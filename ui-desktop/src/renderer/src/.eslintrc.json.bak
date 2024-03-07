@@ -1,0 +1,39 @@
+{
+  "env": {
+    "browser": true
+  },
+  "plugins": ["import", "react"],
+  "extends": [
+    "bloq",
+    "plugin:import/recommended",
+    "plugin:react/recommended",
+    "react-app",
+    "prettier"
+  ],
+  "parserOptions": {
+    "ecmaFeatures": {
+      "jsx": true
+    },
+    "ecmaVersion": 2017,
+    "sourceType": "module"
+  },
+  "root": true,
+  "settings": {
+    "react": {
+      "pragma": "React",
+      "version": "17.0.2"
+    }
+  },
+  "rules": {
+    "react/jsx-no-duplicate-props": ["error"],
+    // "react/boolean-prop-naming": ["warn"],
+    "react/prop-types": "off",
+    "react/display-name": "off",
+    "react/button-has-type": ["warn"],
+    "react/no-typos": ["error"],
+    "arrow-body-style": ["warn", "as-needed"],
+    "complexity": ["warn", { "max": 10 }],
+    "no-console": "warn",
+    "no-shadow": ["error", { "allow": ["status", "Text"] }]
+  }
+}

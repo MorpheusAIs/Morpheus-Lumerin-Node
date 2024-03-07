@@ -1,0 +1,51 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`<GasEditor/> should match its snapshot 1`] = `
+<div>
+  <div
+    class="sc-gzVnrw dLNtIY"
+  >
+    <div
+      class="sc-bZQynM jmPdFc"
+    >
+      <div>
+        <label
+          class="sc-bxivhb htFESG"
+          for="gasLimit"
+        >
+          Gas Limit (Units)
+        </label>
+        <input
+          class="sc-ifAKCX kSbDeA"
+          data-testid="gas-limit-field"
+          id="gasLimit"
+          type="text"
+          value="21000"
+        />
+      </div>
+    </div>
+    <div
+      class="sc-dnqmqq cnSjSH"
+    />
+    <div
+      class="sc-bZQynM jmPdFc"
+    >
+      <div>
+        <label
+          class="sc-bxivhb htFESG"
+          for="gasPrice"
+        >
+          Gas Price (Gwei)
+        </label>
+        <input
+          class="sc-ifAKCX kSbDeA"
+          data-testid="gas-price-field"
+          id="gasPrice"
+          type="text"
+          value="1"
+        />
+      </div>
+    </div>
+  </div>
+</div>
+`;
