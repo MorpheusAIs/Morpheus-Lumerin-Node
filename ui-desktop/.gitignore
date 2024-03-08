@@ -1,0 +1,43 @@
+# dependencies
+/node_modules
+package-lock.json
+
+# environment variables
+.env
+.env.*
+
+# building
+/build
+/dist
+
+# testing
+/coverage
+
+# misc
+.DS_Store
+.vscode
+vscode
+.idea
+
+# logs
+npm-debug.log*
+
+# deb building
+ppa/app/debian/debhelper-build-stamp
+ppa/app/debian/files
+ppa/app/debian/morpheus-ui-desktop.debhelper.log
+ppa/app/debian/morpheus-ui-desktop.substvars
+ppa/app/debian/morpheus-ui-desktop/
+ppa/app/opt/
+ppa/app/usr/
+ppa/morpheus-ui-desktop*
+
+# ESLint
+.eslintcache
+
+# Certificates
+*.p12
+
+*.log
+
+dummy.js

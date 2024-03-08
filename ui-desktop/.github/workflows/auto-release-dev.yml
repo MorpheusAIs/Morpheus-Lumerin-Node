@@ -1,0 +1,197 @@
+name: Auto Release Development
+
+on:
+  push:
+    tags:
+      - "*-dev"
+
+env:
+  CI: false
+  GH_TOKEN: ${{ secrets.ACCESS_TOKEN }} # allow electron-builder to publish a draft release
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [dev]
+        target: [ubuntu, windows, macos, macos-arm]
+        include:
+          - target: ubuntu
+            os: ubuntu-latest
+            artifact_name: morpheus-ui-desktop.deb
+            asset_name: lumerin_v${{github.ref_name}}.deb
+          - target: windows
+            os: windows-latest
+            artifact_name: morpheus-ui-desktop.exe
+            asset_name: lumerin_v${{github.ref_name}}.exe
+          - target: macos
+            os: macos-latest
+            artifact_name: morpheus-ui-desktop-x64.dmg
+            asset_name: lumerin_v${{github.ref_name}}.dmg
+          - target: macos-arm
+            os: macos-latest
+            artifact_name: morpheus-ui-desktop-arm64.dmg
+            asset_name: lumerin_v${{github.ref_name}}_arm.dmg
+    runs-on: ${{ matrix.os }}
+    environment: ${{ matrix.environment }}
+    env: # keep alphabetical order
+      AUTO_ADJUST_CONTRACT_PRICE_TIMEOUT: ${{ vars.AUTO_ADJUST_CONTRACT_PRICE_TIMEOUT }}
+      AUTO_ADJUST_PRICE_INTERVAL: ${{ vars.AUTO_ADJUST_PRICE_INTERVAL }}
+      CHAIN_ID: ${{ vars.CHAIN_ID }}
+      COIN_DEFAULT_GAS_LIMIT: ${{ vars.COIN_DEFAULT_GAS_LIMIT }}
+      DEFAULT_GAS_PRICE: ${{ vars.DEFAULT_GAS_PRICE }}
+      DISPLAY_NAME: ${{ vars.DISPLAY_NAME }}
+      ETH_NODE_ADDRESS_HTTP: ${{ vars.ETH_NODE_ADDRESS_HTTP }}
+      EXPLORER_API_URLS: ${{ vars.EXPLORER_API_URLS }}
+      EXPLORER_URL: ${{ vars.EXPLORER_URL }}
+      FAUCET_URL: ${{ vars.FAUCET_URL }}
+      LMR_DEFAULT_GAS_LIMIT: ${{ vars.LMR_DEFAULT_GAS_LIMIT }}
+      MAX_GAS_PRICE: ${{ vars.MAX_GAS_PRICE }}
+      PORT_CHECK_ERROR_LINK: ${{ vars.PORT_CHECK_ERROR_LINK }}
+      PORT_CHECKER_URL: ${{ vars.PORT_CHECKER_URL }}
+      RECAPTCHA_SITE_KEY: ${{ secrets.RECAPTCHA_SITE_KEY }}
+      SELLER_WHITELIST_URL: ${{ vars.SELLER_WHITELIST_URL }}
+      SHOW_FAUCET: ${{ vars.SHOW_FAUCET }}
+      SYMBOL_ETH: ${{ vars.SYMBOL_ETH }}
+      SYMBOL_LMR: ${{ vars.SYMBOL_LMR }}
+      TITAN_LIGHTNING_DASHBOARD: ${{ vars.TITAN_LIGHTNING_DASHBOARD }}
+      TITAN_LIGHTNING_POOL: ${{ vars.TITAN_LIGHTNING_POOL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16
+      - name: Install packages
+        run: npm install
+      - name: Post install
+        if: matrix.target == 'macos-arm'
+        run: npm run postinstallMacDist
+      - name: Set env from github
+        # keep alphabetical order
+        run: |
+          echo "AUTO_ADJUST_CONTRACT_PRICE_TIMEOUT"=$AUTO_ADJUST_CONTRACT_PRICE_TIMEOUT >> .env
+          echo "AUTO_ADJUST_PRICE_INTERVAL"=$AUTO_ADJUST_PRICE_INTERVAL >> .env
+          echo "CHAIN_ID=$CHAIN_ID" >> .env
+          echo "COIN_DEFAULT_GAS_LIMIT=$COIN_DEFAULT_GAS_LIMIT" >> .env
+          echo "DEFAULT_GAS_PRICE=$DEFAULT_GAS_PRICE" >> .env
+          echo "DEV_TOOLS=true" >> .env
+          echo "DISPLAY_NAME=$DISPLAY_NAME" >> .env
+          echo "ETH_NODE_ADDRESS_HTTP=$ETH_NODE_ADDRESS_HTTP" >> .env
+          echo "EXPLORER_API_URLS=$EXPLORER_API_URLS" >> .env
+          echo "EXPLORER_URL=$EXPLORER_URL" >> .env
+          echo "FAUCET_URL=$FAUCET_URL" >> .env
+          echo "LMR_DEFAULT_GAS_LIMIT=$LMR_DEFAULT_GAS_LIMIT" >> .env
+          echo "MAX_GAS_PRICE=$MAX_GAS_PRICE" >> .env
+          echo "NODE_ENV=production" >> .env
+          echo "PORT_CHECK_ERROR_LINK=$PORT_CHECK_ERROR_LINK" >> .env
+          echo "PORT_CHECKER_URL=$PORT_CHECKER_URL" >> .env
+          echo "PROXY_ROUTER_URL=$PROXY_ROUTER_URL" >> .env
+          echo "RECAPTCHA_SITE_KEY=$RECAPTCHA_SITE_KEY" >> .env
+          echo "REQUIRED_PASSWORD_ENTROPY=$REQUIRED_PASSWORD_ENTROPY" >> .env
+          echo "SELLER_WHITELIST_URL=$SELLER_WHITELIST_URL" >> .env
+          echo "SHOW_FAUCET=$SHOW_FAUCET" >> .env
+          echo "SYMBOL_ETH=$SYMBOL_ETH" >> .env
+          echo "SYMBOL_LMR=$SYMBOL_LMR" >> .env
+          echo "SYMBOL=$SYMBOL" >> .env
+          echo "TITAN_LIGHTNING_DASHBOARD=$TITAN_LIGHTNING_DASHBOARD" >> .env
+          echo "TITAN_LIGHTNING_POOL=$TITAN_LIGHTNING_POOL" >> .env
+        shell: bash
+      - name: Set env from gitlab
+        run: |
+          variables=("TOKEN_ADDRESS" "CLONE_FACTORY_ADDRESS" "WALLET_ETH_NODE_ADDRESS" "PROXY_ROUTER_URL")
+          gitlabVars=$(curl --header "PRIVATE-TOKEN: ${{ secrets.GITLAB_GROUP_TOKEN }}" "https://gitlab.com/api/v4/groups/${{ secrets.GITLAB_GROUP_ID }}/variables?per_page=1000")
+          echo $gitlabVars | jq -c '.[]' | 
+            while IFS= read -r line; do
+              key=$(<<<"$line" jq -r .key);
+              if [[ " ${variables[*]} " =~ " ${key} " ]]; then
+                scope=$(<<<"$line" jq -r .environment_scope);
+                value=$(<<<"$line" jq -r .value);
+                if [ "${scope}" = '*' ]
+                then
+                  if [ "${key}" = 'WALLET_ETH_NODE_ADDRESS' ]; then
+                    echo "ETH_NODE_ADDRESS=$value"  >> .env
+                  else
+                    echo "$key=$value" >> .env
+                  fi
+                fi
+              fi
+            done
+          echo $gitlabVars | jq -c '.[]' | 
+            while IFS= read -r line; do
+              key=$(<<<"$line" jq -r .key);
+              if [[ " ${variables[*]} " =~ " ${key} " ]]; then
+                scope=$(<<<"$line" jq -r .environment_scope);
+                value=$(<<<"$line" jq -r .value);
+                if [ "${scope}" = "${{ matrix.environment }}" ]
+                then
+                  if [ "${key}" = 'WALLET_ETH_NODE_ADDRESS' ]; then
+                    echo "ETH_NODE_ADDRESS=$value"  >> .env
+                  else
+                    echo "$key=$value" >> .env
+                  fi
+                fi
+              fi
+            done
+        shell: bash
+      - name: Fetch latest Proxy Router
+        run: |
+          if [ "${{ matrix.target }}" = "ubuntu" ]
+          then
+            namePrefix="linux_amd64"
+          elif [ "${{ matrix.target }}" = "windows" ]
+          then
+            namePrefix="windows_amd64.exe"
+          elif [ "${{ matrix.target }}" = "macos-arm" ]
+          then
+            namePrefix="darwin_arm64"
+          elif [ "${{ matrix.target }}" = "macos" ]
+          then
+            namePrefix="darwin_amd64"
+          fi
+          break_outer=false
+          for ((i=1;i<=10;i++)); do
+            while read -r result; do
+              name=$(echo "$result" | jq -r '.name')
+              releaseName=$(echo "$result" | jq -r '.releaseName')
+              jobId=$(echo "$result" | jq -r '.jobId')
+
+              artifactPath="dist/proxy-router_${name}_${namePrefix}"
+              downloadUrl="https://gitlab.com/api/v4/projects/${{ secrets.GITLAB_PROXY_REPO_ID }}/jobs/$jobId/artifacts/$artifactPath"
+
+              if [ "${namePrefix}" = 'windows_amd64.exe' ]; then
+                curl -o "$GITHUB_WORKSPACE/executables/proxy-router.exe" -H "Authorization: Bearer ${{ secrets.GITLAB_TOKEN }}" "$downloadUrl" -L
+              else
+                curl -o "$GITHUB_WORKSPACE/executables/proxy-router" -H "Authorization: Bearer ${{ secrets.GITLAB_TOKEN }}" "$downloadUrl" -L
+              fi
+              break_outer=true
+              break
+            done < <(curl -H "Accept: application/json" -H "Authorization: Bearer ${{ secrets.GITLAB_TOKEN }}" -0 "https://gitlab.com/api/v4/projects/${{ secrets.GITLAB_PROXY_REPO_ID }}/jobs?scope[]=success&per_page=100&page=$i" | jq -c '.[] | select(.name == "release-internal") | select(.ref | test("-dev$")) | {name: .ref, releaseName: .name, jobId: .id}')
+            if $break_outer; then
+              break
+            fi
+          done
+        shell: bash
+      - name: Build Web
+        run: npm run web-build
+      - name: Build Mac
+        if: matrix.target == 'macos'
+        run: npm run desktop-build-mac
+      - name: Build Mac arm
+        if: matrix.target == 'macos-arm'
+        run: npm run desktop-build-mac-arm
+      - name: Build Linux
+        if: matrix.target == 'ubuntu'
+        run: npm run desktop-build-linux
+      - name: Build Windows
+        if: matrix.target == 'windows'
+        run: npm run desktop-build-win
+      - name: Upload binaries to release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: dist/${{ matrix.artifact_name }}
+          tag: ${{ github.ref }}
+          asset_name: ${{ matrix.asset_name }}
+          prerelease: true

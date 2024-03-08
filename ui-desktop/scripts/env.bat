@@ -1,0 +1,8 @@
+@echo off
+
+(
+echo DEBUG=%DEBUG%
+echo ENABLED_CHAIN=%ENABLED_CHAIN%
+echo SENTRY_DSN=%SENTRY_DSN%
+echo TRACKING_ID=%TRACKING_ID%
+) > .env
