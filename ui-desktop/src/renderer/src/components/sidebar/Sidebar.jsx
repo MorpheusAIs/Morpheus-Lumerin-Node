@@ -1,16 +1,16 @@
-import React, { useState } from 'react';
-import styled from 'styled-components';
+import React, { useState } from 'react'
+import styled from 'styled-components'
 
-import SecondaryNav from './SecondaryNav';
-import PrimaryNav from './PrimaryNav';
-import LumerinLogo from '../icons/LumerinLogo';
+import SecondaryNav from './SecondaryNav'
+import PrimaryNav from './PrimaryNav'
+import LumerinLogo from '../icons/LumerinLogo'
 
-import { ReactComponent as LumerinLogoFull } from '../icons/LumerinLogoFull.svg';
-import { AddressHeader } from '../common/AddressHeader';
-import withSidebarState from '../../store/hocs/withSidebarState';
+import * as LumerinLogoFull from '../icons/LumerinLogoFull.svg'
+import { AddressHeader } from '../common/AddressHeader'
+import withSidebarState from '../../store/hocs/withSidebarState'
 
 const Container = styled.div`
-  background: ${p => p.theme.colors.light};
+  background: ${(p) => p.theme.colors.light};
   width: 7rem;
   padding-bottom: 4.5rem;
   display: flex;
@@ -48,7 +48,7 @@ const Container = styled.div`
       box-shadow: none;
     }
   }
-`;
+`
 
 const FullLogoContainer = styled.div`
   padding: 4rem 2.2rem 2.8rem 2.2rem;
@@ -62,7 +62,7 @@ const FullLogoContainer = styled.div`
   @media (min-width: 800px) {
     display: block;
   }
-`;
+`
 
 const IconLogoContainer = styled.div`
   padding: 40px 0.8rem 2rem 0.8rem;
@@ -78,7 +78,7 @@ const IconLogoContainer = styled.div`
   @media (min-width: 800px) {
     display: none;
   }
-`;
+`
 
 const NavContainer = styled.div`
   display: flex;
@@ -89,16 +89,16 @@ const NavContainer = styled.div`
   @media (max-width: 800px) {
     padding-left: 1rem;
   }
-`;
+`
 
 const PrimaryNavContainer = styled.nav`
   flex-grow: 1;
   margin-top: 3rem;
-`;
+`
 
 function Sidebar(props) {
-  const { address, copyToClipboard } = props;
-  const [activeIndex, setActiveIndex] = useState(0);
+  const { address, copyToClipboard } = props
+  const [activeIndex, setActiveIndex] = useState(0)
   return (
     <Container>
       <FullLogoContainer parent={Container}>
@@ -127,7 +127,7 @@ function Sidebar(props) {
         <AddressHeader address={address} copyToClipboard={copyToClipboard} />
       </NavContainer>
     </Container>
-  );
+  )
 }
 
-export default withSidebarState(Sidebar);
+export default withSidebarState(Sidebar)

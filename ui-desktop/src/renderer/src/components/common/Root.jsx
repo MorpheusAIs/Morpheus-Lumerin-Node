@@ -1,8 +1,8 @@
-import { withClient } from '../../store/hocs/clientContext';
-import selectors from '../../store/selectors';
-import { connect } from 'react-redux';
-import React from 'react';
-import { ToastsContext } from '../../components/toasts';
+import { withClient } from '../../store/hocs/clientContext'
+import selectors from '../../store/selectors'
+import { connect } from 'react-redux'
+import React from 'react'
+import { ToastsContext } from '../../components/toasts'
 
 class Root extends React.Component {
   // static propTypes = {
@@ -20,11 +20,11 @@ class Root extends React.Component {
   //   }).isRequired
   // };
 
-  static contextType = ToastsContext;
+  static contextType = ToastsContext
 
   state = {
     onboardingComplete: null
-  };
+  }
 
   componentDidMount() {
     this.props.client
@@ -33,8 +33,8 @@ class Root extends React.Component {
         this.props.dispatch({
           type: 'initial-state-received',
           payload: { ...persistedState, config }
-        });
-        this.setState({ onboardingComplete });
+        })
+        this.setState({ onboardingComplete })
       })
       .then(() => {
         if (this.props.isAuthBypassed) {
@@ -42,33 +42,33 @@ class Root extends React.Component {
           this.props.client
             .onLoginSubmit({ password: 'password' })
             .then(() => this.props.dispatch({ type: 'session-started' }))
-            .catch(e => {
-              this.context.toast('error', 'Bypass auth failed');
-            });
+            .catch((e) => {
+              this.context.toast('error', 'Bypass auth failed')
+            })
         }
       })
       .then(() => this.props.client.getDefaultCurrencySetting())
-      .then(defaultCurr => {
+      .then((defaultCurr) => {
         this.props.dispatch({
           type: 'set-seller-currency',
           payload: defaultCurr || this.props.sellerDefaultCurrency || 'BTC'
-        });
+        })
       })
       .then(() => this.props.client.getMarketplaceFee({}))
-      .then(fee =>
+      .then((fee) =>
         this.props.dispatch({
           type: 'set-marketplace-fee',
           payload: fee
         })
       )
       // eslint-disable-next-line no-console
-      .catch(e => {
-        console.error('root component error', e.message);
+      .catch((e) => {
+        console.error('root component error', e.message)
         this.context.toast(
           'error',
           'Failed to startup wallet. Please wait a few minutes and try again'
-        );
-      });
+        )
+      })
   }
 
   onOnboardingCompleted = ({ password, mnemonic, proxyRouterConfig }) => {
@@ -76,25 +76,26 @@ class Root extends React.Component {
       this.props.client
         .onOnboardingCompleted({ password, mnemonic, proxyRouterConfig })
         .then(() => {
-          this.setState({ onboardingComplete: true });
-          this.props.dispatch({ type: 'session-started' });
+          this.setState({ onboardingComplete: true })
+          this.props.dispatch({ type: 'session-started' })
         })
         // eslint-disable-next-line no-console
-        .catch(e => {
+        .catch((e) => {
           this.context.toast(
             'error',
             'Failed to finish onboarding. Please wait a few minutes and try again'
-          );
+          )
         })
-    );
-  };
+    )
+  }
 
   onLoginSubmit = ({ password }) =>
     this.props.client
       .onLoginSubmit({ password })
-      .then(() => this.props.dispatch({ type: 'session-started' }));
+      .then(() => this.props.dispatch({ type: 'session-started' }))
 
   render() {
+    console.log('Root component render')
     const {
       OnboardingComponent,
       LoadingComponent,
@@ -102,11 +103,11 @@ class Root extends React.Component {
       isSessionActive,
       LoginComponent,
       hasEnoughData
-    } = this.props;
+    } = this.props
 
-    const { onboardingComplete } = this.state;
+    const { onboardingComplete } = this.state
 
-    if (onboardingComplete === null) return null;
+    if (onboardingComplete === null) return null
 
     // eslint-disable-next-line no-negated-condition
     return !onboardingComplete ? (
@@ -118,15 +119,15 @@ class Root extends React.Component {
       <RouterComponent />
     ) : (
       <LoadingComponent />
-    );
+    )
   }
 }
 
-const mapStateToProps = state => ({
+const mapStateToProps = (state) => ({
   isSessionActive: selectors.isSessionActive(state),
   hasEnoughData: selectors.hasEnoughData(state),
   isAuthBypassed: selectors.getIsAuthBypassed(state),
   sellerDefaultCurrency: selectors.getSellerDefaultCurrency(state)
-});
+})
 
-export default connect(mapStateToProps)(withClient(Root));
+export default connect(mapStateToProps)(withClient(Root))

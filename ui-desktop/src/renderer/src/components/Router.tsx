@@ -13,7 +13,7 @@ import Sidebar from './sidebar/Sidebar'
 // import Marketplace from './contracts/Marketplace'
 // import Devices from './devices/Devices'
 // import BuyerHub from './contracts/BuyerHub'
-import AutoPriceAdjuster from './AutoPriceAdjuster'
+// import AutoPriceAdjuster from './AutoPriceAdjuster'
 
 const bgImage = 'images/MainBackground.png'
 
