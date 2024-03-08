@@ -1,6 +1,0 @@
-{
-  "extends": [
-    "bloq",
-    "bloq/mocha"
-  ]
-}
