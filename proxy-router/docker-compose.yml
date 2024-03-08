@@ -1,0 +1,8 @@
+services:
+  hashrouter:
+    build: .
+    env_file:
+      - .env
+    ports:
+      - 8081:8081
+      - 3333:3333

@@ -1,0 +1,13 @@
+linters:
+  disable-all: true
+  enable:
+    - gofmt
+    - errcheck
+    #- golint
+    - ineffassign
+    - unconvert
+    # - misspell
+    # - govet
+run:
+  deadline: 5m
+  timeout: 5m
