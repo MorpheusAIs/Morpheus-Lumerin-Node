@@ -1,0 +1,49 @@
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    main: ./cmd
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows # Does not compile for Arm Windows due to go-ole https://github.com/shirou/gopsutil/issues/916
+        goarch: arm64
+    no_unique_dist_dir: true
+    binary: "{{ .ProjectName }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}"
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X gitlab.com/TitanInd/proxy/proxy-router-v3/internal/config.Commit={{.Commit}} -X main.date={{.Date}} -X 'gitlab.com/TitanInd/proxy/proxy-router-v3/internal/config.BuildVersion={{.Version}}'
+
+archives:
+  - format: binary
+    name_template: >-
+      {{ .ProjectName }}_{{ .Tag }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+release:
+  # Define the GitLab release configuration
+  gitlab:
+    owner: TitanInd/proxy
+    name: proxy-router
