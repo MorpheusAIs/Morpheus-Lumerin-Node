@@ -1,21 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import styled from 'styled-components';
+import React, { useState, useEffect } from 'react'
+import styled from 'styled-components'
 
-import withDashboardState from '../../store/hocs/withDashboardState';
+import withDashboardState from '../../store/hocs/withDashboardState'
 
-import { LayoutHeader } from '../common/LayoutHeader';
-import BalanceBlock from './BalanceBlock';
-import TransactionModal from './tx-modal';
-import TxList from './tx-list/TxList';
-import { View } from '../common/View';
+import { LayoutHeader } from '../common/LayoutHeader'
+import BalanceBlock from './BalanceBlock'
+import TransactionModal from './tx-modal'
+import TxList from './tx-list/TxList'
+import { View } from '../common/View'
 
 const Container = styled.div`
-  background-color: ${p => p.theme.colors.light};
+  background-color: ${(p) => p.theme.colors.light};
   height: 100vh;
   max-width: 100vw;
   position: relative;
   padding: 0 2.4rem;
-`;
+`
 
 const Dashboard = ({
   sendDisabled,
@@ -26,18 +26,15 @@ const Dashboard = ({
   copyToClipboard,
   onWalletRefresh
 }) => {
-  const [activeModal, setActiveModal] = useState(null);
+  console.log('dashboard')
+  const [activeModal, setActiveModal] = useState(null)
 
-  const onCloseModal = () => setActiveModal(null);
-  const onTabSwitch = modal => setActiveModal(modal);
+  const onCloseModal = () => setActiveModal(null)
+  const onTabSwitch = (modal) => setActiveModal(modal)
 
   return (
     <View data-testid="dashboard-container">
-      <LayoutHeader
-        title="My Wallet"
-        address={address}
-        copyToClipboard={copyToClipboard}
-      />
+      <LayoutHeader title="My Wallet" address={address} copyToClipboard={copyToClipboard} />
 
       <BalanceBlock
         sendDisabled={sendDisabled}
@@ -57,7 +54,7 @@ const Dashboard = ({
         activeTab={activeModal}
       />
     </View>
-  );
-};
+  )
+}
 
-export default withDashboardState(Dashboard);
+export default withDashboardState(Dashboard)

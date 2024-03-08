@@ -78,7 +78,7 @@ export const Layout = () => (
 */}
       </Switch>
     </Main>
-    <AutoPriceAdjuster />
+    {/* <AutoPriceAdjuster /> */}
     <OfflineWarning />
   </Container>
 )

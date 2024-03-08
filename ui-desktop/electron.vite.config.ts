@@ -2,6 +2,7 @@ import { resolve } from 'path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import svgr from 'vite-plugin-svgr'
+import nodePolyfills from '@vitejs/plugin-node'
 
 export default defineConfig({
   main: {
@@ -18,6 +19,6 @@ export default defineConfig({
         '@tabler/icons': resolve('node_modules/@tabler/icons/dist/es/tabler-icons.js')
       }
     },
-    plugins: [react(), svgr()]
+    plugins: [react(), svgr(), nodePolyfills()]
   }
 })
