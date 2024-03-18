@@ -1,7 +1,7 @@
-const { CLOSEOUT_TYPE } = require('./contractCloseOutType.enum');
-const { CONTRACT_STATE } = require('./contractState.enum');
+import { CLOSEOUT_TYPE } from './contractCloseOutType.enum'
+import { CONTRACT_STATE } from './contractState.enum'
 
-module.exports = {
+export default {
   CLOSEOUT_TYPE,
   CONTRACT_STATE
-};
+}

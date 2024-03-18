@@ -5,4 +5,4 @@ const CLOSEOUT_TYPE = {
   EarlyCancel: 0
 };
 
-module.exports = { CLOSEOUT_TYPE };
+export default { CLOSEOUT_TYPE };

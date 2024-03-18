@@ -3,4 +3,4 @@ const CONTRACT_STATE = {
   Avaliable: '0'
 };
 
-module.exports = { CONTRACT_STATE };
+export default { CONTRACT_STATE };

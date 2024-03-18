@@ -1,12 +1,13 @@
+// Require the axios module to make HTTP requests
+import axios from "axios";
+import CryptoJS from 'crypto-js';
+
 // replace with your GitHub username, repository, and personal access token
 const github_username = "srt0422";
 const github_org = "Lumerin-protocol";
 const github_repository = "WalletDesktop";
 const personal_access_token = "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";
 
-// Require the axios module to make HTTP requests
-const axios = require("axios");
-const CryptoJS = require('crypto-js');
 
 // Set the base URL for the github api
 const baseURL = "https://api.github.com";

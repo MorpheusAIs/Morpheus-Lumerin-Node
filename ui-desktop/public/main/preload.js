@@ -3,7 +3,7 @@
 const { ipcRenderer, clipboard, shell, contextBridge } = require('electron');
 const remote = require('@electron/remote');
 // electron-is-dev can't be used in preload script
-// const isDev = require('electron-is-dev')
+// const isDev = import('electron-is-dev')
 const isDev = !remote.app.isPackaged;
 
 // @see http://electronjs.org/docs/tutorial/security#2-disable-nodejs-integration-for-remote-content

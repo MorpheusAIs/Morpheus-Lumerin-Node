@@ -1,6 +1,6 @@
 import utils from 'web3-utils'
 import cuid from 'cuid'
-import * as Deferred from '../lib/Deferred'
+import Deferred from '../lib/Deferred'
 
 export const fromWei = (str, unit = 'ether') => utils.fromWei(str, unit)
 export const toWei = (bn, unit = 'ether') => utils.toWei(bn, unit)
