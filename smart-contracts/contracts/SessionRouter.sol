@@ -101,6 +101,7 @@ contract SessionRouter {
         tokenMOR.transfer(msg.sender, refund);
 
         session.endTime = block.timestamp;
+        console.log("close timestamp", block.timestamp);
         emit SessionClosedManually(msg.sender, _sessionId);
     }
 }

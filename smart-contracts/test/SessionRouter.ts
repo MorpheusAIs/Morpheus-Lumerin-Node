@@ -41,6 +41,8 @@ describe("Session router", function () {
       URL: "https://bestprovider.com",
       price: parseUnits("100", decimalsMOR),
     }
+
+    const buyerBalance = expected.price * 60n;
     
     const addProviderHash = await sessionRouter.write.addProvider([
       expected.address,
@@ -50,7 +52,7 @@ describe("Session router", function () {
     ]);
     await publicClient.waitForTransactionReceipt({ hash: addProviderHash });
     
-    const transferHash = await tokenMOR.write.transfer([buyer.account.address, expected.price])
+    const transferHash = await tokenMOR.write.transfer([buyer.account.address, buyerBalance])
     await publicClient.waitForTransactionReceipt({hash: transferHash})
 
     return {
@@ -59,6 +61,7 @@ describe("Session router", function () {
       owner,
       provider,
       buyer,
+      buyerBalance,
       publicClient,
       tokenMOR,
     }
@@ -103,15 +106,12 @@ describe("Session router", function () {
   });
 
   describe("Session actions", function(){
-    it.only("Should create session", async function(){
-      const { sessionRouter, provider, buyer, tokenMOR, expected, publicClient } = await loadFixture(
+    it("Should create session", async function(){
+      const { sessionRouter, provider, buyer, tokenMOR, expected, publicClient, buyerBalance } = await loadFixture(
         deployWithSingleProvider,
       );
       
-      console.log("expected price", expected.price)
-      console.log("buyer balance", await tokenMOR.read.balanceOf([buyer.account.address]))
-      console.log("buyer address", buyer.account.address)
-      const approveHash = await tokenMOR.write.approve([sessionRouter.address, expected.price], {account: buyer.account})
+      const approveHash = await tokenMOR.write.approve([sessionRouter.address, buyerBalance], {account: buyer.account})
       await publicClient.waitForTransactionReceipt({hash: approveHash})
 
       const {request, result: sessionId} = await sessionRouter.simulate.startSession([provider.account.address], {account: buyer.account.address})
@@ -122,7 +122,7 @@ describe("Session router", function () {
 
       // check balances
       expect(await tokenMOR.read.balanceOf([buyer.account.address])).eq(0n);
-      expect(await tokenMOR.read.balanceOf([sessionRouter.address])).eq(expected.price);
+      expect(await tokenMOR.read.balanceOf([sessionRouter.address])).eq(buyerBalance);
       
       // check session
       expect(sessionId).eq(0n);
@@ -133,11 +133,34 @@ describe("Session router", function () {
         getAddress(buyer.account.address), 
         getAddress(provider.account.address),
         timestamp,
-        timestamp + 60n // plus minute
+        timestamp + buyerBalance / expected.price * 60n,
       ])
     })
 
-    it("should close session")
+    it.skip("should close session manually and refund", async function(){
+      const { sessionRouter, provider, buyer, tokenMOR, expected, publicClient, buyerBalance } = await loadFixture(
+        deployWithSingleProvider,
+      );
+      
+      const approveHash = await tokenMOR.write.approve([sessionRouter.address, expected.price], {account: buyer.account})
+      await publicClient.waitForTransactionReceipt({hash: approveHash})
+
+      const {request, result: sessionId} = await sessionRouter.simulate.startSession([provider.account.address], {account: buyer.account.address})
+      const startSessionHash = await sessionRouter.write.startSession([provider.account.address], request)
+      const startSessionTx = await publicClient.waitForTransactionReceipt({hash: startSessionHash})
+     
+      const {timestamp} = await publicClient.getBlock({blockNumber: startSessionTx.blockNumber})
+
+      const expectedCloseTimestamp = timestamp + BigInt(30);
+      console.log("exp close", expectedCloseTimestamp)
+      await time.increaseTo(expectedCloseTimestamp)
+      const closeSessionHash = await sessionRouter.write.closeSession([sessionId], {account: buyer.account});
+      await publicClient.waitForTransactionReceipt({hash: closeSessionHash})
+      const refundValue = expected.price / 2n;
+
+      expect(Number(await tokenMOR.read.balanceOf([buyer.account.address]))).closeTo(Number(refundValue), Number(refundValue / 100n));
+      expect(await tokenMOR.read.balanceOf([sessionRouter.address])).eq(refundValue);
+    })
   })
 
   // describe("Deployment", function () {
