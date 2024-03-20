@@ -1,5 +1,5 @@
 import { Simulate, flushPromises } from 'react-testing-library'
-import * as testUtils from '../../testUtils'
+import testUtils from '../../testUtils'
 import Login from '../Login'
 import React from 'react'
 

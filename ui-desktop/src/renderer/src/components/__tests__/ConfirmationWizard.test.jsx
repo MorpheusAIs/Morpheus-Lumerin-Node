@@ -1,6 +1,6 @@
 import { Simulate, flushPromises } from 'react-testing-library'
 import ConfirmationWizard from '../common/ConfirmationWizard'
-import * as testUtils from '../../testUtils'
+import testUtils from '../../testUtils'
 import React from 'react'
 
 const INVALID_PASSWORD = 'wrong!'

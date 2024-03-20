@@ -1,4 +1,4 @@
-import * as testUtils from '../../testUtils'
+import testUtils from '../../testUtils'
 import { Simulate } from 'react-testing-library'
 import Tools from '../tools/Tools'
 import React from 'react'

@@ -1,5 +1,5 @@
 import { Simulate } from 'react-testing-library'
-import * as testUtils from '../../testUtils'
+import testUtils from '../../testUtils'
 import AmountFields from '../common/AmountFields'
 import React from 'react'
 

@@ -1,4 +1,4 @@
-import * as testUtils from '../../testUtils';
+import testUtils from '../../testUtils';
 import ReceiveDrawer from '../dashboard/ReceiveDrawer';
 import { Simulate } from 'react-testing-library';
 import React from 'react';

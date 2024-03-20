@@ -1,4 +1,4 @@
-import bip39 from 'bip39';
+import * as bip39 from 'bip39';
 
 const createMnemonic = () => Promise.resolve(bip39.generateMnemonic());
 

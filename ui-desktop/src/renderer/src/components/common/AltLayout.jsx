@@ -43,7 +43,7 @@ export default function AltLayout({ title, children, ...other }) {
   return (
     <Container align="center" {...other}>
       <LogoContainer>
-        <LumerinLogoFull height="80px" width="250px" />
+        {/* <LumerinLogoFull height="80px" width="250px" /> */}
       </LogoContainer>
       <Body>
         {title && <Title>{title}</Title>}

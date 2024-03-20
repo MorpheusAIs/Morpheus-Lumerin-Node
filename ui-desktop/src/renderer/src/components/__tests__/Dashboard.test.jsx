@@ -1,6 +1,6 @@
 /* eslint-disable require-path-exists/exists */
 /* eslint-disable import/no-unresolved */
-import * as testUtils from '../../testUtils';
+import testUtils from '../../testUtils';
 import { Simulate } from 'react-testing-library';
 import Dashboard from '../dashboard/Dashboard';
 import config from '../../config';

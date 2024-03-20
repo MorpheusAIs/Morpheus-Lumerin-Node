@@ -1,5 +1,5 @@
 import { layout as element } from '../Router'
-import * as testUtils from '../../testUtils'
+import testUtils from '../../testUtils'
 import { Simulate } from 'react-testing-library'
 
 describe('<Router/>', () => {

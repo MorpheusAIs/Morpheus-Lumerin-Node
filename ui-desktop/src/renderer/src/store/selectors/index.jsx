@@ -15,5 +15,5 @@ export default {
   ...wallet,
   ...proxyRouter,
   ...contracts,
-  ...devices
+  ...devices,
 };
