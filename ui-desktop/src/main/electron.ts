@@ -2,18 +2,13 @@ import { app } from 'electron'
 import remote from '@electron/remote/main'
 import path from 'path'
 remote.initialize()
-
 import "./loadEnv"
-
 import isDev  from 'electron-is-dev'
 import os from 'os'
 const Raven = require('raven')
-
 import { createWindow } from './src/main-window.js'
 import { createClient } from './src/client'
-
 import config from './config'
-
 import initContextMenu from './contextMenu'
 import initMenu from './menu'
 import errorHandler from './errorHandler'

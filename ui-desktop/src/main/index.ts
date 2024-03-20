@@ -10,7 +10,6 @@ import initContextMenu from './contextMenu'
 import initMenu from './menu'
 import errorHandler from './errorHandler'
 import logger from './logger'
-
 import isDev from 'electron-is-dev'
 
 console.log('isdev: ', isDev)

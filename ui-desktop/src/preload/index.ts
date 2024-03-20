@@ -1,8 +1,6 @@
 import { electronAPI } from '@electron-toolkit/preload'
 import { ipcRenderer, clipboard, shell, contextBridge } from 'electron'
-import * as remote from '@electron/remote'
-
-const isDev = !remote.app.isPackaged
+import remote from '@electron/remote'
 
 // Custom APIs for renderer
 const api = {}
@@ -52,7 +50,9 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('openLink', openLink)
     contextBridge.exposeInMainWorld('getAppVersion', getAppVersion)
     contextBridge.exposeInMainWorld('copyToClipboard', copyToClipboard)
-    contextBridge.exposeInMainWorld('isDev', isDev)
+    
+    // contextBridge.exposeInMainWorld('isDev', !remote.app.isPackaged)
+    contextBridge.exposeInMainWorld('isDev', true)
 
     contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('api', api)

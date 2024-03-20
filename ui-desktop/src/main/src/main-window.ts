@@ -1,7 +1,7 @@
+import isDev from 'electron-is-dev'
 const { app, BrowserWindow, Notification, dialog } = require('electron')
 const { autoUpdater } = require('electron-updater')
-import isDev from 'electron-is-dev'
-const path = require('path')
+const {join} = require('path')
 const windowStateKeeper = require('electron-window-state')
 
 import logger from '../logger'
@@ -88,7 +88,7 @@ export function loadWindow(config) {
       enableRemoteModule: true,
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.mjs'),
       devTools: config.devTools || !app.isPackaged
     },
     x: mainWindowState.x,
@@ -156,7 +156,7 @@ export function loadWindow(config) {
   })
 }
 
-export function createWindow(config) {
+function createWindowOld(config) {
   console.log("create window config: ", config);
   app.on('fullscreen', function () {
     mainWindow.isFullScreenable ? mainWindow.setFullScreen(true) : mainWindow.setFullScreen(false)
@@ -166,4 +166,36 @@ export function createWindow(config) {
 
   app.on('ready', load)
   app.on('activate', load)
+}
+
+export function createWindow(): void {
+  // Create the browser window.
+  const mainWindow = new BrowserWindow({
+    width: 900,
+    height: 670,
+    show: false,
+    autoHideMenuBar: true,
+    ...(process.platform === 'linux' ? { icon } : {}),
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.mjs'),
+      sandbox: false
+    }
+  })
+
+  mainWindow.on('ready-to-show', () => {
+    mainWindow.show()
+  })
+
+  mainWindow.webContents.setWindowOpenHandler((details) => {
+    shell.openExternal(details.url)
+    return { action: 'deny' }
+  })
+
+  // HMR for renderer base on electron-vite cli.
+  // Load the remote URL for development or the local html file for production.
+  if (isDev && process.env['ELECTRON_RENDERER_URL']) {
+    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+  } else {
+    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+  }
 }

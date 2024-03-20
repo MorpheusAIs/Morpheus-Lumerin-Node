@@ -4,7 +4,7 @@ import React from 'react'
 import Flex from './Flex'
 import Sp from './Spacing'
 
-import * as LumerinLogoFull from '../icons/LumerinLogoFull.svg'
+import LumerinLogoFull from '../icons/LumerinLogoFull.svg'
 
 const Container = styled(Flex.Column)`
   min-height: 100vh;

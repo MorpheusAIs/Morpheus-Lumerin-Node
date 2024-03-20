@@ -1,4 +1,5 @@
 import * as utils from './utils'
+
 console.log('utils: ', utils)
 const { parseJSONArray } = utils
 let httpApiUrls, explorerApiURLs
@@ -58,7 +59,7 @@ const chain = {
   sellerWhitelistUrl: process.env.SELLER_WHITELIST_URL || 'https://forms.gle/wEcAgppfK2p9YZ3g7'
 }
 
-export default {
+const config ={
   chain,
   dbAutocompactionInterval: 30000,
   debug: process.env.DEBUG === 'true' && process.env.IGNORE_DEBUG_LOGS !== 'true',
@@ -75,3 +76,7 @@ export default {
     +process.env.AUTO_ADJUST_CONTRACT_PRICE_TIMEOUT || 24 * 60 * 60 * 1000,
   recaptchaSiteKey: process.env.RECAPTCHA_SITE_KEY
 }
+
+console.log("config module: ", config);
+
+export default config
