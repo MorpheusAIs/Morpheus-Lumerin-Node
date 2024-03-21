@@ -3,7 +3,7 @@ package system
 import (
 	"context"
 
-	"gitlab.com/TitanInd/proxy/proxy-router-v3/internal/interfaces"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
 )
 
 type SystemConfigurator struct {

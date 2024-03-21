@@ -9,7 +9,7 @@ echo COMMIT=$COMMIT
 
 go build \
   -ldflags="-s -w \
-    -X 'gitlab.com/TitanInd/proxy/proxy-router-v3/internal/config.BuildVersion=$VERSION' \
-    -X 'gitlab.com/TitanInd/proxy/proxy-router-v3/internal/config.Commit=$COMMIT' \
+    -X 'github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/config.BuildVersion=$VERSION' \
+    -X 'github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/config.Commit=$COMMIT' \
   " \
-  -o bin/hashrouter cmd/main.go 
+  -o bin/proxy-router cmd/main.go 

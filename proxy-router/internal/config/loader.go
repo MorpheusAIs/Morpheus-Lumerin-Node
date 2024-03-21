@@ -7,9 +7,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
 	"github.com/joho/godotenv"
 	"github.com/omeid/uconfig/flat"
-	"gitlab.com/TitanInd/proxy/proxy-router-v3/internal/lib"
 )
 
 const (

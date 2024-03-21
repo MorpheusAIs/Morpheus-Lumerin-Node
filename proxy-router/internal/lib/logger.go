@@ -4,7 +4,7 @@ import (
 	"io"
 	"os"
 
-	"gitlab.com/TitanInd/proxy/proxy-router-v3/internal/interfaces"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
