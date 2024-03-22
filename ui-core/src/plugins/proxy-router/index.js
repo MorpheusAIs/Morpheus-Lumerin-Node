@@ -1,6 +1,6 @@
 'use strict'
 
-const debug = require('debug')('lmr-wallet:core:proxy-router')
+const logger = require('../../logger');
 
 const createConnectionManager = require('./connections-manager')
 
@@ -8,14 +8,14 @@ function createPlugin() {
   let connectionManager
 
   function start({ config, eventBus }) {
-    debug.enabled = config.debug
+    // debug.enabled = config.debug
 
-    debug('Initiating proxy-router connections stream')
+    logger.debug('Initiating proxy-router connections stream')
     connectionManager = createConnectionManager(config, eventBus)
 
     const refreshConnectionsStream = (data) =>
       connectionManager
-        .getConnectionsStream(data.sellerNodeUrl, data.buyerNodeUrl)
+        .getConnectionsStream(data.proxyNodeUrl)
         .on('data', (data) => {
           eventBus.emit('proxy-router-connections-changed', {
             connections: data.connections,
@@ -32,6 +32,10 @@ function createPlugin() {
     return {
       api: {
         refreshConnectionsStream: refreshConnectionsStream,
+        getLocalIp: connectionManager.getLocalIp,
+        healthCheck: connectionManager.healthCheck,
+        kill: connectionManager.kill,
+        isProxyPortPublic: connectionManager.isProxyPortPublic,
       },
       events: [
         'proxy-router-connections-changed',

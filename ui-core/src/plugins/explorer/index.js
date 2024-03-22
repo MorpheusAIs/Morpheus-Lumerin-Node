@@ -1,33 +1,36 @@
 'use strict';
 
-const debug = require('debug')('lmr-wallet:core:explorer');
+const logger = require('../../logger');
+
 const Web3 = require('web3');
 const { Lumerin } = require('contracts-js');
 
 const createEventsRegistry = require('./events');
-const createLogTransaction = require('./log-transaction');
+const { logTransaction } = require('./log-transaction');
 const createQueue = require('./queue');
 const createStream = require('./blocks-stream');
 const createTransactionSyncer = require('./sync-transactions');
-const refreshTransaction = require('./refresh-transactions');
 const tryParseEventLog = require('./parse-log');
 const createExplorer = require('./explorer');
 
-function createPlugin () {
+function createPlugin() {
   let blocksStream;
   let syncer;
+  let interval;
 
-  function start ({ config, eventBus, plugins }) {
-    debug.enabled = config.debug;
+  function start({ config, eventBus, plugins }) {
+    // debug.enabled = config.debug;
     const { lmrTokenAddress } = config;
 
     const web3 = new Web3(plugins.eth.web3Provider);
 
+    const web3Subscribable = new Web3(plugins.eth.web3SubscriptionProvider);
+
     const eventsRegistry = createEventsRegistry();
     const queue = createQueue(config, eventBus, web3);
-    const lumerin = Lumerin(web3, lmrTokenAddress);
+    const lumerin = Lumerin(web3Subscribable, lmrTokenAddress);
 
-    const explorer = createExplorer(config.chainId, web3, lumerin);
+    const explorer = createExplorer(config.explorerApiURLs, web3, lumerin, eventBus);
 
     syncer = createTransactionSyncer(
       config,
@@ -38,14 +41,17 @@ function createPlugin () {
       explorer
     );
 
-    debug('Initiating blocks stream');
-    blocksStream = createStream(web3);
+    logger.debug('Initiating blocks stream');
+    const streamData = createStream(web3, config.blocksUpdateMs);
+    blocksStream = streamData.stream;
+    interval = streamData.interval;
+
     blocksStream.on('data', function ({ hash, number, timestamp }) {
-      debug('New block', hash, number);
+      logger.debug('New block', hash, number);
       eventBus.emit('coin-block', { hash, number, timestamp });
     });
     blocksStream.on('error', function (err) {
-      debug('Could not get latest block');
+      logger.debug('Could not get latest block');
       eventBus.emit('wallet-error', {
         inner: err,
         message: 'Could not get latest block',
@@ -55,18 +61,18 @@ function createPlugin () {
 
     return {
       api: {
-        logTransaction: createLogTransaction(queue),
+        logTransaction: logTransaction(queue),
         refreshAllTransactions: syncer.refreshAllTransactions,
-        refreshTransaction: refreshTransaction(web3, eventsRegistry, queue),
         registerEvent: eventsRegistry.register,
         syncTransactions: syncer.syncTransactions,
-        tryParseEventLog: tryParseEventLog(web3, eventsRegistry)
+        tryParseEventLog: tryParseEventLog(web3, eventsRegistry),
+        getPastCoinTransactions: syncer.getPastCoinTransactions,
       },
       events: [
-        'wallet-transactions-changed',
         'token-transactions-changed',
         'wallet-state-changed',
         'coin-block',
+        'transactions-next-page',
         'indexer-connection-status-changed',
         'wallet-error'
       ],
@@ -74,9 +80,10 @@ function createPlugin () {
     };
   }
 
-  function stop () {
+  function stop() {
     // blocksStream.destroy();
-    blocksStream.unsubscribe();
+    blocksStream.removeAllListeners();
+    clearInterval(interval);
     syncer.stop();
   }
 
