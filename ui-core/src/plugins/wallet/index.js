@@ -1,7 +1,5 @@
 'use strict';
 
-const debug = require('debug')('lmr-wallet:core:wallet');
-const { add } = require('lodash');
 const Web3 = require('web3');
 
 const api = require('./api');
@@ -11,7 +9,7 @@ function createPlugin () {
   let walletAddress;
 
   function start ({ config, eventBus, plugins }) {
-    debug.enabled = config.debug;
+    // debug.enabled = config.debug;
 
     const web3 = new Web3(plugins.eth.web3Provider);
 
@@ -25,7 +23,7 @@ function createPlugin () {
         .catch(function (err) {
           eventBus.emit('wallet-error', {
             inner: err,
-            message: `Could not get ${config.symbol} balance`,
+            message: `Could not get ETH balance`,
             meta: { plugin: 'wallet' }
           })
         });
@@ -45,7 +43,7 @@ function createPlugin () {
     return {
       api: {
         createAddress: hdkey.getAddress,
-        createPrivateKey: hdkey.getPrivateKey,
+        createPrivateKey: hdkey.getPrivateKeyStringPrefixed,
         getAddressAndPrivateKey: hdkey.getAddressAndPrivateKey,
         getGasLimit: api.estimateGas(web3),
         getGasPrice: api.getGasPrice(web3),

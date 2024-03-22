@@ -1,0 +1,16 @@
+.react-tabs__tab:focus:after {
+  display: none;
+}
+
+.react-tabs {
+  padding-top: 15px;
+}
+
+.react-tabs__tab-list {
+  margin: revert;
+}
+
+.react-tabs__tab--selected {
+  background-color: #0e4353;
+  color: white;
+}

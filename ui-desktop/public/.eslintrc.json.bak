@@ -1,0 +1,20 @@
+{
+  "env": {
+    "node": true
+  },
+  "extends": [
+    "bloq",
+    "prettier"
+  ],
+  "parserOptions": {
+    "ecmaFeatures": {
+      "experimentalObjectRestSpread": false,
+      "jsx": false
+    },
+    "ecmaVersion": 2017
+  },
+  "root": true,
+  "rules": {
+    "promise/catch-or-return": "error"
+  }
+}

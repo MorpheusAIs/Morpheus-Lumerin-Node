@@ -1,6 +1,6 @@
 'use strict'
 
-const debug = require('debug')('lmr-wallet:core:devices')
+const logger = require('../../logger');
 const { AbortController } = require('@azure/abort-controller')
 const {
   EVENT_DEVICES_STATE_UPDATED,
@@ -18,8 +18,7 @@ function createPlugin() {
    * @returns Module
    */
   function start({ config, eventBus }) {
-    debug.enabled = config.debug
-    debug('Initiating devices discovery module')
+    logger.debug('Initiating devices discovery module')
     let abort
     let isDiscovering = false
 
@@ -47,7 +46,7 @@ function createPlugin() {
               eventBus.emit(EVENT_DEVICES_STATE_UPDATED, { isDiscovering })
             })
             .catch((err) => {
-              debug('Device discovery error', err)
+              logger.error('Device discovery error', err)
             })
         },
         stopDiscovery: async () => {
@@ -62,7 +61,7 @@ function createPlugin() {
           setPool(host, pool, abort.signal, (update) => {
             eventBus.emit(EVENT_DEVICES_DEVICE_UPDATED, update)
           }).catch((err) => {
-            debug('Set pool error:', err)
+            logger.error('Set pool error:', err)
             eventBus.emit('wallet-error', {
               inner: err,
               message: `Failed to update miner configuration: ${host}`,

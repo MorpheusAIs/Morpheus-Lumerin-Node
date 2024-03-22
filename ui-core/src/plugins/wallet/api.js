@@ -21,15 +21,16 @@ const ensureAccount = function (web3) {
   }
 }
 
+const getNextNonce = (web3, from) => web3.eth.getTransactionCount(from, 'pending')
+
 const sendSignedTransaction = (web3, logTransaction) =>
   function (privateKey, { from, to, value, gas, gasPrice }) {
-    
     addAccount(web3, privateKey)
-    return web3.eth
-      .getTransactionCount(from, 'pending')
+    const units = Math.floor(Number(value * 10 ** 18)).toString()
+    return getNextNonce(web3, from)
       .then((nonce) =>
         logTransaction(
-          web3.eth.sendTransaction({ from, to, value, gas, gasPrice, nonce }),
+          web3.eth.sendTransaction({ from, to, value: units, gas, nonce }),
           from
         )
       )

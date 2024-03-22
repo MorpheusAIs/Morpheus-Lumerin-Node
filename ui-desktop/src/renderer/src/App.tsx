@@ -1,33 +1,50 @@
-import Versions from './components/Versions'
-import electronLogo from './assets/electron.svg'
+import React from 'react'
+import Modal from 'react-modal'
+import ReactDOM from 'react-dom'
+import { ThemeProvider } from 'styled-components'
+
+import theme from './ui/theme'
+import Root from './components/common/Root'
+import { Provider as ClientProvider } from './store/hocs/clientContext'
+import { Provider, createStore } from './store/store'
+
+import createClient from './client'
+import { subscribeToMainProcessMessages } from './subscriptions'
+
+import Web3ConnectionNotifier from './components/Web3ConnectionNotifier'
+import { ToastsProvider } from './components/toasts'
+import { GlobalTooltips } from './components/common'
+import Onboarding from './components/onboarding/Onboarding'
+import Loading from './components/Loading'
+import Router from './components/Router'
+import Login from './components/Login'
+
+const client = createClient(createStore)
+
+// Initialize all the Main Process subscriptions
+subscribeToMainProcessMessages(client.store)
 
 function App(): JSX.Element {
   const ipcHandle = (): void => window.electron.ipcRenderer.send('ping')
 
   return (
     <>
-      <img alt="logo" className="logo" src={electronLogo} />
-      <div className="creator">Powered by electron-vite</div>
-      <div className="text">
-        Build an Electron app with <span className="react">React</span>
-        &nbsp;and <span className="ts">TypeScript</span>
-      </div>
-      <p className="tip">
-        Please try pressing <code>F12</code> to open the devTool
-      </p>
-      <div className="actions">
-        <div className="action">
-          <a href="https://electron-vite.org/" target="_blank" rel="noreferrer">
-            Documentation
-          </a>
-        </div>
-        <div className="action">
-          <a target="_blank" rel="noreferrer" onClick={ipcHandle}>
-            Send IPC
-          </a>
-        </div>
-      </div>
-      <Versions></Versions>
+      <ClientProvider value={client}>
+        <Provider store={client.store}>
+          <ThemeProvider theme={theme}>
+            <ToastsProvider>
+              <Root
+                OnboardingComponent={Onboarding}
+                LoadingComponent={Loading}
+                RouterComponent={Router}
+                LoginComponent={Login}
+              />
+              <GlobalTooltips />
+              <Web3ConnectionNotifier />
+            </ToastsProvider>
+          </ThemeProvider>
+        </Provider>
+      </ClientProvider>
     </>
   )
 }
