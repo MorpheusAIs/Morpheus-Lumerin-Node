@@ -1,0 +1,135 @@
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    main: ./cmd
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows # Does not compile for Arm Windows due to go-ole https://github.com/shirou/gopsutil/issues/916
+        goarch: arm64
+    no_unique_dist_dir: true
+    binary: "{{ .ProjectName }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}"
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X gitlab.com/TitanInd/proxy/proxy-router-v3/internal/config.Commit={{.Commit}} -X main.date={{.Date}} -X 'gitlab.com/TitanInd/proxy/proxy-router-v3/internal/config.BuildVersion={{.Version}}'
+
+archives:
+  - format: binary
+    name_template: >-
+      {{ .ProjectName }}_{{ .Tag }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+release:
+  # Repo in which the release will be created.
+  # Default is extracted from the origin remote URL or empty if its private hosted.
+  github:
+    owner: Lumerin-protocol
+    name: proxy-router
+
+  # If set to true, will not auto-publish the release.
+  # Available only for GitHub and Gitea.
+  # Default is false.
+  draft: false
+
+  # Whether to remove existing draft releases with the same name before creating
+  # a new one.
+  # Only effective if `draft` is set to true.
+  # Available only for GitHub.
+  #
+  # Default: false.
+  # Since: v1.11.
+  replace_existing_draft: true
+
+  # Useful if you want to delay the creation of the tag in the remote.
+  # You can create the tag locally, but not push it, and run GoReleaser.
+  # It'll then set the `target_commitish` portion of the GitHub release to the
+  # value of this field.
+  # Only works on GitHub.
+  #
+  # Default: empty.
+  # Since: v1.11.
+  target_commitish: ""
+
+  # If set, will create a release discussion in the category specified.
+  #
+  # Warning: do not use categories in the 'Announcement' format.
+  #  Check https://github.com/goreleaser/goreleaser/issues/2304 for more info.
+  #
+  # Default is empty.
+  discussion_category_name: ""
+
+  # If set to auto, will mark the release as not ready for production
+  # in case there is an indicator for this in the tag e.g. v1.0.0-rc1
+  # If set to true, will mark the release as not ready for production.
+  # Default is false.
+  prerelease: "false"
+
+  # What to do with the release notes in case there the release already exists.
+  #
+  # Valid options are:
+  # - `keep-existing`: keep the existing notes
+  # - `append`: append the current release notes to the existing notes
+  # - `prepend`: prepend the current release notes to the existing notes
+  # - `replace`: replace existing notes
+  #
+  # Default is `keep-existing`.
+  mode: replace
+
+  # Header template for the release body.
+  # Defaults to empty.
+  header: |
+    ## Proxyrouter ({{ .Date }})
+
+    Welcome to this new release!
+
+  # Footer template for the release body.
+  # Defaults to empty.
+  footer: |
+    ## Thanks!
+
+    Those were the changes on {{ .Branch }}!
+
+  # You can change the name of the release.
+  # Default is `{{.Tag}}` on OSS and `{{.PrefixedTag}}` on Pro.
+  name_template: "{{.ProjectName}}-{{.Tag}}"
+
+  # You can disable this pipe in order to not create the release on any SCM.
+  # Keep in mind that this might also break things that depend on the release
+  # URL, for instance, homebrew taps.
+  #
+  # Defaults to false.
+  disable: false
+
+  # Set this to true if you want to disable just the artifact upload to the SCM.
+  # If this is true, GoReleaser will still create the release with the
+  # changelog, but won't upload anything to it.
+  #
+  # Default: false.
+  # Since: v1.11.
+  skip_upload: false
+# modelines, feel free to remove those if you don't want/use them:
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
