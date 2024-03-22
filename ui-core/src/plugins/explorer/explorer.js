@@ -1,53 +1,63 @@
 'use strict'
 
-const axios = require('axios')
 const EventEmitter = require('events')
+const pRetry = require('p-retry');
+const { createExplorerApis } = require('./api/factory');
 
-const createExplorer = (chainId, web3, lumerin) => {
-  let baseURL;
-  switch (chainId.toString()) {
-    case 'mainnet':
-    case '1':
-      baseURL = 'https://api.etherscan.io/api'
-      break
-    case 'goerli':
-    case '5':
-      baseURL = 'https://api-goerli.etherscan.io/api'
-      break
-    default:
-      throw new Error(`Unsupported chain ${chainId}`)
-  }
-  const api = axios.create({
-    baseURL,
-  });
-
-  return new Explorer({ api, lumerin, web3 });
+/**
+ * 
+ * @param {string[]} explorerApiURLs 
+ * @param {*} web3 
+ * @param {*} lumerin 
+ * @param {*} eventBus 
+ * @returns 
+ */
+const createExplorer = (explorerApiURLs, web3, lumerin, eventBus) => {
+  const apis = createExplorerApis(explorerApiURLs);
+  return new Explorer({ apis, lumerin, web3, eventBus })
 }
 
 class Explorer {
-  constructor({ api, lumerin, web3 }) {
-    this.api = api;
-    this.lumerin = lumerin;
-    this.web3 = web3;
+  /** @type {import('contracts-js').LumerinContext} */
+  lumerin = null;
+
+  constructor({ apis, lumerin, web3, eventBus }) {
+    this.apis = apis
+    this.lumerin = lumerin
+    this.web3 = web3
+    this.eventBus = eventBus
   }
 
-  async getTransactions(from, to, address) {
-    const params = {
-      module: 'account',
-      action: 'tokentx',
-      sort: 'desc',
-      contractaddress: this.lumerin.address,
-      startBlock: from,
-      endBlock: to,
-      address,
-    }
+  /**
+   * Returns list of transactions for ETH and LMR token
+   * @param {string} from start block
+   * @param {string} to end block
+   * @param {string} address wallet address
+   * @returns {Promise<any[]>}
+   */
+  async getTransactions(from, to, address, page, pageSize) {
+    const lmrTransactions = await this.invoke('getTokenTransactions', from, to, address, this.lumerin._address, page, pageSize)
+    const ethTransactions = await this.invoke('getEthTransactions', from, to, address, page, pageSize)
 
-    const { data } = await this.api.get('/', { params })
-    const { status, message, result } = data
-    if (status !== '1' && message !== 'No transactions found') {
-      throw new Error(result)
+    if (page && pageSize) {
+      const hasNextPage = lmrTransactions.length || ethTransactions.length;
+      this.eventBus.emit('transactions-next-page', {
+        hasNextPage: Boolean(hasNextPage),
+        page: page + 1,
+      })
     }
-    return result.map((transaction) => transaction.hash)
+    return [...lmrTransactions, ...ethTransactions]
+  }
+
+  /**
+   * Returns list of transactions for LMR token
+   * @param {string} from start block
+   * @param {string} to end block
+   * @param {string} address wallet address
+   * @returns {Promise<any[]>}
+   */
+  async getETHTransactions(from, to, address) {
+    return await this.invoke('getEthTransactions', from, to, address)
   }
 
   /**
@@ -70,12 +80,29 @@ class Explorer {
         },
       })
       .on('data', (data) => {
-        const { transactionHash } = data
-        stream.emit('data', transactionHash)
+        stream.emit('data', data)
       })
       .on('error', (err) => {
         stream.emit('error', err)
       })
+
+    this.lumerin.events
+      .Transfer({
+        filter: {
+          from: address,
+        },
+      })
+      .on('data', (data) => {
+        stream.emit('data', data)
+      })
+      .on('error', (err) => {
+        stream.emit('error', err)
+      })
+
+    setInterval(() => {
+      stream.emit('resync')
+    }, 60000)
+
     return stream
   }
 
@@ -87,6 +114,28 @@ class Explorer {
         totalDifficulty: block.totalDifficulty,
       }
     })
+  }
+
+  /**
+   * Helper method that attempts to make a function call for multiple providers
+   * @param {string} methodName 
+   * @param  {...any} args 
+   * @returns {Promise<any>}
+   */
+  async invoke(methodName, ...args) {
+    return await pRetry(async () => {
+      let lastErr
+
+      for (const api of this.apis) {
+        try {
+          return await api[methodName](...args)
+        } catch (err) {
+          lastErr = err
+        }
+      }
+
+      throw new Error(`Explorer error, tried all of the providers without success, ${lastErr}`)
+    }, { minTimeout: 5000, retries: 5 })
   }
 }
 

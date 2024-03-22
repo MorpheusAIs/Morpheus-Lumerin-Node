@@ -1,21 +1,16 @@
 'use strict';
 
-const { identity } = require('lodash');
-const debug = require('debug')('lmr-wallet:core:explorer:syncer');
-const pAll = require('p-all');
-const pWhilst = require('p-whilst');
-const pTimeout = require('p-timeout');
-const noop = require('lodash/noop');
+const logger = require('../../logger');
 
 // eslint-disable-next-line max-params
 function createSyncer (config, eventBus, web3, queue, eventsRegistry, indexer) {
-  debug.enabled = config.debug;
+  // debug.enabled = config.debug;
 
   let bestBlock;
   const gotBestBlockPromise = new Promise(function (resolve) {
     eventBus.once('coin-block', function (header) {
       bestBlock = header.number;
-      debug('Got best block', bestBlock);
+      logger.debug('Got best block', bestBlock);
       resolve(bestBlock);
     });
   })
@@ -27,14 +22,17 @@ function createSyncer (config, eventBus, web3, queue, eventsRegistry, indexer) {
 
     const { symbol, displayName } = config;
 
+    // LMR transactions
     indexer.getTransactionStream(address)
-      .on('data', queue.addTransaction(address))
+      .on('data', (data)=>{
+        queue.addTx(address, null)(mapApiResponseToTrxReceipt(data))
+      })
       .on('resync', function () {
-        debug(`Shall resync ${symbol} transactions on next block`)
+        logger.debug(`Shall resync ${symbol} transactions on next block`)
         shallResync = true;
       })
       .on('error', function (err) {
-        debug(`Shall resync ${symbol} transactions on next block`)
+        logger.debug(`Shall resync ${symbol} transactions on next block`)
         shallResync = true;
         eventBus.emit('wallet-error', {
           inner: err,
@@ -43,6 +41,7 @@ function createSyncer (config, eventBus, web3, queue, eventsRegistry, indexer) {
         });
       });
 
+    // ETH transactions
     // Check if shall resync when a new block is seen, as that is the
     // indication of proper reconnection to the Ethereum node.
     eventBus.on('coin-block', function ({ number }) {
@@ -50,11 +49,12 @@ function createSyncer (config, eventBus, web3, queue, eventsRegistry, indexer) {
         resyncing = true;
         shallResync = false;
         // eslint-disable-next-line promise/catch-or-return
-        indexer.getTransactions(bestSyncBlock, number, address)
+        indexer.getETHTransactions(bestSyncBlock, number, address)
           .then(function (transactions) {
             const { length } = transactions;
-            debug(`${length} past ${symbol} transactions retrieved`)
-            transactions.forEach(queue.addTransaction(address));
+            logger.debug(`${length} past ETH transactions retrieved`)
+            const txs = transactions.map(mapApiResponseToTrxReceipt)
+            queue.addTxs(address,null)(txs)
             bestSyncBlock = number;
           })
           .catch(function (err) {
@@ -69,115 +69,74 @@ function createSyncer (config, eventBus, web3, queue, eventsRegistry, indexer) {
             resyncing = false;
           })
       } else if (!resyncing) {
-        bestSyncBlock = number;
         bestBlock = number;
       }
     })
   }
 
-  function getPastCoinTransactions (fromBlock, toBlock, address) {
+  function mapApiResponseToTrxReceipt(trx){
+    const transaction = {
+      from: trx.from,
+      to: trx.to,
+      value: trx.value,
+      input: trx.input,
+      gas: trx.gas,
+      gasPrice: trx.gasPrice,
+      hash: trx.hash,
+      nonce: trx.nonce,
+      logIndex: trx.logIndex, // emitted only in events, used to differentiate between LMR transfers within one transaction 
+      // maxFeePerGas: params.maxFeePerGas,
+      // maxPriorityFeePerGas: params.maxPriorityFeePerGas,
+    }
+
+    if (trx.returnValues){
+      transaction.from = trx.returnValues.from;
+      transaction.to = trx.returnValues.to;
+      transaction.value = trx.returnValues.value;
+      transaction.hash = trx.transactionHash;
+    }
+
+    const receipt = {
+      transactionHash: trx.hash,
+      transactionIndex: trx.transactionIndex,
+      blockHash: trx.blockHash,
+      blockNumber: trx.blockNumber,
+      from: trx.from,
+      to: trx.to,
+      value: trx.value,
+      contractAddress: trx.contractAddress,
+      cumulativeGasUsed: trx.cumulativeGasUsed,
+      gasUsed: trx.gasUsed,
+      tokenSymbol: trx.tokenSymbol,
+    }
+
+    if (trx.returnValues){
+      receipt.from = trx.returnValues.from;
+      receipt.to = trx.returnValues.to;
+      receipt.value = trx.returnValues.value;
+      receipt.transactionHash = trx.transactionHash;
+      receipt.tokenSymbol = trx.address === config.chain.lmrTokenAddress ? 'LMR' : undefined;
+    }
+
+    return {transaction, receipt}
+  }
+
+  /**
+   * @param {string} fromBlock 
+   * @param {string} toBlock 
+   * @param {string} address 
+   * @returns {Promise<string>} lastSyncedBlock
+   */
+  async function getPastCoinTransactions (fromBlock, toBlock, address, page, pageSize) {
     const { symbol } = config;
 
-    return indexer.getTransactions(fromBlock, toBlock, address)
-      .then(function (transactions) {
-        debug(`${transactions.length} past ${symbol} transactions retrieved`);
-        return Promise.all(transactions.map(queue.addTransaction(address)))
-          .then(() => toBlock);
-      });
+    const transactions = await indexer.getTransactions(fromBlock, toBlock || bestBlock, address, page, pageSize)
+    logger.debug(`${transactions.length} past ${symbol} transactions retrieved`);
+
+    queue.addTxs(address, null)(transactions.map(mapApiResponseToTrxReceipt))
+
+    return toBlock;
   }
-
-  function getPastEventsWithChunks (options) {
-    const CHUNK_SIZE = 4000;
-    const {
-      address,
-      contract,
-      eventName,
-      fromBlock,
-      toBlock,
-      filter,
-      metaParser,
-      minBlock = 0,
-      onProgress = noop
-    } = options;
-    const baseFromBlock = Math.max(fromBlock, minBlock);
-    debug('Retrieving from %s to %s in chunks', baseFromBlock, toBlock);
-    let chunkIndex = 0;
-    const getNewFromBlock = index => baseFromBlock + CHUNK_SIZE * index;
-    const getNewToBlock = function (index) {
-      const istLastRequest = baseFromBlock + CHUNK_SIZE * (index + 1) === toBlock;
-      return Math.max(Math.min(baseFromBlock + CHUNK_SIZE * (index + 1) - (istLastRequest ? 0 : 1), toBlock), minBlock);
-    };
-    return pWhilst(
-      function () {
-        const newFromBlock = getNewFromBlock(chunkIndex);
-        const newToBlock = getNewToBlock(chunkIndex);
-        return newFromBlock < newToBlock;
-      },
-      function () {
-        const newFromBlock = getNewFromBlock(chunkIndex);
-        const newToBlock = getNewToBlock(chunkIndex);
-        debug('Retrieving from %s to %s for event %s', newFromBlock, newToBlock, eventName);
-        return pTimeout(
-          contract
-            .getPastEvents(eventName, {
-              fromBlock: newFromBlock,
-              toBlock: newToBlock,
-              filter
-            })
-            .then(function (events) {
-              debug(`${events.length} past ${eventName} events retrieved`)
-              return Promise.all(
-                events.map(queue.addEvent(address, metaParser))
-              );
-            })
-            .then(function () {
-              debug('Retrieved from %s to %s for event %s', newFromBlock, newToBlock, eventName);
-              chunkIndex++;
-              return onProgress(newToBlock);
-            })
-          ,
-          1000 * 60 * 2
-        );
-      });
-  }
-
-  const getPastEvents = (fromBlock, toBlock, address, onProgress) =>
-    pAll(
-      eventsRegistry
-        .getAll()
-        .map(function (registration) {
-          const {
-            contractAddress,
-            abi,
-            eventName,
-            filter,
-            metaParser,
-            minBlock = 0
-          } = registration(address);
-
-          const contract = new web3.eth.Contract(abi, contractAddress);
-
-          // Ignore missing events
-          if (!contract.events[eventName]) {
-            debug(`Could not get past events for ${eventName}`);
-            return null;
-          }
-          return () =>
-            getPastEventsWithChunks({
-              address,
-              contract,
-              eventName,
-              fromBlock,
-              toBlock,
-              filter,
-              minBlock,
-              onProgress,
-              metaParser
-            })
-        })
-        .filter(identity),
-      { concurrency: 3 }
-    );
 
   const subscriptions = [];
 
@@ -199,7 +158,7 @@ function createSyncer (config, eventBus, web3, queue, eventsRegistry, indexer) {
 
       // Ignore missing events
       if (!contract.events[eventName]) {
-        debug('Could not subscribe: event not found', eventName);
+        logger.error('Could not subscribe: event not found', eventName);
         return;
       }
 
@@ -208,7 +167,7 @@ function createSyncer (config, eventBus, web3, queue, eventsRegistry, indexer) {
         .on('data', queue.addEvent(address, metaParser))
         .on('changed', queue.addEvent(address, metaParser))
         .on('error', function (err) {
-          debug('Shall resync events on next block');
+          logger.error('Shall resync events on next block');
           shallResync = true;
           eventBus.emit('wallet-error', {
             inner: err,
@@ -252,18 +211,15 @@ function createSyncer (config, eventBus, web3, queue, eventsRegistry, indexer) {
     });
   }
 
-  const syncTransactions = (fromBlock, address, onProgress) =>
+  const syncTransactions = (fromBlock, address, onProgress, page, pageSize) =>
     gotBestBlockPromise
       .then(function () {
-        debug('Syncing', fromBlock, bestBlock);
+        logger.debug('Syncing', fromBlock, bestBlock);
         subscribeCoinTransactions(bestBlock, address);
         subscribeEvents(bestBlock, address);
-        return Promise.all([
-          getPastCoinTransactions(fromBlock, bestBlock, address),
-          getPastEvents(fromBlock, bestBlock, address, onProgress)
-        ]);
+        return getPastCoinTransactions(fromBlock, bestBlock, address, page, pageSize)
       })
-      .then(function ([syncedBlock]) {
+      .then(function (syncedBlock) {
         bestBlock = syncedBlock;
         return syncedBlock;
       });
@@ -271,13 +227,9 @@ function createSyncer (config, eventBus, web3, queue, eventsRegistry, indexer) {
   const refreshAllTransactions = address =>
     gotBestBlockPromise
       .then(() => {
-        return Promise.all([
-          getPastCoinTransactions(0, bestBlock, address),
-          getPastEvents(0, bestBlock, address, function (syncedBlock) { bestBlock = syncedBlock })
-        ])
+        return getPastCoinTransactions(0, bestBlock, address)
           .then(function ([syncedBlock]) {
             bestBlock = syncedBlock;
-
             return syncedBlock;
           })
         });
@@ -286,7 +238,7 @@ function createSyncer (config, eventBus, web3, queue, eventsRegistry, indexer) {
     subscriptions.forEach(function (subscription) {
       subscription.unsubscribe(function (err) {
         if (err) {
-          debug('Could not unsubscribe from event', err.message);
+          logger.error('Could not unsubscribe from event', err.message);
         }
       });
     });
@@ -294,7 +246,6 @@ function createSyncer (config, eventBus, web3, queue, eventsRegistry, indexer) {
 
   return {
     getPastCoinTransactions,
-    getPastEvents,
     refreshAllTransactions,
     stop,
     syncTransactions

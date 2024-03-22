@@ -1,8 +1,8 @@
-'use strict';
+'use strict'
 
-const { merge, union } = require('lodash');
-const debug = require('debug')('lmr-wallet:core');
-const EventEmitter = require('events');
+const { merge, union } = require('lodash')
+const EventEmitter = require('events')
+const logger = require('./logger');
 
 const pluginCreators = [
   require('./plugins/rates'),
@@ -14,85 +14,88 @@ const pluginCreators = [
   require('./plugins/proxy-router'),
   require('./plugins/contracts'),
   require('./plugins/devices'),
-];
+]
 
-function createCore () {
-  let eventBus;
-  let initialized = false;
-  let plugins;
+function createCore() {
+  let eventBus
+  let initialized = false
+  let plugins
 
-  function start (givenConfig) {
+  function start(givenConfig) {
     if (initialized) {
-      throw new Error('Wallet Core already initialized');
+      throw new Error('Wallet Core already initialized')
     }
 
-    const config = merge({}, givenConfig);
+    const config = merge({}, givenConfig)
 
-    eventBus = new EventEmitter();
-
-    debug.enabled = config.debug;
     if (config.debug) {
-      const emit = eventBus.emit.bind(eventBus);
-      eventBus.emit = function (eventName, ...args) {
-        debug('<<--', eventName, ...args);
-        emit(eventName, ...args);
-      }
+      logger.transports.console.level = 'debug'
+      logger.transports.file.level = 'debug'
+    } else {
+      logger.transports.console.level = 'warn'
+      logger.transports.file.level = 'warn'
     }
 
-    debug('Wallet core starting', config);
+    eventBus = new EventEmitter()
+    eventBus.emit = function (eventName, ...args) {
+      logger.debug('[Event] -', eventName)
+      return EventEmitter.prototype.emit.apply(this, arguments)
+    }
 
-    let coreEvents = [];
-    const pluginsApi = {};
+    logger.debug('Wallet core starting', config)
 
-    plugins = pluginCreators.map(create => create());
+    let coreEvents = []
+    const pluginsApi = {}
+
+    plugins = pluginCreators.map((create) => create())
 
     plugins.forEach(function (plugin) {
-      const params = { config, eventBus, plugins: pluginsApi };
-      const { api, events, name } = plugin.start(params);
+      const params = { config, eventBus, plugins: pluginsApi }
+      const { api, events, name } = plugin.start(params)
 
       if (api && name) {
-        pluginsApi[name] = api;
+        pluginsApi[name] = api
       }
 
       if (events) {
-        coreEvents = union(coreEvents, events);
+        coreEvents = union(coreEvents, events)
       }
-    });
+    })
 
-    debug('Exposed events', coreEvents);
+    logger.debug('Exposed events', coreEvents)
 
-    initialized = true;
+    initialized = true
 
     return {
       api: pluginsApi,
       emitter: eventBus,
-      events: coreEvents
-    };
+      events: coreEvents,
+    }
   }
 
-  function stop () {
+  function stop() {
     if (!initialized) {
-      throw new Error('Wallet Core not initialized');
+      throw new Error('Wallet Core not initialized')
     }
 
     plugins.reverse().forEach(function (plugin) {
-      plugin.stop();
-    });
+      plugin.stop()
+    })
 
-    plugins = null;
+    plugins = null
 
-    eventBus.removeAllListeners();
-    eventBus = null;
+    eventBus.removeAllListeners()
+    eventBus = null
 
-    initialized = false;
+    initialized = false
 
-    debug('Wallet core stopped');
+    logger.warn('Wallet core stopped')
   }
 
   return {
     start,
-    stop
-  };
+    stop,
+  }
 }
 
-module.exports = createCore;
+module.exports = createCore
