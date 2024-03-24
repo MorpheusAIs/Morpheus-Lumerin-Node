@@ -1,9 +1,9 @@
 {
   "name": "@lumerin/wallet-core",
-  "version": "1.0.18",
+  "version": "1.0.90",
   "author": {
-    "name": "Kodee McIntosh",
-    "email": "kodee@lumerin.io",
+    "name": "Lumerin",
+    "email": "developer@lumerin.io",
     "url": "https://lumerin.io"
   },
   "description": "Core logic to develop a Lumerin wallet",
@@ -20,12 +20,13 @@
     "src"
   ],
   "main": "src/index.js",
-  "repository": "https://gitlab.com/TitanInd/proxy/wallet-core",
+  "repository": "https://github.com/lumerin-protocol/WalletCore",
   "scripts": {
     "check": "dependency-check . --no-dev --ignore-module patch-package --ignore-module websocket-reconnector",
     "lint": "",
     "prepare": "patch-package && husky install",
-    "prepublishOnly": "npm run check"
+    "prepublishOnly": "npm run check",
+    "kill-proxy": "kill-port 3333 && kill-port 3334"
   },
   "dependencies": {
     "@azure/abort-controller": "^1.1.0",
@@ -33,11 +34,17 @@
     "abi-decoder": "^2.4.0",
     "axios": "0.21.1",
     "axios-cookiejar-support": "1.0.1",
+    "bottleneck": "^2.19.5",
+    "chalk": "^2.4.2",
     "cheerio": "^1.0.0-rc.12",
-    "contracts-js": "github:Lumerin-protocol/contracts-js#v0.0.13",
+    "contracts-js": "github:Lumerin-protocol/contracts-js#v0.1.0",
+    "cross-port-killer": "^1.4.0",
     "debug": "4.1.1",
+    "ecies-geth": "^1.7.0",
+    "electron-log": "^4.4.8",
     "ethereumjs-wallet": "1.0.1",
     "ip": "^1.1.8",
+    "json-stringify-safe": "^5.0.1",
     "lodash": "4.17.15",
     "p-all": "3.0.0",
     "p-retry": "4.6.0",
@@ -47,7 +54,7 @@
     "safe-exchange-rate": "1.0.0",
     "socket.io-client": "2.1.1",
     "tough-cookie": "2.5.0",
-    "web3": "^1.7.5",
+    "web3": "^1.8.1",
     "websocket-reconnector": "1.1.1"
   },
   "devDependencies": {

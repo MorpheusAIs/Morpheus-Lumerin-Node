@@ -1,24 +1,27 @@
 'use strict'
 
+const { Lumerin } = require('contracts-js')
+
 const addAccount = (web3, privateKey) =>
   web3.eth.accounts.wallet
     .create(0)
     .add(web3.eth.accounts.privateKeyToAccount(privateKey))
 
-const getNextNonce = (web3, from) =>
-  web3.eth.getTransactionCount(from, 'pending')
-
+/**
+ * 
+ * @param {*} web3 
+ * @param {import("contracts-js").LumerinContext} lumerin 
+ * @param {*} logTransaction 
+ * @param {*} metaParsers 
+ * @returns 
+ */
 const sendLmr = (web3, lumerin, logTransaction, metaParsers) => {
   return (privateKey, { gasPrice, gas, from, to, value }) => {
     addAccount(web3, privateKey)
     const lmrValue = parseFloat(value);
     const lmrUnits = Math.floor(Number(lmrValue * 10 ** 8)).toString();
-    
-    // to = '0x146590438A9Ab7F186d9758629Af476b2B962A37'
-    // value = 100 //value needs to be in units of 1x10^8 lumerin
 
-    return getNextNonce(web3, from).then((nonce) =>
-      logTransaction(
+    return logTransaction(
         lumerin.methods.transfer(to, lmrUnits).send({ from, gas }),
         from,
         metaParsers.transfer({
@@ -26,7 +29,6 @@ const sendLmr = (web3, lumerin, logTransaction, metaParsers) => {
           returnValues: { _from: from, _to: to, _value: lmrUnits },
         })
       )
-    )
   }
 }
 
@@ -52,9 +54,7 @@ const increaseAllowance = (
   walletAddress,
   gasLimit = 1000000
 ) => {
-  const { Lumerin } = new LumerinContracts(web3, chain)
-
-  return Lumerin.methods
+  return Lumerin(web3, chain).methods
     .increaseAllowance(claimantAddress, lmrAmount)
     .send({ from: walletAddress, gas: gasLimit })
 }

@@ -1,18 +1,17 @@
 'use strict'
 
-const debug = require('debug')('lmr-wallet:core:token');
 const Web3 = require('web3');
 const { Lumerin } = require('contracts-js');
 
 const events = require('./events');
-const { registerToken, getTokenBalance, getTokenGasLimit } = require('./api');
+const { registerToken, getTokenBalance, getTokenGasLimit, claimFaucet } = require('./api');
 
 function createPlugin () {
   let walletAddress;
 
   function start ({ config, eventBus, plugins }) {
-    debug.enabled = config.debug;
-    const { lmrTokenAddress } = config;
+    // debug.enabled = config.debug;
+    const { lmrTokenAddress, faucetAddress, faucetUrl } = config;
 
 
     const web3 = new Web3(plugins.eth.web3Provider);
@@ -23,10 +22,6 @@ function createPlugin () {
         .then(function (balance) {
           eventBus.emit('token-balance-changed', {
             lmrBalance: balance,
-          });
-
-          eventBus.emit('token-contract-received', {
-            contract: Lumerin.address
           });
         })
         .catch(function (err) {
@@ -40,7 +35,6 @@ function createPlugin () {
 
     eventBus.on('open-wallet', function ({ address }) {
       walletAddress = address;
-
       emitLmrBalance(address);
     });
 
@@ -57,7 +51,8 @@ function createPlugin () {
         metaParsers: {
           approval: events.approvalMetaParser,
           transfer: events.transferMetaParser
-        }
+        },
+        claimFaucet: claimFaucet(web3, faucetAddress, faucetUrl),
       },
       events: [
         'token-contract-received',

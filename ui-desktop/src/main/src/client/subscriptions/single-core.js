@@ -42,7 +42,7 @@ export function subscribeSingleCore(core) {
   Object.keys(listeners).forEach(function (key) {
     coreListeners[core.chain][key] = withCore(core)(listeners[key])
   })
-
+  console.log("coreListeners", coreListeners);
   utils.subscribeTo(coreListeners[core.chain], core.chain)
 }
 
