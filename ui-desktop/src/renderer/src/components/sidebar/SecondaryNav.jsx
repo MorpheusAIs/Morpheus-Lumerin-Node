@@ -113,7 +113,7 @@ function SecondaryNav({
 }) {
   return (
     <Container>
-      <NavHeader parent={parent}>Tools</NavHeader>
+      {/* <NavHeader parent={parent}>Tools</NavHeader>
       <Button
         onClick={() => setActiveIndex(4)}
         activeClassName="active"
@@ -146,7 +146,7 @@ function SecondaryNav({
           <IconTools width={iconSize} />
         </IconWrapper>
         <Label parent={parent}>Utilities</Label>
-      </Button>
+      </Button> */}
       <HelpLink data-testid="help-nav-btn" onClick={onHelpLinkClick}>
         <IconWrapper parent={parent}>
           <IconHelp width={iconSize} />
