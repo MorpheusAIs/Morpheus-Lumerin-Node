@@ -87,7 +87,7 @@ export default function PrimaryNav({ parent, activeIndex, setActiveIndex }) {
         </Label>
       </Button>
 
-      <Button
+      {/* <Button
         onClick={() => setActiveIndex(1)}
         activeClassName="active"
         to="/marketplace"
@@ -120,7 +120,7 @@ export default function PrimaryNav({ parent, activeIndex, setActiveIndex }) {
           <IconChecklist width={iconSize} />
         </IconWrapper>
         <Label parent={parent}>Seller Hub</Label>
-      </Button>
+      </Button> */}
 
       {/* <Button
         onClick={() => setActiveIndex(3)}
