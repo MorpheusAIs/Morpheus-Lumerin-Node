@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { IconExternalLink } from '@tabler/icons';
+import { IconExternalLink } from '@tabler/icons-react';
 
 import withContractsRowState from '../../../store/hocs/withContractsRowState';
 import { Btn } from '../../common';

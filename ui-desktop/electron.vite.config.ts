@@ -30,7 +30,6 @@ export default defineConfig({
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer/src'),
-        '@tabler/icons': resolve('node_modules/@tabler/icons-react/dist/cjs/tabler-icons-react.cjs')
       }
     },
     plugins: [react(), svgr(), nodePolyfills()]

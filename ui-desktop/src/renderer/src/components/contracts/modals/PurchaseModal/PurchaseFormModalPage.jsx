@@ -27,7 +27,7 @@ import {
   ContractInfoContainer
 } from './common.styles';
 
-import { IconExternalLink, IconQuestionCircle } from '@tabler/icons';
+import { IconExternalLink, IconQuestionCircle } from '@tabler/icons-react';
 import { formatDuration, formatSpeed } from '../../utils';
 import { fromTokenBaseUnitsToLMR } from '../../../../utils/coinValue';
 

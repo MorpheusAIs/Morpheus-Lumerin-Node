@@ -1,10 +1,10 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import styled from 'styled-components';
-import { IconFileReport } from '@tabler/icons';
-import { IconBuildingStore } from '@tabler/icons';
-import { IconChecklist } from '@tabler/icons';
-import { IconWallet } from '@tabler/icons';
+import { IconFileReport } from '@tabler/icons-react';
+import { IconBuildingStore } from '@tabler/icons-react';
+import { IconChecklist } from '@tabler/icons-react';
+import { IconWallet } from '@tabler/icons-react';
 
 const Container = styled.div`
   display: flex;

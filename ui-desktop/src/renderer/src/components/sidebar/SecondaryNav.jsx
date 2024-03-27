@@ -3,10 +3,10 @@ import React from 'react';
 import { withClient } from '../../store/hocs/clientContext';
 import { NavLink } from 'react-router-dom';
 import styled from 'styled-components';
-import { IconPlugConnected } from '@tabler/icons';
-import { IconCpu2 } from '@tabler/icons';
-import { IconHelp } from '@tabler/icons';
-import { IconTools } from '@tabler/icons';
+import { IconPlugConnected } from '@tabler/icons-react';
+import { IconCpu2 } from '@tabler/icons-react';
+import { IconHelp } from '@tabler/icons-react';
+import { IconTools } from '@tabler/icons-react';
 
 const Container = styled.div`
   display: flex;

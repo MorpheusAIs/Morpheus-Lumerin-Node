@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { IconCircle } from '@tabler/icons';
+import { IconCircle } from '@tabler/icons-react';
 import {
   IconTriangleInverted,
   IconTriangle,
   IconAlertTriangle
-} from '@tabler/icons';
+} from '@tabler/icons-react';
 import { ToastsContext } from '../../toasts';
 import styled from 'styled-components';
 

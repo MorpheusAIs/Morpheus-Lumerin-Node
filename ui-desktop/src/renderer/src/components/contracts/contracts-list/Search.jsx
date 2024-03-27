@@ -1,5 +1,5 @@
 import React from 'react';
-import { IconRefresh, IconSearch } from '@tabler/icons';
+import { IconRefresh, IconSearch } from '@tabler/icons-react';
 import styled from 'styled-components';
 
 import debounce from 'lodash/debounce';
