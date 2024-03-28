@@ -13,7 +13,7 @@ import { CONTRACT_STATE } from '../../enums';
 import { lmrDecimals } from '../../utils/coinValue';
 import { formatBtcPerTh, calculateSuggestedPrice } from './utils';
 import ArchiveModal from './modals/ArchiveModal/ArchiveModal';
-import { IconArchive } from '@tabler/icons';
+import { IconArchive } from '@tabler/icons-react';
 import SellerWhitelistModal from './modals/SellerWhitelistModal/SellerWhitelistModal';
 import AdjustProfitModal from './modals/AdjustProfitModal/AdjustProfitModal';
 

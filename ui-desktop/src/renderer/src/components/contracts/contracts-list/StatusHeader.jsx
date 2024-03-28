@@ -1,5 +1,5 @@
 import React from 'react';
-import { IconRefresh } from '@tabler/icons';
+import { IconRefresh } from '@tabler/icons-react';
 import styled from 'styled-components';
 
 const Container = styled.div`

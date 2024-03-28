@@ -1,4 +1,4 @@
-import * as utils from 'web3-utils'
+import utils from 'web3-utils'
 import cuid from 'cuid'
 import Deferred from '../lib/Deferred'
 

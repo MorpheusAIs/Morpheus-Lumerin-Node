@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { abbreviateAddress } from '../../../../utils';
-import { IconTrashOff } from '@tabler/icons';
+import { IconTrashOff } from '@tabler/icons-react';
 import styled from 'styled-components';
 
 import { formatDuration, formatSpeed, formatPrice } from '../../utils';

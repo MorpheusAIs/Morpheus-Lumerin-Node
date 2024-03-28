@@ -5,7 +5,7 @@ const createMnemonic = () => Promise.resolve(bip39.generateMnemonic());
 const isValidMnemonic = mnemonic => bip39.validateMnemonic(mnemonic);
 
 const mnemonicToSeedHex = mnemonic =>
-  bip39.mnemonicToSeedHex(mnemonic).toString('hex');
+  bip39.mnemonicToSeed(mnemonic).toString('hex');
 
 const mnemonicToEntropy = mnemonic =>
   bip39.mnemonicToEntropy(mnemonic).toString('hex');

@@ -3,7 +3,7 @@ import styled from 'styled-components';
 import { ToastsContext } from '../toasts';
 import { BaseBtn } from '.';
 import { abbreviateAddress } from '../../utils';
-import { IconCopy } from '@tabler/icons';
+import { IconCopy } from '@tabler/icons-react';
 
 const Container = styled.header`
   padding: 1.6rem;

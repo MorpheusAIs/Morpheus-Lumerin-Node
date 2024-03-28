@@ -190,6 +190,7 @@ export function createClient(config) {
         core.emitter = emitter
         core.events = events
         core.api = api
+        console.log('Unknown chain =', core);
         subscriptions.subscribe(core)
       })
       .catch(function (err) {

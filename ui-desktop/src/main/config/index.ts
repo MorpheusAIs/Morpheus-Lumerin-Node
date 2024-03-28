@@ -1,7 +1,5 @@
-import * as utils from './utils'
+import { parseJSONArray } from './utils'
 
-console.log('utils: ', utils)
-const { parseJSONArray } = utils
 let httpApiUrls, explorerApiURLs
 
 try {

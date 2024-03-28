@@ -7,7 +7,7 @@ export const createMnemonic = () => Promise.resolve(bip39.generateMnemonic());
 export const isValidMnemonic = mnemonic => bip39.validateMnemonic(mnemonic);
 
 export const mnemonicToSeedHex = mnemonic =>
-  bip39.mnemonicToSeedHex(mnemonic).toString('hex');
+  bip39.mnemonicToSeed(mnemonic).toString('hex');
 
 export const mnemonicToEntropy = mnemonic => bip39.mnemonicToEntropy(mnemonic).toString('hex');
 

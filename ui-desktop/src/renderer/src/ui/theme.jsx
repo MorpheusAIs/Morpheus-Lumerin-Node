@@ -3,7 +3,7 @@ const darkShade = 'rgba(0, 0, 0, 0.2)';
 export default {
   colors: {
     transparent: 'transparent',
-    primary: '#0E4353',
+    primary: '#0e4353',
     primaryLight: '#53b1bd',
     primaryDark: '#252b34',
     translucentPrimary: '#014353',

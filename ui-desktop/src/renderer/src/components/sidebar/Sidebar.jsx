@@ -5,7 +5,7 @@ import SecondaryNav from './SecondaryNav'
 import PrimaryNav from './PrimaryNav'
 import LumerinLogo from '../icons/LumerinLogo'
 
-import LumerinLogoFull from '../icons/LumerinLogoFull.svg'
+import { LumerinLogoFull } from '../icons/LumerinLogoFull'
 import { AddressHeader } from '../common/AddressHeader'
 import withSidebarState from '../../store/hocs/withSidebarState'
 
@@ -102,7 +102,7 @@ function Sidebar(props) {
   return (
     <Container>
       <FullLogoContainer parent={Container}>
-        {/* <LumerinLogoFull height="45px" /> */}
+        <LumerinLogoFull height="45px" /> 
       </FullLogoContainer>
 
       <IconLogoContainer parent={Container}>
