@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
 import { BaseBtn } from '../../common';
-import { IconX } from '@tabler/icons';
+import { IconX } from '@tabler/icons-react';
 
 export const CloseModal = onClose => (
   <IconX

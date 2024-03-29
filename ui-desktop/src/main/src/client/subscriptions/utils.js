@@ -65,7 +65,9 @@ export function onRendererEvent(eventName, handler, chain) {
 }
 
 export const subscribeTo = (types, chain) =>
-  Object.keys(types).forEach((type) => onRendererEvent(type, types[type], chain))
+  Object.keys(types).forEach((type) => {
+    onRendererEvent(type, types[type], chain)
+  } )
 
 export const unsubscribeTo = (types) =>
   Object.keys(types).forEach((type) => ipcMain.removeAllListeners(type, types[type]))

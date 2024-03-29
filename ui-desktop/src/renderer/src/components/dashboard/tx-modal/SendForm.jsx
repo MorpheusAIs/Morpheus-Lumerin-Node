@@ -137,14 +137,14 @@ const LMR_MODE = 'coinAmount';
 const USD_MODE = 'usdAmount';
 
 const selectorStyles = {
-  control: (base, state) => ({ ...base, borderColor: '#0E4353' }),
+  control: (base, state) => ({ ...base, borderColor: '#0e4353' }),
   option: (base, state) => ({
     ...base,
-    backgroundColor: state.isSelected ? '#0E4353' : undefined,
+    backgroundColor: state.isSelected ? '#0e4353' : undefined,
     color: state.isSelected ? '#FFFFFF' : undefined,
     ':active': {
       ...base[':active'],
-      backgroundColor: '#0E435380',
+      backgroundColor: '#0e435380',
       color: '#FFFFFF'
     }
   })

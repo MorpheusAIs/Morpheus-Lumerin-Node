@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useTimer } from 'react-timer-hook';
-import { IconExternalLink, IconChartLine } from '@tabler/icons';
+import { IconExternalLink, IconChartLine } from '@tabler/icons-react';
 import { ToastsContext } from '../../toasts';
 import styled from 'styled-components';
 import withContractsRowState from '../../../store/hocs/withContractsRowState';

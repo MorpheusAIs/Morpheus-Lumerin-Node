@@ -9,7 +9,7 @@ import { ContractsRowContainer } from './contracts-list/ContractsRow.styles';
 
 import HistoryModal from './modals/HistoryModal/HistoryModal';
 import HashrateModal from './modals/HashrateModal/HashrateModal';
-import { IconHistory } from '@tabler/icons';
+import { IconHistory } from '@tabler/icons-react';
 
 import styled from 'styled-components';
 import { Btn } from '../common';

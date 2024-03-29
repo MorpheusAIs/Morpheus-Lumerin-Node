@@ -1,5 +1,5 @@
 import React from 'react';
-import { IconRefresh, IconSearch } from '@tabler/icons';
+import { IconRefresh, IconSearch } from '@tabler/icons-react';
 import styled from 'styled-components';
 import Select from 'react-select';
 
@@ -78,7 +78,7 @@ export default function Sort(props) {
               '&:hover': {
                 border: state.isFocused ? 0 : 0
               },
-              borderColor: state.isFocused ? '#0E4353' : undefined,
+              borderColor: state.isFocused ? '#0e4353' : undefined,
               background: 'transparent'
             }),
             placeholder: base => ({
@@ -89,31 +89,31 @@ export default function Sort(props) {
             }),
             singleValue: base => ({
               ...base,
-              color: '#0E4353',
+              color: '#0e4353',
               fontWeight: 600,
               fontSize: '1.4rem'
             }),
             indicatorsContainer: base => ({
               ...base,
-              color: '#0E4353'
+              color: '#0e4353'
             }),
             indicatorSeparator: base => ({ ...base, display: 'none' }),
             dropdownIndicator: base => ({
               ...base,
-              color: '#0E4353',
+              color: '#0e4353',
               marginLeft: -15
             }),
             option: (base, state) => ({
               ...base,
               cursor: 'pointer',
-              backgroundColor: state.isSelected ? '#0E4353' : undefined,
+              backgroundColor: state.isSelected ? '#0e4353' : undefined,
               fontSize: '1.5rem',
               fontWeight: 500,
               lineHeight: '1.6rem',
               color: state.isSelected ? '#FFFFFF' : undefined,
               ':active': {
                 ...base[':active'],
-                backgroundColor: '#0E435380',
+                backgroundColor: '#0e435380',
                 color: '#FFFFFF'
               },
               ':hover': {

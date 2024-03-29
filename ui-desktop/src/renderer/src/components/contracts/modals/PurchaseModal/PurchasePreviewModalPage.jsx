@@ -11,7 +11,7 @@ import {
   InstructionLink
 } from '../CreateContractModal.styles';
 import Spinner from '../../../common/Spinner';
-import { IconExternalLink, IconAlertTriangle, IconCheck } from '@tabler/icons';
+import { IconExternalLink, IconAlertTriangle, IconCheck } from '@tabler/icons-react';
 import { formatDuration, formatSpeed, formatPrice } from '../../utils';
 import PriceIcon from '../../../icons/PriceIcon';
 import SpeedIcon from '../../../icons/SpeedIcon';

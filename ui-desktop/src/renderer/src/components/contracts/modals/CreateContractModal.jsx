@@ -22,7 +22,7 @@ import { CreateContractSuccessPage } from './CreateContractSuccessPage';
 import { lmrDecimals } from '../../../utils/coinValue';
 import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
-import { IconChevronUp, IconChevronDown } from '@tabler/icons';
+import { IconChevronUp, IconChevronDown } from '@tabler/icons-react';
 import { calculateSuggestedPrice } from '../utils';
 
 import Modal from './Modal';
