@@ -1,8 +1,5 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
-import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import icon from '../../resources/icon.png?asset'
-import { error } from 'console'
-import './loadEnv'
+import { app, BrowserWindow, ipcMain } from 'electron'
+import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { createWindow } from './src/main-window'
 import { createClient } from './src/client'
 import config from './config'
@@ -21,14 +18,15 @@ console.log('electron bootstrap')
 
 if (isDev) {
   // Development
-  app.on('ready', function () {
-    require('electron-debug')({ isEnabled: true })
+  app.on('ready', async function () {
+    const electronDebug = await import('electron-debug')
+    electronDebug({ isEnabled: true })
 
     const {
       default: installExtension,
       REACT_DEVELOPER_TOOLS,
       REDUX_DEVTOOLS
-    } = require('electron-devtools-installer')
+    } = await import('electron-devtools-installer')
 
     installExtension([REACT_DEVELOPER_TOOLS, REDUX_DEVTOOLS])
       .then((extName) => logger.debug(`Added Extension:  ${extName}`))
@@ -60,7 +58,7 @@ app.whenReady().then(() => {
     // dock icon is clicked and there are no other windows open.
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
-  
+
   logger.info('App ready, initializing...')
 
   initMenu()
