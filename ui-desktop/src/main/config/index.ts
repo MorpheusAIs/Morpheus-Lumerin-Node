@@ -75,6 +75,4 @@ const config ={
   recaptchaSiteKey: process.env.RECAPTCHA_SITE_KEY
 }
 
-console.log("config module: ", config);
-
 export default config

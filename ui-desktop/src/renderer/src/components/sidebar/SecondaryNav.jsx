@@ -13,7 +13,8 @@ const Container = styled.div`
   flex-direction: column;
   justify-content: space-between;
   max-height: 10%;
-  border-top: 1px solid #f4f4f4;
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+  color: ${p => p.theme.colors.morMain}
 `;
 
 const Button = styled(NavLink)`
@@ -21,16 +22,16 @@ const Button = styled(NavLink)`
   min-height: 6rem;
   align-items: center;
   text-decoration: none;
-  color: ${p => p.theme.colors.inactive};
+  color: ${p => p.theme.colors.morMain}
   padding: 1.6rem;
-  border-top: 1px solid transparent;
+  border-top: 1px solid rgba;
 
   &:focus {
     outline: none;
   }
 
   &.active {
-    color: ${p => p.theme.colors.primary};
+    color: ${p => p.theme.colors.morMain}
     pointer-events: none;
   }
 `;
@@ -40,9 +41,9 @@ const HelpLink = styled.span`
   min-height: 7.1rem;
   align-items: center;
   text-decoration: none;
-  color: ${p => p.theme.colors.darker};
+  color: ${p => p.theme.colors.morMain};
   padding: 1.6rem;
-  border-top: 1px solid transparent;
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
   cursor: pointer;
 
   &:focus {
@@ -50,7 +51,7 @@ const HelpLink = styled.span`
   }
 
   &.active {
-    color: ${p => p.theme.colors.primary};
+    color: ${p => p.theme.colors.morMain};
     pointer-events: none;
   }
 `;

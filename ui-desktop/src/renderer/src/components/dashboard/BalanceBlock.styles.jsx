@@ -5,8 +5,14 @@ export const Container = styled.div`
   margin: 1.6rem 0 1.6rem;
   background-color: #fff;
   padding: 6px 1.6rem 6px 1.6rem;
-  border-radius: 15px;
+  border-radius: 0.375rem;
+  color: white;
   max-width: 720px;
+
+  background: rgba(255,255,255, 0.04);
+  border-width: 1px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  color: white;
 `;
 
 export const SecondaryContainer = styled.div`
@@ -51,17 +57,25 @@ export const Btn = styled(BaseBtn)`
   border: 1px solid ${p => p.theme.colors.translucentPrimary};
   background-color: ${p => p.theme.colors.light};
   color: ${p => p.theme.colors.translucentPrimary};
+
+  &[data-disabled='true'],
+  &[disabled] {
+    border: 0.0625rem solid #494949!important;
+    color: #fffc!important;
+    background: transparent!important;
+  }
 `;
 
 export const BtnAccent = styled(Btn)`
-  background-color: ${p => p.theme.colors.translucentPrimary};
-  color: ${p => p.theme.colors.light};
+  background-color: ${p => p.theme.colors.morMain};
+  color: black;
+  font-weight: 600;
 `;
 
 export const BtnRow = styled.div`
   display: flex;
   flex-direction: row;
-  width: 320px;
+  width: 250px;
   height: 100%;
   align-items: center;
   justify-content: space-between;

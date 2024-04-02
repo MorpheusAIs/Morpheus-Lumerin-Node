@@ -30,7 +30,7 @@ const Title = styled.label`
   white-space: nowrap;
   margin: 0;
   font-weight: 600;
-  color: ${p => p.theme.colors.primary};
+  color: ${p => p.theme.colors.morMain};
   margin-bottom: 4.8px;
   margin-right: 2.4rem;
   cursor: default;

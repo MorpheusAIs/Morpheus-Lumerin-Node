@@ -1,7 +1,7 @@
 import React, { useState, useContext } from 'react';
 import withBalanceBlockState from '../../store/hocs/withBalanceBlockState';
 import { EtherIcon } from '../icons/EtherIcon';
-import LumerinLogo from '../icons/LumerinLogo';
+import { LumerinLogoFull } from '../icons/LumerinLogoFull';
 import { Balance } from './Balance';
 import {
   WalletBalanceHeader,
@@ -33,7 +33,7 @@ const WalletBalance = ({
           currency={symbol}
           value={lmrBalance}
           icon={
-            <LumerinLogo style={{ height: '3.3rem', marginRight: '4px' }} />
+            <LumerinLogoFull style={{ color: 'white', height: "2rem"}}/> 
           }
           equivalentUSD={lmrBalanceUSD}
           maxSignificantFractionDigits={0}
@@ -105,7 +105,7 @@ const BalanceBlock = ({
             </BtnAccent>
             <Btn
               data-modal="send"
-              data-disabled={sendDisabled}
+              data-disabled={true}
               data-rh={sendDisabledReason}
               data-testid="send-btn"
               onClick={sendDisabled ? null : handleTabSwitch}
