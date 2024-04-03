@@ -1,8 +1,8 @@
 import isDev from 'electron-is-dev'
-const { app, BrowserWindow, Notification, dialog } = require('electron')
-const { autoUpdater } = require('electron-updater')
-const {join} = require('path')
-const windowStateKeeper = require('electron-window-state')
+import * as path from 'path'
+import { app, BrowserWindow, dialog, shell } from 'electron'
+import { autoUpdater } from 'electron-updater'
+import * as windowStateKeeper from 'electron-window-state'
 
 import logger from '../logger'
 import analytics from '../analytics'
@@ -12,23 +12,23 @@ let mainWindow
 
 // Disable electron security warnings since local content is served via http
 if (isDev) {
-  process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = true
+  process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
 }
 
-export function showUpdateNotification(info = {}) {
-  if (!Notification.isSupported()) {
-    return
-  }
+// export function showUpdateNotification(info = {}) {
+//   if (!Notification.isSupported()) {
+//     return
+//   }
 
-  const versionLabel = info.label ? `Version ${info.version}` : 'The latest version'
+//   const versionLabel = info.label ? `Version ${info.version}` : 'The latest version'
 
-  const notification = new Notification({
-    title: `${versionLabel} was installed`,
-    body: 'Lumerin Wallet will be automatically updated after restart.'
-  })
+//   const notification = new Notification({
+//     title: `${versionLabel} was installed`,
+//     body: 'Lumerin Wallet will be automatically updated after restart.'
+//   })
 
-  notification.show()
-}
+//   notification.show()
+// }
 
 export function initAutoUpdate() {
   if (isDev) {
@@ -58,6 +58,8 @@ export function initAutoUpdate() {
 
 export function loadWindow(config) {
   // Ensure the app is ready before creating the main window
+  let appQuitting = false
+
   if (!app.isReady()) {
     logger.warn('Tried to load main window while app not ready. Reloading...')
     restart(1)
@@ -68,7 +70,7 @@ export function loadWindow(config) {
     return
   }
 
-  const mainWindowState = windowStateKeeper({
+  const mainWindowState = windowStateKeeper.default({
     // defaultWidth: 660,
     defaultWidth: 820,
     defaultHeight: 800
@@ -85,7 +87,7 @@ export function loadWindow(config) {
     minHeight: 800,
     backgroundColor: '#323232',
     webPreferences: {
-      enableRemoteModule: true,
+      // enableRemoteModule: true,
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.mjs'),
@@ -128,7 +130,7 @@ export function loadWindow(config) {
 
   mainWindow.on('close', (event) => {
     event.preventDefault()
-    if (app.quitting || process.platform !== 'darwin') {
+    if (appQuitting || process.platform !== 'darwin') {
       const choice = dialog.showMessageBoxSync(mainWindow, {
         type: 'question',
         buttons: ['Yes', 'No'],
@@ -152,20 +154,8 @@ export function loadWindow(config) {
   })
 
   app.on('before-quit', () => {
-    app.quitting = true
+    appQuitting = true
   })
-}
-
-function createWindowOld(config) {
-  console.log("create window config: ", config);
-  app.on('fullscreen', function () {
-    mainWindow.isFullScreenable ? mainWindow.setFullScreen(true) : mainWindow.setFullScreen(false)
-  })
-
-  const load = loadWindow.bind(null, config)
-
-  app.on('ready', load)
-  app.on('activate', load)
 }
 
 export function createWindow(): void {
@@ -175,9 +165,9 @@ export function createWindow(): void {
     height: 670,
     show: false,
     autoHideMenuBar: true,
-    ...(process.platform === 'linux' ? { icon } : {}),
+    // ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
+      preload: path.join(__dirname, '../preload/index.mjs'),
       sandbox: false
     }
   })
@@ -196,6 +186,6 @@ export function createWindow(): void {
   if (isDev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
 }

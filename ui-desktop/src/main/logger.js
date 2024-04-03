@@ -1,9 +1,6 @@
-'use strict'
-
-const chalk = require('chalk')
-
-const logger = require('electron-log')
-const stringify = require('json-stringify-safe')
+import chalk from 'chalk'
+import logger from 'electron-log'
+import stringify from 'json-stringify-safe'
 import config from './config'
 
 logger.transports.file.appName = 'lumerin-wallet-desktop'
