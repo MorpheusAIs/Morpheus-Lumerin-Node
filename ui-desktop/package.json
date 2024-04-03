@@ -18,7 +18,8 @@
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "electron-vite build && electron-builder --mac",
-    "build:linux": "electron-vite build && electron-builder --linux"
+    "build:linux": "electron-vite build && electron-builder --linux",
+    "clean": "rm -rf out dist"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.0",
@@ -34,7 +35,7 @@
     "cuid": "^3.0.0",
     "electron-context-menu": "^3.6.1",
     "electron-debug": "^3.2.0",
-    "electron-devtools-installer": "^3.2.0",
+    "electron-devtools-installer": "git+https://github.com/MarshallOfSound/electron-devtools-installer.git#65ffa89",
     "electron-is-dev": "^3.0.1",
     "electron-log": "^5.1.2",
     "electron-settings": "^4.0.2",

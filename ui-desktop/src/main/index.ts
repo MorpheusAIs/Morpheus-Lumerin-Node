@@ -1,38 +1,51 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
-import { electronApp, optimizer } from '@electron-toolkit/utils'
-import { createWindow } from './src/main-window'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { electronApp, is, optimizer } from '@electron-toolkit/utils'
+import {
+  default as installExtension,
+  REACT_DEVELOPER_TOOLS,
+  REDUX_DEVTOOLS
+} from 'electron-devtools-installer'
 import { createClient } from './src/client'
 import config from './config'
 import initContextMenu from './contextMenu'
 import initMenu from './menu'
 import errorHandler from './errorHandler'
 import logger from './logger'
-import isDev from 'electron-is-dev'
+import { join } from 'path'
 
-console.log('isdev: ', isDev)
-console.log('config: ', config)
-console.log('create window: ', createWindow)
-console.log('error handler: ', errorHandler)
-errorHandler({ logger: logger.error })
-console.log('electron bootstrap')
-
-if (isDev) {
-  // Development
-  app.on('ready', async function () {
-    const electronDebug = await import('electron-debug')
-    electronDebug({ isEnabled: true })
-
-    const {
-      default: installExtension,
-      REACT_DEVELOPER_TOOLS,
-      REDUX_DEVTOOLS
-    } = await import('electron-devtools-installer')
-
-    installExtension([REACT_DEVELOPER_TOOLS, REDUX_DEVTOOLS])
-      .then((extName) => logger.debug(`Added Extension:  ${extName}`))
-      .catch((err) => logger.debug('An error occurred: ', err))
+function createWindow(): void {
+  // Create the browser window.
+  const mainWindow = new BrowserWindow({
+    width: 900,
+    height: 670,
+    show: false,
+    autoHideMenuBar: true,
+    // ...(process.platform === 'linux' ? { icon } : {}),
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.mjs'),
+      sandbox: false
+    }
   })
+
+  mainWindow.on('ready-to-show', () => {
+    mainWindow.show()
+  })
+
+  mainWindow.webContents.setWindowOpenHandler((details) => {
+    shell.openExternal(details.url)
+    return { action: 'deny' }
+  })
+
+  // HMR for renderer base on electron-vite cli.
+  // Load the remote URL for development or the local html file for production.
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+  } else {
+    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+  }
 }
+
+errorHandler({ logger: logger.error })
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
@@ -47,6 +60,17 @@ app.whenReady().then(() => {
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
+
+  // install devtools
+  if (is.dev) {
+    installExtension
+      .default([REDUX_DEVTOOLS, REACT_DEVELOPER_TOOLS], {
+        loadExtensionOptions: { allowFileAccess: true },
+        forceDownload: true
+      })
+      .then((name) => console.log(`Added Extension:  ${name}`))
+      .catch((err) => console.log('An error occurred: ', err))
+  }
 
   // IPC test
   ipcMain.on('ping', () => console.log('pong'))
@@ -75,39 +99,3 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
-
-// In this file you can include the rest of your app"s specific main process
-// code. You can also put them in separate files and require them here.
-
-// function createWindow(): void {
-//   console.log('create window')
-//   // Create the browser window.
-//   const mainWindow = new BrowserWindow({
-//     width: 900,
-//     height: 670,
-//     show: false,
-//     autoHideMenuBar: true,
-//     ...(process.platform === 'linux' ? { icon } : {}),
-//     webPreferences: {
-//       preload: join(__dirname, '../preload/index.js'),
-//       sandbox: false
-//     }
-//   })
-
-//   mainWindow.on('ready-to-show', () => {
-//     mainWindow.show()
-//   })
-
-//   mainWindow.webContents.setWindowOpenHandler((details) => {
-//     shell.openExternal(details.url)
-//     return { action: 'deny' }
-//   })
-
-//   // HMR for renderer base on electron-vite cli.
-//   // Load the remote URL for development or the local html file for production.
-//   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-//     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-//   } else {
-//     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
-//   }
-// }
