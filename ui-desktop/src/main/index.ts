@@ -64,10 +64,7 @@ app.whenReady().then(() => {
   // install devtools
   if (is.dev) {
     installExtension
-      .default([REDUX_DEVTOOLS, REACT_DEVELOPER_TOOLS], {
-        loadExtensionOptions: { allowFileAccess: true },
-        forceDownload: true
-      })
+      .default([REDUX_DEVTOOLS])
       .then((name) => console.log(`Added Extension:  ${name}`))
       .catch((err) => console.log('An error occurred: ', err))
   }
