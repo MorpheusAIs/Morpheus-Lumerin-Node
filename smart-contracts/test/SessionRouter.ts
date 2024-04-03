@@ -1,8 +1,6 @@
 import {
   time,
   loadFixture,
-  takeSnapshot,
-  SnapshotRestorer,
 } from "@nomicfoundation/hardhat-toolbox-viem/network-helpers";
 import { expect } from "chai";
 import hre from "hardhat";
@@ -141,7 +139,7 @@ describe("Session router", function () {
       ])
     })
 
-    it.only("should close session manually and refund", async function(){
+    it("should close session manually and refund", async function(){
       const { sessionRouter, provider, buyer, tokenMOR, expected, publicClient, buyerBalance } = await loadFixture(
         deployWithSingleProvider,
       );

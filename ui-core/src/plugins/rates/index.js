@@ -1,11 +1,9 @@
 'use strict'
 
-const axios = require('axios').default;
-const { getExchangeRate } = require('safe-exchange-rate')
-const debug = require('debug')('lmr-wallet:core:rates')
+const logger = require('../../logger');
 
-const { getLmrRate } = require('./getLmrRate');
-
+const { getNetworkDifficulty } = require('./network-difficulty')
+const { getRate } = require('./rate')
 const createStream = require('./stream')
 
 /**
@@ -15,6 +13,7 @@ const createStream = require('./stream')
  */
 function createPlugin() {
   let dataStream
+  let networkDifficultyStream
 
   /**
    * Start the plugin instance.
@@ -23,33 +22,29 @@ function createPlugin() {
    * @returns {{ events: string[] }} The instance details.
    */
   function start({ config, eventBus }) {
-    debug.enabled = debug.enabled || config.debug
+    // debug.enabled = debug.enabled || config.debug
 
-    debug('Plugin starting')
+    logger.debug('Plugin starting')
 
     const { ratesUpdateMs, symbol } = config
-
-    const getRate = () =>
-      {
-        return symbol === 'LMR' ? getLmrRate() : getExchangeRate(`${symbol}:USD`).then(function (rate) {
-          if (typeof rate !== 'number') {
-            throw new Error(`No exchange rate retrieved for ${symbol}`)
-          }
-          return rate
-        })
-      }
 
     dataStream = createStream(getRate, ratesUpdateMs)
 
     dataStream.on('data', function (price) {
-      debug('Coin price received')
-
-      const priceData = { token: symbol, currency: 'USD', price }
-      eventBus.emit('coin-price-updated', priceData)
+      logger.debug('coin price updated: ', price);
+      if (price) {
+        Object.entries(price).forEach(([token, price]) =>
+          eventBus.emit('coin-price-updated', {
+            token: token,
+            currency: 'USD',
+            price: price,
+          })
+        )
+      }
     })
 
     dataStream.on('error', function (err) {
-      debug('Data stream error')
+      logger.error('coin price error', err)
 
       eventBus.emit('wallet-error', {
         inner: err,
@@ -58,8 +53,24 @@ function createPlugin() {
       })
     })
 
+    networkDifficultyStream = createStream(getNetworkDifficulty, ratesUpdateMs)
+
+    networkDifficultyStream.on('data', function (difficulty) {
+      eventBus.emit('network-difficulty-updated', {
+        difficulty,
+      })
+    })
+
+    networkDifficultyStream.on('error', function (err) {
+      eventBus.emit('wallet-error', {
+        inner: err,
+        message: `Could not get network difficulty`,
+        meta: { plugin: 'rates' },
+      })
+    })
+
     return {
-      events: ['coin-price-updated', 'wallet-error'],
+      events: ['coin-price-updated', 'wallet-error', 'network-difficulty-updated'],
     }
   }
 
@@ -67,9 +78,10 @@ function createPlugin() {
    * Stop the plugin instance.
    */
   function stop() {
-    debug('Plugin stopping')
+    logger.debug('Plugin stopping')
 
     dataStream.destroy()
+    networkDifficultyStream.destroy()
   }
 
   return {

@@ -1,6 +1,6 @@
 'use strict';
 
-const debug = require('debug')('lmr-wallet:core:lumerin');
+const logger = require('../../logger');
 const { Lumerin } = require('contracts-js');
 const Web3 = require('web3');
 
@@ -22,7 +22,7 @@ function createPlugin () {
    * @returns {{api:object,events:string[],name:string}} The plugin API.
    */
   function start ({ config, eventBus, plugins }) {
-    debug.enabled = config.debug;
+    // debug.enabled = config.debug;
 
     const { lmrTokenAddress } = config;
     const { eth, explorer, token } = plugins;

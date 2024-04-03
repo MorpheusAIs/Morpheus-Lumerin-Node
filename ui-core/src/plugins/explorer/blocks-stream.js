@@ -1,24 +1,29 @@
 'use strict';
 
-const debug = require('debug')('lmr-wallet:core:block-stream');
+const logger = require('../../logger');
+const EventEmitter = require('events');
 
-function createStream (web3) {
-  const subscription = web3.eth.subscribe('newBlockHeaders');
+function createStream (web3, updateInterval = 10000) {
+  const ee = new EventEmitter();
 
   web3.eth.getBlock('latest')
     .then(function (block) {
-      subscription.emit('data', block);
+      ee.emit('data', block);
     })
     .catch(function (err) {
-      subscription.emit('error', err);
+      ee.emit('error', err);
     })
 
-  // subscription.destroy = subscription.unsubscribe;
-  subscription.unsubscribe(function(error, success) {
-    success || debug('Could not successfully unsubscribe from web3 block-stream');
-  });
+  const interval = setInterval(async () => {
+    try {
+      const block = await web3.eth.getBlock('latest');
+      ee.emit('data', block);
+    } catch (err) {
+      ee.emit('error', err);
+    }
+  }, updateInterval);
 
-  return subscription;
+  return { interval, stream: ee };
 }
 
 module.exports = createStream;

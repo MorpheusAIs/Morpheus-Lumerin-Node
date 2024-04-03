@@ -91,12 +91,12 @@ contract SessionRouter {
         require(session.buyer == msg.sender, "only user can close session");
         require(session.endTime > block.timestamp, "session already closed or expired");
         uint durationSeconds = block.timestamp - session.startTime;
-        console.log("durarion sec", durationSeconds);
+        
         Provider memory provider = providers[session.provider];
         require(provider.addr != address(0), "provider not found");
 
         uint refund = durationSeconds * provider.pricePerMinute / minute;
-        console.log("refund", refund);
+
         tokenMOR.transfer(msg.sender, refund);
 
         session.endTime = block.timestamp;

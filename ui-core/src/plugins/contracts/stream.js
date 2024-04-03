@@ -1,6 +1,7 @@
 'use strict';
 
-const debug = require('debug')('lmr-wallet:core:contracts-stream');
+// const debug = require('debug')('lmr-wallet:core:contracts-stream');
+const logger = require('../../logger');
 
 /**
  * Create a "classic" stream that connects to Lumerin Contracts.
@@ -36,7 +37,7 @@ function createStream (web3) {
   // emitTickerValue();
 
   subscription.unsubscribe(function(error, success) {
-    success || debug('Could not successfully unsubscribe from web3 block-stream');
+    success || logger.error('Could not successfully unsubscribe from web3 block-stream');
   });
 
 

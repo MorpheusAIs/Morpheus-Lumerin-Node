@@ -1,0 +1,269 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`<AmountFields/> should match its snapshot 1`] = `
+<div>
+  <div
+    class="sc-htoDjs hAEOmi"
+  >
+    <div
+      class="sc-gzVnrw bHqtcW"
+    >
+      <button
+        class="sc-htpNat fpAZyb"
+        data-testid="max-btn"
+        tabindex="-1"
+        type="button"
+      >
+        MAX
+      </button>
+      <div>
+        <label
+          class="sc-bxivhb htFESG"
+          for="ethAmount"
+        >
+          Amount (ETH)
+        </label>
+        <input
+          class="sc-ifAKCX kSbDeA"
+          data-testid="ethAmount-field"
+          id="ethAmount"
+          placeholder="0.00"
+          type="text"
+          value=""
+        />
+      </div>
+    </div>
+    <div
+      class="sc-iwsKbI fGVAip"
+    >
+      <svg
+        class="sc-bZQynM hKkckV"
+        viewBox="0 0 24 24"
+      >
+        <path
+          d="M24 7.136v.96H1.642l4.464 4.464-.682.682-5.28-5.28a.475.475 0 0 1 0-.682L5.424 2l.682.682-4.464 4.464H24v-.01zM18.576 11.6l-.682.682 4.464 4.464H0v.96h22.358l-4.464 4.464.682.681 5.28-5.28a.475.475 0 0 0 0-.681l-5.28-5.29z"
+        />
+      </svg>
+    </div>
+    <div
+      class="sc-gzVnrw bHqtcW"
+    >
+      <div>
+        <label
+          class="sc-bxivhb htFESG"
+          for="usdAmount"
+        >
+          Amount (USD)
+        </label>
+        <input
+          class="sc-ifAKCX kSbDeA"
+          data-testid="usdAmount-field"
+          id="usdAmount"
+          placeholder="0.00"
+          type="text"
+          value=""
+        />
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`<BuyLMRDrawer/> should match its snapshot 1`] = `
+<div>
+  <header
+    class="sc-eHgmQL faXzUG"
+  >
+    <h1
+      class="sc-cvbbAY ewAxGX"
+      data-testid="drawer-title"
+    >
+      Buy Lumerin
+    </h1>
+    <button
+      class="sc-jWBwVP litTlT"
+      data-testid="drawer-close-btn"
+    >
+      <svg
+        class="sc-bZQynM hKkckV"
+        viewBox="0 0 24 24"
+      >
+        <path
+          d="M12 24C5.386 24 0 18.614 0 12S5.386 0 12 0s12 5.386 12 12-5.386 12-12 12zM12 .96C5.914.96.96 5.914.96 12c0 6.086 4.954 11.04 11.04 11.04 6.086 0 11.04-4.954 11.04-11.04C23.04 5.914 18.086.96 12 .96zm3.984 15.696L12 12.672l-3.984 3.984-.682-.682 3.984-3.984-3.984-3.984.682-.681L12 11.309l3.984-3.984.682.681-3.984 3.984 3.984 3.984-.682.682z"
+        />
+      </svg>
+    </button>
+  </header>
+  <div
+    data-testid="buy-drawer"
+  >
+    <form
+      data-testid="buy-form"
+      novalidate=""
+    >
+      <div
+        class="sc-iwsKbI DqpKT"
+      >
+        <div
+          class="sc-htoDjs hAEOmi"
+        >
+          <div
+            class="sc-gzVnrw bHqtcW"
+          >
+            <button
+              class="sc-htpNat fpAZyb"
+              data-testid="max-btn"
+              tabindex="-1"
+              type="button"
+            >
+              MAX
+            </button>
+            <div>
+              <label
+                class="sc-bxivhb htFESG"
+                for="ethAmount"
+              >
+                Amount (ETH)
+              </label>
+              <input
+                class="sc-ifAKCX kSbDeA"
+                data-testid="ethAmount-field"
+                id="ethAmount"
+                placeholder="0.00"
+                type="text"
+                value=""
+              />
+            </div>
+          </div>
+          <div
+            class="sc-iwsKbI fGVAip"
+          >
+            <svg
+              class="sc-bZQynM hKkckV"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M24 7.136v.96H1.642l4.464 4.464-.682.682-5.28-5.28a.475.475 0 0 1 0-.682L5.424 2l.682.682-4.464 4.464H24v-.01zM18.576 11.6l-.682.682 4.464 4.464H0v.96h22.358l-4.464 4.464.682.681 5.28-5.28a.475.475 0 0 0 0-.681l-5.28-5.29z"
+              />
+            </svg>
+          </div>
+          <div
+            class="sc-gzVnrw bHqtcW"
+          >
+            <div>
+              <label
+                class="sc-bxivhb htFESG"
+                for="usdAmount"
+              >
+                Amount (USD)
+              </label>
+              <input
+                class="sc-ifAKCX kSbDeA"
+                data-testid="usdAmount-field"
+                id="usdAmount"
+                placeholder="0.00"
+                type="text"
+                value=""
+              />
+            </div>
+          </div>
+        </div>
+        <div
+          class="sc-iwsKbI cDKkhl"
+        >
+          <div
+            class="sc-htoDjs hdOWyq"
+          >
+            <div
+              class="sc-htoDjs csGvda"
+            >
+              <span
+                class="sc-gZMcBi jHgzeu"
+              >
+                Gas Limit: 
+                250000
+                 (Units)
+              </span>
+              <span
+                class="sc-gZMcBi jHgzeu"
+              >
+                Gas Price: 
+                1
+                 (Gwei)
+              </span>
+            </div>
+            <button
+              class="sc-htpNat bqwpzm"
+              data-testid="edit-gas-btn"
+              tabindex="-1"
+              type="button"
+            >
+              EDIT GAS
+            </button>
+          </div>
+        </div>
+      </div>
+      <div
+        class="sc-Rmtcm dMTmkb"
+      >
+        <button
+          class="sc-bwzfXH gAMukr"
+          type="submit"
+        >
+          Review Buy
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+`;
+
+exports[`<GasEditor/> should match its snapshot 1`] = `
+<div>
+  <div
+    class="sc-htoDjs hAEOmi"
+  >
+    <div
+      class="sc-gzVnrw bHqtcW"
+    >
+      <div>
+        <label
+          class="sc-bxivhb htFESG"
+          for="gasLimit"
+        >
+          Gas Limit (Units)
+        </label>
+        <input
+          class="sc-ifAKCX kSbDeA"
+          data-testid="gas-limit-field"
+          id="gasLimit"
+          type="text"
+          value="21000"
+        />
+      </div>
+    </div>
+    <div
+      class="sc-iwsKbI iyocmw"
+    />
+    <div
+      class="sc-gzVnrw bHqtcW"
+    >
+      <div>
+        <label
+          class="sc-bxivhb htFESG"
+          for="gasPrice"
+        >
+          Gas Price (Gwei)
+        </label>
+        <input
+          class="sc-ifAKCX kSbDeA"
+          data-testid="gas-price-field"
+          id="gasPrice"
+          type="text"
+          value="1"
+        />
+      </div>
+    </div>
+  </div>
+</div>
+`;

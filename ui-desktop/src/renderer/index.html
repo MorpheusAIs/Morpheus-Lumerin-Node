@@ -2,12 +2,63 @@
 <html>
   <head>
     <meta charset="UTF-8" />
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="theme-color" content="#000000">
     <title>Electron</title>
     <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
     <meta
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
     />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&family=Roboto+Mono:ital,wght@0,100..700;1,100..700&display=swap" rel="stylesheet">
+
+    <style>
+  
+      .grecaptcha-badge { 
+        visibility: hidden;
+      }
+  
+      html {
+        font-size: 10px;
+      }
+  
+      body {
+        margin: 0;
+        padding: 0;
+        background-image: url("src/main.jpg");
+        background-position: right;
+        background-repeat: no-repeat;
+        -webkit-background-size: cover;
+        -moz-background-size: cover;
+        -o-background-size: cover;
+        background-size: cover;
+        font-family: 'Montserrat', sans-serif;
+        font-style: normal;
+        font-weight: 400;
+        color: white;
+        font-size: 1.6rem;
+        -webkit-font-smoothing: antialiased;
+      }
+  
+      *,
+      *:before,
+      *:after {
+        box-sizing: border-box;
+        font-family: "Roboto Mono", monospace;
+        font-optical-sizing: auto;
+        font-style: normal;
+      }
+
+      /* Required by Reach UI. See https://github.com/reach/reach-ui/blob/master/packages/menu-button/styles.css#L1 */
+      :root {
+        --reach-menu-button: 1;
+      }
+    </style>
+
   </head>
 
   <body>

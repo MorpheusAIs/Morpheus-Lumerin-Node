@@ -13,15 +13,20 @@ const getAddress = (seed, index) =>
 
 const getPrivateKey = (seed, index) =>
   getWalletFromSeed(seed, index)
-    .getPrivateKeyString();
+    .getPrivateKey();
+
+const getPrivateKeyStringPrefixed = (seed, index) =>
+    getWalletFromSeed(seed, index)
+      .getPrivateKeyString();
 
 const getAddressAndPrivateKey = (seed, index) => ({
   address: getAddress(seed, index),
-  privateKey: getPrivateKey(seed, index)
+  privateKey: getPrivateKey(seed, index).toString('hex')
 });
 
 module.exports = {
   getAddress,
   getPrivateKey,
+  getPrivateKeyStringPrefixed,
   getAddressAndPrivateKey
 };
