@@ -10,12 +10,16 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/aiengine"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/apibus"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/handlers/httphandlers"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/handlers/tcphandlers"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/proxyapi"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/transport"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/rpcproxy"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/system"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"golang.org/x/sync/errgroup"
@@ -186,8 +190,15 @@ func start() error {
 	)
 	tcpServer.SetConnectionHandler(tcpHandler)
 
-	handl := httphandlers.NewHTTPHandler(sysConfig, publicUrl, &cfg, derived, time.Now(), contractLogStorage, log)
-	httpServer := transport.NewServer(cfg.Web.Address, handl, log.Named("HTP"))
+	proxyRouterApi := proxyapi.NewProxyRouterApi(sysConfig, publicUrl, cfg.Marketplace.WalletPrivateKey, &cfg, derived, time.Now(), contractLogStorage, log)
+	rpcProxy := rpcproxy.NewRpcProxy(ethClient)
+	aiEngine := aiengine.NewAiEngine()
+	apiBus := apibus.NewApiBus(rpcProxy, aiEngine, proxyRouterApi)
+
+	handl := httphandlers.NewHTTPHandler(apiBus)
+	httpServer := transport.NewServer(cfg.Web.Address, handl, log.Named("HTTP"))
+
+	fmt.Printf("ApiBus: %+v\n", apiBus)
 
 	ctx, cancel = context.WithCancel(ctx)
 	g, errCtx := errgroup.WithContext(ctx)
