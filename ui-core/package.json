@@ -22,9 +22,9 @@
   "main": "src/index.js",
   "repository": "https://github.com/lumerin-protocol/WalletCore",
   "scripts": {
+    "test": "mocha --recursive test src",
     "check": "dependency-check . --no-dev --ignore-module patch-package --ignore-module websocket-reconnector",
     "lint": "",
-    "prepare": "patch-package && husky install",
     "prepublishOnly": "npm run check",
     "kill-proxy": "kill-port 3333 && kill-port 3334"
   },

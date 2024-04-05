@@ -33,8 +33,12 @@ const Transactions = styled.div`
 
 const ListContainer = styled.div`
   height: calc(100vh - 370px);
-  background: #fff;
-  border-radius: 15px;
+  border-radius: 0.375rem;
+
+  background: rgba(255,255,255, 0.04);
+  border-width: 1px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  color: white;
 `;
 
 const TxRowContainer = styled.div`
@@ -49,7 +53,7 @@ const Title = styled.div`
   white-space: nowrap;
   margin: 0;
   font-weight: 500;
-  color: ${p => p.theme.colors.primary};
+  color: ${p => p.theme.colors.morMain};
   margin-bottom: 4.8px;
   margin-right: 2.4rem;
   cursor: default;
@@ -78,7 +82,7 @@ export const TxList = ({
 
     client.onTransactionLinkClick(e.currentTarget.dataset.hash);
   };
-
+  console.log(transactions.length === 0);
   return (
     <Container data-testid="tx-list">
       <Flex.Row grow="1">
@@ -142,7 +146,7 @@ export const TxList = ({
                     ) : (
                       <NoTxPlaceholder />
                     ))}
-                  {transactions.length && (
+                  {+transactions.length > 0 && (
                     <InfiniteLoader
                       isRowLoaded={isRowLoaded}
                       loadMoreRows={loadMoreRows}

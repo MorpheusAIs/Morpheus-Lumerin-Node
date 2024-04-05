@@ -15,7 +15,7 @@ const Tab = styled.button`
   line-height: 1.2rem;
   font-size: 1.2rem;
   font-weight: bold;
-  color: ${p => p.theme.colors.primary};
+  color: ${p => p.theme.colors.morMain}
   letter-spacing: 1.4px;
   text-align: center;
   opacity: ${p => (p.isActive ? '1' : '0.5')};

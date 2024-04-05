@@ -27,7 +27,7 @@ const Button = styled(NavLink)`
   }
 
   &.active {
-    color: ${p => p.theme.colors.primary};
+    color: ${p => p.theme.colors.morMain};
     pointer-events: none;
   }
 `;

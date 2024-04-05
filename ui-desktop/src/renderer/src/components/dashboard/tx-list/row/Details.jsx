@@ -7,7 +7,7 @@ const Container = styled.div`
   line-height: 1.6rem;
   font-size: 1rem;
   letter-spacing: 0px;
-  color: ${p => p.theme.colors.primary};
+  color: ${p => p.theme.colors.morMain};
   text-transform: uppercase;
   opacity: ${({ isPending }) => (isPending ? '0.5' : '1')};
   text-align: center;

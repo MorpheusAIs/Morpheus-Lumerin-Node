@@ -9,7 +9,7 @@ const RightArrowIcon = ({ size, fill }, props) => {
       <circle
         r="13"
         transform="matrix(1 0 0 -1 14 14)"
-        fill="white"
+        fill="transparent"
         stroke={fill}
         strokeWidth="2"
       />

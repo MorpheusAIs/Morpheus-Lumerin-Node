@@ -2,16 +2,17 @@ import { parseJSONArray } from './utils'
 
 let httpApiUrls, explorerApiURLs
 
+
 try {
   httpApiUrls = parseJSONArray(process.env.ETH_NODE_ADDRESS_HTTP)
 } catch (err) {
-  throw new Error(`Invalid ETH_NODE_ADDRESS_HTTP: ${err?.message}`)
+  throw new Error(`Invalid ETH_NODE_ADDRESS_HTTP: ${(err as Error)?.message}`)
 }
 
 try {
   explorerApiURLs = parseJSONArray(process.env.EXPLORER_API_URLS)
 } catch (err) {
-  throw new Error(`Invalid EXPLORER_API_URLS: ${err?.message}`)
+  throw new Error(`Invalid EXPLORER_API_URLS: ${(err as Error)?.message}`)
 }
 
 const chain = {
@@ -57,7 +58,7 @@ const chain = {
   sellerWhitelistUrl: process.env.SELLER_WHITELIST_URL || 'https://forms.gle/wEcAgppfK2p9YZ3g7'
 }
 
-const config ={
+const config = {
   chain,
   dbAutocompactionInterval: 30000,
   debug: process.env.DEBUG === 'true' && process.env.IGNORE_DEBUG_LOGS !== 'true',
@@ -69,12 +70,10 @@ const config ={
   statePersistanceDebounce: 2000,
   trackingId: process.env.TRACKING_ID,
   web3Timeout: 120000,
-  autoAdjustPriceInterval: +process.env.AUTO_ADJUST_PRICE_INTERVAL || 15 * 60 * 1000,
+  autoAdjustPriceInterval: Number(process.env.AUTO_ADJUST_PRICE_INTERVAL) || 15 * 60 * 1000,
   autoAdjustContractPriceTimeout:
-    +process.env.AUTO_ADJUST_CONTRACT_PRICE_TIMEOUT || 24 * 60 * 60 * 1000,
+    Number(process.env.AUTO_ADJUST_CONTRACT_PRICE_TIMEOUT) || 24 * 60 * 60 * 1000,
   recaptchaSiteKey: process.env.RECAPTCHA_SITE_KEY
 }
-
-console.log("config module: ", config);
 
 export default config

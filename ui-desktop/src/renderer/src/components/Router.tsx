@@ -16,7 +16,6 @@ import Marketplace from './contracts/Marketplace'
 // import BuyerHub from './contracts/BuyerHub'
 // import AutoPriceAdjuster from './AutoPriceAdjuster'
 
-const bgImage = 'images/MainBackground.png'
 
 const fadeIn = keyframes`
   from {
@@ -46,15 +45,7 @@ const Main = styled.div`
   overflow-x: hidden;
   overflow-y: hidden;
   min-height: 100vh;
-  background: #eaf7fc;
   padding-top: 1.4rem;
-  background-image: url(${bgImage});
-  background-position: right;
-  background-repeat: no-repeat;
-  -webkit-background-size: cover;
-  -moz-background-size: cover;
-  -o-background-size: cover;
-  background-size: cover;
 `
 
 export const Layout = () => (
