@@ -41,7 +41,7 @@ contract ModelRegistry is OwnableUpgradeable {
     __Ownable_init();
   }
 
-  function getModelIds() public view returns (bytes32[] memory){
+  function getIds() public view returns (bytes32[] memory){
     return set.keys();
   }
 
@@ -59,6 +59,10 @@ contract ModelRegistry is OwnableUpgradeable {
 
   function getByIndex(uint index) public view returns(Model memory model) {
     return map[set.keyAtIndex(index)];
+  }
+
+  function exists(bytes32 id) public view returns (bool) {
+    return set.exists(id);
   }
 
   // registers new model or updates existing

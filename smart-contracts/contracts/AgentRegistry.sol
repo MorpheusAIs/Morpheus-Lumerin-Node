@@ -5,7 +5,7 @@ import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {KeySet} from "./KeySet.sol";
 import "hardhat/console.sol";
 
-contract ModelRegistry is OwnableUpgradeable {
+contract AgentRegistry is OwnableUpgradeable {
   using KeySet for KeySet.Set;
 
   struct Agent {
@@ -49,6 +49,10 @@ contract ModelRegistry is OwnableUpgradeable {
       _agents[i] = map[set.keyAtIndex(i)];
     }
     return _agents;
+  }
+
+  function exists(bytes32 id) public view returns (bool) {
+    return set.exists(id);
   }
 
   // registers new or updates existing
