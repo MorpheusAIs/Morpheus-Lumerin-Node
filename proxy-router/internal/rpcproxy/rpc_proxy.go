@@ -16,6 +16,6 @@ func NewRpcProxy(rpcClient *ethclient.Client) *RpcProxy {
 	}
 }
 
-func (rpcProxy *RpcProxy) GetLatestBlock(ctx *context.Context) (uint64, error) {
-	return rpcProxy.rpcClient.BlockNumber(*ctx)
+func (rpcProxy *RpcProxy) GetLatestBlock(ctx context.Context) (uint64, error) {
+	return rpcProxy.rpcClient.BlockNumber(ctx)
 }

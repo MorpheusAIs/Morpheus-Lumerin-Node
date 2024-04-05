@@ -198,8 +198,6 @@ func start() error {
 	handl := httphandlers.NewHTTPHandler(apiBus)
 	httpServer := transport.NewServer(cfg.Web.Address, handl, log.Named("HTTP"))
 
-	fmt.Printf("ApiBus: %+v\n", apiBus)
-
 	ctx, cancel = context.WithCancel(ctx)
 	g, errCtx := errgroup.WithContext(ctx)
 	g.Go(func() error {
