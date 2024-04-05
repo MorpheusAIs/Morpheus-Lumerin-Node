@@ -9,6 +9,6 @@ func NewAiEngine() *AiEngine {
 	return &AiEngine{}
 }
 
-func (aiEngine *AiEngine) Prompt(ctx *context.Context) (string, error) {
+func (aiEngine *AiEngine) Prompt(ctx context.Context) (string, error) {
 	return "Hello!", nil
 }

@@ -37,11 +37,11 @@ func (apiBus *ApiBus) HealthCheck(ctx context.Context) interface{} {
 }
 
 // AiEngine
-func (apiBus *ApiBus) Prompt(ctx *context.Context) (string, error) {
+func (apiBus *ApiBus) Prompt(ctx context.Context) (string, error) {
 	return apiBus.aiEngine.Prompt(ctx)
 }
 
 // RpcProxy
-func (apiBus *ApiBus) GetLatestBlock(ctx *context.Context) (uint64, error) {
+func (apiBus *ApiBus) GetLatestBlock(ctx context.Context) (uint64, error) {
 	return apiBus.rpcProxy.GetLatestBlock(ctx)
 }
