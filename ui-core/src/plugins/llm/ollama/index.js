@@ -1,14 +1,14 @@
 const axios = require('axios')
 
-let modelName = 'llama2:70b',
+let modelName = 'llama2:latest',
   modelUrl = ''
 
-module.exports.init = function init(config) {
+function init(config) {
   axios.defaults.baseURL = modelUrl = config.modelUrl
   modelName = config.modelName || modelName
 }
 
-export const chat = {
+const chat = {
   //TODO: map images between ollama api and openai api
   async createChatCompletion(chat, message) {
     try {
@@ -31,6 +31,7 @@ export const chat = {
   },
 }
 
-export default {
-  chat,
+module.exports = {
+  init,
+  chat
 }

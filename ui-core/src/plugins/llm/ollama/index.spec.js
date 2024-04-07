@@ -1,14 +1,17 @@
-import sinon from 'sinon'
-import ollama from './index'
-import { expect } from 'chai'
+const sinon = require('sinon')
+const ollama = require('./index')
+const chai = require('chai')
 
-describe('test ollama', () => {
+const { expect } = chai
+
+describe.only('test ollama', function () {
+  this.timeout(10000)
   describe('api integration', () => {
     before('should init with config', () => {
       ollama.init({
         modelUrl: 'http://localhost:11434',
         modelName: null,
-      });
+      })
 
       expect(ollama.chat.createChatCompletion).is.a('function')
     })
@@ -17,12 +20,19 @@ describe('test ollama', () => {
       const chat = []
       const message = 'how are you?'
       const response = await ollama.chat.createChatCompletion(chat, message)
-      expect(response.messages[0].content).toContain("I'm doing well")
+      console.log("response: ", response);
+
+      // concatenate the values of all of the content fields in all of the response elements
+      const contents = response.data.messages.map(message => message.content);
+
+      console.log("contents: ", contents);
+      expect(contents.join(' ')).to.contain("I'm doing well");
     })
   })
 
   describe.skip('unit', () => {
-    let request = null, response = null;
+    let request = null,
+      response = null
 
     before(async () => {
       //mock axios
