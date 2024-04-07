@@ -9,6 +9,7 @@ const Address = styled.span`
   font-size: 1.1rem;
   font-weight: 600;
   text-transform: initial;
+  color: white;
 
   @media (min-width: 800px) {
     font-size: 1.3rem;

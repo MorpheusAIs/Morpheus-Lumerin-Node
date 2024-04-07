@@ -1,34 +1,30 @@
 import isDev from 'electron-is-dev'
-const { app, BrowserWindow, Notification, dialog } = require('electron')
-const { autoUpdater } = require('electron-updater')
-const {join} = require('path')
-const windowStateKeeper = require('electron-window-state')
+import * as path from 'path'
+import { app, BrowserWindow, dialog, shell } from 'electron'
+import { autoUpdater } from 'electron-updater'
+import * as windowStateKeeper from 'electron-window-state'
 
 import logger from '../logger'
 import analytics from '../analytics'
 import restart from './client/electron-restart'
 
-let mainWindow
 
 // Disable electron security warnings since local content is served via http
-if (isDev) {
-  process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = true
-}
 
-export function showUpdateNotification(info = {}) {
-  if (!Notification.isSupported()) {
-    return
-  }
+// export function showUpdateNotification(info = {}) {
+//   if (!Notification.isSupported()) {
+//     return
+//   }
 
-  const versionLabel = info.label ? `Version ${info.version}` : 'The latest version'
+//   const versionLabel = info.label ? `Version ${info.version}` : 'The latest version'
 
-  const notification = new Notification({
-    title: `${versionLabel} was installed`,
-    body: 'Lumerin Wallet will be automatically updated after restart.'
-  })
+//   const notification = new Notification({
+//     title: `${versionLabel} was installed`,
+//     body: 'Lumerin Wallet will be automatically updated after restart.'
+//   })
 
-  notification.show()
-}
+//   notification.show()
+// }
 
 export function initAutoUpdate() {
   if (isDev) {
@@ -56,146 +52,106 @@ export function initAutoUpdate() {
     })
 }
 
-export function loadWindow(config) {
-  // Ensure the app is ready before creating the main window
-  if (!app.isReady()) {
-    logger.warn('Tried to load main window while app not ready. Reloading...')
-    restart(1)
-    return
-  }
+// TODO: reintegrate what's required to index.ts createWindow function 
+//
+// export function loadWindow(config) {
+//   // Ensure the app is ready before creating the main window
+//   let appQuitting = false
 
-  if (mainWindow) {
-    return
-  }
+//   if (!app.isReady()) {
+//     logger.warn('Tried to load main window while app not ready. Reloading...')
+//     restart(1)
+//     return
+//   }
 
-  const mainWindowState = windowStateKeeper({
-    // defaultWidth: 660,
-    defaultWidth: 820,
-    defaultHeight: 800
-  })
+//   if (mainWindow) {
+//     return
+//   }
 
-  // TODO this should be read from config
-  mainWindow = new BrowserWindow({
-    show: false,
-    width: mainWindowState.width,
-    height: mainWindowState.height,
-    // maxWidth: 660,
-    // maxHeight: 700,
-    minWidth: 660,
-    minHeight: 800,
-    backgroundColor: '#323232',
-    webPreferences: {
-      enableRemoteModule: true,
-      nodeIntegration: false,
-      contextIsolation: true,
-      preload: path.join(__dirname, 'preload.mjs'),
-      devTools: config.devTools || !app.isPackaged
-    },
-    x: mainWindowState.x,
-    y: mainWindowState.y
-  })
+//   const mainWindowState = windowStateKeeper.default({
+//     // defaultWidth: 660,
+//     defaultWidth: 820,
+//     defaultHeight: 800
+//   })
 
-  require('@electron/remote/main').enable(mainWindow.webContents)
+//   // TODO this should be read from config
+//   mainWindow = new BrowserWindow({
+//     show: false,
+//     width: mainWindowState.width,
+//     height: mainWindowState.height,
+//     // maxWidth: 660,
+//     // maxHeight: 700,
+//     minWidth: 660,
+//     minHeight: 800,
+//     backgroundColor: '#323232',
+//     webPreferences: {
+//       // enableRemoteModule: true,
+//       nodeIntegration: false,
+//       contextIsolation: true,
+//       preload: path.join(__dirname, 'preload.mjs'),
+//       devTools: config.devTools || !app.isPackaged
+//     },
+//     x: mainWindowState.x,
+//     y: mainWindowState.y
+//   })
 
-  mainWindowState.manage(mainWindow)
+//   require('@electron/remote/main').enable(mainWindow.webContents)
 
-  analytics.init(mainWindow.webContents.getUserAgent())
+//   mainWindowState.manage(mainWindow)
 
-  const appUrl = isDev
-    ? process.env.ELECTRON_START_URL
-    : `file://${path.join(__dirname, '../index.html')}`
+//   analytics.init(mainWindow.webContents.getUserAgent())
 
-  logger.info('Roading renderer from URL:', appUrl)
+//   const appUrl = isDev
+//     ? process.env.ELECTRON_START_URL
+//     : `file://${path.join(__dirname, '../index.html')}`
 
-  mainWindow.loadURL(appUrl)
+//   logger.info('Roading renderer from URL:', appUrl)
 
-  mainWindow.webContents.on('crashed', function (ev, killed) {
-    logger.error('Crashed', ev.sender.id, killed)
-  })
+//   mainWindow.loadURL(appUrl)
 
-  mainWindow.on('unresponsive', function (ev) {
-    logger.error('Unresponsive', ev.sender.id)
-  })
+//   mainWindow.webContents.on('crashed', function (ev, killed) {
+//     logger.error('Crashed', ev.sender.id, killed)
+//   })
 
-  mainWindow.on('closed', function () {
-    mainWindow = null
-  })
+//   mainWindow.on('unresponsive', function (ev) {
+//     logger.error('Unresponsive', ev.sender.id)
+//   })
 
-  mainWindow.once('ready-to-show', function () {
-    initAutoUpdate()
-    mainWindow.show()
-  })
+//   mainWindow.on('closed', function () {
+//     mainWindow = null
+//   })
 
-  mainWindow.on('close', (event) => {
-    event.preventDefault()
-    if (app.quitting || process.platform !== 'darwin') {
-      const choice = dialog.showMessageBoxSync(mainWindow, {
-        type: 'question',
-        buttons: ['Yes', 'No'],
-        title: 'Confirm',
-        message: 'Are you sure you want to quit?'
-      })
-      if (choice === 1) {
-        return
-      } else {
-        mainWindow.destroy()
-        mainWindow = null
-        app.quit()
-      }
-    } else {
-      mainWindow.hide()
-    }
-  })
+//   mainWindow.once('ready-to-show', function () {
+//     initAutoUpdate()
+//     mainWindow.show()
+//   })
 
-  app.on('activate', () => {
-    mainWindow.show()
-  })
+//   mainWindow.on('close', (event) => {
+//     event.preventDefault()
+//     if (appQuitting || process.platform !== 'darwin') {
+//       const choice = dialog.showMessageBoxSync(mainWindow, {
+//         type: 'question',
+//         buttons: ['Yes', 'No'],
+//         title: 'Confirm',
+//         message: 'Are you sure you want to quit?'
+//       })
+//       if (choice === 1) {
+//         return
+//       } else {
+//         mainWindow.destroy()
+//         mainWindow = null
+//         app.quit()
+//       }
+//     } else {
+//       mainWindow.hide()
+//     }
+//   })
 
-  app.on('before-quit', () => {
-    app.quitting = true
-  })
-}
+//   app.on('activate', () => {
+//     mainWindow.show()
+//   })
 
-function createWindowOld(config) {
-  console.log("create window config: ", config);
-  app.on('fullscreen', function () {
-    mainWindow.isFullScreenable ? mainWindow.setFullScreen(true) : mainWindow.setFullScreen(false)
-  })
-
-  const load = loadWindow.bind(null, config)
-
-  app.on('ready', load)
-  app.on('activate', load)
-}
-
-export function createWindow(): void {
-  // Create the browser window.
-  const mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
-    show: false,
-    autoHideMenuBar: true,
-    ...(process.platform === 'linux' ? { icon } : {}),
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
-      sandbox: false
-    }
-  })
-
-  mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
-  })
-
-  mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
-    return { action: 'deny' }
-  })
-
-  // HMR for renderer base on electron-vite cli.
-  // Load the remote URL for development or the local html file for production.
-  if (isDev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
-  }
-}
+//   app.on('before-quit', () => {
+//     appQuitting = true
+//   })
+// }

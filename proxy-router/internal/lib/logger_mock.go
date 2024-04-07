@@ -1,7 +1,7 @@
 package lib
 
 import (
-	i "gitlab.com/TitanInd/proxy/proxy-router-v3/internal/interfaces"
+	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
 	"go.uber.org/zap/zapcore"
 )
 

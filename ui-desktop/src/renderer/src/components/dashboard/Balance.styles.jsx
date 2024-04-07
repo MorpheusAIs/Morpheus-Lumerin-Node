@@ -8,12 +8,12 @@ export const BalanceOuterWrap = styled.div`
 export const BalanceWrap = styled.div`
   display: flex;
   flex-direction: column;
+  color: white;
   padding: 0.2em 0 0 0;
 `;
 
 export const BalanceRow = styled.div`
   font-size: 2.5rem;
-  color: #0e4353;
   line-height: 1;
   min-width: 8rem;
   text-align: center;

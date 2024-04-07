@@ -1,4 +1,4 @@
-module gitlab.com/TitanInd/proxy/proxy-router-v3
+module github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal
 
 go 1.19
 

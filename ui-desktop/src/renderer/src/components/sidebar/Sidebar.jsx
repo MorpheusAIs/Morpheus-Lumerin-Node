@@ -10,7 +10,7 @@ import { AddressHeader } from '../common/AddressHeader'
 import withSidebarState from '../../store/hocs/withSidebarState'
 
 const Container = styled.div`
-  background: ${(p) => p.theme.colors.light};
+  background: transparent;
   width: 7rem;
   padding-bottom: 4.5rem;
   display: flex;
@@ -102,11 +102,11 @@ function Sidebar(props) {
   return (
     <Container>
       <FullLogoContainer parent={Container}>
-        <LumerinLogoFull height="45px" /> 
+        <LumerinLogoFull /> 
       </FullLogoContainer>
 
       <IconLogoContainer parent={Container}>
-        <LumerinLogo style={{ width: '5rem' }} />
+        <LumerinLogoFull /> 
       </IconLogoContainer>
       <NavContainer>
         <PrimaryNavContainer>

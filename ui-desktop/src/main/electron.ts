@@ -1,11 +1,7 @@
 import { app } from 'electron'
-import remote from '@electron/remote/main'
-import path from 'path'
-remote.initialize()
-import "./loadEnv"
-import isDev  from 'electron-is-dev'
-import os from 'os'
-const Raven = require('raven')
+import isDev from 'electron-is-dev'
+import * as os from 'os'
+import { config as RavenConfig } from 'raven-js'
 import { createWindow } from './src/main-window.js'
 import { createClient } from './src/client'
 import config from './config'
@@ -16,7 +12,7 @@ import logger from './logger'
 
 errorHandler({ logger: logger.error })
 console.log('electron bootstrap')
-console.log("app config: ", config)
+console.log('app config: ', config)
 if (isDev) {
   // Development
   app.on('ready', function () {
@@ -35,7 +31,7 @@ if (isDev) {
 } else {
   // Production
   if (config.sentryDsn) {
-    Raven.config(config.sentryDsn, {
+    RavenConfig(config.sentryDsn, {
       captureUnhandledRejections: true,
       release: app.getVersion(),
       tags: {
@@ -55,8 +51,8 @@ app.on('window-all-closed', function () {
   }
 })
 
-console.log("app config: ", config)
-createWindow(config)
+console.log('app config: ', config)
+createWindow()
 
 app.on('ready', function () {
   logger.info('App ready, initializing...')

@@ -1,15 +1,13 @@
 import {
   time,
   loadFixture,
-  takeSnapshot,
-  SnapshotRestorer,
 } from "@nomicfoundation/hardhat-toolbox-viem/network-helpers";
 import { expect } from "chai";
 import hre from "hardhat";
 import { getAddress, parseGwei, parseUnits } from "viem";
+import { AlmostEqual, expectAlmostEqual } from "../utils/compare";
 
 describe("Session router", function () {
-  let singleProviderSnap: SnapshotRestorer;
   // We define a fixture to reuse the same setup in every test.
   // We use loadFixture to run this setup once, snapshot that state,
   // and reset Hardhat Network to that snapshot in every test.
@@ -127,7 +125,11 @@ describe("Session router", function () {
       // check session
       expect(sessionId).eq(0n);
 
+      const expDuration = buyerBalance / expected.price * 60n;
       const session = await sessionRouter.read.sessions([sessionId])
+      console.log("session", session)
+      console.log("exp duration", expDuration)
+
       expect(session).to.be.deep.eq([
         sessionId, 
         getAddress(buyer.account.address), 
@@ -137,12 +139,12 @@ describe("Session router", function () {
       ])
     })
 
-    it.skip("should close session manually and refund", async function(){
+    it("should close session manually and refund", async function(){
       const { sessionRouter, provider, buyer, tokenMOR, expected, publicClient, buyerBalance } = await loadFixture(
         deployWithSingleProvider,
       );
       
-      const approveHash = await tokenMOR.write.approve([sessionRouter.address, expected.price], {account: buyer.account})
+      const approveHash = await tokenMOR.write.approve([sessionRouter.address, buyerBalance], {account: buyer.account})
       await publicClient.waitForTransactionReceipt({hash: approveHash})
 
       const {request, result: sessionId} = await sessionRouter.simulate.startSession([provider.account.address], {account: buyer.account.address})
@@ -150,16 +152,30 @@ describe("Session router", function () {
       const startSessionTx = await publicClient.waitForTransactionReceipt({hash: startSessionHash})
      
       const {timestamp} = await publicClient.getBlock({blockNumber: startSessionTx.blockNumber})
+      const progress = 1/3;
+      const denominator = 10**3;
+      const expectedSpentBalance = BigInt(Math.round(progress * denominator)) * buyerBalance / BigInt(denominator);
+      const expectedSpentTimeSeconds = 60n * expectedSpentBalance / expected.price
+      const expectedCloseTimestamp = timestamp + expectedSpentTimeSeconds;
 
-      const expectedCloseTimestamp = timestamp + BigInt(30);
+      console.log("exp spent time", expectedSpentTimeSeconds)
       console.log("exp close", expectedCloseTimestamp)
+      console.log("total balance", buyerBalance)
+      console.log("exp spent balance", expectedSpentBalance)
+      console.log("old buyer balance", await tokenMOR.read.balanceOf([buyer.account.address]))
+      console.log("old contract balance", await tokenMOR.read.balanceOf([sessionRouter.address]))
+
       await time.increaseTo(expectedCloseTimestamp)
+      
       const closeSessionHash = await sessionRouter.write.closeSession([sessionId], {account: buyer.account});
       await publicClient.waitForTransactionReceipt({hash: closeSessionHash})
-      const refundValue = expected.price / 2n;
+      const refundValue = buyerBalance - expectedSpentBalance;
 
-      expect(Number(await tokenMOR.read.balanceOf([buyer.account.address]))).closeTo(Number(refundValue), Number(refundValue / 100n));
-      expect(await tokenMOR.read.balanceOf([sessionRouter.address])).eq(refundValue);
+      const newBuyerBalance = await tokenMOR.read.balanceOf([buyer.account.address]);
+      const newRouterBalance = await tokenMOR.read.balanceOf([sessionRouter.address]);
+
+      expectAlmostEqual(refundValue, newBuyerBalance, 0.01);
+      expectAlmostEqual(refundValue, newRouterBalance, 0.01);
     })
   })
 

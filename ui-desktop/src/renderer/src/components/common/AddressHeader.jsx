@@ -21,6 +21,12 @@ const AddressContainer = styled.div`
   padding: 0.5rem 1.25rem;
   color: ${p => p.theme.colors.dark};
   opacity: 0.8;
+
+  border-radius: 0.375rem;
+  background: rgba(255,255,255, 0.04);
+  border-width: 1px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  color: white;
 `;
 
 const Address = styled.div`

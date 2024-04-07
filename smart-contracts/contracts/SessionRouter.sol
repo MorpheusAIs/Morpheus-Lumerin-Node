@@ -65,8 +65,6 @@ contract SessionRouter {
 
     function startSession(address _provider) public payable returns (uint) {
         uint256 actualAllowance = tokenMOR.allowance(msg.sender, address(this));
-        console.log("msg sender", msg.sender);
-        console.log("allowance", actualAllowance);
         bool tokensTransfered = tokenMOR.transferFrom(
             msg.sender,
             address(this),
@@ -77,8 +75,8 @@ contract SessionRouter {
         Provider memory provider = providers[_provider];
         require(provider.addr != address(0), "provider not found");
 
-        uint durationMinutes = actualAllowance / provider.pricePerMinute;
-        uint endTime = block.timestamp + durationMinutes * 60;
+        uint durationSeconds = actualAllowance * minute / provider.pricePerMinute;
+        uint endTime = block.timestamp + durationSeconds;
 
         uint sessionId = sessionList.length;
         sessions[sessionId] = Session(sessionId, msg.sender, _provider, block.timestamp, endTime);
@@ -98,6 +96,7 @@ contract SessionRouter {
         require(provider.addr != address(0), "provider not found");
 
         uint refund = durationSeconds * provider.pricePerMinute / minute;
+
         tokenMOR.transfer(msg.sender, refund);
 
         session.endTime = block.timestamp;

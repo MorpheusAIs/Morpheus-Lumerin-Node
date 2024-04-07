@@ -7,7 +7,7 @@ import Sp from './Spacing'
 const Container = styled(Flex.Column)`
   min-height: 100vh;
   padding: 3.2rem;
-  background: ${(p) => p.theme.colors.light};
+  background: transparent;
   top: center;
 `
 

@@ -15,7 +15,7 @@ export default {
     tertiary: '#DB2642',
     light: '#fff',
     copy: '#545454',
-    dark: '#002121',
+    dark: '#fff',
     darker: '#1d1d1d',
     translucentDark: '#323232EE',
     lightShade: 'rgba(0, 0, 0, 0.1)',
@@ -26,7 +26,7 @@ export default {
     danger: '#d46045',
     darkDanger: 'rgba(212, 96, 69, 0.12)',
     weak: '#888',
-
+    morMain: '#20dc8e',
     // BACKGROUNDS
     medium: '#f4f4f4',
     lightBlue: '#EAF7FC',

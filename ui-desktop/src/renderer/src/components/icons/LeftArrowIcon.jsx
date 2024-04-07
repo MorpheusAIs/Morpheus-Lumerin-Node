@@ -9,7 +9,7 @@ const LeftArrowIcon = ({ size, fill }, props) => {
       <circle
         r="13"
         transform="matrix(-1 -8.74228e-08 -8.74228e-08 1 14 14)"
-        fill="white"
+        fill="transparent"
         stroke={fill}
         strokeWidth="2"
       />

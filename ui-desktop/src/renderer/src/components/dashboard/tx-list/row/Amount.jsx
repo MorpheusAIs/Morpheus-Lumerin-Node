@@ -19,7 +19,7 @@ const Container = styled.div`
       ? p.theme.colors.copy
       : p.isFailed
       ? p.theme.colors.danger
-      : p.theme.colors.primary};
+      : p.theme.colors.dark};
   display: block;
   text-align: center;
   font-size: 1.6rem;
