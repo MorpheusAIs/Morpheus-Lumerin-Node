@@ -9,11 +9,11 @@ contract AgentRegistry is OwnableUpgradeable {
   using KeySet for KeySet.Set;
 
   struct Agent {
+    bytes32 agentId;
     uint256 fee;
     uint256 stake;
     uint256 timestamp;
     address owner;
-    bytes32 uuid;
     string name;        // limit name length
     string[] tags;      // TODO: limit tags amount
   }
@@ -22,8 +22,8 @@ contract AgentRegistry is OwnableUpgradeable {
   error NotSenderOrOwner();
   error ModelNotFound();
 
-  event RegisteredUpdated(address indexed owner, bytes32 indexed uuid);
-  event Deregistered(address indexed owner, bytes32 indexed uuid);
+  event RegisteredUpdated(address indexed owner, bytes32 indexed agentId);
+  event Deregistered(address indexed owner, bytes32 indexed agentId);
   event MinStakeUpdated(uint256 newStake);
 
   // state
@@ -56,30 +56,30 @@ contract AgentRegistry is OwnableUpgradeable {
   }
 
   // registers new or updates existing
-  function register(uint256 addStake, uint256 fee, address owner, bytes32 uuid, string memory name, string[] memory tags) public senderOrOwner(owner){
-    uint256 stake = map[uuid].stake;
+  function register(uint256 addStake, uint256 fee, address owner, bytes32 agentId, string memory name, string[] memory tags) public senderOrOwner(owner){
+    uint256 stake = map[agentId].stake;
     uint256 newStake = stake + addStake;
     if (newStake < minStake) {
       revert StakeTooLow();
     }
 
     if (stake == 0) {
-      set.insert(uuid);
+      set.insert(agentId);
     } else {
-      _senderOrOwner(map[uuid].owner);
+      _senderOrOwner(map[agentId].owner);
     }
 
-    map[uuid] = Agent({
+    map[agentId] = Agent({
       fee: fee,
       stake: newStake,
       timestamp: block.timestamp,
       owner: owner,
-      uuid: uuid,
+      agentId: agentId,
       name: name,
       tags: tags
     });
 
-    emit RegisteredUpdated(owner, uuid);
+    emit RegisteredUpdated(owner, agentId);
     token.transferFrom(_msgSender(), address(this), addStake); // reverts with ERC20InsufficientAllowance
   }
 

@@ -29,57 +29,48 @@ contract Marketplace is OwnableUpgradeable {
   AgentRegistry public agentRegistry;
 
   // storage
-  
-  // option 1
-  // can't get all bids for a provider
-  // mapping(address => mapping(bytes32 => Bid[])) public bids; // provider => modelAgentId => bid[], where index is nonce
-  
-  // option 2
-  // not keeping data for old bids
-  // mapping(bytes32 => Bid) public bids2; // bidId = keccak256(provider, modelAgentId) => bid
-  // mapping(address => KeySet.Set) providerBids; // provider => bidIds
-  // mapping(bytes32 => KeySet.Set) modelAgentBids; // modelAgentId => bidIds
-
-  // option 3
-  // complex, keeps all bids
-  // old bids are accessible only by bidId = keccak256(provider, modelAgentId, nonce)
   mapping(bytes32 => Bid) public map; // bidId = keccak256(provider, modelAgentId, nonce) => bid
-  KeySet.Set set; // keeps all active bidIds
-  mapping(address => KeySet.Set) providerBids; // provider => bidIds, only stores active bids
-  mapping(bytes32 => KeySet.Set) modelAgentBids; // modelAgentId => bidIds, only stores active bids
-  mapping(bytes32 => uint256) providerModelAgentNonce; // keccak256(provider, modelAgentId) => last nonce
+  mapping(bytes32 => uint256) public providerModelAgentNonce; // keccak256(provider, modelAgentId) => last nonce
+  mapping(address => uint256) public userStake; // user stakes
+  uint256 public totalUserStake; // total user stakes that should be returned
+
+  // indexes
+  // active bids
+  KeySet.Set activeBids; // all active bidIds
+  mapping(address => KeySet.Set) providerActiveBids; // provider => active bidIds
+  mapping(bytes32 => KeySet.Set) modelAgentActiveBids; // modelAgentId => active bidIds
+  // all bids
+  mapping(bytes32 => bytes32[]) modelAgentBids; // keccak256(provider, modelAgentId) => all bidIds
+  mapping(address => bytes32[]) providerBids; // provider => all bidIds
+  
+  // events
+  event BidPosted(address indexed provider, bytes32 indexed modelAgentId, uint256 nonce);
+  event BidDeleted(address indexed provider, bytes32 indexed modelAgentId, uint256 nonce);
+  event Staked(address indexed user, uint256 amount);
+  event Unstaked(address indexed user, uint256 amount);
+  event Withdrawn(uint256 amount);
+  event FeeUpdated(uint256 modelFee, uint256 agentFee);
 
   // errors
   error ModelOrAgentNotFound();
-  error NoActiveBid();
+  error ActiveBidNotFound();
   error NotSenderOrOwner();
+  error NotEnoughWithdrawableBalance();
 
   function initialize(
       address _token, 
       address modelRegistryAddr, 
       address agentRegistryAddr
     ) public initializer {
-
+    __Ownable_init();
     token = ERC20(_token);
     modelRegistry = ModelRegistry(modelRegistryAddr);
     agentRegistry = AgentRegistry(agentRegistryAddr);
-    __Ownable_init();
-  }
-  
-  function getAll() public view returns (Bid[] memory) {
-    Bid[] memory _bids = new Bid[](set.count());
-    for (uint i = 0; i < set.count(); i++) {
-      _bids[i] = map[set.keyAtIndex(i)];
-    }
-    return _bids;
   }
 
-  function getByIndex(uint index) public view returns (Bid memory bid) {
-    return map[set.keyAtIndex(index)];
-  }
-
-  function getBidsByProvider(address provider) public view returns (Bid[] memory) {
-    KeySet.Set storage providerBidsSet = providerBids[provider];
+  // returns active bids by provider
+  function getActiveBidsByProvider(address provider) public view returns (Bid[] memory) {
+    KeySet.Set storage providerBidsSet = providerActiveBids[provider];
     Bid[] memory _bids = new Bid[](providerBidsSet.count());
     for (uint i = 0; i < providerBidsSet.count(); i++) {
       _bids[i] = map[providerBidsSet.keyAtIndex(i)];
@@ -87,11 +78,44 @@ contract Marketplace is OwnableUpgradeable {
     return _bids;
   }
 
-  function getBidsByModelAgent(bytes32 modelAgentId) public view returns (Bid[] memory) {
-    KeySet.Set storage modelAgentBidsSet = modelAgentBids[modelAgentId];
+  // returns active bids by model agent
+  function getActiveBidsByModelAgent(bytes32 modelAgentId) public view returns (Bid[] memory) {
+    KeySet.Set storage modelAgentBidsSet = modelAgentActiveBids[modelAgentId];
     Bid[] memory _bids = new Bid[](modelAgentBidsSet.count());
     for (uint i = 0; i < modelAgentBidsSet.count(); i++) {
       _bids[i] = map[modelAgentBidsSet.keyAtIndex(i)];
+    }
+    return _bids;
+  }
+
+  // returns all bids by provider sorted from newest to oldest
+  function getBidsByProvider(address provider, uint256 offset, uint8 limit) public view returns (Bid[] memory) {
+    uint256 length = providerBids[provider].length;
+    if (length < offset){
+      return new Bid[](0);
+    }
+    uint8 size = offset + limit > length ? uint8(length-offset) : limit;
+    Bid[] memory _bids = new Bid[](size);
+    for (uint i = 0; i < size; i++) {
+      uint256 index = length - offset - i - 1;
+      bytes32 id = providerBids[provider][index];
+      _bids[i]=map[id];
+    }
+    return _bids;
+  }
+
+  // returns all bids by provider sorted from newest to oldest
+  function getBidsByModelAgent(bytes32 modelAgentId, uint256 offset, uint8 limit) public view returns (Bid[] memory) {
+    uint256 length = modelAgentBids[modelAgentId].length;
+    if (length < offset){
+      return new Bid[](0);
+    }
+    uint8 size = offset + limit > length ? uint8(length-offset) : limit;
+    Bid[] memory _bids = new Bid[](size);
+    for (uint i = 0; i < size; i++) {
+      uint256 index = length - offset - i - 1;
+      bytes32 id = modelAgentBids[modelAgentId][index];
+      _bids[i]=map[id];
     }
     return _bids;
   }
@@ -130,37 +154,70 @@ contract Marketplace is OwnableUpgradeable {
       deletedAt: 0
     });
 
-    set.insert(bidId);
-    providerBids[provider].insert(bidId);
-    modelAgentBids[modelAgentId].insert(bidId);
+    // active indexes
+    activeBids.insert(bidId);
+    providerActiveBids[provider].insert(bidId);
+    modelAgentActiveBids[modelAgentId].insert(bidId);
+    
+    // all indexes
+    providerBids[provider].push(bidId);
+    modelAgentBids[modelAgentId].push(bidId);
 
+    emit BidPosted(provider, modelAgentId, nonce);
+    
     token.transferFrom(_msgSender(), address(this), modelBidFee);
   }
 
   function deleteModelAgentBid(bytes32 bidId) public {
     Bid storage bid = map[bidId];
     if (bid.createdAt == 0 || bid.deletedAt != 0) {
-      revert NoActiveBid();
+      revert ActiveBidNotFound();
     }
 
     _senderOrOwner(bid.provider);
 
     bid.deletedAt = block.timestamp;
-    set.remove(bidId);
-    providerBids[bid.provider].remove(bidId);
-    modelAgentBids[bid.modelAgentId].remove(bidId);
+    // indexes update
+    activeBids.remove(bidId);
+    providerActiveBids[bid.provider].remove(bidId);
+    modelAgentActiveBids[bid.modelAgentId].remove(bidId);
+
+    emit BidDeleted(bid.provider, bid.modelAgentId, bid.nonce);
   }
 
-  function setModelBidFee(uint256 fee) public onlyOwner {
-    modelBidFee = fee;
+  function stake(uint256 amount) public {
+    totalUserStake += amount;
+    userStake[_msgSender()] += amount;
+
+    emit Staked(_msgSender(), amount);
+    token.transferFrom(_msgSender(), address(this), amount);
   }
 
-  function setAgentBidFee(uint256 fee) public onlyOwner {
-    agentBidFee = fee;
+  function unstake(uint256 amount) public {
+    if (userStake[_msgSender()] < amount) {
+      revert NotEnoughWithdrawableBalance();
+    }
+    totalUserStake -= amount;
+    userStake[_msgSender()] -= amount;
+
+    emit Unstaked(_msgSender(), amount);
+    token.transfer(_msgSender(), amount);
   }
 
-  function withdraw(address addr) public onlyOwner {
-    token.transfer(addr, token.balanceOf(address(this)));
+  function setBidFee(uint256 modelFee, uint256 agentFee) public onlyOwner {
+    modelBidFee = modelFee;
+    agentBidFee = agentFee;
+    emit FeeUpdated(modelFee, agentFee);
+  }
+
+  function withdraw(address addr, uint256 amount) public onlyOwner {
+    uint256 withdrawableBalance = token.balanceOf(address(this)) - totalUserStake;
+    if (amount > withdrawableBalance) {
+      revert NotEnoughWithdrawableBalance();
+    }
+    
+    emit Withdrawn(amount);
+    token.transfer(addr, withdrawableBalance);
   }
 
   modifier senderOrOwner(address addr) {

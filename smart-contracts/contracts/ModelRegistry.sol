@@ -9,11 +9,11 @@ contract ModelRegistry is OwnableUpgradeable {
   using KeySet for KeySet.Set;
 
   struct Model {
+    bytes32 modelId;
+    bytes32 ipfsCID;    // https://docs.ipfs.tech/concepts/content-addressing/#what-is-a-cid
     uint256 fee;
     uint256 stake;
     uint256 timestamp;
-    bytes32 ipfsCID;    // https://docs.ipfs.tech/concepts/content-addressing/#what-is-a-cid
-    bytes32 uuid;
     address owner;
     string name;        // limit name length
     string[] tags;      // TODO: limit tags amount
@@ -23,8 +23,8 @@ contract ModelRegistry is OwnableUpgradeable {
   error NotSenderOrOwner();
   error ModelNotFound();
 
-  event RegisteredUpdated(address indexed owner, bytes32 indexed uuid);
-  event Deregistered(address indexed owner, bytes32 indexed uuid);
+  event RegisteredUpdated(address indexed owner, bytes32 indexed modelId);
+  event Deregistered(address indexed owner, bytes32 indexed modelId);
   event MinStakeUpdated(uint256 newStake);
 
   // state
@@ -34,7 +34,7 @@ contract ModelRegistry is OwnableUpgradeable {
   // storage
   KeySet.Set set;
   mapping(bytes32 => Model) public map;
-  // mapping(address => bytes32[]) public modelsByOwner; // owner to uuids
+  // mapping(address => bytes32[]) public modelsByOwner; // owner to modelIds
 
   function initialize(address _token) public initializer {
     token = ERC20(_token);
@@ -66,31 +66,31 @@ contract ModelRegistry is OwnableUpgradeable {
   }
 
   // registers new model or updates existing
-  function register(uint256 addStake, uint256 fee, bytes32 ipfsCID, bytes32 uuid, address owner, string memory name, string[] memory tags) public senderOrOwner(owner){
-    uint256 stake = map[uuid].stake;
+  function register(uint256 addStake, uint256 fee, bytes32 ipfsCID, bytes32 modelId, address owner, string memory name, string[] memory tags) public senderOrOwner(owner){
+    uint256 stake = map[modelId].stake;
     uint256 newStake = stake + addStake;
     if (newStake < minStake) {
       revert StakeTooLow();
     }
 
     if (stake == 0) {
-      set.insert(uuid);
+      set.insert(modelId);
     } else {
-      _senderOrOwner(map[uuid].owner);
+      _senderOrOwner(map[modelId].owner);
     }
 
-    map[uuid] = Model({
+    map[modelId] = Model({
       fee: fee,
       stake: newStake,
       timestamp: block.timestamp,
       ipfsCID: ipfsCID,
-      uuid: uuid,
+      modelId: modelId,
       owner: owner,
       name: name,
       tags: tags
     });
 
-    emit RegisteredUpdated(owner, uuid);
+    emit RegisteredUpdated(owner, modelId);
     token.transferFrom(_msgSender(), address(this), addStake); // reverts with ERC20InsufficientAllowance
   }
 
