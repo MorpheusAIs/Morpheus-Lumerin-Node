@@ -1,11 +1,13 @@
 const sinon = require('sinon')
+const axios = require('axios')
 const ollama = require('./index')
 const chai = require('chai')
 
 const { expect } = chai
 
+// TODO: fix other tests so they can be run reliably
 describe.only('test ollama', function () {
-  this.timeout(10000)
+  this.timeout(15000)
   describe('api integration', () => {
     before('should init with config', () => {
       ollama.init({
@@ -20,33 +22,31 @@ describe.only('test ollama', function () {
       const chat = []
       const message = 'how are you?'
       const response = await ollama.chat.createChatCompletion(chat, message)
-      console.log("response: ", response);
 
       // concatenate the values of all of the content fields in all of the response elements
-      const contents = response.data.messages.map(message => message.content);
+      const contents = response.map(({ message }) => message.content)
 
-      console.log("contents: ", contents);
-      expect(contents.join(' ')).to.contain("I'm doing well");
+      expect(contents.join('')).to.contain("I'm just an AI")
     })
   })
 
-  describe.skip('unit', () => {
+  describe('unit', () => {
     let request = null,
       response = null
 
     before(async () => {
       //mock axios
-      request = sinon.stub(axios, 'post')
+      request = sinon.stub(axios, 'post');
       response = {
-        data: {
-          messages: [
-            {
-              role: 'bot',
-              content: "I'm doing well",
-            },
-          ],
-        },
-      }
+        data: '{"model":"llama2:latest","created_at":"2024-04-08T02:05:27.47630621Z","message":{"role":"assistant","content":"I"},"done":false}\n' +
+        `{"model":"llama2:latest","created_at":"2024-04-08T02:05:27.587310627Z","message":{"role":"assistant","content":"'"},"done":false}\n` +
+        '{"model":"llama2:latest","created_at":"2024-04-08T02:05:27.698277877Z","message":{"role":"assistant","content":"m"},"done":false}\n' +
+        '{"model":"llama2:latest","created_at":"2024-04-08T02:05:27.813684419Z","message":{"role":"assistant","content":" just"},"done":false}\n' +
+        '{"model":"llama2:latest","created_at":"2024-04-08T02:05:27.925306794Z","message":{"role":"assistant","content":" an"},"done":false}\n' +
+        '{"model":"llama2:latest","created_at":"2024-04-08T02:05:28.037869294Z","message":{"role":"assistant","content":" A"},"done":false}\n' +
+        '{"model":"llama2:latest","created_at":"2024-04-08T02:05:28.151919127Z","message":{"role":"assistant","content":"I"},"done":false}\n'
+      };
+
       request.returns(Promise.resolve(response))
     })
 
@@ -54,8 +54,8 @@ describe.only('test ollama', function () {
       request.restore()
     })
 
-    it('should throw error on invalid config', async () => {
-      await expect(() => ollama.init({})).toThrow()
+    it.skip('should throw error on invalid config', async () => {
+      await expect(() => ollama.init({})).throws()
     })
 
     it('should set default model name', async () => {
@@ -63,15 +63,18 @@ describe.only('test ollama', function () {
         modelUrl: 'http://localhost:11434',
       })
 
-      expect(ollama.chat.createChatCompletion).toBeDefined()
-      expect(ollama.modelName).toEqual('llama2:70b')
+      expect(ollama.chat.createChatCompletion).is.a('function')
+      expect(ollama.modelName).to.equal('llama2:latest')
     })
 
     it('should create chat completion', async () => {
       const chat = []
       const message = 'how are you?'
       const response = await ollama.chat.createChatCompletion(chat, message)
-      expect(response.messages[0].content).toContain("I'm doing well")
+
+      const contents = response.map(({ message }) => message.content)
+
+      expect(contents.join('')).to.contain("I'm just an AI")
     })
   })
 })

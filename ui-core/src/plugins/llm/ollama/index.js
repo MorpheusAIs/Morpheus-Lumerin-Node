@@ -22,16 +22,24 @@ const chat = {
           },
         ],
       })
-
-      return response.data
+      
+      return jsonStringToArray(response.data)
     } catch (error) {
       console.log(error)
       throw error
     }
   },
 }
-
+function jsonStringToArray(jsonString) {
+  // Split the input string by newlines to get an array of strings, each representing a JSON object
+  const lines = jsonString.trim().split('\n');
+  // Map over each line, parsing it as JSON, and return the resulting array of objects
+  const jsonArray = lines.map(line => JSON.parse(line));
+  
+  return jsonArray;
+}
 module.exports = {
   init,
-  chat
+  chat,
+  modelName
 }
