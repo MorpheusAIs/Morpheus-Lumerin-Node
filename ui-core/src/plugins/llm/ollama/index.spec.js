@@ -4,15 +4,15 @@ const ollama = require('./index')
 const chai = require('chai')
 
 const { expect } = chai
-
+const modelName = "llama2:latest"
 // TODO: fix other tests so they can be run reliably
 describe.only('test ollama', function () {
   this.timeout(15000)
   describe('api integration', () => {
     before('should init with config', () => {
       ollama.init({
-        modelUrl: 'http://localhost:11434',
-        modelName: null,
+        modelUrl: 'http://localhost:11435',
+        modelName: modelName,
       })
 
       expect(ollama.chat.createChatCompletion).is.a('function')
@@ -61,6 +61,7 @@ describe.only('test ollama', function () {
     it('should set default model name', async () => {
       ollama.init({
         modelUrl: 'http://localhost:11434',
+        modelName
       })
 
       expect(ollama.chat.createChatCompletion).is.a('function')
