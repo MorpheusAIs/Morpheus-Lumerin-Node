@@ -212,9 +212,9 @@ func (m *MorRpc) SessionCloseRequest(sessionID string, userPrivateKeyHex string)
 	}, nil
 }
 
-func (m *MorRpc) generateTimestamp() int {
+func (m *MorRpc) generateTimestamp() int64 {
 	now := time.Now()
-	return now.Nanosecond()
+	return now.UnixMilli()
 }
 
 // https://goethereumbook.org/signature-generate/
