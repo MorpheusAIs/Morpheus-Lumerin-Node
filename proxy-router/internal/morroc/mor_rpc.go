@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
@@ -219,7 +220,7 @@ func (m *MorRpc) generateTimestamp() int64 {
 
 // https://goethereumbook.org/signature-generate/
 func (m *MorRpc) generateSignature(params map[string]interface{}, privateKeyHex string) (string, error) {
-	result := ""
+	resultStr := ""
 
 	keys := make([]string, 0)
 	for k, _ := range params {
@@ -228,15 +229,17 @@ func (m *MorRpc) generateSignature(params map[string]interface{}, privateKeyHex 
 	sort.Strings(keys)
 
 	// Concatenate the parameters in the order of the sorted keys
+	key_values := make([]string, 0)
 	for _, k := range keys {
-		result += fmt.Sprintf("%s:%v", k, params[k])
+		key_values = append(key_values, fmt.Sprintf("%s=%v", k, params[k]))
 	}
+	resultStr = strings.Join(key_values, "&")
 
 	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
 		return "", err
 	}
-	hash := crypto.Keccak256Hash([]byte(result))
+	hash := crypto.Keccak256Hash([]byte(resultStr))
 	signature, err := crypto.Sign(hash.Bytes(), privateKey)
 	if err != nil {
 		return "", err
