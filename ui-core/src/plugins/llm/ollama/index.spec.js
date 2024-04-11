@@ -11,7 +11,7 @@ describe.only('test ollama', function () {
   describe('api integration', () => {
     before('should init with config', () => {
       ollama.init({
-        modelUrl: 'http://localhost:11435',
+        modelUrl: 'http://localhost:11434',
         modelName: modelName,
       })
 

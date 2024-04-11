@@ -3,11 +3,14 @@ services:
   ollama:
     image: ollama/ollama
     container_name: ollama
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["/docker-compose-startup.sh"]
     volumes:
-      - ollama:/root/.ollama
+      - ollamaconfig:/root/.ollama
+      - ./docker-compose-startup.sh:/docker-compose-startup.sh
     ports:
       - "11434:11434"
     restart: unless-stopped
 
 volumes:
-  ollama:
+  ollamaconfig:
