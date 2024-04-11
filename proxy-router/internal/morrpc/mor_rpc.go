@@ -107,7 +107,7 @@ func (m *MorRpc) ResponseError(message string, privateKeyHex string, requestId s
 }
 
 func (m *MorRpc) AuthError(privateKeyHex string, requestId string) (RpcResponse, error) {
-	return m.ResponseError("Failed to authenticate signature.", privateKeyHex, requestId)
+	return m.ResponseError("Failed to authenticate signature", privateKeyHex, requestId)
 }
 
 func (m *MorRpc) OutOfCapacityError(privateKeyHex string, requestId string) (RpcResponse, error) {
