@@ -2,6 +2,7 @@ package morrpc
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -42,7 +43,9 @@ func TestMorRpc_verifySignature(t *testing.T) {
 	publicKeyBytes, err := hex.DecodeString(publicKey)
 	assert.NoError(t, err)
 
-	isValid := m.VerifySignature(params, signature, publicKeyBytes)
+	paramsBytes, err := json.Marshal(params)
+
+	isValid := m.VerifySignature(paramsBytes, signature, publicKeyBytes)
 	assert.True(t, isValid)
 }
 
@@ -66,6 +69,7 @@ func TestMorRpc_verifySignature_incorrect_params(t *testing.T) {
 	assert.NoError(t, err)
 
 	params["param3"] = "unknown value"
-	isValid := m.VerifySignature(params, signature, publicKeyBytes)
+	paramsBytes, err := json.Marshal(params)
+	isValid := m.VerifySignature(paramsBytes, signature, publicKeyBytes)
 	assert.False(t, isValid)
 }
