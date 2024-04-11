@@ -115,11 +115,11 @@ func (m *MorRpc) OutOfCapacityError(privateKeyHex string, requestId string) (Rpc
 }
 
 func (m *MorRpc) SessionClosedError(privateKeyHex string, requestId string) (RpcResponse, error) {
-	return m.ResponseError("Session is closed.", privateKeyHex, requestId)
+	return m.ResponseError("Session is closed", privateKeyHex, requestId)
 }
 
 func (m *MorRpc) SpendLimitError(privateKeyHex string, requestId string) (RpcResponse, error) {
-	return m.ResponseError("Over spend limit.", privateKeyHex, requestId)
+	return m.ResponseError("Over spend limit", privateKeyHex, requestId)
 }
 
 // Session Report
@@ -128,7 +128,7 @@ func (m *MorRpc) SessionReport(sessionID string, start uint, end uint, prompts u
 	report := m.generateReport(sessionID, start, end, prompts, tokens, reqs)
 	reportJson, err := json.Marshal(report)
 	if err != nil {
-		return m.ResponseError("Failed to generate report.", providerPrivateKeyHex, requestId)
+		return m.ResponseError("Failed to generate report", providerPrivateKeyHex, requestId)
 	}
 	reportStr := string(reportJson)
 
