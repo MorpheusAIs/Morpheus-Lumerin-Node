@@ -1,15 +1,16 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import styled from 'styled-components';
-import { IconFileReport } from '@tabler/icons-react';
+import { IconFileReport, IconMessage } from '@tabler/icons-react';
 import { IconBuildingStore } from '@tabler/icons-react';
 import { IconChecklist } from '@tabler/icons-react';
-import { IconWallet } from '@tabler/icons-react';
+import { IconWallet, IconMessages } from '@tabler/icons-react';
 
 const Container = styled.div`
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  padding-left: 2.2rem;
   max-height: 10%;
 `;
 
@@ -21,6 +22,7 @@ const Button = styled(NavLink)`
   color: ${p => p.theme.colors.inactive};
   padding: 1.6rem;
   border-top: 1px solid transparent;
+
 
   &:focus {
     outline: none;
@@ -87,17 +89,18 @@ export default function PrimaryNav({ parent, activeIndex, setActiveIndex }) {
         </Label>
       </Button>
 
-      {/* <Button
+      <Button
         onClick={() => setActiveIndex(1)}
         activeClassName="active"
-        to="/marketplace"
+        to="/chat"
       >
         <IconWrapper>
-          <IconBuildingStore width={iconSize} />
+          <IconMessages width={iconSize} />
         </IconWrapper>
-        <Label parent={parent}>Marketplace</Label>
+        <Label parent={parent}>Chat</Label>
       </Button>
 
+      {/* 
       <Button
         onClick={() => setActiveIndex(2)}
         activeClassName="active"
