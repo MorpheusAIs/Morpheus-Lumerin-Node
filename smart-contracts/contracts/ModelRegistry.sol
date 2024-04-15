@@ -9,14 +9,14 @@ contract ModelRegistry is OwnableUpgradeable {
   using KeySet for KeySet.Set;
 
   struct Model {
-    bytes32 modelId;
     bytes32 ipfsCID;    // https://docs.ipfs.tech/concepts/content-addressing/#what-is-a-cid
     uint256 fee;
     uint256 stake;
-    uint256 timestamp;
     address owner;
     string name;        // limit name length
     string[] tags;      // TODO: limit tags amount
+    uint128 timestamp;
+    bool isDeleted;
   }
 
   error StakeTooLow();
@@ -32,49 +32,51 @@ contract ModelRegistry is OwnableUpgradeable {
   ERC20 public token;
 
   // storage
-  KeySet.Set set;
-  mapping(bytes32 => Model) public map;
+  mapping(bytes32 => Model) public map; // modelId => Model
+  bytes32[] public models; // all model ids
+  KeySet.Set activeModels; // active model ids
   // mapping(address => bytes32[]) public modelsByOwner; // owner to modelIds
 
   function initialize(address _token) public initializer {
-    token = ERC20(_token);
     __Ownable_init();
+    token = ERC20(_token);
   }
 
   function getIds() public view returns (bytes32[] memory){
-    return set.keys();
+    return activeModels.keys();
   }
 
   function getCount() public view returns(uint count) {
-    return set.count();
+    return activeModels.count();
   }
 
   function getAll() public view returns (Model[] memory){
-    Model[] memory _models = new Model[](set.count());
-    for (uint i = 0; i < set.count(); i++) {
-      _models[i] = map[set.keyAtIndex(i)];
+    Model[] memory _models = new Model[](activeModels.count());
+    for (uint i = 0; i < activeModels.count(); i++) {
+      _models[i] = map[activeModels.keyAtIndex(i)];
     }
     return _models;
   }
 
-  function getByIndex(uint index) public view returns(Model memory model) {
-    return map[set.keyAtIndex(index)];
+  function getByIndex(uint index) public view returns(bytes32 modelId, Model memory model) {
+      modelId = activeModels.keyAtIndex(index);
+      return (modelId, map[modelId]);
   }
 
   function exists(bytes32 id) public view returns (bool) {
-    return set.exists(id);
+    return activeModels.exists(id);
   }
 
   // registers new model or updates existing
-  function register(uint256 addStake, uint256 fee, bytes32 ipfsCID, bytes32 modelId, address owner, string memory name, string[] memory tags) public senderOrOwner(owner){
-    uint256 stake = map[modelId].stake;
-    uint256 newStake = stake + addStake;
+  function register(bytes32 modelId, bytes32 ipfsCID,  uint256 fee, uint256 addStake, address owner, string memory name, string[] memory tags) public senderOrOwner(owner){
+    Model memory model = map[modelId];
+    uint256 newStake = model.stake + addStake;
     if (newStake < minStake) {
       revert StakeTooLow();
     }
-
-    if (stake == 0) {
-      set.insert(modelId);
+    if (model.stake == 0) {
+      activeModels.insert(modelId);
+      models.push(modelId);
     } else {
       _senderOrOwner(map[modelId].owner);
     }
@@ -82,12 +84,12 @@ contract ModelRegistry is OwnableUpgradeable {
     map[modelId] = Model({
       fee: fee,
       stake: newStake,
-      timestamp: block.timestamp,
+      timestamp: uint128(block.timestamp),
       ipfsCID: ipfsCID,
-      modelId: modelId,
       owner: owner,
       name: name,
-      tags: tags
+      tags: tags,
+      isDeleted: false
     });
 
     emit RegisteredUpdated(owner, modelId);
@@ -95,15 +97,15 @@ contract ModelRegistry is OwnableUpgradeable {
   }
 
   function deregister(bytes32 id) public {
-    address owner = map[id].owner;
-    _senderOrOwner(owner);
-    
-    set.remove(id);
-    uint256 stake = map[id].stake;
-    delete map[id];
+    Model storage model = map[id];
+    _senderOrOwner(model.owner);
 
-    emit Deregistered(owner, id);
-    token.transfer(owner, stake);
+    activeModels.remove(id);
+    model.isDeleted = true;
+    uint256 stake = model.stake;
+
+    emit Deregistered(model.owner, id);
+    token.transfer(model.owner, stake);
   }
 
   function setMinStake(uint256 _minStake) public onlyOwner {
@@ -116,8 +118,8 @@ contract ModelRegistry is OwnableUpgradeable {
     _;
   }
 
-  function _senderOrOwner(address addr) internal view {
-    if (addr != _msgSender() && addr != owner()) {
+  function _senderOrOwner(address resourceOwner) internal view {
+    if (_msgSender() != resourceOwner && _msgSender() != owner()) {
       revert NotSenderOrOwner();
     }
   }

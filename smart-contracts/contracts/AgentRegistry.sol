@@ -106,8 +106,8 @@ contract AgentRegistry is OwnableUpgradeable {
     _;
   }
 
-  function _senderOrOwner(address addr) internal view {
-    if (addr != _msgSender() && addr != owner()) {
+  function _senderOrOwner(address resourceOwner) internal view {
+    if (_msgSender() != resourceOwner && _msgSender() != owner()) {
       revert NotSenderOrOwner();
     }
   }
