@@ -12,7 +12,7 @@ const chat = {
   //TODO: map images between ollama api and openai api
   async createChatCompletion(chat, message) {
     try {
-      const response = await axios.post('/api/chat', {
+      const response = await axios.post('/v1/chat/completions', {
         model: modelName,
         messages: [
           ...chat,
@@ -23,7 +23,7 @@ const chat = {
         ],
       })
       
-      return jsonStringToArray(response.data)
+      return response.data.choices
     } catch (error) {
       console.log(error)
       throw error

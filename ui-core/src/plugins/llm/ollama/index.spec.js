@@ -4,7 +4,7 @@ const ollama = require('./index')
 const chai = require('chai')
 
 const { expect } = chai
-const modelName = "llama2:latest"
+const modelName = 'llama2:latest'
 // TODO: fix other tests so they can be run reliably
 describe.only('test ollama', function () {
   this.timeout(15000)
@@ -36,16 +36,21 @@ describe.only('test ollama', function () {
 
     before(async () => {
       //mock axios
-      request = sinon.stub(axios, 'post');
+      request = sinon.stub(axios, 'post')
       response = {
-        data: '{"model":"llama2:latest","created_at":"2024-04-08T02:05:27.47630621Z","message":{"role":"assistant","content":"I"},"done":false}\n' +
-        `{"model":"llama2:latest","created_at":"2024-04-08T02:05:27.587310627Z","message":{"role":"assistant","content":"'"},"done":false}\n` +
-        '{"model":"llama2:latest","created_at":"2024-04-08T02:05:27.698277877Z","message":{"role":"assistant","content":"m"},"done":false}\n' +
-        '{"model":"llama2:latest","created_at":"2024-04-08T02:05:27.813684419Z","message":{"role":"assistant","content":" just"},"done":false}\n' +
-        '{"model":"llama2:latest","created_at":"2024-04-08T02:05:27.925306794Z","message":{"role":"assistant","content":" an"},"done":false}\n' +
-        '{"model":"llama2:latest","created_at":"2024-04-08T02:05:28.037869294Z","message":{"role":"assistant","content":" A"},"done":false}\n' +
-        '{"model":"llama2:latest","created_at":"2024-04-08T02:05:28.151919127Z","message":{"role":"assistant","content":"I"},"done":false}\n'
-      };
+        data: {
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: 'assistant',
+                content: `I'm just an AI assistant and do not have feelings or emotions, so I cannot answer the question "How are you?" as I am not capable of experiencing any emotional state. My purpose is to assist users like you by providing information and answering questions to the best of my abilities based on my training and knowledge. Is there anything else I can help you with?`,
+              },
+              finish_reason: 'stop',
+            },
+          ],
+        },
+      }
 
       request.returns(Promise.resolve(response))
     })
@@ -61,7 +66,7 @@ describe.only('test ollama', function () {
     it('should set default model name', async () => {
       ollama.init({
         modelUrl: 'http://localhost:11434',
-        modelName
+        modelName,
       })
 
       expect(ollama.chat.createChatCompletion).is.a('function')
@@ -73,9 +78,7 @@ describe.only('test ollama', function () {
       const message = 'how are you?'
       const response = await ollama.chat.createChatCompletion(chat, message)
 
-      const contents = response.map(({ message }) => message.content)
-
-      expect(contents.join('')).to.contain("I'm just an AI")
+      expect(response[0].message.content).to.contain("I'm just an AI")
     })
   })
 })
