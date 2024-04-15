@@ -98,6 +98,10 @@ contract ProviderRegistry is OwnableUpgradeable {
     emit MinStakeUpdated(_minStake);
   }
 
+  function exists(address addr) public view returns (bool) {
+    return activeProviders.exists(addr);
+  }
+
   modifier senderOrOwner(address addr) {
     _senderOrOwner(addr);
     _;

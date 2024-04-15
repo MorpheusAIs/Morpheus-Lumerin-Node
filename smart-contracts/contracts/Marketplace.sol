@@ -6,6 +6,7 @@ import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { KeySet } from "./KeySet.sol";
 import { ModelRegistry } from "./ModelRegistry.sol";
 import { AgentRegistry } from "./AgentRegistry.sol";
+import { ProviderRegistry } from './ProviderRegistry.sol';
 
 contract Marketplace is OwnableUpgradeable {
   using KeySet for KeySet.Set;
@@ -26,29 +27,24 @@ contract Marketplace is OwnableUpgradeable {
 
   // dependencies
   ModelRegistry public modelRegistry;
-  AgentRegistry public agentRegistry;
+  ProviderRegistry public providerRegistry;
 
   // storage
   mapping(bytes32 => Bid) public map; // bidId = keccak256(provider, modelAgentId, nonce) => bid
   mapping(bytes32 => uint256) public providerModelAgentNonce; // keccak256(provider, modelAgentId) => last nonce
-  mapping(address => uint256) public userStake; // user stakes
-  uint256 public totalUserStake; // total user stakes that should be returned
 
-  // indexes
-  // active bids
+  // indexes - active bids
   KeySet.Set activeBids; // all active bidIds
   mapping(address => KeySet.Set) providerActiveBids; // provider => active bidIds
   mapping(bytes32 => KeySet.Set) modelAgentActiveBids; // modelAgentId => active bidIds
-  // all bids
+  
+  // indexes - all bids
   mapping(bytes32 => bytes32[]) modelAgentBids; // keccak256(provider, modelAgentId) => all bidIds
   mapping(address => bytes32[]) providerBids; // provider => all bidIds
   
   // events
   event BidPosted(address indexed provider, bytes32 indexed modelAgentId, uint256 nonce);
   event BidDeleted(address indexed provider, bytes32 indexed modelAgentId, uint256 nonce);
-  event Staked(address indexed user, uint256 amount);
-  event Unstaked(address indexed user, uint256 amount);
-  event Withdrawn(uint256 amount);
   event FeeUpdated(uint256 modelFee, uint256 agentFee);
 
   // errors
@@ -59,13 +55,13 @@ contract Marketplace is OwnableUpgradeable {
 
   function initialize(
       address _token, 
-      address modelRegistryAddr, 
-      address agentRegistryAddr
+      address modelRegistryAddr,
+      address providerRegistryAddr
     ) public initializer {
     __Ownable_init();
     token = ERC20(_token);
     modelRegistry = ModelRegistry(modelRegistryAddr);
-    agentRegistry = AgentRegistry(agentRegistryAddr);
+    providerRegistry = ProviderRegistry(providerRegistryAddr);
   }
 
   // returns active bids by provider
@@ -124,20 +120,15 @@ contract Marketplace is OwnableUpgradeable {
     return map[bidId];
   }
 
-  function postModelBid(address provider, bytes32 modelId, uint256 amount) public senderOrOwner(provider){
+  function postModelBid(address providerAddr, bytes32 modelId, uint256 amount) public senderOrOwner(providerAddr){
+    if (!providerRegistry.exists(providerAddr)){
+      revert ModelOrAgentNotFound();
+    }
     if (!modelRegistry.exists(modelId)){
       revert ModelOrAgentNotFound();
     }
 
-    postModelAgentBid(provider, modelId, amount);
-  }
-
-  function postAgentBid(address provider, bytes32 agentId, uint256 amount) public senderOrOwner(provider){
-    if (!agentRegistry.exists(agentId)){
-      revert ModelOrAgentNotFound();
-    }
-
-    postModelAgentBid(provider, agentId, amount);
+    postModelAgentBid(providerAddr, modelId, amount);
   }
 
   function postModelAgentBid(address provider, bytes32 modelAgentId, uint256 amount) internal {
@@ -185,25 +176,6 @@ contract Marketplace is OwnableUpgradeable {
     emit BidDeleted(bid.provider, bid.modelAgentId, bid.nonce);
   }
 
-  function stake(uint256 amount) public {
-    totalUserStake += amount;
-    userStake[_msgSender()] += amount;
-
-    emit Staked(_msgSender(), amount);
-    token.transferFrom(_msgSender(), address(this), amount);
-  }
-
-  function unstake(uint256 amount) public {
-    if (userStake[_msgSender()] < amount) {
-      revert NotEnoughWithdrawableBalance();
-    }
-    totalUserStake -= amount;
-    userStake[_msgSender()] -= amount;
-
-    emit Unstaked(_msgSender(), amount);
-    token.transfer(_msgSender(), amount);
-  }
-
   function setBidFee(uint256 modelFee, uint256 agentFee) public onlyOwner {
     modelBidFee = modelFee;
     agentBidFee = agentFee;
@@ -211,13 +183,12 @@ contract Marketplace is OwnableUpgradeable {
   }
 
   function withdraw(address addr, uint256 amount) public onlyOwner {
-    uint256 withdrawableBalance = token.balanceOf(address(this)) - totalUserStake;
-    if (amount > withdrawableBalance) {
-      revert NotEnoughWithdrawableBalance();
+    if (amount == 0) {
+      amount = token.balanceOf(address(this));
     }
-    
-    emit Withdrawn(amount);
-    token.transfer(addr, withdrawableBalance);
+    // emits ERC-20 transfer event
+    // errors with unsufficient balance if amount too big
+    token.transfer(addr, amount);
   }
 
   modifier senderOrOwner(address addr) {

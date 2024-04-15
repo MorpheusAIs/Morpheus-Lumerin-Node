@@ -1,7 +1,6 @@
 import hre from "hardhat";
-import { getAddress, padBytes, padHex, parseUnits } from "viem/utils";
-import { getHex, getTxTimestamp } from "./utils";
-import crypto from "crypto";
+import { parseUnits } from "viem/utils";
+import { getHex, getTxTimestamp, randomBytes32 } from "./utils";
 
 export async function deployMORtoken() {
   const [owner] = await hre.viem.getWalletClients();
@@ -70,6 +69,7 @@ export async function deploySingleProvider() {
     provider,
     publicClient,
     tokenMOR,
+    decimalsMOR,
   };
 }
 
@@ -95,10 +95,8 @@ export async function deployModelRegistry() {
 
 export async function deploySingleModel() {
   const { modelRegistry, owner, provider, publicClient, tokenMOR } = await deployModelRegistry();
-  const bytes = crypto.randomBytes(32);
-  const modelId = getHex(bytes);
   const expected = {
-    modelId,
+    modelId: randomBytes32(),
     ipfsCID: getHex(Buffer.from("ipfs://ipfsaddress")),
     fee: 100n,
     stake: 100n,
@@ -130,5 +128,83 @@ export async function deploySingleModel() {
     provider,
     publicClient,
     tokenMOR,
+  };
+}
+
+export async function deployMarketplace() {
+  // deploy provider registry and deps
+  const {
+    tokenMOR,
+    publicClient,
+    owner,
+    expected: expectedProvider,
+    provider,
+    providerRegistry,
+    decimalsMOR,
+  } = await deploySingleProvider();
+
+  // deploy model registry
+  const modelRegistry = await hre.viem.deployContract("ModelRegistry", [], {});
+  await modelRegistry.write.initialize([tokenMOR.address]);
+
+  // add single model
+  const expectedModel = {
+    modelId: randomBytes32(),
+    ipfsCID: getHex(Buffer.from("ipfs://ipfsaddress")),
+    fee: 100n,
+    stake: 100n,
+    owner: owner.account.address,
+    name: "Llama 2.0",
+    timestamp: 0n,
+    tags: ["llama", "animal", "cute"],
+    isDeleted: false,
+  };
+
+  await tokenMOR.write.approve([modelRegistry.address, expectedModel.stake]);
+  const addProviderHash = await modelRegistry.write.register([
+    expectedModel.modelId,
+    expectedModel.ipfsCID,
+    expectedModel.fee,
+    expectedModel.stake,
+    expectedModel.owner,
+    expectedModel.name,
+    expectedModel.tags,
+  ]);
+
+  expectedModel.timestamp = await getTxTimestamp(publicClient, addProviderHash);
+
+  // deploy marketplace
+  const marketplace = await hre.viem.deployContract("Marketplace", [], {});
+  await marketplace.write.initialize([
+    tokenMOR.address,
+    modelRegistry.address,
+    providerRegistry.address,
+  ]);
+
+  // expected bid
+  const expectedBid = {
+    providerAddr: expectedProvider.address,
+    modelId: expectedModel.modelId,
+    amount: 10n,
+    nonce: 0n,
+    createdAt: 0n,
+    deletedAt: 0n,
+  };
+
+  // add single bid
+  marketplace.write.postModelBid();
+
+  return {
+    tokenMOR,
+    providerRegistry,
+    modelRegistry,
+    expectedProvider,
+    expectedModel,
+    expectedBid,
+    decimalsMOR,
+    marketplace,
+    owner,
+    provider,
+    publicClient,
   };
 }

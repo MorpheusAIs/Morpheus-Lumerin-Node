@@ -5,9 +5,11 @@
   "license": "MIT",
   "scripts": {
     "compile": "hardhat compile",
-    "test": "hardhat test",
+    "test": "REPORT_GAS=true hardhat test",
     "coverage": "SOLIDITY_COVERAGE=true hardhat coverage",
-    "verify": "hardhat verify"
+    "report": "open ./coverage/index.html",
+    "verify": "hardhat verify",
+    "bindings-go": "hardhat gobind"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ignition": "^0.15.0",
@@ -17,13 +19,14 @@
     "@nomicfoundation/hardhat-verify": "^2.0.0",
     "@nomicfoundation/hardhat-viem": "^2.0.0",
     "@openzeppelin/contracts": "^5.0.2",
+    "@solarity/hardhat-gobind": "^1.2.2",
     "@types/chai": "^4.2.0",
     "@types/chai-as-promised": "^7.1.6",
     "@types/mocha": ">=9.1.0",
     "@types/node": ">=18.0.0",
     "chai": "^4.2.0",
     "hardhat": "^2.22.1",
-    "hardhat-gas-reporter": "^1.0.8",
+    "hardhat-gas-reporter": "^2.1.1",
     "morpheus-smart-contracts": "git+ssh://github.com/MorpheusAIs/SmartContracts.git#753accd",
     "solidity-coverage": "^0.8.12",
     "ts-node": ">=8.0.0",
