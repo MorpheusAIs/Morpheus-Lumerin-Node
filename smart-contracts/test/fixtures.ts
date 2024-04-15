@@ -192,7 +192,7 @@ export async function deployMarketplace() {
   };
 
   // add single bid
-  marketplace.write.postModelBid();
+  // marketplace.write.postModelBid();
 
   return {
     tokenMOR,
