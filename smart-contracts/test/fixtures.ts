@@ -1,6 +1,7 @@
 import hre from "hardhat";
 import { parseUnits } from "viem/utils";
-import { getHex, getTxTimestamp, randomBytes32 } from "./utils";
+import { getHex, getTxTimestamp, randomAddress, randomBytes32 } from "./utils";
+import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 
 export async function deployMORtoken() {
   const [owner] = await hre.viem.getWalletClients();
@@ -18,7 +19,7 @@ export async function deployMORtoken() {
 
 export async function deployProviderRegistry() {
   const [owner, provider] = await hre.viem.getWalletClients();
-  const { tokenMOR, decimalsMOR } = await deployMORtoken();
+  const { tokenMOR, decimalsMOR } = await loadFixture(deployMORtoken);
 
   // Contracts are deployed using the first signer/account by default
   const providerRegistry = await hre.viem.deployContract("ProviderRegistry", [], {});
@@ -38,7 +39,7 @@ export async function deployProviderRegistry() {
 
 export async function deploySingleProvider() {
   const { providerRegistry, owner, provider, publicClient, decimalsMOR, tokenMOR } =
-    await deployProviderRegistry();
+    await loadFixture(deployProviderRegistry);
   const expected = {
     address: provider.account.address,
     stake: parseUnits("100", decimalsMOR),
@@ -75,7 +76,7 @@ export async function deploySingleProvider() {
 
 export async function deployModelRegistry() {
   const [owner, provider] = await hre.viem.getWalletClients();
-  const { tokenMOR, decimalsMOR } = await deployMORtoken();
+  const { tokenMOR, decimalsMOR } = await loadFixture(deployMORtoken);
 
   // Contracts are deployed using the first signer/account by default
   const modelRegistry = await hre.viem.deployContract("ModelRegistry", [], {});
@@ -94,7 +95,9 @@ export async function deployModelRegistry() {
 }
 
 export async function deploySingleModel() {
-  const { modelRegistry, owner, provider, publicClient, tokenMOR } = await deployModelRegistry();
+  const { modelRegistry, owner, provider, publicClient, tokenMOR } = await loadFixture(
+    deployModelRegistry
+  );
   const expected = {
     modelId: randomBytes32(),
     ipfsCID: getHex(Buffer.from("ipfs://ipfsaddress")),
@@ -141,7 +144,7 @@ export async function deployMarketplace() {
     provider,
     providerRegistry,
     decimalsMOR,
-  } = await deploySingleProvider();
+  } = await loadFixture(deploySingleProvider);
 
   // deploy model registry
   const modelRegistry = await hre.viem.deployContract("ModelRegistry", [], {});
@@ -206,5 +209,59 @@ export async function deployMarketplace() {
     owner,
     provider,
     publicClient,
+  };
+}
+
+export async function deployStaking() {
+  const { tokenMOR, decimalsMOR, owner } = await loadFixture(deployMORtoken);
+  const [, , user] = await hre.viem.getWalletClients();
+
+  // Contracts are deployed using the first signer/account by default
+  const staking = await hre.viem.deployContract(
+    "contracts/StakingDailyStipend.sol:StakingDailyStipend",
+    []
+  );
+  await staking.write.initialize([tokenMOR.address, owner.account.address]);
+  await tokenMOR.write.approve([staking.address, 10000n * 10n ** 18n]);
+  await tokenMOR.write.transfer([user.account.address, 10000n * 10n ** 18n]);
+
+  return {
+    tokenMOR,
+    decimalsMOR,
+    staking,
+    owner,
+    user,
+  };
+}
+
+export async function stake() {
+  const { staking, tokenMOR, user } = await loadFixture(deployStaking);
+  const [, , , stipendHolder] = await hre.viem.getWalletClients();
+  const expected = {
+    stakeAmount: 1000n * 10n ** 18n,
+    account: user.account.address,
+    transferTo: stipendHolder,
+    expectedStipend: 0n,
+    spendAmount: 0n,
+  };
+
+  const computeBalance = await staking.read.getComputeBalance();
+  const totalSupply = await tokenMOR.read.totalSupply();
+
+  expected.expectedStipend = ((computeBalance / 100n) * expected.stakeAmount) / totalSupply;
+  expected.spendAmount = expected.expectedStipend / 2n;
+
+  await tokenMOR.write.approve([staking.address, expected.stakeAmount], {
+    account: user.account,
+  });
+  await staking.write.stake([expected.account, expected.stakeAmount], {
+    account: expected.account,
+  });
+
+  return {
+    staking,
+    tokenMOR,
+    user,
+    expected,
   };
 }

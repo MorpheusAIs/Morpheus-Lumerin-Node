@@ -5,7 +5,8 @@
   "license": "MIT",
   "scripts": {
     "compile": "hardhat compile",
-    "test": "REPORT_GAS=true hardhat test",
+    "test": "hardhat test",
+    "test:gas": "REPORT_GAS=true hardhat test",
     "coverage": "SOLIDITY_COVERAGE=true hardhat coverage",
     "report": "open ./coverage/index.html",
     "verify": "hardhat verify",
@@ -24,6 +25,7 @@
     "@solarity/hardhat-gobind": "^1.2.2",
     "@types/chai": "^4.2.0",
     "@types/chai-as-promised": "^7.1.6",
+    "@types/dotenv": "^8.2.0",
     "@types/mocha": ">=9.1.0",
     "@types/node": ">=18.0.0",
     "chai": "^4.2.0",

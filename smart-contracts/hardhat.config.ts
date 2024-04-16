@@ -9,10 +9,13 @@ const config: HardhatUserConfig = {
     reporter: "nyan",
   },
   gasReporter: {
+    enabled: process.env.REPORT_GAS ? true : false,
     outputJSON: true,
+    outputJSONFile: "gas.json",
     coinmarketcap: process.env.COINMARKETCAP_API_KEY,
     darkMode: true,
     currency: "USD",
+    L2Etherscan: "E6UST5HFK6DNNTVUV1YTTRTN3BX727G8SU",
     L2: "arbitrum",
     L1: "ethereum",
   },
