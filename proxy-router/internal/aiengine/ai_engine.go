@@ -20,14 +20,10 @@ func NewAiEngine() *AiEngine {
 func (aiEngine *AiEngine) Prompt(ctx context.Context, req interface{}) (*api.ChatCompletionResponse, error) {
 	request := req.(*api.ChatCompletionRequest)
 	client := api.NewClientWithConfig(api.ClientConfig{
-		BaseURL: os.Getenv("OPENAI_BASE_URL"),
-		APIType: api.APITypeOpenAI,
+		BaseURL:    os.Getenv("OPENAI_BASE_URL"),
+		APIType:    api.APITypeOpenAI,
 		HTTPClient: &http.Client{},
 	})
-	
-	fmt.Printf("client: %+v\r\n", *client)
-	fmt.Printf("base url: %+v\r\n", os.Getenv("OPENAI_BASE_URL"))
-	fmt.Printf("request: %+v\r\n", *request)
 
 	response, err := client.CreateChatCompletion(
 		ctx,
@@ -41,3 +37,42 @@ func (aiEngine *AiEngine) Prompt(ctx context.Context, req interface{}) (*api.Cha
 	return &response, nil
 }
 
+func (aiEngine *AiEngine) PromptStream(ctx context.Context, req interface{}) (*api.ChatCompletionStreamResponse, error) {
+	request := req.(*api.ChatCompletionRequest)
+	client := api.NewClientWithConfig(api.ClientConfig{
+		BaseURL:    os.Getenv("OPENAI_BASE_URL"),
+		APIType:    api.APITypeOpenAI,
+		HTTPClient: &http.Client{},
+	})
+
+	stream, err := client.CreateChatCompletionStream(
+		ctx,
+		*request,
+	)
+
+	if err != nil {
+		fmt.Printf("ChatCompletion error: %v\n", err)
+		return nil, err
+	}
+
+	res, err := stream.Recv()
+
+	if err != nil {
+		fmt.Printf("ChatCompletion stream receive error: %v\n", err)
+		return nil, err
+	}
+
+	response := &api.ChatCompletionStreamResponse{}
+
+	for {
+		response.Choices = append(response.Choices, res.Choices...)
+		res, err = stream.Recv()
+
+		if err != nil {
+			fmt.Printf("ChatCompletion stream receive error: %v\n", err)
+			break
+		}
+	}
+
+	return response, err
+}

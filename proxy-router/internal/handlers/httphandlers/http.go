@@ -48,8 +48,17 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 			return
 		}
 
-		response, err := apiBus.Prompt(ctx, req)
-fmt.Println("apibus prompt response: ",response)
+		req.Stream = ctx.GetHeader("Accept") == "application/json"
+		
+		var response interface{}
+
+		if req.Stream {
+			response, err = apiBus.PromptStream(ctx, req)
+		} else {
+			response, err = apiBus.Prompt(ctx, req)
+		}
+		
+		fmt.Println("apibus prompt response: ", response)
 		if err != nil {
 			ctx.AbortWithError(ERROR_STATUS, err)
 			return
