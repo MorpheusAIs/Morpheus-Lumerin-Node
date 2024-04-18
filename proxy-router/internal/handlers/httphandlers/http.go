@@ -2,6 +2,7 @@ package httphandlers
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/pprof"
@@ -9,7 +10,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/apibus"
 	"github.com/gin-gonic/gin"
 
-	aiApi "github.com/ollama/ollama/api"
+	openai "github.com/sashabaranov/go-openai"
 )
 
 const (
@@ -35,7 +36,7 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 	}))
 	r.POST("/v1/chat/completions", (func(ctx *gin.Context) {
 
-		var req *aiApi.ChatRequest
+		var req *openai.ChatCompletionRequest
 
 		err := ctx.ShouldBindJSON(&req)
 		switch {
@@ -48,7 +49,7 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 		}
 
 		response, err := apiBus.Prompt(ctx, req)
-
+fmt.Println("apibus prompt response: ",response)
 		if err != nil {
 			ctx.AbortWithError(ERROR_STATUS, err)
 			return

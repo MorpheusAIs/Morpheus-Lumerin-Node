@@ -22,7 +22,7 @@ const chat = {
           },
         ],
       })
-      
+      console.log("response.data: ", response.data)
       return response.data.choices
     } catch (error) {
       console.log(error)

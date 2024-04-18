@@ -14,6 +14,7 @@ WORKDIR /app
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /app/bin/proxy-router /usr/bin/
 COPY --from=builder /app/sh /bin/sh
+COPY --from=builder /app/.env /app/.env
 
 SHELL ["/bin/sh", "-c"]
 EXPOSE 3333 8081
