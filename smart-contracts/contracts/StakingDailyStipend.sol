@@ -69,7 +69,7 @@ contract StakingDailyStipend is OwnableUpgradeable {
       revert NotEnoughDailyStipend();
     }
     todaysSpend[from] = OnHold({
-      amount: amount,
+      amount: getTodaysSpend(from) + amount,
       releaseAt: (block.timestamp / DAY + 1) * DAY
     });
     token.transferFrom(address(tokenAccount), to, amount);

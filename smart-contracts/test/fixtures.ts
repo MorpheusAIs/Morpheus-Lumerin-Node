@@ -258,7 +258,7 @@ export async function stake() {
   const totalSupply = await tokenMOR.read.totalSupply();
 
   expected.expectedStipend = ((computeBalance / 100n) * expected.stakeAmount) / totalSupply;
-  expected.spendAmount = expected.expectedStipend / 2n;
+  expected.spendAmount = expected.expectedStipend / 4n;
 
   await tokenMOR.write.approve([staking.address, expected.stakeAmount], {
     account: user.account,

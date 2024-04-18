@@ -47,6 +47,32 @@ describe("Staking", function () {
     );
   });
 
+  it("should count spend amount correctly when spent second time same day", async function () {
+    const { staking, expected, tokenMOR } = await loadFixture(stake);
+
+    await staking.write.transferDailyStipend(
+      [expected.account, expected.transferTo.account.address, expected.spendAmount],
+      { account: expected.account }
+    );
+    expect(await tokenMOR.read.balanceOf([expected.transferTo.account.address])).eq(
+      expected.spendAmount
+    );
+    expect(await staking.read.balanceOfDailyStipend([expected.account])).eq(
+      expected.expectedStipend - expected.spendAmount
+    );
+
+    await staking.write.transferDailyStipend(
+      [expected.account, expected.transferTo.account.address, expected.spendAmount],
+      { account: expected.account }
+    );
+    expect(await tokenMOR.read.balanceOf([expected.transferTo.account.address])).eq(
+      expected.spendAmount * 2n
+    );
+    expect(await staking.read.balanceOfDailyStipend([expected.account])).eq(
+      expected.expectedStipend - expected.spendAmount * 2n
+    );
+  });
+
   it("should error when spending more than daily stipend", async function () {
     const { staking, expected } = await loadFixture(stake);
     try {
