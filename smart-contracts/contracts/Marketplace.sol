@@ -116,11 +116,7 @@ contract Marketplace is OwnableUpgradeable {
     return _bids;
   }
 
-  function getBidById(bytes32 bidId) public view returns (Bid memory) {
-    return map[bidId];
-  }
-
-  function postModelBid(address providerAddr, bytes32 modelId, uint256 amount) public senderOrOwner(providerAddr){
+  function postModelBid(address providerAddr, bytes32 modelId, uint256 amount) public  senderOrOwner(providerAddr) returns (bytes32 bidId){
     if (!providerRegistry.exists(providerAddr)){
       revert ModelOrAgentNotFound();
     }
@@ -128,13 +124,19 @@ contract Marketplace is OwnableUpgradeable {
       revert ModelOrAgentNotFound();
     }
 
-    postModelAgentBid(providerAddr, modelId, amount);
+    return postModelAgentBid(providerAddr, modelId, amount);
   }
 
-  function postModelAgentBid(address provider, bytes32 modelAgentId, uint256 amount) internal {
+  function postModelAgentBid(address provider, bytes32 modelAgentId, uint256 amount) internal returns (bytes32 bidId){
+    // remove old bid
+
     // TEST IT if it increments nonce correctly
     uint256 nonce = providerModelAgentNonce[keccak256(abi.encodePacked(provider, modelAgentId))]++;
-    bytes32 bidId = keccak256(abi.encodePacked(provider, modelAgentId, nonce));
+    if (nonce > 0) {
+      deleteModelAgentBid(keccak256(abi.encodePacked(provider, modelAgentId, nonce-1)));
+    }
+    
+    bidId = keccak256(abi.encodePacked(provider, modelAgentId, nonce));
 
     map[bidId] = Bid({
       provider: provider,
@@ -157,6 +159,7 @@ contract Marketplace is OwnableUpgradeable {
     emit BidPosted(provider, modelAgentId, nonce);
     
     token.transferFrom(_msgSender(), address(this), modelBidFee);
+    return bidId;
   }
 
   function deleteModelAgentBid(bytes32 bidId) public {

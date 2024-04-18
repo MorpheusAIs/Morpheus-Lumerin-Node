@@ -1,5 +1,5 @@
 import hre from "hardhat";
-import { parseUnits } from "viem/utils";
+import { getAddress, parseUnits } from "viem/utils";
 import { getHex, getTxTimestamp, randomAddress, randomBytes32 } from "./utils";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 
@@ -186,7 +186,8 @@ export async function deployMarketplace() {
 
   // expected bid
   const expectedBid = {
-    providerAddr: expectedProvider.address,
+    id: "" as `0x${string}`,
+    providerAddr: getAddress(expectedProvider.address),
     modelId: expectedModel.modelId,
     amount: 10n,
     nonce: 0n,
@@ -195,7 +196,15 @@ export async function deployMarketplace() {
   };
 
   // add single bid
-  // marketplace.write.postModelBid();
+  const postBidtx = await marketplace.simulate.postModelBid(
+    [expectedBid.providerAddr, expectedBid.modelId, expectedBid.amount],
+    { account: provider.account.address }
+  );
+  const client = await hre.viem.getWalletClient(provider.account.address);
+  const txHash = await client.writeContract(postBidtx.request);
+
+  expectedBid.id = postBidtx.result;
+  expectedBid.createdAt = await getTxTimestamp(publicClient, txHash);
 
   return {
     tokenMOR,
