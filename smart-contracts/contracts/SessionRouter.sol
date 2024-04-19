@@ -97,6 +97,10 @@ contract SessionRouter is OwnableUpgradeable {
     }));
   }
 
+  function getSession(bytes32 sessionId) public view returns (Session memory) {
+    return sessions[map[sessionId]];
+  }
+
   function openSession(bytes32 bidId, uint256 budget) public returns (bytes32 sessionId){
     address sender = _msgSender();
     uint256 stipend = stakingDailyStipend.balanceOfDailyStipend(sender);
@@ -170,20 +174,18 @@ contract SessionRouter is OwnableUpgradeable {
       uint256 refund = session.budget - cost;
       token.approve(address(stakingDailyStipend), refund);
       stakingDailyStipend.returnStipend(session.user, refund);
-    }
+    } 
 
     if (isDispute){
       session.closeoutType = 1;
       providerOnHold[session.provider].push(OnHold({
-        amount: session.budget,
+        amount: cost,
         releaseAt: block.timestamp + DAY
       }));
     } else {
       token.transfer(session.provider, cost);
     }
   }
-
-
   // funds related functions
 
   // Returns claimable balance by provider address.
@@ -194,9 +196,10 @@ contract SessionRouter is OwnableUpgradeable {
   function getProviderBalance(address providerAddr) public view returns (uint256 total, uint256 hold) {
     OnHold[] memory onHold = providerOnHold[providerAddr];
     for (uint i = 0; i < onHold.length; i++) {
-      hold += onHold[i].amount;
-      if (onHold[i].releaseAt < block.timestamp) {
-        total+=onHold[i].amount;
+      total += onHold[i].amount;
+      // console.log("onHold", onHold[i].amount, onHold[i].releaseAt, block.timestamp, block.timestamp < onHold[i].releaseAt);
+      if (block.timestamp < onHold[i].releaseAt) {
+        hold+=onHold[i].amount;
       }
     }
     return (total, hold);
@@ -204,7 +207,7 @@ contract SessionRouter is OwnableUpgradeable {
 
   // transfers provider claimable balance to provider address.
   // set amount to 0 to claim all balance.
-  function claimProviderBalance(uint256 amount, address to) public {
+  function claimProviderBalance(uint256 amountToWithdraw, address to) public {
     uint256 balance = 0;
     address sender = _msgSender();
     // the only loop that is not avoidable
@@ -212,13 +215,14 @@ contract SessionRouter is OwnableUpgradeable {
 
     OnHold[] storage onHoldEntries = providerOnHold[sender];
     while (i < onHoldEntries.length) {
-      if (onHoldEntries[i].releaseAt < block.timestamp) {
+      if (block.timestamp > onHoldEntries[i].releaseAt) {
         balance += onHoldEntries[i].amount;
 
-        if (balance >= amount) {
-          uint256 delta = balance - amount;
+
+        if (balance >= amountToWithdraw) {
+          uint256 delta = balance - amountToWithdraw;
           onHoldEntries[i].amount = delta;
-          token.transfer(to, amount);
+          token.transfer(to, amountToWithdraw);
           return;
         } 
 
@@ -227,11 +231,6 @@ contract SessionRouter is OwnableUpgradeable {
       } else {
         i++;
       }
-    }
-    if (amount == 0) {
-      amount = balance;
-      token.transfer(to, amount);
-      return;
     }
 
     revert NotEnoughBalance();
