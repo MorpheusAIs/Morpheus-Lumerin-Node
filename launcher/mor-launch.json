@@ -1,0 +1,6 @@
+{
+    "run":[
+        "sh -c 'echo Launched'",
+        "server -m /tmp/models/llama2_7b_chat_uncensored.Q4_K_M.gguf"
+    ]
+}
