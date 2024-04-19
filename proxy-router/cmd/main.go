@@ -17,6 +17,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/handlers/tcphandlers"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/morrpc"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/proxyapi"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/transport"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/rpcproxy"
@@ -184,13 +185,19 @@ func start() error {
 	derived := new(config.DerivedConfig)
 	derived.WalletAddress = walletAddr.String()
 
+	publicKey, err := lib.PubKeyStringFromPrivate(cfg.Marketplace.WalletPrivateKey)
+	if err != nil {
+		return err
+	}
+
 	tcpServer := transport.NewTCPServer(cfg.Proxy.Address, connLog.Named("TCP"))
+	morTcpHandler := tcphandlers.NewMorRpcHandler(cfg.Marketplace.WalletPrivateKey, publicKey, derived.WalletAddress, morrpc.NewMorRpc())
 	tcpHandler := tcphandlers.NewTCPHandler(
-		log, connLog, schedulerLogFactory,
+		log, connLog, schedulerLogFactory, morTcpHandler,
 	)
 	tcpServer.SetConnectionHandler(tcpHandler)
 
-	proxyRouterApi := proxyapi.NewProxyRouterApi(sysConfig, publicUrl, cfg.Marketplace.WalletPrivateKey, &cfg, derived, time.Now(), contractLogStorage, log)
+	proxyRouterApi := proxyapi.NewProxyRouterApi(sysConfig, publicUrl, publicKey, cfg.Marketplace.WalletPrivateKey, &cfg, derived, time.Now(), contractLogStorage, log)
 	rpcProxy := rpcproxy.NewRpcProxy(ethClient)
 	aiEngine := aiengine.NewAiEngine()
 	apiBus := apibus.NewApiBus(rpcProxy, aiEngine, proxyRouterApi)

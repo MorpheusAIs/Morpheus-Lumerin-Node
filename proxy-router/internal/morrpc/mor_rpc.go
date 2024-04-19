@@ -1,10 +1,13 @@
 package morrpc
 
 import (
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
@@ -243,11 +246,27 @@ func (m *MorRpc) generateSignature(params map[string]interface{}, privateKeyHex 
 	if err != nil {
 		return "", err
 	}
-	return string(signature), nil
+	base64Signature := base64.StdEncoding.EncodeToString(signature)
+	return base64Signature, nil
+}
+
+func (m *MorRpc) VerifySignature(params map[string]interface{}, signature string, publicKey string, sourceLog interfaces.ILogger) bool {
+	delete(params, "signature")
+	publicKeyBytes, err := hex.DecodeString(publicKey)
+	if err != nil {
+		sourceLog.Error("Error decoding public key", err)
+		return false
+	}
+	paramsBytes, err := json.Marshal(params)
+	if err != nil {
+		sourceLog.Error("Error marshalling params", err)
+		return false
+	}
+	return m.verifySignature(paramsBytes, signature, publicKeyBytes)
 }
 
 // https://goethereumbook.org/signature-verify/
-func (m *MorRpc) VerifySignature(params []byte, signature string, publicKeyBytes []byte) bool {
+func (m *MorRpc) verifySignature(params []byte, signature string, publicKeyBytes []byte) bool {
 	var jsonParams map[string]interface{}
 	err := json.Unmarshal([]byte(params), &jsonParams)
 	if err != nil {
@@ -260,7 +279,11 @@ func (m *MorRpc) VerifySignature(params []byte, signature string, publicKeyBytes
 		return false
 	}
 
+	signatureBytes, err := base64.StdEncoding.DecodeString(signature)
+	if err != nil {
+		return false
+	}
 	hash := crypto.Keccak256Hash([]byte(resultStr))
-	signatureNoRecoverID := signature[:len(signature)-1] // remove recovery ID
-	return crypto.VerifySignature(publicKeyBytes, hash.Bytes(), []byte(signatureNoRecoverID))
+	signatureNoRecoverID := signatureBytes[:len(signatureBytes)-1] // remove recovery ID
+	return crypto.VerifySignature(publicKeyBytes, hash.Bytes(), signatureNoRecoverID)
 }
