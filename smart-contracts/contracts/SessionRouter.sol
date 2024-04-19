@@ -5,6 +5,7 @@ import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/O
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { KeySet } from "./KeySet.sol";
 import { Marketplace } from "./Marketplace.sol";
+import { StakingDailyStipend } from './StakingDailyStipend.sol';
 import "hardhat/console.sol";
 
 contract SessionRouter is OwnableUpgradeable {
@@ -17,7 +18,7 @@ contract SessionRouter is OwnableUpgradeable {
     bytes32 modelAgentId;
     uint256 budget;
     uint256 price;
-    string closeoutReceipt;
+    bytes closeoutReceipt;
     uint256 closeoutType;
     uint256 openedAt;
     uint256 closedAt;
@@ -35,6 +36,7 @@ contract SessionRouter is OwnableUpgradeable {
 
   // dependencies
   Marketplace public marketplace;
+  StakingDailyStipend public stakingDailyStipend;
   IERC20 public token;
 
   // arguments for getPeriodReward call
@@ -45,14 +47,17 @@ contract SessionRouter is OwnableUpgradeable {
   // storage
   Session[] public sessions;
   mapping(bytes32 => uint256) public map; // sessionId => index
-  mapping(address => OnHold) public todaysSpend; // user address => spend today
+
+  mapping(address => OnHold[]) public providerOnHold; // user address => balance
+  // mapping(address => OnHold) public todaysSpend; // user address => spend today
   
-  mapping(address => uint256) public userStake; // user address => balance
-  mapping(address => OnHold) public userStakeOnHold; // user address => amount on hold - user funds that put on hold
+  // mapping(address => uint256) public userStake; // user address => balance
+  // mapping(address => OnHold) public userStakeOnHold; // user address => amount on hold - user funds that put on hold
   // mapping(address => OnHold[]) public providerOnHold; // user address => amount on hold - provider funds that put on hold 
 
   // constants
   uint32 constant DAY = 24*60*60; // 1 day
+  uint32 constant MIN_SESSION_DURATION = 5*60; // 5 minutes
 
   // events
   event SessionOpened(address indexed userAddress, bytes32 indexed sessionId, address indexed providerId);
@@ -66,25 +71,48 @@ contract SessionRouter is OwnableUpgradeable {
   error NotUser();
   error NotSenderOrOwner();
   error NotEnoughBalance();
-  error NotEnoughComputeBalanceOrStake();
+  error NotEnoughStipend();
+  error BidNotFound();
+  error InvalidSignature();
+  error SessionTooShort();
+  error SessionNotFound();
 
-  function initialize(address _token) public initializer {
+  function initialize(address _token, address _stakingDailyStipend, address _marketplace) public initializer {
     __Ownable_init();
     token = IERC20(_token);
+    stakingDailyStipend = StakingDailyStipend(_stakingDailyStipend);
+    marketplace = Marketplace(_marketplace);
     stakeDelay = 0;
+    sessions.push(Session({
+      id: bytes32(0),
+      user: address(0),
+      provider: address(0),
+      modelAgentId: bytes32(0),
+      budget: 0,
+      price: 0,
+      closeoutReceipt: "",
+      closeoutType: 0,
+      openedAt: 0,
+      closedAt: 0
+    }));
   }
 
   function openSession(bytes32 bidId, uint256 budget) public returns (bytes32 sessionId){
     address sender = _msgSender();
-    uint256 virtualMORBalance = getUserVirtualMORBalance(sender);
-    if (budget > virtualMORBalance + userStake[sender]) {
-      revert NotEnoughComputeBalanceOrStake();
+    uint256 stipend = stakingDailyStipend.balanceOfDailyStipend(sender);
+    if (budget > stipend) {
+      revert NotEnoughStipend();
     }
-    uint256 vMORToBeUsed = min(budget, virtualMORBalance);
-    setTodaysSpend(sender, getTodaysSpend(sender) + vMORToBeUsed);
-    setStakeOnHold(sender, getStakeOnHold(sender) + getStakeCorrespondingToVirtualMOR(vMORToBeUsed));
 
-    (address provider, bytes32 modelAgentId, uint256 amount, , ,)  = marketplace.map(bidId);
+    (address provider, bytes32 modelAgentId, uint256 amount, , uint256 createdAt, uint256 deletedAt)  = marketplace.map(bidId);
+    if (deletedAt != 0 || createdAt == 0) {
+      revert BidNotFound();
+    }
+
+    uint256 duration = budget / amount;
+    if (duration < MIN_SESSION_DURATION) {
+      revert SessionTooShort();
+    }
 
     sessionId = keccak256(abi.encodePacked(sender, provider, budget, block.number));
     sessions.push(Session({
@@ -101,173 +129,112 @@ contract SessionRouter is OwnableUpgradeable {
     }));
     map[sessionId] = sessions.length - 1;
 
+    emit SessionOpened(sender, sessionId, provider);
+
+    stakingDailyStipend.transferDailyStipend(sender, address(this), budget);
     return sessionId;
   }
 
-  function closeSession(bytes32 sessionId, string memory receipt, string memory signature) public {
+
+  function getEthSignedMessageHash(bytes memory _encodedMessage) public pure returns (bytes32) {
+    return keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", keccak256(_encodedMessage)));
+  }
+
+  function closeSession(bytes32 sessionId, bytes memory receiptEncoded, bytes memory signature) public {
     Session storage session = sessions[map[sessionId]];
+    if (session.openedAt == 0) {
+      revert SessionNotFound();
+    }
     if (session.user != _msgSender() && session.provider != _msgSender()) {
       revert NotUserOrProvider();
     }
 
-    session.closeoutReceipt = receipt;
+    session.closeoutReceipt = receiptEncoded;
     session.closedAt = block.timestamp;
+
+    bool isDispute = true;
+
+    if (signature.length != 0){
+      bytes32 receiptHash = getEthSignedMessageHash(receiptEncoded);
+      address signer = recoverSigner(receiptHash, signature);
+      
+      if (signer == session.provider) {
+        isDispute = false;
+      }
+    }
 
     uint256 durationSeconds = session.closedAt - session.openedAt;
     uint256 cost = durationSeconds * session.price;
 
-    uint256 virtualMOR = getUserVirtualMORBalance(session.user);
-    if (cost > virtualMOR) {
-      uint256 spentStake = cost - virtualMOR;
-      userStake[session.user] -= spentStake;
+    if (cost < session.budget) {
+      uint256 refund = session.budget - cost;
+      token.approve(address(stakingDailyStipend), refund);
+      stakingDailyStipend.returnStipend(session.user, refund);
+    }
+
+    if (isDispute){
+      session.closeoutType = 1;
+      providerOnHold[session.provider].push(OnHold({
+        amount: session.budget,
+        releaseAt: block.timestamp + DAY
+      }));
     } else {
-      setTodaysSpend(session.user, getTodaysSpend(session.user) - session.budget + cost);
+      token.transfer(session.provider, cost);
     }
-
-    // TODO: decide whether put on hold or transfer to provider
-    // wait for dispute design to be finalized
-    //
-    // put on hold
-    //
-    // providerOnHold[session.provider].push(OnHold({
-    //   amount: cost,
-    //   releaseAt: block.timestamp + uint256(stakeDelay)
-    // }));
-    //
-    // or immediately transfer to provider
-    //
-    transferVirtualMOR(session.provider, cost);
   }
 
-  function stake(address addr, uint256 amount) public senderOrOwner(addr){
-    userStake[addr] += amount;
-    token.transferFrom(addr, address(this), amount);
-  }
-
-  function unstake(address addr, uint256 amount, address sendToAddr) public senderOrOwner(addr){
-    OnHold memory stakeOnHold = userStakeOnHold[addr];
-    if (stakeOnHold.releaseAt < block.timestamp) {
-      stakeOnHold.amount = 0;
-    }
-    uint256 stakeAvailable = userStake[addr] - stakeOnHold.amount;
-    if (amount > stakeAvailable) {
-      revert NotEnoughBalance();
-    }
-
-    userStake[addr] -= amount;
-    token.transfer(sendToAddr, amount);
-  }
 
   // funds related functions
 
   // Returns claimable balance by provider address.
   function getProviderClaimBalance(address providerAddr) public view returns (uint256) {
-    // uint256 balance = 0;
-    // the only loop that is not avoidable
-    // for (uint i = 0; i < providerOnHold[providerAddr].length; i++) {
-    //   if (providerOnHold[providerAddr][i].releaseAt < block.timestamp) {
-    //     balance += providerOnHold[providerAddr][i].amount;
-    //   }
-    // }
-    return 0;
+   
+  }
+
+  function getProviderBalance(address providerAddr) public view returns (uint256 total, uint256 hold) {
+    OnHold[] memory onHold = providerOnHold[providerAddr];
+    for (uint i = 0; i < onHold.length; i++) {
+      hold += onHold[i].amount;
+      if (onHold[i].releaseAt < block.timestamp) {
+        total+=onHold[i].amount;
+      }
+    }
+    return (total, hold);
   }
 
   // transfers provider claimable balance to provider address.
   // set amount to 0 to claim all balance.
   function claimProviderBalance(uint256 amount, address to) public {
-    // uint256 balance = 0;
-    // address sender = _msgSender();
-    // // the only loop that is not avoidable
-    // uint i = 0;
+    uint256 balance = 0;
+    address sender = _msgSender();
+    // the only loop that is not avoidable
+    uint i = 0;
 
-    // OnHold[] storage onHoldEntries = providerOnHold[sender];
-    // while (i < onHoldEntries.length) {
-    //   if (onHoldEntries[i].releaseAt < block.timestamp) {
-    //     balance += onHoldEntries[i].amount;
+    OnHold[] storage onHoldEntries = providerOnHold[sender];
+    while (i < onHoldEntries.length) {
+      if (onHoldEntries[i].releaseAt < block.timestamp) {
+        balance += onHoldEntries[i].amount;
 
-    //     if (balance >= amount) {
-    //       uint256 delta = balance - amount;
-    //       onHoldEntries[i].amount = delta;
-    //       token.transfer(to, amount);
-    //       return;
-    //     } 
+        if (balance >= amount) {
+          uint256 delta = balance - amount;
+          onHoldEntries[i].amount = delta;
+          token.transfer(to, amount);
+          return;
+        } 
 
-    //     onHoldEntries[i] = onHoldEntries[onHoldEntries.length-1];
-    //     onHoldEntries.pop();
-    //   } else {
-    //     i++;
-    //   }
-    // }
-    // if (amount == 0) {
-    //   amount = balance;
-    //   token.transfer(to, amount);
-    //   return;
-    // }
+        onHoldEntries[i] = onHoldEntries[onHoldEntries.length-1];
+        onHoldEntries.pop();
+      } else {
+        i++;
+      }
+    }
+    if (amount == 0) {
+      amount = balance;
+      token.transfer(to, amount);
+      return;
+    }
 
     revert NotEnoughBalance();
-  }
-
-  function getTodaysSpend(address userAddress) public view returns (uint256) {
-    OnHold memory spend = todaysSpend[userAddress];
-    if (block.timestamp > spend.releaseAt) {
-      return 0;
-    }
-    return spend.amount;
-  }
-
-  function setTodaysSpend(address userAddress, uint256 amount) public {
-    todaysSpend[userAddress] = OnHold({
-      amount: amount,
-      releaseAt: (block.timestamp / DAY + 1) * DAY
-    });
-  }
-
-  // Returns stake on hold by user address for the current day.
-  function getStakeOnHold(address userAddress) public view returns (uint256) {
-    OnHold memory onHold = userStakeOnHold[userAddress];
-    if (block.timestamp > onHold.releaseAt) {
-      return 0;
-    }
-    return onHold.amount;
-  }
-
-  // Puts user stake on hold for a day
-  function setStakeOnHold(address userAddress, uint256 amount) public {
-    userStakeOnHold[userAddress] = OnHold({
-      amount: amount,
-      releaseAt: (block.timestamp / DAY + 1) * DAY
-    });
-  }
-
-  // return virtual MOR balance of user based on their stake
-  function getUserVirtualMORBalance(address userAddress) public view returns (uint256) {
-    return getTodaysBudget() * userStake[userAddress] / getMintedMOR() - getTodaysSpend(userAddress);
-  }
-
-  // returns stake to put on hold to get 1 virtual MOR
-  function getStakeCorrespondingToVirtualMOR(uint256 virtualMOR) public view returns (uint256) {
-    return virtualMOR * getMintedMOR() / getTodaysBudget();
-  }
-
-  function getTodaysBudget() public view returns (uint256) {
-    // 1% of Compute Balance
-    return getComputeBalance() / 100;
-  }
-
-  function getComputeBalance() public view returns (uint256) {
-    // TODO: or call layer 1 contract to get daily compute balance contract somehow
-    // return Distribution(distributionContractAddr)
-    //   .getPeriodReward(distributionPoolId, distributionRewardStartTime, block.timestamp)
-    return token.allowance(address(token), address(this));
-  }
-
-  function transferVirtualMOR(address to, uint256 amount) public {
-    address computeBalanceAddr = address(0); // the account that holds daily balance
-    token.transferFrom(computeBalanceAddr, to, amount);
-  }
-
-  function getMintedMOR() public view returns (uint256) {
-    return token.totalSupply();
   }
 
   function deleteHistory(bytes32 sessionId) public {
@@ -280,13 +247,36 @@ contract SessionRouter is OwnableUpgradeable {
     stakeDelay = delay;
   }
 
-  function min(uint256 a, uint256 b) internal pure returns (uint256) {
-    return a < b ? a : b;
+  function recoverSigner(bytes32 message, bytes memory sig) public pure returns (address) {
+    (bytes32 r, bytes32 s, uint8 v) = splitSignature(sig);
+    return ecrecover(message, v, r, s);
   }
 
-  function max(uint256 a, uint256 b) internal pure returns (uint256) {
-    return a > b ? a : b;
-  }
+  function splitSignature(bytes memory sig) public pure returns (bytes32 r, bytes32 s, uint8 v) {
+    if (sig.length != 65) {
+      revert InvalidSignature();
+    }
+
+    assembly {
+        /*
+        First 32 bytes stores the length of the signature
+
+        add(sig, 32) = pointer of sig + 32
+        effectively, skips first 32 bytes of signature
+
+        mload(p) loads next 32 bytes starting at the memory address p into memory
+        */
+
+        // first 32 bytes, after the length prefix
+        r := mload(add(sig, 32))
+        // second 32 bytes
+        s := mload(add(sig, 64))
+        // final byte (first byte of the next 32 bytes)
+        v := byte(0, mload(add(sig, 96)))
+    }
+
+    // implicitly return (r, s, v)
+    }
 
   modifier senderOrOwner(address addr) {
     _senderOrOwner(addr);
