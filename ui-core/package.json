@@ -46,6 +46,7 @@
     "ip": "^1.1.8",
     "json-stringify-safe": "^5.0.1",
     "lodash": "4.17.15",
+    "openai": "^4.38.2",
     "p-all": "3.0.0",
     "p-retry": "4.6.0",
     "p-timeout": "4.1.0",

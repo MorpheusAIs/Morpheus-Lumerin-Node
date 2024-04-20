@@ -11,10 +11,18 @@ import (
 )
 
 type AiEngine struct {
+	client *api.Client
 }
 
 func NewAiEngine() *AiEngine {
-	return &AiEngine{}
+	return &AiEngine{
+
+		client: api.NewClientWithConfig(api.ClientConfig{
+			BaseURL:    os.Getenv("OPENAI_BASE_URL"),
+			APIType:    api.APITypeOpenAI,
+			HTTPClient: &http.Client{},
+		}),
+	}
 }
 
 func (aiEngine *AiEngine) Prompt(ctx context.Context, req interface{}) (*api.ChatCompletionResponse, error) {
@@ -39,13 +47,8 @@ func (aiEngine *AiEngine) Prompt(ctx context.Context, req interface{}) (*api.Cha
 
 func (aiEngine *AiEngine) PromptStream(ctx context.Context, req interface{}) (*api.ChatCompletionStreamResponse, error) {
 	request := req.(*api.ChatCompletionRequest)
-	client := api.NewClientWithConfig(api.ClientConfig{
-		BaseURL:    os.Getenv("OPENAI_BASE_URL"),
-		APIType:    api.APITypeOpenAI,
-		HTTPClient: &http.Client{},
-	})
 
-	stream, err := client.CreateChatCompletionStream(
+	stream, err := aiEngine.client.CreateChatCompletionStream(
 		ctx,
 		*request,
 	)
