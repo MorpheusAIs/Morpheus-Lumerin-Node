@@ -45,9 +45,10 @@ func (aiEngine *AiEngine) Prompt(ctx context.Context, req interface{}) (*api.Cha
 	return &response, nil
 }
 
+//TODO: IMPLEMENT RESPONSE BUFFER FLUSHING
 func (aiEngine *AiEngine) PromptStream(ctx context.Context, req interface{}) (*api.ChatCompletionStreamResponse, error) {
 	request := req.(*api.ChatCompletionRequest)
-
+	fmt.Printf("Chat request: %+v\n", request)
 	stream, err := aiEngine.client.CreateChatCompletionStream(
 		ctx,
 		*request,
@@ -58,13 +59,7 @@ func (aiEngine *AiEngine) PromptStream(ctx context.Context, req interface{}) (*a
 		return nil, err
 	}
 
-	res, err := stream.Recv()
-
-	if err != nil {
-		fmt.Printf("ChatCompletion stream receive error: %v\n", err)
-		return nil, err
-	}
-
+	var res api.ChatCompletionStreamResponse
 	response := &api.ChatCompletionStreamResponse{}
 
 	for {
