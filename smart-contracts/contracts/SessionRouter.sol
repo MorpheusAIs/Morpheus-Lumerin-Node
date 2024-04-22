@@ -2,6 +2,8 @@
 pragma solidity ^0.8.24;
 
 import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import { MessageHashUtils } from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { KeySet } from "./KeySet.sol";
 import { Marketplace } from "./Marketplace.sol";
@@ -139,11 +141,6 @@ contract SessionRouter is OwnableUpgradeable {
     return sessionId;
   }
 
-
-  function getEthSignedMessageHash(bytes memory _encodedMessage) public pure returns (bytes32) {
-    return keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", keccak256(_encodedMessage)));
-  }
-
   function closeSession(bytes32 sessionId, bytes memory receiptEncoded, bytes memory signature) public {
     Session storage session = sessions[map[sessionId]];
     if (session.openedAt == 0) {
@@ -156,17 +153,6 @@ contract SessionRouter is OwnableUpgradeable {
     session.closeoutReceipt = receiptEncoded;
     session.closedAt = block.timestamp;
 
-    bool isDispute = true;
-
-    if (signature.length != 0){
-      bytes32 receiptHash = getEthSignedMessageHash(receiptEncoded);
-      address signer = recoverSigner(receiptHash, signature);
-      
-      if (signer == session.provider) {
-        isDispute = false;
-      }
-    }
-
     uint256 durationSeconds = session.closedAt - session.openedAt;
     uint256 cost = durationSeconds * session.price;
 
@@ -176,14 +162,14 @@ contract SessionRouter is OwnableUpgradeable {
       stakingDailyStipend.returnStipend(session.user, refund);
     } 
 
-    if (isDispute){
+    if (isValidReceipt(session.provider, receiptEncoded, signature)){
+      token.transfer(session.provider, cost);
+    } else {
       session.closeoutType = 1;
       providerOnHold[session.provider].push(OnHold({
         amount: cost,
         releaseAt: block.timestamp + DAY
       }));
-    } else {
-      token.transfer(session.provider, cost);
     }
   }
   // funds related functions
@@ -246,36 +232,13 @@ contract SessionRouter is OwnableUpgradeable {
     stakeDelay = delay;
   }
 
-  function recoverSigner(bytes32 message, bytes memory sig) public pure returns (address) {
-    (bytes32 r, bytes32 s, uint8 v) = splitSignature(sig);
-    return ecrecover(message, v, r, s);
+  function isValidReceipt(address signer, bytes memory receipt, bytes memory signature) public pure returns (bool) {
+    if (signature.length == 0){
+      return false;
+    }
+    bytes32 receiptHash = MessageHashUtils.toEthSignedMessageHash(keccak256(receipt));
+    return ECDSA.recover(receiptHash, signature) == signer;
   }
-
-  function splitSignature(bytes memory sig) public pure returns (bytes32 r, bytes32 s, uint8 v) {
-    if (sig.length != 65) {
-      revert InvalidSignature();
-    }
-
-    assembly {
-        /*
-        First 32 bytes stores the length of the signature
-
-        add(sig, 32) = pointer of sig + 32
-        effectively, skips first 32 bytes of signature
-
-        mload(p) loads next 32 bytes starting at the memory address p into memory
-        */
-
-        // first 32 bytes, after the length prefix
-        r := mload(add(sig, 32))
-        // second 32 bytes
-        s := mload(add(sig, 64))
-        // final byte (first byte of the next 32 bytes)
-        v := byte(0, mload(add(sig, 96)))
-    }
-
-    // implicitly return (r, s, v)
-    }
 
   modifier senderOrOwner(address addr) {
     _senderOrOwner(addr);
