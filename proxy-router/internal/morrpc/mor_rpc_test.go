@@ -82,6 +82,6 @@ func TestMorRpc_generate(t *testing.T) {
 	signature, err := m.generateSignature(params, privateKeyHex)
 	assert.NoError(t, err)
 
-	base64Signature := hex.EncodeToString([]byte(signature))
-	fmt.Println(base64Signature)
+	hexSignature := hex.EncodeToString([]byte(signature))
+	fmt.Println(hexSignature)
 }
