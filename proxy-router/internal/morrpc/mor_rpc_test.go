@@ -2,7 +2,7 @@ package morrpc
 
 import (
 	"encoding/hex"
-	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -40,12 +40,7 @@ func TestMorRpc_verifySignature(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotEmpty(t, signature)
 
-	publicKeyBytes, err := hex.DecodeString(publicKey)
-	assert.NoError(t, err)
-
-	paramsBytes, err := json.Marshal(params)
-
-	isValid := m.VerifySignature(paramsBytes, signature, publicKeyBytes)
+	isValid := m.VerifySignature(params, signature, publicKey, nil)
 	assert.True(t, isValid)
 }
 
@@ -65,11 +60,28 @@ func TestMorRpc_verifySignature_incorrect_params(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotEmpty(t, signature)
 
-	publicKeyBytes, err := hex.DecodeString(publicKey)
+	params["param3"] = "unknown value"
+	isValid := m.VerifySignature(params, signature, publicKey, nil)
+	assert.False(t, isValid)
+}
+
+func TestMorRpc_generate(t *testing.T) {
+	m := NewMorRpc()
+
+	params := map[string]interface{}{
+		"user":      "2222",
+		"key":       "033e5e77f12aa67e52484ce64b64737d397098e78d54beba15a0bf6dcfdd5ae7e2",
+		"spend":     "10",
+		"provider":  "1111",
+		"timestamp": "1234567890",
+	}
+
+	privateKeyHex := "81f44a49c40f206517efbbcca783d808914841200e0ac9a769368e1b2741e227"
+	// publicKey := "033e5e77f12aa67e52484ce64b64737d397098e78d54beba15a0bf6dcfdd5ae7e2"
+
+	signature, err := m.generateSignature(params, privateKeyHex)
 	assert.NoError(t, err)
 
-	params["param3"] = "unknown value"
-	paramsBytes, err := json.Marshal(params)
-	isValid := m.VerifySignature(paramsBytes, signature, publicKeyBytes)
-	assert.False(t, isValid)
+	hexSignature := hex.EncodeToString([]byte(signature))
+	fmt.Println(hexSignature)
 }

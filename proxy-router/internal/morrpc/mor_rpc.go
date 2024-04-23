@@ -1,10 +1,12 @@
 package morrpc
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
@@ -243,24 +245,39 @@ func (m *MorRpc) generateSignature(params map[string]interface{}, privateKeyHex 
 	if err != nil {
 		return "", err
 	}
-	return string(signature), nil
+	hexSignature := hex.EncodeToString(signature)
+	return hexSignature, nil
+}
+
+func (m *MorRpc) VerifySignature(params map[string]interface{}, signature string, publicKey string, sourceLog interfaces.ILogger) bool {
+	paramsCopy := make(map[string]interface{})
+	for k, v := range params {
+		paramsCopy[k] = v
+	}
+	delete(paramsCopy, "signature")
+	publicKeyBytes, err := hex.DecodeString(publicKey)
+	if err != nil {
+		sourceLog.Error("Error decoding public key", err)
+		return false
+	}
+	paramsBytes, err := json.Marshal(paramsCopy)
+	if err != nil {
+		sourceLog.Error("Error marshalling params", err)
+		return false
+	}
+	return m.verifySignature(paramsBytes, signature, publicKeyBytes)
 }
 
 // https://goethereumbook.org/signature-verify/
-func (m *MorRpc) VerifySignature(params []byte, signature string, publicKeyBytes []byte) bool {
-	var jsonParams map[string]interface{}
-	err := json.Unmarshal([]byte(params), &jsonParams)
+func (m *MorRpc) verifySignature(params []byte, signature string, publicKeyBytes []byte) bool {
+	signatureBytes, err := hex.DecodeString(signature)
 	if err != nil {
 		return false
 	}
-	delete(jsonParams, "signature")
-
-	resultStr, err := json.Marshal(jsonParams)
-	if err != nil {
+	hash := crypto.Keccak256Hash([]byte(params))
+	if len(signatureBytes) == 0 {
 		return false
 	}
-
-	hash := crypto.Keccak256Hash([]byte(resultStr))
-	signatureNoRecoverID := signature[:len(signature)-1] // remove recovery ID
-	return crypto.VerifySignature(publicKeyBytes, hash.Bytes(), []byte(signatureNoRecoverID))
+	signatureNoRecoverID := signatureBytes[:len(signatureBytes)-1] // remove recovery ID
+	return crypto.VerifySignature(publicKeyBytes, hash.Bytes(), signatureNoRecoverID)
 }
