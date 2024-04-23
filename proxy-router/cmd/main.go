@@ -187,6 +187,7 @@ func start() error {
 
 	publicKey, err := lib.PubKeyStringFromPrivate(cfg.Marketplace.WalletPrivateKey)
 	if err != nil {
+		appLog.Errorf("failed to get public key: %s", err)
 		return err
 	}
 

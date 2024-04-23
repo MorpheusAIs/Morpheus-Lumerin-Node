@@ -91,7 +91,7 @@ func PubKeyStringFromPrivate(privateKey string) (string, error) {
 	pubKey := privKey.Public()
 	pubKeyECDSA, ok := pubKey.(*ecdsa.PublicKey)
 	if !ok {
-		return "", fmt.Errorf("error casting public key to ECDSA")
+		return "", fmt.Errorf("error casting public key to ECDSA: %v", pubKeyECDSA)
 	}
 	publicKeyBytes := crypto.FromECDSAPub(pubKeyECDSA)
 	return hex.EncodeToString(publicKeyBytes), nil

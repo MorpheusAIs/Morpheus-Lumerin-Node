@@ -37,17 +37,21 @@ func NewTCPHandler(
 			return
 		}
 		if resp != nil {
-			sendMsg(conn, resp)
+			_, err := sendMsg(conn, resp)
+			if err != nil {
+				sourceLog.Error("Error sending response", err)
+				return
+			}
 		}
 	}
 }
 
-func sendMsg(conn net.Conn, msg *morrpc.RpcResponse) {
+func sendMsg(conn net.Conn, msg *morrpc.RpcResponse) (int, error) {
 	msgJson, err := json.Marshal(msg)
 	if err != nil {
-		return
+		return 0, err
 	}
-	conn.Write([]byte(msgJson))
+	return conn.Write([]byte(msgJson))
 }
 
 func getMessage(conn net.Conn) (*morrpc.RpcMessage, error) {
