@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/testlib"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/TitanInd/proxy/proxy-router-v3/internal/testlib"
 )
 
 func TestMutexTimeout(t *testing.T) {

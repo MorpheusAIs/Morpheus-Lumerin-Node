@@ -8,7 +8,7 @@ import (
 	"net/netip"
 	"sync"
 
-	"gitlab.com/TitanInd/proxy/proxy-router-v3/internal/interfaces"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
 )
 
 // const kb = 1024 //temp
