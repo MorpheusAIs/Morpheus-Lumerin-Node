@@ -40,8 +40,6 @@ func TestMorRpc_verifySignature(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotEmpty(t, signature)
 
-	assert.NoError(t, err)
-
 	isValid := m.VerifySignature(params, signature, publicKey, nil)
 	assert.True(t, isValid)
 }
@@ -61,8 +59,6 @@ func TestMorRpc_verifySignature_incorrect_params(t *testing.T) {
 	signature, err := m.generateSignature(params, privateKeyHex)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, signature)
-
-	assert.NoError(t, err)
 
 	params["param3"] = "unknown value"
 	isValid := m.VerifySignature(params, signature, publicKey, nil)

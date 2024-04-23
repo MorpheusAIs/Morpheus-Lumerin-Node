@@ -275,6 +275,9 @@ func (m *MorRpc) verifySignature(params []byte, signature string, publicKeyBytes
 		return false
 	}
 	hash := crypto.Keccak256Hash([]byte(params))
+	if len(signatureBytes) == 0 {
+		return false
+	}
 	signatureNoRecoverID := signatureBytes[:len(signatureBytes)-1] // remove recovery ID
 	return crypto.VerifySignature(publicKeyBytes, hash.Bytes(), signatureNoRecoverID)
 }
