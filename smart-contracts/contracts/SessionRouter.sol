@@ -18,6 +18,7 @@ contract SessionRouter is OwnableUpgradeable {
     address user;
     address provider;
     bytes32 modelAgentId;
+    bytes32 bidID;
     uint256 budget;
     uint256 price;
     bytes closeoutReceipt;
@@ -48,15 +49,10 @@ contract SessionRouter is OwnableUpgradeable {
 
   // storage
   Session[] public sessions;
-  mapping(bytes32 => uint256) public map; // sessionId => index
+  mapping(bytes32 => uint256) public map; // sessionId => session index
+  mapping(bytes32 => uint256) public bidMap; // bidId => session index
 
   mapping(address => OnHold[]) public providerOnHold; // user address => balance
-  // mapping(address => OnHold) public todaysSpend; // user address => spend today
-  
-  // mapping(address => uint256) public userStake; // user address => balance
-  // mapping(address => OnHold) public userStakeOnHold; // user address => amount on hold - user funds that put on hold
-  // mapping(address => OnHold[]) public providerOnHold; // user address => amount on hold - provider funds that put on hold 
-
   // constants
   uint32 constant DAY = 24*60*60; // 1 day
   uint32 constant MIN_SESSION_DURATION = 5*60; // 5 minutes
@@ -74,7 +70,10 @@ contract SessionRouter is OwnableUpgradeable {
   error NotSenderOrOwner();
   error NotEnoughBalance();
   error NotEnoughStipend();
+  
   error BidNotFound();
+  error BidTaken();
+
   error InvalidSignature();
   error SessionTooShort();
   error SessionNotFound();
@@ -90,6 +89,7 @@ contract SessionRouter is OwnableUpgradeable {
       user: address(0),
       provider: address(0),
       modelAgentId: bytes32(0),
+      bidID: bytes32(0),
       budget: 0,
       price: 0,
       closeoutReceipt: "",
@@ -110,9 +110,17 @@ contract SessionRouter is OwnableUpgradeable {
       revert NotEnoughStipend();
     }
 
-    (address provider, bytes32 modelAgentId, uint256 amount, , uint256 createdAt, uint256 deletedAt)  = marketplace.map(bidId);
+    (address provider, bytes32 modelAgentId, uint256 amount, , uint256 createdAt, uint256 deletedAt) = marketplace.map(bidId);
     if (deletedAt != 0 || createdAt == 0) {
       revert BidNotFound();
+    }
+
+    if (bidMap[bidId] != 0){
+      // TODO: some bids might be already taken by other sessions
+      // but the session list in marketplace is ignorant of this fact.
+      // Marketplace and SessionRouter contracts should be merged together 
+      // to avoid this issue and update indexes by avoiding costly intercontract calls
+      revert BidTaken();
     }
 
     uint256 duration = budget / amount;
@@ -126,6 +134,7 @@ contract SessionRouter is OwnableUpgradeable {
       user: sender,
       provider: provider,
       modelAgentId: modelAgentId,
+      bidID: bidId,
       budget: budget,
       price: amount,
       closeoutReceipt: "",
@@ -133,7 +142,10 @@ contract SessionRouter is OwnableUpgradeable {
       openedAt: block.timestamp,
       closedAt: 0
     }));
-    map[sessionId] = sessions.length - 1;
+
+    uint256 sessionIndex = sessions.length - 1;
+    map[sessionId] = sessionIndex;
+    bidMap[bidId] = sessionIndex; // marks bid as "taken" by this session
 
     emit SessionOpened(sender, sessionId, provider);
 
@@ -150,6 +162,7 @@ contract SessionRouter is OwnableUpgradeable {
       revert NotUserOrProvider();
     }
 
+    bidMap[session.bidID] = 0;  // marks bid as available
     session.closeoutReceipt = receiptEncoded;
     session.closedAt = block.timestamp;
 
@@ -174,16 +187,10 @@ contract SessionRouter is OwnableUpgradeable {
   }
   // funds related functions
 
-  // Returns claimable balance by provider address.
-  function getProviderClaimBalance(address providerAddr) public view returns (uint256) {
-   
-  }
-
   function getProviderBalance(address providerAddr) public view returns (uint256 total, uint256 hold) {
     OnHold[] memory onHold = providerOnHold[providerAddr];
     for (uint i = 0; i < onHold.length; i++) {
       total += onHold[i].amount;
-      // console.log("onHold", onHold[i].amount, onHold[i].releaseAt, block.timestamp, block.timestamp < onHold[i].releaseAt);
       if (block.timestamp < onHold[i].releaseAt) {
         hold+=onHold[i].amount;
       }
@@ -196,10 +203,10 @@ contract SessionRouter is OwnableUpgradeable {
   function claimProviderBalance(uint256 amountToWithdraw, address to) public {
     uint256 balance = 0;
     address sender = _msgSender();
-    // the only loop that is not avoidable
-    uint i = 0;
-
+    
     OnHold[] storage onHoldEntries = providerOnHold[sender];
+    uint i = 0;
+    // the only loop that is not avoidable
     while (i < onHoldEntries.length) {
       if (block.timestamp > onHoldEntries[i].releaseAt) {
         balance += onHoldEntries[i].amount;

@@ -74,9 +74,51 @@ describe("Session router", function () {
       }
     });
 
-    it("should not open session with same bid simultaneously");
+    it("should not open session with same bid simultaneously", async function () {
+      const { sessionRouter, expectedBid, user } = await loadFixture(deploySessionRouter);
+      const budget = expectedBid.amount * BigInt(HOUR / SECOND);
 
-    it("should open session with same bid after previous session is closed");
+      await sessionRouter.write.openSession([expectedBid.id, budget], {
+        account: user.account.address,
+      });
+
+      try {
+        await sessionRouter.write.openSession([expectedBid.id, budget], {
+          account: user.account.address,
+        });
+        expect.fail("Should have thrown an error");
+      } catch (error) {
+        expectError(error, sessionRouter.abi, "BidTaken");
+      }
+    });
+
+    it("should open session with same bid after previous session is closed", async function () {
+      const { sessionRouter, expectedBid, user, publicClient, provider } = await loadFixture(
+        deploySessionRouter
+      );
+      const budget = expectedBid.amount * BigInt(HOUR / SECOND);
+
+      // first purchase
+      const openTx = await sessionRouter.write.openSession([expectedBid.id, budget], {
+        account: user.account.address,
+      });
+      const sessionId = await getSessionId(publicClient, openTx);
+
+      // first closeout
+      const signature = await provider.signMessage({
+        message: { raw: keccak256(encodedReport) },
+      });
+      await sessionRouter.write.closeSession([sessionId, encodedReport, signature], {
+        account: user.account,
+      });
+
+      // second purchase same bidId
+      const openTx2 = await sessionRouter.write.openSession([expectedBid.id, budget], {
+        account: user.account.address,
+      });
+
+      // expect no purchase error
+    });
 
     it("should emit session opened with session id", async function () {
       const { sessionRouter, provider, expectedBid, staking, user, publicClient, tokenMOR } =

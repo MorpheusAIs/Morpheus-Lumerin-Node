@@ -135,7 +135,7 @@ contract Marketplace is OwnableUpgradeable {
     if (nonce > 0) {
       deleteModelAgentBid(keccak256(abi.encodePacked(provider, modelAgentId, nonce-1)));
     }
-    
+
     bidId = keccak256(abi.encodePacked(provider, modelAgentId, nonce));
 
     map[bidId] = Bid({
