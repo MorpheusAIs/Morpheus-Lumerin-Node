@@ -41,7 +41,7 @@ export async function deploySingleProvider() {
   const { providerRegistry, owner, provider, publicClient, decimalsMOR, tokenMOR } =
     await loadFixture(deployProviderRegistry);
   const expected = {
-    address: provider.account.address,
+    address: getAddress(provider.account.address),
     stake: parseUnits("100", decimalsMOR),
     endpoint: "https://bestprovider.com",
     timestamp: 0n,

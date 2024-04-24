@@ -1,10 +1,9 @@
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox-viem/network-helpers";
 import { expect } from "chai";
 import hre from "hardhat";
-import { getAddress } from "viem";
-import { deployMarketplace, deployProviderRegistry, deploySingleProvider } from "./fixtures";
+import { erc20Abi, getAddress, parseEventLogs } from "viem";
+import { deployMarketplace } from "./fixtures";
 import { expectError, getTxTimestamp } from "./utils";
-import exp from "constants";
 
 describe("Marketplace", function () {
   describe("Deployment", function () {
@@ -157,6 +156,128 @@ describe("Marketplace", function () {
         createdAt: expectedBid.createdAt,
         deletedAt: expectedBid.deletedAt,
       });
+    });
+  });
+
+  describe("bid fee", function () {
+    it("should set bid fee", async function () {
+      const { marketplace, owner, publicClient } = await loadFixture(deployMarketplace);
+      const newFee = 100n;
+      const txHash = await marketplace.write.setBidFee([newFee, newFee], {
+        account: owner.account.address,
+      });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+      const events = parseEventLogs({
+        abi: marketplace.abi,
+        logs: receipt.logs,
+        eventName: "FeeUpdated",
+      });
+      expect(events.length).to.be.equal(1);
+      expect(events[0].args).to.be.deep.equal({ modelFee: newFee, agentFee: newFee });
+
+      const modelBidFee = await marketplace.read.modelBidFee();
+      const agentBidFee = await marketplace.read.agentBidFee();
+      expect(modelBidFee).to.be.equal(newFee);
+      expect(agentBidFee).to.be.equal(newFee);
+    });
+
+    it("should collect bid fee and withdraw", async function () {
+      const { marketplace, owner, expectedBid, publicClient, provider, tokenMOR } =
+        await loadFixture(deployMarketplace);
+      const newFee = 100n;
+      await marketplace.write.setBidFee([newFee, newFee], {
+        account: owner.account.address,
+      });
+
+      // check balance before
+      const balanceBefore = await tokenMOR.read.balanceOf([marketplace.address]);
+
+      // add bid
+      await tokenMOR.write.approve([marketplace.address, expectedBid.amount + newFee], {
+        account: expectedBid.providerAddr,
+      });
+      const postModelBid = await marketplace.simulate.postModelBid(
+        [expectedBid.providerAddr, expectedBid.modelId, expectedBid.amount],
+        { account: expectedBid.providerAddr }
+      );
+      const txHash = await provider.writeContract(postModelBid.request);
+      await publicClient.waitForTransactionReceipt({ hash: txHash });
+
+      // check balance after
+      const balanceAfter = await tokenMOR.read.balanceOf([marketplace.address]);
+      expect(balanceAfter - balanceBefore).to.be.equal(newFee);
+    });
+
+    it("should allow withdrawal by owner", async function () {
+      const { marketplace, owner, expectedBid, publicClient, provider, tokenMOR } =
+        await loadFixture(deployMarketplace);
+      const newFee = 100n;
+      await marketplace.write.setBidFee([newFee, newFee], {
+        account: owner.account.address,
+      });
+
+      // add bid
+      await tokenMOR.write.approve([marketplace.address, expectedBid.amount + newFee], {
+        account: expectedBid.providerAddr,
+      });
+      const postModelBid = await marketplace.simulate.postModelBid(
+        [expectedBid.providerAddr, expectedBid.modelId, expectedBid.amount],
+        { account: expectedBid.providerAddr }
+      );
+      const txHash = await provider.writeContract(postModelBid.request);
+      await publicClient.waitForTransactionReceipt({ hash: txHash });
+
+      // check balance after
+      const balanceBefore = await tokenMOR.read.balanceOf([owner.account.address]);
+      await marketplace.write.withdraw([owner.account.address, newFee], {
+        account: owner.account.address,
+      });
+      const balanceAfter = await tokenMOR.read.balanceOf([owner.account.address]);
+
+      expect(balanceAfter - balanceBefore).to.be.equal(newFee);
+    });
+
+    it("should not allow withdrawal by any other account except owner", async function () {
+      const { marketplace, owner, expectedBid, publicClient, provider, tokenMOR } =
+        await loadFixture(deployMarketplace);
+      const newFee = 100n;
+      await marketplace.write.setBidFee([newFee, newFee], {
+        account: owner.account.address,
+      });
+
+      // add bid
+      await tokenMOR.write.approve([marketplace.address, expectedBid.amount + newFee], {
+        account: expectedBid.providerAddr,
+      });
+      const postModelBid = await marketplace.simulate.postModelBid(
+        [expectedBid.providerAddr, expectedBid.modelId, expectedBid.amount],
+        { account: expectedBid.providerAddr }
+      );
+      const txHash = await provider.writeContract(postModelBid.request);
+      await publicClient.waitForTransactionReceipt({ hash: txHash });
+
+      // check balance after
+      try {
+        await marketplace.write.withdraw([expectedBid.providerAddr, newFee], {
+          account: expectedBid.providerAddr,
+        });
+        expect.fail("Should have thrown an error");
+      } catch (e) {
+        expect((e as Error).message).includes("Ownable: caller is not the owner");
+      }
+    });
+
+    it("should not allow withdrawal if not enough balance", async function () {
+      const { marketplace, owner, tokenMOR } = await loadFixture(deployMarketplace);
+
+      try {
+        await marketplace.write.withdraw([owner.account.address, 100n], {
+          account: owner.account.address,
+        });
+        expect.fail("Should have thrown an error");
+      } catch (e) {
+        expectError(e, tokenMOR.abi, "ERC20InsufficientBalance");
+      }
     });
   });
 });

@@ -207,6 +207,23 @@ describe("Provider registry", function () {
     });
   });
 
+  describe("Views", function () {
+    it("should get all", async function () {
+      const { providerRegistry, expected } = await loadFixture(deploySingleProvider);
+      const [ids, providers] = await providerRegistry.read.getAll();
+
+      expect(providers.length).eq(1);
+      expect(ids.length).eq(1);
+      expect(ids[0]).eq(expected.address);
+      expect(providers[0]).deep.equal({
+        endpoint: expected.endpoint,
+        stake: expected.stake,
+        timestamp: expected.timestamp,
+        isDeleted: expected.isDeleted,
+      });
+    });
+  });
+
   describe("Min stake", function () {
     it("Should set min stake", async function () {
       const { providerRegistry, owner } = await loadFixture(deployProviderRegistry);

@@ -3,7 +3,7 @@ import { expect } from "chai";
 import hre from "hardhat";
 import { PublicClient, getAddress, keccak256, parseEventLogs } from "viem";
 import { deploySessionRouter, encodedReport } from "./fixtures";
-import { expectError, getHex, randomBytes32 } from "./utils";
+import { expectError, getHex, getTxTimestamp, randomBytes32 } from "./utils";
 import { DAY, HOUR, MINUTE, SECOND } from "../utils/time";
 import { expectAlmostEqual } from "../utils/compare";
 
@@ -31,12 +31,61 @@ describe("Session router", function () {
 
   describe("session actions", function () {
     it("should open session", async function () {
-      const { sessionRouter, staking, expectedBid, user } = await loadFixture(deploySessionRouter);
+      const { sessionRouter, expectedBid, user } = await loadFixture(deploySessionRouter);
       const budget = expectedBid.amount * BigInt(HOUR / SECOND);
 
       await sessionRouter.write.openSession([expectedBid.id, budget], {
         account: user.account,
       });
+    });
+
+    it("should verify session fields after opening", async function () {
+      const { sessionRouter, expectedBid, user, publicClient } = await loadFixture(
+        deploySessionRouter
+      );
+      const budget = expectedBid.amount * BigInt(HOUR / SECOND);
+
+      const txHash = await sessionRouter.write.openSession([expectedBid.id, budget], {
+        account: user.account,
+      });
+      const sessionId = await getSessionId(publicClient, txHash);
+      const session = await sessionRouter.read.getSession([sessionId]);
+      const createdAt = await getTxTimestamp(publicClient, txHash);
+
+      expect(session).to.deep.equal({
+        id: sessionId,
+        user: getAddress(user.account.address),
+        provider: getAddress(expectedBid.providerAddr),
+        modelAgentId: expectedBid.modelId,
+        bidID: expectedBid.id,
+        budget: budget,
+        price: expectedBid.amount,
+        closeoutReceipt: getHex(Buffer.from(""), 0),
+        closeoutType: 0n,
+        openedAt: createdAt,
+        closedAt: 0n,
+      });
+    });
+
+    it("should error with NotEnoughStipend when opening session with insufficient stipend", async function () {
+      const { sessionRouter, expectedBid, user, staking, expectedStake } = await loadFixture(
+        deploySessionRouter
+      );
+      const stakeToKeep = 1n;
+      const stakeToUnstake = expectedStake.stakeAmount - stakeToKeep;
+
+      await staking.write.unstake([user.account.address, stakeToUnstake, user.account.address], {
+        account: user.account,
+      });
+
+      try {
+        await sessionRouter.write.openSession([expectedBid.id, stakeToKeep + 1n], {
+          account: user.account,
+        });
+        expect.fail("Should have thrown an error");
+      } catch (error) {
+        expectError(error, sessionRouter.abi, "NotEnoughStipend");
+      }
     });
 
     it("should fail to open session with invalid bid", async function () {
