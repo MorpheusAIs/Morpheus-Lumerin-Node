@@ -2,7 +2,7 @@ import { loadFixture, time } from "@nomicfoundation/hardhat-toolbox-viem/network
 import { expect } from "chai";
 import hre from "hardhat";
 import { PublicClient, getAddress, keccak256, parseEventLogs } from "viem";
-import { deploySessionRouter, encodedReport } from "./fixtures";
+import { deployMarketplace, encodedReport } from "./fixtures";
 import { expectError, getHex, getTxTimestamp, randomBytes32 } from "./utils";
 import { DAY, HOUR, MINUTE, SECOND } from "../utils/time";
 import { expectAlmostEqual } from "../utils/compare";
@@ -10,28 +10,28 @@ import { expectAlmostEqual } from "../utils/compare";
 describe("Session router", function () {
   describe("Deployment", function () {
     it("Should set the right owner", async function () {
-      const { sessionRouter, owner } = await loadFixture(deploySessionRouter);
+      const { sessionRouter, owner } = await loadFixture(deployMarketplace);
 
       expect(await sessionRouter.read.owner()).to.equal(getAddress(owner.account.address));
     });
 
     it("Should set the right token", async function () {
-      const { sessionRouter, tokenMOR } = await loadFixture(deploySessionRouter);
+      const { sessionRouter, tokenMOR } = await loadFixture(deployMarketplace);
 
       expect(await sessionRouter.read.token()).to.equal(getAddress(tokenMOR.address));
     });
 
-    it("Should set registries correctly", async function () {
-      const { sessionRouter, marketplace, staking } = await loadFixture(deploySessionRouter);
+    it.skip("Should set registries correctly", async function () {
+      const { sessionRouter } = await loadFixture(deployMarketplace);
 
-      expect(await sessionRouter.read.marketplace()).eq(getAddress(marketplace.address));
-      expect(await sessionRouter.read.stakingDailyStipend()).eq(getAddress(staking.address));
+      // expect(await sessionRouter.read.marketplace()).eq(getAddress(marketplace.address));
+      // expect(await sessionRouter.read.stakingDailyStipend()).eq(getAddress(sessionRouter.address));
     });
   });
 
   describe("session actions", function () {
     it("should open session", async function () {
-      const { sessionRouter, expectedBid, user } = await loadFixture(deploySessionRouter);
+      const { sessionRouter, expectedBid, user } = await loadFixture(deployMarketplace);
       const budget = expectedBid.amount * BigInt(HOUR / SECOND);
 
       await sessionRouter.write.openSession([expectedBid.id, budget], {
@@ -41,7 +41,7 @@ describe("Session router", function () {
 
     it("should verify session fields after opening", async function () {
       const { sessionRouter, expectedBid, user, publicClient } = await loadFixture(
-        deploySessionRouter
+        deployMarketplace
       );
       const budget = expectedBid.amount * BigInt(HOUR / SECOND);
 
@@ -68,15 +68,18 @@ describe("Session router", function () {
     });
 
     it("should error with NotEnoughStipend when opening session with insufficient stipend", async function () {
-      const { sessionRouter, expectedBid, user, staking, expectedStake } = await loadFixture(
-        deploySessionRouter
+      const { sessionRouter, expectedBid, user, expectedStake } = await loadFixture(
+        deployMarketplace
       );
       const stakeToKeep = 1n;
       const stakeToUnstake = expectedStake.stakeAmount - stakeToKeep;
 
-      await staking.write.unstake([user.account.address, stakeToUnstake, user.account.address], {
-        account: user.account,
-      });
+      await sessionRouter.write.unstake(
+        [user.account.address, stakeToUnstake, user.account.address],
+        {
+          account: user.account,
+        }
+      );
 
       try {
         await sessionRouter.write.openSession([expectedBid.id, stakeToKeep + 1n], {
@@ -89,7 +92,7 @@ describe("Session router", function () {
     });
 
     it("should fail to open session with invalid bid", async function () {
-      const { sessionRouter, user } = await loadFixture(deploySessionRouter);
+      const { sessionRouter, user } = await loadFixture(deployMarketplace);
 
       try {
         await sessionRouter.write.openSession([randomBytes32(), 0n], {
@@ -102,11 +105,11 @@ describe("Session router", function () {
     });
 
     it("should fail to open session with duration less than minimum", async function () {
-      const { sessionRouter, staking, expectedBid, expectedStake, user } = await loadFixture(
-        deploySessionRouter
+      const { sessionRouter, expectedBid, expectedStake, user } = await loadFixture(
+        deployMarketplace
       );
 
-      await staking.write.unstake(
+      await sessionRouter.write.unstake(
         [user.account.address, expectedStake.stakeAmount, user.account.address],
         {
           account: user.account,
@@ -124,7 +127,7 @@ describe("Session router", function () {
     });
 
     it("should not open session with same bid simultaneously", async function () {
-      const { sessionRouter, expectedBid, user } = await loadFixture(deploySessionRouter);
+      const { sessionRouter, expectedBid, user } = await loadFixture(deployMarketplace);
       const budget = expectedBid.amount * BigInt(HOUR / SECOND);
 
       await sessionRouter.write.openSession([expectedBid.id, budget], {
@@ -143,7 +146,7 @@ describe("Session router", function () {
 
     it("should open session with same bid after previous session is closed", async function () {
       const { sessionRouter, expectedBid, user, publicClient, provider } = await loadFixture(
-        deploySessionRouter
+        deployMarketplace
       );
       const budget = expectedBid.amount * BigInt(HOUR / SECOND);
 
@@ -170,8 +173,8 @@ describe("Session router", function () {
     });
 
     it("should emit session opened with session id", async function () {
-      const { sessionRouter, provider, expectedBid, staking, user, publicClient, tokenMOR } =
-        await loadFixture(deploySessionRouter);
+      const { sessionRouter, provider, expectedBid, user, publicClient, tokenMOR } =
+        await loadFixture(deployMarketplace);
 
       const budget = expectedBid.amount * BigInt(HOUR / SECOND);
       const openSession = await sessionRouter.write.openSession([expectedBid.id, budget], {
@@ -194,12 +197,14 @@ describe("Session router", function () {
     });
 
     it("should open and close early", async function () {
-      const { sessionRouter, provider, expectedBid, staking, user, publicClient, tokenMOR } =
-        await loadFixture(deploySessionRouter);
+      const { sessionRouter, provider, expectedBid, user, publicClient, tokenMOR } =
+        await loadFixture(deployMarketplace);
       const budget = expectedBid.amount * BigInt(HOUR / SECOND);
 
       // save balance before opening session
-      const balanceBeforeOpen = await staking.read.balanceOfDailyStipend([user.account.address]);
+      const balanceBeforeOpen = await sessionRouter.read.balanceOfDailyStipend([
+        user.account.address,
+      ]);
       const providerBalanceBefore = await tokenMOR.read.balanceOf([provider.account.address]);
 
       // open session
@@ -209,7 +214,9 @@ describe("Session router", function () {
       const sessionId = await getSessionId(publicClient, openTx);
 
       await time.increase((30 * MINUTE) / SECOND);
-      const balanceBeforeClose = await staking.read.balanceOfDailyStipend([user.account.address]);
+      const balanceBeforeClose = await sessionRouter.read.balanceOfDailyStipend([
+        user.account.address,
+      ]);
 
       // close session
       const signature = await provider.signMessage({
@@ -224,7 +231,9 @@ describe("Session router", function () {
       expect(session.closeoutType).to.equal(0n);
 
       // verify balances
-      const balanceAfterClose = await staking.read.balanceOfDailyStipend([user.account.address]);
+      const balanceAfterClose = await sessionRouter.read.balanceOfDailyStipend([
+        user.account.address,
+      ]);
       const providerBalanceAfter = await tokenMOR.read.balanceOf([provider.account.address]);
 
       const stipendLocked = balanceBeforeOpen - balanceBeforeClose;
@@ -236,12 +245,14 @@ describe("Session router", function () {
     });
 
     it("should open and close with user report - dispute", async function () {
-      const { sessionRouter, provider, expectedBid, staking, user, publicClient, tokenMOR } =
-        await loadFixture(deploySessionRouter);
+      const { sessionRouter, provider, expectedBid, user, publicClient, tokenMOR } =
+        await loadFixture(deployMarketplace);
       const budget = expectedBid.amount * BigInt(HOUR / SECOND);
 
       // save balance before opening session
-      const balanceBeforeOpen = await staking.read.balanceOfDailyStipend([user.account.address]);
+      const balanceBeforeOpen = await sessionRouter.read.balanceOfDailyStipend([
+        user.account.address,
+      ]);
       const providerBalanceBefore = await tokenMOR.read.balanceOf([provider.account.address]);
 
       // open session
@@ -251,7 +262,9 @@ describe("Session router", function () {
       const sessionId = await getSessionId(publicClient, openTx);
 
       await time.increase((30 * MINUTE) / SECOND);
-      const balanceBeforeClose = await staking.read.balanceOfDailyStipend([user.account.address]);
+      const balanceBeforeClose = await sessionRouter.read.balanceOfDailyStipend([
+        user.account.address,
+      ]);
 
       // close session with invalid signature
       const signature = getHex(Buffer.from(""), 0);
@@ -264,7 +277,9 @@ describe("Session router", function () {
       expect(session.closeoutType).to.equal(1n);
 
       // verify balances
-      const balanceAfterClose = await staking.read.balanceOfDailyStipend([user.account.address]);
+      const balanceAfterClose = await sessionRouter.read.balanceOfDailyStipend([
+        user.account.address,
+      ]);
       const providerBalanceAfter = await tokenMOR.read.balanceOf([provider.account.address]);
       const [total, onHold] = await sessionRouter.read.getProviderBalance([
         provider.account.address,
