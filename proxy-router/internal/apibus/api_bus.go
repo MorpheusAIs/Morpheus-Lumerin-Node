@@ -37,6 +37,10 @@ func (apiBus *ApiBus) HealthCheck(ctx context.Context) interface{} {
 	return apiBus.proxyRouterApi.HealthCheck(ctx)
 }
 
+func (apiBus *ApiBus) InitiateSession(ctx *gin.Context) (int, interface{}) {
+	return apiBus.proxyRouterApi.InitiateSession(ctx)
+}
+
 // AiEngine
 func (apiBus *ApiBus) Prompt(ctx context.Context, req interface{}) (interface{}, error) {
 	return apiBus.aiEngine.Prompt(ctx, req)
