@@ -41,7 +41,7 @@ export async function deploySingleProvider() {
   const { providerRegistry, owner, provider, publicClient, decimalsMOR, tokenMOR } =
     await loadFixture(deployProviderRegistry);
   const expected = {
-    address: provider.account.address,
+    address: getAddress(provider.account.address),
     stake: parseUnits("100", decimalsMOR),
     endpoint: "https://bestprovider.com",
     timestamp: 0n,
@@ -176,13 +176,44 @@ export async function deployMarketplace() {
 
   expectedModel.timestamp = await getTxTimestamp(publicClient, addProviderHash);
 
-  // deploy marketplace
-  const marketplace = await hre.viem.deployContract("Marketplace", [], {});
-  await marketplace.write.initialize([
+  // deploy staking
+  const [, , user] = await hre.viem.getWalletClients();
+
+  // deploy session router
+  const sessionRouter = await hre.viem.deployContract("SessionRouter", [], {});
+  await sessionRouter.write.initialize([
     tokenMOR.address,
+    owner.account.address,
     modelRegistry.address,
     providerRegistry.address,
   ]);
+
+  await tokenMOR.write.approve([sessionRouter.address, 10000n * 10n ** 18n]);
+  await tokenMOR.write.transfer([user.account.address, 10000n * 10n ** 18n]);
+
+  const expectedStake = {
+    stakeAmount: 1000n * 10n ** 18n,
+    account: user.account.address,
+    transferTo: user.account.address,
+    expectedStipend: 0n,
+    spendAmount: 0n,
+  };
+
+  const computeBalance = await sessionRouter.read.getComputeBalance();
+  const totalSupply = await tokenMOR.read.totalSupply();
+
+  expectedStake.expectedStipend =
+    ((computeBalance / 100n) * expectedStake.stakeAmount) / totalSupply;
+  expectedStake.spendAmount = expectedStake.expectedStipend / 4n;
+
+  await tokenMOR.write.approve([sessionRouter.address, 10000n * 10n ** 18n], {
+    account: expectedStake.account,
+  });
+  await sessionRouter.write.stake([expectedStake.account, expectedStake.stakeAmount], {
+    account: expectedStake.account,
+  });
+
+  expectedStake.transferTo = sessionRouter.address;
 
   // expected bid
   const expectedBid = {
@@ -196,7 +227,7 @@ export async function deployMarketplace() {
   };
 
   // add single bid
-  const postBidtx = await marketplace.simulate.postModelBid(
+  const postBidtx = await sessionRouter.simulate.postModelBid(
     [expectedBid.providerAddr, expectedBid.modelId, expectedBid.amount],
     { account: provider.account.address }
   );
@@ -208,135 +239,18 @@ export async function deployMarketplace() {
 
   return {
     tokenMOR,
-    providerRegistry,
-    modelRegistry,
-    expectedProvider,
-    expectedModel,
-    expectedBid,
-    decimalsMOR,
-    marketplace,
-    owner,
-    provider,
-    publicClient,
-  };
-}
-
-export async function deployStaking() {
-  const { tokenMOR, decimalsMOR, owner } = await loadFixture(deployMORtoken);
-  const [, , user] = await hre.viem.getWalletClients();
-
-  // Contracts are deployed using the first signer/account by default
-  const staking = await hre.viem.deployContract(
-    "contracts/StakingDailyStipend.sol:StakingDailyStipend",
-    []
-  );
-  await staking.write.initialize([tokenMOR.address, owner.account.address]);
-  await tokenMOR.write.approve([staking.address, 10000n * 10n ** 18n]);
-  await tokenMOR.write.transfer([user.account.address, 10000n * 10n ** 18n]);
-
-  return {
-    tokenMOR,
-    decimalsMOR,
-    staking,
-    owner,
-    user,
-  };
-}
-
-export async function stake() {
-  const { staking, tokenMOR, user } = await loadFixture(deployStaking);
-  const [, , , stipendHolder] = await hre.viem.getWalletClients();
-  const expected = {
-    stakeAmount: 1000n * 10n ** 18n,
-    account: user.account.address,
-    transferTo: stipendHolder,
-    expectedStipend: 0n,
-    spendAmount: 0n,
-  };
-
-  const computeBalance = await staking.read.getComputeBalance();
-  const totalSupply = await tokenMOR.read.totalSupply();
-
-  expected.expectedStipend = ((computeBalance / 100n) * expected.stakeAmount) / totalSupply;
-  expected.spendAmount = expected.expectedStipend / 4n;
-
-  await tokenMOR.write.approve([staking.address, expected.stakeAmount], {
-    account: user.account,
-  });
-  await staking.write.stake([expected.account, expected.stakeAmount], {
-    account: expected.account,
-  });
-
-  return {
-    staking,
-    tokenMOR,
-    user,
-    expected,
-  };
-}
-
-export async function deploySessionRouter() {
-  const {
-    tokenMOR,
-    decimalsMOR,
-    owner,
-    marketplace,
-    expectedBid,
-    expectedModel,
-    expectedProvider,
-    provider,
-    publicClient,
-  } = await loadFixture(deployMarketplace);
-
-  // deploy staking
-  const [, , user] = await hre.viem.getWalletClients();
-  const staking = await hre.viem.deployContract("StakingDailyStipend", []);
-  await staking.write.initialize([tokenMOR.address, owner.account.address]);
-  await tokenMOR.write.approve([staking.address, 10000n * 10n ** 18n]);
-  await tokenMOR.write.transfer([user.account.address, 10000n * 10n ** 18n]);
-
-  const expectedStake = {
-    stakeAmount: 1000n * 10n ** 18n,
-    account: user.account.address,
-    transferTo: user.account.address,
-    expectedStipend: 0n,
-    spendAmount: 0n,
-  };
-
-  const computeBalance = await staking.read.getComputeBalance();
-  const totalSupply = await tokenMOR.read.totalSupply();
-
-  expectedStake.expectedStipend =
-    ((computeBalance / 100n) * expectedStake.stakeAmount) / totalSupply;
-  expectedStake.spendAmount = expectedStake.expectedStipend / 4n;
-
-  await tokenMOR.write.approve([staking.address, 10000n * 10n ** 18n], {
-    account: expectedStake.account,
-  });
-  await staking.write.stake([expectedStake.account, expectedStake.stakeAmount], {
-    account: expectedStake.account,
-  });
-
-  // deploy session router
-  const sessionRouter = await hre.viem.deployContract("SessionRouter", [], {});
-  await sessionRouter.write.initialize([tokenMOR.address, staking.address, marketplace.address]);
-
-  expectedStake.transferTo = sessionRouter.address;
-
-  return {
-    tokenMOR,
     decimalsMOR,
     sessionRouter,
-    marketplace,
     owner,
     user,
     provider,
-    staking,
     expectedBid,
     expectedModel,
     expectedProvider,
     expectedStake,
     publicClient,
+    modelRegistry,
+    providerRegistry,
   };
 }
 
