@@ -1,0 +1,67 @@
+package registries
+
+import (
+	"context"
+	"math/big"
+
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/contracts/marketplace"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/contracts/modelregistry"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
+)
+
+type Marketplace struct {
+	// config
+	marketplaceAddr common.Address
+
+	// state
+	nonce uint64
+	mutex lib.Mutex
+	mpABI *abi.ABI
+
+	// deps
+	marketplace *marketplace.Marketplace
+	client      *ethclient.Client
+	log         interfaces.ILogger
+}
+
+func NewMarketplace(marketplaceAddr common.Address, client *ethclient.Client, log interfaces.ILogger) *Marketplace {
+	mp, err := marketplace.NewMarketplace(marketplaceAddr, client)
+	if err != nil {
+		panic("invalid marketplace ABI")
+	}
+	mpABI, err := modelregistry.ModelRegistryMetaData.GetAbi()
+	if err != nil {
+		panic("invalid marketplace ABI: " + err.Error())
+	}
+	return &Marketplace{
+		marketplace:     mp,
+		marketplaceAddr: marketplaceAddr,
+		client:          client,
+		mpABI:           mpABI,
+		mutex:           lib.NewMutex(),
+		log:             log,
+	}
+}
+
+func (g *Marketplace) GetBidsByProvider(ctx context.Context, provider common.Address, offset *big.Int, limit uint8) ([]marketplace.MarketplaceBid, error) {
+	bids, err := g.marketplace.GetBidsByProvider(&bind.CallOpts{Context: ctx}, provider, offset, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	return bids, nil
+}
+
+func (g *Marketplace) GetBidsByModelAgent(ctx context.Context, modelAgentId [32]byte, offset *big.Int, limit uint8) ([]marketplace.MarketplaceBid, error) {
+	bids, err := g.marketplace.GetBidsByModelAgent(&bind.CallOpts{Context: ctx}, modelAgentId, offset, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	return bids, nil
+}

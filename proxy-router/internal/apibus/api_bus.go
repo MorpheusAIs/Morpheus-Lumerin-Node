@@ -2,10 +2,12 @@ package apibus
 
 import (
 	"context"
+	"math/big"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/aiengine"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/proxyapi"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/rpcproxy"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
 )
 
@@ -48,4 +50,21 @@ func (apiBus *ApiBus) Prompt(ctx context.Context) (string, error) {
 // RpcProxy
 func (apiBus *ApiBus) GetLatestBlock(ctx context.Context) (uint64, error) {
 	return apiBus.rpcProxy.GetLatestBlock(ctx)
+}
+
+func (apiBus *ApiBus) GetAllProviders(ctx context.Context) (int, gin.H) {
+	return apiBus.rpcProxy.GetAllProviders(ctx)
+}
+
+func (apiBus *ApiBus) GetAllModels(ctx context.Context) (int, gin.H) {
+	return apiBus.rpcProxy.GetAllModels(ctx)
+}
+
+func (apiBus *ApiBus) GetBidsByProdiver(ctx context.Context, providerAddr string, offset *big.Int, limit uint8) (int, gin.H) {
+	addr := common.HexToAddress(providerAddr)
+	return apiBus.rpcProxy.GetBidsByProdiver(ctx, addr, offset, limit)
+}
+
+func (apiBus *ApiBus) GetBidsByModelAgent(ctx context.Context, modelAgentId [32]byte, offset *big.Int, limit uint8) (int, gin.H) {
+	return apiBus.rpcProxy.GetBidsByModelAgent(ctx, modelAgentId, offset, limit)
 }

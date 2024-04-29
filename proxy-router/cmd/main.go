@@ -22,6 +22,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/transport"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/rpcproxy"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/system"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"golang.org/x/sync/errgroup"
 )
@@ -198,8 +199,12 @@ func start() error {
 	)
 	tcpServer.SetConnectionHandler(tcpHandler)
 
+	providerRegistryAddr := common.HexToAddress(cfg.Marketplace.ProviderRegistryAddress)
+	modelRegistryAddr := common.HexToAddress(cfg.Marketplace.ModelRegistryAddress)
+	makertplaceAddr := common.HexToAddress(cfg.Marketplace.MarketplaceAddress)
+
 	proxyRouterApi := proxyapi.NewProxyRouterApi(sysConfig, publicUrl, publicKey, cfg.Marketplace.WalletPrivateKey, &cfg, derived, time.Now(), contractLogStorage, log)
-	rpcProxy := rpcproxy.NewRpcProxy(ethClient)
+	rpcProxy := rpcproxy.NewRpcProxy(ethClient, providerRegistryAddr, modelRegistryAddr, makertplaceAddr, proxyLog)
 	aiEngine := aiengine.NewAiEngine()
 	apiBus := apibus.NewApiBus(rpcProxy, aiEngine, proxyRouterApi)
 
