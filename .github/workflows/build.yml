@@ -38,12 +38,16 @@ jobs:
         run: |
           cd launcher
           go mod tidy
+          cd ../proxy-router
+          go mod download
 
       - name: Build
         id: build
         run: |
           cd launcher
           make
+          cd ../proxy-router
+          make build
 
       - name: Determine tag name
         id: tag
@@ -60,8 +64,9 @@ jobs:
           wget https://github.com/ggerganov/llama.cpp/releases/download/b2699/$LLAMACPP
           wget https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
           unzip -o -j $LLAMACPP build/bin/server
-          echo '{"run":["./server -m ./'$MODEL'"]}' > mor-launch.json
-          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch server $MODEL mor-launch.json
+          echo '{"run":["./server -m ./'$MODEL'","./proxy-router"]}' > mor-launch.json
+          cp ./proxy-router/.env.example .env
+          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch server ./proxy-router/bin/proxy-router .env $MODEL mor-launch.json
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -86,12 +91,16 @@ jobs:
         run: |
           cd launcher
           go mod tidy
+          cd ../proxy-router
+          go mod download
 
       - name: Build
         id: build
         run: |
           cd launcher
           make
+          cd ../proxy-router
+          make build
 
       - name: Determine tag name
         id: tag
@@ -108,8 +117,9 @@ jobs:
           wget https://github.com/ggerganov/llama.cpp/releases/download/b2699/$LLAMACPP
           wget https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
           unzip -o -j $LLAMACPP build/bin/server
-          echo '{"run":["./server -m ./'$MODEL'"]}' > mor-launch.json
-          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch server $MODEL mor-launch.json
+          echo '{"run":["./server -m ./'$MODEL'","./proxy-router"]}' > mor-launch.json
+          cp ./proxy-router/.env.example .env
+          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env server $MODEL mor-launch.json
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
