@@ -50,7 +50,7 @@ const createClient = function (createStore) {
   const onTermsLinkClick = () =>
     window.openLink('https://github.com/Lumerin-protocol/WalletDesktop/blob/main/LICENSE')
 
-  const onHelpLinkClick = () => window.openLink('https://lumerin.gitbook.io')
+  const onHelpLinkClick = () => window.openLink('https://mor.org/fair-launch')
 
   const onLinkClick = (url) => window.openLink(url)
 

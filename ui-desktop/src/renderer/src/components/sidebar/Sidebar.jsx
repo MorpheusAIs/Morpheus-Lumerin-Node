@@ -22,6 +22,7 @@ const Container = styled.div`
   left: 0;
   bottom: 0;
   z-index: 3;
+  border-right: 1px solid rgba(255, 255, 255, 0.16);
 
   .sidebar-address {
     display: none;
@@ -85,7 +86,6 @@ const NavContainer = styled.div`
   justify-content: space-between;
   flex-direction: column;
   height: 100%;
-  padding-left: 2.2rem;
   @media (max-width: 800px) {
     padding-left: 1rem;
   }
@@ -97,8 +97,8 @@ const PrimaryNavContainer = styled.nav`
 `
 
 function Sidebar(props) {
-  const { address, copyToClipboard } = props
-  const [activeIndex, setActiveIndex] = useState(0)
+  const { address, copyToClipboard } = props;
+  const [activeIndex, setActiveIndex] = useState(0);
   return (
     <Container>
       <FullLogoContainer parent={Container}>
@@ -117,7 +117,7 @@ function Sidebar(props) {
           />
         </PrimaryNavContainer>
 
-        <nav>
+        <nav style={{ borderTop: '1px solid rgba(255, 255, 255, 0.16)'}}>
           <SecondaryNav
             activeIndex={activeIndex}
             setActiveIndex={setActiveIndex}

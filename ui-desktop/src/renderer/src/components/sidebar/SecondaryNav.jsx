@@ -13,8 +13,8 @@ const Container = styled.div`
   flex-direction: column;
   justify-content: space-between;
   max-height: 10%;
-  border-top: 1px solid rgba(255, 255, 255, 0.16);
   color: ${p => p.theme.colors.morMain}
+  padding-left: 2.2rem;
 `;
 
 const Button = styled(NavLink)`
