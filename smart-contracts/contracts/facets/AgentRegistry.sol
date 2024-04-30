@@ -2,28 +2,27 @@
 pragma solidity ^0.8.24;
 import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {KeySet} from "./KeySet.sol";
-import "hardhat/console.sol";
+import { KeySet } from "../libraries/KeySet.sol";
 
-contract ModelRegistry is OwnableUpgradeable {
+contract AgentRegistry is OwnableUpgradeable {
   using KeySet for KeySet.Set;
 
   struct Agent {
+    bytes32 agentId;
     uint256 fee;
     uint256 stake;
     uint256 timestamp;
     address owner;
-    bytes32 uuid;
-    string name;        // limit name length
-    string[] tags;      // TODO: limit tags amount
+    string name; // limit name length
+    string[] tags; // TODO: limit tags amount
   }
 
   error StakeTooLow();
   error NotSenderOrOwner();
   error ModelNotFound();
 
-  event RegisteredUpdated(address indexed owner, bytes32 indexed uuid);
-  event Deregistered(address indexed owner, bytes32 indexed uuid);
+  event RegisteredUpdated(address indexed owner, bytes32 indexed agentId);
+  event Deregistered(address indexed owner, bytes32 indexed agentId);
   event MinStakeUpdated(uint256 newStake);
 
   // state
@@ -39,11 +38,11 @@ contract ModelRegistry is OwnableUpgradeable {
     __Ownable_init();
   }
 
-  function getIds() public view returns (bytes32[] memory){
+  function getIds() public view returns (bytes32[] memory) {
     return set.keys();
   }
 
-  function getAll() public view returns (Agent[] memory){
+  function getAll() public view returns (Agent[] memory) {
     Agent[] memory _agents = new Agent[](set.count());
     for (uint i = 0; i < set.count(); i++) {
       _agents[i] = map[set.keyAtIndex(i)];
@@ -51,31 +50,42 @@ contract ModelRegistry is OwnableUpgradeable {
     return _agents;
   }
 
+  function exists(bytes32 id) public view returns (bool) {
+    return set.exists(id);
+  }
+
   // registers new or updates existing
-  function register(uint256 addStake, uint256 fee, address owner, bytes32 uuid, string memory name, string[] memory tags) public senderOrOwner(owner){
-    uint256 stake = map[uuid].stake;
+  function register(
+    uint256 addStake,
+    uint256 fee,
+    address owner,
+    bytes32 agentId,
+    string memory name,
+    string[] memory tags
+  ) public senderOrOwner(owner) {
+    uint256 stake = map[agentId].stake;
     uint256 newStake = stake + addStake;
     if (newStake < minStake) {
       revert StakeTooLow();
     }
 
     if (stake == 0) {
-      set.insert(uuid);
+      set.insert(agentId);
     } else {
-      _senderOrOwner(map[uuid].owner);
+      _senderOrOwner(map[agentId].owner);
     }
 
-    map[uuid] = Agent({
+    map[agentId] = Agent({
       fee: fee,
       stake: newStake,
       timestamp: block.timestamp,
       owner: owner,
-      uuid: uuid,
+      agentId: agentId,
       name: name,
       tags: tags
     });
 
-    emit RegisteredUpdated(owner, uuid);
+    emit RegisteredUpdated(owner, agentId);
     token.transferFrom(_msgSender(), address(this), addStake); // reverts with ERC20InsufficientAllowance
   }
 
@@ -102,8 +112,8 @@ contract ModelRegistry is OwnableUpgradeable {
     _;
   }
 
-  function _senderOrOwner(address addr) internal view {
-    if (addr != _msgSender() && addr != owner()) {
+  function _senderOrOwner(address resourceOwner) internal view {
+    if (_msgSender() != resourceOwner && _msgSender() != owner()) {
       revert NotSenderOrOwner();
     }
   }
