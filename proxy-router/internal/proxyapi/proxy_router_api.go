@@ -153,6 +153,84 @@ func (p *ProxyRouterApi) InitiateSession(ctx *gin.Context) (int, gin.H) {
 	}
 }
 
+func (p *ProxyRouterApi) SendPrompt(ctx *gin.Context) (int, gin.H) {
+	var reqPayload map[string]interface{}
+	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+
+	providerPublicKey, ok := reqPayload["providerPublicKey"].(string)
+	if !ok {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "providerPublicKey is required"}
+	}
+
+	prompt, ok := reqPayload["prompt"].(string)
+	if !ok {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "prompt is required"}
+	}
+
+	sessionId := ctx.Param("id")
+	if sessionId == "" {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "sessionId is required"}
+	}
+
+	providerUrl, ok := reqPayload["providerUrl"].(string)
+	if !ok {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "providerUrl is required"}
+	}
+
+	requestID := "1"
+	promptRequest, err := morrpc.NewMorRpc().SessionPromptRequest(sessionId, prompt, providerPublicKey, p.privateKey, requestID)
+	if err != nil {
+		err = lib.WrapError(fmt.Errorf("failed to create session prompt request"), err)
+		p.log.Errorf("%s", err)
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+
+	conn, err := net.Dial("tcp", providerUrl)
+	if err != nil {
+		err = lib.WrapError(fmt.Errorf("failed to connect to provider"), err)
+		p.log.Errorf("%s", err)
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+	defer conn.Close()
+
+	msgJSON, err := json.Marshal(promptRequest)
+	if err != nil {
+		err = lib.WrapError(fmt.Errorf("failed to marshal initiate session request"), err)
+		p.log.Errorf("%s", err)
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+	conn.Write([]byte(msgJSON))
+
+	// read response
+	reader := bufio.NewReader(conn)
+	d := json.NewDecoder(reader)
+	var msg *morrpc.RpcResponse
+	err = d.Decode(&msg)
+	if err != nil {
+		err = lib.WrapError(fmt.Errorf("failed to decode response"), err)
+		p.log.Errorf("%s", err)
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+
+	signature := fmt.Sprintf("%v", msg.Result["signature"])
+	providerPubKey := "mock_provider_pub_key" // get provider public key from storage for sessionId
+	p.log.Debugf("Signature: %s, Provider Pub Key: %s", signature, providerPubKey)
+
+	isValidSignature := morrpc.NewMorRpc().VerifySignature(msg.Result, signature, providerPubKey, p.log)
+	p.log.Debugf("Is valid signature: %t", isValidSignature)
+	if !isValidSignature {
+		err = fmt.Errorf("invalid signature from provider")
+		p.log.Errorf("%s", err)
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+
+	return constants.HTTP_STATUS_OK, gin.H{
+		"response": msg,
+	}
+}
+
 func (p *ProxyRouterApi) GetFiles(ctx *gin.Context) (int, gin.H) {
 	files, err := p.sysConfig.GetFileDescriptors(ctx, os.Getpid())
 	if err != nil {

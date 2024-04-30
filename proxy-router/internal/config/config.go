@@ -17,9 +17,11 @@ type Config struct {
 	}
 	Environment string `env:"ENVIRONMENT" flag:"environment"`
 	Marketplace struct {
-		CloneFactoryAddress string `env:"CLONE_FACTORY_ADDRESS" flag:"contract-address"   validate:"required_if=Disable false,omitempty,eth_addr"`
-		Mnemonic            string `env:"CONTRACT_MNEMONIC"     flag:"contract-mnemonic"  validate:"required_without=WalletPrivateKey|required_if=Disable false"`
-		WalletPrivateKey    string `env:"WALLET_PRIVATE_KEY"    flag:"wallet-private-key" validate:"required_without=Mnemonic|required_if=Disable false"`
+		ProviderRegistryAddress string `env:"PROVIDER_REGISTRY_ADDRESS" flag:"provider-registry-address"   validate:"required_if=Disable false,omitempty,eth_addr"`
+		ModelRegistryAddress    string `env:"MODEL_REGISTRY_ADDRESS" flag:"model-registry-address"   validate:"required_if=Disable false,omitempty,eth_addr"`
+		MarketplaceAddress      string `env:"MARKETPLACE_ADDRESS" flag:"marketplace-address"   validate:"required_if=Disable false,omitempty,eth_addr"`
+		Mnemonic                string `env:"CONTRACT_MNEMONIC"     flag:"contract-mnemonic"  validate:"required_without=WalletPrivateKey|required_if=Disable false"`
+		WalletPrivateKey        string `env:"WALLET_PRIVATE_KEY"    flag:"wallet-private-key" validate:"required_without=Mnemonic|required_if=Disable false"`
 	}
 	Log struct {
 		Color           bool   `env:"LOG_COLOR"            flag:"log-color"`
@@ -134,8 +136,6 @@ func (cfg *Config) GetSanitized() interface{} {
 
 	publicCfg.Blockchain.EthLegacyTx = cfg.Blockchain.EthLegacyTx
 	publicCfg.Environment = cfg.Environment
-
-	publicCfg.Marketplace.CloneFactoryAddress = cfg.Marketplace.CloneFactoryAddress
 
 	publicCfg.Log.Color = cfg.Log.Color
 	publicCfg.Log.FolderPath = cfg.Log.FolderPath
