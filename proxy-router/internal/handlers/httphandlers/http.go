@@ -33,6 +33,11 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 		ctx.JSON(status, response)
 	}))
 
+	r.POST("/proxy/sessions/:id/prompt", (func(ctx *gin.Context) {
+		status, response := apiBus.SendPrompt(ctx)
+		ctx.JSON(status, response)
+	}))
+
 	r.GET("/blockchain/providers", (func(ctx *gin.Context) {
 		status, providers := apiBus.GetAllProviders(ctx)
 		ctx.JSON(status, providers)

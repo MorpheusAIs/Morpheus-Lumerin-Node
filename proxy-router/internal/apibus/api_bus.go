@@ -42,6 +42,10 @@ func (apiBus *ApiBus) InitiateSession(ctx *gin.Context) (int, interface{}) {
 	return apiBus.proxyRouterApi.InitiateSession(ctx)
 }
 
+func (apiBus *ApiBus) SendPrompt(ctx *gin.Context) (int, interface{}) {
+	return apiBus.proxyRouterApi.SendPrompt(ctx)
+}
+
 // AiEngine
 func (apiBus *ApiBus) Prompt(ctx context.Context) (string, error) {
 	return apiBus.aiEngine.Prompt(ctx)

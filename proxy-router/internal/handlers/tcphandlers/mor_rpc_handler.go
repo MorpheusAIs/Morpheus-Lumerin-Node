@@ -63,8 +63,35 @@ func (m *MorRpcHandler) Handle(msg morrpc.RpcMessage, sourceLog interfaces.ILogg
 		}
 
 		return response, nil
-	case "method2":
-		// handle method2
+	case "session.prompt":
+		requestId := fmt.Sprintf("%v", msg.ID)
+		signature := fmt.Sprintf("%v", msg.Params["signature"])
+		sessionId := fmt.Sprintf("%v", msg.Params["sessionid"])
+		prompt := fmt.Sprintf("%v", msg.Params["message"])
+		timeStamp := fmt.Sprintf("%v", msg.Params["timestamp"])
+		sourceLog.Debugf("Received prompt from session %s, timestamp: %s", sessionId, timeStamp)
+
+		userPubKey := "mocked_pub_key" // get user public key from storage for sessionId
+		isValid := m.morRpc.VerifySignature(msg.Params, signature, userPubKey, sourceLog)
+		if !isValid {
+			err := fmt.Errorf("invalid signature")
+			sourceLog.Error(err)
+			return nil, err
+		}
+
+		// Send response
+		response, err := m.morRpc.SessionPromptResponse(
+			fmt.Sprintf("Prompt: %v, my resp: %v", prompt, "ok"),
+			m.privateKeyHex,
+			requestId,
+		)
+		if err != nil {
+			err := lib.WrapError(fmt.Errorf("failed to create response"), err)
+			sourceLog.Error(err)
+			return nil, err
+		}
+
+		return response, nil
 	default:
 		err := fmt.Errorf("unknown method: %s", msg.Method)
 		sourceLog.Error(err)
