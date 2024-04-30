@@ -12,7 +12,8 @@
     "verify": "hardhat verify",
     "bindings-go": "hardhat gobind",
     "node-local": "hardhat node",
-    "deploy-local": "hardhat run --network localhost scripts/deploy-local.ts"
+    "deploy-local": "hardhat run --network localhost scripts/deploy-local.ts",
+    "format": "prettier --write \"contracts/**/*.sol\""
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ignition": "^0.15.0",
