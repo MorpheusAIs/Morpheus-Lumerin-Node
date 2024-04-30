@@ -22,7 +22,12 @@ const config: HardhatUserConfig = {
   gobind: {
     outdir: "./bindings/go",
     onlyFiles: ["./contracts"],
-    skipFiles: ["./contracts/KeySet.sol"],
+    skipFiles: [
+      "contracts/AppStorage.sol",
+      "contracts/libraries",
+      "contracts/diamond/libraries",
+      "contracts/diamond/interfaces",
+    ],
   },
 };
 
