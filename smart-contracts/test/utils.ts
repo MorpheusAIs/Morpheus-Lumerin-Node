@@ -1,6 +1,13 @@
 import { PublicClient } from "@nomicfoundation/hardhat-viem/types";
-import { Abi, BaseError, ContractFunctionRevertedError, UnknownRpcError } from "viem";
-import { DecodeErrorResultReturnType, decodeErrorResult, padHex } from "viem/utils";
+import {
+  Abi,
+  AbiFunction,
+  AbiItem,
+  BaseError,
+  ContractFunctionRevertedError,
+  UnknownRpcError,
+} from "viem";
+import { DecodeErrorResultReturnType, decodeErrorResult, padHex, toFunctionHash } from "viem/utils";
 import crypto from "crypto";
 
 export async function getTxTimestamp(client: PublicClient, txHash: `0x${string}`): Promise<bigint> {
@@ -70,3 +77,15 @@ export const randomBytes32 = (): `0x${string}` => {
 export const randomAddress = (): `0x${string}` => {
   return getHex(crypto.randomBytes(20), 20);
 };
+
+export function getSelectors(abi: Abi) {
+  return abi.filter(isFunctionExceptInitAbi).map((item) => {
+    const hash = toFunctionHash(item);
+    // return "0x" + 4 bytes of the hash
+    return hash.slice(0, 2 + 8);
+  });
+}
+
+export function isFunctionExceptInitAbi(abi: AbiItem): abi is AbiFunction {
+  return abi.type === "function" && abi.name !== "init";
+}

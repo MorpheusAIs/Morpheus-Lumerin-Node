@@ -1,7 +1,7 @@
 import * as fixtures from "../test/fixtures";
 
 async function main() {
-  const data = await fixtures.deployMarketplace();
+  const data = await fixtures.deployDiamond();
   console.log(`
     MOR token deployed to         ${data.tokenMOR.address}
     ProviderRegistry deployed to  ${data.providerRegistry.address}

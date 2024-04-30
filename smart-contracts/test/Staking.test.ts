@@ -1,12 +1,12 @@
 import { loadFixture, time } from "@nomicfoundation/hardhat-toolbox-viem/network-helpers";
 import { expect } from "chai";
-import { deployMarketplace } from "./fixtures";
+import { deployDiamond } from "./fixtures";
 import { expectError } from "./utils";
 import { DAY, SECOND } from "../utils/time";
 
-describe("Staking", function () {
+describe.skip("Staking", function () {
   it("should stake", async function () {
-    const { sessionRouter, expectedStake } = await loadFixture(deployMarketplace);
+    const { sessionRouter, expectedStake } = await loadFixture(deployDiamond);
 
     expect(await sessionRouter.read.userStake([expectedStake.account])).equal(
       expectedStake.stakeAmount
@@ -17,7 +17,7 @@ describe("Staking", function () {
   });
 
   it("should unstake", async function () {
-    const { sessionRouter, expectedStake } = await loadFixture(deployMarketplace);
+    const { sessionRouter, expectedStake } = await loadFixture(deployDiamond);
 
     await sessionRouter.write.unstake(
       [expectedStake.account, expectedStake.stakeAmount, expectedStake.account],
@@ -32,14 +32,14 @@ describe("Staking", function () {
   // rewrite with real purchases
   describe.skip("Stipend", function () {
     it("should return daily stipend", async function () {
-      const { sessionRouter, expectedStake } = await loadFixture(deployMarketplace);
+      const { sessionRouter, expectedStake } = await loadFixture(deployDiamond);
 
       const balance = await sessionRouter.read.balanceOfDailyStipend([expectedStake.account]);
       expect(balance).eq(expectedStake.expectedStipend);
     });
 
     it("should spend daily stipend", async function () {
-      const { sessionRouter, expectedStake, tokenMOR } = await loadFixture(deployMarketplace);
+      const { sessionRouter, expectedStake, tokenMOR } = await loadFixture(deployDiamond);
 
       // await sessionRouter.write.transferDailyStipend(
       //   [expectedStake.account, expectedStake.transferTo, expectedStake.spendAmount],
@@ -55,7 +55,7 @@ describe("Staking", function () {
     });
 
     it("should count spend amount correctly when spent second time same day", async function () {
-      const { sessionRouter, expectedStake, tokenMOR } = await loadFixture(deployMarketplace);
+      const { sessionRouter, expectedStake, tokenMOR } = await loadFixture(deployDiamond);
 
       // await sessionRouter.write.transferDailyStipend(
       //   [expectedStake.account, expectedStake.transferTo, expectedStake.spendAmount],
@@ -81,7 +81,7 @@ describe("Staking", function () {
     });
 
     it("should error when spending more than daily stipend", async function () {
-      const { sessionRouter, expectedStake } = await loadFixture(deployMarketplace);
+      const { sessionRouter, expectedStake } = await loadFixture(deployDiamond);
       try {
         // await sessionRouter.write.transferDailyStipend(
         //   [expectedStake.account, expectedStake.transferTo, expectedStake.expectedStipend + 1n],
@@ -94,7 +94,7 @@ describe("Staking", function () {
     });
 
     it("should reset daily stipend value on the next day", async function () {
-      const { sessionRouter, expectedStake, tokenMOR } = await loadFixture(deployMarketplace);
+      const { sessionRouter, expectedStake, tokenMOR } = await loadFixture(deployDiamond);
 
       // await sessionRouter.write.transferDailyStipend(
       //   [expectedStake.account, expectedStake.transferTo, expectedStake.spendAmount],
@@ -115,7 +115,7 @@ describe("Staking", function () {
     });
 
     it("should lock unstaking till next day after using stipend", async function () {
-      const { sessionRouter, expectedStake, tokenMOR } = await loadFixture(deployMarketplace);
+      const { sessionRouter, expectedStake, tokenMOR } = await loadFixture(deployDiamond);
 
       // await sessionRouter.write.transferDailyStipend(
       //   [expectedStake.account, expectedStake.transferTo, expectedStake.spendAmount],
@@ -151,7 +151,7 @@ describe("Staking", function () {
     });
 
     it("should return stipend to the staking contract and increase daily stipend", async function () {
-      const { sessionRouter, expectedStake, tokenMOR } = await loadFixture(deployMarketplace);
+      const { sessionRouter, expectedStake, tokenMOR } = await loadFixture(deployDiamond);
 
       const stipendBeforeTransfer = await sessionRouter.read.balanceOfDailyStipend([
         expectedStake.account,

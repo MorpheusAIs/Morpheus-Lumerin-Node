@@ -1,7 +1,17 @@
 import hre from "hardhat";
-import { encodePacked, getAddress, parseUnits } from "viem/utils";
-import { getHex, getTxTimestamp, randomBytes32 } from "./utils";
+import {
+  encodeFunctionData,
+  encodePacked,
+  getAddress,
+  parseUnits,
+  toFunctionHash,
+  toHex,
+} from "viem/utils";
+import { getHex, getSelectors, getTxTimestamp, randomBytes32 } from "./utils";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
+import { Abi, AbiFunction, AbiItem } from "viem";
+// import { toSignatureHash } from "viem/_types/utils/hash/toSignatureHash";
+import { FacetCutAction } from "../libraries/diamond";
 
 export async function deployMORtoken() {
   const [owner] = await hre.viem.getWalletClients();
@@ -17,30 +27,76 @@ export async function deployMORtoken() {
   };
 }
 
-export async function deployProviderRegistry() {
-  const [owner, provider] = await hre.viem.getWalletClients();
-  const { tokenMOR, decimalsMOR } = await loadFixture(deployMORtoken);
+export async function deployDiamond() {
+  // deploy provider registry and deps
+  const { tokenMOR, owner, decimalsMOR } = await loadFixture(deployMORtoken);
 
-  // Contracts are deployed using the first signer/account by default
-  const providerRegistry = await hre.viem.deployContract("ProviderRegistry", [], {});
-  await providerRegistry.write.initialize([tokenMOR.address]);
-
+  const [, provider, user] = await hre.viem.getWalletClients();
   const publicClient = await hre.viem.getPublicClient();
+
+  // 1. deploy diamont init
+  const diamondInit = await hre.viem.deployContract("DiamondInit", [], {});
+
+  // 2. deploy faucets
+  const FacetNames = [
+    "DiamondCutFacet",
+    "DiamondLoupeFacet",
+    "OwnershipFacet",
+    "ModelRegistry",
+    "ProviderRegistry",
+    "Marketplace",
+    "SessionRouter",
+  ] as const;
+
+  const facetContracts = await Promise.all(
+    FacetNames.map((name) => {
+      return hre.viem.deployContract(name as any, [], {});
+    })
+  );
+
+  // 3. deploy diamond
+  const facetCuts = facetContracts.map((facetContract) => ({
+    facetAddress: facetContract.address,
+    action: FacetCutAction.Add,
+    functionSelectors: getSelectors(facetContract.abi),
+  }));
+
+  const diamondArgs = {
+    owner: owner.account.address,
+    init: diamondInit.address,
+    initCalldata: encodeFunctionData({
+      abi: diamondInit.abi,
+      functionName: "init",
+      args: [tokenMOR.address, owner.account.address],
+    }),
+  };
+  const diamond = await hre.viem.deployContract("Diamond", [facetCuts, diamondArgs]);
+
+  const modelRegistry = await hre.viem.getContractAt("ModelRegistry", diamond.address);
+  const providerRegistry = await hre.viem.getContractAt("ProviderRegistry", diamond.address);
+  const marketplace = await hre.viem.getContractAt("Marketplace", diamond.address);
+  const sessionRouter = await hre.viem.getContractAt("SessionRouter", diamond.address);
 
   return {
     tokenMOR,
     decimalsMOR,
-    providerRegistry,
+    diamond,
     owner,
+    user,
     provider,
     publicClient,
+    modelRegistry,
+    providerRegistry,
+    marketplace,
+    sessionRouter,
   };
 }
 
 export async function deploySingleProvider() {
-  const { providerRegistry, owner, provider, publicClient, decimalsMOR, tokenMOR } =
-    await loadFixture(deployProviderRegistry);
-  const expected = {
+  const { sessionRouter, providerRegistry, owner, provider, publicClient, decimalsMOR, tokenMOR } =
+    await loadFixture(deployDiamond);
+
+  const expectedProvider = {
     address: getAddress(provider.account.address),
     stake: parseUnits("100", decimalsMOR),
     endpoint: "https://bestprovider.com",
@@ -48,57 +104,38 @@ export async function deploySingleProvider() {
     isDeleted: false,
   };
 
-  await tokenMOR.write.transfer([provider.account.address, expected.stake * 100n], {
+  await tokenMOR.write.transfer([provider.account.address, expectedProvider.stake * 100n], {
     account: owner.account,
   });
 
-  await tokenMOR.write.approve([providerRegistry.address, expected.stake], {
+  await tokenMOR.write.approve([sessionRouter.address, expectedProvider.stake], {
     account: provider.account,
   });
 
-  const addProviderHash = await providerRegistry.write.register(
-    [expected.address, expected.stake, expected.endpoint],
+  const addProviderHash = await providerRegistry.write.providerRegister(
+    [expectedProvider.address, expectedProvider.stake, expectedProvider.endpoint],
     { account: provider.account }
   );
-
-  expected.timestamp = await getTxTimestamp(publicClient, addProviderHash);
+  expectedProvider.timestamp = await getTxTimestamp(publicClient, addProviderHash);
 
   return {
-    expected,
+    expectedProvider,
     providerRegistry,
+    sessionRouter,
     owner,
     provider,
     publicClient,
     tokenMOR,
     decimalsMOR,
-  };
-}
-
-export async function deployModelRegistry() {
-  const [owner, provider] = await hre.viem.getWalletClients();
-  const { tokenMOR, decimalsMOR } = await loadFixture(deployMORtoken);
-
-  // Contracts are deployed using the first signer/account by default
-  const modelRegistry = await hre.viem.deployContract("ModelRegistry", [], {});
-  await modelRegistry.write.initialize([tokenMOR.address]);
-
-  const publicClient = await hre.viem.getPublicClient();
-
-  return {
-    tokenMOR,
-    decimalsMOR,
-    modelRegistry,
-    owner,
-    provider,
-    publicClient,
   };
 }
 
 export async function deploySingleModel() {
-  const { modelRegistry, owner, provider, publicClient, tokenMOR } = await loadFixture(
-    deployModelRegistry
+  const { owner, provider, publicClient, tokenMOR, modelRegistry } = await loadFixture(
+    deployDiamond
   );
-  const expected = {
+
+  const expectedModel = {
     modelId: randomBytes32(),
     ipfsCID: getHex(Buffer.from("ipfs://ipfsaddress")),
     fee: 100n,
@@ -110,22 +147,22 @@ export async function deploySingleModel() {
     isDeleted: false,
   };
 
-  await tokenMOR.write.approve([modelRegistry.address, expected.stake]);
+  await tokenMOR.write.approve([modelRegistry.address, expectedModel.stake]);
 
-  const addProviderHash = await modelRegistry.write.register([
-    expected.modelId,
-    expected.ipfsCID,
-    expected.fee,
-    expected.stake,
-    expected.owner,
-    expected.name,
-    expected.tags,
+  const addProviderHash = await modelRegistry.write.modelRegister([
+    expectedModel.modelId,
+    expectedModel.ipfsCID,
+    expectedModel.fee,
+    expectedModel.stake,
+    expectedModel.owner,
+    expectedModel.name,
+    expectedModel.tags,
   ]);
 
-  expected.timestamp = await getTxTimestamp(publicClient, addProviderHash);
+  expectedModel.timestamp = await getTxTimestamp(publicClient, addProviderHash);
 
   return {
-    expected,
+    expectedModel,
     modelRegistry,
     owner,
     provider,
@@ -133,22 +170,26 @@ export async function deploySingleModel() {
     tokenMOR,
   };
 }
-
-export async function deployMarketplace() {
-  // deploy provider registry and deps
+export async function deploySingleBid() {
   const {
-    tokenMOR,
-    publicClient,
     owner,
-    expected: expectedProvider,
     provider,
-    providerRegistry,
+    publicClient,
+    tokenMOR,
+    modelRegistry,
+    user,
     decimalsMOR,
-  } = await loadFixture(deploySingleProvider);
+    marketplace,
+    sessionRouter,
+  } = await loadFixture(deployDiamond);
 
-  // deploy model registry
-  const modelRegistry = await hre.viem.deployContract("ModelRegistry", [], {});
-  await modelRegistry.write.initialize([tokenMOR.address]);
+  const expectedProvider = {
+    address: getAddress(provider.account.address),
+    stake: parseUnits("100", decimalsMOR),
+    endpoint: "https://bestprovider.com",
+    timestamp: 0n,
+    isDeleted: false,
+  };
 
   // add single model
   const expectedModel = {
@@ -164,7 +205,7 @@ export async function deployMarketplace() {
   };
 
   await tokenMOR.write.approve([modelRegistry.address, expectedModel.stake]);
-  const addProviderHash = await modelRegistry.write.register([
+  const addProviderHash = await modelRegistry.write.modelRegister([
     expectedModel.modelId,
     expectedModel.ipfsCID,
     expectedModel.fee,
@@ -176,81 +217,43 @@ export async function deployMarketplace() {
 
   expectedModel.timestamp = await getTxTimestamp(publicClient, addProviderHash);
 
-  // deploy staking
-  const [, , user] = await hre.viem.getWalletClients();
-
-  // deploy session router
-  const sessionRouter = await hre.viem.deployContract("SessionRouter", [], {});
-  await sessionRouter.write.initialize([
-    tokenMOR.address,
-    owner.account.address,
-    modelRegistry.address,
-    providerRegistry.address,
-  ]);
-
-  await tokenMOR.write.approve([sessionRouter.address, 10000n * 10n ** 18n]);
-  await tokenMOR.write.transfer([user.account.address, 10000n * 10n ** 18n]);
-
-  const expectedStake = {
-    stakeAmount: 1000n * 10n ** 18n,
-    account: user.account.address,
-    transferTo: user.account.address,
-    expectedStipend: 0n,
-    spendAmount: 0n,
-  };
-
-  const computeBalance = await sessionRouter.read.getComputeBalance();
-  const totalSupply = await tokenMOR.read.totalSupply();
-
-  expectedStake.expectedStipend =
-    ((computeBalance / 100n) * expectedStake.stakeAmount) / totalSupply;
-  expectedStake.spendAmount = expectedStake.expectedStipend / 4n;
-
-  await tokenMOR.write.approve([sessionRouter.address, 10000n * 10n ** 18n], {
-    account: expectedStake.account,
+  await tokenMOR.write.approve([modelRegistry.address, 10000n * 10n ** 18n]);
+  await tokenMOR.write.transfer([user.account.address, 100000n * 10n ** 18n]);
+  await tokenMOR.write.approve([modelRegistry.address, 10000000n * 10n ** 18n], {
+    account: user.account,
   });
-  await sessionRouter.write.stake([expectedStake.account, expectedStake.stakeAmount], {
-    account: expectedStake.account,
-  });
-
-  expectedStake.transferTo = sessionRouter.address;
 
   // expected bid
   const expectedBid = {
     id: "" as `0x${string}`,
     providerAddr: getAddress(expectedProvider.address),
     modelId: expectedModel.modelId,
-    amount: 10n,
+    pricePerSecond: 1n,
     nonce: 0n,
     createdAt: 0n,
     deletedAt: 0n,
   };
 
   // add single bid
-  const postBidtx = await sessionRouter.simulate.postModelBid(
-    [expectedBid.providerAddr, expectedBid.modelId, expectedBid.amount],
+  const postBidtx = await marketplace.simulate.postModelBid(
+    [expectedBid.providerAddr, expectedBid.modelId, expectedBid.pricePerSecond],
     { account: provider.account.address }
   );
-  const client = await hre.viem.getWalletClient(provider.account.address);
-  const txHash = await client.writeContract(postBidtx.request);
+  const txHash = await provider.writeContract(postBidtx.request);
 
   expectedBid.id = postBidtx.result;
   expectedBid.createdAt = await getTxTimestamp(publicClient, txHash);
 
   return {
+    expectedBid,
+    marketplace,
+    owner,
+    provider,
+    publicClient,
     tokenMOR,
     decimalsMOR,
     sessionRouter,
-    owner,
     user,
-    provider,
-    expectedBid,
-    expectedModel,
-    expectedProvider,
-    expectedStake,
-    publicClient,
-    modelRegistry,
-    providerRegistry,
   };
 }
 

@@ -2,8 +2,7 @@
 pragma solidity ^0.8.24;
 import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {KeySet} from "./KeySet.sol";
-import "hardhat/console.sol";
+import { KeySet } from "../libraries/KeySet.sol";
 
 contract AgentRegistry is OwnableUpgradeable {
   using KeySet for KeySet.Set;
