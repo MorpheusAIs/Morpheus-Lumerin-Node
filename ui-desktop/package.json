@@ -55,6 +55,7 @@
     "react-redux": "^9.1.0",
     "react-router-dom": "4.3.1",
     "react-select": "^5.8.0",
+    "react-textarea-autosize": "^8.5.3",
     "react-virtualized": "9.20.1",
     "redux": "4.2.0",
     "redux-actions": "2.3.0",

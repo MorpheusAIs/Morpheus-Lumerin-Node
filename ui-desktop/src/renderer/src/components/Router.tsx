@@ -7,6 +7,8 @@ import Dashboard from './dashboard/Dashboard'
 import Sidebar from './sidebar/Sidebar'
 import Marketplace from './contracts/Marketplace'
 import Chat from './chat/Chat';
+import { Models } from './models/Models'
+import { Agents } from './agents/Agents'
 
 // import Sockets from './sockets/Sockets'
 // import Reports from './reports/Reports'
@@ -59,6 +61,8 @@ export const Layout = () => (
         <Route path="/" exact render={() => <Redirect to="/wallet" />} />
         <Route path="/wallet" component={Dashboard} />
         <Route path="/chat" component={Chat} />
+        <Route path="/agents" component={Agents} />
+        <Route path="/models" component={Models} />
         {/* <Route path="/sockets" component={Sockets} />
         <Route path="/seller-hub" component={SellerHub} />
         <Route path="/buyer-hub" component={BuyerHub} /> */}

@@ -9,9 +9,9 @@ const LoginBtn = styled(BaseBtn)`
   font-size: 1.5rem;
   font-weight: bold;
   height: 40px;
-  border-radius: 5px;
-  background-color: ${(p) => p.theme.colors.primary};
-  color: ${(p) => p.theme.colors.light};
+  border-radius: 2px;
+  background-color: ${(p) => p.theme.colors.morMain};
+  color: black;
 
   @media (min-width: 1040px) {
     margin-left: 0;
