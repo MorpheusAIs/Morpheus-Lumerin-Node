@@ -1,21 +1,37 @@
-/* global ethers */
+import { Abi, AbiFunction, AbiItem, toFunctionHash } from "viem";
 
-export const FacetCutAction = { Add: 0, Replace: 1, Remove: 2 };
+export const FacetCutAction = {
+  Add: 0,
+  Replace: 1,
+  Remove: 2,
+};
+
+export function isFunctionExceptInitAbi(abi: AbiItem): abi is AbiFunction {
+  return abi.type === "function" && abi.name !== "init";
+}
 
 // get function selectors from ABI
-export function getSelectors(contract) {
-  const signatures = Object.keys(contract.interface.functions);
-  const selectors = signatures.reduce((acc, val) => {
-    if (val !== "init(bytes)") {
-      acc.push(contract.interface.getSighash(val));
-    }
-    return acc;
-  }, []);
-  selectors.contract = contract;
-  selectors.remove = remove;
-  selectors.get = get;
-  return selectors;
+export function getSelectors(abi: Abi) {
+  return abi.filter(isFunctionExceptInitAbi).map((item) => {
+    const hash = toFunctionHash(item);
+    // return "0x" + 4 bytes of the hash
+    return hash.slice(0, 2 + 8);
+  });
 }
+
+// export function getSelectors(contract) {
+//   const signatures = Object.keys(contract.interface.functions);
+//   const selectors = signatures.reduce((acc, val) => {
+//     if (val !== "init(bytes)") {
+//       acc.push(contract.interface.getSighash(val));
+//     }
+//     return acc;
+//   }, []);
+//   selectors.contract = contract;
+//   selectors.remove = remove;
+//   selectors.get = get;
+//   return selectors;
+// }
 
 // get function selector from function signature
 export function getSelector(func) {
@@ -59,7 +75,9 @@ export function get(functionNames) {
 
 // remove selectors using an array of signatures
 export function removeSelectors(selectors, signatures) {
-  const iface = new ethers.utils.Interface(signatures.map((v) => "function " + v));
+  const iface = new ethers.utils.Interface(
+    signatures.map((v) => "function " + v),
+  );
   const removeSelectors = signatures.map((v) => iface.getSighash(v));
   selectors = selectors.filter((v) => !removeSelectors.includes(v));
   return selectors;

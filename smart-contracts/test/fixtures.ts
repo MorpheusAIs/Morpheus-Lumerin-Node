@@ -1,8 +1,8 @@
 import hre from "hardhat";
 import { encodeFunctionData, encodePacked, getAddress, parseUnits } from "viem/utils";
-import { getHex, getSelectors, getTxTimestamp, randomBytes32 } from "./utils";
+import { getHex, getTxTimestamp, randomBytes32 } from "./utils";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { FacetCutAction } from "../libraries/diamond";
+import { FacetCutAction, getSelectors } from "../libraries/diamond";
 
 export async function deployMORtoken() {
   const [owner] = await hre.viem.getWalletClients();
