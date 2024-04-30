@@ -3,12 +3,10 @@ package config
 import (
 	"runtime"
 	"strings"
-	"time"
 )
 
 type DerivedConfig struct {
-	WalletAddress  string
-	LumerinAddress string
+	WalletAddress string
 }
 
 // Validation tags described here: https://pkg.go.dev/github.com/go-playground/validator/v10
@@ -18,22 +16,10 @@ type Config struct {
 		EthLegacyTx    bool   `env:"ETH_NODE_LEGACY_TX" flag:"eth-node-legacy-tx" desc:"use it to disable EIP-1559 transactions"`
 	}
 	Environment string `env:"ENVIRONMENT" flag:"environment"`
-	Hashrate    struct {
-		CycleDuration     time.Duration `env:"HASHRATE_CYCLE_DURATION"           flag:"hashrate-cycle-duration"           validate:"omitempty,duration" desc:"duration of the hashrate cycle, after which the hashrate is evaluated, applies to both seller and buyer"`
-		ErrorThreshold    float64       `env:"HASHRATE_ERROR_THRESHOLD"          flag:"hashrate-error-threshold"                                        desc:"hashrate relative error threshold for the contract to be considered fulfilling accurately, applies for buyer"`
-		ErrorTimeout      time.Duration `env:"HASHRATE_ERROR_TIMEOUT"            flag:"hashrate-error-timeout"            validate:"omitempty,duration" desc:"time to wait for for the hashrate to fall within acceptable limits, otherwise close contract, applies for buyer"`
-		ShareTimeout      time.Duration `env:"HASHRATE_SHARE_TIMEOUT"            flag:"hashrate-share-timeout"            validate:"omitempty,duration" desc:"time to wait for the share to arrive, otherwise close contract, applies for buyer"`
-		ValidatorFlatness time.Duration `env:"HASHRATE_VALIDATION_FLATNESS"      flag:"hashrate-validation-flatness"      validate:"omitempty,duration" desc:"artificial parameter of validation function, applies for buyer"`
-	}
 	Marketplace struct {
 		CloneFactoryAddress string `env:"CLONE_FACTORY_ADDRESS" flag:"contract-address"   validate:"required_if=Disable false,omitempty,eth_addr"`
 		Mnemonic            string `env:"CONTRACT_MNEMONIC"     flag:"contract-mnemonic"  validate:"required_without=WalletPrivateKey|required_if=Disable false"`
 		WalletPrivateKey    string `env:"WALLET_PRIVATE_KEY"    flag:"wallet-private-key" validate:"required_without=Mnemonic|required_if=Disable false"`
-	}
-	Miner struct {
-		NotPropagateWorkerName bool          `env:"MINER_NOT_PROPAGATE_WORKER_NAME" flag:"miner-not-propagate-worker-name"     validate:""                      desc:"not preserve worker name from the source in the destination pool. Preserving works only if the source miner worker name is defined as 'accountName.workerName'. Does not apply for contracts"`
-		IdleReadTimeout        time.Duration `env:"MINER_IDLE_READ_TIMEOUT"         flag:"miner-idle-read-timeout"             validate:"omitempty,duration"    desc:"closes connection if no read operation performed for this duration (e.g. no share submitted)"`
-		VettingShares          int           `env:"MINER_VETTING_SHARES"            flag:"miner-vetting-shares"                validate:"omitempty,number"`
 	}
 	Log struct {
 		Color           bool   `env:"LOG_COLOR"            flag:"log-color"`
@@ -45,11 +31,6 @@ type Config struct {
 		LevelProxy      string `env:"LOG_LEVEL_PROXY"      flag:"log-level-proxy"      validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
 		LevelScheduler  string `env:"LOG_LEVEL_SCHEDULER"  flag:"log-level-scheduler"  validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
 		LevelContract   string `env:"LOG_LEVEL_CONTRACT"   flag:"log-level-contract"   validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
-	}
-	Pool struct {
-		Address          string        `env:"POOL_ADDRESS" flag:"pool-address" validate:"required,uri"`
-		CleanJobTimeout  time.Duration `env:"POOL_CLEAN_JOB_TIMEOUT" flag:"pool-clean-job-timeout" validate:"duration" desc:"duration after which jobs are removed from the cache after receiving clean_jobs flag from the pool notify message"`
-		IdleWriteTimeout time.Duration `env:"POOL_IDLE_WRITE_TIMEOUT" flag:"pool-idle-write-timeout" validate:"duration" desc:"if there are no writes for this duration, the connection is going to be closed"`
 	}
 	Proxy struct {
 		Address        string `env:"PROXY_ADDRESS" flag:"proxy-address" validate:"required,hostname_port"`
@@ -75,36 +56,11 @@ func (cfg *Config) SetDefaults() {
 		cfg.Environment = "development"
 	}
 
-	// Hashrate
-
-	if cfg.Hashrate.CycleDuration == 0 {
-		cfg.Hashrate.CycleDuration = 5 * time.Minute
-	}
-	if cfg.Hashrate.ShareTimeout == 0 {
-		cfg.Hashrate.ShareTimeout = 7 * time.Minute
-	}
-	if cfg.Hashrate.ErrorThreshold == 0 {
-		cfg.Hashrate.ErrorThreshold = 0.05
-	}
-	if cfg.Hashrate.ValidatorFlatness == 0 {
-		cfg.Hashrate.ValidatorFlatness = 20 * time.Minute
-	}
-
 	// Marketplace
 
 	// normalizes private key
 	// TODO: convert and validate to ecies.PrivateKey
 	cfg.Marketplace.WalletPrivateKey = strings.TrimPrefix(cfg.Marketplace.WalletPrivateKey, "0x")
-
-	// Miner
-
-	if cfg.Miner.VettingShares == 0 {
-		cfg.Miner.VettingShares = 2
-	}
-
-	if cfg.Miner.IdleReadTimeout == 0 {
-		cfg.Miner.IdleReadTimeout = 10 * time.Minute
-	}
 
 	// Log
 
@@ -122,14 +78,6 @@ func (cfg *Config) SetDefaults() {
 	}
 	if cfg.Log.LevelApp == "" {
 		cfg.Log.LevelApp = "debug"
-	}
-
-	// Pool
-	if cfg.Pool.IdleWriteTimeout == 0 {
-		cfg.Pool.IdleWriteTimeout = 10 * time.Minute
-	}
-	if cfg.Pool.CleanJobTimeout == 0 {
-		cfg.Pool.CleanJobTimeout = 2 * time.Minute
 	}
 
 	// Proxy
@@ -187,17 +135,7 @@ func (cfg *Config) GetSanitized() interface{} {
 	publicCfg.Blockchain.EthLegacyTx = cfg.Blockchain.EthLegacyTx
 	publicCfg.Environment = cfg.Environment
 
-	publicCfg.Hashrate.CycleDuration = cfg.Hashrate.CycleDuration
-	publicCfg.Hashrate.ErrorThreshold = cfg.Hashrate.ErrorThreshold
-	publicCfg.Hashrate.ErrorTimeout = cfg.Hashrate.ErrorTimeout
-	publicCfg.Hashrate.ShareTimeout = cfg.Hashrate.ShareTimeout
-	publicCfg.Hashrate.ValidatorFlatness = cfg.Hashrate.ValidatorFlatness
-
 	publicCfg.Marketplace.CloneFactoryAddress = cfg.Marketplace.CloneFactoryAddress
-
-	publicCfg.Miner.NotPropagateWorkerName = cfg.Miner.NotPropagateWorkerName
-	publicCfg.Miner.IdleReadTimeout = cfg.Miner.IdleReadTimeout
-	publicCfg.Miner.VettingShares = cfg.Miner.VettingShares
 
 	publicCfg.Log.Color = cfg.Log.Color
 	publicCfg.Log.FolderPath = cfg.Log.FolderPath
@@ -207,9 +145,6 @@ func (cfg *Config) GetSanitized() interface{} {
 	publicCfg.Log.LevelConnection = cfg.Log.LevelConnection
 	publicCfg.Log.LevelProxy = cfg.Log.LevelProxy
 	publicCfg.Log.LevelScheduler = cfg.Log.LevelScheduler
-
-	publicCfg.Pool.Address = cfg.Pool.Address
-	publicCfg.Pool.IdleWriteTimeout = cfg.Pool.IdleWriteTimeout
 
 	publicCfg.Proxy.Address = cfg.Proxy.Address
 	publicCfg.Proxy.MaxCachedDests = cfg.Proxy.MaxCachedDests

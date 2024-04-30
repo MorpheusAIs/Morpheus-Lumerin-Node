@@ -10,22 +10,19 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/aiengine"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/apibus"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/config"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/handlers/httphandlers"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/handlers/tcphandlers"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/morrpc"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/proxyapi"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/transport"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/rpcproxy"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/system"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"gitlab.com/TitanInd/proxy/proxy-router-v3/internal/config"
-	"gitlab.com/TitanInd/proxy/proxy-router-v3/internal/contractmanager"
-	"gitlab.com/TitanInd/proxy/proxy-router-v3/internal/handlers/httphandlers"
-	"gitlab.com/TitanInd/proxy/proxy-router-v3/internal/handlers/tcphandlers"
-	"gitlab.com/TitanInd/proxy/proxy-router-v3/internal/interfaces"
-	"gitlab.com/TitanInd/proxy/proxy-router-v3/internal/lib"
-	"gitlab.com/TitanInd/proxy/proxy-router-v3/internal/repositories/contracts"
-	"gitlab.com/TitanInd/proxy/proxy-router-v3/internal/repositories/transport"
-	"gitlab.com/TitanInd/proxy/proxy-router-v3/internal/resources/hashrate/allocator"
-	"gitlab.com/TitanInd/proxy/proxy-router-v3/internal/resources/hashrate/contract"
-	"gitlab.com/TitanInd/proxy/proxy-router-v3/internal/resources/hashrate/hashrate"
-	"gitlab.com/TitanInd/proxy/proxy-router-v3/internal/resources/hashrate/proxy"
-	"gitlab.com/TitanInd/proxy/proxy-router-v3/internal/resources/hashrate/validator"
-	"gitlab.com/TitanInd/proxy/proxy-router-v3/internal/system"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -55,11 +52,6 @@ func start() error {
 	}
 
 	fmt.Printf("Loaded config: %+v\n", cfg.GetSanitized())
-
-	destUrl, err := url.Parse(cfg.Pool.Address)
-	if err != nil {
-		return err
-	}
 
 	mainLogFilePath := ""
 	logFolderPath := ""
@@ -102,15 +94,15 @@ func start() error {
 
 	contractLogStorage := lib.NewCollection[*interfaces.LogStorage]()
 
-	contractLogFactory := func(contractID string) (interfaces.ILogger, error) {
-		logStorage := interfaces.NewLogStorage(contractID)
-		contractLogStorage.Store(logStorage)
-		fp := ""
-		if logFolderPath != "" {
-			fp = filepath.Join(logFolderPath, fmt.Sprintf("contract-%s.log", lib.SanitizeFilename(lib.StrShort(contractID))))
-		}
-		return lib.NewLoggerMemory(cfg.Log.LevelContract, cfg.Log.Color, cfg.Log.IsProd, cfg.Log.JSON, fp, logStorage.Buffer)
-	}
+	// contractLogFactory := func(contractID string) (interfaces.ILogger, error) {
+	// 	logStorage := interfaces.NewLogStorage(contractID)
+	// 	contractLogStorage.Store(logStorage)
+	// 	fp := ""
+	// 	if logFolderPath != "" {
+	// 		fp = filepath.Join(logFolderPath, fmt.Sprintf("contract-%s.log", lib.SanitizeFilename(lib.StrShort(contractID))))
+	// 	}
+	// 	return lib.NewLoggerMemory(cfg.Log.LevelContract, cfg.Log.Color, cfg.Log.IsProd, cfg.Log.JSON, fp, logStorage.Buffer)
+	// }
 
 	defer func() {
 		_ = connLog.Close()
@@ -168,58 +160,17 @@ func start() error {
 		os.Exit(1)
 	}()
 
-	var (
-		HashrateCounterDefault = "ema--5m"
-		HashrateCounterBuyer   = hashrate.MeanCounterKey
-	)
-
-	hashrateFactory := func() *hashrate.Hashrate {
-		return hashrate.NewHashrate(
-			map[string]hashrate.Counter{
-				HashrateCounterDefault: hashrate.NewEma(5 * time.Minute),
-				"ema-10m":              hashrate.NewEma(10 * time.Minute),
-				"ema-30m":              hashrate.NewEma(30 * time.Minute),
-				HashrateCounterBuyer:   hashrate.NewMean(),
-			},
-		)
-	}
-
-	destFactory := func(ctx context.Context, url *url.URL, srcWorker string, srcAddr string) (*proxy.ConnDest, error) {
-		validator := validator.NewValidator(cfg.Pool.CleanJobTimeout)
-		return proxy.ConnectDest(ctx, url, validator, IDLE_READ_CLOSE_TIMEOUT, cfg.Pool.IdleWriteTimeout, connLog.With("SrcWorker", srcWorker, "SrcAddr", srcAddr))
-	}
-
-	globalHashrate := hashrate.NewGlobalHashrate(hashrateFactory)
-	alloc := allocator.NewAllocator(lib.NewCollection[*allocator.Scheduler](), log.Named("ALC"))
-
 	ethClient, err := ethclient.DialContext(ctx, cfg.Blockchain.EthNodeAddress)
 	if err != nil {
 		return lib.WrapError(ErrConnectToEthNode, err)
 	}
+	block, err := ethClient.BlockNumber(ctx)
+	if err != nil {
+		return lib.WrapError(ErrConnectToEthNode, err)
+	}
+	appLog.Infof("connected to ethereum node: %s, block: %d", cfg.Blockchain.EthNodeAddress, block)
 
 	publicUrl, err := url.Parse(cfg.Web.PublicUrl)
-	if err != nil {
-		return err
-	}
-
-	store := contracts.NewHashrateEthereum(common.HexToAddress(cfg.Marketplace.CloneFactoryAddress), ethClient, log)
-
-	store.SetLegacyTx(cfg.Blockchain.EthLegacyTx)
-
-	hrContractFactory, err := contract.NewContractFactory(
-		alloc,
-		hashrateFactory,
-		globalHashrate,
-		store,
-		contractLogFactory,
-
-		cfg.Marketplace.WalletPrivateKey,
-		cfg.Hashrate.CycleDuration,
-		cfg.Hashrate.ShareTimeout,
-		cfg.Hashrate.ErrorThreshold,
-		HashrateCounterBuyer,
-		cfg.Hashrate.ValidatorFlatness,
-	)
 	if err != nil {
 		return err
 	}
@@ -228,44 +179,37 @@ func start() error {
 	if err != nil {
 		return err
 	}
-	lumerinAddr, err := store.GetLumerinAddress(ctx)
-	if err != nil {
-		return err
-	}
 
 	appLog.Infof("wallet address: %s", walletAddr.String())
-	appLog.Infof("lumerin address: %s", lumerinAddr.String())
 
 	derived := new(config.DerivedConfig)
 	derived.WalletAddress = walletAddr.String()
-	derived.LumerinAddress = lumerinAddr.String()
 
-	cm := contractmanager.NewContractManager(common.HexToAddress(cfg.Marketplace.CloneFactoryAddress), walletAddr, hrContractFactory.CreateContract, store, log.Named("MNG"))
+	publicKey, err := lib.PubKeyStringFromPrivate(cfg.Marketplace.WalletPrivateKey)
+	if err != nil {
+		appLog.Errorf("failed to get public key: %s", err)
+		return err
+	}
 
 	tcpServer := transport.NewTCPServer(cfg.Proxy.Address, connLog.Named("TCP"))
+	morTcpHandler := tcphandlers.NewMorRpcHandler(cfg.Marketplace.WalletPrivateKey, publicKey, derived.WalletAddress, morrpc.NewMorRpc())
 	tcpHandler := tcphandlers.NewTCPHandler(
-		log, connLog, proxyLog, schedulerLogFactory,
-		cfg.Miner.NotPropagateWorkerName, cfg.Miner.IdleReadTimeout, IDLE_WRITE_CLOSE_TIMEOUT,
-		cfg.Miner.VettingShares, cfg.Proxy.MaxCachedDests,
-		destUrl,
-		destFactory, hashrateFactory,
-		globalHashrate, HashrateCounterDefault,
-		alloc,
-		cm.GetContract,
+		log, connLog, schedulerLogFactory, morTcpHandler,
 	)
 	tcpServer.SetConnectionHandler(tcpHandler)
 
-	handl := httphandlers.NewHTTPHandler(alloc, cm, globalHashrate, sysConfig, publicUrl, HashrateCounterDefault, cfg.Hashrate.CycleDuration, &cfg, derived, time.Now(), contractLogStorage, log)
-	httpServer := transport.NewServer(cfg.Web.Address, handl, log.Named("HTP"))
+	proxyRouterApi := proxyapi.NewProxyRouterApi(sysConfig, publicUrl, publicKey, cfg.Marketplace.WalletPrivateKey, &cfg, derived, time.Now(), contractLogStorage, log)
+	rpcProxy := rpcproxy.NewRpcProxy(ethClient)
+	aiEngine := aiengine.NewAiEngine()
+	apiBus := apibus.NewApiBus(rpcProxy, aiEngine, proxyRouterApi)
+
+	handl := httphandlers.NewHTTPHandler(apiBus)
+	httpServer := transport.NewServer(cfg.Web.Address, handl, log.Named("HTTP"))
 
 	ctx, cancel = context.WithCancel(ctx)
 	g, errCtx := errgroup.WithContext(ctx)
 	g.Go(func() error {
 		return tcpServer.Run(errCtx)
-	})
-
-	g.Go(func() error {
-		return cm.Run(errCtx)
 	})
 
 	g.Go(func() error {
