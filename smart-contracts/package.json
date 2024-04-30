@@ -6,8 +6,13 @@
   "scripts": {
     "compile": "hardhat compile",
     "test": "hardhat test",
-    "coverage": "hardhat coverage",
-    "verify": "hardhat verify"
+    "test:gas": "REPORT_GAS=true hardhat test",
+    "coverage": "SOLIDITY_COVERAGE=true hardhat coverage",
+    "report": "open ./coverage/index.html",
+    "verify": "hardhat verify",
+    "bindings-go": "hardhat gobind",
+    "node-local": "hardhat node",
+    "deploy-local": "hardhat run --network localhost scripts/deploy-local.ts"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ignition": "^0.15.0",
