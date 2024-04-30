@@ -8,6 +8,7 @@ import { LibOwner } from "../libraries/LibOwner.sol";
 
 contract ProviderRegistry {
   using AddressSet for AddressSet.Set;
+  
   AppStorage internal s;
 
   event ProviderRegisteredUpdated(address indexed provider);
@@ -16,16 +17,8 @@ contract ProviderRegistry {
 
   error StakeTooLow();
 
-  function providerMap(
-    address addr
-  ) public view returns (string memory, uint256, uint128, bool) {
-    Provider memory provider = s.providerMap[addr];
-    return (
-      provider.endpoint,
-      provider.stake,
-      provider.timestamp,
-      provider.isDeleted
-    );
+  function providerMap(address addr) public view returns (Provider memory) {
+    return s.providerMap[addr];
   }
 
   function providers(uint256 index) public view returns (address) {

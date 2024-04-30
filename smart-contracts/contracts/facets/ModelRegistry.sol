@@ -11,30 +11,15 @@ contract ModelRegistry {
 
   AppStorage internal s;
 
-  error ModelNotFound();
-  error StakeTooLow();
-
   event ModelRegisteredUpdated(address indexed owner, bytes32 indexed modelId);
   event ModelDeregistered(address indexed owner, bytes32 indexed modelId);
   event ModelMinStakeUpdated(uint256 newStake);
 
-  function modelMap(
-    bytes32 id
-  )
-    public
-    view
-    returns (bytes32, uint256, uint256, address, string memory, uint128, bool)
-  {
-    Model memory model = s.modelMap[id];
-    return (
-      model.ipfsCID,
-      model.fee,
-      model.stake,
-      model.owner,
-      model.name,
-      model.timestamp,
-      model.isDeleted
-    );
+  error ModelNotFound();
+  error StakeTooLow();
+
+  function modelMap(bytes32 id) public view returns (Model memory) {
+    return s.modelMap[id];
   }
 
   function models(uint256 index) public view returns (bytes32) {

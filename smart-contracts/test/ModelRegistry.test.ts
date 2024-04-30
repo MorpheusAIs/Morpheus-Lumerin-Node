@@ -14,7 +14,8 @@ describe("Model registry", function () {
     });
 
     it("Should register", async function () {
-      const { modelRegistry, expectedModel } = await loadFixture(deploySingleModel);
+      const { modelRegistry, expectedModel } =
+        await loadFixture(deploySingleModel);
       const data = await modelRegistry.read.modelMap([expectedModel.modelId]);
       const events = await modelRegistry.getEvents.ModelRegisteredUpdated({
         modelId: expectedModel.modelId,
@@ -23,16 +24,16 @@ describe("Model registry", function () {
 
       expect(await modelRegistry.read.modelGetCount()).eq(1n);
       expect(await modelRegistry.read.models([0n])).eq(expectedModel.modelId);
-      expect(data).deep.equal([
-        expectedModel.ipfsCID,
-        expectedModel.fee,
-        expectedModel.stake,
-        getAddress(expectedModel.owner),
-        expectedModel.name,
-        // expectedModel.tags,
-        expectedModel.timestamp,
-        expectedModel.isDeleted,
-      ]);
+      expect(data).deep.equal({
+        ipfsCID: expectedModel.ipfsCID,
+        fee: expectedModel.fee,
+        stake: expectedModel.stake,
+        owner: getAddress(expectedModel.owner),
+        name: expectedModel.name,
+        tags: expectedModel.tags,
+        timestamp: expectedModel.timestamp,
+        isDeleted: expectedModel.isDeleted,
+      });
       expect(events.length).eq(1);
     });
 
@@ -57,7 +58,8 @@ describe("Model registry", function () {
     });
 
     it("Should error when registering with insufficient allowance", async function () {
-      const { modelRegistry, owner, tokenMOR } = await loadFixture(deployDiamond);
+      const { modelRegistry, owner, tokenMOR } =
+        await loadFixture(deployDiamond);
       try {
         await modelRegistry.simulate.modelRegister([
           randomBytes32(),
@@ -81,10 +83,18 @@ describe("Model registry", function () {
       await tokenMOR.write.approve([modelRegistry.address, 100n]);
       try {
         await modelRegistry.simulate.modelRegister(
-          [randomBytes32(), randomBytes32(), 0n, 100n, randomAddress(), "a", []],
+          [
+            randomBytes32(),
+            randomBytes32(),
+            0n,
+            100n,
+            randomAddress(),
+            "a",
+            [],
+          ],
           {
             account: user.account.address,
-          }
+          },
         );
         expect.fail("Expected error");
       } catch (e) {
@@ -93,7 +103,8 @@ describe("Model registry", function () {
     });
 
     it("Should deregister by owner", async function () {
-      const { modelRegistry, owner, expectedModel } = await loadFixture(deploySingleModel);
+      const { modelRegistry, owner, expectedModel } =
+        await loadFixture(deploySingleModel);
 
       await modelRegistry.write.modelDeregister([expectedModel.modelId], {
         account: owner.account,
@@ -104,16 +115,21 @@ describe("Model registry", function () {
       });
 
       expect(await modelRegistry.read.modelGetCount()).eq(0n);
-      expect((await modelRegistry.read.modelMap([expectedModel.modelId]))[6]).to.equal(true); // 7 is index of isDeleted field
+      expect(
+        (await modelRegistry.read.modelMap([expectedModel.modelId])).isDeleted,
+      ).to.equal(true);
       expect(events.length).eq(1);
       await expect(modelRegistry.read.modelGetByIndex([0n])).rejectedWith(
-        /.*reverted with panic code 0x32 (Array accessed at an out-of-bounds or negative index)*/
+        /.*reverted with panic code 0x32 (Array accessed at an out-of-bounds or negative index)*/,
       );
-      expect(await modelRegistry.read.models([0n])).equals(expectedModel.modelId);
+      expect(await modelRegistry.read.models([0n])).equals(
+        expectedModel.modelId,
+      );
     });
 
     it("Should deregister by admin", async function () {
-      const { modelRegistry, owner, expectedModel } = await loadFixture(deploySingleModel);
+      const { modelRegistry, owner, expectedModel } =
+        await loadFixture(deploySingleModel);
 
       await modelRegistry.write.modelDeregister([expectedModel.modelId], {
         account: owner.account,
@@ -139,9 +155,12 @@ describe("Model registry", function () {
     });
 
     it("Should return stake on deregister", async function () {
-      const { modelRegistry, tokenMOR, expectedModel } = await loadFixture(deploySingleModel);
+      const { modelRegistry, tokenMOR, expectedModel } =
+        await loadFixture(deploySingleModel);
 
-      const balanceBefore = await tokenMOR.read.balanceOf([expectedModel.owner]);
+      const balanceBefore = await tokenMOR.read.balanceOf([
+        expectedModel.owner,
+      ]);
       await modelRegistry.write.modelDeregister([expectedModel.modelId]);
       const balanceAfter = await tokenMOR.read.balanceOf([expectedModel.owner]);
 
@@ -149,8 +168,14 @@ describe("Model registry", function () {
     });
 
     it("Should update existing model", async function () {
-      const { modelRegistry, provider, tokenMOR, expectedModel, publicClient, owner } =
-        await loadFixture(deploySingleModel);
+      const {
+        modelRegistry,
+        provider,
+        tokenMOR,
+        expectedModel,
+        publicClient,
+        owner,
+      } = await loadFixture(deploySingleModel);
       const updates = {
         ipfsCID: getHex(Buffer.from("ipfs://new-ipfsaddress")),
         fee: expectedModel.fee * 2n,
@@ -173,24 +198,25 @@ describe("Model registry", function () {
         updates.tags,
       ]);
       const timestamp = await getTxTimestamp(publicClient, txHash);
-      const providerData = await modelRegistry.read.modelMap([expectedModel.modelId]);
-
-      expect(providerData).deep.equal([
-        updates.ipfsCID,
-        updates.fee,
-        expectedModel.stake + updates.addStake,
-        getAddress(updates.owner),
-        updates.name,
-        // expectedModel.tags,
-        timestamp,
-        expectedModel.isDeleted,
+      const providerData = await modelRegistry.read.modelMap([
+        expectedModel.modelId,
       ]);
+
+      expect(providerData).deep.equal({
+        ipfsCID: updates.ipfsCID,
+        fee: updates.fee,
+        stake: expectedModel.stake + updates.addStake,
+        owner: getAddress(updates.owner),
+        name: updates.name,
+        tags: updates.tags,
+        timestamp: timestamp,
+        isDeleted: expectedModel.isDeleted,
+      });
     });
 
     it("Should emit event on update", async function () {
-      const { modelRegistry, provider, tokenMOR, expectedModel, owner } = await loadFixture(
-        deploySingleModel
-      );
+      const { modelRegistry, provider, tokenMOR, expectedModel, owner } =
+        await loadFixture(deploySingleModel);
       const updates = {
         ipfsCID: getHex(Buffer.from("ipfs://new-ipfsaddress")),
         fee: expectedModel.fee * 2n,
@@ -221,8 +247,11 @@ describe("Model registry", function () {
 
   describe("Getters", function () {
     it("Should get by index", async function () {
-      const { modelRegistry, provider, expectedModel } = await loadFixture(deploySingleModel);
-      const [modelId, providerData] = await modelRegistry.read.modelGetByIndex([0n]);
+      const { modelRegistry, provider, expectedModel } =
+        await loadFixture(deploySingleModel);
+      const [modelId, providerData] = await modelRegistry.read.modelGetByIndex([
+        0n,
+      ]);
 
       expect(modelId).eq(expectedModel.modelId);
       expect(providerData).deep.equal({
@@ -238,19 +267,22 @@ describe("Model registry", function () {
     });
 
     it("Should get by address", async function () {
-      const { modelRegistry, provider, expectedModel } = await loadFixture(deploySingleModel);
+      const { modelRegistry, provider, expectedModel } =
+        await loadFixture(deploySingleModel);
 
-      const providerData = await modelRegistry.read.modelMap([expectedModel.modelId]);
-      expect(providerData).deep.equal([
-        expectedModel.ipfsCID,
-        expectedModel.fee,
-        expectedModel.stake,
-        getAddress(expectedModel.owner),
-        expectedModel.name,
-        // expectedModel.tags,
-        expectedModel.timestamp,
-        expectedModel.isDeleted,
+      const providerData = await modelRegistry.read.modelMap([
+        expectedModel.modelId,
       ]);
+      expect(providerData).deep.equal({
+        ipfsCID: expectedModel.ipfsCID,
+        fee: expectedModel.fee,
+        stake: expectedModel.stake,
+        owner: getAddress(expectedModel.owner),
+        name: expectedModel.name,
+        tags: expectedModel.tags,
+        timestamp: expectedModel.timestamp,
+        isDeleted: expectedModel.isDeleted,
+      });
     });
   });
 
@@ -259,7 +291,9 @@ describe("Model registry", function () {
       const { modelRegistry, owner } = await loadFixture(deployDiamond);
       const minStake = 100n;
 
-      await modelRegistry.write.modelSetMinStake([minStake], { account: owner.account });
+      await modelRegistry.write.modelSetMinStake([minStake], {
+        account: owner.account,
+      });
       const events = await modelRegistry.getEvents.ModelMinStakeUpdated();
       expect(await modelRegistry.read.modelMinStake()).eq(minStake);
       expect(events.length).eq(1);
@@ -269,13 +303,15 @@ describe("Model registry", function () {
     it("Should error when not owner is setting min stake", async function () {
       const { modelRegistry, provider } = await loadFixture(deploySingleModel);
       try {
-        await modelRegistry.write.modelSetMinStake([100n], { account: provider.account });
+        await modelRegistry.write.modelSetMinStake([100n], {
+          account: provider.account,
+        });
         expect.fail("Expected error");
       } catch (e) {
         expectError(
           e,
           (await hre.artifacts.readArtifact("OwnershipFacet")).abi,
-          "NotContractOwner"
+          "NotContractOwner",
         );
       }
     });
