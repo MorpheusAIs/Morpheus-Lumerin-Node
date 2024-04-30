@@ -201,10 +201,10 @@ func start() error {
 
 	providerRegistryAddr := common.HexToAddress(cfg.Marketplace.ProviderRegistryAddress)
 	modelRegistryAddr := common.HexToAddress(cfg.Marketplace.ModelRegistryAddress)
-	makertplaceAddr := common.HexToAddress(cfg.Marketplace.MarketplaceAddress)
+	marketplaceAddr := common.HexToAddress(cfg.Marketplace.MarketplaceAddress)
 
 	proxyRouterApi := proxyapi.NewProxyRouterApi(sysConfig, publicUrl, publicKey, cfg.Marketplace.WalletPrivateKey, &cfg, derived, time.Now(), contractLogStorage, log)
-	rpcProxy := rpcproxy.NewRpcProxy(ethClient, providerRegistryAddr, modelRegistryAddr, makertplaceAddr, proxyLog)
+	rpcProxy := rpcproxy.NewRpcProxy(ethClient, providerRegistryAddr, modelRegistryAddr, marketplaceAddr, proxyLog)
 	aiEngine := aiengine.NewAiEngine()
 	apiBus := apibus.NewApiBus(rpcProxy, aiEngine, proxyRouterApi)
 

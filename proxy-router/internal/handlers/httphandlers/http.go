@@ -50,7 +50,7 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 			return
 		}
 
-		status, bids := apiBus.GetBidsByProdiver(ctx, providerId, offset, limit)
+		status, bids := apiBus.GetBidsByProvider(ctx, providerId, offset, limit)
 		ctx.JSON(status, bids)
 	}))
 
