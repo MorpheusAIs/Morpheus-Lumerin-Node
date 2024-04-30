@@ -17,10 +17,12 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/handlers/tcphandlers"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/morrpc"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/proxyapi"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/transport"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/rpcproxy"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/system"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"golang.org/x/sync/errgroup"
 )
@@ -184,14 +186,25 @@ func start() error {
 	derived := new(config.DerivedConfig)
 	derived.WalletAddress = walletAddr.String()
 
+	publicKey, err := lib.PubKeyStringFromPrivate(cfg.Marketplace.WalletPrivateKey)
+	if err != nil {
+		appLog.Errorf("failed to get public key: %s", err)
+		return err
+	}
+
 	tcpServer := transport.NewTCPServer(cfg.Proxy.Address, connLog.Named("TCP"))
+	morTcpHandler := tcphandlers.NewMorRpcHandler(cfg.Marketplace.WalletPrivateKey, publicKey, derived.WalletAddress, morrpc.NewMorRpc())
 	tcpHandler := tcphandlers.NewTCPHandler(
-		log, connLog, schedulerLogFactory,
+		log, connLog, schedulerLogFactory, morTcpHandler,
 	)
 	tcpServer.SetConnectionHandler(tcpHandler)
 
-	proxyRouterApi := proxyapi.NewProxyRouterApi(sysConfig, publicUrl, cfg.Marketplace.WalletPrivateKey, &cfg, derived, time.Now(), contractLogStorage, log)
-	rpcProxy := rpcproxy.NewRpcProxy(ethClient)
+	providerRegistryAddr := common.HexToAddress(cfg.Marketplace.ProviderRegistryAddress)
+	modelRegistryAddr := common.HexToAddress(cfg.Marketplace.ModelRegistryAddress)
+	marketplaceAddr := common.HexToAddress(cfg.Marketplace.MarketplaceAddress)
+
+	proxyRouterApi := proxyapi.NewProxyRouterApi(sysConfig, publicUrl, publicKey, cfg.Marketplace.WalletPrivateKey, &cfg, derived, time.Now(), contractLogStorage, log)
+	rpcProxy := rpcproxy.NewRpcProxy(ethClient, providerRegistryAddr, modelRegistryAddr, marketplaceAddr, proxyLog)
 	aiEngine := aiengine.NewAiEngine()
 	apiBus := apibus.NewApiBus(rpcProxy, aiEngine, proxyRouterApi)
 
