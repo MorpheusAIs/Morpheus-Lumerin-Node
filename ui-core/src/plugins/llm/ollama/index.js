@@ -1,18 +1,18 @@
 const axios = require('axios')
 
-let modelName = 'llama2:70b',
+let modelName = 'llama2:latest',
   modelUrl = ''
 
-module.exports.init = function init(config) {
+function init(config) {
   axios.defaults.baseURL = modelUrl = config.modelUrl
   modelName = config.modelName || modelName
 }
 
-export const chat = {
+const chat = {
   //TODO: map images between ollama api and openai api
   async createChatCompletion(chat, message) {
     try {
-      const response = await axios.post('/api/chat', {
+      const response = await axios.post('/v1/chat/completions', {
         model: modelName,
         messages: [
           ...chat,
@@ -22,15 +22,24 @@ export const chat = {
           },
         ],
       })
-
-      return response.data
+      console.log("response.data: ", response.data)
+      return response.data.choices
     } catch (error) {
       console.log(error)
       throw error
     }
   },
 }
-
-export default {
+function jsonStringToArray(jsonString) {
+  // Split the input string by newlines to get an array of strings, each representing a JSON object
+  const lines = jsonString.trim().split('\n');
+  // Map over each line, parsing it as JSON, and return the resulting array of objects
+  const jsonArray = lines.map(line => JSON.parse(line));
+  
+  return jsonArray;
+}
+module.exports = {
+  init,
   chat,
+  modelName
 }

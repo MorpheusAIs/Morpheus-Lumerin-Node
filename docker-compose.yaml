@@ -1,13 +1,26 @@
 version: '3.8'
 services:
+  proxy-router:
+    build: 
+      context: ./proxy-router
+    env_file:
+      - ./proxy-router/.env
+    ports:
+      - 8082:8082
+      - 3333:3333
+    depends_on:
+      - ollama
   ollama:
     image: ollama/ollama
     container_name: ollama
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["/docker-compose-startup.sh"]
     volumes:
-      - ollama:/root/.ollama
+      - ollamaconfig:/root/.ollama
+      - ./docker-compose-startup.sh:/docker-compose-startup.sh
     ports:
       - "11434:11434"
     restart: unless-stopped
 
 volumes:
-  ollama:
+  ollamaconfig:

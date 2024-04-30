@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+//TODO: split implementations into separate client layer
 type ApiBus struct {
 	rpcProxy       *rpcproxy.RpcProxy
 	aiEngine       *aiengine.AiEngine
@@ -47,8 +48,8 @@ func (apiBus *ApiBus) SendPrompt(ctx *gin.Context) (int, interface{}) {
 }
 
 // AiEngine
-func (apiBus *ApiBus) Prompt(ctx context.Context) (string, error) {
-	return apiBus.aiEngine.Prompt(ctx)
+func (apiBus *ApiBus) Prompt(ctx context.Context, req interface{}) (interface{}, error) {
+	return apiBus.aiEngine.Prompt(ctx, req)
 }
 
 // RpcProxy
