@@ -127,12 +127,66 @@ jobs:
           path: mor-launch-${{ steps.tag.outputs.name }}-macos-x64.zip
           name: mor-launch-macos-x64.zip
 
+  macOS-14-arm64:
+    runs-on: macos-14
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+        id: checkout
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21.x'
+          cache-dependency-path: launcher/go.sum
+
+      - name: Install dependencies
+        run: |
+          cd launcher
+          go mod tidy
+          cd ../proxy-router
+          go mod download
+
+      - name: Build
+        id: build
+        run: |
+          cd launcher
+          make
+          cd ../proxy-router
+          make build
+
+      - name: Determine tag name
+        id: tag
+        run: |
+          SHORT_HASH="$(git rev-parse --short=7 HEAD)"
+          echo "name=${SHORT_HASH}" >> $GITHUB_OUTPUT
+
+      - name: Pack artifacts
+        id: pack_artifacts
+        run: |
+          ARTIFACT=mor-launch-${{ steps.tag.outputs.name }}-macos-arm64.zip
+          LLAMACPP=llama-b2699-bin-macos-arm64.zip
+          MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
+          wget https://github.com/ggerganov/llama.cpp/releases/download/b2699/$LLAMACPP
+          wget https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
+          unzip -o -j $LLAMACPP build/bin/server
+          echo '{"run":["./server -m ./'$MODEL'","./proxy-router"]}' > mor-launch.json
+          cp ./proxy-router/.env.example .env
+          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env server $MODEL mor-launch.json
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          path: mor-launch-${{ steps.tag.outputs.name }}-macos-arm64.zip
+          name: mor-launch-macos-arm64.zip
+
   release:
     if: ${{ github.event.inputs.create_release == 'true' }}
     runs-on: ubuntu-latest
     needs:
       - Ubuntu-22-x64
       - macOS-12-x64
+      - macOS-14-arm64
     steps:
       - name: Clone
         id: checkout
