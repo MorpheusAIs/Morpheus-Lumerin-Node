@@ -13,8 +13,8 @@ contract AgentRegistry is OwnableUpgradeable {
     uint256 stake;
     uint256 timestamp;
     address owner;
-    string name;        // limit name length
-    string[] tags;      // TODO: limit tags amount
+    string name; // limit name length
+    string[] tags; // TODO: limit tags amount
   }
 
   error StakeTooLow();
@@ -38,11 +38,11 @@ contract AgentRegistry is OwnableUpgradeable {
     __Ownable_init();
   }
 
-  function getIds() public view returns (bytes32[] memory){
+  function getIds() public view returns (bytes32[] memory) {
     return set.keys();
   }
 
-  function getAll() public view returns (Agent[] memory){
+  function getAll() public view returns (Agent[] memory) {
     Agent[] memory _agents = new Agent[](set.count());
     for (uint i = 0; i < set.count(); i++) {
       _agents[i] = map[set.keyAtIndex(i)];
@@ -55,7 +55,14 @@ contract AgentRegistry is OwnableUpgradeable {
   }
 
   // registers new or updates existing
-  function register(uint256 addStake, uint256 fee, address owner, bytes32 agentId, string memory name, string[] memory tags) public senderOrOwner(owner){
+  function register(
+    uint256 addStake,
+    uint256 fee,
+    address owner,
+    bytes32 agentId,
+    string memory name,
+    string[] memory tags
+  ) public senderOrOwner(owner) {
     uint256 stake = map[agentId].stake;
     uint256 newStake = stake + addStake;
     if (newStake < minStake) {

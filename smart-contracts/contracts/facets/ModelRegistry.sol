@@ -13,29 +13,43 @@ contract ModelRegistry {
 
   error ModelNotFound();
   error StakeTooLow();
-  
+
   event ModelRegisteredUpdated(address indexed owner, bytes32 indexed modelId);
   event ModelDeregistered(address indexed owner, bytes32 indexed modelId);
   event ModelMinStakeUpdated(uint256 newStake);
 
-  function modelMap(bytes32 id) public view returns (bytes32,uint256,uint256,address,string memory,uint128,bool) {
+  function modelMap(
+    bytes32 id
+  )
+    public
+    view
+    returns (bytes32, uint256, uint256, address, string memory, uint128, bool)
+  {
     Model memory model = s.modelMap[id];
-    return (model.ipfsCID, model.fee, model.stake, model.owner, model.name,model.timestamp, model.isDeleted);
+    return (
+      model.ipfsCID,
+      model.fee,
+      model.stake,
+      model.owner,
+      model.name,
+      model.timestamp,
+      model.isDeleted
+    );
   }
 
   function models(uint256 index) public view returns (bytes32) {
     return s.models[index];
   }
 
-  function modelGetIds() public view returns (bytes32[] memory){
+  function modelGetIds() public view returns (bytes32[] memory) {
     return s.activeModels.keys();
   }
 
-  function modelGetCount() public view returns(uint count) {
+  function modelGetCount() public view returns (uint count) {
     return s.activeModels.count();
   }
 
-  function modelGetAll() public view returns (Model[] memory){
+  function modelGetAll() public view returns (Model[] memory) {
     Model[] memory _models = new Model[](s.activeModels.count());
     for (uint i = 0; i < s.activeModels.count(); i++) {
       _models[i] = s.modelMap[s.activeModels.keyAtIndex(i)];
@@ -43,9 +57,11 @@ contract ModelRegistry {
     return _models;
   }
 
-  function modelGetByIndex(uint index) public view returns(bytes32 modelId, Model memory model) {
-      modelId = s.activeModels.keyAtIndex(index);
-      return (modelId, s.modelMap[modelId]);
+  function modelGetByIndex(
+    uint index
+  ) public view returns (bytes32 modelId, Model memory model) {
+    modelId = s.activeModels.keyAtIndex(index);
+    return (modelId, s.modelMap[modelId]);
   }
 
   function modelExists(bytes32 id) public view returns (bool) {
@@ -53,7 +69,15 @@ contract ModelRegistry {
   }
 
   // registers new model or updates existing
-  function modelRegister(bytes32 modelId, bytes32 ipfsCID,  uint256 fee, uint256 addStake, address owner, string memory name, string[] memory tags) public {
+  function modelRegister(
+    bytes32 modelId,
+    bytes32 ipfsCID,
+    uint256 fee,
+    uint256 addStake,
+    address owner,
+    string memory name,
+    string[] memory tags
+  ) public {
     LibOwner._senderOrOwner(owner);
     Model memory model = s.modelMap[modelId];
     uint256 newStake = model.stake + addStake;

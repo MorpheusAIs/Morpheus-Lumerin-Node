@@ -23,7 +23,7 @@ library LibOwner {
     }
   }
 
-  function _onlyOwner() internal view{
+  function _onlyOwner() internal view {
     LibDiamond.enforceIsContractOwner();
   }
 }

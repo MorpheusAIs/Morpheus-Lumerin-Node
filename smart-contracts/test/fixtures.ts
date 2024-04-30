@@ -1,16 +1,7 @@
 import hre from "hardhat";
-import {
-  encodeFunctionData,
-  encodePacked,
-  getAddress,
-  parseUnits,
-  toFunctionHash,
-  toHex,
-} from "viem/utils";
+import { encodeFunctionData, encodePacked, getAddress, parseUnits } from "viem/utils";
 import { getHex, getSelectors, getTxTimestamp, randomBytes32 } from "./utils";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { Abi, AbiFunction, AbiItem } from "viem";
-// import { toSignatureHash } from "viem/_types/utils/hash/toSignatureHash";
 import { FacetCutAction } from "../libraries/diamond";
 
 export async function deployMORtoken() {
@@ -72,10 +63,22 @@ export async function deployDiamond() {
   };
   const diamond = await hre.viem.deployContract("Diamond", [facetCuts, diamondArgs]);
 
-  const modelRegistry = await hre.viem.getContractAt("ModelRegistry", diamond.address);
-  const providerRegistry = await hre.viem.getContractAt("ProviderRegistry", diamond.address);
-  const marketplace = await hre.viem.getContractAt("Marketplace", diamond.address);
-  const sessionRouter = await hre.viem.getContractAt("SessionRouter", diamond.address);
+  const modelRegistry = await hre.viem.getContractAt(
+    "contracts/facets/ModelRegistry.sol:ModelRegistry",
+    diamond.address
+  );
+  const providerRegistry = await hre.viem.getContractAt(
+    "contracts/facets/ProviderRegistry.sol:ProviderRegistry",
+    diamond.address
+  );
+  const marketplace = await hre.viem.getContractAt(
+    "contracts/facets/Marketplace.sol:Marketplace",
+    diamond.address
+  );
+  const sessionRouter = await hre.viem.getContractAt(
+    "contracts/facets/SessionRouter.sol:SessionRouter",
+    diamond.address
+  );
 
   return {
     tokenMOR,
