@@ -7,11 +7,12 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { ModelRegistry } from "./ModelRegistry.sol";
 import { ProviderRegistry } from "./ProviderRegistry.sol";
 import { AppStorage, Bid } from "../AppStorage.sol";
-import { KeySet } from "../libraries/KeySet.sol";
+import { KeySet, AddressSet} from "../libraries/KeySet.sol";
 import { LibOwner } from "../libraries/LibOwner.sol";
 
 contract Marketplace {
   using KeySet for KeySet.Set;
+  using AddressSet for AddressSet.Set;
 
   AppStorage internal s;
 
@@ -107,10 +108,10 @@ contract Marketplace {
     uint256 pricePerSecond
   ) public returns (bytes32 bidId) {
     LibOwner._senderOrOwner(providerAddr);
-    if (s.providerMap[providerAddr].isDeleted) {
+    if (!s.activeProviders.exists(providerAddr)) {
       revert ProviderNotFound();
     }
-    if (s.modelMap[modelId].isDeleted) {
+    if (!s.activeModels.exists(modelId)) {
       revert ModelOrAgentNotFound();
     }
 

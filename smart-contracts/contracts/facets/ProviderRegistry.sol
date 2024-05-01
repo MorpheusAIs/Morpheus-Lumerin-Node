@@ -73,8 +73,6 @@ contract ProviderRegistry {
     if (provider.timestamp == 0) {
       s.activeProviders.insert(addr);
       s.providers.push(addr);
-    } else {
-      LibOwner._senderOrOwner(addr);
     }
 
     s.providerMap[addr] = Provider(
