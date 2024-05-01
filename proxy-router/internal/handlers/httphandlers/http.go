@@ -1,13 +1,12 @@
 package httphandlers
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
-	"encoding/hex"
-	"fmt"
 	"math/big"
+	"net/http"
 	"net/http/pprof"
 
 	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal"
@@ -53,7 +52,7 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 		}
 
 		response, err := apiBus.Prompt(ctx, req)
-fmt.Println("apibus prompt response: ",response)
+		fmt.Println("apibus prompt response: ", response)
 		if err != nil {
 			ctx.AbortWithError(ERROR_STATUS, err)
 			return

@@ -52,7 +52,7 @@ func (rpcProxy *RpcProxy) GetAllModels(ctx context.Context) (int, gin.H) {
 	return constants.HTTP_STATUS_OK, gin.H{"models": models}
 }
 
-func (rpcProxy *RpcProxy) GetBidsByProdiver(ctx context.Context, providerAddr common.Address, offset *big.Int, limit uint8) (int, gin.H) {
+func (rpcProxy *RpcProxy) GetBidsByProvider(ctx context.Context, providerAddr common.Address, offset *big.Int, limit uint8) (int, gin.H) {
 	bids, err := rpcProxy.marketplace.GetBidsByProvider(ctx, providerAddr, offset, limit)
 	if err != nil {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
