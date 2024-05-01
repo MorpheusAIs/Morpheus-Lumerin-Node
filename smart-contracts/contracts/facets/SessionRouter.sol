@@ -8,8 +8,9 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { KeySet } from "../libraries/KeySet.sol";
 import { ModelRegistry } from "./ModelRegistry.sol";
 import { ProviderRegistry } from "./ProviderRegistry.sol";
-import { AppStorage, Session, Bid, OnHold } from "../AppStorage.sol";
+import { AppStorage, Session, Bid, OnHold, Pool } from "../AppStorage.sol";
 import { LibOwner } from "../libraries/LibOwner.sol";
+import { LinearDistributionIntervalDecrease } from '../libraries/LinearDistributionIntervalDecrease.sol';
 
 contract SessionRouter {
   using KeySet for KeySet.Set;
@@ -268,24 +269,21 @@ contract SessionRouter {
   }
 
   function getComputeBalance() public view returns (uint256) {
-    // TODO: or call layer 1 contract to get daily compute balance contract
-    //
-    // arguments for getPeriodReward call
-    // address public constant distributionContractAddr = address(0x0);
-    // uint32 public constant distributionRewardStartTime = 1707350400; // ephochSeconds Feb 8 2024 00:00:00
-    // uint8 public constant distributionPoolId = 3;
-    //
-    // return Distribution(distributionContractAddr)
-    //   .getPeriodReward(distributionPoolId, distributionRewardStartTime, block.timestamp)
-    // return token.allowance(address(token), address(this));
-    return 10 * 10 ** 18; // 10 tokens
+    return LinearDistributionIntervalDecrease.getPeriodReward(
+        s.pool.initialReward,     
+        s.pool.rewardDecrease,
+        s.pool.payoutStart,
+        s.pool.decreaseInterval,
+        s.pool.payoutStart,       // should that be payoutStart or 1707350400 ephochSeconds (Feb 8 2024 00:00:00) 
+        uint128(block.timestamp)
+      );
   }
 
-  //===========================
-  //        BIDS
-  //===========================
-
-  //===========================
-  //     ACCESS CONTROL
-  //===========================
+  // parameters should be the same as in Ethereum L1 Distribution contract
+  // at address 0x47176B2Af9885dC6C4575d4eFd63895f7Aaa4790
+  // call 'Distribution.pools(3)' where '3' is a poolId
+  function setPoolConfig(Pool calldata pool) public {
+    LibOwner._onlyOwner();
+    s.pool = pool;
+  }
 }
