@@ -82,6 +82,21 @@ func PrivKeyStringToAddr(privateKey string) (common.Address, error) {
 	return addr, nil
 }
 
+func PubKeyStringFromPrivate(privateKey string) (string, error) {
+	privKey, err := crypto.HexToECDSA(privateKey)
+	if err != nil {
+		return "", WrapError(ErrInvalidPrivateKey, err)
+	}
+
+	pubKey := privKey.Public()
+	pubKeyECDSA, ok := pubKey.(*ecdsa.PublicKey)
+	if !ok {
+		return "", fmt.Errorf("error casting public key to ECDSA: %v", pubKeyECDSA)
+	}
+	publicKeyBytes := crypto.FromECDSAPub(pubKeyECDSA)
+	return hex.EncodeToString(publicKeyBytes), nil
+}
+
 func MustPrivKeyToAddr(privateKey *ecdsa.PrivateKey) common.Address {
 	addr, err := PrivKeyToAddr(privateKey)
 	if err != nil {
