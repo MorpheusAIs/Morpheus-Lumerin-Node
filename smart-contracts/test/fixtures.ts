@@ -40,9 +40,14 @@ export async function deployDiamond() {
   ] as const;
 
   const facetContracts = await Promise.all(
-    FacetNames.map((name) => {
-      return hre.viem.deployContract(name as any, [], {});
-    })
+    FacetNames.map(async (name) => {
+      try {
+        return await hre.viem.deployContract(name as any, [], {});
+      } catch (e) {
+        console.log(`error deploying ${name}`);
+        throw e;
+      }
+    }),
   );
 
   // 3. deploy diamond
@@ -96,8 +101,18 @@ export async function deployDiamond() {
 }
 
 export async function deploySingleProvider() {
-  const { sessionRouter, providerRegistry, owner, provider, publicClient, decimalsMOR, tokenMOR } =
-    await loadFixture(deployDiamond);
+  const {
+    sessionRouter,
+    providerRegistry,
+    owner,
+    provider,
+    publicClient,
+    decimalsMOR,
+    tokenMOR,
+    modelRegistry,
+    user,
+    marketplace,
+  } = await loadFixture(deployDiamond);
 
   const expectedProvider = {
     address: getAddress(provider.account.address),
@@ -107,26 +122,42 @@ export async function deploySingleProvider() {
     isDeleted: false,
   };
 
-  await tokenMOR.write.transfer([provider.account.address, expectedProvider.stake * 100n], {
-    account: owner.account,
-  });
+  await tokenMOR.write.transfer(
+    [provider.account.address, expectedProvider.stake * 100n],
+    {
+      account: owner.account,
+    },
+  );
 
-  await tokenMOR.write.approve([sessionRouter.address, expectedProvider.stake], {
-    account: provider.account,
-  });
+  await tokenMOR.write.approve(
+    [sessionRouter.address, expectedProvider.stake],
+    {
+      account: provider.account,
+    },
+  );
 
   const addProviderHash = await providerRegistry.write.providerRegister(
-    [expectedProvider.address, expectedProvider.stake, expectedProvider.endpoint],
-    { account: provider.account }
+    [
+      expectedProvider.address,
+      expectedProvider.stake,
+      expectedProvider.endpoint,
+    ],
+    { account: provider.account },
   );
-  expectedProvider.timestamp = await getTxTimestamp(publicClient, addProviderHash);
+  expectedProvider.timestamp = await getTxTimestamp(
+    publicClient,
+    addProviderHash,
+  );
 
   return {
     expectedProvider,
     providerRegistry,
+    modelRegistry,
     sessionRouter,
+    marketplace,
     owner,
     provider,
+    user,
     publicClient,
     tokenMOR,
     decimalsMOR,
@@ -134,9 +165,8 @@ export async function deploySingleProvider() {
 }
 
 export async function deploySingleModel() {
-  const { owner, provider, publicClient, tokenMOR, modelRegistry } = await loadFixture(
-    deployDiamond
-  );
+  const { owner, provider, publicClient, tokenMOR, modelRegistry } =
+    await loadFixture(deployDiamond);
 
   const expectedModel = {
     modelId: randomBytes32(),
@@ -184,15 +214,8 @@ export async function deploySingleBid() {
     decimalsMOR,
     marketplace,
     sessionRouter,
-  } = await loadFixture(deployDiamond);
-
-  const expectedProvider = {
-    address: getAddress(provider.account.address),
-    stake: parseUnits("100", decimalsMOR),
-    endpoint: "https://bestprovider.com",
-    timestamp: 0n,
-    isDeleted: false,
-  };
+    expectedProvider,
+  } = await loadFixture(deploySingleProvider);
 
   // add single model
   const expectedModel = {
@@ -222,9 +245,12 @@ export async function deploySingleBid() {
 
   await tokenMOR.write.approve([modelRegistry.address, 10000n * 10n ** 18n]);
   await tokenMOR.write.transfer([user.account.address, 100000n * 10n ** 18n]);
-  await tokenMOR.write.approve([modelRegistry.address, 10000000n * 10n ** 18n], {
-    account: user.account,
-  });
+  await tokenMOR.write.approve(
+    [modelRegistry.address, 10000000n * 10n ** 18n],
+    {
+      account: user.account,
+    },
+  );
 
   // expected bid
   const expectedBid = {
@@ -240,7 +266,7 @@ export async function deploySingleBid() {
   // add single bid
   const postBidtx = await marketplace.simulate.postModelBid(
     [expectedBid.providerAddr, expectedBid.modelId, expectedBid.pricePerSecond],
-    { account: provider.account.address }
+    { account: provider.account.address },
   );
   const txHash = await provider.writeContract(postBidtx.request);
 
