@@ -226,12 +226,12 @@ jobs:
           MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
           wget https://github.com/ggerganov/llama.cpp/releases/download/b2699/$LLAMACPP
           wget https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
-          unzip -o -j $LLAMACPP server.exe
-          echo '{"run":[".\server.exe -m .\'$MODEL'",".\proxy-router.exe"]}' > mor-launch.json
+          unzip -o -j $LLAMACPP server.exe llama.dll
+          echo '{"run":["./server.exe -m ./'$MODEL'","./proxy-router.exe"]}' > mor-launch.json
           cp ./proxy-router/.env.example .env
           mv ./proxy-router/bin/proxy-router proxy-router.exe
           mv ./launcher/mor-launch mor-launch.exe
-          7z a $ARTIFACT LICENSE mor-launch.exe proxy-router.exe .env server.exe $MODEL mor-launch.json
+          7z a $ARTIFACT LICENSE mor-launch.exe proxy-router.exe .env server.exe llama.dll $MODEL mor-launch.json
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
