@@ -199,12 +199,10 @@ func start() error {
 	)
 	tcpServer.SetConnectionHandler(tcpHandler)
 
-	providerRegistryAddr := common.HexToAddress(cfg.Marketplace.ProviderRegistryAddress)
-	modelRegistryAddr := common.HexToAddress(cfg.Marketplace.ModelRegistryAddress)
-	marketplaceAddr := common.HexToAddress(cfg.Marketplace.MarketplaceAddress)
+	diamondContractAddr := common.HexToAddress(cfg.Marketplace.DiamondContractAddress)
 
 	proxyRouterApi := proxyapi.NewProxyRouterApi(sysConfig, publicUrl, publicKey, cfg.Marketplace.WalletPrivateKey, &cfg, derived, time.Now(), contractLogStorage, log)
-	rpcProxy := rpcproxy.NewRpcProxy(ethClient, providerRegistryAddr, modelRegistryAddr, marketplaceAddr, proxyLog)
+	rpcProxy := rpcproxy.NewRpcProxy(ethClient, diamondContractAddr, proxyLog)
 	aiEngine := aiengine.NewAiEngine()
 	apiBus := apibus.NewApiBus(rpcProxy, aiEngine, proxyRouterApi)
 

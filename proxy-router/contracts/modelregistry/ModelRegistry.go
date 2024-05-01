@@ -29,8 +29,8 @@ var (
 	_ = abi.ConvertType
 )
 
-// ModelRegistryModel is an auto generated low-level Go binding around an user-defined struct.
-type ModelRegistryModel struct {
+// Model is an auto generated low-level Go binding around an user-defined struct.
+type Model struct {
 	IpfsCID   [32]byte
 	Fee       *big.Int
 	Stake     *big.Int
@@ -43,7 +43,7 @@ type ModelRegistryModel struct {
 
 // ModelRegistryMetaData contains all meta data concerning the ModelRegistry contract.
 var ModelRegistryMetaData = &bind.MetaData{
-	ABI: "[{\"inputs\":[],\"name\":\"KeyExists\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"KeyNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ModelNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotSenderOrOwner\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"StakeTooLow\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroKey\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"}],\"name\":\"Deregistered\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint8\",\"name\":\"version\",\"type\":\"uint8\"}],\"name\":\"Initialized\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newStake\",\"type\":\"uint256\"}],\"name\":\"MinStakeUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"}],\"name\":\"RegisteredUpdated\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"id\",\"type\":\"bytes32\"}],\"name\":\"deregister\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"id\",\"type\":\"bytes32\"}],\"name\":\"exists\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getAll\",\"outputs\":[{\"components\":[{\"internalType\":\"bytes32\",\"name\":\"ipfsCID\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"stake\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string[]\",\"name\":\"tags\",\"type\":\"string[]\"},{\"internalType\":\"uint128\",\"name\":\"timestamp\",\"type\":\"uint128\"},{\"internalType\":\"bool\",\"name\":\"isDeleted\",\"type\":\"bool\"}],\"internalType\":\"structModelRegistry.Model[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"index\",\"type\":\"uint256\"}],\"name\":\"getByIndex\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"},{\"components\":[{\"internalType\":\"bytes32\",\"name\":\"ipfsCID\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"stake\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string[]\",\"name\":\"tags\",\"type\":\"string[]\"},{\"internalType\":\"uint128\",\"name\":\"timestamp\",\"type\":\"uint128\"},{\"internalType\":\"bool\",\"name\":\"isDeleted\",\"type\":\"bool\"}],\"internalType\":\"structModelRegistry.Model\",\"name\":\"model\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getCount\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"count\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getIds\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_token\",\"type\":\"address\"}],\"name\":\"initialize\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"name\":\"map\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"ipfsCID\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"stake\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"uint128\",\"name\":\"timestamp\",\"type\":\"uint128\"},{\"internalType\":\"bool\",\"name\":\"isDeleted\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"minStake\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"models\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"ipfsCID\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"addStake\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string[]\",\"name\":\"tags\",\"type\":\"string[]\"}],\"name\":\"register\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_minStake\",\"type\":\"uint256\"}],\"name\":\"setMinStake\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"token\",\"outputs\":[{\"internalType\":\"contractERC20\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
+	ABI: "[{\"inputs\":[],\"name\":\"KeyExists\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"KeyNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ModelNotFound\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_user\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_contractOwner\",\"type\":\"address\"}],\"name\":\"NotContractOwner\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotSenderOrOwner\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"StakeTooLow\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroKey\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"}],\"name\":\"ModelDeregistered\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newStake\",\"type\":\"uint256\"}],\"name\":\"ModelMinStakeUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"}],\"name\":\"ModelRegisteredUpdated\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"id\",\"type\":\"bytes32\"}],\"name\":\"modelDeregister\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"id\",\"type\":\"bytes32\"}],\"name\":\"modelExists\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"modelGetAll\",\"outputs\":[{\"components\":[{\"internalType\":\"bytes32\",\"name\":\"ipfsCID\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"stake\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string[]\",\"name\":\"tags\",\"type\":\"string[]\"},{\"internalType\":\"uint128\",\"name\":\"timestamp\",\"type\":\"uint128\"},{\"internalType\":\"bool\",\"name\":\"isDeleted\",\"type\":\"bool\"}],\"internalType\":\"structModel[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"index\",\"type\":\"uint256\"}],\"name\":\"modelGetByIndex\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"},{\"components\":[{\"internalType\":\"bytes32\",\"name\":\"ipfsCID\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"stake\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string[]\",\"name\":\"tags\",\"type\":\"string[]\"},{\"internalType\":\"uint128\",\"name\":\"timestamp\",\"type\":\"uint128\"},{\"internalType\":\"bool\",\"name\":\"isDeleted\",\"type\":\"bool\"}],\"internalType\":\"structModel\",\"name\":\"model\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"modelGetCount\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"count\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"modelGetIds\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"id\",\"type\":\"bytes32\"}],\"name\":\"modelMap\",\"outputs\":[{\"components\":[{\"internalType\":\"bytes32\",\"name\":\"ipfsCID\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"stake\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string[]\",\"name\":\"tags\",\"type\":\"string[]\"},{\"internalType\":\"uint128\",\"name\":\"timestamp\",\"type\":\"uint128\"},{\"internalType\":\"bool\",\"name\":\"isDeleted\",\"type\":\"bool\"}],\"internalType\":\"structModel\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"modelMinStake\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"ipfsCID\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"addStake\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string[]\",\"name\":\"tags\",\"type\":\"string[]\"}],\"name\":\"modelRegister\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_minStake\",\"type\":\"uint256\"}],\"name\":\"modelSetMinStake\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"index\",\"type\":\"uint256\"}],\"name\":\"models\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"}]",
 }
 
 // ModelRegistryABI is the input ABI used to generate the binding from.
@@ -192,12 +192,12 @@ func (_ModelRegistry *ModelRegistryTransactorRaw) Transact(opts *bind.TransactOp
 	return _ModelRegistry.Contract.contract.Transact(opts, method, params...)
 }
 
-// Exists is a free data retrieval call binding the contract method 0x38a699a4.
+// ModelExists is a free data retrieval call binding the contract method 0x022964d2.
 //
-// Solidity: function exists(bytes32 id) view returns(bool)
-func (_ModelRegistry *ModelRegistryCaller) Exists(opts *bind.CallOpts, id [32]byte) (bool, error) {
+// Solidity: function modelExists(bytes32 id) view returns(bool)
+func (_ModelRegistry *ModelRegistryCaller) ModelExists(opts *bind.CallOpts, id [32]byte) (bool, error) {
 	var out []interface{}
-	err := _ModelRegistry.contract.Call(opts, &out, "exists", id)
+	err := _ModelRegistry.contract.Call(opts, &out, "modelExists", id)
 
 	if err != nil {
 		return *new(bool), err
@@ -209,102 +209,102 @@ func (_ModelRegistry *ModelRegistryCaller) Exists(opts *bind.CallOpts, id [32]by
 
 }
 
-// Exists is a free data retrieval call binding the contract method 0x38a699a4.
+// ModelExists is a free data retrieval call binding the contract method 0x022964d2.
 //
-// Solidity: function exists(bytes32 id) view returns(bool)
-func (_ModelRegistry *ModelRegistrySession) Exists(id [32]byte) (bool, error) {
-	return _ModelRegistry.Contract.Exists(&_ModelRegistry.CallOpts, id)
+// Solidity: function modelExists(bytes32 id) view returns(bool)
+func (_ModelRegistry *ModelRegistrySession) ModelExists(id [32]byte) (bool, error) {
+	return _ModelRegistry.Contract.ModelExists(&_ModelRegistry.CallOpts, id)
 }
 
-// Exists is a free data retrieval call binding the contract method 0x38a699a4.
+// ModelExists is a free data retrieval call binding the contract method 0x022964d2.
 //
-// Solidity: function exists(bytes32 id) view returns(bool)
-func (_ModelRegistry *ModelRegistryCallerSession) Exists(id [32]byte) (bool, error) {
-	return _ModelRegistry.Contract.Exists(&_ModelRegistry.CallOpts, id)
+// Solidity: function modelExists(bytes32 id) view returns(bool)
+func (_ModelRegistry *ModelRegistryCallerSession) ModelExists(id [32]byte) (bool, error) {
+	return _ModelRegistry.Contract.ModelExists(&_ModelRegistry.CallOpts, id)
 }
 
-// GetAll is a free data retrieval call binding the contract method 0x53ed5143.
+// ModelGetAll is a free data retrieval call binding the contract method 0xb889c67b.
 //
-// Solidity: function getAll() view returns((bytes32,uint256,uint256,address,string,string[],uint128,bool)[])
-func (_ModelRegistry *ModelRegistryCaller) GetAll(opts *bind.CallOpts) ([]ModelRegistryModel, error) {
+// Solidity: function modelGetAll() view returns((bytes32,uint256,uint256,address,string,string[],uint128,bool)[])
+func (_ModelRegistry *ModelRegistryCaller) ModelGetAll(opts *bind.CallOpts) ([]Model, error) {
 	var out []interface{}
-	err := _ModelRegistry.contract.Call(opts, &out, "getAll")
+	err := _ModelRegistry.contract.Call(opts, &out, "modelGetAll")
 
 	if err != nil {
-		return *new([]ModelRegistryModel), err
+		return *new([]Model), err
 	}
 
-	out0 := *abi.ConvertType(out[0], new([]ModelRegistryModel)).(*[]ModelRegistryModel)
+	out0 := *abi.ConvertType(out[0], new([]Model)).(*[]Model)
 
 	return out0, err
 
 }
 
-// GetAll is a free data retrieval call binding the contract method 0x53ed5143.
+// ModelGetAll is a free data retrieval call binding the contract method 0xb889c67b.
 //
-// Solidity: function getAll() view returns((bytes32,uint256,uint256,address,string,string[],uint128,bool)[])
-func (_ModelRegistry *ModelRegistrySession) GetAll() ([]ModelRegistryModel, error) {
-	return _ModelRegistry.Contract.GetAll(&_ModelRegistry.CallOpts)
+// Solidity: function modelGetAll() view returns((bytes32,uint256,uint256,address,string,string[],uint128,bool)[])
+func (_ModelRegistry *ModelRegistrySession) ModelGetAll() ([]Model, error) {
+	return _ModelRegistry.Contract.ModelGetAll(&_ModelRegistry.CallOpts)
 }
 
-// GetAll is a free data retrieval call binding the contract method 0x53ed5143.
+// ModelGetAll is a free data retrieval call binding the contract method 0xb889c67b.
 //
-// Solidity: function getAll() view returns((bytes32,uint256,uint256,address,string,string[],uint128,bool)[])
-func (_ModelRegistry *ModelRegistryCallerSession) GetAll() ([]ModelRegistryModel, error) {
-	return _ModelRegistry.Contract.GetAll(&_ModelRegistry.CallOpts)
+// Solidity: function modelGetAll() view returns((bytes32,uint256,uint256,address,string,string[],uint128,bool)[])
+func (_ModelRegistry *ModelRegistryCallerSession) ModelGetAll() ([]Model, error) {
+	return _ModelRegistry.Contract.ModelGetAll(&_ModelRegistry.CallOpts)
 }
 
-// GetByIndex is a free data retrieval call binding the contract method 0x2d883a73.
+// ModelGetByIndex is a free data retrieval call binding the contract method 0x43119765.
 //
-// Solidity: function getByIndex(uint256 index) view returns(bytes32 modelId, (bytes32,uint256,uint256,address,string,string[],uint128,bool) model)
-func (_ModelRegistry *ModelRegistryCaller) GetByIndex(opts *bind.CallOpts, index *big.Int) (struct {
+// Solidity: function modelGetByIndex(uint256 index) view returns(bytes32 modelId, (bytes32,uint256,uint256,address,string,string[],uint128,bool) model)
+func (_ModelRegistry *ModelRegistryCaller) ModelGetByIndex(opts *bind.CallOpts, index *big.Int) (struct {
 	ModelId [32]byte
-	Model   ModelRegistryModel
+	Model   Model
 }, error) {
 	var out []interface{}
-	err := _ModelRegistry.contract.Call(opts, &out, "getByIndex", index)
+	err := _ModelRegistry.contract.Call(opts, &out, "modelGetByIndex", index)
 
 	outstruct := new(struct {
 		ModelId [32]byte
-		Model   ModelRegistryModel
+		Model   Model
 	})
 	if err != nil {
 		return *outstruct, err
 	}
 
 	outstruct.ModelId = *abi.ConvertType(out[0], new([32]byte)).(*[32]byte)
-	outstruct.Model = *abi.ConvertType(out[1], new(ModelRegistryModel)).(*ModelRegistryModel)
+	outstruct.Model = *abi.ConvertType(out[1], new(Model)).(*Model)
 
 	return *outstruct, err
 
 }
 
-// GetByIndex is a free data retrieval call binding the contract method 0x2d883a73.
+// ModelGetByIndex is a free data retrieval call binding the contract method 0x43119765.
 //
-// Solidity: function getByIndex(uint256 index) view returns(bytes32 modelId, (bytes32,uint256,uint256,address,string,string[],uint128,bool) model)
-func (_ModelRegistry *ModelRegistrySession) GetByIndex(index *big.Int) (struct {
+// Solidity: function modelGetByIndex(uint256 index) view returns(bytes32 modelId, (bytes32,uint256,uint256,address,string,string[],uint128,bool) model)
+func (_ModelRegistry *ModelRegistrySession) ModelGetByIndex(index *big.Int) (struct {
 	ModelId [32]byte
-	Model   ModelRegistryModel
+	Model   Model
 }, error) {
-	return _ModelRegistry.Contract.GetByIndex(&_ModelRegistry.CallOpts, index)
+	return _ModelRegistry.Contract.ModelGetByIndex(&_ModelRegistry.CallOpts, index)
 }
 
-// GetByIndex is a free data retrieval call binding the contract method 0x2d883a73.
+// ModelGetByIndex is a free data retrieval call binding the contract method 0x43119765.
 //
-// Solidity: function getByIndex(uint256 index) view returns(bytes32 modelId, (bytes32,uint256,uint256,address,string,string[],uint128,bool) model)
-func (_ModelRegistry *ModelRegistryCallerSession) GetByIndex(index *big.Int) (struct {
+// Solidity: function modelGetByIndex(uint256 index) view returns(bytes32 modelId, (bytes32,uint256,uint256,address,string,string[],uint128,bool) model)
+func (_ModelRegistry *ModelRegistryCallerSession) ModelGetByIndex(index *big.Int) (struct {
 	ModelId [32]byte
-	Model   ModelRegistryModel
+	Model   Model
 }, error) {
-	return _ModelRegistry.Contract.GetByIndex(&_ModelRegistry.CallOpts, index)
+	return _ModelRegistry.Contract.ModelGetByIndex(&_ModelRegistry.CallOpts, index)
 }
 
-// GetCount is a free data retrieval call binding the contract method 0xa87d942c.
+// ModelGetCount is a free data retrieval call binding the contract method 0x807b8975.
 //
-// Solidity: function getCount() view returns(uint256 count)
-func (_ModelRegistry *ModelRegistryCaller) GetCount(opts *bind.CallOpts) (*big.Int, error) {
+// Solidity: function modelGetCount() view returns(uint256 count)
+func (_ModelRegistry *ModelRegistryCaller) ModelGetCount(opts *bind.CallOpts) (*big.Int, error) {
 	var out []interface{}
-	err := _ModelRegistry.contract.Call(opts, &out, "getCount")
+	err := _ModelRegistry.contract.Call(opts, &out, "modelGetCount")
 
 	if err != nil {
 		return *new(*big.Int), err
@@ -316,26 +316,26 @@ func (_ModelRegistry *ModelRegistryCaller) GetCount(opts *bind.CallOpts) (*big.I
 
 }
 
-// GetCount is a free data retrieval call binding the contract method 0xa87d942c.
+// ModelGetCount is a free data retrieval call binding the contract method 0x807b8975.
 //
-// Solidity: function getCount() view returns(uint256 count)
-func (_ModelRegistry *ModelRegistrySession) GetCount() (*big.Int, error) {
-	return _ModelRegistry.Contract.GetCount(&_ModelRegistry.CallOpts)
+// Solidity: function modelGetCount() view returns(uint256 count)
+func (_ModelRegistry *ModelRegistrySession) ModelGetCount() (*big.Int, error) {
+	return _ModelRegistry.Contract.ModelGetCount(&_ModelRegistry.CallOpts)
 }
 
-// GetCount is a free data retrieval call binding the contract method 0xa87d942c.
+// ModelGetCount is a free data retrieval call binding the contract method 0x807b8975.
 //
-// Solidity: function getCount() view returns(uint256 count)
-func (_ModelRegistry *ModelRegistryCallerSession) GetCount() (*big.Int, error) {
-	return _ModelRegistry.Contract.GetCount(&_ModelRegistry.CallOpts)
+// Solidity: function modelGetCount() view returns(uint256 count)
+func (_ModelRegistry *ModelRegistryCallerSession) ModelGetCount() (*big.Int, error) {
+	return _ModelRegistry.Contract.ModelGetCount(&_ModelRegistry.CallOpts)
 }
 
-// GetIds is a free data retrieval call binding the contract method 0x2b105663.
+// ModelGetIds is a free data retrieval call binding the contract method 0x9f9877fc.
 //
-// Solidity: function getIds() view returns(bytes32[])
-func (_ModelRegistry *ModelRegistryCaller) GetIds(opts *bind.CallOpts) ([][32]byte, error) {
+// Solidity: function modelGetIds() view returns(bytes32[])
+func (_ModelRegistry *ModelRegistryCaller) ModelGetIds(opts *bind.CallOpts) ([][32]byte, error) {
 	var out []interface{}
-	err := _ModelRegistry.contract.Call(opts, &out, "getIds")
+	err := _ModelRegistry.contract.Call(opts, &out, "modelGetIds")
 
 	if err != nil {
 		return *new([][32]byte), err
@@ -347,96 +347,57 @@ func (_ModelRegistry *ModelRegistryCaller) GetIds(opts *bind.CallOpts) ([][32]by
 
 }
 
-// GetIds is a free data retrieval call binding the contract method 0x2b105663.
+// ModelGetIds is a free data retrieval call binding the contract method 0x9f9877fc.
 //
-// Solidity: function getIds() view returns(bytes32[])
-func (_ModelRegistry *ModelRegistrySession) GetIds() ([][32]byte, error) {
-	return _ModelRegistry.Contract.GetIds(&_ModelRegistry.CallOpts)
+// Solidity: function modelGetIds() view returns(bytes32[])
+func (_ModelRegistry *ModelRegistrySession) ModelGetIds() ([][32]byte, error) {
+	return _ModelRegistry.Contract.ModelGetIds(&_ModelRegistry.CallOpts)
 }
 
-// GetIds is a free data retrieval call binding the contract method 0x2b105663.
+// ModelGetIds is a free data retrieval call binding the contract method 0x9f9877fc.
 //
-// Solidity: function getIds() view returns(bytes32[])
-func (_ModelRegistry *ModelRegistryCallerSession) GetIds() ([][32]byte, error) {
-	return _ModelRegistry.Contract.GetIds(&_ModelRegistry.CallOpts)
+// Solidity: function modelGetIds() view returns(bytes32[])
+func (_ModelRegistry *ModelRegistryCallerSession) ModelGetIds() ([][32]byte, error) {
+	return _ModelRegistry.Contract.ModelGetIds(&_ModelRegistry.CallOpts)
 }
 
-// Map is a free data retrieval call binding the contract method 0x0ae186a8.
+// ModelMap is a free data retrieval call binding the contract method 0x6e5cbd85.
 //
-// Solidity: function map(bytes32 ) view returns(bytes32 ipfsCID, uint256 fee, uint256 stake, address owner, string name, uint128 timestamp, bool isDeleted)
-func (_ModelRegistry *ModelRegistryCaller) Map(opts *bind.CallOpts, arg0 [32]byte) (struct {
-	IpfsCID   [32]byte
-	Fee       *big.Int
-	Stake     *big.Int
-	Owner     common.Address
-	Name      string
-	Timestamp *big.Int
-	IsDeleted bool
-}, error) {
+// Solidity: function modelMap(bytes32 id) view returns((bytes32,uint256,uint256,address,string,string[],uint128,bool))
+func (_ModelRegistry *ModelRegistryCaller) ModelMap(opts *bind.CallOpts, id [32]byte) (Model, error) {
 	var out []interface{}
-	err := _ModelRegistry.contract.Call(opts, &out, "map", arg0)
+	err := _ModelRegistry.contract.Call(opts, &out, "modelMap", id)
 
-	outstruct := new(struct {
-		IpfsCID   [32]byte
-		Fee       *big.Int
-		Stake     *big.Int
-		Owner     common.Address
-		Name      string
-		Timestamp *big.Int
-		IsDeleted bool
-	})
 	if err != nil {
-		return *outstruct, err
+		return *new(Model), err
 	}
 
-	outstruct.IpfsCID = *abi.ConvertType(out[0], new([32]byte)).(*[32]byte)
-	outstruct.Fee = *abi.ConvertType(out[1], new(*big.Int)).(**big.Int)
-	outstruct.Stake = *abi.ConvertType(out[2], new(*big.Int)).(**big.Int)
-	outstruct.Owner = *abi.ConvertType(out[3], new(common.Address)).(*common.Address)
-	outstruct.Name = *abi.ConvertType(out[4], new(string)).(*string)
-	outstruct.Timestamp = *abi.ConvertType(out[5], new(*big.Int)).(**big.Int)
-	outstruct.IsDeleted = *abi.ConvertType(out[6], new(bool)).(*bool)
+	out0 := *abi.ConvertType(out[0], new(Model)).(*Model)
 
-	return *outstruct, err
+	return out0, err
 
 }
 
-// Map is a free data retrieval call binding the contract method 0x0ae186a8.
+// ModelMap is a free data retrieval call binding the contract method 0x6e5cbd85.
 //
-// Solidity: function map(bytes32 ) view returns(bytes32 ipfsCID, uint256 fee, uint256 stake, address owner, string name, uint128 timestamp, bool isDeleted)
-func (_ModelRegistry *ModelRegistrySession) Map(arg0 [32]byte) (struct {
-	IpfsCID   [32]byte
-	Fee       *big.Int
-	Stake     *big.Int
-	Owner     common.Address
-	Name      string
-	Timestamp *big.Int
-	IsDeleted bool
-}, error) {
-	return _ModelRegistry.Contract.Map(&_ModelRegistry.CallOpts, arg0)
+// Solidity: function modelMap(bytes32 id) view returns((bytes32,uint256,uint256,address,string,string[],uint128,bool))
+func (_ModelRegistry *ModelRegistrySession) ModelMap(id [32]byte) (Model, error) {
+	return _ModelRegistry.Contract.ModelMap(&_ModelRegistry.CallOpts, id)
 }
 
-// Map is a free data retrieval call binding the contract method 0x0ae186a8.
+// ModelMap is a free data retrieval call binding the contract method 0x6e5cbd85.
 //
-// Solidity: function map(bytes32 ) view returns(bytes32 ipfsCID, uint256 fee, uint256 stake, address owner, string name, uint128 timestamp, bool isDeleted)
-func (_ModelRegistry *ModelRegistryCallerSession) Map(arg0 [32]byte) (struct {
-	IpfsCID   [32]byte
-	Fee       *big.Int
-	Stake     *big.Int
-	Owner     common.Address
-	Name      string
-	Timestamp *big.Int
-	IsDeleted bool
-}, error) {
-	return _ModelRegistry.Contract.Map(&_ModelRegistry.CallOpts, arg0)
+// Solidity: function modelMap(bytes32 id) view returns((bytes32,uint256,uint256,address,string,string[],uint128,bool))
+func (_ModelRegistry *ModelRegistryCallerSession) ModelMap(id [32]byte) (Model, error) {
+	return _ModelRegistry.Contract.ModelMap(&_ModelRegistry.CallOpts, id)
 }
 
-// MinStake is a free data retrieval call binding the contract method 0x375b3c0a.
+// ModelMinStake is a free data retrieval call binding the contract method 0xe41a6823.
 //
-// Solidity: function minStake() view returns(uint256)
-func (_ModelRegistry *ModelRegistryCaller) MinStake(opts *bind.CallOpts) (*big.Int, error) {
+// Solidity: function modelMinStake() view returns(uint256)
+func (_ModelRegistry *ModelRegistryCaller) ModelMinStake(opts *bind.CallOpts) (*big.Int, error) {
 	var out []interface{}
-	err := _ModelRegistry.contract.Call(opts, &out, "minStake")
+	err := _ModelRegistry.contract.Call(opts, &out, "modelMinStake")
 
 	if err != nil {
 		return *new(*big.Int), err
@@ -448,26 +409,26 @@ func (_ModelRegistry *ModelRegistryCaller) MinStake(opts *bind.CallOpts) (*big.I
 
 }
 
-// MinStake is a free data retrieval call binding the contract method 0x375b3c0a.
+// ModelMinStake is a free data retrieval call binding the contract method 0xe41a6823.
 //
-// Solidity: function minStake() view returns(uint256)
-func (_ModelRegistry *ModelRegistrySession) MinStake() (*big.Int, error) {
-	return _ModelRegistry.Contract.MinStake(&_ModelRegistry.CallOpts)
+// Solidity: function modelMinStake() view returns(uint256)
+func (_ModelRegistry *ModelRegistrySession) ModelMinStake() (*big.Int, error) {
+	return _ModelRegistry.Contract.ModelMinStake(&_ModelRegistry.CallOpts)
 }
 
-// MinStake is a free data retrieval call binding the contract method 0x375b3c0a.
+// ModelMinStake is a free data retrieval call binding the contract method 0xe41a6823.
 //
-// Solidity: function minStake() view returns(uint256)
-func (_ModelRegistry *ModelRegistryCallerSession) MinStake() (*big.Int, error) {
-	return _ModelRegistry.Contract.MinStake(&_ModelRegistry.CallOpts)
+// Solidity: function modelMinStake() view returns(uint256)
+func (_ModelRegistry *ModelRegistryCallerSession) ModelMinStake() (*big.Int, error) {
+	return _ModelRegistry.Contract.ModelMinStake(&_ModelRegistry.CallOpts)
 }
 
 // Models is a free data retrieval call binding the contract method 0x6a030ca9.
 //
-// Solidity: function models(uint256 ) view returns(bytes32)
-func (_ModelRegistry *ModelRegistryCaller) Models(opts *bind.CallOpts, arg0 *big.Int) ([32]byte, error) {
+// Solidity: function models(uint256 index) view returns(bytes32)
+func (_ModelRegistry *ModelRegistryCaller) Models(opts *bind.CallOpts, index *big.Int) ([32]byte, error) {
 	var out []interface{}
-	err := _ModelRegistry.contract.Call(opts, &out, "models", arg0)
+	err := _ModelRegistry.contract.Call(opts, &out, "models", index)
 
 	if err != nil {
 		return *new([32]byte), err
@@ -481,209 +442,84 @@ func (_ModelRegistry *ModelRegistryCaller) Models(opts *bind.CallOpts, arg0 *big
 
 // Models is a free data retrieval call binding the contract method 0x6a030ca9.
 //
-// Solidity: function models(uint256 ) view returns(bytes32)
-func (_ModelRegistry *ModelRegistrySession) Models(arg0 *big.Int) ([32]byte, error) {
-	return _ModelRegistry.Contract.Models(&_ModelRegistry.CallOpts, arg0)
+// Solidity: function models(uint256 index) view returns(bytes32)
+func (_ModelRegistry *ModelRegistrySession) Models(index *big.Int) ([32]byte, error) {
+	return _ModelRegistry.Contract.Models(&_ModelRegistry.CallOpts, index)
 }
 
 // Models is a free data retrieval call binding the contract method 0x6a030ca9.
 //
-// Solidity: function models(uint256 ) view returns(bytes32)
-func (_ModelRegistry *ModelRegistryCallerSession) Models(arg0 *big.Int) ([32]byte, error) {
-	return _ModelRegistry.Contract.Models(&_ModelRegistry.CallOpts, arg0)
+// Solidity: function models(uint256 index) view returns(bytes32)
+func (_ModelRegistry *ModelRegistryCallerSession) Models(index *big.Int) ([32]byte, error) {
+	return _ModelRegistry.Contract.Models(&_ModelRegistry.CallOpts, index)
 }
 
-// Owner is a free data retrieval call binding the contract method 0x8da5cb5b.
+// ModelDeregister is a paid mutator transaction binding the contract method 0xd5a245f1.
 //
-// Solidity: function owner() view returns(address)
-func (_ModelRegistry *ModelRegistryCaller) Owner(opts *bind.CallOpts) (common.Address, error) {
-	var out []interface{}
-	err := _ModelRegistry.contract.Call(opts, &out, "owner")
-
-	if err != nil {
-		return *new(common.Address), err
-	}
-
-	out0 := *abi.ConvertType(out[0], new(common.Address)).(*common.Address)
-
-	return out0, err
-
+// Solidity: function modelDeregister(bytes32 id) returns()
+func (_ModelRegistry *ModelRegistryTransactor) ModelDeregister(opts *bind.TransactOpts, id [32]byte) (*types.Transaction, error) {
+	return _ModelRegistry.contract.Transact(opts, "modelDeregister", id)
 }
 
-// Owner is a free data retrieval call binding the contract method 0x8da5cb5b.
+// ModelDeregister is a paid mutator transaction binding the contract method 0xd5a245f1.
 //
-// Solidity: function owner() view returns(address)
-func (_ModelRegistry *ModelRegistrySession) Owner() (common.Address, error) {
-	return _ModelRegistry.Contract.Owner(&_ModelRegistry.CallOpts)
+// Solidity: function modelDeregister(bytes32 id) returns()
+func (_ModelRegistry *ModelRegistrySession) ModelDeregister(id [32]byte) (*types.Transaction, error) {
+	return _ModelRegistry.Contract.ModelDeregister(&_ModelRegistry.TransactOpts, id)
 }
 
-// Owner is a free data retrieval call binding the contract method 0x8da5cb5b.
+// ModelDeregister is a paid mutator transaction binding the contract method 0xd5a245f1.
 //
-// Solidity: function owner() view returns(address)
-func (_ModelRegistry *ModelRegistryCallerSession) Owner() (common.Address, error) {
-	return _ModelRegistry.Contract.Owner(&_ModelRegistry.CallOpts)
+// Solidity: function modelDeregister(bytes32 id) returns()
+func (_ModelRegistry *ModelRegistryTransactorSession) ModelDeregister(id [32]byte) (*types.Transaction, error) {
+	return _ModelRegistry.Contract.ModelDeregister(&_ModelRegistry.TransactOpts, id)
 }
 
-// Token is a free data retrieval call binding the contract method 0xfc0c546a.
+// ModelRegister is a paid mutator transaction binding the contract method 0x82806227.
 //
-// Solidity: function token() view returns(address)
-func (_ModelRegistry *ModelRegistryCaller) Token(opts *bind.CallOpts) (common.Address, error) {
-	var out []interface{}
-	err := _ModelRegistry.contract.Call(opts, &out, "token")
-
-	if err != nil {
-		return *new(common.Address), err
-	}
-
-	out0 := *abi.ConvertType(out[0], new(common.Address)).(*common.Address)
-
-	return out0, err
-
+// Solidity: function modelRegister(bytes32 modelId, bytes32 ipfsCID, uint256 fee, uint256 addStake, address owner, string name, string[] tags) returns()
+func (_ModelRegistry *ModelRegistryTransactor) ModelRegister(opts *bind.TransactOpts, modelId [32]byte, ipfsCID [32]byte, fee *big.Int, addStake *big.Int, owner common.Address, name string, tags []string) (*types.Transaction, error) {
+	return _ModelRegistry.contract.Transact(opts, "modelRegister", modelId, ipfsCID, fee, addStake, owner, name, tags)
 }
 
-// Token is a free data retrieval call binding the contract method 0xfc0c546a.
+// ModelRegister is a paid mutator transaction binding the contract method 0x82806227.
 //
-// Solidity: function token() view returns(address)
-func (_ModelRegistry *ModelRegistrySession) Token() (common.Address, error) {
-	return _ModelRegistry.Contract.Token(&_ModelRegistry.CallOpts)
+// Solidity: function modelRegister(bytes32 modelId, bytes32 ipfsCID, uint256 fee, uint256 addStake, address owner, string name, string[] tags) returns()
+func (_ModelRegistry *ModelRegistrySession) ModelRegister(modelId [32]byte, ipfsCID [32]byte, fee *big.Int, addStake *big.Int, owner common.Address, name string, tags []string) (*types.Transaction, error) {
+	return _ModelRegistry.Contract.ModelRegister(&_ModelRegistry.TransactOpts, modelId, ipfsCID, fee, addStake, owner, name, tags)
 }
 
-// Token is a free data retrieval call binding the contract method 0xfc0c546a.
+// ModelRegister is a paid mutator transaction binding the contract method 0x82806227.
 //
-// Solidity: function token() view returns(address)
-func (_ModelRegistry *ModelRegistryCallerSession) Token() (common.Address, error) {
-	return _ModelRegistry.Contract.Token(&_ModelRegistry.CallOpts)
+// Solidity: function modelRegister(bytes32 modelId, bytes32 ipfsCID, uint256 fee, uint256 addStake, address owner, string name, string[] tags) returns()
+func (_ModelRegistry *ModelRegistryTransactorSession) ModelRegister(modelId [32]byte, ipfsCID [32]byte, fee *big.Int, addStake *big.Int, owner common.Address, name string, tags []string) (*types.Transaction, error) {
+	return _ModelRegistry.Contract.ModelRegister(&_ModelRegistry.TransactOpts, modelId, ipfsCID, fee, addStake, owner, name, tags)
 }
 
-// Deregister is a paid mutator transaction binding the contract method 0x20813154.
+// ModelSetMinStake is a paid mutator transaction binding the contract method 0x78998329.
 //
-// Solidity: function deregister(bytes32 id) returns()
-func (_ModelRegistry *ModelRegistryTransactor) Deregister(opts *bind.TransactOpts, id [32]byte) (*types.Transaction, error) {
-	return _ModelRegistry.contract.Transact(opts, "deregister", id)
+// Solidity: function modelSetMinStake(uint256 _minStake) returns()
+func (_ModelRegistry *ModelRegistryTransactor) ModelSetMinStake(opts *bind.TransactOpts, _minStake *big.Int) (*types.Transaction, error) {
+	return _ModelRegistry.contract.Transact(opts, "modelSetMinStake", _minStake)
 }
 
-// Deregister is a paid mutator transaction binding the contract method 0x20813154.
+// ModelSetMinStake is a paid mutator transaction binding the contract method 0x78998329.
 //
-// Solidity: function deregister(bytes32 id) returns()
-func (_ModelRegistry *ModelRegistrySession) Deregister(id [32]byte) (*types.Transaction, error) {
-	return _ModelRegistry.Contract.Deregister(&_ModelRegistry.TransactOpts, id)
+// Solidity: function modelSetMinStake(uint256 _minStake) returns()
+func (_ModelRegistry *ModelRegistrySession) ModelSetMinStake(_minStake *big.Int) (*types.Transaction, error) {
+	return _ModelRegistry.Contract.ModelSetMinStake(&_ModelRegistry.TransactOpts, _minStake)
 }
 
-// Deregister is a paid mutator transaction binding the contract method 0x20813154.
+// ModelSetMinStake is a paid mutator transaction binding the contract method 0x78998329.
 //
-// Solidity: function deregister(bytes32 id) returns()
-func (_ModelRegistry *ModelRegistryTransactorSession) Deregister(id [32]byte) (*types.Transaction, error) {
-	return _ModelRegistry.Contract.Deregister(&_ModelRegistry.TransactOpts, id)
+// Solidity: function modelSetMinStake(uint256 _minStake) returns()
+func (_ModelRegistry *ModelRegistryTransactorSession) ModelSetMinStake(_minStake *big.Int) (*types.Transaction, error) {
+	return _ModelRegistry.Contract.ModelSetMinStake(&_ModelRegistry.TransactOpts, _minStake)
 }
 
-// Initialize is a paid mutator transaction binding the contract method 0xc4d66de8.
-//
-// Solidity: function initialize(address _token) returns()
-func (_ModelRegistry *ModelRegistryTransactor) Initialize(opts *bind.TransactOpts, _token common.Address) (*types.Transaction, error) {
-	return _ModelRegistry.contract.Transact(opts, "initialize", _token)
-}
-
-// Initialize is a paid mutator transaction binding the contract method 0xc4d66de8.
-//
-// Solidity: function initialize(address _token) returns()
-func (_ModelRegistry *ModelRegistrySession) Initialize(_token common.Address) (*types.Transaction, error) {
-	return _ModelRegistry.Contract.Initialize(&_ModelRegistry.TransactOpts, _token)
-}
-
-// Initialize is a paid mutator transaction binding the contract method 0xc4d66de8.
-//
-// Solidity: function initialize(address _token) returns()
-func (_ModelRegistry *ModelRegistryTransactorSession) Initialize(_token common.Address) (*types.Transaction, error) {
-	return _ModelRegistry.Contract.Initialize(&_ModelRegistry.TransactOpts, _token)
-}
-
-// Register is a paid mutator transaction binding the contract method 0x9e4aaa05.
-//
-// Solidity: function register(bytes32 modelId, bytes32 ipfsCID, uint256 fee, uint256 addStake, address owner, string name, string[] tags) returns()
-func (_ModelRegistry *ModelRegistryTransactor) Register(opts *bind.TransactOpts, modelId [32]byte, ipfsCID [32]byte, fee *big.Int, addStake *big.Int, owner common.Address, name string, tags []string) (*types.Transaction, error) {
-	return _ModelRegistry.contract.Transact(opts, "register", modelId, ipfsCID, fee, addStake, owner, name, tags)
-}
-
-// Register is a paid mutator transaction binding the contract method 0x9e4aaa05.
-//
-// Solidity: function register(bytes32 modelId, bytes32 ipfsCID, uint256 fee, uint256 addStake, address owner, string name, string[] tags) returns()
-func (_ModelRegistry *ModelRegistrySession) Register(modelId [32]byte, ipfsCID [32]byte, fee *big.Int, addStake *big.Int, owner common.Address, name string, tags []string) (*types.Transaction, error) {
-	return _ModelRegistry.Contract.Register(&_ModelRegistry.TransactOpts, modelId, ipfsCID, fee, addStake, owner, name, tags)
-}
-
-// Register is a paid mutator transaction binding the contract method 0x9e4aaa05.
-//
-// Solidity: function register(bytes32 modelId, bytes32 ipfsCID, uint256 fee, uint256 addStake, address owner, string name, string[] tags) returns()
-func (_ModelRegistry *ModelRegistryTransactorSession) Register(modelId [32]byte, ipfsCID [32]byte, fee *big.Int, addStake *big.Int, owner common.Address, name string, tags []string) (*types.Transaction, error) {
-	return _ModelRegistry.Contract.Register(&_ModelRegistry.TransactOpts, modelId, ipfsCID, fee, addStake, owner, name, tags)
-}
-
-// RenounceOwnership is a paid mutator transaction binding the contract method 0x715018a6.
-//
-// Solidity: function renounceOwnership() returns()
-func (_ModelRegistry *ModelRegistryTransactor) RenounceOwnership(opts *bind.TransactOpts) (*types.Transaction, error) {
-	return _ModelRegistry.contract.Transact(opts, "renounceOwnership")
-}
-
-// RenounceOwnership is a paid mutator transaction binding the contract method 0x715018a6.
-//
-// Solidity: function renounceOwnership() returns()
-func (_ModelRegistry *ModelRegistrySession) RenounceOwnership() (*types.Transaction, error) {
-	return _ModelRegistry.Contract.RenounceOwnership(&_ModelRegistry.TransactOpts)
-}
-
-// RenounceOwnership is a paid mutator transaction binding the contract method 0x715018a6.
-//
-// Solidity: function renounceOwnership() returns()
-func (_ModelRegistry *ModelRegistryTransactorSession) RenounceOwnership() (*types.Transaction, error) {
-	return _ModelRegistry.Contract.RenounceOwnership(&_ModelRegistry.TransactOpts)
-}
-
-// SetMinStake is a paid mutator transaction binding the contract method 0x8c80fd90.
-//
-// Solidity: function setMinStake(uint256 _minStake) returns()
-func (_ModelRegistry *ModelRegistryTransactor) SetMinStake(opts *bind.TransactOpts, _minStake *big.Int) (*types.Transaction, error) {
-	return _ModelRegistry.contract.Transact(opts, "setMinStake", _minStake)
-}
-
-// SetMinStake is a paid mutator transaction binding the contract method 0x8c80fd90.
-//
-// Solidity: function setMinStake(uint256 _minStake) returns()
-func (_ModelRegistry *ModelRegistrySession) SetMinStake(_minStake *big.Int) (*types.Transaction, error) {
-	return _ModelRegistry.Contract.SetMinStake(&_ModelRegistry.TransactOpts, _minStake)
-}
-
-// SetMinStake is a paid mutator transaction binding the contract method 0x8c80fd90.
-//
-// Solidity: function setMinStake(uint256 _minStake) returns()
-func (_ModelRegistry *ModelRegistryTransactorSession) SetMinStake(_minStake *big.Int) (*types.Transaction, error) {
-	return _ModelRegistry.Contract.SetMinStake(&_ModelRegistry.TransactOpts, _minStake)
-}
-
-// TransferOwnership is a paid mutator transaction binding the contract method 0xf2fde38b.
-//
-// Solidity: function transferOwnership(address newOwner) returns()
-func (_ModelRegistry *ModelRegistryTransactor) TransferOwnership(opts *bind.TransactOpts, newOwner common.Address) (*types.Transaction, error) {
-	return _ModelRegistry.contract.Transact(opts, "transferOwnership", newOwner)
-}
-
-// TransferOwnership is a paid mutator transaction binding the contract method 0xf2fde38b.
-//
-// Solidity: function transferOwnership(address newOwner) returns()
-func (_ModelRegistry *ModelRegistrySession) TransferOwnership(newOwner common.Address) (*types.Transaction, error) {
-	return _ModelRegistry.Contract.TransferOwnership(&_ModelRegistry.TransactOpts, newOwner)
-}
-
-// TransferOwnership is a paid mutator transaction binding the contract method 0xf2fde38b.
-//
-// Solidity: function transferOwnership(address newOwner) returns()
-func (_ModelRegistry *ModelRegistryTransactorSession) TransferOwnership(newOwner common.Address) (*types.Transaction, error) {
-	return _ModelRegistry.Contract.TransferOwnership(&_ModelRegistry.TransactOpts, newOwner)
-}
-
-// ModelRegistryDeregisteredIterator is returned from FilterDeregistered and is used to iterate over the raw logs and unpacked data for Deregistered events raised by the ModelRegistry contract.
-type ModelRegistryDeregisteredIterator struct {
-	Event *ModelRegistryDeregistered // Event containing the contract specifics and raw log
+// ModelRegistryModelDeregisteredIterator is returned from FilterModelDeregistered and is used to iterate over the raw logs and unpacked data for ModelDeregistered events raised by the ModelRegistry contract.
+type ModelRegistryModelDeregisteredIterator struct {
+	Event *ModelRegistryModelDeregistered // Event containing the contract specifics and raw log
 
 	contract *bind.BoundContract // Generic contract to use for unpacking event data
 	event    string              // Event name to use for unpacking event data
@@ -697,7 +533,7 @@ type ModelRegistryDeregisteredIterator struct {
 // Next advances the iterator to the subsequent event, returning whether there
 // are any more events found. In case of a retrieval or parsing error, false is
 // returned and Error() can be queried for the exact failure.
-func (it *ModelRegistryDeregisteredIterator) Next() bool {
+func (it *ModelRegistryModelDeregisteredIterator) Next() bool {
 	// If the iterator failed, stop iterating
 	if it.fail != nil {
 		return false
@@ -706,7 +542,7 @@ func (it *ModelRegistryDeregisteredIterator) Next() bool {
 	if it.done {
 		select {
 		case log := <-it.logs:
-			it.Event = new(ModelRegistryDeregistered)
+			it.Event = new(ModelRegistryModelDeregistered)
 			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
 				it.fail = err
 				return false
@@ -721,7 +557,7 @@ func (it *ModelRegistryDeregisteredIterator) Next() bool {
 	// Iterator still in progress, wait for either a data or an error event
 	select {
 	case log := <-it.logs:
-		it.Event = new(ModelRegistryDeregistered)
+		it.Event = new(ModelRegistryModelDeregistered)
 		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
 			it.fail = err
 			return false
@@ -737,28 +573,28 @@ func (it *ModelRegistryDeregisteredIterator) Next() bool {
 }
 
 // Error returns any retrieval or parsing error occurred during filtering.
-func (it *ModelRegistryDeregisteredIterator) Error() error {
+func (it *ModelRegistryModelDeregisteredIterator) Error() error {
 	return it.fail
 }
 
 // Close terminates the iteration process, releasing any pending underlying
 // resources.
-func (it *ModelRegistryDeregisteredIterator) Close() error {
+func (it *ModelRegistryModelDeregisteredIterator) Close() error {
 	it.sub.Unsubscribe()
 	return nil
 }
 
-// ModelRegistryDeregistered represents a Deregistered event raised by the ModelRegistry contract.
-type ModelRegistryDeregistered struct {
+// ModelRegistryModelDeregistered represents a ModelDeregistered event raised by the ModelRegistry contract.
+type ModelRegistryModelDeregistered struct {
 	Owner   common.Address
 	ModelId [32]byte
 	Raw     types.Log // Blockchain specific contextual infos
 }
 
-// FilterDeregistered is a free log retrieval operation binding the contract event 0xcc0d8d49cb9a5a3eebc1e1f0b607b8aad83fbe9618e448df79b8a0cc33319472.
+// FilterModelDeregistered is a free log retrieval operation binding the contract event 0x79a9f3017f26694a70f688c1e37f4add042a050660c62fc8351f760b153b888b.
 //
-// Solidity: event Deregistered(address indexed owner, bytes32 indexed modelId)
-func (_ModelRegistry *ModelRegistryFilterer) FilterDeregistered(opts *bind.FilterOpts, owner []common.Address, modelId [][32]byte) (*ModelRegistryDeregisteredIterator, error) {
+// Solidity: event ModelDeregistered(address indexed owner, bytes32 indexed modelId)
+func (_ModelRegistry *ModelRegistryFilterer) FilterModelDeregistered(opts *bind.FilterOpts, owner []common.Address, modelId [][32]byte) (*ModelRegistryModelDeregisteredIterator, error) {
 
 	var ownerRule []interface{}
 	for _, ownerItem := range owner {
@@ -769,17 +605,17 @@ func (_ModelRegistry *ModelRegistryFilterer) FilterDeregistered(opts *bind.Filte
 		modelIdRule = append(modelIdRule, modelIdItem)
 	}
 
-	logs, sub, err := _ModelRegistry.contract.FilterLogs(opts, "Deregistered", ownerRule, modelIdRule)
+	logs, sub, err := _ModelRegistry.contract.FilterLogs(opts, "ModelDeregistered", ownerRule, modelIdRule)
 	if err != nil {
 		return nil, err
 	}
-	return &ModelRegistryDeregisteredIterator{contract: _ModelRegistry.contract, event: "Deregistered", logs: logs, sub: sub}, nil
+	return &ModelRegistryModelDeregisteredIterator{contract: _ModelRegistry.contract, event: "ModelDeregistered", logs: logs, sub: sub}, nil
 }
 
-// WatchDeregistered is a free log subscription operation binding the contract event 0xcc0d8d49cb9a5a3eebc1e1f0b607b8aad83fbe9618e448df79b8a0cc33319472.
+// WatchModelDeregistered is a free log subscription operation binding the contract event 0x79a9f3017f26694a70f688c1e37f4add042a050660c62fc8351f760b153b888b.
 //
-// Solidity: event Deregistered(address indexed owner, bytes32 indexed modelId)
-func (_ModelRegistry *ModelRegistryFilterer) WatchDeregistered(opts *bind.WatchOpts, sink chan<- *ModelRegistryDeregistered, owner []common.Address, modelId [][32]byte) (event.Subscription, error) {
+// Solidity: event ModelDeregistered(address indexed owner, bytes32 indexed modelId)
+func (_ModelRegistry *ModelRegistryFilterer) WatchModelDeregistered(opts *bind.WatchOpts, sink chan<- *ModelRegistryModelDeregistered, owner []common.Address, modelId [][32]byte) (event.Subscription, error) {
 
 	var ownerRule []interface{}
 	for _, ownerItem := range owner {
@@ -790,7 +626,7 @@ func (_ModelRegistry *ModelRegistryFilterer) WatchDeregistered(opts *bind.WatchO
 		modelIdRule = append(modelIdRule, modelIdItem)
 	}
 
-	logs, sub, err := _ModelRegistry.contract.WatchLogs(opts, "Deregistered", ownerRule, modelIdRule)
+	logs, sub, err := _ModelRegistry.contract.WatchLogs(opts, "ModelDeregistered", ownerRule, modelIdRule)
 	if err != nil {
 		return nil, err
 	}
@@ -800,8 +636,8 @@ func (_ModelRegistry *ModelRegistryFilterer) WatchDeregistered(opts *bind.WatchO
 			select {
 			case log := <-logs:
 				// New log arrived, parse the event and forward to the user
-				event := new(ModelRegistryDeregistered)
-				if err := _ModelRegistry.contract.UnpackLog(event, "Deregistered", log); err != nil {
+				event := new(ModelRegistryModelDeregistered)
+				if err := _ModelRegistry.contract.UnpackLog(event, "ModelDeregistered", log); err != nil {
 					return err
 				}
 				event.Raw = log
@@ -822,21 +658,21 @@ func (_ModelRegistry *ModelRegistryFilterer) WatchDeregistered(opts *bind.WatchO
 	}), nil
 }
 
-// ParseDeregistered is a log parse operation binding the contract event 0xcc0d8d49cb9a5a3eebc1e1f0b607b8aad83fbe9618e448df79b8a0cc33319472.
+// ParseModelDeregistered is a log parse operation binding the contract event 0x79a9f3017f26694a70f688c1e37f4add042a050660c62fc8351f760b153b888b.
 //
-// Solidity: event Deregistered(address indexed owner, bytes32 indexed modelId)
-func (_ModelRegistry *ModelRegistryFilterer) ParseDeregistered(log types.Log) (*ModelRegistryDeregistered, error) {
-	event := new(ModelRegistryDeregistered)
-	if err := _ModelRegistry.contract.UnpackLog(event, "Deregistered", log); err != nil {
+// Solidity: event ModelDeregistered(address indexed owner, bytes32 indexed modelId)
+func (_ModelRegistry *ModelRegistryFilterer) ParseModelDeregistered(log types.Log) (*ModelRegistryModelDeregistered, error) {
+	event := new(ModelRegistryModelDeregistered)
+	if err := _ModelRegistry.contract.UnpackLog(event, "ModelDeregistered", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log
 	return event, nil
 }
 
-// ModelRegistryInitializedIterator is returned from FilterInitialized and is used to iterate over the raw logs and unpacked data for Initialized events raised by the ModelRegistry contract.
-type ModelRegistryInitializedIterator struct {
-	Event *ModelRegistryInitialized // Event containing the contract specifics and raw log
+// ModelRegistryModelMinStakeUpdatedIterator is returned from FilterModelMinStakeUpdated and is used to iterate over the raw logs and unpacked data for ModelMinStakeUpdated events raised by the ModelRegistry contract.
+type ModelRegistryModelMinStakeUpdatedIterator struct {
+	Event *ModelRegistryModelMinStakeUpdated // Event containing the contract specifics and raw log
 
 	contract *bind.BoundContract // Generic contract to use for unpacking event data
 	event    string              // Event name to use for unpacking event data
@@ -850,7 +686,7 @@ type ModelRegistryInitializedIterator struct {
 // Next advances the iterator to the subsequent event, returning whether there
 // are any more events found. In case of a retrieval or parsing error, false is
 // returned and Error() can be queried for the exact failure.
-func (it *ModelRegistryInitializedIterator) Next() bool {
+func (it *ModelRegistryModelMinStakeUpdatedIterator) Next() bool {
 	// If the iterator failed, stop iterating
 	if it.fail != nil {
 		return false
@@ -859,7 +695,7 @@ func (it *ModelRegistryInitializedIterator) Next() bool {
 	if it.done {
 		select {
 		case log := <-it.logs:
-			it.Event = new(ModelRegistryInitialized)
+			it.Event = new(ModelRegistryModelMinStakeUpdated)
 			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
 				it.fail = err
 				return false
@@ -874,7 +710,7 @@ func (it *ModelRegistryInitializedIterator) Next() bool {
 	// Iterator still in progress, wait for either a data or an error event
 	select {
 	case log := <-it.logs:
-		it.Event = new(ModelRegistryInitialized)
+		it.Event = new(ModelRegistryModelMinStakeUpdated)
 		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
 			it.fail = err
 			return false
@@ -890,175 +726,41 @@ func (it *ModelRegistryInitializedIterator) Next() bool {
 }
 
 // Error returns any retrieval or parsing error occurred during filtering.
-func (it *ModelRegistryInitializedIterator) Error() error {
+func (it *ModelRegistryModelMinStakeUpdatedIterator) Error() error {
 	return it.fail
 }
 
 // Close terminates the iteration process, releasing any pending underlying
 // resources.
-func (it *ModelRegistryInitializedIterator) Close() error {
+func (it *ModelRegistryModelMinStakeUpdatedIterator) Close() error {
 	it.sub.Unsubscribe()
 	return nil
 }
 
-// ModelRegistryInitialized represents a Initialized event raised by the ModelRegistry contract.
-type ModelRegistryInitialized struct {
-	Version uint8
-	Raw     types.Log // Blockchain specific contextual infos
-}
-
-// FilterInitialized is a free log retrieval operation binding the contract event 0x7f26b83ff96e1f2b6a682f133852f6798a09c465da95921460cefb3847402498.
-//
-// Solidity: event Initialized(uint8 version)
-func (_ModelRegistry *ModelRegistryFilterer) FilterInitialized(opts *bind.FilterOpts) (*ModelRegistryInitializedIterator, error) {
-
-	logs, sub, err := _ModelRegistry.contract.FilterLogs(opts, "Initialized")
-	if err != nil {
-		return nil, err
-	}
-	return &ModelRegistryInitializedIterator{contract: _ModelRegistry.contract, event: "Initialized", logs: logs, sub: sub}, nil
-}
-
-// WatchInitialized is a free log subscription operation binding the contract event 0x7f26b83ff96e1f2b6a682f133852f6798a09c465da95921460cefb3847402498.
-//
-// Solidity: event Initialized(uint8 version)
-func (_ModelRegistry *ModelRegistryFilterer) WatchInitialized(opts *bind.WatchOpts, sink chan<- *ModelRegistryInitialized) (event.Subscription, error) {
-
-	logs, sub, err := _ModelRegistry.contract.WatchLogs(opts, "Initialized")
-	if err != nil {
-		return nil, err
-	}
-	return event.NewSubscription(func(quit <-chan struct{}) error {
-		defer sub.Unsubscribe()
-		for {
-			select {
-			case log := <-logs:
-				// New log arrived, parse the event and forward to the user
-				event := new(ModelRegistryInitialized)
-				if err := _ModelRegistry.contract.UnpackLog(event, "Initialized", log); err != nil {
-					return err
-				}
-				event.Raw = log
-
-				select {
-				case sink <- event:
-				case err := <-sub.Err():
-					return err
-				case <-quit:
-					return nil
-				}
-			case err := <-sub.Err():
-				return err
-			case <-quit:
-				return nil
-			}
-		}
-	}), nil
-}
-
-// ParseInitialized is a log parse operation binding the contract event 0x7f26b83ff96e1f2b6a682f133852f6798a09c465da95921460cefb3847402498.
-//
-// Solidity: event Initialized(uint8 version)
-func (_ModelRegistry *ModelRegistryFilterer) ParseInitialized(log types.Log) (*ModelRegistryInitialized, error) {
-	event := new(ModelRegistryInitialized)
-	if err := _ModelRegistry.contract.UnpackLog(event, "Initialized", log); err != nil {
-		return nil, err
-	}
-	event.Raw = log
-	return event, nil
-}
-
-// ModelRegistryMinStakeUpdatedIterator is returned from FilterMinStakeUpdated and is used to iterate over the raw logs and unpacked data for MinStakeUpdated events raised by the ModelRegistry contract.
-type ModelRegistryMinStakeUpdatedIterator struct {
-	Event *ModelRegistryMinStakeUpdated // Event containing the contract specifics and raw log
-
-	contract *bind.BoundContract // Generic contract to use for unpacking event data
-	event    string              // Event name to use for unpacking event data
-
-	logs chan types.Log        // Log channel receiving the found contract events
-	sub  ethereum.Subscription // Subscription for errors, completion and termination
-	done bool                  // Whether the subscription completed delivering logs
-	fail error                 // Occurred error to stop iteration
-}
-
-// Next advances the iterator to the subsequent event, returning whether there
-// are any more events found. In case of a retrieval or parsing error, false is
-// returned and Error() can be queried for the exact failure.
-func (it *ModelRegistryMinStakeUpdatedIterator) Next() bool {
-	// If the iterator failed, stop iterating
-	if it.fail != nil {
-		return false
-	}
-	// If the iterator completed, deliver directly whatever's available
-	if it.done {
-		select {
-		case log := <-it.logs:
-			it.Event = new(ModelRegistryMinStakeUpdated)
-			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
-				it.fail = err
-				return false
-			}
-			it.Event.Raw = log
-			return true
-
-		default:
-			return false
-		}
-	}
-	// Iterator still in progress, wait for either a data or an error event
-	select {
-	case log := <-it.logs:
-		it.Event = new(ModelRegistryMinStakeUpdated)
-		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
-			it.fail = err
-			return false
-		}
-		it.Event.Raw = log
-		return true
-
-	case err := <-it.sub.Err():
-		it.done = true
-		it.fail = err
-		return it.Next()
-	}
-}
-
-// Error returns any retrieval or parsing error occurred during filtering.
-func (it *ModelRegistryMinStakeUpdatedIterator) Error() error {
-	return it.fail
-}
-
-// Close terminates the iteration process, releasing any pending underlying
-// resources.
-func (it *ModelRegistryMinStakeUpdatedIterator) Close() error {
-	it.sub.Unsubscribe()
-	return nil
-}
-
-// ModelRegistryMinStakeUpdated represents a MinStakeUpdated event raised by the ModelRegistry contract.
-type ModelRegistryMinStakeUpdated struct {
+// ModelRegistryModelMinStakeUpdated represents a ModelMinStakeUpdated event raised by the ModelRegistry contract.
+type ModelRegistryModelMinStakeUpdated struct {
 	NewStake *big.Int
 	Raw      types.Log // Blockchain specific contextual infos
 }
 
-// FilterMinStakeUpdated is a free log retrieval operation binding the contract event 0x47ab46f2c8d4258304a2f5551c1cbdb6981be49631365d1ba7191288a73f39ef.
+// FilterModelMinStakeUpdated is a free log retrieval operation binding the contract event 0xa7facdcb561b9b7c3091d6bea4b06c48f97f719dade07ba7510a687109161f6e.
 //
-// Solidity: event MinStakeUpdated(uint256 newStake)
-func (_ModelRegistry *ModelRegistryFilterer) FilterMinStakeUpdated(opts *bind.FilterOpts) (*ModelRegistryMinStakeUpdatedIterator, error) {
+// Solidity: event ModelMinStakeUpdated(uint256 newStake)
+func (_ModelRegistry *ModelRegistryFilterer) FilterModelMinStakeUpdated(opts *bind.FilterOpts) (*ModelRegistryModelMinStakeUpdatedIterator, error) {
 
-	logs, sub, err := _ModelRegistry.contract.FilterLogs(opts, "MinStakeUpdated")
+	logs, sub, err := _ModelRegistry.contract.FilterLogs(opts, "ModelMinStakeUpdated")
 	if err != nil {
 		return nil, err
 	}
-	return &ModelRegistryMinStakeUpdatedIterator{contract: _ModelRegistry.contract, event: "MinStakeUpdated", logs: logs, sub: sub}, nil
+	return &ModelRegistryModelMinStakeUpdatedIterator{contract: _ModelRegistry.contract, event: "ModelMinStakeUpdated", logs: logs, sub: sub}, nil
 }
 
-// WatchMinStakeUpdated is a free log subscription operation binding the contract event 0x47ab46f2c8d4258304a2f5551c1cbdb6981be49631365d1ba7191288a73f39ef.
+// WatchModelMinStakeUpdated is a free log subscription operation binding the contract event 0xa7facdcb561b9b7c3091d6bea4b06c48f97f719dade07ba7510a687109161f6e.
 //
-// Solidity: event MinStakeUpdated(uint256 newStake)
-func (_ModelRegistry *ModelRegistryFilterer) WatchMinStakeUpdated(opts *bind.WatchOpts, sink chan<- *ModelRegistryMinStakeUpdated) (event.Subscription, error) {
+// Solidity: event ModelMinStakeUpdated(uint256 newStake)
+func (_ModelRegistry *ModelRegistryFilterer) WatchModelMinStakeUpdated(opts *bind.WatchOpts, sink chan<- *ModelRegistryModelMinStakeUpdated) (event.Subscription, error) {
 
-	logs, sub, err := _ModelRegistry.contract.WatchLogs(opts, "MinStakeUpdated")
+	logs, sub, err := _ModelRegistry.contract.WatchLogs(opts, "ModelMinStakeUpdated")
 	if err != nil {
 		return nil, err
 	}
@@ -1068,8 +770,8 @@ func (_ModelRegistry *ModelRegistryFilterer) WatchMinStakeUpdated(opts *bind.Wat
 			select {
 			case log := <-logs:
 				// New log arrived, parse the event and forward to the user
-				event := new(ModelRegistryMinStakeUpdated)
-				if err := _ModelRegistry.contract.UnpackLog(event, "MinStakeUpdated", log); err != nil {
+				event := new(ModelRegistryModelMinStakeUpdated)
+				if err := _ModelRegistry.contract.UnpackLog(event, "ModelMinStakeUpdated", log); err != nil {
 					return err
 				}
 				event.Raw = log
@@ -1090,21 +792,21 @@ func (_ModelRegistry *ModelRegistryFilterer) WatchMinStakeUpdated(opts *bind.Wat
 	}), nil
 }
 
-// ParseMinStakeUpdated is a log parse operation binding the contract event 0x47ab46f2c8d4258304a2f5551c1cbdb6981be49631365d1ba7191288a73f39ef.
+// ParseModelMinStakeUpdated is a log parse operation binding the contract event 0xa7facdcb561b9b7c3091d6bea4b06c48f97f719dade07ba7510a687109161f6e.
 //
-// Solidity: event MinStakeUpdated(uint256 newStake)
-func (_ModelRegistry *ModelRegistryFilterer) ParseMinStakeUpdated(log types.Log) (*ModelRegistryMinStakeUpdated, error) {
-	event := new(ModelRegistryMinStakeUpdated)
-	if err := _ModelRegistry.contract.UnpackLog(event, "MinStakeUpdated", log); err != nil {
+// Solidity: event ModelMinStakeUpdated(uint256 newStake)
+func (_ModelRegistry *ModelRegistryFilterer) ParseModelMinStakeUpdated(log types.Log) (*ModelRegistryModelMinStakeUpdated, error) {
+	event := new(ModelRegistryModelMinStakeUpdated)
+	if err := _ModelRegistry.contract.UnpackLog(event, "ModelMinStakeUpdated", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log
 	return event, nil
 }
 
-// ModelRegistryOwnershipTransferredIterator is returned from FilterOwnershipTransferred and is used to iterate over the raw logs and unpacked data for OwnershipTransferred events raised by the ModelRegistry contract.
-type ModelRegistryOwnershipTransferredIterator struct {
-	Event *ModelRegistryOwnershipTransferred // Event containing the contract specifics and raw log
+// ModelRegistryModelRegisteredUpdatedIterator is returned from FilterModelRegisteredUpdated and is used to iterate over the raw logs and unpacked data for ModelRegisteredUpdated events raised by the ModelRegistry contract.
+type ModelRegistryModelRegisteredUpdatedIterator struct {
+	Event *ModelRegistryModelRegisteredUpdated // Event containing the contract specifics and raw log
 
 	contract *bind.BoundContract // Generic contract to use for unpacking event data
 	event    string              // Event name to use for unpacking event data
@@ -1118,7 +820,7 @@ type ModelRegistryOwnershipTransferredIterator struct {
 // Next advances the iterator to the subsequent event, returning whether there
 // are any more events found. In case of a retrieval or parsing error, false is
 // returned and Error() can be queried for the exact failure.
-func (it *ModelRegistryOwnershipTransferredIterator) Next() bool {
+func (it *ModelRegistryModelRegisteredUpdatedIterator) Next() bool {
 	// If the iterator failed, stop iterating
 	if it.fail != nil {
 		return false
@@ -1127,7 +829,7 @@ func (it *ModelRegistryOwnershipTransferredIterator) Next() bool {
 	if it.done {
 		select {
 		case log := <-it.logs:
-			it.Event = new(ModelRegistryOwnershipTransferred)
+			it.Event = new(ModelRegistryModelRegisteredUpdated)
 			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
 				it.fail = err
 				return false
@@ -1142,7 +844,7 @@ func (it *ModelRegistryOwnershipTransferredIterator) Next() bool {
 	// Iterator still in progress, wait for either a data or an error event
 	select {
 	case log := <-it.logs:
-		it.Event = new(ModelRegistryOwnershipTransferred)
+		it.Event = new(ModelRegistryModelRegisteredUpdated)
 		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
 			it.fail = err
 			return false
@@ -1158,181 +860,28 @@ func (it *ModelRegistryOwnershipTransferredIterator) Next() bool {
 }
 
 // Error returns any retrieval or parsing error occurred during filtering.
-func (it *ModelRegistryOwnershipTransferredIterator) Error() error {
+func (it *ModelRegistryModelRegisteredUpdatedIterator) Error() error {
 	return it.fail
 }
 
 // Close terminates the iteration process, releasing any pending underlying
 // resources.
-func (it *ModelRegistryOwnershipTransferredIterator) Close() error {
+func (it *ModelRegistryModelRegisteredUpdatedIterator) Close() error {
 	it.sub.Unsubscribe()
 	return nil
 }
 
-// ModelRegistryOwnershipTransferred represents a OwnershipTransferred event raised by the ModelRegistry contract.
-type ModelRegistryOwnershipTransferred struct {
-	PreviousOwner common.Address
-	NewOwner      common.Address
-	Raw           types.Log // Blockchain specific contextual infos
-}
-
-// FilterOwnershipTransferred is a free log retrieval operation binding the contract event 0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0.
-//
-// Solidity: event OwnershipTransferred(address indexed previousOwner, address indexed newOwner)
-func (_ModelRegistry *ModelRegistryFilterer) FilterOwnershipTransferred(opts *bind.FilterOpts, previousOwner []common.Address, newOwner []common.Address) (*ModelRegistryOwnershipTransferredIterator, error) {
-
-	var previousOwnerRule []interface{}
-	for _, previousOwnerItem := range previousOwner {
-		previousOwnerRule = append(previousOwnerRule, previousOwnerItem)
-	}
-	var newOwnerRule []interface{}
-	for _, newOwnerItem := range newOwner {
-		newOwnerRule = append(newOwnerRule, newOwnerItem)
-	}
-
-	logs, sub, err := _ModelRegistry.contract.FilterLogs(opts, "OwnershipTransferred", previousOwnerRule, newOwnerRule)
-	if err != nil {
-		return nil, err
-	}
-	return &ModelRegistryOwnershipTransferredIterator{contract: _ModelRegistry.contract, event: "OwnershipTransferred", logs: logs, sub: sub}, nil
-}
-
-// WatchOwnershipTransferred is a free log subscription operation binding the contract event 0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0.
-//
-// Solidity: event OwnershipTransferred(address indexed previousOwner, address indexed newOwner)
-func (_ModelRegistry *ModelRegistryFilterer) WatchOwnershipTransferred(opts *bind.WatchOpts, sink chan<- *ModelRegistryOwnershipTransferred, previousOwner []common.Address, newOwner []common.Address) (event.Subscription, error) {
-
-	var previousOwnerRule []interface{}
-	for _, previousOwnerItem := range previousOwner {
-		previousOwnerRule = append(previousOwnerRule, previousOwnerItem)
-	}
-	var newOwnerRule []interface{}
-	for _, newOwnerItem := range newOwner {
-		newOwnerRule = append(newOwnerRule, newOwnerItem)
-	}
-
-	logs, sub, err := _ModelRegistry.contract.WatchLogs(opts, "OwnershipTransferred", previousOwnerRule, newOwnerRule)
-	if err != nil {
-		return nil, err
-	}
-	return event.NewSubscription(func(quit <-chan struct{}) error {
-		defer sub.Unsubscribe()
-		for {
-			select {
-			case log := <-logs:
-				// New log arrived, parse the event and forward to the user
-				event := new(ModelRegistryOwnershipTransferred)
-				if err := _ModelRegistry.contract.UnpackLog(event, "OwnershipTransferred", log); err != nil {
-					return err
-				}
-				event.Raw = log
-
-				select {
-				case sink <- event:
-				case err := <-sub.Err():
-					return err
-				case <-quit:
-					return nil
-				}
-			case err := <-sub.Err():
-				return err
-			case <-quit:
-				return nil
-			}
-		}
-	}), nil
-}
-
-// ParseOwnershipTransferred is a log parse operation binding the contract event 0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0.
-//
-// Solidity: event OwnershipTransferred(address indexed previousOwner, address indexed newOwner)
-func (_ModelRegistry *ModelRegistryFilterer) ParseOwnershipTransferred(log types.Log) (*ModelRegistryOwnershipTransferred, error) {
-	event := new(ModelRegistryOwnershipTransferred)
-	if err := _ModelRegistry.contract.UnpackLog(event, "OwnershipTransferred", log); err != nil {
-		return nil, err
-	}
-	event.Raw = log
-	return event, nil
-}
-
-// ModelRegistryRegisteredUpdatedIterator is returned from FilterRegisteredUpdated and is used to iterate over the raw logs and unpacked data for RegisteredUpdated events raised by the ModelRegistry contract.
-type ModelRegistryRegisteredUpdatedIterator struct {
-	Event *ModelRegistryRegisteredUpdated // Event containing the contract specifics and raw log
-
-	contract *bind.BoundContract // Generic contract to use for unpacking event data
-	event    string              // Event name to use for unpacking event data
-
-	logs chan types.Log        // Log channel receiving the found contract events
-	sub  ethereum.Subscription // Subscription for errors, completion and termination
-	done bool                  // Whether the subscription completed delivering logs
-	fail error                 // Occurred error to stop iteration
-}
-
-// Next advances the iterator to the subsequent event, returning whether there
-// are any more events found. In case of a retrieval or parsing error, false is
-// returned and Error() can be queried for the exact failure.
-func (it *ModelRegistryRegisteredUpdatedIterator) Next() bool {
-	// If the iterator failed, stop iterating
-	if it.fail != nil {
-		return false
-	}
-	// If the iterator completed, deliver directly whatever's available
-	if it.done {
-		select {
-		case log := <-it.logs:
-			it.Event = new(ModelRegistryRegisteredUpdated)
-			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
-				it.fail = err
-				return false
-			}
-			it.Event.Raw = log
-			return true
-
-		default:
-			return false
-		}
-	}
-	// Iterator still in progress, wait for either a data or an error event
-	select {
-	case log := <-it.logs:
-		it.Event = new(ModelRegistryRegisteredUpdated)
-		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
-			it.fail = err
-			return false
-		}
-		it.Event.Raw = log
-		return true
-
-	case err := <-it.sub.Err():
-		it.done = true
-		it.fail = err
-		return it.Next()
-	}
-}
-
-// Error returns any retrieval or parsing error occurred during filtering.
-func (it *ModelRegistryRegisteredUpdatedIterator) Error() error {
-	return it.fail
-}
-
-// Close terminates the iteration process, releasing any pending underlying
-// resources.
-func (it *ModelRegistryRegisteredUpdatedIterator) Close() error {
-	it.sub.Unsubscribe()
-	return nil
-}
-
-// ModelRegistryRegisteredUpdated represents a RegisteredUpdated event raised by the ModelRegistry contract.
-type ModelRegistryRegisteredUpdated struct {
+// ModelRegistryModelRegisteredUpdated represents a ModelRegisteredUpdated event raised by the ModelRegistry contract.
+type ModelRegistryModelRegisteredUpdated struct {
 	Owner   common.Address
 	ModelId [32]byte
 	Raw     types.Log // Blockchain specific contextual infos
 }
 
-// FilterRegisteredUpdated is a free log retrieval operation binding the contract event 0x4dffc4e92367641816479c647d1ff3f03202f6c73b97340cba51a7b577c55804.
+// FilterModelRegisteredUpdated is a free log retrieval operation binding the contract event 0xda9282a68d90c36d31d780a69a65da6c35191a5d8cdd37bd1a1a5aa9fb168e77.
 //
-// Solidity: event RegisteredUpdated(address indexed owner, bytes32 indexed modelId)
-func (_ModelRegistry *ModelRegistryFilterer) FilterRegisteredUpdated(opts *bind.FilterOpts, owner []common.Address, modelId [][32]byte) (*ModelRegistryRegisteredUpdatedIterator, error) {
+// Solidity: event ModelRegisteredUpdated(address indexed owner, bytes32 indexed modelId)
+func (_ModelRegistry *ModelRegistryFilterer) FilterModelRegisteredUpdated(opts *bind.FilterOpts, owner []common.Address, modelId [][32]byte) (*ModelRegistryModelRegisteredUpdatedIterator, error) {
 
 	var ownerRule []interface{}
 	for _, ownerItem := range owner {
@@ -1343,17 +892,17 @@ func (_ModelRegistry *ModelRegistryFilterer) FilterRegisteredUpdated(opts *bind.
 		modelIdRule = append(modelIdRule, modelIdItem)
 	}
 
-	logs, sub, err := _ModelRegistry.contract.FilterLogs(opts, "RegisteredUpdated", ownerRule, modelIdRule)
+	logs, sub, err := _ModelRegistry.contract.FilterLogs(opts, "ModelRegisteredUpdated", ownerRule, modelIdRule)
 	if err != nil {
 		return nil, err
 	}
-	return &ModelRegistryRegisteredUpdatedIterator{contract: _ModelRegistry.contract, event: "RegisteredUpdated", logs: logs, sub: sub}, nil
+	return &ModelRegistryModelRegisteredUpdatedIterator{contract: _ModelRegistry.contract, event: "ModelRegisteredUpdated", logs: logs, sub: sub}, nil
 }
 
-// WatchRegisteredUpdated is a free log subscription operation binding the contract event 0x4dffc4e92367641816479c647d1ff3f03202f6c73b97340cba51a7b577c55804.
+// WatchModelRegisteredUpdated is a free log subscription operation binding the contract event 0xda9282a68d90c36d31d780a69a65da6c35191a5d8cdd37bd1a1a5aa9fb168e77.
 //
-// Solidity: event RegisteredUpdated(address indexed owner, bytes32 indexed modelId)
-func (_ModelRegistry *ModelRegistryFilterer) WatchRegisteredUpdated(opts *bind.WatchOpts, sink chan<- *ModelRegistryRegisteredUpdated, owner []common.Address, modelId [][32]byte) (event.Subscription, error) {
+// Solidity: event ModelRegisteredUpdated(address indexed owner, bytes32 indexed modelId)
+func (_ModelRegistry *ModelRegistryFilterer) WatchModelRegisteredUpdated(opts *bind.WatchOpts, sink chan<- *ModelRegistryModelRegisteredUpdated, owner []common.Address, modelId [][32]byte) (event.Subscription, error) {
 
 	var ownerRule []interface{}
 	for _, ownerItem := range owner {
@@ -1364,7 +913,7 @@ func (_ModelRegistry *ModelRegistryFilterer) WatchRegisteredUpdated(opts *bind.W
 		modelIdRule = append(modelIdRule, modelIdItem)
 	}
 
-	logs, sub, err := _ModelRegistry.contract.WatchLogs(opts, "RegisteredUpdated", ownerRule, modelIdRule)
+	logs, sub, err := _ModelRegistry.contract.WatchLogs(opts, "ModelRegisteredUpdated", ownerRule, modelIdRule)
 	if err != nil {
 		return nil, err
 	}
@@ -1374,8 +923,8 @@ func (_ModelRegistry *ModelRegistryFilterer) WatchRegisteredUpdated(opts *bind.W
 			select {
 			case log := <-logs:
 				// New log arrived, parse the event and forward to the user
-				event := new(ModelRegistryRegisteredUpdated)
-				if err := _ModelRegistry.contract.UnpackLog(event, "RegisteredUpdated", log); err != nil {
+				event := new(ModelRegistryModelRegisteredUpdated)
+				if err := _ModelRegistry.contract.UnpackLog(event, "ModelRegisteredUpdated", log); err != nil {
 					return err
 				}
 				event.Raw = log
@@ -1396,12 +945,12 @@ func (_ModelRegistry *ModelRegistryFilterer) WatchRegisteredUpdated(opts *bind.W
 	}), nil
 }
 
-// ParseRegisteredUpdated is a log parse operation binding the contract event 0x4dffc4e92367641816479c647d1ff3f03202f6c73b97340cba51a7b577c55804.
+// ParseModelRegisteredUpdated is a log parse operation binding the contract event 0xda9282a68d90c36d31d780a69a65da6c35191a5d8cdd37bd1a1a5aa9fb168e77.
 //
-// Solidity: event RegisteredUpdated(address indexed owner, bytes32 indexed modelId)
-func (_ModelRegistry *ModelRegistryFilterer) ParseRegisteredUpdated(log types.Log) (*ModelRegistryRegisteredUpdated, error) {
-	event := new(ModelRegistryRegisteredUpdated)
-	if err := _ModelRegistry.contract.UnpackLog(event, "RegisteredUpdated", log); err != nil {
+// Solidity: event ModelRegisteredUpdated(address indexed owner, bytes32 indexed modelId)
+func (_ModelRegistry *ModelRegistryFilterer) ParseModelRegisteredUpdated(log types.Log) (*ModelRegistryModelRegisteredUpdated, error) {
+	event := new(ModelRegistryModelRegisteredUpdated)
+	if err := _ModelRegistry.contract.UnpackLog(event, "ModelRegisteredUpdated", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log

@@ -20,10 +20,10 @@ type RpcProxy struct {
 	marketplace      *registries.Marketplace
 }
 
-func NewRpcProxy(rpcClient *ethclient.Client, providerRegistryAddr common.Address, modelRegistryAddr common.Address, marketplaceAddr common.Address, log interfaces.ILogger) *RpcProxy {
-	providerRegistry := registries.NewProviderRegistry(providerRegistryAddr, rpcClient, log)
-	modelRegistry := registries.NewModelRegistry(modelRegistryAddr, rpcClient, log)
-	marketplace := registries.NewMarketplace(marketplaceAddr, rpcClient, log)
+func NewRpcProxy(rpcClient *ethclient.Client, diamonContractAddr common.Address, log interfaces.ILogger) *RpcProxy {
+	providerRegistry := registries.NewProviderRegistry(diamonContractAddr, rpcClient, log)
+	modelRegistry := registries.NewModelRegistry(diamonContractAddr, rpcClient, log)
+	marketplace := registries.NewMarketplace(diamonContractAddr, rpcClient, log)
 	return &RpcProxy{
 		rpcClient:        rpcClient,
 		providerRegistry: providerRegistry,
