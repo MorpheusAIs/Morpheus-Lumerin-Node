@@ -1,8 +1,14 @@
 import hre from "hardhat";
-import { encodeFunctionData, encodePacked, getAddress, parseUnits } from "viem/utils";
-import { getHex, getTxTimestamp, randomBytes32 } from "./utils";
+import {
+  encodeFunctionData,
+  encodePacked,
+  getAddress,
+  parseUnits,
+} from "viem/utils";
+import { getHex, getTxTimestamp, now, randomBytes32 } from "./utils";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { FacetCutAction, getSelectors } from "../libraries/diamond";
+import { MINUTE, SECOND } from "../utils/time";
 
 export async function deployMORtoken() {
   const [owner] = await hre.viem.getWalletClients();
@@ -66,23 +72,26 @@ export async function deployDiamond() {
       args: [tokenMOR.address, owner.account.address],
     }),
   };
-  const diamond = await hre.viem.deployContract("Diamond", [facetCuts, diamondArgs]);
+  const diamond = await hre.viem.deployContract("Diamond", [
+    facetCuts,
+    diamondArgs,
+  ]);
 
   const modelRegistry = await hre.viem.getContractAt(
     "contracts/facets/ModelRegistry.sol:ModelRegistry",
-    diamond.address
+    diamond.address,
   );
   const providerRegistry = await hre.viem.getContractAt(
     "contracts/facets/ProviderRegistry.sol:ProviderRegistry",
-    diamond.address
+    diamond.address,
   );
   const marketplace = await hre.viem.getContractAt(
     "contracts/facets/Marketplace.sol:Marketplace",
-    diamond.address
+    diamond.address,
   );
   const sessionRouter = await hre.viem.getContractAt(
     "contracts/facets/SessionRouter.sol:SessionRouter",
-    diamond.address
+    diamond.address,
   );
 
   return {
@@ -257,7 +266,7 @@ export async function deploySingleBid() {
     id: "" as `0x${string}`,
     providerAddr: getAddress(expectedProvider.address),
     modelId: expectedModel.modelId,
-    pricePerSecond: 1n,
+    pricePerSecond: parseUnits("0.0001", decimalsMOR),
     nonce: 0n,
     createdAt: 0n,
     deletedAt: 0n,
@@ -273,8 +282,26 @@ export async function deploySingleBid() {
   expectedBid.id = postBidtx.result;
   expectedBid.createdAt = await getTxTimestamp(publicClient, txHash);
 
+  // generating data for sample session
+  const durationSeconds = (5 * MINUTE) / SECOND;
+  const totalCost = expectedBid.pricePerSecond * BigInt(durationSeconds);
+  const totalSupply = await tokenMOR.read.totalSupply();
+  const todaysBudget = await sessionRouter.read.getTodaysBudget([now()]);
+
+  const expectedSession = {
+    durationSeconds,
+    totalCost,
+    pricePerSecond: expectedBid.pricePerSecond,
+    user: getAddress(user.account.address),
+    provider: expectedBid.providerAddr,
+    modelAgentId: expectedBid.modelId,
+    bidID: expectedBid.id,
+    stake: (totalCost * totalSupply) / todaysBudget,
+  };
+
   return {
     expectedBid,
+    expectedSession,
     marketplace,
     owner,
     provider,
