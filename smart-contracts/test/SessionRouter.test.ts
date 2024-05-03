@@ -8,14 +8,7 @@ import { expect } from "chai";
 import hre from "hardhat";
 import { PublicClient, getAddress, keccak256, parseEventLogs } from "viem";
 import { deploySingleBid, encodedReport } from "./fixtures";
-import {
-  catchError,
-  expectError,
-  getHex,
-  getTxTimestamp,
-  now,
-  randomBytes32,
-} from "./utils";
+import { catchError, getHex, getTxTimestamp } from "./utils";
 import { DAY, HOUR, MINUTE, SECOND } from "../utils/time";
 import { expectAlmostEqual } from "../utils/compare";
 import { waitForTransactionReceipt } from "viem/_types/actions/public/waitForTransactionReceipt";

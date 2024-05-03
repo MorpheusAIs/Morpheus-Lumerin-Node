@@ -43,9 +43,15 @@ contract Marketplace {
     address provider
   ) public view returns (Bid[] memory) {
     KeySet.Set storage providerBidsSet = s.providerActiveBids[provider];
-    Bid[] memory _bids = new Bid[](providerBidsSet.count());
+    uint256 length = providerBidsSet.count();
+
+    Bid[] memory _bids = new Bid[](length);
+    bytes32[] memory bidIds = new bytes32[](length);
+    
     for (uint i = 0; i < providerBidsSet.count(); i++) {
-      _bids[i] = s.bidMap[providerBidsSet.keyAtIndex(i)];
+      bytes32 id = providerBidsSet.keyAtIndex(i);
+      bidIds[i] = id;
+      _bids[i] = s.bidMap[id];
     }
     return _bids;
   }
@@ -55,9 +61,15 @@ contract Marketplace {
     bytes32 modelAgentId
   ) public view returns (Bid[] memory) {
     KeySet.Set storage modelAgentBidsSet = s.modelAgentActiveBids[modelAgentId];
-    Bid[] memory _bids = new Bid[](modelAgentBidsSet.count());
-    for (uint i = 0; i < modelAgentBidsSet.count(); i++) {
-      _bids[i] = s.bidMap[modelAgentBidsSet.keyAtIndex(i)];
+    uint256 length = modelAgentBidsSet.count();
+
+    Bid[] memory _bids = new Bid[](length);
+    bytes32[] memory bidIds = new bytes32[](length);
+    
+    for (uint i = 0; i < length; i++) {
+      bytes32 id = modelAgentBidsSet.keyAtIndex(i);
+      bidIds[i] = id;
+      _bids[i] = s.bidMap[id];
     }
     return _bids;
   }
@@ -67,19 +79,21 @@ contract Marketplace {
     address provider,
     uint256 offset,
     uint8 limit
-  ) public view returns (Bid[] memory) {
+  ) public view returns (bytes32[] memory, Bid[] memory) {
     uint256 length = s.providerBids[provider].length;
     if (length < offset) {
-      return new Bid[](0);
+      return (new bytes32[](0), new Bid[](0));
     }
     uint8 size = offset + limit > length ? uint8(length - offset) : limit;
     Bid[] memory _bids = new Bid[](size);
+    bytes32[] memory bidIds = new bytes32[](size);
     for (uint i = 0; i < size; i++) {
       uint256 index = length - offset - i - 1;
       bytes32 id = s.providerBids[provider][index];
+      bidIds[i] = id;
       _bids[i] = s.bidMap[id];
     }
-    return _bids;
+    return (bidIds, _bids);
   }
 
   // returns all bids by provider sorted from newest to oldest
@@ -87,19 +101,21 @@ contract Marketplace {
     bytes32 modelAgentId,
     uint256 offset,
     uint8 limit
-  ) public view returns (Bid[] memory) {
+  ) public view returns (bytes32[] memory, Bid[] memory) {
     uint256 length = s.modelAgentBids[modelAgentId].length;
     if (length < offset) {
-      return new Bid[](0);
+      return (new bytes32[](0), new Bid[](0));
     }
     uint8 size = offset + limit > length ? uint8(length - offset) : limit;
     Bid[] memory _bids = new Bid[](size);
+    bytes32[] memory bidIds = new bytes32[](size);
     for (uint i = 0; i < size; i++) {
       uint256 index = length - offset - i - 1;
       bytes32 id = s.modelAgentBids[modelAgentId][index];
+      bidIds[i] = id;
       _bids[i] = s.bidMap[id];
     }
-    return _bids;
+    return (bidIds, _bids);
   }
 
   function postModelBid(
