@@ -37,10 +37,7 @@ contract SessionRouter {
 
   // errors
   error NotUserOrProvider();
-  error NotUser();
-
-  error NotEnoughWithdrawableBalance();
-  error NotEnoughBalance();
+  error NotEnoughWithdrawableBalance();   // means that there is not enough funds at all or some funds are still locked
 
   error SessionTooShort();
   error SessionNotFound();
@@ -72,7 +69,7 @@ contract SessionRouter {
       revert BidTaken();
     }
 
-    uint256 duration = balanceOfSessionStipend(_stake, uint128(block.timestamp)) / bid.pricePerSecond;
+    uint256 duration = stakeToStipend(_stake, uint128(block.timestamp)) / bid.pricePerSecond;
     if (duration < MIN_SESSION_DURATION) {
       revert SessionTooShort();
     }
@@ -116,24 +113,24 @@ contract SessionRouter {
       revert SessionAlreadyClosed();
     }
 
-    uint256 stipend = balanceOfSessionStipend(session.stake, uint128(block.timestamp));
+    uint256 stipend = stakeToStipend(session.stake, uint128(block.timestamp));
     uint256 durationSeconds = stipend / session.pricePerSecond;
 
     uint256 secondsFromStartOfDay = block.timestamp % DAY;
-    uint256 startOfTheDay = block.timestamp - secondsFromStartOfDay;
+    uint256 startOfToday = block.timestamp - secondsFromStartOfDay;
     uint256 secondsLeftToday = DAY - secondsFromStartOfDay;
-    uint256 startOfTheTomorrow = startOfTheDay + DAY;
+    uint256 startOfTheTomorrow = startOfToday + DAY;
 
     // case 1 
     // started today and will end today 
-    if (session.openedAt > startOfTheDay && session.openedAt + durationSeconds < startOfTheTomorrow) {
+    if (session.openedAt > startOfToday && session.openedAt + durationSeconds < startOfTheTomorrow) {
       return session.openedAt + durationSeconds;
     }
 
     // case 2 
     // started today and will end tomorrow (at midnight new stipend issued)
-    if (session.openedAt > startOfTheDay && session.openedAt + durationSeconds >= startOfTheTomorrow) {
-      uint256 tomorrowStipend = balanceOfSessionStipend(session.stake, uint128(block.timestamp + secondsLeftToday + 1));
+    if (session.openedAt > startOfToday && session.openedAt + durationSeconds >= startOfTheTomorrow) {
+      uint256 tomorrowStipend = stakeToStipend(session.stake, uint128(block.timestamp + secondsLeftToday + 1));
       uint256 tomorrowDurationSeconds = tomorrowStipend / session.pricePerSecond;
       return session.openedAt + durationSeconds + tomorrowDurationSeconds;
     }
@@ -147,7 +144,7 @@ contract SessionRouter {
     // case 4
     // started any time and will end today
     if (durationSeconds < DAY) {
-      return startOfTheDay + durationSeconds;
+      return startOfToday + durationSeconds;
     }
 
     return stipend / session.pricePerSecond;
@@ -173,84 +170,95 @@ contract SessionRouter {
     session.closeoutReceipt = receiptEncoded;
     session.closedAt = block.timestamp;
 
-    uint256 startOfTheDay = block.timestamp - (block.timestamp % DAY);
-    uint256 todaysSessionDurationSeconds = block.timestamp - maxUint256(session.openedAt, startOfTheDay);
+    uint256 startOfToday = startOfTheDay(block.timestamp);
+    uint256 todaysSessionDurationSeconds = block.timestamp - maxUint256(session.openedAt, startOfToday);
     uint256 todaySessionCost = todaysSessionDurationSeconds * session.pricePerSecond;
 
-    // TODO: partially return stake according to the usage
-    // and put rest on hold for 24 hours
-
+    // calculate provider withdraw
+    uint256 providerWithdraw;
     if (isValidReceipt(session.provider, receiptEncoded, signature)) {
       // withdraw all remaining provider funds
       uint256 totalSessionDuration = session.closedAt - session.openedAt;
       uint256 totalCost = totalSessionDuration * session.pricePerSecond;
-      uint256 withdrawAmount = totalCost - session.providerWithdrawnAmount;
-      session.providerWithdrawnAmount+=withdrawAmount;
-      s.token.transferFrom(s.fundingAccount, session.provider, withdrawAmount);
+      providerWithdraw = totalCost - session.providerWithdrawnAmount;
     } else {
       // withdraw all funds except for today's session cost
-      uint256 durationTillToday = startOfTheDay - minUint256(session.openedAt, startOfTheDay);
-      uint256 costTillToday = durationTillToday * session.pricePerSecond;
-      uint256 withdrawAmount = costTillToday - session.providerWithdrawnAmount;
-      session.providerWithdrawnAmount+=withdrawAmount;
-      s.token.transferFrom(s.fundingAccount, session.provider, withdrawAmount);
-      
-      // put today's session cost on hold for 24 hours
-      s.providerOnHold[session.provider].push(
-        OnHold({ amount: todaySessionCost, releaseAt: block.timestamp + DAY })
-      );
       session.closeoutType = 1;
+      uint256 durationTillToday = startOfToday - minUint256(session.openedAt, startOfToday);
+      uint256 costTillToday = durationTillToday * session.pricePerSecond;
+      providerWithdraw = costTillToday - session.providerWithdrawnAmount;
     }
+    session.providerWithdrawnAmount+=providerWithdraw;
+
+    // calculate user withdraw
+    uint256 userStakeToLock = stipendToStake(todaySessionCost, uint128(block.timestamp));
+    s.userOnHold[session.user].push(OnHold({
+      amount: session.stake - userStakeToLock,
+      releaseAt: block.timestamp + DAY
+    }));
+    uint256 userWithdraw = session.stake - userStakeToLock;
+
+    emit SessionClosed(session.user, sessionId, session.provider);
+    
+    // withdraw provider and user  funds
+    s.token.transferFrom(s.fundingAccount, session.provider, providerWithdraw);
+    s.token.transfer(session.user, userWithdraw);
   }
 
   // funds related functions
 
-  // TODO: implement
-  // returns total claimanble balance of the provider from all sessions
-  // and the amount that is on hold
-  function getProviderBalance(
-    address providerAddr
-  ) public view returns (uint256 total, uint256 hold) {
-    // OnHold[] memory onHold = s.providerOnHold[providerAddr];
-    // for (uint i = 0; i < onHold.length; i++) {
-    //   total += onHold[i].amount;
-    //   if (block.timestamp < onHold[i].releaseAt) {
-    //     hold += onHold[i].amount;
-    //   }
-    // }
-    return (total, hold);
+  // returns total claimanble balance for the provider for particular session
+  function getProviderClaimableBalance(bytes32 sessionId) public view returns (uint256) {
+    Session memory session = s.sessions[s.sessionMap[sessionId]];
+    if (session.openedAt == 0) {
+      revert SessionNotFound();
+    }
+    
+    return _getProviderClaimableBalance(session);
   }
 
-  // transfers provider claimable balance to provider address.
-  // set amount to 0 to claim all balance.
-  function claimProviderBalance(uint256 amountToWithdraw, address to) public {
-    OnHold[] storage onHoldEntries = s.providerOnHold[msg.sender];
-    uint256 balance = 0;
-    uint i = 0;
-    // the only loop that is not avoidable
-    while (i < onHoldEntries.length) {
-      if (block.timestamp > onHoldEntries[i].releaseAt) {
-        balance += onHoldEntries[i].amount;
+  function claimProviderBalance(bytes32 sessionId, uint256 amountToWithdraw, address to) public {
+    Session storage session = s.sessions[s.sessionMap[sessionId]];
+    if (session.openedAt == 0) {
+      revert SessionNotFound();
+    }
+    LibOwner._senderOrOwner(session.provider);
 
-        if (balance >= amountToWithdraw) {
-          uint256 delta = balance - amountToWithdraw;
-          onHoldEntries[i].amount = delta;
-          s.token.transferFrom(s.fundingAccount, to, amountToWithdraw);
-          return;
-        }
+    uint256 withdrawableAmount = _getProviderClaimableBalance(session);
 
-        onHoldEntries[i] = onHoldEntries[onHoldEntries.length - 1];
-        onHoldEntries.pop();
-      } else {
-        i++;
-      }
+    if (amountToWithdraw > withdrawableAmount) {
+      revert NotEnoughWithdrawableBalance();
     }
 
-    revert NotEnoughBalance();
+    session.providerWithdrawnAmount += amountToWithdraw;
+    s.token.transferFrom(s.fundingAccount, to, amountToWithdraw);
+    return;
   }
 
-  function claimProviderBalanceV2(uint256 amountToWithdraw, address to) public {
-    return;
+  function _getProviderClaimableBalance(Session memory session) internal view returns (uint256){
+     if (session.closedAt == 0) {
+      // session is still open
+      // provider can claim all funds except for today's session cost
+      uint256 startOfToday = startOfTheDay(block.timestamp);
+      uint256 durationTillToday = startOfToday - minUint256(session.openedAt, startOfToday);
+      uint256 costTillToday = durationTillToday * session.pricePerSecond;
+      uint256 withdrawableAmount = costTillToday - session.providerWithdrawnAmount;
+      return withdrawableAmount;
+    } else if (session.closedAt > startOfTheDay(block.timestamp)){
+      // likely not to be the case when session was closed today
+      // cause provider already got funds
+      uint256 durationTillToday = startOfTheDay(block.timestamp) - minUint256(session.openedAt, startOfTheDay(block.timestamp));
+      uint256 costTillToday = durationTillToday * session.pricePerSecond;
+      uint256 withdrawableAmount = costTillToday - session.providerWithdrawnAmount;
+      return withdrawableAmount;
+    } else {
+      // session was closed yesterday or earlier
+      // provider can claim all funds
+      uint256 totalSessionDuration = session.closedAt - session.openedAt;
+      uint256 totalCost = totalSessionDuration * session.pricePerSecond;
+      uint256 withdrawableAmount = totalCost - session.providerWithdrawnAmount;
+      return withdrawableAmount;
+    }
   }
 
   function deleteHistory(bytes32 sessionId) public {
@@ -282,34 +290,74 @@ contract SessionRouter {
   //         STAKING
   //===========================
 
-  function withdrawableStakeBalance(
-    address userAddress
-  ) public view returns (uint256) {
-    //TODO: return user stake (on hold and withdrawable)
-    return 0;
+  // returns amount of user stake withdrawable and on hold
+  function withdrawableUserStake(
+    address userAddr
+  ) public view returns (uint256 avail, uint256 hold) {
+    OnHold[] memory onHold = s.userOnHold[userAddr];
+    for (uint i = 0; i < onHold.length; i++) {
+      uint256 amount = onHold[i].amount;
+      if (block.timestamp < onHold[i].releaseAt) {
+        hold += amount;
+      } else {
+        avail += amount;
+      }
+    }
+    return (avail, hold);
   }
 
-  // return virtual MOR balance of user based on their stake
-  // DEPRECATED
-  // function balanceOfDailyStipend(address userAddress) public view returns (uint256) {
-  //   return getTodaysBudget() * userStake[userAddress] / token.totalSupply() - getTodaysSpend(userAddress);
-  // }
+  function withdrawUserStake(uint256 amountToWithdraw, address to) public {
+    uint256 balance = 0;
+    address sender = msg.sender;
 
-  function balanceOfSessionStipend(
+    // withdraw all available funds if amountToWithdraw is 0
+    if (amountToWithdraw == 0) {
+      amountToWithdraw = type(uint256).max;
+    }
+
+    OnHold[] storage onHoldEntries = s.userOnHold[sender];
+    uint i = 0;
+
+    // the only loop that is not avoidable     
+    while (i < onHoldEntries.length) {
+      if (block.timestamp > onHoldEntries[i].releaseAt) {
+        balance += onHoldEntries[i].amount;
+
+        if (balance >= amountToWithdraw) {
+          uint256 delta = balance - amountToWithdraw;
+          onHoldEntries[i].amount = delta;
+          s.token.transfer(to, amountToWithdraw);
+          return;
+        }
+
+        // removes entry from array
+        onHoldEntries[i] = onHoldEntries[onHoldEntries.length - 1];
+        onHoldEntries.pop();
+      } else {
+        i++;
+      }
+    }
+
+    if (amountToWithdraw == type(uint256).max) {
+      s.token.transfer(to, balance);
+      return;
+    }
+
+    revert NotEnoughWithdrawableBalance();
+  }
+
+  // returns stipend of user based on their stake
+  function stakeToStipend(
     uint256 sessionStake, uint128 timestamp
   ) public view returns (uint256) {
     return (getTodaysBudget(timestamp) * sessionStake) / s.token.totalSupply();
   }
 
-  function getTodaysSpend(address userAddress) public view returns (uint256) {
-    // OnHold memory spend = todaysSpend[userAddress];
-    // if (block.timestamp > spend.releaseAt) {
-    //   return 0;
-    // }
-    // return spend.amount;
-    //
-    // TODO: implement global counter of how much was spent today
-    return 0;
+  // returns stake of user based on their stipend
+  function stipendToStake(
+    uint256 stipend, uint128 timestamp
+  ) public view returns (uint256) {
+    return (stipend * s.token.totalSupply()) / getTodaysBudget(timestamp);
   }
 
   function getTodaysBudget(uint128 timestamp) public view returns (uint256) {
@@ -334,6 +382,10 @@ contract SessionRouter {
   function setPoolConfig(Pool calldata pool) public {
     LibOwner._onlyOwner();
     s.pool = pool;
+  }
+
+  function startOfTheDay(uint256 timestamp) public pure returns (uint256) {
+    return timestamp - (timestamp % DAY);
   }
 
   function minUint256(uint256 a, uint256 b) internal pure returns (uint256) {

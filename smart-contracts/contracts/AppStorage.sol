@@ -89,7 +89,6 @@ struct AppStorage {
   mapping(bytes32 => uint256) sessionMap; // sessionId => session index
   mapping(bytes32 => uint256) bidSessionMap; // bidId => session index
   mapping(address => KeySet.Set) userActiveSessions; // user address => active session indexes
-  mapping(address => OnHold[]) providerOnHold; // provider address => balance
   mapping(address => OnHold[]) userOnHold; // user address => balance
   //
   // OTHER
