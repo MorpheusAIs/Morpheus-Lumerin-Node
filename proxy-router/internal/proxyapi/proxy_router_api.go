@@ -16,6 +16,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/morrpc"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/storages"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/system"
 	"github.com/gin-gonic/gin"
 )
@@ -32,28 +33,30 @@ type ConfigResponse struct {
 }
 
 type ProxyRouterApi struct {
-	sysConfig     *system.SystemConfigurator
-	publicUrl     *url.URL
-	pubKey        string
-	privateKey    string
-	config        Sanitizable
-	derivedConfig *config.DerivedConfig
-	appStartTime  time.Time
-	logStorage    *lib.Collection[*interfaces.LogStorage]
-	log           interfaces.ILogger
+	sysConfig      *system.SystemConfigurator
+	publicUrl      *url.URL
+	pubKey         string
+	privateKey     string
+	config         Sanitizable
+	derivedConfig  *config.DerivedConfig
+	appStartTime   time.Time
+	logStorage     *lib.Collection[*interfaces.LogStorage]
+	sessionStorage *storages.SessionStorage
+	log            interfaces.ILogger
 }
 
-func NewProxyRouterApi(sysConfig *system.SystemConfigurator, publicUrl *url.URL, pubKey string, privateKey string, config Sanitizable, derivedConfig *config.DerivedConfig, appStartTime time.Time, logStorage *lib.Collection[*interfaces.LogStorage], log interfaces.ILogger) *ProxyRouterApi {
+func NewProxyRouterApi(sysConfig *system.SystemConfigurator, publicUrl *url.URL, pubKey string, privateKey string, config Sanitizable, derivedConfig *config.DerivedConfig, appStartTime time.Time, logStorage *lib.Collection[*interfaces.LogStorage], sessionStorage *storages.SessionStorage, log interfaces.ILogger) *ProxyRouterApi {
 	return &ProxyRouterApi{
-		sysConfig:     sysConfig,
-		publicUrl:     publicUrl,
-		pubKey:        pubKey,
-		privateKey:    privateKey,
-		config:        config,
-		derivedConfig: derivedConfig,
-		appStartTime:  appStartTime,
-		logStorage:    logStorage,
-		log:           log,
+		sysConfig:      sysConfig,
+		publicUrl:      publicUrl,
+		pubKey:         pubKey,
+		privateKey:     privateKey,
+		config:         config,
+		derivedConfig:  derivedConfig,
+		appStartTime:   appStartTime,
+		logStorage:     logStorage,
+		sessionStorage: sessionStorage,
+		log:            log,
 	}
 }
 
@@ -109,31 +112,9 @@ func (p *ProxyRouterApi) InitiateSession(ctx *gin.Context) (int, gin.H) {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 
-	conn, err := net.Dial("tcp", providerUrl)
-	if err != nil {
-		err = lib.WrapError(fmt.Errorf("failed to connect to provider"), err)
-		p.log.Errorf("%s", err)
-		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
-	}
-	defer conn.Close()
-
-	msgJSON, err := json.Marshal(initiateSessionRequest)
-	if err != nil {
-		err = lib.WrapError(fmt.Errorf("failed to marshal initiate session request"), err)
-		p.log.Errorf("%s", err)
-		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
-	}
-	conn.Write([]byte(msgJSON))
-
-	// read response
-	reader := bufio.NewReader(conn)
-	d := json.NewDecoder(reader)
-	var msg *morrpc.RpcResponse
-	err = d.Decode(&msg)
-	if err != nil {
-		err = lib.WrapError(fmt.Errorf("failed to decode response"), err)
-		p.log.Errorf("%s", err)
-		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	msg, code, ginErr := p.rpcRequest(providerUrl, initiateSessionRequest)
+	if ginErr != nil {
+		return code, ginErr
 	}
 
 	signature := fmt.Sprintf("%v", msg.Result["signature"])
@@ -147,6 +128,12 @@ func (p *ProxyRouterApi) InitiateSession(ctx *gin.Context) (int, gin.H) {
 		p.log.Errorf("%s", err)
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
+
+	p.sessionStorage.AddSession(&storages.Session{
+		Id:             requestID,
+		UserPubKey:     p.pubKey,
+		ProviderPubKey: providerPubKey,
+	})
 
 	return constants.HTTP_STATUS_OK, gin.H{
 		"response": msg,
@@ -187,35 +174,14 @@ func (p *ProxyRouterApi) SendPrompt(ctx *gin.Context) (int, gin.H) {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 
-	conn, err := net.Dial("tcp", providerUrl)
-	if err != nil {
-		err = lib.WrapError(fmt.Errorf("failed to connect to provider"), err)
-		p.log.Errorf("%s", err)
-		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
-	}
-	defer conn.Close()
-
-	msgJSON, err := json.Marshal(promptRequest)
-	if err != nil {
-		err = lib.WrapError(fmt.Errorf("failed to marshal initiate session request"), err)
-		p.log.Errorf("%s", err)
-		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
-	}
-	conn.Write([]byte(msgJSON))
-
-	// read response
-	reader := bufio.NewReader(conn)
-	d := json.NewDecoder(reader)
-	var msg *morrpc.RpcResponse
-	err = d.Decode(&msg)
-	if err != nil {
-		err = lib.WrapError(fmt.Errorf("failed to decode response"), err)
-		p.log.Errorf("%s", err)
-		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	msg, code, ginError := p.rpcRequest(providerUrl, promptRequest)
+	if ginError != nil {
+		return code, ginError
 	}
 
 	signature := fmt.Sprintf("%v", msg.Result["signature"])
-	providerPubKey := "mock_provider_pub_key" // get provider public key from storage for sessionId
+	session := p.sessionStorage.GetSession(sessionId)
+	providerPubKey := session.ProviderPubKey // get provider public key from storage for sessionId
 	p.log.Debugf("Signature: %s, Provider Pub Key: %s", signature, providerPubKey)
 
 	isValidSignature := morrpc.NewMorRpc().VerifySignature(msg.Result, signature, providerPubKey, p.log)
@@ -258,6 +224,36 @@ func (p *ProxyRouterApi) GetFiles(ctx *gin.Context) (int, gin.H) {
 		ctx.Abort()
 	}
 	return constants.HTTP_STATUS_OK, gin.H{}
+}
+
+func (p *ProxyRouterApi) rpcRequest(url string, rpcMessage *morrpc.RpcMessage) (*morrpc.RpcResponse, int, gin.H) {
+	conn, err := net.Dial("tcp", url)
+	if err != nil {
+		err = lib.WrapError(fmt.Errorf("failed to connect to provider"), err)
+		p.log.Errorf("%s", err)
+		return nil, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+	defer conn.Close()
+
+	msgJSON, err := json.Marshal(rpcMessage)
+	if err != nil {
+		err = lib.WrapError(fmt.Errorf("failed to marshal request"), err)
+		p.log.Errorf("%s", err)
+		return nil, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+	conn.Write([]byte(msgJSON))
+
+	// read response
+	reader := bufio.NewReader(conn)
+	d := json.NewDecoder(reader)
+	var msg *morrpc.RpcResponse
+	err = d.Decode(&msg)
+	if err != nil {
+		err = lib.WrapError(fmt.Errorf("failed to decode response"), err)
+		p.log.Errorf("%s", err)
+		return nil, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+	return msg, 0, nil
 }
 
 func writeFiles(writer io.Writer, files []system.FD) error {

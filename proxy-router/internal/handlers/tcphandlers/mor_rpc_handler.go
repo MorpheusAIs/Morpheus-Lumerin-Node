@@ -6,21 +6,24 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/morrpc"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/storages"
 )
 
 type MorRpcHandler struct {
-	privateKeyHex string
-	publicKeyHex  string
-	address       string
-	morRpc        *morrpc.MorRpc
+	privateKeyHex  string
+	publicKeyHex   string
+	address        string
+	morRpc         *morrpc.MorRpc
+	sessionStorage *storages.SessionStorage
 }
 
-func NewMorRpcHandler(privateKeyHex string, publicKeyHex string, address string, morRpc *morrpc.MorRpc) *MorRpcHandler {
+func NewMorRpcHandler(privateKeyHex string, publicKeyHex string, address string, morRpc *morrpc.MorRpc, sessionStorage *storages.SessionStorage) *MorRpcHandler {
 	return &MorRpcHandler{
-		privateKeyHex: privateKeyHex,
-		address:       address,
-		publicKeyHex:  publicKeyHex,
-		morRpc:        morRpc,
+		privateKeyHex:  privateKeyHex,
+		address:        address,
+		publicKeyHex:   publicKeyHex,
+		morRpc:         morRpc,
+		sessionStorage: sessionStorage,
 	}
 }
 
@@ -62,6 +65,11 @@ func (m *MorRpcHandler) Handle(msg morrpc.RpcMessage, sourceLog interfaces.ILogg
 			return nil, err
 		}
 
+		session := storages.Session{
+			Id:         requestId,
+			UserPubKey: userPubKey,
+		}
+		m.sessionStorage.AddSession(&session)
 		return response, nil
 	case "session.prompt":
 		requestId := fmt.Sprintf("%v", msg.ID)
@@ -71,7 +79,10 @@ func (m *MorRpcHandler) Handle(msg morrpc.RpcMessage, sourceLog interfaces.ILogg
 		timeStamp := fmt.Sprintf("%v", msg.Params["timestamp"])
 		sourceLog.Debugf("Received prompt from session %s, timestamp: %s", sessionId, timeStamp)
 
-		userPubKey := "mocked_pub_key" // get user public key from storage for sessionId
+		session := m.sessionStorage.GetSession(sessionId)
+
+		userPubKey := session.UserPubKey // get user public key from storage for sessionId
+		fmt.Println(userPubKey)
 		isValid := m.morRpc.VerifySignature(msg.Params, signature, userPubKey, sourceLog)
 		if !isValid {
 			err := fmt.Errorf("invalid signature")

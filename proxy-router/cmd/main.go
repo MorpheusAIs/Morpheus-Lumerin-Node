@@ -21,6 +21,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/proxyapi"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/transport"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/rpcproxy"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/storages"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/system"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -192,8 +193,10 @@ func start() error {
 		return err
 	}
 
+	sessionStorage := storages.NewSessionStorage()
+
 	tcpServer := transport.NewTCPServer(cfg.Proxy.Address, connLog.Named("TCP"))
-	morTcpHandler := tcphandlers.NewMorRpcHandler(cfg.Marketplace.WalletPrivateKey, publicKey, derived.WalletAddress, morrpc.NewMorRpc())
+	morTcpHandler := tcphandlers.NewMorRpcHandler(cfg.Marketplace.WalletPrivateKey, publicKey, derived.WalletAddress, morrpc.NewMorRpc(), sessionStorage)
 	tcpHandler := tcphandlers.NewTCPHandler(
 		log, connLog, schedulerLogFactory, morTcpHandler,
 	)
@@ -201,9 +204,10 @@ func start() error {
 
 	diamondContractAddr := common.HexToAddress(cfg.Marketplace.DiamondContractAddress)
 
-	proxyRouterApi := proxyapi.NewProxyRouterApi(sysConfig, publicUrl, publicKey, cfg.Marketplace.WalletPrivateKey, &cfg, derived, time.Now(), contractLogStorage, log)
-	rpcProxy := rpcproxy.NewRpcProxy(ethClient, diamondContractAddr, proxyLog)
+	proxyRouterApi := proxyapi.NewProxyRouterApi(sysConfig, publicUrl, publicKey, cfg.Marketplace.WalletPrivateKey, &cfg, derived, time.Now(), contractLogStorage, sessionStorage, log)
+	rpcProxy := rpcproxy.NewRpcProxy(ethClient, diamondContractAddr, cfg.Marketplace.WalletPrivateKey, proxyLog, cfg.Blockchain.EthLegacyTx)
 	aiEngine := aiengine.NewAiEngine()
+
 	apiBus := apibus.NewApiBus(rpcProxy, aiEngine, proxyRouterApi)
 
 	handl := httphandlers.NewHTTPHandler(apiBus)
