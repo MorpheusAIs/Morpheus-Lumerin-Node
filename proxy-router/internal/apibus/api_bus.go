@@ -47,8 +47,8 @@ func (apiBus *ApiBus) Prompt(ctx context.Context, req interface{}) (interface{},
 }
 
 // AiEngine
-func (apiBus *ApiBus) PromptStream(ctx context.Context, req interface{}) (interface{}, error) {
-	return apiBus.aiEngine.PromptStream(ctx, req)
+func (apiBus *ApiBus) PromptStream(ctx context.Context, req interface{}, flush interface{}) (interface{}, error) {
+	return apiBus.aiEngine.PromptStream(ctx, req, flush)
 }
 
 // RpcProxy

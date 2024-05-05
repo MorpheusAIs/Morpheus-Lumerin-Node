@@ -2,18 +2,18 @@ const sinon = require('sinon')
 const axios = require('axios')
 const ollama = require('./index')
 const chai = require('chai')
-
 const { expect } = chai
 const modelName = 'llama2:latest'
 const config = {
 
   modelUrl: 'http://localhost:8082/v1',
+  // modelUrl: "http://localhost:11434/v1",
   modelName: modelName,
 }
 // TODO: fix other tests so they can be run reliably
 describe.only('test ollama', function () {
   this.timeout(15000)
-  describe.only('api integration', () => {
+  describe('api integration', () => {
     before('should init with config', () => {
 
       process.env.OPENAI_BASE_URL = config.modelUrl
@@ -26,7 +26,7 @@ describe.only('test ollama', function () {
       const chat = []
       const message = 'how are you?'
       const response = await ollama.chat.createChatCompletion(chat, message)
-
+// console.log("response: ", response)
       // concatenate the values of all of the content fields in all of the response elements
       const contents = response.map(({ message }) => message.content)
 
@@ -37,7 +37,7 @@ describe.only('test ollama', function () {
       const chat = []
       const message = 'how are you?'
       const response = await ollama.chat.createChatCompletion(chat, message)
-console.log("stream response: ", response)
+// console.log("stream response: ", response)
       // concatenate the values of all of the content fields in all of the response elements
       const contents = response.map(({ message }) => message.content)
 

@@ -44,8 +44,12 @@ async function streamChatCompletions(chat, message) {
       messages: [...chat, message]
     });
 
+    for await (const chunk of stream) {
+      // console.log("choices: ", chunk.choices[0]?.delta?.content || '');
+    }
+
     const chatCompletion = await stream.finalChatCompletion()
-    console.log('chat completion: ', chatCompletion) // {id: "…", choices: […], …}
+    // console.log('chat completion: ', chatCompletion) // {id: "…", choices: […], …}
     return chatCompletion.choices
   } catch (error) {
     console.log('chat completion error: ', error)
