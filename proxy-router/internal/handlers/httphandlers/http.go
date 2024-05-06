@@ -49,22 +49,8 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 		var response interface{}
 
 		if req.Stream {
-			flusher, ok := ctx.Writer.(http.Flusher)
-
-			// ctx.Writer.Header().Set("Cache-Control", "no-cache")
-			// ctx.Writer.Header().Set("Connection", "keep-alive")
-			// ctx.Writer.Header().Set("Transfer-Encoding", "chunked")
-			// ctx.Writer.WriteHeader(http.StatusOK)
-			flusher.Flush()
-
-			if !ok {
-				http.Error(ctx.Writer, "Streaming unsupported!", http.StatusInternalServerError)
-				return
-			}
-			// encoder := json.NewEncoder(ctx.Writer)
-
+			
 			response, err = apiBus.PromptStream(ctx, req, func (response *openai.ChatCompletionStreamResponse) error {
-				fmt.Println("sream response: ", response)
 
 				marshalledResponse, err := json.Marshal(response)
 
@@ -74,13 +60,10 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 
 				ctx.Writer.Header().Set("Content-Type", "text/event-stream")
 				_, err = ctx.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", marshalledResponse)))
-				// err = encoder.Encode(*response)
 
 				if err != nil {
 					return err
 				}
-
-				flusher.Flush()
 
 				return nil
 			})
@@ -88,7 +71,6 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 			response, err = apiBus.Prompt(ctx, req)
 		}
 		
-		fmt.Println("apibus prompt response: ", response)
 		if err != nil {
 			ctx.AbortWithError(http.StatusInternalServerError, err)
 			return

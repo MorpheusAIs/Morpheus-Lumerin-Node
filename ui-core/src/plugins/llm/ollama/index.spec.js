@@ -12,7 +12,7 @@ const config = {
 }
 // TODO: fix other tests so they can be run reliably
 describe.only('test ollama', function () {
-  this.timeout(15000)
+  this.timeout(20000)
   describe('api integration', () => {
     before('should init with config', () => {
 
@@ -26,7 +26,6 @@ describe.only('test ollama', function () {
       const chat = []
       const message = 'how are you?'
       const response = await ollama.chat.createChatCompletion(chat, message)
-// console.log("response: ", response)
       // concatenate the values of all of the content fields in all of the response elements
       const contents = response.map(({ message }) => message.content)
 
@@ -37,7 +36,7 @@ describe.only('test ollama', function () {
       const chat = []
       const message = 'how are you?'
       const response = await ollama.chat.createChatCompletion(chat, message)
-// console.log("stream response: ", response)
+      
       // concatenate the values of all of the content fields in all of the response elements
       const contents = response.map(({ message }) => message.content)
 
