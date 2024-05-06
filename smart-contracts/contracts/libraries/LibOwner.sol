@@ -16,6 +16,8 @@ library LibOwner {
     _;
   }
 
+  // Allows if sender is the owner of particular resource or the owner of the contract
+  // TODO: rename to onlyOwnerOrEntityOwner
   function _senderOrOwner(address resourceOwner) internal view {
     address owner = LibDiamond.diamondStorage().contractOwner;
     if (msg.sender != resourceOwner && msg.sender != owner) {

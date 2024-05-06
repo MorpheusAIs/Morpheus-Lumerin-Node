@@ -24,12 +24,31 @@ export async function getTxTimestamp(
   return block.timestamp;
 }
 
+/** helper function to catch errors and check if the error is the expected one
+ * @example
+ * await catchError(abi, "ErrorName", async () => {
+ *   await contract.method();
+ * });
+**/
+export async function catchError<const TAbi extends Abi | readonly unknown[]>(
+  abi: TAbi | undefined,
+  error: DecodeErrorResultReturnType<TAbi>["errorName"],
+  cb: () => Promise<unknown>,
+) {
+  try {
+    await cb();
+    throw new Error(`No error was thrown, expected error "${error}"`);
+  } catch (err) {
+    expectError(err, abi, error);
+  }
+}
+
 export function expectError<const TAbi extends Abi | readonly unknown[]>(
   err: any,
   abi: TAbi | undefined,
   error: DecodeErrorResultReturnType<TAbi>["errorName"],
 ) {
-  if (!catchErr(err, abi, error)) {
+  if (!isErr(err, abi, error)) {
     console.error(err);
     throw new Error(
       `Expected blockchain custom error "${error}" was not thrown\n\n${err}`,
@@ -40,7 +59,7 @@ export function expectError<const TAbi extends Abi | readonly unknown[]>(
   }
 }
 
-export function catchErr<const TAbi extends Abi | readonly unknown[]>(
+export function isErr<const TAbi extends Abi | readonly unknown[]>(
   err: any,
   abi: TAbi | undefined,
   error: DecodeErrorResultReturnType<TAbi>["errorName"],
@@ -89,4 +108,8 @@ export const randomBytes32 = (): `0x${string}` => {
 
 export const randomAddress = (): `0x${string}` => {
   return getHex(crypto.randomBytes(20), 20);
+};
+
+export const now = (): bigint => {
+  return BigInt(Math.floor(Date.now() / 1000));
 };
