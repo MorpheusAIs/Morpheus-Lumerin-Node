@@ -117,17 +117,14 @@ func (aiEngine *AiEngine) Prompt(ctx context.Context, req interface{}) (*api.Cha
 	return &response, nil
 }
 
-type StreamFlush func(*api.ChatCompletionStreamResponse) error
+type ChunkSubmit func(*api.ChatCompletionStreamResponse) error
 
-// TODO: IMPLEMENT RESPONSE BUFFER FLUSHING
-func (aiEngine *AiEngine) PromptStream(ctx context.Context, req interface{}, flush interface{}) (*api.ChatCompletionStreamResponse, error) {
+func (aiEngine *AiEngine) PromptStream(ctx context.Context, req interface{}, chunkSubmitCallback interface{}) (*api.ChatCompletionStreamResponse, error) {
 	request := req.(*api.ChatCompletionRequest)
-	streamFlush := flush.(func(*api.ChatCompletionStreamResponse) error)
-	fmt.Printf("Chat request: %+v\n", request)
+	chunkCallback := chunkSubmitCallback.(func(*api.ChatCompletionStreamResponse) error)
 
 	resp, err := requestChatCompletionStream(ctx, request, func(completion api.ChatCompletionStreamResponse) error {
-		// fmt.Printf("Chat completion: %+v\n", completion)
-		return streamFlush(&completion)
+		return chunkCallback(&completion)
 	})
 
 	if err != nil {
