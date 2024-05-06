@@ -10,6 +10,7 @@ on:
   push:
     branches:
       - main
+      - feat-ci-node
     paths: ['.github/workflows/**', '**/Makefile', '**/*.go']
 
 concurrency:
@@ -36,12 +37,21 @@ jobs:
             launcher/go.sum
             proxy-router/go.sum
 
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'yarn'
+          cache-dependency-path: ui-desktop/yarn.lock
+
       - name: Install dependencies
         run: |
           cd launcher
           go mod tidy
           cd ../proxy-router
           go mod download
+          cd ../ui-desktop
+          yarn install
 
       - name: Build
         id: build
@@ -50,6 +60,8 @@ jobs:
           make
           cd ../proxy-router
           make build
+          cd ../ui-desktop
+          yarn build:linux
 
       - name: Determine tag name
         id: tag
@@ -91,12 +103,21 @@ jobs:
             launcher/go.sum
             proxy-router/go.sum
 
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'yarn'
+          cache-dependency-path: ui-desktop/yarn.lock
+
       - name: Install dependencies
         run: |
           cd launcher
           go mod tidy
           cd ../proxy-router
           go mod download
+          cd ../ui-desktop
+          yarn install
 
       - name: Build
         id: build
@@ -105,6 +126,8 @@ jobs:
           make
           cd ../proxy-router
           make build
+          cd ../ui-desktop
+          yarn build:mac
 
       - name: Determine tag name
         id: tag
@@ -146,12 +169,21 @@ jobs:
             launcher/go.sum
             proxy-router/go.sum
 
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'yarn'
+          cache-dependency-path: ui-desktop/yarn.lock
+
       - name: Install dependencies
         run: |
           cd launcher
           go mod tidy
           cd ../proxy-router
           go mod download
+          cd ../ui-desktop
+          yarn install
 
       - name: Build
         id: build
@@ -160,6 +192,8 @@ jobs:
           make
           cd ../proxy-router
           make build
+          cd ../ui-desktop
+          yarn build:mac
 
       - name: Determine tag name
         id: tag
@@ -201,6 +235,13 @@ jobs:
             launcher/go.sum
             proxy-router/go.sum
 
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'yarn'
+          cache-dependency-path: ui-desktop/yarn.lock
+
       - name: Install wget
         run: |
           choco install wget --no-progress
@@ -211,6 +252,8 @@ jobs:
           go mod tidy
           cd ../proxy-router
           go mod download
+          cd ../ui-desktop
+          yarn install
 
       - name: Build
         id: build
@@ -219,6 +262,8 @@ jobs:
           make
           cd ../proxy-router
           make build
+          cd ../ui-desktop
+          yarn build:win
 
       - name: Determine tag name
         id: tag
