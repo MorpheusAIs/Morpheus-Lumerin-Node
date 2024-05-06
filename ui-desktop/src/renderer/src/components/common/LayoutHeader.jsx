@@ -9,7 +9,7 @@ const Container = styled.div`
   align-items: center;
   position: sticky;
   width: 100%;
-  padding: 1.5rem 0;
+  padding: 0 0 1.5rem 0;
   z-index: 2;
   right: 0;
   left: 0;
@@ -44,12 +44,10 @@ const Title = styled.label`
 `;
 
 export const LayoutHeader = ({ title, children }) => (
-  <>
     <Container>
       <TitleRow>
         <Title>{title}</Title>
         {children}
       </TitleRow>
     </Container>
-  </>
 );

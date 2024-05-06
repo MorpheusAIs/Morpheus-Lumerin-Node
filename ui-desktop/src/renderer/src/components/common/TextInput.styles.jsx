@@ -11,7 +11,7 @@ export const Label = styled.label`
 export const Input = styled.input`
   border: none;
   display: block;
-  border-radius: 15px;
+  border-radius: 2px;
   padding: 0.8rem 1.6rem;
   background-color: ${p => p.theme.colors.lightBlue};
   margin-top: 0.8rem;

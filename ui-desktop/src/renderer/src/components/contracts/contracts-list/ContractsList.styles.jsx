@@ -15,6 +15,13 @@ export const Contracts = styled.div`
   margin: 1.6rem 0 1.6rem;
   border-radius: 15px;
   background-color: #fff;
+
+  border-radius: 0.375rem;
+
+  background: rgba(255,255,255, 0.04);
+  border-width: 1px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  color: white;
 `;
 
 export const ListContainer = styled.div`
