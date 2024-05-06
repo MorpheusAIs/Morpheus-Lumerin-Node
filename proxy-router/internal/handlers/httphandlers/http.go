@@ -1,11 +1,11 @@
 package httphandlers
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"encoding/hex"
 	"math/big"
 	"net/http"
 	"net/http/pprof"
@@ -86,28 +86,6 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 		ctx.JSON(http.StatusOK, response)
 	}))
 
-		var req *openai.ChatCompletionRequest
-
-		err := ctx.ShouldBindJSON(&req)
-		switch {
-		case errors.Is(err, io.EOF):
-			ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "missing request body"})
-			return
-		case err != nil:
-			ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		response, err := apiBus.Prompt(ctx, req)
-		fmt.Println("apibus prompt response: ", response)
-		if err != nil {
-			ctx.AbortWithError(ERROR_STATUS, err)
-			return
-		}
-
-		ctx.JSON(SUCCESS_STATUS, response)
-	}))
-
 	r.POST("/proxy/sessions/initiate", (func(ctx *gin.Context) {
 		status, response := apiBus.InitiateSession(ctx)
 		ctx.JSON(status, response)
@@ -149,7 +127,7 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 
 		id, err := hex.DecodeString(modelAgentId)
 		if err != nil {
-			ctx.JSON(constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "invalid model agent id"})
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid model agent id"})
 			return
 		}
 		var idBytes [32]byte
@@ -180,14 +158,14 @@ func getOffsetLimit(ctx *gin.Context) (*big.Int, uint8) {
 
 	offset, ok := new(big.Int).SetString(offsetStr, 10)
 	if !ok {
-		ctx.JSON(constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "invalid offset"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid offset"})
 		return nil, 0
 	}
 
 	var limit uint8
 	_, err := fmt.Sscanf(limitStr, "%d", &limit)
 	if err != nil {
-		ctx.JSON(constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "invalid limit"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid limit"})
 		return nil, 0
 	}
 	return offset, limit
