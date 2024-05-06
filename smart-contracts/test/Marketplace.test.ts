@@ -115,7 +115,7 @@ describe("Marketplace", function () {
       ]);
       expect(oldBids1).to.be.deep.equal(oldBids2);
       expect(oldBids1.length).to.be.equal(2);
-      expect(oldBids1[1]).to.be.deep.equal({
+      expect(oldBids1[1][1]).to.be.deep.equal({
         provider: expBid.providerAddr,
         modelAgentId: expBid.modelId,
         pricePerSecond: expBid.pricePerSecond,

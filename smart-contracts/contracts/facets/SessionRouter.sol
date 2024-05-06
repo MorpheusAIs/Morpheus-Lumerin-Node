@@ -349,14 +349,14 @@ contract SessionRouter {
   // returns stipend of user based on their stake
   function stakeToStipend(
     uint256 sessionStake, uint128 timestamp
-  ) public view returns (uint256) {
+  ) internal view returns (uint256) {
     return (getTodaysBudget(timestamp) * sessionStake) / s.token.totalSupply();
   }
 
   // returns stake of user based on their stipend
   function stipendToStake(
     uint256 stipend, uint128 timestamp
-  ) public view returns (uint256) {
+  ) internal view returns (uint256) {
     return (stipend * s.token.totalSupply()) / getTodaysBudget(timestamp);
   }
 

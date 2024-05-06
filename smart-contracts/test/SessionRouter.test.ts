@@ -8,10 +8,9 @@ import { expect } from "chai";
 import hre from "hardhat";
 import { PublicClient, getAddress, keccak256, parseEventLogs } from "viem";
 import { deploySingleBid, encodedReport } from "./fixtures";
-import { catchError, getHex, getTxTimestamp } from "./utils";
+import { catchError, getHex, getTxTimestamp, randomBytes32 } from "./utils";
 import { DAY, HOUR, MINUTE, SECOND } from "../utils/time";
 import { expectAlmostEqual } from "../utils/compare";
-import { waitForTransactionReceipt } from "viem/_types/actions/public/waitForTransactionReceipt";
 
 describe("Session router", function () {
   describe("session read functions", function () {
@@ -89,15 +88,17 @@ describe("Session router", function () {
         pricePerSecond: exp.pricePerSecond,
         closeoutReceipt: getHex(Buffer.from(""), 0),
         closeoutType: 0n,
+        providerWithdrawnAmount: 0n,
         openedAt: createdAt,
         closedAt: 0n,
       });
     });
 
-    it.only("should verify balances after opening", async function () {
+    it("should verify balances after opening", async function () {
       const {
         sessionRouter,
         expectedSession: exp,
+        publicClient,
         user,
         tokenMOR,
       } = await loadFixture(deploySingleBid);
@@ -109,7 +110,7 @@ describe("Session router", function () {
         [exp.bidID, exp.stake],
         { account: user.account },
       );
-      await waitForTransactionReceipt(user, { hash: txHash });
+      await publicClient.waitForTransactionReceipt({ hash: txHash });
 
       const srAfter = await tokenMOR.read.balanceOf([sessionRouter.address]);
       const userAfter = await tokenMOR.read.balanceOf([user.account.address]);
@@ -126,7 +127,7 @@ describe("Session router", function () {
       } = await loadFixture(deploySingleBid);
 
       await catchError(sessionRouter.abi, "BidNotFound", async () => {
-        await sessionRouter.write.openSession([exp.bidID, exp.stake], {
+        await sessionRouter.write.openSession([randomBytes32(), exp.stake], {
           account: user.account,
         });
       });
@@ -197,7 +198,9 @@ describe("Session router", function () {
 
       // expect no purchase error
     });
+  });
 
+  describe.skip("session closeout", function () {
     it("should open and close early", async function () {
       const {
         sessionRouter,

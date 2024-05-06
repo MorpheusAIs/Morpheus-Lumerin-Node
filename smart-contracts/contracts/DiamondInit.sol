@@ -29,7 +29,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 contract DiamondInit {
   // You can add parameters to this function in order to pass in
   // data to set your own state variables
-  function init(address _token, address _tokenAccount) external {
+  function init(address _token, address _fundingAccount) external {
     // adding ERC165 data
     LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
     ds.supportedInterfaces[type(IERC165).interfaceId] = true;
@@ -42,7 +42,7 @@ contract DiamondInit {
     s.token = IERC20(_token);
 
     s.stakeDelay = 0;
-    s.tokenAccount = _tokenAccount;
+    s.fundingAccount = _fundingAccount;
 
     // we need to add a dummy session to avoid index 0
     s.sessions.push(
@@ -56,6 +56,7 @@ contract DiamondInit {
         pricePerSecond: 0,
         closeoutReceipt: "",
         closeoutType: 0,
+        providerWithdrawnAmount: 0,
         openedAt: 0,
         closedAt: 0
       })
