@@ -1,12 +1,10 @@
 import {
   loadFixture,
-  mine,
-  reset,
   time,
 } from "@nomicfoundation/hardhat-toolbox-viem/network-helpers";
 import { expect } from "chai";
 import hre from "hardhat";
-import { PublicClient, getAddress, keccak256, parseEventLogs } from "viem";
+import { PublicClient, keccak256, parseEventLogs } from "viem";
 import { deploySingleBid, encodedReport } from "./fixtures";
 import { catchError, getHex, getTxTimestamp, randomBytes32 } from "./utils";
 import { DAY, HOUR, MINUTE, SECOND } from "../utils/time";

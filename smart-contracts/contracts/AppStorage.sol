@@ -41,7 +41,8 @@ struct Session {
   uint256 pricePerSecond;
   bytes closeoutReceipt;
   uint256 closeoutType;
-  uint256 providerWithdrawnAmount;  // amount of funds that was already withdrawn by provider (we allow to withdraw for the previous day)
+  // amount of funds that was already withdrawn by provider (we allow to withdraw for the previous day)
+  uint256 providerWithdrawnAmount;  
   uint256 openedAt;
   uint256 closedAt;
 }
@@ -94,7 +95,8 @@ struct AppStorage {
   // OTHER
   //
   IERC20 token;         // MOR token
-  int256 stakeDelay;    // Number of seconds to delay the stake return when a user closes out a session using a user signed receipt
+  // Number of seconds to delay the stake return when a user closes out a session using a user signed receipt
+  int256 stakeDelay;   
   address fundingAccount; // account which stores the MOR tokens with infinite allowance for this contract
   uint256 bidFee;
   uint256 feeBalance;   // total fees balance of the contract

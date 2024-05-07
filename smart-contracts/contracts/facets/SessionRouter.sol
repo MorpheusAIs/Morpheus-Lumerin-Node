@@ -10,15 +10,15 @@ import { ModelRegistry } from "./ModelRegistry.sol";
 import { ProviderRegistry } from "./ProviderRegistry.sol";
 import { AppStorage, Session, Bid, OnHold, Pool } from "../AppStorage.sol";
 import { LibOwner } from "../libraries/LibOwner.sol";
-import { LinearDistributionIntervalDecrease } from '../libraries/LinearDistributionIntervalDecrease.sol';
+import { LinearDistributionIntervalDecrease } from "../libraries/LinearDistributionIntervalDecrease.sol";
 
 contract SessionRouter {
   using KeySet for KeySet.Set;
   AppStorage internal s;
 
   // constants
-  uint32 constant DAY = 24 * 60 * 60; // 1 day
-  uint32 constant MIN_SESSION_DURATION = 5 * 60; // 5 minutes
+  uint32 public constant DAY = 24 * 60 * 60; // 1 day
+  uint32 public constant MIN_SESSION_DURATION = 5 * 60; // 5 minutes
 
   // events
   event SessionOpened(
@@ -247,7 +247,8 @@ contract SessionRouter {
     } else if (session.closedAt > startOfTheDay(block.timestamp)){
       // likely not to be the case when session was closed today
       // cause provider already got funds
-      uint256 durationTillToday = startOfTheDay(block.timestamp) - minUint256(session.openedAt, startOfTheDay(block.timestamp));
+      uint256 durationTillToday = startOfTheDay(block.timestamp) - 
+        minUint256(session.openedAt, startOfTheDay(block.timestamp));
       uint256 costTillToday = durationTillToday * session.pricePerSecond;
       uint256 withdrawableAmount = costTillToday - session.providerWithdrawnAmount;
       return withdrawableAmount;
