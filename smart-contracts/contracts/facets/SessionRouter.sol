@@ -53,8 +53,9 @@ contract SessionRouter {
     if (s.bidSessionMap[bidId] != 0) {
       revert BidTaken();
     }
+    uint256 startOfToday = startOfTheDay(block.timestamp);
+    uint256 duration = stakeToStipend(_stake, startOfToday) / bid.pricePerSecond;
 
-    uint256 duration = stakeToStipend(_stake, uint128(block.timestamp)) / bid.pricePerSecond;
     if (duration < MIN_SESSION_DURATION) {
       revert SessionTooShort();
     }
@@ -151,14 +152,19 @@ contract SessionRouter {
 
     uint256 startOfToday = startOfTheDay(block.timestamp);
     uint256 todaysSessionDurationSeconds = block.timestamp - maxUint256(session.openedAt, startOfToday);
-    uint256 todaySessionCost = todaysSessionDurationSeconds * session.pricePerSecond;
+    uint256 todaySessionExpectedCost = todaysSessionDurationSeconds * session.pricePerSecond;
+    uint256 todaySessionExpectedStake = stipendToStake(todaySessionExpectedCost, startOfToday);
+    // if user closed session later than expected then cost is capped by stake
+    uint256 todayExpectedCost = minUint256(todaySessionExpectedCost, stakeToStipend(session.stake, startOfToday));
+    uint256 todayExpectedStake = minUint256(todaySessionExpectedStake, session.stake); 
 
     // calculate provider withdraw
     uint256 providerWithdraw;
     if (isValidReceipt(session.provider, receiptEncoded, signature)) {
       // withdraw all remaining provider funds
-      uint256 totalSessionDuration = session.closedAt - session.openedAt;
-      uint256 totalCost = totalSessionDuration * session.pricePerSecond;
+      uint256 durationTillToday = startOfToday - minUint256(session.openedAt, startOfToday);
+      uint256 costTillToday = durationTillToday * session.pricePerSecond;
+      uint256 totalCost = costTillToday + todayExpectedCost;
       providerWithdraw = totalCost - session.providerWithdrawnAmount;
     } else {
       // withdraw all funds except for today's session cost
@@ -170,15 +176,15 @@ contract SessionRouter {
     session.providerWithdrawnAmount += providerWithdraw;
 
     // calculate user withdraw
-    uint256 userStakeToLock = stipendToStake(todaySessionCost, uint128(block.timestamp));
+    uint256 userStakeToLock = todayExpectedStake;
     s.userOnHold[session.user].push(
-      OnHold({ amount: session.stake - userStakeToLock, releaseAt: block.timestamp + DAY })
+      OnHold({ amount: userStakeToLock, releaseAt: block.timestamp + DAY })
     );
     uint256 userWithdraw = session.stake - userStakeToLock;
 
     emit SessionClosed(session.user, sessionId, session.provider);
 
-    // withdraw provider and user  funds
+    // withdraw provider and user funds
     s.token.transferFrom(s.fundingAccount, session.provider, providerWithdraw);
     s.token.transfer(session.user, userWithdraw);
   }
@@ -318,20 +324,24 @@ contract SessionRouter {
   }
 
   // returns stipend of user based on their stake
-  function stakeToStipend(uint256 sessionStake, uint128 timestamp) internal view returns (uint256) {
-    return (getTodaysBudget(timestamp) * sessionStake) / s.token.totalSupply();
+  function stakeToStipend(uint256 sessionStake, uint256 timestamp) internal view returns (uint256) {
+    return sessionStake / (s.token.totalSupply() / _getTodaysBudget(timestamp));
   }
 
   // returns stake of user based on their stipend
-  function stipendToStake(uint256 stipend, uint128 timestamp) internal view returns (uint256) {
-    return (stipend * s.token.totalSupply()) / getTodaysBudget(timestamp);
+  function stipendToStake(uint256 stipend, uint256 timestamp) internal view returns (uint256) {
+    return stipend * (s.token.totalSupply() / _getTodaysBudget(timestamp));
   }
 
-  function getTodaysBudget(uint128 timestamp) public view returns (uint256) {
+  function getTodaysBudget() public view returns (uint256) {
+    return _getTodaysBudget(startOfTheDay(block.timestamp));
+  }
+
+  function _getTodaysBudget(uint256 timestamp) public view returns (uint256) {
     return getComputeBalance(timestamp) / 100; // 1% of Compute Balance
   }
 
-  function getComputeBalance(uint128 timestamp) public view returns (uint256) {
+  function getComputeBalance(uint256 timestamp) public view returns (uint256) {
     // TODO: cache today's budget and compute balance
     return
       LinearDistributionIntervalDecrease.getPeriodReward(

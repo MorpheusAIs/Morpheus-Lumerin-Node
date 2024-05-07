@@ -4,6 +4,7 @@ import {
   BaseError,
   ContractFunctionRevertedError,
   UnknownRpcError,
+  parseEventLogs,
 } from "viem";
 import {
   DecodeErrorResultReturnType,
@@ -11,6 +12,7 @@ import {
   padHex,
 } from "viem/utils";
 import crypto from "crypto";
+import { HardhatRuntimeEnvironment } from "hardhat/types";
 
 export async function getTxTimestamp(
   client: PublicClient,
@@ -23,6 +25,30 @@ export async function getTxTimestamp(
   const block = await client.getBlock({ blockNumber: receipt.blockNumber });
   return block.timestamp;
 }
+
+export async function getSessionId(
+  publicClient: PublicClient,
+  hre: HardhatRuntimeEnvironment,
+  txHash: `0x${string}`,
+): Promise<`0x${string}`> {
+  const receipt = await publicClient.waitForTransactionReceipt({
+    hash: txHash,
+  });
+  const artifact = await hre.artifacts.readArtifact("SessionRouter");
+  const events = parseEventLogs({
+    abi: artifact.abi,
+    logs: receipt.logs,
+    eventName: "SessionOpened",
+  });
+  if (events.length === 0) {
+    throw new Error("SessionOpened event not found");
+  }
+  if (events.length > 1) {
+    throw new Error("Multiple SessionOpened events found");
+  }
+  return events[0].args.sessionId;
+}
+
 
 /** helper function to catch errors and check if the error is the expected one
  * @example

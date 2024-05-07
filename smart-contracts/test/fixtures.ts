@@ -8,7 +8,7 @@ import {
 import { getHex, getTxTimestamp, now, randomBytes32 } from "./utils";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { FacetCutAction, getSelectors } from "../libraries/diamond";
-import { MINUTE, SECOND } from "../utils/time";
+import { HOUR, MINUTE, SECOND } from "../utils/time";
 import {
   GetContractReturnType,
   WalletClient,
@@ -306,10 +306,10 @@ export async function deploySingleBid() {
   expectedBid.createdAt = await getTxTimestamp(publicClient, txHash);
 
   // generating data for sample session
-  const durationSeconds = (5 * MINUTE) / SECOND;
-  const totalCost = expectedBid.pricePerSecond * BigInt(durationSeconds);
+  const durationSeconds = BigInt(HOUR / SECOND);
+  const totalCost = expectedBid.pricePerSecond * durationSeconds;
   const totalSupply = await tokenMOR.read.totalSupply();
-  const todaysBudget = await sessionRouter.read.getTodaysBudget([now()]);
+  const todaysBudget = await sessionRouter.read.getTodaysBudget();
 
   const expectedSession = {
     durationSeconds,
