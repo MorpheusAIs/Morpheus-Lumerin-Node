@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.24;
-import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+
 import { AppStorage, Model } from "../AppStorage.sol";
 import { KeySet } from "../libraries/KeySet.sol";
 import { LibOwner } from "../libraries/LibOwner.sol";
@@ -42,9 +41,7 @@ contract ModelRegistry {
     return _models;
   }
 
-  function modelGetByIndex(
-    uint index
-  ) public view returns (bytes32 modelId, Model memory model) {
+  function modelGetByIndex(uint index) public view returns (bytes32 modelId, Model memory model) {
     modelId = s.activeModels.keyAtIndex(index);
     return (modelId, s.modelMap[modelId]);
   }

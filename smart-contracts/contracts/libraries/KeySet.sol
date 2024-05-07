@@ -46,10 +46,7 @@ library KeySet {
     return self.keyList[self.keyPointers[key]] == key;
   }
 
-  function keyAtIndex(
-    Set storage self,
-    uint index
-  ) internal view returns (bytes32) {
+  function keyAtIndex(Set storage self, uint index) internal view returns (bytes32) {
     return self.keyList[index];
   }
 
@@ -102,10 +99,7 @@ library AddressSet {
     return self.keyList[self.keyPointers[key]] == key;
   }
 
-  function keyAtIndex(
-    Set storage self,
-    uint index
-  ) internal view returns (address) {
+  function keyAtIndex(Set storage self, uint index) internal view returns (address) {
     return self.keyList[index];
   }
 
