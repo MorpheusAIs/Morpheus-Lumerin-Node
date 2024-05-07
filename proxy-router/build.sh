@@ -1,3 +1,5 @@
+#!/bin/sh
+
 VERSION=$(grep '^VERSION=' .version | cut -d '=' -f 2-)
 echo VERSION=$VERSION
 

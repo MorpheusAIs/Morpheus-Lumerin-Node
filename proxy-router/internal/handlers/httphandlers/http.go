@@ -2,6 +2,7 @@ package httphandlers
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -9,7 +10,6 @@ import (
 	"net/http"
 	"net/http/pprof"
 
-	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/apibus"
 	"github.com/gin-gonic/gin"
 
@@ -28,10 +28,10 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 	r := gin.New()
 
 	r.GET("/healthcheck", (func(ctx *gin.Context) {
-		ctx.JSON(SUCCESS_STATUS, apiBus.HealthCheck(ctx))
+		ctx.JSON(http.StatusOK, apiBus.HealthCheck(ctx))
 	}))
 	r.GET("/config", (func(ctx *gin.Context) {
-		ctx.JSON(SUCCESS_STATUS, apiBus.GetConfig(ctx))
+		ctx.JSON(http.StatusOK, apiBus.GetConfig(ctx))
 	}))
 	r.GET("/files", (func(ctx *gin.Context) {
 		status, files := apiBus.GetFiles(ctx)
@@ -51,14 +51,39 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 			return
 		}
 
-		response, err := apiBus.Prompt(ctx, req)
-		fmt.Println("apibus prompt response: ", response)
+		req.Stream = ctx.GetHeader("Accept") == "application/json"
+
+		var response interface{}
+
+		if req.Stream {
+			
+			response, err = apiBus.PromptStream(ctx, req, func (response *openai.ChatCompletionStreamResponse) error {
+
+				marshalledResponse, err := json.Marshal(response)
+
+				if err != nil{
+					return err
+				}
+
+				ctx.Writer.Header().Set("Content-Type", "text/event-stream")
+				_, err = ctx.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", marshalledResponse)))
+
+				if err != nil {
+					return err
+				}
+
+				return nil
+			})
+		} else {
+			response, err = apiBus.Prompt(ctx, req)
+		}
+		
 		if err != nil {
-			ctx.AbortWithError(ERROR_STATUS, err)
+			ctx.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
 
-		ctx.JSON(SUCCESS_STATUS, response)
+		ctx.JSON(http.StatusOK, response)
 	}))
 
 	r.POST("/proxy/sessions/initiate", (func(ctx *gin.Context) {
@@ -102,7 +127,7 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 
 		id, err := hex.DecodeString(modelAgentId)
 		if err != nil {
-			ctx.JSON(constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "invalid model agent id"})
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid model agent id"})
 			return
 		}
 		var idBytes [32]byte
@@ -138,14 +163,14 @@ func getOffsetLimit(ctx *gin.Context) (*big.Int, uint8) {
 
 	offset, ok := new(big.Int).SetString(offsetStr, 10)
 	if !ok {
-		ctx.JSON(constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "invalid offset"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid offset"})
 		return nil, 0
 	}
 
 	var limit uint8
 	_, err := fmt.Sscanf(limitStr, "%d", &limit)
 	if err != nil {
-		ctx.JSON(constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "invalid limit"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid limit"})
 		return nil, 0
 	}
 	return offset, limit

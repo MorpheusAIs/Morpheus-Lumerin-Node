@@ -52,6 +52,11 @@ func (apiBus *ApiBus) Prompt(ctx context.Context, req interface{}) (interface{},
 	return apiBus.aiEngine.Prompt(ctx, req)
 }
 
+// AiEngine
+func (apiBus *ApiBus) PromptStream(ctx context.Context, req interface{}, flush interface{}) (interface{}, error) {
+	return apiBus.aiEngine.PromptStream(ctx, req, flush)
+}
+
 // RpcProxy
 func (apiBus *ApiBus) GetLatestBlock(ctx context.Context) (uint64, error) {
 	return apiBus.rpcProxy.GetLatestBlock(ctx)
