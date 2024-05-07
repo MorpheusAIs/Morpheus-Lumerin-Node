@@ -3,9 +3,9 @@ package registries
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"math/big"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/contracts/modelregistry"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/contracts/sessionrouter"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
@@ -35,7 +35,7 @@ func NewSessionRouter(sessionRouterAddr common.Address, client *ethclient.Client
 	if err != nil {
 		panic("invalid marketplace ABI")
 	}
-	srABI, err := modelregistry.ModelRegistryMetaData.GetAbi()
+	srABI, err := sessionrouter.SessionRouterMetaData.GetAbi()
 	if err != nil {
 		panic("invalid marketplace ABI: " + err.Error())
 	}
@@ -55,9 +55,25 @@ func (g *SessionRouter) OpenSession(ctx *bind.TransactOpts, bidId [32]byte, stak
 		return "", err
 	}
 
-	sessionId := hex.EncodeToString(sessionTx.Data())
+	// Wait for the transaction receipt
+	receipt, err := bind.WaitMined(context.Background(), g.client, sessionTx)
+	if err != nil {
+		return "", err
+	}
 
-	return sessionId, nil
+	// Find the event log
+	for _, log := range receipt.Logs {
+		// Check if the log belongs to the OpenSession event
+		event, err := g.sessionRouter.ParseSessionOpened(*log)
+		if err != nil {
+			continue // not our event, skip it
+		}
+
+		// Convert the sessionId to string
+		return hex.EncodeToString(event.SessionId[:]), nil
+	}
+
+	return "", fmt.Errorf("OpenSession event not found in transaction logs")
 }
 
 func (g *SessionRouter) GetSession(ctx context.Context, sessionId string) (*sessionrouter.Session, error) {
@@ -75,4 +91,12 @@ func (g *SessionRouter) GetSession(ctx context.Context, sessionId string) (*sess
 	}
 
 	return &session, nil
+}
+
+func (g *SessionRouter) GetContractAddress() common.Address {
+	return g.sessionRouterAddr
+}
+
+func (g *SessionRouter) GetABI() *abi.ABI {
+	return g.srABI
 }

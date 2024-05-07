@@ -19,6 +19,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/morrpc"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/proxyapi"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/registries"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/transport"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/rpcproxy"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/storages"
@@ -204,9 +205,12 @@ func start() error {
 
 	diamondContractAddr := common.HexToAddress(cfg.Marketplace.DiamondContractAddress)
 
-	proxyRouterApi := proxyapi.NewProxyRouterApi(sysConfig, publicUrl, publicKey, cfg.Marketplace.WalletPrivateKey, &cfg, derived, time.Now(), contractLogStorage, sessionStorage, log)
 	rpcProxy := rpcproxy.NewRpcProxy(ethClient, diamondContractAddr, cfg.Marketplace.WalletPrivateKey, proxyLog, cfg.Blockchain.EthLegacyTx)
+	proxyRouterApi := proxyapi.NewProxyRouterApi(sysConfig, publicUrl, publicKey, cfg.Marketplace.WalletPrivateKey, &cfg, derived, time.Now(), contractLogStorage, sessionStorage, log)
 	aiEngine := aiengine.NewAiEngine()
+
+	sessionRouter := registries.NewSessionRouter(diamondContractAddr, ethClient, log)
+	eventListener := rpcproxy.NewEventsListener(ethClient, sessionStorage, sessionRouter, log)
 
 	apiBus := apibus.NewApiBus(rpcProxy, aiEngine, proxyRouterApi)
 
@@ -217,6 +221,10 @@ func start() error {
 	g, errCtx := errgroup.WithContext(ctx)
 	g.Go(func() error {
 		return tcpServer.Run(errCtx)
+	})
+
+	g.Go(func() error {
+		return eventListener.Run(errCtx)
 	})
 
 	g.Go(func() error {

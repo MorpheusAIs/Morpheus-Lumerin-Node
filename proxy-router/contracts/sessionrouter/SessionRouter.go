@@ -29,24 +29,33 @@ var (
 	_ = abi.ConvertType
 )
 
+// Pool is an auto generated low-level Go binding around an user-defined struct.
+type Pool struct {
+	InitialReward    *big.Int
+	RewardDecrease   *big.Int
+	PayoutStart      *big.Int
+	DecreaseInterval *big.Int
+}
+
 // Session is an auto generated low-level Go binding around an user-defined struct.
 type Session struct {
-	Id              [32]byte
-	User            common.Address
-	Provider        common.Address
-	ModelAgentId    [32]byte
-	BidID           [32]byte
-	Stake           *big.Int
-	PricePerSecond  *big.Int
-	CloseoutReceipt []byte
-	CloseoutType    *big.Int
-	OpenedAt        *big.Int
-	ClosedAt        *big.Int
+	Id                      [32]byte
+	User                    common.Address
+	Provider                common.Address
+	ModelAgentId            [32]byte
+	BidID                   [32]byte
+	Stake                   *big.Int
+	PricePerSecond          *big.Int
+	CloseoutReceipt         []byte
+	CloseoutType            *big.Int
+	ProviderWithdrawnAmount *big.Int
+	OpenedAt                *big.Int
+	ClosedAt                *big.Int
 }
 
 // SessionRouterMetaData contains all meta data concerning the SessionRouter contract.
 var SessionRouterMetaData = &bind.MetaData{
-	ABI: "[{\"inputs\":[],\"name\":\"BidNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"BidTaken\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ECDSAInvalidSignature\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"length\",\"type\":\"uint256\"}],\"name\":\"ECDSAInvalidSignatureLength\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"s\",\"type\":\"bytes32\"}],\"name\":\"ECDSAInvalidSignatureS\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InvalidSignature\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_user\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_contractOwner\",\"type\":\"address\"}],\"name\":\"NotContractOwner\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotEnoughBalance\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotEnoughStake\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotEnoughStipend\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotEnoughWithdrawableBalance\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotSenderOrOwner\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotUser\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotUserOrProvider\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"SessionNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"SessionTooShort\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"providerAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"ProviderClaimed\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"userAddress\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"sessionId\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"providerId\",\"type\":\"address\"}],\"name\":\"SessionClosed\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"userAddress\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"sessionId\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"providerId\",\"type\":\"address\"}],\"name\":\"SessionOpened\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"userAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"Staked\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"userAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"Unstaked\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"sessionStake\",\"type\":\"uint256\"}],\"name\":\"balanceOfSessionStipend\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"amountToWithdraw\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"}],\"name\":\"claimProviderBalance\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"sessionId\",\"type\":\"bytes32\"},{\"internalType\":\"bytes\",\"name\":\"receiptEncoded\",\"type\":\"bytes\"},{\"internalType\":\"bytes\",\"name\":\"signature\",\"type\":\"bytes\"}],\"name\":\"closeSession\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"sessionId\",\"type\":\"bytes32\"}],\"name\":\"deleteHistory\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getComputeBalance\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_stake\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"}],\"name\":\"getExpectedDuration\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"providerAddr\",\"type\":\"address\"}],\"name\":\"getProviderBalance\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"total\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"hold\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"sessionId\",\"type\":\"bytes32\"}],\"name\":\"getSession\",\"outputs\":[{\"components\":[{\"internalType\":\"bytes32\",\"name\":\"id\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"user\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"modelAgentId\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"bidID\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"stake\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"bytes\",\"name\":\"closeoutReceipt\",\"type\":\"bytes\"},{\"internalType\":\"uint256\",\"name\":\"closeoutType\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"openedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"closedAt\",\"type\":\"uint256\"}],\"internalType\":\"structSession\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getTodaysBudget\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"userAddress\",\"type\":\"address\"}],\"name\":\"getTodaysSpend\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"signer\",\"type\":\"address\"},{\"internalType\":\"bytes\",\"name\":\"receipt\",\"type\":\"bytes\"},{\"internalType\":\"bytes\",\"name\":\"signature\",\"type\":\"bytes\"}],\"name\":\"isValidReceipt\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"pure\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"bidId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"_stake\",\"type\":\"uint256\"}],\"name\":\"openSession\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"sessionId\",\"type\":\"bytes32\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"int256\",\"name\":\"delay\",\"type\":\"int256\"}],\"name\":\"setStakeDelay\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"userAddress\",\"type\":\"address\"}],\"name\":\"withdrawableStakeBalance\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"}]",
+	ABI: "[{\"inputs\":[],\"name\":\"BidNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"BidTaken\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ECDSAInvalidSignature\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"length\",\"type\":\"uint256\"}],\"name\":\"ECDSAInvalidSignatureLength\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"s\",\"type\":\"bytes32\"}],\"name\":\"ECDSAInvalidSignatureS\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_user\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_contractOwner\",\"type\":\"address\"}],\"name\":\"NotContractOwner\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotEnoughWithdrawableBalance\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotSenderOrOwner\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotUserOrProvider\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"SessionAlreadyClosed\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"SessionNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"SessionTooShort\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"providerAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"ProviderClaimed\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"userAddress\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"sessionId\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"providerId\",\"type\":\"address\"}],\"name\":\"SessionClosed\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"userAddress\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"sessionId\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"providerId\",\"type\":\"address\"}],\"name\":\"SessionOpened\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"userAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"Staked\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"userAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"Unstaked\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"sessionId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"amountToWithdraw\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"}],\"name\":\"claimProviderBalance\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"sessionId\",\"type\":\"bytes32\"},{\"internalType\":\"bytes\",\"name\":\"receiptEncoded\",\"type\":\"bytes\"},{\"internalType\":\"bytes\",\"name\":\"signature\",\"type\":\"bytes\"}],\"name\":\"closeSession\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"sessionId\",\"type\":\"bytes32\"}],\"name\":\"deleteHistory\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint128\",\"name\":\"timestamp\",\"type\":\"uint128\"}],\"name\":\"getComputeBalance\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"sessionId\",\"type\":\"bytes32\"}],\"name\":\"getProviderClaimableBalance\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"sessionId\",\"type\":\"bytes32\"}],\"name\":\"getSession\",\"outputs\":[{\"components\":[{\"internalType\":\"bytes32\",\"name\":\"id\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"user\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"modelAgentId\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"bidID\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"stake\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"bytes\",\"name\":\"closeoutReceipt\",\"type\":\"bytes\"},{\"internalType\":\"uint256\",\"name\":\"closeoutType\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"providerWithdrawnAmount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"openedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"closedAt\",\"type\":\"uint256\"}],\"internalType\":\"structSession\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"sessionId\",\"type\":\"bytes32\"}],\"name\":\"getSessionEndTime\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint128\",\"name\":\"timestamp\",\"type\":\"uint128\"}],\"name\":\"getTodaysBudget\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"signer\",\"type\":\"address\"},{\"internalType\":\"bytes\",\"name\":\"receipt\",\"type\":\"bytes\"},{\"internalType\":\"bytes\",\"name\":\"signature\",\"type\":\"bytes\"}],\"name\":\"isValidReceipt\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"pure\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"bidId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"_stake\",\"type\":\"uint256\"}],\"name\":\"openSession\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"sessionId\",\"type\":\"bytes32\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"components\":[{\"internalType\":\"uint256\",\"name\":\"initialReward\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"rewardDecrease\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"payoutStart\",\"type\":\"uint128\"},{\"internalType\":\"uint128\",\"name\":\"decreaseInterval\",\"type\":\"uint128\"}],\"internalType\":\"structPool\",\"name\":\"pool\",\"type\":\"tuple\"}],\"name\":\"setPoolConfig\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"int256\",\"name\":\"delay\",\"type\":\"int256\"}],\"name\":\"setStakeDelay\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"timestamp\",\"type\":\"uint256\"}],\"name\":\"startOfTheDay\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"pure\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"amountToWithdraw\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"}],\"name\":\"withdrawUserStake\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"userAddr\",\"type\":\"address\"}],\"name\":\"withdrawableUserStake\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"avail\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"hold\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"}]",
 }
 
 // SessionRouterABI is the input ABI used to generate the binding from.
@@ -195,12 +204,12 @@ func (_SessionRouter *SessionRouterTransactorRaw) Transact(opts *bind.TransactOp
 	return _SessionRouter.Contract.contract.Transact(opts, method, params...)
 }
 
-// BalanceOfSessionStipend is a free data retrieval call binding the contract method 0x398be739.
+// GetComputeBalance is a free data retrieval call binding the contract method 0x61ce471a.
 //
-// Solidity: function balanceOfSessionStipend(uint256 sessionStake) view returns(uint256)
-func (_SessionRouter *SessionRouterCaller) BalanceOfSessionStipend(opts *bind.CallOpts, sessionStake *big.Int) (*big.Int, error) {
+// Solidity: function getComputeBalance(uint128 timestamp) view returns(uint256)
+func (_SessionRouter *SessionRouterCaller) GetComputeBalance(opts *bind.CallOpts, timestamp *big.Int) (*big.Int, error) {
 	var out []interface{}
-	err := _SessionRouter.contract.Call(opts, &out, "balanceOfSessionStipend", sessionStake)
+	err := _SessionRouter.contract.Call(opts, &out, "getComputeBalance", timestamp)
 
 	if err != nil {
 		return *new(*big.Int), err
@@ -212,26 +221,26 @@ func (_SessionRouter *SessionRouterCaller) BalanceOfSessionStipend(opts *bind.Ca
 
 }
 
-// BalanceOfSessionStipend is a free data retrieval call binding the contract method 0x398be739.
+// GetComputeBalance is a free data retrieval call binding the contract method 0x61ce471a.
 //
-// Solidity: function balanceOfSessionStipend(uint256 sessionStake) view returns(uint256)
-func (_SessionRouter *SessionRouterSession) BalanceOfSessionStipend(sessionStake *big.Int) (*big.Int, error) {
-	return _SessionRouter.Contract.BalanceOfSessionStipend(&_SessionRouter.CallOpts, sessionStake)
+// Solidity: function getComputeBalance(uint128 timestamp) view returns(uint256)
+func (_SessionRouter *SessionRouterSession) GetComputeBalance(timestamp *big.Int) (*big.Int, error) {
+	return _SessionRouter.Contract.GetComputeBalance(&_SessionRouter.CallOpts, timestamp)
 }
 
-// BalanceOfSessionStipend is a free data retrieval call binding the contract method 0x398be739.
+// GetComputeBalance is a free data retrieval call binding the contract method 0x61ce471a.
 //
-// Solidity: function balanceOfSessionStipend(uint256 sessionStake) view returns(uint256)
-func (_SessionRouter *SessionRouterCallerSession) BalanceOfSessionStipend(sessionStake *big.Int) (*big.Int, error) {
-	return _SessionRouter.Contract.BalanceOfSessionStipend(&_SessionRouter.CallOpts, sessionStake)
+// Solidity: function getComputeBalance(uint128 timestamp) view returns(uint256)
+func (_SessionRouter *SessionRouterCallerSession) GetComputeBalance(timestamp *big.Int) (*big.Int, error) {
+	return _SessionRouter.Contract.GetComputeBalance(&_SessionRouter.CallOpts, timestamp)
 }
 
-// GetComputeBalance is a free data retrieval call binding the contract method 0x653cdf0c.
+// GetProviderClaimableBalance is a free data retrieval call binding the contract method 0xa8ca6323.
 //
-// Solidity: function getComputeBalance() view returns(uint256)
-func (_SessionRouter *SessionRouterCaller) GetComputeBalance(opts *bind.CallOpts) (*big.Int, error) {
+// Solidity: function getProviderClaimableBalance(bytes32 sessionId) view returns(uint256)
+func (_SessionRouter *SessionRouterCaller) GetProviderClaimableBalance(opts *bind.CallOpts, sessionId [32]byte) (*big.Int, error) {
 	var out []interface{}
-	err := _SessionRouter.contract.Call(opts, &out, "getComputeBalance")
+	err := _SessionRouter.contract.Call(opts, &out, "getProviderClaimableBalance", sessionId)
 
 	if err != nil {
 		return *new(*big.Int), err
@@ -243,99 +252,23 @@ func (_SessionRouter *SessionRouterCaller) GetComputeBalance(opts *bind.CallOpts
 
 }
 
-// GetComputeBalance is a free data retrieval call binding the contract method 0x653cdf0c.
+// GetProviderClaimableBalance is a free data retrieval call binding the contract method 0xa8ca6323.
 //
-// Solidity: function getComputeBalance() view returns(uint256)
-func (_SessionRouter *SessionRouterSession) GetComputeBalance() (*big.Int, error) {
-	return _SessionRouter.Contract.GetComputeBalance(&_SessionRouter.CallOpts)
+// Solidity: function getProviderClaimableBalance(bytes32 sessionId) view returns(uint256)
+func (_SessionRouter *SessionRouterSession) GetProviderClaimableBalance(sessionId [32]byte) (*big.Int, error) {
+	return _SessionRouter.Contract.GetProviderClaimableBalance(&_SessionRouter.CallOpts, sessionId)
 }
 
-// GetComputeBalance is a free data retrieval call binding the contract method 0x653cdf0c.
+// GetProviderClaimableBalance is a free data retrieval call binding the contract method 0xa8ca6323.
 //
-// Solidity: function getComputeBalance() view returns(uint256)
-func (_SessionRouter *SessionRouterCallerSession) GetComputeBalance() (*big.Int, error) {
-	return _SessionRouter.Contract.GetComputeBalance(&_SessionRouter.CallOpts)
-}
-
-// GetExpectedDuration is a free data retrieval call binding the contract method 0x693e495d.
-//
-// Solidity: function getExpectedDuration(uint256 _stake, uint256 pricePerSecond) view returns(uint256)
-func (_SessionRouter *SessionRouterCaller) GetExpectedDuration(opts *bind.CallOpts, _stake *big.Int, pricePerSecond *big.Int) (*big.Int, error) {
-	var out []interface{}
-	err := _SessionRouter.contract.Call(opts, &out, "getExpectedDuration", _stake, pricePerSecond)
-
-	if err != nil {
-		return *new(*big.Int), err
-	}
-
-	out0 := *abi.ConvertType(out[0], new(*big.Int)).(**big.Int)
-
-	return out0, err
-
-}
-
-// GetExpectedDuration is a free data retrieval call binding the contract method 0x693e495d.
-//
-// Solidity: function getExpectedDuration(uint256 _stake, uint256 pricePerSecond) view returns(uint256)
-func (_SessionRouter *SessionRouterSession) GetExpectedDuration(_stake *big.Int, pricePerSecond *big.Int) (*big.Int, error) {
-	return _SessionRouter.Contract.GetExpectedDuration(&_SessionRouter.CallOpts, _stake, pricePerSecond)
-}
-
-// GetExpectedDuration is a free data retrieval call binding the contract method 0x693e495d.
-//
-// Solidity: function getExpectedDuration(uint256 _stake, uint256 pricePerSecond) view returns(uint256)
-func (_SessionRouter *SessionRouterCallerSession) GetExpectedDuration(_stake *big.Int, pricePerSecond *big.Int) (*big.Int, error) {
-	return _SessionRouter.Contract.GetExpectedDuration(&_SessionRouter.CallOpts, _stake, pricePerSecond)
-}
-
-// GetProviderBalance is a free data retrieval call binding the contract method 0x832eea0c.
-//
-// Solidity: function getProviderBalance(address providerAddr) view returns(uint256 total, uint256 hold)
-func (_SessionRouter *SessionRouterCaller) GetProviderBalance(opts *bind.CallOpts, providerAddr common.Address) (struct {
-	Total *big.Int
-	Hold  *big.Int
-}, error) {
-	var out []interface{}
-	err := _SessionRouter.contract.Call(opts, &out, "getProviderBalance", providerAddr)
-
-	outstruct := new(struct {
-		Total *big.Int
-		Hold  *big.Int
-	})
-	if err != nil {
-		return *outstruct, err
-	}
-
-	outstruct.Total = *abi.ConvertType(out[0], new(*big.Int)).(**big.Int)
-	outstruct.Hold = *abi.ConvertType(out[1], new(*big.Int)).(**big.Int)
-
-	return *outstruct, err
-
-}
-
-// GetProviderBalance is a free data retrieval call binding the contract method 0x832eea0c.
-//
-// Solidity: function getProviderBalance(address providerAddr) view returns(uint256 total, uint256 hold)
-func (_SessionRouter *SessionRouterSession) GetProviderBalance(providerAddr common.Address) (struct {
-	Total *big.Int
-	Hold  *big.Int
-}, error) {
-	return _SessionRouter.Contract.GetProviderBalance(&_SessionRouter.CallOpts, providerAddr)
-}
-
-// GetProviderBalance is a free data retrieval call binding the contract method 0x832eea0c.
-//
-// Solidity: function getProviderBalance(address providerAddr) view returns(uint256 total, uint256 hold)
-func (_SessionRouter *SessionRouterCallerSession) GetProviderBalance(providerAddr common.Address) (struct {
-	Total *big.Int
-	Hold  *big.Int
-}, error) {
-	return _SessionRouter.Contract.GetProviderBalance(&_SessionRouter.CallOpts, providerAddr)
+// Solidity: function getProviderClaimableBalance(bytes32 sessionId) view returns(uint256)
+func (_SessionRouter *SessionRouterCallerSession) GetProviderClaimableBalance(sessionId [32]byte) (*big.Int, error) {
+	return _SessionRouter.Contract.GetProviderClaimableBalance(&_SessionRouter.CallOpts, sessionId)
 }
 
 // GetSession is a free data retrieval call binding the contract method 0x39b240bd.
 //
-// Solidity: function getSession(bytes32 sessionId) view returns((bytes32,address,address,bytes32,bytes32,uint256,uint256,bytes,uint256,uint256,uint256))
+// Solidity: function getSession(bytes32 sessionId) view returns((bytes32,address,address,bytes32,bytes32,uint256,uint256,bytes,uint256,uint256,uint256,uint256))
 func (_SessionRouter *SessionRouterCaller) GetSession(opts *bind.CallOpts, sessionId [32]byte) (Session, error) {
 	var out []interface{}
 	err := _SessionRouter.contract.Call(opts, &out, "getSession", sessionId)
@@ -352,24 +285,24 @@ func (_SessionRouter *SessionRouterCaller) GetSession(opts *bind.CallOpts, sessi
 
 // GetSession is a free data retrieval call binding the contract method 0x39b240bd.
 //
-// Solidity: function getSession(bytes32 sessionId) view returns((bytes32,address,address,bytes32,bytes32,uint256,uint256,bytes,uint256,uint256,uint256))
+// Solidity: function getSession(bytes32 sessionId) view returns((bytes32,address,address,bytes32,bytes32,uint256,uint256,bytes,uint256,uint256,uint256,uint256))
 func (_SessionRouter *SessionRouterSession) GetSession(sessionId [32]byte) (Session, error) {
 	return _SessionRouter.Contract.GetSession(&_SessionRouter.CallOpts, sessionId)
 }
 
 // GetSession is a free data retrieval call binding the contract method 0x39b240bd.
 //
-// Solidity: function getSession(bytes32 sessionId) view returns((bytes32,address,address,bytes32,bytes32,uint256,uint256,bytes,uint256,uint256,uint256))
+// Solidity: function getSession(bytes32 sessionId) view returns((bytes32,address,address,bytes32,bytes32,uint256,uint256,bytes,uint256,uint256,uint256,uint256))
 func (_SessionRouter *SessionRouterCallerSession) GetSession(sessionId [32]byte) (Session, error) {
 	return _SessionRouter.Contract.GetSession(&_SessionRouter.CallOpts, sessionId)
 }
 
-// GetTodaysBudget is a free data retrieval call binding the contract method 0xa7e7f9a9.
+// GetSessionEndTime is a free data retrieval call binding the contract method 0x3a02141b.
 //
-// Solidity: function getTodaysBudget() view returns(uint256)
-func (_SessionRouter *SessionRouterCaller) GetTodaysBudget(opts *bind.CallOpts) (*big.Int, error) {
+// Solidity: function getSessionEndTime(bytes32 sessionId) view returns(uint256)
+func (_SessionRouter *SessionRouterCaller) GetSessionEndTime(opts *bind.CallOpts, sessionId [32]byte) (*big.Int, error) {
 	var out []interface{}
-	err := _SessionRouter.contract.Call(opts, &out, "getTodaysBudget")
+	err := _SessionRouter.contract.Call(opts, &out, "getSessionEndTime", sessionId)
 
 	if err != nil {
 		return *new(*big.Int), err
@@ -381,26 +314,26 @@ func (_SessionRouter *SessionRouterCaller) GetTodaysBudget(opts *bind.CallOpts) 
 
 }
 
-// GetTodaysBudget is a free data retrieval call binding the contract method 0xa7e7f9a9.
+// GetSessionEndTime is a free data retrieval call binding the contract method 0x3a02141b.
 //
-// Solidity: function getTodaysBudget() view returns(uint256)
-func (_SessionRouter *SessionRouterSession) GetTodaysBudget() (*big.Int, error) {
-	return _SessionRouter.Contract.GetTodaysBudget(&_SessionRouter.CallOpts)
+// Solidity: function getSessionEndTime(bytes32 sessionId) view returns(uint256)
+func (_SessionRouter *SessionRouterSession) GetSessionEndTime(sessionId [32]byte) (*big.Int, error) {
+	return _SessionRouter.Contract.GetSessionEndTime(&_SessionRouter.CallOpts, sessionId)
 }
 
-// GetTodaysBudget is a free data retrieval call binding the contract method 0xa7e7f9a9.
+// GetSessionEndTime is a free data retrieval call binding the contract method 0x3a02141b.
 //
-// Solidity: function getTodaysBudget() view returns(uint256)
-func (_SessionRouter *SessionRouterCallerSession) GetTodaysBudget() (*big.Int, error) {
-	return _SessionRouter.Contract.GetTodaysBudget(&_SessionRouter.CallOpts)
+// Solidity: function getSessionEndTime(bytes32 sessionId) view returns(uint256)
+func (_SessionRouter *SessionRouterCallerSession) GetSessionEndTime(sessionId [32]byte) (*big.Int, error) {
+	return _SessionRouter.Contract.GetSessionEndTime(&_SessionRouter.CallOpts, sessionId)
 }
 
-// GetTodaysSpend is a free data retrieval call binding the contract method 0x02fc4ec8.
+// GetTodaysBudget is a free data retrieval call binding the contract method 0x40005965.
 //
-// Solidity: function getTodaysSpend(address userAddress) view returns(uint256)
-func (_SessionRouter *SessionRouterCaller) GetTodaysSpend(opts *bind.CallOpts, userAddress common.Address) (*big.Int, error) {
+// Solidity: function getTodaysBudget(uint128 timestamp) view returns(uint256)
+func (_SessionRouter *SessionRouterCaller) GetTodaysBudget(opts *bind.CallOpts, timestamp *big.Int) (*big.Int, error) {
 	var out []interface{}
-	err := _SessionRouter.contract.Call(opts, &out, "getTodaysSpend", userAddress)
+	err := _SessionRouter.contract.Call(opts, &out, "getTodaysBudget", timestamp)
 
 	if err != nil {
 		return *new(*big.Int), err
@@ -412,18 +345,18 @@ func (_SessionRouter *SessionRouterCaller) GetTodaysSpend(opts *bind.CallOpts, u
 
 }
 
-// GetTodaysSpend is a free data retrieval call binding the contract method 0x02fc4ec8.
+// GetTodaysBudget is a free data retrieval call binding the contract method 0x40005965.
 //
-// Solidity: function getTodaysSpend(address userAddress) view returns(uint256)
-func (_SessionRouter *SessionRouterSession) GetTodaysSpend(userAddress common.Address) (*big.Int, error) {
-	return _SessionRouter.Contract.GetTodaysSpend(&_SessionRouter.CallOpts, userAddress)
+// Solidity: function getTodaysBudget(uint128 timestamp) view returns(uint256)
+func (_SessionRouter *SessionRouterSession) GetTodaysBudget(timestamp *big.Int) (*big.Int, error) {
+	return _SessionRouter.Contract.GetTodaysBudget(&_SessionRouter.CallOpts, timestamp)
 }
 
-// GetTodaysSpend is a free data retrieval call binding the contract method 0x02fc4ec8.
+// GetTodaysBudget is a free data retrieval call binding the contract method 0x40005965.
 //
-// Solidity: function getTodaysSpend(address userAddress) view returns(uint256)
-func (_SessionRouter *SessionRouterCallerSession) GetTodaysSpend(userAddress common.Address) (*big.Int, error) {
-	return _SessionRouter.Contract.GetTodaysSpend(&_SessionRouter.CallOpts, userAddress)
+// Solidity: function getTodaysBudget(uint128 timestamp) view returns(uint256)
+func (_SessionRouter *SessionRouterCallerSession) GetTodaysBudget(timestamp *big.Int) (*big.Int, error) {
+	return _SessionRouter.Contract.GetTodaysBudget(&_SessionRouter.CallOpts, timestamp)
 }
 
 // IsValidReceipt is a free data retrieval call binding the contract method 0x626dd729.
@@ -457,12 +390,12 @@ func (_SessionRouter *SessionRouterCallerSession) IsValidReceipt(signer common.A
 	return _SessionRouter.Contract.IsValidReceipt(&_SessionRouter.CallOpts, signer, receipt, signature)
 }
 
-// WithdrawableStakeBalance is a free data retrieval call binding the contract method 0x7594e4d9.
+// StartOfTheDay is a free data retrieval call binding the contract method 0xeedd0a72.
 //
-// Solidity: function withdrawableStakeBalance(address userAddress) view returns(uint256)
-func (_SessionRouter *SessionRouterCaller) WithdrawableStakeBalance(opts *bind.CallOpts, userAddress common.Address) (*big.Int, error) {
+// Solidity: function startOfTheDay(uint256 timestamp) pure returns(uint256)
+func (_SessionRouter *SessionRouterCaller) StartOfTheDay(opts *bind.CallOpts, timestamp *big.Int) (*big.Int, error) {
 	var out []interface{}
-	err := _SessionRouter.contract.Call(opts, &out, "withdrawableStakeBalance", userAddress)
+	err := _SessionRouter.contract.Call(opts, &out, "startOfTheDay", timestamp)
 
 	if err != nil {
 		return *new(*big.Int), err
@@ -474,39 +407,84 @@ func (_SessionRouter *SessionRouterCaller) WithdrawableStakeBalance(opts *bind.C
 
 }
 
-// WithdrawableStakeBalance is a free data retrieval call binding the contract method 0x7594e4d9.
+// StartOfTheDay is a free data retrieval call binding the contract method 0xeedd0a72.
 //
-// Solidity: function withdrawableStakeBalance(address userAddress) view returns(uint256)
-func (_SessionRouter *SessionRouterSession) WithdrawableStakeBalance(userAddress common.Address) (*big.Int, error) {
-	return _SessionRouter.Contract.WithdrawableStakeBalance(&_SessionRouter.CallOpts, userAddress)
+// Solidity: function startOfTheDay(uint256 timestamp) pure returns(uint256)
+func (_SessionRouter *SessionRouterSession) StartOfTheDay(timestamp *big.Int) (*big.Int, error) {
+	return _SessionRouter.Contract.StartOfTheDay(&_SessionRouter.CallOpts, timestamp)
 }
 
-// WithdrawableStakeBalance is a free data retrieval call binding the contract method 0x7594e4d9.
+// StartOfTheDay is a free data retrieval call binding the contract method 0xeedd0a72.
 //
-// Solidity: function withdrawableStakeBalance(address userAddress) view returns(uint256)
-func (_SessionRouter *SessionRouterCallerSession) WithdrawableStakeBalance(userAddress common.Address) (*big.Int, error) {
-	return _SessionRouter.Contract.WithdrawableStakeBalance(&_SessionRouter.CallOpts, userAddress)
+// Solidity: function startOfTheDay(uint256 timestamp) pure returns(uint256)
+func (_SessionRouter *SessionRouterCallerSession) StartOfTheDay(timestamp *big.Int) (*big.Int, error) {
+	return _SessionRouter.Contract.StartOfTheDay(&_SessionRouter.CallOpts, timestamp)
 }
 
-// ClaimProviderBalance is a paid mutator transaction binding the contract method 0xc9a93c1a.
+// WithdrawableUserStake is a free data retrieval call binding the contract method 0x536f1f82.
 //
-// Solidity: function claimProviderBalance(uint256 amountToWithdraw, address to) returns()
-func (_SessionRouter *SessionRouterTransactor) ClaimProviderBalance(opts *bind.TransactOpts, amountToWithdraw *big.Int, to common.Address) (*types.Transaction, error) {
-	return _SessionRouter.contract.Transact(opts, "claimProviderBalance", amountToWithdraw, to)
+// Solidity: function withdrawableUserStake(address userAddr) view returns(uint256 avail, uint256 hold)
+func (_SessionRouter *SessionRouterCaller) WithdrawableUserStake(opts *bind.CallOpts, userAddr common.Address) (struct {
+	Avail *big.Int
+	Hold  *big.Int
+}, error) {
+	var out []interface{}
+	err := _SessionRouter.contract.Call(opts, &out, "withdrawableUserStake", userAddr)
+
+	outstruct := new(struct {
+		Avail *big.Int
+		Hold  *big.Int
+	})
+	if err != nil {
+		return *outstruct, err
+	}
+
+	outstruct.Avail = *abi.ConvertType(out[0], new(*big.Int)).(**big.Int)
+	outstruct.Hold = *abi.ConvertType(out[1], new(*big.Int)).(**big.Int)
+
+	return *outstruct, err
+
 }
 
-// ClaimProviderBalance is a paid mutator transaction binding the contract method 0xc9a93c1a.
+// WithdrawableUserStake is a free data retrieval call binding the contract method 0x536f1f82.
 //
-// Solidity: function claimProviderBalance(uint256 amountToWithdraw, address to) returns()
-func (_SessionRouter *SessionRouterSession) ClaimProviderBalance(amountToWithdraw *big.Int, to common.Address) (*types.Transaction, error) {
-	return _SessionRouter.Contract.ClaimProviderBalance(&_SessionRouter.TransactOpts, amountToWithdraw, to)
+// Solidity: function withdrawableUserStake(address userAddr) view returns(uint256 avail, uint256 hold)
+func (_SessionRouter *SessionRouterSession) WithdrawableUserStake(userAddr common.Address) (struct {
+	Avail *big.Int
+	Hold  *big.Int
+}, error) {
+	return _SessionRouter.Contract.WithdrawableUserStake(&_SessionRouter.CallOpts, userAddr)
 }
 
-// ClaimProviderBalance is a paid mutator transaction binding the contract method 0xc9a93c1a.
+// WithdrawableUserStake is a free data retrieval call binding the contract method 0x536f1f82.
 //
-// Solidity: function claimProviderBalance(uint256 amountToWithdraw, address to) returns()
-func (_SessionRouter *SessionRouterTransactorSession) ClaimProviderBalance(amountToWithdraw *big.Int, to common.Address) (*types.Transaction, error) {
-	return _SessionRouter.Contract.ClaimProviderBalance(&_SessionRouter.TransactOpts, amountToWithdraw, to)
+// Solidity: function withdrawableUserStake(address userAddr) view returns(uint256 avail, uint256 hold)
+func (_SessionRouter *SessionRouterCallerSession) WithdrawableUserStake(userAddr common.Address) (struct {
+	Avail *big.Int
+	Hold  *big.Int
+}, error) {
+	return _SessionRouter.Contract.WithdrawableUserStake(&_SessionRouter.CallOpts, userAddr)
+}
+
+// ClaimProviderBalance is a paid mutator transaction binding the contract method 0xbab3de02.
+//
+// Solidity: function claimProviderBalance(bytes32 sessionId, uint256 amountToWithdraw, address to) returns()
+func (_SessionRouter *SessionRouterTransactor) ClaimProviderBalance(opts *bind.TransactOpts, sessionId [32]byte, amountToWithdraw *big.Int, to common.Address) (*types.Transaction, error) {
+	return _SessionRouter.contract.Transact(opts, "claimProviderBalance", sessionId, amountToWithdraw, to)
+}
+
+// ClaimProviderBalance is a paid mutator transaction binding the contract method 0xbab3de02.
+//
+// Solidity: function claimProviderBalance(bytes32 sessionId, uint256 amountToWithdraw, address to) returns()
+func (_SessionRouter *SessionRouterSession) ClaimProviderBalance(sessionId [32]byte, amountToWithdraw *big.Int, to common.Address) (*types.Transaction, error) {
+	return _SessionRouter.Contract.ClaimProviderBalance(&_SessionRouter.TransactOpts, sessionId, amountToWithdraw, to)
+}
+
+// ClaimProviderBalance is a paid mutator transaction binding the contract method 0xbab3de02.
+//
+// Solidity: function claimProviderBalance(bytes32 sessionId, uint256 amountToWithdraw, address to) returns()
+func (_SessionRouter *SessionRouterTransactorSession) ClaimProviderBalance(sessionId [32]byte, amountToWithdraw *big.Int, to common.Address) (*types.Transaction, error) {
+	return _SessionRouter.Contract.ClaimProviderBalance(&_SessionRouter.TransactOpts, sessionId, amountToWithdraw, to)
 }
 
 // CloseSession is a paid mutator transaction binding the contract method 0x9775d1ff.
@@ -572,6 +550,27 @@ func (_SessionRouter *SessionRouterTransactorSession) OpenSession(bidId [32]byte
 	return _SessionRouter.Contract.OpenSession(&_SessionRouter.TransactOpts, bidId, _stake)
 }
 
+// SetPoolConfig is a paid mutator transaction binding the contract method 0x8b1af52a.
+//
+// Solidity: function setPoolConfig((uint256,uint256,uint128,uint128) pool) returns()
+func (_SessionRouter *SessionRouterTransactor) SetPoolConfig(opts *bind.TransactOpts, pool Pool) (*types.Transaction, error) {
+	return _SessionRouter.contract.Transact(opts, "setPoolConfig", pool)
+}
+
+// SetPoolConfig is a paid mutator transaction binding the contract method 0x8b1af52a.
+//
+// Solidity: function setPoolConfig((uint256,uint256,uint128,uint128) pool) returns()
+func (_SessionRouter *SessionRouterSession) SetPoolConfig(pool Pool) (*types.Transaction, error) {
+	return _SessionRouter.Contract.SetPoolConfig(&_SessionRouter.TransactOpts, pool)
+}
+
+// SetPoolConfig is a paid mutator transaction binding the contract method 0x8b1af52a.
+//
+// Solidity: function setPoolConfig((uint256,uint256,uint128,uint128) pool) returns()
+func (_SessionRouter *SessionRouterTransactorSession) SetPoolConfig(pool Pool) (*types.Transaction, error) {
+	return _SessionRouter.Contract.SetPoolConfig(&_SessionRouter.TransactOpts, pool)
+}
+
 // SetStakeDelay is a paid mutator transaction binding the contract method 0x3cadd8bb.
 //
 // Solidity: function setStakeDelay(int256 delay) returns()
@@ -591,6 +590,27 @@ func (_SessionRouter *SessionRouterSession) SetStakeDelay(delay *big.Int) (*type
 // Solidity: function setStakeDelay(int256 delay) returns()
 func (_SessionRouter *SessionRouterTransactorSession) SetStakeDelay(delay *big.Int) (*types.Transaction, error) {
 	return _SessionRouter.Contract.SetStakeDelay(&_SessionRouter.TransactOpts, delay)
+}
+
+// WithdrawUserStake is a paid mutator transaction binding the contract method 0xcd308cb1.
+//
+// Solidity: function withdrawUserStake(uint256 amountToWithdraw, address to) returns()
+func (_SessionRouter *SessionRouterTransactor) WithdrawUserStake(opts *bind.TransactOpts, amountToWithdraw *big.Int, to common.Address) (*types.Transaction, error) {
+	return _SessionRouter.contract.Transact(opts, "withdrawUserStake", amountToWithdraw, to)
+}
+
+// WithdrawUserStake is a paid mutator transaction binding the contract method 0xcd308cb1.
+//
+// Solidity: function withdrawUserStake(uint256 amountToWithdraw, address to) returns()
+func (_SessionRouter *SessionRouterSession) WithdrawUserStake(amountToWithdraw *big.Int, to common.Address) (*types.Transaction, error) {
+	return _SessionRouter.Contract.WithdrawUserStake(&_SessionRouter.TransactOpts, amountToWithdraw, to)
+}
+
+// WithdrawUserStake is a paid mutator transaction binding the contract method 0xcd308cb1.
+//
+// Solidity: function withdrawUserStake(uint256 amountToWithdraw, address to) returns()
+func (_SessionRouter *SessionRouterTransactorSession) WithdrawUserStake(amountToWithdraw *big.Int, to common.Address) (*types.Transaction, error) {
+	return _SessionRouter.Contract.WithdrawUserStake(&_SessionRouter.TransactOpts, amountToWithdraw, to)
 }
 
 // SessionRouterProviderClaimedIterator is returned from FilterProviderClaimed and is used to iterate over the raw logs and unpacked data for ProviderClaimed events raised by the SessionRouter contract.

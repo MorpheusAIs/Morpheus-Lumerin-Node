@@ -48,20 +48,20 @@ func NewMarketplace(marketplaceAddr common.Address, client *ethclient.Client, lo
 	}
 }
 
-func (g *Marketplace) GetBidsByProvider(ctx context.Context, provider common.Address, offset *big.Int, limit uint8) ([]marketplace.Bid, error) {
-	bids, err := g.marketplace.GetBidsByProvider(&bind.CallOpts{Context: ctx}, provider, offset, limit)
+func (g *Marketplace) GetBidsByProvider(ctx context.Context, provider common.Address, offset *big.Int, limit uint8) ([][32]byte, []marketplace.Bid, error) {
+	adresses, bids, err := g.marketplace.GetBidsByProvider(&bind.CallOpts{Context: ctx}, provider, offset, limit)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return bids, nil
+	return adresses, bids, nil
 }
 
-func (g *Marketplace) GetBidsByModelAgent(ctx context.Context, modelAgentId [32]byte, offset *big.Int, limit uint8) ([]marketplace.Bid, error) {
-	bids, err := g.marketplace.GetBidsByModelAgent(&bind.CallOpts{Context: ctx}, modelAgentId, offset, limit)
+func (g *Marketplace) GetBidsByModelAgent(ctx context.Context, modelAgentId [32]byte, offset *big.Int, limit uint8) ([][32]byte, []marketplace.Bid, error) {
+	addresses, bids, err := g.marketplace.GetBidsByModelAgent(&bind.CallOpts{Context: ctx}, modelAgentId, offset, limit)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return bids, nil
+	return addresses, bids, nil
 }

@@ -65,11 +65,12 @@ func (m *MorRpcHandler) Handle(msg morrpc.RpcMessage, sourceLog interfaces.ILogg
 			return nil, err
 		}
 
-		session := storages.Session{
-			Id:         requestId,
-			UserPubKey: userPubKey,
+		user := storages.User{
+			Addr:   userAddr,
+			PubKey: userPubKey,
 		}
-		m.sessionStorage.AddSession(&session)
+
+		m.sessionStorage.AddUser(&user)
 		return response, nil
 	case "session.prompt":
 		requestId := fmt.Sprintf("%v", msg.ID)
@@ -80,9 +81,8 @@ func (m *MorRpcHandler) Handle(msg morrpc.RpcMessage, sourceLog interfaces.ILogg
 		sourceLog.Debugf("Received prompt from session %s, timestamp: %s", sessionId, timeStamp)
 
 		session := m.sessionStorage.GetSession(sessionId)
-
-		userPubKey := session.UserPubKey // get user public key from storage for sessionId
-		fmt.Println(userPubKey)
+		user := m.sessionStorage.GetUser(session.UserAddr)
+		userPubKey := user.PubKey
 		isValid := m.morRpc.VerifySignature(msg.Params, signature, userPubKey, sourceLog)
 		if !isValid {
 			err := fmt.Errorf("invalid signature")

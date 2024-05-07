@@ -56,7 +56,7 @@ func (rpcProxy *RpcProxy) GetAllProviders(ctx context.Context) (int, gin.H) {
 }
 
 func (rpcProxy *RpcProxy) GetAllModels(ctx context.Context) (int, gin.H) {
-	models, err := rpcProxy.modelRegistry.GetAllProviders(ctx)
+	models, err := rpcProxy.modelRegistry.GetAllModels(ctx)
 	if err != nil {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
@@ -64,19 +64,29 @@ func (rpcProxy *RpcProxy) GetAllModels(ctx context.Context) (int, gin.H) {
 }
 
 func (rpcProxy *RpcProxy) GetBidsByProvider(ctx context.Context, providerAddr common.Address, offset *big.Int, limit uint8) (int, gin.H) {
-	bids, err := rpcProxy.marketplace.GetBidsByProvider(ctx, providerAddr, offset, limit)
+	ids, bids, err := rpcProxy.marketplace.GetBidsByProvider(ctx, providerAddr, offset, limit)
 	if err != nil {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
-	return constants.HTTP_STATUS_OK, gin.H{"bids": bids}
+
+	hexIds := make([]string, len(ids))
+	for i, id := range ids {
+		hexIds[i] = hex.EncodeToString(id[:])
+	}
+	return constants.HTTP_STATUS_OK, gin.H{"bids": bids, "ids": hexIds}
 }
 
 func (rpcProxy *RpcProxy) GetBidsByModelAgent(ctx context.Context, modelId [32]byte, offset *big.Int, limit uint8) (int, gin.H) {
-	bids, err := rpcProxy.marketplace.GetBidsByModelAgent(ctx, modelId, offset, limit)
+	ids, bids, err := rpcProxy.marketplace.GetBidsByModelAgent(ctx, modelId, offset, limit)
 	if err != nil {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
-	return constants.HTTP_STATUS_OK, gin.H{"bids": bids}
+
+	hexIds := make([]string, len(ids))
+	for i, address := range ids {
+		hexIds[i] = hex.EncodeToString(address[:])
+	}
+	return constants.HTTP_STATUS_OK, gin.H{"bids": bids, "ids": hexIds}
 }
 
 func (rpcProxy *RpcProxy) OpenSession(ctx *gin.Context) (int, gin.H) {
@@ -119,6 +129,14 @@ func (rpcProxy *RpcProxy) OpenSession(ctx *gin.Context) (int, gin.H) {
 	}
 
 	return constants.HTTP_STATUS_OK, gin.H{"sessionId": sessionId}
+}
+
+func (rpcProxy *RpcProxy) GetSession(ctx *gin.Context, sessionId string) (int, gin.H) {
+	session, err := rpcProxy.sessionRouter.GetSession(ctx, sessionId)
+	if err != nil {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+	return constants.HTTP_STATUS_OK, gin.H{"session": session}
 }
 
 func (rpcProxy *RpcProxy) getTransactOpts(ctx context.Context, privKey string) (*bind.TransactOpts, error) {

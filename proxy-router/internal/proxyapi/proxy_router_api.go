@@ -129,12 +129,6 @@ func (p *ProxyRouterApi) InitiateSession(ctx *gin.Context) (int, gin.H) {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 
-	p.sessionStorage.AddSession(&storages.Session{
-		Id:             requestID,
-		UserPubKey:     p.pubKey,
-		ProviderPubKey: providerPubKey,
-	})
-
 	return constants.HTTP_STATUS_OK, gin.H{
 		"response": msg,
 	}
@@ -180,8 +174,7 @@ func (p *ProxyRouterApi) SendPrompt(ctx *gin.Context) (int, gin.H) {
 	}
 
 	signature := fmt.Sprintf("%v", msg.Result["signature"])
-	session := p.sessionStorage.GetSession(sessionId)
-	providerPubKey := session.ProviderPubKey // get provider public key from storage for sessionId
+	providerPubKey := providerPublicKey // get provider public key from storage for sessionId
 	p.log.Debugf("Signature: %s, Provider Pub Key: %s", signature, providerPubKey)
 
 	isValidSignature := morrpc.NewMorRpc().VerifySignature(msg.Result, signature, providerPubKey, p.log)

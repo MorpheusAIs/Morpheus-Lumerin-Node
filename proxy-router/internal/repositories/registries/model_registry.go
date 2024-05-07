@@ -46,7 +46,7 @@ func NewModelRegistry(modelRegistryAddr common.Address, client *ethclient.Client
 	}
 }
 
-func (g *ModelRegistry) GetAllProviders(ctx context.Context) ([]modelregistry.Model, error) {
+func (g *ModelRegistry) GetAllModels(ctx context.Context) ([]modelregistry.Model, error) {
 	models, err := g.modelRegistry.ModelGetAll(&bind.CallOpts{Context: ctx})
 	if err != nil {
 		return nil, err
