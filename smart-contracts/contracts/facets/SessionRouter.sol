@@ -337,7 +337,7 @@ contract SessionRouter {
     return _getTodaysBudget(startOfTheDay(block.timestamp));
   }
 
-  function _getTodaysBudget(uint256 timestamp) public view returns (uint256) {
+  function _getTodaysBudget(uint256 timestamp) internal view returns (uint256) {
     return getComputeBalance(timestamp) / 100; // 1% of Compute Balance
   }
 
