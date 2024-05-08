@@ -197,7 +197,6 @@ contract SessionRouter {
     if (session.openedAt == 0) {
       revert SessionNotFound();
     }
-
     return _getProviderClaimableBalance(session);
   }
 

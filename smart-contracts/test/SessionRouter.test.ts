@@ -4,14 +4,14 @@ import {
 } from "@nomicfoundation/hardhat-toolbox-viem/network-helpers";
 import { expect } from "chai";
 import hre from "hardhat";
-import { PublicClient, keccak256, parseEventLogs } from "viem";
+import {  keccak256 } from "viem";
 import { deploySingleBid, encodedReport } from "./fixtures";
 import {
   catchError,
   getHex,
+  getSessionId,
   getTxTimestamp,
   randomBytes32,
-  getSessionId,
 } from "./utils";
 import { DAY, HOUR, MINUTE, SECOND } from "../utils/time";
 import { expectAlmostEqual } from "../utils/compare";
