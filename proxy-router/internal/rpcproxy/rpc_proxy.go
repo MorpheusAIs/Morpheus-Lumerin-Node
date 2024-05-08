@@ -7,7 +7,9 @@ import (
 
 	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/registries"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/rpcproxy/structs"
 	"github.com/gin-gonic/gin"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -69,11 +71,19 @@ func (rpcProxy *RpcProxy) GetBidsByProvider(ctx context.Context, providerAddr co
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 
-	hexIds := make([]string, len(ids))
-	for i, id := range ids {
-		hexIds[i] = hex.EncodeToString(id[:])
+	result := make([]*structs.Bid, len(ids))
+	for i, value := range bids {
+		result[i] = &structs.Bid{
+			Id:             lib.BytesToString(ids[i][:]),
+			ModelAgentId:   lib.BytesToString(value.ModelAgentId[:]),
+			Provider:       value.Provider,
+			Nonce:          value.Nonce,
+			CreatedAt:      value.CreatedAt,
+			DeletedAt:      value.DeletedAt,
+			PricePerSecond: value.PricePerSecond,
+		}
 	}
-	return constants.HTTP_STATUS_OK, gin.H{"bids": bids, "ids": hexIds}
+	return constants.HTTP_STATUS_OK, gin.H{"bids": result}
 }
 
 func (rpcProxy *RpcProxy) GetBidsByModelAgent(ctx context.Context, modelId [32]byte, offset *big.Int, limit uint8) (int, gin.H) {
