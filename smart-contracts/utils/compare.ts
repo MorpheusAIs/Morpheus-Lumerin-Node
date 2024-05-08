@@ -1,6 +1,6 @@
 import { expect } from "chai";
 
-type NumberLike = number | bigint;
+export type NumberLike = number | bigint;
 
 export const expectAlmostEqual = (
   expected: NumberLike,

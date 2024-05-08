@@ -4,7 +4,7 @@ import {
 } from "@nomicfoundation/hardhat-toolbox-viem/network-helpers";
 import { expect } from "chai";
 import hre from "hardhat";
-import { PublicClient, keccak256, parseEventLogs } from "viem";
+import { keccak256, maxUint256 } from "viem";
 import { deploySingleBid, encodedReport } from "./fixtures";
 import {
   catchError,
@@ -13,7 +13,7 @@ import {
   randomBytes32,
   getSessionId,
 } from "./utils";
-import { DAY, HOUR, MINUTE, SECOND } from "../utils/time";
+import { DAY, HOUR, MINUTE, SECOND, now, startOfNextDay } from "../utils/time";
 import { expectAlmostEqual } from "../utils/compare";
 
 describe("Session router", function () {
@@ -157,11 +157,112 @@ describe("Session router", function () {
   });
 
   describe("session end time", function () {
-    it("should open session (< 1 day) and verify end time", async function () {});
+    it("should open session (spans 1 day) and verify end time", async function () {
+      const {
+        sessionRouter,
+        expectedSession: exp,
+        user,
+        publicClient,
+      } = await loadFixture(deploySingleBid);
+      // open session
+      const openTx = await sessionRouter.write.openSession(
+        [exp.bidID, exp.stake],
+        {
+          account: user.account.address,
+        },
+      );
+
+      const startedAt = await getTxTimestamp(publicClient, openTx);
+      const sessionId = await getSessionId(publicClient, hre, openTx);
+      const endTime = await sessionRouter.read.getSessionEndTime([sessionId]);
+
+      expect(endTime).to.equal(startedAt + exp.durationSeconds);
+    });
+
+    it("should open session (spans 2 days) and verify end time", async function () {
+      //TODO: improve code to reduce time difference
+      const {
+        sessionRouter,
+        expectedSession: exp,
+        user,
+        publicClient,
+      } = await loadFixture(deploySingleBid);
+
+      // increase time to 23:00 next day
+      await time.increaseTo(
+        startOfNextDay(now()) + BigInt((23 * HOUR) / SECOND),
+      );
+      const openTx = await sessionRouter.write.openSession(
+        [exp.bidID, exp.stake * 2n],
+        {
+          account: user.account.address,
+        },
+      );
+
+      const startedAt = await getTxTimestamp(publicClient, openTx);
+      const sessionId = await getSessionId(publicClient, hre, openTx);
+      const endTime = await sessionRouter.read.getSessionEndTime([sessionId]);
+      const expEndTime = startOfNextDay(startedAt) + exp.durationSeconds * 2n;
+
+      expect(Number(endTime)).to.approximately(
+        Number(expEndTime),
+        (3 * MINUTE) / SECOND,
+      );
+    });
+
+    it("should open session (longer than 1 day) and verify end time", async function () {
+      const {
+        sessionRouter,
+        expectedSession: exp,
+        user,
+        publicClient,
+        tokenMOR,
+      } = await loadFixture(deploySingleBid);
+      const stake = exp.stake * 25n;
+
+      await tokenMOR.write.transfer([user.account.address, stake]);
+
+      const openTx = await sessionRouter.write.openSession([exp.bidID, stake], {
+        account: user.account.address,
+      });
+
+      const sessionId = await getSessionId(publicClient, hre, openTx);
+      const endTime = await sessionRouter.read.getSessionEndTime([sessionId]);
+
+      expect(endTime).to.be.equal(maxUint256);
+    });
+
+    it("should open session (longer than 1 day) that ends today and verify end time", async function () {
+      const {
+        sessionRouter,
+        expectedSession: exp,
+        user,
+        owner,
+        publicClient,
+        tokenMOR,
+      } = await loadFixture(deploySingleBid);
+      const stake = exp.stake * 24n;
+
+      await tokenMOR.write.transfer([user.account.address, stake]);
+
+      const openTx = await sessionRouter.write.openSession([exp.bidID, stake], {
+        account: user.account.address,
+      });
+
+      const sessionId = await getSessionId(publicClient, hre, openTx);
+      const endTime = await sessionRouter.read.getSessionEndTime([sessionId]);
+      console.log("endTime", endTime);
+
+      await time.increase((1000 * DAY) / SECOND);
+      const endTime2 = await sessionRouter.read.getSessionEndTime([sessionId]);
+      console.log("endTime2", endTime2);
+
+      // expect(endTime).to.be.equal(maxUint256);
+    });
   });
 
   describe("session closeout", function () {
-    it("should open short (<1D) session and close later", async function () {
+    it("should open short (< 1D) session and close later", async function () {
       const {
         sessionRouter,
         provider,

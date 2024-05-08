@@ -98,6 +98,8 @@ contract SessionRouter {
     }
 
     uint256 stipend = stakeToStipend(session.stake, uint128(block.timestamp));
+
+
     uint256 durationSeconds = stipend / session.pricePerSecond;
 
     uint256 secondsFromStartOfDay = block.timestamp % DAY;
@@ -112,13 +114,13 @@ contract SessionRouter {
     }
 
     // case 2
-    // started today and will end tomorrow (at midnight new stipend issued)
-    if (session.openedAt > startOfToday && session.openedAt + durationSeconds >= startOfTheTomorrow) {
-      uint256 tomorrowStipend = stakeToStipend(session.stake, uint128(block.timestamp + secondsLeftToday + 1));
+    // started today and will end tomorrow (considering that at midnight new stipend will be issued)
+    if (session.openedAt >= startOfToday && durationSeconds < DAY) {
+      uint256 tomorrowStipend = stakeToStipend(session.stake, startOfTheTomorrow);
       uint256 tomorrowDurationSeconds = tomorrowStipend / session.pricePerSecond;
-      return session.openedAt + durationSeconds + tomorrowDurationSeconds;
+      return startOfTheTomorrow + tomorrowDurationSeconds;
     }
-
+    
     // case 3
     // started any time and won't end today
     if (durationSeconds >= DAY) {
@@ -126,8 +128,8 @@ contract SessionRouter {
     }
 
     // case 4
-    // started any time and will end today
-    if (durationSeconds < DAY) {
+    // started before today and will end today
+    if (session.openedAt < startOfToday && durationSeconds < DAY) {
       return startOfToday + durationSeconds;
     }
 
