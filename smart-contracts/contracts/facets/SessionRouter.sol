@@ -1,43 +1,31 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.24;
 
-import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import { MessageHashUtils } from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { KeySet } from "../libraries/KeySet.sol";
-import { ModelRegistry } from "./ModelRegistry.sol";
-import { ProviderRegistry } from "./ProviderRegistry.sol";
 import { AppStorage, Session, Bid, OnHold, Pool } from "../AppStorage.sol";
 import { LibOwner } from "../libraries/LibOwner.sol";
-import { LinearDistributionIntervalDecrease } from '../libraries/LinearDistributionIntervalDecrease.sol';
+import { LinearDistributionIntervalDecrease } from "../libraries/LinearDistributionIntervalDecrease.sol";
 
 contract SessionRouter {
   using KeySet for KeySet.Set;
   AppStorage internal s;
 
   // constants
-  uint32 constant DAY = 24 * 60 * 60; // 1 day
-  uint32 constant MIN_SESSION_DURATION = 5 * 60; // 5 minutes
+  uint32 public constant DAY = 24 * 60 * 60; // 1 day
+  uint32 public constant MIN_SESSION_DURATION = 5 * 60; // 5 minutes
 
   // events
-  event SessionOpened(
-    address indexed userAddress,
-    bytes32 indexed sessionId,
-    address indexed providerId
-  );
-  event SessionClosed(
-    address indexed userAddress,
-    bytes32 indexed sessionId,
-    address indexed providerId
-  );
+  event SessionOpened(address indexed userAddress, bytes32 indexed sessionId, address indexed providerId);
+  event SessionClosed(address indexed userAddress, bytes32 indexed sessionId, address indexed providerId);
   event Staked(address indexed userAddress, uint256 amount);
   event Unstaked(address indexed userAddress, uint256 amount);
   event ProviderClaimed(address indexed providerAddress, uint256 amount);
 
   // errors
   error NotUserOrProvider();
-  error NotEnoughWithdrawableBalance();   // means that there is not enough funds at all or some funds are still locked
+  error NotEnoughWithdrawableBalance(); // means that there is not enough funds at all or some funds are still locked
 
   error SessionTooShort();
   error SessionNotFound();
@@ -54,10 +42,7 @@ contract SessionRouter {
     return s.sessions[s.sessionMap[sessionId]];
   }
 
-  function openSession(
-    bytes32 bidId,
-    uint256 _stake
-  ) public returns (bytes32 sessionId) {
+  function openSession(bytes32 bidId, uint256 _stake) public returns (bytes32 sessionId) {
     address sender = msg.sender;
 
     Bid memory bid = s.bidMap[bidId];
@@ -68,15 +53,14 @@ contract SessionRouter {
     if (s.bidSessionMap[bidId] != 0) {
       revert BidTaken();
     }
+    uint256 startOfToday = startOfTheDay(block.timestamp);
+    uint256 duration = stakeToStipend(_stake, startOfToday) / bid.pricePerSecond;
 
-    uint256 duration = stakeToStipend(_stake, uint128(block.timestamp)) / bid.pricePerSecond;
     if (duration < MIN_SESSION_DURATION) {
       revert SessionTooShort();
     }
 
-    sessionId = keccak256(
-      abi.encodePacked(sender, bid.provider, _stake, block.number)
-    );
+    sessionId = keccak256(abi.encodePacked(sender, bid.provider, _stake, block.number));
     s.sessions.push(
       Session({
         id: sessionId,
@@ -121,13 +105,13 @@ contract SessionRouter {
     uint256 secondsLeftToday = DAY - secondsFromStartOfDay;
     uint256 startOfTheTomorrow = startOfToday + DAY;
 
-    // case 1 
-    // started today and will end today 
+    // case 1
+    // started today and will end today
     if (session.openedAt > startOfToday && session.openedAt + durationSeconds < startOfTheTomorrow) {
       return session.openedAt + durationSeconds;
     }
 
-    // case 2 
+    // case 2
     // started today and will end tomorrow (at midnight new stipend issued)
     if (session.openedAt > startOfToday && session.openedAt + durationSeconds >= startOfTheTomorrow) {
       uint256 tomorrowStipend = stakeToStipend(session.stake, uint128(block.timestamp + secondsLeftToday + 1));
@@ -150,11 +134,7 @@ contract SessionRouter {
     return stipend / session.pricePerSecond;
   }
 
-  function closeSession(
-    bytes32 sessionId,
-    bytes memory receiptEncoded,
-    bytes memory signature
-  ) public {
+  function closeSession(bytes32 sessionId, bytes memory receiptEncoded, bytes memory signature) public {
     Session storage session = s.sessions[s.sessionMap[sessionId]];
     if (session.openedAt == 0) {
       revert SessionNotFound();
@@ -172,14 +152,19 @@ contract SessionRouter {
 
     uint256 startOfToday = startOfTheDay(block.timestamp);
     uint256 todaysSessionDurationSeconds = block.timestamp - maxUint256(session.openedAt, startOfToday);
-    uint256 todaySessionCost = todaysSessionDurationSeconds * session.pricePerSecond;
+    uint256 todaySessionExpectedCost = todaysSessionDurationSeconds * session.pricePerSecond;
+    uint256 todaySessionExpectedStake = stipendToStake(todaySessionExpectedCost, startOfToday);
+    // if user closed session later than expected then cost is capped by stake
+    uint256 todayExpectedCost = minUint256(todaySessionExpectedCost, stakeToStipend(session.stake, startOfToday));
+    uint256 todayExpectedStake = minUint256(todaySessionExpectedStake, session.stake); 
 
     // calculate provider withdraw
     uint256 providerWithdraw;
     if (isValidReceipt(session.provider, receiptEncoded, signature)) {
       // withdraw all remaining provider funds
-      uint256 totalSessionDuration = session.closedAt - session.openedAt;
-      uint256 totalCost = totalSessionDuration * session.pricePerSecond;
+      uint256 durationTillToday = startOfToday - minUint256(session.openedAt, startOfToday);
+      uint256 costTillToday = durationTillToday * session.pricePerSecond;
+      uint256 totalCost = costTillToday + todayExpectedCost;
       providerWithdraw = totalCost - session.providerWithdrawnAmount;
     } else {
       // withdraw all funds except for today's session cost
@@ -188,19 +173,18 @@ contract SessionRouter {
       uint256 costTillToday = durationTillToday * session.pricePerSecond;
       providerWithdraw = costTillToday - session.providerWithdrawnAmount;
     }
-    session.providerWithdrawnAmount+=providerWithdraw;
+    session.providerWithdrawnAmount += providerWithdraw;
 
     // calculate user withdraw
-    uint256 userStakeToLock = stipendToStake(todaySessionCost, uint128(block.timestamp));
-    s.userOnHold[session.user].push(OnHold({
-      amount: session.stake - userStakeToLock,
-      releaseAt: block.timestamp + DAY
-    }));
+    uint256 userStakeToLock = todayExpectedStake;
+    s.userOnHold[session.user].push(
+      OnHold({ amount: userStakeToLock, releaseAt: block.timestamp + DAY })
+    );
     uint256 userWithdraw = session.stake - userStakeToLock;
 
     emit SessionClosed(session.user, sessionId, session.provider);
-    
-    // withdraw provider and user  funds
+
+    // withdraw provider and user funds
     s.token.transferFrom(s.fundingAccount, session.provider, providerWithdraw);
     s.token.transfer(session.user, userWithdraw);
   }
@@ -213,7 +197,6 @@ contract SessionRouter {
     if (session.openedAt == 0) {
       revert SessionNotFound();
     }
-    
     return _getProviderClaimableBalance(session);
   }
 
@@ -235,8 +218,8 @@ contract SessionRouter {
     return;
   }
 
-  function _getProviderClaimableBalance(Session memory session) internal view returns (uint256){
-     if (session.closedAt == 0) {
+  function _getProviderClaimableBalance(Session memory session) internal view returns (uint256) {
+    if (session.closedAt == 0) {
       // session is still open
       // provider can claim all funds except for today's session cost
       uint256 startOfToday = startOfTheDay(block.timestamp);
@@ -244,10 +227,11 @@ contract SessionRouter {
       uint256 costTillToday = durationTillToday * session.pricePerSecond;
       uint256 withdrawableAmount = costTillToday - session.providerWithdrawnAmount;
       return withdrawableAmount;
-    } else if (session.closedAt > startOfTheDay(block.timestamp)){
+    } else if (session.closedAt > startOfTheDay(block.timestamp)) {
       // likely not to be the case when session was closed today
       // cause provider already got funds
-      uint256 durationTillToday = startOfTheDay(block.timestamp) - minUint256(session.openedAt, startOfTheDay(block.timestamp));
+      uint256 durationTillToday = startOfTheDay(block.timestamp) -
+        minUint256(session.openedAt, startOfTheDay(block.timestamp));
       uint256 costTillToday = durationTillToday * session.pricePerSecond;
       uint256 withdrawableAmount = costTillToday - session.providerWithdrawnAmount;
       return withdrawableAmount;
@@ -272,17 +256,11 @@ contract SessionRouter {
     s.stakeDelay = delay;
   }
 
-  function isValidReceipt(
-    address signer,
-    bytes memory receipt,
-    bytes memory signature
-  ) public pure returns (bool) {
+  function isValidReceipt(address signer, bytes memory receipt, bytes memory signature) public pure returns (bool) {
     if (signature.length == 0) {
       return false;
     }
-    bytes32 receiptHash = MessageHashUtils.toEthSignedMessageHash(
-      keccak256(receipt)
-    );
+    bytes32 receiptHash = MessageHashUtils.toEthSignedMessageHash(keccak256(receipt));
     return ECDSA.recover(receiptHash, signature) == signer;
   }
 
@@ -291,9 +269,7 @@ contract SessionRouter {
   //===========================
 
   // returns amount of user stake withdrawable and on hold
-  function withdrawableUserStake(
-    address userAddr
-  ) public view returns (uint256 avail, uint256 hold) {
+  function withdrawableUserStake(address userAddr) public view returns (uint256 avail, uint256 hold) {
     OnHold[] memory onHold = s.userOnHold[userAddr];
     for (uint i = 0; i < onHold.length; i++) {
       uint256 amount = onHold[i].amount;
@@ -318,7 +294,7 @@ contract SessionRouter {
     OnHold[] storage onHoldEntries = s.userOnHold[sender];
     uint i = 0;
 
-    // the only loop that is not avoidable     
+    // the only loop that is not avoidable
     while (i < onHoldEntries.length) {
       if (block.timestamp > onHoldEntries[i].releaseAt) {
         balance += onHoldEntries[i].amount;
@@ -347,31 +323,32 @@ contract SessionRouter {
   }
 
   // returns stipend of user based on their stake
-  function stakeToStipend(
-    uint256 sessionStake, uint128 timestamp
-  ) internal view returns (uint256) {
-    return (getTodaysBudget(timestamp) * sessionStake) / s.token.totalSupply();
+  function stakeToStipend(uint256 sessionStake, uint256 timestamp) internal view returns (uint256) {
+    return sessionStake / (s.token.totalSupply() / _getTodaysBudget(timestamp));
   }
 
   // returns stake of user based on their stipend
-  function stipendToStake(
-    uint256 stipend, uint128 timestamp
-  ) internal view returns (uint256) {
-    return (stipend * s.token.totalSupply()) / getTodaysBudget(timestamp);
+  function stipendToStake(uint256 stipend, uint256 timestamp) internal view returns (uint256) {
+    return stipend * (s.token.totalSupply() / _getTodaysBudget(timestamp));
   }
 
-  function getTodaysBudget(uint128 timestamp) public view returns (uint256) {
+  function getTodaysBudget() public view returns (uint256) {
+    return _getTodaysBudget(startOfTheDay(block.timestamp));
+  }
+
+  function _getTodaysBudget(uint256 timestamp) internal view returns (uint256) {
     return getComputeBalance(timestamp) / 100; // 1% of Compute Balance
   }
 
-  function getComputeBalance(uint128 timestamp) public view returns (uint256) {
+  function getComputeBalance(uint256 timestamp) public view returns (uint256) {
     // TODO: cache today's budget and compute balance
-    return LinearDistributionIntervalDecrease.getPeriodReward(
-        s.pool.initialReward,     
+    return
+      LinearDistributionIntervalDecrease.getPeriodReward(
+        s.pool.initialReward,
         s.pool.rewardDecrease,
         s.pool.payoutStart,
         s.pool.decreaseInterval,
-        s.pool.payoutStart,       // should that be payoutStart or 1707350400 ephochSeconds (Feb 8 2024 00:00:00) 
+        s.pool.payoutStart, // should that be payoutStart or 1707350400 ephochSeconds (Feb 8 2024 00:00:00)
         uint128(timestamp)
       );
   }

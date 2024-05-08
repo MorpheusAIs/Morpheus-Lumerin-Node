@@ -27,10 +27,7 @@ struct DiamondArgs {
 }
 
 contract Diamond {
-  constructor(
-    IDiamondCut.FacetCut[] memory _diamondCut,
-    DiamondArgs memory _args
-  ) payable {
+  constructor(IDiamondCut.FacetCut[] memory _diamondCut, DiamondArgs memory _args) payable {
     LibDiamond.setContractOwner(_args.owner);
     LibDiamond.diamondCut(_diamondCut, _args.init, _args.initCalldata);
 

@@ -1,14 +1,18 @@
 import {
   loadFixture,
-  mine,
-  reset,
   time,
 } from "@nomicfoundation/hardhat-toolbox-viem/network-helpers";
 import { expect } from "chai";
 import hre from "hardhat";
-import { PublicClient, getAddress, keccak256, parseEventLogs } from "viem";
+import {  keccak256 } from "viem";
 import { deploySingleBid, encodedReport } from "./fixtures";
-import { catchError, getHex, getTxTimestamp, randomBytes32 } from "./utils";
+import {
+  catchError,
+  getHex,
+  getSessionId,
+  getTxTimestamp,
+  randomBytes32,
+} from "./utils";
 import { DAY, HOUR, MINUTE, SECOND } from "../utils/time";
 import { expectAlmostEqual } from "../utils/compare";
 
@@ -57,7 +61,7 @@ describe("Session router", function () {
         { account: user.account },
       );
 
-      const sessionId = await getSessionId(publicClient, openTx);
+      const sessionId = await getSessionId(publicClient, hre, openTx);
       expect(sessionId).to.be.a("string");
     });
 
@@ -74,7 +78,7 @@ describe("Session router", function () {
         { account: user.account },
       );
 
-      const sessionId = await getSessionId(publicClient, txHash);
+      const sessionId = await getSessionId(publicClient, hre, txHash);
       const session = await sessionRouter.read.getSession([sessionId]);
       const createdAt = await getTxTimestamp(publicClient, txHash);
 
@@ -133,19 +137,7 @@ describe("Session router", function () {
       });
     });
 
-    it("should error when bid is already used", async function () {
-      const {
-        sessionRouter,
-        user,
-        expectedSession: exp,
-      } = await loadFixture(deploySingleBid);
-
-      await sessionRouter.write.openSession([exp.bidID, exp.stake], {
-        account: user.account,
-      });
-    });
-
-    it("should not open session with same bid simultaneously", async function () {
+    it("should error when opening with same bid simultaneously", async function () {
       const {
         sessionRouter,
         expectedSession: exp,
@@ -162,77 +154,39 @@ describe("Session router", function () {
         });
       });
     });
-
-    it.skip("should open session with same bid after previous session is closed", async function () {
-      const { sessionRouter, expectedBid, user, publicClient, provider } =
-        await loadFixture(deploySingleBid);
-      const budget = expectedBid.pricePerSecond * BigInt(HOUR / SECOND);
-
-      // first purchase
-      const openTx = await sessionRouter.write.openSession(
-        [expectedBid.id, budget],
-        {
-          account: user.account.address,
-        },
-      );
-      const sessionId = await getSessionId(publicClient, openTx);
-
-      // first closeout
-      const signature = await provider.signMessage({
-        message: { raw: keccak256(encodedReport) },
-      });
-      await sessionRouter.write.closeSession(
-        [sessionId, encodedReport, signature],
-        {
-          account: user.account,
-        },
-      );
-
-      // second purchase same bidId
-      const openTx2 = await sessionRouter.write.openSession(
-        [expectedBid.id, budget],
-        {
-          account: user.account.address,
-        },
-      );
-
-      // expect no purchase error
-    });
   });
 
-  describe.skip("session closeout", function () {
-    it("should open and close early", async function () {
+  describe("session end time", function () {
+    it("should open session (< 1 day) and verify end time", async function () {});
+  });
+
+  describe("session closeout", function () {
+    it("should open short (<1D) session and close later", async function () {
       const {
         sessionRouter,
         provider,
-        expectedBid,
+        expectedSession: exp,
         user,
         publicClient,
         tokenMOR,
       } = await loadFixture(deploySingleBid);
-      const budget = expectedBid.pricePerSecond * BigInt(HOUR / SECOND);
+      // open session
+      const openTx = await sessionRouter.write.openSession(
+        [exp.bidID, exp.stake],
+        {
+          account: user.account.address,
+        },
+      );
+      const sessionId = await getSessionId(publicClient, hre, openTx);
 
-      // save balance before opening session
-      const balanceBeforeOpen = await sessionRouter.read.balanceOfDailyStipend([
+      await time.increase(exp.durationSeconds * 2n);
+
+      const userBalanceBefore = await tokenMOR.read.balanceOf([
         user.account.address,
       ]);
       const providerBalanceBefore = await tokenMOR.read.balanceOf([
         provider.account.address,
       ]);
-
-      // open session
-      const openTx = await sessionRouter.write.openSession(
-        [expectedBid.id, budget],
-        {
-          account: user.account.address,
-        },
-      );
-      const sessionId = await getSessionId(publicClient, openTx);
-
-      await time.increase((30 * MINUTE) / SECOND);
-      const balanceBeforeClose = await sessionRouter.read.balanceOfDailyStipend(
-        [user.account.address],
-      );
 
       // close session
       const signature = await provider.signMessage({
@@ -250,22 +204,78 @@ describe("Session router", function () {
       expect(session.closeoutType).to.equal(0n);
 
       // verify balances
-      const balanceAfterClose = await sessionRouter.read.balanceOfDailyStipend([
+      const userBalanceAfter = await tokenMOR.read.balanceOf([
         user.account.address,
       ]);
       const providerBalanceAfter = await tokenMOR.read.balanceOf([
         provider.account.address,
       ]);
 
-      const stipendLocked = balanceBeforeOpen - balanceBeforeClose;
-      const stipendSpent = balanceBeforeOpen - balanceAfterClose;
+      const userStakeReturned = userBalanceAfter - userBalanceBefore;
       const providerEarned = providerBalanceAfter - providerBalanceBefore;
 
-      expect(stipendSpent).to.equal(providerEarned);
-      expectAlmostEqual(stipendLocked / 2n, stipendSpent, 0.05);
+      expect(userStakeReturned).to.equal(0n);
+      expectAlmostEqual(providerEarned, exp.totalCost, 0.0001);
     });
 
-    it("should open and close with user report - dispute", async function () {
+    it("should open short (<1D) session and close early", async function () {
+      const {
+        sessionRouter,
+        provider,
+        expectedSession: exp,
+        user,
+        publicClient,
+        tokenMOR,
+      } = await loadFixture(deploySingleBid);
+      // open session
+      const openTx = await sessionRouter.write.openSession(
+        [exp.bidID, exp.stake],
+        {
+          account: user.account.address,
+        },
+      );
+      const sessionId = await getSessionId(publicClient, hre, openTx);
+
+      await time.increase(exp.durationSeconds / 2n - 1n);
+
+      const userBalanceBefore = await tokenMOR.read.balanceOf([
+        user.account.address,
+      ]);
+      const providerBalanceBefore = await tokenMOR.read.balanceOf([
+        provider.account.address,
+      ]);
+
+      // close session
+      const signature = await provider.signMessage({
+        message: { raw: keccak256(encodedReport) },
+      });
+      await sessionRouter.write.closeSession(
+        [sessionId, encodedReport, signature],
+        {
+          account: user.account,
+        },
+      );
+
+      // verify session is closed without dispute
+      const session = await sessionRouter.read.getSession([sessionId]);
+      expect(session.closeoutType).to.equal(0n);
+
+      // verify balances
+      const userBalanceAfter = await tokenMOR.read.balanceOf([
+        user.account.address,
+      ]);
+      const providerBalanceAfter = await tokenMOR.read.balanceOf([
+        provider.account.address,
+      ]);
+
+      const userStakeReturned = userBalanceAfter - userBalanceBefore;
+      const providerEarned = providerBalanceAfter - providerBalanceBefore;
+
+      expectAlmostEqual(userStakeReturned, exp.stake / 2n, 0.0001);
+      expectAlmostEqual(providerEarned, exp.totalCost / 2n, 0.0001);
+    });
+
+    it.skip("should open and close with user report - dispute", async function () {
       const {
         sessionRouter,
         provider,
@@ -291,7 +301,7 @@ describe("Session router", function () {
           account: user.account.address,
         },
       );
-      const sessionId = await getSessionId(publicClient, openTx);
+      const sessionId = await getSessionId(publicClient, hre, openTx);
 
       await time.increase((30 * MINUTE) / SECOND);
       const balanceBeforeClose = await sessionRouter.read.balanceOfDailyStipend(
@@ -359,27 +369,42 @@ describe("Session router", function () {
       const providerClaimed = providerBalanceAfterClaim - providerBalanceAfter;
       expect(providerClaimed).to.equal(total2);
     });
+
+    it.skip("should open session with same bid after previous session is closed", async function () {
+      const { sessionRouter, expectedBid, user, publicClient, provider } =
+        await loadFixture(deploySingleBid);
+      const budget = expectedBid.pricePerSecond * BigInt(HOUR / SECOND);
+
+      // first purchase
+      const openTx = await sessionRouter.write.openSession(
+        [expectedBid.id, budget],
+        {
+          account: user.account.address,
+        },
+      );
+      const sessionId = await getSessionId(publicClient, hre, openTx);
+
+      // first closeout
+      const signature = await provider.signMessage({
+        message: { raw: keccak256(encodedReport) },
+      });
+      await sessionRouter.write.closeSession(
+        [sessionId, encodedReport, signature],
+        {
+          account: user.account,
+        },
+      );
+
+      // second purchase same bidId
+      const openTx2 = await sessionRouter.write.openSession(
+        [expectedBid.id, budget],
+        {
+          account: user.account.address,
+        },
+      );
+
+      // expect no purchase error
+    });
   });
 });
 
-async function getSessionId(
-  publicClient: PublicClient,
-  txHash: `0x${string}`,
-): Promise<`0x${string}`> {
-  const receipt = await publicClient.waitForTransactionReceipt({
-    hash: txHash,
-  });
-  const artifact = await hre.artifacts.readArtifact("SessionRouter");
-  const events = parseEventLogs({
-    abi: artifact.abi,
-    logs: receipt.logs,
-    eventName: "SessionOpened",
-  });
-  if (events.length === 0) {
-    throw new Error("SessionOpened event not found");
-  }
-  if (events.length > 1) {
-    throw new Error("Multiple SessionOpened events found");
-  }
-  return events[0].args.sessionId;
-}

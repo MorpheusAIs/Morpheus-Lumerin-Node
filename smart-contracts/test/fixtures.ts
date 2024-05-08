@@ -8,7 +8,11 @@ import {
 import { getHex, getTxTimestamp, now, randomBytes32 } from "./utils";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { FacetCutAction, getSelectors } from "../libraries/diamond";
-import { MINUTE, SECOND } from "../utils/time";
+import { HOUR, MINUTE, SECOND } from "../utils/time";
+import {
+  GetContractReturnType,
+  WalletClient,
+} from "@nomicfoundation/hardhat-viem/types";
 
 export async function deployMORtoken() {
   const [owner] = await hre.viem.getWalletClients();
@@ -27,55 +31,10 @@ export async function deployMORtoken() {
 export async function deployDiamond() {
   // deploy provider registry and deps
   const { tokenMOR, owner, decimalsMOR } = await loadFixture(deployMORtoken);
-
-  const [, provider, user] = await hre.viem.getWalletClients();
+  const [_, provider, user] = await hre.viem.getWalletClients();
   const publicClient = await hre.viem.getPublicClient();
 
-  // 1. deploy diamont init
-  const diamondInit = await hre.viem.deployContract("DiamondInit", [], {});
-
-  // 2. deploy faucets
-  const FacetNames = [
-    "DiamondCutFacet",
-    "DiamondLoupeFacet",
-    "OwnershipFacet",
-    "ModelRegistry",
-    "ProviderRegistry",
-    "Marketplace",
-    "SessionRouter",
-  ] as const;
-
-  const facetContracts = await Promise.all(
-    FacetNames.map(async (name) => {
-      try {
-        return await hre.viem.deployContract(name as any, [], {});
-      } catch (e) {
-        console.log(`error deploying ${name}`);
-        throw e;
-      }
-    }),
-  );
-
-  // 3. deploy diamond
-  const facetCuts = facetContracts.map((facetContract) => ({
-    facetAddress: facetContract.address,
-    action: FacetCutAction.Add,
-    functionSelectors: getSelectors(facetContract.abi),
-  }));
-
-  const diamondArgs = {
-    owner: owner.account.address,
-    init: diamondInit.address,
-    initCalldata: encodeFunctionData({
-      abi: diamondInit.abi,
-      functionName: "init",
-      args: [tokenMOR.address, owner.account.address],
-    }),
-  };
-  const diamond = await hre.viem.deployContract("Diamond", [
-    facetCuts,
-    diamondArgs,
-  ]);
+  const { diamond } = await onlyDeployDiamond(tokenMOR.address, owner);
 
   const modelRegistry = await hre.viem.getContractAt(
     "contracts/facets/ModelRegistry.sol:ModelRegistry",
@@ -106,6 +65,70 @@ export async function deployDiamond() {
     providerRegistry,
     marketplace,
     sessionRouter,
+  };
+}
+
+export async function onlyDeployDiamond(
+  morAddress: string,
+  owner: WalletClient,
+) {
+  // 1. deploy diamont init
+  const diamondInit = await hre.viem.deployContract("DiamondInit", [], {});
+  console.log("diamond init deployed at address", diamondInit.address);
+
+  // 2. deploy faucets
+  const FacetNames = [
+    "DiamondCutFacet",
+    "DiamondLoupeFacet",
+    "OwnershipFacet",
+    "ModelRegistry",
+    "ProviderRegistry",
+    "Marketplace",
+    "SessionRouter",
+  ] as const;
+
+  const facetContracts: GetContractReturnType[] = [];
+  for (const name of FacetNames) {
+    try {
+      const data = await hre.viem.deployContract(name as any, [], {});
+      console.log("faucet ", name, " deployed at address", data.address);
+      facetContracts.push(data);
+    } catch (e) {
+      console.log(`error deploying ${name}`);
+      throw e;
+    }
+  }
+
+  // 3. deploy diamond
+  const facetCuts = facetContracts.map((facetContract) => ({
+    facetAddress: facetContract.address,
+    action: FacetCutAction.Add,
+    functionSelectors: getSelectors(facetContract.abi),
+  }));
+
+  const diamondArgs = {
+    owner: owner.account.address,
+    init: diamondInit.address,
+    initCalldata: encodeFunctionData({
+      abi: hre.artifacts.readArtifactSync("DiamondInit").abi,
+      functionName: "init",
+      args: [morAddress as any, owner.account.address],
+    }),
+  };
+
+  const diamond = await hre.viem.deployContract("Diamond", [
+    facetCuts,
+    diamondArgs,
+  ]);
+
+  return {
+    diamond,
+    facets: facetContracts.map((f) => ({
+      name: f.constructor.name,
+      address: f.address,
+    })),
+    constructorArgs: [facetCuts, diamondArgs],
+    owner,
   };
 }
 
@@ -283,10 +306,10 @@ export async function deploySingleBid() {
   expectedBid.createdAt = await getTxTimestamp(publicClient, txHash);
 
   // generating data for sample session
-  const durationSeconds = (5 * MINUTE) / SECOND;
-  const totalCost = expectedBid.pricePerSecond * BigInt(durationSeconds);
+  const durationSeconds = BigInt(HOUR / SECOND);
+  const totalCost = expectedBid.pricePerSecond * durationSeconds;
   const totalSupply = await tokenMOR.read.totalSupply();
-  const todaysBudget = await sessionRouter.read.getTodaysBudget([now()]);
+  const todaysBudget = await sessionRouter.read.getTodaysBudget();
 
   const expectedSession = {
     durationSeconds,
