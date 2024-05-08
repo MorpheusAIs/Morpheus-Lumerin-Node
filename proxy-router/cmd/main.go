@@ -196,13 +196,6 @@ func start() error {
 
 	sessionStorage := storages.NewSessionStorage()
 
-	tcpServer := transport.NewTCPServer(cfg.Proxy.Address, connLog.Named("TCP"))
-	morTcpHandler := tcphandlers.NewMorRpcHandler(cfg.Marketplace.WalletPrivateKey, publicKey, derived.WalletAddress, morrpc.NewMorRpc(), sessionStorage)
-	tcpHandler := tcphandlers.NewTCPHandler(
-		log, connLog, schedulerLogFactory, morTcpHandler,
-	)
-	tcpServer.SetConnectionHandler(tcpHandler)
-
 	diamondContractAddr := common.HexToAddress(cfg.Marketplace.DiamondContractAddress)
 
 	rpcProxy := rpcproxy.NewRpcProxy(ethClient, diamondContractAddr, cfg.Marketplace.WalletPrivateKey, proxyLog, cfg.Blockchain.EthLegacyTx)
@@ -216,6 +209,13 @@ func start() error {
 
 	handl := httphandlers.NewHTTPHandler(apiBus)
 	httpServer := transport.NewServer(cfg.Web.Address, handl, log.Named("HTTP"))
+
+	tcpServer := transport.NewTCPServer(cfg.Proxy.Address, connLog.Named("TCP"))
+	morTcpHandler := tcphandlers.NewMorRpcHandler(cfg.Marketplace.WalletPrivateKey, publicKey, derived.WalletAddress, morrpc.NewMorRpc(), sessionStorage, apiBus)
+	tcpHandler := tcphandlers.NewTCPHandler(
+		log, connLog, schedulerLogFactory, morTcpHandler,
+	)
+	tcpServer.SetConnectionHandler(tcpHandler)
 
 	ctx, cancel = context.WithCancel(ctx)
 	g, errCtx := errgroup.WithContext(ctx)

@@ -56,12 +56,11 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 		var response interface{}
 
 		if req.Stream {
-			
-			response, err = apiBus.PromptStream(ctx, req, func (response *openai.ChatCompletionStreamResponse) error {
+			response, err = apiBus.PromptStream(ctx, req, func(response *openai.ChatCompletionStreamResponse) error {
 
 				marshalledResponse, err := json.Marshal(response)
 
-				if err != nil{
+				if err != nil {
 					return err
 				}
 
@@ -77,7 +76,7 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 		} else {
 			response, err = apiBus.Prompt(ctx, req)
 		}
-		
+
 		if err != nil {
 			ctx.AbortWithError(http.StatusInternalServerError, err)
 			return
@@ -92,8 +91,12 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 	}))
 
 	r.POST("/proxy/sessions/:id/prompt", (func(ctx *gin.Context) {
-		status, response := apiBus.SendPrompt(ctx)
-		ctx.JSON(status, response)
+		ok, status, response := apiBus.SendPrompt(ctx)
+		if !ok {
+			ctx.JSON(status, response)
+			return
+		}
+		return
 	}))
 
 	r.GET("/blockchain/providers", (func(ctx *gin.Context) {

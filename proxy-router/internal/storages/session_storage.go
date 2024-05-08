@@ -23,12 +23,14 @@ func NewSessionStorage() *SessionStorage {
 	}
 }
 
-func (s *SessionStorage) GetSession(id string) *Session {
-	return s.storage[id]
+func (s *SessionStorage) GetSession(id string) (*Session, bool) {
+	session, ok := s.storage[id]
+	return session, ok
 }
 
-func (s *SessionStorage) GetUser(addr string) *User {
-	return s.users[addr]
+func (s *SessionStorage) GetUser(addr string) (*User, bool) {
+	user, ok := s.users[addr]
+	return user, ok
 }
 
 func (s *SessionStorage) AddSession(session *Session) {
