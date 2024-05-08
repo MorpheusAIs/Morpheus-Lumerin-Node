@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"encoding/hex"
 	"fmt"
 )
 
@@ -19,4 +20,8 @@ func StrShortConf(str string, prefix, suffix int) string {
 		return fmt.Sprintf("%s..%s", str[:prefix], str[l-suffix:l])
 	}
 	return str
+}
+
+func BytesToString(b []byte) string {
+	return "0x" + hex.EncodeToString(b)
 }
