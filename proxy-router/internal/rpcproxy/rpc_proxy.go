@@ -58,11 +58,27 @@ func (rpcProxy *RpcProxy) GetAllProviders(ctx context.Context) (int, gin.H) {
 }
 
 func (rpcProxy *RpcProxy) GetAllModels(ctx context.Context) (int, gin.H) {
-	models, err := rpcProxy.modelRegistry.GetAllModels(ctx)
+	ids, models, err := rpcProxy.modelRegistry.GetAllModels(ctx)
 	if err != nil {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
-	return constants.HTTP_STATUS_OK, gin.H{"models": models}
+
+	result := make([]*structs.Model, len(ids))
+	for i, value := range models {
+		result[i] = &structs.Model{
+			Id:        lib.BytesToString(ids[i][:]),
+			IpfsCID:   lib.BytesToString(value.IpfsCID[:]),
+			Fee:       value.Fee,
+			Stake:     value.Stake,
+			Owner:     value.Owner,
+			Name:      value.Name,
+			Tags:      value.Tags,
+			Timestamp: value.Timestamp,
+			IsDeleted: value.IsDeleted,
+		}
+	}
+
+	return constants.HTTP_STATUS_OK, gin.H{"models": result}
 }
 
 func (rpcProxy *RpcProxy) GetBidsByProvider(ctx context.Context, providerAddr common.Address, offset *big.Int, limit uint8) (int, gin.H) {
@@ -92,11 +108,20 @@ func (rpcProxy *RpcProxy) GetBidsByModelAgent(ctx context.Context, modelId [32]b
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 
-	hexIds := make([]string, len(ids))
-	for i, address := range ids {
-		hexIds[i] = hex.EncodeToString(address[:])
+	result := make([]*structs.Bid, len(ids))
+	for i, value := range bids {
+		result[i] = &structs.Bid{
+			Id:             lib.BytesToString(ids[i][:]),
+			ModelAgentId:   lib.BytesToString(value.ModelAgentId[:]),
+			Provider:       value.Provider,
+			Nonce:          value.Nonce,
+			CreatedAt:      value.CreatedAt,
+			DeletedAt:      value.DeletedAt,
+			PricePerSecond: value.PricePerSecond,
+		}
 	}
-	return constants.HTTP_STATUS_OK, gin.H{"bids": bids, "ids": hexIds}
+
+	return constants.HTTP_STATUS_OK, gin.H{"bids": result}
 }
 
 func (rpcProxy *RpcProxy) OpenSession(ctx *gin.Context) (int, gin.H) {

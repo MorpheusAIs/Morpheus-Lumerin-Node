@@ -1,7 +1,6 @@
 package httphandlers
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +10,7 @@ import (
 	"net/http/pprof"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/apibus"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
 
 	openai "github.com/sashabaranov/go-openai"
@@ -128,14 +128,9 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 			return
 		}
 
-		id, err := hex.DecodeString(modelAgentId)
-		if err != nil {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid model agent id"})
-			return
-		}
-		var idBytes [32]byte
-		copy(idBytes[:], id)
-		status, models := apiBus.GetBidsByModelAgent(ctx, idBytes, offset, limit)
+		id := common.FromHex(modelAgentId)
+
+		status, models := apiBus.GetBidsByModelAgent(ctx, ([32]byte)(id), offset, limit)
 		ctx.JSON(status, models)
 	}))
 
