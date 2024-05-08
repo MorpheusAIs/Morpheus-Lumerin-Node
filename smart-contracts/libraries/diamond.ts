@@ -1,4 +1,5 @@
 import { Abi, AbiFunction, AbiItem, toFunctionHash } from "viem";
+import { toFunctionSignature } from "viem/utils";
 
 export const FacetCutAction = {
   Add: 0,
@@ -20,17 +21,15 @@ export function getSelectors(abi: Abi): `0x${string}`[] {
 }
 
 export function getSelectorsWithFunctions(abi: Abi): {
-  selectors: `0x${string}`[];
-  functionNames: string[];
-} {
-  const functionNames: string[] = [];
-  const selectors = abi.filter(isFunctionExceptInitAbi).map((item) => {
-    functionNames.push(item.name);
+  hash: `0x${string}`;
+  signature: string;
+}[] {
+  return abi.filter(isFunctionExceptInitAbi).map((item) => {
+    const signature = toFunctionSignature(item);
     const hash = toFunctionHash(item);
     // return "0x" + 4 bytes of the hash
-    return hash.slice(0, 2 + 8) as `0x${string}`;
+    return { hash: hash.slice(0, 2 + 8) as `0x${string}`, signature };
   });
-  return { selectors, functionNames };
 }
 
 // export function getSelectors(contract) {

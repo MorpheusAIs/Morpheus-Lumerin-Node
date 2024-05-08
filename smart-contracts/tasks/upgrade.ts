@@ -45,17 +45,20 @@ task<Args>("upgrade", "Upgrades contract's faucet")
       [],
       {},
     );
+    console.log(`Facet ${args.facet} deployed at ${facetContract.address}`);
 
-    const { selectors, functionNames } = getSelectorsWithFunctions(
-      facetContract.abi,
+    const fns = getSelectorsWithFunctions(facetContract.abi);
+
+    console.log(
+      `Updating function names:\n${fns.map(({ hash, signature }) => {
+        return `${hash} - ${signature}\n`;
+      })}\n`,
     );
-
-    console.log(`Updating function names:\n${functionNames.join("\n")}\n`);
 
     const facetCut = {
       facetAddress: facetContract.address,
       action: FacetCutAction.Replace,
-      functionSelectors: selectors,
+      functionSelectors: fns.map((s) => s.hash),
     };
 
     const diamondCut = await hre.viem.getContractAt(
