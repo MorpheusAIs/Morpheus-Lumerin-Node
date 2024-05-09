@@ -160,7 +160,7 @@ func (rpcProxy *RpcProxy) OpenSession(ctx *gin.Context) (int, gin.H) {
 
 	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
 	if err != nil {
-		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
 	}
 
 	sessionId, err := rpcProxy.sessionRouter.OpenSession(transactOpt, [32]byte(bidId), stake)
