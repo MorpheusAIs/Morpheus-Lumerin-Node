@@ -54,7 +54,19 @@ func (rpcProxy *RpcProxy) GetAllProviders(ctx context.Context) (int, gin.H) {
 	if err != nil {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
-	return constants.HTTP_STATUS_OK, gin.H{"addresses": addrs, "providers": providers}
+
+	result := make([]*structs.Provider, len(addrs))
+	for i, value := range providers {
+		result[i] = &structs.Provider{
+			Address:   addrs[i],
+			Endpoint:  value.Endpoint,
+			Stake:     value.Stake,
+			IsDeleted: value.IsDeleted,
+			Timestamp: value.Timestamp,
+		}
+	}
+
+	return constants.HTTP_STATUS_OK, gin.H{"providers": result}
 }
 
 func (rpcProxy *RpcProxy) GetAllModels(ctx context.Context) (int, gin.H) {
