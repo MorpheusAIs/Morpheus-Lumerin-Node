@@ -2,7 +2,6 @@ package rpcproxy
 
 import (
 	"context"
-	"encoding/hex"
 	"math/big"
 
 	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal"
@@ -157,20 +156,14 @@ func (rpcProxy *RpcProxy) OpenSession(ctx *gin.Context) (int, gin.H) {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "stake is invalid"}
 	}
 
-	bidId, err := hex.DecodeString(bidIdStr)
-	if err != nil {
-		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "bidId is invalid"}
-	}
-
-	var idBytes [32]byte
-	copy(idBytes[:], bidId)
+	bidId := common.FromHex(bidIdStr)
 
 	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
 	if err != nil {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 
-	sessionId, err := rpcProxy.sessionRouter.OpenSession(transactOpt, idBytes, stake)
+	sessionId, err := rpcProxy.sessionRouter.OpenSession(transactOpt, [32]byte(bidId), stake)
 	if err != nil {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
