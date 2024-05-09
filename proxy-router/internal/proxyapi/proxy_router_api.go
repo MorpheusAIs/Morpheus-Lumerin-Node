@@ -292,6 +292,7 @@ func (p *ProxyRouterApi) rpcRequestStream(ctx *gin.Context, url string, rpcMessa
 		if err != nil {
 			return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 		}
+		ctx.Writer.Flush()
 		if stop {
 			break
 		}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/apibus"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
 	openai "github.com/sashabaranov/go-openai"
@@ -26,6 +27,10 @@ type HTTPHandler struct{}
 func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
+
+	r.Use(cors.New(cors.Config{
+		AllowOrigins: []string{"*"},
+	}))
 
 	r.GET("/healthcheck", (func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, apiBus.HealthCheck(ctx))
