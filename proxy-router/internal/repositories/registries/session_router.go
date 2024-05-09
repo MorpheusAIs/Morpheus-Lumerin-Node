@@ -2,7 +2,6 @@ package registries
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"math/big"
 
@@ -70,22 +69,17 @@ func (g *SessionRouter) OpenSession(ctx *bind.TransactOpts, bidId [32]byte, stak
 		}
 
 		// Convert the sessionId to string
-		return hex.EncodeToString(event.SessionId[:]), nil
+		sessionId := lib.BytesToString(event.SessionId[:])
+		return sessionId, nil
 	}
 
 	return "", fmt.Errorf("OpenSession event not found in transaction logs")
 }
 
 func (g *SessionRouter) GetSession(ctx context.Context, sessionId string) (*sessionrouter.Session, error) {
-	id, err := hex.DecodeString(sessionId)
-	if err != nil {
-		return nil, err
-	}
+	id := common.FromHex(sessionId)
 
-	var idBytes [32]byte
-	copy(idBytes[:], id)
-
-	session, err := g.sessionRouter.GetSession(&bind.CallOpts{Context: ctx}, idBytes)
+	session, err := g.sessionRouter.GetSession(&bind.CallOpts{Context: ctx}, [32]byte(id))
 	if err != nil {
 		return nil, err
 	}

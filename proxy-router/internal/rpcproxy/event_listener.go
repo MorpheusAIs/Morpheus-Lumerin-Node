@@ -2,7 +2,6 @@ package rpcproxy
 
 import (
 	"context"
-	"encoding/hex"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/contracts/sessionrouter"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
@@ -65,8 +64,7 @@ func (e *EventsListener) controller(ctx context.Context, event interface{}) erro
 }
 
 func (e *EventsListener) handleSessionOpened(ctx context.Context, event *sessionrouter.SessionRouterSessionOpened) error {
-
-	sessionId := hex.EncodeToString(event.SessionId[:])
+	sessionId := lib.BytesToString(event.SessionId[:])
 	e.log.Debugf("received open session router event, sessionId %s", sessionId)
 	// session, err := e.sessionRouter.GetSession(ctx, sessionId)
 	// if err != nil {
