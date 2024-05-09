@@ -143,7 +143,7 @@ jobs:
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b2699/$LLAMACPP
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
           unzip -o -j $LLAMACPP build/bin/server
-          echo '{"run":["./server -m ./'$MODEL'","./proxy-router","./ui-desktop.app/Contents/MacOS/ui-desktop"]}' > mor-launch.json
+          echo '{"run":["'$HOME'/server -m '$HOME'/'$MODEL'","'$HOME'/proxy-router","'$HOME'/ui-desktop.app/Contents/MacOS/ui-desktop"]}' > mor-launch.json
           cp ./proxy-router/.env.example .env
           unzip ./ui-desktop/dist/ui-desktop-1.0.0-mac.zip
           zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env server $MODEL mor-launch.json
@@ -211,7 +211,7 @@ jobs:
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b2699/$LLAMACPP
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
           unzip -o -j $LLAMACPP build/bin/server
-          echo '{"run":["./server -m ./'$MODEL'","./proxy-router","./ui-desktop.app/Contents/MacOS/ui-desktop"]}' > mor-launch.json
+          echo '{"run":["'$HOME'/server -m '$HOME'/'$MODEL'","'$HOME'/proxy-router","'$HOME'/ui-desktop.app/Contents/MacOS/ui-desktop"]}' > mor-launch.json
           cp ./proxy-router/.env.example .env
           unzip ./ui-desktop/dist/ui-desktop-1.0.0-arm64-mac.zip
           zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env server $MODEL mor-launch.json
