@@ -117,14 +117,9 @@ func (p *ProxyRouterApi) InitiateSession(ctx *gin.Context) (int, gin.H) {
 		return code, ginErr
 	}
 
-	signature := fmt.Sprintf("%v", msg.Result["signature"])
 	providerPubKey := fmt.Sprintf("%v", msg.Result["message"])
-	p.log.Debugf("Signature: %s, Provider Pub Key: %s", signature, providerPubKey)
-
-	isValidSignature := morrpc.NewMorRpc().VerifySignature(msg.Result, signature, providerPubKey, p.log)
-	p.log.Debugf("Is valid signature: %t", isValidSignature)
-	if !isValidSignature {
-		err = fmt.Errorf("invalid signature from provider")
+	if !p.validateMsgSignature(msg, providerPubKey) {
+		err = fmt.Errorf("Received invalid signature from provider")
 		p.log.Errorf("%s", err)
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
@@ -168,23 +163,7 @@ func (p *ProxyRouterApi) SendPrompt(ctx *gin.Context) (bool, int, gin.H) {
 		return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 
-	return p.rpcRequestStream(ctx, providerUrl, promptRequest)
-
-	// signature := fmt.Sprintf("%v", msg.Result["signature"])
-	// providerPubKey := providerPublicKey // get provider public key from storage for sessionId
-	// p.log.Debugf("Signature: %s, Provider Pub Key: %s", signature, providerPubKey)
-
-	// isValidSignature := morrpc.NewMorRpc().VerifySignature(msg.Result, signature, providerPubKey, p.log)
-	// p.log.Debugf("Is valid signature: %t", isValidSignature)
-	// if !isValidSignature {
-	// 	err = fmt.Errorf("invalid signature from provider")
-	// 	p.log.Errorf("%s", err)
-	// 	return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
-	// }
-
-	// return constants.HTTP_STATUS_OK, gin.H{
-	// 	"response": "ok",
-	// }
+	return p.rpcRequestStream(ctx, providerUrl, promptRequest, providerPublicKey)
 }
 
 func (p *ProxyRouterApi) GetFiles(ctx *gin.Context) (int, gin.H) {
@@ -246,7 +225,7 @@ func (p *ProxyRouterApi) rpcRequest(url string, rpcMessage *morrpc.RpcMessage) (
 	return msg, 0, nil
 }
 
-func (p *ProxyRouterApi) rpcRequestStream(ctx *gin.Context, url string, rpcMessage *morrpc.RpcMessage) (bool, int, gin.H) {
+func (p *ProxyRouterApi) rpcRequestStream(ctx *gin.Context, url string, rpcMessage *morrpc.RpcMessage, providerPublicKey string) (bool, int, gin.H) {
 	conn, err := net.Dial("tcp", url)
 	if err != nil {
 		err = lib.WrapError(fmt.Errorf("failed to connect to provider"), err)
@@ -267,12 +246,19 @@ func (p *ProxyRouterApi) rpcRequestStream(ctx *gin.Context, url string, rpcMessa
 	reader := bufio.NewReader(conn)
 	d := json.NewDecoder(reader)
 	ctx.Writer.Header().Set("Content-Type", "text/event-stream")
+
 	for {
 		var msg *morrpc.RpcResponse
 		err = d.Decode(&msg)
-		fmt.Println("msg", msg)
+		p.log.Debugf("Received stream msg:", msg)
 		if err != nil {
 			err = lib.WrapError(fmt.Errorf("failed to decode response"), err)
+			p.log.Errorf("%s", err)
+			return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+		}
+
+		if !p.validateMsgSignature(msg, providerPublicKey) {
+			err = fmt.Errorf("Received invalid signature from provider")
 			p.log.Errorf("%s", err)
 			return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 		}
@@ -312,6 +298,14 @@ func (p *ProxyRouterApi) rpcRequestStream(ctx *gin.Context, url string, rpcMessa
 	}
 
 	return true, constants.HTTP_STATUS_OK, gin.H{}
+}
+
+func (p *ProxyRouterApi) validateMsgSignature(msg *morrpc.RpcResponse, providerPubicKey string) bool {
+	signature := fmt.Sprintf("%v", msg.Result["signature"])
+
+	isValidSignature := morrpc.NewMorRpc().VerifySignature(msg.Result, signature, providerPubicKey, p.log)
+	p.log.Debugf("Is valid signature: %t", isValidSignature)
+	return isValidSignature
 }
 
 func writeFiles(writer io.Writer, files []system.FD) error {
