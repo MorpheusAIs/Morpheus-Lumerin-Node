@@ -18,18 +18,21 @@ import {
     Control,
     SendBtn
 } from './Chat.styles';
+import { withRouter } from 'react-router-dom';
+import withChatState from '../../store/hocs/withChatState';
+import { abbreviateAddress } from '../../utils'
 
 import 'react-modern-drawer/dist/index.css'
 import './Chat.css'
 import { ChatHistory } from './ChatHistory';
+import Spinner from 'react-bootstrap/Spinner';
 
-const lorem = "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum."
 const colors = [
     '#1899cb', '#da4d76', '#d66b38', '#d39d00', '#b46fc4', '#269c68', '#86858a'
 ];
 
 const getColor = (name) => {
-    return colors[getHashCode(name) % colors.length]
+    return colors[(getHashCode(name) + 1) % colors.length]
 }
 
 const Chat = (props) => {
@@ -37,10 +40,18 @@ const Chat = (props) => {
 
     const [value, setValue] = useState("");
 
-    const [history, setHistory] = useState(["What is Lorem Ipsum?"]);
+    const [chatHistory, setChatHistory] = useState<string[]>([]);
     const [isSpinning, setIsSpinning] = useState(false);
 
-    const user = props.chat || 'Llama GPT';
+    const modelName = props?.model?.Name || "GPT";
+    const providerAddress = props?.provider?.Address ? abbreviateAddress(props?.provider?.Address, 4) : null;
+
+    useEffect(() => {
+        if(!props.selectedBid) {
+            props.history.push("/models");
+            return;
+        }
+    }, [])
 
     const [messages, setMessages] = useState<any>([]);
 
@@ -54,22 +65,23 @@ const Chat = (props) => {
     }
 
     const call = async (message) => {
-
-        const response = await fetch(`http://localhost:11434/v1/chat/completions`, {
+        setIsSpinning(true);
+        const response = await fetch("http://localhost:8082/proxy/sessions/f347c30247d9f4b9b8f3ced2afaef8add536495c0755763e3202595d91233c94/prompt", {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
             body: JSON.stringify({
-                        "model": "llama2:latest",
-                        "stream": true,
-                        "messages": [
-                            {
-                                "role": "user",
-                                "content": message
-                            }
-                        ]
-                    })
+                "prompt" : { 
+                    "model": "llama2:latest",
+                    "stream": true,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": message
+                        }
+                    ]
+                },
+                "providerUrl": "localhost:3334",
+                "providerPublicKey": "048318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed753547f11ca8696646f2f3acb08e31016afac23e630c5d11f59f61fef57b0d2aa5"
+            })
         });
         
         function parse(decodedChunk) {
@@ -83,56 +95,30 @@ const Chat = (props) => {
 
         const textDecoder = new TextDecoder();
 
-        let answer = ""
         if (response.body != null) {
             const reader = response.body.getReader()
 
-            let memoState = [...messages, { id: "some", user: 'Me', text: value, role: "user", icon: "M", color: colors[getHashCode("M") % colors.length] }];
+            let memoState = [...messages, { id: "some", user: 'Me', text: value, role: "user", icon: "M", color: "#20dc8e" }];
             
             while (true) {
-
                 const { value, done } = await reader.read();
                 if (done) {
                     break;
                 }
                 const decodedString = textDecoder.decode(value, { stream: true });
+                
                 const parts = parse(decodedString);
                 parts.forEach(part => {
                     const message = memoState.find(m => m.id == part.id);
                     const otherMessages = memoState.filter(m => m.id != part.id);
-    
-                    const text = (message?.text || '') + part.choices[0].delta.content;
-    
-                    const result = [...otherMessages, { id: part.id, user: 'GPT', role: "assistant", text: text, icon: "GPT", color: getColor("GPT") }];
+                    console.log(part?.choices[0]?.delta?.content);
+                    const text = `${message?.text || ''}${part?.choices[0]?.delta?.content || ''}`;
+                    const result = [...otherMessages, { id: part.id, user: modelName, role: "assistant", text: text, icon: "L", color: getColor("L") }];
                     memoState = result;
                     setMessages(result);
                 })
             }
-        }
 
-        try {
-            const response = await fetch("http://localhost:11434/v1/chat/completions", {
-                method: 'POST',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    model: "llama2:latest",
-                    messages: [
-                    {
-                        role: "user",
-                        content: message
-                    }]
-                })
-            });
-            const data = await response.json();
-            setMessages([...messages, { user: 'GPT', role: "assistant", text: data.choices, icon: "GPT", color: getColor("GPT") }]);
-        }
-        catch (e) {
-            setMessages([...messages, { user: 'GPT', role: "assistant", text: "Ooops, cannot answer", icon: "GPT", color: getColor("GPT") }]);
-        }
-        finally {
             setIsSpinning(false);
         }
     }
@@ -143,7 +129,8 @@ const Chat = (props) => {
         }
         
         setIsSpinning(true);
-        setMessages([...messages, { id: "some", user: 'Me', text: value, role: "user", icon: "M", color: colors[getHashCode("M") % colors.length] }]);
+        setChatHistory([...chatHistory, value]);
+        setMessages([...messages, { id: "some", user: 'Me', text: value, role: "user", icon: "M", color: "#20dc8e" }]);
         scrollToBottom();
         call(value);
         setValue("");
@@ -157,7 +144,7 @@ const Chat = (props) => {
                 direction='right'
                 className='history-drawer'
             >
-                <ChatHistory history={history} />
+                <ChatHistory history={chatHistory} />
             </Drawer>
             <View>
                 <ContainerTitle style={{ padding: '0 2.4rem' }}>
@@ -167,12 +154,12 @@ const Chat = (props) => {
                 </ContainerTitle>
                 <ChatTitleContainer>
                     <ChatAvatar>
-                        <Avatar style={{ color: 'white' }} color={getColor("GPT")}>
-                            GPT
+                        <Avatar style={{ color: 'white' }} color={getColor("L")}>
+                            L
                         </Avatar>
-                        <div style={{ marginLeft: '10px' }}>Llama GPT</div>
+                        <div style={{ marginLeft: '10px' }}>{modelName}</div>
                     </ChatAvatar>
-                    <div>Provider: 0x123...234</div>
+                    <div>Provider: {providerAddress}</div>
                     <div>
                         <div onClick={toggleDrawer}>
                             <IconHistory size={"2.4rem"}></IconHistory>
@@ -202,7 +189,9 @@ const Chat = (props) => {
                             placeholder={"Ask me anything..."}
                             minRows={1}
                             maxRows={6} />
-                        <SendBtn disabled={isSpinning} onClick={handleSubmit}><IconArrowUp size={"26px"}></IconArrowUp></SendBtn>
+                        <SendBtn onClick={handleSubmit}>{
+                            isSpinning ? <Spinner animation="border" />: <IconArrowUp size={"26px"}></IconArrowUp>
+                        }</SendBtn>
                     </Control>
                 </Container>
             </View>
@@ -245,4 +234,4 @@ function getHashCode(string) {
     return Math.abs(hash);
 }
 
-export default Chat;
+export default withRouter(withChatState(Chat));

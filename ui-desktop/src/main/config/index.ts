@@ -45,7 +45,7 @@ const chain = {
     process.env.PORT_CHECK_ERROR_LINK ||
     'https://gitbook.lumerin.io/lumerin-hashpower-marketplace/buyer/2.-network-changes-for-receiving-hashrate',
 
-  localProxyRouterUrl: `http://localhost:${process.env.PROXY_WEB_DEFAULT_PORT || 8081}`,
+  localProxyRouterUrl: `http://localhost:${process.env.PROXY_WEB_DEFAULT_PORT || 8082}`,
 
   faucetUrl: process.env.FAUCET_URL,
   showFaucet: process.env.SHOW_FAUCET === 'true',
