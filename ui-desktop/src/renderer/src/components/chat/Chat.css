@@ -3,12 +3,13 @@
     min-width: 250px!important;
     border-left: 1px solid rgba(255, 255, 255, 0.16)!important;
     padding: 2.4rem!important;
+    background: #0d1f16!important;
 
-    background-image: url("src/main.jpg")!important;
+    /* background-image: url("src/main.jpg")!important;
     background-position: right!important;
     background-repeat: no-repeat!important;
     -webkit-background-size: cover!important;
     -moz-background-size: cover!important;
     -o-background-size: cover!important;
-    background-size: cover!important;
+    background-size: cover!important; */
 }

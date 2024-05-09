@@ -48,8 +48,8 @@ func NewProviderRegistry(providerRegistryAddr common.Address, client *ethclient.
 	}
 }
 
-func (g *ProviderRegistry) GetAllProviders(ctx context.Context) ([]string, []providerregistry.ProviderRegistryProvider, error) {
-	providerAddrs, providers, err := g.providerRegistry.GetAll(&bind.CallOpts{Context: ctx})
+func (g *ProviderRegistry) GetAllProviders(ctx context.Context) ([]string, []providerregistry.Provider, error) {
+	providerAddrs, providers, err := g.providerRegistry.ProviderGetAll(&bind.CallOpts{Context: ctx})
 	if err != nil {
 		return nil, nil, err
 	}

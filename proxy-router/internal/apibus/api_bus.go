@@ -11,7 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-//TODO: split implementations into separate client layer
+// TODO: split implementations into separate client layer
 type ApiBus struct {
 	rpcProxy       *rpcproxy.RpcProxy
 	aiEngine       *aiengine.AiEngine
@@ -43,7 +43,7 @@ func (apiBus *ApiBus) InitiateSession(ctx *gin.Context) (int, interface{}) {
 	return apiBus.proxyRouterApi.InitiateSession(ctx)
 }
 
-func (apiBus *ApiBus) SendPrompt(ctx *gin.Context) (int, interface{}) {
+func (apiBus *ApiBus) SendPrompt(ctx *gin.Context) (bool, int, interface{}) {
 	return apiBus.proxyRouterApi.SendPrompt(ctx)
 }
 
@@ -77,4 +77,8 @@ func (apiBus *ApiBus) GetBidsByProvider(ctx context.Context, providerAddr string
 
 func (apiBus *ApiBus) GetBidsByModelAgent(ctx context.Context, modelAgentId [32]byte, offset *big.Int, limit uint8) (int, gin.H) {
 	return apiBus.rpcProxy.GetBidsByModelAgent(ctx, modelAgentId, offset, limit)
+}
+
+func (apiBus *ApiBus) OpenSession(ctx *gin.Context) (int, gin.H) {
+	return apiBus.rpcProxy.OpenSession(ctx)
 }

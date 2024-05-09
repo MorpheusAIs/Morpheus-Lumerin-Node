@@ -3,7 +3,12 @@ import { expect } from "chai";
 import hre from "hardhat";
 import { parseEventLogs } from "viem";
 import { deploySingleBid } from "./fixtures";
-import { expectError, getTxTimestamp } from "./utils";
+import {
+  expectError,
+  getTxTimestamp,
+  randomAddress,
+  randomBytes32,
+} from "./utils";
 
 describe("Marketplace", function () {
   describe("bid actions", function () {
@@ -21,35 +26,59 @@ describe("Marketplace", function () {
       });
     });
 
-    it("Should create a bid and query by id", async function () {
+    it("Should error if provider doesn't exist", async function () {
       const { marketplace, expectedBid } = await loadFixture(deploySingleBid);
-      const data = await marketplace.read.bidMap([expectedBid.id]);
+      const unknownProvider = randomAddress();
 
-      expect(data).to.be.deep.equal({
-        provider: expectedBid.providerAddr,
-        modelAgentId: expectedBid.modelId,
-        pricePerSecond: expectedBid.pricePerSecond,
-        nonce: expectedBid.nonce,
-        createdAt: expectedBid.createdAt,
-        deletedAt: expectedBid.deletedAt,
-      });
+      try {
+        await marketplace.simulate.postModelBid(
+          [unknownProvider, expectedBid.modelId, expectedBid.pricePerSecond],
+          { account: unknownProvider },
+        );
+        expect.fail("Should have thrown an error");
+      } catch (e) {
+        expectError(e, marketplace.abi, "ProviderNotFound");
+      }
+    });
+
+    it("Should error if model doesn't exist", async function () {
+      const { marketplace, expectedBid } = await loadFixture(deploySingleBid);
+      const unknownModel = randomBytes32();
+
+      try {
+        await marketplace.simulate.postModelBid(
+          [expectedBid.providerAddr, unknownModel, expectedBid.pricePerSecond],
+          { account: expectedBid.providerAddr },
+        );
+        expect.fail("Should have thrown an error");
+      } catch (e) {
+        expectError(e, marketplace.abi, "ModelOrAgentNotFound");
+      }
     });
 
     it("Should create second bid", async function () {
-      const { marketplace, expectedBid: expBid, publicClient } = await loadFixture(deploySingleBid);
+      const {
+        marketplace,
+        expectedBid: expBid,
+        publicClient,
+      } = await loadFixture(deploySingleBid);
 
       // create new bid with same provider and modelId
       const client = await hre.viem.getWalletClient(expBid.providerAddr);
       const postModelBid = await marketplace.simulate.postModelBid(
         [expBid.providerAddr, expBid.modelId, expBid.pricePerSecond],
-        { account: expBid.providerAddr }
+        { account: expBid.providerAddr },
       );
       const txHash = await client.writeContract(postModelBid.request);
       const timestamp = await getTxTimestamp(publicClient, txHash);
 
       // check indexes are updated
-      const newBids1 = await marketplace.read.getActiveBidsByProvider([expBid.providerAddr]);
-      const newBids2 = await marketplace.read.getActiveBidsByModelAgent([expBid.modelId]);
+      const newBids1 = await marketplace.read.getActiveBidsByProvider([
+        expBid.providerAddr,
+      ]);
+      const newBids2 = await marketplace.read.getActiveBidsByModelAgent([
+        expBid.modelId,
+      ]);
 
       expect(newBids1).to.be.deep.equal(newBids2);
       expect(newBids1.length).to.be.equal(1);
@@ -74,11 +103,19 @@ describe("Marketplace", function () {
       });
 
       // check old bid is still queried
-      const oldBids1 = await marketplace.read.getBidsByProvider([expBid.providerAddr, 0n, 100]);
-      const oldBids2 = await marketplace.read.getBidsByModelAgent([expBid.modelId, 0n, 100]);
+      const oldBids1 = await marketplace.read.getBidsByProvider([
+        expBid.providerAddr,
+        0n,
+        100,
+      ]);
+      const oldBids2 = await marketplace.read.getBidsByModelAgent([
+        expBid.modelId,
+        0n,
+        100,
+      ]);
       expect(oldBids1).to.be.deep.equal(oldBids2);
       expect(oldBids1.length).to.be.equal(2);
-      expect(oldBids1[1]).to.be.deep.equal({
+      expect(oldBids1[1][1]).to.be.deep.equal({
         provider: expBid.providerAddr,
         modelAgentId: expBid.modelId,
         pricePerSecond: expBid.pricePerSecond,
@@ -90,7 +127,9 @@ describe("Marketplace", function () {
 
     it("Should query by provider", async function () {
       const { marketplace, expectedBid } = await loadFixture(deploySingleBid);
-      const data = await marketplace.read.getActiveBidsByProvider([expectedBid.providerAddr]);
+      const data = await marketplace.read.getActiveBidsByProvider([
+        expectedBid.providerAddr,
+      ]);
 
       expect(data.length).to.equal(1);
       expect(data[0]).to.deep.equal({
@@ -105,7 +144,9 @@ describe("Marketplace", function () {
 
     it("Should query by provider with pagination", async function () {
       const { marketplace, expectedBid } = await loadFixture(deploySingleBid);
-      const data = await marketplace.read.getActiveBidsByProvider([expectedBid.providerAddr]);
+      const data = await marketplace.read.getActiveBidsByProvider([
+        expectedBid.providerAddr,
+      ]);
 
       expect(data.length).to.equal(1);
       expect(data[0]).to.deep.equal({
@@ -120,7 +161,9 @@ describe("Marketplace", function () {
 
     it("Should query by modelId", async function () {
       const { marketplace, expectedBid } = await loadFixture(deploySingleBid);
-      const data = await marketplace.read.getActiveBidsByModelAgent([expectedBid.modelId]);
+      const data = await marketplace.read.getActiveBidsByModelAgent([
+        expectedBid.modelId,
+      ]);
 
       expect(data.length).to.equal(1);
       expect(data[0]).to.deep.equal({
@@ -136,12 +179,15 @@ describe("Marketplace", function () {
 
   describe("bid fee", function () {
     it("should set bid fee", async function () {
-      const { marketplace, owner, publicClient } = await loadFixture(deploySingleBid);
+      const { marketplace, owner, publicClient } =
+        await loadFixture(deploySingleBid);
       const newFee = 100n;
       const txHash = await marketplace.write.setBidFee([newFee], {
         account: owner.account.address,
       });
-      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+      const receipt = await publicClient.waitForTransactionReceipt({
+        hash: txHash,
+      });
       const events = parseEventLogs({
         abi: marketplace.abi,
         logs: receipt.logs,
@@ -156,8 +202,14 @@ describe("Marketplace", function () {
     });
 
     it("should collect bid fee", async function () {
-      const { marketplace, owner, expectedBid, publicClient, provider, tokenMOR } =
-        await loadFixture(deploySingleBid);
+      const {
+        marketplace,
+        owner,
+        expectedBid,
+        publicClient,
+        provider,
+        tokenMOR,
+      } = await loadFixture(deploySingleBid);
       const newFee = 100n;
       await marketplace.write.setBidFee([newFee], {
         account: owner.account.address,
@@ -168,15 +220,24 @@ describe("Marketplace", function () {
       });
 
       // check balance before
-      const balanceBefore = await tokenMOR.read.balanceOf([marketplace.address]);
+      const balanceBefore = await tokenMOR.read.balanceOf([
+        marketplace.address,
+      ]);
 
       // add bid
-      await tokenMOR.write.approve([marketplace.address, expectedBid.pricePerSecond + newFee], {
-        account: expectedBid.providerAddr,
-      });
+      await tokenMOR.write.approve(
+        [marketplace.address, expectedBid.pricePerSecond + newFee],
+        {
+          account: expectedBid.providerAddr,
+        },
+      );
       const postModelBid = await marketplace.simulate.postModelBid(
-        [expectedBid.providerAddr, expectedBid.modelId, expectedBid.pricePerSecond],
-        { account: expectedBid.providerAddr }
+        [
+          expectedBid.providerAddr,
+          expectedBid.modelId,
+          expectedBid.pricePerSecond,
+        ],
+        { account: expectedBid.providerAddr },
       );
       const txHash = await provider.writeContract(postModelBid.request);
       await publicClient.waitForTransactionReceipt({ hash: txHash });
@@ -187,8 +248,14 @@ describe("Marketplace", function () {
     });
 
     it("should allow withdrawal by owner", async function () {
-      const { marketplace, owner, expectedBid, publicClient, provider, tokenMOR } =
-        await loadFixture(deploySingleBid);
+      const {
+        marketplace,
+        owner,
+        expectedBid,
+        publicClient,
+        provider,
+        tokenMOR,
+      } = await loadFixture(deploySingleBid);
       const newFee = 100n;
       await marketplace.write.setBidFee([newFee], {
         account: owner.account.address,
@@ -198,29 +265,46 @@ describe("Marketplace", function () {
       });
 
       // add bid
-      await tokenMOR.write.approve([marketplace.address, expectedBid.pricePerSecond + newFee], {
-        account: expectedBid.providerAddr,
-      });
+      await tokenMOR.write.approve(
+        [marketplace.address, expectedBid.pricePerSecond + newFee],
+        {
+          account: expectedBid.providerAddr,
+        },
+      );
       const postModelBid = await marketplace.simulate.postModelBid(
-        [expectedBid.providerAddr, expectedBid.modelId, expectedBid.pricePerSecond],
-        { account: expectedBid.providerAddr }
+        [
+          expectedBid.providerAddr,
+          expectedBid.modelId,
+          expectedBid.pricePerSecond,
+        ],
+        { account: expectedBid.providerAddr },
       );
       const txHash = await provider.writeContract(postModelBid.request);
       await publicClient.waitForTransactionReceipt({ hash: txHash });
 
       // check balance after
-      const balanceBefore = await tokenMOR.read.balanceOf([owner.account.address]);
+      const balanceBefore = await tokenMOR.read.balanceOf([
+        owner.account.address,
+      ]);
       await marketplace.write.withdraw([owner.account.address, newFee], {
         account: owner.account.address,
       });
-      const balanceAfter = await tokenMOR.read.balanceOf([owner.account.address]);
+      const balanceAfter = await tokenMOR.read.balanceOf([
+        owner.account.address,
+      ]);
 
       expect(balanceAfter - balanceBefore).to.be.equal(newFee);
     });
 
     it("should not allow withdrawal by any other account except owner", async function () {
-      const { marketplace, owner, expectedBid, publicClient, provider, tokenMOR } =
-        await loadFixture(deploySingleBid);
+      const {
+        marketplace,
+        owner,
+        expectedBid,
+        publicClient,
+        provider,
+        tokenMOR,
+      } = await loadFixture(deploySingleBid);
       const newFee = 100n;
       await marketplace.write.setBidFee([newFee], {
         account: owner.account.address,
@@ -231,12 +315,19 @@ describe("Marketplace", function () {
       });
 
       // add bid
-      await tokenMOR.write.approve([marketplace.address, expectedBid.pricePerSecond + newFee], {
-        account: expectedBid.providerAddr,
-      });
+      await tokenMOR.write.approve(
+        [marketplace.address, expectedBid.pricePerSecond + newFee],
+        {
+          account: expectedBid.providerAddr,
+        },
+      );
       const postModelBid = await marketplace.simulate.postModelBid(
-        [expectedBid.providerAddr, expectedBid.modelId, expectedBid.pricePerSecond],
-        { account: expectedBid.providerAddr }
+        [
+          expectedBid.providerAddr,
+          expectedBid.modelId,
+          expectedBid.pricePerSecond,
+        ],
+        { account: expectedBid.providerAddr },
       );
       const txHash = await provider.writeContract(postModelBid.request);
       await publicClient.waitForTransactionReceipt({ hash: txHash });
@@ -251,13 +342,14 @@ describe("Marketplace", function () {
         expectError(
           e,
           (await hre.artifacts.readArtifact("OwnershipFacet")).abi,
-          "NotContractOwner"
+          "NotContractOwner",
         );
       }
     });
 
     it("should not allow withdrawal if not enough balance", async function () {
-      const { marketplace, owner, tokenMOR } = await loadFixture(deploySingleBid);
+      const { marketplace, owner, tokenMOR } =
+        await loadFixture(deploySingleBid);
 
       try {
         await marketplace.write.withdraw([owner.account.address, 100000000n], {

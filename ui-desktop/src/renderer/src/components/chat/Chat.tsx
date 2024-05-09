@@ -1,4 +1,4 @@
-import React, { createRef, useContext, useRef, useState } from 'react'
+import React, { createRef, useContext, useEffect, useRef, useState } from 'react'
 // import component 👇
 import Drawer from 'react-modern-drawer'
 import { IconHistory, IconArrowUp } from '@tabler/icons-react';
@@ -42,9 +42,7 @@ const Chat = (props) => {
 
     const user = props.chat || 'Llama GPT';
 
-    const [messages, setMessages] = useState([
-        { user: 'Me', role: "user", text: "What is Lorem Ipsum?", icon: "M", color: getColor("Me") },
-        { user: 'GPT', role: "assistant", text: lorem, icon: "GPT", color: getColor("GPT") }]);
+    const [messages, setMessages] = useState<any>([]);
 
     const [isOpen, setIsOpen] = useState(false);
     const toggleDrawer = () => {
@@ -56,6 +54,62 @@ const Chat = (props) => {
     }
 
     const call = async (message) => {
+
+        const response = await fetch(`http://localhost:11434/v1/chat/completions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                        "model": "llama2:latest",
+                        "stream": true,
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": message
+                            }
+                        ]
+                    })
+        });
+        
+        function parse(decodedChunk) {
+            const lines = decodedChunk.split('\n');
+            const trimmedData = lines.map(line => line.replace(/^data: /, "").trim());
+            const filteredData = trimmedData.filter(line => !["", "[DONE]"].includes(line));
+            const parsedData = filteredData.map(line => JSON.parse(line));
+            
+            return parsedData;
+        }
+
+        const textDecoder = new TextDecoder();
+
+        let answer = ""
+        if (response.body != null) {
+            const reader = response.body.getReader()
+
+            let memoState = [...messages, { id: "some", user: 'Me', text: value, role: "user", icon: "M", color: colors[getHashCode("M") % colors.length] }];
+            
+            while (true) {
+
+                const { value, done } = await reader.read();
+                if (done) {
+                    break;
+                }
+                const decodedString = textDecoder.decode(value, { stream: true });
+                const parts = parse(decodedString);
+                parts.forEach(part => {
+                    const message = memoState.find(m => m.id == part.id);
+                    const otherMessages = memoState.filter(m => m.id != part.id);
+    
+                    const text = (message?.text || '') + part.choices[0].delta.content;
+    
+                    const result = [...otherMessages, { id: part.id, user: 'GPT', role: "assistant", text: text, icon: "GPT", color: getColor("GPT") }];
+                    memoState = result;
+                    setMessages(result);
+                })
+            }
+        }
+
         try {
             const response = await fetch("http://localhost:11434/v1/chat/completions", {
                 method: 'POST',
@@ -89,9 +143,9 @@ const Chat = (props) => {
         }
         
         setIsSpinning(true);
-        setMessages([...messages, { user: 'Me', text: value, role: "user", icon: "M", color: colors[getHashCode("M") % colors.length] }]);
+        setMessages([...messages, { id: "some", user: 'Me', text: value, role: "user", icon: "M", color: colors[getHashCode("M") % colors.length] }]);
         scrollToBottom();
-        call(messages);
+        call(value);
         setValue("");
     }
 

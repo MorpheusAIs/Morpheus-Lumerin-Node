@@ -5,8 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/Lumerin-protocol/contracts-go/clonefactory"
-	"github.com/Lumerin-protocol/contracts-go/implementation"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/contracts/sessionrouter"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
 	"github.com/ethereum/go-ethereum"
@@ -18,31 +17,10 @@ const RECONNECT_TIMEOUT = 2 * time.Second
 
 type EventMapper func(types.Log) (interface{}, error)
 
-func implementationEventFactory(name string) interface{} {
+func BlockchainEventFactory(name string) interface{} {
 	switch name {
-	case "contractPurchased":
-		return new(implementation.ImplementationContractPurchased)
-	case "contractClosed":
-		return new(implementation.ImplementationContractClosed)
-	case "cipherTextUpdated":
-		return new(implementation.ImplementationCipherTextUpdated)
-	case "purchaseInfoUpdated":
-		return new(implementation.ImplementationPurchaseInfoUpdated)
-	default:
-		return nil
-	}
-}
-
-func clonefactoryEventFactory(name string) interface{} {
-	switch name {
-	case "contractCreated":
-		return new(clonefactory.ClonefactoryContractCreated)
-	case "clonefactoryContractPurchased":
-		return new(clonefactory.ClonefactoryClonefactoryContractPurchased)
-	case "purchaseInfoUpdated":
-		return new(clonefactory.ClonefactoryPurchaseInfoUpdated)
-	case "contractDeleteUpdated":
-		return new(clonefactory.ClonefactoryContractDeleteUpdated)
+	case "SessionOpened":
+		return new(sessionrouter.SessionRouterSessionOpened)
 	default:
 		return nil
 	}

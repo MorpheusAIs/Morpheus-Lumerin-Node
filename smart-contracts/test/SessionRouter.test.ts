@@ -1,254 +1,321 @@
-import { loadFixture, time } from "@nomicfoundation/hardhat-toolbox-viem/network-helpers";
+import {
+  loadFixture,
+  time,
+} from "@nomicfoundation/hardhat-toolbox-viem/network-helpers";
 import { expect } from "chai";
 import hre from "hardhat";
-import { PublicClient, getAddress, keccak256, parseEventLogs } from "viem";
+import {  keccak256 } from "viem";
 import { deploySingleBid, encodedReport } from "./fixtures";
-import { expectError, getHex, getTxTimestamp, randomBytes32 } from "./utils";
+import {
+  catchError,
+  getHex,
+  getSessionId,
+  getTxTimestamp,
+  randomBytes32,
+} from "./utils";
 import { DAY, HOUR, MINUTE, SECOND } from "../utils/time";
 import { expectAlmostEqual } from "../utils/compare";
 
-describe.skip("Session router", function () {
-  describe("session actions", function () {
-    it("should open session", async function () {
-      const { sessionRouter, expectedBid, user } = await loadFixture(deploySingleBid);
-      const budget = 100000n * 10n ** 18n;
-      console.log(budget);
+describe("Session router", function () {
+  describe("session read functions", function () {
+    it("should get compute balance equal to one on L1", async function () {
+      const { sessionRouter } = await loadFixture(deploySingleBid);
+      const exp = {
+        initialReward: 3456000000000000000000n,
+        rewardDecrease: 592558728240000000n,
+        payoutStart: 1707393600n,
+        decreaseInterval: 86400n,
+        blockTimeEpochSeconds:
+          BigInt(new Date("2024-05-02T09:19:57Z").getTime()) / 1000n,
+        balance: 287859686689348241525000n,
+      };
 
-      await sessionRouter.write.openSession([expectedBid.id, budget], {
-        account: user.account,
-      });
+      await sessionRouter.write.setPoolConfig([
+        {
+          initialReward: exp.initialReward,
+          rewardDecrease: exp.rewardDecrease,
+          payoutStart: exp.payoutStart,
+          decreaseInterval: exp.decreaseInterval,
+        },
+      ]);
+
+      const balance = await sessionRouter.read.getComputeBalance([
+        exp.blockTimeEpochSeconds,
+      ]);
+
+      expect(balance).to.equal(exp.balance);
+    });
+  });
+
+  describe("session actions", function () {
+    it("should open session without error", async function () {
+      const {
+        sessionRouter,
+        expectedSession: exp,
+        user,
+        publicClient,
+      } = await loadFixture(deploySingleBid);
+
+      const openTx = await sessionRouter.write.openSession(
+        [exp.bidID, exp.stake],
+        { account: user.account },
+      );
+
+      const sessionId = await getSessionId(publicClient, hre, openTx);
+      expect(sessionId).to.be.a("string");
     });
 
     it("should verify session fields after opening", async function () {
-      const { sessionRouter, expectedBid, user, publicClient } = await loadFixture(deploySingleBid);
-      const budget = 100000n * 10n ** 18n;
+      const {
+        sessionRouter,
+        expectedSession: exp,
+        user,
+        publicClient,
+      } = await loadFixture(deploySingleBid);
 
-      const txHash = await sessionRouter.write.openSession([expectedBid.id, budget], {
-        account: user.account,
-      });
-      const sessionId = await getSessionId(publicClient, txHash);
+      const txHash = await sessionRouter.write.openSession(
+        [exp.bidID, exp.stake],
+        { account: user.account },
+      );
+
+      const sessionId = await getSessionId(publicClient, hre, txHash);
       const session = await sessionRouter.read.getSession([sessionId]);
       const createdAt = await getTxTimestamp(publicClient, txHash);
 
       expect(session).to.deep.equal({
         id: sessionId,
-        user: getAddress(user.account.address),
-        provider: getAddress(expectedBid.providerAddr),
-        modelAgentId: expectedBid.modelId,
-        bidID: expectedBid.id,
-        budget: budget,
-        price: expectedBid.pricePerSecond,
+        user: exp.user,
+        provider: exp.provider,
+        modelAgentId: exp.modelAgentId,
+        bidID: exp.bidID,
+        stake: exp.stake,
+        pricePerSecond: exp.pricePerSecond,
         closeoutReceipt: getHex(Buffer.from(""), 0),
         closeoutType: 0n,
+        providerWithdrawnAmount: 0n,
         openedAt: createdAt,
         closedAt: 0n,
       });
     });
 
-    it("should error with NotEnoughStipend when opening session with insufficient stipend", async function () {
-      const { sessionRouter, expectedBid, user, expectedStake } = await loadFixture(
-        deploySingleBid
-      );
-      const stakeToKeep = 1n;
-      const stakeToUnstake = expectedStake.stakeAmount - stakeToKeep;
+    it("should verify balances after opening", async function () {
+      const {
+        sessionRouter,
+        expectedSession: exp,
+        publicClient,
+        user,
+        tokenMOR,
+      } = await loadFixture(deploySingleBid);
 
-      await sessionRouter.write.unstake(
-        [user.account.address, stakeToUnstake, user.account.address],
-        {
-          account: user.account,
-        }
-      );
+      const srBefore = await tokenMOR.read.balanceOf([sessionRouter.address]);
+      const userBefore = await tokenMOR.read.balanceOf([user.account.address]);
 
-      try {
-        await sessionRouter.write.openSession([expectedBid.id, stakeToKeep + 1n], {
-          account: user.account,
-        });
-        expect.fail("Should have thrown an error");
-      } catch (error) {
-        expectError(error, sessionRouter.abi, "NotEnoughStipend");
-      }
+      const txHash = await sessionRouter.write.openSession(
+        [exp.bidID, exp.stake],
+        { account: user.account },
+      );
+      await publicClient.waitForTransactionReceipt({ hash: txHash });
+
+      const srAfter = await tokenMOR.read.balanceOf([sessionRouter.address]);
+      const userAfter = await tokenMOR.read.balanceOf([user.account.address]);
+
+      expect(srAfter - srBefore).to.equal(exp.stake);
+      expect(userBefore - userAfter).to.equal(exp.stake);
     });
 
-    it("should fail to open session with invalid bid", async function () {
-      const { sessionRouter, user } = await loadFixture(deploySingleBid);
+    it("should error when opening session with missing bid", async function () {
+      const {
+        sessionRouter,
+        user,
+        expectedSession: exp,
+      } = await loadFixture(deploySingleBid);
 
-      try {
-        await sessionRouter.write.openSession([randomBytes32(), 0n], {
+      await catchError(sessionRouter.abi, "BidNotFound", async () => {
+        await sessionRouter.write.openSession([randomBytes32(), exp.stake], {
           account: user.account,
         });
-        expect.fail("Should have thrown an error");
-      } catch (error) {
-        expectError(error, sessionRouter.abi, "BidNotFound");
-      }
+      });
     });
 
-    it("should fail to open session with duration less than minimum", async function () {
-      const { sessionRouter, expectedBid, expectedStake, user } = await loadFixture(
-        deploySingleBid
-      );
+    it("should error when opening with same bid simultaneously", async function () {
+      const {
+        sessionRouter,
+        expectedSession: exp,
+        user,
+      } = await loadFixture(deploySingleBid);
 
-      await sessionRouter.write.unstake(
-        [user.account.address, expectedStake.stakeAmount, user.account.address],
-        {
-          account: user.account,
-        }
-      );
-
-      try {
-        await sessionRouter.write.openSession([expectedBid.id, 0n], {
-          account: user.account,
-        });
-        expect.fail("Should have thrown an error");
-      } catch (error) {
-        expectError(error, sessionRouter.abi, "SessionTooShort");
-      }
-    });
-
-    it("should not open session with same bid simultaneously", async function () {
-      const { sessionRouter, expectedBid, user } = await loadFixture(deploySingleBid);
-      const budget = expectedBid.pricePerSecond * BigInt(HOUR / SECOND);
-
-      await sessionRouter.write.openSession([expectedBid.id, budget], {
+      await sessionRouter.write.openSession([exp.bidID, exp.stake], {
         account: user.account.address,
       });
 
-      try {
-        await sessionRouter.write.openSession([expectedBid.id, budget], {
+      await catchError(sessionRouter.abi, "BidTaken", async () => {
+        await sessionRouter.write.openSession([exp.bidID, exp.stake], {
           account: user.account.address,
         });
-        expect.fail("Should have thrown an error");
-      } catch (error) {
-        expectError(error, sessionRouter.abi, "BidTaken");
-      }
+      });
     });
+  });
 
-    it("should open session with same bid after previous session is closed", async function () {
-      const { sessionRouter, expectedBid, user, publicClient, provider } = await loadFixture(
-        deploySingleBid
+  describe("session end time", function () {
+    it("should open session (< 1 day) and verify end time", async function () {});
+  });
+
+  describe("session closeout", function () {
+    it("should open short (<1D) session and close later", async function () {
+      const {
+        sessionRouter,
+        provider,
+        expectedSession: exp,
+        user,
+        publicClient,
+        tokenMOR,
+      } = await loadFixture(deploySingleBid);
+      // open session
+      const openTx = await sessionRouter.write.openSession(
+        [exp.bidID, exp.stake],
+        {
+          account: user.account.address,
+        },
       );
-      const budget = expectedBid.pricePerSecond * BigInt(HOUR / SECOND);
+      const sessionId = await getSessionId(publicClient, hre, openTx);
 
-      // first purchase
-      const openTx = await sessionRouter.write.openSession([expectedBid.id, budget], {
-        account: user.account.address,
-      });
-      const sessionId = await getSessionId(publicClient, openTx);
+      await time.increase(exp.durationSeconds * 2n);
 
-      // first closeout
-      const signature = await provider.signMessage({
-        message: { raw: keccak256(encodedReport) },
-      });
-      await sessionRouter.write.closeSession([sessionId, encodedReport, signature], {
-        account: user.account,
-      });
-
-      // second purchase same bidId
-      const openTx2 = await sessionRouter.write.openSession([expectedBid.id, budget], {
-        account: user.account.address,
-      });
-
-      // expect no purchase error
-    });
-
-    it("should emit session opened with session id", async function () {
-      const { sessionRouter, provider, expectedBid, user, publicClient, tokenMOR } =
-        await loadFixture(deploySingleBid);
-
-      const budget = expectedBid.pricePerSecond * BigInt(HOUR / SECOND);
-      const openSession = await sessionRouter.write.openSession([expectedBid.id, budget], {
-        account: user.account.address,
-      });
-      const receipt = await publicClient.waitForTransactionReceipt({ hash: openSession });
-      const events = parseEventLogs({
-        abi: sessionRouter.abi,
-        logs: receipt.logs,
-        eventName: "SessionOpened",
-      });
-      const [event] = events;
-
-      expect(events.length).to.equal(1);
-      expect(event.args.userAddress).to.equal(getAddress(user.account.address));
-      expect(event.args.providerId).to.equal(getAddress(provider.account.address));
-
-      const sessionId = await getSessionId(publicClient, openSession);
-      expect(sessionId).to.equal(event.args.sessionId);
-    });
-
-    it("should open and close early", async function () {
-      const { sessionRouter, provider, expectedBid, user, publicClient, tokenMOR } =
-        await loadFixture(deploySingleBid);
-      const budget = expectedBid.pricePerSecond * BigInt(HOUR / SECOND);
-
-      // save balance before opening session
-      const balanceBeforeOpen = await sessionRouter.read.balanceOfDailyStipend([
+      const userBalanceBefore = await tokenMOR.read.balanceOf([
         user.account.address,
       ]);
-      const providerBalanceBefore = await tokenMOR.read.balanceOf([provider.account.address]);
-
-      // open session
-      const openTx = await sessionRouter.write.openSession([expectedBid.id, budget], {
-        account: user.account.address,
-      });
-      const sessionId = await getSessionId(publicClient, openTx);
-
-      await time.increase((30 * MINUTE) / SECOND);
-      const balanceBeforeClose = await sessionRouter.read.balanceOfDailyStipend([
-        user.account.address,
+      const providerBalanceBefore = await tokenMOR.read.balanceOf([
+        provider.account.address,
       ]);
 
       // close session
       const signature = await provider.signMessage({
         message: { raw: keccak256(encodedReport) },
       });
-      await sessionRouter.write.closeSession([sessionId, encodedReport, signature], {
-        account: user.account,
-      });
+      await sessionRouter.write.closeSession(
+        [sessionId, encodedReport, signature],
+        {
+          account: user.account,
+        },
+      );
 
       // verify session is closed without dispute
       const session = await sessionRouter.read.getSession([sessionId]);
       expect(session.closeoutType).to.equal(0n);
 
       // verify balances
-      const balanceAfterClose = await sessionRouter.read.balanceOfDailyStipend([
+      const userBalanceAfter = await tokenMOR.read.balanceOf([
         user.account.address,
       ]);
-      const providerBalanceAfter = await tokenMOR.read.balanceOf([provider.account.address]);
+      const providerBalanceAfter = await tokenMOR.read.balanceOf([
+        provider.account.address,
+      ]);
 
-      const stipendLocked = balanceBeforeOpen - balanceBeforeClose;
-      const stipendSpent = balanceBeforeOpen - balanceAfterClose;
+      const userStakeReturned = userBalanceAfter - userBalanceBefore;
       const providerEarned = providerBalanceAfter - providerBalanceBefore;
 
-      expect(stipendSpent).to.equal(providerEarned);
-      expectAlmostEqual(stipendLocked / 2n, stipendSpent, 0.05);
+      expect(userStakeReturned).to.equal(0n);
+      expectAlmostEqual(providerEarned, exp.totalCost, 0.0001);
     });
 
-    it("should open and close with user report - dispute", async function () {
-      const { sessionRouter, provider, expectedBid, user, publicClient, tokenMOR } =
-        await loadFixture(deploySingleBid);
+    it("should open short (<1D) session and close early", async function () {
+      const {
+        sessionRouter,
+        provider,
+        expectedSession: exp,
+        user,
+        publicClient,
+        tokenMOR,
+      } = await loadFixture(deploySingleBid);
+      // open session
+      const openTx = await sessionRouter.write.openSession(
+        [exp.bidID, exp.stake],
+        {
+          account: user.account.address,
+        },
+      );
+      const sessionId = await getSessionId(publicClient, hre, openTx);
+
+      await time.increase(exp.durationSeconds / 2n - 1n);
+
+      const userBalanceBefore = await tokenMOR.read.balanceOf([
+        user.account.address,
+      ]);
+      const providerBalanceBefore = await tokenMOR.read.balanceOf([
+        provider.account.address,
+      ]);
+
+      // close session
+      const signature = await provider.signMessage({
+        message: { raw: keccak256(encodedReport) },
+      });
+      await sessionRouter.write.closeSession(
+        [sessionId, encodedReport, signature],
+        {
+          account: user.account,
+        },
+      );
+
+      // verify session is closed without dispute
+      const session = await sessionRouter.read.getSession([sessionId]);
+      expect(session.closeoutType).to.equal(0n);
+
+      // verify balances
+      const userBalanceAfter = await tokenMOR.read.balanceOf([
+        user.account.address,
+      ]);
+      const providerBalanceAfter = await tokenMOR.read.balanceOf([
+        provider.account.address,
+      ]);
+
+      const userStakeReturned = userBalanceAfter - userBalanceBefore;
+      const providerEarned = providerBalanceAfter - providerBalanceBefore;
+
+      expectAlmostEqual(userStakeReturned, exp.stake / 2n, 0.0001);
+      expectAlmostEqual(providerEarned, exp.totalCost / 2n, 0.0001);
+    });
+
+    it.skip("should open and close with user report - dispute", async function () {
+      const {
+        sessionRouter,
+        provider,
+        expectedBid,
+        user,
+        publicClient,
+        tokenMOR,
+      } = await loadFixture(deploySingleBid);
       const budget = expectedBid.pricePerSecond * BigInt(HOUR / SECOND);
 
       // save balance before opening session
       const balanceBeforeOpen = await sessionRouter.read.balanceOfDailyStipend([
         user.account.address,
       ]);
-      const providerBalanceBefore = await tokenMOR.read.balanceOf([provider.account.address]);
+      const providerBalanceBefore = await tokenMOR.read.balanceOf([
+        provider.account.address,
+      ]);
 
       // open session
-      const openTx = await sessionRouter.write.openSession([expectedBid.id, budget], {
-        account: user.account.address,
-      });
-      const sessionId = await getSessionId(publicClient, openTx);
+      const openTx = await sessionRouter.write.openSession(
+        [expectedBid.id, budget],
+        {
+          account: user.account.address,
+        },
+      );
+      const sessionId = await getSessionId(publicClient, hre, openTx);
 
       await time.increase((30 * MINUTE) / SECOND);
-      const balanceBeforeClose = await sessionRouter.read.balanceOfDailyStipend([
-        user.account.address,
-      ]);
+      const balanceBeforeClose = await sessionRouter.read.balanceOfDailyStipend(
+        [user.account.address],
+      );
 
       // close session with invalid signature
       const signature = getHex(Buffer.from(""), 0);
-      await sessionRouter.write.closeSession([sessionId, encodedReport, signature], {
-        account: user.account,
-      });
+      await sessionRouter.write.closeSession(
+        [sessionId, encodedReport, signature],
+        {
+          account: user.account,
+        },
+      );
 
       // verify session is closed with dispute
       const session = await sessionRouter.read.getSession([sessionId]);
@@ -258,7 +325,9 @@ describe.skip("Session router", function () {
       const balanceAfterClose = await sessionRouter.read.balanceOfDailyStipend([
         user.account.address,
       ]);
-      const providerBalanceAfter = await tokenMOR.read.balanceOf([provider.account.address]);
+      const providerBalanceAfter = await tokenMOR.read.balanceOf([
+        provider.account.address,
+      ]);
       const [total, onHold] = await sessionRouter.read.getProviderBalance([
         provider.account.address,
       ]);
@@ -280,9 +349,12 @@ describe.skip("Session router", function () {
       expect(onHold2).to.equal(0n);
 
       // verify user balance after dispute is claimable
-      await sessionRouter.write.claimProviderBalance([total2, provider.account.address], {
-        account: provider.account.address,
-      });
+      await sessionRouter.write.claimProviderBalance(
+        [total2, provider.account.address],
+        {
+          account: provider.account.address,
+        },
+      );
 
       const [total3, onHold3] = await sessionRouter.read.getProviderBalance([
         provider.account.address,
@@ -291,23 +363,48 @@ describe.skip("Session router", function () {
       expect(onHold3).to.equal(0n);
 
       // verify provider balance after claim
-      const providerBalanceAfterClaim = await tokenMOR.read.balanceOf([provider.account.address]);
+      const providerBalanceAfterClaim = await tokenMOR.read.balanceOf([
+        provider.account.address,
+      ]);
       const providerClaimed = providerBalanceAfterClaim - providerBalanceAfter;
       expect(providerClaimed).to.equal(total2);
+    });
+
+    it.skip("should open session with same bid after previous session is closed", async function () {
+      const { sessionRouter, expectedBid, user, publicClient, provider } =
+        await loadFixture(deploySingleBid);
+      const budget = expectedBid.pricePerSecond * BigInt(HOUR / SECOND);
+
+      // first purchase
+      const openTx = await sessionRouter.write.openSession(
+        [expectedBid.id, budget],
+        {
+          account: user.account.address,
+        },
+      );
+      const sessionId = await getSessionId(publicClient, hre, openTx);
+
+      // first closeout
+      const signature = await provider.signMessage({
+        message: { raw: keccak256(encodedReport) },
+      });
+      await sessionRouter.write.closeSession(
+        [sessionId, encodedReport, signature],
+        {
+          account: user.account,
+        },
+      );
+
+      // second purchase same bidId
+      const openTx2 = await sessionRouter.write.openSession(
+        [expectedBid.id, budget],
+        {
+          account: user.account.address,
+        },
+      );
+
+      // expect no purchase error
     });
   });
 });
 
-async function getSessionId(
-  publicClient: PublicClient,
-  txHash: `0x${string}`
-): Promise<`0x${string}`> {
-  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
-  const artifact = await hre.artifacts.readArtifact("SessionRouter");
-  const [event] = parseEventLogs({
-    abi: artifact.abi,
-    logs: receipt.logs,
-    eventName: "SessionOpened",
-  });
-  return event.args.sessionId;
-}

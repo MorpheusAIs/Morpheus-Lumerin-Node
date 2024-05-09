@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.24;
-import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+
 import { AppStorage, Model } from "../AppStorage.sol";
 import { KeySet } from "../libraries/KeySet.sol";
 import { LibOwner } from "../libraries/LibOwner.sol";
@@ -34,17 +33,19 @@ contract ModelRegistry {
     return s.activeModels.count();
   }
 
-  function modelGetAll() public view returns (Model[] memory) {
-    Model[] memory _models = new Model[](s.activeModels.count());
-    for (uint i = 0; i < s.activeModels.count(); i++) {
-      _models[i] = s.modelMap[s.activeModels.keyAtIndex(i)];
+  function modelGetAll() public view returns (bytes32[] memory, Model[] memory) {
+    uint256 len = s.activeModels.count();
+    Model[] memory _models = new Model[](len);
+    bytes32[] memory ids = new bytes32[](len);
+    for (uint i = 0; i < len; i++) {
+      bytes32 id = s.activeModels.keyAtIndex(i);
+      ids[i] = id;
+      _models[i] = s.modelMap[id];
     }
-    return _models;
+    return (ids, _models);
   }
 
-  function modelGetByIndex(
-    uint index
-  ) public view returns (bytes32 modelId, Model memory model) {
+  function modelGetByIndex(uint index) public view returns (bytes32 modelId, Model memory model) {
     modelId = s.activeModels.keyAtIndex(index);
     return (modelId, s.modelMap[modelId]);
   }

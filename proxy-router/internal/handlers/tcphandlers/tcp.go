@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
@@ -31,17 +32,18 @@ func NewTCPHandler(
 			return
 		}
 
-		resp, err := morRpcHandler.Handle(*msg, sourceLog)
+		err = morRpcHandler.Handle(ctx, *msg, sourceLog, func(resp *morrpc.RpcResponse) error {
+			_, err := sendMsg(conn, resp)
+			if err != nil {
+				sourceLog.Error("Error sending message", err)
+				return err
+			}
+			fmt.Println("sent message")
+			return err
+		})
 		if err != nil {
 			sourceLog.Error("Error handling message", err)
 			return
-		}
-		if resp != nil {
-			_, err := sendMsg(conn, resp)
-			if err != nil {
-				sourceLog.Error("Error sending response", err)
-				return
-			}
 		}
 	}
 }
