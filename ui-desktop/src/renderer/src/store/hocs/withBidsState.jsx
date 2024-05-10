@@ -51,7 +51,7 @@ const withBidsState = WrappedComponent => {
                     user: this.props.address,
                     provider: data.provider.Address,
                     spend: 10,
-                    providerUrl: data.provider.Endpoint
+                    providerUrl: data.provider.Endpoint.replace("http://", "")
                 };
                 const response = await fetch(path, {
                     method: "POST",
@@ -62,14 +62,14 @@ const withBidsState = WrappedComponent => {
             }
             catch (e) {
                 console.log("Error", e)
-                return;
+                return false;
             }
 
             try {
                 const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions`;
                 const body = {
                     bidId: data.bidId,
-                    stake: String(data.provider.Stake) + 0,
+                    stake: "468495269761303840000", // TEMP ISSUE SOLVER
                 };
                 const response = await fetch(path, {
                     method: "POST",
@@ -80,11 +80,12 @@ const withBidsState = WrappedComponent => {
             }
             catch (e) {
                 console.log("Error", e)
-                return;
+                return false;
             }
 
             this.props.setBidState(data);
             this.props.setActiveSession({ sessionId: sessionId, signature: signature });
+            return true;
         }
 
         render() {

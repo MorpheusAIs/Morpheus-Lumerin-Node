@@ -47,7 +47,7 @@ const Chat = (props) => {
     const providerAddress = props?.provider?.Address ? abbreviateAddress(props?.provider?.Address, 4) : null;
 
     useEffect(() => {
-        if(!props.selectedBid) {
+        if(!props.activeSession) {
             props.history.push("/models");
             return;
         }
@@ -81,7 +81,7 @@ const Chat = (props) => {
                         }
                     ]
                 },
-                providerUrl: props.provider.Endpoint,
+                providerUrl: props.provider.Endpoint.replace("http://", ""),
                 providerPublicKey: props.activeSession.signature
             })
         });

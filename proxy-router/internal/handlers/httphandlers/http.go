@@ -161,7 +161,7 @@ func getOffsetLimit(ctx *gin.Context) (*big.Int, uint8) {
 	}
 	limitStr := ctx.Query("limit")
 	if limitStr == "" {
-		limitStr = "10"
+		limitStr = "100"
 	}
 
 	offset, ok := new(big.Int).SetString(offsetStr, 10)

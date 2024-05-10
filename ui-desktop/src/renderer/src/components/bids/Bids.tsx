@@ -52,7 +52,7 @@ function renderTable({ onStart, bids, providers }) {
                             <td>{abbreviateAddress(b.Id, 5)}</td>
                             <td>{abbreviateAddress(b.Provider, 5)}</td>
                             <td>{provider?.Endpoint}</td>
-                            <td>{provider?.Stake / 10 ** 18} MOR</td>
+                            <td>{b.PricePerSecond / 10 ** 18} MOR</td>
                             <td><StartBtn onClick={() => onStart(b.Id, provider)}>Start</StartBtn></td>
                         </tr>)
                     }) : null}
@@ -82,7 +82,10 @@ const Bids = ({ history, getProviders, selectedModel, getBitsByModels, setBid })
     }, [])
 
     const onStart = (bidId, provider) => {
-        setBid({ bidId, provider }).then(() => {
+        setBid({ bidId, provider }).then((isSuccess) => {
+            if(!isSuccess) {
+                return;
+            }
             history.push("/chat");
         })
     }
