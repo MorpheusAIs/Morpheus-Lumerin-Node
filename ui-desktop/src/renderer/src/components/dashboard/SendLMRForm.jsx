@@ -125,6 +125,7 @@ class SendLMRForm extends React.Component {
   );
 
   render() {
+    console.log("SendLMRForm")
     return (
       <ConfirmationWizard
         renderConfirmation={this.renderConfirmation}
