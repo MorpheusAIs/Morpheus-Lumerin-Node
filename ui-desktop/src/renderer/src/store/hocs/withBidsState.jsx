@@ -8,66 +8,111 @@ import { ToastsContext } from '../../components/toasts';
 import selectors from '../selectors';
 
 const withBidsState = WrappedComponent => {
-  class Container extends React.Component {
-   
-    static contextType = ToastsContext;
+    class Container extends React.Component {
 
-    static displayName = `withBidsState(${WrappedComponent.displayName ||
-      WrappedComponent.name})`;
+        static contextType = ToastsContext;
 
-    getBitsByModels = async (modelId) => {
-        try {
-            const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/models/${modelId}/bids`
-            const response = await fetch(path);
-            const data = await response.json();
-            return data.bids;
-          }
-          catch(e) {
-            console.log("Error", e)
-            return [];
-          }
+        static displayName = `withBidsState(${WrappedComponent.displayName ||
+            WrappedComponent.name})`;
+
+        getBitsByModels = async (modelId) => {
+            try {
+                const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/models/${modelId}/bids`
+                const response = await fetch(path);
+                const data = await response.json();
+                return data.bids;
+            }
+            catch (e) {
+                console.log("Error", e)
+                return [];
+            }
+        }
+
+        getProviders = async () => {
+            try {
+                const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/providers`
+                const response = await fetch(path);
+                const data = await response.json();
+                return data.providers;
+            }
+            catch (e) {
+                console.log("Error", e)
+                return [];
+            }
+        }
+
+        setBid = async (data) => {
+            let signature = '';
+            let sessionId = '';
+
+            try {
+                const path = `${this.props.config.chain.localProxyRouterUrl}/proxy/sessions/initiate`;
+                const body = {
+                    user: this.props.address,
+                    provider: data.provider.Address,
+                    spend: 10,
+                    providerUrl: data.provider.Endpoint
+                };
+                const response = await fetch(path, {
+                    method: "POST",
+                    body: JSON.stringify(body)
+                });
+                const dataResponse = await response.json();
+                signature = dataResponse.response.result.message;
+            }
+            catch (e) {
+                console.log("Error", e)
+                return;
+            }
+
+            try {
+                const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions`;
+                const body = {
+                    bidId: data.bidId,
+                    stake: String(data.provider.Stake) + 0,
+                };
+                const response = await fetch(path, {
+                    method: "POST",
+                    body: JSON.stringify(body)
+                });
+                const dataResponse = await response.json();
+                sessionId = dataResponse.sessionId;
+            }
+            catch (e) {
+                console.log("Error", e)
+                return;
+            }
+
+            this.props.setBidState(data);
+            this.props.setActiveSession({ sessionId: sessionId, signature: signature });
+        }
+
+        render() {
+
+            return (
+                <WrappedComponent
+                    getProviders={this.getProviders}
+                    getBitsByModels={this.getBitsByModels}
+                    setBid={this.setBid}
+                    {...this.state}
+                    {...this.props}
+                />
+            );
+        }
     }
 
-    getProviders = async () => {
-        try {
-            const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/providers`
-            const response = await fetch(path);
-            const data = await response.json();
-            return data.providers;
-          }
-          catch(e) {
-            console.log("Error", e)
-            return [];
-          }
-    }
- 
-    render() {
+    const mapStateToProps = (state, props) => ({
+        address: selectors.getWalletAddress(state),
+        config: state.config,
+        selectedModel: state.models.selectedModel
+    });
 
-      return (
-        <WrappedComponent
-            getProviders={this.getProviders}
-            getBitsByModels={this.getBitsByModels}
-            {...this.state}
-            {...this.props}
-        />
-      );
-    }
-  }
+    const mapDispatchToProps = dispatch => ({
+        setBidState: model => dispatch({ type: 'set-bid', payload: model }),
+        setActiveSession: sessionModel => dispatch({ type: 'set-active-session', payload: sessionModel })
+    });
 
-  const mapStateToProps = (state, props) => ({
-    // selectedCurrency: selectors.getSellerSelectedCurrency(state),
-    // isLocalProxyRouter: selectors.getIsLocalProxyRouter(state),
-    // titanLightningPool: state.config.chain.titanLightningPool,
-    // titanLightningDashboard: state.config.chain.titanLightningDashboard,
-    config: state.config,
-    selectedModel: state.models.selectedModel
-  });
-
-  const mapDispatchToProps = dispatch => ({
-    setBid: model => dispatch({ type: 'set-bid', payload: model })
-  });
-
-  return withClient(connect(mapStateToProps, mapDispatchToProps)(Container));
+    return withClient(connect(mapStateToProps, mapDispatchToProps)(Container));
 };
 
 export default withBidsState;
