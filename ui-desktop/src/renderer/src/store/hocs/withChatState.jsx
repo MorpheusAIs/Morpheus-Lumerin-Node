@@ -62,7 +62,8 @@ const withChatState = WrappedComponent => {
     config: state.config,
     selectedBid: state.models.selectedBid,
     model: state.models.selectedModel,
-    provider: state.models.selectedProvider
+    provider: state.models.selectedProvider,
+    activeSession: state.models.activeSession
   });
 
   const mapDispatchToProps = dispatch => ({

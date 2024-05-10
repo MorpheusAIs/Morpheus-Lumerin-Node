@@ -63,7 +63,7 @@ function renderTable({ onStart, bids, providers }) {
 
 const Bids = ({ history, getProviders, selectedModel, getBitsByModels, setBid }) => {
     const [bids, setBids] = useState([]);
-    const [providers, setProviders] = useState({});
+    const [providers, setProviders] = useState([]);
 
     useEffect(() => {
         if (!selectedModel) {
@@ -82,8 +82,9 @@ const Bids = ({ history, getProviders, selectedModel, getBitsByModels, setBid })
     }, [])
 
     const onStart = (bidId, provider) => {
-        setBid({ bidId, provider });
-        history.push("/chat");
+        setBid({ bidId, provider }).then(() => {
+            history.push("/chat");
+        })
     }
 
     return (

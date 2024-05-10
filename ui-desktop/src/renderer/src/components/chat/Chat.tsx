@@ -61,26 +61,28 @@ const Chat = (props) => {
     }
 
     const scrollToBottom = () => {
-        chatBlockRef.current?.scrollIntoView({ behavior: "smooth" })
+        chatBlockRef.current?.scrollIntoView({ behavior: "smooth", block: 'end' })
     }
 
     const call = async (message) => {
         setIsSpinning(true);
-        const response = await fetch("http://localhost:8082/proxy/sessions/f347c30247d9f4b9b8f3ced2afaef8add536495c0755763e3202595d91233c94/prompt", {
+        const chatHistory = messages.map(m => ({ role: m.role, content: m.text }))
+        const response = await fetch(`${props.config.chain.localProxyRouterUrl}/proxy/sessions/${props.activeSession.sessionId}/prompt`, {
             method: 'POST',
             body: JSON.stringify({
-                "prompt" : { 
-                    "model": "llama2:latest",
-                    "stream": true,
-                    "messages": [
+                prompt : { 
+                    model: "llama2:latest",
+                    stream: true,
+                    messages: [
+                        ...chatHistory,
                         {
-                            "role": "user",
-                            "content": message
+                            role: "user",
+                            content: message
                         }
                     ]
                 },
-                "providerUrl": "localhost:3334",
-                "providerPublicKey": "048318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed753547f11ca8696646f2f3acb08e31016afac23e630c5d11f59f61fef57b0d2aa5"
+                providerUrl: props.provider.Endpoint,
+                providerPublicKey: props.activeSession.signature
             })
         });
         
@@ -111,11 +113,11 @@ const Chat = (props) => {
                 parts.forEach(part => {
                     const message = memoState.find(m => m.id == part.id);
                     const otherMessages = memoState.filter(m => m.id != part.id);
-                    console.log(part?.choices[0]?.delta?.content);
                     const text = `${message?.text || ''}${part?.choices[0]?.delta?.content || ''}`;
                     const result = [...otherMessages, { id: part.id, user: modelName, role: "assistant", text: text, icon: "L", color: getColor("L") }];
                     memoState = result;
                     setMessages(result);
+                    scrollToBottom();
                 })
             }
 
@@ -131,7 +133,6 @@ const Chat = (props) => {
         setIsSpinning(true);
         setChatHistory([...chatHistory, value]);
         setMessages([...messages, { id: "some", user: 'Me', text: value, role: "user", icon: "M", color: "#20dc8e" }]);
-        scrollToBottom();
         call(value);
         setValue("");
     }

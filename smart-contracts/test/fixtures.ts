@@ -149,7 +149,7 @@ export async function deploySingleProvider() {
   const expectedProvider = {
     address: getAddress(provider.account.address),
     stake: parseUnits("100", decimalsMOR),
-    endpoint: "https://bestprovider.com",
+    endpoint: "localhost:3334",
     timestamp: 0n,
     isDeleted: false,
   };
