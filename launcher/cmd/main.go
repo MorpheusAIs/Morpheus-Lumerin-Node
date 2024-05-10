@@ -68,6 +68,7 @@ func main() {
                 return
             }
             cmd := exec.Command(args[0], args[1:]...)
+            cmd.Dir = base
             stdout, err := cmd.StdoutPipe()
             if err != nil {
                 log.Print(err)
