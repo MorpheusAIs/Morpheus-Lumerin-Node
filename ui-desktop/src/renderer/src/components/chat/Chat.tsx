@@ -61,11 +61,12 @@ const Chat = (props) => {
     }
 
     const scrollToBottom = () => {
-        chatBlockRef.current?.scrollIntoView({ behavior: "smooth" })
+        chatBlockRef.current?.scrollIntoView({ behavior: "smooth", block: 'end' })
     }
 
     const call = async (message) => {
         setIsSpinning(true);
+        const chatHistory = messages.map(m => ({ role: m.role, content: m.text }))
         const response = await fetch(`${props.config.chain.localProxyRouterUrl}/proxy/sessions/${props.activeSession.sessionId}/prompt`, {
             method: 'POST',
             body: JSON.stringify({
@@ -73,9 +74,10 @@ const Chat = (props) => {
                     model: "llama2:latest",
                     stream: true,
                     messages: [
+                        ...chatHistory,
                         {
-                            "role": "user",
-                            "content": message
+                            role: "user",
+                            content: message
                         }
                     ]
                 },
@@ -115,6 +117,7 @@ const Chat = (props) => {
                     const result = [...otherMessages, { id: part.id, user: modelName, role: "assistant", text: text, icon: "L", color: getColor("L") }];
                     memoState = result;
                     setMessages(result);
+                    scrollToBottom();
                 })
             }
 
@@ -130,7 +133,6 @@ const Chat = (props) => {
         setIsSpinning(true);
         setChatHistory([...chatHistory, value]);
         setMessages([...messages, { id: "some", user: 'Me', text: value, role: "user", icon: "M", color: "#20dc8e" }]);
-        scrollToBottom();
         call(value);
         setValue("");
     }
