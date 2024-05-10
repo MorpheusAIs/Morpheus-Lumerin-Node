@@ -50,7 +50,8 @@ func (e *EventsListener) Run(ctx context.Context) error {
 				e.log.Errorf("error loading data: %s", err)
 			}
 		case err := <-sub.Err():
-			return err
+			e.log.Errorf("error in event listener: %s", err)
+			// return err
 		}
 	}
 }

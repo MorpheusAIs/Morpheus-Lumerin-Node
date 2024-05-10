@@ -77,7 +77,8 @@ func WatchContractEvents(ctx context.Context, client EthereumClient, contractAdd
 							continue
 						}
 						// mapper error, retry won't help
-						return err
+						// return err
+						continue
 					}
 
 					select {
