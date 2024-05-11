@@ -220,7 +220,7 @@ export function SendForm(props) {
     setMode(newMode);
     props.onAmountInput(sanitize(newAmount));
   };
-console.log("SendForm")
+  
   return (
     <>
       <HeaderWrapper>

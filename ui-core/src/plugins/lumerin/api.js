@@ -20,8 +20,7 @@ const sendLmr = (web3, lumerin, logTransaction, metaParsers) => {
     addAccount(web3, privateKey)
     const lmrValue = parseFloat(value);
     const lmrUnits = Math.floor(Number(lmrValue * 10 ** 18)).toString();
-console.log("mor value", lmrValue);
-console.log("mor units", lmrUnits);
+
     return logTransaction(
         lumerin.methods.transfer(to, lmrUnits).send({ from, gas }),
         from,
