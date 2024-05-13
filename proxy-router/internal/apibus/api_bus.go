@@ -82,3 +82,7 @@ func (apiBus *ApiBus) GetBidsByModelAgent(ctx context.Context, modelAgentId [32]
 func (apiBus *ApiBus) OpenSession(ctx *gin.Context) (int, gin.H) {
 	return apiBus.rpcProxy.OpenSession(ctx)
 }
+
+func (apiBus *ApiBus) CloseSession(ctx *gin.Context) (int, gin.H) {
+	return apiBus.rpcProxy.CloseSession(ctx)
+}
