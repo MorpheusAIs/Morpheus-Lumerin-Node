@@ -19,7 +19,7 @@ const Button = styled(NavLink)`
   min-height: 6rem;
   align-items: center;
   text-decoration: none;
-  color: ${p => p.theme.colors.inactive};
+  color: white;
   padding: 1.6rem;
   border-top: 1px solid transparent;
 
@@ -87,17 +87,6 @@ export default function PrimaryNav({ parent, activeIndex, setActiveIndex }) {
         <Label active={activeIndex === 0} parent={parent}>
           Wallet
         </Label>
-      </Button>
-
-      <Button
-        onClick={() => setActiveIndex(1)}
-        activeClassName="active"
-        to="/chat"
-      >
-        <IconWrapper>
-          <IconMessages width={iconSize} />
-        </IconWrapper>
-        <Label active={activeIndex === 1} parent={parent}>Chat</Label>
       </Button>
 
       <Button

@@ -14,6 +14,7 @@ const Container = styled.div`
   right: 0;
   left: 0;
   top: 0;
+  padding-bottom: 32px!important;
 `;
 
 const TitleRow = styled.div`

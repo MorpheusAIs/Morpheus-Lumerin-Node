@@ -186,11 +186,16 @@ func (m *MorRpc) InitiateSessionRequest(user string, provider string, userPubKey
 	}, nil
 }
 
-func (m *MorRpc) SessionPromptRequest(sessionID string, prompt string, providerPubKey string, userPrivateKeyHex string, requestId string) (*RpcMessage, error) {
+func (m *MorRpc) SessionPromptRequest(sessionID string, prompt interface{}, providerPubKey string, userPrivateKeyHex string, requestId string) (*RpcMessage, error) {
 	method := "session.prompt"
 	timestamp := m.generateTimestamp()
+
+	promptStr, err := json.Marshal(prompt)
+	if err != nil {
+		return &RpcMessage{}, err
+	}
 	params := map[string]interface{}{
-		"message":   prompt,
+		"message":   string(promptStr),
 		"sessionid": sessionID,
 		"timestamp": timestamp,
 	}

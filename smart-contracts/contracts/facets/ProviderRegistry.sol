@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.24;
-import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+
 import { AddressSet } from "../libraries/KeySet.sol";
 import { AppStorage, Provider } from "../AppStorage.sol";
 import { LibOwner } from "../libraries/LibOwner.sol";
 
 contract ProviderRegistry {
   using AddressSet for AddressSet.Set;
-  
+
   AppStorage internal s;
 
   event ProviderRegisteredUpdated(address indexed provider);
@@ -33,18 +32,12 @@ contract ProviderRegistry {
     return s.activeProviders.count();
   }
 
-  function providerGetByIndex(
-    uint index
-  ) public view returns (address addr, Provider memory provider) {
+  function providerGetByIndex(uint index) public view returns (address addr, Provider memory provider) {
     addr = s.activeProviders.keyAtIndex(index);
     return (addr, s.providerMap[addr]);
   }
 
-  function providerGetAll()
-    public
-    view
-    returns (address[] memory, Provider[] memory)
-  {
+  function providerGetAll() public view returns (address[] memory, Provider[] memory) {
     uint256 count = s.activeProviders.count();
     address[] memory _addrs = new address[](count);
     Provider[] memory _providers = new Provider[](count);
@@ -59,11 +52,7 @@ contract ProviderRegistry {
   }
 
   // registers new provider or updates existing
-  function providerRegister(
-    address addr,
-    uint256 addStake,
-    string memory endpoint
-  ) public {
+  function providerRegister(address addr, uint256 addStake, string memory endpoint) public {
     LibOwner._senderOrOwner(addr);
     Provider memory provider = s.providerMap[addr];
     uint256 newStake = provider.stake + addStake;
@@ -73,16 +62,9 @@ contract ProviderRegistry {
     if (provider.timestamp == 0) {
       s.activeProviders.insert(addr);
       s.providers.push(addr);
-    } else {
-      LibOwner._senderOrOwner(addr);
     }
 
-    s.providerMap[addr] = Provider(
-      endpoint,
-      newStake,
-      uint128(block.timestamp),
-      false
-    );
+    s.providerMap[addr] = Provider(endpoint, newStake, uint128(block.timestamp), false);
 
     emit ProviderRegisteredUpdated(addr);
 

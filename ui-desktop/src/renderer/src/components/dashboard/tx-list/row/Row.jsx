@@ -41,7 +41,7 @@ const Row = ({ tx, explorerUrl, symbol, symbolEth }) => (
     <IconContainer>
       <TxIcon txType={tx.txType} />
     </IconContainer>
-    <Amount {...tx} symbol={tx.symbol === 'LMR' ? symbol : symbolEth} />
+    <Amount {...tx} symbol={tx.symbol === 'LMR' ? "seMOR" : symbolEth} />
     <Details {...tx} />
   </Container>
 );

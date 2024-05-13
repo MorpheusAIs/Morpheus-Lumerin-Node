@@ -36,14 +36,21 @@ export const Control = styled.div`
         resize: none;
         padding-right: 6rem;
     }
+
+    textarea:focus, input:focus{
+        outline: none!important;
+    }
 `
 
 export const SendBtn = styled.div`
     position: absolute;
     right: 16px;
     border-radius: 5px;
-    width: 26px;
-    height: 26px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     text-align: center;
     bottom: 12px;
     background: ${p => p.theme.colors.morMain};
@@ -68,6 +75,8 @@ export const AvatarHeader = styled.div`
     font-weight: 900;
     padding: 0 8px;
     font-size: 18px;
+    line-height: 18px;
+    margin-bottom: 5px;
 `
 
 export const MessageBody = styled.div`
@@ -103,7 +112,11 @@ export const CustomTextArrea = styled(TextareaAutosize)`
     padding: 12px 16px;
 
     &::focus {
-        outline: none;
+        outline: none!important;
+    }
+
+    textarea:focus, input:focus{
+        outline: none!important;
     }
 `
 

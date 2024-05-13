@@ -1,7 +1,6 @@
 package httphandlers
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +10,8 @@ import (
 	"net/http/pprof"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/apibus"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
 	openai "github.com/sashabaranov/go-openai"
@@ -26,6 +27,10 @@ type HTTPHandler struct{}
 func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
+
+	r.Use(cors.New(cors.Config{
+		AllowOrigins: []string{"*"},
+	}))
 
 	r.GET("/healthcheck", (func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, apiBus.HealthCheck(ctx))
@@ -56,12 +61,11 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 		var response interface{}
 
 		if req.Stream {
-			
-			response, err = apiBus.PromptStream(ctx, req, func (response *openai.ChatCompletionStreamResponse) error {
+			response, err = apiBus.PromptStream(ctx, req, func(response *openai.ChatCompletionStreamResponse) error {
 
 				marshalledResponse, err := json.Marshal(response)
 
-				if err != nil{
+				if err != nil {
 					return err
 				}
 
@@ -77,7 +81,7 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 		} else {
 			response, err = apiBus.Prompt(ctx, req)
 		}
-		
+
 		if err != nil {
 			ctx.AbortWithError(http.StatusInternalServerError, err)
 			return
@@ -92,8 +96,12 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 	}))
 
 	r.POST("/proxy/sessions/:id/prompt", (func(ctx *gin.Context) {
-		status, response := apiBus.SendPrompt(ctx)
-		ctx.JSON(status, response)
+		ok, status, response := apiBus.SendPrompt(ctx)
+		if !ok {
+			ctx.JSON(status, response)
+			return
+		}
+		return
 	}))
 
 	r.GET("/blockchain/providers", (func(ctx *gin.Context) {
@@ -125,15 +133,20 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 			return
 		}
 
-		id, err := hex.DecodeString(modelAgentId)
-		if err != nil {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid model agent id"})
-			return
-		}
-		var idBytes [32]byte
-		copy(idBytes[:], id)
-		status, models := apiBus.GetBidsByModelAgent(ctx, idBytes, offset, limit)
+		id := common.FromHex(modelAgentId)
+
+		status, models := apiBus.GetBidsByModelAgent(ctx, ([32]byte)(id), offset, limit)
 		ctx.JSON(status, models)
+	}))
+
+	r.POST("/blockchain/sessions", (func(ctx *gin.Context) {
+		status, response := apiBus.OpenSession(ctx)
+		ctx.JSON(status, response)
+	}))
+
+	r.POST("/blockchain/sessions/:id/close", (func(ctx *gin.Context) {
+		status, response := apiBus.CloseSession(ctx)
+		ctx.JSON(status, response)
 	}))
 
 	r.Any("/debug/pprof/*action", gin.WrapF(pprof.Index))
@@ -153,7 +166,7 @@ func getOffsetLimit(ctx *gin.Context) (*big.Int, uint8) {
 	}
 	limitStr := ctx.Query("limit")
 	if limitStr == "" {
-		limitStr = "10"
+		limitStr = "100"
 	}
 
 	offset, ok := new(big.Int).SetString(offsetStr, 10)

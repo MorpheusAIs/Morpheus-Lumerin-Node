@@ -105,10 +105,8 @@ const BalanceBlock = ({
             </BtnAccent>
             <Btn
               data-modal="send"
-              data-disabled={true}
-              data-rh={sendDisabledReason}
               data-testid="send-btn"
-              onClick={sendDisabled ? null : handleTabSwitch}
+              onClick={handleTabSwitch}
               block
             >
               Send

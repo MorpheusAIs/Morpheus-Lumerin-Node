@@ -15,7 +15,7 @@ export default {
     tertiary: '#DB2642',
     light: '#fff',
     copy: '#545454',
-    dark: '#fff',
+    dark: '#000',
     darker: '#1d1d1d',
     translucentDark: '#323232EE',
     lightShade: 'rgba(0, 0, 0, 0.1)',

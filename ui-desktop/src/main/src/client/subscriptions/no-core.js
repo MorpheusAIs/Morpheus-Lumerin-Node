@@ -23,7 +23,8 @@ const listeners = {
   'set-profit-settings': handlers.setProfitSettings,
   'get-contract-hashrate': handlers.getContractHashrate,
   'get-auto-adjust-price': handlers.getAutoAdjustPriceData,
-  'set-auto-adjust-price': handlers.setAutoAdjustPriceData
+  'set-auto-adjust-price': handlers.setAutoAdjustPriceData,
+  'get-all-models': handlers.getAllModels
 }
 
 // Subscribe to messages where no core has to react
