@@ -171,6 +171,27 @@ func (rpcProxy *RpcProxy) OpenSession(ctx *gin.Context) (int, gin.H) {
 	return constants.HTTP_STATUS_OK, gin.H{"sessionId": sessionId}
 }
 
+func (rpcProxy *RpcProxy) CloseSession(ctx *gin.Context) (int, gin.H) {
+	sessionId := ctx.Param("id")
+
+	if sessionId == "" {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "sessionId is required"}
+	}
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+
+	encodedReport := "0x0000008000002710"
+	_, err = rpcProxy.sessionRouter.CloseSession(transactOpt, sessionId, encodedReport, rpcProxy.privateKey)
+	if err != nil {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+
+	return constants.HTTP_STATUS_OK, gin.H{"success": true}
+}
+
 func (rpcProxy *RpcProxy) GetSession(ctx *gin.Context, sessionId string) (int, gin.H) {
 	session, err := rpcProxy.sessionRouter.GetSession(ctx, sessionId)
 	if err != nil {

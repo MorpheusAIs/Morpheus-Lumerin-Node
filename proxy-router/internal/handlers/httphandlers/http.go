@@ -144,6 +144,11 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 		ctx.JSON(status, response)
 	}))
 
+	r.POST("/blockchain/sessions/:id/close", (func(ctx *gin.Context) {
+		status, response := apiBus.CloseSession(ctx)
+		ctx.JSON(status, response)
+	}))
+
 	r.Any("/debug/pprof/*action", gin.WrapF(pprof.Index))
 
 	err := r.SetTrustedProxies(nil)
