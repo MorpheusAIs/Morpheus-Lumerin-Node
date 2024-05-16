@@ -86,7 +86,6 @@ func (m *MorRpcHandler) Handle(ctx context.Context, msg morrpc.RpcMessage, sourc
 		prompt := fmt.Sprintf("%v", msg.Params["message"])
 		timeStamp := fmt.Sprintf("%v", msg.Params["timestamp"])
 		sourceLog.Debugf("Received prompt from session %s, timestamp: %s", sessionId, timeStamp)
-		fmt.Println("Prompt: ", prompt)
 		session, ok := m.sessionStorage.GetSession(sessionId)
 		if !ok {
 			err := fmt.Errorf("session not found")
