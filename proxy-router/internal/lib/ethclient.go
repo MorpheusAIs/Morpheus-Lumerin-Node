@@ -7,13 +7,17 @@ import (
 )
 
 type EVMError struct {
-	Abi   *abi.Error
+	Abi   abi.Error
 	Cause error
 	Args  interface{}
 }
 
 func (e EVMError) Error() string {
-	return "EVM error: " + e.Abi.Sig + " " + e.Abi.ID.Hex()[:10]
+	idBytes := e.Abi.ID.Bytes()
+	if len(idBytes) > 4 {
+		idBytes = idBytes[:4]
+	}
+	return "EVM error: " + e.Abi.Sig + " " + common.BytesToHash(idBytes).Hex()
 }
 
 // TryConvertGethError attempts to convert geth error to an EVMError, otherwise just returns original error
@@ -54,23 +58,23 @@ func ExtractGETHErrorData(err error) ([]byte, bool) {
 	if !ok {
 		return nil, false
 	}
-	if errDataHex[0:2] != "0x" || len(errDataHex) < 10 {
+	errDataBytes := common.FromHex(errDataHex)
+	if len(errDataBytes) < 4 {
 		return nil, false
 	}
-	return common.FromHex(errDataHex), true
+	return errDataBytes, true
 }
 
 // CastErrorData casts the error data to the appropriate error type
-func CastErrorData(errData []byte, contractMetadata *bind.MetaData) (*abi.Error, interface{}, bool) {
-	abi, err := contractMetadata.GetAbi()
-	if err != nil {
-		return nil, nil, false
-	}
-	for _, abiError := range abi.Errors {
-		args, err := abiError.Unpack(errData)
-		if err == nil {
-			return &abiError, args, true
+func CastErrorData(errData []byte, contractMetadata *bind.MetaData) (abi.Error, interface{}, bool) {
+	abiData, err := contractMetadata.GetAbi()
+	if err == nil {
+		for _, abiError := range abiData.Errors {
+			args, err := abiError.Unpack(errData)
+			if err == nil {
+				return abiError, args, true
+			}
 		}
 	}
-	return nil, nil, false
+	return abi.Error{}, nil, false
 }
