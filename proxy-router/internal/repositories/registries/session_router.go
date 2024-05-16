@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
@@ -85,6 +86,56 @@ func (g *SessionRouter) GetSession(ctx context.Context, sessionId string) (*sess
 	}
 
 	return &session, nil
+}
+
+func (g *SessionRouter) CloseSession(ctx *bind.TransactOpts, sessionId string, encodedReport string, privateKeyHex string) (string, error) {
+	id := [32]byte(common.FromHex(sessionId))
+	report := common.FromHex(encodedReport)
+
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		return "", err
+	}
+	hash := crypto.Keccak256Hash(report)
+
+	prefixStr := fmt.Sprintf("\x19Ethereum Signed Message:\n%d", len(hash.Bytes()))
+	message := append([]byte(prefixStr), hash.Bytes()...)
+	resultHash := crypto.Keccak256Hash(message)
+
+	signature, err := crypto.Sign(resultHash.Bytes(), privateKey)
+	if err != nil {
+		return "", err
+	}
+
+	// https://github.com/ethereum/go-ethereum/blob/44a50c9f96386f44a8682d51cf7500044f6cbaea/internal/ethapi/api.go#L580
+	signature[64] += 27 // Transform V from 0/1 to 27/28
+
+	sessionTx, err := g.sessionRouter.CloseSession(ctx, id, []byte(encodedReport), signature)
+	if err != nil {
+		return "", err
+	}
+
+	// Wait for the transaction receipt
+	receipt, err := bind.WaitMined(context.Background(), g.client, sessionTx)
+	if err != nil {
+		fmt.Println(err)
+		return "", err
+	}
+
+	// Find the event log
+	for _, log := range receipt.Logs {
+		// Check if the log belongs to the CloseSession event
+		event, err := g.sessionRouter.ParseSessionClosed(*log)
+		if err != nil {
+			continue // not our event, skip it
+		}
+
+		// Convert the sessionId to string
+		sessionId := lib.BytesToString(event.SessionId[:])
+		return sessionId, nil
+	}
+
+	return "", fmt.Errorf("CloseSession event not found in transaction logs")
 }
 
 func (g *SessionRouter) GetContractAddress() common.Address {

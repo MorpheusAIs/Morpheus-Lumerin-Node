@@ -68,6 +68,7 @@ const FeeRow = styled.div`
   display: flex;
   flex-direction: row;
   justify-content: space-between;
+  
 `;
 
 const FeeLabel = styled.div`
@@ -219,7 +220,7 @@ export function SendForm(props) {
     setMode(newMode);
     props.onAmountInput(sanitize(newAmount));
   };
-
+  
   return (
     <>
       <HeaderWrapper>
@@ -241,7 +242,7 @@ export function SendForm(props) {
         />
       </div>
 
-      <Column>
+      <Column style={{color: "black"}}>
         <AmountContainer>
           <AmountInput
             type="number"
