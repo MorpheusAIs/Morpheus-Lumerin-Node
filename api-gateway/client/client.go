@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -41,7 +42,10 @@ func (c *ApiGatewayClient) postRequest(ctx context.Context, endpoint string, bod
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, "POST", c.BaseURL+endpoint, reqBody)
+
+	reader := bytes.NewReader(reqBody)
+
+	req, err := http.NewRequestWithContext(ctx, "POST", c.BaseURL+endpoint, reader)
 	if err != nil {
 		return err
 	}

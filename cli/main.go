@@ -11,6 +11,83 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+func main() {
+	app := &cli.App{
+		Commands: []*cli.Command{
+			{
+				Name:    "healthcheck",
+				Aliases: []string{"he"},
+				Usage:   "check application health",
+				Action:  (&actions{}).healthcheck,
+			},
+			{
+				Name:    "proxyRouterConfig",
+				Aliases: []string{"prc"},
+				Usage:   "view proxy router config",
+				Action:  (&actions{}).proxyRouterConfig,
+			},
+			{
+				Name:    "proxyRouterFiles",
+				Aliases: []string{"prf"},
+				Usage:   "get the files associated with the proxy router pid",
+				Action:  (&actions{}).proxyRouterFiles,
+			},
+			{
+				Name:    "createChatCompletions",
+				Aliases: []string{"ccc"},
+				Usage:   "create a chat completion by sending a prompt to the ai engine",
+				Action:  (&actions{}).createChatCompletions,
+			},
+			{
+				Name:    "initiateProxySession",
+				Aliases: []string{"ips"},
+				Usage:   "",
+				Action:  (&actions{}).initiateProxySession,
+			},
+			{
+				Name:    "blockchainProviders",
+				Aliases: []string{"bp"},
+				Usage:   "",
+				Action:  (&actions{}).blockchainProviders,
+			},
+			{
+				Name:    "blockchainProviders",
+				Aliases: []string{"bp"},
+				Usage:   "",
+				Action:  (&actions{}).blockchainProviders,
+			},
+			{
+				Name:    "blockchainProvidersBids",
+				Aliases: []string{"bpb"},
+				Usage:   "",
+				Action:  (&actions{}).blockchainProvidersBids,
+			},
+			{
+				Name:    "blockchainModels",
+				Aliases: []string{"bm"},
+				Usage:   "",
+				Action:  (&actions{}).blockchainModels,
+			},
+			{
+				Name:    "openBlockchainSession",
+				Aliases: []string{"open blockchain session"},
+				Usage:   "",
+				Action:  (&actions{}).openBlockchainSession,
+			},
+			{
+				Name:    "closeBlockchainSession",
+				Aliases: []string{"cbs"},
+				Usage:   "",
+				Action:  (&actions{}).closeBlockchainSession,
+			},
+		},
+	}
+
+	if err := app.Run(os.Args); err != nil {
+		log.Fatal(err)
+	}
+}
+
 type actions struct {
 	client *client.Client
 }
@@ -106,81 +183,4 @@ func (a *actions) closeBlockchainSession(cCtx *cli.Context) error {
 	}
 	fmt.Println("blockchain session closed") // Output a message indicating the blockchain session was closed
 	return nil
-}
-
-func main() {
-	app := &cli.App{
-		Commands: []*cli.Command{
-			{
-				Name:    "healthcheck",
-				Aliases: []string{"he"},
-				Usage:   "check application health",
-				Action:  (&actions{}).healthcheck,
-			},
-			{
-				Name:    "proxyRouterConfig",
-				Aliases: []string{"prc"},
-				Usage:   "view proxy router config",
-				Action:  (&actions{}).proxyRouterConfig,
-			},
-			{
-				Name:    "proxyRouterFiles",
-				Aliases: []string{"prf"},
-				Usage:   "get the files associated with the proxy router pid",
-				Action:  (&actions{}).proxyRouterFiles,
-			},
-			{
-				Name:    "createChatCompletions",
-				Aliases: []string{"ccc"},
-				Usage:   "create a chat completion by sending a prompt to the ai engine",
-				Action:  (&actions{}).createChatCompletions,
-			},
-			{
-				Name:    "initiateProxySession",
-				Aliases: []string{"ips"},
-				Usage:   "",
-				Action:  (&actions{}).initiateProxySession,
-			},
-			{
-				Name:    "blockchainProviders",
-				Aliases: []string{"bp"},
-				Usage:   "",
-				Action:  (&actions{}).blockchainProviders,
-			},
-			{
-				Name:    "blockchainProviders",
-				Aliases: []string{"bp"},
-				Usage:   "",
-				Action:  (&actions{}).blockchainProviders,
-			},
-			{
-				Name:    "blockchainProvidersBids",
-				Aliases: []string{"bpb"},
-				Usage:   "",
-				Action:  (&actions{}).blockchainProvidersBids,
-			},
-			{
-				Name:    "blockchainModels",
-				Aliases: []string{"bm"},
-				Usage:   "",
-				Action:  (&actions{}).blockchainModels,
-			},
-			{
-				Name:    "openBlockchainSession",
-				Aliases: []string{"open blockchain session"},
-				Usage:   "",
-				Action:  (&actions{}).openBlockchainSession,
-			},
-			{
-				Name:    "closeBlockchainSession",
-				Aliases: []string{"cbs"},
-				Usage:   "",
-				Action:  (&actions{}).closeBlockchainSession,
-			},
-		},
-	}
-
-	if err := app.Run(os.Args); err != nil {
-		log.Fatal(err)
-	}
 }
