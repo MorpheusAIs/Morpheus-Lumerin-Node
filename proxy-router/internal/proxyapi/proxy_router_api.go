@@ -183,7 +183,6 @@ func (p *ProxyRouterApi) GetFiles(ctx *gin.Context) (int, gin.H) {
 			fmt.Fprintf(ctx.Writer, "system config: %s\n", json)
 		}
 	}
-
 	fmt.Fprintf(ctx.Writer, "\n")
 
 	err = writeFiles(ctx.Writer, files)
