@@ -241,7 +241,7 @@ func (rpcProxy *RpcProxy) GetBalance(ctx *gin.Context) (int, gin.H) {
 		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get mor balance: " + err.Error()}
 	}
 
-	return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"eth": ethBalance.String(), "mor": balance.String()}
+	return constants.HTTP_STATUS_OK, gin.H{"eth": ethBalance.String(), "mor": balance.String()}
 }
 
 func (rpcProxy *RpcProxy) SendEth(ctx *gin.Context) (int, gin.H) {
