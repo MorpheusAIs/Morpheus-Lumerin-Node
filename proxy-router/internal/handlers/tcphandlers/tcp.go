@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/morrpc"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/transport"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/morrpc"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/transport"
 )
 
 func NewTCPHandler(

@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/contracts/providerregistry"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/contracts/providerregistry"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"

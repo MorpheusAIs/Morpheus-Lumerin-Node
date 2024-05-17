@@ -5,9 +5,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/api-gateway/client"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/api-gateway/client"
 
-	"github.com/example/api-gateway/client"
 	"github.com/urfave/cli/v2"
 )
 
@@ -18,69 +17,73 @@ func main() {
 				Name:    "healthcheck",
 				Aliases: []string{"he"},
 				Usage:   "check application health",
-				Action:  (&actions{}).healthcheck,
+				Action:  actions.healthcheck,
 			},
 			{
 				Name:    "proxyRouterConfig",
 				Aliases: []string{"prc"},
 				Usage:   "view proxy router config",
-				Action:  (&actions{}).proxyRouterConfig,
+				Action:  actions.proxyRouterConfig,
 			},
 			{
 				Name:    "proxyRouterFiles",
 				Aliases: []string{"prf"},
 				Usage:   "get the files associated with the proxy router pid",
-				Action:  (&actions{}).proxyRouterFiles,
+				Action:  actions.proxyRouterFiles,
 			},
 			{
 				Name:    "createChatCompletions",
 				Aliases: []string{"ccc"},
 				Usage:   "create a chat completion by sending a prompt to the ai engine",
-				Action:  (&actions{}).createChatCompletions,
+				Action:  actions.createChatCompletions,
 			},
 			{
 				Name:    "initiateProxySession",
 				Aliases: []string{"ips"},
 				Usage:   "",
-				Action:  (&actions{}).initiateProxySession,
+				Action:  actions.initiateProxySession,
 			},
 			{
 				Name:    "blockchainProviders",
 				Aliases: []string{"bp"},
 				Usage:   "",
-				Action:  (&actions{}).blockchainProviders,
+				Action:  actions.blockchainProviders,
 			},
 			{
 				Name:    "blockchainProviders",
 				Aliases: []string{"bp"},
 				Usage:   "",
-				Action:  (&actions{}).blockchainProviders,
+				Action:  actions.blockchainProviders,
 			},
 			{
 				Name:    "blockchainProvidersBids",
 				Aliases: []string{"bpb"},
 				Usage:   "",
-				Action:  (&actions{}).blockchainProvidersBids,
+				Action:  actions.blockchainProvidersBids,
 			},
 			{
 				Name:    "blockchainModels",
 				Aliases: []string{"bm"},
 				Usage:   "",
-				Action:  (&actions{}).blockchainModels,
+				Action:  actions.blockchainModels,
 			},
 			{
 				Name:    "openBlockchainSession",
 				Aliases: []string{"open blockchain session"},
 				Usage:   "",
-				Action:  (&actions{}).openBlockchainSession,
+				Action:  actions.openBlockchainSession,
 			},
 			{
 				Name:    "closeBlockchainSession",
 				Aliases: []string{"cbs"},
 				Usage:   "",
-				Action:  (&actions{}).closeBlockchainSession,
+				Action:  actions.closeBlockchainSession,
 			},
 		},
+}
+
+var actions = &actions{}
+
 	}
 
 	if err := app.Run(os.Args); err != nil {

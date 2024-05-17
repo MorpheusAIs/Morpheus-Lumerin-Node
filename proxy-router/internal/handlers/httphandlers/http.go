@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/apibus"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/apibus"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"

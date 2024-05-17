@@ -1,7 +1,7 @@
 package lib
 
 import (
-	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
+	i "github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
 	"go.uber.org/zap/zapcore"
 )
 

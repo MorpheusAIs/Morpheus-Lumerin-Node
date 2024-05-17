@@ -1,4 +1,4 @@
-module github.com/MorpheusAIs/Morpheus-Lumerin-Node/launcher
+module github.com/Lumerin-protocol/Morpheus-Lumerin-Node/launcher
 
 go 1.19
 
