@@ -67,7 +67,7 @@ func (g *MorToken) Transfer(ctx *bind.TransactOpts, to common.Address, value *bi
 	}
 
 	// Wait for the transaction receipt
-	_, err = bind.WaitMined(context.Background(), g.client, tx)
+	_, err = bind.WaitMined(ctx.Context, g.client, tx)
 	if err != nil {
 		return tx, err
 	}
