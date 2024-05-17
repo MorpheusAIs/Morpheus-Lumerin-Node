@@ -62,6 +62,14 @@ func (apiBus *ApiBus) GetLatestBlock(ctx context.Context) (uint64, error) {
 	return apiBus.rpcProxy.GetLatestBlock(ctx)
 }
 
+func (apiBus *ApiBus) GetBalance(ctx *gin.Context) (int, gin.H) {
+	return apiBus.rpcProxy.GetBalance(ctx)
+}
+
+func (apiBus *ApiBus) GetAllowance(ctx *gin.Context) (int, gin.H) {
+	return apiBus.rpcProxy.GetAllowance(ctx)
+}
+
 func (apiBus *ApiBus) GetAllProviders(ctx context.Context) (int, gin.H) {
 	return apiBus.rpcProxy.GetAllProviders(ctx)
 }

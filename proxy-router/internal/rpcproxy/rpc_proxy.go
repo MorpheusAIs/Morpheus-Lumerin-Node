@@ -23,16 +23,18 @@ type RpcProxy struct {
 	modelRegistry    *registries.ModelRegistry
 	marketplace      *registries.Marketplace
 	sessionRouter    *registries.SessionRouter
+	morToken         *registries.MorToken
 
 	legacyTx   bool
 	privateKey string
 }
 
-func NewRpcProxy(rpcClient *ethclient.Client, diamonContractAddr common.Address, privateKey string, log interfaces.ILogger, legacyTx bool) *RpcProxy {
+func NewRpcProxy(rpcClient *ethclient.Client, diamonContractAddr common.Address, morTokenAddr common.Address, privateKey string, log interfaces.ILogger, legacyTx bool) *RpcProxy {
 	providerRegistry := registries.NewProviderRegistry(diamonContractAddr, rpcClient, log)
 	modelRegistry := registries.NewModelRegistry(diamonContractAddr, rpcClient, log)
 	marketplace := registries.NewMarketplace(diamonContractAddr, rpcClient, log)
 	sessionRouter := registries.NewSessionRouter(diamonContractAddr, rpcClient, log)
+	morToken := registries.NewMorToken(morTokenAddr, rpcClient, log)
 	return &RpcProxy{
 		rpcClient:        rpcClient,
 		providerRegistry: providerRegistry,
@@ -41,6 +43,7 @@ func NewRpcProxy(rpcClient *ethclient.Client, diamonContractAddr common.Address,
 		sessionRouter:    sessionRouter,
 		legacyTx:         legacyTx,
 		privateKey:       privateKey,
+		morToken:         morToken,
 	}
 }
 
@@ -198,6 +201,47 @@ func (rpcProxy *RpcProxy) GetSession(ctx *gin.Context, sessionId string) (int, g
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 	return constants.HTTP_STATUS_OK, gin.H{"session": session}
+}
+
+func (rpcProxy *RpcProxy) GetBalance(ctx *gin.Context) (int, gin.H) {
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+
+	ethBalance, err := rpcProxy.rpcClient.BalanceAt(ctx, transactOpt.From, nil)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get eth balance: " + err.Error()}
+	}
+
+	balance, err := rpcProxy.morToken.GetBalance(ctx, transactOpt.From)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get mor balance: " + err.Error()}
+	}
+
+	return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"eth": ethBalance.String(), "mor": balance.String()}
+}
+
+func (rpcProxy *RpcProxy) GetAllowance(ctx *gin.Context) (int, gin.H) {
+	spender := ctx.Query("spender")
+
+	if spender == "" {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "spender is required"}
+	}
+
+	spenderAddr := common.HexToAddress(spender)
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get transactOpts: " + err.Error()}
+	}
+
+	allowance, err := rpcProxy.morToken.GetAllowance(ctx, transactOpt.From, spenderAddr)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get allowance: " + err.Error()}
+	}
+
+	return constants.HTTP_STATUS_OK, gin.H{"allowance": allowance.String()}
 }
 
 func (rpcProxy *RpcProxy) getTransactOpts(ctx context.Context, privKey string) (*bind.TransactOpts, error) {
