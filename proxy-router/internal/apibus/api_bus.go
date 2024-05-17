@@ -78,6 +78,10 @@ func (apiBus *ApiBus) GetAllModels(ctx context.Context) (int, gin.H) {
 	return apiBus.rpcProxy.GetAllModels(ctx)
 }
 
+func (apiBus *ApiBus) GetTransactions(ctx *gin.Context) (int, gin.H) {
+	return apiBus.rpcProxy.GetTransactions(ctx)
+}
+
 func (apiBus *ApiBus) GetBidsByProvider(ctx context.Context, providerAddr string, offset *big.Int, limit uint8) (int, gin.H) {
 	addr := common.HexToAddress(providerAddr)
 	return apiBus.rpcProxy.GetBidsByProvider(ctx, addr, offset, limit)
