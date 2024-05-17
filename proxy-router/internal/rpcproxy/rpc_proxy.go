@@ -3,6 +3,8 @@ package rpcproxy
 import (
 	"context"
 	"math/big"
+	"sort"
+	"strconv"
 
 	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
@@ -23,16 +25,21 @@ type RpcProxy struct {
 	modelRegistry    *registries.ModelRegistry
 	marketplace      *registries.Marketplace
 	sessionRouter    *registries.SessionRouter
+	morToken         *registries.MorToken
+	explorerClient   *ExplorerClient
 
 	legacyTx   bool
 	privateKey string
 }
 
-func NewRpcProxy(rpcClient *ethclient.Client, diamonContractAddr common.Address, privateKey string, log interfaces.ILogger, legacyTx bool) *RpcProxy {
+func NewRpcProxy(rpcClient *ethclient.Client, diamonContractAddr common.Address, morTokenAddr common.Address, explorerApiUrl string, privateKey string, log interfaces.ILogger, legacyTx bool) *RpcProxy {
 	providerRegistry := registries.NewProviderRegistry(diamonContractAddr, rpcClient, log)
 	modelRegistry := registries.NewModelRegistry(diamonContractAddr, rpcClient, log)
 	marketplace := registries.NewMarketplace(diamonContractAddr, rpcClient, log)
 	sessionRouter := registries.NewSessionRouter(diamonContractAddr, rpcClient, log)
+	morToken := registries.NewMorToken(morTokenAddr, rpcClient, log)
+
+	explorerClient := NewExplorerClient(explorerApiUrl, morTokenAddr.String())
 	return &RpcProxy{
 		rpcClient:        rpcClient,
 		providerRegistry: providerRegistry,
@@ -41,6 +48,8 @@ func NewRpcProxy(rpcClient *ethclient.Client, diamonContractAddr common.Address,
 		sessionRouter:    sessionRouter,
 		legacyTx:         legacyTx,
 		privateKey:       privateKey,
+		morToken:         morToken,
+		explorerClient:   explorerClient,
 	}
 }
 
@@ -211,6 +220,90 @@ func (rpc *RpcProxy) GetProviderClaimableBalance(ctx *gin.Context) (int, gin.H) 
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 	return constants.HTTP_STATUS_OK, gin.H{"balance": balance}
+}
+
+func (rpcProxy *RpcProxy) GetBalance(ctx *gin.Context) (int, gin.H) {
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+
+	ethBalance, err := rpcProxy.rpcClient.BalanceAt(ctx, transactOpt.From, nil)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get eth balance: " + err.Error()}
+	}
+
+	balance, err := rpcProxy.morToken.GetBalance(ctx, transactOpt.From)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get mor balance: " + err.Error()}
+	}
+
+	return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"eth": ethBalance.String(), "mor": balance.String()}
+}
+
+func (rpcProxy *RpcProxy) GetAllowance(ctx *gin.Context) (int, gin.H) {
+	spender := ctx.Query("spender")
+
+	if spender == "" {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "spender is required"}
+	}
+
+	spenderAddr := common.HexToAddress(spender)
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get transactOpts: " + err.Error()}
+	}
+
+	allowance, err := rpcProxy.morToken.GetAllowance(ctx, transactOpt.From, spenderAddr)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get allowance: " + err.Error()}
+	}
+
+	return constants.HTTP_STATUS_OK, gin.H{"allowance": allowance.String()}
+}
+
+func (rpcProxy *RpcProxy) GetTransactions(ctx *gin.Context) (int, gin.H) {
+	page := ctx.Query("page")
+	limit := ctx.Query("limit")
+	if page == "" {
+		page = "1"
+	}
+
+	if limit == "" {
+		limit = "10"
+	}
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+	address := transactOpt.From
+
+	ethTrxs, err := rpcProxy.explorerClient.GetEthTransactions(address.String(), page, limit)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+	morTrxs, err := rpcProxy.explorerClient.GetTokenTransactions(address.String(), page, limit)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+
+	allTrxs := append(ethTrxs, morTrxs...)
+	sort.Slice(allTrxs, func(i, j int) bool {
+		blockNumber1, err := strconv.ParseInt(allTrxs[i].BlockNumber, 10, 0)
+		if err != nil {
+			return false
+		}
+		blockNumber2, err := strconv.ParseInt(allTrxs[j].BlockNumber, 10, 0)
+		if err != nil {
+			return false
+		}
+
+		return blockNumber1 > blockNumber2
+	})
+
+	return constants.HTTP_STATUS_OK, gin.H{"transactions": allTrxs}
 }
 
 func (rpcProxy *RpcProxy) getTransactOpts(ctx context.Context, privKey string) (*bind.TransactOpts, error) {

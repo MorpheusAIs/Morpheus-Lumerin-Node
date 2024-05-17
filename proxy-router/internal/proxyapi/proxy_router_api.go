@@ -183,7 +183,6 @@ func (p *ProxyRouterApi) GetFiles(ctx *gin.Context) (int, gin.H) {
 			fmt.Fprintf(ctx.Writer, "system config: %s\n", json)
 		}
 	}
-
 	fmt.Fprintf(ctx.Writer, "\n")
 
 	err = writeFiles(ctx.Writer, files)
@@ -263,9 +262,16 @@ func (p *ProxyRouterApi) rpcRequestStream(ctx *gin.Context, url string, rpcMessa
 			return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 		}
 
-		aiRespStr := msg.Result["message"].(string)
+		aiResponseEncrypted := msg.Result["message"].(string)
+		aiResponse, err := lib.DecryptString(aiResponseEncrypted, p.privateKey)
+		if err != nil {
+			err = lib.WrapError(fmt.Errorf("failed to decrypt ai response chunk"), err)
+			p.log.Errorf("%s", err)
+			return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+		}
+
 		var payload map[string]interface{}
-		err = json.Unmarshal([]byte(aiRespStr), &payload)
+		err = json.Unmarshal([]byte(aiResponse), &payload)
 		if err != nil {
 			err = lib.WrapError(fmt.Errorf("failed to unmarshal response"), err)
 			p.log.Errorf("%s", err)

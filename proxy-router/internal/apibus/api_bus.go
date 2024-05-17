@@ -62,12 +62,24 @@ func (apiBus *ApiBus) GetLatestBlock(ctx context.Context) (uint64, error) {
 	return apiBus.rpcProxy.GetLatestBlock(ctx)
 }
 
+func (apiBus *ApiBus) GetBalance(ctx *gin.Context) (int, gin.H) {
+	return apiBus.rpcProxy.GetBalance(ctx)
+}
+
+func (apiBus *ApiBus) GetAllowance(ctx *gin.Context) (int, gin.H) {
+	return apiBus.rpcProxy.GetAllowance(ctx)
+}
+
 func (apiBus *ApiBus) GetAllProviders(ctx context.Context) (int, gin.H) {
 	return apiBus.rpcProxy.GetAllProviders(ctx)
 }
 
 func (apiBus *ApiBus) GetAllModels(ctx context.Context) (int, gin.H) {
 	return apiBus.rpcProxy.GetAllModels(ctx)
+}
+
+func (apiBus *ApiBus) GetTransactions(ctx *gin.Context) (int, gin.H) {
+	return apiBus.rpcProxy.GetTransactions(ctx)
 }
 
 func (apiBus *ApiBus) GetBidsByProvider(ctx context.Context, providerAddr string, offset *big.Int, limit uint8) (int, gin.H) {
