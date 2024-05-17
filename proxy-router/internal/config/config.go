@@ -18,6 +18,7 @@ type Config struct {
 	Environment string `env:"ENVIRONMENT" flag:"environment"`
 	Marketplace struct {
 		DiamondContractAddress string `env:"DIAMOND_CONTRACT_ADDRESS" flag:"diamond-address"   validate:"required_if=Disable false,omitempty,eth_addr"`
+		MorTokenAddress        string `env:"MOR_TOKEN_ADDRESS"         flag:"mor-token-address" validate:"required_if=Disable false,omitempty,eth_addr"`
 		Mnemonic               string `env:"CONTRACT_MNEMONIC"     flag:"contract-mnemonic"  validate:"required_without=WalletPrivateKey|required_if=Disable false"`
 		WalletPrivateKey       string `env:"WALLET_PRIVATE_KEY"    flag:"wallet-private-key" validate:"required_without=Mnemonic|required_if=Disable false"`
 	}

@@ -139,6 +139,16 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 		ctx.JSON(status, models)
 	}))
 
+	r.GET("/blockchain/balance", (func(ctx *gin.Context) {
+		status, balance := apiBus.GetBalance(ctx)
+		ctx.JSON(status, balance)
+	}))
+
+	r.GET("/blockchain/allowance", (func(ctx *gin.Context) {
+		status, balance := apiBus.GetAllowance(ctx)
+		ctx.JSON(status, balance)
+	}))
+
 	r.POST("/blockchain/sessions", (func(ctx *gin.Context) {
 		status, response := apiBus.OpenSession(ctx)
 		ctx.JSON(status, response)
