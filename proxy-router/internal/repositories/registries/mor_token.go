@@ -10,6 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
@@ -57,4 +58,18 @@ func (g *MorToken) GetAllowance(ctx context.Context, owner common.Address, spend
 
 func (g *MorToken) Approve(ctx context.Context, spender common.Address, amount *big.Int) (*bind.TransactOpts, error) {
 	return nil, nil
+}
+
+func (g *MorToken) Transfer(ctx *bind.TransactOpts, to common.Address, value *big.Int) (*types.Transaction, error) {
+	tx, err := g.mor.Transfer(ctx, to, value)
+	if err != nil {
+		return nil, lib.TryConvertGethError(err, morpheustoken.MorpheusTokenMetaData)
+	}
+
+	// Wait for the transaction receipt
+	_, err = bind.WaitMined(ctx.Context, g.client, tx)
+	if err != nil {
+		return nil, err
+	}
+	return tx, nil
 }

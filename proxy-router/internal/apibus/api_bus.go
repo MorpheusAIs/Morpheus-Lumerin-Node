@@ -91,6 +91,14 @@ func (apiBus *ApiBus) GetBidsByModelAgent(ctx context.Context, modelAgentId [32]
 	return apiBus.rpcProxy.GetBidsByModelAgent(ctx, modelAgentId, offset, limit)
 }
 
+func (apiBus *ApiBus) SendEth(ctx *gin.Context) (int, gin.H) {
+	return apiBus.rpcProxy.SendEth(ctx)
+}
+
+func (apiBus *ApiBus) SendMor(ctx *gin.Context) (int, gin.H) {
+	return apiBus.rpcProxy.SendMor(ctx)
+}
+
 func (apiBus *ApiBus) OpenSession(ctx *gin.Context) (int, gin.H) {
 	return apiBus.rpcProxy.OpenSession(ctx)
 }

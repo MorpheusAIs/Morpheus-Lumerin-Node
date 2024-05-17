@@ -2,6 +2,7 @@ package rpcproxy
 
 import (
 	"context"
+	"errors"
 	"math/big"
 	"sort"
 	"strconv"
@@ -13,8 +14,10 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/rpcproxy/structs"
 	"github.com/gin-gonic/gin"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
@@ -241,6 +244,72 @@ func (rpcProxy *RpcProxy) GetBalance(ctx *gin.Context) (int, gin.H) {
 	return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"eth": ethBalance.String(), "mor": balance.String()}
 }
 
+func (rpcProxy *RpcProxy) SendEth(ctx *gin.Context) (int, gin.H) {
+	to, amount, err := rpcProxy.getSendParams(ctx)
+	if err != nil {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+
+	nonce, err := rpcProxy.rpcClient.PendingNonceAt(context.Background(), transactOpt.From)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get nonce: " + err.Error()}
+	}
+
+	toAddr := common.HexToAddress(to)
+	estimatedGas, err := rpcProxy.rpcClient.EstimateGas(context.Background(), ethereum.CallMsg{
+		From:  transactOpt.From,
+		To:    &toAddr,
+		Value: amount,
+	})
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to estimate gas: " + err.Error()}
+	}
+
+	gas := float64(estimatedGas) * 1.5
+	tx := types.NewTransaction(nonce, toAddr, amount, uint64(gas), transactOpt.GasPrice, nil)
+	signedTx, err := rpcProxy.signTx(ctx, tx, rpcProxy.privateKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to sign eth: " + err.Error()}
+	}
+
+	err = rpcProxy.rpcClient.SendTransaction(context.Background(), signedTx)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to send eth: " + err.Error()}
+	}
+
+	// Wait for the transaction receipt
+	_, err = bind.WaitMined(context.Background(), rpcProxy.rpcClient, signedTx)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to send eth: " + err.Error()}
+	}
+
+	return constants.HTTP_STATUS_OK, gin.H{"txHash": signedTx.Hash().String()}
+}
+
+func (rpcProxy *RpcProxy) SendMor(ctx *gin.Context) (int, gin.H) {
+	to, amount, err := rpcProxy.getSendParams(ctx)
+	if err != nil {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+
+	tx, err := rpcProxy.morToken.Transfer(transactOpt, common.HexToAddress(to), amount)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to transfer mor: " + err.Error()}
+	}
+
+	return constants.HTTP_STATUS_OK, gin.H{"txHash": tx.Hash().String()}
+}
+
 func (rpcProxy *RpcProxy) GetAllowance(ctx *gin.Context) (int, gin.H) {
 	spender := ctx.Query("spender")
 
@@ -335,4 +404,43 @@ func (rpcProxy *RpcProxy) getTransactOpts(ctx context.Context, privKey string) (
 	transactOpts.Context = ctx
 
 	return transactOpts, nil
+}
+
+func (rpcProxy *RpcProxy) signTx(ctx context.Context, tx *types.Transaction, privKey string) (*types.Transaction, error) {
+	privateKey, err := crypto.HexToECDSA(privKey)
+	if err != nil {
+		return nil, err
+	}
+
+	chainId, err := rpcProxy.rpcClient.ChainID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return types.SignTx(tx, types.NewEIP155Signer(chainId), privateKey)
+}
+
+func (rpcProxy *RpcProxy) getSendParams(ctx *gin.Context) (string, *big.Int, error) {
+	var reqPayload map[string]interface{}
+	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
+		return "", &big.Int{}, err
+	}
+
+	to := reqPayload["to"].(string)
+	amountStr := reqPayload["amount"].(string)
+
+	if to == "0" {
+		return "", &big.Int{}, errors.New("to is required")
+	}
+
+	if amountStr == "" {
+		return "", &big.Int{}, errors.New("amount is required")
+	}
+
+	amount, ok := new(big.Int).SetString(amountStr, 10)
+	if !ok {
+		return "", &big.Int{}, errors.New("invalid amount" + amountStr)
+	}
+
+	return to, amount, nil
 }
