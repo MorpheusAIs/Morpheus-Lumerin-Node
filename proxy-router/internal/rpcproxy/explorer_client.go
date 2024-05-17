@@ -63,7 +63,6 @@ func (e *ExplorerClient) doRequest(url string) ([]structs.RawTransaction, error)
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		return nil, err
 	}
-	fmt.Println(response)
 	if response.Status == "0" {
 		return make([]structs.RawTransaction, 0), nil
 	}
