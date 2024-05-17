@@ -114,6 +114,16 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 		ctx.JSON(status, providers)
 	}))
 
+	r.POST("/blockchain/send/eth", (func(ctx *gin.Context) {
+		status, response := apiBus.SendEth(ctx)
+		ctx.JSON(status, response)
+	}))
+
+	r.POST("/blockchain/send/mor", (func(ctx *gin.Context) {
+		status, response := apiBus.SendMor(ctx)
+		ctx.JSON(status, response)
+	}))
+
 	r.GET("/blockchain/providers/:id/bids", (func(ctx *gin.Context) {
 		providerId := ctx.Param("id")
 		offset, limit := getOffsetLimit(ctx)
