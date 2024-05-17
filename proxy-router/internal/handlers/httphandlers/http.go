@@ -104,6 +104,11 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 		return
 	}))
 
+	r.GET("/proxy/sessions/:id/providerClaimableBalance", (func(ctx *gin.Context) {
+		status, response := apiBus.GetProviderClaimableBalance(ctx)
+		ctx.JSON(status, response)
+	}))
+
 	r.GET("/blockchain/providers", (func(ctx *gin.Context) {
 		status, providers := apiBus.GetAllProviders(ctx)
 		ctx.JSON(status, providers)

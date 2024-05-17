@@ -200,6 +200,19 @@ func (rpcProxy *RpcProxy) GetSession(ctx *gin.Context, sessionId string) (int, g
 	return constants.HTTP_STATUS_OK, gin.H{"session": session}
 }
 
+func (rpc *RpcProxy) GetProviderClaimableBalance(ctx *gin.Context) (int, gin.H) {
+	sessionId := ctx.Param("id")
+	if sessionId == "" {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "sessionId is required"}
+	}
+
+	balance, err := rpc.sessionRouter.GetProviderClaimableBalance(ctx, sessionId)
+	if err != nil {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+	return constants.HTTP_STATUS_OK, gin.H{"balance": balance}
+}
+
 func (rpcProxy *RpcProxy) getTransactOpts(ctx context.Context, privKey string) (*bind.TransactOpts, error) {
 	privateKey, err := crypto.HexToECDSA(privKey)
 	if err != nil {
