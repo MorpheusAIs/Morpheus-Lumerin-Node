@@ -242,7 +242,7 @@ export function SendForm(props) {
         />
       </div>
 
-      <Column style={{color: "black"}}>
+      <Column>
         <AmountContainer>
           <AmountInput
             type="number"

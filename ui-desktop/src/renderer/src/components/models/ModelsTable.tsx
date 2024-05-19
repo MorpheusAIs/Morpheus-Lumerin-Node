@@ -21,6 +21,13 @@ const CustomCard = styled(Card)`
   }
 `
 
+const Container = styled.div`
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 24px;
+`
+
 function ModelCard({ onSelect, model }) {
   return (
     <CustomCard style={{ width: '36rem' }} onClick={() => onSelect(model.Id)}>
@@ -36,7 +43,9 @@ function ModelCard({ onSelect, model }) {
           </div>
         </Card.Text>
         <Card.Footer className='d-flex gap-20'>
-          {model.Tags.map(t => (<div>{t}</div>))}
+          {
+            model.Tags.map(t => (<div key={t}>{t}</div>)) 
+          }
         </Card.Footer>
       </Card.Body>
     </CustomCard>
@@ -63,11 +72,11 @@ function ModelsTable({
     });
   }, [])
 
-  return (<div>
+  return (<Container>
      {
       models.length ? models.map((x => (<div>{ModelCard({ onSelect, model: x})}</div>))) : null
      }
-    </div>)
+    </Container>)
 }
 
 export default withRouter(withModelsState(ModelsTable));

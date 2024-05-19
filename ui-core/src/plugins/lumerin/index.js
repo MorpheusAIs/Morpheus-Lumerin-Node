@@ -32,9 +32,9 @@ function createPlugin () {
 
     // Register LMR token
     token.registerToken(lumerin.address, {
-      decimals: 18,
-      name: 'Morpheus',
-      symbol: 'MOR'
+      decimals: 8,
+      name: 'Lumerin',
+      symbol: 'LMR'
     });
 
     // eventBus.on('coin-block', emitLumerinStatus);

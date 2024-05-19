@@ -17,7 +17,6 @@ const withModelsState = WrappedComponent => {
 
     getAllModels = async () => {
         const result = await this.props.client.getAllModels();
-        console.log("🚀 ~ Container ~ getAllModels= ~ result:", result)
         return result;
     }
 

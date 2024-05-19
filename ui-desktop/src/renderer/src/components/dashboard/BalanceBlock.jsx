@@ -103,14 +103,14 @@ const BalanceBlock = ({
             >
               Receive
             </BtnAccent>
-            <Btn
+            <BtnAccent
               data-modal="send"
               data-testid="send-btn"
               onClick={handleTabSwitch}
               block
             >
               Send
-            </Btn>
+            </BtnAccent>
 
             {showFaucet && (
               <BtnAccent
