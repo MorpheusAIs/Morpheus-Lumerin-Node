@@ -12,6 +12,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func NewApiGatewayClient(baseURL string, httpClient *http.Client) *ApiGatewayClient {
+	return &ApiGatewayClient{
+		BaseURL: baseURL,
+		Client:  httpClient,
+	}
+}
+
 type ApiGatewayClient struct {
 	BaseURL string
 	Client  *http.Client
@@ -30,7 +37,7 @@ func (c *ApiGatewayClient) getRequest(ctx context.Context, endpoint string, resu
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New(fmt.Sprintf("unexpected status code: %d", resp.StatusCode))
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	return json.NewDecoder(resp.Body).Decode(result)
@@ -59,22 +66,26 @@ func (c *ApiGatewayClient) postRequest(ctx context.Context, endpoint string, bod
 		return errors.New(fmt.Sprintf("unexpected status code: %d", resp.StatusCode))
 	}
 
+	if result == nil {
+		return nil
+	}
+
 	return json.NewDecoder(resp.Body).Decode(result)
 }
 
-func (c *ApiGatewayClient) GetConfig(ctx context.Context) (interface{}, error) {
+func (c *ApiGatewayClient) GetProxyRouterConfig(ctx context.Context) (interface{}, error) {
 	var result interface{}
 	err := c.getRequest(ctx, "/config", &result)
 	return result, err
 }
 
-func (c *ApiGatewayClient) GetFiles(ctx context.Context) (int, interface{}) {
+func (c *ApiGatewayClient) GetProxyRouterFiles(ctx context.Context) (interface{}, error) {
 	var result interface{}
 	err := c.getRequest(ctx, "/files", &result)
 	if err != nil {
-		return http.StatusInternalServerError, err.Error()
+		return nil, fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
 	}
-	return http.StatusOK, result
+	return result, nil
 }
 
 func (c *ApiGatewayClient) HealthCheck(ctx context.Context) (interface{}, error) {
@@ -83,22 +94,26 @@ func (c *ApiGatewayClient) HealthCheck(ctx context.Context) (interface{}, error)
 	return result, err
 }
 
-func (c *ApiGatewayClient) InitiateSession(ctx context.Context) (int, interface{}) {
+func (c *ApiGatewayClient) InitiateSession(ctx context.Context) (interface{}, error) {
 	var result interface{}
 	err := c.postRequest(ctx, "/proxy/sessions/initiate", nil, &result)
+
 	if err != nil {
-		return http.StatusInternalServerError, err.Error()
+		return nil, fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
 	}
-	return http.StatusOK, result
+
+	return result, nil
 }
 
-func (c *ApiGatewayClient) SendPrompt(ctx context.Context) (bool, int, interface{}) {
+func (c *ApiGatewayClient) SendPrompt(ctx context.Context, prompt string, messages []string) (interface{}, error) {
 	var result interface{}
 	err := c.postRequest(ctx, "/proxy/sessions/:id/prompt", nil, &result)
+
 	if err != nil {
-		return false, http.StatusInternalServerError, err.Error()
+		return http.StatusInternalServerError, err
 	}
-	return true, http.StatusOK, result
+
+	return result, nil
 }
 
 func (c *ApiGatewayClient) Prompt(ctx context.Context, req interface{}) (interface{}, error) {
@@ -108,68 +123,77 @@ func (c *ApiGatewayClient) Prompt(ctx context.Context, req interface{}) (interfa
 }
 
 func (c *ApiGatewayClient) PromptStream(ctx context.Context, req interface{}, flush interface{}) (interface{}, error) {
-	// Implementation for streaming responses can be complex and may require handling HTTP/2 or WebSockets
+
 	return nil, errors.New("streaming not implemented")
 }
 
-func (c *ApiGatewayClient) GetLatestBlock(ctx context.Context) (uint64, error) {
-	var result uint64
-	err := c.getRequest(ctx, "/blockchain/latestBlock", &result)
+func (c *ApiGatewayClient) GetLatestBlock(ctx context.Context) (result uint64, err error) {
+
+	err = c.getRequest(ctx, "/blockchain/latestBlock", &result)
 	return result, err
 }
 
-func (c *ApiGatewayClient) GetAllProviders(ctx context.Context) (int, gin.H) {
-	var result gin.H
-	err := c.getRequest(ctx, "/blockchain/providers", &result)
+func (c *ApiGatewayClient) GetAllProviders(ctx context.Context) (result []string, err error) {
+
+	err = c.getRequest(ctx, "/blockchain/providers", &result)
+
 	if err != nil {
-		return http.StatusInternalServerError, gin.H{"error": err.Error()}
+		return nil, fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
 	}
-	return http.StatusOK, result
+
+	return result, nil
 }
 
-func (c *ApiGatewayClient) GetAllModels(ctx context.Context) (int, gin.H) {
-	var result gin.H
-	err := c.getRequest(ctx, "/blockchain/models", &result)
+func (c *ApiGatewayClient) GetAllModels(ctx context.Context) (result []string, err error) {
+
+	err = c.getRequest(ctx, "/blockchain/models", &result)
+
 	if err != nil {
-		return http.StatusInternalServerError, gin.H{"error": err.Error()}
+		return nil, fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
 	}
-	return http.StatusOK, result
+
+	return result, nil
 }
 
-func (c *ApiGatewayClient) GetBidsByProvider(ctx context.Context, providerAddr string, offset *big.Int, limit uint8) (int, gin.H) {
-	var result gin.H
+func (c *ApiGatewayClient) GetBidsByProvider(ctx context.Context, providerAddr string, offset *big.Int, limit uint8) (bids []string, err error) {
+
 	endpoint := fmt.Sprintf("/blockchain/providers/%s/bids?offset=%s&limit=%d", providerAddr, offset.String(), limit)
-	err := c.getRequest(ctx, endpoint, &result)
+	err = c.getRequest(ctx, endpoint, &bids)
 	if err != nil {
-		return http.StatusInternalServerError, gin.H{"error": err.Error()}
+		return nil, fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
 	}
-	return http.StatusOK, result
+	return bids, err
 }
 
-func (c *ApiGatewayClient) GetBidsByModelAgent(ctx context.Context, modelAgentId [32]byte, offset *big.Int, limit uint8) (int, gin.H) {
-	var result gin.H
+func (c *ApiGatewayClient) GetBidsByModelAgent(ctx context.Context, modelAgentId [32]byte, offset *big.Int, limit uint8) (result []string, err error) {
+
 	endpoint := fmt.Sprintf("/blockchain/models/%x/bids?offset=%s&limit=%d", modelAgentId, offset.String(), limit)
-	err := c.getRequest(ctx, endpoint, &result)
+	err = c.getRequest(ctx, endpoint, &result)
+
 	if err != nil {
-		return http.StatusInternalServerError, gin.H{"error": err.Error()}
+		return nil, fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
 	}
-	return http.StatusOK, result
+
+	return result, err
 }
 
-func (c *ApiGatewayClient) OpenSession(ctx *gin.Context) (int, gin.H) {
-	var result gin.H
-	err := c.postRequest(ctx, "/blockchain/sessions", nil, &result)
+func (c *ApiGatewayClient) OpenSession(ctx *gin.Context) (err error) {
+
+	err = c.postRequest(ctx, "/blockchain/sessions", nil, nil)
+
 	if err != nil {
-		return http.StatusInternalServerError, gin.H{"error": err.Error()}
+		return fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
 	}
-	return http.StatusOK, result
+
+	return nil
 }
 
-func (c *ApiGatewayClient) CloseSession(ctx *gin.Context) (int, gin.H) {
-	var result gin.H
-	err := c.postRequest(ctx, "/blockchain/sessions/:id/close", nil, &result)
+func (c *ApiGatewayClient) CloseSession(ctx *gin.Context) error {
+	err := c.postRequest(ctx, "/blockchain/sessions/:id/close", nil, nil)
+
 	if err != nil {
-		return http.StatusInternalServerError, gin.H{"error": err.Error()}
+		return fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
 	}
-	return http.StatusOK, result
+
+	return nil
 }

@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"log"
+	"math/big"
+	"net/http"
 	"os"
 
 	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/api-gateway/client"
@@ -10,7 +12,10 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+const httpErrorMessage string = "internal error: %v; http status: %v"
+
 func main() {
+	actions := NewActions(client.NewApiGatewayClient("http://localhost:8080", http.DefaultClient))
 	app := &cli.App{
 		Commands: []*cli.Command{
 			{
@@ -80,10 +85,6 @@ func main() {
 				Action:  actions.closeBlockchainSession,
 			},
 		},
-}
-
-var actions = &actions{}
-
 	}
 
 	if err := app.Run(os.Args); err != nil {
@@ -92,10 +93,10 @@ var actions = &actions{}
 }
 
 type actions struct {
-	client *client.Client
+	client *client.ApiGatewayClient
 }
 
-func NewActions(c *client.Client) *actions {
+func NewActions(c *client.ApiGatewayClient) *actions {
 	return &actions{client: c}
 }
 func (a *actions) healthcheck(cCtx *cli.Context) error {
@@ -108,7 +109,7 @@ func (a *actions) healthcheck(cCtx *cli.Context) error {
 }
 
 func (a *actions) proxyRouterConfig(cCtx *cli.Context) error {
-	config, err := a.client.GetProxyRouterConfig()
+	config, err := a.client.GetProxyRouterConfig(cCtx.Context)
 	if err != nil {
 		return err
 	}
@@ -117,34 +118,37 @@ func (a *actions) proxyRouterConfig(cCtx *cli.Context) error {
 }
 
 func (a *actions) proxyRouterFiles(cCtx *cli.Context) error {
-	files, err := a.client.GetProxyRouterFiles()
+	status, files, err := a.client.GetProxyRouterFiles(cCtx.Context)
+
 	if err != nil {
-		return err
+		return fmt.Errorf("Failed to get proxy router file descriptor; internal error: %v; http status: %v", err, status)
 	}
+
 	fmt.Println("proxy router files:", files) // Output the proxy router files
 	return nil
 }
 
-func (a *actions) createChatCompletions(cCtx *cli.Context) error {
-	completion, err := a.client.CreateChatCompletion()
-	if err != nil {
-		return err
+func (a *actions) createChatCompletions(cCtx *cli.Context, prompt string, messages []string) error {
+	ok, status, completion, err := a.client.SendPrompt(cCtx.Context, prompt, messages)
+	if !ok {
+		return fmt.Errorf("Chat failed; internal error: %v; http status: %v;", err, status)
 	}
+
 	fmt.Println("chat completion:", completion) // Output the chat completion
 	return nil
 }
 
 func (a *actions) initiateProxySession(cCtx *cli.Context) error {
-	session, err := a.client.InitiateProxySession()
+	status, session, err := a.client.InitiateSession(cCtx.Context)
 	if err != nil {
-		return err
+		return fmt.Errorf("internal error: %v; http status: %v", err, status)
 	}
 	fmt.Println("proxy session:", session) // Output the proxy session details
 	return nil
 }
 
 func (a *actions) blockchainProviders(cCtx *cli.Context) error {
-	providers, err := a.client.GetBlockchainProviders()
+	providers, err := a.client.GetAllProviders(cCtx.Context)
 	if err != nil {
 		return err
 	}
@@ -152,8 +156,8 @@ func (a *actions) blockchainProviders(cCtx *cli.Context) error {
 	return nil
 }
 
-func (a *actions) blockchainProvidersBids(cCtx *cli.Context) error {
-	bids, err := a.client.GetBlockchainProvidersBids()
+func (a *actions) blockchainProvidersBids(cCtx *cli.Context, providerAddress string, offset *big.Int, limit uint8) error {
+	bids, err := a.client.GetBidsByProvider(cCtx.Context, providerAddress, offset, limit)
 	if err != nil {
 		return err
 	}
