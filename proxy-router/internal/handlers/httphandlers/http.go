@@ -104,9 +104,24 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 		return
 	}))
 
+	r.GET("/proxy/sessions/:id/providerClaimableBalance", (func(ctx *gin.Context) {
+		status, response := apiBus.GetProviderClaimableBalance(ctx)
+		ctx.JSON(status, response)
+	}))
+
 	r.GET("/blockchain/providers", (func(ctx *gin.Context) {
 		status, providers := apiBus.GetAllProviders(ctx)
 		ctx.JSON(status, providers)
+	}))
+
+	r.POST("/blockchain/send/eth", (func(ctx *gin.Context) {
+		status, response := apiBus.SendEth(ctx)
+		ctx.JSON(status, response)
+	}))
+
+	r.POST("/blockchain/send/mor", (func(ctx *gin.Context) {
+		status, response := apiBus.SendMor(ctx)
+		ctx.JSON(status, response)
 	}))
 
 	r.GET("/blockchain/providers/:id/bids", (func(ctx *gin.Context) {
@@ -137,6 +152,21 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 
 		status, models := apiBus.GetBidsByModelAgent(ctx, ([32]byte)(id), offset, limit)
 		ctx.JSON(status, models)
+	}))
+
+	r.GET("/blockchain/balance", (func(ctx *gin.Context) {
+		status, balance := apiBus.GetBalance(ctx)
+		ctx.JSON(status, balance)
+	}))
+
+	r.GET("/blockchain/transactions", (func(ctx *gin.Context) {
+		status, transactions := apiBus.GetTransactions(ctx)
+		ctx.JSON(status, transactions)
+	}))
+
+	r.GET("/blockchain/allowance", (func(ctx *gin.Context) {
+		status, balance := apiBus.GetAllowance(ctx)
+		ctx.JSON(status, balance)
 	}))
 
 	r.POST("/blockchain/sessions", (func(ctx *gin.Context) {

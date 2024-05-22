@@ -52,7 +52,7 @@ func NewSessionRouter(sessionRouterAddr common.Address, client *ethclient.Client
 func (g *SessionRouter) OpenSession(ctx *bind.TransactOpts, bidId [32]byte, stake *big.Int) (string, error) {
 	sessionTx, err := g.sessionRouter.OpenSession(ctx, bidId, stake)
 	if err != nil {
-		return "", err
+		return "", lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
 	}
 
 	// Wait for the transaction receipt
@@ -112,7 +112,7 @@ func (g *SessionRouter) CloseSession(ctx *bind.TransactOpts, sessionId string, e
 
 	sessionTx, err := g.sessionRouter.CloseSession(ctx, id, []byte(encodedReport), signature)
 	if err != nil {
-		return "", err
+		return "", lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
 	}
 
 	// Wait for the transaction receipt
@@ -136,6 +136,15 @@ func (g *SessionRouter) CloseSession(ctx *bind.TransactOpts, sessionId string, e
 	}
 
 	return "", fmt.Errorf("CloseSession event not found in transaction logs")
+}
+
+func (g *SessionRouter) GetProviderClaimableBalance(ctx context.Context, sessionId string) (*big.Int, error) {
+	id := [32]byte(common.FromHex(sessionId))
+	balance, err := g.sessionRouter.GetProviderClaimableBalance(&bind.CallOpts{Context: ctx}, id)
+	if err != nil {
+		return nil, lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
+	}
+	return balance, nil
 }
 
 func (g *SessionRouter) GetContractAddress() common.Address {

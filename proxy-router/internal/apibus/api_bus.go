@@ -62,12 +62,24 @@ func (apiBus *ApiBus) GetLatestBlock(ctx context.Context) (uint64, error) {
 	return apiBus.rpcProxy.GetLatestBlock(ctx)
 }
 
+func (apiBus *ApiBus) GetBalance(ctx *gin.Context) (int, gin.H) {
+	return apiBus.rpcProxy.GetBalance(ctx)
+}
+
+func (apiBus *ApiBus) GetAllowance(ctx *gin.Context) (int, gin.H) {
+	return apiBus.rpcProxy.GetAllowance(ctx)
+}
+
 func (apiBus *ApiBus) GetAllProviders(ctx context.Context) (int, gin.H) {
 	return apiBus.rpcProxy.GetAllProviders(ctx)
 }
 
 func (apiBus *ApiBus) GetAllModels(ctx context.Context) (int, gin.H) {
 	return apiBus.rpcProxy.GetAllModels(ctx)
+}
+
+func (apiBus *ApiBus) GetTransactions(ctx *gin.Context) (int, gin.H) {
+	return apiBus.rpcProxy.GetTransactions(ctx)
 }
 
 func (apiBus *ApiBus) GetBidsByProvider(ctx context.Context, providerAddr string, offset *big.Int, limit uint8) (int, gin.H) {
@@ -79,10 +91,22 @@ func (apiBus *ApiBus) GetBidsByModelAgent(ctx context.Context, modelAgentId [32]
 	return apiBus.rpcProxy.GetBidsByModelAgent(ctx, modelAgentId, offset, limit)
 }
 
+func (apiBus *ApiBus) SendEth(ctx *gin.Context) (int, gin.H) {
+	return apiBus.rpcProxy.SendEth(ctx)
+}
+
+func (apiBus *ApiBus) SendMor(ctx *gin.Context) (int, gin.H) {
+	return apiBus.rpcProxy.SendMor(ctx)
+}
+
 func (apiBus *ApiBus) OpenSession(ctx *gin.Context) (int, gin.H) {
 	return apiBus.rpcProxy.OpenSession(ctx)
 }
 
 func (apiBus *ApiBus) CloseSession(ctx *gin.Context) (int, gin.H) {
 	return apiBus.rpcProxy.CloseSession(ctx)
+}
+
+func (apiBus *ApiBus) GetProviderClaimableBalance(ctx *gin.Context) (int, gin.H) {
+	return apiBus.rpcProxy.GetProviderClaimableBalance(ctx)
 }

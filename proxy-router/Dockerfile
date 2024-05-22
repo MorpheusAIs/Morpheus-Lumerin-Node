@@ -1,4 +1,4 @@
-FROM golang:1.19.3-alpine as builder
+FROM golang:1.22.3-alpine as builder
 
 ARG COMMIT
 ENV COMMIT=$COMMIT
@@ -17,5 +17,5 @@ COPY --from=builder /app/sh /bin/sh
 COPY --from=builder /app/.env /app/.env
 
 SHELL ["/bin/sh", "-c"]
-EXPOSE 3333 8081
+EXPOSE 3333 8080
 ENTRYPOINT ["proxy-router"]

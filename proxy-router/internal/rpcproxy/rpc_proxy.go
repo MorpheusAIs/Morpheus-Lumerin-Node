@@ -2,7 +2,10 @@ package rpcproxy
 
 import (
 	"context"
+	"errors"
 	"math/big"
+	"sort"
+	"strconv"
 
 	constants "github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal"
 	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
@@ -11,8 +14,10 @@ import (
 	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/rpcproxy/structs"
 	"github.com/gin-gonic/gin"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
@@ -23,16 +28,21 @@ type RpcProxy struct {
 	modelRegistry    *registries.ModelRegistry
 	marketplace      *registries.Marketplace
 	sessionRouter    *registries.SessionRouter
+	morToken         *registries.MorToken
+	explorerClient   *ExplorerClient
 
 	legacyTx   bool
 	privateKey string
 }
 
-func NewRpcProxy(rpcClient *ethclient.Client, diamonContractAddr common.Address, privateKey string, log interfaces.ILogger, legacyTx bool) *RpcProxy {
+func NewRpcProxy(rpcClient *ethclient.Client, diamonContractAddr common.Address, morTokenAddr common.Address, explorerApiUrl string, privateKey string, log interfaces.ILogger, legacyTx bool) *RpcProxy {
 	providerRegistry := registries.NewProviderRegistry(diamonContractAddr, rpcClient, log)
 	modelRegistry := registries.NewModelRegistry(diamonContractAddr, rpcClient, log)
 	marketplace := registries.NewMarketplace(diamonContractAddr, rpcClient, log)
 	sessionRouter := registries.NewSessionRouter(diamonContractAddr, rpcClient, log)
+	morToken := registries.NewMorToken(morTokenAddr, rpcClient, log)
+
+	explorerClient := NewExplorerClient(explorerApiUrl, morTokenAddr.String())
 	return &RpcProxy{
 		rpcClient:        rpcClient,
 		providerRegistry: providerRegistry,
@@ -41,6 +51,8 @@ func NewRpcProxy(rpcClient *ethclient.Client, diamonContractAddr common.Address,
 		sessionRouter:    sessionRouter,
 		legacyTx:         legacyTx,
 		privateKey:       privateKey,
+		morToken:         morToken,
+		explorerClient:   explorerClient,
 	}
 }
 
@@ -200,6 +212,169 @@ func (rpcProxy *RpcProxy) GetSession(ctx *gin.Context, sessionId string) (int, g
 	return constants.HTTP_STATUS_OK, gin.H{"session": session}
 }
 
+func (rpc *RpcProxy) GetProviderClaimableBalance(ctx *gin.Context) (int, gin.H) {
+	sessionId := ctx.Param("id")
+	if sessionId == "" {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "sessionId is required"}
+	}
+
+	balance, err := rpc.sessionRouter.GetProviderClaimableBalance(ctx, sessionId)
+	if err != nil {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+	return constants.HTTP_STATUS_OK, gin.H{"balance": balance}
+}
+
+func (rpcProxy *RpcProxy) GetBalance(ctx *gin.Context) (int, gin.H) {
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+
+	ethBalance, err := rpcProxy.rpcClient.BalanceAt(ctx, transactOpt.From, nil)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get eth balance: " + err.Error()}
+	}
+
+	balance, err := rpcProxy.morToken.GetBalance(ctx, transactOpt.From)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get mor balance: " + err.Error()}
+	}
+
+	return constants.HTTP_STATUS_OK, gin.H{"eth": ethBalance.String(), "mor": balance.String()}
+}
+
+func (rpcProxy *RpcProxy) SendEth(ctx *gin.Context) (int, gin.H) {
+	to, amount, err := rpcProxy.getSendParams(ctx)
+	if err != nil {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+
+	nonce, err := rpcProxy.rpcClient.PendingNonceAt(context.Background(), transactOpt.From)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get nonce: " + err.Error()}
+	}
+
+	toAddr := common.HexToAddress(to)
+	estimatedGas, err := rpcProxy.rpcClient.EstimateGas(context.Background(), ethereum.CallMsg{
+		From:  transactOpt.From,
+		To:    &toAddr,
+		Value: amount,
+	})
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to estimate gas: " + err.Error()}
+	}
+
+	gas := float64(estimatedGas) * 1.5
+	tx := types.NewTransaction(nonce, toAddr, amount, uint64(gas), transactOpt.GasPrice, nil)
+	signedTx, err := rpcProxy.signTx(ctx, tx, rpcProxy.privateKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to sign eth: " + err.Error()}
+	}
+
+	err = rpcProxy.rpcClient.SendTransaction(context.Background(), signedTx)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to send eth: " + err.Error()}
+	}
+
+	// Wait for the transaction receipt
+	_, err = bind.WaitMined(context.Background(), rpcProxy.rpcClient, signedTx)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to send eth: " + err.Error()}
+	}
+
+	return constants.HTTP_STATUS_OK, gin.H{"txHash": signedTx.Hash().String()}
+}
+
+func (rpcProxy *RpcProxy) SendMor(ctx *gin.Context) (int, gin.H) {
+	to, amount, err := rpcProxy.getSendParams(ctx)
+	if err != nil {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+
+	tx, err := rpcProxy.morToken.Transfer(transactOpt, common.HexToAddress(to), amount)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to transfer mor: " + err.Error()}
+	}
+
+	return constants.HTTP_STATUS_OK, gin.H{"txHash": tx.Hash().String()}
+}
+
+func (rpcProxy *RpcProxy) GetAllowance(ctx *gin.Context) (int, gin.H) {
+	spender := ctx.Query("spender")
+
+	if spender == "" {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "spender is required"}
+	}
+
+	spenderAddr := common.HexToAddress(spender)
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get transactOpts: " + err.Error()}
+	}
+
+	allowance, err := rpcProxy.morToken.GetAllowance(ctx, transactOpt.From, spenderAddr)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get allowance: " + err.Error()}
+	}
+
+	return constants.HTTP_STATUS_OK, gin.H{"allowance": allowance.String()}
+}
+
+func (rpcProxy *RpcProxy) GetTransactions(ctx *gin.Context) (int, gin.H) {
+	page := ctx.Query("page")
+	limit := ctx.Query("limit")
+	if page == "" {
+		page = "1"
+	}
+
+	if limit == "" {
+		limit = "10"
+	}
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+	address := transactOpt.From
+
+	ethTrxs, err := rpcProxy.explorerClient.GetEthTransactions(address.String(), page, limit)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+	morTrxs, err := rpcProxy.explorerClient.GetTokenTransactions(address.String(), page, limit)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+
+	allTrxs := append(ethTrxs, morTrxs...)
+	sort.Slice(allTrxs, func(i, j int) bool {
+		blockNumber1, err := strconv.ParseInt(allTrxs[i].BlockNumber, 10, 0)
+		if err != nil {
+			return false
+		}
+		blockNumber2, err := strconv.ParseInt(allTrxs[j].BlockNumber, 10, 0)
+		if err != nil {
+			return false
+		}
+
+		return blockNumber1 > blockNumber2
+	})
+
+	return constants.HTTP_STATUS_OK, gin.H{"transactions": allTrxs}
+}
+
 func (rpcProxy *RpcProxy) getTransactOpts(ctx context.Context, privKey string) (*bind.TransactOpts, error) {
 	privateKey, err := crypto.HexToECDSA(privKey)
 	if err != nil {
@@ -229,4 +404,43 @@ func (rpcProxy *RpcProxy) getTransactOpts(ctx context.Context, privKey string) (
 	transactOpts.Context = ctx
 
 	return transactOpts, nil
+}
+
+func (rpcProxy *RpcProxy) signTx(ctx context.Context, tx *types.Transaction, privKey string) (*types.Transaction, error) {
+	privateKey, err := crypto.HexToECDSA(privKey)
+	if err != nil {
+		return nil, err
+	}
+
+	chainId, err := rpcProxy.rpcClient.ChainID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return types.SignTx(tx, types.NewEIP155Signer(chainId), privateKey)
+}
+
+func (rpcProxy *RpcProxy) getSendParams(ctx *gin.Context) (string, *big.Int, error) {
+	var reqPayload map[string]interface{}
+	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
+		return "", &big.Int{}, err
+	}
+
+	to := reqPayload["to"].(string)
+	amountStr := reqPayload["amount"].(string)
+
+	if to == "0" {
+		return "", &big.Int{}, errors.New("to is required")
+	}
+
+	if amountStr == "" {
+		return "", &big.Int{}, errors.New("amount is required")
+	}
+
+	amount, ok := new(big.Int).SetString(amountStr, 10)
+	if !ok {
+		return "", &big.Int{}, errors.New("invalid amount" + amountStr)
+	}
+
+	return to, amount, nil
 }
