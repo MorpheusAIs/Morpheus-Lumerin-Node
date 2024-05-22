@@ -44,6 +44,7 @@ struct Session {
   // amount of funds that was already withdrawn by provider (we allow to withdraw for the previous day)
   uint256 providerWithdrawnAmount;
   uint256 openedAt;
+  uint256 endsAt; // expected end time considering the stake provided
   uint256 closedAt;
 }
 

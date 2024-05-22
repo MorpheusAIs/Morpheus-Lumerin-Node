@@ -4,8 +4,12 @@ import {
 } from "@nomicfoundation/hardhat-toolbox-viem/network-helpers";
 import { expect } from "chai";
 import hre from "hardhat";
-import {  keccak256 } from "viem";
-import { deploySingleBid, encodedReport } from "./fixtures";
+import { keccak256 } from "viem";
+import {
+  deploySingleBid,
+  encodedReport,
+  getProviderApproval,
+} from "./fixtures";
 import {
   catchError,
   getHex,
@@ -54,10 +58,12 @@ describe("Session router", function () {
         expectedSession: exp,
         user,
         publicClient,
+        provider,
       } = await loadFixture(deploySingleBid);
 
+      const { msg, signature } = await getProviderApproval(provider);
       const openTx = await sessionRouter.write.openSession(
-        [exp.bidID, exp.stake],
+        [exp.bidID, exp.stake, msg, signature],
         { account: user.account },
       );
 
@@ -71,16 +77,18 @@ describe("Session router", function () {
         expectedSession: exp,
         user,
         publicClient,
+        provider,
       } = await loadFixture(deploySingleBid);
 
-      const txHash = await sessionRouter.write.openSession(
-        [exp.bidID, exp.stake],
+      const { msg, signature } = await getProviderApproval(provider);
+      const openTx = await sessionRouter.write.openSession(
+        [exp.bidID, exp.stake, msg, signature],
         { account: user.account },
       );
 
-      const sessionId = await getSessionId(publicClient, hre, txHash);
+      const sessionId = await getSessionId(publicClient, hre, openTx);
       const session = await sessionRouter.read.getSession([sessionId]);
-      const createdAt = await getTxTimestamp(publicClient, txHash);
+      const createdAt = await getTxTimestamp(publicClient, openTx);
 
       expect(session).to.deep.equal({
         id: sessionId,
@@ -94,6 +102,7 @@ describe("Session router", function () {
         closeoutType: 0n,
         providerWithdrawnAmount: 0n,
         openedAt: createdAt,
+        endsAt: createdAt + exp.durationSeconds,
         closedAt: 0n,
       });
     });
@@ -105,13 +114,15 @@ describe("Session router", function () {
         publicClient,
         user,
         tokenMOR,
+        provider,
       } = await loadFixture(deploySingleBid);
 
       const srBefore = await tokenMOR.read.balanceOf([sessionRouter.address]);
       const userBefore = await tokenMOR.read.balanceOf([user.account.address]);
 
+      const { msg, signature } = await getProviderApproval(provider);
       const txHash = await sessionRouter.write.openSession(
-        [exp.bidID, exp.stake],
+        [exp.bidID, exp.stake, msg, signature],
         { account: user.account },
       );
       await publicClient.waitForTransactionReceipt({ hash: txHash });
@@ -128,12 +139,17 @@ describe("Session router", function () {
         sessionRouter,
         user,
         expectedSession: exp,
+        provider,
       } = await loadFixture(deploySingleBid);
 
+      const { msg, signature } = await getProviderApproval(provider);
       await catchError(sessionRouter.abi, "BidNotFound", async () => {
-        await sessionRouter.write.openSession([randomBytes32(), exp.stake], {
-          account: user.account,
-        });
+        await sessionRouter.write.openSession(
+          [randomBytes32(), exp.stake, msg, signature],
+          {
+            account: user.account,
+          },
+        );
       });
     });
 
@@ -142,22 +158,92 @@ describe("Session router", function () {
         sessionRouter,
         expectedSession: exp,
         user,
+        provider,
       } = await loadFixture(deploySingleBid);
 
-      await sessionRouter.write.openSession([exp.bidID, exp.stake], {
-        account: user.account.address,
-      });
+      const { msg, signature } = await getProviderApproval(provider);
+      await sessionRouter.write.openSession(
+        [exp.bidID, exp.stake, msg, signature],
+        { account: user.account.address },
+      );
 
       await catchError(sessionRouter.abi, "BidTaken", async () => {
-        await sessionRouter.write.openSession([exp.bidID, exp.stake], {
-          account: user.account.address,
-        });
+        await sessionRouter.write.openSession(
+          [exp.bidID, exp.stake, msg, signature],
+          { account: user.account.address },
+        );
       });
     });
   });
 
-  describe("session end time", function () {
-    it("should open session (< 1 day) and verify end time", async function () {});
+  describe("verify session end time", function () {
+    it("session that doesn't span a day (1h)", async function () {
+      const {
+        sessionRouter,
+        expectedSession: exp,
+        user,
+        publicClient,
+        getStake,
+        provider,
+      } = await loadFixture(deploySingleBid);
+
+      const durationSeconds = BigInt(HOUR / SECOND);
+      const stake = getStake(durationSeconds, exp.pricePerSecond);
+
+      const { msg, signature } = await getProviderApproval(provider);
+      const txHash = await sessionRouter.write.openSession(
+        [exp.bidID, stake, msg, signature],
+        {
+          account: user.account,
+        },
+      );
+
+      const sessionId = await getSessionId(publicClient, hre, txHash);
+      const session = await sessionRouter.read.getSession([sessionId]);
+      const createdAt = await getTxTimestamp(publicClient, txHash);
+
+      expect(session.endsAt).to.equal(createdAt + exp.durationSeconds);
+    });
+
+    it("session that spans a day (6h)", async function () {
+      const startOfTomorrow =
+        ((BigInt(new Date().getTime()) / BigInt(DAY)) * BigInt(DAY) +
+          BigInt(DAY)) /
+        BigInt(SECOND);
+      await time.increaseTo(startOfTomorrow + 21n * BigInt(HOUR / SECOND));
+
+      const {
+        sessionRouter,
+        expectedSession: exp,
+        user,
+        publicClient,
+        getStake,
+        approveUserFunds,
+        provider,
+      } = await loadFixture(deploySingleBid);
+
+      const durationSeconds = 6n * BigInt(HOUR / SECOND);
+      const effectiveDuration = 9n * BigInt(HOUR / SECOND);
+      const stake = getStake(durationSeconds, exp.pricePerSecond);
+
+      await approveUserFunds(stake);
+
+      const { msg, signature } = await getProviderApproval(provider);
+      const txHash = await sessionRouter.write.openSession(
+        [exp.bidID, stake, msg, signature],
+        {
+          account: user.account,
+        },
+      );
+
+      const sessionId = await getSessionId(publicClient, hre, txHash);
+      const session = await sessionRouter.read.getSession([sessionId]);
+      const createdAt = await getTxTimestamp(publicClient, txHash);
+
+      console.log(new Date(Number(createdAt * 1000n)));
+
+      expect(session.endsAt).to.equal(createdAt + effectiveDuration);
+    });
   });
 
   describe("session closeout", function () {
@@ -170,9 +256,11 @@ describe("Session router", function () {
         publicClient,
         tokenMOR,
       } = await loadFixture(deploySingleBid);
+
       // open session
+      const { msg, signature } = await getProviderApproval(provider);
       const openTx = await sessionRouter.write.openSession(
-        [exp.bidID, exp.stake],
+        [exp.bidID, exp.stake, msg, signature],
         {
           account: user.account.address,
         },
@@ -189,15 +277,12 @@ describe("Session router", function () {
       ]);
 
       // close session
-      const signature = await provider.signMessage({
+      const sig = await provider.signMessage({
         message: { raw: keccak256(encodedReport) },
       });
-      await sessionRouter.write.closeSession(
-        [sessionId, encodedReport, signature],
-        {
-          account: user.account,
-        },
-      );
+      await sessionRouter.write.closeSession([sessionId, encodedReport, sig], {
+        account: user.account,
+      });
 
       // verify session is closed without dispute
       const session = await sessionRouter.read.getSession([sessionId]);
@@ -228,8 +313,9 @@ describe("Session router", function () {
         tokenMOR,
       } = await loadFixture(deploySingleBid);
       // open session
+      const { msg, signature } = await getProviderApproval(provider);
       const openTx = await sessionRouter.write.openSession(
-        [exp.bidID, exp.stake],
+        [exp.bidID, exp.stake, msg, signature],
         {
           account: user.account.address,
         },
@@ -246,15 +332,12 @@ describe("Session router", function () {
       ]);
 
       // close session
-      const signature = await provider.signMessage({
+      const sig = await provider.signMessage({
         message: { raw: keccak256(encodedReport) },
       });
-      await sessionRouter.write.closeSession(
-        [sessionId, encodedReport, signature],
-        {
-          account: user.account,
-        },
-      );
+      await sessionRouter.write.closeSession([sessionId, encodedReport, sig], {
+        account: user.account,
+      });
 
       // verify session is closed without dispute
       const session = await sessionRouter.read.getSession([sessionId]);
@@ -407,4 +490,3 @@ describe("Session router", function () {
     });
   });
 });
-
