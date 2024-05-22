@@ -60,6 +60,14 @@ func (g *MorToken) Approve(ctx context.Context, spender common.Address, amount *
 	return nil, nil
 }
 
+func (g *MorToken) GetTotalSupply(ctx context.Context) (*big.Int, error) {
+	supply, err := g.mor.TotalSupply(&bind.CallOpts{Context: ctx})
+	if err != nil {
+		return nil, lib.TryConvertGethError(err, morpheustoken.MorpheusTokenMetaData)
+	}
+	return supply, nil
+}
+
 func (g *MorToken) Transfer(ctx *bind.TransactOpts, to common.Address, value *big.Int) (*types.Transaction, error) {
 	tx, err := g.mor.Transfer(ctx, to, value)
 	if err != nil {
