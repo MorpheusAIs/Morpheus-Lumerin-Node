@@ -110,3 +110,11 @@ func (apiBus *ApiBus) CloseSession(ctx *gin.Context) (int, gin.H) {
 func (apiBus *ApiBus) GetProviderClaimableBalance(ctx *gin.Context) (int, gin.H) {
 	return apiBus.rpcProxy.GetProviderClaimableBalance(ctx)
 }
+
+func (apiBus *ApiBus) GetTodaysBudget(ctx *gin.Context) (int, gin.H) {
+	return apiBus.rpcProxy.GetTodaysBudget(ctx)
+}
+
+func (apiBus *ApiBus) GetTokenSupply(ctx *gin.Context) (int, gin.H) {
+	return apiBus.rpcProxy.GetTokenSupply(ctx)
+}
