@@ -24,13 +24,22 @@ const Dashboard = ({
   address,
   hasTransactions,
   copyToClipboard,
-  onWalletRefresh
+  onWalletRefresh,
+  onInit
 }) => {
   console.log('dashboard')
   const [activeModal, setActiveModal] = useState(null)
 
   const onCloseModal = () => setActiveModal(null)
   const onTabSwitch = (modal) => setActiveModal(modal)
+
+  useEffect(() => {
+    onInit();
+  }, [])
+
+  const [rates, setRates] = useState(null);
+  const [transactions, setTransactions] = useState([])
+  const [balance, setBalance] = useState({ mor: 0, eth: 0})
 
   return (
     <View data-testid="dashboard-container">

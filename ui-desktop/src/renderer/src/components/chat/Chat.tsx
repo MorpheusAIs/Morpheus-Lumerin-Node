@@ -18,6 +18,7 @@ import {
     Control,
     SendBtn
 } from './Chat.styles';
+import { BtnAccent } from '../dashboard/BalanceBlock.styles';
 import { withRouter } from 'react-router-dom';
 import withChatState from '../../store/hocs/withChatState';
 import { abbreviateAddress } from '../../utils'
@@ -39,6 +40,7 @@ const Chat = (props) => {
     const chatBlockRef = useRef<null | HTMLDivElement>(null);
 
     const [value, setValue] = useState("");
+    const [hasSession, setHasSession] = useState(false);
 
     const [chatHistory, setChatHistory] = useState<string[]>([]);
     const [isSpinning, setIsSpinning] = useState(false);
@@ -47,10 +49,10 @@ const Chat = (props) => {
     const providerAddress = props?.provider?.Address ? abbreviateAddress(props?.provider?.Address, 4) : null;
 
     useEffect(() => {
-        if(!props.activeSession) {
-            props.history.push("/models");
-            return;
-        }
+        // if(!props.activeSession) {
+        //     props.history.push("/models");
+        //     return;
+        // }
     }, [])
 
     const [messages, setMessages] = useState<any>([]);
@@ -70,7 +72,7 @@ const Chat = (props) => {
         const response = await fetch(`${props.config.chain.localProxyRouterUrl}/proxy/sessions/${props.activeSession.sessionId}/prompt`, {
             method: 'POST',
             body: JSON.stringify({
-                prompt : { 
+                prompt: {
                     model: "llama2:latest",
                     stream: true,
                     messages: [
@@ -85,13 +87,13 @@ const Chat = (props) => {
                 providerPublicKey: props.activeSession.signature
             })
         });
-        
+
         function parse(decodedChunk) {
             const lines = decodedChunk.split('\n');
             const trimmedData = lines.map(line => line.replace(/^data: /, "").trim());
             const filteredData = trimmedData.filter(line => !["", "[DONE]"].includes(line));
             const parsedData = filteredData.map(line => JSON.parse(line));
-            
+
             return parsedData;
         }
 
@@ -101,14 +103,14 @@ const Chat = (props) => {
             const reader = response.body.getReader()
 
             let memoState = [...messages, { id: "some", user: 'Me', text: value, role: "user", icon: "M", color: "#20dc8e" }];
-            
+
             while (true) {
                 const { value, done } = await reader.read();
                 if (done) {
                     break;
                 }
                 const decodedString = textDecoder.decode(value, { stream: true });
-                
+
                 const parts = parse(decodedString);
                 parts.forEach(part => {
                     const message = memoState.find(m => m.id == part.id);
@@ -126,10 +128,10 @@ const Chat = (props) => {
     }
 
     const handleSubmit = () => {
-        if(!value) {
+        if (!value) {
             return;
         }
-        
+
         setIsSpinning(true);
         setChatHistory([...chatHistory, value]);
         setMessages([...messages, { id: "some", user: 'Me', text: value, role: "user", icon: "M", color: "#20dc8e" }]);
@@ -151,6 +153,7 @@ const Chat = (props) => {
                 <ContainerTitle style={{ padding: '0 2.4rem' }}>
                     <TitleRow>
                         <Title>Chat</Title>
+                        <div>MODEL SELECTOR</div>
                     </TitleRow>
                 </ContainerTitle>
                 <ChatTitleContainer>
@@ -169,15 +172,31 @@ const Chat = (props) => {
                 </ChatTitleContainer>
 
                 <Container>
-                    <ChatBlock ref={chatBlockRef}>
+                    <ChatBlock ref={chatBlockRef} className={!messages?.length ? 'createSessionMode' : null}>
                         {
-                            messages && messages.map(x => (
+                            messages?.length ? messages.map(x => (
                                 <Message key={makeid(6)} message={x}></Message>
                             ))
+                                : <div className='session-container' style={{ width: '400px'}}>
+                                    <div className='session-title'>To perform promt please create session and choose desired session time</div>
+                                    <div className='session-title'>Session will be created for selected Model</div>
+                                    <div>  
+                                        <BtnAccent
+                                        data-modal="receive"
+                                        data-testid="receive-btn"
+                                        styles={{ marginLeft: '0'}}
+                                        onClick={() => { }}
+                                        block
+                                    >
+                                        Create Session
+                                    </BtnAccent></div>
+                                </div>
                         }
+
                     </ChatBlock>
                     <Control>
                         <CustomTextArrea
+                            disabled={!hasSession}
                             onKeyPress={(e) => {
                                 if (e.key === 'Enter') {
                                     e.preventDefault();
@@ -190,8 +209,8 @@ const Chat = (props) => {
                             placeholder={"Ask me anything..."}
                             minRows={1}
                             maxRows={6} />
-                        <SendBtn onClick={handleSubmit}>{
-                            isSpinning ? <Spinner animation="border" />: <IconArrowUp size={"26px"}></IconArrowUp>
+                        <SendBtn disabled={!hasSession} onClick={handleSubmit}>{
+                            isSpinning ? <Spinner animation="border" /> : <IconArrowUp size={"26px"}></IconArrowUp>
                         }</SendBtn>
                     </Control>
                 </Container>

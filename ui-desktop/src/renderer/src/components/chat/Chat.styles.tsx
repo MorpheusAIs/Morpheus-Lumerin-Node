@@ -24,6 +24,21 @@ export const ChatBlock = styled.div`
     height: 100%;
     overflow-y: auto;
     margin-bottom: 20px;
+
+    &.createSessionMode {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    &.createSessionMode .session-container {
+        width: 400px;
+    }
+
+    &.createSessionMode .session-title {
+        text-align: center;
+        margin-bottom: 10px;
+    }
 `
 
 export const Control = styled.div`
@@ -54,6 +69,10 @@ export const SendBtn = styled.div`
     text-align: center;
     bottom: 12px;
     background: ${p => p.theme.colors.morMain};
+
+    &[disabled] {
+        opacity: 0.5;
+    }
 `
 
 export const Avatar = styled.div`

@@ -115,7 +115,7 @@ function createSyncer (config, eventBus, web3, queue, eventsRegistry, indexer) {
       receipt.to = trx.returnValues.to;
       receipt.value = trx.returnValues.value;
       receipt.transactionHash = trx.transactionHash;
-      receipt.tokenSymbol = trx.address === config.chain.lmrTokenAddress ? 'LMR' : undefined;
+      receipt.tokenSymbol = trx.address === config.chain.mainTokenAddress ? 'MOR' : undefined;
     }
 
     return {transaction, receipt}
@@ -130,7 +130,7 @@ function createSyncer (config, eventBus, web3, queue, eventsRegistry, indexer) {
   async function getPastCoinTransactions (fromBlock, toBlock, address, page, pageSize) {
     const { symbol } = config;
 
-    const transactions = await indexer.getTransactions(fromBlock, toBlock || bestBlock, address, page, pageSize)
+    const transactions = await indexer.getTransactions(page, pageSize)
     logger.debug(`${transactions.length} past ${symbol} transactions retrieved`);
 
     queue.addTxs(address, null)(transactions.map(mapApiResponseToTrxReceipt))
@@ -215,7 +215,8 @@ function createSyncer (config, eventBus, web3, queue, eventsRegistry, indexer) {
     gotBestBlockPromise
       .then(function () {
         logger.debug('Syncing', fromBlock, bestBlock);
-        subscribeCoinTransactions(bestBlock, address);
+        // SUBCRIPTION FOR TRANSACTIONS
+        // subscribeCoinTransactions(bestBlock, address);
         subscribeEvents(bestBlock, address);
         return getPastCoinTransactions(fromBlock, bestBlock, address, page, pageSize)
       })

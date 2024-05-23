@@ -57,27 +57,13 @@ const BalanceBlock = ({
   lmrBalanceUSD,
   ethBalance,
   ethBalanceUSD,
-  sendDisabled,
-  sendDisabledReason,
-  recaptchaSiteKey,
-  faucetUrl,
-  showFaucet,
-  walletAddress,
   onTabSwitch,
   symbol,
   symbolEth,
-  client
 }) => {
   const handleTabSwitch = e => {
     e.preventDefault();
     onTabSwitch(e.target.dataset.modal);
-  };
-
-  const claimFaucet = e => {
-    e.preventDefault();
-    const url = new URL(faucetUrl);
-    url.searchParams.set('address', walletAddress);
-    window.open(url);
   };
 
   return (
@@ -111,18 +97,6 @@ const BalanceBlock = ({
             >
               Send
             </BtnAccent>
-
-            {showFaucet && (
-              <BtnAccent
-                data-modal="claim"
-                onClick={claimFaucet}
-                data-rh={`Payout from the faucet is 2 ${symbol} and 0.01 ${symbolEth} per day.\n
-          Wallet addresses are limited to one request every 24 hours.`}
-                block
-              >
-                Get Tokens
-              </BtnAccent>
-            )}
           </BtnRow>
         </SecondaryContainer>
       </Container>

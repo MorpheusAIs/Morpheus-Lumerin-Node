@@ -3,8 +3,8 @@ import { NavLink } from 'react-router-dom';
 import styled from 'styled-components';
 import { IconFileReport, IconMessage } from '@tabler/icons-react';
 import { IconBuildingStore } from '@tabler/icons-react';
-import { IconChecklist } from '@tabler/icons-react';
-import { IconWallet, IconMessages, IconPackages, IconUsers } from '@tabler/icons-react';
+import { IconBrandStackshare } from '@tabler/icons-react';
+import { IconWallet, IconPhoto, IconPackages, IconUsers } from '@tabler/icons-react';
 
 const Container = styled.div`
   display: flex;
@@ -90,27 +90,62 @@ export default function PrimaryNav({ parent, activeIndex, setActiveIndex }) {
       </Button>
 
       <Button
-        onClick={() => setActiveIndex(2)}
+        onClick={() => setActiveIndex(1)}
         activeClassName="active"
-        to="/models"
+        to="/chat"
       >
         <IconWrapper>
-          <IconPackages width={iconSize} />
+          <IconMessage width={iconSize} />
         </IconWrapper>
-        <Label active={activeIndex === 2} parent={parent}>Models</Label>
+        <Label active={activeIndex === 1} parent={parent}>Chat</Label>
+      </Button>
+
+      <Button
+        onClick={() => setActiveIndex(2)}
+        activeClassName="active"
+        to="/media"
+      >
+        <IconWrapper>
+          <IconPhoto width={iconSize} />
+        </IconWrapper>
+        <Label active={activeIndex === 2} parent={parent}>Media</Label>
       </Button>
 
 
       <Button
         onClick={() => setActiveIndex(3)}
         activeClassName="active"
+        to="/models"
+      >
+        <IconWrapper>
+          <IconPackages width={iconSize} />
+        </IconWrapper>
+        <Label active={activeIndex === 3} parent={parent}>Models</Label>
+      </Button>
+
+
+      <Button
+        onClick={() => setActiveIndex(4)}
+        activeClassName="active"
         to="/agents"
       >
         <IconWrapper>
           <IconUsers width={iconSize} />
         </IconWrapper>
-        <Label active={activeIndex === 3} parent={parent}>Agents</Label>
+        <Label active={activeIndex === 4} parent={parent}>Agents</Label>
       </Button>
+
+      <Button
+        onClick={() => setActiveIndex(5)}
+        activeClassName="active"
+        to="/hub"
+      >
+        <IconWrapper>
+          <IconBrandStackshare width={iconSize} />
+        </IconWrapper>
+        <Label active={activeIndex === 5} parent={parent}>Provider Hub</Label>
+      </Button>
+      
     </Container>
   );
 }

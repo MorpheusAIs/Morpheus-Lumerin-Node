@@ -9,7 +9,7 @@ import React, { useState } from 'react';
 const withSendLMRFormState = Component => {
   const WrappedComponent = ({
     lmrDefaultGasLimit,
-    lmrTokenAddress,
+    mainTokenAddress,
     chainGasPrice,
     availableLMR,
     walletId,
@@ -18,7 +18,7 @@ const withSendLMRFormState = Component => {
   }) => {
     const props = {
       lmrDefaultGasLimit,
-      lmrTokenAddress,
+      mainTokenAddress,
       chainGasPrice,
       availableLMR,
       walletId,
@@ -76,7 +76,7 @@ const withSendLMRFormState = Component => {
       client
         .getTokenGasLimit({
           value: client.toWei(utils.sanitize(inputs.lmrAmount)),
-          token: lmrTokenAddress,
+          token: mainTokenAddress,
           chain,
           from,
           to: inputs.toAddress
@@ -141,7 +141,7 @@ const withSendLMRFormState = Component => {
 
   const mapStateToProps = state => ({
     lmrDefaultGasLimit: selectors.getChainConfig(state).lmrDefaultGasLimit,
-    lmrTokenAddress: selectors.getChainConfig(state).lmrTokenAddress,
+    mainTokenAddress: selectors.getChainConfig(state).mainTokenAddress,
     chainGasPrice: selectors.getChainGasPrice(state),
     availableLMR: selectors.getLmrBalanceWei(state),
     from: selectors.getWalletAddress(state),
