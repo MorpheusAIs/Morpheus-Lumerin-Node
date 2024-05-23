@@ -11,7 +11,7 @@ export const CloseModal = onClose => (
       top: '25px',
       right: '30px',
       cursor: 'pointer',
-      color: 'rgba(0, 0, 0, 0.54)'
+      color: 'white'
     }}
     onClick={onClose}
   />
@@ -41,10 +41,13 @@ export const Body = styled.div`
   background-color: ${p => p.theme.colors.light};
   width: ${p => p.width || '45%'};
   height: ${p => p.height || 'fit-content'};
-  border-radius: 15px;
+  border-radius: 5px;
   padding: 3rem 5%;
   max-width: ${p => p.maxWidth || '600px'};
   max-height: ${p => p.maxHeight || '800px'};
+  background-color: #173629;
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.04);
 
   @media (min-height: 700px) {
     padding: 5rem;

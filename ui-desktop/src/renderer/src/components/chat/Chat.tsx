@@ -27,6 +27,7 @@ import 'react-modern-drawer/dist/index.css'
 import './Chat.css'
 import { ChatHistory } from './ChatHistory';
 import Spinner from 'react-bootstrap/Spinner';
+import OpenSessionModal from './modals/OpenSessionModal';
 
 const colors = [
     '#1899cb', '#da4d76', '#d66b38', '#d39d00', '#b46fc4', '#269c68', '#86858a'
@@ -44,6 +45,8 @@ const Chat = (props) => {
 
     const [chatHistory, setChatHistory] = useState<string[]>([]);
     const [isSpinning, setIsSpinning] = useState(false);
+
+    const [openSessionModal, setOpenSessionModal] = useState(false);
 
     const modelName = props?.model?.Name || "GPT";
     const providerAddress = props?.provider?.Address ? abbreviateAddress(props?.provider?.Address, 4) : null;
@@ -185,7 +188,7 @@ const Chat = (props) => {
                                         data-modal="receive"
                                         data-testid="receive-btn"
                                         styles={{ marginLeft: '0'}}
-                                        onClick={() => { }}
+                                        onClick={() => setOpenSessionModal(true)}
                                         block
                                     >
                                         Create Session
@@ -215,6 +218,7 @@ const Chat = (props) => {
                     </Control>
                 </Container>
             </View>
+            <OpenSessionModal isActive={openSessionModal} handleClose={() => setOpenSessionModal(false)} />
         </>
     )
 }
