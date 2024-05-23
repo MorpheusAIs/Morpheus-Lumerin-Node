@@ -332,6 +332,23 @@ func (rpcProxy *RpcProxy) GetAllowance(ctx *gin.Context) (int, gin.H) {
 	return constants.HTTP_STATUS_OK, gin.H{"allowance": allowance.String()}
 }
 
+func (rpcProxy *RpcProxy) GetTodaysBudget(ctx *gin.Context) (int, gin.H) {
+	budget, err := rpcProxy.sessionRouter.GetTodaysBudget(ctx)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get budget: " + err.Error()}
+	}
+
+	return constants.HTTP_STATUS_OK, gin.H{"budget": budget.String()}
+}
+
+func (rpcProxy *RpcProxy) GetTokenSupply(ctx *gin.Context) (int, gin.H) {
+	supply, err := rpcProxy.morToken.GetTotalSupply(ctx)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get supply: " + err.Error()}
+	}
+	return constants.HTTP_STATUS_OK, gin.H{"supply": supply.String()}
+}
+
 func (rpcProxy *RpcProxy) GetTransactions(ctx *gin.Context) (int, gin.H) {
 	page := ctx.Query("page")
 	limit := ctx.Query("limit")

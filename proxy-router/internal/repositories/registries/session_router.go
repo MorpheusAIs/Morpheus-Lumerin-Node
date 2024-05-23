@@ -147,6 +147,14 @@ func (g *SessionRouter) GetProviderClaimableBalance(ctx context.Context, session
 	return balance, nil
 }
 
+func (g *SessionRouter) GetTodaysBudget(ctx context.Context) (*big.Int, error) {
+	budget, err := g.sessionRouter.GetTodaysBudget(&bind.CallOpts{Context: ctx})
+	if err != nil {
+		return nil, lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
+	}
+	return budget, nil
+}
+
 func (g *SessionRouter) GetContractAddress() common.Address {
 	return g.sessionRouterAddr
 }
