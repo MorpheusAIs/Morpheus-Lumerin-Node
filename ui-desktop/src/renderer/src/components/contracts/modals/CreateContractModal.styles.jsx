@@ -128,7 +128,7 @@ export const Input = styled.input`
   outline: 0;
   border: 0px;
   background: #eaf7fc;
-  border-radius: 15px;
+  border-radius: 5px;
   padding: 1.5rem 1.5rem;
   margin-top: 0.25rem;
 
@@ -179,10 +179,10 @@ export const LeftBtn = styled(BaseBtn)`
   width: 45%;
   height: 40px;
   font-size: 1.5rem;
-  border-radius: 15px;
+  border-radius: 5px;
   border: 1px solid ${p => p.theme.colors.primary};
-  background-color: ${p => p.theme.colors.light};
-  color: ${p => p.theme.colors.primary};
+  background-color: ${p => p.theme.colors.morMain};
+  color: black;
 
   @media (min-width: 1040px) {
     margin-left: 0;
@@ -193,9 +193,10 @@ export const RightBtn = styled(BaseBtn)`
   width: 45%;
   height: 40px;
   font-size: 1.5rem;
-  border-radius: 15px;
-  background-color: ${p => p.theme.colors.primary};
-  color: ${p => p.theme.colors.light};
+  border-radius: 5px;
+  background-color: ${p => p.theme.colors.morMain};
+  color: black;
+  font-weight: 600;
 
   @media (min-width: 1040px) {
     margin-left: 0;

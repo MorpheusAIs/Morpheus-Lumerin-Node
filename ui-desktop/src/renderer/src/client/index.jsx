@@ -147,6 +147,8 @@ const createClient = function (createStore) {
     getTransactions: utils.forwardToMainProcess('get-transactions'),
     getBalances: utils.forwardToMainProcess('get-balances'),
     getRates: utils.forwardToMainProcess('get-rates'),
+    getTodaysBudget: utils.forwardToMainProcess('get-todays-budget'),
+    getTokenSupply: utils.forwardToMainProcess('get-supply'),
   }
 
   const api = {

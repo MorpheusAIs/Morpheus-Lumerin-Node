@@ -40,6 +40,12 @@ const withChatState = WrappedComponent => {
             return [];
           }
     }
+
+    getMetaInfo = async () => {
+      var budget = await this.props.client.getTodaysBudget();
+      var supply = await this.props.client.getTokenSupply();
+      return { budget, supply };
+    }
  
     render() {
 
@@ -47,6 +53,7 @@ const withChatState = WrappedComponent => {
         <WrappedComponent
             getProviders={this.getProviders}
             getBitsByModels={this.getBitsByModels}
+            getMetaInfo={this.getMetaInfo}
             {...this.state}
             {...this.props}
         />

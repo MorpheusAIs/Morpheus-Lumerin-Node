@@ -29,6 +29,8 @@ const listeners = {
   'get-transactions': handlers.getTransactions,
   'get-balances': handlers.getBalances,
   'get-rates': handlers.getMorRate,
+  "get-todays-budget": handlers.getTodaysBudget,
+  "get-supply": handlers.getTokenSupply,
 }
 
 // Subscribe to messages where no core has to react

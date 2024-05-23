@@ -32,7 +32,7 @@ const IconContainer = styled.div`
 const Row = ({ tx, explorerUrl, symbol, symbolEth }) => (
   <Container onClick={() => window.openLink(explorerUrl)}>
     <IconContainer>
-      {tx.symbol === 'LMR' ? (
+      {tx.symbol === symbol ? (
         <LumerinLogoFull size="4rem" />
       ) : (
         <EtherIcon size="4rem"></EtherIcon>
@@ -41,7 +41,7 @@ const Row = ({ tx, explorerUrl, symbol, symbolEth }) => (
     <IconContainer>
       <TxIcon txType={tx.txType} />
     </IconContainer>
-    <Amount {...tx} symbol={tx.symbol === 'LMR' ? "seMOR" : symbolEth} />
+    <Amount {...tx} symbol={tx.symbol === 'MOR' ? symbol : symbolEth} />
     <Details {...tx} />
   </Container>
 );

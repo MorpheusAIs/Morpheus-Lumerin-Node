@@ -45,6 +45,7 @@ const Chat = (props) => {
 
     const [chatHistory, setChatHistory] = useState<string[]>([]);
     const [isSpinning, setIsSpinning] = useState(false);
+    const [meta, setMeta] = useState({ budget: 0, supply: 0 });
 
     const [openSessionModal, setOpenSessionModal] = useState(false);
 
@@ -52,6 +53,7 @@ const Chat = (props) => {
     const providerAddress = props?.provider?.Address ? abbreviateAddress(props?.provider?.Address, 4) : null;
 
     useEffect(() => {
+        props.getMetaInfo().then(setMeta);
         // if(!props.activeSession) {
         //     props.history.push("/models");
         //     return;
@@ -218,7 +220,11 @@ const Chat = (props) => {
                     </Control>
                 </Container>
             </View>
-            <OpenSessionModal isActive={openSessionModal} handleClose={() => setOpenSessionModal(false)} />
+            <OpenSessionModal 
+                pricePerSecond={0.001 * (10 ** 18)}
+                {...meta}
+                isActive={openSessionModal}
+                handleClose={() => setOpenSessionModal(false)} />
         </>
     )
 }
