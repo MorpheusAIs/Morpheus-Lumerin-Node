@@ -13,6 +13,8 @@ import {
 } from "viem/utils";
 import crypto from "crypto";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
+import { DAY, SECOND } from "../utils/time";
+import { time } from "@nomicfoundation/hardhat-toolbox-viem/network-helpers";
 
 export async function getTxTimestamp(
   client: PublicClient,
@@ -49,40 +51,47 @@ export async function getSessionId(
   return events[0].args.sessionId;
 }
 
-
 /** helper function to catch errors and check if the error is the expected one
  * @example
  * await catchError(abi, "ErrorName", async () => {
  *   await contract.method();
  * });
-**/
+ **/
 export async function catchError<const TAbi extends Abi | readonly unknown[]>(
   abi: TAbi | undefined,
-  error: DecodeErrorResultReturnType<TAbi>["errorName"],
+  error:
+    | DecodeErrorResultReturnType<TAbi>["errorName"]
+    | DecodeErrorResultReturnType<TAbi>["errorName"][],
   cb: () => Promise<unknown>,
 ) {
   try {
     await cb();
     throw new Error(`No error was thrown, expected error "${error}"`);
   } catch (err) {
-    expectError(err, abi, error);
+    if (Array.isArray(error)) {
+      return expectError(err, abi, error);
+    } else {
+      return expectError(err, abi, [error]);
+    }
   }
 }
 
 export function expectError<const TAbi extends Abi | readonly unknown[]>(
   err: any,
   abi: TAbi | undefined,
-  error: DecodeErrorResultReturnType<TAbi>["errorName"],
+  errors: DecodeErrorResultReturnType<TAbi>["errorName"][],
 ) {
-  if (!isErr(err, abi, error)) {
-    console.error(err);
-    throw new Error(
-      `Expected blockchain custom error "${error}" was not thrown\n\n${err}`,
-      {
-        cause: err,
-      },
-    );
+  for (const error of errors) {
+    if (isErr(err, abi, error)) {
+      return;
+    }
   }
+
+  console.error(err);
+  throw new Error(
+    `Expected one of blockchain custom errors "${errors.join(" | ")}" was not thrown\n\n${err}`,
+    { cause: err },
+  );
 }
 
 export function isErr<const TAbi extends Abi | readonly unknown[]>(
@@ -132,10 +141,26 @@ export const randomBytes32 = (): `0x${string}` => {
   return getHex(crypto.randomBytes(32));
 };
 
+export const randomBytes = (nBytes: number): `0x${string}` => {
+  return getHex(crypto.randomBytes(nBytes), nBytes);
+};
+
 export const randomAddress = (): `0x${string}` => {
   return getHex(crypto.randomBytes(20), 20);
 };
 
 export const now = (): bigint => {
   return BigInt(Math.floor(Date.now() / 1000));
+};
+
+export const now2 = async (): Promise<bigint> => {
+  return BigInt(await time.latest());
+};
+
+export const startOfTheDay = (timestamp: bigint): bigint => {
+  return timestamp - (timestamp % BigInt(DAY / SECOND));
+};
+
+export const NewDate = (timestamp: bigint): Date => {
+  return new Date(Number(timestamp) * 1000);
 };

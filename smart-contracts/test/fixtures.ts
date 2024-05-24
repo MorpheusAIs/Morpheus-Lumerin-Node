@@ -317,17 +317,31 @@ export async function deploySingleBid() {
     stake: (totalCost * totalSupply) / todaysBudget,
   };
 
-  function getStake(durationSeconds: bigint, pricePerSecond: bigint): bigint {
+  async function getStake(
+    durationSeconds: bigint,
+    pricePerSecond: bigint,
+  ): Promise<bigint> {
     const totalCost = pricePerSecond * durationSeconds;
+    const totalSupply = await tokenMOR.read.totalSupply();
+    const todaysBudget = await sessionRouter.read.getTodaysBudget();
     return (totalCost * totalSupply) / todaysBudget;
   }
 
-  async function approveUserFunds(amount: bigint){
+  async function getDuration(
+    stake: bigint,
+    pricePerSecond: bigint,
+  ): Promise<bigint> {
+    const totalSupply = await tokenMOR.read.totalSupply();
+    const todaysBudget = await sessionRouter.read.getTodaysBudget();
+    const totalCost = (stake * todaysBudget) / totalSupply;
+    return totalCost / pricePerSecond;
+  }
+
+  async function approveUserFunds(amount: bigint) {
     await tokenMOR.write.transfer([user.account.address, amount]);
     await tokenMOR.write.approve([modelRegistry.address, amount], {
-    account: user.account,
-  });
-
+      account: user.account,
+    });
   }
 
   await approveUserFunds(expectedSession.stake);
@@ -343,6 +357,7 @@ export async function deploySingleBid() {
     decimalsMOR,
     sessionRouter,
     getStake,
+    getDuration,
     approveUserFunds,
     user,
   };
@@ -352,23 +367,43 @@ export const providerReport = {
   ips: 128,
   timestamp: 10000,
 };
-export const reportAbi = ["uint32", "uint32"] as const;
-export const encodedReport = encodePacked(reportAbi, [
-  providerReport.ips,
-  providerReport.timestamp,
-]);
+export const reportAbi = [
+  { type: "bytes32" },
+  { type: "uint128" },
+  { type: "uint32" },
+];
 
-export const approvalAbi = [{type: "uint128"}];
+export const approvalAbi = [{ type: "bytes32" }, { type: "uint128" }];
 
-export const getProviderApproval = async (provider: WalletClient) => {
-  const timestampSeconds = await time.latest();
-  const msg = encodeAbiParameters(approvalAbi, [BigInt(timestampSeconds)])
+export const getProviderApproval = async (
+  provider: WalletClient,
+  bidId: `0x${string}`,
+) => {
+  const timestampMs = (await time.latest()) * 1000;
+  const msg = encodeAbiParameters(approvalAbi, [bidId, BigInt(timestampMs)]);
   const signature = await provider.signMessage({
     message: { raw: keccak256(msg) },
   });
 
   return {
     msg,
-    signature
-  }
-}
+    signature,
+  };
+};
+
+export const getReport = async (
+  reporter: WalletClient,
+  sessionId: `0x${string}`,
+  ips: number,
+) => {
+  const timestampMs = (await time.latest()) * 1000;
+  const msg = encodeAbiParameters(reportAbi, [sessionId, timestampMs, ips]);
+  const sig = await reporter.signMessage({
+    message: { raw: keccak256(msg) },
+  });
+
+  return {
+    msg,
+    sig,
+  };
+};

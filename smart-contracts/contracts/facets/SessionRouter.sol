@@ -28,14 +28,15 @@ contract SessionRouter {
   error NotUserOrProvider();
   error NotEnoughWithdrawableBalance(); // means that there is not enough funds at all or some funds are still locked
   error ProviderSignatureMismatch();
-  error SignatureTimeout();
+  error SignatureExpired();
+  error DuplicateApproval();
 
   error SessionTooShort();
   error SessionNotFound();
   error SessionAlreadyClosed();
 
   error BidNotFound();
-  error BidTaken();
+  error CannotDecodeAbi();
 
   //===========================
   //         SESSION
@@ -46,37 +47,38 @@ contract SessionRouter {
   }
 
   function openSession(
-    bytes32 bidId,
     uint256 _stake,
     bytes memory providerApproval,
     bytes memory signature
   ) public returns (bytes32 sessionId) {
     address sender = msg.sender;
 
+    // reverts without specific error if cannot decode abi
+    (bytes32 bidId, uint128 timestampMs) = abi.decode(providerApproval, (bytes32, uint128));
+
+    if (timestampMs / 1000 < block.timestamp - SIGNATURE_TTL) {
+      revert SignatureExpired();
+    }
+
     Bid memory bid = s.bidMap[bidId];
     if (bid.deletedAt != 0 || bid.createdAt == 0) {
       revert BidNotFound();
-    }
-
-    if (s.bidSessionMap[bidId] != 0) {
-      revert BidTaken();
-    }
-
-    uint256 startOfToday = startOfTheDay(block.timestamp);
-    uint256 duration = stakeToStipend(_stake, startOfToday) / bid.pricePerSecond;
-
-    if (duration < MIN_SESSION_DURATION) {
-      revert SessionTooShort();
     }
 
     if (!isValidReceipt(bid.provider, providerApproval, signature)) {
       revert ProviderSignatureMismatch();
     }
 
-    uint128 timestamp = abi.decode(providerApproval, (uint128));
+    if (s.approvalMap[providerApproval]) {
+      revert DuplicateApproval();
+    }
+    s.approvalMap[providerApproval] = true;
 
-    if (timestamp < block.timestamp - SIGNATURE_TTL) {
-      revert SignatureTimeout();
+    uint256 startOfToday = startOfTheDay(block.timestamp);
+    uint256 duration = stakeToStipend(_stake, startOfToday) / bid.pricePerSecond;
+
+    if (duration < MIN_SESSION_DURATION) {
+      revert SessionTooShort();
     }
 
     sessionId = keccak256(abi.encodePacked(sender, bid.provider, _stake, block.number));
@@ -108,7 +110,13 @@ contract SessionRouter {
     return sessionId;
   }
 
-  function closeSession(bytes32 sessionId, bytes memory receiptEncoded, bytes memory signature) public {
+  function closeSession(bytes memory receiptEncoded, bytes memory signature) public {
+    // reverts without specific error if cannot decode abi
+    (bytes32 sessionId, uint128 timestampMs, uint32 ips) = abi.decode(receiptEncoded, (bytes32, uint128, uint32));
+    if (timestampMs / 1000 < block.timestamp - SIGNATURE_TTL) {
+      revert SignatureExpired();
+    }
+
     Session storage session = s.sessions[s.sessionMap[sessionId]];
     if (session.openedAt == 0) {
       revert SessionNotFound();
@@ -124,19 +132,12 @@ contract SessionRouter {
     session.closeoutReceipt = receiptEncoded;
     session.closedAt = block.timestamp;
 
-    // uint256 startOfToday = startOfTheDay(block.timestamp);
-    // uint256 todaysSessionDurationSeconds = block.timestamp - maxUint256(session.openedAt, startOfToday);
-    // uint256 todaySessionExpectedCost = todaysSessionDurationSeconds * session.pricePerSecond;
-    // uint256 todaySessionExpectedStake = stipendToStake(todaySessionExpectedCost, startOfToday);
-    // // if user closed session later than expected then cost is capped by stake
-    // uint256 todayExpectedCost = minUint256(todaySessionExpectedCost, stakeToStipend(session.stake, startOfToday));
-    // uint256 todayExpectedStake = minUint256(todaySessionExpectedStake, session.stake);
-
-    bool isClosingSameDayItEndsOrEarlier = startOfTheDay(block.timestamp) <= startOfTheDay(session.endsAt);
+    bool isClosingLate = startOfTheDay(block.timestamp) > startOfTheDay(session.endsAt);
+    bool noDispute = isValidReceipt(session.provider, receiptEncoded, signature);
 
     // calculate provider withdraw
     uint256 providerWithdraw;
-    if (isValidReceipt(session.provider, receiptEncoded, signature) || !isClosingSameDayItEndsOrEarlier) {
+    if (noDispute || isClosingLate) {
       // session was closed without dispute or next day after it expected to end
       uint256 duration = minUint256(block.timestamp, session.endsAt) - session.openedAt;
       uint256 cost = duration * session.pricePerSecond;
@@ -150,18 +151,21 @@ contract SessionRouter {
       providerWithdraw = costTillToday - session.providerWithdrawnAmount;
     }
 
+    if (!noDispute) {
+      session.closeoutType = 1;
+    }
+
     session.providerWithdrawnAmount += providerWithdraw;
 
     // calculate user withdraw
-
     uint256 userStakeToLock = 0;
-    if (isClosingSameDayItEndsOrEarlier) {
+    if (!isClosingLate) {
       // session was closed on the same day
       // lock today's stake
-      uint256 durationTillToday = startOfTheDay(block.timestamp) -
-        minUint256(session.openedAt, startOfTheDay(block.timestamp));
-      uint256 costTillToday = durationTillToday * session.pricePerSecond;
-      userStakeToLock = stipendToStake(costTillToday, startOfTheDay(block.timestamp));
+      uint256 todaysDuration = minUint256(session.endsAt, block.timestamp) -
+        maxUint256(startOfTheDay(block.timestamp), session.openedAt);
+      uint256 todaysCost = todaysDuration * session.pricePerSecond;
+      userStakeToLock = stipendToStake(todaysCost, startOfTheDay(block.timestamp));
       s.userOnHold[session.user].push(OnHold({ amount: userStakeToLock, releaseAt: block.timestamp + 1 days }));
     }
 
@@ -202,15 +206,14 @@ contract SessionRouter {
   }
 
   function _getProviderClaimableBalance(Session memory session) internal view returns (uint256) {
-    // if session was closed with no dispute - provider got all funds
+    // if session was closed with no dispute - provider already got all funds
+    //
+    // if session was closed with dispute   -
+    // if session was ended but not closed  -
+    // if session was not ended             - provider can claim all funds except for today's session cost
 
-    // if session was closed with dispute -
-    // if session was ended but not closed -
-    // if session was not ended - provider can claim all funds except for today's session cost
-
-    uint256 startOfToday = startOfTheDay(block.timestamp);
-    uint256 claimEndTime = minUint256(startOfToday, session.endsAt);
-    uint256 claimableDuration = startOfToday - minUint256(session.openedAt, claimEndTime);
+    uint256 claimIntervalEnd = minUint256(startOfTheDay(block.timestamp), session.endsAt);
+    uint256 claimableDuration = maxUint256(claimIntervalEnd, session.openedAt) - session.openedAt;
     uint256 totalCost = claimableDuration * session.pricePerSecond;
     uint256 withdrawableAmount = totalCost - session.providerWithdrawnAmount;
 
@@ -295,12 +298,12 @@ contract SessionRouter {
   }
 
   // returns stipend of user based on their stake
-  function stakeToStipend(uint256 sessionStake, uint256 timestamp) internal view returns (uint256) {
+  function stakeToStipend(uint256 sessionStake, uint256 timestamp) public view returns (uint256) {
     return sessionStake / (s.token.totalSupply() / _getTodaysBudget(timestamp));
   }
 
   // returns stake of user based on their stipend
-  function stipendToStake(uint256 stipend, uint256 timestamp) internal view returns (uint256) {
+  function stipendToStake(uint256 stipend, uint256 timestamp) public view returns (uint256) {
     // TODO: cache total supply
     return stipend * (s.token.totalSupply() / _getTodaysBudget(timestamp));
   }
@@ -324,7 +327,7 @@ contract SessionRouter {
       endTime = startOfTheDay(endTime) + nextDayDuration;
     }
 
-    return endTime;
+    return minUint256(endTime, openedAt + MAX_SESSION_DURATION);
   }
 
   /// @notice returns the time when stipend will be less than daily price

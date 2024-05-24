@@ -92,6 +92,7 @@ struct AppStorage {
   mapping(bytes32 => uint256) bidSessionMap; // bidId => session index
   mapping(address => KeySet.Set) userActiveSessions; // user address => active session indexes
   mapping(address => OnHold[]) userOnHold; // user address => balance
+  mapping(bytes => bool) approvalMap; // provider approval => true if approval was already used
   //
   // OTHER
   //
