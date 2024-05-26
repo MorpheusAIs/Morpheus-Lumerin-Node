@@ -44,7 +44,7 @@ const OpenSessionModal = ({ isActive, handleClose, budget, supply, pricePerSecon
                     const value = Number(e.target.value);
                     const totalCost = pricePerSecond * value * 60;
                     const stake = totalCost * supply / budget;
-                    console.log("🚀 ~ OpenSessionModal ~ stake:", stake / 10 ** 18)
+                    console.log("STAKE", stake)
                     setMorStake(stake);
                     setDuration(value);
                   } }
