@@ -19,7 +19,7 @@ type AgentRegistry struct {
 	// state
 	nonce uint64
 	mutex lib.Mutex
-	mrABI *abi.ABI
+	arABI *abi.ABI
 
 	// deps
 	agentRegistry *agentregistry.AgentRegistry
@@ -28,19 +28,19 @@ type AgentRegistry struct {
 }
 
 func NewAgentRegistry(agentRegistryAddr common.Address, client *ethclient.Client, log interfaces.ILogger) *AgentRegistry {
-	mr, err := agentregistry.NewAgentRegistry(agentRegistryAddr, client)
+	ar, err := agentregistry.NewAgentRegistry(agentRegistryAddr, client)
 	if err != nil {
-		panic("invalid model registry ABI")
+		panic("invalid agent registry ABI")
 	}
-	mrABI, err := agentregistry.AgentRegistryMetaData.GetAbi()
+	arABI, err := agentregistry.AgentRegistryMetaData.GetAbi()
 	if err != nil {
-		panic("invalid model registry ABI: " + err.Error())
+		panic("invalid agent registry ABI: " + err.Error())
 	}
 	return &AgentRegistry{
-		agentRegistry:     mr,
+		agentRegistry:     ar,
 		agentRegistryAddr: agentRegistryAddr,
 		client:            client,
-		mrABI:             mrABI,
+		arABI:             arABI,
 		mutex:             lib.NewMutex(),
 		log:               log,
 	}
