@@ -10,24 +10,20 @@ async function main() {
   };
 
   const linear = await hre.viem.deployContract("Linear", []);
-  const start = new Date("2024-05-08T00:00:00Z").getTime() / 1000;
+  const now = BigInt(new Date().getTime()) / 1000n;
+  const start = (now / 86400n + 1n) * 86400n;
+  const end = start + 86400n;
 
-  const dailyReward: bigint[] = [];
+  const reward = await linear.read.getPeriodReward([
+    data.initialReward,
+    data.rewardDecrease,
+    data.payoutStart,
+    data.decreaseInterval,
+    start,
+    end,
+  ]);
 
-  for (let i = 0; i < 100; i++) {
-    const date = start + i * 6 * 60 * 60;
-    const reward = await linear.read.getPeriodReward([
-      data.initialReward,
-      data.rewardDecrease,
-      data.payoutStart,
-      data.decreaseInterval,
-      data.payoutStart,
-      BigInt(date),
-    ]);
-    dailyReward.push(reward);
-  }
-  const content = dailyReward.join("\n");
-  fs.writeFileSync("dailyReward.json", content);
+  console.log("Reward: ", reward.toString());
 }
 
 main();
