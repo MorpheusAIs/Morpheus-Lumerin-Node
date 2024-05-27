@@ -119,7 +119,7 @@ describe("session closeout", function () {
     expectAlmostEqual(providerEarned, exp.totalCost / 2n, 0.0001);
   });
 
-  it.only("should open and close early with user report - dispute", async function () {
+  it("should open and close early with user report - dispute", async function () {
     const {
       sessionRouter,
       provider,

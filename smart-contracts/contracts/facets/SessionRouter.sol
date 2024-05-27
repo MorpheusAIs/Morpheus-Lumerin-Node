@@ -3,13 +3,15 @@ pragma solidity ^0.8.24;
 
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import { MessageHashUtils } from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
-import { KeySet } from "../libraries/KeySet.sol";
+import { KeySet, Uint256Set } from "../libraries/KeySet.sol";
 import { AppStorage, Session, Bid, OnHold, Pool } from "../AppStorage.sol";
 import { LibOwner } from "../libraries/LibOwner.sol";
 import { LinearDistributionIntervalDecrease } from "../libraries/LinearDistributionIntervalDecrease.sol";
 
 contract SessionRouter {
   using KeySet for KeySet.Set;
+  using Uint256Set for Uint256Set.Set;
+
   AppStorage internal s;
 
   // constants
@@ -44,6 +46,26 @@ contract SessionRouter {
 
   function getSession(bytes32 sessionId) public view returns (Session memory) {
     return s.sessions[s.sessionMap[sessionId]];
+  }
+
+  function getSessionsByUser(address user) public view returns (Session[] memory) {
+    Uint256Set.Set storage userSessions = s.userActiveSessions[user];
+    uint256 size = userSessions.count();
+    Session[] memory sessions = new Session[](size);
+    for (uint i = 0; i < size; i++) {
+      sessions[i] = s.sessions[userSessions.keyAtIndex(i)];
+    }
+    return sessions;
+  }
+
+  function getSessionsByProvider(address provider) public view returns (Session[] memory) {
+    Uint256Set.Set storage providerSessions = s.providerActiveSessions[provider];
+    uint256 size = providerSessions.count();
+    Session[] memory sessions = new Session[](size);
+    for (uint i = 0; i < size; i++) {
+      sessions[i] = s.sessions[providerSessions.keyAtIndex(i)];
+    }
+    return sessions;
   }
 
   function openSession(
@@ -102,7 +124,8 @@ contract SessionRouter {
 
     uint256 sessionIndex = s.sessions.length - 1;
     s.sessionMap[sessionId] = sessionIndex;
-    s.bidSessionMap[bidId] = sessionIndex; // marks bid as "taken" by this session
+    s.userActiveSessions[sender].insert(sessionIndex);
+    s.providerActiveSessions[bid.provider].insert(sessionIndex);
 
     emit SessionOpened(sender, sessionId, bid.provider);
     s.token.transferFrom(sender, address(this), _stake); // errors with Insufficient Allowance if not approved
@@ -117,7 +140,8 @@ contract SessionRouter {
       revert SignatureExpired();
     }
 
-    Session storage session = s.sessions[s.sessionMap[sessionId]];
+    uint256 sessionIndex = s.sessionMap[sessionId];
+    Session storage session = s.sessions[sessionIndex];
     if (session.openedAt == 0) {
       revert SessionNotFound();
     }
@@ -128,7 +152,10 @@ contract SessionRouter {
       revert SessionAlreadyClosed();
     }
 
-    s.bidSessionMap[session.bidID] = 0; // marks bid as available
+    // update indexes
+    s.userActiveSessions[session.user].remove(sessionIndex);
+    s.providerActiveSessions[session.provider].remove(sessionIndex);
+
     session.closeoutReceipt = receiptEncoded;
     session.closedAt = block.timestamp;
 
