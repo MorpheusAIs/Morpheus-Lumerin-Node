@@ -107,6 +107,10 @@ func (apiBus *ApiBus) CloseSession(ctx *gin.Context) (int, gin.H) {
 	return apiBus.rpcProxy.CloseSession(ctx)
 }
 
+func (apiBus *ApiBus) ClaimProviderBalance(ctx *gin.Context) (int, gin.H) {
+	return apiBus.rpcProxy.ClaimProviderBalance(ctx)
+}
+
 func (apiBus *ApiBus) GetProviderClaimableBalance(ctx *gin.Context) (int, gin.H) {
 	return apiBus.rpcProxy.GetProviderClaimableBalance(ctx)
 }
