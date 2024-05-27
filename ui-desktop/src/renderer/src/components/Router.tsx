@@ -21,6 +21,7 @@ import Bids from './bids/Bids'
 // import AutoPriceAdjuster from './AutoPriceAdjuster'
 
 import 'bootstrap/dist/css/bootstrap.min.css';
+import { Providers } from './providers/Providers'
 
 const fadeIn = keyframes`
   from {
@@ -66,6 +67,7 @@ export const Layout = () => (
         <Route path="/agents" component={Agents} />
         <Route path="/models" component={Models} />
         <Route path="/bids" component={Bids} />
+        <Route path="/providers" component={Providers} />
         {/* <Route path="/sockets" component={Sockets} />
         <Route path="/seller-hub" component={SellerHub} />
         <Route path="/buyer-hub" component={BuyerHub} /> */}

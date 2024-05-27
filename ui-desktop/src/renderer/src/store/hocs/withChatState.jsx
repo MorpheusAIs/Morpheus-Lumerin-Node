@@ -41,6 +41,19 @@ const withChatState = WrappedComponent => {
           }
     }
 
+    closeSession = async (sessionId) => {
+      try {
+          const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions/${sessionId}/close`;
+          const response = await fetch(path);
+          const data = await response.json();
+          return data.success;
+        }
+        catch(e) {
+          console.log("Error", e)
+          return [];
+        }
+  }
+
     getMetaInfo = async () => {
       var budget = await this.props.client.getTodaysBudget();
       var supply = await this.props.client.getTokenSupply();

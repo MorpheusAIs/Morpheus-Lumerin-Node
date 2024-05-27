@@ -138,7 +138,7 @@ export default function PrimaryNav({ parent, activeIndex, setActiveIndex }) {
       <Button
         onClick={() => setActiveIndex(5)}
         activeClassName="active"
-        to="/hub"
+        to="/providers"
       >
         <IconWrapper>
           <IconBrandStackshare width={iconSize} />

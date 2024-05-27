@@ -43,9 +43,12 @@ const Chat = (props) => {
     const [value, setValue] = useState("");
     const [hasSession, setHasSession] = useState(false);
 
-    const [chatHistory, setChatHistory] = useState<string[]>([]);
+    const [chatHistory, setChatHistory] = useState<{ id: string, title: string}[]>();
     const [isSpinning, setIsSpinning] = useState(false);
     const [meta, setMeta] = useState({ budget: 0, supply: 0 });
+
+    const [sessions, setSessions] = useState([{id: "1245", title: "What can I do to save cats?"}])
+    const [activeSession, setActiveSession] = useState("");
 
     const [openSessionModal, setOpenSessionModal] = useState(false);
 
@@ -69,6 +72,10 @@ const Chat = (props) => {
 
     const scrollToBottom = () => {
         chatBlockRef.current?.scrollIntoView({ behavior: "smooth", block: 'end' })
+    }
+
+    const closeSession = (sessionId: string) => {
+
     }
 
     const call = async (message) => {
@@ -138,7 +145,6 @@ const Chat = (props) => {
         }
 
         setIsSpinning(true);
-        setChatHistory([...chatHistory, value]);
         setMessages([...messages, { id: "some", user: 'Me', text: value, role: "user", icon: "M", color: "#20dc8e" }]);
         call(value);
         setValue("");
@@ -152,7 +158,7 @@ const Chat = (props) => {
                 direction='right'
                 className='history-drawer'
             >
-                <ChatHistory history={chatHistory} />
+                <ChatHistory history={sessions} onCloseSession={closeSession}/>
             </Drawer>
             <View>
                 <ContainerTitle style={{ padding: '0 2.4rem' }}>

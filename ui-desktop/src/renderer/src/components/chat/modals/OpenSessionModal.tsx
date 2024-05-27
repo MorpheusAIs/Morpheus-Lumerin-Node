@@ -11,18 +11,12 @@ import {
     Label,
     Sublabel,
     RightBtn,
-    ErrorLabel,
-    ApplyBtn,
-    ProfitMessageLabel,
-    ProfitLabel
   } from '../../contracts/modals/CreateContractModal.styles';
 
-const OpenSessionModal = ({ isActive, handleClose, budget, supply, pricePerSecond }) => {
+const OpenSessionModal = ({ isActive, handleClose, budget, supply, pricePerSecond, triggerOpen }) => {
 
     const [duration, setDuration] = useState<number | undefined>(undefined);
     const [morStake, setMorStake] = useState<number | undefined>(undefined);
-
-    console.log("🚀 ~ OpenSessionModal ~ duration:", duration)
     
 
     if (!isActive) {
@@ -36,7 +30,7 @@ const OpenSessionModal = ({ isActive, handleClose, budget, supply, pricePerSecon
           <Form>
           <Row>
               <InputGroup>
-                <Label htmlFor="time">Session Duration</Label>
+                <Label htmlFor="time">Session Duration (in minutes)</Label>
                 <Input
                   placeholder="# of minutes"
                   value={duration}
@@ -44,7 +38,6 @@ const OpenSessionModal = ({ isActive, handleClose, budget, supply, pricePerSecon
                     const value = Number(e.target.value);
                     const totalCost = pricePerSecond * value * 60;
                     const stake = totalCost * supply / budget;
-                    console.log("STAKE", stake)
                     setMorStake(stake);
                     setDuration(value);
                   } }
@@ -67,9 +60,9 @@ const OpenSessionModal = ({ isActive, handleClose, budget, supply, pricePerSecon
               </InputGroup>
             </Row>
             {
-                duration && (
+                duration && morStake && (
                     <Row style={{ margin: "20px 0"}}>
-                        MOR To Stake: 5 MOR
+                        Funds to Stake: {(morStake / 10 ** 18).toFixed(2)} MOR
                     </Row>
                 )
             }
@@ -82,7 +75,7 @@ const OpenSessionModal = ({ isActive, handleClose, budget, supply, pricePerSecon
             >
               <Row style={{ justifyContent: 'center' }}>
                 {/* <LeftBtn onClick={handleSaveDraft}>Save as Draft</LeftBtn> */}
-                <RightBtn type="submit">
+                <RightBtn onClick={() => triggerOpen({ stake: morStake, duration })}>
                   {"Open"}
                 </RightBtn>
               </Row>
