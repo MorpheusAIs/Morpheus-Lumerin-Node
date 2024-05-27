@@ -341,6 +341,30 @@ func (rpcProxy *RpcProxy) GetTodaysBudget(ctx *gin.Context) (int, gin.H) {
 	return constants.HTTP_STATUS_OK, gin.H{"budget": budget.String()}
 }
 
+func (rpcProxy *RpcProxy) ClaimProviderBalance(ctx *gin.Context) (int, gin.H) {
+	sessionId := ctx.Param("id")
+	if sessionId == "" {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "sessionId is required"}
+	}
+
+	to, amount, err := rpcProxy.getSendParams(ctx)
+	if err != nil {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+
+	txHash, err := rpcProxy.sessionRouter.ClaimProviderBalance(transactOpt, sessionId, amount, common.HexToAddress(to))
+	if err != nil {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+
+	return constants.HTTP_STATUS_OK, gin.H{"txHash": txHash}
+}
+
 func (rpcProxy *RpcProxy) GetTokenSupply(ctx *gin.Context) (int, gin.H) {
 	supply, err := rpcProxy.morToken.GetTotalSupply(ctx)
 	if err != nil {
