@@ -1,5 +1,5 @@
-//go:build !docker
-// +build !docker
+//go:build docker
+// +build docker
 
 package system
 
@@ -11,14 +11,15 @@ import (
 	"github.com/shirou/gopsutil/v3/process"
 )
 
-type LinuxConfigurator struct {
+type DockerConfigurator struct {
 }
 
-func NewOSConfigurator() *LinuxConfigurator {
-	return &LinuxConfigurator{}
+func NewOSConfigurator() *DockerConfigurator {
+	fmt.Println("NewOSConfigurator for docker")
+	return &DockerConfigurator{}
 }
 
-func (c *LinuxConfigurator) GetConfig() (*Config, error) {
+func (c *DockerConfigurator) GetConfig() (*Config, error) {
 	cfg := &Config{}
 	localPortRange, err := sysctlGet("net.ipv4.ip_local_port_range")
 	if err != nil {
@@ -38,11 +39,11 @@ func (c *LinuxConfigurator) GetConfig() (*Config, error) {
 	}
 	cfg.Somaxconn = somaxconn
 
-	netdevMaxBacklog, err := sysctlGet("net.core.netdev_max_backlog")
-	if err != nil {
-		return nil, err
-	}
-	cfg.NetdevMaxBacklog = netdevMaxBacklog
+	// netdevMaxBacklog, err := sysctlGet("net.core.netdev_max_backlog")
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// cfg.NetdevMaxBacklog = netdevMaxBacklog
 
 	var rlimit syscall.Rlimit
 	err = syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlimit)
@@ -56,7 +57,7 @@ func (c *LinuxConfigurator) GetConfig() (*Config, error) {
 	return cfg, nil
 }
 
-func (c *LinuxConfigurator) ApplyConfig(cfg *Config) error {
+func (c *DockerConfigurator) ApplyConfig(cfg *Config) error {
 	err := sysctlSet("net.ipv4.ip_local_port_range", cfg.LocalPortRange)
 	if err != nil {
 		return err
@@ -80,7 +81,7 @@ func (c *LinuxConfigurator) ApplyConfig(cfg *Config) error {
 	return err
 }
 
-func (*LinuxConfigurator) GetFileDescriptors(ctx context.Context, pid int) ([]FD, error) {
+func (*DockerConfigurator) GetFileDescriptors(ctx context.Context, pid int) ([]FD, error) {
 	process, err := process.NewProcessWithContext(ctx, int32(pid))
 	if err != nil {
 		return nil, err

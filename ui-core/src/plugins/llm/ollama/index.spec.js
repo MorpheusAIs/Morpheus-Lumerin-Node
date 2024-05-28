@@ -6,7 +6,7 @@ const { expect } = chai
 const modelName = 'llama2:latest'
 const config = {
 
-  modelUrl: 'http://localhost:8082/v1',
+  modelUrl: 'http://localhost:8080/v1',
   // modelUrl: "http://localhost:11434/v1",
   modelName: modelName,
 }

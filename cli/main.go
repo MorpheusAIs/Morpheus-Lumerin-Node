@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"math/big"
@@ -55,12 +56,6 @@ func main() {
 				Action:  actions.blockchainProviders,
 			},
 			{
-				Name:    "blockchainProviders",
-				Aliases: []string{"bp"},
-				Usage:   "",
-				Action:  actions.blockchainProviders,
-			},
-			{
 				Name:    "blockchainProvidersBids",
 				Aliases: []string{"bpb"},
 				Usage:   "",
@@ -84,6 +79,18 @@ func main() {
 				Usage:   "",
 				Action:  actions.closeBlockchainSession,
 			},
+			{
+				Name:    "createAndStreamChatCompletions",
+				Aliases: []string{"csc", "streamlocal"},
+				Usage:   "create a chat completion by sending a prompt to the ai engine",
+				Action:  actions.createAndStreamChatCompletions,
+			},
+			{
+				Name:    "createAndStreamSessionChatCompletions",
+				Aliases: []string{"ccc"},
+				Usage:   "create a chat completion by sending a prompt to the ai engine",
+				Action:  actions.createChatCompletions,
+			},
 		},
 	}
 
@@ -99,12 +106,15 @@ type actions struct {
 func NewActions(c *client.ApiGatewayClient) *actions {
 	return &actions{client: c}
 }
+
 func (a *actions) healthcheck(cCtx *cli.Context) error {
-	res, err := a.client.Healthcheck()
+	res, err := a.client.HealthCheck(cCtx.Context)
 	if err != nil {
 		return err
 	}
-	fmt.Println("healthcheck:", res) // Output the result of the healthcheck
+	// Output the result of the healthcheck
+	jsonData, err := json.Marshal(res)
+	fmt.Println(string(jsonData))
 	return nil
 }
 
@@ -113,37 +123,79 @@ func (a *actions) proxyRouterConfig(cCtx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("proxy router config:", config) // Output the proxy router configuration
+	jsonData, err := json.Marshal(config)
+	fmt.Println(string(jsonData))
 	return nil
 }
 
 func (a *actions) proxyRouterFiles(cCtx *cli.Context) error {
-	status, files, err := a.client.GetProxyRouterFiles(cCtx.Context)
+	files, err := a.client.GetProxyRouterFiles(cCtx.Context)
 
 	if err != nil {
-		return fmt.Errorf("Failed to get proxy router file descriptor; internal error: %v; http status: %v", err, status)
+		return err
 	}
 
-	fmt.Println("proxy router files:", files) // Output the proxy router files
+	jsonData, err := json.Marshal(files)
+	fmt.Println(string(jsonData))
 	return nil
 }
 
-func (a *actions) createChatCompletions(cCtx *cli.Context, prompt string, messages []string) error {
-	ok, status, completion, err := a.client.SendPrompt(cCtx.Context, prompt, messages)
-	if !ok {
-		return fmt.Errorf("Chat failed; internal error: %v; http status: %v;", err, status)
+func (a *actions) createChatCompletions(cCtx *cli.Context) error {
+	prompt := cCtx.String("prompt")
+
+	//TODO: handle chat history
+	_ = cCtx.StringSlice("messages")
+
+	completion, err := a.client.Prompt(cCtx.Context, prompt, []client.ChatCompletionMessage{})
+	if err != nil {
+		return err
 	}
 
-	fmt.Println("chat completion:", completion) // Output the chat completion
+	jsonData, err := json.Marshal(completion)
+	fmt.Println(string(jsonData))
+	return nil
+}
+
+func (a *actions) createAndStreamChatCompletions(cCtx *cli.Context) error {
+	prompt := cCtx.String("prompt")
+	messages := cCtx.Generic("messages").([]*client.ChatCompletionMessage)
+
+	completion, err := a.client.PromptStream(cCtx.Context, prompt, messages, func(msg client.ChatCompletionStreamResponse) error {
+		fmt.Println(msg)
+		return nil
+	})
+	
+	if err != nil {
+		return err
+	}
+
+	jsonData, err := json.Marshal(completion)
+	fmt.Println(string(jsonData))
+	return nil
+}
+
+func (a *actions) createSessionChatCompletions(cCtx *cli.Context) error {
+	prompt := cCtx.String("prompt")
+
+	messages := cCtx.StringSlice("messages")
+
+	completion, err := a.client.SessionPrompt(cCtx.Context, prompt, messages)
+	if err != nil {
+		return err
+	}
+
+	jsonData, err := json.Marshal(completion)
+	fmt.Println(string(jsonData))
 	return nil
 }
 
 func (a *actions) initiateProxySession(cCtx *cli.Context) error {
-	status, session, err := a.client.InitiateSession(cCtx.Context)
+	session, err := a.client.InitiateSession(cCtx.Context)
 	if err != nil {
-		return fmt.Errorf("internal error: %v; http status: %v", err, status)
+		return err
 	}
-	fmt.Println("proxy session:", session) // Output the proxy session details
+	jsonData, err := json.Marshal(session)
+	fmt.Println(string(jsonData))
 	return nil
 }
 
@@ -152,42 +204,57 @@ func (a *actions) blockchainProviders(cCtx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("blockchain providers:", providers) // Output the blockchain providers
+	jsonData, err := json.Marshal(providers)
+	fmt.Println(string(jsonData))
 	return nil
 }
 
-func (a *actions) blockchainProvidersBids(cCtx *cli.Context, providerAddress string, offset *big.Int, limit uint8) error {
-	bids, err := a.client.GetBidsByProvider(cCtx.Context, providerAddress, offset, limit)
+func (a *actions) blockchainProvidersBids(cCtx *cli.Context) error {
+
+	providerAddress := cCtx.String("providerAddress")
+
+	offset := cCtx.Int64("offset")
+
+	limit := cCtx.Uint("limit")
+
+	bids, err := a.client.GetBidsByProvider(cCtx.Context, providerAddress, big.NewInt(offset), uint8(limit))
 	if err != nil {
 		return err
 	}
-	fmt.Println("blockchain providers bids:", bids) // Output the blockchain providers' bids
+	jsonData, err := json.Marshal(bids)
+	fmt.Println(string(jsonData))
 	return nil
 }
 
 func (a *actions) blockchainModels(cCtx *cli.Context) error {
-	models, err := a.client.GetBlockchainModels()
+	models, err := a.client.GetAllModels(cCtx.Context)
 	if err != nil {
 		return err
 	}
-	fmt.Println("blockchain models:", models) // Output the blockchain models
+	jsonData, err := json.Marshal(models)
+	fmt.Println(string(jsonData))
 	return nil
 }
 
 func (a *actions) openBlockchainSession(cCtx *cli.Context) error {
-	session, err := a.client.OpenBlockchainSession()
+	err := a.client.OpenSession(cCtx.Context)
 	if err != nil {
 		return err
 	}
-	fmt.Println("blockchain session:", session) // Output the blockchain session details
+	// TODO: Output a message indicating the blockchain session was opened and showing relevant data for the session
+	// jsonData, err := json.Marshal(bids)
+	// fmt.Println(string(jsonData))
 	return nil
 }
 
 func (a *actions) closeBlockchainSession(cCtx *cli.Context) error {
-	err := a.client.CloseBlockchainSession()
+	err := a.client.CloseSession(cCtx.Context)
 	if err != nil {
 		return err
 	}
-	fmt.Println("blockchain session closed") // Output a message indicating the blockchain session was closed
+
+	// TODO: Output a message indicating the blockchain session was closed and showing relevant data for the session
+	// jsonData, err := json.Marshal(bids)
+	// fmt.Println(string(jsonData))
 	return nil
 }

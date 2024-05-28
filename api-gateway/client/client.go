@@ -9,19 +9,27 @@ import (
 	"math/big"
 	"net/http"
 
-	"github.com/gin-gonic/gin"
+	"github.com/sashabaranov/go-openai"
 )
+
+type ChatCompletionMessage = openai.ChatCompletionMessage
 
 func NewApiGatewayClient(baseURL string, httpClient *http.Client) *ApiGatewayClient {
 	return &ApiGatewayClient{
 		BaseURL: baseURL,
-		Client:  httpClient,
+		HttpClient:  httpClient,
+		OpenAiClient: openai.NewClientWithConfig(openai.ClientConfig{
+			BaseURL:    baseURL + "/v1",
+			APIType:    openai.APITypeOpenAI,
+			HTTPClient: httpClient,
+		}),
 	}
 }
 
 type ApiGatewayClient struct {
 	BaseURL string
-	Client  *http.Client
+	HttpClient  *http.Client
+	OpenAiClient *openai.Client
 }
 
 // Helper function to make GET requests
@@ -30,16 +38,20 @@ func (c *ApiGatewayClient) getRequest(ctx context.Context, endpoint string, resu
 	if err != nil {
 		return err
 	}
-	resp, err := c.Client.Do(req)
+	resp, err := c.HttpClient.Do(req)
 	if err != nil {
+		fmt.Println("http client error: ", err)
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		fmt.Printf("unexpected status code: %d", resp.StatusCode)
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
+	// line, _, _ := bufio.NewReader(resp.Body).ReadLine()
 
+	// fmt.Println("response body line 1: ", string(line))
 	return json.NewDecoder(resp.Body).Decode(result)
 }
 
@@ -52,11 +64,12 @@ func (c *ApiGatewayClient) postRequest(ctx context.Context, endpoint string, bod
 
 	reader := bytes.NewReader(reqBody)
 
+	fmt.Println("post path: ", c.BaseURL+endpoint)
 	req, err := http.NewRequestWithContext(ctx, "POST", c.BaseURL+endpoint, reader)
 	if err != nil {
 		return err
 	}
-	resp, err := c.Client.Do(req)
+	resp, err := c.HttpClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -73,14 +86,21 @@ func (c *ApiGatewayClient) postRequest(ctx context.Context, endpoint string, bod
 	return json.NewDecoder(resp.Body).Decode(result)
 }
 
+func (c *ApiGatewayClient) streamChat(ctx context.Context, path string, req *ChatCompletionRequest, result *ChatCompletionStreamResponse, flush CompletionCallback) error {
+	
+	RequestChatCompletionStream(ctx, req, flush)
+
+	return nil
+}
+
 func (c *ApiGatewayClient) GetProxyRouterConfig(ctx context.Context) (interface{}, error) {
-	var result interface{}
+	var result map[string]interface{}
 	err := c.getRequest(ctx, "/config", &result)
 	return result, err
 }
 
 func (c *ApiGatewayClient) GetProxyRouterFiles(ctx context.Context) (interface{}, error) {
-	var result interface{}
+	var result map[string]interface{}
 	err := c.getRequest(ctx, "/files", &result)
 	if err != nil {
 		return nil, fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
@@ -89,13 +109,14 @@ func (c *ApiGatewayClient) GetProxyRouterFiles(ctx context.Context) (interface{}
 }
 
 func (c *ApiGatewayClient) HealthCheck(ctx context.Context) (interface{}, error) {
-	var result interface{}
+	var result map[string]interface{}
 	err := c.getRequest(ctx, "/healthcheck", &result)
+
 	return result, err
 }
 
 func (c *ApiGatewayClient) InitiateSession(ctx context.Context) (interface{}, error) {
-	var result interface{}
+	var result map[string]interface{}
 	err := c.postRequest(ctx, "/proxy/sessions/initiate", nil, &result)
 
 	if err != nil {
@@ -105,8 +126,8 @@ func (c *ApiGatewayClient) InitiateSession(ctx context.Context) (interface{}, er
 	return result, nil
 }
 
-func (c *ApiGatewayClient) SendPrompt(ctx context.Context, prompt string, messages []string) (interface{}, error) {
-	var result interface{}
+func (c *ApiGatewayClient) SessionPrompt(ctx context.Context, prompt string, messages []string) (interface{}, error) {
+	var result map[string]interface{}
 	err := c.postRequest(ctx, "/proxy/sessions/:id/prompt", nil, &result)
 
 	if err != nil {
@@ -116,15 +137,42 @@ func (c *ApiGatewayClient) SendPrompt(ctx context.Context, prompt string, messag
 	return result, nil
 }
 
-func (c *ApiGatewayClient) Prompt(ctx context.Context, req interface{}) (interface{}, error) {
-	var result interface{}
-	err := c.postRequest(ctx, "/v1/chat/completions", req, &result)
-	return result, err
+func (c *ApiGatewayClient) Prompt(ctx context.Context, message string, history []ChatCompletionMessage) (interface{}, error) {
+	
+	request := &openai.ChatCompletionRequest{
+		Messages: append(history, ChatCompletionMessage{
+			Role: "user",
+			Content: message,
+		}),
+		Stream: false,
+		Model:     "llama2",
+		ResponseFormat: &openai.ChatCompletionResponseFormat{
+			Type: openai.ChatCompletionResponseFormatTypeText,
+		},
+	}
+
+	return c.OpenAiClient.CreateChatCompletion(ctx, *request)
 }
 
-func (c *ApiGatewayClient) PromptStream(ctx context.Context, req interface{}, flush interface{}) (interface{}, error) {
+func (c *ApiGatewayClient) PromptStream(ctx context.Context, message string, history []*ChatCompletionMessage, flush CompletionCallback) (interface{}, error) {
+	var messages []ChatCompletionMessage
 
-	return nil, errors.New("streaming not implemented")
+	for i := 0; i < len(history); i++ {
+		historyItem := history[i]
+
+		messages = append(messages, ChatCompletionMessage{
+			Role:    historyItem.Role,
+			Content: historyItem.Content,
+		})
+	}
+
+	request := &openai.ChatCompletionRequest{
+
+		Messages: messages,
+		Stream:   true,
+	}
+
+	return RequestChatCompletionStream(ctx, request, flush)
 }
 
 func (c *ApiGatewayClient) GetLatestBlock(ctx context.Context) (result uint64, err error) {
@@ -177,7 +225,7 @@ func (c *ApiGatewayClient) GetBidsByModelAgent(ctx context.Context, modelAgentId
 	return result, err
 }
 
-func (c *ApiGatewayClient) OpenSession(ctx *gin.Context) (err error) {
+func (c *ApiGatewayClient) OpenSession(ctx context.Context) (err error) {
 
 	err = c.postRequest(ctx, "/blockchain/sessions", nil, nil)
 
@@ -188,7 +236,7 @@ func (c *ApiGatewayClient) OpenSession(ctx *gin.Context) (err error) {
 	return nil
 }
 
-func (c *ApiGatewayClient) CloseSession(ctx *gin.Context) error {
+func (c *ApiGatewayClient) CloseSession(ctx context.Context) error {
 	err := c.postRequest(ctx, "/blockchain/sessions/:id/close", nil, nil)
 
 	if err != nil {

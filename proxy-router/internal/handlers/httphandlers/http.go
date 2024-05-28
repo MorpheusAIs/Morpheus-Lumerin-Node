@@ -40,6 +40,7 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 	}))
 	r.GET("/files", (func(ctx *gin.Context) {
 		status, files := apiBus.GetFiles(ctx)
+		
 		ctx.JSON(status, files)
 	}))
 	r.POST("/v1/chat/completions", (func(ctx *gin.Context) {
@@ -56,7 +57,8 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 			return
 		}
 
-		req.Stream = ctx.GetHeader("Accept") == "application/json"
+		fmt.Println("chat request: ", req)
+		// req.Stream = ctx.GetHeader("Accept") == "application/json"
 
 		var response interface{}
 
