@@ -2,7 +2,8 @@ import { useEffect } from 'react'
 import { LayoutHeader } from '../common/LayoutHeader'
 import { View } from '../common/View'
 import ProvidersList from './ProvidersList'
-import { withModelsState } from '../../store/hocs/withModelsState';
+import withProvidersState  from '../../store/hocs/withProvidersState';
+import { BtnAccent } from '../dashboard/BalanceBlock.styles';
 
 export const Providers = (props) => {
 
@@ -13,10 +14,10 @@ export const Providers = (props) => {
     return (    
     <View data-testid="models-container">
         <LayoutHeader title="Providers">
-            Add provider
+            <BtnAccent style={{ padding: '1.5rem'}}>Add provider</BtnAccent>
         </LayoutHeader>
         <ProvidersList />
     </View>)
 }
 
-export default withModelsState(Providers)
+export default withProvidersState(Providers)

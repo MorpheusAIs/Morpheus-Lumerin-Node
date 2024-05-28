@@ -6,12 +6,11 @@ export const View = styled.div`
   max-width: 100%;
   min-width: 600px;
   position: relative;
-  padding-top: 2rem;
 `;
 
 export const Container = styled.div`
     max-width: 1120px;
-    height: calc(100% - 160px);
+    height: calc(100% - 200px);
     justify-content: space-between;
     margin: 0 auto;
     display: flex;
@@ -146,13 +145,12 @@ export const ContainerTitle = styled.div`
   align-items: center;
   position: sticky;
   width: 100%;
-  padding: 1.5rem 0;
+  padding: 0 2.4rem;
   z-index: 2;
   right: 0;
   left: 0;
   top: 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.16);
-  padding-bottom: 32px!important;
 `;
 
 export const TitleRow = styled.div`

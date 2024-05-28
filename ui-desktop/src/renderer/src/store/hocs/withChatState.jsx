@@ -52,7 +52,34 @@ const withChatState = WrappedComponent => {
           console.log("Error", e)
           return [];
         }
-  }
+    }
+
+    getAllModels = async () => {
+      const result = await this.props.client.getAllModels();
+      return result;
+    }
+    
+    getModelsData = async () => {
+      const models = (await this.getAllModels()).filter(m => !m.IsDeleted);
+      const providers = (await this.getProviders()).filter(m => !m.IsDeleted);
+      const providersMap = providers.reduce((a,b) => ({...a, [b.Address.toLowerCase()]: b}), {});
+      let result = [];
+
+      for (const model of models) {
+        const id = model.Id;
+        const bids = (await this.getBitsByModels(id)).filter(b => !b.DeletedAt);
+        if(!bids.length) {
+          continue;
+        }
+
+        const bidsWithProviders = bids.map(b => ({...b, ProviderData: providersMap[b.Provider.toLowerCase()], Model: model}))
+
+        result.push({...model, bids: model.Name == "Llama 2.0" ? [...bidsWithProviders, { Provider: "Local", Model: model}] : bidsWithProviders })
+      }
+      
+      return { models: result, providers }
+    }
+
 
     getMetaInfo = async () => {
       var budget = await this.props.client.getTodaysBudget();
@@ -67,6 +94,7 @@ const withChatState = WrappedComponent => {
             getProviders={this.getProviders}
             getBitsByModels={this.getBitsByModels}
             getMetaInfo={this.getMetaInfo}
+            getModelsData={this.getModelsData}
             {...this.state}
             {...this.props}
         />

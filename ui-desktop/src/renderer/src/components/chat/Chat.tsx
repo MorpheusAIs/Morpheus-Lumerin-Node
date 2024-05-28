@@ -1,7 +1,7 @@
 import React, { createRef, useContext, useEffect, useRef, useState } from 'react'
 // import component 👇
 import Drawer from 'react-modern-drawer'
-import { IconHistory, IconArrowUp } from '@tabler/icons-react';
+import { IconHistory, IconArrowUp, IconServer, IconWorld } from '@tabler/icons-react';
 import {
     View,
     ContainerTitle,
@@ -28,12 +28,16 @@ import './Chat.css'
 import { ChatHistory } from './ChatHistory';
 import Spinner from 'react-bootstrap/Spinner';
 import OpenSessionModal from './modals/OpenSessionModal';
+import ModelSelectionModal from './modals/ModelSelectionModal';
 
 const colors = [
     '#1899cb', '#da4d76', '#d66b38', '#d39d00', '#b46fc4', '#269c68', '#86858a'
 ];
 
 const getColor = (name) => {
+    if (!name) {
+        return;
+    }
     return colors[(getHashCode(name) + 1) % colors.length]
 }
 
@@ -41,22 +45,36 @@ const Chat = (props) => {
     const chatBlockRef = useRef<null | HTMLDivElement>(null);
 
     const [value, setValue] = useState("");
-    const [hasSession, setHasSession] = useState(false);
+    const [hasSession, setHasSession] = useState(true);
 
-    const [chatHistory, setChatHistory] = useState<{ id: string, title: string}[]>();
+    const [chatHistory, setChatHistory] = useState<{ id: string, title: string }[]>();
+
     const [isSpinning, setIsSpinning] = useState(false);
     const [meta, setMeta] = useState({ budget: 0, supply: 0 });
 
-    const [sessions, setSessions] = useState([{id: "1245", title: "What can I do to save cats?"}])
+    const [sessions, setSessions] = useState([{ id: "1245", title: "What can I do to save animals?" }])
     const [activeSession, setActiveSession] = useState("");
 
-    const [openSessionModal, setOpenSessionModal] = useState(false);
+    const [chainData, setChainData] = useState<any>(null);
 
-    const modelName = props?.model?.Name || "GPT";
-    const providerAddress = props?.provider?.Address ? abbreviateAddress(props?.provider?.Address, 4) : null;
+    const [openSessionModal, setOpenSessionModal] = useState(false);
+    const [openChangeModal, setOpenChangeModal] = useState(false);
+
+    const [selectedBid, setSelectedBid] = useState<any>(null);
+
+    const modelName = props?.model?.Name || "Model";
+
+    const isLocal = selectedBid?.Provider == 'Local';
+    const providerAddress = isLocal ? "(local)" : selectedBid?.Provider ? abbreviateAddress(selectedBid?.Provider, 4) : null;
 
     useEffect(() => {
         props.getMetaInfo().then(setMeta);
+        props.getModelsData().then((chainData) => {
+            setChainData(chainData);
+            const defaultSelectedBid = (chainData.models
+                .find((x: any) => x.bids.find(b => b.Provider == 'Local')) as any).bids.find(b => b.Provider == 'Local');
+            setSelectedBid(defaultSelectedBid);
+        });
         // if(!props.activeSession) {
         //     props.history.push("/models");
         //     return;
@@ -72,6 +90,10 @@ const Chat = (props) => {
 
     const scrollToBottom = () => {
         chatBlockRef.current?.scrollIntoView({ behavior: "smooth", block: 'end' })
+    }
+
+    const onOpenSession = (stake) => {
+        console.log("open-session", stake);
     }
 
     const closeSession = (sessionId: string) => {
@@ -158,23 +180,49 @@ const Chat = (props) => {
                 direction='right'
                 className='history-drawer'
             >
-                <ChatHistory history={sessions} onCloseSession={closeSession}/>
+                <ChatHistory history={sessions} onCloseSession={closeSession} />
             </Drawer>
             <View>
-                <ContainerTitle style={{ padding: '0 2.4rem' }}>
+                <ContainerTitle>
                     <TitleRow>
                         <Title>Chat</Title>
-                        <div>MODEL SELECTOR</div>
+                        <div className='d-flex' style={{ alignItems: 'center' }}>
+                            <div className='d-flex model-selector'>
+                                <div className='model-selector__info'>
+                                    <h3>{selectedBid?.Model?.Name}</h3>
+                                    {
+                                        isLocal ?
+                                            (
+                                                <>
+                                                    <span>(local)</span>
+                                                    <span>0 MOR/sec</span>
+                                                </>
+                                            )
+                                            : (
+                                                <>
+                                                    <span>{providerAddress}</span>
+                                                    <span>{selectedBid?.PricePerSecond || 0} MOR/sec</span>
+                                                </>
+                                            )
+                                    }
+                                </div>
+                                <div className='model-selector__icons'>
+                                    <IconServer width={'1.5rem'} color='#20dc8e'></IconServer>
+                                    <IconWorld width={'1.5rem'}></IconWorld>
+                                </div>
+                            </div>
+                            <BtnAccent className='change-modal' onClick={() => setOpenChangeModal(true)}>Change Model</BtnAccent>
+                        </div>
                     </TitleRow>
                 </ContainerTitle>
                 <ChatTitleContainer>
                     <ChatAvatar>
-                        <Avatar style={{ color: 'white' }} color={getColor("L")}>
-                            L
+                        <Avatar style={{ color: 'white' }} color={getColor(selectedBid?.Model?.Name[0])}>
+                            {selectedBid?.Model?.Name[0]}
                         </Avatar>
-                        <div style={{ marginLeft: '10px' }}>{modelName}</div>
+                        <div style={{ marginLeft: '10px' }}>{selectedBid?.Model?.Name}</div>
                     </ChatAvatar>
-                    <div>Provider: {providerAddress}</div>
+                    <div>Provider: {isLocal ? "(local)" : providerAddress}</div>
                     <div>
                         <div onClick={toggleDrawer}>
                             <IconHistory size={"2.4rem"}></IconHistory>
@@ -188,22 +236,21 @@ const Chat = (props) => {
                             messages?.length ? messages.map(x => (
                                 <Message key={makeid(6)} message={x}></Message>
                             ))
-                                : <div className='session-container' style={{ width: '400px'}}>
+                                : (!isLocal && <div className='session-container' style={{ width: '400px' }}>
                                     <div className='session-title'>To perform promt please create session and choose desired session time</div>
                                     <div className='session-title'>Session will be created for selected Model</div>
-                                    <div>  
+                                    <div>
                                         <BtnAccent
-                                        data-modal="receive"
-                                        data-testid="receive-btn"
-                                        styles={{ marginLeft: '0'}}
-                                        onClick={() => setOpenSessionModal(true)}
-                                        block
-                                    >
-                                        Create Session
-                                    </BtnAccent></div>
-                                </div>
+                                            data-modal="receive"
+                                            data-testid="receive-btn"
+                                            styles={{ marginLeft: '0' }}
+                                            onClick={() => setOpenSessionModal(true)}
+                                            block
+                                        >
+                                            Create Session
+                                        </BtnAccent></div>
+                                </div>)
                         }
-
                     </ChatBlock>
                     <Control>
                         <CustomTextArrea
@@ -226,11 +273,25 @@ const Chat = (props) => {
                     </Control>
                 </Container>
             </View>
-            <OpenSessionModal 
-                pricePerSecond={0.001 * (10 ** 18)}
+            <OpenSessionModal
+                pricePerSecond={selectedBid?.PricePerSecond}
                 {...meta}
                 isActive={openSessionModal}
+                triggerOpen={(data) => {
+                    onOpenSession(data);
+                }}
                 handleClose={() => setOpenSessionModal(false)} />
+            <ModelSelectionModal
+                models={(chainData as any)?.models}
+                isActive={openChangeModal}
+                onChangeModel={(id) => {
+                    const defaultSelectedBid = (chainData.models
+                        .find((x: any) => x.bids.find(b => b.Id == id)) as any)
+                        .bids.find(b => b.Id == id);
+
+                    setSelectedBid(defaultSelectedBid);
+                }}
+                handleClose={() => setOpenChangeModal(false)} />
         </>
     )
 }
