@@ -111,6 +111,11 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 		ctx.JSON(status, response)
 	}))
 
+	r.POST("/proxy/sessions/:id/providerClaim", (func(ctx *gin.Context) {
+		status, response := apiBus.GetProviderClaimableBalance(ctx)
+		ctx.JSON(status, response)
+	}))
+
 	r.GET("/blockchain/providers", (func(ctx *gin.Context) {
 		status, providers := apiBus.GetAllProviders(ctx)
 		ctx.JSON(status, providers)
@@ -173,6 +178,16 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 
 	r.POST("/blockchain/sessions", (func(ctx *gin.Context) {
 		status, response := apiBus.OpenSession(ctx)
+		ctx.JSON(status, response)
+	}))
+
+	r.GET("/blockchain/sessions/budget", (func(ctx *gin.Context) {
+		status, response := apiBus.GetTodaysBudget(ctx)
+		ctx.JSON(status, response)
+	}))
+
+	r.GET("/blockchain/token/supply", (func(ctx *gin.Context) {
+		status, response := apiBus.GetTokenSupply(ctx)
 		ctx.JSON(status, response)
 	}))
 

@@ -147,6 +147,30 @@ func (g *SessionRouter) GetProviderClaimableBalance(ctx context.Context, session
 	return balance, nil
 }
 
+func (g *SessionRouter) ClaimProviderBalance(ctx *bind.TransactOpts, sessionId string, amount *big.Int, to common.Address) (string, error) {
+	id := [32]byte(common.FromHex(sessionId))
+	tx, err := g.sessionRouter.ClaimProviderBalance(ctx, id, amount, to)
+	if err != nil {
+		return "", lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
+	}
+
+	// Wait for the transaction receipt
+	_, err = bind.WaitMined(context.Background(), g.client, tx)
+	if err != nil {
+		return "", err
+	}
+
+	return tx.Hash().String(), nil
+}
+
+func (g *SessionRouter) GetTodaysBudget(ctx context.Context) (*big.Int, error) {
+	budget, err := g.sessionRouter.GetTodaysBudget(&bind.CallOpts{Context: ctx})
+	if err != nil {
+		return nil, lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
+	}
+	return budget, nil
+}
+
 func (g *SessionRouter) GetContractAddress() common.Address {
 	return g.sessionRouterAddr
 }
