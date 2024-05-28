@@ -103,9 +103,14 @@ func (p *ProxyRouterApi) InitiateSession(ctx *gin.Context) (int, gin.H) {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "providerUrl is required"}
 	}
 
+	bidId, ok := reqPayload["bidId"].(string)
+	if !ok {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "bidId is required"}
+	}
+
 	requestID := "1"
 
-	initiateSessionRequest, err := morrpc.NewMorRpc().InitiateSessionRequest(user, provider, p.pubKey, spend, p.privateKey, requestID)
+	initiateSessionRequest, err := morrpc.NewMorRpc().InitiateSessionRequest(user, provider, p.pubKey, spend, bidId, p.privateKey, requestID)
 	if err != nil {
 		err = lib.WrapError(fmt.Errorf("failed to create initiate session request"), err)
 		p.log.Errorf("%s", err)

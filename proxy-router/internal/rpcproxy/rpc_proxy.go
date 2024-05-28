@@ -2,11 +2,13 @@ package rpcproxy
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"math/big"
 	"sort"
 	"strconv"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/contracts/sessionrouter"
 	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
@@ -153,10 +155,16 @@ func (rpcProxy *RpcProxy) OpenSession(ctx *gin.Context) (int, gin.H) {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 
-	bidIdStr, ok := reqPayload["bidId"].(string)
+	approval, ok := reqPayload["approval"].(string)
 	if !ok {
-		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "bidId is required"}
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "approval is required"}
 	}
+
+	approvalSig, ok := reqPayload["approvalSig"].(string)
+	if !ok {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "approvalSig is required"}
+	}
+
 	stakeStr, ok := reqPayload["stake"].(string)
 	if !ok {
 		print(ok)
@@ -168,14 +176,15 @@ func (rpcProxy *RpcProxy) OpenSession(ctx *gin.Context) (int, gin.H) {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "stake is invalid"}
 	}
 
-	bidId := common.FromHex(bidIdStr)
-
 	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
 	if err != nil {
 		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
 	}
 
-	sessionId, err := rpcProxy.sessionRouter.OpenSession(transactOpt, [32]byte(bidId), stake)
+	approvalBytes := common.FromHex(approval)
+	approvalSigBytes := common.FromHex(approvalSig)
+
+	sessionId, err := rpcProxy.sessionRouter.OpenSession(transactOpt, approvalBytes, approvalSigBytes, stake, rpcProxy.privateKey)
 	if err != nil {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
@@ -195,8 +204,7 @@ func (rpcProxy *RpcProxy) CloseSession(ctx *gin.Context) (int, gin.H) {
 		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
 	}
 
-	encodedReport := "0x0000008000002710"
-	_, err = rpcProxy.sessionRouter.CloseSession(transactOpt, sessionId, encodedReport, rpcProxy.privateKey)
+	_, err = rpcProxy.sessionRouter.CloseSession(transactOpt, sessionId, rpcProxy.privateKey)
 	if err != nil {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
@@ -371,6 +379,46 @@ func (rpcProxy *RpcProxy) GetTokenSupply(ctx *gin.Context) (int, gin.H) {
 		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get supply: " + err.Error()}
 	}
 	return constants.HTTP_STATUS_OK, gin.H{"supply": supply.String()}
+}
+
+func (rpcProxy *RpcProxy) GetSessions(ctx *gin.Context) (int, gin.H) {
+	if ctx.Query("user") != "" {
+		sessions, err := rpcProxy.sessionRouter.GetSessionsByUser(ctx, common.HexToAddress(ctx.Query("user")))
+		if err != nil {
+			return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+		}
+		return constants.HTTP_STATUS_OK, gin.H{"sessions": rpcProxy.mapSessions(sessions)}
+	} else if ctx.Query("provider") != "" {
+		sessions, err := rpcProxy.sessionRouter.GetSessionsByProvider(ctx, common.HexToAddress(ctx.Query("provider")))
+		if err != nil {
+			return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+		}
+		return constants.HTTP_STATUS_OK, gin.H{"sessions": rpcProxy.mapSessions(sessions)}
+	} else {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "user or provider is required"}
+	}
+}
+
+func (rpcProxy *RpcProxy) mapSessions(sessions []sessionrouter.Session) []*structs.Session {
+	result := make([]*structs.Session, len(sessions))
+	for i, value := range sessions {
+		result[i] = &structs.Session{
+			Id:                      lib.BytesToString(value.Id[:]),
+			Provider:                value.Provider,
+			User:                    value.User,
+			ModelAgentId:            lib.BytesToString(value.ModelAgentId[:]),
+			BidID:                   lib.BytesToString(value.BidID[:]),
+			Stake:                   value.Stake,
+			PricePerSecond:          value.PricePerSecond,
+			CloseoutReceipt:         hex.EncodeToString(value.CloseoutReceipt),
+			CloseoutType:            value.CloseoutType,
+			ProviderWithdrawnAmount: value.ProviderWithdrawnAmount,
+			OpenedAt:                value.OpenedAt,
+			EndsAt:                  value.EndsAt,
+			ClosedAt:                value.ClosedAt,
+		}
+	}
+	return result
 }
 
 func (rpcProxy *RpcProxy) GetTransactions(ctx *gin.Context) (int, gin.H) {
