@@ -364,13 +364,17 @@ contract SessionRouter {
 
   /// @notice returns stipend of user based on their stake
   function stakeToStipend(uint256 sessionStake, uint256 timestamp) public view returns (uint256) {
-    return sessionStake / (s.token.totalSupply() / getTodaysBudget(timestamp));
+    uint256 time = startOfTheDay(timestamp);
+    uint256 totalMOR = totalMORSupply(time);
+    uint todaysBudget = getTodaysBudget(time);
+    uint stake = sessionStake / (totalMOR / todaysBudget);
+    return stake;
   }
 
   /// @notice returns stake of user based on their stipend
   function stipendToStake(uint256 stipend, uint256 timestamp) public view returns (uint256) {
     // TODO: cache total supply
-    return stipend * (s.token.totalSupply() / getTodaysBudget(timestamp));
+    return stipend * (totalMORSupply(timestamp) / getTodaysBudget(timestamp));
   }
 
   /// @dev make it pure
@@ -398,7 +402,7 @@ contract SessionRouter {
   /// @notice returns the time when stipend will be less than daily price
   function whenStipendLessThanDailyPrice(uint256 sessionStake, uint256 pricePerSecond) public view returns (uint256) {
     uint256 pricePerDay = pricePerSecond * 1 days;
-    uint256 minComputeBalance = (pricePerDay * 100 * s.token.totalSupply()) / sessionStake;
+    uint256 minComputeBalance = (pricePerDay * 100 * totalMORSupply(block.timestamp)) / sessionStake;
     return whenComputeBalanceIsLessThan(minComputeBalance);
   }
 
@@ -410,34 +414,53 @@ contract SessionRouter {
   /// @notice returns today's compute balance in MOR
   function getComputeBalance(uint256 timestamp) public view returns (uint256) {
     // TODO: cache today's budget and compute balance
+    Pool memory pool = s.pools[3];
     return
       LinearDistributionIntervalDecrease.getPeriodReward(
-        s.pool.initialReward,
-        s.pool.rewardDecrease,
-        s.pool.payoutStart,
-        s.pool.decreaseInterval,
-        uint128(startOfTheDay(timestamp)),
-        uint128(startOfTheDay(timestamp) + 1 days)
+        pool.initialReward,
+        pool.rewardDecrease,
+        pool.payoutStart,
+        pool.decreaseInterval,
+        pool.payoutStart,
+        uint128(startOfTheDay(timestamp))
       );
+  }
+
+  // returns total amount of MOR tokens that were distributed across all pools
+  function totalMORSupply(uint256 timestamp) public view returns (uint256) {
+    uint256 totalSupply = 0;
+    for (uint i = 0; i < s.pools.length; i++) {
+      Pool memory pool = s.pools[i];
+      uint256 sup = LinearDistributionIntervalDecrease.getPeriodReward(
+        pool.initialReward,
+        pool.rewardDecrease,
+        pool.payoutStart,
+        pool.decreaseInterval,
+        pool.payoutStart,
+        uint128(startOfTheDay(timestamp))
+      );
+      totalSupply += sup;
+    }
+    return totalSupply;
   }
 
   /// @notice returns the time when compute balance will be less than targetReward
   /// @dev returns 0 if targetReward is greater than initial reward
   function whenComputeBalanceIsLessThan(uint256 targetReward) public view returns (uint256) {
-    if (targetReward >= s.pool.initialReward) {
+    Pool memory pool = s.pools[3];
+    if (targetReward >= pool.initialReward) {
       return 0;
     }
-    return
-      ((s.pool.initialReward - targetReward) / s.pool.rewardDecrease) * s.pool.decreaseInterval + s.pool.payoutStart;
+    return ((pool.initialReward - targetReward) / pool.rewardDecrease) * pool.decreaseInterval + pool.payoutStart;
   }
 
   /// @notice sets distibution pool configuration
   /// @dev parameters should be the same as in Ethereum L1 Distribution contract
   /// @dev at address 0x47176B2Af9885dC6C4575d4eFd63895f7Aaa4790
   /// @dev call 'Distribution.pools(3)' where '3' is a poolId
-  function setPoolConfig(Pool calldata pool) public {
+  function setPoolConfig(uint256 index, Pool calldata pool) public {
     LibOwner._onlyOwner();
-    s.pool = pool;
+    s.pools[index] = pool;
   }
 
   function startOfTheDay(uint256 timestamp) public pure returns (uint256) {

@@ -413,7 +413,7 @@ describe("verify session end time", function () {
     expect(endsAt.getTime()).approximately(expEndsAt.getTime(), 10 * SECOND);
   });
 
-  it.skip("session that lasts multiple days", async function () {
+  it.only("session that lasts multiple days", async function () {
     const {
       sessionRouter,
       expectedSession: exp,
@@ -425,13 +425,15 @@ describe("verify session end time", function () {
       provider,
     } = await loadFixture(deploySingleBid);
 
-    for (let i = 0; i < 100; i++) {
-      console.log(
-        await sessionRouter.read.getTodaysBudget([
-          now() + BigInt((i * DAY) / SECOND),
-        ]),
-      );
+    const now = await now2();
+    for (let i = 0; i < 500; i++) {
+      const time = now + BigInt((i * DAY) / SECOND);
+      const stipend = await sessionRouter.read.stakeToStipend([
+        1000n * 10n ** 18n,
+        time,
+      ]);
     }
+
     return;
 
     const midnight = startOfTheDay(await now2()) + BigInt(DAY / SECOND);

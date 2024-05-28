@@ -110,7 +110,7 @@ struct AppStorage {
   uint256 feeBalance; // total fees balance of the contract
   uint256 modelMinStake;
   uint256 providerMinStake;
-  Pool pool; // distribution pool configuration
+  Pool[] pools; // distribution pools configuration that mirrors L1 contract
 }
 
 library LibAppStorage {
