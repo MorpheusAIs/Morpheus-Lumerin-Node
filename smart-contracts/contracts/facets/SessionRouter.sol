@@ -326,13 +326,13 @@ contract SessionRouter {
 
   // returns stipend of user based on their stake
   function stakeToStipend(uint256 sessionStake, uint256 timestamp) public view returns (uint256) {
-    return sessionStake / (s.token.totalSupply() / _getTodaysBudget(timestamp));
+    return sessionStake / (s.token.totalSupply() / getTodaysBudget(timestamp));
   }
 
   // returns stake of user based on their stipend
   function stipendToStake(uint256 stipend, uint256 timestamp) public view returns (uint256) {
     // TODO: cache total supply
-    return stipend * (s.token.totalSupply() / _getTodaysBudget(timestamp));
+    return stipend * (s.token.totalSupply() / getTodaysBudget(timestamp));
   }
 
   /// @dev make it pure
@@ -365,11 +365,7 @@ contract SessionRouter {
   }
 
   /// @notice returns today's budget in MOR
-  function getTodaysBudget() public view returns (uint256) {
-    return _getTodaysBudget(startOfTheDay(block.timestamp));
-  }
-
-  function _getTodaysBudget(uint256 timestamp) public view returns (uint256) {
+  function getTodaysBudget(uint256 timestamp) public view returns (uint256) {
     return getComputeBalance(timestamp) / 100; // 1% of Compute Balance
   }
 
