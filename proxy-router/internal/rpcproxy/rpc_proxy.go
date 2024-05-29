@@ -75,7 +75,7 @@ func (rpcProxy *RpcProxy) GetAllProviders(ctx context.Context) (int, gin.H) {
 			Endpoint:  value.Endpoint,
 			Stake:     value.Stake,
 			IsDeleted: value.IsDeleted,
-			Timestamp: value.Timestamp,
+			CreatedAt: value.CreatedAt,
 		}
 	}
 
@@ -98,7 +98,7 @@ func (rpcProxy *RpcProxy) GetAllModels(ctx context.Context) (int, gin.H) {
 			Owner:     value.Owner,
 			Name:      value.Name,
 			Tags:      value.Tags,
-			Timestamp: value.Timestamp,
+			CreatedAt: value.CreatedAt,
 			IsDeleted: value.IsDeleted,
 		}
 	}

@@ -179,7 +179,7 @@ func (g *SessionRouter) ClaimProviderBalance(ctx *bind.TransactOpts, sessionId s
 }
 
 func (g *SessionRouter) GetTodaysBudget(ctx context.Context) (*big.Int, error) {
-	timestamp := big.NewInt(time.Now().UnixMilli())
+	timestamp := big.NewInt(time.Now().Unix())
 	budget, err := g.sessionRouter.GetTodaysBudget(&bind.CallOpts{Context: ctx}, timestamp)
 	if err != nil {
 		return nil, lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
