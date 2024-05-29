@@ -84,6 +84,7 @@ function createSyncer (config, eventBus, web3, queue, eventsRegistry, indexer) {
       gasPrice: trx.gasPrice,
       hash: trx.hash,
       nonce: trx.nonce,
+      isMor: Boolean(trx.contractAddress),
       logIndex: trx.logIndex, // emitted only in events, used to differentiate between LMR transfers within one transaction 
       // maxFeePerGas: params.maxFeePerGas,
       // maxPriorityFeePerGas: params.maxPriorityFeePerGas,
@@ -108,6 +109,7 @@ function createSyncer (config, eventBus, web3, queue, eventsRegistry, indexer) {
       cumulativeGasUsed: trx.cumulativeGasUsed,
       gasUsed: trx.gasUsed,
       tokenSymbol: trx.tokenSymbol,
+      isMor: Boolean(trx.contractAddress),
     }
 
     if (trx.returnValues){

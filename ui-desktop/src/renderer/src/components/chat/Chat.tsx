@@ -52,7 +52,6 @@ const Chat = (props) => {
     const [isSpinning, setIsSpinning] = useState(false);
     const [meta, setMeta] = useState({ budget: 0, supply: 0 });
 
-    const [sessions, setSessions] = useState([{ id: "1245", title: "What can I do to save animals?" }])
     const [activeSession, setActiveSession] = useState<any>(undefined);
 
     const [chainData, setChainData] = useState<any>(null);
@@ -225,7 +224,6 @@ const Chat = (props) => {
                     loadSessions={async () => {
                         return await props.getSessionsByUser(props.address);
                     }}
-                    history={sessions}
                     onCloseSession={closeSession} />
             </Drawer>
             <View>

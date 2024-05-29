@@ -21,7 +21,6 @@ const HistoryItem = styled.div`
 `
 
 interface ChatHistoryProps {
-    history: { id: string, title: string}[],
     onCloseSession: (string) => void;
     loadSessions: () => Promise<any>;
 }
