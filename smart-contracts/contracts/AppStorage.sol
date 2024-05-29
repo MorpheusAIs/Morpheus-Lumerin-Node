@@ -87,12 +87,18 @@ struct AppStorage {
   //
   // SESSION storage
   //
-  Session[] sessions; // all sessions
+  // all sessions
+  Session[] sessions;
   mapping(bytes32 => uint256) sessionMap; // sessionId => session index
+  mapping(address => uint256[]) userSessions; // user address => all session indexes
+  mapping(address => uint256[]) providerSessions; // provider address => all session indexes
+  mapping(bytes32 => uint256[]) modelSessions; // modelId => all session indexes
+  // active sessions
   mapping(address => Uint256Set.Set) userActiveSessions; // user address => active session indexes
   mapping(address => Uint256Set.Set) providerActiveSessions; // provider address => active session indexes
   mapping(address => OnHold[]) userOnHold; // user address => balance
   mapping(bytes => bool) approvalMap; // provider approval => true if approval was already used
+  uint64 activeSessionsCount;
   //
   // OTHER
   //

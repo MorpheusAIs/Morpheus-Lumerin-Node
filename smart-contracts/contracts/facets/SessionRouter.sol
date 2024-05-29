@@ -46,7 +46,7 @@ contract SessionRouter {
     return s.sessions[s.sessionMap[sessionId]];
   }
 
-  function getSessionsByUser(address user) public view returns (Session[] memory) {
+  function getActiveSessionsByUser(address user) public view returns (Session[] memory) {
     Uint256Set.Set storage userSessions = s.userActiveSessions[user];
     uint256 size = userSessions.count();
     Session[] memory sessions = new Session[](size);
@@ -56,7 +56,7 @@ contract SessionRouter {
     return sessions;
   }
 
-  function getSessionsByProvider(address provider) public view returns (Session[] memory) {
+  function getActiveSessionsByProvider(address provider) public view returns (Session[] memory) {
     Uint256Set.Set storage providerSessions = s.providerActiveSessions[provider];
     uint256 size = providerSessions.count();
     Session[] memory sessions = new Session[](size);
@@ -64,6 +64,40 @@ contract SessionRouter {
       sessions[i] = s.sessions[providerSessions.keyAtIndex(i)];
     }
     return sessions;
+  }
+
+  function getSessionsByProvider(address provider, uint256 offset, uint8 limit) public view returns (Session[] memory) {
+    return paginate(s.providerSessions[provider], offset, limit);
+  }
+
+  function getSessionsByUser(address user, uint256 offset, uint8 limit) public view returns (Session[] memory) {
+    return paginate(s.userSessions[user], offset, limit);
+  }
+
+  function getSessionsByModel(bytes32 modelId, uint256 offset, uint8 limit) public view returns (Session[] memory) {
+    return paginate(s.modelSessions[modelId], offset, limit);
+  }
+
+  function paginate(uint256[] memory indexes, uint256 offset, uint8 limit) private view returns (Session[] memory) {
+    uint256 length = indexes.length;
+    if (length < offset) {
+      return (new Session[](0));
+    }
+    uint8 size = offset + limit > length ? uint8(length - offset) : limit;
+    Session[] memory sessions = new Session[](size);
+    for (uint i = 0; i < size; i++) {
+      uint256 index = length - offset - i - 1;
+      sessions[i] = s.sessions[indexes[index]];
+    }
+    return sessions;
+  }
+
+  function activeSessionsCount() public view returns (uint256) {
+    return s.activeSessionsCount;
+  }
+
+  function sessionsCount() public view returns (uint256) {
+    return s.sessions.length;
   }
 
   function openSession(
@@ -122,8 +156,13 @@ contract SessionRouter {
 
     uint256 sessionIndex = s.sessions.length - 1;
     s.sessionMap[sessionId] = sessionIndex;
+    s.userSessions[sender].push(sessionIndex);
+    s.providerSessions[bid.provider].push(sessionIndex);
+    s.modelSessions[bid.modelAgentId].push(sessionIndex);
+
     s.userActiveSessions[sender].insert(sessionIndex);
     s.providerActiveSessions[bid.provider].insert(sessionIndex);
+    s.activeSessionsCount++;
 
     emit SessionOpened(sender, sessionId, bid.provider);
     s.token.transferFrom(sender, address(this), _stake); // errors with Insufficient Allowance if not approved
@@ -133,7 +172,7 @@ contract SessionRouter {
 
   function closeSession(bytes memory receiptEncoded, bytes memory signature) public {
     // reverts without specific error if cannot decode abi
-    (bytes32 sessionId, uint128 timestampMs, uint32 ips) = abi.decode(receiptEncoded, (bytes32, uint128, uint32));
+    (bytes32 sessionId, uint128 timestampMs, ) = abi.decode(receiptEncoded, (bytes32, uint128, uint32));
     if (timestampMs / 1000 < block.timestamp - SIGNATURE_TTL) {
       revert SignatureExpired();
     }
@@ -153,15 +192,17 @@ contract SessionRouter {
     // update indexes
     s.userActiveSessions[session.user].remove(sessionIndex);
     s.providerActiveSessions[session.provider].remove(sessionIndex);
+    s.activeSessionsCount--;
 
+    // update session record
     session.closeoutReceipt = receiptEncoded;
     session.closedAt = uint128(block.timestamp);
 
+    // calculate provider withdraw
+    uint256 providerWithdraw;
     bool isClosingLate = startOfTheDay(block.timestamp) > startOfTheDay(session.endsAt);
     bool noDispute = isValidReceipt(session.provider, receiptEncoded, signature);
 
-    // calculate provider withdraw
-    uint256 providerWithdraw;
     if (noDispute || isClosingLate) {
       // session was closed without dispute or next day after it expected to end
       uint256 duration = minUint256(block.timestamp, session.endsAt) - session.openedAt;
