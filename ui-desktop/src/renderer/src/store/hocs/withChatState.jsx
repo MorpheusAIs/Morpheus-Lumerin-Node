@@ -195,7 +195,7 @@ const withChatState = WrappedComponent => {
     model: state.models.selectedModel,
     provider: state.models.selectedProvider,
     activeSession: state.models.activeSession,
-    address: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8" // selectors.getWalletAddress(state),
+    address: selectors.getWalletAddress(state),
   });
 
   const mapDispatchToProps = dispatch => ({

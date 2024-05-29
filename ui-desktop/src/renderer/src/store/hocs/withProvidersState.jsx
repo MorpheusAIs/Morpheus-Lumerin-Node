@@ -118,7 +118,7 @@ const withProvidersState = WrappedComponent => {
     // isLocalProxyRouter: selectors.getIsLocalProxyRouter(state),
     // titanLightningPool: state.config.chain.titanLightningPool,
     // titanLightningDashboard: state.config.chain.titanLightningDashboard,
-    providerId: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8", // selectors.getWalletAddress(state),
+    providerId: selectors.getWalletAddress(state),
     config: state.config
   });
 
