@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { List as RVList, AutoSizer } from 'react-virtualized';
 import Modal from '../../contracts/modals/Modal';
+import styled from 'styled-components';
 import {
     TitleWrapper,
     Title,
@@ -33,6 +34,10 @@ const bodyProps = {
     maxWidth: '100%',
     onClick: e => e.stopPropagation()
 }
+const RVContainer = styled(RVList)`
+ .ReactVirtualized__Grid__innerScrollContainer {
+   overflow: visible !important;
+  }`
 
 const ModelSelectionModal = ({ isActive, handleClose, models, onChangeModel }) => {
 
@@ -48,7 +53,7 @@ const ModelSelectionModal = ({ isActive, handleClose, models, onChangeModel }) =
             </TitleWrapper>
             <AutoSizer width={400} height={500}>
                 {({ width, height }) => (
-                    <RVList
+                    <RVContainer
                         rowRenderer={rowRenderer(models, (id) => {
                             onChangeModel(id);
                             handleClose();

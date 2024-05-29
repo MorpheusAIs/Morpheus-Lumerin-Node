@@ -60,6 +60,7 @@ const BalanceBlock = ({
   onTabSwitch,
   symbol,
   symbolEth,
+  ...props
 }) => {
   const handleTabSwitch = e => {
     e.preventDefault();
@@ -72,9 +73,9 @@ const BalanceBlock = ({
         <SecondaryContainer>
           <WalletBalance
             {...{
-              lmrBalance,
-              lmrBalanceUSD,
-              ethBalance,
+              lmrBalance: props?.balances?.mor ? +props.balances.mor / 10 ** 18 : 0,
+              lmrBalanceUSD: props?.balances?.mor ? `$${((+props.balances.mor / 10 ** 18) * +props.rate).toFixed(0)}` : 0,
+              ethBalance:  props?.balances?.eth ? (+props.balances.eth / 10 ** 18) : 0,
               ethBalanceUSD,
               symbol,
               symbolEth

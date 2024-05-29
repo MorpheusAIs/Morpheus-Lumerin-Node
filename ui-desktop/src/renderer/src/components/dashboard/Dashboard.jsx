@@ -27,25 +27,23 @@ const Dashboard = ({
   onWalletRefresh,
   onInit
 }) => {
-  console.log('dashboard')
   const [activeModal, setActiveModal] = useState(null)
 
   const onCloseModal = () => setActiveModal(null)
   const onTabSwitch = (modal) => setActiveModal(modal)
 
-  useEffect(() => {
-    onInit();
-  }, [])
+  const [balanceData, setBalanceData] = useState(null);
 
-  const [rates, setRates] = useState(null);
-  const [transactions, setTransactions] = useState([])
-  const [balance, setBalance] = useState({ mor: 0, eth: 0})
+  useEffect(() => {
+    onInit().then(setBalanceData);
+  }, [])
 
   return (
     <View data-testid="dashboard-container">
       <LayoutHeader title="My Wallet" address={address} copyToClipboard={copyToClipboard} />
 
       <BalanceBlock
+        {...balanceData}
         sendDisabled={sendDisabled}
         sendDisabledReason={sendDisabledReason}
         onTabSwitch={onTabSwitch}

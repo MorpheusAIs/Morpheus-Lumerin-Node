@@ -41,7 +41,8 @@ const selectorStyles = {
             ...base[':active'],
             backgroundColor: '#0e435380',
             color: '#20dc8e'
-        }
+        },
+        zIndex: 100
     }),
     placeholder: base => ({
         ...base,
@@ -62,7 +63,18 @@ const selectorStyles = {
 };
 
 function ModelRow(props) {
-    const options = props?.model?.bids.map(x => ({ value: x.Id, label: `${abbreviateAddress(x.Provider || "", 3)} ${x.PricePerSecond / (10 ** 18)} MOR` }))
+    
+    let hasLocal = false;
+    const optionsWithoutLocal = props?.model?.bids.map(x => {
+        const isLocal = !x.Id;
+        if(isLocal) {
+            hasLocal = true;
+            return null;
+        }
+        return ({ value: x.Id, label: `${abbreviateAddress(x.Provider || "", 3)} ${x.PricePerSecond / (10 ** 18)} MOR` })
+    }).filter(x => x);
+    const options = hasLocal ? [({ value: "Local", label: "(local) 0 MOR"}), ...optionsWithoutLocal] : optionsWithoutLocal;
+    
     const [selected, changeSelected] = useState<any>();
 
     return (

@@ -93,67 +93,9 @@ const Chat = (props) => {
     const onOpenSession = ({ stake }) => {
         console.log("open-session", stake);
 
-        (async () => {
-            let signature: any = {};
-            let sessionId = '';
-
-            const bidId = selectedBid.Id;
-
-            try {
-                const path = `${props.config.chain.localProxyRouterUrl}/proxy/sessions/initiate`;
-                const body = {
-                    user: props.address,
-                    provider: selectedBid.Provider,
-                    spend: Number(stake),
-                    bidId,
-                    providerUrl: selectedBid.ProviderData.Endpoint.replace("http://", "")
-                };
-                const response = await fetch(path, {
-                    method: "POST",
-                    body: JSON.stringify(body)
-                });
-                const dataResponse = await response.json();
-                signature = dataResponse.response.result;
-            }
-            catch (e) {
-                console.log("Error", e)
-                return false;
-            }
-
-            try {
-                const path = `${props.config.chain.localProxyRouterUrl}/blockchain/approve?amount=${BigInt(stake).toString()}&spender=${"0x8a791620dd6260079bf849dc5567adc3f2fdc318"}`;
-                const response = await fetch(path, {
-                    method: "POST",
-                });
-                const dataResponse = await response.json();
-                console.log("Increase", dataResponse)
-            }
-            catch (e) {
-                console.log("Error", e)
-                return false;
-            }
-
-            try {
-                const path = `${props.config.chain.localProxyRouterUrl}/blockchain/sessions`;
-                const body = {
-                    approval: signature.approval,
-                    approvalSig: signature.approvalSig,
-                    stake: BigInt(stake).toString(),
-                };
-                const response = await fetch(path, {
-                    method: "POST",
-                    body: JSON.stringify(body)
-                });
-                const dataResponse = await response.json();
-                sessionId = dataResponse.sessionId;
-            }
-            catch (e) {
-                console.log("Error", e)
-                return false;
-            }
-
-            setActiveSession({ sessionId, signature });
-        })();
+        props.onOpenSession({ stake, selectedBid}).then((res) => {
+            setActiveSession(res);
+        })
     }
 
     const closeSession = (sessionId: string) => {

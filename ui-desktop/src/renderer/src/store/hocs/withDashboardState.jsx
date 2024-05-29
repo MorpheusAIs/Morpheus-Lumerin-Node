@@ -53,7 +53,6 @@ const withDashboardState = WrappedComponent => {
       var balances = await this.props.client.getBalances();
       var transactions = await this.props.client.getTransactions();
       var rate = await this.props.client.getRates();
-      console.log("🚀 ~ OnInit", balances, transactions, rate);
       return { balances, transactions, rate };
     }
 

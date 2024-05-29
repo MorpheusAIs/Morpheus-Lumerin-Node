@@ -101,6 +101,71 @@ const withChatState = WrappedComponent => {
         return [];
       }
     }
+
+    onOpenSession = async ({ selectedBid, stake }) => {
+      console.log("open-session", stake);
+
+          let signature = {};
+          let sessionId = '';
+
+          debugger;
+          const bidId = selectedBid.Id;
+
+          try {
+              const path = `${this.props.config.chain.localProxyRouterUrl}/proxy/sessions/initiate`;
+              const body = {
+                  user: this.props.address,
+                  provider: selectedBid.Provider,
+                  spend: Number(stake),
+                  bidId,
+                  providerUrl: selectedBid.ProviderData.Endpoint.replace("http://", "")
+              };
+              const response = await fetch(path, {
+                  method: "POST",
+                  body: JSON.stringify(body)
+              });
+              const dataResponse = await response.json();
+              signature = dataResponse.response.result;
+          }
+          catch (e) {
+              console.log("Error", e)
+              return false;
+          }
+
+          try {
+              const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/approve?amount=${BigInt(stake).toString()}&spender=${this.props.config.chain.diamondAddress}`;
+              const response = await fetch(path, {
+                  method: "POST",
+              });
+              const dataResponse = await response.json();
+              console.log("Increase", dataResponse)
+          }
+          catch (e) {
+              console.log("Error", e)
+              return false;
+          }
+
+          try {
+              const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions`;
+              const body = {
+                  approval: signature.approval,
+                  approvalSig: signature.approvalSig,
+                  stake: BigInt(stake).toString(),
+              };
+              const response = await fetch(path, {
+                  method: "POST",
+                  body: JSON.stringify(body)
+              });
+              const dataResponse = await response.json();
+              sessionId = dataResponse.sessionId;
+          }
+          catch (e) {
+              console.log("Error", e)
+              return false;
+          }
+ 
+          return { sessionId, signature };
+        }
  
     render() {
 
@@ -112,6 +177,7 @@ const withChatState = WrappedComponent => {
             getModelsData={this.getModelsData}
             getSessionsByUser={this.getSessionsByUser}
             closeSession={this.closeSession}
+            onOpenSession={this.onOpenSession}
             {...this.state}
             {...this.props}
         />
