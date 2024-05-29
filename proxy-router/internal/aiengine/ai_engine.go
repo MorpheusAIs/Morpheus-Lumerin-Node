@@ -61,21 +61,21 @@ func requestChatCompletionStream(ctx context.Context, request *api.ChatCompletio
 	for scanner.Scan() {
 		line := scanner.Text()
 		// Handle the completion of the stream
-		if line == "data: [DONE]" {
-			fmt.Println("Stream completed.")
+		// if line == "data: [DONE]" {
+		// 	fmt.Println("Stream completed.")
 
-			completion := &api.ChatCompletionStreamResponse{
-				Choices: []api.ChatCompletionStreamChoice{
-					{
-						Delta: api.ChatCompletionStreamChoiceDelta{
-							Content: "[DONE]",
-						},
-					},
-				},
-			}
+		// 	completion := &api.ChatCompletionStreamResponse{
+		// 		Choices: []api.ChatCompletionStreamChoice{
+		// 			{
+		// 				Delta: api.ChatCompletionStreamChoiceDelta{
+		// 					Content: "[DONE]",
+		// 				},
+		// 			},
+		// 		},
+		// 	}
 
-			return completion, nil
-		}
+		// 	return completion, nil
+		// }
 
 		if strings.HasPrefix(line, "data: ") {
 			data := line[6:] // Skip the "data: " prefix
@@ -134,4 +134,3 @@ func (aiEngine *AiEngine) PromptStream(ctx context.Context, req interface{}, chu
 
 	return resp, err
 }
-

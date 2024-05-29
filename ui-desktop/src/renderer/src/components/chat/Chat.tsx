@@ -103,10 +103,15 @@ const Chat = (props) => {
     const call = async (message) => {
         setIsSpinning(true);
         const chatHistory = messages.map(m => ({ role: m.role, content: m.text }))
-        const response = await fetch(`${props.config.chain.localProxyRouterUrl}/proxy/sessions/${props.activeSession.sessionId}/prompt`, {
-            method: 'POST',
-            body: JSON.stringify({
-                prompt: {
+        let response;
+
+        if(isLocal) {
+            response = await fetch(`${props.config.chain.localProxyRouterUrl}/v1/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    "Accept": "application/json"
+                },
+                body: JSON.stringify({
                     model: "llama2:latest",
                     stream: true,
                     messages: [
@@ -116,11 +121,30 @@ const Chat = (props) => {
                             content: message
                         }
                     ]
-                },
-                providerUrl: props.provider.Endpoint.replace("http://", ""),
-                providerPublicKey: props.activeSession.signature
-            })
-        });
+                })
+            });
+        }
+        else {
+            response = await fetch(`${props.config.chain.localProxyRouterUrl}/proxy/sessions/${props.activeSession.sessionId}/prompt`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    prompt: {
+                        model: "llama2:latest",
+                        stream: true,
+                        messages: [
+                            ...chatHistory,
+                            {
+                                role: "user",
+                                content: message
+                            }
+                        ]
+                    },
+                    providerUrl: props.provider.Endpoint.replace("http://", ""),
+                    providerPublicKey: props.activeSession.signature
+                })
+            });
+        }
+        
 
         function parse(decodedChunk) {
             const lines = decodedChunk.split('\n');
@@ -144,7 +168,6 @@ const Chat = (props) => {
                     break;
                 }
                 const decodedString = textDecoder.decode(value, { stream: true });
-
                 const parts = parse(decodedString);
                 parts.forEach(part => {
                     const message = memoState.find(m => m.id == part.id);

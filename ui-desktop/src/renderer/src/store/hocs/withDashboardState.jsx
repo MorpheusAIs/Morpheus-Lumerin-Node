@@ -51,11 +51,9 @@ const withDashboardState = WrappedComponent => {
 
     onInit = async () => {
       var balances = await this.props.client.getBalances();
-      console.log("🚀 ~ Container ~ getBalances= ~ balances:", balances)
       var transactions = await this.props.client.getTransactions();
-      console.log("🚀 ~ Container ~ getBalances= ~ transactions:", transactions)
-      var rate = await this.props.client.getMorRate();
-      console.log("🚀 ~ Container ~ onInit= ~ rate:", rate)
+      var rate = await this.props.client.getRates();
+      console.log("🚀 ~ OnInit", balances, transactions, rate);
       return { balances, transactions, rate };
     }
 
