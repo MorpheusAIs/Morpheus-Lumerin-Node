@@ -75,7 +75,7 @@ func (rpcProxy *RpcProxy) GetAllProviders(ctx context.Context) (int, gin.H) {
 			Endpoint:  value.Endpoint,
 			Stake:     value.Stake,
 			IsDeleted: value.IsDeleted,
-			Timestamp: value.Timestamp,
+			CreatedAt: value.CreatedAt,
 		}
 	}
 
@@ -98,7 +98,7 @@ func (rpcProxy *RpcProxy) GetAllModels(ctx context.Context) (int, gin.H) {
 			Owner:     value.Owner,
 			Name:      value.Name,
 			Tags:      value.Tags,
-			Timestamp: value.Timestamp,
+			CreatedAt: value.CreatedAt,
 			IsDeleted: value.IsDeleted,
 		}
 	}
@@ -340,6 +340,38 @@ func (rpcProxy *RpcProxy) GetAllowance(ctx *gin.Context) (int, gin.H) {
 	return constants.HTTP_STATUS_OK, gin.H{"allowance": allowance.String()}
 }
 
+func (rpcProxy *RpcProxy) Approve(ctx *gin.Context) (int, gin.H) {
+	spender := ctx.Query("spender")
+
+	if spender == "" {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "spender is required"}
+	}
+
+	spenderAddr := common.HexToAddress(spender)
+
+	amount := ctx.Query("amount")
+	if amount == "" {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "amount is required"}
+	}
+
+	amountInt, ok := new(big.Int).SetString(amount, 10)
+	if !ok {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "invalid amount"}
+	}
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get transactOpts: " + err.Error()}
+	}
+
+	tx, err := rpcProxy.morToken.Approve(transactOpt, spenderAddr, amountInt)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to approve: " + err.Error()}
+	}
+
+	return constants.HTTP_STATUS_OK, gin.H{"tx": tx}
+}
+
 func (rpcProxy *RpcProxy) GetTodaysBudget(ctx *gin.Context) (int, gin.H) {
 	budget, err := rpcProxy.sessionRouter.GetTodaysBudget(ctx)
 	if err != nil {
@@ -381,15 +413,15 @@ func (rpcProxy *RpcProxy) GetTokenSupply(ctx *gin.Context) (int, gin.H) {
 	return constants.HTTP_STATUS_OK, gin.H{"supply": supply.String()}
 }
 
-func (rpcProxy *RpcProxy) GetSessions(ctx *gin.Context) (int, gin.H) {
+func (rpcProxy *RpcProxy) GetSessions(ctx *gin.Context, offset *big.Int, limit uint8) (int, gin.H) {
 	if ctx.Query("user") != "" {
-		sessions, err := rpcProxy.sessionRouter.GetSessionsByUser(ctx, common.HexToAddress(ctx.Query("user")))
+		sessions, err := rpcProxy.sessionRouter.GetSessionsByUser(ctx, common.HexToAddress(ctx.Query("user")), offset, limit)
 		if err != nil {
 			return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
 		}
 		return constants.HTTP_STATUS_OK, gin.H{"sessions": rpcProxy.mapSessions(sessions)}
 	} else if ctx.Query("provider") != "" {
-		sessions, err := rpcProxy.sessionRouter.GetSessionsByProvider(ctx, common.HexToAddress(ctx.Query("provider")))
+		sessions, err := rpcProxy.sessionRouter.GetSessionsByProvider(ctx, common.HexToAddress(ctx.Query("provider")), offset, limit)
 		if err != nil {
 			return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
 		}
