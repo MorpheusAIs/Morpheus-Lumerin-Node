@@ -4,9 +4,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
@@ -45,6 +48,11 @@ type ReqObject struct {
 	Toks uint `json:"toks"`
 }
 
+var approvalAbi = []lib.AbiParameter{
+	{Type: "bytes32"},
+	{Type: "uint128"},
+}
+
 type MorRpc struct{}
 
 func NewMorRpc() *MorRpc {
@@ -53,12 +61,25 @@ func NewMorRpc() *MorRpc {
 
 // Provider Node Communication
 
-func (m *MorRpc) InitiateSessionResponse(providerPubKey string, userAddr string, providerPrivateKeyHex string, requestId string) (*RpcResponse, error) {
+func (m *MorRpc) InitiateSessionResponse(providerPubKey string, userAddr string, bidId string, providerPrivateKeyHex string, requestId string) (*RpcResponse, error) {
 	timestamp := m.generateTimestamp()
+
+	bidIdBytes := common.FromHex(bidId)
+	approval, err := lib.EncodeAbiParameters(approvalAbi, []interface{}{[32]byte(bidIdBytes), big.NewInt(timestamp)})
+	if err != nil {
+		return &RpcResponse{}, err
+	}
+	approvalSig, err := lib.SignEthMessage(approval, providerPrivateKeyHex)
+	if err != nil {
+		return &RpcResponse{}, err
+	}
+
 	params := map[string]interface{}{
-		"message":   providerPubKey,
-		"user":      userAddr,
-		"timestamp": timestamp,
+		"message":     providerPubKey,
+		"approval":    hex.EncodeToString(approval),
+		"approvalSig": hex.EncodeToString(approvalSig),
+		"user":        userAddr,
+		"timestamp":   timestamp,
 	}
 
 	signature, err := m.generateSignature(params, providerPrivateKeyHex)
@@ -163,7 +184,7 @@ func (m *MorRpc) generateReport(sessionID string, start uint, end uint, prompts 
 
 // User Node Communication
 
-func (m *MorRpc) InitiateSessionRequest(user string, provider string, userPubKey string, spend float64, userPrivateKeyHex string, requestId string) (*RpcMessage, error) {
+func (m *MorRpc) InitiateSessionRequest(user string, provider string, userPubKey string, spend float64, bidId string, userPrivateKeyHex string, requestId string) (*RpcMessage, error) {
 	method := "session.request"
 	timestamp := m.generateTimestamp()
 	params := map[string]interface{}{
@@ -172,6 +193,7 @@ func (m *MorRpc) InitiateSessionRequest(user string, provider string, userPubKey
 		"provider":  provider,
 		"key":       userPubKey,
 		"spend":     fmt.Sprintf("%f", spend),
+		"bidid":     bidId,
 	}
 
 	signature, err := m.generateSignature(params, userPrivateKeyHex)

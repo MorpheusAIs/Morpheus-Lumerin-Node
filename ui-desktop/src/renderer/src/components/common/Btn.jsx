@@ -26,9 +26,9 @@ export const Btn = styled(BaseBtn)`
   line-height: 2.5rem;
   font-size: 2rem;
   font-weight: 500;
-  color: ${p => p.theme.colors.light};
-  border-radius: 12px;
-  background-color: ${p => p.theme.colors.primary};
+  color: black;
+  border-radius: 5px;
+  background-color: ${p => p.theme.colors.morMain};
   box-shadow: inset 0 3px 0 0 rgba(255, 255, 255, 0.1);
   padding: 1.6rem 2rem;
 

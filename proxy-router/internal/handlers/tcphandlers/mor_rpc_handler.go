@@ -42,6 +42,7 @@ func (m *MorRpcHandler) Handle(ctx context.Context, msg morrpc.RpcMessage, sourc
 		userPubKey := fmt.Sprintf("%v", msg.Params["key"])
 		spend := fmt.Sprintf("%v", msg.Params["spend"])
 		timeStamp := fmt.Sprintf("%v", msg.Params["timestamp"])
+		bidId := fmt.Sprintf("%v", msg.Params["bidid"])
 		sourceLog.Debugf("Received session request from %s, timestamp: %s", userAddr, timeStamp)
 
 		isValid := m.morRpc.VerifySignature(msg.Params, signature, userPubKey, sourceLog)
@@ -62,6 +63,7 @@ func (m *MorRpcHandler) Handle(ctx context.Context, msg morrpc.RpcMessage, sourc
 		response, err := m.morRpc.InitiateSessionResponse(
 			m.publicKeyHex,
 			userAddr,
+			bidId,
 			m.privateKeyHex,
 			requestId,
 		)
@@ -81,31 +83,30 @@ func (m *MorRpcHandler) Handle(ctx context.Context, msg morrpc.RpcMessage, sourc
 		return nil
 	case "session.prompt":
 		requestId := fmt.Sprintf("%v", msg.ID)
-		// signature := fmt.Sprintf("%v", msg.Params["signature"])
+		signature := fmt.Sprintf("%v", msg.Params["signature"])
 		sessionId := fmt.Sprintf("%v", msg.Params["sessionid"])
 		prompt := fmt.Sprintf("%v", msg.Params["message"])
 		timeStamp := fmt.Sprintf("%v", msg.Params["timestamp"])
 		sourceLog.Debugf("Received prompt from session %s, timestamp: %s", sessionId, timeStamp)
-		fmt.Println("Prompt: ", prompt)
-		// session, ok := m.sessionStorage.GetSession(sessionId)
-		// if !ok {
-		// 	err := fmt.Errorf("session not found")
-		// 	sourceLog.Error(err)
-		// 	return err
-		// }
-		// user, ok := m.sessionStorage.GetUser(session.UserAddr)
-		// if !ok {
-		// 	err := fmt.Errorf("user not found")
-		// 	sourceLog.Error(err)
-		// 	return err
-		// }
-		// userPubKey := user.PubKey
-		// isValid := m.morRpc.VerifySignature(msg.Params, signature, userPubKey, sourceLog)
-		// if !isValid {
-		// 	err := fmt.Errorf("invalid signature")
-		// 	sourceLog.Error(err)
-		// 	return err
-		// }
+		session, ok := m.sessionStorage.GetSession(sessionId)
+		if !ok {
+			err := fmt.Errorf("session not found")
+			sourceLog.Error(err)
+			return err
+		}
+		user, ok := m.sessionStorage.GetUser(session.UserAddr)
+		if !ok {
+			err := fmt.Errorf("user not found")
+			sourceLog.Error(err)
+			return err
+		}
+		userPubKey := user.PubKey
+		isValid := m.morRpc.VerifySignature(msg.Params, signature, userPubKey, sourceLog)
+		if !isValid {
+			err := fmt.Errorf("invalid signature")
+			sourceLog.Error(err)
+			return err
+		}
 
 		var req *openai.ChatCompletionRequest
 
@@ -122,10 +123,14 @@ func (m *MorRpcHandler) Handle(ctx context.Context, msg morrpc.RpcMessage, sourc
 				return err
 			}
 
-			fmt.Println(string(marshalledResponse))
+			encryptedResponse, err := lib.EncryptString(string(marshalledResponse), userPubKey)
+			if err != nil {
+				return err
+			}
+
 			// Send response
 			r, err := m.morRpc.SessionPromptResponse(
-				string(marshalledResponse),
+				encryptedResponse,
 				m.privateKeyHex,
 				requestId,
 			)

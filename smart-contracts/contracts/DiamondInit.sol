@@ -58,6 +58,7 @@ contract DiamondInit {
         closeoutType: 0,
         providerWithdrawnAmount: 0,
         openedAt: 0,
+        endsAt: 0,
         closedAt: 0
       })
     );

@@ -11,7 +11,7 @@ const Container = styled.div`
 const Icon = styled.svg`
   position: absolute;
   fill: ${p =>
-    p.isActive ? p.theme.colors.primary : p.theme.colors.translucentDark};
+    p.isActive ? p.theme.colors.morMain : p.theme.colors.translucentDark};
   left: 0;
   top: 1px;
 `;

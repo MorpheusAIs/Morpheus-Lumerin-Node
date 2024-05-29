@@ -2,7 +2,7 @@ import { loadFixture } from "@nomicfoundation/hardhat-toolbox-viem/network-helpe
 import { expect } from "chai";
 import hre from "hardhat";
 import { getAddress } from "viem";
-import { expectError, getTxTimestamp } from "./utils";
+import { catchError, expectError, getTxTimestamp } from "./utils";
 import { deployDiamond, deploySingleProvider } from "./fixtures";
 
 describe("Provider registry", function () {
@@ -32,7 +32,7 @@ describe("Provider registry", function () {
       expect(data).deep.equal({
         endpoint: expectedProvider.endpoint,
         stake: expectedProvider.stake,
-        timestamp: expectedProvider.timestamp,
+        createdAt: expectedProvider.createdAt,
         isDeleted: false,
       });
       expect(events.length).eq(1);
@@ -42,31 +42,27 @@ describe("Provider registry", function () {
       const { providerRegistry, provider } = await loadFixture(deployDiamond);
       const minStake = 100n;
       await providerRegistry.write.providerSetMinStake([minStake]);
-      try {
+
+      await catchError(providerRegistry.abi, "StakeTooLow", async () => {
         await providerRegistry.simulate.providerRegister([
           provider.account.address,
           minStake - 1n,
           "endpoint",
         ]);
-        expect.fail("Expected error");
-      } catch (e) {
-        expectError(e, providerRegistry.abi, "StakeTooLow");
-      }
+      });
     });
 
     it("Should error when registering with insufficient allowance", async function () {
       const { providerRegistry, provider, tokenMOR } =
         await loadFixture(deployDiamond);
-      try {
+
+      await catchError(tokenMOR.abi, "ERC20InsufficientAllowance", async () => {
         await providerRegistry.simulate.providerRegister([
           provider.account.address,
           100n,
           "endpoint",
         ]);
-        expect.fail("Expected error");
-      } catch (e) {
-        expectError(e, tokenMOR.abi, "ERC20InsufficientAllowance");
-      }
+      });
     });
 
     it("Should error when register account doesnt match sender account", async function () {
@@ -74,17 +70,15 @@ describe("Provider registry", function () {
 
       const { providerRegistry, provider, tokenMOR, owner } =
         await loadFixture(deployDiamond);
-      try {
+
+      await catchError(providerRegistry.abi, "NotSenderOrOwner", async () => {
         await providerRegistry.simulate.providerRegister(
           [user.account.address, 100n, "endpoint"],
           {
             account: provider.account.address,
           },
         );
-        expect.fail("Expected error");
-      } catch (e) {
-        expectError(e, providerRegistry.abi, "NotSenderOrOwner");
-      }
+      });
     });
 
     it("Should deregister by provider", async function () {
@@ -181,7 +175,7 @@ describe("Provider registry", function () {
       expect(providerData).deep.equal({
         endpoint: updates.endpoint,
         stake: expectedProvider.stake + updates.addStake,
-        timestamp: timestamp,
+        createdAt: timestamp,
         isDeleted: expectedProvider.isDeleted,
       });
     });
@@ -225,7 +219,7 @@ describe("Provider registry", function () {
       expect(providerData).deep.equal({
         endpoint: expectedProvider.endpoint,
         stake: expectedProvider.stake,
-        timestamp: expectedProvider.timestamp,
+        createdAt: expectedProvider.createdAt,
         isDeleted: expectedProvider.isDeleted,
       });
     });
@@ -240,7 +234,7 @@ describe("Provider registry", function () {
       expect(providerData).deep.equal({
         endpoint: expectedProvider.endpoint,
         stake: expectedProvider.stake,
-        timestamp: expectedProvider.timestamp,
+        createdAt: expectedProvider.createdAt,
         isDeleted: expectedProvider.isDeleted,
       });
     });
@@ -258,7 +252,7 @@ describe("Provider registry", function () {
       expect(providers[0]).deep.equal({
         endpoint: expectedProvider.endpoint,
         stake: expectedProvider.stake,
-        timestamp: expectedProvider.timestamp,
+        createdAt: expectedProvider.createdAt,
         isDeleted: expectedProvider.isDeleted,
       });
     });
@@ -282,18 +276,15 @@ describe("Provider registry", function () {
       const { providerRegistry, provider } =
         await loadFixture(deploySingleProvider);
 
-      try {
-        await providerRegistry.write.providerSetMinStake([100n], {
-          account: provider.account,
-        });
-        expect.fail("Expected error");
-      } catch (e) {
-        expectError(
-          e,
-          (await hre.artifacts.readArtifact("OwnershipFacet")).abi,
-          "NotContractOwner",
-        );
-      }
+      await catchError(
+        (await hre.artifacts.readArtifact("OwnershipFacet")).abi,
+        "NotContractOwner",
+        async () => {
+          await providerRegistry.write.providerSetMinStake([100n], {
+            account: provider.account,
+          });
+        },
+      );
     });
   });
 });

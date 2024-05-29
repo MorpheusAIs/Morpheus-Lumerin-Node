@@ -2,8 +2,13 @@ package rpcproxy
 
 import (
 	"context"
+	"encoding/hex"
+	"errors"
 	"math/big"
+	"sort"
+	"strconv"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/contracts/sessionrouter"
 	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
@@ -11,8 +16,10 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/rpcproxy/structs"
 	"github.com/gin-gonic/gin"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
@@ -23,16 +30,21 @@ type RpcProxy struct {
 	modelRegistry    *registries.ModelRegistry
 	marketplace      *registries.Marketplace
 	sessionRouter    *registries.SessionRouter
+	morToken         *registries.MorToken
+	explorerClient   *ExplorerClient
 
 	legacyTx   bool
 	privateKey string
 }
 
-func NewRpcProxy(rpcClient *ethclient.Client, diamonContractAddr common.Address, privateKey string, log interfaces.ILogger, legacyTx bool) *RpcProxy {
+func NewRpcProxy(rpcClient *ethclient.Client, diamonContractAddr common.Address, morTokenAddr common.Address, explorerApiUrl string, privateKey string, log interfaces.ILogger, legacyTx bool) *RpcProxy {
 	providerRegistry := registries.NewProviderRegistry(diamonContractAddr, rpcClient, log)
 	modelRegistry := registries.NewModelRegistry(diamonContractAddr, rpcClient, log)
 	marketplace := registries.NewMarketplace(diamonContractAddr, rpcClient, log)
 	sessionRouter := registries.NewSessionRouter(diamonContractAddr, rpcClient, log)
+	morToken := registries.NewMorToken(morTokenAddr, rpcClient, log)
+
+	explorerClient := NewExplorerClient(explorerApiUrl, morTokenAddr.String())
 	return &RpcProxy{
 		rpcClient:        rpcClient,
 		providerRegistry: providerRegistry,
@@ -41,6 +53,8 @@ func NewRpcProxy(rpcClient *ethclient.Client, diamonContractAddr common.Address,
 		sessionRouter:    sessionRouter,
 		legacyTx:         legacyTx,
 		privateKey:       privateKey,
+		morToken:         morToken,
+		explorerClient:   explorerClient,
 	}
 }
 
@@ -61,7 +75,7 @@ func (rpcProxy *RpcProxy) GetAllProviders(ctx context.Context) (int, gin.H) {
 			Endpoint:  value.Endpoint,
 			Stake:     value.Stake,
 			IsDeleted: value.IsDeleted,
-			Timestamp: value.Timestamp,
+			CreatedAt: value.CreatedAt,
 		}
 	}
 
@@ -84,7 +98,7 @@ func (rpcProxy *RpcProxy) GetAllModels(ctx context.Context) (int, gin.H) {
 			Owner:     value.Owner,
 			Name:      value.Name,
 			Tags:      value.Tags,
-			Timestamp: value.Timestamp,
+			CreatedAt: value.CreatedAt,
 			IsDeleted: value.IsDeleted,
 		}
 	}
@@ -141,10 +155,16 @@ func (rpcProxy *RpcProxy) OpenSession(ctx *gin.Context) (int, gin.H) {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 
-	bidIdStr, ok := reqPayload["bidId"].(string)
+	approval, ok := reqPayload["approval"].(string)
 	if !ok {
-		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "bidId is required"}
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "approval is required"}
 	}
+
+	approvalSig, ok := reqPayload["approvalSig"].(string)
+	if !ok {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "approvalSig is required"}
+	}
+
 	stakeStr, ok := reqPayload["stake"].(string)
 	if !ok {
 		print(ok)
@@ -156,14 +176,15 @@ func (rpcProxy *RpcProxy) OpenSession(ctx *gin.Context) (int, gin.H) {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "stake is invalid"}
 	}
 
-	bidId := common.FromHex(bidIdStr)
-
 	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
 	if err != nil {
 		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
 	}
 
-	sessionId, err := rpcProxy.sessionRouter.OpenSession(transactOpt, [32]byte(bidId), stake)
+	approvalBytes := common.FromHex(approval)
+	approvalSigBytes := common.FromHex(approvalSig)
+
+	sessionId, err := rpcProxy.sessionRouter.OpenSession(transactOpt, approvalBytes, approvalSigBytes, stake, rpcProxy.privateKey)
 	if err != nil {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
@@ -183,8 +204,7 @@ func (rpcProxy *RpcProxy) CloseSession(ctx *gin.Context) (int, gin.H) {
 		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
 	}
 
-	encodedReport := "0x0000008000002710"
-	_, err = rpcProxy.sessionRouter.CloseSession(transactOpt, sessionId, encodedReport, rpcProxy.privateKey)
+	_, err = rpcProxy.sessionRouter.CloseSession(transactOpt, sessionId, rpcProxy.privateKey)
 	if err != nil {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
@@ -198,6 +218,282 @@ func (rpcProxy *RpcProxy) GetSession(ctx *gin.Context, sessionId string) (int, g
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 	return constants.HTTP_STATUS_OK, gin.H{"session": session}
+}
+
+func (rpc *RpcProxy) GetProviderClaimableBalance(ctx *gin.Context) (int, gin.H) {
+	sessionId := ctx.Param("id")
+	if sessionId == "" {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "sessionId is required"}
+	}
+
+	balance, err := rpc.sessionRouter.GetProviderClaimableBalance(ctx, sessionId)
+	if err != nil {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+	return constants.HTTP_STATUS_OK, gin.H{"balance": balance}
+}
+
+func (rpcProxy *RpcProxy) GetBalance(ctx *gin.Context) (int, gin.H) {
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+
+	ethBalance, err := rpcProxy.rpcClient.BalanceAt(ctx, transactOpt.From, nil)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get eth balance: " + err.Error()}
+	}
+
+	balance, err := rpcProxy.morToken.GetBalance(ctx, transactOpt.From)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get mor balance: " + err.Error()}
+	}
+
+	return constants.HTTP_STATUS_OK, gin.H{"eth": ethBalance.String(), "mor": balance.String()}
+}
+
+func (rpcProxy *RpcProxy) SendEth(ctx *gin.Context) (int, gin.H) {
+	to, amount, err := rpcProxy.getSendParams(ctx)
+	if err != nil {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+
+	nonce, err := rpcProxy.rpcClient.PendingNonceAt(context.Background(), transactOpt.From)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get nonce: " + err.Error()}
+	}
+
+	toAddr := common.HexToAddress(to)
+	estimatedGas, err := rpcProxy.rpcClient.EstimateGas(context.Background(), ethereum.CallMsg{
+		From:  transactOpt.From,
+		To:    &toAddr,
+		Value: amount,
+	})
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to estimate gas: " + err.Error()}
+	}
+
+	gas := float64(estimatedGas) * 1.5
+	tx := types.NewTransaction(nonce, toAddr, amount, uint64(gas), transactOpt.GasPrice, nil)
+	signedTx, err := rpcProxy.signTx(ctx, tx, rpcProxy.privateKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to sign eth: " + err.Error()}
+	}
+
+	err = rpcProxy.rpcClient.SendTransaction(context.Background(), signedTx)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to send eth: " + err.Error()}
+	}
+
+	// Wait for the transaction receipt
+	_, err = bind.WaitMined(context.Background(), rpcProxy.rpcClient, signedTx)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to send eth: " + err.Error()}
+	}
+
+	return constants.HTTP_STATUS_OK, gin.H{"txHash": signedTx.Hash().String()}
+}
+
+func (rpcProxy *RpcProxy) SendMor(ctx *gin.Context) (int, gin.H) {
+	to, amount, err := rpcProxy.getSendParams(ctx)
+	if err != nil {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+
+	tx, err := rpcProxy.morToken.Transfer(transactOpt, common.HexToAddress(to), amount)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to transfer mor: " + err.Error()}
+	}
+
+	return constants.HTTP_STATUS_OK, gin.H{"txHash": tx.Hash().String()}
+}
+
+func (rpcProxy *RpcProxy) GetAllowance(ctx *gin.Context) (int, gin.H) {
+	spender := ctx.Query("spender")
+
+	if spender == "" {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "spender is required"}
+	}
+
+	spenderAddr := common.HexToAddress(spender)
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get transactOpts: " + err.Error()}
+	}
+
+	allowance, err := rpcProxy.morToken.GetAllowance(ctx, transactOpt.From, spenderAddr)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get allowance: " + err.Error()}
+	}
+
+	return constants.HTTP_STATUS_OK, gin.H{"allowance": allowance.String()}
+}
+
+func (rpcProxy *RpcProxy) Approve(ctx *gin.Context) (int, gin.H) {
+	spender := ctx.Query("spender")
+
+	if spender == "" {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "spender is required"}
+	}
+
+	spenderAddr := common.HexToAddress(spender)
+
+	amount := ctx.Query("amount")
+	if amount == "" {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "amount is required"}
+	}
+
+	amountInt, ok := new(big.Int).SetString(amount, 10)
+	if !ok {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "invalid amount"}
+	}
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get transactOpts: " + err.Error()}
+	}
+
+	tx, err := rpcProxy.morToken.Approve(transactOpt, spenderAddr, amountInt)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to approve: " + err.Error()}
+	}
+
+	return constants.HTTP_STATUS_OK, gin.H{"tx": tx}
+}
+
+func (rpcProxy *RpcProxy) GetTodaysBudget(ctx *gin.Context) (int, gin.H) {
+	budget, err := rpcProxy.sessionRouter.GetTodaysBudget(ctx)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get budget: " + err.Error()}
+	}
+
+	return constants.HTTP_STATUS_OK, gin.H{"budget": budget.String()}
+}
+
+func (rpcProxy *RpcProxy) ClaimProviderBalance(ctx *gin.Context) (int, gin.H) {
+	sessionId := ctx.Param("id")
+	if sessionId == "" {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "sessionId is required"}
+	}
+
+	to, amount, err := rpcProxy.getSendParams(ctx)
+	if err != nil {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+
+	txHash, err := rpcProxy.sessionRouter.ClaimProviderBalance(transactOpt, sessionId, amount, common.HexToAddress(to))
+	if err != nil {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+
+	return constants.HTTP_STATUS_OK, gin.H{"txHash": txHash}
+}
+
+func (rpcProxy *RpcProxy) GetTokenSupply(ctx *gin.Context) (int, gin.H) {
+	supply, err := rpcProxy.morToken.GetTotalSupply(ctx)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get supply: " + err.Error()}
+	}
+	return constants.HTTP_STATUS_OK, gin.H{"supply": supply.String()}
+}
+
+func (rpcProxy *RpcProxy) GetSessions(ctx *gin.Context, offset *big.Int, limit uint8) (int, gin.H) {
+	if ctx.Query("user") != "" {
+		sessions, err := rpcProxy.sessionRouter.GetSessionsByUser(ctx, common.HexToAddress(ctx.Query("user")), offset, limit)
+		if err != nil {
+			return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+		}
+		return constants.HTTP_STATUS_OK, gin.H{"sessions": rpcProxy.mapSessions(sessions)}
+	} else if ctx.Query("provider") != "" {
+		sessions, err := rpcProxy.sessionRouter.GetSessionsByProvider(ctx, common.HexToAddress(ctx.Query("provider")), offset, limit)
+		if err != nil {
+			return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+		}
+		return constants.HTTP_STATUS_OK, gin.H{"sessions": rpcProxy.mapSessions(sessions)}
+	} else {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "user or provider is required"}
+	}
+}
+
+func (rpcProxy *RpcProxy) mapSessions(sessions []sessionrouter.Session) []*structs.Session {
+	result := make([]*structs.Session, len(sessions))
+	for i, value := range sessions {
+		result[i] = &structs.Session{
+			Id:                      lib.BytesToString(value.Id[:]),
+			Provider:                value.Provider,
+			User:                    value.User,
+			ModelAgentId:            lib.BytesToString(value.ModelAgentId[:]),
+			BidID:                   lib.BytesToString(value.BidID[:]),
+			Stake:                   value.Stake,
+			PricePerSecond:          value.PricePerSecond,
+			CloseoutReceipt:         hex.EncodeToString(value.CloseoutReceipt),
+			CloseoutType:            value.CloseoutType,
+			ProviderWithdrawnAmount: value.ProviderWithdrawnAmount,
+			OpenedAt:                value.OpenedAt,
+			EndsAt:                  value.EndsAt,
+			ClosedAt:                value.ClosedAt,
+		}
+	}
+	return result
+}
+
+func (rpcProxy *RpcProxy) GetTransactions(ctx *gin.Context) (int, gin.H) {
+	page := ctx.Query("page")
+	limit := ctx.Query("limit")
+	if page == "" {
+		page = "1"
+	}
+
+	if limit == "" {
+		limit = "10"
+	}
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+	address := transactOpt.From
+
+	ethTrxs, err := rpcProxy.explorerClient.GetEthTransactions(address.String(), page, limit)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+	morTrxs, err := rpcProxy.explorerClient.GetTokenTransactions(address.String(), page, limit)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+
+	allTrxs := append(ethTrxs, morTrxs...)
+	sort.Slice(allTrxs, func(i, j int) bool {
+		blockNumber1, err := strconv.ParseInt(allTrxs[i].BlockNumber, 10, 0)
+		if err != nil {
+			return false
+		}
+		blockNumber2, err := strconv.ParseInt(allTrxs[j].BlockNumber, 10, 0)
+		if err != nil {
+			return false
+		}
+
+		return blockNumber1 > blockNumber2
+	})
+
+	return constants.HTTP_STATUS_OK, gin.H{"transactions": allTrxs}
 }
 
 func (rpcProxy *RpcProxy) getTransactOpts(ctx context.Context, privKey string) (*bind.TransactOpts, error) {
@@ -229,4 +525,43 @@ func (rpcProxy *RpcProxy) getTransactOpts(ctx context.Context, privKey string) (
 	transactOpts.Context = ctx
 
 	return transactOpts, nil
+}
+
+func (rpcProxy *RpcProxy) signTx(ctx context.Context, tx *types.Transaction, privKey string) (*types.Transaction, error) {
+	privateKey, err := crypto.HexToECDSA(privKey)
+	if err != nil {
+		return nil, err
+	}
+
+	chainId, err := rpcProxy.rpcClient.ChainID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return types.SignTx(tx, types.NewEIP155Signer(chainId), privateKey)
+}
+
+func (rpcProxy *RpcProxy) getSendParams(ctx *gin.Context) (string, *big.Int, error) {
+	var reqPayload map[string]interface{}
+	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
+		return "", &big.Int{}, err
+	}
+
+	to := reqPayload["to"].(string)
+	amountStr := reqPayload["amount"].(string)
+
+	if to == "0" {
+		return "", &big.Int{}, errors.New("to is required")
+	}
+
+	if amountStr == "" {
+		return "", &big.Int{}, errors.New("amount is required")
+	}
+
+	amount, ok := new(big.Int).SetString(amountStr, 10)
+	if !ok {
+		return "", &big.Int{}, errors.New("invalid amount" + amountStr)
+	}
+
+	return to, amount, nil
 }

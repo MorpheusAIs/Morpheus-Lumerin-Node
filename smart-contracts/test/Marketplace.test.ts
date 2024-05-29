@@ -4,6 +4,7 @@ import hre from "hardhat";
 import { parseEventLogs } from "viem";
 import { deploySingleBid } from "./fixtures";
 import {
+  catchError,
   expectError,
   getTxTimestamp,
   randomAddress,
@@ -30,30 +31,24 @@ describe("Marketplace", function () {
       const { marketplace, expectedBid } = await loadFixture(deploySingleBid);
       const unknownProvider = randomAddress();
 
-      try {
+      await catchError(marketplace.abi, "ProviderNotFound", async () => {
         await marketplace.simulate.postModelBid(
           [unknownProvider, expectedBid.modelId, expectedBid.pricePerSecond],
           { account: unknownProvider },
         );
-        expect.fail("Should have thrown an error");
-      } catch (e) {
-        expectError(e, marketplace.abi, "ProviderNotFound");
-      }
+      });
     });
 
     it("Should error if model doesn't exist", async function () {
       const { marketplace, expectedBid } = await loadFixture(deploySingleBid);
       const unknownModel = randomBytes32();
 
-      try {
+      await catchError(marketplace.abi, "ModelOrAgentNotFound", async () => {
         await marketplace.simulate.postModelBid(
           [expectedBid.providerAddr, unknownModel, expectedBid.pricePerSecond],
           { account: expectedBid.providerAddr },
         );
-        expect.fail("Should have thrown an error");
-      } catch (e) {
-        expectError(e, marketplace.abi, "ModelOrAgentNotFound");
-      }
+      });
     });
 
     it("Should create second bid", async function () {
@@ -333,32 +328,26 @@ describe("Marketplace", function () {
       await publicClient.waitForTransactionReceipt({ hash: txHash });
 
       // check balance after
-      try {
-        await marketplace.write.withdraw([expectedBid.providerAddr, newFee], {
-          account: expectedBid.providerAddr,
-        });
-        expect.fail("Should have thrown an error");
-      } catch (e) {
-        expectError(
-          e,
-          (await hre.artifacts.readArtifact("OwnershipFacet")).abi,
-          "NotContractOwner",
-        );
-      }
+      await catchError(
+        (await hre.artifacts.readArtifact("OwnershipFacet")).abi,
+        "NotContractOwner",
+        async () => {
+          await marketplace.write.withdraw([expectedBid.providerAddr, newFee], {
+            account: expectedBid.providerAddr,
+          });
+        },
+      );
     });
 
     it("should not allow withdrawal if not enough balance", async function () {
       const { marketplace, owner, tokenMOR } =
         await loadFixture(deploySingleBid);
 
-      try {
+      await catchError(marketplace.abi, "NotEnoughBalance", async () => {
         await marketplace.write.withdraw([owner.account.address, 100000000n], {
           account: owner.account.address,
         });
-        expect.fail("Should have thrown an error");
-      } catch (e) {
-        expectError(e, marketplace.abi, "NotEnoughBalance");
-      }
+      });
     });
   });
 });

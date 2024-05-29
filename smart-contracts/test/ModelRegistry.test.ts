@@ -3,7 +3,13 @@ import { expect } from "chai";
 import hre from "hardhat";
 import { getAddress } from "viem";
 import { deployDiamond, deploySingleModel } from "./fixtures";
-import { expectError, getHex, getTxTimestamp, randomAddress, randomBytes32 } from "./utils";
+import {
+  catchError,
+  getHex,
+  getTxTimestamp,
+  randomAddress,
+  randomBytes32,
+} from "./utils";
 
 describe("Model registry", function () {
   describe("Actions", function () {
@@ -31,7 +37,7 @@ describe("Model registry", function () {
         owner: getAddress(expectedModel.owner),
         name: expectedModel.name,
         tags: expectedModel.tags,
-        timestamp: expectedModel.timestamp,
+        createdAt: expectedModel.createdAt,
         isDeleted: expectedModel.isDeleted,
       });
       expect(events.length).eq(1);
@@ -41,7 +47,8 @@ describe("Model registry", function () {
       const { modelRegistry, owner } = await loadFixture(deployDiamond);
       const minStake = 100n;
       await modelRegistry.write.modelSetMinStake([minStake]);
-      try {
+
+      await catchError(modelRegistry.abi, "StakeTooLow", async () => {
         await modelRegistry.simulate.modelRegister([
           randomBytes32(),
           randomBytes32(),
@@ -51,16 +58,14 @@ describe("Model registry", function () {
           "a",
           [],
         ]);
-        expect.fail("Expected error");
-      } catch (e) {
-        expectError(e, modelRegistry.abi, "StakeTooLow");
-      }
+      });
     });
 
     it("Should error when registering with insufficient allowance", async function () {
       const { modelRegistry, owner, tokenMOR } =
         await loadFixture(deployDiamond);
-      try {
+
+      await catchError(tokenMOR.abi, "ERC20InsufficientAllowance", async () => {
         await modelRegistry.simulate.modelRegister([
           randomBytes32(),
           randomBytes32(),
@@ -70,10 +75,7 @@ describe("Model registry", function () {
           "a",
           [],
         ]);
-        expect.fail("Expected error");
-      } catch (e) {
-        expectError(e, tokenMOR.abi, "ERC20InsufficientAllowance");
-      }
+      });
     });
 
     it("Should error when register account doesnt match sender account", async function () {
@@ -81,7 +83,8 @@ describe("Model registry", function () {
 
       const { modelRegistry, tokenMOR } = await loadFixture(deployDiamond);
       await tokenMOR.write.approve([modelRegistry.address, 100n]);
-      try {
+
+      await catchError(modelRegistry.abi, "NotSenderOrOwner", async () => {
         await modelRegistry.simulate.modelRegister(
           [
             randomBytes32(),
@@ -96,10 +99,7 @@ describe("Model registry", function () {
             account: user.account.address,
           },
         );
-        expect.fail("Expected error");
-      } catch (e) {
-        expectError(e, modelRegistry.abi, "NotSenderOrOwner");
-      }
+      });
     });
 
     it("Should deregister by owner", async function () {
@@ -144,14 +144,11 @@ describe("Model registry", function () {
 
     it("Should error if model not known by admin", async function () {
       const { modelRegistry, owner } = await loadFixture(deploySingleModel);
-      try {
+      await catchError(modelRegistry.abi, "KeyNotFound", async () => {
         await modelRegistry.write.modelDeregister([randomBytes32()], {
           account: owner.account,
         });
-        expect.fail("Expected error");
-      } catch (e) {
-        expectError(e, modelRegistry.abi, "KeyNotFound");
-      }
+      });
     });
 
     it("Should return stake on deregister", async function () {
@@ -209,7 +206,7 @@ describe("Model registry", function () {
         owner: getAddress(updates.owner),
         name: updates.name,
         tags: updates.tags,
-        timestamp: timestamp,
+        createdAt: timestamp,
         isDeleted: expectedModel.isDeleted,
       });
     });
@@ -261,7 +258,7 @@ describe("Model registry", function () {
         owner: getAddress(expectedModel.owner),
         name: expectedModel.name,
         tags: expectedModel.tags,
-        timestamp: expectedModel.timestamp,
+        createdAt: expectedModel.createdAt,
         isDeleted: expectedModel.isDeleted,
       });
     });
@@ -280,7 +277,7 @@ describe("Model registry", function () {
         owner: getAddress(expectedModel.owner),
         name: expectedModel.name,
         tags: expectedModel.tags,
-        timestamp: expectedModel.timestamp,
+        createdAt: expectedModel.createdAt,
         isDeleted: expectedModel.isDeleted,
       });
     });
@@ -302,18 +299,11 @@ describe("Model registry", function () {
 
     it("Should error when not owner is setting min stake", async function () {
       const { modelRegistry, provider } = await loadFixture(deploySingleModel);
-      try {
+      await catchError(modelRegistry.abi, "NotContractOwner", async () => {
         await modelRegistry.write.modelSetMinStake([100n], {
           account: provider.account,
         });
-        expect.fail("Expected error");
-      } catch (e) {
-        expectError(
-          e,
-          (await hre.artifacts.readArtifact("OwnershipFacet")).abi,
-          "NotContractOwner",
-        );
-      }
+      });
     });
   });
 });
