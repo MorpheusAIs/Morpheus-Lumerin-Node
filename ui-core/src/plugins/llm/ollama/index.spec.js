@@ -10,6 +10,7 @@ const config = {
   // modelUrl: "http://localhost:11434/v1",
   modelName: modelName,
 }
+
 // TODO: fix other tests so they can be run reliably
 describe.only('test ollama', function () {
   this.timeout(20000)

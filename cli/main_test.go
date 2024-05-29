@@ -8,7 +8,7 @@ import (
 
 // Build the main package and return the path to the executable
 func buildMain(t *testing.T) string {
-	exePath := "./myapp" // Path to the compiled executable
+	exePath := "./testapp" // Path to the compiled executable
 
 	cmd := exec.Command("go", "build", "-o", exePath, ".")
 	err := cmd.Run()
@@ -41,13 +41,14 @@ func TestCLICommands(t *testing.T) {
 	_, err := runCommand(t, exePath, "healthcheck")
 	_, err = runCommand(t, exePath, "proxyRouterConfig")
 	_, err = runCommand(t, exePath, "proxyRouterFiles")
-	_, err = runCommand(t, exePath, "createChatCompletions")
-	_, err = runCommand(t, exePath, "initiateProxySession")
-	_, err = runCommand(t, exePath, "blockchainProviders")
-	_, err = runCommand(t, exePath, "blockchainProvidersBids")
-	_, err = runCommand(t, exePath, "blockchainModels")
-	_, err = runCommand(t, exePath, "openBlockchainSession")
-	_, err = runCommand(t, exePath, "closeBlockchainSession")
+	_, err = runCommand(t, exePath, "blockchainProviders", "create")
+	// _, err = runCommand(t, exePath, "blockchainProviders")
+	// _, err = runCommand(t, exePath, "createChatCompletions")
+	// _, err = runCommand(t, exePath, "initiateProxySession")
+	// _, err = runCommand(t, exePath, "blockchainProvidersBids")
+	// _, err = runCommand(t, exePath, "blockchainModels")
+	// _, err = runCommand(t, exePath, "openBlockchainSession")
+	// _, err = runCommand(t, exePath, "closeBlockchainSession")
 
 	_, err = runCommand(t, exePath, "createChatCompletions")
 

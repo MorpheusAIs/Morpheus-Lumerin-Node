@@ -54,6 +54,14 @@ func main() {
 				Aliases: []string{"bp"},
 				Usage:   "",
 				Action:  actions.blockchainProviders,
+				Subcommands: []*cli.Command{
+					{
+						Name:    "create",
+						Aliases: []string{"c"},
+						Usage:   "blockchainProviders create",
+						Action:  actions.createBlockchainProvider,
+					},
+				}
 			},
 			{
 				Name:    "blockchainProvidersBids",
@@ -87,7 +95,7 @@ func main() {
 			},
 			{
 				Name:    "createAndStreamSessionChatCompletions",
-				Aliases: []string{"ccc"},
+				Aliases: []string{"cssc"},
 				Usage:   "create a chat completion by sending a prompt to the ai engine",
 				Action:  actions.createChatCompletions,
 			},
@@ -201,6 +209,17 @@ func (a *actions) initiateProxySession(cCtx *cli.Context) error {
 
 func (a *actions) blockchainProviders(cCtx *cli.Context) error {
 	providers, err := a.client.GetAllProviders(cCtx.Context)
+	if err != nil {
+		return err
+	}
+	jsonData, err := json.Marshal(providers)
+	fmt.Println(string(jsonData))
+	return nil
+}
+
+func (a *actions) createBlockchainProvider(cCtx *cli.Context) error {
+	//TODO: handle provider fields
+	providers, err := a.client.createProvider(cCtx.Context)
 	if err != nil {
 		return err
 	}

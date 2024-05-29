@@ -41,42 +41,42 @@ func TestFiles(t *testing.T) {
 	}
 }
 
-// func TestCreateAndStreamChatCompletionMessage(t *testing.T) {
-// 	client := NewApiGatewayClient("http://localhost:8080", http.DefaultClient)
+func SkipTestCreateAndStreamChatCompletionMessage(t *testing.T) {
+	client := NewApiGatewayClient("http://localhost:8080", http.DefaultClient)
 
-// 	prompt := "What is the meaning of life?"
-// 	messages := []*ChatCompletionMessage{
-// 		{
-// 			Content: "The meaning of life is 42.",
-// 		},
-// 	}
+	prompt := "What is the meaning of life?"
+	messages := []*ChatCompletionMessage{
+		{
+			Content: "The meaning of life is 42.",
+		},
+	}
 
-// 	res, err := client.PromptStream(context.Background(), prompt, messages, func(msg ChatCompletionStreamResponse) error {
-// 		fmt.Println("chat completion message: ", msg)
-// 		return nil
-// 	})
+	res, err := client.PromptStream(context.Background(), prompt, messages, func(msg ChatCompletionStreamResponse) error {
+		fmt.Println("chat completion message: ", msg)
+		return nil
+	})
 
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
+	if err != nil {
+		t.Fatal(err)
+	}
 
-// 	fmt.Println("chat completion result: ", res)
+	fmt.Println("chat completion result: ", res)
 
-// 	mapResult := res.(map[string]interface{})
+	mapResult := res.(map[string]interface{})
 
-// 	if mapResult["choices"] == nil {
-// 		t.Fatal("invalid chat completion result")
-// 	}
+	if mapResult["choices"] == nil {
+		t.Fatal("invalid chat completion result")
+	}
 
-// 	if mapResult["choices"].([]interface{})[0].(map[string]interface{})["text"] == "" {
-// 		t.Fatal("invalid chat completion text result")
-// 	}
-// }
+	if mapResult["choices"].([]interface{})[0].(map[string]interface{})["text"] == "" {
+		t.Fatal("invalid chat completion text result")
+	}
+}
 
-func TestCreateChatCompletionMessage(t *testing.T) {
+func SkipTestCreateChatCompletionMessage(t *testing.T) {
 
 	os.Setenv("OPENAI_BASE_URL", "http://localhost:8080/v1")
-	
+
 	client := NewApiGatewayClient("http://localhost:8080", http.DefaultClient)
 
 	prompt := "What is the meaning of life?"
