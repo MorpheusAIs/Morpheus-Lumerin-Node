@@ -22,17 +22,11 @@ const HistoryItem = styled.div`
 
 interface ChatHistoryProps {
     onCloseSession: (string) => void;
-    loadSessions: () => Promise<any>;
+    sessions: any[];
 }
 
 export const ChatHistory = (props: ChatHistoryProps) => {
-    const [sessions, setSessions] = useState<any[]>();
-
-    useEffect(() => {
-        props.loadSessions().then(sessions => {
-            setSessions(sessions);
-        })
-    }, []);
+    const sessions = props.sessions;
     
     return (
         <Container>
