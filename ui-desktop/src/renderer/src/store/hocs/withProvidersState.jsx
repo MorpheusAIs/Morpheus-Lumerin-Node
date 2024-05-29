@@ -33,8 +33,67 @@ const withProvidersState = WrappedComponent => {
       }
     }
 
-    getBitsByModels = async (modelId) => {
-        
+    getSessionsByProvider = async (provider) => {
+      try {
+        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions?provider=${provider}`;
+        const response = await fetch(path);
+        const data = await response.json();
+        return data.sessions;
+      }
+      catch(e) {
+        console.log("Error", e)
+        return [];
+      }
+    }
+
+    getBalanceBySession = async (sessionId) => {
+      try {
+        const path = `${this.props.config.chain.localProxyRouterUrl}/proxy/sessions/${sessionId}/providerClaimableBalance`
+        const response = await fetch(path);
+        const data = await response.json();
+        return data.balance;
+      }
+      catch(e) {
+        console.log("Error", e)
+        return [];
+      }
+    }
+
+    claimFunds = async (sessionId) => {
+      try {
+        const path = `${props.config.chain.localProxyRouterUrl}/proxy/sessions/${sessionId}/providerClaim`;
+        const response = await fetch(path, {
+            method: "POST",
+        });
+        const dataResponse = await response.json();
+      }
+      catch(e) {
+        console.log("Error", e)
+      }
+    }
+
+    fetchData = async (providerId) => {
+      const models = await this.getAllModels();
+      // const providers = await getAllProviders();
+      const providerSession = await this.getSessionsByProvider(providerId);
+      const modelsNames = models.reduce((a,b) => ({ ...a, [b.Id]: b.Name}), {});
+      
+      let results = [];
+      for (const session of providerSession) {
+        const id = session.Id;
+        let balance = 0;
+        try {
+          if(!session.ClosedAt) {
+            balance = (await this.getBalanceBySession(id));
+          }
+        }
+        catch(e) {
+          console.log(e);
+        }
+        results.push({ ...session, Balance: balance })
+      }
+
+      return { results, modelsNames };
     }
  
     render() {
@@ -43,6 +102,10 @@ const withProvidersState = WrappedComponent => {
         <WrappedComponent
             getAllModels={this.getAllModels}
             getAllProviders={this.getAllProviders}
+            getBalanceBySession={this.getBalanceBySession}
+            claimFunds={this.claimFunds}
+            getSessionsByProvider={this.getSessionsByProvider}
+            fetchData={this.fetchData}
             {...this.state}
             {...this.props}
         />
@@ -55,6 +118,7 @@ const withProvidersState = WrappedComponent => {
     // isLocalProxyRouter: selectors.getIsLocalProxyRouter(state),
     // titanLightningPool: state.config.chain.titanLightningPool,
     // titanLightningDashboard: state.config.chain.titanLightningDashboard,
+    providerId: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8", // selectors.getWalletAddress(state),
     config: state.config
   });
 

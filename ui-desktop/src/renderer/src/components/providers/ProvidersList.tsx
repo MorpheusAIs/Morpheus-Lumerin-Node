@@ -83,9 +83,9 @@ function renderTable({ onClaim, sessions }) {
                       <tr key={b.Id}>
                           <td>{abbreviateAddress(b.Id, 5)}</td>
                           <td>{abbreviateAddress(b.BidID, 5)}</td>
-                          <td>CLOSED</td>
-                          <td>4 MOR</td>
-                          <td><StartBtn>Claim</StartBtn></td>
+                          <td>{b.ClosedAt ? "CLOSED" : "OPEN"}</td>
+                          <td>{b.Balance / 10 ** 18} MOR</td>
+                          <td><StartBtn onClick={() => onClaim(b.Id)}>Claim</StartBtn></td>
                       </tr>)
                   }) : null}
           </tbody>
@@ -94,63 +94,23 @@ function renderTable({ onClaim, sessions }) {
 }
 
 
-function AllCollapseExample() {
-  return (
-    <Accordion>
-      <Accordion.Item eventKey="0">
-        <Accordion.Header className='model-header'>Llama 3.0</Accordion.Header>
-        <Accordion.Body>
-          {renderTable({ onClaim: null,     "sessions": [
-        {
-            "Id": "0xf7294224df37b4f3b72e5cd00e5c8ccf4a6f4f2987563f07ff63f63a039ed433",
-            "User": "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc",
-            "Provider": "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
-            "ModelAgentId": "0x21731a519f4467e105a19b27db37e96bb915bd866e93140874a0d3206404f4e9",
-            "BidID": "0xfab7ad9b96cf4ced3a025b6ea3605f17343c8f9630bdf25fbfd51137525ce099",
-            "Stake": 38092532819383690000000,
-            "PricePerSecond": 100000000000000,
-            "CloseoutReceipt": "",
-            "CloseoutType": 0,
-            "ProviderWithdrawnAmount": 0,
-            "OpenedAt": 1716879674,
-            "EndsAt": 1716879981,
-            "ClosedAt": 0
-        }
-    ]})}
-        </Accordion.Body>
-      </Accordion.Item>
-    </Accordion>
-  );
-}
-
-function ProvidersList({
-  getAllModels,
-  history,
-  setSelectedModel
-} : any) {
-  const [models, setModels] = useState<any[]>([]);
-  console.log("🚀 ~ models:", models)
-
-  useEffect(() => {
-    getAllModels().then(data => {
-      setModels(data.filter(d => !d.IsDeleted));
-    });
-  }, [])
-
-  // Accordiaon
-  // with table
-  // Claim each
-
-  // filter models by User
-  // Show accordion
-  // Get Claimable balance
-
-//   {
-
-// }
+function ProvidersList({ data, claimFunds }) {
   
   return (<div>
-      {AllCollapseExample()}
+      {data?.modelsNames && Object.keys(data?.modelsNames).map(model => {
+        const modelSessions = data.results.filter(r => r.ModelAgentId.toLowerCase() == model.toLowerCase());
+        
+        return (
+          <Accordion>
+          <Accordion.Item eventKey="0">
+            <Accordion.Header className='model-header'>{data?.modelsNames[model]}</Accordion.Header>
+            <Accordion.Body>
+              {renderTable({ onClaim: claimFunds, sessions: modelSessions})}
+            </Accordion.Body>
+          </Accordion.Item>
+        </Accordion>
+        )
+      })}
     </div>)
 }
 

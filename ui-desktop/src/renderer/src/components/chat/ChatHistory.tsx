@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import styled from 'styled-components';
 import { IconX } from "@tabler/icons-react";
+import { abbreviateAddress } from '../../utils';
 
 const Container = styled.div`
     text-align: center;
@@ -16,25 +17,38 @@ const HistoryItem = styled.div`
     align-items: center;
     justify-content: space-evenly;
     cursor: pointer;
+    padding: 5px 0;
 `
 
 interface ChatHistoryProps {
     history: { id: string, title: string}[],
     onCloseSession: (string) => void;
+    loadSessions: () => Promise<any>;
 }
 
 export const ChatHistory = (props: ChatHistoryProps) => {
+    const [sessions, setSessions] = useState<any[]>();
+
+    useEffect(() => {
+        props.loadSessions().then(sessions => {
+            setSessions(sessions);
+        })
+    }, []);
+    
     return (
         <Container>
             <Title>
                 Sessions
             </Title>
             {
-                props.history?.length && (
-                    props.history.map(a => (
-                    <HistoryItem key={a.id}>
-                        {a.title}
-                        <IconX onClick={() => props.onCloseSession(a.id)}></IconX>
+                sessions?.length && (
+                    sessions.map(a => (
+                    <HistoryItem key={a.Id}>
+                        <div>{abbreviateAddress(a.Id, 5)}</div>
+                        <div>{new Date(a.OpenedAt * 1000).toLocaleString()}</div>
+                        {
+                            !a.ClosedAt ? (<IconX onClick={() => props.onCloseSession(a.Id)}></IconX>) : <div>CLOSED</div>
+                        }
                     </HistoryItem>)) 
                 )
             }

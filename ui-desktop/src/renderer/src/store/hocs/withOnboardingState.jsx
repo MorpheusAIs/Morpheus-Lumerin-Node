@@ -127,7 +127,7 @@ const withOnboardingState = WrappedComponent => {
       if (Object.keys(errors).length > 0) return this.setState({ errors });
 
       this.setState({ isMnemonicVerified: true });
-      onFinishOnboarding();
+      this.onFinishOnboarding();
     };
 
     validateDefaultPoolAddress() {
@@ -210,7 +210,6 @@ const withOnboardingState = WrappedComponent => {
           shouldSubmit={shouldSubmit}
           currentStep={this.getCurrentStep()}
           getTooltip={getTooltip}
-          onFinishOnboarding={this.onFinishOnboarding}
           onRunWithoutProxyRouter={this.onRunWithoutProxyRouter}
           {...this.state}
         />

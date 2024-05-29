@@ -62,7 +62,7 @@ const selectorStyles = {
 };
 
 function ModelRow(props) {
-    const options = props?.model?.bids.map(x => ({ value: x.Id, label: `${abbreviateAddress(x.Provider || "", 3)} ${x.PricePerSecond || 0} MOR` }))
+    const options = props?.model?.bids.map(x => ({ value: x.Id, label: `${abbreviateAddress(x.Provider || "", 3)} ${x.PricePerSecond / (10 ** 18)} MOR` }))
     const [selected, changeSelected] = useState<any>();
 
     return (

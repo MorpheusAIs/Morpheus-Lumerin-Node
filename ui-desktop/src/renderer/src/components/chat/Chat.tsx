@@ -53,7 +53,7 @@ const Chat = (props) => {
     const [meta, setMeta] = useState({ budget: 0, supply: 0 });
 
     const [sessions, setSessions] = useState([{ id: "1245", title: "What can I do to save animals?" }])
-    const [activeSession, setActiveSession] = useState("");
+    const [activeSession, setActiveSession] = useState<any>(undefined);
 
     const [chainData, setChainData] = useState<any>(null);
 
@@ -68,17 +68,15 @@ const Chat = (props) => {
     const providerAddress = isLocal ? "(local)" : selectedBid?.Provider ? abbreviateAddress(selectedBid?.Provider, 4) : null;
 
     useEffect(() => {
-        props.getMetaInfo().then(setMeta);
+        props.getMetaInfo().then((meta) => {
+            setMeta(meta);
+        });
         props.getModelsData().then((chainData) => {
             setChainData(chainData);
             const defaultSelectedBid = (chainData.models
                 .find((x: any) => x.bids.find(b => b.Provider == 'Local')) as any).bids.find(b => b.Provider == 'Local');
             setSelectedBid(defaultSelectedBid);
         });
-        // if(!props.activeSession) {
-        //     props.history.push("/models");
-        //     return;
-        // }
     }, [])
 
     const [messages, setMessages] = useState<any>([]);
@@ -92,12 +90,74 @@ const Chat = (props) => {
         chatBlockRef.current?.scrollIntoView({ behavior: "smooth", block: 'end' })
     }
 
-    const onOpenSession = (stake) => {
+    const onOpenSession = ({ stake }) => {
         console.log("open-session", stake);
+
+        (async () => {
+            let signature: any = {};
+            let sessionId = '';
+
+            const bidId = selectedBid.Id;
+
+            try {
+                const path = `${props.config.chain.localProxyRouterUrl}/proxy/sessions/initiate`;
+                const body = {
+                    user: props.address,
+                    provider: selectedBid.Provider,
+                    spend: Number(stake),
+                    bidId,
+                    providerUrl: selectedBid.ProviderData.Endpoint.replace("http://", "")
+                };
+                const response = await fetch(path, {
+                    method: "POST",
+                    body: JSON.stringify(body)
+                });
+                const dataResponse = await response.json();
+                signature = dataResponse.response.result;
+            }
+            catch (e) {
+                console.log("Error", e)
+                return false;
+            }
+
+            try {
+                const path = `${props.config.chain.localProxyRouterUrl}/blockchain/approve?amount=${BigInt(stake).toString()}&spender=${"0x8a791620dd6260079bf849dc5567adc3f2fdc318"}`;
+                const response = await fetch(path, {
+                    method: "POST",
+                });
+                const dataResponse = await response.json();
+                console.log("Increase", dataResponse)
+            }
+            catch (e) {
+                console.log("Error", e)
+                return false;
+            }
+
+            try {
+                const path = `${props.config.chain.localProxyRouterUrl}/blockchain/sessions`;
+                const body = {
+                    approval: signature.approval,
+                    approvalSig: signature.approvalSig,
+                    stake: BigInt(stake).toString(),
+                };
+                const response = await fetch(path, {
+                    method: "POST",
+                    body: JSON.stringify(body)
+                });
+                const dataResponse = await response.json();
+                sessionId = dataResponse.sessionId;
+            }
+            catch (e) {
+                console.log("Error", e)
+                return false;
+            }
+
+            setActiveSession({ sessionId, signature });
+        })();
     }
 
     const closeSession = (sessionId: string) => {
-
+        props.closeSession(sessionId);
     }
 
     const call = async (message) => {
@@ -125,26 +185,35 @@ const Chat = (props) => {
             });
         }
         else {
-            response = await fetch(`${props.config.chain.localProxyRouterUrl}/proxy/sessions/${props.activeSession.sessionId}/prompt`, {
-                method: 'POST',
-                body: JSON.stringify({
-                    prompt: {
-                        model: "llama2:latest",
-                        stream: true,
-                        messages: [
-                            ...chatHistory,
-                            {
-                                role: "user",
-                                content: message
-                            }
-                        ]
-                    },
-                    providerUrl: props.provider.Endpoint.replace("http://", ""),
-                    providerPublicKey: props.activeSession.signature
-                })
-            });
+            try {
+                response = await fetch(`${props.config.chain.localProxyRouterUrl}/proxy/sessions/${activeSession.sessionId}/prompt`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        prompt: {
+                            model: "llama2:latest",
+                            stream: true,
+                            messages: [
+                                ...chatHistory,
+                                {
+                                    role: "user",
+                                    content: message
+                                }
+                            ]
+                        },
+                        providerUrl: selectedBid.ProviderData.Endpoint.replace("http://", ""),
+                        providerPublicKey: activeSession.signature.message
+                    })
+                });
+
+                if(!response.ok) {
+                    console.log("Failed", await response.json())
+                }
+            }
+            catch(e) {
+                console.log("error", e);
+                return;
+            }
         }
-        
 
         function parse(decodedChunk) {
             const lines = decodedChunk.split('\n');
@@ -165,11 +234,15 @@ const Chat = (props) => {
             while (true) {
                 const { value, done } = await reader.read();
                 if (done) {
+                    setIsSpinning(false);
                     break;
                 }
                 const decodedString = textDecoder.decode(value, { stream: true });
                 const parts = parse(decodedString);
                 parts.forEach(part => {
+                    if(!part?.id) {
+                        return;
+                    }
                     const message = memoState.find(m => m.id == part.id);
                     const otherMessages = memoState.filter(m => m.id != part.id);
                     const text = `${message?.text || ''}${part?.choices[0]?.delta?.content || ''}`;
@@ -180,7 +253,6 @@ const Chat = (props) => {
                 })
             }
 
-            setIsSpinning(false);
         }
     }
 
@@ -191,9 +263,13 @@ const Chat = (props) => {
 
         setIsSpinning(true);
         setMessages([...messages, { id: "some", user: 'Me', text: value, role: "user", icon: "M", color: "#20dc8e" }]);
-        call(value);
+        call(value).then(() => {
+            setIsSpinning(false);
+        });
         setValue("");
     }
+
+    const price = selectedBid?.PricePerSecond ? selectedBid?.PricePerSecond / (10 ** 18) : 0;
 
     return (
         <>
@@ -203,7 +279,12 @@ const Chat = (props) => {
                 direction='right'
                 className='history-drawer'
             >
-                <ChatHistory history={sessions} onCloseSession={closeSession} />
+                <ChatHistory
+                    loadSessions={async () => {
+                        return await props.getSessionsByUser(props.address);
+                    }}
+                    history={sessions}
+                    onCloseSession={closeSession} />
             </Drawer>
             <View>
                 <ContainerTitle>
@@ -224,7 +305,7 @@ const Chat = (props) => {
                                             : (
                                                 <>
                                                     <span>{providerAddress}</span>
-                                                    <span>{selectedBid?.PricePerSecond || 0} MOR/sec</span>
+                                                    <span>{price} MOR/sec</span>
                                                 </>
                                             )
                                     }
@@ -259,7 +340,7 @@ const Chat = (props) => {
                             messages?.length ? messages.map(x => (
                                 <Message key={makeid(6)} message={x}></Message>
                             ))
-                                : (!isLocal && <div className='session-container' style={{ width: '400px' }}>
+                                : (!isLocal && !activeSession && <div className='session-container' style={{ width: '400px' }}>
                                     <div className='session-title'>To perform promt please create session and choose desired session time</div>
                                     <div className='session-title'>Session will be created for selected Model</div>
                                     <div>
@@ -301,6 +382,7 @@ const Chat = (props) => {
                 {...meta}
                 isActive={openSessionModal}
                 triggerOpen={(data) => {
+                    setOpenSessionModal(false)
                     onOpenSession(data);
                 }}
                 handleClose={() => setOpenSessionModal(false)} />
@@ -313,6 +395,7 @@ const Chat = (props) => {
                         .bids.find(b => b.Id == id);
 
                     setSelectedBid(defaultSelectedBid);
+                    setMessages([]);
                 }}
                 handleClose={() => setOpenChangeModal(false)} />
         </>

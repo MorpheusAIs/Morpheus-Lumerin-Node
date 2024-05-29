@@ -44,7 +44,9 @@ const withChatState = WrappedComponent => {
     closeSession = async (sessionId) => {
       try {
           const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions/${sessionId}/close`;
-          const response = await fetch(path);
+          const response = await fetch(path, { 
+            method: "POST"
+          });
           const data = await response.json();
           return data.success;
         }
@@ -86,6 +88,19 @@ const withChatState = WrappedComponent => {
       var supply = await this.props.client.getTokenSupply();
       return { budget, supply };
     }
+
+    getSessionsByUser = async (user) => {
+      try {
+        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions?user=${user}`;
+        const response = await fetch(path);
+        const data = await response.json();
+        return data.sessions;
+      }
+      catch(e) {
+        console.log("Error", e)
+        return [];
+      }
+    }
  
     render() {
 
@@ -95,6 +110,8 @@ const withChatState = WrappedComponent => {
             getBitsByModels={this.getBitsByModels}
             getMetaInfo={this.getMetaInfo}
             getModelsData={this.getModelsData}
+            getSessionsByUser={this.getSessionsByUser}
+            closeSession={this.closeSession}
             {...this.state}
             {...this.props}
         />
@@ -111,7 +128,8 @@ const withChatState = WrappedComponent => {
     selectedBid: state.models.selectedBid,
     model: state.models.selectedModel,
     provider: state.models.selectedProvider,
-    activeSession: state.models.activeSession
+    activeSession: state.models.activeSession,
+    address: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8" // selectors.getWalletAddress(state),
   });
 
   const mapDispatchToProps = dispatch => ({

@@ -1,14 +1,21 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { LayoutHeader } from '../common/LayoutHeader'
 import { View } from '../common/View'
 import ProvidersList from './ProvidersList'
-import withProvidersState  from '../../store/hocs/withProvidersState';
+import { withRouter } from 'react-router-dom';
 import { BtnAccent } from '../dashboard/BalanceBlock.styles';
 
-export const Providers = (props) => {
+import withProvidersState from "../../store/hocs/withProvidersState";
+const Providers = ({ fetchData, providerId }) => {
+
+    const [data, setData] = useState();
 
     useEffect(() => {
-
+        (async () => {
+            const data = await fetchData(providerId);
+            console.log(data);
+            setData(data);
+        })()
     }, [])
 
     return (    
@@ -16,8 +23,8 @@ export const Providers = (props) => {
         <LayoutHeader title="Providers">
             <BtnAccent style={{ padding: '1.5rem'}}>Add provider</BtnAccent>
         </LayoutHeader>
-        <ProvidersList />
+        <ProvidersList data={data} />
     </View>)
 }
 
-export default withProvidersState(Providers)
+export default withRouter(withProvidersState(Providers));

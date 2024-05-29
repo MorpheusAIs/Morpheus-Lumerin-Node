@@ -21,7 +21,7 @@ import Bids from './bids/Bids'
 // import AutoPriceAdjuster from './AutoPriceAdjuster'
 
 import 'bootstrap/dist/css/bootstrap.min.css';
-import { Providers } from './providers/Providers'
+import Providers from './providers/Providers'
 
 const fadeIn = keyframes`
   from {

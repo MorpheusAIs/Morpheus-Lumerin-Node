@@ -14,7 +14,6 @@ import {
 } from '../../contracts/modals/CreateContractModal.styles';
 
 const OpenSessionModal = ({ isActive, handleClose, budget, supply, pricePerSecond, triggerOpen }) => {
-console.log("🚀 ~ OpenSessionModal ~ budget, supply, pricePerSecond,:", budget, supply, pricePerSecond,)
 
   const [duration, setDuration] = useState<number | undefined>(undefined);
   const [morStake, setMorStake] = useState<number | undefined>(undefined);
@@ -36,9 +35,10 @@ console.log("🚀 ~ OpenSessionModal ~ budget, supply, pricePerSecond,:", budget
             placeholder="# of minutes"
             value={duration}
             onChange={(e) => {
+
               const value = Number(e.target.value);
-              const totalCost = (pricePerSecond * 10 ** 18) * value * 60;
-              const stake = totalCost * supply / budget;
+              const totalCost = pricePerSecond * value * 60;
+              const stake = totalCost * +supply / +budget;
               setMorStake(stake);
               setDuration(value);
             }}
