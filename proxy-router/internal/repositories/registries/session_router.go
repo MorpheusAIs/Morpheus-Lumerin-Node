@@ -94,16 +94,16 @@ func (g *SessionRouter) GetSession(ctx context.Context, sessionId string) (*sess
 	return &session, nil
 }
 
-func (g *SessionRouter) GetSessionsByProvider(ctx context.Context, providerAddr common.Address) ([]sessionrouter.Session, error) {
-	sessions, err := g.sessionRouter.GetSessionsByProvider(&bind.CallOpts{Context: ctx}, providerAddr)
+func (g *SessionRouter) GetSessionsByProvider(ctx context.Context, providerAddr common.Address, offset *big.Int, limit uint8) ([]sessionrouter.Session, error) {
+	sessions, err := g.sessionRouter.GetSessionsByProvider(&bind.CallOpts{Context: ctx}, providerAddr, offset, limit)
 	if err != nil {
 		return nil, lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
 	}
 	return sessions, nil
 }
 
-func (g *SessionRouter) GetSessionsByUser(ctx context.Context, userAddr common.Address) ([]sessionrouter.Session, error) {
-	sessions, err := g.sessionRouter.GetSessionsByUser(&bind.CallOpts{Context: ctx}, userAddr)
+func (g *SessionRouter) GetSessionsByUser(ctx context.Context, userAddr common.Address, offset *big.Int, limit uint8) ([]sessionrouter.Session, error) {
+	sessions, err := g.sessionRouter.GetSessionsByUser(&bind.CallOpts{Context: ctx}, userAddr, offset, limit)
 	if err != nil {
 		return nil, lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
 	}
