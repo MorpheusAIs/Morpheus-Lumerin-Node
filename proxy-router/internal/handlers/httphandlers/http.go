@@ -110,7 +110,7 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 	}))
 
 	r.POST("/proxy/sessions/:id/providerClaim", (func(ctx *gin.Context) {
-		status, response := apiBus.GetProviderClaimableBalance(ctx)
+		status, response := apiBus.ClaimProviderBalance(ctx)
 		ctx.JSON(status, response)
 	}))
 
