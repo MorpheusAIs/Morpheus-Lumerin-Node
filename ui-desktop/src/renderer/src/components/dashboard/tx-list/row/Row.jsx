@@ -29,21 +29,25 @@ const IconContainer = styled.div`
   width: 40px;
 `;
 
-const Row = ({ tx, explorerUrl, symbol, symbolEth }) => (
-  <Container onClick={() => window.openLink(explorerUrl)}>
-    <IconContainer>
-      {tx.symbol === symbol ? (
-        <LumerinLogoFull size="4rem" />
-      ) : (
-        <EtherIcon size="4rem"></EtherIcon>
-      )}
-    </IconContainer>
-    <IconContainer>
-      <TxIcon txType={tx.txType} />
-    </IconContainer>
-    <Amount {...tx} symbol={tx.symbol === 'MOR' ? symbol : symbolEth} />
-    <Details {...tx} />
-  </Container>
-);
+const Row = ({ tx, explorerUrl, symbol, symbolEth, morAddress }) => {
+  const morTransaction = tx.isMor;
+
+  return (
+  	<Container onClick={() => window.openLink(explorerUrl)}>
+    	<IconContainer>
+      	{morTransaction ? (
+        	<LumerinLogoFull size="4rem" />
+      	) : (
+        	<EtherIcon size="4rem"></EtherIcon>
+      	)}
+    	</IconContainer>
+    	<IconContainer>
+      	<TxIcon txType={tx.txType} />
+    	</IconContainer>
+    	<Amount {...tx} symbol={morTransaction ? "saMOR" : symbolEth} />
+    	<Details {...tx} />
+  	</Container>
+	);
+};
 
 export default withTxRowState(Row);

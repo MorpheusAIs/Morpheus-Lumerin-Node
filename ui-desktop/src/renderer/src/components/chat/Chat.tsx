@@ -47,12 +47,11 @@ const Chat = (props) => {
     const [value, setValue] = useState("");
     const [hasSession, setHasSession] = useState(true);
 
-    const [chatHistory, setChatHistory] = useState<{ id: string, title: string }[]>();
+    const [sessions, setSessions] = useState<any>();
 
     const [isSpinning, setIsSpinning] = useState(false);
     const [meta, setMeta] = useState({ budget: 0, supply: 0 });
 
-    const [sessions, setSessions] = useState([{ id: "1245", title: "What can I do to save animals?" }])
     const [activeSession, setActiveSession] = useState<any>(undefined);
 
     const [chainData, setChainData] = useState<any>(null);
@@ -62,7 +61,7 @@ const Chat = (props) => {
 
     const [selectedBid, setSelectedBid] = useState<any>(null);
 
-    const modelName = props?.model?.Name || "Model";
+    const modelName = selectedBid?.Model?.Name || "Model";
 
     const isLocal = selectedBid?.Provider == 'Local';
     const providerAddress = isLocal ? "(local)" : selectedBid?.Provider ? abbreviateAddress(selectedBid?.Provider, 4) : null;
@@ -77,6 +76,7 @@ const Chat = (props) => {
                 .find((x: any) => x.bids.find(b => b.Provider == 'Local')) as any).bids.find(b => b.Provider == 'Local');
             setSelectedBid(defaultSelectedBid);
         });
+        refreshSessions();
     }, [])
 
     const [messages, setMessages] = useState<any>([]);
@@ -95,11 +95,16 @@ const Chat = (props) => {
 
         props.onOpenSession({ stake, selectedBid}).then((res) => {
             setActiveSession(res);
+            refreshSessions();
         })
     }
 
+    const refreshSessions = () => {
+        return props.getSessionsByUser(props.address).then(setSessions);
+    }
+
     const closeSession = (sessionId: string) => {
-        props.closeSession(sessionId);
+        props.closeSession(sessionId).then(refreshSessions);
     }
 
     const call = async (message) => {
@@ -222,10 +227,7 @@ const Chat = (props) => {
                 className='history-drawer'
             >
                 <ChatHistory
-                    loadSessions={async () => {
-                        return await props.getSessionsByUser(props.address);
-                    }}
-                    history={sessions}
+                    sessions={sessions}
                     onCloseSession={closeSession} />
             </Drawer>
             <View>

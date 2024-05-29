@@ -85,7 +85,7 @@ function renderTable({ onClaim, sessions }) {
                           <td>{abbreviateAddress(b.BidID, 5)}</td>
                           <td>{b.ClosedAt ? "CLOSED" : "OPEN"}</td>
                           <td>{b.Balance / 10 ** 18} MOR</td>
-                          <td><StartBtn onClick={() => onClaim(b.Id)}>Claim</StartBtn></td>
+                          <td>{!b.ClosedAt && <StartBtn onClick={() => onClaim(b.Id)}>Claim</StartBtn>}</td>
                       </tr>)
                   }) : null}
           </tbody>
@@ -101,7 +101,7 @@ function ProvidersList({ data, claimFunds }) {
         const modelSessions = data.results.filter(r => r.ModelAgentId.toLowerCase() == model.toLowerCase());
         
         return (
-          <Accordion>
+          <Accordion alwaysOpen>
           <Accordion.Item eventKey="0">
             <Accordion.Header className='model-header'>{data?.modelsNames[model]}</Accordion.Header>
             <Accordion.Body>
