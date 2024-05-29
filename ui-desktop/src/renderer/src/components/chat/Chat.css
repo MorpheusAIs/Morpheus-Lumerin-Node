@@ -1,5 +1,5 @@
 .history-drawer {
-    width: 25%!important;
+    width: 35%!important;
     min-width: 250px!important;
     border-left: 1px solid rgba(255, 255, 255, 0.16)!important;
     padding: 2.4rem!important;
@@ -12,4 +12,37 @@
     -moz-background-size: cover!important;
     -o-background-size: cover!important;
     background-size: cover!important; */
+}
+
+.model-selector {
+    align-items: center;
+    justify-content: space-between;
+    margin: 1.6rem 0 1.6rem;
+    background-color: #fff;
+    padding: 6px 1.6rem 6px 1.6rem;
+    border-radius: 0.375rem;
+    color: white;
+    max-width: 720px;
+  
+    background: rgba(255,255,255, 0.04);
+    border-width: 1px;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    color: white;
+    width: 350px;
+}
+
+.model-selector__info span {
+    font-size: 12px;
+    display: block;
+}
+
+.change-modal {
+    height: 60px!important;
+    width: 140px!important;
+}
+
+.model-selector__icons {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }

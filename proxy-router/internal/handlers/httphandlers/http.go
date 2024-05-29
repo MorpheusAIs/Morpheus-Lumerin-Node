@@ -71,6 +71,7 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 
 				ctx.Writer.Header().Set("Content-Type", "text/event-stream")
 				_, err = ctx.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", marshalledResponse)))
+				ctx.Writer.Flush()
 
 				if err != nil {
 					return err

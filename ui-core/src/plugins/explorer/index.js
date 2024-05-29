@@ -20,7 +20,7 @@ function createPlugin() {
 
   function start({ config, eventBus, plugins }) {
     // debug.enabled = config.debug;
-    const { lmrTokenAddress } = config;
+    const { mainTokenAddress } = config;
 
     const web3 = new Web3(plugins.eth.web3Provider);
 
@@ -28,9 +28,9 @@ function createPlugin() {
 
     const eventsRegistry = createEventsRegistry();
     const queue = createQueue(config, eventBus, web3);
-    const lumerin = Lumerin(web3Subscribable, lmrTokenAddress);
+    // const lumerin = Lumerin(web3Subscribable, mainTokenAddress);
 
-    const explorer = createExplorer(config.explorerApiURLs, web3, lumerin, eventBus);
+    const explorer = createExplorer(config, web3, eventBus);
 
     syncer = createTransactionSyncer(
       config,

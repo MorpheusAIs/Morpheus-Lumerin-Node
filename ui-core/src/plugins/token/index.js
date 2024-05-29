@@ -11,42 +11,43 @@ function createPlugin () {
 
   function start ({ config, eventBus, plugins }) {
     // debug.enabled = config.debug;
-    const { lmrTokenAddress, faucetAddress, faucetUrl } = config;
+    const { mainTokenAddress, faucetAddress, faucetUrl } = config;
 
 
     const web3 = new Web3(plugins.eth.web3Provider);
-    const lumerin = Lumerin(web3, lmrTokenAddress)
+    // const lumerin = Lumerin(web3, mainTokenAddress)
 
-    function emitLmrBalance (walletAddress) {
-      getTokenBalance(lumerin, walletAddress)
-        .then(function (balance) {
-          eventBus.emit('token-balance-changed', {
-            lmrBalance: balance,
-          });
-        })
-        .catch(function (err) {
-          eventBus.emit('wallet-error', {
-            inner: err,
-            message: `Could not get LMR token balance`,
-            meta: { plugin: 'token' }
-          });
-        });
-    }
+    // HERE GET LMR BALANCE
+    // function emitLmrBalance (walletAddress) {
+    //   getTokenBalance(lumerin, walletAddress)
+    //     .then(function (balance) {
+    //       eventBus.emit('token-balance-changed', {
+    //         lmrBalance: balance,
+    //       });
+    //     })
+    //     .catch(function (err) {
+    //       eventBus.emit('wallet-error', {
+    //         inner: err,
+    //         message: `Could not get LMR token balance`,
+    //         meta: { plugin: 'token' }
+    //       });
+    //     });
+    // }
 
-    eventBus.on('open-wallet', function ({ address }) {
-      walletAddress = address;
-      emitLmrBalance(address);
-    });
+    // eventBus.on('open-wallet', function ({ address }) {
+    //   walletAddress = address;
+    //   emitLmrBalance(address);
+    // });
 
-    eventBus.on('lmr-tx', function () {
-      if (walletAddress) {
-        emitLmrBalance(walletAddress);
-      }
-    });
+    // eventBus.on('lmr-tx', function () {
+    //   if (walletAddress) {
+    //     emitLmrBalance(walletAddress);
+    //   }
+    // });
 
     return {
       api: {
-        getTokenGasLimit: getTokenGasLimit(lumerin),
+        // getTokenGasLimit: getTokenGasLimit(lumerin),
         registerToken: registerToken(plugins),
         metaParsers: {
           approval: events.approvalMetaParser,
