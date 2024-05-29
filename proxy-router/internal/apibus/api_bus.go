@@ -122,3 +122,7 @@ func (apiBus *ApiBus) GetTodaysBudget(ctx *gin.Context) (int, gin.H) {
 func (apiBus *ApiBus) GetTokenSupply(ctx *gin.Context) (int, gin.H) {
 	return apiBus.rpcProxy.GetTokenSupply(ctx)
 }
+
+func (apiBus *ApiBus) GetSessions(ctx *gin.Context) (int, gin.H) {
+	return apiBus.rpcProxy.GetSessions(ctx)
+}

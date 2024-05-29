@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/contracts/sessionrouter"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
@@ -11,7 +12,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
@@ -28,6 +28,12 @@ type SessionRouter struct {
 	sessionRouter *sessionrouter.SessionRouter
 	client        *ethclient.Client
 	log           interfaces.ILogger
+}
+
+var closeReportAbi = []lib.AbiParameter{
+	{Type: "bytes32"},
+	{Type: "uint128"},
+	{Type: "uint32"},
 }
 
 func NewSessionRouter(sessionRouterAddr common.Address, client *ethclient.Client, log interfaces.ILogger) *SessionRouter {
@@ -49,8 +55,8 @@ func NewSessionRouter(sessionRouterAddr common.Address, client *ethclient.Client
 	}
 }
 
-func (g *SessionRouter) OpenSession(ctx *bind.TransactOpts, bidId [32]byte, stake *big.Int) (string, error) {
-	sessionTx, err := g.sessionRouter.OpenSession(ctx, bidId, stake)
+func (g *SessionRouter) OpenSession(ctx *bind.TransactOpts, approval []byte, approvalSig []byte, stake *big.Int, privateKeyHex string) (string, error) {
+	sessionTx, err := g.sessionRouter.OpenSession(ctx, stake, approval, approvalSig)
 	if err != nil {
 		return "", lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
 	}
@@ -58,7 +64,7 @@ func (g *SessionRouter) OpenSession(ctx *bind.TransactOpts, bidId [32]byte, stak
 	// Wait for the transaction receipt
 	receipt, err := bind.WaitMined(context.Background(), g.client, sessionTx)
 	if err != nil {
-		return "", err
+		return "", lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
 	}
 
 	// Find the event log
@@ -88,29 +94,38 @@ func (g *SessionRouter) GetSession(ctx context.Context, sessionId string) (*sess
 	return &session, nil
 }
 
-func (g *SessionRouter) CloseSession(ctx *bind.TransactOpts, sessionId string, encodedReport string, privateKeyHex string) (string, error) {
+func (g *SessionRouter) GetSessionsByProvider(ctx context.Context, providerAddr common.Address) ([]sessionrouter.Session, error) {
+	sessions, err := g.sessionRouter.GetSessionsByProvider(&bind.CallOpts{Context: ctx}, providerAddr)
+	if err != nil {
+		return nil, lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
+	}
+	return sessions, nil
+}
+
+func (g *SessionRouter) GetSessionsByUser(ctx context.Context, userAddr common.Address) ([]sessionrouter.Session, error) {
+	sessions, err := g.sessionRouter.GetSessionsByUser(&bind.CallOpts{Context: ctx}, userAddr)
+	if err != nil {
+		return nil, lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
+	}
+	return sessions, nil
+}
+
+func (g *SessionRouter) CloseSession(ctx *bind.TransactOpts, sessionId string, privateKeyHex string) (string, error) {
 	id := [32]byte(common.FromHex(sessionId))
-	report := common.FromHex(encodedReport)
 
-	privateKey, err := crypto.HexToECDSA(privateKeyHex)
-	if err != nil {
-		return "", err
-	}
-	hash := crypto.Keccak256Hash(report)
-
-	prefixStr := fmt.Sprintf("\x19Ethereum Signed Message:\n%d", len(hash.Bytes()))
-	message := append([]byte(prefixStr), hash.Bytes()...)
-	resultHash := crypto.Keccak256Hash(message)
-
-	signature, err := crypto.Sign(resultHash.Bytes(), privateKey)
+	ips := uint32(1)
+	timestamp := big.NewInt(time.Now().UnixMilli())
+	report, err := lib.EncodeAbiParameters(closeReportAbi, []interface{}{id, timestamp, ips})
 	if err != nil {
 		return "", err
 	}
 
-	// https://github.com/ethereum/go-ethereum/blob/44a50c9f96386f44a8682d51cf7500044f6cbaea/internal/ethapi/api.go#L580
-	signature[64] += 27 // Transform V from 0/1 to 27/28
+	signature, err := lib.SignEthMessage(report, privateKeyHex)
+	if err != nil {
+		return "", err
+	}
 
-	sessionTx, err := g.sessionRouter.CloseSession(ctx, id, []byte(encodedReport), signature)
+	sessionTx, err := g.sessionRouter.CloseSession(ctx, report, signature)
 	if err != nil {
 		return "", lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
 	}
@@ -164,7 +179,8 @@ func (g *SessionRouter) ClaimProviderBalance(ctx *bind.TransactOpts, sessionId s
 }
 
 func (g *SessionRouter) GetTodaysBudget(ctx context.Context) (*big.Int, error) {
-	budget, err := g.sessionRouter.GetTodaysBudget(&bind.CallOpts{Context: ctx})
+	timestamp := big.NewInt(time.Now().UnixMilli())
+	budget, err := g.sessionRouter.GetTodaysBudget(&bind.CallOpts{Context: ctx}, timestamp)
 	if err != nil {
 		return nil, lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
 	}
