@@ -22,9 +22,6 @@ contract SessionRouter {
   // events
   event SessionOpened(address indexed userAddress, bytes32 indexed sessionId, address indexed providerId);
   event SessionClosed(address indexed userAddress, bytes32 indexed sessionId, address indexed providerId);
-  event Staked(address indexed userAddress, uint256 amount);
-  event Unstaked(address indexed userAddress, uint256 amount);
-  event ProviderClaimed(address indexed providerAddress, uint256 amount);
 
   // errors
   error NotUserOrProvider();
@@ -44,11 +41,12 @@ contract SessionRouter {
   //         SESSION
   //===========================
 
+  /// @notice returns session by sessionId
   function getSession(bytes32 sessionId) public view returns (Session memory) {
     return s.sessions[s.sessionMap[sessionId]];
   }
 
-  function getSessionsByUser(address user) public view returns (Session[] memory) {
+  function getActiveSessionsByUser(address user) public view returns (Session[] memory) {
     Uint256Set.Set storage userSessions = s.userActiveSessions[user];
     uint256 size = userSessions.count();
     Session[] memory sessions = new Session[](size);
@@ -58,7 +56,7 @@ contract SessionRouter {
     return sessions;
   }
 
-  function getSessionsByProvider(address provider) public view returns (Session[] memory) {
+  function getActiveSessionsByProvider(address provider) public view returns (Session[] memory) {
     Uint256Set.Set storage providerSessions = s.providerActiveSessions[provider];
     uint256 size = providerSessions.count();
     Session[] memory sessions = new Session[](size);
@@ -66,6 +64,40 @@ contract SessionRouter {
       sessions[i] = s.sessions[providerSessions.keyAtIndex(i)];
     }
     return sessions;
+  }
+
+  function getSessionsByProvider(address provider, uint256 offset, uint8 limit) public view returns (Session[] memory) {
+    return paginate(s.providerSessions[provider], offset, limit);
+  }
+
+  function getSessionsByUser(address user, uint256 offset, uint8 limit) public view returns (Session[] memory) {
+    return paginate(s.userSessions[user], offset, limit);
+  }
+
+  function getSessionsByModel(bytes32 modelId, uint256 offset, uint8 limit) public view returns (Session[] memory) {
+    return paginate(s.modelSessions[modelId], offset, limit);
+  }
+
+  function paginate(uint256[] memory indexes, uint256 offset, uint8 limit) private view returns (Session[] memory) {
+    uint256 length = indexes.length;
+    if (length < offset) {
+      return (new Session[](0));
+    }
+    uint8 size = offset + limit > length ? uint8(length - offset) : limit;
+    Session[] memory sessions = new Session[](size);
+    for (uint i = 0; i < size; i++) {
+      uint256 index = length - offset - i - 1;
+      sessions[i] = s.sessions[indexes[index]];
+    }
+    return sessions;
+  }
+
+  function activeSessionsCount() public view returns (uint256) {
+    return s.activeSessionsCount;
+  }
+
+  function sessionsCount() public view returns (uint256) {
+    return s.sessions.length;
   }
 
   function openSession(
@@ -116,7 +148,7 @@ contract SessionRouter {
         closeoutReceipt: "",
         closeoutType: 0,
         providerWithdrawnAmount: 0,
-        openedAt: block.timestamp,
+        openedAt: uint128(block.timestamp),
         endsAt: whenSessionEnds(_stake, bid.pricePerSecond, block.timestamp),
         closedAt: 0
       })
@@ -124,8 +156,13 @@ contract SessionRouter {
 
     uint256 sessionIndex = s.sessions.length - 1;
     s.sessionMap[sessionId] = sessionIndex;
+    s.userSessions[sender].push(sessionIndex);
+    s.providerSessions[bid.provider].push(sessionIndex);
+    s.modelSessions[bid.modelAgentId].push(sessionIndex);
+
     s.userActiveSessions[sender].insert(sessionIndex);
     s.providerActiveSessions[bid.provider].insert(sessionIndex);
+    s.activeSessionsCount++;
 
     emit SessionOpened(sender, sessionId, bid.provider);
     s.token.transferFrom(sender, address(this), _stake); // errors with Insufficient Allowance if not approved
@@ -135,7 +172,7 @@ contract SessionRouter {
 
   function closeSession(bytes memory receiptEncoded, bytes memory signature) public {
     // reverts without specific error if cannot decode abi
-    (bytes32 sessionId, uint128 timestampMs, uint32 ips) = abi.decode(receiptEncoded, (bytes32, uint128, uint32));
+    (bytes32 sessionId, uint128 timestampMs, ) = abi.decode(receiptEncoded, (bytes32, uint128, uint32));
     if (timestampMs / 1000 < block.timestamp - SIGNATURE_TTL) {
       revert SignatureExpired();
     }
@@ -155,15 +192,17 @@ contract SessionRouter {
     // update indexes
     s.userActiveSessions[session.user].remove(sessionIndex);
     s.providerActiveSessions[session.provider].remove(sessionIndex);
+    s.activeSessionsCount--;
 
+    // update session record
     session.closeoutReceipt = receiptEncoded;
-    session.closedAt = block.timestamp;
-
-    bool isClosingLate = startOfTheDay(block.timestamp) > startOfTheDay(session.endsAt);
-    bool noDispute = isValidReceipt(session.provider, receiptEncoded, signature);
+    session.closedAt = uint128(block.timestamp);
 
     // calculate provider withdraw
     uint256 providerWithdraw;
+    bool isClosingLate = startOfTheDay(block.timestamp) > startOfTheDay(session.endsAt);
+    bool noDispute = isValidReceipt(session.provider, receiptEncoded, signature);
+
     if (noDispute || isClosingLate) {
       // session was closed without dispute or next day after it expected to end
       uint256 duration = minUint256(block.timestamp, session.endsAt) - session.openedAt;
@@ -193,7 +232,9 @@ contract SessionRouter {
         maxUint256(startOfTheDay(block.timestamp), session.openedAt);
       uint256 todaysCost = todaysDuration * session.pricePerSecond;
       userStakeToLock = stipendToStake(todaysCost, startOfTheDay(block.timestamp));
-      s.userOnHold[session.user].push(OnHold({ amount: userStakeToLock, releaseAt: block.timestamp + 1 days }));
+      s.userOnHold[session.user].push(
+        OnHold({ amount: userStakeToLock, releaseAt: uint128(block.timestamp + 1 days) })
+      );
     }
 
     uint256 userWithdraw = session.stake - userStakeToLock;
@@ -205,7 +246,9 @@ contract SessionRouter {
     s.token.transfer(session.user, userWithdraw);
   }
 
-  // returns total claimanble balance for the provider for particular session
+  // funds related functions
+
+  /// @notice returns total claimanble balance for the provider for particular session
   function getProviderClaimableBalance(bytes32 sessionId) public view returns (uint256) {
     Session memory session = s.sessions[s.sessionMap[sessionId]];
     if (session.openedAt == 0) {
@@ -214,6 +257,7 @@ contract SessionRouter {
     return _getProviderClaimableBalance(session);
   }
 
+  /// @notice allows provider to claim their funds
   function claimProviderBalance(bytes32 sessionId, uint256 amountToWithdraw, address to) public {
     Session storage session = s.sessions[s.sessionMap[sessionId]];
     if (session.openedAt == 0) {
@@ -247,17 +291,14 @@ contract SessionRouter {
     return withdrawableAmount;
   }
 
+  /// @notice deletes session from the history
   function deleteHistory(bytes32 sessionId) public {
     Session storage session = s.sessions[s.sessionMap[sessionId]];
     LibOwner._senderOrOwner(session.user);
     session.user = address(0);
   }
 
-  function setStakeDelay(int256 delay) public {
-    LibOwner._onlyOwner();
-    s.stakeDelay = delay;
-  }
-
+  /// @notice checks if receipt is valid
   function isValidReceipt(address signer, bytes memory receipt, bytes memory signature) public pure returns (bool) {
     if (signature.length == 0) {
       return false;
@@ -266,11 +307,7 @@ contract SessionRouter {
     return ECDSA.recover(receiptHash, signature) == signer;
   }
 
-  //===========================
-  //         STAKING
-  //===========================
-
-  // returns amount of user stake withdrawable and on hold
+  /// @notice returns amount of withdrawable user stake and one on hold
   function withdrawableUserStake(address userAddr) public view returns (uint256 avail, uint256 hold) {
     OnHold[] memory onHold = s.userOnHold[userAddr];
     for (uint i = 0; i < onHold.length; i++) {
@@ -284,6 +321,7 @@ contract SessionRouter {
     return (avail, hold);
   }
 
+  /// @notice withdraws user stake
   function withdrawUserStake(uint256 amountToWithdraw, address to) public {
     uint256 balance = 0;
     address sender = msg.sender;
@@ -324,12 +362,12 @@ contract SessionRouter {
     revert NotEnoughWithdrawableBalance();
   }
 
-  // returns stipend of user based on their stake
+  /// @notice returns stipend of user based on their stake
   function stakeToStipend(uint256 sessionStake, uint256 timestamp) public view returns (uint256) {
     return sessionStake / (s.token.totalSupply() / getTodaysBudget(timestamp));
   }
 
-  // returns stake of user based on their stipend
+  /// @notice returns stake of user based on their stipend
   function stipendToStake(uint256 stipend, uint256 timestamp) public view returns (uint256) {
     // TODO: cache total supply
     return stipend * (s.token.totalSupply() / getTodaysBudget(timestamp));
@@ -369,6 +407,7 @@ contract SessionRouter {
     return getComputeBalance(timestamp) / 100; // 1% of Compute Balance
   }
 
+  /// @notice returns today's compute balance in MOR
   function getComputeBalance(uint256 timestamp) public view returns (uint256) {
     // TODO: cache today's budget and compute balance
     return
