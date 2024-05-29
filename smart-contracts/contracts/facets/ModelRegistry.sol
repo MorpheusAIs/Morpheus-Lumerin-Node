@@ -98,7 +98,7 @@ contract ModelRegistry {
     });
 
     emit ModelRegisteredUpdated(owner, modelId);
-    s.token.transferFrom(msg.sender, address(this), addStake); // reverts with ERC20InsufficientAllowance
+    s.token.transferFrom(msg.sender, address(this), addStake); // reverts with ERC20InsufficientAllowance()
   }
 
   /// @notice Deregisters a model
@@ -106,7 +106,7 @@ contract ModelRegistry {
     Model storage model = s.modelMap[id];
     LibOwner._senderOrOwner(model.owner);
 
-    s.activeModels.remove(id);
+    s.activeModels.remove(id); // reverts with KeyNotFound()
     model.isDeleted = true;
     uint256 stake = model.stake;
 
