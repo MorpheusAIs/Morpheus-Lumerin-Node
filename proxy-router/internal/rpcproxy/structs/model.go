@@ -14,6 +14,6 @@ type Model struct {
 	Owner     common.Address
 	Name      string
 	Tags      []string
-	Timestamp *big.Int
+	CreatedAt *big.Int
 	IsDeleted bool
 }

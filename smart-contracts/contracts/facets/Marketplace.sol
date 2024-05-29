@@ -40,7 +40,7 @@ contract Marketplace {
     return _bids;
   }
 
-  // returns active bids by model agent
+  /// @notice returns active bids by model or agent id
   function getActiveBidsByModelAgent(bytes32 modelAgentId) public view returns (Bid[] memory) {
     KeySet.Set storage modelAgentBidsSet = s.modelAgentActiveBids[modelAgentId];
     uint256 length = modelAgentBidsSet.count();
@@ -55,7 +55,7 @@ contract Marketplace {
     return _bids;
   }
 
-  // returns all bids by provider sorted from newest to oldest
+  /// @notice returns all bids by provider sorted from newest to oldest
   function getBidsByProvider(
     address provider,
     uint256 offset,
@@ -77,7 +77,7 @@ contract Marketplace {
     return (bidIds, _bids);
   }
 
-  // returns all bids by provider sorted from newest to oldest
+  /// @notice returns all bids by model or agent Id sorted from newest to oldest
   function getBidsByModelAgent(
     bytes32 modelAgentId,
     uint256 offset,
@@ -99,6 +99,7 @@ contract Marketplace {
     return (bidIds, _bids);
   }
 
+  /// @notice posts a new bid for a model
   function postModelBid(address providerAddr, bytes32 modelId, uint256 pricePerSecond) public returns (bytes32 bidId) {
     LibOwner._senderOrOwner(providerAddr);
     if (!s.activeProviders.exists(providerAddr)) {
@@ -131,7 +132,7 @@ contract Marketplace {
       modelAgentId: modelAgentId,
       pricePerSecond: pricePerSecond,
       nonce: nonce,
-      createdAt: block.timestamp,
+      createdAt: uint128(block.timestamp),
       deletedAt: 0
     });
 
@@ -152,6 +153,7 @@ contract Marketplace {
     return bidId;
   }
 
+  /// @notice deletes a bid
   function deleteModelAgentBid(bytes32 bidId) public {
     Bid storage bid = s.bidMap[bidId];
     if (bid.createdAt == 0 || bid.deletedAt != 0) {
@@ -160,7 +162,7 @@ contract Marketplace {
 
     LibOwner._senderOrOwner(bid.provider);
 
-    bid.deletedAt = block.timestamp;
+    bid.deletedAt = uint128(block.timestamp);
     // indexes update
     s.activeBids.remove(bidId);
     s.providerActiveBids[bid.provider].remove(bidId);
@@ -169,16 +171,19 @@ contract Marketplace {
     emit BidDeleted(bid.provider, bid.modelAgentId, bid.nonce);
   }
 
+  /// @notice sets a bid fee
   function setBidFee(uint256 _bidFee) public {
     LibOwner._onlyOwner();
     s.bidFee = _bidFee;
     emit FeeUpdated(_bidFee);
   }
 
+  /// @notice returns the bid fee
   function bidFee() public view returns (uint256) {
     return s.bidFee;
   }
 
+  /// @notice withdraws the fee balance (OWNER ONLY)
   function withdraw(address addr, uint256 amount) public {
     LibOwner._onlyOwner();
     if (amount > s.feeBalance) {

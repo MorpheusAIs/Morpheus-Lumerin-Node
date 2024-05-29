@@ -7,7 +7,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 struct Provider {
   string endpoint; // example 'domain.com:1234'
   uint256 stake; // stake amount
-  uint128 timestamp; // timestamp of the registration
+  uint128 createdAt; // timestamp of the registration
   bool isDeleted;
 }
 
@@ -18,7 +18,7 @@ struct Model {
   address owner;
   string name; // limit name length
   string[] tags; // TODO: limit tags amount
-  uint128 timestamp;
+  uint128 createdAt;
   bool isDeleted;
 }
 
@@ -27,8 +27,8 @@ struct Bid {
   bytes32 modelAgentId;
   uint256 pricePerSecond; // hourly price
   uint256 nonce;
-  uint256 createdAt;
-  uint256 deletedAt;
+  uint128 createdAt;
+  uint128 deletedAt;
 }
 
 struct Session {
@@ -50,7 +50,7 @@ struct Session {
 
 struct OnHold {
   uint256 amount;
-  uint256 releaseAt; // in epoch seconds TODO: consider using hours to reduce storage cost
+  uint128 releaseAt; // in epoch seconds TODO: consider using hours to reduce storage cost
 }
 
 struct Pool {
@@ -87,12 +87,18 @@ struct AppStorage {
   //
   // SESSION storage
   //
-  Session[] sessions; // all sessions
+  // all sessions
+  Session[] sessions;
   mapping(bytes32 => uint256) sessionMap; // sessionId => session index
+  mapping(address => uint256[]) userSessions; // user address => all session indexes
+  mapping(address => uint256[]) providerSessions; // provider address => all session indexes
+  mapping(bytes32 => uint256[]) modelSessions; // modelId => all session indexes
+  // active sessions
   mapping(address => Uint256Set.Set) userActiveSessions; // user address => active session indexes
   mapping(address => Uint256Set.Set) providerActiveSessions; // provider address => active session indexes
   mapping(address => OnHold[]) userOnHold; // user address => balance
   mapping(bytes => bool) approvalMap; // provider approval => true if approval was already used
+  uint64 activeSessionsCount;
   //
   // OTHER
   //

@@ -70,6 +70,10 @@ func (apiBus *ApiBus) GetAllowance(ctx *gin.Context) (int, gin.H) {
 	return apiBus.rpcProxy.GetAllowance(ctx)
 }
 
+func (apiBus *ApiBus) Approve(ctx *gin.Context) (int, gin.H) {
+	return apiBus.rpcProxy.Approve(ctx)
+}
+
 func (apiBus *ApiBus) GetAllProviders(ctx context.Context) (int, gin.H) {
 	return apiBus.rpcProxy.GetAllProviders(ctx)
 }
@@ -123,6 +127,6 @@ func (apiBus *ApiBus) GetTokenSupply(ctx *gin.Context) (int, gin.H) {
 	return apiBus.rpcProxy.GetTokenSupply(ctx)
 }
 
-func (apiBus *ApiBus) GetSessions(ctx *gin.Context) (int, gin.H) {
-	return apiBus.rpcProxy.GetSessions(ctx)
+func (apiBus *ApiBus) GetSessions(ctx *gin.Context, offset *big.Int, limit uint8) (int, gin.H) {
+	return apiBus.rpcProxy.GetSessions(ctx, offset, limit)
 }

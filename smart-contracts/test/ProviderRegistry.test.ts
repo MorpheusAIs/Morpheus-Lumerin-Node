@@ -32,7 +32,7 @@ describe("Provider registry", function () {
       expect(data).deep.equal({
         endpoint: expectedProvider.endpoint,
         stake: expectedProvider.stake,
-        timestamp: expectedProvider.timestamp,
+        createdAt: expectedProvider.createdAt,
         isDeleted: false,
       });
       expect(events.length).eq(1);
@@ -175,7 +175,7 @@ describe("Provider registry", function () {
       expect(providerData).deep.equal({
         endpoint: updates.endpoint,
         stake: expectedProvider.stake + updates.addStake,
-        timestamp: timestamp,
+        createdAt: timestamp,
         isDeleted: expectedProvider.isDeleted,
       });
     });
@@ -219,7 +219,7 @@ describe("Provider registry", function () {
       expect(providerData).deep.equal({
         endpoint: expectedProvider.endpoint,
         stake: expectedProvider.stake,
-        timestamp: expectedProvider.timestamp,
+        createdAt: expectedProvider.createdAt,
         isDeleted: expectedProvider.isDeleted,
       });
     });
@@ -234,7 +234,7 @@ describe("Provider registry", function () {
       expect(providerData).deep.equal({
         endpoint: expectedProvider.endpoint,
         stake: expectedProvider.stake,
-        timestamp: expectedProvider.timestamp,
+        createdAt: expectedProvider.createdAt,
         isDeleted: expectedProvider.isDeleted,
       });
     });
@@ -252,7 +252,7 @@ describe("Provider registry", function () {
       expect(providers[0]).deep.equal({
         endpoint: expectedProvider.endpoint,
         stake: expectedProvider.stake,
-        timestamp: expectedProvider.timestamp,
+        createdAt: expectedProvider.createdAt,
         isDeleted: expectedProvider.isDeleted,
       });
     });
