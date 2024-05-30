@@ -153,5 +153,4 @@ func (m *MorRpcHandler) Handle(ctx context.Context, msg morrpc.RpcMessage, sourc
 		sourceLog.Error(err)
 		return err
 	}
-	return nil
 }

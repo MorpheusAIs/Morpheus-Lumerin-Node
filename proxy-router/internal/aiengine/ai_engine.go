@@ -20,7 +20,6 @@ type AiEngine struct {
 
 func NewAiEngine() *AiEngine {
 	return &AiEngine{
-
 		client: api.NewClientWithConfig(api.ClientConfig{
 			BaseURL:    os.Getenv("OPENAI_BASE_URL"),
 			APIType:    api.APITypeOpenAI,
@@ -134,4 +133,3 @@ func (aiEngine *AiEngine) PromptStream(ctx context.Context, req interface{}, chu
 
 	return resp, err
 }
-
