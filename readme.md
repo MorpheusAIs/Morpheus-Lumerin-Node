@@ -1,5 +1,5 @@
 # Morpheus Lumerin Node
-The purpose of this software is to enable interact with LLMs on the Morpheus network through a desktop chat experience.
+The purpose of this software is to enable interacttion with distributed, decentralized LLMs on the Morpheus network through a desktop chat experience.
 
 The steps listed below are for both the Consumer and Provider to get started with the Morpheus Lumerin Node. As the software is developed, both onboarding & configuration of the provider and consumer roles will be simplified, automated and more transparent to the end user.
 
@@ -11,24 +11,20 @@ The steps listed below are for both the Consumer and Provider to get started wit
 * Local Llama.cpp and tinyllama model to run locally 
 
 ## Tokens and Contract Information 
-* Morpheus saMOR Token: `0x70768f0fF919e194E11aBFC3a2eDF43213359dc1` 
+* Morpheus saMOR Token: `0xc1664f994fd3991f98ae944bc16b9aed673ef5fd` 
 * Lumerin Morpheus Smart Contract : `0x70768f0fF919e194E11aBFC3a2eDF43213359dc1`
 * Blockchain Explorer: `https://sepolia.arbiscan.io/`
 
 ## Prerequisites
 * **WALLET:** For testing, you will need both `saMOR` and `saETH` tokens in your wallet. You should be able to get either of these from the usual Sepolia Arbitrum testnet faucets.
-
     * `saMOR` is the token used to pay for the model provider staking and consumer usage
     * `saETH` is the token used to pay for the gas fees on the network  
-
     * At this time, we recommend setting up a new wallet in either MetaMask or other existing crypto wallet 
-
         * You will need both the wallet's `private key` and `mnemonic` from your wallet to startup and interact with both the proxy-router and the UI-Desktop 
         * AS ALWAYS:  **NEVER** share either of these two items with anyone else, as they are the keys to your wallet and can be used to access your funds
         * In the future, as the UI-Desktop functionality is developed, all of this will be handled in the UI and you will not need to manually enter these items
 
 * **ETH NODE:** You will need access to either a public or private Sepolia Arbitrum ETH node that the proxy-router and ui-desktop will use to monitor events on the blockchain
-
     * We have provided an existing public node example `https://arbitrum-sepolia.blockpi.network/v1/rpc/public` in the .env-example file for you to use, however, 
     * We stronly recommend either a wss: or https: private endpoint from a trusted service like Alchemy or Infura (both offer free accounts for testing/private usage)
 
@@ -40,19 +36,16 @@ The steps listed below are for both the Consumer and Provider to get started wit
     2. Obtain or Transfer saMOR and saETH to this wallet for testing (suggest 1000 saMOR and at least 0.1 saETH) - Sepolia Arbitrum Chain 
 2. Download latest release for your operating system: https://github.com/Lumerin-protocol/Morpheus-Lumerin-Node/releases
 3. Extract the zip to a local folder (examples)
-    
     * Windows: `(%USERPROFILE%)/Downloads/morpheus)` 
     * Linux & MacOS: `~/Downloads/morpheus`
     * On MacOS you may need to execute `xattr -c mor-launch proxy-router ui-desktop.app` in a command window to remove the quarantine flag on MacOS
 4. Edit the .env file (this is a hidden file, please use your OS specific method to show hidden files) 
-    
     * Change `ETH_NODE_ADDRESS=` (you can setup a free one in Alchemy or Infura) 
     * Change `WALLET_PRIVATE_KEY=` This will be the private key of the Wallet you setup previously
 
 ### Consumer (Local LLM, Proxy-Router & UI-Desktop): 
 1. Assuming that you have already setup the prerequisites and downloaded the latest release, you can follow the steps below to get started
 2. Launch the node - this should open a command window to see local LLM model server and proxy-router start and then should launch the user interface  
-
     * Windows: Double click the `mor-launch.exe` (You will need to tell Windows Defender this is ok to run) 
     * Linux & MacOS: Open a terminal and navigate to the folder and run `./mor-launch`
     
@@ -60,7 +53,6 @@ The steps listed below are for both the Consumer and Provider to get started wit
     1. Read & accept terms & Conditions 
     2. Set a strong password (this is for the UI-Desktop only)
     3. When prompted to create the wallet from a new Mnemonic, select **Recover your wallet** from `Saved Mnemonic` instead.  
-    
         * This is important so that the private key for the proxy-router (in the .env file) and the wallet running in the UI are the same 
         * If you create a new wallet, the proxy-router will be listening to a different wallet address than the UI is managing and this will not work.
 4. Local Test: Once the UI is up and running,
@@ -68,7 +60,6 @@ The steps listed below are for both the Consumer and Provider to get started wit
     2. Click on the `Chat` icon on the left side of the screen
     3. Make sure the `Local Model` is selected
     4. Begin your conversation with the model by typing in the chat window and pressing `Enter`
-
         * You should see the model respond with the appropriate response to the prompt you entered, if not, then likely the configuration in the .env file is incorrect or the model is not running correctly
 5. Remote Test: Once you've verified that your wallet can access the blockchain and you can see the local model working, you can switch to a remote model and test that as well
     1. In the `Chat` window, select `Change Model `
@@ -105,7 +96,6 @@ At this time, we are not onboarding any new providers, but you can follow the st
             1. addr = Provider address 
             2. addStake = Amount of stake for provider to risk - Stake can be 0 now 
             3. Endpoint = Publicly accessible endpoint for provider (ip:port or fqdn:port no protocol) eg: `mycoolmornode.domain.com:3989`
-
     3. Create Model in the contract:
         1. Select ModelRegistry/modelRegister function
             1. modelId: random 32byte/hex that will uniquely identify model (uuid)
