@@ -29,7 +29,7 @@ The steps listed below are for both the Consumer and Provider to get started wit
     * We stronly recommend either a wss: or https: private endpoint from a trusted service like Alchemy or Infura (both offer free accounts for testing/private usage)
 
 
-## Getting Started 
+## Getting Started (using the provided releases - run from source instructions coming soon)
 ### Common Steps for both Consumer and Provider: 
 1. PreRequisites: 
     1. Have Mnemonic and Private key for a Consumer Wallet (Suggest setting one up in MetaMask so you can pull the mnemonic and private key) 
