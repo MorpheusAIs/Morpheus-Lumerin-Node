@@ -1,5 +1,5 @@
 # Morpheus Lumerin Node
-The purpose of this software is to enable interacttion with distributed, decentralized LLMs on the Morpheus network through a desktop chat experience.
+The purpose of this software is to enable interaction with distributed, decentralized LLMs on the Morpheus network through a desktop chat experience.
 
 The steps listed below are for both the Consumer and Provider to get started with the Morpheus Lumerin Node. As the software is developed, both onboarding & configuration of the provider and consumer roles will be simplified, automated and more transparent to the end user.
 
@@ -48,7 +48,6 @@ The steps listed below are for both the Consumer and Provider to get started wit
 2. Launch the node - this should open a command window to see local LLM model server and proxy-router start and then should launch the user interface  
     * Windows: Double click the `mor-launch.exe` (You will need to tell Windows Defender this is ok to run) 
     * Linux & MacOS: Open a terminal and navigate to the folder and run `./mor-launch`
-    
 3. Startup User Interface: 
     1. Read & accept terms & Conditions 
     2. Set a strong password (this is for the UI-Desktop only)
@@ -81,7 +80,8 @@ The steps listed below are for both the Consumer and Provider to get started wit
 
 ### Provider (Local LLM to offer, Proxy-Router running as background/service): 
 This section is used for offering your hosted LLM model to the network for others to use.
-At this time, we are not onboarding any new providers, but you can follow the steps below to see how it would work and will be automated and simplified in the future.
+
+**At this time, we are not onboarding any new providers, but you can follow the steps below to see how it would work and will be automated and simplified in the future.**
 1. SETUP PROVIDER / MODEL / BID: 
     1. WEB3/Arbiscan/Metamask: Authorize Diamond Contract to spend on the Provider's behalf 
         1. https://sepolia.arbiscan.io/address/0xc1664f994fd3991f98ae944bc16b9aed673ef5fd#writeContract 
