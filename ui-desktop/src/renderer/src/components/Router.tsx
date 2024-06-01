@@ -9,6 +9,7 @@ import Marketplace from './contracts/Marketplace'
 import Chat from './chat/Chat';
 import { Models } from './models/Models'
 import { Agents } from './agents/Agents'
+import Bids from './bids/Bids'
 
 // import Sockets from './sockets/Sockets'
 // import Reports from './reports/Reports'
@@ -19,6 +20,8 @@ import { Agents } from './agents/Agents'
 // import BuyerHub from './contracts/BuyerHub'
 // import AutoPriceAdjuster from './AutoPriceAdjuster'
 
+import 'bootstrap/dist/css/bootstrap.min.css';
+import Providers from './providers/Providers'
 
 const fadeIn = keyframes`
   from {
@@ -63,6 +66,8 @@ export const Layout = () => (
         <Route path="/chat" component={Chat} />
         <Route path="/agents" component={Agents} />
         <Route path="/models" component={Models} />
+        <Route path="/bids" component={Bids} />
+        <Route path="/providers" component={Providers} />
         {/* <Route path="/sockets" component={Sockets} />
         <Route path="/seller-hub" component={SellerHub} />
         <Route path="/buyer-hub" component={BuyerHub} /> */}

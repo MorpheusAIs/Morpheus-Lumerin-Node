@@ -10,9 +10,10 @@ const { Lumerin, CloneFactory } = require('contracts-js')
 function createQueue(config, eventBus, web3) {
   // debug.enabled = config.debug
 
-  const lumerin = Lumerin(web3, config.lmrTokenAddress)
+  //const lumerin = Lumerin(web3, config.mainTokenAddress)
+  //abiDecoder.addABI(lumerin.options.jsonInterface)
+  
   const cloneFactory = CloneFactory(web3, config.cloneFactoryAddress)
-  abiDecoder.addABI(lumerin.options.jsonInterface)
   abiDecoder.addABI(cloneFactory.options.jsonInterface)
 
   const metasCache = {}

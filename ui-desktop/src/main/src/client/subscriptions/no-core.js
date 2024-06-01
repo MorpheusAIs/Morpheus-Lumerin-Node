@@ -23,7 +23,14 @@ const listeners = {
   'set-profit-settings': handlers.setProfitSettings,
   'get-contract-hashrate': handlers.getContractHashrate,
   'get-auto-adjust-price': handlers.getAutoAdjustPriceData,
-  'set-auto-adjust-price': handlers.setAutoAdjustPriceData
+  'set-auto-adjust-price': handlers.setAutoAdjustPriceData,
+  // Api Gateway
+  'get-all-models': handlers.getAllModels,
+  'get-transactions': handlers.getTransactions,
+  'get-balances': handlers.getBalances,
+  'get-rates': handlers.getMorRate,
+  "get-todays-budget": handlers.getTodaysBudget,
+  "get-supply": handlers.getTokenSupply,
 }
 
 // Subscribe to messages where no core has to react

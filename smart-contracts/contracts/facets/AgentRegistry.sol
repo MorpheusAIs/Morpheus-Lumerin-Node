@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.24;
+
 import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { KeySet } from "../libraries/KeySet.sol";
@@ -11,7 +12,7 @@ contract AgentRegistry is OwnableUpgradeable {
     bytes32 agentId;
     uint256 fee;
     uint256 stake;
-    uint256 timestamp;
+    uint128 createdAt;
     address owner;
     string name; // limit name length
     string[] tags; // TODO: limit tags amount
@@ -30,7 +31,7 @@ contract AgentRegistry is OwnableUpgradeable {
   ERC20 public token;
 
   // model storage
-  KeySet.Set set;
+  KeySet.Set private set;
   mapping(bytes32 => Agent) public map;
 
   function initialize(address _token) public initializer {
@@ -78,7 +79,7 @@ contract AgentRegistry is OwnableUpgradeable {
     map[agentId] = Agent({
       fee: fee,
       stake: newStake,
-      timestamp: block.timestamp,
+      createdAt: uint128(block.timestamp),
       owner: owner,
       agentId: agentId,
       name: name,

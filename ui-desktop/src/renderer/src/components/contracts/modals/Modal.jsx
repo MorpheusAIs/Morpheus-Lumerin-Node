@@ -6,7 +6,7 @@ import {
   CloseModal
 } from './CreateContractModal.styles';
 
-function Modal({ children, onClose }) {
+function Modal({ children, onClose, bodyProps }) {
   const waitingForMouseUpRef = useRef(false);
   const ignoreBackdropClickRef = useRef(false);
   const modalRef = useRef(false);
@@ -34,6 +34,7 @@ function Modal({ children, onClose }) {
   return (
     <ModalBase onClick={wrapClose} onMouseUp={handleMouseUp} ref={modalRef}>
       <Body
+        {...bodyProps}
         onClick={e => e.stopPropagation()}
         onMouseDown={handleDialogMouseDown}
       >

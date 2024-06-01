@@ -4,8 +4,7 @@ pragma solidity ^0.8.0;
 // Example library to show a simple example of diamond storage
 
 library TestLib {
-  bytes32 constant DIAMOND_STORAGE_POSITION =
-    keccak256("diamond.standard.test.storage");
+  bytes32 constant DIAMOND_STORAGE_POSITION = keccak256("diamond.standard.test.storage");
 
   struct TestState {
     address myAddress;
@@ -76,7 +75,5 @@ contract Test1Facet {
 
   function test1Func20() external {}
 
-  function supportsInterface(
-    bytes4 _interfaceID
-  ) external view returns (bool) {}
+  function supportsInterface(bytes4 _interfaceID) external view returns (bool) {}
 }

@@ -127,7 +127,7 @@ export const createTransactionParser = myAddress => rawTx => {
   const timestamp = getTimestamp(rawTx, txType);
   const symbol = getSymbol(rawTx, tokenData, txType);
   const value = getValue(rawTx, tokenData, txType);
-
+  
   return {
     contractCallFailed: getContractCallFailed(rawTx),
     isCancelApproval: getIsCancelApproval(tokenData),
@@ -141,13 +141,13 @@ export const createTransactionParser = myAddress => rawTx => {
     gasUsed: getGasUsed(rawTx),
     txType,
     symbol,
-    value:
-      symbol === 'LMR'
-        ? fromTokenBaseUnitsToLMR(value)
-        : fromTokenBaseUnitsToETH(value),
+    value:(value / 10 ** 18),
+      // rawTx?.transaction?.isMor
+      //   ? fromTokenBaseUnitsToLMR(value)
     from: getFrom(rawTx, tokenData, txType),
     hash: getTransactionHash(rawTx),
     meta: rawTx.meta,
-    to: getTo(rawTx, tokenData, txType)
+    to: getTo(rawTx, tokenData, txType),
+    isMor: rawTx?.transaction?.isMor
   };
 };

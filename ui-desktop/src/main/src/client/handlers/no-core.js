@@ -14,6 +14,8 @@ import {
   getKey,
   setKey
 } from '../settings'
+import apiGateway from '../apiGateway';
+
 const validatePassword = (data) => auth.isValidPassword(data)
 
 function clearCache() {
@@ -111,5 +113,6 @@ export default {
   getProfitSettings,
   setProfitSettings,
   getAutoAdjustPriceData,
-  setAutoAdjustPriceData
+  setAutoAdjustPriceData,
+  ...apiGateway
 }

@@ -24,17 +24,17 @@ function createPlugin () {
   function start ({ config, eventBus, plugins }) {
     // debug.enabled = config.debug;
 
-    const { lmrTokenAddress } = config;
+    const { mainTokenAddress } = config;
     const { eth, explorer, token } = plugins;
 
     const web3 = new Web3(eth.web3Provider);
-    const lumerin = Lumerin(web3, lmrTokenAddress)
+    // const lumerin = Lumerin(web3, mainTokenAddress)
 
     // Register LMR token
-    token.registerToken(lumerin.address, {
-      decimals: 8,
-      name: 'Lumerin',
-      symbol: 'LMR'
+    token.registerToken(mainTokenAddress, {
+      decimals: 18,
+      name: 'Morpheus',
+      symbol: 'MOR'
     });
 
     // eventBus.on('coin-block', emitLumerinStatus);
@@ -54,13 +54,13 @@ function createPlugin () {
     // Build and return API
     return {
       api: {
-        sendLmr: sendLmr(
-          web3,
-          lumerin,
-          explorer.logTransaction,
-          metaParsers
-        ),
-        estimateGasTransfer: estimateGasTransfer(lumerin),
+        // sendLmr: sendLmr(
+        //   web3,
+        //   lumerin,
+        //   explorer.logTransaction,
+        //   metaParsers
+        // ),
+        // estimateGasTransfer: estimateGasTransfer(lumerin),
       },
       events: [
         'wallet-error'

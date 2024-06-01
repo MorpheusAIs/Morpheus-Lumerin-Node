@@ -4,6 +4,7 @@ import {
   BaseError,
   ContractFunctionRevertedError,
   UnknownRpcError,
+  parseEventLogs,
 } from "viem";
 import {
   DecodeErrorResultReturnType,
@@ -11,6 +12,9 @@ import {
   padHex,
 } from "viem/utils";
 import crypto from "crypto";
+import { HardhatRuntimeEnvironment } from "hardhat/types";
+import { DAY, SECOND } from "../utils/time";
+import { time } from "@nomicfoundation/hardhat-toolbox-viem/network-helpers";
 
 export async function getTxTimestamp(
   client: PublicClient,
@@ -24,23 +28,73 @@ export async function getTxTimestamp(
   return block.timestamp;
 }
 
-export function expectError<const TAbi extends Abi | readonly unknown[]>(
-  err: any,
+export async function getSessionId(
+  publicClient: PublicClient,
+  hre: HardhatRuntimeEnvironment,
+  txHash: `0x${string}`,
+): Promise<`0x${string}`> {
+  const receipt = await publicClient.waitForTransactionReceipt({
+    hash: txHash,
+  });
+  const artifact = await hre.artifacts.readArtifact("SessionRouter");
+  const events = parseEventLogs({
+    abi: artifact.abi,
+    logs: receipt.logs,
+    eventName: "SessionOpened",
+  });
+  if (events.length === 0) {
+    throw new Error("SessionOpened event not found");
+  }
+  if (events.length > 1) {
+    throw new Error("Multiple SessionOpened events found");
+  }
+  return events[0].args.sessionId;
+}
+
+/** helper function to catch errors and check if the error is the expected one
+ * @example
+ * await catchError(abi, "ErrorName", async () => {
+ *   await contract.method();
+ * });
+ **/
+export async function catchError<const TAbi extends Abi | readonly unknown[]>(
   abi: TAbi | undefined,
-  error: DecodeErrorResultReturnType<TAbi>["errorName"],
+  error:
+    | DecodeErrorResultReturnType<TAbi>["errorName"]
+    | DecodeErrorResultReturnType<TAbi>["errorName"][],
+  cb: () => Promise<unknown>,
 ) {
-  if (!catchErr(err, abi, error)) {
-    console.error(err);
-    throw new Error(
-      `Expected blockchain custom error "${error}" was not thrown\n\n${err}`,
-      {
-        cause: err,
-      },
-    );
+  try {
+    await cb();
+    throw new Error(`No error was thrown, expected error "${error}"`);
+  } catch (err) {
+    if (Array.isArray(error)) {
+      return expectError(err, abi, error);
+    } else {
+      return expectError(err, abi, [error]);
+    }
   }
 }
 
-export function catchErr<const TAbi extends Abi | readonly unknown[]>(
+export function expectError<const TAbi extends Abi | readonly unknown[]>(
+  err: any,
+  abi: TAbi | undefined,
+  errors: DecodeErrorResultReturnType<TAbi>["errorName"][],
+) {
+  for (const error of errors) {
+    if (isErr(err, abi, error)) {
+      return;
+    }
+  }
+
+  console.error(err);
+  throw new Error(
+    `Expected one of blockchain custom errors "${errors.join(" | ")}" was not thrown\n\n${err}`,
+    { cause: err },
+  );
+}
+
+export function isErr<const TAbi extends Abi | readonly unknown[]>(
   err: any,
   abi: TAbi | undefined,
   error: DecodeErrorResultReturnType<TAbi>["errorName"],
@@ -87,6 +141,26 @@ export const randomBytes32 = (): `0x${string}` => {
   return getHex(crypto.randomBytes(32));
 };
 
+export const randomBytes = (nBytes: number): `0x${string}` => {
+  return getHex(crypto.randomBytes(nBytes), nBytes);
+};
+
 export const randomAddress = (): `0x${string}` => {
   return getHex(crypto.randomBytes(20), 20);
+};
+
+export const now = (): bigint => {
+  return BigInt(Math.floor(Date.now() / 1000));
+};
+
+export const now2 = async (): Promise<bigint> => {
+  return BigInt(await time.latest());
+};
+
+export const startOfTheDay = (timestamp: bigint): bigint => {
+  return timestamp - (timestamp % BigInt(DAY / SECOND));
+};
+
+export const NewDate = (timestamp: bigint): Date => {
+  return new Date(Number(timestamp) * 1000);
 };

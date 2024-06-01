@@ -2,25 +2,15 @@
 
 const { ipcMain, app } = require('electron')
 const createCore = require('@lumerin/wallet-core')
-const stringify = require('json-stringify-safe')
 
 import logger from '../../logger'
 import subscriptions from './subscriptions'
 import settings from './settings'
 import storage from './storage'
-import { startMonitoringHashrate } from './contractsHashrateSyncer'
 
-import { getAddressAndPrivateKey, refreshProxyRouterConnection } from './handlers/single-core'
-
-import { runProxyRouter, isProxyRouterHealthy } from './proxyRouter'
-let interval
 export function startCore({ chain, core, config: coreConfig }, webContent) {
   logger.verbose(`Starting core ${chain}`)
   const { emitter, events, api } = core.start(coreConfig)
-  const proxyRouterApi = api['proxy-router']
-  if (interval) clearInterval(interval)
-
-  interval = startMonitoringHashrate(coreConfig.localProxyRouterUrl, 5 * 60 * 1000)
 
   // emitter.setMaxListeners(30);
   emitter.setMaxListeners(50)
@@ -103,39 +93,6 @@ export function startCore({ chain, core, config: coreConfig }, webContent) {
     }
     return false
   }
-
-  // emitter.on('open-proxy-router', async ({ password }) => {
-  //   const proxyRouterUserConfig = settings.getProxyRouterConfig()
-  //   if (!proxyRouterUserConfig.runWithoutProxyRouter) {
-  //     const { address, privateKey } = await getAddressAndPrivateKey({ password }, { api })
-
-  //     send('proxy-router-type-changed', {
-  //       isLocal: true
-  //     })
-
-  //     const config = {
-  //       privateKey,
-  //       walletAddress: address,
-  //       ...coreConfig.chain,
-  //       ...proxyRouterUserConfig
-  //     }
-
-  //     const isProxyHealth = await isProxyRouterHealthy(api, config.localProxyRouterUrl)
-  //     const shouldRestartProxy = shouldRestartProxyRouterAfterWalletUpdate()
-  //     if (!isProxyHealth || shouldRestartProxy) {
-  //       logger.debug('Seller is not healhy, restart...')
-  //       await proxyRouterApi.kill(config.proxyPort).catch(logger.error)
-  //       runProxyRouter(config)
-  //     }
-
-  //     refreshProxyRouterConnection(
-  //       {
-  //         proxyNodeUrl: config.localProxyRouterUrl
-  //       },
-  //       { api }
-  //     )
-  //   }
-  // })
 
   return {
     emitter,

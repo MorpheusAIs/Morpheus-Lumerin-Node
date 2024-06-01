@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.24;
-import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+
 import { AppStorage, Model } from "../AppStorage.sol";
 import { KeySet } from "../libraries/KeySet.sol";
 import { LibOwner } from "../libraries/LibOwner.sol";
@@ -18,42 +17,53 @@ contract ModelRegistry {
   error ModelNotFound();
   error StakeTooLow();
 
+  /// @notice Returns model struct by id
   function modelMap(bytes32 id) public view returns (Model memory) {
     return s.modelMap[id];
   }
 
+  /// @notice Returns model id by index
   function models(uint256 index) public view returns (bytes32) {
     return s.models[index];
   }
 
+  /// @notice Returns active (undeleted) model IDs
   function modelGetIds() public view returns (bytes32[] memory) {
     return s.activeModels.keys();
   }
 
+  /// @notice Returns count of active models
   function modelGetCount() public view returns (uint count) {
     return s.activeModels.count();
   }
 
-  function modelGetAll() public view returns (Model[] memory) {
-    Model[] memory _models = new Model[](s.activeModels.count());
-    for (uint i = 0; i < s.activeModels.count(); i++) {
-      _models[i] = s.modelMap[s.activeModels.keyAtIndex(i)];
+  /// @notice Returns all models
+  /// @return ids    array of model ids
+  /// @return models array of model structs
+  function modelGetAll() public view returns (bytes32[] memory, Model[] memory) {
+    uint256 len = s.activeModels.count();
+    Model[] memory _models = new Model[](len);
+    bytes32[] memory ids = new bytes32[](len);
+    for (uint i = 0; i < len; i++) {
+      bytes32 id = s.activeModels.keyAtIndex(i);
+      ids[i] = id;
+      _models[i] = s.modelMap[id];
     }
-    return _models;
+    return (ids, _models);
   }
 
-  function modelGetByIndex(
-    uint index
-  ) public view returns (bytes32 modelId, Model memory model) {
+  /// @notice Returns active model struct by index
+  function modelGetByIndex(uint index) public view returns (bytes32 modelId, Model memory model) {
     modelId = s.activeModels.keyAtIndex(index);
     return (modelId, s.modelMap[modelId]);
   }
 
+  /// @notice Checks if model exists
   function modelExists(bytes32 id) public view returns (bool) {
     return s.activeModels.exists(id);
   }
 
-  // registers new model or updates existing
+  /// @notice Registers or updates existing model
   function modelRegister(
     bytes32 modelId,
     bytes32 ipfsCID,
@@ -79,7 +89,7 @@ contract ModelRegistry {
     s.modelMap[modelId] = Model({
       fee: fee,
       stake: newStake,
-      timestamp: uint128(block.timestamp),
+      createdAt: uint128(block.timestamp),
       ipfsCID: ipfsCID,
       owner: owner,
       name: name,
@@ -88,14 +98,15 @@ contract ModelRegistry {
     });
 
     emit ModelRegisteredUpdated(owner, modelId);
-    s.token.transferFrom(msg.sender, address(this), addStake); // reverts with ERC20InsufficientAllowance
+    s.token.transferFrom(msg.sender, address(this), addStake); // reverts with ERC20InsufficientAllowance()
   }
 
+  /// @notice Deregisters a model
   function modelDeregister(bytes32 id) public {
     Model storage model = s.modelMap[id];
     LibOwner._senderOrOwner(model.owner);
 
-    s.activeModels.remove(id);
+    s.activeModels.remove(id); // reverts with KeyNotFound()
     model.isDeleted = true;
     uint256 stake = model.stake;
 
@@ -103,12 +114,14 @@ contract ModelRegistry {
     s.token.transfer(model.owner, stake);
   }
 
+  /// @notice Sets the minimum stake required for a model
   function modelSetMinStake(uint256 _minStake) public {
     LibOwner._onlyOwner();
     s.modelMinStake = _minStake;
     emit ModelMinStakeUpdated(s.modelMinStake);
   }
 
+  /// @notice Returns the minimum stake required for a model
   function modelMinStake() public view returns (uint256) {
     return s.modelMinStake;
   }

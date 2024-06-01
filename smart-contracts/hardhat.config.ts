@@ -1,10 +1,21 @@
 import "dotenv/config";
-import { HardhatUserConfig } from "hardhat/config";
+import "@nomicfoundation/hardhat-verify";
 import "@nomicfoundation/hardhat-toolbox-viem";
+import "@nomicfoundation/hardhat-ignition-viem";
 import "@solarity/hardhat-gobind";
+import "./tasks/upgrade";
+import { HardhatUserConfig } from "hardhat/config";
 
 const config: HardhatUserConfig = {
-  solidity: "0.8.24",
+  solidity: {
+    version: "0.8.24",
+    settings: {
+      optimizer: {
+        enabled: true,
+        runs: 200,
+      },
+    },
+  },
   mocha: {
     reporter: "nyan",
   },
@@ -15,7 +26,7 @@ const config: HardhatUserConfig = {
     coinmarketcap: process.env.COINMARKETCAP_API_KEY,
     darkMode: true,
     currency: "USD",
-    L2Etherscan: "E6UST5HFK6DNNTVUV1YTTRTN3BX727G8SU",
+    L2Etherscan: process.env.ETHERSCAN_API_KEY,
     L2: "arbitrum",
     L1: "ethereum",
   },

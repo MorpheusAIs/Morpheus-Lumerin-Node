@@ -49,6 +49,13 @@ const withDashboardState = WrappedComponent => {
         });
     };
 
+    onInit = async () => {
+      var balances = await this.props.client.getBalances();
+      var transactions = await this.props.client.getTransactions();
+      var rate = await this.props.client.getRates();
+      return { balances, transactions, rate };
+    }
+
     render() {
       const { sendLmrFeatureStatus } = this.props;
 
@@ -64,6 +71,7 @@ const withDashboardState = WrappedComponent => {
           sendDisabledReason={sendDisabledReason}
           copyToClipboard={this.props.client.copyToClipboard}
           onWalletRefresh={this.onWalletRefresh}
+          onInit={this.onInit}
           sendDisabled={sendLmrFeatureStatus !== 'ok'}
           {...this.props}
           {...this.state}

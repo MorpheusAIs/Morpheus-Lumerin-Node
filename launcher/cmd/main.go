@@ -7,6 +7,7 @@ import (
     "io"
     "os"
     "os/exec"
+    "path/filepath"
     "sync"
     "github.com/google/shlex"
 )
@@ -15,20 +16,29 @@ type Config struct {
     Run []string `json:"run"`
 }
 
-func findConfig(fileName string) (string, error) {
-    homeFile := path.Join(os.Getenv("HOME"), fileName)
+func findConfig(fileName string, base string) (string, error) {
     if _, err := os.Stat(fileName); err == nil {
         return fileName, nil
-    } else if _, err := os.Stat(homeFile); err == nil {
-        return homeFile, nil
-    } else {
-        return "", os.ErrNotExist
     }
+    homeFile := path.Join(os.Getenv("HOME"), fileName)
+    if _, err := os.Stat(homeFile); err == nil {
+        return homeFile, nil
+    }
+    siblingFile := path.Join(base, fileName)
+    if _, err := os.Stat(siblingFile); err == nil {
+        return siblingFile, nil
+    }
+    return "", os.ErrNotExist
 }
 
 func main() {
+    exepath, err := os.Executable()
+    if err != nil {
+        log.Panic(err)
+    }
+    base := filepath.Dir(exepath)
     confName := "mor-launch.json"
-    confFile, err := findConfig(confName)
+    confFile, err := findConfig(confName, base)
     if err != nil {
         log.Fatalf("Error finding %s: %v", confName, err)
     }
@@ -58,6 +68,7 @@ func main() {
                 return
             }
             cmd := exec.Command(args[0], args[1:]...)
+            cmd.Dir = base
             stdout, err := cmd.StdoutPipe()
             if err != nil {
                 log.Print(err)

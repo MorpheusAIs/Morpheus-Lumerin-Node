@@ -140,7 +140,15 @@ const createClient = function (createStore) {
     setProfitSettings: utils.forwardToMainProcess('set-profit-settings'),
     getAutoAdjustPriceData: utils.forwardToMainProcess('get-auto-adjust-price'),
     setAutoAdjustPriceData: utils.forwardToMainProcess('set-auto-adjust-price'),
-    getContractHashrate: utils.forwardToMainProcess('get-contract-hashrate')
+    getContractHashrate: utils.forwardToMainProcess('get-contract-hashrate'),
+    // API Gateway
+    getAllModels: utils.forwardToMainProcess('get-all-models'),
+
+    getTransactions: utils.forwardToMainProcess('get-transactions'),
+    getBalances: utils.forwardToMainProcess('get-balances'),
+    getRates: utils.forwardToMainProcess('get-rates'),
+    getTodaysBudget: utils.forwardToMainProcess('get-todays-budget'),
+    getTokenSupply: utils.forwardToMainProcess('get-supply'),
   }
 
   const api = {

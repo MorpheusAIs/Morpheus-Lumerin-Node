@@ -1,7 +1,7 @@
 package httphandlers
 
 import (
-	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -9,8 +9,9 @@ import (
 	"net/http"
 	"net/http/pprof"
 
-	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/apibus"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
 	openai "github.com/sashabaranov/go-openai"
@@ -27,11 +28,15 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 
+	r.Use(cors.New(cors.Config{
+		AllowOrigins: []string{"*"},
+	}))
+
 	r.GET("/healthcheck", (func(ctx *gin.Context) {
-		ctx.JSON(SUCCESS_STATUS, apiBus.HealthCheck(ctx))
+		ctx.JSON(http.StatusOK, apiBus.HealthCheck(ctx))
 	}))
 	r.GET("/config", (func(ctx *gin.Context) {
-		ctx.JSON(SUCCESS_STATUS, apiBus.GetConfig(ctx))
+		ctx.JSON(http.StatusOK, apiBus.GetConfig(ctx))
 	}))
 	r.GET("/files", (func(ctx *gin.Context) {
 		status, files := apiBus.GetFiles(ctx)
@@ -51,14 +56,39 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 			return
 		}
 
-		response, err := apiBus.Prompt(ctx, req)
-		fmt.Println("apibus prompt response: ", response)
+		req.Stream = ctx.GetHeader("Accept") == "application/json"
+
+		var response interface{}
+
+		if req.Stream {
+			response, err = apiBus.PromptStream(ctx, req, func(response *openai.ChatCompletionStreamResponse) error {
+
+				marshalledResponse, err := json.Marshal(response)
+
+				if err != nil {
+					return err
+				}
+
+				ctx.Writer.Header().Set("Content-Type", "text/event-stream")
+				_, err = ctx.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", marshalledResponse)))
+				ctx.Writer.Flush()
+
+				if err != nil {
+					return err
+				}
+
+				return nil
+			})
+		} else {
+			response, err = apiBus.Prompt(ctx, req)
+		}
+
 		if err != nil {
-			ctx.AbortWithError(ERROR_STATUS, err)
+			ctx.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
 
-		ctx.JSON(SUCCESS_STATUS, response)
+		ctx.JSON(http.StatusOK, response)
 	}))
 
 	r.POST("/proxy/sessions/initiate", (func(ctx *gin.Context) {
@@ -67,13 +97,37 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 	}))
 
 	r.POST("/proxy/sessions/:id/prompt", (func(ctx *gin.Context) {
-		status, response := apiBus.SendPrompt(ctx)
+		ok, status, response := apiBus.SendPrompt(ctx)
+		if !ok {
+			ctx.JSON(status, response)
+			return
+		}
+		return
+	}))
+
+	r.GET("/proxy/sessions/:id/providerClaimableBalance", (func(ctx *gin.Context) {
+		status, response := apiBus.GetProviderClaimableBalance(ctx)
+		ctx.JSON(status, response)
+	}))
+
+	r.POST("/proxy/sessions/:id/providerClaim", (func(ctx *gin.Context) {
+		status, response := apiBus.ClaimProviderBalance(ctx)
 		ctx.JSON(status, response)
 	}))
 
 	r.GET("/blockchain/providers", (func(ctx *gin.Context) {
 		status, providers := apiBus.GetAllProviders(ctx)
 		ctx.JSON(status, providers)
+	}))
+
+	r.POST("/blockchain/send/eth", (func(ctx *gin.Context) {
+		status, response := apiBus.SendEth(ctx)
+		ctx.JSON(status, response)
+	}))
+
+	r.POST("/blockchain/send/mor", (func(ctx *gin.Context) {
+		status, response := apiBus.SendMor(ctx)
+		ctx.JSON(status, response)
 	}))
 
 	r.GET("/blockchain/providers/:id/bids", (func(ctx *gin.Context) {
@@ -100,15 +154,59 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 			return
 		}
 
-		id, err := hex.DecodeString(modelAgentId)
-		if err != nil {
-			ctx.JSON(constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "invalid model agent id"})
+		id := common.FromHex(modelAgentId)
+
+		status, models := apiBus.GetBidsByModelAgent(ctx, ([32]byte)(id), offset, limit)
+		ctx.JSON(status, models)
+	}))
+
+	r.GET("/blockchain/balance", (func(ctx *gin.Context) {
+		status, balance := apiBus.GetBalance(ctx)
+		ctx.JSON(status, balance)
+	}))
+
+	r.GET("/blockchain/transactions", (func(ctx *gin.Context) {
+		status, transactions := apiBus.GetTransactions(ctx)
+		ctx.JSON(status, transactions)
+	}))
+
+	r.GET("/blockchain/allowance", (func(ctx *gin.Context) {
+		status, balance := apiBus.GetAllowance(ctx)
+		ctx.JSON(status, balance)
+	}))
+
+	r.POST("/blockchain/approve", (func(ctx *gin.Context) {
+		status, response := apiBus.Approve(ctx)
+		ctx.JSON(status, response)
+	}))
+
+	r.POST("/blockchain/sessions", (func(ctx *gin.Context) {
+		status, response := apiBus.OpenSession(ctx)
+		ctx.JSON(status, response)
+	}))
+
+	r.GET("/blockchain/sessions", (func(ctx *gin.Context) {
+		offset, limit := getOffsetLimit(ctx)
+		if offset == nil {
 			return
 		}
-		var idBytes [32]byte
-		copy(idBytes[:], id)
-		status, models := apiBus.GetBidsByModelAgent(ctx, idBytes, offset, limit)
-		ctx.JSON(status, models)
+		status, response := apiBus.GetSessions(ctx, offset, limit)
+		ctx.JSON(status, response)
+	}))
+
+	r.GET("/blockchain/sessions/budget", (func(ctx *gin.Context) {
+		status, response := apiBus.GetTodaysBudget(ctx)
+		ctx.JSON(status, response)
+	}))
+
+	r.GET("/blockchain/token/supply", (func(ctx *gin.Context) {
+		status, response := apiBus.GetTokenSupply(ctx)
+		ctx.JSON(status, response)
+	}))
+
+	r.POST("/blockchain/sessions/:id/close", (func(ctx *gin.Context) {
+		status, response := apiBus.CloseSession(ctx)
+		ctx.JSON(status, response)
 	}))
 
 	r.Any("/debug/pprof/*action", gin.WrapF(pprof.Index))
@@ -128,19 +226,19 @@ func getOffsetLimit(ctx *gin.Context) (*big.Int, uint8) {
 	}
 	limitStr := ctx.Query("limit")
 	if limitStr == "" {
-		limitStr = "10"
+		limitStr = "100"
 	}
 
 	offset, ok := new(big.Int).SetString(offsetStr, 10)
 	if !ok {
-		ctx.JSON(constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "invalid offset"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid offset"})
 		return nil, 0
 	}
 
 	var limit uint8
 	_, err := fmt.Sscanf(limitStr, "%d", &limit)
 	if err != nil {
-		ctx.JSON(constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "invalid limit"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid limit"})
 		return nil, 0
 	}
 	return offset, limit

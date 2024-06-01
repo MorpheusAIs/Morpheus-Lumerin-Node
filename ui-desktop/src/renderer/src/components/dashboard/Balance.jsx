@@ -62,7 +62,7 @@ export const Balance = ({
       <BalanceWrap>
         <BalanceRow>
           {formatCurrency({ value, maxSignificantFractionDigits })}&nbsp;
-          <CurrencySpan>{currency}</CurrencySpan>
+          <CurrencySpan>{currency == "saLMR" ? "saMOR" : currency}</CurrencySpan>
         </BalanceRow>
         <EquivalentUSDRow>≈ {equivalentUSD}</EquivalentUSDRow>
       </BalanceWrap>
