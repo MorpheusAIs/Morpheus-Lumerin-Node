@@ -34,7 +34,7 @@ type AgentRegistryAgent struct {
 	AgentId   [32]byte
 	Fee       *big.Int
 	Stake     *big.Int
-	Timestamp *big.Int
+	CreatedAt *big.Int
 	Owner     common.Address
 	Name      string
 	Tags      []string
@@ -42,7 +42,7 @@ type AgentRegistryAgent struct {
 
 // AgentRegistryMetaData contains all meta data concerning the AgentRegistry contract.
 var AgentRegistryMetaData = &bind.MetaData{
-	ABI: "[{\"inputs\":[],\"name\":\"KeyExists\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"KeyNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ModelNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotSenderOrOwner\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"StakeTooLow\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroKey\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"agentId\",\"type\":\"bytes32\"}],\"name\":\"Deregistered\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint8\",\"name\":\"version\",\"type\":\"uint8\"}],\"name\":\"Initialized\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newStake\",\"type\":\"uint256\"}],\"name\":\"MinStakeUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"agentId\",\"type\":\"bytes32\"}],\"name\":\"RegisteredUpdated\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"id\",\"type\":\"bytes32\"}],\"name\":\"deregister\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"id\",\"type\":\"bytes32\"}],\"name\":\"exists\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getAll\",\"outputs\":[{\"components\":[{\"internalType\":\"bytes32\",\"name\":\"agentId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"stake\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"timestamp\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string[]\",\"name\":\"tags\",\"type\":\"string[]\"}],\"internalType\":\"structAgentRegistry.Agent[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getIds\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_token\",\"type\":\"address\"}],\"name\":\"initialize\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"name\":\"map\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"agentId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"stake\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"timestamp\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"minStake\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"addStake\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"agentId\",\"type\":\"bytes32\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string[]\",\"name\":\"tags\",\"type\":\"string[]\"}],\"name\":\"register\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_minStake\",\"type\":\"uint256\"}],\"name\":\"setMinStake\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"token\",\"outputs\":[{\"internalType\":\"contractERC20\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
+	ABI: "[{\"inputs\":[],\"name\":\"KeyExists\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"KeyNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ModelNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotSenderOrOwner\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"StakeTooLow\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroKey\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"agentId\",\"type\":\"bytes32\"}],\"name\":\"Deregistered\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint8\",\"name\":\"version\",\"type\":\"uint8\"}],\"name\":\"Initialized\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newStake\",\"type\":\"uint256\"}],\"name\":\"MinStakeUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"agentId\",\"type\":\"bytes32\"}],\"name\":\"RegisteredUpdated\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"id\",\"type\":\"bytes32\"}],\"name\":\"deregister\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"id\",\"type\":\"bytes32\"}],\"name\":\"exists\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getAll\",\"outputs\":[{\"components\":[{\"internalType\":\"bytes32\",\"name\":\"agentId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"stake\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string[]\",\"name\":\"tags\",\"type\":\"string[]\"}],\"internalType\":\"structAgentRegistry.Agent[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getIds\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_token\",\"type\":\"address\"}],\"name\":\"initialize\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"name\":\"map\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"agentId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"stake\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"minStake\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"addStake\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"agentId\",\"type\":\"bytes32\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string[]\",\"name\":\"tags\",\"type\":\"string[]\"}],\"name\":\"register\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_minStake\",\"type\":\"uint256\"}],\"name\":\"setMinStake\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"token\",\"outputs\":[{\"internalType\":\"contractERC20\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
 }
 
 // AgentRegistryABI is the input ABI used to generate the binding from.
@@ -224,7 +224,7 @@ func (_AgentRegistry *AgentRegistryCallerSession) Exists(id [32]byte) (bool, err
 
 // GetAll is a free data retrieval call binding the contract method 0x53ed5143.
 //
-// Solidity: function getAll() view returns((bytes32,uint256,uint256,uint256,address,string,string[])[])
+// Solidity: function getAll() view returns((bytes32,uint256,uint256,uint128,address,string,string[])[])
 func (_AgentRegistry *AgentRegistryCaller) GetAll(opts *bind.CallOpts) ([]AgentRegistryAgent, error) {
 	var out []interface{}
 	err := _AgentRegistry.contract.Call(opts, &out, "getAll")
@@ -241,14 +241,14 @@ func (_AgentRegistry *AgentRegistryCaller) GetAll(opts *bind.CallOpts) ([]AgentR
 
 // GetAll is a free data retrieval call binding the contract method 0x53ed5143.
 //
-// Solidity: function getAll() view returns((bytes32,uint256,uint256,uint256,address,string,string[])[])
+// Solidity: function getAll() view returns((bytes32,uint256,uint256,uint128,address,string,string[])[])
 func (_AgentRegistry *AgentRegistrySession) GetAll() ([]AgentRegistryAgent, error) {
 	return _AgentRegistry.Contract.GetAll(&_AgentRegistry.CallOpts)
 }
 
 // GetAll is a free data retrieval call binding the contract method 0x53ed5143.
 //
-// Solidity: function getAll() view returns((bytes32,uint256,uint256,uint256,address,string,string[])[])
+// Solidity: function getAll() view returns((bytes32,uint256,uint256,uint128,address,string,string[])[])
 func (_AgentRegistry *AgentRegistryCallerSession) GetAll() ([]AgentRegistryAgent, error) {
 	return _AgentRegistry.Contract.GetAll(&_AgentRegistry.CallOpts)
 }
@@ -286,12 +286,12 @@ func (_AgentRegistry *AgentRegistryCallerSession) GetIds() ([][32]byte, error) {
 
 // Map is a free data retrieval call binding the contract method 0x0ae186a8.
 //
-// Solidity: function map(bytes32 ) view returns(bytes32 agentId, uint256 fee, uint256 stake, uint256 timestamp, address owner, string name)
+// Solidity: function map(bytes32 ) view returns(bytes32 agentId, uint256 fee, uint256 stake, uint128 createdAt, address owner, string name)
 func (_AgentRegistry *AgentRegistryCaller) Map(opts *bind.CallOpts, arg0 [32]byte) (struct {
 	AgentId   [32]byte
 	Fee       *big.Int
 	Stake     *big.Int
-	Timestamp *big.Int
+	CreatedAt *big.Int
 	Owner     common.Address
 	Name      string
 }, error) {
@@ -302,7 +302,7 @@ func (_AgentRegistry *AgentRegistryCaller) Map(opts *bind.CallOpts, arg0 [32]byt
 		AgentId   [32]byte
 		Fee       *big.Int
 		Stake     *big.Int
-		Timestamp *big.Int
+		CreatedAt *big.Int
 		Owner     common.Address
 		Name      string
 	})
@@ -313,7 +313,7 @@ func (_AgentRegistry *AgentRegistryCaller) Map(opts *bind.CallOpts, arg0 [32]byt
 	outstruct.AgentId = *abi.ConvertType(out[0], new([32]byte)).(*[32]byte)
 	outstruct.Fee = *abi.ConvertType(out[1], new(*big.Int)).(**big.Int)
 	outstruct.Stake = *abi.ConvertType(out[2], new(*big.Int)).(**big.Int)
-	outstruct.Timestamp = *abi.ConvertType(out[3], new(*big.Int)).(**big.Int)
+	outstruct.CreatedAt = *abi.ConvertType(out[3], new(*big.Int)).(**big.Int)
 	outstruct.Owner = *abi.ConvertType(out[4], new(common.Address)).(*common.Address)
 	outstruct.Name = *abi.ConvertType(out[5], new(string)).(*string)
 
@@ -323,12 +323,12 @@ func (_AgentRegistry *AgentRegistryCaller) Map(opts *bind.CallOpts, arg0 [32]byt
 
 // Map is a free data retrieval call binding the contract method 0x0ae186a8.
 //
-// Solidity: function map(bytes32 ) view returns(bytes32 agentId, uint256 fee, uint256 stake, uint256 timestamp, address owner, string name)
+// Solidity: function map(bytes32 ) view returns(bytes32 agentId, uint256 fee, uint256 stake, uint128 createdAt, address owner, string name)
 func (_AgentRegistry *AgentRegistrySession) Map(arg0 [32]byte) (struct {
 	AgentId   [32]byte
 	Fee       *big.Int
 	Stake     *big.Int
-	Timestamp *big.Int
+	CreatedAt *big.Int
 	Owner     common.Address
 	Name      string
 }, error) {
@@ -337,12 +337,12 @@ func (_AgentRegistry *AgentRegistrySession) Map(arg0 [32]byte) (struct {
 
 // Map is a free data retrieval call binding the contract method 0x0ae186a8.
 //
-// Solidity: function map(bytes32 ) view returns(bytes32 agentId, uint256 fee, uint256 stake, uint256 timestamp, address owner, string name)
+// Solidity: function map(bytes32 ) view returns(bytes32 agentId, uint256 fee, uint256 stake, uint128 createdAt, address owner, string name)
 func (_AgentRegistry *AgentRegistryCallerSession) Map(arg0 [32]byte) (struct {
 	AgentId   [32]byte
 	Fee       *big.Int
 	Stake     *big.Int
-	Timestamp *big.Int
+	CreatedAt *big.Int
 	Owner     common.Address
 	Name      string
 }, error) {

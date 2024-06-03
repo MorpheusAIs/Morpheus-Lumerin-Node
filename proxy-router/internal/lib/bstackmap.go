@@ -46,6 +46,7 @@ func (bs *BoundStackMap[T]) Get(key string) (T, bool) {
 	item, ok := bs.dataMap[key]
 	return item, ok
 }
+
 func (bs *BoundStackMap[T]) At(index int) (T, bool) {
 	bs.m.RLock()
 	defer bs.m.RUnlock()

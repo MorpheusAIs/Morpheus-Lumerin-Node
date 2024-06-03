@@ -1,0 +1,9 @@
+.model-header button {
+    background: #03160e!important;
+    color: #20dc8e!important;
+    font-size: 2rem;
+}
+
+.accordion-item {
+    background: transparent!important;
+}

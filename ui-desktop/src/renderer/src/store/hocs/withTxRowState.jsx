@@ -28,7 +28,8 @@ const withTxRowState = WrappedComponent => {
       hash: props.tx.hash
     }),
     symbol: selectors.getCoinSymbol(state),
-    symbolEth: selectors.getSymbolEth(state)
+    symbolEth: selectors.getSymbolEth(state),
+    morAddress: state.config.chain.diamondAddress
   });
 
   return connect(mapStateToProps)(Container);

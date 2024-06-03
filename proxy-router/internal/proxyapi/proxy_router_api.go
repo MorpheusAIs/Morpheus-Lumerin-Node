@@ -103,9 +103,14 @@ func (p *ProxyRouterApi) InitiateSession(ctx *gin.Context) (int, gin.H) {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "providerUrl is required"}
 	}
 
+	bidId, ok := reqPayload["bidId"].(string)
+	if !ok {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "bidId is required"}
+	}
+
 	requestID := "1"
 
-	initiateSessionRequest, err := morrpc.NewMorRpc().InitiateSessionRequest(user, provider, p.pubKey, spend, p.privateKey, requestID)
+	initiateSessionRequest, err := morrpc.NewMorRpc().InitiateSessionRequest(user, provider, p.pubKey, spend, bidId, p.privateKey, requestID)
 	if err != nil {
 		err = lib.WrapError(fmt.Errorf("failed to create initiate session request"), err)
 		p.log.Errorf("%s", err)
@@ -119,7 +124,7 @@ func (p *ProxyRouterApi) InitiateSession(ctx *gin.Context) (int, gin.H) {
 
 	providerPubKey := fmt.Sprintf("%v", msg.Result["message"])
 	if !p.validateMsgSignature(msg, providerPubKey) {
-		err = fmt.Errorf("Received invalid signature from provider")
+		err = fmt.Errorf("received invalid signature from provider")
 		p.log.Errorf("%s", err)
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
@@ -183,7 +188,6 @@ func (p *ProxyRouterApi) GetFiles(ctx *gin.Context) (int, gin.H) {
 			fmt.Fprintf(ctx.Writer, "system config: %s\n", json)
 		}
 	}
-
 	fmt.Fprintf(ctx.Writer, "\n")
 
 	err = writeFiles(ctx.Writer, files)
@@ -258,14 +262,21 @@ func (p *ProxyRouterApi) rpcRequestStream(ctx *gin.Context, url string, rpcMessa
 		}
 
 		if !p.validateMsgSignature(msg, providerPublicKey) {
-			err = fmt.Errorf("Received invalid signature from provider")
+			err = fmt.Errorf("received invalid signature from provider")
 			p.log.Errorf("%s", err)
 			return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 		}
 
-		aiRespStr := msg.Result["message"].(string)
+		aiResponseEncrypted := msg.Result["message"].(string)
+		aiResponse, err := lib.DecryptString(aiResponseEncrypted, p.privateKey)
+		if err != nil {
+			err = lib.WrapError(fmt.Errorf("failed to decrypt ai response chunk"), err)
+			p.log.Errorf("%s", err)
+			return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+		}
+
 		var payload map[string]interface{}
-		err = json.Unmarshal([]byte(aiRespStr), &payload)
+		err = json.Unmarshal([]byte(aiResponse), &payload)
 		if err != nil {
 			err = lib.WrapError(fmt.Errorf("failed to unmarshal response"), err)
 			p.log.Errorf("%s", err)
@@ -314,14 +325,12 @@ func writeFiles(writer io.Writer, files []system.FD) error {
 	text += "\n"
 	text += "fd\tpath\n"
 
-	_, err := fmt.Fprintf(writer, text)
-	if err != nil {
+	if _, err := fmt.Fprint(writer, text); err != nil {
 		return err
 	}
 
 	for _, f := range files {
-		_, err := fmt.Fprintf(writer, "%s\t%s\n", f.ID, f.Path)
-		if err != nil {
+		if _, err := fmt.Fprintf(writer, "%s\t%s\n", f.ID, f.Path); err != nil {
 			return err
 		}
 	}

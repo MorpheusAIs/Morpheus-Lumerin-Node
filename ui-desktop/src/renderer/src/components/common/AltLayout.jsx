@@ -12,6 +12,10 @@ const Container = styled(Flex.Column)`
 `
 
 const Body = styled.div`
+  background: rgba(255,255,255, 0.04);
+  border-width: 1px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  padding: 3rem;
   max-width: 53rem;
   width: 100%;
   margin-top: 4rem;

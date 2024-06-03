@@ -12,7 +12,7 @@ const FilteredMessage = props => {
   //   coinSymbol: PropTypes.string.isRequired,
   //   children: PropTypes.node.isRequired,
   //   config: PropTypes.shape({
-  //     lmrTokenAddress: PropTypes.string.isRequired
+  //     mainTokenAddress: PropTypes.string.isRequired
   //   }).isRequired,
   //   client: PropTypes.shape({
   //     fromWei: PropTypes.func.isRequired
@@ -30,7 +30,7 @@ const FilteredMessage = props => {
         replaceWith: 'WEB FACING CONTRACT'
       },
       {
-        search: props.config.lmrTokenAddress,
+        search: props.config.mainTokenAddress,
         replaceWith: 'LMR TOKEN CONTRACT'
       },
       { search: /(.*gas too low.*)/gi, replaceWith: () => 'Gas too low.' },

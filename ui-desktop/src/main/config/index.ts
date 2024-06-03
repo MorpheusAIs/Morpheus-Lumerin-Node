@@ -21,7 +21,7 @@ const chain = {
   symbol: process.env.SYMBOL_LMR || 'LMR',
   symbolEth: process.env.SYMBOL_ETH || 'ETH',
 
-  lmrTokenAddress: process.env.LUMERIN_TOKEN_ADDRESS,
+  mainTokenAddress: process.env.TOKEN_ADDRESS,
   cloneFactoryAddress: process.env.CLONE_FACTORY_ADDRESS,
 
   proxyRouterUrl: process.env.PROXY_ROUTER_URL,
@@ -46,6 +46,7 @@ const chain = {
     'https://gitbook.lumerin.io/lumerin-hashpower-marketplace/buyer/2.-network-changes-for-receiving-hashrate',
 
   localProxyRouterUrl: `http://localhost:${process.env.PROXY_WEB_DEFAULT_PORT || 8082}`,
+  diamondAddress: process.env.DIAMOND_ADDRESS,
 
   faucetUrl: process.env.FAUCET_URL,
   showFaucet: process.env.SHOW_FAUCET === 'true',

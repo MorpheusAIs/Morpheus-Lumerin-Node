@@ -4,7 +4,7 @@ import { withClient } from '../../store/hocs/clientContext';
 import { NavLink } from 'react-router-dom';
 import styled from 'styled-components';
 import { IconPlugConnected } from '@tabler/icons-react';
-import { IconCpu2 } from '@tabler/icons-react';
+import { IconSettings } from '@tabler/icons-react';
 import { IconHelp } from '@tabler/icons-react';
 import { IconTools } from '@tabler/icons-react';
 
@@ -43,7 +43,6 @@ const HelpLink = styled.span`
   text-decoration: none;
   color: ${p => p.theme.colors.morMain};
   padding: 1.6rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.16);
   cursor: pointer;
 
   &:focus {
@@ -136,18 +135,21 @@ function SecondaryNav({
         </IconWrapper>
         <Label parent={parent}>Devices</Label>
       </Button>
+       */}
+
       <Button
         onClick={() => setActiveIndex(5)}
         activeClassName="active"
         data-testid="tools-nav-btn"
         parent={parent}
-        to="/tools"
+        to="/settings"
       >
         <IconWrapper parent={parent}>
-          <IconTools width={iconSize} />
+          <IconSettings width={iconSize} />
         </IconWrapper>
-        <Label parent={parent}>Utilities</Label>
-      </Button> */}
+        <Label parent={parent}>Settings</Label>
+      </Button>
+
       <HelpLink data-testid="help-nav-btn" onClick={onHelpLinkClick}>
         <IconWrapper parent={parent}>
           <IconHelp width={iconSize} />

@@ -69,7 +69,7 @@ const withBidsState = WrappedComponent => {
                 const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions`;
                 const body = {
                     bidId: data.bidId,
-                    stake: "468495269761303840000", // TEMP ISSUE SOLVER
+                    stake: "380925328193836900000", // TEMP ISSUE SOLVER
                 };
                 const response = await fetch(path, {
                     method: "POST",

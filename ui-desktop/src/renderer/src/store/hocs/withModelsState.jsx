@@ -17,12 +17,20 @@ const withModelsState = WrappedComponent => {
 
     getAllModels = async () => {
         const result = await this.props.client.getAllModels();
-        console.log("🚀 ~ Container ~ getAllModels= ~ result:", result)
         return result;
     }
 
     getAllProviders = async () => {
-
+      try {
+        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/providers`
+        const response = await fetch(path);
+        const data = await response.json();
+        return data.providers;
+      }
+      catch(e) {
+        console.log("Error", e)
+        return [];
+      }
     }
 
     getBitsByModels = async (modelId) => {

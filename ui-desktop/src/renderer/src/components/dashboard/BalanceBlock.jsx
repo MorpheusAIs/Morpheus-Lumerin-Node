@@ -57,27 +57,14 @@ const BalanceBlock = ({
   lmrBalanceUSD,
   ethBalance,
   ethBalanceUSD,
-  sendDisabled,
-  sendDisabledReason,
-  recaptchaSiteKey,
-  faucetUrl,
-  showFaucet,
-  walletAddress,
   onTabSwitch,
   symbol,
   symbolEth,
-  client
+  ...props
 }) => {
   const handleTabSwitch = e => {
     e.preventDefault();
     onTabSwitch(e.target.dataset.modal);
-  };
-
-  const claimFaucet = e => {
-    e.preventDefault();
-    const url = new URL(faucetUrl);
-    url.searchParams.set('address', walletAddress);
-    window.open(url);
   };
 
   return (
@@ -86,9 +73,9 @@ const BalanceBlock = ({
         <SecondaryContainer>
           <WalletBalance
             {...{
-              lmrBalance,
-              lmrBalanceUSD,
-              ethBalance,
+              lmrBalance: props?.balances?.mor ? +props.balances.mor / 10 ** 18 : 0,
+              lmrBalanceUSD: props?.balances?.mor ? `$${((+props.balances.mor / 10 ** 18) * +props.rate).toFixed(0)}` : 0,
+              ethBalance:  props?.balances?.eth ? (+props.balances.eth / 10 ** 18) : 0,
               ethBalanceUSD,
               symbol,
               symbolEth
@@ -103,26 +90,14 @@ const BalanceBlock = ({
             >
               Receive
             </BtnAccent>
-            <Btn
+            <BtnAccent
               data-modal="send"
               data-testid="send-btn"
               onClick={handleTabSwitch}
               block
             >
               Send
-            </Btn>
-
-            {showFaucet && (
-              <BtnAccent
-                data-modal="claim"
-                onClick={claimFaucet}
-                data-rh={`Payout from the faucet is 2 ${symbol} and 0.01 ${symbolEth} per day.\n
-          Wallet addresses are limited to one request every 24 hours.`}
-                block
-              >
-                Get Tokens
-              </BtnAccent>
-            )}
+            </BtnAccent>
           </BtnRow>
         </SecondaryContainer>
       </Container>
