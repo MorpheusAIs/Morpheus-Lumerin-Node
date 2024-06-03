@@ -124,7 +124,7 @@ func (p *ProxyRouterApi) InitiateSession(ctx *gin.Context) (int, gin.H) {
 
 	providerPubKey := fmt.Sprintf("%v", msg.Result["message"])
 	if !p.validateMsgSignature(msg, providerPubKey) {
-		err = fmt.Errorf("Received invalid signature from provider")
+		err = fmt.Errorf("received invalid signature from provider")
 		p.log.Errorf("%s", err)
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
@@ -262,7 +262,7 @@ func (p *ProxyRouterApi) rpcRequestStream(ctx *gin.Context, url string, rpcMessa
 		}
 
 		if !p.validateMsgSignature(msg, providerPublicKey) {
-			err = fmt.Errorf("Received invalid signature from provider")
+			err = fmt.Errorf("received invalid signature from provider")
 			p.log.Errorf("%s", err)
 			return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 		}
@@ -325,14 +325,12 @@ func writeFiles(writer io.Writer, files []system.FD) error {
 	text += "\n"
 	text += "fd\tpath\n"
 
-	_, err := fmt.Fprintf(writer, text)
-	if err != nil {
+	if _, err := fmt.Fprint(writer, text); err != nil {
 		return err
 	}
 
 	for _, f := range files {
-		_, err := fmt.Fprintf(writer, "%s\t%s\n", f.ID, f.Path)
-		if err != nil {
+		if _, err := fmt.Fprintf(writer, "%s\t%s\n", f.ID, f.Path); err != nil {
 			return err
 		}
 	}

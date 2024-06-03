@@ -10,13 +10,11 @@ func NewValidator() (*validator.Validate, error) {
 	valid := validator.New()
 
 	err := valid.RegisterValidation("duration", func(fl validator.FieldLevel) bool {
-		kind := fl.Field().Kind()
-		if kind != reflect.Int64 {
+		if kind := fl.Field().Kind(); kind != reflect.Int64 {
 			return false
 		}
 
-		value := fl.Field().Int()
-		return value != 0
+		return fl.Field().Int() != 0
 	})
 
 	if err != nil {
