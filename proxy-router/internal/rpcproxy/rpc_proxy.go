@@ -149,25 +149,35 @@ func (rpcProxy *RpcProxy) GetBidsByModelAgent(ctx context.Context, modelId [32]b
 	return constants.HTTP_STATUS_OK, gin.H{"bids": result}
 }
 
+type OpenSessionRequest struct {
+	Approval    string `json:"approval"`
+	ApprovalSig string `json:"approvalSig"`
+	Stake       string `json:"stake"`
+}
+
+type SendRequest struct {
+	To     string `json:"to"`
+	Amount string `json:"amount"`
+}
+
 func (rpcProxy *RpcProxy) OpenSession(ctx *gin.Context) (int, gin.H) {
-	var reqPayload map[string]interface{}
+	var reqPayload OpenSessionRequest
 	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 
-	approval, ok := reqPayload["approval"].(string)
-	if !ok {
+	approval := reqPayload.Approval
+	if approval == "" {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "approval is required"}
 	}
 
-	approvalSig, ok := reqPayload["approvalSig"].(string)
-	if !ok {
+	approvalSig := reqPayload.ApprovalSig
+	if approvalSig == "" {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "approvalSig is required"}
 	}
 
-	stakeStr, ok := reqPayload["stake"].(string)
-	if !ok {
-		print(ok)
+	stakeStr := reqPayload.Stake
+	if stakeStr == "" {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "stake is required"}
 	}
 
@@ -181,8 +191,8 @@ func (rpcProxy *RpcProxy) OpenSession(ctx *gin.Context) (int, gin.H) {
 		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
 	}
 
-	approvalBytes := common.FromHex(approval)
-	approvalSigBytes := common.FromHex(approvalSig)
+	approvalBytes := common.FromHex(reqPayload.Approval)
+	approvalSigBytes := common.FromHex(reqPayload.ApprovalSig)
 
 	sessionId, err := rpcProxy.sessionRouter.OpenSession(transactOpt, approvalBytes, approvalSigBytes, stake, rpcProxy.privateKey)
 	if err != nil {
@@ -542,13 +552,13 @@ func (rpcProxy *RpcProxy) signTx(ctx context.Context, tx *types.Transaction, pri
 }
 
 func (rpcProxy *RpcProxy) getSendParams(ctx *gin.Context) (string, *big.Int, error) {
-	var reqPayload map[string]interface{}
+	var reqPayload SendRequest
 	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
 		return "", &big.Int{}, err
 	}
 
-	to := reqPayload["to"].(string)
-	amountStr := reqPayload["amount"].(string)
+	to := reqPayload.To
+	amountStr := reqPayload.Amount
 
 	if to == "0" {
 		return "", &big.Int{}, errors.New("to is required")
