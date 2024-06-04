@@ -128,10 +128,8 @@ contract SessionRouter {
     }
     s.approvalMap[providerApproval] = true;
 
-    uint256 startOfToday = startOfTheDay(block.timestamp);
-    uint256 duration = stakeToStipend(_stake, startOfToday) / bid.pricePerSecond;
-
-    if (duration < MIN_SESSION_DURATION) {
+    uint256 endsAt = whenSessionEnds(_stake, bid.pricePerSecond, block.timestamp);
+    if (endsAt - block.timestamp < MIN_SESSION_DURATION) {
       revert SessionTooShort();
     }
 
