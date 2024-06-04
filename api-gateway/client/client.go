@@ -16,8 +16,8 @@ type ChatCompletionMessage = openai.ChatCompletionMessage
 
 func NewApiGatewayClient(baseURL string, httpClient *http.Client) *ApiGatewayClient {
 	return &ApiGatewayClient{
-		BaseURL: baseURL,
-		HttpClient:  httpClient,
+		BaseURL:    baseURL,
+		HttpClient: httpClient,
 		OpenAiClient: openai.NewClientWithConfig(openai.ClientConfig{
 			BaseURL:    baseURL + "/v1",
 			APIType:    openai.APITypeOpenAI,
@@ -27,8 +27,8 @@ func NewApiGatewayClient(baseURL string, httpClient *http.Client) *ApiGatewayCli
 }
 
 type ApiGatewayClient struct {
-	BaseURL string
-	HttpClient  *http.Client
+	BaseURL      string
+	HttpClient   *http.Client
 	OpenAiClient *openai.Client
 }
 
@@ -87,7 +87,7 @@ func (c *ApiGatewayClient) postRequest(ctx context.Context, endpoint string, bod
 }
 
 func (c *ApiGatewayClient) streamChat(ctx context.Context, path string, req *ChatCompletionRequest, result *ChatCompletionStreamResponse, flush CompletionCallback) error {
-	
+
 	RequestChatCompletionStream(ctx, req, flush)
 
 	return nil
@@ -138,14 +138,14 @@ func (c *ApiGatewayClient) SessionPrompt(ctx context.Context, prompt string, mes
 }
 
 func (c *ApiGatewayClient) Prompt(ctx context.Context, message string, history []ChatCompletionMessage) (interface{}, error) {
-	
+
 	request := &openai.ChatCompletionRequest{
 		Messages: append(history, ChatCompletionMessage{
-			Role: "user",
+			Role:    "user",
 			Content: message,
 		}),
 		Stream: false,
-		Model:     "llama2",
+		Model:  "llama2",
 		ResponseFormat: &openai.ChatCompletionResponseFormat{
 			Type: openai.ChatCompletionResponseFormatTypeText,
 		},
@@ -184,6 +184,23 @@ func (c *ApiGatewayClient) GetLatestBlock(ctx context.Context) (result uint64, e
 func (c *ApiGatewayClient) GetAllProviders(ctx context.Context) (result []string, err error) {
 
 	err = c.getRequest(ctx, "/blockchain/providers", &result)
+
+	if err != nil {
+		return nil, fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
+	}
+
+	return result, nil
+}
+
+func (c *ApiGatewayClient) CreateNewProvider(ctx context.Context, address string, addStake uint64, endpoint string) (result []string, err error) {
+
+	request := struct {
+		address  string
+		addStake uint64
+		endpoint string
+	}{address, addStake, endpoint}
+
+	err = c.postRequest(ctx, "/blockchain/providers", &request, &result)
 
 	if err != nil {
 		return nil, fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)

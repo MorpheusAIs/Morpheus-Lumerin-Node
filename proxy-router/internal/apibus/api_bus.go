@@ -74,6 +74,10 @@ func (apiBus *ApiBus) GetAllProviders(ctx context.Context) (int, gin.H) {
 	return apiBus.rpcProxy.GetAllProviders(ctx)
 }
 
+func (apiBus *ApiBus) CreateNewProvider(ctx context.Context, address string, addStake uint64, endpoint string) (int, gin.H) {
+	return apiBus.rpcProxy.CreateNewProvider(ctx, address, addStake, endpoint)
+}
+
 func (apiBus *ApiBus) GetAllModels(ctx context.Context) (int, gin.H) {
 	return apiBus.rpcProxy.GetAllModels(ctx)
 }

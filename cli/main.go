@@ -61,7 +61,7 @@ func main() {
 						Usage:   "blockchainProviders create",
 						Action:  actions.createBlockchainProvider,
 					},
-				}
+				},
 			},
 			{
 				Name:    "blockchainProvidersBids",
@@ -172,7 +172,7 @@ func (a *actions) createAndStreamChatCompletions(cCtx *cli.Context) error {
 		fmt.Println(msg)
 		return nil
 	})
-	
+
 	if err != nil {
 		return err
 	}
@@ -219,7 +219,7 @@ func (a *actions) blockchainProviders(cCtx *cli.Context) error {
 
 func (a *actions) createBlockchainProvider(cCtx *cli.Context) error {
 	//TODO: handle provider fields
-	providers, err := a.client.createProvider(cCtx.Context)
+	providers, err := a.client.CreateNewProvider(cCtx.Context)
 	if err != nil {
 		return err
 	}

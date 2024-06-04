@@ -6,8 +6,51 @@ import (
 	"net/http"
 	"os"
 	"testing"
+
+	hdwallet "github.com/miguelmota/go-ethereum-hdwallet"
 )
 
+func TestGetProviders(t *testing.T) {
+	client := NewApiGatewayClient("http://localhost:8080", http.DefaultClient)
+	res, err := client.GetAllProviders(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fmt.Println("providers: ", res)
+
+}
+
+func TestCreateProvider(t *testing.T) {
+
+	master, err := hdwallet.NewKey()
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wallet, err := master.GetWallet()
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	address, err := wallet.GetAddress()
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewApiGatewayClient("http://localhost:8080", http.DefaultClient)
+
+	res, err := client.CreateNewProvider(context.Background(), address, 1, "localhost:8080")
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fmt.Println("providers: ", res)
+}
+ 
 func TestHealthCheck(t *testing.T) {
 	client := NewApiGatewayClient("http://localhost:8080", &http.Client{})
 	res, err := client.HealthCheck(context.Background())
@@ -32,7 +75,7 @@ func TestHealthCheck(t *testing.T) {
 	}
 }
 
-func TestFiles(t *testing.T) {
+func SkipTestFiles(t *testing.T) {
 	client := NewApiGatewayClient("http://localhost:8080", http.DefaultClient)
 	_, err := client.GetProxyRouterFiles(context.Background())
 

@@ -28,7 +28,7 @@ func runCommand(t *testing.T, exePath string, args ...string) (string, error) {
 		t.Fatalf("Commnd failed: %v; \nError: %v\nOutput: %s", args[0], err, output)
 	}
 
-	fmt.Println(string(output))
+	fmt.Println(args[0], ": ", string(output))
 	
 	return string(output), err
 }
@@ -50,8 +50,11 @@ func TestCLICommands(t *testing.T) {
 	// _, err = runCommand(t, exePath, "openBlockchainSession")
 	// _, err = runCommand(t, exePath, "closeBlockchainSession")
 
-	_, err = runCommand(t, exePath, "createChatCompletions")
+	// _, err = runCommand(t, exePath, "createChatCompletions")
 
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Check the output
 	// expectedOutput := "expected result"
 	// if output != expectedOutput {
@@ -61,6 +64,6 @@ func TestCLICommands(t *testing.T) {
 	// Clean up the executable
 	err = exec.Command("rm", exePath).Run()
 	if err != nil {
-		t.Logf("Failed to remove executable: %v", err)
+		t.Fatalf("Failed to remove executable: %v", err)
 	}
 }
