@@ -37,13 +37,13 @@ function Loading({ chainStatus }) {
             <ChecklistItem isActive={chainStatus.hasBlockHeight} text="Blockchain status" />
             <ChecklistItem
               isActive={chainStatus.hasCoinRate}
-              text={`${chainStatus.symbol} exchange data`}
+              text={`${chainStatus.symbol || "MOR"} exchange data`}
             />
             <ChecklistItem
               isActive={chainStatus.hasCoinBalance}
-              text={`${chainStatus.symbol} balance`}
+              text={`${chainStatus.symbol || "MOR"} balance`}
             />
-            <ChecklistItem isActive={chainStatus.hasLmrBalance} text="LMR balance" />
+            {/* <ChecklistItem isActive={chainStatus.hasLmrBalance} text={`${chainStatus.symbol || "MOR"} balance`} /> */}
           </Checklist>
         </div>
       </ChecklistContainer>

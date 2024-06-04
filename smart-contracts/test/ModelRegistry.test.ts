@@ -37,7 +37,7 @@ describe("Model registry", function () {
         owner: getAddress(expectedModel.owner),
         name: expectedModel.name,
         tags: expectedModel.tags,
-        timestamp: expectedModel.timestamp,
+        createdAt: expectedModel.createdAt,
         isDeleted: expectedModel.isDeleted,
       });
       expect(events.length).eq(1);
@@ -206,7 +206,7 @@ describe("Model registry", function () {
         owner: getAddress(updates.owner),
         name: updates.name,
         tags: updates.tags,
-        timestamp: timestamp,
+        createdAt: timestamp,
         isDeleted: expectedModel.isDeleted,
       });
     });
@@ -258,7 +258,7 @@ describe("Model registry", function () {
         owner: getAddress(expectedModel.owner),
         name: expectedModel.name,
         tags: expectedModel.tags,
-        timestamp: expectedModel.timestamp,
+        createdAt: expectedModel.createdAt,
         isDeleted: expectedModel.isDeleted,
       });
     });
@@ -277,7 +277,7 @@ describe("Model registry", function () {
         owner: getAddress(expectedModel.owner),
         name: expectedModel.name,
         tags: expectedModel.tags,
-        timestamp: expectedModel.timestamp,
+        createdAt: expectedModel.createdAt,
         isDeleted: expectedModel.isDeleted,
       });
     });

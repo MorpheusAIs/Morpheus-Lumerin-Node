@@ -64,7 +64,7 @@ func TestAiEngine_PromptStream(t *testing.T) {
 		fmt.Println("error: ", err)
 	}
 
-	if resp == nil {
+	if resp == nil || resp.Choices == nil {
 		t.Errorf("invalid nil response")
 	}
 

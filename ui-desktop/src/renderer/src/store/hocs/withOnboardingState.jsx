@@ -126,7 +126,8 @@ const withOnboardingState = WrappedComponent => {
 
       if (Object.keys(errors).length > 0) return this.setState({ errors });
 
-      return this.setState({ isMnemonicVerified: true });
+      this.setState({ isMnemonicVerified: true });
+      this.onFinishOnboarding();
     };
 
     validateDefaultPoolAddress() {
@@ -141,49 +142,11 @@ const withOnboardingState = WrappedComponent => {
       return true;
     }
 
-    onProxyRouterConfigured = e => {
+    // HERE
+    onFinishOnboarding = e => {
       if (e && e.preventDefault) e.preventDefault();
 
-      if (this.state.isTitanLightning) {
-        if (!EMAIL_REGEX.test(this.state.lightningAddress)) {
-          const newErrors = this.state.errors;
-          newErrors.lightningAddress = 'Invalid email';
-          this.setState({ errors: newErrors });
-          return;
-        }
-        const poolUrl = generatePoolUrl(
-          this.state.lightningAddress,
-          this.props.config.chain.titanLightningPool
-        );
-
-        return this.props.onOnboardingCompleted({
-          proxyRouterConfig: {
-            sellerDefaultPool: poolUrl,
-            buyerDefaultPool: poolUrl,
-            isTitanLightning: true
-          },
-          password: this.state.password,
-          mnemonic: this.state.useUserMnemonic
-            ? utils.sanitizeMnemonic(this.state.userMnemonic)
-            : this.state.mnemonic
-        });
-      }
-
-      const isValid = this.validateDefaultPoolAddress();
-      if (!isValid) {
-        return;
-      }
-
-      const defaultPool = toRfc2396(
-        this.state.proxyDefaultPool,
-        this.state.proxyPoolUsername
-      );
-
       return this.props.onOnboardingCompleted({
-        proxyRouterConfig: {
-          sellerDefaultPool: defaultPool,
-          buyerDefaultPool: defaultPool
-        },
         password: this.state.password,
         mnemonic: this.state.useUserMnemonic
           ? utils.sanitizeMnemonic(this.state.userMnemonic)
@@ -247,7 +210,6 @@ const withOnboardingState = WrappedComponent => {
           shouldSubmit={shouldSubmit}
           currentStep={this.getCurrentStep()}
           getTooltip={getTooltip}
-          onProxyRouterConfigured={this.onProxyRouterConfigured}
           onRunWithoutProxyRouter={this.onRunWithoutProxyRouter}
           {...this.state}
         />

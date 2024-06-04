@@ -56,8 +56,17 @@ func (g *MorToken) GetAllowance(ctx context.Context, owner common.Address, spend
 	return g.mor.Allowance(&bind.CallOpts{Context: ctx}, owner, spender)
 }
 
-func (g *MorToken) Approve(ctx context.Context, spender common.Address, amount *big.Int) (*bind.TransactOpts, error) {
-	return nil, nil
+func (g *MorToken) Approve(ctx *bind.TransactOpts, spender common.Address, amount *big.Int) (*types.Transaction, error) {
+	tx, err := g.mor.Approve(ctx, spender, amount)
+	if err != nil {
+		return nil, lib.TryConvertGethError(err, morpheustoken.MorpheusTokenMetaData)
+	}
+	// Wait for the transaction receipt
+	_, err = bind.WaitMined(ctx.Context, g.client, tx)
+	if err != nil {
+		return nil, err
+	}
+	return tx, nil
 }
 
 func (g *MorToken) GetTotalSupply(ctx context.Context) (*big.Int, error) {

@@ -12,7 +12,7 @@ const loading = keyframes`
 
 const Container = styled.div`
   width: 100%;
-  background-color: ${p => p.theme.colors.translucentPrimary};
+  background-color: ${p => p.theme.colors.morMain};
   padding: 0.2rem;
   border-radius: 0.8rem;
 `;

@@ -42,6 +42,7 @@ func (m *MorRpcHandler) Handle(ctx context.Context, msg morrpc.RpcMessage, sourc
 		userPubKey := fmt.Sprintf("%v", msg.Params["key"])
 		spend := fmt.Sprintf("%v", msg.Params["spend"])
 		timeStamp := fmt.Sprintf("%v", msg.Params["timestamp"])
+		bidId := fmt.Sprintf("%v", msg.Params["bidid"])
 		sourceLog.Debugf("Received session request from %s, timestamp: %s", userAddr, timeStamp)
 
 		isValid := m.morRpc.VerifySignature(msg.Params, signature, userPubKey, sourceLog)
@@ -62,6 +63,7 @@ func (m *MorRpcHandler) Handle(ctx context.Context, msg morrpc.RpcMessage, sourc
 		response, err := m.morRpc.InitiateSessionResponse(
 			m.publicKeyHex,
 			userAddr,
+			bidId,
 			m.privateKeyHex,
 			requestId,
 		)
@@ -153,5 +155,4 @@ func (m *MorRpcHandler) Handle(ctx context.Context, msg morrpc.RpcMessage, sourc
 		sourceLog.Error(err)
 		return err
 	}
-	return nil
 }

@@ -27,3 +27,6 @@ test-unit:
 
 test-integration:
 	go test -v ./test/...
+
+swagger:
+	swag init -g ./internal/handlers/httphandlers/http.go

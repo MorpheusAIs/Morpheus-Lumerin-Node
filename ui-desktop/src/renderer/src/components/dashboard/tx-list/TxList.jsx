@@ -82,7 +82,7 @@ export const TxList = ({
 
     client.onTransactionLinkClick(e.currentTarget.dataset.hash);
   };
-  console.log(transactions.length === 0);
+  // transactions = [];
   return (
     <Container data-testid="tx-list">
       <Flex.Row grow="1">

@@ -45,8 +45,7 @@ func (c *SystemConfigurator) ApplyConfig(cfg *Config) error {
 }
 
 func (c *SystemConfigurator) RestoreConfig() error {
-	err := c.osConfigurator.ApplyConfig(c.backup)
-	if err != nil {
+	if err := c.osConfigurator.ApplyConfig(c.backup); err != nil {
 		return err
 	}
 	c.log.Debugf("system config restored: %+v", c.backup)

@@ -11,7 +11,7 @@ export const CloseModal = onClose => (
       top: '25px',
       right: '30px',
       cursor: 'pointer',
-      color: 'rgba(0, 0, 0, 0.54)'
+      color: 'white'
     }}
     onClick={onClose}
   />
@@ -41,10 +41,13 @@ export const Body = styled.div`
   background-color: ${p => p.theme.colors.light};
   width: ${p => p.width || '45%'};
   height: ${p => p.height || 'fit-content'};
-  border-radius: 15px;
+  border-radius: 5px;
   padding: 3rem 5%;
   max-width: ${p => p.maxWidth || '600px'};
   max-height: ${p => p.maxHeight || '800px'};
+  background-color: #173629;
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.04);
 
   @media (min-height: 700px) {
     padding: 5rem;
@@ -125,7 +128,7 @@ export const Input = styled.input`
   outline: 0;
   border: 0px;
   background: #eaf7fc;
-  border-radius: 15px;
+  border-radius: 5px;
   padding: 1.5rem 1.5rem;
   margin-top: 0.25rem;
 
@@ -176,10 +179,10 @@ export const LeftBtn = styled(BaseBtn)`
   width: 45%;
   height: 40px;
   font-size: 1.5rem;
-  border-radius: 15px;
+  border-radius: 5px;
   border: 1px solid ${p => p.theme.colors.primary};
-  background-color: ${p => p.theme.colors.light};
-  color: ${p => p.theme.colors.primary};
+  background-color: ${p => p.theme.colors.morMain};
+  color: black;
 
   @media (min-width: 1040px) {
     margin-left: 0;
@@ -190,9 +193,10 @@ export const RightBtn = styled(BaseBtn)`
   width: 45%;
   height: 40px;
   font-size: 1.5rem;
-  border-radius: 15px;
-  background-color: ${p => p.theme.colors.primary};
-  color: ${p => p.theme.colors.light};
+  border-radius: 5px;
+  background-color: ${p => p.theme.colors.morMain};
+  color: black;
+  font-weight: 600;
 
   @media (min-width: 1040px) {
     margin-left: 0;

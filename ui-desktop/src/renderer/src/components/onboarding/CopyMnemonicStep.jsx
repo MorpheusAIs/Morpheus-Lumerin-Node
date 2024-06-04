@@ -12,7 +12,7 @@ const Mnemonic = styled.div`
   font-weight: 600;
   line-height: 2;
   text-align: center;
-  color: ${p => p.theme.colors.primary};
+  color: ${p => p.theme.colors.morMain};
   word-spacing: 1.6rem;
 `;
 

@@ -32,6 +32,29 @@ type ConfigResponse struct {
 	Config        interface{}
 }
 
+type HealthCheckResponse struct {
+	Status  string
+	Version string
+	Uptime  string
+}
+
+type PromptMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type PromptRequest struct {
+	Messages []PromptMessage `json:"messages"`
+	Stream   bool            `json:"stream"`
+	Model    string          `json:"model"`
+}
+
+type RemotePromptRequest struct {
+	ProviderPublicKey string
+	Prompt            PromptRequest
+	ProviderUrl       string
+}
+
 type ProxyRouterApi struct {
 	sysConfig      *system.SystemConfigurator
 	publicUrl      *url.URL
@@ -69,11 +92,11 @@ func (p *ProxyRouterApi) GetConfig(ctx context.Context) ConfigResponse {
 	}
 }
 
-func (p *ProxyRouterApi) HealthCheck(ctx context.Context) gin.H {
-	return gin.H{
-		"status":  "healthy",
-		"version": config.BuildVersion,
-		"uptime":  time.Since(p.appStartTime).Round(time.Second).String(),
+func (p *ProxyRouterApi) HealthCheck(ctx context.Context) HealthCheckResponse {
+	return HealthCheckResponse{
+		Status:  "healthy",
+		Version: config.BuildVersion,
+		Uptime:  time.Since(p.appStartTime).Round(time.Second).String(),
 	}
 }
 
@@ -103,9 +126,14 @@ func (p *ProxyRouterApi) InitiateSession(ctx *gin.Context) (int, gin.H) {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "providerUrl is required"}
 	}
 
+	bidId, ok := reqPayload["bidId"].(string)
+	if !ok {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "bidId is required"}
+	}
+
 	requestID := "1"
 
-	initiateSessionRequest, err := morrpc.NewMorRpc().InitiateSessionRequest(user, provider, p.pubKey, spend, p.privateKey, requestID)
+	initiateSessionRequest, err := morrpc.NewMorRpc().InitiateSessionRequest(user, provider, p.pubKey, spend, bidId, p.privateKey, requestID)
 	if err != nil {
 		err = lib.WrapError(fmt.Errorf("failed to create initiate session request"), err)
 		p.log.Errorf("%s", err)
@@ -119,7 +147,7 @@ func (p *ProxyRouterApi) InitiateSession(ctx *gin.Context) (int, gin.H) {
 
 	providerPubKey := fmt.Sprintf("%v", msg.Result["message"])
 	if !p.validateMsgSignature(msg, providerPubKey) {
-		err = fmt.Errorf("Received invalid signature from provider")
+		err = fmt.Errorf("received invalid signature from provider")
 		p.log.Errorf("%s", err)
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
@@ -257,7 +285,7 @@ func (p *ProxyRouterApi) rpcRequestStream(ctx *gin.Context, url string, rpcMessa
 		}
 
 		if !p.validateMsgSignature(msg, providerPublicKey) {
-			err = fmt.Errorf("Received invalid signature from provider")
+			err = fmt.Errorf("received invalid signature from provider")
 			p.log.Errorf("%s", err)
 			return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 		}
@@ -320,14 +348,12 @@ func writeFiles(writer io.Writer, files []system.FD) error {
 	text += "\n"
 	text += "fd\tpath\n"
 
-	_, err := fmt.Fprintf(writer, text)
-	if err != nil {
+	if _, err := fmt.Fprint(writer, text); err != nil {
 		return err
 	}
 
 	for _, f := range files {
-		_, err := fmt.Fprintf(writer, "%s\t%s\n", f.ID, f.Path)
-		if err != nil {
+		if _, err := fmt.Fprintf(writer, "%s\t%s\n", f.ID, f.Path); err != nil {
 			return err
 		}
 	}

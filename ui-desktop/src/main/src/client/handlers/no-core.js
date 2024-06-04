@@ -14,7 +14,7 @@ import {
   getKey,
   setKey
 } from '../settings'
-import config from '../../../config'
+import apiGateway from '../apiGateway';
 
 const validatePassword = (data) => auth.isValidPassword(data)
 
@@ -96,19 +96,6 @@ const getContractHashrate = async ({ contractId, fromDate }) => {
 
 const restartWallet = () => restart(1)
 
-const getAllModels = async () => {
-  try {
-    const path = `${config.chain.localProxyRouterUrl}/blockchain/models`
-    const response = await fetch(path);
-    const data = await response.json();
-    return data.models;
-  }
-  catch(e) {
-    console.log("Error", e)
-    return [];
-  }
-}
-
 export default {
   validatePassword,
   changePassword,
@@ -127,5 +114,5 @@ export default {
   setProfitSettings,
   getAutoAdjustPriceData,
   setAutoAdjustPriceData,
-  getAllModels
+  ...apiGateway
 }

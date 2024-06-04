@@ -6,48 +6,67 @@ const { createExplorerApis } = require('./api/factory');
 
 /**
  * 
- * @param {string[]} explorerApiURLs 
+ * @param {*} config 
  * @param {*} web3 
- * @param {*} lumerin 
  * @param {*} eventBus 
  * @returns 
  */
-const createExplorer = (explorerApiURLs, web3, lumerin, eventBus) => {
+const createExplorer = (config, web3, eventBus) => {
+  const explorerApiURLs = config.explorerApiURLs;
   const apis = createExplorerApis(explorerApiURLs);
-  return new Explorer({ apis, lumerin, web3, eventBus })
+  return new Explorer({ apis, web3, eventBus, config })
 }
 
 class Explorer {
   /** @type {import('contracts-js').LumerinContext} */
   lumerin = null;
 
-  constructor({ apis, lumerin, web3, eventBus }) {
+  constructor({ apis, web3, eventBus, config }) {
     this.apis = apis
-    this.lumerin = lumerin
     this.web3 = web3
     this.eventBus = eventBus
+    this.config = config
   }
 
   /**
    * Returns list of transactions for ETH and LMR token
-   * @param {string} from start block
-   * @param {string} to end block
-   * @param {string} address wallet address
    * @returns {Promise<any[]>}
    */
-  async getTransactions(from, to, address, page, pageSize) {
-    const lmrTransactions = await this.invoke('getTokenTransactions', from, to, address, this.lumerin._address, page, pageSize)
-    const ethTransactions = await this.invoke('getEthTransactions', from, to, address, page, pageSize)
+  async getTransactions(page, pageSize) {
+    try {
+      const transactions = await this.getTransactionsGateway(page, pageSize);
 
-    if (page && pageSize) {
-      const hasNextPage = lmrTransactions.length || ethTransactions.length;
-      this.eventBus.emit('transactions-next-page', {
-        hasNextPage: Boolean(hasNextPage),
-        page: page + 1,
-      })
+      // OLD CALL TO BLOCKCHAIN
+      // const lmrTransactions = await this.invoke('getTokenTransactions', from, to, address, this.lumerin._address, page, pageSize)
+      // const ethTransactions = await this.invoke('getEthTransactions', from, to, address, page, pageSize)
+  
+      if (page && pageSize) {
+        const hasNextPage = transactions.length;
+        this.eventBus.emit('transactions-next-page', {
+          hasNextPage: Boolean(hasNextPage),
+          page: page + 1,
+        })
+      }
+      return [...transactions]
     }
-    return [...lmrTransactions, ...ethTransactions]
+    catch(e) {
+      console.log("Error", e);
+      return [];
+    }
   }
+
+ async getTransactionsGateway(page = 1, size = 15) {
+    try {
+        const path = `${this.config.chain.localProxyRouterUrl}/blockchain/transactions?page=${page}&limit=${size}`
+        const response = await fetch(path);
+        const data = await response.json();
+        return data?.transactions || [];
+    }
+    catch (e) {
+        console.log("Error", e)
+        return [];
+    }
+}
 
   /**
    * Returns list of transactions for LMR token
@@ -58,52 +77,6 @@ class Explorer {
    */
   async getETHTransactions(from, to, address) {
     return await this.invoke('getEthTransactions', from, to, address)
-  }
-
-  /**
-   * Create a stream that will emit an event each time a transaction for the
-   * specified address is indexed.
-   *
-   * The stream will emit `data` for each transaction. If the connection is lost
-   * or an error occurs, an `error` event will be emitted.
-   *
-   * @param {string} address The address.
-   * @returns {object} The event emitter.
-   */
-  getTransactionStream = (address) => {
-    const stream = new EventEmitter()
-
-    this.lumerin.events
-      .Transfer({
-        filter: {
-          to: address,
-        },
-      })
-      .on('data', (data) => {
-        stream.emit('data', data)
-      })
-      .on('error', (err) => {
-        stream.emit('error', err)
-      })
-
-    this.lumerin.events
-      .Transfer({
-        filter: {
-          from: address,
-        },
-      })
-      .on('data', (data) => {
-        stream.emit('data', data)
-      })
-      .on('error', (err) => {
-        stream.emit('error', err)
-      })
-
-    setInterval(() => {
-      stream.emit('resync')
-    }, 60000)
-
-    return stream
   }
 
   getLatestBlock() {

@@ -427,7 +427,7 @@ describe("verify session end time", function () {
 
     for (let i = 0; i < 100; i++) {
       console.log(
-        await sessionRouter.read._getTodaysBudget([
+        await sessionRouter.read.getTodaysBudget([
           now() + BigInt((i * DAY) / SECOND),
         ]),
       );

@@ -7,7 +7,7 @@ import {
   keccak256,
   parseUnits,
 } from "viem/utils";
-import { getHex, getTxTimestamp, now, randomBytes32 } from "./utils";
+import { getHex, getTxTimestamp, now, now2, randomBytes32 } from "./utils";
 import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
 import { FacetCutAction, getSelectors } from "../libraries/diamond";
 import { HOUR, MINUTE, SECOND } from "../utils/time";
@@ -152,7 +152,7 @@ export async function deploySingleProvider() {
     address: getAddress(provider.account.address),
     stake: parseUnits("100", decimalsMOR),
     endpoint: "localhost:3334",
-    timestamp: 0n,
+    createdAt: 0n,
     isDeleted: false,
   };
 
@@ -178,7 +178,7 @@ export async function deploySingleProvider() {
     ],
     { account: provider.account },
   );
-  expectedProvider.timestamp = await getTxTimestamp(
+  expectedProvider.createdAt = await getTxTimestamp(
     publicClient,
     addProviderHash,
   );
@@ -209,7 +209,7 @@ export async function deploySingleModel() {
     stake: 100n,
     owner: owner.account.address,
     name: "Llama 2.0",
-    timestamp: 0n,
+    createdAt: 0n,
     tags: ["llama", "animal", "cute"],
     isDeleted: false,
   };
@@ -226,7 +226,7 @@ export async function deploySingleModel() {
     expectedModel.tags,
   ]);
 
-  expectedModel.timestamp = await getTxTimestamp(publicClient, addProviderHash);
+  expectedModel.createdAt = await getTxTimestamp(publicClient, addProviderHash);
 
   return {
     expectedModel,
@@ -304,7 +304,7 @@ export async function deploySingleBid() {
   const durationSeconds = BigInt(HOUR / SECOND);
   const totalCost = expectedBid.pricePerSecond * durationSeconds;
   const totalSupply = await tokenMOR.read.totalSupply();
-  const todaysBudget = await sessionRouter.read.getTodaysBudget();
+  const todaysBudget = await sessionRouter.read.getTodaysBudget([await now2()]);
 
   const expectedSession = {
     durationSeconds,
@@ -323,7 +323,9 @@ export async function deploySingleBid() {
   ): Promise<bigint> {
     const totalCost = pricePerSecond * durationSeconds;
     const totalSupply = await tokenMOR.read.totalSupply();
-    const todaysBudget = await sessionRouter.read.getTodaysBudget();
+    const todaysBudget = await sessionRouter.read.getTodaysBudget([
+      await now2(),
+    ]);
     return (totalCost * totalSupply) / todaysBudget;
   }
 
@@ -332,7 +334,9 @@ export async function deploySingleBid() {
     pricePerSecond: bigint,
   ): Promise<bigint> {
     const totalSupply = await tokenMOR.read.totalSupply();
-    const todaysBudget = await sessionRouter.read.getTodaysBudget();
+    const todaysBudget = await sessionRouter.read.getTodaysBudget([
+      await now2(),
+    ]);
     const totalCost = (stake * todaysBudget) / totalSupply;
     return totalCost / pricePerSecond;
   }

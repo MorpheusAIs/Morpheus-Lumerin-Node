@@ -67,8 +67,7 @@ func ExtractGETHErrorData(err error) ([]byte, bool) {
 
 // CastErrorData casts the error data to the appropriate error type
 func CastErrorData(errData []byte, contractMetadata *bind.MetaData) (abi.Error, interface{}, bool) {
-	abiData, err := contractMetadata.GetAbi()
-	if err == nil {
+	if abiData, err := contractMetadata.GetAbi(); err == nil {
 		for _, abiError := range abiData.Errors {
 			args, err := abiError.Unpack(errData)
 			if err == nil {
