@@ -413,7 +413,7 @@ describe("verify session end time", function () {
     expect(endsAt.getTime()).approximately(expEndsAt.getTime(), 10 * SECOND);
   });
 
-  it.only("session that lasts multiple days", async function () {
+  it("session that lasts multiple days", async function () {
     const {
       sessionRouter,
       expectedSession: exp,

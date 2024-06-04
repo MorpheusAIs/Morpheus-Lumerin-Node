@@ -1,5 +1,4 @@
 import hre from "hardhat";
-import fs from "node:fs";
 
 async function main() {
   const data = {
@@ -33,14 +32,13 @@ async function main() {
       end,
     ]);
 
-    const total = 4n*reward + rewardSm;
+    const total = 4n * reward + rewardSm;
 
     const ratio = Number(reward) / Number(total);
 
     console.log("Reward: ", reward.toString());
     console.log("RewardSm: ", rewardSm.toString());
     console.log("Ratio: ", ratio);
-
   }
 }
 

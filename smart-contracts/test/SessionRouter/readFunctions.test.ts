@@ -17,6 +17,7 @@ describe("Session router", function () {
       };
 
       await sessionRouter.write.setPoolConfig([
+        3n,
         {
           initialReward: exp.initialReward,
           rewardDecrease: exp.rewardDecrease,

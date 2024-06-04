@@ -272,6 +272,7 @@ contract SessionRouter {
     }
 
     session.providerWithdrawnAmount += amountToWithdraw;
+    s.totalClaimed += amountToWithdraw;
     s.token.transferFrom(s.fundingAccount, to, amountToWithdraw);
     return;
   }
@@ -373,7 +374,6 @@ contract SessionRouter {
 
   /// @notice returns stake of user based on their stipend
   function stipendToStake(uint256 stipend, uint256 timestamp) public view returns (uint256) {
-    // TODO: cache total supply
     return stipend * (totalMORSupply(timestamp) / getTodaysBudget(timestamp));
   }
 
@@ -413,17 +413,17 @@ contract SessionRouter {
 
   /// @notice returns today's compute balance in MOR
   function getComputeBalance(uint256 timestamp) public view returns (uint256) {
-    // TODO: cache today's budget and compute balance
     Pool memory pool = s.pools[3];
-    return
-      LinearDistributionIntervalDecrease.getPeriodReward(
-        pool.initialReward,
-        pool.rewardDecrease,
-        pool.payoutStart,
-        pool.decreaseInterval,
-        pool.payoutStart,
-        uint128(startOfTheDay(timestamp))
-      );
+    uint256 periodReward = LinearDistributionIntervalDecrease.getPeriodReward(
+      pool.initialReward,
+      pool.rewardDecrease,
+      pool.payoutStart,
+      pool.decreaseInterval,
+      pool.payoutStart,
+      uint128(startOfTheDay(timestamp))
+    );
+
+    return periodReward - s.totalClaimed;
   }
 
   // returns total amount of MOR tokens that were distributed across all pools
