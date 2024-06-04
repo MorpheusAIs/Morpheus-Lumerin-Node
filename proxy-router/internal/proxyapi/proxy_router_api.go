@@ -32,6 +32,29 @@ type ConfigResponse struct {
 	Config        interface{}
 }
 
+type HealthCheckResponse struct {
+	Status  string
+	Version string
+	Uptime  string
+}
+
+type PromptMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type PromptRequest struct {
+	Messages []PromptMessage `json:"messages"`
+	Stream   bool            `json:"stream"`
+	Model    string          `json:"model"`
+}
+
+type RemotePromptRequest struct {
+	ProviderPublicKey string
+	Prompt            PromptRequest
+	ProviderUrl       string
+}
+
 type ProxyRouterApi struct {
 	sysConfig      *system.SystemConfigurator
 	publicUrl      *url.URL
@@ -69,11 +92,11 @@ func (p *ProxyRouterApi) GetConfig(ctx context.Context) ConfigResponse {
 	}
 }
 
-func (p *ProxyRouterApi) HealthCheck(ctx context.Context) gin.H {
-	return gin.H{
-		"status":  "healthy",
-		"version": config.BuildVersion,
-		"uptime":  time.Since(p.appStartTime).Round(time.Second).String(),
+func (p *ProxyRouterApi) HealthCheck(ctx context.Context) HealthCheckResponse {
+	return HealthCheckResponse{
+		Status:  "healthy",
+		Version: config.BuildVersion,
+		Uptime:  time.Since(p.appStartTime).Round(time.Second).String(),
 	}
 }
 

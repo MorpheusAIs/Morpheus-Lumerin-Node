@@ -1,10 +1,7 @@
 package httphandlers
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"math/big"
 	"net/http"
 	"net/http/pprof"
@@ -14,7 +11,12 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
-	openai "github.com/sashabaranov/go-openai"
+	ginSwagger "github.com/swaggo/gin-swagger"
+
+	// gin-swagger middleware
+	swaggerFiles "github.com/swaggo/files"
+
+	_ "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/docs"
 )
 
 const (
@@ -24,6 +26,16 @@ const (
 
 type HTTPHandler struct{}
 
+// @title           ApiBus Example API
+// @version         1.0
+// @description     This is a sample server celler server.
+// @termsOfService  http://swagger.io/terms/
+
+// @host      localhost:8082
+// @BasePath  /
+
+// @externalDocs.description  OpenAPI
+// @externalDocs.url          https://swagger.io/resources/open-api/
 func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
@@ -31,6 +43,8 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 	r.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"*"},
 	}))
+
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	r.GET("/healthcheck", (func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, apiBus.HealthCheck(ctx))
@@ -43,52 +57,7 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 		ctx.JSON(status, files)
 	}))
 	r.POST("/v1/chat/completions", (func(ctx *gin.Context) {
-
-		var req *openai.ChatCompletionRequest
-
-		err := ctx.ShouldBindJSON(&req)
-		switch {
-		case errors.Is(err, io.EOF):
-			ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "missing request body"})
-			return
-		case err != nil:
-			ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		req.Stream = ctx.GetHeader("Accept") == "application/json"
-
-		var response interface{}
-
-		if req.Stream {
-			response, err = apiBus.PromptStream(ctx, req, func(response *openai.ChatCompletionStreamResponse) error {
-
-				marshalledResponse, err := json.Marshal(response)
-
-				if err != nil {
-					return err
-				}
-
-				ctx.Writer.Header().Set("Content-Type", "text/event-stream")
-				_, err = ctx.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", marshalledResponse)))
-				ctx.Writer.Flush()
-
-				if err != nil {
-					return err
-				}
-
-				return nil
-			})
-		} else {
-			response, err = apiBus.Prompt(ctx, req)
-		}
-
-		if err != nil {
-			ctx.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-
-		ctx.JSON(http.StatusOK, response)
+		apiBus.PromptLocal(ctx)
 	}))
 
 	r.POST("/proxy/sessions/initiate", (func(ctx *gin.Context) {
