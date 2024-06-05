@@ -10,7 +10,6 @@ fi
 echo COMMIT=$COMMIT
 
 go build \
-  -tags docker \
   -ldflags="-s -w \
     -X 'github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/config.BuildVersion=$VERSION' \
     -X 'github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/config.Commit=$COMMIT' \
