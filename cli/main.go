@@ -16,7 +16,7 @@ import (
 const httpErrorMessage string = "internal error: %v; http status: %v"
 
 func main() {
-	actions := NewActions(client.NewApiGatewayClient("http://localhost:8080", http.DefaultClient))
+	actions := NewActions(client.NewApiGatewayClient("http://localhost:8082", http.DefaultClient))
 	app := &cli.App{
 		Commands: []*cli.Command{
 			{
@@ -219,7 +219,7 @@ func (a *actions) blockchainProviders(cCtx *cli.Context) error {
 
 func (a *actions) createBlockchainProvider(cCtx *cli.Context) error {
 	//TODO: handle provider fields
-	providers, err := a.client.CreateNewProvider(cCtx.Context)
+	providers, err := a.client.CreateNewProvider(cCtx.Context, "", 0, "")
 	if err != nil {
 		return err
 	}
