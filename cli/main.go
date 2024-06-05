@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/api-gateway/client"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/api-gateway/client"
 
 	"github.com/urfave/cli/v2"
 )

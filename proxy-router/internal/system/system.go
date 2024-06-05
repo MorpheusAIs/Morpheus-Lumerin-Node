@@ -3,7 +3,7 @@ package system
 import (
 	"context"
 
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
 )
 
 type SystemConfigurator struct {

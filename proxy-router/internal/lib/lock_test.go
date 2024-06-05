@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/testlib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/testlib"
 	"github.com/stretchr/testify/require"
 )
 

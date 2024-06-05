@@ -1,11 +1,11 @@
-module github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli
+module github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli
 
 go 1.22.0
 
 toolchain go1.22.3
 
 require (
-	github.com/Lumerin-protocol/Morpheus-Lumerin-Node/api-gateway v0.0.2
+	github.com/MorpheusAIs/Morpheus-Lumerin-Node/api-gateway v0.0.2
 	github.com/urfave/cli/v2 v2.27.2
 )
 
@@ -44,4 +44,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/Lumerin-protocol/Morpheus-Lumerin-Node/api-gateway => ../api-gateway
+replace github.com/MorpheusAIs/Morpheus-Lumerin-Node/api-gateway => ../api-gateway
