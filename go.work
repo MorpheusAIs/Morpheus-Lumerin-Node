@@ -4,3 +4,4 @@ use ./launcher
 use ./proxy-router
 use ./api-gateway
 use ./cli
+use ./cli/chat
