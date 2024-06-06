@@ -41,11 +41,12 @@ const getColor = (name) => {
     return colors[(getHashCode(name) + 1) % colors.length]
 }
 
+let abort = false;
+
 const Chat = (props) => {
     const chatBlockRef = useRef<null | HTMLDivElement>(null);
 
     const [value, setValue] = useState("");
-    const [hasSession, setHasSession] = useState(true);
 
     const [sessions, setSessions] = useState<any>();
 
@@ -87,13 +88,16 @@ const Chat = (props) => {
     }
 
     const scrollToBottom = () => {
-        chatBlockRef.current?.scrollIntoView({ behavior: "smooth", block: 'end' })
+        chatBlockRef.current?.scroll({ top: chatBlockRef.current.scrollHeight, behavior: 'smooth' })
     }
 
     const onOpenSession = ({ stake }) => {
         console.log("open-session", stake);
 
         props.onOpenSession({ stake, selectedBid}).then((res) => {
+            if(!res) {
+                return;
+            }
             setActiveSession(res);
             refreshSessions();
         })
@@ -108,7 +112,6 @@ const Chat = (props) => {
     }
 
     const call = async (message) => {
-        setIsSpinning(true);
         const chatHistory = messages.map(m => ({ role: m.role, content: m.text }))
         let response;
 
@@ -179,6 +182,10 @@ const Chat = (props) => {
             let memoState = [...messages, { id: "some", user: 'Me', text: value, role: "user", icon: "M", color: "#20dc8e" }];
 
             while (true) {
+                if(abort) {
+                    await reader.cancel();
+                    abort = false;
+                }
                 const { value, done } = await reader.read();
                 if (done) {
                     setIsSpinning(false);
@@ -193,7 +200,7 @@ const Chat = (props) => {
                     const message = memoState.find(m => m.id == part.id);
                     const otherMessages = memoState.filter(m => m.id != part.id);
                     const text = `${message?.text || ''}${part?.choices[0]?.delta?.content || ''}`;
-                    const result = [...otherMessages, { id: part.id, user: modelName, role: "assistant", text: text, icon: "L", color: getColor("L") }];
+                    const result = [...otherMessages, { id: part.id, user: modelName, role: "assistant", text: text, icon: modelName.toUpperCase()[0], color: getColor(modelName.toUpperCase()[0]) }];
                     memoState = result;
                     setMessages(result);
                     scrollToBottom();
@@ -204,6 +211,12 @@ const Chat = (props) => {
     }
 
     const handleSubmit = () => {
+        if(isSpinning) {
+            abort = true;
+            setIsSpinning(false);
+            return;
+        }
+
         if (!value) {
             return;
         }
@@ -214,6 +227,7 @@ const Chat = (props) => {
             setIsSpinning(false);
         });
         setValue("");
+        scrollToBottom();
     }
 
     const price = selectedBid?.PricePerSecond ? selectedBid?.PricePerSecond / (10 ** 18) : 0;
@@ -302,7 +316,7 @@ const Chat = (props) => {
                     </ChatBlock>
                     <Control>
                         <CustomTextArrea
-                            disabled={!hasSession}
+                            disabled={!activeSession}
                             onKeyPress={(e) => {
                                 if (e.key === 'Enter') {
                                     e.preventDefault();
@@ -315,7 +329,7 @@ const Chat = (props) => {
                             placeholder={"Ask me anything..."}
                             minRows={1}
                             maxRows={6} />
-                        <SendBtn disabled={!hasSession} onClick={handleSubmit}>{
+                        <SendBtn disabled={!activeSession} onClick={handleSubmit}>{
                             isSpinning ? <Spinner animation="border" /> : <IconArrowUp size={"26px"}></IconArrowUp>
                         }</SendBtn>
                     </Control>
