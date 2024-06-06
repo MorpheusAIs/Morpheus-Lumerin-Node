@@ -2,7 +2,7 @@ import { loadFixture } from "@nomicfoundation/hardhat-toolbox-viem/network-helpe
 import { expect } from "chai";
 import hre from "hardhat";
 import { getAddress } from "viem";
-import { catchError, expectError, getTxTimestamp } from "./utils";
+import { catchError, getTxTimestamp } from "./utils";
 import { deployDiamond, deploySingleProvider } from "./fixtures";
 
 describe("Provider registry", function () {
