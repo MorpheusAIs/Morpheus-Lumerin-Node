@@ -7,6 +7,8 @@ import (
 	"math/big"
 	"net/http"
 	"os"
+	"bufio"
+	"strings"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/api-gateway/client"
 
@@ -16,8 +18,27 @@ import (
 const httpErrorMessage string = "internal error: %v; http status: %v"
 
 func main() {
-	actions := NewActions(client.NewApiGatewayClient("http://localhost:8082", http.DefaultClient))
+	api_host := "http://localhost:8082"
+	file, err := os.Open(".env")
+	if err == nil {
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			nv := strings.SplitN(scanner.Text(), "=", 2)
+			if nv == nil || len(nv) != 2 {
+				continue
+			}
+			n := strings.Trim(nv[0], " ")
+			v := strings.Trim(nv[1], " ")
+			if n == "API_HOST" {
+				api_host = v
+			}
+		}
+	}
+	defer file.Close()
+
+	actions := NewActions(client.NewApiGatewayClient(api_host, http.DefaultClient))
 	app := &cli.App{
+		Usage: "A client to call the Morpheus Lumerin API",
 		Commands: []*cli.Command{
 			{
 				Name:    "healthcheck",
