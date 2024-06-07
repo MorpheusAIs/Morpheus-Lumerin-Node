@@ -126,7 +126,7 @@ func (c *ApiGatewayClient) InitiateSession(ctx context.Context) (interface{}, er
 	return result, nil
 }
 
-func (c *ApiGatewayClient) SessionPrompt(ctx context.Context, prompt string, messages []string) (interface{}, error) {
+func (c *ApiGatewayClient) SessionPrompt(ctx context.Context, prompt string) (interface{}, error) {
 	var result map[string]interface{}
 	err := c.postRequest(ctx, "/proxy/sessions/:id/prompt", nil, &result)
 
@@ -181,7 +181,7 @@ func (c *ApiGatewayClient) GetLatestBlock(ctx context.Context) (result uint64, e
 	return result, err
 }
 
-func (c *ApiGatewayClient) GetAllProviders(ctx context.Context) (result []string, err error) {
+func (c *ApiGatewayClient) GetAllProviders(ctx context.Context) (result interface{}, err error) {
 
 	err = c.getRequest(ctx, "/blockchain/providers", &result)
 
@@ -209,7 +209,7 @@ func (c *ApiGatewayClient) CreateNewProvider(ctx context.Context, address string
 	return result, nil
 }
 
-func (c *ApiGatewayClient) GetAllModels(ctx context.Context) (result []string, err error) {
+func (c *ApiGatewayClient) GetAllModels(ctx context.Context) (result interface{}, err error) {
 
 	err = c.getRequest(ctx, "/blockchain/models", &result)
 

@@ -61,64 +61,115 @@ func main() {
 			{
 				Name:    "createChatCompletions",
 				Aliases: []string{"ccc"},
-				Usage:   "create a chat completion by sending a prompt to the ai engine",
+				Usage:   "create chat completions by sending a prompt to the AI engine",
 				Action:  actions.createChatCompletions,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name: "prompt",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name: "messages",
+					},
+				},
 			},
 			{
 				Name:    "initiateProxySession",
 				Aliases: []string{"ips"},
-				Usage:   "",
+				Usage:   "initiate a proxy session",
 				Action:  actions.initiateProxySession,
 			},
 			{
 				Name:    "blockchainProviders",
 				Aliases: []string{"bp"},
-				Usage:   "",
+				Usage:   "list blockchain providers",
 				Action:  actions.blockchainProviders,
-				Subcommands: []*cli.Command{
-					{
-						Name:    "create",
-						Aliases: []string{"c"},
-						Usage:   "blockchainProviders create",
-						Action:  actions.createBlockchainProvider,
+			},
+			{
+				Name:    "blockchainProvidersCreate",
+				Aliases: []string{"bpc"},
+				Usage:   "create a blockchain provider",
+				Action:  actions.createBlockchainProvider,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name: "address",
+						Required: true,
+					},
+					&cli.Uint64Flag{
+						Name: "stake",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name: "endpoint",
+						Required: true,
 					},
 				},
 			},
 			{
 				Name:    "blockchainProvidersBids",
 				Aliases: []string{"bpb"},
-				Usage:   "",
+				Usage:   "list provider bids",
 				Action:  actions.blockchainProvidersBids,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name: "address",
+						Required: true,
+					},
+					&cli.Int64Flag{
+						Name: "offset",
+					},
+					&cli.UintFlag{
+						Name: "limit",
+					},
+				},
 			},
 			{
 				Name:    "blockchainModels",
 				Aliases: []string{"bm"},
-				Usage:   "",
+				Usage:   "list models",
 				Action:  actions.blockchainModels,
 			},
 			{
 				Name:    "openBlockchainSession",
-				Aliases: []string{"open blockchain session"},
-				Usage:   "",
+				Aliases: []string{"obs"},
+				Usage:   "open a blockchain session",
 				Action:  actions.openBlockchainSession,
 			},
 			{
 				Name:    "closeBlockchainSession",
 				Aliases: []string{"cbs"},
-				Usage:   "",
+				Usage:   "close a blockchain session",
 				Action:  actions.closeBlockchainSession,
 			},
 			{
 				Name:    "createAndStreamChatCompletions",
-				Aliases: []string{"csc", "streamlocal"},
-				Usage:   "create a chat completion by sending a prompt to the ai engine",
+				Aliases: []string{"csc"},
+				Usage:   "create and stream chat completions",
 				Action:  actions.createAndStreamChatCompletions,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name: "prompt",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name: "messages",
+					},
+				},
 			},
 			{
 				Name:    "createAndStreamSessionChatCompletions",
 				Aliases: []string{"cssc"},
-				Usage:   "create a chat completion by sending a prompt to the ai engine",
+				Usage:   "create and stream session chat completions",
 				Action:  actions.createChatCompletions,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name: "prompt",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name: "messages",
+					},
+				},
 			},
 		},
 	}
@@ -171,11 +222,10 @@ func (a *actions) proxyRouterFiles(cCtx *cli.Context) error {
 
 func (a *actions) createChatCompletions(cCtx *cli.Context) error {
 	prompt := cCtx.String("prompt")
+	var messages []client.ChatCompletionMessage
+	json.Unmarshal([]byte(cCtx.String("messages")), &messages)
 
-	//TODO: handle chat history
-	_ = cCtx.StringSlice("messages")
-
-	completion, err := a.client.Prompt(cCtx.Context, prompt, []client.ChatCompletionMessage{})
+	completion, err := a.client.Prompt(cCtx.Context, prompt, messages)
 	if err != nil {
 		return err
 	}
@@ -187,7 +237,8 @@ func (a *actions) createChatCompletions(cCtx *cli.Context) error {
 
 func (a *actions) createAndStreamChatCompletions(cCtx *cli.Context) error {
 	prompt := cCtx.String("prompt")
-	messages := cCtx.Generic("messages").([]*client.ChatCompletionMessage)
+	var messages []*client.ChatCompletionMessage
+	json.Unmarshal([]byte(cCtx.String("messages")), &messages)
 
 	completion, err := a.client.PromptStream(cCtx.Context, prompt, messages, func(msg client.ChatCompletionStreamResponse) error {
 		fmt.Println(msg)
@@ -205,10 +256,10 @@ func (a *actions) createAndStreamChatCompletions(cCtx *cli.Context) error {
 
 func (a *actions) createSessionChatCompletions(cCtx *cli.Context) error {
 	prompt := cCtx.String("prompt")
+	var messages []client.ChatCompletionMessage
+	json.Unmarshal([]byte(cCtx.String("messages")), &messages)
 
-	messages := cCtx.StringSlice("messages")
-
-	completion, err := a.client.SessionPrompt(cCtx.Context, prompt, messages)
+	completion, err := a.client.SessionPrompt(cCtx.Context, prompt)
 	if err != nil {
 		return err
 	}
@@ -239,8 +290,11 @@ func (a *actions) blockchainProviders(cCtx *cli.Context) error {
 }
 
 func (a *actions) createBlockchainProvider(cCtx *cli.Context) error {
-	//TODO: handle provider fields
-	providers, err := a.client.CreateNewProvider(cCtx.Context, "", 0, "")
+	address := cCtx.String("address")
+	stake := cCtx.Uint64("stake")
+	endpoint := cCtx.String("endpoint")
+
+	providers, err := a.client.CreateNewProvider(cCtx.Context, address, stake, endpoint)
 	if err != nil {
 		return err
 	}
@@ -250,14 +304,11 @@ func (a *actions) createBlockchainProvider(cCtx *cli.Context) error {
 }
 
 func (a *actions) blockchainProvidersBids(cCtx *cli.Context) error {
-
-	providerAddress := cCtx.String("providerAddress")
-
+	address := cCtx.String("address")
 	offset := cCtx.Int64("offset")
-
 	limit := cCtx.Uint("limit")
 
-	bids, err := a.client.GetBidsByProvider(cCtx.Context, providerAddress, big.NewInt(offset), uint8(limit))
+	bids, err := a.client.GetBidsByProvider(cCtx.Context, address, big.NewInt(offset), uint8(limit))
 	if err != nil {
 		return err
 	}
