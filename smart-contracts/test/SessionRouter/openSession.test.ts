@@ -416,21 +416,9 @@ describe("verify session end time", function () {
       expectedSession: exp,
       user,
       publicClient,
-      getStake,
       approveUserFunds,
       provider,
     } = await loadFixture(deploySingleBid);
-
-    // const now = await nowChain();
-    // for (let i = 0; i < 500; i++) {
-    //   const time = now + BigInt((i * DAY) / SECOND);
-    //   const stipend = await sessionRouter.read.stakeToStipend([
-    //     1000n * 10n ** 18n,
-    //     time,
-    //   ]);
-    // }
-
-    // return;
 
     const midnight = startOfTheDay(await nowChain()) + BigInt(DAY / SECOND);
     await time.increaseTo(midnight);
@@ -442,12 +430,6 @@ describe("verify session end time", function () {
       await nowChain(),
     ]);
 
-    const pricePerDay = 24n * 60n * 60n * exp.pricePerSecond;
-
-    const stipend = await sessionRouter.read.stakeToStipend([
-      stake,
-      await nowChain(),
-    ]);
     await approveUserFunds(stake);
 
     const { msg, signature } = await getProviderApproval(provider, exp.bidID);
@@ -458,8 +440,8 @@ describe("verify session end time", function () {
 
     const sessionId = await getSessionId(publicClient, hre, txHash);
     const session = await sessionRouter.read.getSession([sessionId]);
+    const durSeconds = Number(session.endsAt - session.openedAt);
 
-    const endsAt = NewDate(session.endsAt);
-    // const expEndsAt = NewDate(createdAt + effectiveDuration);
+    expect(durSeconds).to.equal(7 * (DAY / SECOND));
   });
 });

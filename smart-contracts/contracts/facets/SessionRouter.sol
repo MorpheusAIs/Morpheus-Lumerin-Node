@@ -384,27 +384,22 @@ contract SessionRouter {
     uint256 pricePerSecond,
     uint256 openedAt
   ) public view returns (uint256) {
-    uint256 lastDay = whenStipendLessThanDailyPrice(sessionStake, pricePerSecond);
-    if (lastDay == 0) {
-      lastDay = openedAt;
+    // if session stake is more than daily price then session will last for its max duration
+    uint256 duration = stakeToStipend(sessionStake, openedAt) / pricePerSecond;
+    if (duration >= 1 days) {
+      return openedAt + MAX_SESSION_DURATION;
     }
 
-    uint256 endTime = lastDay + stakeToStipend(sessionStake, lastDay) / pricePerSecond;
+    uint256 endTime = openedAt + duration;
 
-    // if session ends after today then count the next day stipend
-    if (startOfTheDay(endTime) > startOfTheDay(lastDay)) {
-      uint256 nextDayDuration = stakeToStipend(sessionStake, lastDay + 1 days) / pricePerSecond;
-      endTime = startOfTheDay(endTime) + nextDayDuration;
+    // is session ends today then return the end time
+    if (startOfTheDay(openedAt) == startOfTheDay(endTime)) {
+      return endTime;
     }
 
-    return minUint256(endTime, openedAt + MAX_SESSION_DURATION);
-  }
-
-  /// @notice returns the time when stipend will be less than daily price
-  function whenStipendLessThanDailyPrice(uint256 sessionStake, uint256 pricePerSecond) private view returns (uint256) {
-    uint256 pricePerDay = pricePerSecond * 1 days;
-    uint256 minComputeBalance = (pricePerDay * 100 * totalMORSupply(block.timestamp)) / sessionStake;
-    return whenComputeBalanceIsLessThan(minComputeBalance);
+    // if session ends after today then add the next day stipend
+    uint256 nextDayDuration = stakeToStipend(sessionStake, openedAt + 1 days) / pricePerSecond;
+    return startOfTheDay(endTime) + nextDayDuration;
   }
 
   /// @notice returns today's budget in MOR
@@ -424,13 +419,14 @@ contract SessionRouter {
       uint128(startOfTheDay(timestamp))
     );
 
-    return periodReward - s.totalClaimed;
+    return periodReward + s.totalClaimed;
   }
 
   // returns total amount of MOR tokens that were distributed across all pools
   function totalMORSupply(uint256 timestamp) public view returns (uint256) {
     uint256 totalSupply = 0;
     for (uint i = 0; i < s.pools.length; i++) {
+      if (i == 3) continue; // skip compute pool (it's calculated separately)
       Pool memory pool = s.pools[i];
       uint256 sup = LinearDistributionIntervalDecrease.getPeriodReward(
         pool.initialReward,
@@ -442,17 +438,7 @@ contract SessionRouter {
       );
       totalSupply += sup;
     }
-    return totalSupply;
-  }
-
-  /// @notice returns the time when compute balance will be less than targetReward
-  /// @dev returns 0 if targetReward is greater than initial reward
-  function whenComputeBalanceIsLessThan(uint256 targetReward) private view returns (uint256) {
-    Pool memory pool = s.pools[3];
-    if (targetReward >= pool.initialReward) {
-      return 0;
-    }
-    return ((pool.initialReward - targetReward) / pool.rewardDecrease) * pool.decreaseInterval + pool.payoutStart;
+    return totalSupply + s.totalClaimed;
   }
 
   /// @notice sets distibution pool configuration
