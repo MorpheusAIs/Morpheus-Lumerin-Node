@@ -11,6 +11,7 @@ import (
 
 	"fmt"
 
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/api-gateway/client"
 	api "github.com/sashabaranov/go-openai"
 )
 
@@ -122,7 +123,7 @@ func (aiEngine *AiEngine) PromptStream(ctx context.Context, req interface{}, chu
 	request := req.(*api.ChatCompletionRequest)
 	chunkCallback := chunkSubmitCallback.(func(*api.ChatCompletionStreamResponse) error)
 
-	resp, err := RequestChatCompletionStream(ctx, request, func(completion api.ChatCompletionStreamResponse) error {
+	resp, err := client.RequestChatCompletionStream(ctx, *aiEngine.client, request, func(completion api.ChatCompletionStreamResponse) error {
 		return chunkCallback(&completion)
 	})
 

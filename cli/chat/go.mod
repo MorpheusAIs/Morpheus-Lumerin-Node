@@ -1,4 +1,4 @@
-module github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat
+module github.com/dwisiswant0/chatgptui
 
 go 1.19
 

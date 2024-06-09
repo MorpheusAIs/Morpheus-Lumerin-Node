@@ -19,5 +19,5 @@ COPY --from=busybox /bin /bin
 COPY --from=busybox /lib /lib
 
 SHELL ["/bin/sh", "-c"]
-EXPOSE 3333 8080
+EXPOSE 3333 8080 8082
 ENTRYPOINT ["proxy-router"]

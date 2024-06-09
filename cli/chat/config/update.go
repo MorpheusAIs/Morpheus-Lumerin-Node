@@ -1,11 +1,12 @@
 package config
 
 import (
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/chat"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/common"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/style"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/util"
-	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/bubbletea"
+
+	"github.com/dwisiswant0/chatgptui/chat"
+	"github.com/dwisiswant0/chatgptui/common"
+	"github.com/dwisiswant0/chatgptui/style"
+	"github.com/dwisiswant0/chatgptui/util"
 )
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/sashabaranov/go-openai"
 
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/common"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/style"
+	"github.com/dwisiswant0/chatgptui/common"
+	"github.com/dwisiswant0/chatgptui/style"
 )
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -38,19 +39,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			default:
 				m.messages = append(m.messages, fmt.Sprintf("%s %s", style.Sender.Render("👤:"), val))
 
-				res, err := m.sendChat(val)
+				err := m.sendChat(val, func(completion openai.ChatCompletionStreamResponse) error {
+
+					m.messages = append(m.messages, fmt.Sprintf(
+						"%s %s",
+						style.Response.Render("🤖:"),
+						lipgloss.NewStyle().Width(78-5).Render(completion.Choices[0].Delta.Content)),
+					)
+					m.viewport.SetContent(strings.Join(m.messages, "\n"))
+					m.viewport.GotoBottom()
+
+					return nil
+				})
+
 				if err != nil {
 					m.err = err
 					return m, nil
 				}
 
-				m.messages = append(m.messages, fmt.Sprintf(
-					"%s %s",
-					style.Response.Render("🤖:"),
-					lipgloss.NewStyle().Width(78-5).Render(res)),
-				)
-				m.viewport.SetContent(strings.Join(m.messages, "\n"))
-				m.viewport.GotoBottom()
 			}
 
 			m.textarea.Reset()

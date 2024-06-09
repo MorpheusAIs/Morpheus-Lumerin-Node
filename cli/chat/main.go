@@ -3,10 +3,10 @@ package main
 import (
 	"flag"
 
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/chat"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/common"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/config"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/util"
+	"github.com/dwisiswant0/chatgptui/chat"
+	"github.com/dwisiswant0/chatgptui/common"
+	"github.com/dwisiswant0/chatgptui/config"
+	"github.com/dwisiswant0/chatgptui/util"
 )
 
 func init() {

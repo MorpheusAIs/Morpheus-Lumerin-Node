@@ -5,8 +5,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/common"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/style"
+	"github.com/dwisiswant0/chatgptui/common"
+	"github.com/dwisiswant0/chatgptui/style"
 )
 
 func New(cfgs ...common.Config) model {
@@ -22,7 +22,7 @@ func New(cfgs ...common.Config) model {
 		cfg = cfgs[0]
 	}
 
-	m := model{inputs: make([]textinput.Model, 5)}
+	m := model{inputs: make([]textinput.Model, 7)}
 	m.configs = make([]configInput, len(m.inputs))
 
 	for i := range m.configs {
@@ -31,28 +31,31 @@ func New(cfgs ...common.Config) model {
 		// 	m.configs[i].label = "OpenAI API key"
 		// 	m.configs[i].name = "openai_api_key"
 		case 0:
+			m.configs[i].label = "Wallet Key"
+			m.configs[i].name = "wallet_key"
+		case 1:
 			m.configs[i].label = "Wallet Address"
 			m.configs[i].name = "wallet_address"
-		case 1:
+		case 2:
+			m.configs[i].label = "Open AI Base Url"
+			m.configs[i].name = "openai_base_url"
+			m.configs[i].defaultValue = "http://localhost:8082/v1"
+		case 3:
 			m.configs[i].label = "Model"
 			m.configs[i].name = "model"
-			m.configs[i].defaultValue = "lamma2"
-		case 2:
+			m.configs[i].defaultValue = "llama2"
+		case 4:
 			m.configs[i].label = "Temperature"
 			m.configs[i].name = "temperature"
 			m.configs[i].defaultValue = "0.7"
-		case 3:
+		case 5:
 			m.configs[i].label = "Maximum length"
 			m.configs[i].name = "max_length"
 			m.configs[i].defaultValue = "256"
-		case 4:
+		case 6:
 			m.configs[i].label = "Top P"
 			m.configs[i].name = "top_p"
 			m.configs[i].defaultValue = "1"
-		case 5:
-			m.configs[i].label = "Session Length"
-			m.configs[i].name = "session_length"
-			m.configs[i].defaultValue = "5"
 		}
 	}
 
@@ -71,13 +74,15 @@ func New(cfgs ...common.Config) model {
 			t.EchoCharacter = '•'
 
 			if isEdit {
-				t.SetValue(cfg.OpenaiAPIKey)
+				t.SetValue(cfg.WalletKey)
 			}
 		default:
 			t.Placeholder = m.getPlaceholder(i)
 
 			if isEdit {
 				switch m.configs[i].name {
+				case "wallet_address":
+					t.SetValue(cfg.WalletAddress)
 				case "model":
 					t.SetValue(cfg.Model)
 				case "temperature":

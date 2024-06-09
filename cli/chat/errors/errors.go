@@ -4,7 +4,6 @@ import "errors"
 
 var (
 	InvalidAPIKey      = errors.New("Invalid OpenAI API key!")
-	InvalidWalletAddress      = errors.New("Invalid Wallet Address!")
 	MaxLengthRange     = errors.New("Max. length range between 1-4000!")
 	GreaterFloatNumber = errors.New("Floating number cannot be greater than 1!")
 )

@@ -1,12 +1,15 @@
 package chat
 
 import (
+	"fmt"
+	"net/http"
+
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/sashabaranov/go-openai"
 
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/common"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/style"
+	"github.com/dwisiswant0/chatgptui/common"
+	"github.com/dwisiswant0/chatgptui/style"
 )
 
 func New(cfg common.Config) model {
@@ -29,17 +32,20 @@ func New(cfg common.Config) model {
 	vp.SetContent(common.ChatWelcomeMessage)
 	vp.Style = style.Viewport
 
+	fmt.Printf("config: %+v", cfg)
+	// client := openai.NewClient(cfg.OpenaiAPIKey)
 	client := openai.NewClientWithConfig(openai.ClientConfig{
-
-		BaseURL:    baseURL + "/v1",
+		BaseURL:    cfg.OpenaiBaseUrl,
 		APIType:    openai.APITypeOpenAI,
-		HTTPClient: httpClient,
+		HTTPClient: http.DefaultClient,
 	})
-	req := openai.CompletionRequest{
+
+	req := openai.ChatCompletionRequest{
 		MaxTokens:   cfg.MaxLength,
 		Model:       cfg.Model,
 		Temperature: cfg.Temperature,
 		TopP:        cfg.TopP,
+		Stream:      true,
 	}
 
 	return model{

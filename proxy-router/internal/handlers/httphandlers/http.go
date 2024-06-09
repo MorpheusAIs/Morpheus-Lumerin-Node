@@ -16,7 +16,7 @@ import (
 	// gin-swagger middleware
 	swaggerFiles "github.com/swaggo/files"
 
-	_ "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/docs"
+	_ "github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/docs"
 )
 
 const (
@@ -58,6 +58,7 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 		ctx.JSON(status, files)
 	}))
 	r.POST("/v1/chat/completions", (func(ctx *gin.Context) {
+		fmt.Println("chat completions")
 		apiBus.PromptLocal(ctx)
 	}))
 

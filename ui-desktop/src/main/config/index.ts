@@ -38,7 +38,7 @@ const chain = {
   maxGasPrice: process.env.MAX_GAS_PRICE,
 
   proxyPort: process.env.PROXY_DEFAULT_PORT || 3333,
-  proxyWebPort: process.env.PROXY_WEB_DEFAULT_PORT || 8081,
+  proxyWebPort: process.env.PROXY_WEB_DEFAULT_PORT || 8082,
 
   portCheckerUrl: process.env.PORT_CHECKER_URL || 'https://portchecker.io/api/v1/query',
   portCheckErrorLink:

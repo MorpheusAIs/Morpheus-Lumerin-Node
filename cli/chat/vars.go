@@ -3,7 +3,7 @@ package main
 import (
 	"github.com/charmbracelet/bubbletea"
 
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/common"
+	"github.com/dwisiswant0/chatgptui/common"
 )
 
 var (

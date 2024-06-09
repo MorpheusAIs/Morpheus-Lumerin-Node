@@ -3,7 +3,7 @@ package chat
 import (
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/common"
+	"github.com/dwisiswant0/chatgptui/common"
 	"github.com/sashabaranov/go-openai"
 )
 
@@ -15,5 +15,5 @@ type model struct {
 	viewport viewport.Model
 
 	openaiClient  *openai.Client
-	openaiRequest openai.CompletionRequest
+	openaiRequest openai.ChatCompletionRequest
 }

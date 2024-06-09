@@ -2,18 +2,28 @@ package chat
 
 import (
 	"context"
-	"strings"
+	"fmt"
+
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/api-gateway/client"
+	"github.com/sashabaranov/go-openai"
 )
 
-func (m model) sendChat(prompt string) (string, error) {
+func (m model) sendChat(prompt string, streamResponse client.CompletionCallback) error {
 	ctx := context.Background()
 
-	m.openaiRequest.Prompt = prompt
+	m.openaiRequest.Messages = append(m.openaiRequest.Messages, openai.ChatCompletionMessage{
+		Role:    "user",
+		Content: prompt,
+	})
 
-	resp, err := m.openaiClient.CreateCompletion(ctx, m.openaiRequest)
+	response, err := client.RequestChatCompletionStream(ctx, &m.openaiRequest, streamResponse)
+
+	fmt.Println("resp: ", response)
+	fmt.Println("err: ", err)
+
 	if err != nil {
-		return "", err
+		return err
 	}
 
-	return strings.TrimSpace(resp.Choices[0].Text), nil
+	return nil
 }

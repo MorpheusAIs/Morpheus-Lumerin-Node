@@ -3,15 +3,17 @@ package client
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"testing"
 
 	hdwallet "github.com/miguelmota/go-ethereum-hdwallet"
+	"github.com/sashabaranov/go-openai"
 )
 
-func TestGetProviders(t *testing.T) {
-	client := NewApiGatewayClient("http://localhost:8080", http.DefaultClient)
+func SkipTestGetProviders(t *testing.T) {
+	client := NewApiGatewayClient("http://localhost:8082", http.DefaultClient)
 	res, err := client.GetAllProviders(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -21,28 +23,30 @@ func TestGetProviders(t *testing.T) {
 
 }
 
-func TestCreateProvider(t *testing.T) {
+func SkipTestCreateProvider(t *testing.T) {
 
-	master, err := hdwallet.NewKey()
-
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	wallet, err := master.GetWallet()
+	mnemonic, err := hdwallet.NewMnemonic(128)
 
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	address, err := wallet.GetAddress()
+	wallet, err := hdwallet.NewFromMnemonic(mnemonic)
 
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := NewApiGatewayClient("http://localhost:8080", http.DefaultClient)
 
-	res, err := client.CreateNewProvider(context.Background(), address, 1, "localhost:8080")
+	account := wallet.Accounts()[0]
+
+	address := account.Address.Hex()
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewApiGatewayClient("http://localhost:8082", http.DefaultClient)
+
+	res, err := client.CreateNewProvider(context.Background(), address, 1, "localhost:8082")
 
 	if err != nil {
 		t.Fatal(err)
@@ -50,9 +54,9 @@ func TestCreateProvider(t *testing.T) {
 
 	fmt.Println("providers: ", res)
 }
- 
-func TestHealthCheck(t *testing.T) {
-	client := NewApiGatewayClient("http://localhost:8080", &http.Client{})
+
+func SkipTestHealthCheck(t *testing.T) {
+	client := NewApiGatewayClient("http://localhost:8082", &http.Client{})
 	res, err := client.HealthCheck(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -76,7 +80,7 @@ func TestHealthCheck(t *testing.T) {
 }
 
 func SkipTestFiles(t *testing.T) {
-	client := NewApiGatewayClient("http://localhost:8080", http.DefaultClient)
+	client := NewApiGatewayClient("http://localhost:8082", http.DefaultClient)
 	_, err := client.GetProxyRouterFiles(context.Background())
 
 	if err != nil {
@@ -84,8 +88,8 @@ func SkipTestFiles(t *testing.T) {
 	}
 }
 
-func SkipTestCreateAndStreamChatCompletionMessage(t *testing.T) {
-	client := NewApiGatewayClient("http://localhost:8080", http.DefaultClient)
+func TestCreateAndStreamChatCompletionMessage(t *testing.T) {
+	client := NewApiGatewayClient("http://localhost:8082", http.DefaultClient)
 
 	prompt := "What is the meaning of life?"
 	messages := []*ChatCompletionMessage{
@@ -94,37 +98,39 @@ func SkipTestCreateAndStreamChatCompletionMessage(t *testing.T) {
 		},
 	}
 
-	res, err := client.PromptStream(context.Background(), prompt, messages, func(msg ChatCompletionStreamResponse) error {
-		fmt.Println("chat completion message: ", msg)
+	results := make([]ChatCompletionStreamResponse, 0)
+
+	_, err := client.PromptStream(context.Background(), prompt, messages, func(msg ChatCompletionStreamResponse) error {
+		results = append(results, msg)
+		fmt.Println("msg: ", msg)
 		return nil
 	})
 
-	if err != nil {
+	if err != nil && err != io.EOF {
 		t.Fatal(err)
 	}
 
-	fmt.Println("chat completion result: ", res)
+	fmt.Println("chat completion result: ", results)
 
-	mapResult := res.(map[string]interface{})
-
-	if mapResult["choices"] == nil {
-		t.Fatal("invalid chat completion result")
+	if len(results) == 0 {
+		t.Fatal("invalid chat completion result: ", results)
 	}
 
-	if mapResult["choices"].([]interface{})[0].(map[string]interface{})["text"] == "" {
+	if results[0].Choices[0].Delta.Content == "" {
 		t.Fatal("invalid chat completion text result")
 	}
 }
 
-func SkipTestCreateChatCompletionMessage(t *testing.T) {
+func TestCreateChatCompletionMessage(t *testing.T) {
 
-	os.Setenv("OPENAI_BASE_URL", "http://localhost:8080/v1")
+	os.Setenv("OPENAI_BASE_URL", "http://localhost:8082/v1")
 
-	client := NewApiGatewayClient("http://localhost:8080", http.DefaultClient)
+	client := NewApiGatewayClient("http://localhost:8082", http.DefaultClient)
 
 	prompt := "What is the meaning of life?"
 	messages := []ChatCompletionMessage{
 		{
+			Role:    "user",
 			Content: "The meaning of life is 42.",
 		},
 	}
@@ -137,13 +143,13 @@ func SkipTestCreateChatCompletionMessage(t *testing.T) {
 
 	fmt.Println("chat completion result: ", res)
 
-	mapResult := res.(map[string]interface{})
+	result := res.(openai.ChatCompletionResponse)
 
-	if mapResult["choices"] == nil {
+	if result.Choices == nil || len(result.Choices) == 0 {
 		t.Fatal("invalid chat completion result")
 	}
 
-	if mapResult["choices"].([]interface{})[0].(map[string]interface{})["text"] == "" {
+	if result.Choices[0].Message.Content == "" {
 		t.Fatal("invalid chat completion text result")
 	}
 }

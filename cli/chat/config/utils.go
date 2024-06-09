@@ -10,8 +10,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/common"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/errors"
+	"github.com/dwisiswant0/chatgptui/common"
+	"github.com/dwisiswant0/chatgptui/errors"
 )
 
 func (m model) getPlaceholder(i int) string {
@@ -40,10 +40,15 @@ func (m model) validateInput(i int) error {
 			return errors.InvalidAPIKey
 		}
 		m.configs[i].value = val
+	case "openai_base_url":
+		m.configs[i].value = val
 	case "wallet_address":
 		if !strings.HasPrefix(val, "0x") {
-			return errors.InvalidWalletAddress
+			return errors.InvalidAPIKey
 		}
+		m.configs[i].value = val
+	case "wallet_key":
+		//TODO: validate wallet key
 		m.configs[i].value = val
 	case "model":
 		for _, model := range common.OpenaiModels {

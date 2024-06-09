@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -76,7 +75,7 @@ func (c *ApiGatewayClient) postRequest(ctx context.Context, endpoint string, bod
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New(fmt.Sprintf("unexpected status code: %d", resp.StatusCode))
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	if result == nil {
@@ -88,7 +87,7 @@ func (c *ApiGatewayClient) postRequest(ctx context.Context, endpoint string, bod
 
 func (c *ApiGatewayClient) streamChat(ctx context.Context, path string, req *ChatCompletionRequest, result *ChatCompletionStreamResponse, flush CompletionCallback) error {
 
-	RequestChatCompletionStream(ctx, req, flush)
+	RequestChatCompletionStream(ctx, *c.OpenAiClient, req, flush)
 
 	return nil
 }
@@ -166,13 +165,21 @@ func (c *ApiGatewayClient) PromptStream(ctx context.Context, message string, his
 		})
 	}
 
-	request := &openai.ChatCompletionRequest{
+	messages = append(messages, ChatCompletionMessage{
+		Role:    "user",
+		Content: message,
+	})
 
+	request := &openai.ChatCompletionRequest{
 		Messages: messages,
-		Stream:   true,
+		Stream: true,
+		Model:  "llama2",
+		ResponseFormat: &openai.ChatCompletionResponseFormat{
+			Type: openai.ChatCompletionResponseFormatTypeText,
+		},
 	}
 
-	return RequestChatCompletionStream(ctx, request, flush)
+	return RequestChatCompletionStream(ctx, *c.OpenAiClient, request, flush)
 }
 
 func (c *ApiGatewayClient) GetLatestBlock(ctx context.Context) (result uint64, err error) {

@@ -364,7 +364,7 @@ func (apiBus *ApiBus) PromptLocal(ctx *gin.Context) {
 	}
 
 	// TODO: change this so "Stream" is only true if the client wants to stream.
-	req.Stream = ctx.GetHeader("Accept") == "application/json"
+	// req.Stream = ctx.GetHeader("Accept") == "application/json"
 
 	var response interface{}
 
