@@ -41,6 +41,34 @@ func main() {
 		Usage: "A client to call the Morpheus Lumerin API",
 		Commands: []*cli.Command{
 			{
+				Name: "getAllowance",
+				Aliases: []string{"ga"},
+				Usage: "get allowance",
+				Action: actions.getAllowance,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name: "spender",
+						Required: true,
+					},
+				},
+			},
+			{
+				Name: "approveAllowance",
+				Aliases: []string{"aa"},
+				Usage: "approve allowance",
+				Action: actions.approveAllowance,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name: "spender",
+						Required: true,
+					},
+					&cli.Uint64Flag{
+						Name: "amount",
+						Required: true,
+					},
+				},
+			},
+			{
 				Name:    "healthcheck",
 				Aliases: []string{"he"},
 				Usage:   "check application health",
@@ -185,6 +213,27 @@ type actions struct {
 
 func NewActions(c *client.ApiGatewayClient) *actions {
 	return &actions{client: c}
+}
+
+func (a *actions) getAllowance(cCtx *cli.Context) error {
+	spender := cCtx.String("spender")
+	res, err := a.client.GetAllowance(cCtx.Context, spender)
+	if err != nil {
+		return err
+	}
+	fmt.Println(res)
+	return nil
+}
+
+func (a *actions) approveAllowance(cCtx *cli.Context) error {
+	spender := cCtx.String("spender")
+	amount := cCtx.Uint64("amount")
+	res, err := a.client.ApproveAllowance(cCtx.Context, spender, amount)
+	if err != nil {
+		return err
+	}
+	fmt.Println(res)
+	return nil
 }
 
 func (a *actions) healthcheck(cCtx *cli.Context) error {

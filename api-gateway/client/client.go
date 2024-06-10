@@ -93,6 +93,20 @@ func (c *ApiGatewayClient) streamChat(ctx context.Context, path string, req *Cha
 	return nil
 }
 
+func (c *ApiGatewayClient) GetAllowance(ctx context.Context, spender string) (interface{}, error) {
+	var result map[string]interface{}
+	endpoint := fmt.Sprintf("/blockchain/allowance?spender=%s", spender)
+	err := c.getRequest(ctx, endpoint, &result)
+	return result, err
+}
+
+func (c *ApiGatewayClient) ApproveAllowance(ctx context.Context, spender string, amount uint64) (interface{}, error) {
+	var result map[string]interface{}
+	endpoint := fmt.Sprintf("/blockchain/allowance?spender=%s&amount=%d", spender, amount)
+	err := c.postRequest(ctx, endpoint, nil, &result)
+	return result, err
+}
+
 func (c *ApiGatewayClient) GetProxyRouterConfig(ctx context.Context) (interface{}, error) {
 	var result map[string]interface{}
 	err := c.getRequest(ctx, "/config", &result)
