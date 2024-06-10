@@ -152,43 +152,52 @@ func (p *ProxyRouterApi) InitiateSession(ctx *gin.Context) (int, gin.H) {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 
+	userObj := storages.User{
+		Addr:   provider,
+		PubKey: providerPubKey,
+		Url:    providerUrl,
+	}
+	err = p.sessionStorage.AddUser(&userObj)
+	if err != nil {
+		err = lib.WrapError(fmt.Errorf("failed store user"), err)
+		p.log.Errorf("%s", err)
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+
 	return constants.HTTP_STATUS_OK, gin.H{
 		"response": msg,
 	}
 }
 
 func (p *ProxyRouterApi) SendPrompt(ctx *gin.Context) (bool, int, gin.H) {
-	var reqPayload map[string]interface{}
-	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
-		return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
-	}
-
-	providerPublicKey, ok := reqPayload["providerPublicKey"].(string)
-	if !ok {
-		return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "providerPublicKey is required"}
-	}
-
-	prompt, ok := reqPayload["prompt"]
-	if !ok {
-		return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "prompt is required"}
+	var prompt map[string]interface{}
+	if err := ctx.ShouldBindJSON(&prompt); err != nil {
+		return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 
 	sessionId := ctx.Param("id")
 	if sessionId == "" {
-		return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "sessionId is required"}
+		return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "sessionId is required"}
 	}
 
-	providerUrl, ok := reqPayload["providerUrl"].(string)
+	session, ok := p.sessionStorage.GetSession(sessionId)
 	if !ok {
-		return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "providerUrl is required"}
+		return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "session not found"}
 	}
+	provider, ok := p.sessionStorage.GetUser(session.ProviderAddr)
+	if !ok {
+		return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "provider not found"}
+	}
+
+	providerUrl := provider.Url
+	providerPublicKey := provider.PubKey
 
 	requestID := "1"
 	promptRequest, err := morrpc.NewMorRpc().SessionPromptRequest(sessionId, prompt, providerPublicKey, p.privateKey, requestID)
 	if err != nil {
 		err = lib.WrapError(fmt.Errorf("failed to create session prompt request"), err)
 		p.log.Errorf("%s", err)
-		return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+		return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 
 	return p.rpcRequestStream(ctx, providerUrl, promptRequest, providerPublicKey)
@@ -257,7 +266,7 @@ func (p *ProxyRouterApi) rpcRequestStream(ctx *gin.Context, url string, rpcMessa
 	if err != nil {
 		err = lib.WrapError(fmt.Errorf("failed to connect to provider"), err)
 		p.log.Errorf("%s", err)
-		return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+		return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 	defer conn.Close()
 
@@ -265,7 +274,7 @@ func (p *ProxyRouterApi) rpcRequestStream(ctx *gin.Context, url string, rpcMessa
 	if err != nil {
 		err = lib.WrapError(fmt.Errorf("failed to marshal request"), err)
 		p.log.Errorf("%s", err)
-		return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+		return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 	conn.Write([]byte(msgJSON))
 
@@ -281,13 +290,13 @@ func (p *ProxyRouterApi) rpcRequestStream(ctx *gin.Context, url string, rpcMessa
 		if err != nil {
 			err = lib.WrapError(fmt.Errorf("failed to decode response"), err)
 			p.log.Errorf("%s", err)
-			return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+			return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 		}
 
 		if !p.validateMsgSignature(msg, providerPublicKey) {
-			err = fmt.Errorf("Received invalid signature from provider")
+			err = fmt.Errorf("received invalid signature from provider")
 			p.log.Errorf("%s", err)
-			return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+			return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 		}
 
 		aiResponseEncrypted := msg.Result["message"].(string)
@@ -295,7 +304,7 @@ func (p *ProxyRouterApi) rpcRequestStream(ctx *gin.Context, url string, rpcMessa
 		if err != nil {
 			err = lib.WrapError(fmt.Errorf("failed to decrypt ai response chunk"), err)
 			p.log.Errorf("%s", err)
-			return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+			return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 		}
 
 		var payload map[string]interface{}
@@ -303,7 +312,7 @@ func (p *ProxyRouterApi) rpcRequestStream(ctx *gin.Context, url string, rpcMessa
 		if err != nil {
 			err = lib.WrapError(fmt.Errorf("failed to unmarshal response"), err)
 			p.log.Errorf("%s", err)
-			return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+			return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 		}
 
 		var stop = false
@@ -320,11 +329,11 @@ func (p *ProxyRouterApi) rpcRequestStream(ctx *gin.Context, url string, rpcMessa
 		if err != nil {
 			err = lib.WrapError(fmt.Errorf("failed to marshal response"), err)
 			p.log.Errorf("%s", err)
-			return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+			return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 		}
 		_, err = ctx.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", msgJSON)))
 		if err != nil {
-			return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+			return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 		}
 		ctx.Writer.Flush()
 		if stop {
@@ -332,7 +341,7 @@ func (p *ProxyRouterApi) rpcRequestStream(ctx *gin.Context, url string, rpcMessa
 		}
 	}
 
-	return true, constants.HTTP_STATUS_OK, gin.H{}
+	return false, constants.HTTP_STATUS_OK, gin.H{}
 }
 
 func (p *ProxyRouterApi) validateMsgSignature(msg *morrpc.RpcResponse, providerPubicKey string) bool {

@@ -72,10 +72,13 @@ func (e *EventsListener) handleSessionOpened(ctx context.Context, event *session
 	// 	return err
 	// }
 
-	e.store.AddSession(&storages.Session{
+	err := e.store.AddSession(&storages.Session{
 		Id:       sessionId,
 		UserAddr: event.UserAddress.Hex(),
 	})
+	if err != nil {
+		return err
+	}
 
 	return nil
 }

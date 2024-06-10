@@ -57,21 +57,16 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 		ctx.JSON(status, files)
 	}))
 	r.POST("/v1/chat/completions", (func(ctx *gin.Context) {
-		apiBus.PromptLocal(ctx)
+		shouldSendResponse, status, response := apiBus.RemoteOrLocalPrompt(ctx)
+		if !shouldSendResponse {
+			return
+		}
+		ctx.JSON(status, response)
 	}))
 
 	r.POST("/proxy/sessions/initiate", (func(ctx *gin.Context) {
 		status, response := apiBus.InitiateSession(ctx)
 		ctx.JSON(status, response)
-	}))
-
-	r.POST("/proxy/sessions/:id/prompt", (func(ctx *gin.Context) {
-		ok, status, response := apiBus.SendPrompt(ctx)
-		if !ok {
-			ctx.JSON(status, response)
-			return
-		}
-		return
 	}))
 
 	r.GET("/proxy/sessions/:id/providerClaimableBalance", (func(ctx *gin.Context) {
