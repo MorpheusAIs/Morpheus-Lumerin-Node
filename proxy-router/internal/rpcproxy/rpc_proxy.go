@@ -34,10 +34,18 @@ type RpcProxy struct {
 	explorerClient   *ExplorerClient
 
 	legacyTx   bool
-	privateKey string
+	privateKey interfaces.PrKeyProvider
 }
 
-func NewRpcProxy(rpcClient *ethclient.Client, diamonContractAddr common.Address, morTokenAddr common.Address, explorerApiUrl string, privateKey string, log interfaces.ILogger, legacyTx bool) *RpcProxy {
+func NewRpcProxy(
+	rpcClient *ethclient.Client,
+	diamonContractAddr common.Address,
+	morTokenAddr common.Address,
+	explorerApiUrl string,
+	privateKey interfaces.PrKeyProvider,
+	log interfaces.ILogger,
+	legacyTx bool,
+) *RpcProxy {
 	providerRegistry := registries.NewProviderRegistry(diamonContractAddr, rpcClient, log)
 	modelRegistry := registries.NewModelRegistry(diamonContractAddr, rpcClient, log)
 	marketplace := registries.NewMarketplace(diamonContractAddr, rpcClient, log)
@@ -186,7 +194,12 @@ func (rpcProxy *RpcProxy) OpenSession(ctx *gin.Context) (int, gin.H) {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "stake is invalid"}
 	}
 
-	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	prKey, err := rpcProxy.privateKey.GetPrivateKey()
+	if err != nil {
+		return prKeyErr(err)
+	}
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, prKey)
 	if err != nil {
 		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
 	}
@@ -194,7 +207,7 @@ func (rpcProxy *RpcProxy) OpenSession(ctx *gin.Context) (int, gin.H) {
 	approvalBytes := common.FromHex(reqPayload.Approval)
 	approvalSigBytes := common.FromHex(reqPayload.ApprovalSig)
 
-	sessionId, err := rpcProxy.sessionRouter.OpenSession(transactOpt, approvalBytes, approvalSigBytes, stake, rpcProxy.privateKey)
+	sessionId, err := rpcProxy.sessionRouter.OpenSession(transactOpt, approvalBytes, approvalSigBytes, stake, prKey)
 	if err != nil {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
@@ -209,12 +222,17 @@ func (rpcProxy *RpcProxy) CloseSession(ctx *gin.Context) (int, gin.H) {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "sessionId is required"}
 	}
 
-	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	prKey, err := rpcProxy.privateKey.GetPrivateKey()
+	if err != nil {
+		return prKeyErr(err)
+	}
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, prKey)
 	if err != nil {
 		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
 	}
 
-	_, err = rpcProxy.sessionRouter.CloseSession(transactOpt, sessionId, rpcProxy.privateKey)
+	_, err = rpcProxy.sessionRouter.CloseSession(transactOpt, sessionId, prKey)
 	if err != nil {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
@@ -244,7 +262,12 @@ func (rpc *RpcProxy) GetProviderClaimableBalance(ctx *gin.Context) (int, gin.H) 
 }
 
 func (rpcProxy *RpcProxy) GetBalance(ctx *gin.Context) (int, gin.H) {
-	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	prKey, err := rpcProxy.privateKey.GetPrivateKey()
+	if err != nil {
+		return prKeyErr(err)
+	}
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, prKey)
 	if err != nil {
 		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
 	}
@@ -268,7 +291,12 @@ func (rpcProxy *RpcProxy) SendEth(ctx *gin.Context) (int, gin.H) {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 
-	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	prKey, err := rpcProxy.privateKey.GetPrivateKey()
+	if err != nil {
+		return prKeyErr(err)
+	}
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, prKey)
 	if err != nil {
 		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
 	}
@@ -290,7 +318,7 @@ func (rpcProxy *RpcProxy) SendEth(ctx *gin.Context) (int, gin.H) {
 
 	gas := float64(estimatedGas) * 1.5
 	tx := types.NewTransaction(nonce, toAddr, amount, uint64(gas), transactOpt.GasPrice, nil)
-	signedTx, err := rpcProxy.signTx(ctx, tx, rpcProxy.privateKey)
+	signedTx, err := rpcProxy.signTx(ctx, tx, prKey)
 	if err != nil {
 		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to sign eth: " + err.Error()}
 	}
@@ -314,8 +342,12 @@ func (rpcProxy *RpcProxy) SendMor(ctx *gin.Context) (int, gin.H) {
 	if err != nil {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
+	prKey, err := rpcProxy.privateKey.GetPrivateKey()
+	if err != nil {
+		return prKeyErr(err)
+	}
 
-	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, prKey)
 	if err != nil {
 		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
 	}
@@ -337,7 +369,12 @@ func (rpcProxy *RpcProxy) GetAllowance(ctx *gin.Context) (int, gin.H) {
 
 	spenderAddr := common.HexToAddress(spender)
 
-	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	prKey, err := rpcProxy.privateKey.GetPrivateKey()
+	if err != nil {
+		return prKeyErr(err)
+	}
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, prKey)
 	if err != nil {
 		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get transactOpts: " + err.Error()}
 	}
@@ -369,7 +406,12 @@ func (rpcProxy *RpcProxy) Approve(ctx *gin.Context) (int, gin.H) {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "invalid amount"}
 	}
 
-	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	prKey, err := rpcProxy.privateKey.GetPrivateKey()
+	if err != nil {
+		return prKeyErr(err)
+	}
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, prKey)
 	if err != nil {
 		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get transactOpts: " + err.Error()}
 	}
@@ -402,7 +444,12 @@ func (rpcProxy *RpcProxy) ClaimProviderBalance(ctx *gin.Context) (int, gin.H) {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 
-	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	prKey, err := rpcProxy.privateKey.GetPrivateKey()
+	if err != nil {
+		return prKeyErr(err)
+	}
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, prKey)
 	if err != nil {
 		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
 	}
@@ -474,7 +521,12 @@ func (rpcProxy *RpcProxy) GetTransactions(ctx *gin.Context) (int, gin.H) {
 		limit = "10"
 	}
 
-	transactOpt, err := rpcProxy.getTransactOpts(ctx, rpcProxy.privateKey)
+	prKey, err := rpcProxy.privateKey.GetPrivateKey()
+	if err != nil {
+		return prKeyErr(err)
+	}
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, prKey)
 	if err != nil {
 		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
 	}
@@ -574,4 +626,8 @@ func (rpcProxy *RpcProxy) getSendParams(ctx *gin.Context) (string, *big.Int, err
 	}
 
 	return to, amount, nil
+}
+
+func prKeyErr(err error) (int, gin.H) {
+	return constants.HTTP_CONFLICT, gin.H{"error": "cannot get private key: " + err.Error()}
 }
