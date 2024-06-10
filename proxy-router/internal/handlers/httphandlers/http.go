@@ -97,6 +97,7 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 	r.GET("/blockchain/providers/:id/bids", (func(ctx *gin.Context) {
 		providerId := ctx.Param("id")
 		offset, limit := getOffsetLimit(ctx)
+
 		if offset == nil {
 			return
 		}
@@ -175,8 +176,7 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 
 	r.Any("/debug/pprof/*action", gin.WrapF(pprof.Index))
 
-	err := r.SetTrustedProxies(nil)
-	if err != nil {
+	if err := r.SetTrustedProxies(nil); err != nil {
 		panic(err)
 	}
 

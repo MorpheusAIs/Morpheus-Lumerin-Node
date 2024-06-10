@@ -34,7 +34,7 @@ var DIAMOND_CONTRACT_ADDR = "0x70768f0ff919e194e11abfc3a2edf43213359dc1"
 var MOR_CONTRACT_ADDR = "0xc1664f994fd3991f98ae944bc16b9aed673ef5fd"
 var EXPLORER_API_URL = "https://api-sepolia.arbiscan.io/api"
 var ETH_LEGACY_TX = false
-var ETH_NODE_ADDRESS = "wss://arb-sepolia.g.alchemy.com/v2/Ken3T8xkvWUxtpKvb3yDedzF-sNsQDlZ"
+var ETH_NODE_ADDRESS = "wss://arb-sepolia.g.alchemy.com/v2/UPDATE_HERE"
 
 var PROVIDER_ADDR = "0x65bBb982d9B0AfE9AED13E999B79c56dDF9e04fC"
 var PROVIDER_URL = "thehulk1.stg.lumerin.io:3333"
