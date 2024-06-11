@@ -14,4 +14,4 @@ go build \
     -X 'github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/config.BuildVersion=$VERSION' \
     -X 'github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/config.Commit=$COMMIT' \
   " \
-  -o bin/proxy-router cmd/main.go 
+  -o bin/proxy-router cmd/main.go

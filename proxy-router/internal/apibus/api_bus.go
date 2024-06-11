@@ -10,7 +10,9 @@ import (
 	"net/http"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/aiengine"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/proxyapi"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/wallet"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/rpcproxy"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
@@ -22,13 +24,15 @@ type ApiBus struct {
 	rpcProxy       *rpcproxy.RpcProxy
 	aiEngine       *aiengine.AiEngine
 	proxyRouterApi *proxyapi.ProxyRouterApi
+	wallet         *wallet.Wallet
 }
 
-func NewApiBus(rpcProxy *rpcproxy.RpcProxy, aiEngine *aiengine.AiEngine, proxyRouterApi *proxyapi.ProxyRouterApi) *ApiBus {
+func NewApiBus(rpcProxy *rpcproxy.RpcProxy, aiEngine *aiengine.AiEngine, proxyRouterApi *proxyapi.ProxyRouterApi, wallet *wallet.Wallet) *ApiBus {
 	return &ApiBus{
 		rpcProxy:       rpcProxy,
 		aiEngine:       aiEngine,
 		proxyRouterApi: proxyRouterApi,
+		wallet:         wallet,
 	}
 }
 
@@ -386,4 +390,33 @@ func (apiBus *ApiBus) PromptLocal(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, response)
+}
+
+// GetWallet godoc
+//
+//		@Summary		Get Wallet
+//		@Description	Get wallet address
+//	 	@Tags			wallet
+//		@Produce		json
+//		@Success		200	{object}	interface{}
+//		@Router			/wallet [get]
+func (apiBus *ApiBus) GetWallet(ctx context.Context) (common.Address, error) {
+	prKey, err := apiBus.wallet.GetPrivateKey()
+	if err != nil {
+		return common.Address{}, err
+	}
+	return lib.PrivKeyStringToAddr(prKey)
+}
+
+// SetupWallet godoc
+//
+//		@Summary		Set Wallet
+//		@Description	Set wallet private key
+//	 	@Tags			wallet
+//		@Produce		json
+//		@Param			privatekey	body	httphandlers.SetupWalletReqBody true	"Private key"
+//		@Success		200	{object}	interface{}
+//		@Router			/wallet [post]
+func (apiBus *ApiBus) SetupWallet(ctx context.Context, privateKeyHex string) error {
+	return apiBus.wallet.SetPrivateKey(privateKeyHex)
 }
