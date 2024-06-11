@@ -178,7 +178,7 @@ func (p *ProxyRouterApi) SendPrompt(ctx *gin.Context) (bool, int, gin.H) {
 		return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 
-	sessionId := ctx.Param("id")
+	sessionId := ctx.GetHeader("session_id")
 	if sessionId == "" {
 		return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "sessionId is required"}
 	}
