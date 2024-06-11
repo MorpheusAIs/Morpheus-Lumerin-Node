@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"os"
 
 	"github.com/dwisiswant0/chatgptui/chat"
 	"github.com/dwisiswant0/chatgptui/common"
@@ -20,6 +21,12 @@ func init() {
 
 	flag.BoolVar(&opt.Version, "V", false, "Show current version")
 	flag.BoolVar(&opt.Version, "version", false, "Show current version")
+
+	openAiBaseUrl := os.Getenv("OPENAI_BASE_URL")
+
+	if openAiBaseUrl == "" {
+		os.Setenv("OPENAI_BASE_URL","http://localhost:8082/v1")
+	}
 
 	flag.Usage = func() {
 		showBanner()

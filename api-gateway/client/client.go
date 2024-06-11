@@ -87,7 +87,7 @@ func (c *ApiGatewayClient) postRequest(ctx context.Context, endpoint string, bod
 
 func (c *ApiGatewayClient) streamChat(ctx context.Context, path string, req *ChatCompletionRequest, result *ChatCompletionStreamResponse, flush CompletionCallback) error {
 
-	RequestChatCompletionStream(ctx, *c.OpenAiClient, req, flush)
+	RequestChatCompletionStream(ctx, req, flush)
 
 	return nil
 }
@@ -172,14 +172,10 @@ func (c *ApiGatewayClient) PromptStream(ctx context.Context, message string, his
 
 	request := &openai.ChatCompletionRequest{
 		Messages: messages,
-		Stream: true,
-		Model:  "llama2",
-		ResponseFormat: &openai.ChatCompletionResponseFormat{
-			Type: openai.ChatCompletionResponseFormatTypeText,
-		},
+		Model:    "llama2",
 	}
 
-	return RequestChatCompletionStream(ctx, *c.OpenAiClient, request, flush)
+	return RequestChatCompletionStream(ctx, request, flush)
 }
 
 func (c *ApiGatewayClient) GetLatestBlock(ctx context.Context) (result uint64, err error) {

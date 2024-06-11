@@ -39,7 +39,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			default:
 				m.messages = append(m.messages, fmt.Sprintf("%s %s", style.Sender.Render("👤:"), val))
 
-				err := m.sendChat(val, func(completion openai.ChatCompletionStreamResponse) error {
+				err := m.sendChat(val, func(completion *openai.ChatCompletionStreamResponse) error {
 
 					m.messages = append(m.messages, fmt.Sprintf(
 						"%s %s",

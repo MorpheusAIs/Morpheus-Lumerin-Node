@@ -1,13 +1,9 @@
 package aiengine
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"encoding/json"
 	"net/http"
 	"os"
-	"strings"
 
 	"fmt"
 
@@ -29,73 +25,7 @@ func NewAiEngine() *AiEngine {
 	}
 }
 
-type CompletionCallback func(completion api.ChatCompletionStreamResponse) error
-
-func RequestChatCompletionStream(ctx context.Context, request *api.ChatCompletionRequest, callback CompletionCallback) (*api.ChatCompletionStreamResponse, error) {
-	requestBody, err := json.Marshal(request)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encode request: %v", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", os.Getenv("OPENAI_BASE_URL")+"/chat/completions", bytes.NewReader(requestBody))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %v", err)
-	}
-
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+apiKey)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "text/event-stream")
-	req.Header.Set("Connection", "keep-alive")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	scanner := bufio.NewScanner(resp.Body)
-	for scanner.Scan() {
-		line := scanner.Text()
-		// Handle the completion of the stream
-		// if line == "data: [DONE]" {
-		// 	fmt.Println("Stream completed.")
-
-		// 	completion := &api.ChatCompletionStreamResponse{
-		// 		Choices: []api.ChatCompletionStreamChoice{
-		// 			{
-		// 				Delta: api.ChatCompletionStreamChoiceDelta{
-		// 					Content: "[DONE]",
-		// 				},
-		// 			},
-		// 		},
-		// 	}
-
-		// 	return completion, nil
-		// }
-
-		if strings.HasPrefix(line, "data: ") {
-			data := line[6:] // Skip the "data: " prefix
-			// fmt.Println("data: ", data)
-			var completion api.ChatCompletionStreamResponse
-			if err := json.Unmarshal([]byte(data), &completion); err != nil {
-				fmt.Printf("Error decoding response: %v\n", err)
-				continue
-			}
-			// Call the callback function with the unmarshalled completion
-			callback(completion)
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("error reading stream: %v", err)
-	}
-
-	return nil, err
-}
+type CompletionCallback func(completion *api.ChatCompletionStreamResponse) error
 
 func (aiEngine *AiEngine) Prompt(ctx context.Context, req interface{}) (*api.ChatCompletionResponse, error) {
 	request := req.(*api.ChatCompletionRequest)
@@ -122,10 +52,14 @@ type ChunkSubmit func(*api.ChatCompletionStreamResponse) error
 func (aiEngine *AiEngine) PromptStream(ctx context.Context, req interface{}, chunkSubmitCallback interface{}) (*api.ChatCompletionStreamResponse, error) {
 	request := req.(*api.ChatCompletionRequest)
 	chunkCallback := chunkSubmitCallback.(func(*api.ChatCompletionStreamResponse) error)
+	fmt.Println("requesting chat completion stream - request: ", request)
+	resp, err := client.RequestChatCompletionStream(ctx, request, func(completion *api.ChatCompletionStreamResponse) error {
 
-	resp, err := client.RequestChatCompletionStream(ctx, *aiEngine.client, request, func(completion api.ChatCompletionStreamResponse) error {
-		return chunkCallback(&completion)
+		fmt.Println("chunk - response: ", completion)
+		return chunkCallback(completion)
 	})
+
+	fmt.Println("requested chat completion stream - response: ", resp, "; error: ", err)
 
 	if err != nil {
 		fmt.Printf("Stream ChatCompletion error: %v\n", err)

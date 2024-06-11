@@ -5,7 +5,7 @@ go 1.22.0
 toolchain go1.22.3
 
 require (
-	github.com/Lumerin-protocol/Morpheus-Lumerin-Node/api-gateway v0.0.2
+	github.com/Lumerin-protocol/Morpheus-Lumerin-Node/api-gateway v0.0.3
 	github.com/ethereum/go-ethereum v1.12.0
 	github.com/gin-contrib/cors v1.7.2
 	github.com/gin-gonic/gin v1.9.1
@@ -83,4 +83,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/Lumerin-protocol/Morpheus-Lumerin-Node/api-gateway v0.0.2 => ../api-gateway
+replace github.com/Lumerin-protocol/Morpheus-Lumerin-Node/api-gateway v0.0.3 => ./api-gateway
+
+// replace github.com/Lumerin-protocol/Morpheus-Lumerin-Node/api-gateway v0.0.3 => ../api-gateway
