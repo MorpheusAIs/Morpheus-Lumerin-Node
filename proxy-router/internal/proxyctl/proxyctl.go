@@ -55,7 +55,7 @@ type Proxy struct {
 }
 
 // NewProxyCtl creates a new Proxy controller instance
-func NewProxyCtl(eventListerer *rpcproxy.EventsListener, wallet interfaces.PrKeyProvider, log *lib.Logger, connLog *lib.Logger, proxyAddr string, scl SchedulerLogFactory) *Proxy {
+func NewProxyCtl(eventListerer *rpcproxy.EventsListener, wallet interfaces.PrKeyProvider, log *lib.Logger, connLog *lib.Logger, proxyAddr string, scl SchedulerLogFactory, sessionStorage *storages.SessionStorage) *Proxy {
 	return &Proxy{
 		eventListener:       eventListerer,
 		wallet:              wallet,
@@ -63,6 +63,7 @@ func NewProxyCtl(eventListerer *rpcproxy.EventsListener, wallet interfaces.PrKey
 		connLog:             connLog,
 		proxyAddr:           proxyAddr,
 		schedulerLogFactory: scl,
+		sessionStorage:      sessionStorage,
 	}
 }
 
@@ -113,6 +114,12 @@ func (p *Proxy) run(ctx context.Context, prKey string) error {
 	if err != nil {
 		return err
 	}
+
+	walletAddr, err := lib.PrivKeyStringToAddr(prKey)
+	if err != nil {
+		return err
+	}
+	p.log.Infof("Wallet address:", walletAddr.String())
 
 	morTcpHandler := tcphandlers.NewMorRpcHandler(prKey, morrpc.NewMorRpc(), p.sessionStorage, p.apiBus)
 	tcpHandler := tcphandlers.NewTCPHandler(

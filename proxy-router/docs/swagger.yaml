@@ -505,4 +505,35 @@ paths:
       summary: Send prompt to a local model
       tags:
       - wallet
+  /wallet:
+    get:
+      description: Get wallet address
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Get Wallet
+      tags:
+      - wallet
+    post:
+      description: Set wallet private key
+      parameters:
+      - description: Private Key
+        in: query
+        name: privateKeyHex
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Set Wallet
+      tags:
+      - wallet
 swagger: "2.0"

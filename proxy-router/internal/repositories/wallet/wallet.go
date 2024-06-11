@@ -45,7 +45,7 @@ func (w *Wallet) GetPrivateKey() (string, error) {
 	}
 
 	if prKey != "" {
-		return prKey, prKeyErr
+		return lib.RemoveHexPrefix(prKey), prKeyErr
 	}
 
 	if mnem != "" && derivation != "" {
@@ -61,7 +61,11 @@ func (w *Wallet) GetPrivateKey() (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return wallet.PrivateKeyHex(account)
+		privateKey, err := wallet.PrivateKeyHex(account)
+		if err != nil {
+			return "", err
+		}
+		return lib.RemoveHexPrefix(privateKey), nil
 	}
 
 	var err error

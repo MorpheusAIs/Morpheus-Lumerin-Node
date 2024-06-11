@@ -416,7 +416,7 @@ func (apiBus *ApiBus) GetWallet(ctx context.Context) (common.Address, error) {
 //		@Produce		json
 //		@Param			privateKeyHex	query	string	true	"Private Key"
 //		@Success		200	{object}	interface{}
-//		@Router			/wallet/setup [post]
+//		@Router			/wallet [post]
 func (apiBus *ApiBus) SetupWallet(ctx context.Context, privateKeyHex string) error {
 	return apiBus.wallet.SetPrivateKey(privateKeyHex)
 }
