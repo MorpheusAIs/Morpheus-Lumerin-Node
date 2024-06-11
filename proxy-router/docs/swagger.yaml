@@ -1,5 +1,12 @@
 basePath: /
 definitions:
+  httphandlers.SetupWalletReqBody:
+    properties:
+      privateKey:
+        type: string
+    required:
+    - privateKey
+    type: object
   proxyapi.ConfigResponse:
     properties:
       commit:
@@ -521,11 +528,12 @@ paths:
     post:
       description: Set wallet private key
       parameters:
-      - description: Private Key
-        in: query
-        name: privateKeyHex
+      - description: Private key
+        in: body
+        name: privatekey
         required: true
-        type: string
+        schema:
+          $ref: '#/definitions/httphandlers.SetupWalletReqBody'
       produces:
       - application/json
       responses:

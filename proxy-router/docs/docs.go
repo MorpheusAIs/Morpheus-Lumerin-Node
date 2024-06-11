@@ -708,11 +708,13 @@ const docTemplate = `{
                 "summary": "Set Wallet",
                 "parameters": [
                     {
-                        "type": "string",
-                        "description": "Private Key",
-                        "name": "privateKeyHex",
-                        "in": "query",
-                        "required": true
+                        "description": "Private key",
+                        "name": "privatekey",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/httphandlers.SetupWalletReqBody"
+                        }
                     }
                 ],
                 "responses": {
@@ -727,6 +729,17 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "httphandlers.SetupWalletReqBody": {
+            "type": "object",
+            "required": [
+                "privateKey"
+            ],
+            "properties": {
+                "privateKey": {
+                    "type": "string"
+                }
+            }
+        },
         "proxyapi.ConfigResponse": {
             "type": "object",
             "properties": {

@@ -55,7 +55,7 @@ type Proxy struct {
 }
 
 // NewProxyCtl creates a new Proxy controller instance
-func NewProxyCtl(eventListerer *rpcproxy.EventsListener, wallet interfaces.PrKeyProvider, log *lib.Logger, connLog *lib.Logger, proxyAddr string, scl SchedulerLogFactory, sessionStorage *storages.SessionStorage) *Proxy {
+func NewProxyCtl(eventListerer *rpcproxy.EventsListener, wallet interfaces.PrKeyProvider, log *lib.Logger, connLog *lib.Logger, proxyAddr string, scl SchedulerLogFactory, sessionStorage *storages.SessionStorage, apiBus *apibus.ApiBus) *Proxy {
 	return &Proxy{
 		eventListener:       eventListerer,
 		wallet:              wallet,
@@ -64,6 +64,7 @@ func NewProxyCtl(eventListerer *rpcproxy.EventsListener, wallet interfaces.PrKey
 		proxyAddr:           proxyAddr,
 		schedulerLogFactory: scl,
 		sessionStorage:      sessionStorage,
+		apiBus:              apiBus,
 	}
 }
 

@@ -203,7 +203,7 @@ func start() error {
 		cancel()
 	}()
 
-	proxy := proxyctl.NewProxyCtl(eventListener, wallet, log, connLog, cfg.Proxy.Address, schedulerLogFactory, sessionStorage)
+	proxy := proxyctl.NewProxyCtl(eventListener, wallet, log, connLog, cfg.Proxy.Address, schedulerLogFactory, sessionStorage, apiBus)
 	err = proxy.Run(ctx)
 
 	cancelServer()
