@@ -10,7 +10,9 @@ import (
 	"net/http"
 
 	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/aiengine"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
 	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/proxyapi"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/wallet"
 	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/rpcproxy"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
@@ -22,13 +24,15 @@ type ApiBus struct {
 	rpcProxy       *rpcproxy.RpcProxy
 	aiEngine       *aiengine.AiEngine
 	proxyRouterApi *proxyapi.ProxyRouterApi
+	wallet         *wallet.Wallet
 }
 
-func NewApiBus(rpcProxy *rpcproxy.RpcProxy, aiEngine *aiengine.AiEngine, proxyRouterApi *proxyapi.ProxyRouterApi) *ApiBus {
+func NewApiBus(rpcProxy *rpcproxy.RpcProxy, aiEngine *aiengine.AiEngine, proxyRouterApi *proxyapi.ProxyRouterApi, wallet *wallet.Wallet) *ApiBus {
 	return &ApiBus{
 		rpcProxy:       rpcProxy,
 		aiEngine:       aiEngine,
 		proxyRouterApi: proxyRouterApi,
+		wallet:         wallet,
 	}
 }
 
@@ -74,17 +78,7 @@ func (apiBus *ApiBus) InitiateSession(ctx *gin.Context) (int, interface{}) {
 	return apiBus.proxyRouterApi.InitiateSession(ctx)
 }
 
-// SendPrompt godoc
-//
-//		@Summary		Send prompt to provider
-//		@Description	sens a prompt to the provider by opened session
-//	 	@Tags			sessions
-//		@Produce		json
-//		@Param 			id  path string true "Session ID"
-//		@Param			prompt	body		proxyapi.RemotePromptRequest 	true	"RemotePrompt"
-//		@Success		200	{object}	interface{}
-//		@Router			/proxy/sessions/{id}/prompt [post]
-func (apiBus *ApiBus) SendPrompt(ctx *gin.Context) (bool, int, interface{}) {
+func (apiBus *ApiBus) SendPrompt(ctx *gin.Context) (bool, int, gin.H) {
 	return apiBus.proxyRouterApi.SendPrompt(ctx)
 }
 
@@ -341,26 +335,33 @@ func (apiBus *ApiBus) GetSessions(ctx *gin.Context, offset *big.Int, limit uint8
 	return apiBus.rpcProxy.GetSessions(ctx, offset, limit)
 }
 
-// SendLocalPrompt godoc
+// SendPrompt godoc
 //
-//		@Summary		Send prompt to a local model
-//		@Description	Send prompt to a local model
+//		@Summary		Send Local Or Remote Prompt
+//		@Description	Send prompt to a local or remote model based on session id in header
 //	 	@Tags			wallet
 //		@Produce		json
-//		@Param			prompt	body		proxyapi.PromptRequest 	true	"LocalPrompt"
+//		@Param			prompt	body		proxyapi.PromptRequest 	true	"Prompt"
+//		@Header			session_id	string	false	"Session ID"
 //		@Success		200	{object}	interface{}
 //		@Router			/v1/chat/completions [post]
-func (apiBus *ApiBus) PromptLocal(ctx *gin.Context) {
+func (apiBus *ApiBus) RemoteOrLocalPrompt(ctx *gin.Context) (bool, int, gin.H) {
+	sessionId := ctx.GetHeader("session_id")
+	if sessionId == "" {
+		return apiBus.PromptLocal(ctx)
+	}
+	return apiBus.SendPrompt(ctx)
+}
+
+func (apiBus *ApiBus) PromptLocal(ctx *gin.Context) (bool, int, gin.H) {
 	var req *openai.ChatCompletionRequest
 
 	err := ctx.ShouldBindJSON(&req)
 	switch {
 	case errors.Is(err, io.EOF):
-		ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "missing request body"})
-		return
+		return true, http.StatusBadRequest, gin.H{"error": "missing request body"}
 	case err != nil:
-		ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+		return true, http.StatusBadRequest, gin.H{"error": err.Error()}
 	}
 
 	// TODO: change this so "Stream" is only true if the client wants to stream.
@@ -389,12 +390,44 @@ func (apiBus *ApiBus) PromptLocal(ctx *gin.Context) {
 		})
 	} else {
 		response, err = apiBus.Prompt(ctx, req)
+		if err != nil {
+			return true, http.StatusInternalServerError, gin.H{"error": err.Error()}
+		}
+		return true, http.StatusOK, response.(gin.H)
 	}
 
 	if err != nil {
-		ctx.AbortWithError(http.StatusInternalServerError, err)
-		return
+		return true, http.StatusInternalServerError, gin.H{"error": err.Error()}
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	return false, http.StatusOK, response.(gin.H)
+}
+
+// GetWallet godoc
+//
+//		@Summary		Get Wallet
+//		@Description	Get wallet address
+//	 	@Tags			wallet
+//		@Produce		json
+//		@Success		200	{object}	interface{}
+//		@Router			/wallet [get]
+func (apiBus *ApiBus) GetWallet(ctx context.Context) (common.Address, error) {
+	prKey, err := apiBus.wallet.GetPrivateKey()
+	if err != nil {
+		return common.Address{}, err
+	}
+	return lib.PrivKeyStringToAddr(prKey)
+}
+
+// SetupWallet godoc
+//
+//		@Summary		Set Wallet
+//		@Description	Set wallet private key
+//	 	@Tags			wallet
+//		@Produce		json
+//		@Param			privatekey	body	httphandlers.SetupWalletReqBody true	"Private key"
+//		@Success		200	{object}	interface{}
+//		@Router			/wallet [post]
+func (apiBus *ApiBus) SetupWallet(ctx context.Context, privateKeyHex string) error {
+	return apiBus.wallet.SetPrivateKey(privateKeyHex)
 }

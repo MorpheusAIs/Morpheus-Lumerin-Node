@@ -19,11 +19,6 @@ import (
 	_ "github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/docs"
 )
 
-const (
-	SUCCESS_STATUS = 200
-	ERROR_STATUS   = 500
-)
-
 type HTTPHandler struct{}
 
 // @title           ApiBus Example API
@@ -58,19 +53,16 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 		ctx.JSON(status, files)
 	}))
 	r.POST("/v1/chat/completions", (func(ctx *gin.Context) {
-		fmt.Println("chat completions")
-		apiBus.PromptLocal(ctx)
+		shouldSendResponse, status, response := apiBus.RemoteOrLocalPrompt(ctx)
+		if !shouldSendResponse {
+			return
+		}
+		ctx.JSON(status, response)
 	}))
 
 	r.POST("/proxy/sessions/initiate", (func(ctx *gin.Context) {
 		status, response := apiBus.InitiateSession(ctx)
 		ctx.JSON(status, response)
-	}))
-
-	r.POST("/proxy/sessions/:id/prompt", (func(ctx *gin.Context) {
-		if ok, status, response := apiBus.SendPrompt(ctx); !ok {
-			ctx.JSON(status, response)
-		}
 	}))
 
 	r.GET("/proxy/sessions/:id/providerClaimableBalance", (func(ctx *gin.Context) {
@@ -186,6 +178,21 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 	r.POST("/blockchain/sessions/:id/close", (func(ctx *gin.Context) {
 		status, response := apiBus.CloseSession(ctx)
 		ctx.JSON(status, response)
+	}))
+
+	r.POST("/wallet", (func(ctx *gin.Context) {
+		var req SetupWalletReqBody
+		err := ctx.ShouldBindJSON(&req)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		err = apiBus.SetupWallet(ctx, req.PrivateKey)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
 	}))
 
 	r.Any("/debug/pprof/*action", gin.WrapF(pprof.Index))

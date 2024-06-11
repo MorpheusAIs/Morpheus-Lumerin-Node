@@ -58,8 +58,7 @@ type RemotePromptRequest struct {
 type ProxyRouterApi struct {
 	sysConfig      *system.SystemConfigurator
 	publicUrl      *url.URL
-	pubKey         string
-	privateKey     string
+	privateKey     interfaces.PrKeyProvider
 	config         Sanitizable
 	derivedConfig  *config.DerivedConfig
 	appStartTime   time.Time
@@ -68,11 +67,10 @@ type ProxyRouterApi struct {
 	log            interfaces.ILogger
 }
 
-func NewProxyRouterApi(sysConfig *system.SystemConfigurator, publicUrl *url.URL, pubKey string, privateKey string, config Sanitizable, derivedConfig *config.DerivedConfig, appStartTime time.Time, logStorage *lib.Collection[*interfaces.LogStorage], sessionStorage *storages.SessionStorage, log interfaces.ILogger) *ProxyRouterApi {
+func NewProxyRouterApi(sysConfig *system.SystemConfigurator, publicUrl *url.URL, privateKey interfaces.PrKeyProvider, config Sanitizable, derivedConfig *config.DerivedConfig, appStartTime time.Time, logStorage *lib.Collection[*interfaces.LogStorage], sessionStorage *storages.SessionStorage, log interfaces.ILogger) *ProxyRouterApi {
 	return &ProxyRouterApi{
 		sysConfig:      sysConfig,
 		publicUrl:      publicUrl,
-		pubKey:         pubKey,
 		privateKey:     privateKey,
 		config:         config,
 		derivedConfig:  derivedConfig,
@@ -133,7 +131,12 @@ func (p *ProxyRouterApi) InitiateSession(ctx *gin.Context) (int, gin.H) {
 
 	requestID := "1"
 
-	initiateSessionRequest, err := morrpc.NewMorRpc().InitiateSessionRequest(user, provider, p.pubKey, spend, bidId, p.privateKey, requestID)
+	prKey, err := p.privateKey.GetPrivateKey()
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+
+	initiateSessionRequest, err := morrpc.NewMorRpc().InitiateSessionRequest(user, provider, spend, bidId, prKey, requestID)
 	if err != nil {
 		err = lib.WrapError(fmt.Errorf("failed to create initiate session request"), err)
 		p.log.Errorf("%s", err)
@@ -152,43 +155,56 @@ func (p *ProxyRouterApi) InitiateSession(ctx *gin.Context) (int, gin.H) {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 
+	userObj := storages.User{
+		Addr:   provider,
+		PubKey: providerPubKey,
+		Url:    providerUrl,
+	}
+	err = p.sessionStorage.AddUser(&userObj)
+	if err != nil {
+		err = lib.WrapError(fmt.Errorf("failed store user"), err)
+		p.log.Errorf("%s", err)
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+
 	return constants.HTTP_STATUS_OK, gin.H{
 		"response": msg,
 	}
 }
 
 func (p *ProxyRouterApi) SendPrompt(ctx *gin.Context) (bool, int, gin.H) {
-	var reqPayload map[string]interface{}
-	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
-		return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	var prompt map[string]interface{}
+	if err := ctx.ShouldBindJSON(&prompt); err != nil {
+		return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 
-	providerPublicKey, ok := reqPayload["providerPublicKey"].(string)
-	if !ok {
-		return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "providerPublicKey is required"}
-	}
-
-	prompt, ok := reqPayload["prompt"]
-	if !ok {
-		return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "prompt is required"}
-	}
-
-	sessionId := ctx.Param("id")
+	sessionId := ctx.GetHeader("session_id")
 	if sessionId == "" {
-		return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "sessionId is required"}
+		return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "sessionId is required"}
 	}
 
-	providerUrl, ok := reqPayload["providerUrl"].(string)
+	session, ok := p.sessionStorage.GetSession(sessionId)
 	if !ok {
-		return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "providerUrl is required"}
+		return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "session not found"}
+	}
+	provider, ok := p.sessionStorage.GetUser(session.ProviderAddr)
+	if !ok {
+		return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "provider not found"}
+	}
+
+	providerUrl := provider.Url
+	providerPublicKey := provider.PubKey
+	prKey, err := p.privateKey.GetPrivateKey()
+	if err != nil {
+		return false, constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
 	}
 
 	requestID := "1"
-	promptRequest, err := morrpc.NewMorRpc().SessionPromptRequest(sessionId, prompt, providerPublicKey, p.privateKey, requestID)
+	promptRequest, err := morrpc.NewMorRpc().SessionPromptRequest(sessionId, prompt, providerPublicKey, prKey, requestID)
 	if err != nil {
 		err = lib.WrapError(fmt.Errorf("failed to create session prompt request"), err)
 		p.log.Errorf("%s", err)
-		return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+		return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 
 	return p.rpcRequestStream(ctx, providerUrl, promptRequest, providerPublicKey)
@@ -253,11 +269,16 @@ func (p *ProxyRouterApi) rpcRequest(url string, rpcMessage *morrpc.RpcMessage) (
 }
 
 func (p *ProxyRouterApi) rpcRequestStream(ctx *gin.Context, url string, rpcMessage *morrpc.RpcMessage, providerPublicKey string) (bool, int, gin.H) {
+	prKey, err := p.privateKey.GetPrivateKey()
+	if err != nil {
+		return false, constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+
 	conn, err := net.Dial("tcp", url)
 	if err != nil {
 		err = lib.WrapError(fmt.Errorf("failed to connect to provider"), err)
 		p.log.Errorf("%s", err)
-		return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+		return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 	defer conn.Close()
 
@@ -265,7 +286,7 @@ func (p *ProxyRouterApi) rpcRequestStream(ctx *gin.Context, url string, rpcMessa
 	if err != nil {
 		err = lib.WrapError(fmt.Errorf("failed to marshal request"), err)
 		p.log.Errorf("%s", err)
-		return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+		return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 	conn.Write([]byte(msgJSON))
 
@@ -281,21 +302,21 @@ func (p *ProxyRouterApi) rpcRequestStream(ctx *gin.Context, url string, rpcMessa
 		if err != nil {
 			err = lib.WrapError(fmt.Errorf("failed to decode response"), err)
 			p.log.Errorf("%s", err)
-			return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+			return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 		}
 
 		if !p.validateMsgSignature(msg, providerPublicKey) {
 			err = fmt.Errorf("received invalid signature from provider")
 			p.log.Errorf("%s", err)
-			return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+			return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 		}
 
 		aiResponseEncrypted := msg.Result["message"].(string)
-		aiResponse, err := lib.DecryptString(aiResponseEncrypted, p.privateKey)
+		aiResponse, err := lib.DecryptString(aiResponseEncrypted, prKey)
 		if err != nil {
 			err = lib.WrapError(fmt.Errorf("failed to decrypt ai response chunk"), err)
 			p.log.Errorf("%s", err)
-			return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+			return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 		}
 
 		var payload map[string]interface{}
@@ -303,7 +324,7 @@ func (p *ProxyRouterApi) rpcRequestStream(ctx *gin.Context, url string, rpcMessa
 		if err != nil {
 			err = lib.WrapError(fmt.Errorf("failed to unmarshal response"), err)
 			p.log.Errorf("%s", err)
-			return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+			return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 		}
 
 		var stop = false
@@ -320,11 +341,11 @@ func (p *ProxyRouterApi) rpcRequestStream(ctx *gin.Context, url string, rpcMessa
 		if err != nil {
 			err = lib.WrapError(fmt.Errorf("failed to marshal response"), err)
 			p.log.Errorf("%s", err)
-			return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+			return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 		}
 		_, err = ctx.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", msgJSON)))
 		if err != nil {
-			return false, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+			return true, constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 		}
 		ctx.Writer.Flush()
 		if stop {
@@ -332,7 +353,7 @@ func (p *ProxyRouterApi) rpcRequestStream(ctx *gin.Context, url string, rpcMessa
 		}
 	}
 
-	return true, constants.HTTP_STATUS_OK, gin.H{}
+	return false, constants.HTTP_STATUS_OK, gin.H{}
 }
 
 func (p *ProxyRouterApi) validateMsgSignature(msg *morrpc.RpcResponse, providerPubicKey string) bool {

@@ -11,8 +11,6 @@ import (
 	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
 )
 
-// const kb = 1024 //temp
-
 type TCPServer struct {
 	serverAddr string
 	handler    Handler

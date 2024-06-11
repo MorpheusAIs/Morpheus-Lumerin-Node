@@ -184,14 +184,18 @@ func (m *MorRpc) generateReport(sessionID string, start uint, end uint, prompts 
 
 // User Node Communication
 
-func (m *MorRpc) InitiateSessionRequest(user string, provider string, userPubKey string, spend float64, bidId string, userPrivateKeyHex string, requestId string) (*RpcMessage, error) {
+func (m *MorRpc) InitiateSessionRequest(user string, provider string, spend float64, bidId string, userPrivateKeyHex string, requestId string) (*RpcMessage, error) {
 	method := "session.request"
 	timestamp := m.generateTimestamp()
+	pbKey, err := lib.PubKeyStringFromPrivate(userPrivateKeyHex)
+	if err != nil {
+		return &RpcMessage{}, err
+	}
 	params := map[string]interface{}{
 		"timestamp": timestamp,
 		"user":      user,
 		"provider":  provider,
-		"key":       userPubKey,
+		"key":       pbKey,
 		"spend":     fmt.Sprintf("%f", spend),
 		"bidid":     bidId,
 	}
