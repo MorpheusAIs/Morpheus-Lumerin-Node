@@ -19,11 +19,6 @@ import (
 	_ "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/docs"
 )
 
-const (
-	SUCCESS_STATUS = 200
-	ERROR_STATUS   = 500
-)
-
 type HTTPHandler struct{}
 
 // @title           ApiBus Example API
@@ -172,6 +167,21 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 	r.POST("/blockchain/sessions/:id/close", (func(ctx *gin.Context) {
 		status, response := apiBus.CloseSession(ctx)
 		ctx.JSON(status, response)
+	}))
+
+	r.POST("/wallet", (func(ctx *gin.Context) {
+		var req SetupWalletReqBody
+		err := ctx.ShouldBindJSON(&req)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		err = apiBus.SetupWallet(ctx, req.PrivateKey)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
 	}))
 
 	r.Any("/debug/pprof/*action", gin.WrapF(pprof.Index))

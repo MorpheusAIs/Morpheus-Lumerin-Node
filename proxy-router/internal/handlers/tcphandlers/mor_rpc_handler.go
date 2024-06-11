@@ -22,11 +22,11 @@ type MorRpcHandler struct {
 	apibus         *apibus.ApiBus
 }
 
-func NewMorRpcHandler(privateKeyHex string, publicKeyHex string, address string, morRpc *morrpc.MorRpc, sessionStorage *storages.SessionStorage, apiBus *apibus.ApiBus) *MorRpcHandler {
+func NewMorRpcHandler(privateKeyHex string, morRpc *morrpc.MorRpc, sessionStorage *storages.SessionStorage, apiBus *apibus.ApiBus) *MorRpcHandler {
 	return &MorRpcHandler{
 		privateKeyHex:  privateKeyHex,
-		address:        address,
-		publicKeyHex:   publicKeyHex,
+		address:        lib.MustPrivKeyStringToAddr(privateKeyHex).Hex(),
+		publicKeyHex:   lib.MustPubKeyStringFromPrivate(privateKeyHex),
 		morRpc:         morRpc,
 		sessionStorage: sessionStorage,
 		apibus:         apiBus,

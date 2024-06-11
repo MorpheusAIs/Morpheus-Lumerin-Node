@@ -1,5 +1,12 @@
 basePath: /
 definitions:
+  httphandlers.SetupWalletReqBody:
+    properties:
+      privateKey:
+        type: string
+    required:
+    - privateKey
+    type: object
   proxyapi.ConfigResponse:
     properties:
       commit:
@@ -503,6 +510,38 @@ paths:
           schema:
             type: object
       summary: Send prompt to a local model
+      tags:
+      - wallet
+  /wallet:
+    get:
+      description: Get wallet address
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Get Wallet
+      tags:
+      - wallet
+    post:
+      description: Set wallet private key
+      parameters:
+      - description: Private key
+        in: body
+        name: privatekey
+        required: true
+        schema:
+          $ref: '#/definitions/httphandlers.SetupWalletReqBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Set Wallet
       tags:
       - wallet
 swagger: "2.0"

@@ -58,8 +58,7 @@ type RemotePromptRequest struct {
 type ProxyRouterApi struct {
 	sysConfig      *system.SystemConfigurator
 	publicUrl      *url.URL
-	pubKey         string
-	privateKey     string
+	privateKey     interfaces.PrKeyProvider
 	config         Sanitizable
 	derivedConfig  *config.DerivedConfig
 	appStartTime   time.Time
@@ -68,11 +67,10 @@ type ProxyRouterApi struct {
 	log            interfaces.ILogger
 }
 
-func NewProxyRouterApi(sysConfig *system.SystemConfigurator, publicUrl *url.URL, pubKey string, privateKey string, config Sanitizable, derivedConfig *config.DerivedConfig, appStartTime time.Time, logStorage *lib.Collection[*interfaces.LogStorage], sessionStorage *storages.SessionStorage, log interfaces.ILogger) *ProxyRouterApi {
+func NewProxyRouterApi(sysConfig *system.SystemConfigurator, publicUrl *url.URL, privateKey interfaces.PrKeyProvider, config Sanitizable, derivedConfig *config.DerivedConfig, appStartTime time.Time, logStorage *lib.Collection[*interfaces.LogStorage], sessionStorage *storages.SessionStorage, log interfaces.ILogger) *ProxyRouterApi {
 	return &ProxyRouterApi{
 		sysConfig:      sysConfig,
 		publicUrl:      publicUrl,
-		pubKey:         pubKey,
 		privateKey:     privateKey,
 		config:         config,
 		derivedConfig:  derivedConfig,
@@ -133,7 +131,12 @@ func (p *ProxyRouterApi) InitiateSession(ctx *gin.Context) (int, gin.H) {
 
 	requestID := "1"
 
-	initiateSessionRequest, err := morrpc.NewMorRpc().InitiateSessionRequest(user, provider, p.pubKey, spend, bidId, p.privateKey, requestID)
+	prKey, err := p.privateKey.GetPrivateKey()
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+
+	initiateSessionRequest, err := morrpc.NewMorRpc().InitiateSessionRequest(user, provider, spend, bidId, prKey, requestID)
 	if err != nil {
 		err = lib.WrapError(fmt.Errorf("failed to create initiate session request"), err)
 		p.log.Errorf("%s", err)
@@ -191,9 +194,13 @@ func (p *ProxyRouterApi) SendPrompt(ctx *gin.Context) (bool, int, gin.H) {
 
 	providerUrl := provider.Url
 	providerPublicKey := provider.PubKey
+	prKey, err := p.privateKey.GetPrivateKey()
+	if err != nil {
+		return false, constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
 
 	requestID := "1"
-	promptRequest, err := morrpc.NewMorRpc().SessionPromptRequest(sessionId, prompt, providerPublicKey, p.privateKey, requestID)
+	promptRequest, err := morrpc.NewMorRpc().SessionPromptRequest(sessionId, prompt, providerPublicKey, prKey, requestID)
 	if err != nil {
 		err = lib.WrapError(fmt.Errorf("failed to create session prompt request"), err)
 		p.log.Errorf("%s", err)
@@ -262,6 +269,11 @@ func (p *ProxyRouterApi) rpcRequest(url string, rpcMessage *morrpc.RpcMessage) (
 }
 
 func (p *ProxyRouterApi) rpcRequestStream(ctx *gin.Context, url string, rpcMessage *morrpc.RpcMessage, providerPublicKey string) (bool, int, gin.H) {
+	prKey, err := p.privateKey.GetPrivateKey()
+	if err != nil {
+		return false, constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+
 	conn, err := net.Dial("tcp", url)
 	if err != nil {
 		err = lib.WrapError(fmt.Errorf("failed to connect to provider"), err)
@@ -300,7 +312,7 @@ func (p *ProxyRouterApi) rpcRequestStream(ctx *gin.Context, url string, rpcMessa
 		}
 
 		aiResponseEncrypted := msg.Result["message"].(string)
-		aiResponse, err := lib.DecryptString(aiResponseEncrypted, p.privateKey)
+		aiResponse, err := lib.DecryptString(aiResponseEncrypted, prKey)
 		if err != nil {
 			err = lib.WrapError(fmt.Errorf("failed to decrypt ai response chunk"), err)
 			p.log.Errorf("%s", err)
