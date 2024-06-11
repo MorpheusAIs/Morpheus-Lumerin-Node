@@ -14,6 +14,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/registries"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/rpcproxy/structs"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/storages"
 	"github.com/gin-gonic/gin"
 
 	"github.com/ethereum/go-ethereum"
@@ -32,6 +33,7 @@ type RpcProxy struct {
 	sessionRouter    *registries.SessionRouter
 	morToken         *registries.MorToken
 	explorerClient   *ExplorerClient
+	sessionStorage   *storages.SessionStorage
 
 	legacyTx   bool
 	privateKey interfaces.PrKeyProvider
@@ -51,6 +53,7 @@ func NewRpcProxy(
 	marketplace := registries.NewMarketplace(diamonContractAddr, rpcClient, log)
 	sessionRouter := registries.NewSessionRouter(diamonContractAddr, rpcClient, log)
 	morToken := registries.NewMorToken(morTokenAddr, rpcClient, log)
+	sessionStorage := storages.NewSessionStorage()
 
 	explorerClient := NewExplorerClient(explorerApiUrl, morTokenAddr.String())
 	return &RpcProxy{
@@ -63,6 +66,7 @@ func NewRpcProxy(
 		privateKey:       privateKey,
 		morToken:         morToken,
 		explorerClient:   explorerClient,
+		sessionStorage:   sessionStorage,
 	}
 }
 
@@ -210,6 +214,20 @@ func (rpcProxy *RpcProxy) OpenSession(ctx *gin.Context) (int, gin.H) {
 	sessionId, err := rpcProxy.sessionRouter.OpenSession(transactOpt, approvalBytes, approvalSigBytes, stake, prKey)
 	if err != nil {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+
+	session, err := rpcProxy.sessionRouter.GetSession(ctx, sessionId)
+	if err != nil {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "failed to get session from blockchain: " + err.Error()}
+	}
+
+	err = rpcProxy.sessionStorage.AddSession(&storages.Session{
+		Id:           sessionId,
+		UserAddr:     session.User.Hex(),
+		ProviderAddr: session.Provider.Hex(),
+	})
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to store session: " + err.Error()}
 	}
 
 	return constants.HTTP_STATUS_OK, gin.H{"sessionId": sessionId}

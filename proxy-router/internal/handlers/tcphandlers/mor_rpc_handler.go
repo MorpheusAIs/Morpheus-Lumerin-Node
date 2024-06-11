@@ -78,7 +78,12 @@ func (m *MorRpcHandler) Handle(ctx context.Context, msg morrpc.RpcMessage, sourc
 			PubKey: userPubKey,
 		}
 
-		m.sessionStorage.AddUser(&user)
+		err = m.sessionStorage.AddUser(&user)
+		if err != nil {
+			err := lib.WrapError(fmt.Errorf("failed store user"), err)
+			sourceLog.Error(err)
+			return err
+		}
 		sendCallback(response)
 		return nil
 	case "session.prompt":

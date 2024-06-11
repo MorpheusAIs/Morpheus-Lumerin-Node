@@ -68,10 +68,13 @@ func (e *EventsListener) handleSessionOpened(event *sessionrouter.SessionRouterS
 	sessionId := lib.BytesToString(event.SessionId[:])
 	e.log.Debugf("received open session router event, sessionId %s", sessionId)
 
-	e.store.AddSession(&storages.Session{
+	err := e.store.AddSession(&storages.Session{
 		Id:       sessionId,
 		UserAddr: event.UserAddress.Hex(),
 	})
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
