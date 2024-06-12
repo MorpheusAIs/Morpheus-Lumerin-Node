@@ -16,7 +16,7 @@ contract SessionRouter {
 
   // constants
   uint32 public constant MIN_SESSION_DURATION = 5 minutes;
-  uint32 public constant MAX_SESSION_DURATION = 7 days;
+  uint32 public constant MAX_SESSION_DURATION = 1 days;
   uint32 public constant SIGNATURE_TTL = 10 minutes;
 
   // events
@@ -386,20 +386,11 @@ contract SessionRouter {
   ) public view returns (uint256) {
     // if session stake is more than daily price then session will last for its max duration
     uint256 duration = stakeToStipend(sessionStake, openedAt) / pricePerSecond;
-    if (duration >= 1 days) {
+    if (duration >= MAX_SESSION_DURATION) {
       return openedAt + MAX_SESSION_DURATION;
     }
 
-    uint256 endTime = openedAt + duration;
-
-    // is session ends today then return the end time
-    if (startOfTheDay(openedAt) == startOfTheDay(endTime)) {
-      return endTime;
-    }
-
-    // if session ends after today then add the next day stipend
-    uint256 nextDayDuration = stakeToStipend(sessionStake, openedAt + 1 days) / pricePerSecond;
-    return startOfTheDay(endTime) + nextDayDuration;
+    return openedAt + duration;
   }
 
   /// @notice returns today's budget in MOR

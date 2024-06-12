@@ -367,14 +367,13 @@ describe("verify session end time", function () {
     expect(session.endsAt).to.equal(createdAt + exp.durationSeconds);
   });
 
-  it("session that spans across midnight (6h)", async function () {
+  it("session that spans across midnight (6h) should last 6h", async function () {
     const {
       sessionRouter,
       expectedSession: exp,
       user,
       publicClient,
       getStake,
-      getDuration,
       approveUserFunds,
       provider,
     } = await loadFixture(deploySingleBid);
@@ -397,15 +396,13 @@ describe("verify session end time", function () {
     );
 
     await time.increase((3 * HOUR) / SECOND + 1);
-    const durarion2ndDay = await getDuration(stake, exp.pricePerSecond);
-    const effectiveDuration = 3n * BigInt(HOUR / SECOND) + durarion2ndDay;
 
     const sessionId = await getSessionId(publicClient, hre, txHash);
     const session = await sessionRouter.read.getSession([sessionId]);
     const createdAt = await getTxTimestamp(publicClient, txHash);
 
     const endsAt = NewDate(session.endsAt);
-    const expEndsAt = NewDate(createdAt + effectiveDuration);
+    const expEndsAt = NewDate(createdAt + durationSeconds);
 
     expect(endsAt.getTime()).approximately(expEndsAt.getTime(), 10 * SECOND);
   });
@@ -442,6 +439,6 @@ describe("verify session end time", function () {
     const session = await sessionRouter.read.getSession([sessionId]);
     const durSeconds = Number(session.endsAt - session.openedAt);
 
-    expect(durSeconds).to.equal(7 * (DAY / SECOND));
+    expect(durSeconds).to.equal(1 * (DAY / SECOND));
   });
 });
