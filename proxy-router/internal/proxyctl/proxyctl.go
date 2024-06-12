@@ -3,14 +3,14 @@ package proxyctl
 import (
 	"context"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/apibus"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/handlers/tcphandlers"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/morrpc"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/transport"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/rpcproxy"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/storages"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apibus"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/handlers/tcphandlers"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/morrpc"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/transport"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/rpcproxy"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -102,7 +102,7 @@ func (p *Proxy) Run(ctx context.Context) error {
 		case <-tsk.Done():
 			err := tsk.Err()
 			if err != nil {
-				p.log.Error("proxy stopped with error", err)
+				p.log.Errorf("proxy stopped with error: %s", err)
 				return err
 			}
 		}
@@ -120,7 +120,7 @@ func (p *Proxy) run(ctx context.Context, prKey string) error {
 	if err != nil {
 		return err
 	}
-	p.log.Infof("Wallet address:", walletAddr.String())
+	p.log.Infof("Wallet address: %s", walletAddr.String())
 
 	morTcpHandler := tcphandlers.NewMorRpcHandler(prKey, morrpc.NewMorRpc(), p.sessionStorage, p.apiBus)
 	tcpHandler := tcphandlers.NewTCPHandler(

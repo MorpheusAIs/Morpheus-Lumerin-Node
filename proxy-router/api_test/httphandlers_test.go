@@ -13,15 +13,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/aiengine"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/apibus"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/config"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/handlers/httphandlers"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/proxyapi"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/rpcproxy"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/storages"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apibus"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/handlers/httphandlers"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/wallet"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/rpcproxy"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 
@@ -258,18 +259,15 @@ func InitializeApiBus(t *testing.T) *apibus.ApiBus {
 	derived := new(config.DerivedConfig)
 	contractLogStorage := lib.NewCollection[*interfaces.LogStorage]()
 
-	publicKey, err := lib.PubKeyStringFromPrivate(WALLET_PRIVATE_KEY)
-	if err != nil {
-		t.Fatalf("failed to get public key: %s", err)
-		return nil
-	}
-
 	diamondContractAddr := common.HexToAddress(DIAMOND_CONTRACT_ADDR)
 	morContractAddr := common.HexToAddress(MOR_CONTRACT_ADDR)
 
-	rpcProxy := rpcproxy.NewRpcProxy(ethClient, diamondContractAddr, morContractAddr, EXPLORER_API_URL, WALLET_PRIVATE_KEY, log, ETH_LEGACY_TX)
-	proxyRouterApi := proxyapi.NewProxyRouterApi(nil, &url.URL{}, publicKey, WALLET_PRIVATE_KEY, nil, derived, time.Now(), contractLogStorage, storages.NewSessionStorage(), log)
+	sessionStorage := storages.NewSessionStorage(log)
 
-	apiBus := apibus.NewApiBus(rpcProxy, aiengine.NewAiEngine(), proxyRouterApi)
+	wlt := wallet.NewEnvWallet(WALLET_PRIVATE_KEY)
+	rpcProxy := rpcproxy.NewRpcProxy(ethClient, diamondContractAddr, morContractAddr, EXPLORER_API_URL, wlt, sessionStorage, log, ETH_LEGACY_TX)
+	proxyRouterApi := proxyapi.NewProxyRouterApi(nil, &url.URL{}, wlt, nil, derived, time.Now(), contractLogStorage, sessionStorage, log)
+
+	apiBus := apibus.NewApiBus(rpcProxy, aiengine.NewAiEngine(), proxyRouterApi, wlt)
 	return apiBus
 }

@@ -4,8 +4,8 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/keychain"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/keychain"
 	hdwallet "github.com/miguelmota/go-ethereum-hdwallet"
 )
 
@@ -20,14 +20,14 @@ var (
 	ErrPkeyAndMnemonic = errors.New("both mnemonic and private key are stored")
 )
 
-type Wallet struct {
+type KeychainWallet struct {
 	storage   *keychain.Keychain
 	updatedCh chan struct{}
 	mutex     sync.Mutex
 }
 
-func NewWallet() *Wallet {
-	return &Wallet{
+func NewKeychainWallet() *KeychainWallet {
+	return &KeychainWallet{
 		storage:   keychain.NewKeychain(),
 		updatedCh: make(chan struct{}),
 	}
@@ -36,7 +36,7 @@ func NewWallet() *Wallet {
 // GetPrivateKey use this function to get the private key regardless of whether it was stored as a mnemonic or private key
 //
 // errors with ErrPkeyAndMnemonic if both mnemonic and private key are stored
-func (w *Wallet) GetPrivateKey() (string, error) {
+func (w *KeychainWallet) GetPrivateKey() (string, error) {
 	prKey, prKeyErr := w.getStoredPrivateKey()
 	mnem, derivation, mnemErr := w.getStoredMnemonic()
 
@@ -81,7 +81,7 @@ func (w *Wallet) GetPrivateKey() (string, error) {
 }
 
 // SetPrivateKey stores the private key of the wallet
-func (w *Wallet) SetPrivateKey(privateKeyOxHex string) error {
+func (w *KeychainWallet) SetPrivateKey(privateKeyOxHex string) error {
 	err := w.storage.Upsert(PRIVATE_KEY_KEY, privateKeyOxHex)
 	if err != nil {
 		return err
@@ -113,7 +113,7 @@ func (w *Wallet) SetPrivateKey(privateKeyOxHex string) error {
 }
 
 // SetMnemonic stores the mnemonic of the wallet
-func (w *Wallet) SetMnemonic(mnemonic string, derivationPath string) error {
+func (w *KeychainWallet) SetMnemonic(mnemonic string, derivationPath string) error {
 	err := w.storage.Upsert(MNEMONIC_KEY, mnemonic)
 	if err != nil {
 		return err
@@ -127,12 +127,12 @@ func (w *Wallet) SetMnemonic(mnemonic string, derivationPath string) error {
 }
 
 // getStoredPrivateKey retrieves the private key of the wallet
-func (w *Wallet) getStoredPrivateKey() (string, error) {
+func (w *KeychainWallet) getStoredPrivateKey() (string, error) {
 	return w.storage.Get(PRIVATE_KEY_KEY)
 }
 
 // getStoredMnemonic retrieves the mnemonic of the wallet
-func (w *Wallet) getStoredMnemonic() (string, string, error) {
+func (w *KeychainWallet) getStoredMnemonic() (string, string, error) {
 	mnemonic, err := w.storage.Get(MNEMONIC_KEY)
 	if err != nil {
 		return "", "", err
@@ -146,7 +146,7 @@ func (w *Wallet) getStoredMnemonic() (string, string, error) {
 	return mnemonic, derivationPath, nil
 }
 
-func (w *Wallet) PrivateKeyUpdated() <-chan struct{} {
+func (w *KeychainWallet) PrivateKeyUpdated() <-chan struct{} {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 

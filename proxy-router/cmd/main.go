@@ -10,20 +10,20 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/aiengine"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/apibus"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/config"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/handlers/httphandlers"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/proxyapi"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/proxyctl"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/registries"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/transport"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/wallet"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/rpcproxy"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/storages"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/system"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apibus"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/handlers/httphandlers"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyctl"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/transport"
+	wlt "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/wallet"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/rpcproxy"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
@@ -177,13 +177,21 @@ func start() error {
 		return err
 	}
 
-	sessionStorage := storages.NewSessionStorage()
-	wallet := wallet.NewWallet()
+	sessionStorage := storages.NewSessionStorage(log)
+
+	var wallet interfaces.Wallet
+	if cfg.Marketplace.WalletPrivateKey != "" {
+		wallet = wlt.NewEnvWallet(cfg.Marketplace.WalletPrivateKey)
+		log.Warnf("Using env wallet. Private key persistance unavailable")
+	} else {
+		wallet = wlt.NewKeychainWallet()
+		log.Infof("Using keychain wallet")
+	}
 
 	diamondContractAddr := common.HexToAddress(cfg.Marketplace.DiamondContractAddress)
 	morContractAddr := common.HexToAddress(cfg.Marketplace.MorTokenAddress)
 
-	rpcProxy := rpcproxy.NewRpcProxy(ethClient, diamondContractAddr, morContractAddr, cfg.Blockchain.ExplorerApiUrl, wallet, proxyLog, cfg.Blockchain.EthLegacyTx)
+	rpcProxy := rpcproxy.NewRpcProxy(ethClient, diamondContractAddr, morContractAddr, cfg.Blockchain.ExplorerApiUrl, wallet, sessionStorage, proxyLog, cfg.Blockchain.EthLegacyTx)
 	proxyRouterApi := proxyapi.NewProxyRouterApi(sysConfig, publicUrl, wallet, &cfg, nil, time.Now(), contractLogStorage, sessionStorage, log)
 	aiEngine := aiengine.NewAiEngine()
 
