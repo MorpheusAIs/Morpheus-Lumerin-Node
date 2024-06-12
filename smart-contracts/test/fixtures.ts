@@ -7,7 +7,7 @@ import {
   keccak256,
   parseUnits,
 } from "viem/utils";
-import { getHex, getTxTimestamp, now, now2, randomBytes32 } from "./utils";
+import { getHex, getTxTimestamp, now, nowChain, randomBytes32 } from "./utils";
 import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
 import { FacetCutAction, getSelectors } from "../libraries/diamond";
 import { HOUR, MINUTE, SECOND } from "../utils/time";
@@ -303,8 +303,12 @@ export async function deploySingleBid() {
   // generating data for sample session
   const durationSeconds = BigInt(HOUR / SECOND);
   const totalCost = expectedBid.pricePerSecond * durationSeconds;
-  const totalSupply = await tokenMOR.read.totalSupply();
-  const todaysBudget = await sessionRouter.read.getTodaysBudget([await now2()]);
+  const totalSupply = await sessionRouter.read.totalMORSupply([
+    await nowChain(),
+  ]);
+  const todaysBudget = await sessionRouter.read.getTodaysBudget([
+    await nowChain(),
+  ]);
 
   const expectedSession = {
     durationSeconds,
@@ -322,9 +326,11 @@ export async function deploySingleBid() {
     pricePerSecond: bigint,
   ): Promise<bigint> {
     const totalCost = pricePerSecond * durationSeconds;
-    const totalSupply = await tokenMOR.read.totalSupply();
+    const totalSupply = await sessionRouter.read.totalMORSupply([
+      await nowChain(),
+    ]);
     const todaysBudget = await sessionRouter.read.getTodaysBudget([
-      await now2(),
+      await nowChain(),
     ]);
     return (totalCost * totalSupply) / todaysBudget;
   }
@@ -333,9 +339,11 @@ export async function deploySingleBid() {
     stake: bigint,
     pricePerSecond: bigint,
   ): Promise<bigint> {
-    const totalSupply = await tokenMOR.read.totalSupply();
+    const totalSupply = await sessionRouter.read.totalMORSupply([
+      await nowChain(),
+    ]);
     const todaysBudget = await sessionRouter.read.getTodaysBudget([
-      await now2(),
+      await nowChain(),
     ]);
     const totalCost = (stake * todaysBudget) / totalSupply;
     return totalCost / pricePerSecond;

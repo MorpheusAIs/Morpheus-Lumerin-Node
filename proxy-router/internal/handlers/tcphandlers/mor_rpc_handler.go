@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/apibus"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/morrpc"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/storages"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apibus"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/morrpc"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/sashabaranov/go-openai"
 )
 
@@ -22,11 +22,11 @@ type MorRpcHandler struct {
 	apibus         *apibus.ApiBus
 }
 
-func NewMorRpcHandler(privateKeyHex string, publicKeyHex string, address string, morRpc *morrpc.MorRpc, sessionStorage *storages.SessionStorage, apiBus *apibus.ApiBus) *MorRpcHandler {
+func NewMorRpcHandler(privateKeyHex string, morRpc *morrpc.MorRpc, sessionStorage *storages.SessionStorage, apiBus *apibus.ApiBus) *MorRpcHandler {
 	return &MorRpcHandler{
 		privateKeyHex:  privateKeyHex,
-		address:        address,
-		publicKeyHex:   publicKeyHex,
+		address:        lib.MustPrivKeyStringToAddr(privateKeyHex).Hex(),
+		publicKeyHex:   lib.MustPubKeyStringFromPrivate(privateKeyHex),
 		morRpc:         morRpc,
 		sessionStorage: sessionStorage,
 		apibus:         apiBus,
@@ -78,7 +78,12 @@ func (m *MorRpcHandler) Handle(ctx context.Context, msg morrpc.RpcMessage, sourc
 			PubKey: userPubKey,
 		}
 
-		m.sessionStorage.AddUser(&user)
+		err = m.sessionStorage.AddUser(&user)
+		if err != nil {
+			err := lib.WrapError(fmt.Errorf("failed store user"), err)
+			sourceLog.Error(err)
+			return err
+		}
 		sendCallback(response)
 		return nil
 	case "session.prompt":

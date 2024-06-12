@@ -6,7 +6,7 @@ export const expectAlmostEqual = (
   expected: NumberLike,
   actual: NumberLike,
   epsilon: NumberLike,
-  message?: string
+  message?: string,
 ): void => {
   const delta = Number(epsilon) * Number(expected);
   const min = Number(expected) - delta;
@@ -22,11 +22,45 @@ export const expectAlmostEqual = (
 export const AlmostEqual = (
   expected: NumberLike,
   actual: NumberLike,
-  epsilon: NumberLike
+  epsilon: NumberLike,
 ): boolean => {
   return RelativeError(expected, actual) <= epsilon;
 };
 
-export const RelativeError = (target: NumberLike, actual: NumberLike): number => {
+export const RelativeError = (
+  target: NumberLike,
+  actual: NumberLike,
+): number => {
   return Math.abs(Number(actual) - Number(target)) / Math.abs(Number(target));
-}
+};
+
+export const expectAlmostEqualDelta = (
+  expected: NumberLike,
+  actual: NumberLike,
+  delta: NumberLike,
+  message?: string,
+): void => {
+  const min = Number(expected) - Number(delta);
+  const max = Number(expected) + Number(delta);
+
+  let msg = `expected ${actual} to be within ${expected} +/- ${delta} (${min} - ${max})`;
+  if (message) {
+    msg += `: ${message}`;
+  }
+  expect(AlmostEqualDelta(expected, actual, delta)).to.be.eq(true, msg);
+};
+
+export const AlmostEqualDelta = (
+  expected: NumberLike,
+  actual: NumberLike,
+  delta: NumberLike,
+): boolean => {
+  return AbsoluteError(expected, actual) <= delta;
+};
+
+export const AbsoluteError = (
+  target: NumberLike,
+  actual: NumberLike,
+): number => {
+  return Math.abs(Number(actual) - Number(target));
+};

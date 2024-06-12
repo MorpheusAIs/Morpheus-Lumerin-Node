@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/joho/godotenv"
 	"github.com/omeid/uconfig/flat"
 )
