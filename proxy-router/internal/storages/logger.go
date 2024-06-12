@@ -3,7 +3,7 @@ package storages
 import (
 	"strings"
 
-	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
+	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 )
 
 type BadgerLogger struct {

@@ -3,11 +3,11 @@ package rpcproxy
 import (
 	"context"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/contracts/sessionrouter"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/contracts"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/registries"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/storages"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/sessionrouter"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 

@@ -1,7 +1,7 @@
 package storages
 
 import (
-	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
+	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 
 	badger "github.com/dgraph-io/badger/v4"
 )

@@ -8,7 +8,7 @@ import (
 	"net/netip"
 	"sync"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 )
 
 type TCPServer struct {
