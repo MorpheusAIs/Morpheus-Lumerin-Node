@@ -45,6 +45,7 @@ func NewRpcProxy(
 	morTokenAddr common.Address,
 	explorerApiUrl string,
 	privateKey interfaces.PrKeyProvider,
+	sessionStorage *storages.SessionStorage,
 	log interfaces.ILogger,
 	legacyTx bool,
 ) *RpcProxy {
@@ -53,7 +54,6 @@ func NewRpcProxy(
 	marketplace := registries.NewMarketplace(diamonContractAddr, rpcClient, log)
 	sessionRouter := registries.NewSessionRouter(diamonContractAddr, rpcClient, log)
 	morToken := registries.NewMorToken(morTokenAddr, rpcClient, log)
-	sessionStorage := storages.NewSessionStorage()
 
 	explorerClient := NewExplorerClient(explorerApiUrl, morTokenAddr.String())
 	return &RpcProxy{

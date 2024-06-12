@@ -20,7 +20,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/proxyctl"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/registries"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/transport"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/wallet"
+	wlt "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/wallet"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/rpcproxy"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/storages"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/system"
@@ -177,13 +177,21 @@ func start() error {
 		return err
 	}
 
-	sessionStorage := storages.NewSessionStorage()
-	wallet := wallet.NewWallet()
+	sessionStorage := storages.NewSessionStorage(log)
+
+	var wallet interfaces.Wallet
+	if cfg.Marketplace.WalletPrivateKey != "" {
+		wallet = wlt.NewEnvWallet(cfg.Marketplace.WalletPrivateKey)
+		log.Warnf("Using env wallet. Private key persistance unavailable")
+	} else {
+		wallet = wlt.NewKeychainWallet()
+		log.Infof("Using keychain wallet")
+	}
 
 	diamondContractAddr := common.HexToAddress(cfg.Marketplace.DiamondContractAddress)
 	morContractAddr := common.HexToAddress(cfg.Marketplace.MorTokenAddress)
 
-	rpcProxy := rpcproxy.NewRpcProxy(ethClient, diamondContractAddr, morContractAddr, cfg.Blockchain.ExplorerApiUrl, wallet, proxyLog, cfg.Blockchain.EthLegacyTx)
+	rpcProxy := rpcproxy.NewRpcProxy(ethClient, diamondContractAddr, morContractAddr, cfg.Blockchain.ExplorerApiUrl, wallet, sessionStorage, proxyLog, cfg.Blockchain.EthLegacyTx)
 	proxyRouterApi := proxyapi.NewProxyRouterApi(sysConfig, publicUrl, wallet, &cfg, nil, time.Now(), contractLogStorage, sessionStorage, log)
 	aiEngine := aiengine.NewAiEngine()
 

@@ -10,9 +10,9 @@ import (
 	"net/http"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/aiengine"
+	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/proxyapi"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/wallet"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/rpcproxy"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
@@ -24,10 +24,10 @@ type ApiBus struct {
 	rpcProxy       *rpcproxy.RpcProxy
 	aiEngine       *aiengine.AiEngine
 	proxyRouterApi *proxyapi.ProxyRouterApi
-	wallet         *wallet.Wallet
+	wallet         i.Wallet
 }
 
-func NewApiBus(rpcProxy *rpcproxy.RpcProxy, aiEngine *aiengine.AiEngine, proxyRouterApi *proxyapi.ProxyRouterApi, wallet *wallet.Wallet) *ApiBus {
+func NewApiBus(rpcProxy *rpcproxy.RpcProxy, aiEngine *aiengine.AiEngine, proxyRouterApi *proxyapi.ProxyRouterApi, wallet i.Wallet) *ApiBus {
 	return &ApiBus{
 		rpcProxy:       rpcProxy,
 		aiEngine:       aiEngine,

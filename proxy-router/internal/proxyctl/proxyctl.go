@@ -102,7 +102,7 @@ func (p *Proxy) Run(ctx context.Context) error {
 		case <-tsk.Done():
 			err := tsk.Err()
 			if err != nil {
-				p.log.Error("proxy stopped with error", err)
+				p.log.Errorf("proxy stopped with error: %s", err)
 				return err
 			}
 		}
@@ -120,7 +120,7 @@ func (p *Proxy) run(ctx context.Context, prKey string) error {
 	if err != nil {
 		return err
 	}
-	p.log.Infof("Wallet address:", walletAddr.String())
+	p.log.Infof("Wallet address: %s", walletAddr.String())
 
 	morTcpHandler := tcphandlers.NewMorRpcHandler(prKey, morrpc.NewMorRpc(), p.sessionStorage, p.apiBus)
 	tcpHandler := tcphandlers.NewTCPHandler(
