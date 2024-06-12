@@ -10,23 +10,24 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/aiengine"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/apibus"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/config"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/handlers/httphandlers"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/handlers/tcphandlers"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/morrpc"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/proxyapi"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/registries"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/transport"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/rpcproxy"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/storages"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/system"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apibus"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/handlers/httphandlers"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyctl"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/transport"
+	wlt "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/wallet"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/rpcproxy"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"golang.org/x/sync/errgroup"
+
+	docs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/docs"
 )
 
 const (
@@ -68,6 +69,18 @@ func start() error {
 		}
 
 		mainLogFilePath = filepath.Join(logFolderPath, "main.log")
+	}
+
+	if cfg.Web.PublicUrl != "" {
+		hostWithoutProtocol := cfg.Web.PublicUrl
+		if u, err := url.Parse(cfg.Web.PublicUrl); err == nil {
+			hostWithoutProtocol = u.Host
+		}
+		docs.SwaggerInfo.Host = hostWithoutProtocol
+	} else if cfg.Web.Address != "" {
+		docs.SwaggerInfo.Host = cfg.Web.Address
+	} else {
+		docs.SwaggerInfo.Host = "localhost:8082"
 	}
 
 	log, err := lib.NewLogger(cfg.Log.LevelApp, cfg.Log.Color, cfg.Log.IsProd, cfg.Log.JSON, mainLogFilePath)
@@ -178,74 +191,33 @@ func start() error {
 		return err
 	}
 
-	walletAddr, err := lib.PrivKeyStringToAddr(cfg.Marketplace.WalletPrivateKey)
-	if err != nil {
-		return err
+	sessionStorage := storages.NewSessionStorage(log)
+
+	var wallet interfaces.Wallet
+	if cfg.Marketplace.WalletPrivateKey != "" {
+		wallet = wlt.NewEnvWallet(cfg.Marketplace.WalletPrivateKey)
+		log.Warnf("Using env wallet. Private key persistance unavailable")
+	} else {
+		wallet = wlt.NewKeychainWallet()
+		log.Infof("Using keychain wallet")
 	}
-
-	appLog.Infof("wallet address: %s", walletAddr.String())
-
-	derived := new(config.DerivedConfig)
-	derived.WalletAddress = walletAddr.String()
-
-	publicKey, err := lib.PubKeyStringFromPrivate(cfg.Marketplace.WalletPrivateKey)
-	if err != nil {
-		appLog.Errorf("failed to get public key: %s", err)
-		return err
-	}
-
-	sessionStorage := storages.NewSessionStorage()
 
 	diamondContractAddr := common.HexToAddress(cfg.Marketplace.DiamondContractAddress)
 	morContractAddr := common.HexToAddress(cfg.Marketplace.MorTokenAddress)
 
-	rpcProxy := rpcproxy.NewRpcProxy(ethClient, diamondContractAddr, morContractAddr, cfg.Blockchain.ExplorerApiUrl, cfg.Marketplace.WalletPrivateKey, proxyLog, cfg.Blockchain.EthLegacyTx)
-	proxyRouterApi := proxyapi.NewProxyRouterApi(sysConfig, publicUrl, publicKey, cfg.Marketplace.WalletPrivateKey, &cfg, derived, time.Now(), contractLogStorage, sessionStorage, log)
+	rpcProxy := rpcproxy.NewRpcProxy(ethClient, diamondContractAddr, morContractAddr, cfg.Blockchain.ExplorerApiUrl, wallet, sessionStorage, proxyLog, cfg.Blockchain.EthLegacyTx)
+	proxyRouterApi := proxyapi.NewProxyRouterApi(sysConfig, publicUrl, wallet, &cfg, nil, time.Now(), contractLogStorage, sessionStorage, log)
 	aiEngine := aiengine.NewAiEngine()
 
 	sessionRouter := registries.NewSessionRouter(diamondContractAddr, ethClient, log)
 	eventListener := rpcproxy.NewEventsListener(ethClient, sessionStorage, sessionRouter, log)
 
-	apiBus := apibus.NewApiBus(rpcProxy, aiEngine, proxyRouterApi)
+	apiBus := apibus.NewApiBus(rpcProxy, aiEngine, proxyRouterApi, wallet)
 
 	handl := httphandlers.NewHTTPHandler(apiBus)
 	httpServer := transport.NewServer(cfg.Web.Address, handl, log.Named("HTTP"))
 
-	tcpServer := transport.NewTCPServer(cfg.Proxy.Address, connLog.Named("TCP"))
-	morTcpHandler := tcphandlers.NewMorRpcHandler(cfg.Marketplace.WalletPrivateKey, publicKey, derived.WalletAddress, morrpc.NewMorRpc(), sessionStorage, apiBus)
-	tcpHandler := tcphandlers.NewTCPHandler(
-		log, connLog, schedulerLogFactory, morTcpHandler,
-	)
-	tcpServer.SetConnectionHandler(tcpHandler)
-
-	ctx, cancel = context.WithCancel(ctx)
-	g, errCtx := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		return tcpServer.Run(errCtx)
-	})
-
-	g.Go(func() error {
-		return eventListener.Run(errCtx)
-	})
-
-	g.Go(func() error {
-		for {
-			select {
-			case <-errCtx.Done():
-				return nil
-			case <-time.After(5 * time.Minute):
-				fd, err := sysConfig.GetFileDescriptors(errCtx, os.Getpid())
-				if err != nil {
-					appLog.Errorf("failed to get open files: %s", err)
-				} else {
-					appLog.Infof("open files: %d", len(fd))
-				}
-			}
-		}
-	})
-
 	// http server should shut down latest to keep pprof running
-
 	serverErrCh := make(chan error, 1)
 	serverCtx, cancelServer := context.WithCancel(context.Background())
 	go func() {
@@ -253,7 +225,8 @@ func start() error {
 		cancel()
 	}()
 
-	err = g.Wait()
+	proxy := proxyctl.NewProxyCtl(eventListener, wallet, log, connLog, cfg.Proxy.Address, schedulerLogFactory, sessionStorage, apiBus)
+	err = proxy.Run(ctx)
 
 	cancelServer()
 	<-serverErrCh

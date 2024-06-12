@@ -3,11 +3,11 @@ package rpcproxy
 import (
 	"context"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/contracts/sessionrouter"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/contracts"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/registries"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/storages"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/sessionrouter"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
@@ -45,7 +45,7 @@ func (e *EventsListener) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case event := <-sub.Events():
-			err := e.controller(ctx, event)
+			err := e.controller(event)
 			if err != nil {
 				e.log.Errorf("error loading data: %s", err)
 			}
@@ -56,26 +56,25 @@ func (e *EventsListener) Run(ctx context.Context) error {
 	}
 }
 
-func (e *EventsListener) controller(ctx context.Context, event interface{}) error {
+func (e *EventsListener) controller(event interface{}) error {
 	switch ev := event.(type) {
 	case *sessionrouter.SessionRouterSessionOpened:
-		return e.handleSessionOpened(ctx, ev)
+		return e.handleSessionOpened(ev)
 	}
 	return nil
 }
 
-func (e *EventsListener) handleSessionOpened(ctx context.Context, event *sessionrouter.SessionRouterSessionOpened) error {
+func (e *EventsListener) handleSessionOpened(event *sessionrouter.SessionRouterSessionOpened) error {
 	sessionId := lib.BytesToString(event.SessionId[:])
 	e.log.Debugf("received open session router event, sessionId %s", sessionId)
-	// session, err := e.sessionRouter.GetSession(ctx, sessionId)
-	// if err != nil {
-	// 	return err
-	// }
 
-	e.store.AddSession(&storages.Session{
+	err := e.store.AddSession(&storages.Session{
 		Id:       sessionId,
 		UserAddr: event.UserAddress.Hex(),
 	})
+	if err != nil {
+		return err
+	}
 
 	return nil
 }

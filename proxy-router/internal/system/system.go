@@ -3,7 +3,7 @@ package system
 import (
 	"context"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 )
 
 type SystemConfigurator struct {
@@ -45,8 +45,7 @@ func (c *SystemConfigurator) ApplyConfig(cfg *Config) error {
 }
 
 func (c *SystemConfigurator) RestoreConfig() error {
-	err := c.osConfigurator.ApplyConfig(c.backup)
-	if err != nil {
+	if err := c.osConfigurator.ApplyConfig(c.backup); err != nil {
 		return err
 	}
 	c.log.Debugf("system config restored: %+v", c.backup)

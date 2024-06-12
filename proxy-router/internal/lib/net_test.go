@@ -8,6 +8,11 @@ import (
 
 func TestPipe(t *testing.T) {
 	client, server, err := TCPPipe()
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	defer client.Close()
 	defer server.Close()
 

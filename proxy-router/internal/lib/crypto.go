@@ -16,7 +16,7 @@ var (
 )
 
 func DecryptString(str string, privateKey string) (string, error) {
-	pkECDSA, err := crypto.HexToECDSA(privateKey)
+	pkECDSA, err := crypto.ToECDSA(common.FromHex(privateKey))
 	if err != nil {
 		return "", WrapError(ErrInvalidPrivateKey, err)
 	}
@@ -70,7 +70,7 @@ func PrivKeyToAddr(privateKey *ecdsa.PrivateKey) (common.Address, error) {
 }
 
 func PrivKeyStringToAddr(privateKey string) (common.Address, error) {
-	privKey, err := crypto.HexToECDSA(privateKey)
+	privKey, err := crypto.ToECDSA(common.FromHex(privateKey))
 	if err != nil {
 		return common.Address{}, WrapError(ErrInvalidPrivateKey, err)
 	}
@@ -83,7 +83,7 @@ func PrivKeyStringToAddr(privateKey string) (common.Address, error) {
 }
 
 func PubKeyStringFromPrivate(privateKey string) (string, error) {
-	privKey, err := crypto.HexToECDSA(privateKey)
+	privKey, err := crypto.ToECDSA(common.FromHex(privateKey))
 	if err != nil {
 		return "", WrapError(ErrInvalidPrivateKey, err)
 	}
@@ -95,6 +95,14 @@ func PubKeyStringFromPrivate(privateKey string) (string, error) {
 	}
 	publicKeyBytes := crypto.FromECDSAPub(pubKeyECDSA)
 	return hex.EncodeToString(publicKeyBytes), nil
+}
+
+func MustPubKeyStringFromPrivate(privateKey string) string {
+	pubKey, err := PubKeyStringFromPrivate(privateKey)
+	if err != nil {
+		panic(err)
+	}
+	return pubKey
 }
 
 func MustPrivKeyToAddr(privateKey *ecdsa.PrivateKey) common.Address {

@@ -8,10 +8,8 @@ import (
 	"net/netip"
 	"sync"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 )
-
-// const kb = 1024 //temp
 
 type TCPServer struct {
 	serverAddr string

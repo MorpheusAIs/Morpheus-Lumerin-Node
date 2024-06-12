@@ -17,7 +17,7 @@ const config: HardhatUserConfig = {
     },
   },
   mocha: {
-    reporter: "nyan",
+    // reporter: "",
   },
   gasReporter: {
     enabled: process.env.REPORT_GAS ? true : false,

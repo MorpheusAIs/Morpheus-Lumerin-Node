@@ -1,14 +1,12 @@
-
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 
-import { LinearDistributionIntervalDecrease } from './libraries/LinearDistributionIntervalDecrease.sol';
+import { LinearDistributionIntervalDecrease } from "./libraries/LinearDistributionIntervalDecrease.sol";
 
 contract Linear {
   uint256 public constant initialAmount = 1000;
 
-  constructor() {
-  }
+  constructor() {}
 
   function getPeriodReward(
     uint256 initialAmount_,
@@ -18,13 +16,14 @@ contract Linear {
     uint128 startTime_,
     uint128 endTime_
   ) public pure returns (uint256) {
-    return LinearDistributionIntervalDecrease.getPeriodReward(
-      initialAmount_,
-      decreaseAmount_,
-      payoutStart_,
-      interval_,
-      startTime_,
-      endTime_
-    );
+    return
+      LinearDistributionIntervalDecrease.getPeriodReward(
+        initialAmount_,
+        decreaseAmount_,
+        payoutStart_,
+        interval_,
+        startTime_,
+        endTime_
+      );
   }
 }

@@ -15,36 +15,35 @@ contract ProviderRegistry {
   event ProviderMinStakeUpdated(uint256 newStake);
 
   error StakeTooLow();
-  
+
   /// @notice Returns provider struct by address
-  function providerMap(address addr) public view returns (Provider memory) {
+  function providerMap(address addr) external view returns (Provider memory) {
     return s.providerMap[addr];
   }
 
   /// @notice Returns provider address by index
-  function providers(uint256 index) public view returns (address) {
+  function providers(uint256 index) external view returns (address) {
     return s.providers[index];
   }
 
   /// @notice Returns active (undeleted) provider IDs
-  function providerGetIds() public view returns (address[] memory) {
+  function providerGetIds() external view returns (address[] memory) {
     return s.activeProviders.keys();
   }
 
   /// @notice Returns count of active providers
-  function providerGetCount() public view returns (uint count) {
+  function providerGetCount() external view returns (uint count) {
     return s.activeProviders.count();
   }
-  
+
   /// @notice Returns provider by index
-  function providerGetByIndex(uint index) public view returns (address addr, Provider memory provider) {
+  function providerGetByIndex(uint index) external view returns (address addr, Provider memory provider) {
     addr = s.activeProviders.keyAtIndex(index);
     return (addr, s.providerMap[addr]);
   }
 
-  
   /// @notice Returns all providers
-  function providerGetAll() public view returns (address[] memory, Provider[] memory) {
+  function providerGetAll() external view returns (address[] memory, Provider[] memory) {
     uint256 count = s.activeProviders.count();
     address[] memory _addrs = new address[](count);
     Provider[] memory _providers = new Provider[](count);
@@ -62,7 +61,7 @@ contract ProviderRegistry {
   /// @param   addr      provider address
   /// @param   addStake  amount of stake to add
   /// @param   endpoint  provider endpoint (host.com:1234)
-  function providerRegister(address addr, uint256 addStake, string memory endpoint) public {
+  function providerRegister(address addr, uint256 addStake, string memory endpoint) external {
     LibOwner._senderOrOwner(addr);
     Provider memory provider = s.providerMap[addr];
     uint256 newStake = provider.stake + addStake;
@@ -80,9 +79,9 @@ contract ProviderRegistry {
 
     s.token.transferFrom(msg.sender, address(this), addStake); // reverts with ERC20InsufficientAllowance
   }
-  
+
   /// @notice Deregisters a provider
-  function providerDeregister(address addr) public {
+  function providerDeregister(address addr) external {
     LibOwner._senderOrOwner(addr);
     s.activeProviders.remove(addr);
 
@@ -94,19 +93,19 @@ contract ProviderRegistry {
   }
 
   /// @notice Sets the minimum stake required for a provider
-  function providerSetMinStake(uint256 _minStake) public {
+  function providerSetMinStake(uint256 _minStake) external {
     LibOwner._onlyOwner();
     s.providerMinStake = _minStake;
     emit ProviderMinStakeUpdated(_minStake);
   }
-  
+
   /// @notice Checks if a provider exists (is active / not deleted)
-  function providrerExists(address addr) public view returns (bool) {
+  function providerExists(address addr) external view returns (bool) {
     return s.activeProviders.exists(addr);
   }
 
   /// @notice Returns the minimum stake required for a provider
-  function providerMinStake() public view returns (uint256) {
+  function providerMinStake() external view returns (uint256) {
     return s.providerMinStake;
   }
 }
