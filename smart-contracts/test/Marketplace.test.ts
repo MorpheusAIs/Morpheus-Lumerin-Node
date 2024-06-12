@@ -5,7 +5,6 @@ import { parseEventLogs } from "viem";
 import { deploySingleBid } from "./fixtures";
 import {
   catchError,
-  expectError,
   getTxTimestamp,
   randomAddress,
   randomBytes32,

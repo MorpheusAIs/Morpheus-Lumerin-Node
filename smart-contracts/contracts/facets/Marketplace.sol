@@ -22,11 +22,11 @@ contract Marketplace {
   error BidTaken();
   error NotEnoughBalance();
 
-  function bidMap(bytes32 bidId) public view returns (Bid memory) {
+  function bidMap(bytes32 bidId) external view returns (Bid memory) {
     return s.bidMap[bidId];
   }
 
-  function getActiveBidsByProvider(address provider) public view returns (Bid[] memory) {
+  function getActiveBidsByProvider(address provider) external view returns (Bid[] memory) {
     KeySet.Set storage providerBidsSet = s.providerActiveBids[provider];
     uint256 length = providerBidsSet.count();
 
@@ -41,7 +41,7 @@ contract Marketplace {
   }
 
   /// @notice returns active bids by model or agent id
-  function getActiveBidsByModelAgent(bytes32 modelAgentId) public view returns (Bid[] memory) {
+  function getActiveBidsByModelAgent(bytes32 modelAgentId) external view returns (Bid[] memory) {
     KeySet.Set storage modelAgentBidsSet = s.modelAgentActiveBids[modelAgentId];
     uint256 length = modelAgentBidsSet.count();
 
@@ -60,7 +60,7 @@ contract Marketplace {
     address provider,
     uint256 offset,
     uint8 limit
-  ) public view returns (bytes32[] memory, Bid[] memory) {
+  ) external view returns (bytes32[] memory, Bid[] memory) {
     uint256 length = s.providerBids[provider].length;
     if (length < offset) {
       return (new bytes32[](0), new Bid[](0));
@@ -82,7 +82,7 @@ contract Marketplace {
     bytes32 modelAgentId,
     uint256 offset,
     uint8 limit
-  ) public view returns (bytes32[] memory, Bid[] memory) {
+  ) external view returns (bytes32[] memory, Bid[] memory) {
     uint256 length = s.modelAgentBids[modelAgentId].length;
     if (length < offset) {
       return (new bytes32[](0), new Bid[](0));
@@ -100,7 +100,11 @@ contract Marketplace {
   }
 
   /// @notice posts a new bid for a model
-  function postModelBid(address providerAddr, bytes32 modelId, uint256 pricePerSecond) public returns (bytes32 bidId) {
+  function postModelBid(
+    address providerAddr,
+    bytes32 modelId,
+    uint256 pricePerSecond
+  ) external returns (bytes32 bidId) {
     LibOwner._senderOrOwner(providerAddr);
     if (!s.activeProviders.exists(providerAddr)) {
       revert ProviderNotFound();
@@ -172,19 +176,19 @@ contract Marketplace {
   }
 
   /// @notice sets a bid fee
-  function setBidFee(uint256 _bidFee) public {
+  function setBidFee(uint256 _bidFee) external {
     LibOwner._onlyOwner();
     s.bidFee = _bidFee;
     emit FeeUpdated(_bidFee);
   }
 
   /// @notice returns the bid fee
-  function bidFee() public view returns (uint256) {
+  function bidFee() external view returns (uint256) {
     return s.bidFee;
   }
 
   /// @notice withdraws the fee balance (OWNER ONLY)
-  function withdraw(address addr, uint256 amount) public {
+  function withdraw(address addr, uint256 amount) external {
     LibOwner._onlyOwner();
     if (amount > s.feeBalance) {
       revert NotEnoughBalance();

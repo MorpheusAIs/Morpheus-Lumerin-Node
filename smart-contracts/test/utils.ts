@@ -153,7 +153,7 @@ export const now = (): bigint => {
   return BigInt(Math.floor(Date.now() / 1000));
 };
 
-export const now2 = async (): Promise<bigint> => {
+export const nowChain = async (): Promise<bigint> => {
   return BigInt(await time.latest());
 };
 
