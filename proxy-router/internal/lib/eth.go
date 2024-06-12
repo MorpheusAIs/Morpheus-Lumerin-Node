@@ -42,7 +42,7 @@ func SignEthMessage(msg []byte, privateKeyHex string) ([]byte, error) {
 		return nil, err
 	}
 
-	// https://github.com/ethereum/go-ethereum/blob/44a50c9f96386f44a8682d51cf7500044f6cbaea/internal/ethapi/api.go#L580
+	// https://github.com/ethereum/go-ethereum/blob/44a50c9f96386f44a8682d51cf7500044f6cbaea/ethapi/api.go#L580
 	signature[64] += 27 // Transform V from 0/1 to 27/28
 	return signature, nil
 }

@@ -1,29 +1,35 @@
 package httphandlers
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"math/big"
 	"net/http"
 	"net/http/pprof"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/apibus"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apibus"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
-	openai "github.com/sashabaranov/go-openai"
-)
+	ginSwagger "github.com/swaggo/gin-swagger"
 
-const (
-	SUCCESS_STATUS = 200
-	ERROR_STATUS   = 500
+	// gin-swagger middleware
+	swaggerFiles "github.com/swaggo/files"
+
+	_ "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/docs"
 )
 
 type HTTPHandler struct{}
 
+// @title           ApiBus Example API
+// @version         1.0
+// @description     This is a sample server celler server.
+// @termsOfService  http://swagger.io/terms/
+
+// @BasePath  /
+
+// @externalDocs.description  OpenAPI
+// @externalDocs.url          https://swagger.io/resources/open-api/
 func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
@@ -31,6 +37,8 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 	r.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"*"},
 	}))
+
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	r.GET("/healthcheck", (func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, apiBus.HealthCheck(ctx))
@@ -43,66 +51,16 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 		ctx.JSON(status, files)
 	}))
 	r.POST("/v1/chat/completions", (func(ctx *gin.Context) {
-
-		var req *openai.ChatCompletionRequest
-
-		err := ctx.ShouldBindJSON(&req)
-		switch {
-		case errors.Is(err, io.EOF):
-			ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "missing request body"})
-			return
-		case err != nil:
-			ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		shouldSendResponse, status, response := apiBus.RemoteOrLocalPrompt(ctx)
+		if !shouldSendResponse {
 			return
 		}
-
-		req.Stream = ctx.GetHeader("Accept") == "application/json"
-
-		var response interface{}
-
-		if req.Stream {
-			response, err = apiBus.PromptStream(ctx, req, func(response *openai.ChatCompletionStreamResponse) error {
-
-				marshalledResponse, err := json.Marshal(response)
-
-				if err != nil {
-					return err
-				}
-
-				ctx.Writer.Header().Set("Content-Type", "text/event-stream")
-				_, err = ctx.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", marshalledResponse)))
-				ctx.Writer.Flush()
-
-				if err != nil {
-					return err
-				}
-
-				return nil
-			})
-		} else {
-			response, err = apiBus.Prompt(ctx, req)
-		}
-
-		if err != nil {
-			ctx.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-
-		ctx.JSON(http.StatusOK, response)
+		ctx.JSON(status, response)
 	}))
 
 	r.POST("/proxy/sessions/initiate", (func(ctx *gin.Context) {
 		status, response := apiBus.InitiateSession(ctx)
 		ctx.JSON(status, response)
-	}))
-
-	r.POST("/proxy/sessions/:id/prompt", (func(ctx *gin.Context) {
-		ok, status, response := apiBus.SendPrompt(ctx)
-		if !ok {
-			ctx.JSON(status, response)
-			return
-		}
-		return
 	}))
 
 	r.GET("/proxy/sessions/:id/providerClaimableBalance", (func(ctx *gin.Context) {
@@ -133,6 +91,7 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 	r.GET("/blockchain/providers/:id/bids", (func(ctx *gin.Context) {
 		providerId := ctx.Param("id")
 		offset, limit := getOffsetLimit(ctx)
+
 		if offset == nil {
 			return
 		}
@@ -209,10 +168,24 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 		ctx.JSON(status, response)
 	}))
 
+	r.POST("/wallet", (func(ctx *gin.Context) {
+		var req SetupWalletReqBody
+		err := ctx.ShouldBindJSON(&req)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		err = apiBus.SetupWallet(ctx, req.PrivateKey)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
+	}))
+
 	r.Any("/debug/pprof/*action", gin.WrapF(pprof.Index))
 
-	err := r.SetTrustedProxies(nil)
-	if err != nil {
+	if err := r.SetTrustedProxies(nil); err != nil {
 		panic(err)
 	}
 

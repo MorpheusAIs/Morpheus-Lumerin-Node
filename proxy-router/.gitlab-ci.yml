@@ -173,8 +173,8 @@ bedrock-04-PRD-rawimage:
 .update_raw_task_definition: &update_raw_task_definition |
   echo "**************************"
   echo "*** Update Validator Task Definition"
-  echo "*** Unique elements that should be set in calling module are Wallet Private Key, Pool Address, Web_public_url, "
-  echo "*** CI_WALLET_PRIVATE_KEY, CI_POOL_ADDRESS, CI_WEB_PUBLIC_URL"
+  echo "*** Unique elements that should be set in calling module are Pool Address, Web_public_url, "
+  echo "*** CI_POOL_ADDRESS, CI_WEB_PUBLIC_URL"
   echo "**************************"
   aws ecs describe-task-definition --region $AWS_DEFAULT_REGION --task-definition tsk-$CI_AWS_TASK > output.json
   echo "**************************"
@@ -195,8 +195,6 @@ bedrock-04-PRD-rawimage:
         { "name": "HASHRATE_ERROR_THRESHOLD", "value": "'"$HASHRATE_ERROR_THRESHOLD"'" },
         { "name": "HASHRATE_ERROR_TIMEOUT", "value": "'"$HASHRATE_ERROR_TIMEOUT"'" },
         { "name": "CLONE_FACTORY_ADDRESS", "value": "'"$CLONE_FACTORY_ADDRESS"'" },
-        { "name": "CONTRACT_MNEMONIC", "value": "'"$CONTRACT_MNEMONIC"'" },
-        { "name": "WALLET_PRIVATE_KEY", "value": "'"$CI_WALLET_PRIVATE_KEY"'" },
         { "name": "MINER_VETTING_DURATION", "value": "'"$MINER_VETTING_DURATION"'" },
         { "name": "MINER_SHARE_TIMEOUT", "value": "'"$MINER_SHARE_TIMEOUT"'" },
         { "name": "LOG_COLOR", "value": "'"$LOG_COLOR"'" },

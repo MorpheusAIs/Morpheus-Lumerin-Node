@@ -2,11 +2,10 @@ package registries
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/contracts/providerregistry"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/providerregistry"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -37,7 +36,6 @@ func NewProviderRegistry(providerRegistryAddr common.Address, client *ethclient.
 	if err != nil {
 		panic("invalid provider registry ABI: " + err.Error())
 	}
-	fmt.Println(providerRegistryAddr)
 	return &ProviderRegistry{
 		providerRegistry:     pr,
 		providerRegistryAddr: providerRegistryAddr,

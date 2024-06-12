@@ -15,3 +15,10 @@ func GetRandomAddr() common.Address {
 func AddrShort(addr string) string {
 	return StrShortConf(addr, 5, 3)
 }
+
+func RemoveHexPrefix(s string) string {
+	if len(s) >= 2 && s[0:2] == "0x" {
+		return s[2:]
+	}
+	return s
+}

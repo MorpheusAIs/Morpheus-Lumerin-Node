@@ -41,11 +41,21 @@ const getColor = (name) => {
     return colors[(getHashCode(name) + 1) % colors.length]
 }
 
+const parse = (decodedChunk) => {
+    const lines = decodedChunk.split('\n');
+    const trimmedData = lines.map(line => line.replace(/^data: /, "").trim());
+    const filteredData = trimmedData.filter(line => !["", "[DONE]"].includes(line));
+    const parsedData = filteredData.map(line => JSON.parse(line));
+
+    return parsedData;
+}
+
+let abort = false;
+
 const Chat = (props) => {
     const chatBlockRef = useRef<null | HTMLDivElement>(null);
 
     const [value, setValue] = useState("");
-    const [hasSession, setHasSession] = useState(true);
 
     const [sessions, setSessions] = useState<any>();
 
@@ -87,13 +97,16 @@ const Chat = (props) => {
     }
 
     const scrollToBottom = () => {
-        chatBlockRef.current?.scrollIntoView({ behavior: "smooth", block: 'end' })
+        chatBlockRef.current?.scroll({ top: chatBlockRef.current.scrollHeight, behavior: 'smooth' })
     }
 
     const onOpenSession = ({ stake }) => {
         console.log("open-session", stake);
 
-        props.onOpenSession({ stake, selectedBid}).then((res) => {
+        props.onOpenSession({ stake, selectedBid }).then((res) => {
+            if (!res) {
+                return;
+            }
             setActiveSession(res);
             refreshSessions();
         })
@@ -108,67 +121,40 @@ const Chat = (props) => {
     }
 
     const call = async (message) => {
-        setIsSpinning(true);
         const chatHistory = messages.map(m => ({ role: m.role, content: m.text }))
-        let response;
 
-        if(isLocal) {
-            response = await fetch(`${props.config.chain.localProxyRouterUrl}/v1/chat/completions`, {
-                method: 'POST',
-                headers: {
-                    "Accept": "application/json"
-                },
-                body: JSON.stringify({
-                    model: "llama2:latest",
-                    stream: true,
-                    messages: [
-                        ...chatHistory,
-                        {
-                            role: "user",
-                            content: message
-                        }
-                    ]
-                })
-            });
+        const headers = {
+            "Accept": "application/json"
+        };
+        if (!isLocal) {
+            headers["session_id"] = activeSession.sessionId;
         }
-        else {
-            try {
-                response = await fetch(`${props.config.chain.localProxyRouterUrl}/proxy/sessions/${activeSession.sessionId}/prompt`, {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        prompt: {
-                            model: "llama2:latest",
-                            stream: true,
-                            messages: [
-                                ...chatHistory,
-                                {
-                                    role: "user",
-                                    content: message
-                                }
-                            ]
-                        },
-                        providerUrl: selectedBid.ProviderData.Endpoint.replace("http://", ""),
-                        providerPublicKey: activeSession.signature.message
-                    })
-                });
+        
+        const response = await fetch(`${props.config.chain.localProxyRouterUrl}/v1/chat/completions`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                model: "llama2:latest",
+                stream: true,
+                messages: [
+                    ...chatHistory,
+                    {
+                        role: "user",
+                        content: message
+                    }
+                ]
+            })
+        }).catch((e) => {
+            console.log("Failed to send request", e)
+            return null;
+        });
 
-                if(!response.ok) {
-                    console.log("Failed", await response.json())
-                }
-            }
-            catch(e) {
-                console.log("error", e);
-                return;
-            }
+        if (!response) {
+            return;
         }
 
-        function parse(decodedChunk) {
-            const lines = decodedChunk.split('\n');
-            const trimmedData = lines.map(line => line.replace(/^data: /, "").trim());
-            const filteredData = trimmedData.filter(line => !["", "[DONE]"].includes(line));
-            const parsedData = filteredData.map(line => JSON.parse(line));
-
-            return parsedData;
+        if (!response.ok) {
+            console.log("Failed", await response.json())
         }
 
         const textDecoder = new TextDecoder();
@@ -179,6 +165,10 @@ const Chat = (props) => {
             let memoState = [...messages, { id: "some", user: 'Me', text: value, role: "user", icon: "M", color: "#20dc8e" }];
 
             while (true) {
+                if (abort) {
+                    await reader.cancel();
+                    abort = false;
+                }
                 const { value, done } = await reader.read();
                 if (done) {
                     setIsSpinning(false);
@@ -187,13 +177,13 @@ const Chat = (props) => {
                 const decodedString = textDecoder.decode(value, { stream: true });
                 const parts = parse(decodedString);
                 parts.forEach(part => {
-                    if(!part?.id) {
+                    if (!part?.id) {
                         return;
                     }
                     const message = memoState.find(m => m.id == part.id);
                     const otherMessages = memoState.filter(m => m.id != part.id);
                     const text = `${message?.text || ''}${part?.choices[0]?.delta?.content || ''}`;
-                    const result = [...otherMessages, { id: part.id, user: modelName, role: "assistant", text: text, icon: "L", color: getColor("L") }];
+                    const result = [...otherMessages, { id: part.id, user: modelName, role: "assistant", text: text, icon: modelName.toUpperCase()[0], color: getColor(modelName.toUpperCase()[0]) }];
                     memoState = result;
                     setMessages(result);
                     scrollToBottom();
@@ -204,6 +194,12 @@ const Chat = (props) => {
     }
 
     const handleSubmit = () => {
+        if (isSpinning) {
+            abort = true;
+            setIsSpinning(false);
+            return;
+        }
+
         if (!value) {
             return;
         }
@@ -214,6 +210,7 @@ const Chat = (props) => {
             setIsSpinning(false);
         });
         setValue("");
+        scrollToBottom();
     }
 
     const price = selectedBid?.PricePerSecond ? selectedBid?.PricePerSecond / (10 ** 18) : 0;
@@ -302,7 +299,7 @@ const Chat = (props) => {
                     </ChatBlock>
                     <Control>
                         <CustomTextArrea
-                            disabled={!hasSession}
+                            disabled={!activeSession}
                             onKeyPress={(e) => {
                                 if (e.key === 'Enter') {
                                     e.preventDefault();
@@ -315,7 +312,7 @@ const Chat = (props) => {
                             placeholder={"Ask me anything..."}
                             minRows={1}
                             maxRows={6} />
-                        <SendBtn disabled={!hasSession} onClick={handleSubmit}>{
+                        <SendBtn disabled={!activeSession} onClick={handleSubmit}>{
                             isSpinning ? <Spinner animation="border" /> : <IconArrowUp size={"26px"}></IconArrowUp>
                         }</SendBtn>
                     </Control>

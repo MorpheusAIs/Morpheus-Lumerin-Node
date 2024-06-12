@@ -1,0 +1,516 @@
+basePath: /
+definitions:
+  httphandlers.SetupWalletReqBody:
+    properties:
+      privateKey:
+        type: string
+    required:
+    - privateKey
+    type: object
+  proxyapi.ConfigResponse:
+    properties:
+      commit:
+        type: string
+      config: {}
+      derivedConfig: {}
+      version:
+        type: string
+    type: object
+  proxyapi.HealthCheckResponse:
+    properties:
+      status:
+        type: string
+      uptime:
+        type: string
+      version:
+        type: string
+    type: object
+  proxyapi.PromptMessage:
+    properties:
+      content:
+        type: string
+      role:
+        type: string
+    type: object
+  proxyapi.PromptRequest:
+    properties:
+      messages:
+        items:
+          $ref: '#/definitions/proxyapi.PromptMessage'
+        type: array
+      model:
+        type: string
+      stream:
+        type: boolean
+    type: object
+  rpcproxy.OpenSessionRequest:
+    properties:
+      approval:
+        type: string
+      approvalSig:
+        type: string
+      stake:
+        type: string
+    type: object
+  rpcproxy.SendRequest:
+    properties:
+      amount:
+        type: string
+      to:
+        type: string
+    type: object
+externalDocs:
+  description: OpenAPI
+  url: https://swagger.io/resources/open-api/
+info:
+  contact: {}
+  description: This is a sample server celler server.
+  termsOfService: http://swagger.io/terms/
+  title: ApiBus Example API
+  version: "1.0"
+paths:
+  /blockchain/allowance:
+    get:
+      description: Get MOR allowance for spender
+      parameters:
+      - description: Spender address
+        in: query
+        name: spender
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Get Allowance for MOR
+      tags:
+      - wallet
+    post:
+      description: Approve MOR allowance for spender
+      parameters:
+      - description: Spender address
+        in: query
+        name: spender
+        required: true
+        type: string
+      - description: Amount
+        in: query
+        name: amount
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Approve MOR allowance
+      tags:
+      - wallet
+  /blockchain/balance:
+    get:
+      description: Get ETH and MOR balance of the user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Get ETH and MOR balance
+      tags:
+      - wallet
+  /blockchain/models:
+    get:
+      description: Get models list from blokchain
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: object
+            type: array
+      summary: Get models list
+      tags:
+      - wallet
+  /blockchain/models/{id}/bids:
+    get:
+      description: Get bids from blockchain by model agent
+      parameters:
+      - description: Offset
+        in: query
+        name: offset
+        type: string
+      - description: Limit
+        in: query
+        name: limit
+        type: string
+      - description: ModelAgent ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: object
+            type: array
+      summary: "Get Bids by\tModel Agent"
+      tags:
+      - wallet
+  /blockchain/providers:
+    get:
+      description: Get providers list from blokchain
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: object
+            type: array
+      summary: Get providers list
+      tags:
+      - wallet
+  /blockchain/providers/{id}/bids:
+    get:
+      description: Get bids from blockchain by provider
+      parameters:
+      - description: Offset
+        in: query
+        name: offset
+        type: string
+      - description: Limit
+        in: query
+        name: limit
+        type: string
+      - description: Provider ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: object
+            type: array
+      summary: Get Bids by Provider
+      tags:
+      - wallet
+  /blockchain/send/eth:
+    post:
+      description: Send Eth to address
+      parameters:
+      - description: Send Eth
+        in: body
+        name: sendeth
+        required: true
+        schema:
+          $ref: '#/definitions/rpcproxy.SendRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Send Eth
+      tags:
+      - wallet
+  /blockchain/send/mor:
+    post:
+      description: Send Mor to address
+      parameters:
+      - description: Send Mor
+        in: body
+        name: sendmor
+        required: true
+        schema:
+          $ref: '#/definitions/rpcproxy.SendRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Send Mor
+      tags:
+      - wallet
+  /blockchain/sessions:
+    get:
+      description: Get sessions from blockchain by user or provider
+      parameters:
+      - description: Offset
+        in: query
+        name: offset
+        type: string
+      - description: Limit
+        in: query
+        name: limit
+        type: string
+      - description: Provider address
+        in: query
+        name: provider
+        type: string
+      - description: User address
+        in: query
+        name: user
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: object
+            type: array
+      summary: Get Sessions
+      tags:
+      - sessions
+    post:
+      consumes:
+      - application/json
+      description: Sends transaction in blockchain to open a session
+      parameters:
+      - description: Open session
+        in: body
+        name: opensession
+        required: true
+        schema:
+          $ref: '#/definitions/rpcproxy.OpenSessionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Open Session with Provider in blockchain
+      tags:
+      - sessions
+  /blockchain/sessions/{id}/close:
+    post:
+      description: Sends transaction in blockchain to close a session
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Close Session with Provider
+      tags:
+      - sessions
+  /blockchain/sessions/budget:
+    get:
+      description: Get todays budget from blockchain
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Get Todays Budget
+      tags:
+      - wallet
+  /blockchain/token/supply:
+    get:
+      description: Get MOR token supply from blockchain
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Get Token Supply
+      tags:
+      - wallet
+  /blockchain/transactions:
+    get:
+      description: Get MOR and ETH transactions
+      parameters:
+      - description: Page
+        in: query
+        name: page
+        type: string
+      - description: Limit
+        in: query
+        name: limit
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: object
+            type: array
+      summary: Get Transactions
+      tags:
+      - wallet
+  /config:
+    get:
+      description: Return the current config of proxy router
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.ConfigResponse'
+      summary: Get Config
+      tags:
+      - healthcheck
+  /healthcheck:
+    get:
+      description: do ping
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.HealthCheckResponse'
+      summary: Healthcheck example
+      tags:
+      - healthcheck
+  /proxy/sessions/${id}/providerClaim:
+    post:
+      description: Claim provider balance from session
+      parameters:
+      - description: Claim
+        in: body
+        name: claim
+        required: true
+        schema:
+          $ref: '#/definitions/rpcproxy.SendRequest'
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Claim Provider Balance
+      tags:
+      - sessions
+  /proxy/sessions/${id}/providerClaimableBalance:
+    get:
+      description: Get provider claimable balance from session
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Get Provider Claimable Balance
+      tags:
+      - sessions
+  /proxy/sessions/initiate:
+    post:
+      description: sends a handshake to the provider
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Initiate Session with Provider
+      tags:
+      - sessions
+  /v1/chat/completions:
+    post:
+      description: Send prompt to a local or remote model based on session id in header
+      parameters:
+      - description: Prompt
+        in: body
+        name: prompt
+        required: true
+        schema:
+          $ref: '#/definitions/proxyapi.PromptRequest'
+      - description: Session ID
+        in: header
+        name: session_id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Send Local Or Remote Prompt
+      tags:
+      - wallet
+  /wallet:
+    get:
+      description: Get wallet address
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Get Wallet
+      tags:
+      - wallet
+    post:
+      description: Set wallet private key
+      parameters:
+      - description: Private key
+        in: body
+        name: privatekey
+        required: true
+        schema:
+          $ref: '#/definitions/httphandlers.SetupWalletReqBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Set Wallet
+      tags:
+      - wallet
+swagger: "2.0"
