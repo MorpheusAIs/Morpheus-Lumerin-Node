@@ -26,6 +26,8 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
+
+	docs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/docs"
 )
 
 const (
@@ -67,6 +69,14 @@ func start() error {
 		}
 
 		mainLogFilePath = filepath.Join(logFolderPath, "main.log")
+	}
+
+	if cfg.Web.PublicUrl != "" {
+		docs.SwaggerInfo.Host = cfg.Web.PublicUrl
+	} else if cfg.Web.Address != "" {
+		docs.SwaggerInfo.Host = cfg.Web.Address
+	} else {
+		docs.SwaggerInfo.Host = "localhost:8082"
 	}
 
 	log, err := lib.NewLogger(cfg.Log.LevelApp, cfg.Log.Color, cfg.Log.IsProd, cfg.Log.JSON, mainLogFilePath)

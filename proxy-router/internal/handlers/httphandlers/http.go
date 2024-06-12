@@ -26,7 +26,6 @@ type HTTPHandler struct{}
 // @description     This is a sample server celler server.
 // @termsOfService  http://swagger.io/terms/
 
-// @host      localhost:8082
 // @BasePath  /
 
 // @externalDocs.description  OpenAPI

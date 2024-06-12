@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"runtime"
 )
 
@@ -117,7 +118,7 @@ func (cfg *Config) SetDefaults() {
 		cfg.Web.Address = "0.0.0.0:8080"
 	}
 	if cfg.Web.PublicUrl == "" {
-		cfg.Web.PublicUrl = "http://localhost:8080"
+		cfg.Web.PublicUrl = fmt.Sprintf("http://%s", cfg.Web.Address)
 	}
 }
 
