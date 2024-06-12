@@ -41,6 +41,15 @@ const getColor = (name) => {
     return colors[(getHashCode(name) + 1) % colors.length]
 }
 
+const parse = (decodedChunk) => {
+    const lines = decodedChunk.split('\n');
+    const trimmedData = lines.map(line => line.replace(/^data: /, "").trim());
+    const filteredData = trimmedData.filter(line => !["", "[DONE]"].includes(line));
+    const parsedData = filteredData.map(line => JSON.parse(line));
+
+    return parsedData;
+}
+
 let abort = false;
 
 const Chat = (props) => {
@@ -94,8 +103,8 @@ const Chat = (props) => {
     const onOpenSession = ({ stake }) => {
         console.log("open-session", stake);
 
-        props.onOpenSession({ stake, selectedBid}).then((res) => {
-            if(!res) {
+        props.onOpenSession({ stake, selectedBid }).then((res) => {
+            if (!res) {
                 return;
             }
             setActiveSession(res);
@@ -113,65 +122,39 @@ const Chat = (props) => {
 
     const call = async (message) => {
         const chatHistory = messages.map(m => ({ role: m.role, content: m.text }))
-        let response;
 
-        if(isLocal) {
-            response = await fetch(`${props.config.chain.localProxyRouterUrl}/v1/chat/completions`, {
-                method: 'POST',
-                headers: {
-                    "Accept": "application/json"
-                },
-                body: JSON.stringify({
-                    model: "llama2:latest",
-                    stream: true,
-                    messages: [
-                        ...chatHistory,
-                        {
-                            role: "user",
-                            content: message
-                        }
-                    ]
-                })
-            });
+        const headers = {
+            "Accept": "application/json"
+        };
+        if (!isLocal) {
+            headers["session_id"] = activeSession.sessionId;
         }
-        else {
-            try {
-                response = await fetch(`${props.config.chain.localProxyRouterUrl}/proxy/sessions/${activeSession.sessionId}/prompt`, {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        prompt: {
-                            model: "llama2:latest",
-                            stream: true,
-                            messages: [
-                                ...chatHistory,
-                                {
-                                    role: "user",
-                                    content: message
-                                }
-                            ]
-                        },
-                        providerUrl: selectedBid.ProviderData.Endpoint.replace("http://", ""),
-                        providerPublicKey: activeSession.signature.message
-                    })
-                });
+        
+        const response = await fetch(`${props.config.chain.localProxyRouterUrl}/v1/chat/completions`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                model: "llama2:latest",
+                stream: true,
+                messages: [
+                    ...chatHistory,
+                    {
+                        role: "user",
+                        content: message
+                    }
+                ]
+            })
+        }).catch((e) => {
+            console.log("Failed to send request", e)
+            return null;
+        });
 
-                if(!response.ok) {
-                    console.log("Failed", await response.json())
-                }
-            }
-            catch(e) {
-                console.log("error", e);
-                return;
-            }
+        if (!response) {
+            return;
         }
 
-        function parse(decodedChunk) {
-            const lines = decodedChunk.split('\n');
-            const trimmedData = lines.map(line => line.replace(/^data: /, "").trim());
-            const filteredData = trimmedData.filter(line => !["", "[DONE]"].includes(line));
-            const parsedData = filteredData.map(line => JSON.parse(line));
-
-            return parsedData;
+        if (!response.ok) {
+            console.log("Failed", await response.json())
         }
 
         const textDecoder = new TextDecoder();
@@ -182,7 +165,7 @@ const Chat = (props) => {
             let memoState = [...messages, { id: "some", user: 'Me', text: value, role: "user", icon: "M", color: "#20dc8e" }];
 
             while (true) {
-                if(abort) {
+                if (abort) {
                     await reader.cancel();
                     abort = false;
                 }
@@ -194,7 +177,7 @@ const Chat = (props) => {
                 const decodedString = textDecoder.decode(value, { stream: true });
                 const parts = parse(decodedString);
                 parts.forEach(part => {
-                    if(!part?.id) {
+                    if (!part?.id) {
                         return;
                     }
                     const message = memoState.find(m => m.id == part.id);
@@ -211,7 +194,7 @@ const Chat = (props) => {
     }
 
     const handleSubmit = () => {
-        if(isSpinning) {
+        if (isSpinning) {
             abort = true;
             setIsSpinning(false);
             return;
