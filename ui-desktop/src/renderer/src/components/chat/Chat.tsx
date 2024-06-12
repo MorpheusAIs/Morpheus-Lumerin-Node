@@ -299,7 +299,7 @@ const Chat = (props) => {
                     </ChatBlock>
                     <Control>
                         <CustomTextArrea
-                            disabled={!activeSession}
+                            disabled={!activeSession && !isLocal}
                             onKeyPress={(e) => {
                                 if (e.key === 'Enter') {
                                     e.preventDefault();
@@ -312,7 +312,7 @@ const Chat = (props) => {
                             placeholder={"Ask me anything..."}
                             minRows={1}
                             maxRows={6} />
-                        <SendBtn disabled={!activeSession} onClick={handleSubmit}>{
+                        <SendBtn disabled={!activeSession && !isLocal} onClick={handleSubmit}>{
                             isSpinning ? <Spinner animation="border" /> : <IconArrowUp size={"26px"}></IconArrowUp>
                         }</SendBtn>
                     </Control>
