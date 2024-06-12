@@ -72,7 +72,11 @@ func start() error {
 	}
 
 	if cfg.Web.PublicUrl != "" {
-		docs.SwaggerInfo.Host = cfg.Web.PublicUrl
+		hostWithoutProtocol := cfg.Web.PublicUrl
+		if u, err := url.Parse(cfg.Web.PublicUrl); err == nil {
+			hostWithoutProtocol = u.Host
+		}
+		docs.SwaggerInfo.Host = hostWithoutProtocol
 	} else if cfg.Web.Address != "" {
 		docs.SwaggerInfo.Host = cfg.Web.Address
 	} else {
