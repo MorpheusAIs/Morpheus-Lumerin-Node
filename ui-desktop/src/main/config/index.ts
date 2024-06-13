@@ -24,7 +24,6 @@ const chain = {
   symbolEth: process.env.SYMBOL_ETH || 'ETH',
 
   mainTokenAddress: process.env.TOKEN_ADDRESS,
-  cloneFactoryAddress: process.env.CLONE_FACTORY_ADDRESS,
 
   proxyRouterUrl: process.env.PROXY_ROUTER_URL,
   explorerUrl: process.env.EXPLORER_URL,

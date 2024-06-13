@@ -20,8 +20,6 @@ const registerToken = ({ explorer }) =>
       return false
     }
 
-    events.getEventDataCreators(checksumAddress).forEach(explorer.registerEvent)
-
     return true
   }
 
@@ -38,20 +36,20 @@ function getTokenGasLimit(lumerin) {
   }
 }
 
-const claimFaucetDirectly = async (web3, privateKey, walletId) => {
-  const claimFunction = web3.utils.keccak256('claim()').substring(0, 10)
-  const gasLimit = 300_000
-  const txObject = {
-    from: walletId,
-    to: faucetAddress,
-    gas: gasLimit,
-    data: claimFunction,
-  }
+// const claimFaucetDirectly = async (web3, privateKey, walletId) => {
+//   const claimFunction = web3.utils.keccak256('claim()').substring(0, 10)
+//   const gasLimit = 300_000
+//   const txObject = {
+//     from: walletId,
+//     to: faucetAddress,
+//     gas: gasLimit,
+//     data: claimFunction,
+//   }
 
-  const signedTx = await web3.eth.accounts.signTransaction(txObject, privateKey)
-  const result = await web3.eth.sendSignedTransaction(signedTx.rawTransaction)
-  return result
-}
+//   const signedTx = await web3.eth.accounts.signTransaction(txObject, privateKey)
+//   const result = await web3.eth.sendSignedTransaction(signedTx.rawTransaction)
+//   return result
+// }
 
 const claimFaucetHttp = async (token, walletAddr, faucetUrl) => {
   const baseURL = `${faucetUrl}/${walletAddr}`
