@@ -13,10 +13,11 @@ describe("Session router", function () {
         decreaseInterval: 86400n,
         blockTimeEpochSeconds:
           BigInt(new Date("2024-05-02T09:19:57Z").getTime()) / 1000n,
-        balance: 3406521346191960000000n,
+        balance: 286534931460577320000000n,
       };
 
       await sessionRouter.write.setPoolConfig([
+        3n,
         {
           initialReward: exp.initialReward,
           rewardDecrease: exp.rewardDecrease,

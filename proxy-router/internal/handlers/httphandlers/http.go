@@ -26,7 +26,6 @@ type HTTPHandler struct{}
 // @description     This is a sample server celler server.
 // @termsOfService  http://swagger.io/terms/
 
-// @host      localhost:8082
 // @BasePath  /
 
 // @externalDocs.description  OpenAPI
@@ -37,6 +36,7 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 
 	r.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"*"},
+		AllowHeaders: []string{"session_id"},
 	}))
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))

@@ -609,63 +609,31 @@ const docTemplate = `{
                 }
             }
         },
-        "/proxy/sessions/{id}/prompt": {
-            "post": {
-                "description": "sens a prompt to the provider by opened session",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "sessions"
-                ],
-                "summary": "Send prompt to provider",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Session ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "RemotePrompt",
-                        "name": "prompt",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/proxyapi.RemotePromptRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object"
-                        }
-                    }
-                }
-            }
-        },
         "/v1/chat/completions": {
             "post": {
-                "description": "Send prompt to a local model",
+                "description": "Send prompt to a local or remote model based on session id in header",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "wallet"
                 ],
-                "summary": "Send prompt to a local model",
+                "summary": "Send Local Or Remote Prompt",
                 "parameters": [
                     {
-                        "description": "LocalPrompt",
+                        "description": "Prompt",
                         "name": "prompt",
                         "in": "body",
                         "required": true,
                         "schema": {
                             "$ref": "#/definitions/proxyapi.PromptRequest"
                         }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Session ID",
+                        "name": "session_id",
+                        "in": "header"
                     }
                 ],
                 "responses": {
@@ -795,20 +763,6 @@ const docTemplate = `{
                 }
             }
         },
-        "proxyapi.RemotePromptRequest": {
-            "type": "object",
-            "properties": {
-                "prompt": {
-                    "$ref": "#/definitions/proxyapi.PromptRequest"
-                },
-                "providerPublicKey": {
-                    "type": "string"
-                },
-                "providerUrl": {
-                    "type": "string"
-                }
-            }
-        },
         "rpcproxy.OpenSessionRequest": {
             "type": "object",
             "properties": {
@@ -844,7 +798,7 @@ const docTemplate = `{
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
 	Version:          "1.0",
-	Host:             "localhost:8082",
+	Host:             "",
 	BasePath:         "/",
 	Schemes:          []string{},
 	Title:            "ApiBus Example API",

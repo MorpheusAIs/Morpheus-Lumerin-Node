@@ -332,7 +332,7 @@ func (apiBus *ApiBus) GetSessions(ctx *gin.Context, offset *big.Int, limit uint8
 //	 	@Tags			wallet
 //		@Produce		json
 //		@Param			prompt	body		proxyapi.PromptRequest 	true	"Prompt"
-//		@Header			session_id	string	false	"Session ID"
+//		@Param 			session_id header string false "Session ID"
 //		@Success		200	{object}	interface{}
 //		@Router			/v1/chat/completions [post]
 func (apiBus *ApiBus) RemoteOrLocalPrompt(ctx *gin.Context) (bool, int, gin.H) {

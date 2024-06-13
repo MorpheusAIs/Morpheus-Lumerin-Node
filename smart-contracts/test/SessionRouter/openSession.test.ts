@@ -11,14 +11,13 @@ import {
   getHex,
   getSessionId,
   getTxTimestamp,
-  now,
-  now2,
+  nowChain,
   randomBytes,
   randomBytes32,
   startOfTheDay,
 } from "../utils";
-import { DAY, HOUR, SECOND } from "../../utils/time";
-import { UnknownRpcError } from "viem";
+import { DAY, HOUR, MINUTE, SECOND } from "../../utils/time";
+import { UnknownRpcError, formatUnits } from "viem";
 
 describe("session actions", function () {
   describe("positive cases", function () {
@@ -358,9 +357,7 @@ describe("verify session end time", function () {
     const { msg, signature } = await getProviderApproval(provider, exp.bidID);
     const txHash = await sessionRouter.write.openSession(
       [stake, msg, signature],
-      {
-        account: user.account,
-      },
+      { account: user.account },
     );
 
     const sessionId = await getSessionId(publicClient, hre, txHash);
@@ -370,20 +367,19 @@ describe("verify session end time", function () {
     expect(session.endsAt).to.equal(createdAt + exp.durationSeconds);
   });
 
-  it("session that spans across midnight (6h)", async function () {
+  it("session that spans across midnight (6h) should last 6h", async function () {
     const {
       sessionRouter,
       expectedSession: exp,
       user,
       publicClient,
       getStake,
-      getDuration,
       approveUserFunds,
       provider,
     } = await loadFixture(deploySingleBid);
 
     const tomorrow9pm =
-      startOfTheDay(await now2()) +
+      startOfTheDay(await nowChain()) +
       BigInt(DAY / SECOND) +
       21n * BigInt(HOUR / SECOND);
     await time.increaseTo(tomorrow9pm); // 9pm
@@ -400,46 +396,37 @@ describe("verify session end time", function () {
     );
 
     await time.increase((3 * HOUR) / SECOND + 1);
-    const durarion2ndDay = await getDuration(stake, exp.pricePerSecond);
-    const effectiveDuration = 3n * BigInt(HOUR / SECOND) + durarion2ndDay;
 
     const sessionId = await getSessionId(publicClient, hre, txHash);
     const session = await sessionRouter.read.getSession([sessionId]);
     const createdAt = await getTxTimestamp(publicClient, txHash);
 
     const endsAt = NewDate(session.endsAt);
-    const expEndsAt = NewDate(createdAt + effectiveDuration);
+    const expEndsAt = NewDate(createdAt + durationSeconds);
 
     expect(endsAt.getTime()).approximately(expEndsAt.getTime(), 10 * SECOND);
   });
 
-  it.skip("session that lasts multiple days", async function () {
+  it("session that lasts multiple days", async function () {
     const {
       sessionRouter,
       expectedSession: exp,
       user,
       publicClient,
-      getStake,
-      getDuration,
       approveUserFunds,
       provider,
     } = await loadFixture(deploySingleBid);
 
-    for (let i = 0; i < 100; i++) {
-      console.log(
-        await sessionRouter.read.getTodaysBudget([
-          now() + BigInt((i * DAY) / SECOND),
-        ]),
-      );
-    }
-    return;
+    const midnight = startOfTheDay(await nowChain()) + BigInt(DAY / SECOND);
+    await time.increaseTo(midnight);
 
-    const midnight = startOfTheDay(await now2()) + BigInt(DAY / SECOND);
-    await time.increaseTo(midnight); // 9pm
-
-    // the stake is enough to cover the whole day + extra 6h
+    // the stake is enough to cover the whole day + extra 1h
     const durationSeconds = 25n * BigInt(HOUR / SECOND);
-    const stake = await getStake(durationSeconds, exp.pricePerSecond);
+    const stake = await sessionRouter.read.stipendToStake([
+      durationSeconds * exp.pricePerSecond,
+      await nowChain(),
+    ]);
+
     await approveUserFunds(stake);
 
     const { msg, signature } = await getProviderApproval(provider, exp.bidID);
@@ -450,22 +437,8 @@ describe("verify session end time", function () {
 
     const sessionId = await getSessionId(publicClient, hre, txHash);
     const session = await sessionRouter.read.getSession([sessionId]);
+    const durSeconds = Number(session.endsAt - session.openedAt);
 
-    const endsAt = NewDate(session.endsAt);
-    // const expEndsAt = NewDate(createdAt + effectiveDuration);
-
-    console.log("start", NewDate(session.openedAt));
-    console.log("actual", endsAt);
-    console.log("duration", session.endsAt - session.openedAt, "seconds");
-
-    const lastDay = session.endsAt - BigInt(DAY / SECOND);
-
-    await time.increaseTo(lastDay);
-    const dd = await sessionRouter.read.stakeToStipend([stake, lastDay]);
-    console.log("stipend last day\t", dd);
-    console.log(
-      "stipend needed for 24h\t",
-      Number(session.pricePerSecond) * 24 * 3600,
-    );
+    expect(durSeconds).to.equal(1 * (DAY / SECOND));
   });
 });
