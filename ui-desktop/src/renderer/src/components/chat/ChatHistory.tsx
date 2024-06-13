@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from "react";
 import styled from 'styled-components';
 import { IconX } from "@tabler/icons-react";
 import { abbreviateAddress } from '../../utils';
+import { isClosed } from './utils';
 
 const Container = styled.div`
     text-align: center;
@@ -37,10 +37,10 @@ export const ChatHistory = (props: ChatHistoryProps) => {
                 sessions?.length && (
                     sessions.map(a => (
                     <HistoryItem key={a.Id}>
-                        <div>{abbreviateAddress(a.Id, 5)}</div>
-                        <div>{new Date(a.OpenedAt * 1000).toLocaleString()}</div>
+                        <div>{abbreviateAddress(a.Id, 3)}</div>
+                        <div>{(a.EndsAt - a.OpenedAt) / 60} min</div>
                         {
-                            !a.ClosedAt ? (<IconX onClick={() => props.onCloseSession(a.Id)}></IconX>) : <div>CLOSED</div>
+                            !isClosed(a) ? (<IconX onClick={() => props.onCloseSession(a.Id)}></IconX>) : <div>CLOSED</div>
                         }
                     </HistoryItem>)) 
                 )

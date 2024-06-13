@@ -9,7 +9,7 @@ import selectors from '../selectors';
 
 const withChatState = WrappedComponent => {
   class Container extends React.Component {
-
+    
     static contextType = ToastsContext;
 
     static displayName = `withChatState(${WrappedComponent.displayName ||

@@ -31,6 +31,9 @@ const listeners = {
   'get-rates': handlers.getMorRate,
   "get-todays-budget": handlers.getTodaysBudget,
   "get-supply": handlers.getTokenSupply,
+  // Chat history
+  "get-chat-history": handlers.getChatHitory,
+  "save-chat-history": handlers.saveChatHistory
 }
 
 // Subscribe to messages where no core has to react

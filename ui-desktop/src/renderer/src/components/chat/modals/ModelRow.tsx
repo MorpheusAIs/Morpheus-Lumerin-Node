@@ -1,20 +1,11 @@
-import React, { useState } from 'react';
-import { IconTrashOff } from '@tabler/icons-react';
+import { useState } from 'react';
 import styled from 'styled-components';
 import Select from "react-select";
 import {
-    TitleWrapper,
-    Title,
-    Subtitle,
-    Form,
-    InputGroup,
-    Row,
-    Input,
-    Label,
-    Sublabel,
     RightBtn,
 } from '../../contracts/modals/CreateContractModal.styles';
 import { abbreviateAddress } from '../../../utils';
+import { formatSmallNumber } from '../utils';
 
 const RowContainer = styled.div`
   padding: 1.2rem 0;
@@ -71,7 +62,7 @@ function ModelRow(props) {
             hasLocal = true;
             return null;
         }
-        return ({ value: x.Id, label: `${abbreviateAddress(x.Provider || "", 3)} ${x.PricePerSecond / (10 ** 18)} MOR` })
+        return ({ value: x.Id, label: `${abbreviateAddress(x.Provider || "", 3)} ${formatSmallNumber(x.PricePerSecond / (10 ** 18))} MOR` })
     }).filter(x => x);
     const options = hasLocal ? [({ value: "Local", label: "(local) 0 MOR"}), ...optionsWithoutLocal] : optionsWithoutLocal;
     
