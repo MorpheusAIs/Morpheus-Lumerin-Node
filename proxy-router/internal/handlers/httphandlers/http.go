@@ -36,6 +36,7 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 
 	r.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"*"},
+		AllowHeaders: []string{"session_id"},
 	}))
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
