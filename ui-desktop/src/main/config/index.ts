@@ -1,7 +1,9 @@
 import { parseJSONArray } from './utils'
+import dotenv from 'dotenv'
+
+dotenv.config()
 
 let httpApiUrls, explorerApiURLs
-
 
 try {
   httpApiUrls = parseJSONArray(process.env.ETH_NODE_ADDRESS_HTTP)
