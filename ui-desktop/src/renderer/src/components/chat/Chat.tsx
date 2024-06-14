@@ -103,26 +103,48 @@ const Chat = (props) => {
         chatBlockRef.current?.scroll({ top: chatBlockRef.current.scrollHeight, behavior: 'smooth' })
     }
 
-    const onOpenSession = ({ stake }) => {
+    const onOpenSession = async ({ stake }) => {
         console.log("open-session", stake);
 
-        props.onOpenSession({ stake, selectedBid }).then((res) => {
-            if (!res) {
+        try {
+            const openedSession = await props.onOpenSession({ stake, selectedBid });
+            if (!openedSession) {
                 return;
             }
-            setActiveSession(res);
-            refreshSessions();
-        }).finally(() => {
+    
+            setActiveSession(openedSession);
+            await refreshSessions();
+        }
+        finally {
             setIsLoading(false);
-        })
+        }
     }
 
     const refreshSessions = async () => {
-        return await props.getSessionsByUser(props.address);
+        const sessions = await props.getSessionsByUser(props.address);
+        setSessions(sessions);
     }
 
-    const closeSession = (sessionId: string) => {
-        props.closeSession(sessionId).then(refreshSessions);
+    const closeSession = async (sessionId: string) => {
+        await props.closeSession(sessionId);
+        await refreshSessions();
+    }
+    
+    const selectSession = async (sessionId: string) => {
+        console.log("select-session", sessionId)
+
+        const openSessions = sessions.filter(s => !isClosed(s));
+        const openSession = openSessions.find(s => s.Id == sessionId);
+
+        if (openSession) {
+            setActiveSession({ sessionId: openSession.Id});
+        }
+
+        const selectedBid = (chainData.models
+            .find((x: any) => x.bids.find(b => b.Id == openSession.BidID)) as any)
+            .bids.find(b => b.Id == openSession.BidID);
+
+        setSelectedBid(selectedBid);
     }
 
     const call = async (message) => {
@@ -160,6 +182,8 @@ const Chat = (props) => {
 
         if (!response.ok) {
             console.log("Failed", await response.json())
+            props.toasts.toast('error', 'Failed to send prompt');
+            return;
         }
 
         const textDecoder = new TextDecoder();
@@ -220,6 +244,32 @@ const Chat = (props) => {
         setValue("");
         scrollToBottom();
     }
+    const onBidSelect = ({ bidId, modelId }) => {
+        setMessages([]);
+        setActiveSession(undefined);
+
+        if(bidId) {
+            const selectedBid = (chainData.models
+                .find((x: any) => x.bids.find(b => b.Id == bidId)) as any)
+                .bids.find(b => b.Id == bidId);
+
+            const openSessions = sessions.filter(s => !isClosed(s));
+            const openBidSession = openSessions.find(s => s.BidID == selectedBid.Id);
+            
+            if (openBidSession) {
+                setActiveSession({ sessionId: openBidSession.Id});
+            }
+
+            setSelectedBid(selectedBid);
+        }
+        else {
+            const selectedBid = chainData.models
+                .find(x => x.Id == modelId)
+                .bids.find(b => b.Provider == 'Local');;
+
+            setSelectedBid(selectedBid);
+        }
+    }
 
     return (
         <>
@@ -237,6 +287,8 @@ const Chat = (props) => {
             >
                 <ChatHistory
                     sessions={sessions}
+                    onSelectSession={selectSession}
+                    refreshSessions={refreshSessions}
                     onCloseSession={closeSession} />
             </Drawer>
             <View>
@@ -320,7 +372,6 @@ const Chat = (props) => {
                             }}
                             value={value}
                             onChange={ev => setValue(ev.target.value)}
-                            // style={{ background: 'transparent', boxSizing: 'border-box'}}
                             placeholder={"Ask me anything..."}
                             minRows={1}
                             maxRows={6} />
@@ -343,13 +394,8 @@ const Chat = (props) => {
             <ModelSelectionModal
                 models={(chainData as any)?.models}
                 isActive={openChangeModal}
-                onChangeModel={(id) => {
-                    const defaultSelectedBid = (chainData.models
-                        .find((x: any) => x.bids.find(b => b.Id == id)) as any)
-                        .bids.find(b => b.Id == id);
-
-                    setSelectedBid(defaultSelectedBid);
-                    setMessages([]);
+                onChangeModel={(eventData) => {
+                    onBidSelect(eventData);
                 }}
                 handleClose={() => setOpenChangeModal(false)} />
         </>

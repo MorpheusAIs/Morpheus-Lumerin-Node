@@ -195,6 +195,7 @@ const withChatState = WrappedComponent => {
           getSessionsByUser={this.getSessionsByUser}
           closeSession={this.closeSession}
           onOpenSession={this.onOpenSession}
+          toasts={this.context}
           {...this.state}
           {...this.props}
         />

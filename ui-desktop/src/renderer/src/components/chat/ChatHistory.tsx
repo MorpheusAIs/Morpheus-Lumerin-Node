@@ -1,5 +1,5 @@
 import styled from 'styled-components';
-import { IconX } from "@tabler/icons-react";
+import { IconX, IconRefresh } from "@tabler/icons-react";
 import { abbreviateAddress } from '../../utils';
 import { isClosed } from './utils';
 
@@ -22,6 +22,8 @@ const HistoryItem = styled.div`
 
 interface ChatHistoryProps {
     onCloseSession: (string) => void;
+    onSelectSession: (string) => void;
+    refreshSessions: () => void;
     sessions: any[];
 }
 
@@ -31,12 +33,12 @@ export const ChatHistory = (props: ChatHistoryProps) => {
     return (
         <Container>
             <Title>
-                Sessions
+                Sessions <span><IconRefresh width={"14px"}></IconRefresh></span>
             </Title>
             {
                 sessions?.length && (
                     sessions.map(a => (
-                    <HistoryItem key={a.Id}>
+                    <HistoryItem key={a.Id} onClick={() => props.onSelectSession(a.Id)}>
                         <div>{abbreviateAddress(a.Id, 3)}</div>
                         <div>{(a.EndsAt - a.OpenedAt) / 60} min</div>
                         {
