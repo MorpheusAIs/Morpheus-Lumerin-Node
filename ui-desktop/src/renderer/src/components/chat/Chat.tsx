@@ -145,6 +145,7 @@ const Chat = (props) => {
             .bids.find(b => b.Id == openSession.BidID);
 
         setSelectedBid(selectedBid);
+        toggleDrawer();
     }
 
     const call = async (message) => {
