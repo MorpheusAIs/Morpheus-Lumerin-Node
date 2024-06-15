@@ -7,6 +7,8 @@ import (
 	"math/big"
 	"net/http"
 	"os"
+	"bufio"
+	"strings"
 
 	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/api-gateway/client"
 
@@ -16,9 +18,56 @@ import (
 const httpErrorMessage string = "internal error: %v; http status: %v"
 
 func main() {
-	actions := NewActions(client.NewApiGatewayClient("http://localhost:8080", http.DefaultClient))
+	api_host := "http://localhost:8082"
+	file, err := os.Open(".env")
+	if err == nil {
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			nv := strings.SplitN(scanner.Text(), "=", 2)
+			if nv == nil || len(nv) != 2 {
+				continue
+			}
+			n := strings.Trim(nv[0], " ")
+			v := strings.Trim(nv[1], " ")
+			if n == "API_HOST" {
+				api_host = v
+			}
+		}
+	}
+	defer file.Close()
+
+	actions := NewActions(client.NewApiGatewayClient(api_host, http.DefaultClient))
 	app := &cli.App{
+		Usage: "A client to call the Morpheus Lumerin API",
 		Commands: []*cli.Command{
+			{
+				Name: "getAllowance",
+				Aliases: []string{"ga"},
+				Usage: "get allowance",
+				Action: actions.getAllowance,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name: "spender",
+						Required: true,
+					},
+				},
+			},
+			{
+				Name: "approveAllowance",
+				Aliases: []string{"aa"},
+				Usage: "approve allowance",
+				Action: actions.approveAllowance,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name: "spender",
+						Required: true,
+					},
+					&cli.Uint64Flag{
+						Name: "amount",
+						Required: true,
+					},
+				},
+			},
 			{
 				Name:    "healthcheck",
 				Aliases: []string{"he"},
@@ -40,64 +89,115 @@ func main() {
 			{
 				Name:    "createChatCompletions",
 				Aliases: []string{"ccc"},
-				Usage:   "create a chat completion by sending a prompt to the ai engine",
+				Usage:   "create chat completions by sending a prompt to the AI engine",
 				Action:  actions.createChatCompletions,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name: "prompt",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name: "messages",
+					},
+				},
 			},
 			{
 				Name:    "initiateProxySession",
 				Aliases: []string{"ips"},
-				Usage:   "",
+				Usage:   "initiate a proxy session",
 				Action:  actions.initiateProxySession,
 			},
 			{
 				Name:    "blockchainProviders",
 				Aliases: []string{"bp"},
-				Usage:   "",
+				Usage:   "list blockchain providers",
 				Action:  actions.blockchainProviders,
-				Subcommands: []*cli.Command{
-					{
-						Name:    "create",
-						Aliases: []string{"c"},
-						Usage:   "blockchainProviders create",
-						Action:  actions.createBlockchainProvider,
+			},
+			{
+				Name:    "blockchainProvidersCreate",
+				Aliases: []string{"bpc"},
+				Usage:   "create a blockchain provider",
+				Action:  actions.createBlockchainProvider,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name: "address",
+						Required: true,
+					},
+					&cli.Uint64Flag{
+						Name: "stake",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name: "endpoint",
+						Required: true,
 					},
 				},
 			},
 			{
 				Name:    "blockchainProvidersBids",
 				Aliases: []string{"bpb"},
-				Usage:   "",
+				Usage:   "list provider bids",
 				Action:  actions.blockchainProvidersBids,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name: "address",
+						Required: true,
+					},
+					&cli.Int64Flag{
+						Name: "offset",
+					},
+					&cli.UintFlag{
+						Name: "limit",
+					},
+				},
 			},
 			{
 				Name:    "blockchainModels",
 				Aliases: []string{"bm"},
-				Usage:   "",
+				Usage:   "list models",
 				Action:  actions.blockchainModels,
 			},
 			{
 				Name:    "openBlockchainSession",
-				Aliases: []string{"open blockchain session"},
-				Usage:   "",
+				Aliases: []string{"obs"},
+				Usage:   "open a blockchain session",
 				Action:  actions.openBlockchainSession,
 			},
 			{
 				Name:    "closeBlockchainSession",
 				Aliases: []string{"cbs"},
-				Usage:   "",
+				Usage:   "close a blockchain session",
 				Action:  actions.closeBlockchainSession,
 			},
 			{
 				Name:    "createAndStreamChatCompletions",
-				Aliases: []string{"csc", "streamlocal"},
-				Usage:   "create a chat completion by sending a prompt to the ai engine",
+				Aliases: []string{"csc"},
+				Usage:   "create and stream chat completions",
 				Action:  actions.createAndStreamChatCompletions,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name: "prompt",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name: "messages",
+					},
+				},
 			},
 			{
 				Name:    "createAndStreamSessionChatCompletions",
 				Aliases: []string{"cssc"},
-				Usage:   "create a chat completion by sending a prompt to the ai engine",
+				Usage:   "create and stream session chat completions",
 				Action:  actions.createChatCompletions,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name: "prompt",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name: "messages",
+					},
+				},
 			},
 		},
 	}
@@ -113,6 +213,27 @@ type actions struct {
 
 func NewActions(c *client.ApiGatewayClient) *actions {
 	return &actions{client: c}
+}
+
+func (a *actions) getAllowance(cCtx *cli.Context) error {
+	spender := cCtx.String("spender")
+	res, err := a.client.GetAllowance(cCtx.Context, spender)
+	if err != nil {
+		return err
+	}
+	fmt.Println(res)
+	return nil
+}
+
+func (a *actions) approveAllowance(cCtx *cli.Context) error {
+	spender := cCtx.String("spender")
+	amount := cCtx.Uint64("amount")
+	res, err := a.client.ApproveAllowance(cCtx.Context, spender, amount)
+	if err != nil {
+		return err
+	}
+	fmt.Println(res)
+	return nil
 }
 
 func (a *actions) healthcheck(cCtx *cli.Context) error {
@@ -150,11 +271,10 @@ func (a *actions) proxyRouterFiles(cCtx *cli.Context) error {
 
 func (a *actions) createChatCompletions(cCtx *cli.Context) error {
 	prompt := cCtx.String("prompt")
+	var messages []client.ChatCompletionMessage
+	json.Unmarshal([]byte(cCtx.String("messages")), &messages)
 
-	//TODO: handle chat history
-	_ = cCtx.StringSlice("messages")
-
-	completion, err := a.client.Prompt(cCtx.Context, prompt, []client.ChatCompletionMessage{})
+	completion, err := a.client.Prompt(cCtx.Context, prompt, messages)
 	if err != nil {
 		return err
 	}
@@ -166,7 +286,8 @@ func (a *actions) createChatCompletions(cCtx *cli.Context) error {
 
 func (a *actions) createAndStreamChatCompletions(cCtx *cli.Context) error {
 	prompt := cCtx.String("prompt")
-	messages := cCtx.Generic("messages").([]*client.ChatCompletionMessage)
+	var messages []*client.ChatCompletionMessage
+	json.Unmarshal([]byte(cCtx.String("messages")), &messages)
 
 	completion, err := a.client.PromptStream(cCtx.Context, prompt, messages, func(msg client.ChatCompletionStreamResponse) error {
 		fmt.Println(msg)
@@ -184,10 +305,10 @@ func (a *actions) createAndStreamChatCompletions(cCtx *cli.Context) error {
 
 func (a *actions) createSessionChatCompletions(cCtx *cli.Context) error {
 	prompt := cCtx.String("prompt")
+	var messages []client.ChatCompletionMessage
+	json.Unmarshal([]byte(cCtx.String("messages")), &messages)
 
-	messages := cCtx.StringSlice("messages")
-
-	completion, err := a.client.SessionPrompt(cCtx.Context, prompt, messages)
+	completion, err := a.client.SessionPrompt(cCtx.Context, prompt)
 	if err != nil {
 		return err
 	}
@@ -218,8 +339,11 @@ func (a *actions) blockchainProviders(cCtx *cli.Context) error {
 }
 
 func (a *actions) createBlockchainProvider(cCtx *cli.Context) error {
-	//TODO: handle provider fields
-	providers, err := a.client.CreateNewProvider(cCtx.Context)
+	address := cCtx.String("address")
+	stake := cCtx.Uint64("stake")
+	endpoint := cCtx.String("endpoint")
+
+	providers, err := a.client.CreateNewProvider(cCtx.Context, address, stake, endpoint)
 	if err != nil {
 		return err
 	}
@@ -229,14 +353,11 @@ func (a *actions) createBlockchainProvider(cCtx *cli.Context) error {
 }
 
 func (a *actions) blockchainProvidersBids(cCtx *cli.Context) error {
-
-	providerAddress := cCtx.String("providerAddress")
-
+	address := cCtx.String("address")
 	offset := cCtx.Int64("offset")
-
 	limit := cCtx.Uint("limit")
 
-	bids, err := a.client.GetBidsByProvider(cCtx.Context, providerAddress, big.NewInt(offset), uint8(limit))
+	bids, err := a.client.GetBidsByProvider(cCtx.Context, address, big.NewInt(offset), uint8(limit))
 	if err != nil {
 		return err
 	}
