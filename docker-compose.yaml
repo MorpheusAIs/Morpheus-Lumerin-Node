@@ -13,6 +13,7 @@ services:
       - ollama
     volumes:
       - ./proxy-router/logs:/app/logs
+      - ~/go/pkg/mod:/go/pkg/mod
   ollama:
     image: ollama/ollama
     container_name: ollama

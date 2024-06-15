@@ -57,5 +57,6 @@ func New(cfg common.Config) model {
 
 		openaiClient:  client,
 		openaiRequest: req,
+		completionChunkSub: make(chan string),
 	}
 }

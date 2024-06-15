@@ -3,14 +3,14 @@ package proxyctl
 import (
 	"context"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/apibus"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/handlers/tcphandlers"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/morrpc"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/transport"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/rpcproxy"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/internal/storages"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/apibus"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/handlers/tcphandlers"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/morrpc"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/transport"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/rpcproxy"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/storages"
 	"golang.org/x/sync/errgroup"
 )
 

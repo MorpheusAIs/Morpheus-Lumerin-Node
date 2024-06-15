@@ -345,7 +345,7 @@ func (apiBus *ApiBus) GetSessions(ctx *gin.Context, offset *big.Int, limit uint8
 //		@Header			session_id	string	false	"Session ID"
 //		@Success		200	{object}	interface{}
 //		@Router			/v1/chat/completions [post]
-func (apiBus *ApiBus) RemoteOrLocalPrompt(ctx *gin.Context) (bool, int, gin.H) {
+func (apiBus *ApiBus) RemoteOrLocalPrompt(ctx *gin.Context) (bool, int, interface{}) {
 	sessionId := ctx.GetHeader("session_id")
 	if sessionId == "" {
 		return apiBus.PromptLocal(ctx)
@@ -353,7 +353,7 @@ func (apiBus *ApiBus) RemoteOrLocalPrompt(ctx *gin.Context) (bool, int, gin.H) {
 	return apiBus.SendPrompt(ctx)
 }
 
-func (apiBus *ApiBus) PromptLocal(ctx *gin.Context) (bool, int, gin.H) {
+func (apiBus *ApiBus) PromptLocal(ctx *gin.Context) (bool, int, interface{}) {
 	var req *openai.ChatCompletionRequest
 
 	err := ctx.ShouldBindJSON(&req)
@@ -400,7 +400,7 @@ func (apiBus *ApiBus) PromptLocal(ctx *gin.Context) (bool, int, gin.H) {
 		return true, http.StatusInternalServerError, gin.H{"error": err.Error()}
 	}
 
-	return false, http.StatusOK, response.(gin.H)
+	return false, http.StatusOK, response
 }
 
 // GetWallet godoc

@@ -181,6 +181,7 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 	}))
 
 	r.POST("/wallet", (func(ctx *gin.Context) {
+		
 		var req SetupWalletReqBody
 		err := ctx.ShouldBindJSON(&req)
 		if err != nil {
