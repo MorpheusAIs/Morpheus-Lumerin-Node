@@ -42,13 +42,13 @@ export const FooterBlock = styled.div`
 `;
 
 export const FooterLabel = styled.label`
-  color: ${p => p.theme.colors.dark};
+  color: ${p => p.theme.colors.morMain};
   margin-top: 5px;
   font-size: 1.6rem;
   font-weight: bold;
 `;
 
 export const FooterSublabel = styled.label`
-  color: ${p => p.theme.colors.primary};
+  color: white;
   font-size: 1.4rem;
 `;

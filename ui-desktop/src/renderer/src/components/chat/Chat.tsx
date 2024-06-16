@@ -1,4 +1,4 @@
-import React, { createRef, useContext, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 // import component 👇
 import Drawer from 'react-modern-drawer'
 import { IconHistory, IconArrowUp, IconServer, IconWorld } from '@tabler/icons-react';
@@ -52,6 +52,7 @@ const Chat = (props) => {
 
     const [openSessionModal, setOpenSessionModal] = useState(false);
     const [openChangeModal, setOpenChangeModal] = useState(false);
+    const [isReadonly, setIsReadonly] = useState(false);
 
     const [selectedBid, setSelectedBid] = useState<any>(null);
 
@@ -59,7 +60,7 @@ const Chat = (props) => {
 
     const isLocal = !selectedBid || selectedBid?.Provider == 'Local';
     const providerAddress = isLocal ? "(local)" : selectedBid?.Provider ? abbreviateAddress(selectedBid?.Provider, 4) : null;
-
+    const isDisabled = (!activeSession && !isLocal) || isReadonly;
 
     useEffect(() => {
         (async () => {
@@ -147,21 +148,35 @@ const Chat = (props) => {
     }
     
     const selectSession = async (sessionId: string) => {
+        const findBid = (id) => {
+            return (chainData.models
+                .find((x: any) => x.bids.find(b => b.Id == id)) as any)
+                .bids.find(b => b.Id == id);
+        }
+
         console.log("select-session", sessionId)
+        toggleDrawer();
 
         const openSessions = sessions.filter(s => !isClosed(s));
         const openSession = openSessions.find(s => s.Id == sessionId);
 
-        if (openSession) {
-            await onSetActiveSession({ sessionId: openSession.Id })
+        if(!openSession) {
+            setIsReadonly(true)
+
+            const closedSession = sessions.find(s => s.Id == sessionId);
+            if (closedSession) {
+                await onSetActiveSession({ sessionId: closedSession.Id })
+                const selectedBid = findBid(closedSession.BidID);
+                setSelectedBid(selectedBid);
+            }
+            return;
         }
-
-        const selectedBid = (chainData.models
-            .find((x: any) => x.bids.find(b => b.Id == openSession.BidID)) as any)
-            .bids.find(b => b.Id == openSession.BidID);
-
-        setSelectedBid(selectedBid);
-        toggleDrawer();
+        else {
+            setIsReadonly(false)
+            await onSetActiveSession({ sessionId: openSession.Id })
+            const selectedBid = findBid(openSession.BidID);
+            setSelectedBid(selectedBid);
+        }
     }
 
     const call = async (message) => {
@@ -215,41 +230,39 @@ const Chat = (props) => {
 
         const reader = response.body.getReader()
 
-
-        while (true) {
-            if (abort) {
-                await reader.cancel();
-                abort = false;
-            }
-            let line; 
-            try {
+        try {
+            while (true) {
+                if (abort) {
+                    await reader.cancel();
+                    abort = false;
+                }
+    
                 const { value, done } = await reader.read();
-                line = value;
                 if (done) {
                     setIsSpinning(false);
                     break;
                 }
+    
+                const decodedString = textDecoder.decode(value, { stream: true });
+                const parts = parseDataChunk(decodedString);
+                parts.forEach(part => {
+                    if (!part?.id) {
+                        return;
+                    }
+                    const message = memoState.find(m => m.id == part.id);
+                    const otherMessages = memoState.filter(m => m.id != part.id);
+                    const text = `${message?.text || ''}${part?.choices[0]?.delta?.content || ''}`;
+                    const result = [...otherMessages, { id: part.id, user: modelName, role: "assistant", text: text, icon: modelName.toUpperCase()[0], color: getColor(modelName.toUpperCase()[0]) }];
+                    memoState = result;
+                    setMessages(result);
+                    scrollToBottom();
+                })
             }
-            catch(e) {
-                return memoState;
-            }
-
-            const decodedString = textDecoder.decode(line, { stream: true });
-            const parts = parseDataChunk(decodedString);
-            parts.forEach(part => {
-                if (!part?.id) {
-                    return;
-                }
-                const message = memoState.find(m => m.id == part.id);
-                const otherMessages = memoState.filter(m => m.id != part.id);
-                const text = `${message?.text || ''}${part?.choices[0]?.delta?.content || ''}`;
-                const result = [...otherMessages, { id: part.id, user: modelName, role: "assistant", text: text, icon: modelName.toUpperCase()[0], color: getColor(modelName.toUpperCase()[0]) }];
-                memoState = result;
-                setMessages(result);
-                scrollToBottom();
-            })
         }
-
+        catch(e) {
+            console.error(e);
+        }
+       
         return memoState;
     }
 
@@ -279,6 +292,7 @@ const Chat = (props) => {
     const onBidSelect = ({ bidId, modelId }) => {
         setMessages([]);
         setActiveSession(undefined);
+        setIsReadonly(false);
 
         if(bidId) {
             const selectedBid = (chainData.models
@@ -320,6 +334,7 @@ const Chat = (props) => {
             >
                 <ChatHistory
                     sessions={sessions}
+                    models={chainData?.models || []}
                     onSelectSession={selectSession}
                     refreshSessions={refreshSessions}
                     onCloseSession={closeSession} />
@@ -396,7 +411,7 @@ const Chat = (props) => {
                     </ChatBlock>
                     <Control>
                         <CustomTextArrea
-                            disabled={!activeSession && !isLocal}
+                            disabled={isDisabled}
                             onKeyPress={(e) => {
                                 if (e.key === 'Enter') {
                                     e.preventDefault();
@@ -405,10 +420,10 @@ const Chat = (props) => {
                             }}
                             value={value}
                             onChange={ev => setValue(ev.target.value)}
-                            placeholder={"Ask me anything..."}
+                            placeholder={isReadonly ? "Session is closed. Chat in ReadOnly Mode" : "Ask me anything..."}
                             minRows={1}
                             maxRows={6} />
-                        <SendBtn disabled={!activeSession && !isLocal} onClick={handleSubmit}>{
+                        <SendBtn disabled={isDisabled} onClick={handleSubmit}>{
                             isSpinning ? <Spinner animation="border" /> : <IconArrowUp size={"26px"}></IconArrowUp>
                         }</SendBtn>
                     </Control>

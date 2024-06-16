@@ -4,7 +4,6 @@ import { abbreviateAddress } from '../../utils';
 import { isClosed } from './utils';
 
 const Container = styled.div`
-    text-align: center;
 
     .history-scroll-block {
         overflow-y: auto;
@@ -24,8 +23,8 @@ const HistoryItem = styled.div`
     color: ${p => p.theme.colors.morMain}
     display: flex;
     align-items: center;
-    justify-content: space-evenly;
-    padding: 5px 0;
+    justify-content: space-between;
+    padding: 5px 0 0 0;
 `
 const HistoryEntryContainer = styled.div`
     background: rgba(255,255,255, 0.04);
@@ -34,11 +33,11 @@ const HistoryEntryContainer = styled.div`
     color: white;
     margin-bottom: 15px;
     cursor: pointer;
+    padding: 10px;
 `
 
 const HistoryEntryTitle = styled.div`
     text-align: justify;
-    padding: 10px;
     text-overflow: ellipsis;
     overflow: hidden;
     white-space: nowrap;
@@ -49,6 +48,7 @@ interface ChatHistoryProps {
     onSelectSession: (string) => void;
     refreshSessions: () => void;
     sessions: any[];
+    models: any[];
 }
 
 export const ChatHistory = (props: ChatHistoryProps) => {
@@ -64,11 +64,12 @@ export const ChatHistory = (props: ChatHistoryProps) => {
                     sessions?.length && (
                         sessions.map(a => {
                             const title = localStorage.getItem(a.Id);
+                            const model = props.models.find(x => x.Id == a.ModelAgentId);
                             return (
                                 <HistoryEntryContainer onClick={() => props.onSelectSession(a.Id)}>
                                     {title ? <HistoryEntryTitle data-rh={title} data-rh-negative>{title}</HistoryEntryTitle> : null}
                                     <HistoryItem key={a.Id}>
-                                        <div>{abbreviateAddress(a.Id, 3)}</div>
+                                        <div data-rh={abbreviateAddress(a.Id, 3)} data-rh-negative>{model.Name}</div>
                                         <div>{(a.EndsAt - a.OpenedAt) / 60} min</div>
                                         {
                                             !isClosed(a) ? (<IconX onClick={() => props.onCloseSession(a.Id)}></IconX>) : <div>CLOSED</div>

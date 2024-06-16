@@ -35,7 +35,7 @@ export const getColor = (name) => {
 
 export const parseDataChunk = (decodedChunk) => {
     const lines = decodedChunk.split('\n');
-    const trimmedData = lines.map(line => line.replace(/^data: /, "").trim());
+    const trimmedData = lines.map(line => line.replace(/^data: /, "").replace("<|im_start|>", "").replace("<|im_end|>", "").trim());
     const filteredData = trimmedData.filter(line => !["", "[DONE]"].includes(line));
     const parsedData = filteredData.map(line => JSON.parse(line));
 
