@@ -1,16 +1,16 @@
 import dbManager from '../database';
 
 const getChatHitory = async (sessionId) => {
-    const collection = await dbManager.getDb().collection('chat').findAsync({ id: sessionId });
+    const collection = await dbManager.getDb().collection('chat').findAsync({ _id: sessionId });
     return collection;
 }
 
-const saveChatHistory = ({ sessionId, messages }) => {
-    const db = getDb();
+const saveChatHistory = async ({ sessionId, messages }) => {
+    const db = dbManager.getDb();
     const collection = db.collection('chat');
-    collection.insert(
+    await collection.insert(
         {
-            id: sessionId,
+            _id: sessionId,
             messages: messages,
         });
 }

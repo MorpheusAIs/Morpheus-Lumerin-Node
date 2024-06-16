@@ -17,7 +17,7 @@ export const Container = styled.div`
   animation-fill-mode: forwards;
   background-color: ${p =>
     p.negative
-      ? p.theme.colors.primary
+      ? p.theme.colors.morMain
       : p.darker
       ? p.theme.colors.darker
       : p.theme.colors.dark};
@@ -45,7 +45,7 @@ export const Container = styled.div`
     border-bottom: none;
     border-top-color: ${p =>
       p.negative
-        ? p.theme.colors.primary
+        ? p.theme.colors.morMain
         : p.darker
         ? p.theme.colors.darker
         : p.theme.colors.dark};

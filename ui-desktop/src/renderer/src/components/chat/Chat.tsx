@@ -33,6 +33,7 @@ import ModelSelectionModal from './modals/ModelSelectionModal';
 import { parseDataChunk, makeId, getColor, isClosed, formatSmallNumber } from './utils';
 
 let abort = false;
+const userMessage = { user: 'Me', role: "user", icon: "M", color: "#20dc8e" };
 
 const Chat = (props) => {
     const chatBlockRef = useRef<null | HTMLDivElement>(null);
@@ -75,7 +76,7 @@ const Chat = (props) => {
                     ?.bids?.find(b => b.Id == latestSession.BidID);
                 if(openBid){
                     setSelectedBid(openBid);
-                    setActiveSession({ sessionId: latestSession.Id});
+                    await onSetActiveSession({ sessionId: latestSession.Id})
                 }
             }
             else {
@@ -120,6 +121,21 @@ const Chat = (props) => {
         }
     }
 
+    const onSetActiveSession = async (session) => {
+        setActiveSession(session);
+        if(session) {
+            try {
+                const history = await props.client.getChatHistory(session.sessionId);
+                if (history.length) {
+                    setMessages(history[0].messages);
+                }
+            }
+            catch(e) {
+                props.toasts.toast('error', 'Failed to load chat history');
+            }
+        }
+    }
+
     const refreshSessions = async () => {
         const sessions = await props.getSessionsByUser(props.address);
         setSessions(sessions);
@@ -137,7 +153,7 @@ const Chat = (props) => {
         const openSession = openSessions.find(s => s.Id == sessionId);
 
         if (openSession) {
-            setActiveSession({ sessionId: openSession.Id});
+            await onSetActiveSession({ sessionId: openSession.Id })
         }
 
         const selectedBid = (chainData.models
@@ -150,6 +166,9 @@ const Chat = (props) => {
 
     const call = async (message) => {
         const chatHistory = messages.map(m => ({ role: m.role, content: m.text }))
+
+        let memoState = [...messages, { id: makeId(6), text: value, ...userMessage }];
+        setMessages(memoState);
 
         const headers = {
             "Accept": "application/json"
@@ -196,19 +215,26 @@ const Chat = (props) => {
 
         const reader = response.body.getReader()
 
-        let memoState = [...messages, { id: "some", user: 'Me', text: value, role: "user", icon: "M", color: "#20dc8e" }];
 
         while (true) {
             if (abort) {
                 await reader.cancel();
                 abort = false;
             }
-            const { value, done } = await reader.read();
-            if (done) {
-                setIsSpinning(false);
-                break;
+            let line; 
+            try {
+                const { value, done } = await reader.read();
+                line = value;
+                if (done) {
+                    setIsSpinning(false);
+                    break;
+                }
             }
-            const decodedString = textDecoder.decode(value, { stream: true });
+            catch(e) {
+                return memoState;
+            }
+
+            const decodedString = textDecoder.decode(line, { stream: true });
             const parts = parseDataChunk(decodedString);
             parts.forEach(part => {
                 if (!part?.id) {
@@ -223,6 +249,8 @@ const Chat = (props) => {
                 scrollToBottom();
             })
         }
+
+        return memoState;
     }
 
     const handleSubmit = () => {
@@ -236,11 +264,14 @@ const Chat = (props) => {
             return;
         }
 
+        if(!isLocal && messages.length === 0) {
+            localStorage.setItem(activeSession.sessionId, value);
+        }
+
         setIsSpinning(true);
-        setMessages([...messages, { id: "some", user: 'Me', text: value, role: "user", icon: "M", color: "#20dc8e" }]);
-        call(value).then(() => {
-            // set local storage last session
-            // flush to file
+        call(value).then((messages) => {
+            console.log("Flush to storage");
+            props.client.saveChatHistory({ sessionId: activeSession.sessionId, messages });
         }).finally(() => setIsSpinning(false));
         setValue("");
         scrollToBottom();
@@ -258,7 +289,7 @@ const Chat = (props) => {
             const openBidSession = openSessions.find(s => s.BidID == selectedBid.Id);
             
             if (openBidSession) {
-                setActiveSession({ sessionId: openBidSession.Id});
+                onSetActiveSession({ sessionId: openBidSession.Id})
             }
 
             setSelectedBid(selectedBid);
@@ -270,6 +301,7 @@ const Chat = (props) => {
 
             setSelectedBid(selectedBid);
         }
+        abort = true;
     }
 
     return (

@@ -5,19 +5,43 @@ import { isClosed } from './utils';
 
 const Container = styled.div`
     text-align: center;
+
+    .history-scroll-block {
+        overflow-y: auto;
+        height: calc(100vh - 100px);
+    }
 `
 
 const Title = styled.div`
     text-align: center;
     margin-bottom: 2.4rem;
+
+    span {
+        cursor: pointer;
+    }
 `
 const HistoryItem = styled.div`
     color: ${p => p.theme.colors.morMain}
     display: flex;
     align-items: center;
     justify-content: space-evenly;
-    cursor: pointer;
     padding: 5px 0;
+`
+const HistoryEntryContainer = styled.div`
+    background: rgba(255,255,255, 0.04);
+    border-width: 1px;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    color: white;
+    margin-bottom: 15px;
+    cursor: pointer;
+`
+
+const HistoryEntryTitle = styled.div`
+    text-align: justify;
+    padding: 10px;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
 `
 
 interface ChatHistoryProps {
@@ -29,24 +53,33 @@ interface ChatHistoryProps {
 
 export const ChatHistory = (props: ChatHistoryProps) => {
     const sessions = props.sessions;
-    
+
     return (
         <Container>
             <Title>
-                Sessions <span><IconRefresh width={"14px"}></IconRefresh></span>
+                Sessions <span onClick={props.refreshSessions}><IconRefresh width={"14px"}></IconRefresh></span>
             </Title>
-            {
-                sessions?.length && (
-                    sessions.map(a => (
-                    <HistoryItem key={a.Id} onClick={() => props.onSelectSession(a.Id)}>
-                        <div>{abbreviateAddress(a.Id, 3)}</div>
-                        <div>{(a.EndsAt - a.OpenedAt) / 60} min</div>
-                        {
-                            !isClosed(a) ? (<IconX onClick={() => props.onCloseSession(a.Id)}></IconX>) : <div>CLOSED</div>
+            <div className='history-scroll-block'>
+                {
+                    sessions?.length && (
+                        sessions.map(a => {
+                            const title = localStorage.getItem(a.Id);
+                            return (
+                                <HistoryEntryContainer onClick={() => props.onSelectSession(a.Id)}>
+                                    {title ? <HistoryEntryTitle data-rh={title} data-rh-negative>{title}</HistoryEntryTitle> : null}
+                                    <HistoryItem key={a.Id}>
+                                        <div>{abbreviateAddress(a.Id, 3)}</div>
+                                        <div>{(a.EndsAt - a.OpenedAt) / 60} min</div>
+                                        {
+                                            !isClosed(a) ? (<IconX onClick={() => props.onCloseSession(a.Id)}></IconX>) : <div>CLOSED</div>
+                                        }
+                                    </HistoryItem>
+                                </HistoryEntryContainer>
+                            )
                         }
-                    </HistoryItem>)) 
-                )
-            }
+                        ))
+                }
+            </div>
         </Container>
     )
 }
