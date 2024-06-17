@@ -147,7 +147,7 @@ func main() {
 			{
 				Name:    "createBlockchainProviderBid",
 				Aliases: []string{"cbpb"},
-				Usage:   "create provider bid",
+				Usage:   "createBlockchainProviderBid {{model}}",
 				Action:  actions.createBlockchainProviderBid,
 				Flags: []cli.Flag{
 					&cli.StringFlag{
@@ -168,8 +168,8 @@ func main() {
 			},
 			{
 				Name:    "openBlockchainSession",
-				Aliases: []string{"obs"},
 				Usage:   "open a blockchain session",
+				Aliases: []string{"obs"},
 				Action:  actions.openBlockchainSession,
 			},
 			{
@@ -415,6 +415,7 @@ func (a *actions) blockchainModels(cCtx *cli.Context) error {
 	}
 	jsonData, err := json.Marshal(models)
 	fmt.Println(string(jsonData))
+
 	return nil
 }
 
