@@ -33,6 +33,7 @@ import ModelSelectionModal from './modals/ModelSelectionModal';
 import { parseDataChunk, makeId, getColor, isClosed, formatSmallNumber } from './utils';
 
 let abort = false;
+let cancelScroll = false;
 const userMessage = { user: 'Me', role: "user", icon: "M", color: "#20dc8e" };
 
 const Chat = (props) => {
@@ -64,6 +65,13 @@ const Chat = (props) => {
     const isDisabled = (!activeSession && !isLocal) || isReadonly;
 
     useEffect(() => {
+        chatBlockRef?.current?.addEventListener('wheel', (event: any) => {
+            const isUp = event.wheelDelta ? event.wheelDelta > 0 : event.deltaY < 0;
+            if(isUp) {
+                cancelScroll = true;
+            }
+        });
+
         (async () => {
             const meta = await props.getMetaInfo();
             const chainData = await props.getModelsData();
@@ -105,7 +113,9 @@ const Chat = (props) => {
     }
 
     const scrollToBottom = () => {
-        chatBlockRef.current?.scroll({ top: chatBlockRef.current.scrollHeight, behavior: 'smooth' })
+        if(!cancelScroll) {
+            chatBlockRef.current?.scroll({ top: chatBlockRef.current.scrollHeight, behavior: 'smooth' })
+        }
     }
 
     const onOpenSession = async ({ stake }) => {
@@ -270,6 +280,7 @@ const Chat = (props) => {
         await props.client.saveChatHistory({ sessionId: activeSession.sessionId, messages: memoState });
         console.log("Stored succesfully");
        
+        cancelScroll = false;
         return memoState;
     }
 
