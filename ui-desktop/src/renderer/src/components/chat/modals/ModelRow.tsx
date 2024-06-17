@@ -1,20 +1,11 @@
-import React, { useState } from 'react';
-import { IconTrashOff } from '@tabler/icons-react';
+import { useState } from 'react';
 import styled from 'styled-components';
 import Select from "react-select";
 import {
-    TitleWrapper,
-    Title,
-    Subtitle,
-    Form,
-    InputGroup,
-    Row,
-    Input,
-    Label,
-    Sublabel,
     RightBtn,
 } from '../../contracts/modals/CreateContractModal.styles';
 import { abbreviateAddress } from '../../../utils';
+import { formatSmallNumber } from '../utils';
 
 const RowContainer = styled.div`
   padding: 1.2rem 0;
@@ -64,18 +55,24 @@ const selectorStyles = {
 
 function ModelRow(props) {
     
-    let hasLocal = false;
-    const optionsWithoutLocal = props?.model?.bids.map(x => {
+    const options= props?.model?.bids.map(x => {
         const isLocal = !x.Id;
         if(isLocal) {
-            hasLocal = true;
-            return null;
+            return { value: "Local", label: "(local) 0 MOR"};
         }
-        return ({ value: x.Id, label: `${abbreviateAddress(x.Provider || "", 3)} ${x.PricePerSecond / (10 ** 18)} MOR` })
-    }).filter(x => x);
-    const options = hasLocal ? [({ value: "Local", label: "(local) 0 MOR"}), ...optionsWithoutLocal] : optionsWithoutLocal;
+        return ({ value: x.Id, label: `${abbreviateAddress(x.Provider || "", 3)} ${formatSmallNumber(x.PricePerSecond / (10 ** 18))} MOR` })
+    });
     
     const [selected, changeSelected] = useState<any>();
+
+    const handleSelect = (value) => {
+        if(value == "Local") {
+            props.onChangeModel({ modelId: props?.model?.Id })
+        }
+        else {
+            props.onChangeModel({ bidId: value})
+        }
+    }
 
     return (
         <RowContainer>
@@ -94,7 +91,7 @@ function ModelRow(props) {
                 </div>
             </FlexCenter>
             <FlexCenter>
-                <RightBtn block onClick={() => props.onChangeModel(selected?.value)}>Change</RightBtn>
+                <RightBtn block onClick={() => handleSelect(selected?.value)}>Change</RightBtn>
             </FlexCenter>
         </RowContainer>
     );

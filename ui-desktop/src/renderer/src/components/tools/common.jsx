@@ -1,8 +1,8 @@
 import styled from 'styled-components';
 
-import 'react-tabs/style/react-tabs.css';
+// import 'react-tabs/style/react-tabs.css';
 import './styles.css';
-import { BaseBtn, TextInput } from '../common';
+import { Btn, BaseBtn, TextInput } from '../common';
 
 export const Sublabel = styled.label`
   line-height: 1.4rem;
@@ -18,14 +18,14 @@ export const ErrorLabel = styled(Sublabel)`
   color: red;
 `;
 
-export const StyledBtn = styled(BaseBtn)`
+export const StyledBtn = styled(Btn)`
   width: 40%;
   height: 40px;
   font-size: 1.5rem;
   border-radius: 5px;
   padding: 0 0.6rem;
-  background-color: ${p => p.theme.colors.primary};
-  color: ${p => p.theme.colors.light};
+  background-color: ${p => p.theme.colors.morMain};
+  color: black;
 
   @media (min-width: 1040px) {
     width: 35%;
