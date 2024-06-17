@@ -135,28 +135,28 @@ func main() {
 						Required: true,
 					},
 					&cli.Int64Flag{
-						Name: "offset",
+						Name:  "offset",
+						Value: 0,
 					},
 					&cli.UintFlag{
-						Name: "limit",
+						Name:  "limit",
+						Value: 10,
 					},
 				},
 			},
 			{
-				Name:    "createClockchainProvidersBids",
+				Name:    "createBlockchainProviderBid",
 				Aliases: []string{"cbpb"},
 				Usage:   "create provider bid",
 				Action:  actions.createBlockchainProviderBid,
 				Flags: []cli.Flag{
 					&cli.StringFlag{
-						Name:     "provider",
+						Name:     "model",
 						Required: true,
 					},
-					&cli.StringFlag{
-						Name: "model",
-					},
 					&cli.Uint64Flag{
-						Name: "pricePerSecond",
+						Name:     "pricePerSecond",
+						Required: true,
 					},
 				},
 			},
@@ -366,11 +366,10 @@ func (a *actions) blockchainProviders(cCtx *cli.Context) error {
 }
 
 func (a *actions) createBlockchainProvider(cCtx *cli.Context) error {
-	address := cCtx.String("address")
 	stake := cCtx.Uint64("stake")
 	endpoint := cCtx.String("endpoint")
 
-	providers, err := a.client.CreateNewProvider(cCtx.Context, address, stake, endpoint)
+	providers, err := a.client.CreateNewProvider(cCtx.Context, stake, endpoint)
 
 	if err != nil {
 		return err
@@ -382,17 +381,16 @@ func (a *actions) createBlockchainProvider(cCtx *cli.Context) error {
 }
 
 func (a *actions) createBlockchainProviderBid(cCtx *cli.Context) error {
-	provider := cCtx.String("provider")
 	model := cCtx.String("model")
 	pricePerSecond := cCtx.Uint64("pricePerSecond")
 
-	_, err := a.client.CreateNewProviderBid(cCtx.Context, provider, model, pricePerSecond)
+	_, err := a.client.CreateNewProviderBid(cCtx.Context, model, pricePerSecond)
 
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("bid created for provider ", provider)
+	fmt.Println("bid created for model ", model)
 	return nil
 }
 

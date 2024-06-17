@@ -9,7 +9,6 @@ import (
 	"math/big"
 	"net/http"
 
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/api-gateway/client"
 	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/aiengine"
 	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
 	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/proxyapi"
@@ -107,12 +106,12 @@ func (apiBus *ApiBus) GetLatestBlock(ctx context.Context) (uint64, error) {
 //		@Success		200	{object}	interface{}
 //		@Router			/blockchain/balance [get]
 func (apiBus *ApiBus) GetBalance(ctx context.Context) (int, gin.H) {
-	apiContext, ok :=  ctx.(*gin.Context)
+	apiContext, ok := ctx.(*gin.Context)
 
 	if !ok {
 		return 500, gin.H{"error": "invalid context"}
 	}
-	
+
 	return apiBus.rpcProxy.GetBalance(apiContext)
 }
 
@@ -155,12 +154,30 @@ func (apiBus *ApiBus) GetAllProviders(ctx context.Context) (int, gin.H) {
 	return apiBus.rpcProxy.GetAllProviders(ctx)
 }
 
-func (apiBus *ApiBus) CreateNewProvider(ctx context.Context, address string, addStake uint64, endpoint string) (int, gin.H) {
-	return apiBus.rpcProxy.CreateNewProvider(ctx, address, addStake, endpoint)
+// CreateNewProvider godoc
+//
+//		@Summary		Create new provider
+//		@Description	Create new provider in blockchain
+//	 	@Tags			wallet
+//		@Produce		json
+//		@Param			provider	body		rpcproxy.ProviderReqBody 	true	"Provider"
+//		@Success		200	{object}	interface{}
+//		@Router			/blockchain/providers [post]
+func (apiBus *ApiBus) CreateNewProvider(ctx *gin.Context) (int, gin.H) {
+	return apiBus.rpcProxy.CreateNewProvider(ctx)
 }
 
-func (apiBus *ApiBus) CreateNewBid(ctx context.Context, provider string, model string, pricePerSecond uint64) (int, gin.H) {
-	return apiBus.rpcProxy.CreateNewBid(ctx, provider, client.StringTo32Byte(model), pricePerSecond)
+// CreateNewBid godoc
+//
+//		@Summary		Create new bid
+//		@Description	Create new bid in blockchain
+//	 	@Tags			wallet
+//		@Produce		json
+//		@Param			bid	body		rpcproxy.ProviderBidReqBody 	true	"Bid"
+//		@Success		200	{object}	interface{}
+//		@Router			/blockchain/providers/bids [post]
+func (apiBus *ApiBus) CreateNewBid(ctx *gin.Context) (int, gin.H) {
+	return apiBus.rpcProxy.CreateNewBid(ctx)
 }
 
 // GetModels godoc

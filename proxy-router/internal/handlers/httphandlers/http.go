@@ -49,7 +49,7 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 	}))
 	r.GET("/files", (func(ctx *gin.Context) {
 		status, files := apiBus.GetFiles(ctx)
-		
+
 		ctx.JSON(status, files)
 	}))
 	r.POST("/v1/chat/completions", (func(ctx *gin.Context) {
@@ -81,22 +81,12 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 	}))
 
 	r.POST("/blockchain/providers", (func(ctx *gin.Context) {
-		address := ctx.GetString("address")
-		addStake := ctx.GetUint64("addStake")
-		endpoint := ctx.GetString("endpoint")
-
-		status, response := apiBus.CreateNewProvider(ctx, address, addStake, endpoint)
-
+		status, response := apiBus.CreateNewProvider(ctx)
 		ctx.JSON(status, response)
 	}))
 
 	r.POST("/blockchain/providers/bids", (func(ctx *gin.Context) {
-		provider := ctx.GetString("provider")
-		model := ctx.GetString("model")
-		pricePerSecond := ctx.GetUint64("pricePerSecond")
-		
-		status, response := apiBus.CreateNewBid(ctx, provider, model, pricePerSecond)
-
+		status, response := apiBus.CreateNewBid(ctx)
 		ctx.JSON(status, response)
 	}))
 
@@ -191,7 +181,7 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 	}))
 
 	r.POST("/wallet", (func(ctx *gin.Context) {
-		
+
 		var req SetupWalletReqBody
 		err := ctx.ShouldBindJSON(&req)
 		if err != nil {

@@ -181,13 +181,11 @@ func (c *ApiGatewayClient) GetAllProviders(ctx context.Context) (result map[stri
 	return result, nil
 }
 
-func (c *ApiGatewayClient) CreateNewProvider(ctx context.Context, address string, addStake uint64, endpoint string) (result []string, err error) {
-
+func (c *ApiGatewayClient) CreateNewProvider(ctx context.Context, addStake uint64, endpoint string) (result interface{}, err error) {
 	request := struct {
-		address  string
-		addStake uint64
-		endpoint string
-	}{address, addStake, endpoint}
+		AddStake uint64 `json:"addStake"`
+		Endpoint string `json:"endpoint"`
+	}{addStake, endpoint}
 
 	err = c.postRequest(ctx, "/blockchain/providers", &request, &result)
 
@@ -198,13 +196,11 @@ func (c *ApiGatewayClient) CreateNewProvider(ctx context.Context, address string
 	return result, nil
 }
 
-func (c *ApiGatewayClient) CreateNewProviderBid(ctx context.Context, provider string, model string, pricePerSecond uint64) (result []string, err error) {
-
+func (c *ApiGatewayClient) CreateNewProviderBid(ctx context.Context, model string, pricePerSecond uint64) (result interface{}, err error) {
 	request := struct {
-		provider  string
-		model string
-		pricePerSecond uint64
-	}{provider, model, pricePerSecond}
+		Model          string `json:"model"`
+		PricePerSecond uint64 `json:"pricePerSecond"`
+	}{model, pricePerSecond}
 
 	err = c.postRequest(ctx, "/blockchain/providers/bids", &request, &result)
 
@@ -226,8 +222,7 @@ func (c *ApiGatewayClient) GetAllModels(ctx context.Context) (result []string, e
 	return result, nil
 }
 
-func (c *ApiGatewayClient) GetBidsByProvider(ctx context.Context, providerAddr string, offset *big.Int, limit uint8) (bids []string, err error) {
-
+func (c *ApiGatewayClient) GetBidsByProvider(ctx context.Context, providerAddr string, offset *big.Int, limit uint8) (bids interface{}, err error) {
 	endpoint := fmt.Sprintf("/blockchain/providers/%s/bids?offset=%s&limit=%d", providerAddr, offset.String(), limit)
 	err = c.getRequest(ctx, endpoint, &bids)
 	if err != nil {
@@ -255,7 +250,6 @@ type SessionRequest struct {
 }
 
 type Session struct {
-	
 }
 
 func (c *ApiGatewayClient) OpenSession(req *SessionRequest, ctx context.Context) (session *Session, err error) {

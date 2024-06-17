@@ -6,7 +6,6 @@ import (
 	"math/big"
 
 	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/contracts/marketplace"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/contracts/modelregistry"
 	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
 	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -35,7 +34,7 @@ func NewMarketplace(marketplaceAddr common.Address, client *ethclient.Client, lo
 	if err != nil {
 		panic("invalid marketplace ABI")
 	}
-	mpABI, err := modelregistry.ModelRegistryMetaData.GetAbi()
+	mpABI, err := marketplace.MarketplaceMetaData.GetAbi()
 	if err != nil {
 		panic("invalid marketplace ABI: " + err.Error())
 	}
@@ -49,17 +48,18 @@ func NewMarketplace(marketplaceAddr common.Address, client *ethclient.Client, lo
 	}
 }
 
-func (g *Marketplace) PostModelBid(ctx context.Context, provider string, model [32]byte, pricePerSecond uint64) error {
-	tx, err := g.marketplace.PostModelBid(&bind.TransactOpts{Context: ctx}, common.HexToAddress(provider), model, big.NewInt(int64(pricePerSecond)))
+func (g *Marketplace) PostModelBid(ctx *bind.TransactOpts, provider string, model [32]byte, pricePerSecond *big.Int) error {
+	fmt.Println("PostModelBid", provider, model, pricePerSecond)
+	tx, err := g.marketplace.PostModelBid(ctx, common.HexToAddress(provider), model, pricePerSecond)
 	if err != nil {
-		return err
+		return lib.TryConvertGethError(err, marketplace.MarketplaceMetaData)
 	}
 
 	// Wait for the transaction receipt
 	receipt, err := bind.WaitMined(context.Background(), g.client, tx)
 
 	if err != nil {
-		return err
+		return lib.TryConvertGethError(err, marketplace.MarketplaceMetaData)
 	}
 
 	// Find the event log
@@ -74,7 +74,7 @@ func (g *Marketplace) PostModelBid(ctx context.Context, provider string, model [
 		return nil
 	}
 
-	return fmt.Errorf("OpenSession event not found in transaction logs")
+	return fmt.Errorf("PostModelBid event not found in transaction logs")
 }
 
 func (g *Marketplace) GetBidsByProvider(ctx context.Context, provider common.Address, offset *big.Int, limit uint8) ([][32]byte, []marketplace.Bid, error) {

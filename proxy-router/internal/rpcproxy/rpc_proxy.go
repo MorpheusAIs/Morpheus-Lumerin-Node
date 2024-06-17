@@ -40,6 +40,16 @@ type RpcProxy struct {
 	privateKey interfaces.PrKeyProvider
 }
 
+type ProviderReqBody struct {
+	AddStake uint64 `json:"addStake"`
+	Endpoint string `json:"endpoint"`
+}
+
+type ProviderBidReqBody struct {
+	Model          string `json:"model"`
+	PricePerSecond uint64 `json:"pricePerSecond"`
+}
+
 func NewRpcProxy(
 	rpcClient *ethclient.Client,
 	diamonContractAddr common.Address,
@@ -97,18 +107,49 @@ func (rpcProxy *RpcProxy) GetAllProviders(ctx context.Context) (int, gin.H) {
 	return constants.HTTP_STATUS_OK, gin.H{"providers": result}
 }
 
-func (rpcProxy *RpcProxy) CreateNewProvider(ctx context.Context, address string, addStake uint64, endpoint string) (int, gin.H) {	
-	fmt.Println("CreateNewProvider address: ", address, " addStake: ", addStake, " endpoint: ", endpoint)
-	err := rpcProxy.providerRegistry.CreateNewProvider(ctx, address, addStake, endpoint)
+func (rpcProxy *RpcProxy) CreateNewProvider(ctx *gin.Context) (int, gin.H) {
+	var reqPayload ProviderReqBody
+	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+
+	prKey, err := rpcProxy.privateKey.GetPrivateKey()
+	if err != nil {
+		return prKeyErr(err)
+	}
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, prKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+
+	err = rpcProxy.providerRegistry.CreateNewProvider(transactOpt, transactOpt.From.Hex(), reqPayload.AddStake, reqPayload.Endpoint)
 	if err != nil {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 	return constants.HTTP_STATUS_OK, gin.H{"success": true}
 }
 
-func (rpcProxy *RpcProxy) CreateNewBid(ctx context.Context, provider string, model [32]byte, pricePerSecond uint64) (int, gin.H) {	
-	fmt.Println("CreateNewBid provider: ", provider, " model: ", model, " pricePerSecond: ", pricePerSecond)
-	err := rpcProxy.marketplace.PostModelBid(ctx, provider, model, pricePerSecond)
+func (rpcProxy *RpcProxy) CreateNewBid(ctx *gin.Context) (int, gin.H) {
+	var reqPayload ProviderBidReqBody
+	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+
+	pricePerSecond := big.NewInt(int64(reqPayload.PricePerSecond))
+
+	prKey, err := rpcProxy.privateKey.GetPrivateKey()
+	if err != nil {
+		return prKeyErr(err)
+	}
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, prKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+	modelIdBytes := [32]byte(common.FromHex(reqPayload.Model))
+
+	err = rpcProxy.marketplace.PostModelBid(transactOpt, transactOpt.From.Hex(), modelIdBytes, pricePerSecond)
 	if err != nil {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
