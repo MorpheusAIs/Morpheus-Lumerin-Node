@@ -1,7 +1,7 @@
-package main
+package mainchat
 
 import (
-	"github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/dwisiswant0/chatgptui/common"
 )

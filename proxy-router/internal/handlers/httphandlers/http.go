@@ -90,6 +90,16 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 		ctx.JSON(status, response)
 	}))
 
+	r.POST("/blockchain/providers/bids", (func(ctx *gin.Context) {
+		provider := ctx.GetString("provider")
+		model := ctx.GetString("model")
+		pricePerSecond := ctx.GetUint64("pricePerSecond")
+		
+		status, response := apiBus.CreateNewBid(ctx, provider, model, pricePerSecond)
+
+		ctx.JSON(status, response)
+	}))
+
 	r.POST("/blockchain/send/eth", (func(ctx *gin.Context) {
 		status, response := apiBus.SendEth(ctx)
 		ctx.JSON(status, response)

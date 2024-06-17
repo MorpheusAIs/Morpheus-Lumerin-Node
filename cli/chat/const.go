@@ -1,4 +1,4 @@
-package main
+package mainchat
 
 const (
 	header = "\n  ChatGPTUI 🤖 %s\n" +

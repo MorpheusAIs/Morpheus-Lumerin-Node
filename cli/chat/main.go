@@ -1,4 +1,4 @@
-package main
+package mainchat
 
 import (
 	"flag"
@@ -25,7 +25,7 @@ func init() {
 	openAiBaseUrl := os.Getenv("OPENAI_BASE_URL")
 
 	if openAiBaseUrl == "" {
-		os.Setenv("OPENAI_BASE_URL","http://localhost:8082/v1")
+		os.Setenv("OPENAI_BASE_URL", "http://localhost:8082/v1")
 	}
 
 	flag.Usage = func() {
@@ -71,4 +71,8 @@ func main() {
 	}
 
 	util.RunProgram(m)
+}
+
+func Run() {
+	main()
 }

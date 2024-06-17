@@ -106,6 +106,15 @@ func (rpcProxy *RpcProxy) CreateNewProvider(ctx context.Context, address string,
 	return constants.HTTP_STATUS_OK, gin.H{"success": true}
 }
 
+func (rpcProxy *RpcProxy) CreateNewBid(ctx context.Context, provider string, model [32]byte, pricePerSecond uint64) (int, gin.H) {	
+	fmt.Println("CreateNewBid provider: ", provider, " model: ", model, " pricePerSecond: ", pricePerSecond)
+	err := rpcProxy.marketplace.PostModelBid(ctx, provider, model, pricePerSecond)
+	if err != nil {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+	return constants.HTTP_STATUS_OK, gin.H{"success": true}
+}
+
 func (rpcProxy *RpcProxy) GetAllModels(ctx context.Context) (int, gin.H) {
 	ids, models, err := rpcProxy.modelRegistry.GetAllModels(ctx)
 	if err != nil {

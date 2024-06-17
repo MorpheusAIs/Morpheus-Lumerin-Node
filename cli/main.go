@@ -7,63 +7,54 @@ import (
 	"math/big"
 	"net/http"
 	"os"
-	"bufio"
-	"strings"
 
 	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/api-gateway/client"
+	chat "github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat"
 
+	dotenv "github.com/joho/godotenv"
 	"github.com/urfave/cli/v2"
 )
 
 const httpErrorMessage string = "internal error: %v; http status: %v"
 
+var sessionId string
+
 func main() {
 	api_host := "http://localhost:8082"
-	file, err := os.Open(".env")
-	if err == nil {
-		scanner := bufio.NewScanner(file)
-		for scanner.Scan() {
-			nv := strings.SplitN(scanner.Text(), "=", 2)
-			if nv == nil || len(nv) != 2 {
-				continue
-			}
-			n := strings.Trim(nv[0], " ")
-			v := strings.Trim(nv[1], " ")
-			if n == "API_HOST" {
-				api_host = v
-			}
-		}
+	dotenv.Load(".env")
+
+	if v := os.Getenv("API_HOST"); v != "" {
+		api_host = v
 	}
-	defer file.Close()
 
 	actions := NewActions(client.NewApiGatewayClient(api_host, http.DefaultClient))
 	app := &cli.App{
 		Usage: "A client to call the Morpheus Lumerin API",
 		Commands: []*cli.Command{
 			{
-				Name: "getAllowance",
+				Name:    "getAllowance",
 				Aliases: []string{"ga"},
-				Usage: "get allowance",
-				Action: actions.getAllowance,
+				Usage:   "get allowance",
+				Action:  actions.getAllowance,
 				Flags: []cli.Flag{
 					&cli.StringFlag{
-						Name: "spender",
+						Name:     "spender",
 						Required: true,
 					},
 				},
 			},
 			{
-				Name: "approveAllowance",
+				Name:    "approveAllowance",
 				Aliases: []string{"aa"},
-				Usage: "approve allowance",
-				Action: actions.approveAllowance,
+				Usage:   "approve allowance",
+				Action:  actions.approveAllowance,
 				Flags: []cli.Flag{
 					&cli.StringFlag{
-						Name: "spender",
+						Name:     "spender",
 						Required: true,
 					},
 					&cli.Uint64Flag{
-						Name: "amount",
+						Name:     "amount",
 						Required: true,
 					},
 				},
@@ -93,7 +84,7 @@ func main() {
 				Action:  actions.createChatCompletions,
 				Flags: []cli.Flag{
 					&cli.StringFlag{
-						Name: "prompt",
+						Name:     "prompt",
 						Required: true,
 					},
 					&cli.StringFlag{
@@ -114,33 +105,33 @@ func main() {
 				Action:  actions.blockchainProviders,
 			},
 			{
-				Name:    "blockchainProvidersCreate",
+				Name:    "createBlockchainProvider",
 				Aliases: []string{"bpc"},
 				Usage:   "create a blockchain provider",
 				Action:  actions.createBlockchainProvider,
 				Flags: []cli.Flag{
 					&cli.StringFlag{
-						Name: "address",
+						Name:     "address",
 						Required: true,
 					},
 					&cli.Uint64Flag{
-						Name: "stake",
+						Name:     "stake",
 						Required: true,
 					},
 					&cli.StringFlag{
-						Name: "endpoint",
+						Name:     "endpoint",
 						Required: true,
 					},
 				},
 			},
 			{
-				Name:    "blockchainProvidersBids",
+				Name:    "blockchainProviderBid",
 				Aliases: []string{"bpb"},
 				Usage:   "list provider bids",
 				Action:  actions.blockchainProvidersBids,
 				Flags: []cli.Flag{
 					&cli.StringFlag{
-						Name: "address",
+						Name:     "address",
 						Required: true,
 					},
 					&cli.Int64Flag{
@@ -148,6 +139,24 @@ func main() {
 					},
 					&cli.UintFlag{
 						Name: "limit",
+					},
+				},
+			},
+			{
+				Name:    "createClockchainProvidersBids",
+				Aliases: []string{"cbpb"},
+				Usage:   "create provider bid",
+				Action:  actions.createBlockchainProviderBid,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "provider",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name: "model",
+					},
+					&cli.Uint64Flag{
+						Name: "pricePerSecond",
 					},
 				},
 			},
@@ -176,7 +185,7 @@ func main() {
 				Action:  actions.createAndStreamChatCompletions,
 				Flags: []cli.Flag{
 					&cli.StringFlag{
-						Name: "prompt",
+						Name:     "prompt",
 						Required: true,
 					},
 					&cli.StringFlag{
@@ -191,11 +200,23 @@ func main() {
 				Action:  actions.createChatCompletions,
 				Flags: []cli.Flag{
 					&cli.StringFlag{
-						Name: "prompt",
+						Name:     "prompt",
 						Required: true,
 					},
 					&cli.StringFlag{
 						Name: "messages",
+					},
+				},
+			},
+			{
+				Name:    "chat",
+				Aliases: []string{},
+				Usage:   "open interactive chat client",
+				Action:  actions.startChat,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "sessionId",
+						Required: false,
 					},
 				},
 			},
@@ -213,6 +234,13 @@ type actions struct {
 
 func NewActions(c *client.ApiGatewayClient) *actions {
 	return &actions{client: c}
+}
+
+func (a *actions) startChat(cCtx *cli.Context) error {
+
+	chat.Run()
+
+	return nil
 }
 
 func (a *actions) getAllowance(cCtx *cli.Context) error {
@@ -284,31 +312,17 @@ func (a *actions) createChatCompletions(cCtx *cli.Context) error {
 	return nil
 }
 
+// todo: retrieve session id
 func (a *actions) createAndStreamChatCompletions(cCtx *cli.Context) error {
 	prompt := cCtx.String("prompt")
 	var messages []*client.ChatCompletionMessage
 	json.Unmarshal([]byte(cCtx.String("messages")), &messages)
 
-	completion, err := a.client.PromptStream(cCtx.Context, prompt, messages, func(msg client.ChatCompletionStreamResponse) error {
+	completion, err := a.client.PromptStream(cCtx.Context, prompt, "", func(msg *client.ChatCompletionStreamResponse) error {
 		fmt.Println(msg)
 		return nil
 	})
 
-	if err != nil {
-		return err
-	}
-
-	jsonData, err := json.Marshal(completion)
-	fmt.Println(string(jsonData))
-	return nil
-}
-
-func (a *actions) createSessionChatCompletions(cCtx *cli.Context) error {
-	prompt := cCtx.String("prompt")
-	var messages []client.ChatCompletionMessage
-	json.Unmarshal([]byte(cCtx.String("messages")), &messages)
-
-	completion, err := a.client.SessionPrompt(cCtx.Context, prompt)
 	if err != nil {
 		return err
 	}
@@ -330,11 +344,24 @@ func (a *actions) initiateProxySession(cCtx *cli.Context) error {
 
 func (a *actions) blockchainProviders(cCtx *cli.Context) error {
 	providers, err := a.client.GetAllProviders(cCtx.Context)
+
 	if err != nil {
 		return err
 	}
-	jsonData, err := json.Marshal(providers)
-	fmt.Println(string(jsonData))
+
+	for _, item := range providers["providers"].([]interface{}) {
+		provider := item.(map[string]interface{})
+		// fmt.Println(provider)
+		// fmt.Println(reflect.TypeOf(provider))
+		fmt.Println(provider["Address"], " - ", provider["Endpoint"])
+	}
+
+	// jsonData, err := json.Marshal(providers)
+
+	// if err != nil {
+	// 	return err
+	// }
+
 	return nil
 }
 
@@ -344,11 +371,28 @@ func (a *actions) createBlockchainProvider(cCtx *cli.Context) error {
 	endpoint := cCtx.String("endpoint")
 
 	providers, err := a.client.CreateNewProvider(cCtx.Context, address, stake, endpoint)
+
 	if err != nil {
 		return err
 	}
+
 	jsonData, err := json.Marshal(providers)
 	fmt.Println(string(jsonData))
+	return nil
+}
+
+func (a *actions) createBlockchainProviderBid(cCtx *cli.Context) error {
+	provider := cCtx.String("provider")
+	model := cCtx.String("model")
+	pricePerSecond := cCtx.Uint64("pricePerSecond")
+
+	_, err := a.client.CreateNewProviderBid(cCtx.Context, provider, model, pricePerSecond)
+
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("bid created for provider ", provider)
 	return nil
 }
 
@@ -377,13 +421,17 @@ func (a *actions) blockchainModels(cCtx *cli.Context) error {
 }
 
 func (a *actions) openBlockchainSession(cCtx *cli.Context) error {
-	err := a.client.OpenSession(cCtx.Context)
+
+	req := &client.SessionRequest{}
+
+	session, err := a.client.OpenSession(req, cCtx.Context)
+
 	if err != nil {
 		return err
 	}
 	// TODO: Output a message indicating the blockchain session was opened and showing relevant data for the session
 	// jsonData, err := json.Marshal(bids)
-	// fmt.Println(string(jsonData))
+	fmt.Println(session)
 	return nil
 }
 

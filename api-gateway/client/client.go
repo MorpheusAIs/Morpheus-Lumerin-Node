@@ -78,18 +78,11 @@ func (c *ApiGatewayClient) postRequest(ctx context.Context, endpoint string, bod
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	if result == nil {
+	if resp == nil {
 		return nil
 	}
 
 	return json.NewDecoder(resp.Body).Decode(result)
-}
-
-func (c *ApiGatewayClient) streamChat(ctx context.Context, path string, req *ChatCompletionRequest, result *ChatCompletionStreamResponse, flush CompletionCallback) error {
-
-	RequestChatCompletionStream(ctx, req, flush)
-
-	return nil
 }
 
 func (c *ApiGatewayClient) GetProxyRouterConfig(ctx context.Context) (interface{}, error) {
@@ -125,9 +118,9 @@ func (c *ApiGatewayClient) InitiateSession(ctx context.Context) (interface{}, er
 	return result, nil
 }
 
-func (c *ApiGatewayClient) SessionPrompt(ctx context.Context, prompt string, messages []string) (interface{}, error) {
+func (c *ApiGatewayClient) SessionPrompt(ctx context.Context, prompt string, sessionId string) (interface{}, error) {
 	var result map[string]interface{}
-	err := c.postRequest(ctx, "/proxy/sessions/:id/prompt", nil, &result)
+	err := c.postRequest(ctx, fmt.Sprintf("/proxy/sessions/%s/prompt", sessionId), nil, &result)
 
 	if err != nil {
 		return http.StatusInternalServerError, err
@@ -139,10 +132,14 @@ func (c *ApiGatewayClient) SessionPrompt(ctx context.Context, prompt string, mes
 func (c *ApiGatewayClient) Prompt(ctx context.Context, message string, history []ChatCompletionMessage) (interface{}, error) {
 
 	request := &openai.ChatCompletionRequest{
-		Messages: append(history, ChatCompletionMessage{
+		// Messages: append(history, ChatCompletionMessage{
+		// 	Role:    "user",
+		// 	Content: message,
+		// }),
+		Messages: []ChatCompletionMessage{{
 			Role:    "user",
 			Content: message,
-		}),
+		}},
 		Stream: false,
 		Model:  "llama2",
 		ResponseFormat: &openai.ChatCompletionResponseFormat{
@@ -153,29 +150,18 @@ func (c *ApiGatewayClient) Prompt(ctx context.Context, message string, history [
 	return c.OpenAiClient.CreateChatCompletion(ctx, *request)
 }
 
-func (c *ApiGatewayClient) PromptStream(ctx context.Context, message string, history []*ChatCompletionMessage, flush CompletionCallback) (interface{}, error) {
-	var messages []ChatCompletionMessage
-
-	for i := 0; i < len(history); i++ {
-		historyItem := history[i]
-
-		messages = append(messages, ChatCompletionMessage{
-			Role:    historyItem.Role,
-			Content: historyItem.Content,
-		})
-	}
-
-	messages = append(messages, ChatCompletionMessage{
-		Role:    "user",
-		Content: message,
-	})
+func (c *ApiGatewayClient) PromptStream(ctx context.Context, message string, sessionId string, flush CompletionCallback) (interface{}, error) {
 
 	request := &openai.ChatCompletionRequest{
-		Messages: messages,
-		Model:    "llama2",
+		Messages: []ChatCompletionMessage{{
+			Role:    "user",
+			Content: message,
+		},
+		},
+		Model: "llama2",
 	}
 
-	return RequestChatCompletionStream(ctx, request, flush)
+	return RequestChatCompletionStream(ctx, request, flush, sessionId)
 }
 
 func (c *ApiGatewayClient) GetLatestBlock(ctx context.Context) (result uint64, err error) {
@@ -184,7 +170,7 @@ func (c *ApiGatewayClient) GetLatestBlock(ctx context.Context) (result uint64, e
 	return result, err
 }
 
-func (c *ApiGatewayClient) GetAllProviders(ctx context.Context) (result []string, err error) {
+func (c *ApiGatewayClient) GetAllProviders(ctx context.Context) (result map[string]interface{}, err error) {
 
 	err = c.getRequest(ctx, "/blockchain/providers", &result)
 
@@ -204,6 +190,23 @@ func (c *ApiGatewayClient) CreateNewProvider(ctx context.Context, address string
 	}{address, addStake, endpoint}
 
 	err = c.postRequest(ctx, "/blockchain/providers", &request, &result)
+
+	if err != nil {
+		return nil, fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
+	}
+
+	return result, nil
+}
+
+func (c *ApiGatewayClient) CreateNewProviderBid(ctx context.Context, provider string, model string, pricePerSecond uint64) (result []string, err error) {
+
+	request := struct {
+		provider  string
+		model string
+		pricePerSecond uint64
+	}{provider, model, pricePerSecond}
+
+	err = c.postRequest(ctx, "/blockchain/providers/bids", &request, &result)
 
 	if err != nil {
 		return nil, fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
@@ -245,15 +248,25 @@ func (c *ApiGatewayClient) GetBidsByModelAgent(ctx context.Context, modelAgentId
 	return result, err
 }
 
-func (c *ApiGatewayClient) OpenSession(ctx context.Context) (err error) {
+type SessionRequest struct {
+	Approval    string `json:"approval"`
+	ApprovalSig string `json:"approvalSig"`
+	Stake       uint64 `json:"stake"`
+}
 
-	err = c.postRequest(ctx, "/blockchain/sessions", nil, nil)
+type Session struct {
+	
+}
+
+func (c *ApiGatewayClient) OpenSession(req *SessionRequest, ctx context.Context) (session *Session, err error) {
+
+	err = c.postRequest(ctx, "/blockchain/sessions", req, session)
 
 	if err != nil {
-		return fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
+		return nil, fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
 	}
 
-	return nil
+	return session, nil
 }
 
 func (c *ApiGatewayClient) CloseSession(ctx context.Context) error {
@@ -264,4 +277,18 @@ func (c *ApiGatewayClient) CloseSession(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (c *ApiGatewayClient) GetAllowance(ctx context.Context, spender string) (interface{}, error) {
+	var result map[string]interface{}
+	endpoint := fmt.Sprintf("/blockchain/allowance?spender=%s", spender)
+	err := c.getRequest(ctx, endpoint, &result)
+	return result, err
+}
+
+func (c *ApiGatewayClient) ApproveAllowance(ctx context.Context, spender string, amount uint64) (interface{}, error) {
+	var result map[string]interface{}
+	endpoint := fmt.Sprintf("/blockchain/allowance?spender=%s&amount=%d", spender, amount)
+	err := c.postRequest(ctx, endpoint, nil, &result)
+	return result, err
 }

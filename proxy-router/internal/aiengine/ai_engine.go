@@ -49,6 +49,7 @@ func (aiEngine *AiEngine) Prompt(ctx context.Context, req interface{}) (*api.Cha
 
 type ChunkSubmit func(*api.ChatCompletionStreamResponse) error
 
+// TODO: make sure session id is provided when it's needed. (maybe never?)
 func (aiEngine *AiEngine) PromptStream(ctx context.Context, req interface{}, chunkSubmitCallback interface{}) (*api.ChatCompletionStreamResponse, error) {
 	request := req.(*api.ChatCompletionRequest)
 	chunkCallback := chunkSubmitCallback.(func(*api.ChatCompletionStreamResponse) error)
@@ -57,7 +58,7 @@ func (aiEngine *AiEngine) PromptStream(ctx context.Context, req interface{}, chu
 
 		fmt.Println("chunk - response: ", completion)
 		return chunkCallback(completion)
-	})
+	}, "")
 
 	fmt.Println("requested chat completion stream - response: ", resp, "; error: ", err)
 

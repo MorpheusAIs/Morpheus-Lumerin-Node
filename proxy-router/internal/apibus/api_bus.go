@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"net/http"
 
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/api-gateway/client"
 	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/aiengine"
 	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
 	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/proxyapi"
@@ -156,6 +157,10 @@ func (apiBus *ApiBus) GetAllProviders(ctx context.Context) (int, gin.H) {
 
 func (apiBus *ApiBus) CreateNewProvider(ctx context.Context, address string, addStake uint64, endpoint string) (int, gin.H) {
 	return apiBus.rpcProxy.CreateNewProvider(ctx, address, addStake, endpoint)
+}
+
+func (apiBus *ApiBus) CreateNewBid(ctx context.Context, provider string, model string, pricePerSecond uint64) (int, gin.H) {
+	return apiBus.rpcProxy.CreateNewBid(ctx, provider, client.StringTo32Byte(model), pricePerSecond)
 }
 
 // GetModels godoc
