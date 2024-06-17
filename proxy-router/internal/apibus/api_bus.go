@@ -160,6 +160,10 @@ func (apiBus *ApiBus) GetAllModels(ctx context.Context) (int, gin.H) {
 	return apiBus.rpcProxy.GetAllModels(ctx)
 }
 
+func (apiBus *ApiBus) GetAgents(ctx context.Context) (int, gin.H) {
+	return apiBus.rpcProxy.GetAgents(ctx)
+}
+
 // GetTransactions godoc
 //
 //		@Summary		Get Transactions

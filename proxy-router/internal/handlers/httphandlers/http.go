@@ -106,6 +106,11 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 		ctx.JSON(status, models)
 	}))
 
+	r.GET("/blockchain/agents", (func(ctx *gin.Context) {
+		status, agents := apiBus.GetAgents(ctx)
+		ctx.JSON(status, agents)
+	}))
+
 	r.GET("/blockchain/models/:id/bids", (func(ctx *gin.Context) {
 		modelAgentId := ctx.Param("id")
 

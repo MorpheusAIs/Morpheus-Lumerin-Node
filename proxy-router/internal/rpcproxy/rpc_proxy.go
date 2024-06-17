@@ -31,6 +31,7 @@ type RpcProxy struct {
 	modelRegistry    *registries.ModelRegistry
 	marketplace      *registries.Marketplace
 	sessionRouter    *registries.SessionRouter
+	agentRegistry    *registries.AgentRegistry
 	morToken         *registries.MorToken
 	explorerClient   *ExplorerClient
 	sessionStorage   *storages.SessionStorage
@@ -116,6 +117,28 @@ func (rpcProxy *RpcProxy) GetAllModels(ctx context.Context) (int, gin.H) {
 	}
 
 	return constants.HTTP_STATUS_OK, gin.H{"models": result}
+}
+
+func (rpcProxy *RpcProxy) GetAgents(ctx context.Context) (int, gin.H) {
+	agents, err := rpcProxy.agentRegistry.GetAllAgents(ctx)
+
+	if err != nil {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+
+	result := []*structs.Agent{}
+	for _, value := range agents {
+		result = append(result, &structs.Agent{
+			AgentId:   lib.BytesToString(value.AgentId[:]),
+			Fee:       *value.Fee,
+			Stake:     *value.Stake,
+			Timestamp: *value.CreatedAt,
+			Owner:     value.Owner,
+			Name:      value.Name,
+			Tags:      value.Tags,
+		})
+	}
+	return constants.HTTP_STATUS_OK, gin.H{"agents": result}
 }
 
 func (rpcProxy *RpcProxy) GetBidsByProvider(ctx context.Context, providerAddr common.Address, offset *big.Int, limit uint8) (int, gin.H) {
