@@ -49,6 +49,7 @@ const Chat = (props) => {
     const [activeSession, setActiveSession] = useState<any>(undefined);
 
     const [chainData, setChainData] = useState<any>(null);
+    const [sessionTitles, setSessionTitles] = useState<{sessionId: string, title: string }[]>([]);
 
     const [openSessionModal, setOpenSessionModal] = useState(false);
     const [openChangeModal, setOpenChangeModal] = useState(false);
@@ -66,6 +67,8 @@ const Chat = (props) => {
         (async () => {
             const meta = await props.getMetaInfo();
             const chainData = await props.getModelsData();
+            const titles = await props.client.getTitles();
+            setSessionTitles(titles.map(t => ({ sessionId: t._id, title: t.title})));
             
             const sessions = await props.getSessionsByUser(props.address);
             const openSessions = sessions.filter(s => !isClosed(s));
@@ -128,7 +131,7 @@ const Chat = (props) => {
             try {
                 const history = await props.client.getChatHistory(session.sessionId);
                 if (history.length) {
-                    setMessages(history[0].messages);
+                    setMessages(history[0].messages || []);
                 }
             }
             catch(e) {
@@ -251,7 +254,7 @@ const Chat = (props) => {
                     }
                     const message = memoState.find(m => m.id == part.id);
                     const otherMessages = memoState.filter(m => m.id != part.id);
-                    const text = `${message?.text || ''}${part?.choices[0]?.delta?.content || ''}`;
+                    const text = `${message?.text || ''}${part?.choices[0]?.delta?.content || ''}`.replace("<|im_start|>", "").replace("<|im_end|>", "");
                     const result = [...otherMessages, { id: part.id, user: modelName, role: "assistant", text: text, icon: modelName.toUpperCase()[0], color: getColor(modelName.toUpperCase()[0]) }];
                     memoState = result;
                     setMessages(result);
@@ -262,30 +265,38 @@ const Chat = (props) => {
         catch(e) {
             console.error(e);
         }
+
+        console.log("Flush to storage");
+        await props.client.saveChatHistory({ sessionId: activeSession.sessionId, messages: memoState });
+        console.log("Stored succesfully");
        
         return memoState;
     }
 
     const handleSubmit = () => {
+        if (!value) {
+            return;
+        }
+
+        if (abort) {
+            abort = false;
+        }
+
         if (isSpinning) {
             abort = true;
             setIsSpinning(false);
             return;
         }
 
-        if (!value) {
-            return;
-        }
-
         if(!isLocal && messages.length === 0) {
-            localStorage.setItem(activeSession.sessionId, value);
+            const title = { sessionId: activeSession.sessionId, title: value};
+            props.client.saveTitle(title).then(() => {
+                setSessionTitles([...sessionTitles, title]);
+            }).catch(console.error);
         }
 
         setIsSpinning(true);
-        call(value).then((messages) => {
-            console.log("Flush to storage");
-            props.client.saveChatHistory({ sessionId: activeSession.sessionId, messages });
-        }).finally(() => setIsSpinning(false));
+        call(value).finally(() => setIsSpinning(false));
         setValue("");
         scrollToBottom();
     }
@@ -333,6 +344,7 @@ const Chat = (props) => {
                 className='history-drawer'
             >
                 <ChatHistory
+                    sessionTitles={sessionTitles}
                     sessions={sessions}
                     models={chainData?.models || []}
                     onSelectSession={selectSession}

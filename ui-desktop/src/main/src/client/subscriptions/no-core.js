@@ -33,7 +33,9 @@ const listeners = {
   "get-supply": handlers.getTokenSupply,
   // Chat history
   "get-chat-history": handlers.getChatHitory,
-  "save-chat-history": handlers.saveChatHistory
+  "save-chat-history": handlers.saveChatHistory,
+  "get-chat-titles": handlers.getTitles,
+  "save-chat-title": handlers.saveTitle
 }
 
 // Subscribe to messages where no core has to react

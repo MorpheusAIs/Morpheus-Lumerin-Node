@@ -49,6 +49,7 @@ interface ChatHistoryProps {
     refreshSessions: () => void;
     sessions: any[];
     models: any[];
+    sessionTitles: {sessionId: string, title: string }[]
 }
 
 export const ChatHistory = (props: ChatHistoryProps) => {
@@ -63,7 +64,8 @@ export const ChatHistory = (props: ChatHistoryProps) => {
                 {
                     sessions?.length && (
                         sessions.map(a => {
-                            const title = localStorage.getItem(a.Id);
+                            const titleObj = props.sessionTitles.find(t => t.sessionId.toLowerCase() == String(a.Id).toLowerCase());
+                            const title = titleObj?.title || "";
                             const model = props.models.find(x => x.Id == a.ModelAgentId);
                             return (
                                 <HistoryEntryContainer onClick={() => props.onSelectSession(a.Id)}>
