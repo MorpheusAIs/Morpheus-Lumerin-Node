@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 )
 
 type Server struct {

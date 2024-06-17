@@ -43,15 +43,6 @@ definitions:
       stream:
         type: boolean
     type: object
-  proxyapi.RemotePromptRequest:
-    properties:
-      prompt:
-        $ref: '#/definitions/proxyapi.PromptRequest'
-      providerPublicKey:
-        type: string
-      providerUrl:
-        type: string
-    type: object
   rpcproxy.OpenSessionRequest:
     properties:
       approval:
@@ -71,7 +62,6 @@ definitions:
 externalDocs:
   description: OpenAPI
   url: https://swagger.io/resources/open-api/
-host: localhost:8082
 info:
   contact: {}
   description: This is a sample server celler server.
@@ -454,31 +444,6 @@ paths:
       summary: Get Provider Claimable Balance
       tags:
       - sessions
-  /proxy/sessions/{id}/prompt:
-    post:
-      description: sens a prompt to the provider by opened session
-      parameters:
-      - description: Session ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: RemotePrompt
-        in: body
-        name: prompt
-        required: true
-        schema:
-          $ref: '#/definitions/proxyapi.RemotePromptRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            type: object
-      summary: Send prompt to provider
-      tags:
-      - sessions
   /proxy/sessions/initiate:
     post:
       description: sends a handshake to the provider
@@ -494,14 +459,18 @@ paths:
       - sessions
   /v1/chat/completions:
     post:
-      description: Send prompt to a local model
+      description: Send prompt to a local or remote model based on session id in header
       parameters:
-      - description: LocalPrompt
+      - description: Prompt
         in: body
         name: prompt
         required: true
         schema:
           $ref: '#/definitions/proxyapi.PromptRequest'
+      - description: Session ID
+        in: header
+        name: session_id
+        type: string
       produces:
       - application/json
       responses:
@@ -509,7 +478,7 @@ paths:
           description: OK
           schema:
             type: object
-      summary: Send prompt to a local model
+      summary: Send Local Or Remote Prompt
       tags:
       - wallet
   /wallet:

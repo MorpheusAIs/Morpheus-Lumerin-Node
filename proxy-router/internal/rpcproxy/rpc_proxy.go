@@ -9,13 +9,13 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/contracts/sessionrouter"
-	constants "github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/interfaces"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/registries"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/rpcproxy/structs"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/storages"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/contracts/sessionrouter"
+	constants "github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/rpcproxy/structs"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/gin-gonic/gin"
 
 	"github.com/ethereum/go-ethereum"
@@ -56,6 +56,7 @@ func NewRpcProxy(
 	morTokenAddr common.Address,
 	explorerApiUrl string,
 	privateKey interfaces.PrKeyProvider,
+	sessionStorage *storages.SessionStorage,
 	log interfaces.ILogger,
 	legacyTx bool,
 ) *RpcProxy {
@@ -64,7 +65,6 @@ func NewRpcProxy(
 	marketplace := registries.NewMarketplace(diamonContractAddr, rpcClient, log)
 	sessionRouter := registries.NewSessionRouter(diamonContractAddr, rpcClient, log)
 	morToken := registries.NewMorToken(morTokenAddr, rpcClient, log)
-	sessionStorage := storages.NewSessionStorage()
 
 	explorerClient := NewExplorerClient(explorerApiUrl, morTokenAddr.String())
 	return &RpcProxy{

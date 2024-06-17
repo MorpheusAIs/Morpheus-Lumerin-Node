@@ -22,7 +22,6 @@ import { useState } from 'react';
 const QRContainer = styled.div`
   display: flex;
   align-self: center;
-  background: white;
   padding: 3rem 1.6rem 1.6rem 1.6rem;
 
   & canvas {
@@ -37,7 +36,7 @@ export const Divider = styled.div`
   border: 0.5px solid rgba(0, 0, 0, 0.25);`;
 
 const CopyBtn = styled(BaseBtn)`
-  background-color: ${p => p.theme.colors.light};
+  background-color: transparent;
   border-radius: 5px;
   border: 1px;
   padding: 0 !important;
@@ -78,21 +77,21 @@ export function ReceiveForm({
     <>
       <HeaderWrapper>
         <BackBtn data-modal="send" onClick={onRequestClose}>
-          <BackIcon size="2.4rem" fill="black" />
+          <BackIcon size="2.4rem" fill="white" />
         </BackBtn>
         <Header>You are receiving</Header>
       </HeaderWrapper>
       <QRContainer>
-        <QRCode value={address} />
+        <QRCode value={address} bgColor='transparent' fgColor='#20dc8e' />
       </QRContainer>
       <Footer>
         <FooterRow>
           <FooterBlock>
             <FooterLabel>{symbol} Address</FooterLabel>
-            <FooterSublabel>{abbreviateAddress(address, 16)}</FooterSublabel>
+            <FooterSublabel>{abbreviateAddress(address, 8)}</FooterSublabel>
           </FooterBlock>
           <CopyBtn onClick={handleCopyToClipboard}>
-            <CopyIcon fill="black" size="3.8rem" />
+            <CopyIcon fill="#20dc8e" size="3.8rem"/>
           </CopyBtn>
         </FooterRow>
         <FooterLabel>{symbol} Balance</FooterLabel>

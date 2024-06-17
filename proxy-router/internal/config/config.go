@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"runtime"
 )
 
@@ -19,6 +20,7 @@ type Config struct {
 	Marketplace struct {
 		DiamondContractAddress string `env:"DIAMOND_CONTRACT_ADDRESS" flag:"diamond-address"   validate:"required_if=Disable false,omitempty,eth_addr"`
 		MorTokenAddress        string `env:"MOR_TOKEN_ADDRESS"        flag:"mor-token-address" validate:"required_if=Disable false,omitempty,eth_addr"`
+		WalletPrivateKey       string `env:"WALLET_PRIVATE_KEY"       flag:"wallet-private-key"     desc:"if set, will use this private key to sign transactions, otherwise it will be retrieved from the system keychain"`
 	}
 	Log struct {
 		Color           bool   `env:"LOG_COLOR"            flag:"log-color"`
@@ -116,7 +118,7 @@ func (cfg *Config) SetDefaults() {
 		cfg.Web.Address = "0.0.0.0:8080"
 	}
 	if cfg.Web.PublicUrl == "" {
-		cfg.Web.PublicUrl = "http://localhost:8080"
+		cfg.Web.PublicUrl = fmt.Sprintf("http://%s", cfg.Web.Address)
 	}
 }
 

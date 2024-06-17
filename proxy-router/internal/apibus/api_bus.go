@@ -9,11 +9,11 @@ import (
 	"math/big"
 	"net/http"
 
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/aiengine"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/lib"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/proxyapi"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/repositories/wallet"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/rpcproxy"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
+	i "github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/rpcproxy"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
 	"github.com/sashabaranov/go-openai"
@@ -24,10 +24,10 @@ type ApiBus struct {
 	rpcProxy       *rpcproxy.RpcProxy
 	aiEngine       *aiengine.AiEngine
 	proxyRouterApi *proxyapi.ProxyRouterApi
-	wallet         *wallet.Wallet
+	wallet         i.Wallet
 }
 
-func NewApiBus(rpcProxy *rpcproxy.RpcProxy, aiEngine *aiengine.AiEngine, proxyRouterApi *proxyapi.ProxyRouterApi, wallet *wallet.Wallet) *ApiBus {
+func NewApiBus(rpcProxy *rpcproxy.RpcProxy, aiEngine *aiengine.AiEngine, proxyRouterApi *proxyapi.ProxyRouterApi, wallet i.Wallet) *ApiBus {
 	return &ApiBus{
 		rpcProxy:       rpcProxy,
 		aiEngine:       aiEngine,
@@ -364,7 +364,7 @@ func (apiBus *ApiBus) GetSessions(ctx *gin.Context, offset *big.Int, limit uint8
 //	 	@Tags			wallet
 //		@Produce		json
 //		@Param			prompt	body		proxyapi.PromptRequest 	true	"Prompt"
-//		@Header			session_id	string	false	"Session ID"
+//		@Param 			session_id header string false "Session ID"
 //		@Success		200	{object}	interface{}
 //		@Router			/v1/chat/completions [post]
 func (apiBus *ApiBus) RemoteOrLocalPrompt(ctx *gin.Context) (bool, int, interface{}) {

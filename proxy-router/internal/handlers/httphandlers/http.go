@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/internal/apibus"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/apibus"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -16,7 +16,7 @@ import (
 	// gin-swagger middleware
 	swaggerFiles "github.com/swaggo/files"
 
-	_ "github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/docs"
+	_ "github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/docs"
 )
 
 type HTTPHandler struct{}
@@ -26,7 +26,6 @@ type HTTPHandler struct{}
 // @description     This is a sample server celler server.
 // @termsOfService  http://swagger.io/terms/
 
-// @host      localhost:8082
 // @BasePath  /
 
 // @externalDocs.description  OpenAPI
@@ -37,6 +36,7 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 
 	r.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"*"},
+		AllowHeaders: []string{"session_id"},
 	}))
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))

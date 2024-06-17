@@ -183,7 +183,18 @@ export const onboardingCompleted = (data, core) => {
         core,
         true
       )
-    )
+    ).then(() => {
+      return core.api.wallet.createPrivateKey(wallet.getSeed(data.password))
+    })
+    .then((privateKey) => {
+      const { proxyUrl } = data;
+      return fetch(`${proxyUrl}/wallet`, {
+        method: "POST",
+        body: JSON.stringify({
+          privateKey,
+        })
+      });
+    })
     .then(() => true)
     .catch((err) => ({ error: new WalletError('Onboarding unable to be completed: ', err) }))
 }

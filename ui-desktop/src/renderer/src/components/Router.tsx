@@ -9,6 +9,7 @@ import Marketplace from './contracts/Marketplace'
 import Chat from './chat/Chat';
 import { Models } from './models/Models'
 import { Agents } from './agents/Agents'
+import Settings from './settings/Settings';
 import Bids from './bids/Bids'
 
 // import Sockets from './sockets/Sockets'
@@ -52,6 +53,7 @@ const Main = styled.div`
   overflow-y: hidden;
   min-height: 100vh;
   padding-top: 1.4rem;
+  position: relative;
 `
 
 export const Layout = () => (
@@ -68,6 +70,7 @@ export const Layout = () => (
         <Route path="/models" component={Models} />
         <Route path="/bids" component={Bids} />
         <Route path="/providers" component={Providers} />
+        <Route path="/settings" component={Settings} />
         {/* <Route path="/sockets" component={Sockets} />
         <Route path="/seller-hub" component={SellerHub} />
         <Route path="/buyer-hub" component={BuyerHub} /> */}

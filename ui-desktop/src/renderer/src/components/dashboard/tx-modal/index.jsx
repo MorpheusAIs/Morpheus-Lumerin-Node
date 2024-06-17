@@ -28,7 +28,7 @@ const Body = styled.div`
   justify-content: space-between;
   position: fixed;
   z-index: 20;
-  background-color: ${p => p.theme.colors.light};
+  background-color: ${p => p.theme.colors.morLight};
   width: 400px;
   height: 500px;
   border-radius: 5px;

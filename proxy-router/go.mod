@@ -1,4 +1,4 @@
-module github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal
+module github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router
 
 go 1.22.0
 

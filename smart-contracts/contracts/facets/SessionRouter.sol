@@ -16,7 +16,7 @@ contract SessionRouter {
 
   // constants
   uint32 public constant MIN_SESSION_DURATION = 5 minutes;
-  uint32 public constant MAX_SESSION_DURATION = 7 days;
+  uint32 public constant MAX_SESSION_DURATION = 1 days;
   uint32 public constant SIGNATURE_TTL = 10 minutes;
 
   // events
@@ -42,11 +42,11 @@ contract SessionRouter {
   //===========================
 
   /// @notice returns session by sessionId
-  function getSession(bytes32 sessionId) public view returns (Session memory) {
+  function getSession(bytes32 sessionId) external view returns (Session memory) {
     return s.sessions[s.sessionMap[sessionId]];
   }
 
-  function getActiveSessionsByUser(address user) public view returns (Session[] memory) {
+  function getActiveSessionsByUser(address user) external view returns (Session[] memory) {
     Uint256Set.Set storage userSessions = s.userActiveSessions[user];
     uint256 size = userSessions.count();
     Session[] memory sessions = new Session[](size);
@@ -56,7 +56,7 @@ contract SessionRouter {
     return sessions;
   }
 
-  function getActiveSessionsByProvider(address provider) public view returns (Session[] memory) {
+  function getActiveSessionsByProvider(address provider) external view returns (Session[] memory) {
     Uint256Set.Set storage providerSessions = s.providerActiveSessions[provider];
     uint256 size = providerSessions.count();
     Session[] memory sessions = new Session[](size);
@@ -66,15 +66,19 @@ contract SessionRouter {
     return sessions;
   }
 
-  function getSessionsByProvider(address provider, uint256 offset, uint8 limit) public view returns (Session[] memory) {
+  function getSessionsByProvider(
+    address provider,
+    uint256 offset,
+    uint8 limit
+  ) external view returns (Session[] memory) {
     return paginate(s.providerSessions[provider], offset, limit);
   }
 
-  function getSessionsByUser(address user, uint256 offset, uint8 limit) public view returns (Session[] memory) {
+  function getSessionsByUser(address user, uint256 offset, uint8 limit) external view returns (Session[] memory) {
     return paginate(s.userSessions[user], offset, limit);
   }
 
-  function getSessionsByModel(bytes32 modelId, uint256 offset, uint8 limit) public view returns (Session[] memory) {
+  function getSessionsByModel(bytes32 modelId, uint256 offset, uint8 limit) external view returns (Session[] memory) {
     return paginate(s.modelSessions[modelId], offset, limit);
   }
 
@@ -92,11 +96,11 @@ contract SessionRouter {
     return sessions;
   }
 
-  function activeSessionsCount() public view returns (uint256) {
+  function activeSessionsCount() external view returns (uint256) {
     return s.activeSessionsCount;
   }
 
-  function sessionsCount() public view returns (uint256) {
+  function sessionsCount() external view returns (uint256) {
     return s.sessions.length;
   }
 
@@ -104,7 +108,7 @@ contract SessionRouter {
     uint256 _stake,
     bytes memory providerApproval,
     bytes memory signature
-  ) public returns (bytes32 sessionId) {
+  ) external returns (bytes32 sessionId) {
     address sender = msg.sender;
 
     // reverts without specific error if cannot decode abi
@@ -128,10 +132,8 @@ contract SessionRouter {
     }
     s.approvalMap[providerApproval] = true;
 
-    uint256 startOfToday = startOfTheDay(block.timestamp);
-    uint256 duration = stakeToStipend(_stake, startOfToday) / bid.pricePerSecond;
-
-    if (duration < MIN_SESSION_DURATION) {
+    uint256 endsAt = whenSessionEnds(_stake, bid.pricePerSecond, block.timestamp);
+    if (endsAt - block.timestamp < MIN_SESSION_DURATION) {
       revert SessionTooShort();
     }
 
@@ -149,7 +151,7 @@ contract SessionRouter {
         closeoutType: 0,
         providerWithdrawnAmount: 0,
         openedAt: uint128(block.timestamp),
-        endsAt: whenSessionEnds(_stake, bid.pricePerSecond, block.timestamp),
+        endsAt: endsAt,
         closedAt: 0
       })
     );
@@ -170,7 +172,7 @@ contract SessionRouter {
     return sessionId;
   }
 
-  function closeSession(bytes memory receiptEncoded, bytes memory signature) public {
+  function closeSession(bytes memory receiptEncoded, bytes memory signature) external {
     // reverts without specific error if cannot decode abi
     (bytes32 sessionId, uint128 timestampMs, ) = abi.decode(receiptEncoded, (bytes32, uint128, uint32));
     if (timestampMs / 1000 < block.timestamp - SIGNATURE_TTL) {
@@ -223,7 +225,7 @@ contract SessionRouter {
 
     session.providerWithdrawnAmount += providerWithdraw;
 
-    // calculate user withdraw
+    // we have to lock today's stake so the user won't get the reward twice
     uint256 userStakeToLock = 0;
     if (!isClosingLate) {
       // session was closed on the same day
@@ -258,7 +260,7 @@ contract SessionRouter {
   }
 
   /// @notice allows provider to claim their funds
-  function claimProviderBalance(bytes32 sessionId, uint256 amountToWithdraw, address to) public {
+  function claimProviderBalance(bytes32 sessionId, uint256 amountToWithdraw, address to) external {
     Session storage session = s.sessions[s.sessionMap[sessionId]];
     if (session.openedAt == 0) {
       revert SessionNotFound();
@@ -272,6 +274,7 @@ contract SessionRouter {
     }
 
     session.providerWithdrawnAmount += amountToWithdraw;
+    s.totalClaimed += amountToWithdraw;
     s.token.transferFrom(s.fundingAccount, to, amountToWithdraw);
     return;
   }
@@ -292,14 +295,14 @@ contract SessionRouter {
   }
 
   /// @notice deletes session from the history
-  function deleteHistory(bytes32 sessionId) public {
+  function deleteHistory(bytes32 sessionId) external {
     Session storage session = s.sessions[s.sessionMap[sessionId]];
     LibOwner._senderOrOwner(session.user);
     session.user = address(0);
   }
 
   /// @notice checks if receipt is valid
-  function isValidReceipt(address signer, bytes memory receipt, bytes memory signature) public pure returns (bool) {
+  function isValidReceipt(address signer, bytes memory receipt, bytes memory signature) private pure returns (bool) {
     if (signature.length == 0) {
       return false;
     }
@@ -308,7 +311,7 @@ contract SessionRouter {
   }
 
   /// @notice returns amount of withdrawable user stake and one on hold
-  function withdrawableUserStake(address userAddr) public view returns (uint256 avail, uint256 hold) {
+  function withdrawableUserStake(address userAddr) external view returns (uint256 avail, uint256 hold) {
     OnHold[] memory onHold = s.userOnHold[userAddr];
     for (uint i = 0; i < onHold.length; i++) {
       uint256 amount = onHold[i].amount;
@@ -322,7 +325,7 @@ contract SessionRouter {
   }
 
   /// @notice withdraws user stake
-  function withdrawUserStake(uint256 amountToWithdraw, address to) public {
+  function withdrawUserStake(uint256 amountToWithdraw, address to) external {
     uint256 balance = 0;
     address sender = msg.sender;
 
@@ -364,13 +367,15 @@ contract SessionRouter {
 
   /// @notice returns stipend of user based on their stake
   function stakeToStipend(uint256 sessionStake, uint256 timestamp) public view returns (uint256) {
-    return sessionStake / (s.token.totalSupply() / getTodaysBudget(timestamp));
+    // inlined getTodaysBudget call to get a better precision
+    return (sessionStake * getComputeBalance(timestamp)) / (totalMORSupply(timestamp) * 100);
   }
 
   /// @notice returns stake of user based on their stipend
   function stipendToStake(uint256 stipend, uint256 timestamp) public view returns (uint256) {
-    // TODO: cache total supply
-    return stipend * (s.token.totalSupply() / getTodaysBudget(timestamp));
+    // inlined getTodaysBudget call to get a better precision
+    // return (stipend * totalMORSupply(timestamp)) / getTodaysBudget(timestamp);
+    return (stipend * totalMORSupply(timestamp) * 100) / getComputeBalance(timestamp);
   }
 
   /// @dev make it pure
@@ -378,28 +383,14 @@ contract SessionRouter {
     uint256 sessionStake,
     uint256 pricePerSecond,
     uint256 openedAt
-  ) private view returns (uint256) {
-    uint256 lastDay = whenStipendLessThanDailyPrice(sessionStake, pricePerSecond);
-    if (lastDay == 0) {
-      lastDay = openedAt;
+  ) public view returns (uint256) {
+    // if session stake is more than daily price then session will last for its max duration
+    uint256 duration = stakeToStipend(sessionStake, openedAt) / pricePerSecond;
+    if (duration >= MAX_SESSION_DURATION) {
+      return openedAt + MAX_SESSION_DURATION;
     }
 
-    uint256 endTime = lastDay + stakeToStipend(sessionStake, lastDay) / pricePerSecond;
-
-    // if session ends after today then count the next day stipend
-    if (startOfTheDay(endTime) > startOfTheDay(lastDay)) {
-      uint256 nextDayDuration = stakeToStipend(sessionStake, lastDay + 1 days) / pricePerSecond;
-      endTime = startOfTheDay(endTime) + nextDayDuration;
-    }
-
-    return minUint256(endTime, openedAt + MAX_SESSION_DURATION);
-  }
-
-  /// @notice returns the time when stipend will be less than daily price
-  function whenStipendLessThanDailyPrice(uint256 sessionStake, uint256 pricePerSecond) public view returns (uint256) {
-    uint256 pricePerDay = pricePerSecond * 1 days;
-    uint256 minComputeBalance = (pricePerDay * 100 * s.token.totalSupply()) / sessionStake;
-    return whenComputeBalanceIsLessThan(minComputeBalance);
+    return openedAt + duration;
   }
 
   /// @notice returns today's budget in MOR
@@ -409,35 +400,45 @@ contract SessionRouter {
 
   /// @notice returns today's compute balance in MOR
   function getComputeBalance(uint256 timestamp) public view returns (uint256) {
-    // TODO: cache today's budget and compute balance
-    return
-      LinearDistributionIntervalDecrease.getPeriodReward(
-        s.pool.initialReward,
-        s.pool.rewardDecrease,
-        s.pool.payoutStart,
-        s.pool.decreaseInterval,
-        uint128(startOfTheDay(timestamp)),
-        uint128(startOfTheDay(timestamp) + 1 days)
-      );
+    Pool memory pool = s.pools[3];
+    uint256 periodReward = LinearDistributionIntervalDecrease.getPeriodReward(
+      pool.initialReward,
+      pool.rewardDecrease,
+      pool.payoutStart,
+      pool.decreaseInterval,
+      pool.payoutStart,
+      uint128(startOfTheDay(timestamp))
+    );
+
+    return periodReward + s.totalClaimed;
   }
 
-  /// @notice returns the time when compute balance will be less than targetReward
-  /// @dev returns 0 if targetReward is greater than initial reward
-  function whenComputeBalanceIsLessThan(uint256 targetReward) public view returns (uint256) {
-    if (targetReward >= s.pool.initialReward) {
-      return 0;
+  // returns total amount of MOR tokens that were distributed across all pools
+  function totalMORSupply(uint256 timestamp) public view returns (uint256) {
+    uint256 totalSupply = 0;
+    for (uint i = 0; i < s.pools.length; i++) {
+      if (i == 3) continue; // skip compute pool (it's calculated separately)
+      Pool memory pool = s.pools[i];
+      uint256 sup = LinearDistributionIntervalDecrease.getPeriodReward(
+        pool.initialReward,
+        pool.rewardDecrease,
+        pool.payoutStart,
+        pool.decreaseInterval,
+        pool.payoutStart,
+        uint128(startOfTheDay(timestamp))
+      );
+      totalSupply += sup;
     }
-    return
-      ((s.pool.initialReward - targetReward) / s.pool.rewardDecrease) * s.pool.decreaseInterval + s.pool.payoutStart;
+    return totalSupply + s.totalClaimed;
   }
 
   /// @notice sets distibution pool configuration
   /// @dev parameters should be the same as in Ethereum L1 Distribution contract
   /// @dev at address 0x47176B2Af9885dC6C4575d4eFd63895f7Aaa4790
   /// @dev call 'Distribution.pools(3)' where '3' is a poolId
-  function setPoolConfig(Pool calldata pool) public {
+  function setPoolConfig(uint256 index, Pool calldata pool) public {
     LibOwner._onlyOwner();
-    s.pool = pool;
+    s.pools[index] = pool;
   }
 
   function startOfTheDay(uint256 timestamp) public pure returns (uint256) {
