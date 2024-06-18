@@ -178,13 +178,6 @@ export function ProxyConfigPanel(props) {
               onClick={() => {
                 props.setProxyRouterSettings({
                   ...props.proxyRouterSettings,
-                  isTitanLightning: props.isTitanLightning,
-                  sellerDefaultPool: generatePoolUrl(
-                    props.sellerPoolParts.account,
-                    !props.isTitanLightning
-                      ? props.sellerPoolParts.pool
-                      : props.titanLightningPool
-                  )
                 });
                 props.onActiveModalClick('confirm-proxy-restart');
               }}
