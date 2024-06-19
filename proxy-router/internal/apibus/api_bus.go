@@ -1,6 +1,7 @@
 package apibus
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,16 +9,40 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"net/url"
 
+	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
 	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/rpcproxy"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/rpcproxy/structs"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
 	"github.com/sashabaranov/go-openai"
 )
+
+type OpenSessionRequestV2 struct {
+	ProviderAddr    string   `json:"providerAddr"`
+	BidId           string   `json:"bidId"`
+	ProviderUrl     string   `json:"providerUrl"`
+	SessionDuration *big.Int `json:"sessionDuration"`
+}
+
+type InitiateSessionData struct {
+	Approval    string `json:"approval"`
+	ApprovalSig string `json:"approvalSig"`
+	Message     string `json:"message"`
+}
+
+type InitiateSessionResult struct {
+	Result InitiateSessionData `json:"result"`
+}
+
+type InitiateSessionResponse struct {
+	Response InitiateSessionResult `json:"response"`
+}
 
 // TODO: split implementations into separate client layer
 type ApiBus struct {
@@ -242,6 +267,155 @@ func (apiBus *ApiBus) SendMor(ctx *gin.Context) (int, gin.H) {
 //		@Success		200	{object}	interface{}
 //		@Router			/blockchain/sessions [post]
 func (apiBus *ApiBus) OpenSession(ctx *gin.Context) (int, gin.H) {
+	return apiBus.rpcProxy.OpenSession(ctx)
+}
+
+// OpenSession godoc
+//
+//		@Summary		Open Session full flow
+//		@Description	Full flow to open a session
+//	 	@Tags			sessions
+//		@Produce		json
+//		@Accept			json
+//		@Param			opensessionv2	body		rpcproxy.OpenSessionRequestV2 	true	"Open session"
+//		@Success		200	{object}	interface{}
+//		@Router			/blockchain/sessions/v2 [post]
+func (apiBus *ApiBus) OpenSessionV2(ctx *gin.Context) (int, gin.H) {
+	code, supply := apiBus.rpcProxy.GetTokenSupply(ctx)
+	if code != http.StatusOK {
+		return code, gin.H{
+			"error": "failed to get token supply",
+		}
+	}
+
+	code, budget := apiBus.rpcProxy.GetTodaysBudget(ctx)
+	if code != http.StatusOK {
+		return code, gin.H{
+			"error": "failed to get todays budget",
+		}
+	}
+
+	var reqPayload OpenSessionRequestV2
+	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
+	}
+
+	providerAddr := common.HexToAddress(reqPayload.ProviderAddr)
+	offset := new(big.Int).SetInt64(0)
+	code, bids := apiBus.rpcProxy.GetBidsByProvider(ctx, providerAddr, offset, 100)
+	if code != http.StatusOK {
+		return code, gin.H{
+			"error": "failed to get provider bids",
+		}
+	}
+
+	var bid *structs.Bid
+	bidsArr := bids["bids"].([]*structs.Bid)
+	for _, v := range bidsArr {
+		fmt.Println(v.Id, reqPayload.BidId)
+		if v.Id == reqPayload.BidId {
+			bid = v
+			break
+		}
+	}
+
+	if bid == nil {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{
+			"error": "bid not found",
+		}
+	}
+
+	sessionDuration := reqPayload.SessionDuration
+	totalCost := sessionDuration.Mul(bid.PricePerSecond, sessionDuration)
+	supplyVal, err := new(big.Int).SetString(supply["supply"].(string), 10)
+	if !err {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{
+			"error": "failed to parse token supply",
+		}
+	}
+	budgetVal, err := new(big.Int).SetString(budget["budget"].(string), 10)
+	if !err {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{
+			"error": "failed to parse token budget",
+		}
+	}
+	stake := totalCost.Div(totalCost.Mul(supplyVal, totalCost), budgetVal)
+
+	code, myAddr := apiBus.rpcProxy.GetMyAddr(ctx)
+	if code != http.StatusOK {
+		return code, gin.H{
+			"error": "failed to get my address",
+		}
+	}
+	userAddr := myAddr["address"].(string)
+
+	initiateSessionPayload := gin.H{
+		"provider":    providerAddr,
+		"bidId":       bid.Id,
+		"spend":       stake.Int64(),
+		"providerUrl": reqPayload.ProviderUrl,
+		"user":        userAddr,
+	}
+	jsonPayload, _ := json.Marshal(initiateSessionPayload)
+
+	header := http.Header{
+		"Content-Type": []string{"application/json"},
+	}
+	ctx.Request = &http.Request{
+		Body:   io.NopCloser(bytes.NewBuffer(jsonPayload)),
+		Header: header,
+	}
+
+	code, handshake := apiBus.proxyRouterApi.InitiateSession(ctx)
+	if code != http.StatusOK {
+		return code, gin.H{
+			"error": "failed to initiate session",
+		}
+	}
+
+	var handshakeData InitiateSessionResponse
+	handshakeJson, _ := json.Marshal(handshake)
+	if err := json.Unmarshal(handshakeJson, &handshakeData); err != nil {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{
+			"error": err.Error(),
+		}
+	}
+
+	approvePayload := gin.H{
+		"spender": apiBus.rpcProxy.GetDiamondContractAddr().Hex(),
+		"amount":  stake.String(),
+	}
+
+	query := url.Values{}
+	query.Add("spender", approvePayload["spender"].(string))
+	query.Add("amount", approvePayload["amount"].(string))
+
+	ctx.Request = &http.Request{
+		Header: header,
+		URL: &url.URL{
+			RawQuery: query.Encode(),
+		},
+	}
+	code, _ = apiBus.rpcProxy.Approve(ctx)
+	if code != http.StatusOK {
+		return code, gin.H{
+			"error": "failed to approve",
+		}
+	}
+
+	approval := handshakeData.Response.Result.Approval
+	approvalSig := handshakeData.Response.Result.ApprovalSig
+	openSessionPayload := gin.H{
+		"approval":    approval,
+		"approvalSig": approvalSig,
+		"stake":       stake.String(),
+	}
+	jsonPayload, _ = json.Marshal(openSessionPayload)
+
+	ctx.Request = &http.Request{
+		Body:   io.NopCloser(bytes.NewBuffer(jsonPayload)),
+		Header: header,
+	}
 	return apiBus.rpcProxy.OpenSession(ctx)
 }
 

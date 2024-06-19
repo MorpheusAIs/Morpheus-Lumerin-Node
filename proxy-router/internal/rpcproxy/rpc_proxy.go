@@ -9,8 +9,8 @@ import (
 	"strconv"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/sessionrouter"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/rpcproxy/structs"
@@ -35,6 +35,8 @@ type RpcProxy struct {
 	explorerClient   *ExplorerClient
 	sessionStorage   *storages.SessionStorage
 
+	diamonContractAddr common.Address
+
 	legacyTx   bool
 	privateKey interfaces.PrKeyProvider
 }
@@ -57,17 +59,22 @@ func NewRpcProxy(
 
 	explorerClient := NewExplorerClient(explorerApiUrl, morTokenAddr.String())
 	return &RpcProxy{
-		rpcClient:        rpcClient,
-		providerRegistry: providerRegistry,
-		modelRegistry:    modelRegistry,
-		marketplace:      marketplace,
-		sessionRouter:    sessionRouter,
-		legacyTx:         legacyTx,
-		privateKey:       privateKey,
-		morToken:         morToken,
-		explorerClient:   explorerClient,
-		sessionStorage:   sessionStorage,
+		rpcClient:          rpcClient,
+		providerRegistry:   providerRegistry,
+		modelRegistry:      modelRegistry,
+		marketplace:        marketplace,
+		sessionRouter:      sessionRouter,
+		legacyTx:           legacyTx,
+		privateKey:         privateKey,
+		morToken:           morToken,
+		explorerClient:     explorerClient,
+		sessionStorage:     sessionStorage,
+		diamonContractAddr: diamonContractAddr,
 	}
+}
+
+func (rpcProxy *RpcProxy) GetDiamondContractAddr() common.Address {
+	return rpcProxy.diamonContractAddr
 }
 
 func (rpcProxy *RpcProxy) GetLatestBlock(ctx context.Context) (uint64, error) {
@@ -116,6 +123,20 @@ func (rpcProxy *RpcProxy) GetAllModels(ctx context.Context) (int, gin.H) {
 	}
 
 	return constants.HTTP_STATUS_OK, gin.H{"models": result}
+}
+
+func (rpcProxy *RpcProxy) GetMyAddr(ctx context.Context) (int, gin.H) {
+	prKey, err := rpcProxy.privateKey.GetPrivateKey()
+	if err != nil {
+		return prKeyErr(err)
+	}
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, prKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+
+	return constants.HTTP_STATUS_OK, gin.H{"address": transactOpt.From.String()}
 }
 
 func (rpcProxy *RpcProxy) GetBidsByProvider(ctx context.Context, providerAddr common.Address, offset *big.Int, limit uint8) (int, gin.H) {

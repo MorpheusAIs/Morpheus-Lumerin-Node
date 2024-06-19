@@ -145,6 +145,11 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 		ctx.JSON(status, response)
 	}))
 
+	r.POST("/blockchain/sessions/v2", (func(ctx *gin.Context) {
+		status, response := apiBus.OpenSessionV2(ctx)
+		ctx.JSON(status, response)
+	}))
+
 	r.GET("/blockchain/sessions", (func(ctx *gin.Context) {
 		offset, limit := getOffsetLimit(ctx)
 		if offset == nil {
