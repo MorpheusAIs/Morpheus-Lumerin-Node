@@ -5,11 +5,11 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 
-	"github.com/dwisiswant0/chatgptui/common"
-	"github.com/dwisiswant0/chatgptui/style"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/common"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/style"
 )
 
-func New(cfgs ...common.Config) model {
+func New(sessionId string, cfgs ...common.Config) model {
 	var (
 		cfg common.Config
 		t   textinput.Model
@@ -24,7 +24,7 @@ func New(cfgs ...common.Config) model {
 
 	m := model{inputs: make([]textinput.Model, 7)}
 	m.configs = make([]configInput, len(m.inputs))
-
+ 
 	for i := range m.configs {
 		switch i {
 		// case 0:
@@ -95,6 +95,7 @@ func New(cfgs ...common.Config) model {
 			}
 		}
 
+		m.sessionId = sessionId
 		m.inputs[i] = t
 	}
 

@@ -1,12 +1,12 @@
 package config
 
 import (
-	"github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/dwisiswant0/chatgptui/chat"
-	"github.com/dwisiswant0/chatgptui/common"
-	"github.com/dwisiswant0/chatgptui/style"
-	"github.com/dwisiswant0/chatgptui/util"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/chat"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/common"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/style"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/util"
 )
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -49,7 +49,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							m.err = err
 							return m, nil
 						}
-
+						
+						cfg.SessionId = m.sessionId
 						util.RunProgram(chat.New(cfg))
 						m.err = nil
 					}

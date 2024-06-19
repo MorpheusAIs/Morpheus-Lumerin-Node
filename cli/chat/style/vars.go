@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/dwisiswant0/chatgptui/util"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/util"
 )
 
 var (

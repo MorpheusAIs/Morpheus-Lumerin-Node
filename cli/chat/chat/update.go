@@ -6,8 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/dwisiswant0/chatgptui/common"
-	"github.com/dwisiswant0/chatgptui/style"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/common"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/style"
 	"github.com/sashabaranov/go-openai"
 )
 
@@ -31,6 +31,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
+			m.textarea.Reset()
+
 			switch val {
 			case "/c", "/clear":
 				m.viewport.SetContent(common.ChatWelcomeMessage)
@@ -40,7 +42,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				m.viewport.SetContent(strings.Join(m.messages, "\n\n"))
 
-				m.textarea.Reset()
+				m.viewport.GotoBottom()
+
 				return m, tea.Batch(tiCmd, vpCmd, streamCompletions(m, val), waitForCompletion(m.completionChunkSub))
 			}
 		}
@@ -59,7 +62,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.SetContent(strings.Join(m.messages, "\n\n"))
 		// fmt.Println("messages: ", m.messages)
 		// fmt.Println("messageChunks: ", m.messageChunks)
-		m.textarea.Reset()
+		m.viewport.GotoBottom()
 
 		return m, tea.Batch(tiCmd, vpCmd, waitForCompletion(m.completionChunkSub))
 	}

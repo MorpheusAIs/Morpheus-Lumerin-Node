@@ -236,9 +236,27 @@ func NewActions(c *client.ApiGatewayClient) *actions {
 	return &actions{client: c}
 }
 
+var localProxyRouterUrl string;
+var contractAddress string;
+var userWalletAddress string;
+var bidId string;
+var provider string;
+var providerEndpoint string;
+var stake int;
+
 func (a *actions) startChat(cCtx *cli.Context) error {
 
-	chat.Run()
+	// userWalletAddress := cCtx.String("wallet")
+	// stake := cCtx.Int("stake")
+	// localProxyRouterUrl := cCtx.String("localEndpoint")
+	// contractAddress := cCtx.String("contract")
+	// bidId := cCtx.String("bid")
+	// provider := cCtx.String("providerWallet")
+	// providerEndpoint := cCtx.String("providerEndpoint")
+	
+	// lib.OpenSession(cCtx.Context, localProxyRouterUrl, contractAddress, userWalletAddress, bidId, provider, providerEndpoint, stake)
+
+	chat.Run("")
 
 	return nil
 }
@@ -421,16 +439,17 @@ func (a *actions) blockchainModels(cCtx *cli.Context) error {
 
 func (a *actions) openBlockchainSession(cCtx *cli.Context) error {
 
-	req := &client.SessionRequest{}
-
-	session, err := a.client.OpenSession(req, cCtx.Context)
+	session, err := a.client.OpenSession(cCtx.Context, &client.SessionRequest{
+		Approval: cCtx.String("approval"),
+		ApprovalSig: cCtx.String("approvalSig"),
+		Stake: cCtx.Uint64("stake"),
+	})
 
 	if err != nil {
 		return err
 	}
-	// TODO: Output a message indicating the blockchain session was opened and showing relevant data for the session
-	// jsonData, err := json.Marshal(bids)
-	fmt.Println(session)
+
+	fmt.Println("session opened: ", session.Id)
 	return nil
 }
 

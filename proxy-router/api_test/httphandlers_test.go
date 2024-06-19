@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -29,59 +30,56 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var WALLET_PRIVATE_KEY = "" // Set this to a valid private key to run the test.
+var WALLET_PRIVATE_KEY = "0ac29f41ad75406a9878ca70050846b2d4f0bdbb330efdfb5dc95eab436981af" // Set this to a valid private key to run the test.
 
 var DIAMOND_CONTRACT_ADDR = "0x70768f0ff919e194e11abfc3a2edf43213359dc1"
 var MOR_CONTRACT_ADDR = "0xc1664f994fd3991f98ae944bc16b9aed673ef5fd"
 var EXPLORER_API_URL = "https://api-sepolia.arbiscan.io/api"
 var ETH_LEGACY_TX = false
-var ETH_NODE_ADDRESS = "wss://arb-sepolia.g.alchemy.com/v2/UPDATE_HERE"
+var ETH_NODE_ADDRESS = "wss://arb-sepolia.g.alchemy.com/v2/Ken3T8xkvWUxtpKvb3yDedzF-sNsQDlZ"
 
 var PROVIDER_ADDR = "0x65bBb982d9B0AfE9AED13E999B79c56dDF9e04fC"
 var PROVIDER_URL = "thehulk1.stg.lumerin.io:3333"
 var BID_ID = "0xa0d6ea9ce7183510e16cbfd207b9e381a91c20ee75d5db483b5758ddf22a27b1"
 var SESSION_DURATION = new(big.Int).SetInt64(5 * 60) // 5 minutes in seconds
 
-func TestNewHTTPHandlerIntegration(t *testing.T) {
-	apiBus := InitializeApiBus(t)
+func TestChat(t *testing.T) {
 
-	walletAddr, err := lib.PrivKeyStringToAddr(WALLET_PRIVATE_KEY)
-	if err != nil {
-		t.Fatalf("failed to get wallet address: %s", err)
-		return
+	if t == nil {
+		t = new(testing.T)
 	}
 
+	_, _, _, stake, _ := PrepSessionForChat(t)
+	
+	localProxyRouterUrl := "http://localhost:8082" ;
+	contractAddress := DIAMOND_CONTRACT_ADDR;
+	userWalletAddress := WALLET_PRIVATE_KEY;
+	bidId := BID_ID;
+	provider := PROVIDER_ADDR;
+	providerEndpoint := PROVIDER_URL;
+
+	exec.Command("go", "run", "./cli/main.go", 
+	"-wallet", userWalletAddress, 
+	"-stake", stake.String(), 
+	"-localEndpoint", localProxyRouterUrl,
+	"-contract",contractAddress,
+	"-bid",  bidId,
+	"-providerWallet", provider,
+	"-providerEndpoint", providerEndpoint).Run()
+}
+
+func TestNewHTTPHandlerIntegration(t *testing.T) {
 	// Create a new instance of the HTTPHandler.
-	handler := httphandlers.NewHTTPHandler(apiBus)
-
-	server := httptest.NewServer(handler)
-	defer server.Close()
-
 	// Make a request to get the token supply.
-	supply := GetTokenSupply(t, server)
-
 	// Make a request to get today's budget.
-	budget := GetTodaysBudget(t, server)
-
 	// Make a request to get the provider's bids.
-	bid := FindBid(t, server)
-
 	// Calculate the stake.
-	pricePerSecond := new(big.Float).SetFloat64(bid["PricePerSecond"].(float64))
-	pricePerSecondInt := new(big.Int)
-	pricePerSecondInt, _ = pricePerSecondInt.SetString(pricePerSecond.Text('f', 0), 10)
-
-	totalCost := SESSION_DURATION.Mul(pricePerSecondInt, SESSION_DURATION)
-	stake := totalCost.Div(totalCost.Mul(supply, totalCost), budget)
-
 	// Make a request to initiate a session.
-	initiateSessionResponse := InitiateSession(t, server, walletAddr, stake)
-	approval := initiateSessionResponse.Response.Result.Approval
-	approvalSig := initiateSessionResponse.Response.Result.ApprovalSig
-	providerPubKey := initiateSessionResponse.Response.Result.Message
-
 	// Make a request to open a session.
-	sessionId := OpenSession(t, server, approval, approvalSig, stake)
+	server, providerPubKey, sessionId, _, shouldReturn := PrepSessionForChat(t)
+	if shouldReturn {
+		return
+	}
 
 	// Make a request to send a prompt.
 	promptRequestBody := map[string]interface{}{
@@ -113,6 +111,42 @@ func TestNewHTTPHandlerIntegration(t *testing.T) {
 	require.Equal(t, http.StatusOK, closeSessionResp.StatusCode)
 
 	require.Equal(t, http.StatusOK, sendPromptResp.StatusCode)
+}
+
+func PrepSessionForChat(t *testing.T) (server *httptest.Server, providerPubKey string, sessionId string, stake *big.Int, shouldReturn bool) {
+	apiBus := InitializeApiBus(t)
+
+	walletAddr, err := lib.PrivKeyStringToAddr(WALLET_PRIVATE_KEY)
+	if err != nil {
+		t.Fatalf("failed to get wallet address: %s", err)
+		return nil, "", "", nil, true
+	}
+
+	handler := httphandlers.NewHTTPHandler(apiBus)
+
+	server = httptest.NewServer(handler)
+	defer server.Close()
+
+	supply := GetTokenSupply(t, server)
+
+	budget := GetTodaysBudget(t, server)
+
+	bid := FindBid(t, server)
+
+	pricePerSecond := new(big.Float).SetFloat64(bid["PricePerSecond"].(float64))
+	pricePerSecondInt := new(big.Int)
+	pricePerSecondInt, _ = pricePerSecondInt.SetString(pricePerSecond.Text('f', 0), 10)
+
+	totalCost := SESSION_DURATION.Mul(pricePerSecondInt, SESSION_DURATION)
+	stake = totalCost.Div(totalCost.Mul(supply, totalCost), budget)
+
+	initiateSessionResponse := InitiateSession(t, server, walletAddr, stake)
+	approval := initiateSessionResponse.Response.Result.Approval
+	approvalSig := initiateSessionResponse.Response.Result.ApprovalSig
+	providerPubKey = initiateSessionResponse.Response.Result.Message
+
+	sessionId = OpenSession(t, server, approval, approvalSig, stake)
+	return server, providerPubKey, sessionId, stake, shouldReturn
 }
 
 func GetTokenSupply(t *testing.T, server *httptest.Server) *big.Int {
@@ -226,8 +260,14 @@ func OpenSession(t *testing.T, server *httptest.Server, approval string, approva
 	openSessionBody, err := json.Marshal(openBody)
 	require.NoError(t, err)
 
+	fmt.Printf("open session body: %s\n", string(openSessionBody))
+
 	openSessionURL := server.URL + "/blockchain/sessions"
 	openSessionResp, err := http.Post(openSessionURL, "application/json", bytes.NewReader(openSessionBody))
+
+	fmt.Println("open session error: ", err)
+	fmt.Println("open session response: ", openSessionResp)
+
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, openSessionResp.StatusCode)
 

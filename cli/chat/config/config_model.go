@@ -13,4 +13,5 @@ type model struct {
 	focusIndex int
 	inputs     []textinput.Model
 	configs    []configInput
+	sessionId string
 }

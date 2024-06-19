@@ -15,7 +15,7 @@ func (m model) sendChat(prompt string, streamResponse client.CompletionCallback)
 		Content: prompt,
 	})
 
-	_, err := client.RequestChatCompletionStream(ctx, &m.openaiRequest, streamResponse)
+	_, err := client.RequestChatCompletionStream(ctx, &m.openaiRequest, streamResponse, m.config.SessionId)
 
 	// fmt.Println("resp: ", response)
 	// fmt.Println("err: ", err)

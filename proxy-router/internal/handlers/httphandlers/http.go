@@ -152,6 +152,9 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 	}))
 
 	r.POST("/blockchain/sessions", (func(ctx *gin.Context) {
+		fmt.Printf("POST /blockchain/sessions\n")
+		fmt.Printf("body: %+v\n", ctx.Request.Body)
+		fmt.Println("approval: ", ctx.GetString("approval"))
 		status, response := apiBus.OpenSession(ctx)
 		ctx.JSON(status, response)
 	}))

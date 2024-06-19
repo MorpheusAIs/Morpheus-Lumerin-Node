@@ -3,8 +3,8 @@ package chat
 import (
 	"strings"
 
-	"github.com/dwisiswant0/chatgptui/common"
-	"github.com/dwisiswant0/chatgptui/style"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/common"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/style"
 )
 
 func (m model) View() string {

@@ -250,9 +250,10 @@ type SessionRequest struct {
 }
 
 type Session struct {
+	Id string `json:"id"`
 }
 
-func (c *ApiGatewayClient) OpenSession(req *SessionRequest, ctx context.Context) (session *Session, err error) {
+func (c *ApiGatewayClient) OpenSession(ctx context.Context, req *SessionRequest) (session *Session, err error) {
 
 	err = c.postRequest(ctx, "/blockchain/sessions", req, session)
 

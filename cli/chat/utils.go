@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/dwisiswant0/chatgptui/common"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/common"
 )
 
 func showBanner() {

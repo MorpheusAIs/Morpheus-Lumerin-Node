@@ -10,11 +10,11 @@ ChatGPTUI is designed to be easy to use and highly customizable. The tool suppor
 
 ## Install
 
-1. Grab the pre-built binary from the [releases page](https://github.com/dwisiswant0/chatgptui/releases), unpack & run! Or
+1. Grab the pre-built binary from the [releases page](https://github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/releases), unpack & run! Or
 2. If you have [Go1.19+](https://go.dev/dl/) compiler installed & configured:
 
 ```bash
-go install github.com/dwisiswant0/chatgptui@latest
+go install github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat@latest
 ```
 
 ## Usage

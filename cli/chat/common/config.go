@@ -9,4 +9,5 @@ type Config struct {
 	TopP          float32 `json:"top_p" validate:"required,number"`
 	OpenaiAPIKey  string  `json:"openai_api_key"`
 	OpenaiBaseUrl string  `json:"openai_base_url" validate:"required,uri"`
+	SessionId     string  `json:"session_id"`
 }

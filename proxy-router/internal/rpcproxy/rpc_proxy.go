@@ -236,6 +236,7 @@ type SendRequest struct {
 
 func (rpcProxy *RpcProxy) OpenSession(ctx *gin.Context) (int, gin.H) {
 	var reqPayload OpenSessionRequest
+	fmt.Printf("body: %+v\n", ctx.Request.Body)
 	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}

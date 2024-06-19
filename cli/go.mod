@@ -14,7 +14,7 @@ require (
 	github.com/urfave/cli/v2 v2.27.2
 )
 
-require github.com/dwisiswant0/chatgptui v1.0.1
+// require github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat v1.0.1
 
 require (
 	github.com/atotto/clipboard v0.1.4 // indirect
