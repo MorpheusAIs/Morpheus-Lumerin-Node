@@ -426,6 +426,29 @@ func (rpcProxy *RpcProxy) GetAllowance(ctx *gin.Context) (int, gin.H) {
 	return constants.HTTP_STATUS_OK, gin.H{"allowance": allowance.String()}
 }
 
+func (rpcProxy *RpcProxy) GetBidById(ctx *gin.Context, bidId string) (int, gin.H) {
+	if bidId == "" {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "bidId is required"}
+	}
+
+	id := [32]byte(common.FromHex(bidId))
+	bid, err := rpcProxy.marketplace.GetBidById(ctx, id)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get bid: " + err.Error()}
+	}
+
+	return constants.HTTP_STATUS_OK, gin.H{"bid": &structs.Bid{
+		Id:             bidId,
+		ModelAgentId:   lib.BytesToString(bid.ModelAgentId[:]),
+		Provider:       bid.Provider,
+		Nonce:          bid.Nonce,
+		CreatedAt:      bid.CreatedAt,
+		DeletedAt:      bid.DeletedAt,
+		PricePerSecond: bid.PricePerSecond,
+	},
+	}
+}
+
 func (rpcProxy *RpcProxy) Approve(ctx *gin.Context) (int, gin.H) {
 	spender := ctx.Query("spender")
 

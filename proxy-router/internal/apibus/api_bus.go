@@ -24,10 +24,9 @@ import (
 )
 
 type OpenSessionRequestV2 struct {
-	ProviderAddr    string   `json:"providerAddr"`
-	BidId           string   `json:"bidId"`
-	ProviderUrl     string   `json:"providerUrl"`
-	SessionDuration *big.Int `json:"sessionDuration"`
+	BidId           string `json:"bidId"`
+	ProviderUrl     string `json:"providerUrl"`
+	SessionDuration int64  `json:"sessionDuration"`
 }
 
 type InitiateSessionData struct {
@@ -277,7 +276,7 @@ func (apiBus *ApiBus) OpenSession(ctx *gin.Context) (int, gin.H) {
 //	 	@Tags			sessions
 //		@Produce		json
 //		@Accept			json
-//		@Param			opensessionv2	body		rpcproxy.OpenSessionRequestV2 	true	"Open session"
+//		@Param			opensessionv2	body		apibus.OpenSessionRequestV2 	true	"Open session"
 //		@Success		200	{object}	interface{}
 //		@Router			/blockchain/sessions/v2 [post]
 func (apiBus *ApiBus) OpenSessionV2(ctx *gin.Context) (int, gin.H) {
@@ -300,32 +299,21 @@ func (apiBus *ApiBus) OpenSessionV2(ctx *gin.Context) (int, gin.H) {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
 
-	providerAddr := common.HexToAddress(reqPayload.ProviderAddr)
-	offset := new(big.Int).SetInt64(0)
-	code, bids := apiBus.rpcProxy.GetBidsByProvider(ctx, providerAddr, offset, 100)
+	code, bidResponse := apiBus.rpcProxy.GetBidById(ctx, reqPayload.BidId)
 	if code != http.StatusOK {
 		return code, gin.H{
-			"error": "failed to get provider bids",
+			"error": "failed to get bid",
 		}
 	}
 
-	var bid *structs.Bid
-	bidsArr := bids["bids"].([]*structs.Bid)
-	for _, v := range bidsArr {
-		fmt.Println(v.Id, reqPayload.BidId)
-		if v.Id == reqPayload.BidId {
-			bid = v
-			break
-		}
-	}
-
+	bid := bidResponse["bid"].(*structs.Bid)
 	if bid == nil {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{
 			"error": "bid not found",
 		}
 	}
 
-	sessionDuration := reqPayload.SessionDuration
+	sessionDuration := new(big.Int).SetInt64(reqPayload.SessionDuration)
 	totalCost := sessionDuration.Mul(bid.PricePerSecond, sessionDuration)
 	supplyVal, err := new(big.Int).SetString(supply["supply"].(string), 10)
 	if !err {
@@ -350,7 +338,7 @@ func (apiBus *ApiBus) OpenSessionV2(ctx *gin.Context) (int, gin.H) {
 	userAddr := myAddr["address"].(string)
 
 	initiateSessionPayload := gin.H{
-		"provider":    providerAddr,
+		"provider":    bid.Provider.Hex(),
 		"bidId":       bid.Id,
 		"spend":       stake.Int64(),
 		"providerUrl": reqPayload.ProviderUrl,
