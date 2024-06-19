@@ -77,6 +77,14 @@ func (g *Marketplace) PostModelBid(ctx *bind.TransactOpts, provider string, mode
 	return fmt.Errorf("PostModelBid event not found in transaction logs")
 }
 
+func (g *Marketplace) GetBidById(ctx context.Context, bidId [32]byte) (*marketplace.Bid, error) {
+	bid, err := g.marketplace.BidMap(&bind.CallOpts{Context: ctx}, bidId)
+	if err != nil {
+		return nil, err
+	}
+	return &bid, nil
+}
+
 func (g *Marketplace) GetBidsByProvider(ctx context.Context, provider common.Address, offset *big.Int, limit uint8) ([][32]byte, []marketplace.Bid, error) {
 	adresses, bids, err := g.marketplace.GetBidsByProvider(&bind.CallOpts{Context: ctx}, provider, offset, limit)
 	if err != nil {

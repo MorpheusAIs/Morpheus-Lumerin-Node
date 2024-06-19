@@ -1,9 +1,9 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import {
-  default as installExtension,
-  REACT_DEVELOPER_TOOLS,
+  default as install,
   REDUX_DEVTOOLS
+  // REACT_DEVELOPER_TOOLS,
 } from 'electron-devtools-installer'
 import { createClient } from './src/client'
 import config from './config'
@@ -12,6 +12,8 @@ import initMenu from './menu'
 import errorHandler from './errorHandler'
 import logger from './logger'
 import { join } from 'path'
+
+const installExtension = (install as any).default as typeof install
 
 function createWindow(): void {
   // Create the browser window.
@@ -63,8 +65,7 @@ app.whenReady().then(() => {
 
   // install devtools
   if (is.dev) {
-    installExtension
-      .default([REDUX_DEVTOOLS])
+    installExtension([REDUX_DEVTOOLS])
       .then((name) => console.log(`Added Extension:  ${name}`))
       .catch((err) => console.log('An error occurred: ', err))
   }

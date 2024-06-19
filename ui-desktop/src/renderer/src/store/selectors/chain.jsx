@@ -30,17 +30,6 @@ export const getBlockHeight = createSelector(
   chainMetaData => chainMetaData.height
 );
 
-// Returns the active chain current gas price
-export const getChainGasPrice = createSelector(
-  getChainConfig,
-  getChainMeta,
-  (chainConfigData, chainMetaData) =>
-    // Parity may return 0 as gasPrice if latests blocks are empty
-    !chainMetaData.gasPrice || parseInt(chainMetaData.gasPrice, 10) <= 0
-      ? chainConfigData.defaultGasPrice
-      : chainMetaData.gasPrice
-);
-
 // Returns the active chain connection status
 export const getChainConnectionStatus = createSelector(
   getChain,
@@ -68,12 +57,6 @@ export const getContractExplorerUrl = createSelector(
           .replace('tx', 'address') // TODO: Replace with url builder
           .replace('{{hash}}', hash)
       : '#'
-);
-
-// Returns the ProxyRouter URL
-export const getProxyRouterUrl = createSelector(
-  getChainConfig,
-  chainConfigData => chainConfigData.proxyRouterUrl
 );
 
 // Returns the indexer connection status

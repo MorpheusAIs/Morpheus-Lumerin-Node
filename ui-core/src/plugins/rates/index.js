@@ -1,6 +1,6 @@
 'use strict'
 
-const logger = require('../../logger');
+const logger = require('../../logger')
 
 const { getNetworkDifficulty } = require('./network-difficulty')
 const { getRate } = require('./rate')
@@ -26,12 +26,13 @@ function createPlugin() {
 
     logger.debug('Plugin starting')
 
-    const { ratesUpdateMs, symbol } = config
+    const { symbol } = config
+    const ratesUpdateMs = 30000
 
     dataStream = createStream(getRate, ratesUpdateMs)
 
     dataStream.on('data', function (price) {
-      logger.debug('coin price updated: ', price);
+      logger.debug('coin price updated: ', price)
       if (price) {
         Object.entries(price).forEach(([token, price]) =>
           eventBus.emit('coin-price-updated', {
@@ -70,7 +71,11 @@ function createPlugin() {
     })
 
     return {
-      events: ['coin-price-updated', 'wallet-error', 'network-difficulty-updated'],
+      events: [
+        'coin-price-updated',
+        'wallet-error',
+        'network-difficulty-updated',
+      ],
     }
   }
 

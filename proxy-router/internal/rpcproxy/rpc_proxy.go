@@ -9,13 +9,13 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/contracts/sessionrouter"
-	constants "github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/lib"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/rpcproxy/structs"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/storages"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/sessionrouter"
+	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/rpcproxy/structs"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/gin-gonic/gin"
 
 	"github.com/ethereum/go-ethereum"
@@ -35,6 +35,8 @@ type RpcProxy struct {
 	morToken         *registries.MorToken
 	explorerClient   *ExplorerClient
 	sessionStorage   *storages.SessionStorage
+
+	diamonContractAddr common.Address
 
 	legacyTx   bool
 	privateKey interfaces.PrKeyProvider
@@ -68,17 +70,22 @@ func NewRpcProxy(
 
 	explorerClient := NewExplorerClient(explorerApiUrl, morTokenAddr.String())
 	return &RpcProxy{
-		rpcClient:        rpcClient,
-		providerRegistry: providerRegistry,
-		modelRegistry:    modelRegistry,
-		marketplace:      marketplace,
-		sessionRouter:    sessionRouter,
-		legacyTx:         legacyTx,
-		privateKey:       privateKey,
-		morToken:         morToken,
-		explorerClient:   explorerClient,
-		sessionStorage:   sessionStorage,
+		rpcClient:          rpcClient,
+		providerRegistry:   providerRegistry,
+		modelRegistry:      modelRegistry,
+		marketplace:        marketplace,
+		sessionRouter:      sessionRouter,
+		legacyTx:           legacyTx,
+		privateKey:         privateKey,
+		morToken:           morToken,
+		explorerClient:     explorerClient,
+		sessionStorage:     sessionStorage,
+		diamonContractAddr: diamonContractAddr,
 	}
+}
+
+func (rpcProxy *RpcProxy) GetDiamondContractAddr() common.Address {
+	return rpcProxy.diamonContractAddr
 }
 
 func (rpcProxy *RpcProxy) GetLatestBlock(ctx context.Context) (uint64, error) {
@@ -178,6 +185,20 @@ func (rpcProxy *RpcProxy) GetAllModels(ctx context.Context) (int, gin.H) {
 	}
 
 	return constants.HTTP_STATUS_OK, gin.H{"models": result}
+}
+
+func (rpcProxy *RpcProxy) GetMyAddr(ctx context.Context) (int, gin.H) {
+	prKey, err := rpcProxy.privateKey.GetPrivateKey()
+	if err != nil {
+		return prKeyErr(err)
+	}
+
+	transactOpt, err := rpcProxy.getTransactOpts(ctx, prKey)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": err.Error()}
+	}
+
+	return constants.HTTP_STATUS_OK, gin.H{"address": transactOpt.From.String()}
 }
 
 func (rpcProxy *RpcProxy) GetBidsByProvider(ctx context.Context, providerAddr common.Address, offset *big.Int, limit uint8) (int, gin.H) {
@@ -466,6 +487,29 @@ func (rpcProxy *RpcProxy) GetAllowance(ctx *gin.Context) (int, gin.H) {
 	}
 
 	return constants.HTTP_STATUS_OK, gin.H{"allowance": allowance.String()}
+}
+
+func (rpcProxy *RpcProxy) GetBidById(ctx *gin.Context, bidId string) (int, gin.H) {
+	if bidId == "" {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": "bidId is required"}
+	}
+
+	id := [32]byte(common.FromHex(bidId))
+	bid, err := rpcProxy.marketplace.GetBidById(ctx, id)
+	if err != nil {
+		return constants.HTTP_INTERNAL_SERVER_ERROR, gin.H{"error": "failed to get bid: " + err.Error()}
+	}
+
+	return constants.HTTP_STATUS_OK, gin.H{"bid": &structs.Bid{
+		Id:             bidId,
+		ModelAgentId:   lib.BytesToString(bid.ModelAgentId[:]),
+		Provider:       bid.Provider,
+		Nonce:          bid.Nonce,
+		CreatedAt:      bid.CreatedAt,
+		DeletedAt:      bid.DeletedAt,
+		PricePerSecond: bid.PricePerSecond,
+	},
+	}
 }
 
 func (rpcProxy *RpcProxy) Approve(ctx *gin.Context) (int, gin.H) {

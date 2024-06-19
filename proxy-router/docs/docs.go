@@ -396,6 +396,40 @@ const docTemplate = `{
                 }
             }
         },
+        "/blockchain/sessions/v2": {
+            "post": {
+                "description": "Full flow to open a session",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "Open Session full flow",
+                "parameters": [
+                    {
+                        "description": "Open session",
+                        "name": "opensessionv2",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apibus.OpenSessionRequestV2"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                }
+            }
+        },
         "/blockchain/sessions/{id}/close": {
             "post": {
                 "description": "Sends transaction in blockchain to close a session",
@@ -697,6 +731,20 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "apibus.OpenSessionRequestV2": {
+            "type": "object",
+            "properties": {
+                "bidId": {
+                    "type": "string"
+                },
+                "providerUrl": {
+                    "type": "string"
+                },
+                "sessionDuration": {
+                    "type": "integer"
+                }
+            }
+        },
         "httphandlers.SetupWalletReqBody": {
             "type": "object",
             "required": [

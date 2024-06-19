@@ -75,6 +75,10 @@ func TestNewHTTPHandlerIntegration(t *testing.T) {
 	// Make a request to get the provider's bids.
 	// Calculate the stake.
 	// Make a request to initiate a session.
+	initiateSessionResponse := InitiateSession(t, server, walletAddr, stake)
+	approval := initiateSessionResponse.Response.Result.Approval
+	approvalSig := initiateSessionResponse.Response.Result.ApprovalSig
+
 	// Make a request to open a session.
 	server, providerPubKey, sessionId, _, shouldReturn := PrepSessionForChat(t)
 	if shouldReturn {
@@ -83,25 +87,24 @@ func TestNewHTTPHandlerIntegration(t *testing.T) {
 
 	// Make a request to send a prompt.
 	promptRequestBody := map[string]interface{}{
-		"providerPublicKey": providerPubKey,
-		"prompt": map[string]interface{}{
-			"model":  "llama2",
-			"stream": true,
-			"messages": []map[string]string{
-				{
-					"role":    "user",
-					"content": "Why sky is blue?",
-				},
+		"model":  "llama2",
+		"stream": true,
+		"messages": []map[string]string{
+			{
+				"role":    "user",
+				"content": "Why sky is blue?",
 			},
 		},
-		"providerUrl": PROVIDER_URL,
 	}
 
 	promptBody, err := json.Marshal(promptRequestBody)
 	require.NoError(t, err)
 
-	sendPromptURL := server.URL + fmt.Sprintf("/proxy/sessions/%s/prompt", sessionId)
-	sendPromptResp, err := http.Post(sendPromptURL, "application/json", bytes.NewReader(promptBody))
+	sendPromptURL := server.URL + fmt.Sprintf("/v1/chat/completions")
+	request := httptest.NewRequest("POST", sendPromptURL, bytes.NewReader(promptBody))
+	request.Header.Add("session_id", sessionId)
+
+	sendPromptResp, err := server.Client().Do(request)
 	require.NoError(t, err)
 
 	// Make a request to close a session.
