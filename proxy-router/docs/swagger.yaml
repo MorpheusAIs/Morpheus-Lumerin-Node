@@ -1,5 +1,14 @@
 basePath: /
 definitions:
+  apibus.OpenSessionRequestV2:
+    properties:
+      bidId:
+        type: string
+      providerUrl:
+        type: string
+      sessionDuration:
+        type: integer
+    type: object
   httphandlers.SetupWalletReqBody:
     properties:
       privateKey:
@@ -337,6 +346,28 @@ paths:
       summary: Get Todays Budget
       tags:
       - wallet
+  /blockchain/sessions/v2:
+    post:
+      consumes:
+      - application/json
+      description: Full flow to open a session
+      parameters:
+      - description: Open session
+        in: body
+        name: opensessionv2
+        required: true
+        schema:
+          $ref: '#/definitions/apibus.OpenSessionRequestV2'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Open Session full flow
+      tags:
+      - sessions
   /blockchain/token/supply:
     get:
       description: Get MOR token supply from blockchain
