@@ -398,7 +398,12 @@ func (apiBus *ApiBus) OpenSessionV2(ctx *gin.Context) (int, gin.H) {
 		"approvalSig": approvalSig,
 		"stake":       stake.String(),
 	}
-	jsonPayload, _ = json.Marshal(openSessionPayload)
+	jsonPayload, marshalErr := json.Marshal(openSessionPayload)
+	if marshalErr != nil {
+		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{
+			"error": "failed to marshal open session payload: " + marshalErr.Error(),
+		}
+	}
 
 	ctx.Request = &http.Request{
 		Body:   io.NopCloser(bytes.NewBuffer(jsonPayload)),
