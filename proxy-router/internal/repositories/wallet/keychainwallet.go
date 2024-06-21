@@ -128,7 +128,7 @@ func (w *KeychainWallet) getStoredPrivateKey() (lib.HexString, error) {
 	if err != nil {
 		return nil, err
 	}
-	return lib.NewHexString(prKey), nil
+	return lib.StringToHexString(prKey)
 }
 
 // getStoredMnemonic retrieves the mnemonic of the wallet

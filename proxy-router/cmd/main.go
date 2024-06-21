@@ -199,19 +199,19 @@ func start() error {
 	sessionStorage := storages.NewSessionStorage(log)
 
 	var wallet interfaces.Wallet
-	if len(cfg.Marketplace.WalletPrivateKey) > 0 {
-		wallet = wlt.NewEnvWallet(cfg.Marketplace.WalletPrivateKey)
+	if len(*cfg.Marketplace.WalletPrivateKey) > 0 {
+		wallet = wlt.NewEnvWallet(*cfg.Marketplace.WalletPrivateKey)
 		log.Warnf("Using env wallet. Private key persistance unavailable")
 	} else {
 		wallet = wlt.NewKeychainWallet()
 		log.Infof("Using keychain wallet")
 	}
 
-	blockchainApi := blockchainapi.NewBlockchainService(ethClient, cfg.Marketplace.DiamondContractAddress, cfg.Marketplace.MorTokenAddress, cfg.Blockchain.ExplorerApiUrl, wallet, sessionStorage, proxyLog, cfg.Blockchain.EthLegacyTx)
+	blockchainApi := blockchainapi.NewBlockchainService(ethClient, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, cfg.Blockchain.ExplorerApiUrl, wallet, sessionStorage, proxyLog, cfg.Blockchain.EthLegacyTx)
 	proxyRouterApi := proxyapi.NewProxySender(publicUrl, wallet, contractLogStorage, sessionStorage, log)
 	aiEngine := aiengine.NewAiEngine()
 
-	sessionRouter := registries.NewSessionRouter(cfg.Marketplace.DiamondContractAddress, ethClient, log)
+	sessionRouter := registries.NewSessionRouter(*cfg.Marketplace.DiamondContractAddress, ethClient, log)
 	eventListener := blockchainapi.NewEventsListener(ethClient, sessionStorage, sessionRouter, log)
 
 	blockchainController := blockchainapi.NewBlockchainController(blockchainApi)

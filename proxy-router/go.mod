@@ -10,7 +10,7 @@ require (
 	github.com/go-playground/validator/v10 v10.20.0
 	github.com/joho/godotenv v1.5.1
 	github.com/miguelmota/go-ethereum-hdwallet v0.1.2
-	github.com/omeid/uconfig v0.5.0
+	github.com/omeid/uconfig v0.7.0
 	github.com/sashabaranov/go-openai v1.21.0
 	github.com/shirou/gopsutil/v3 v3.23.11
 	github.com/stretchr/testify v1.9.0

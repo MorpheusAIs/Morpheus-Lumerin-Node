@@ -109,7 +109,12 @@ func (s *MORRPCController) sessionPrompt(ctx context.Context, msg m.RPCMessageV2
 		sourceLog.Error(err)
 		return err
 	}
-	isValid := s.morRpc.VerifySignature(msg.Params, req.Signature, lib.NewHexString(user.PubKey), sourceLog)
+	pubKeyHex, err := lib.StringToHexString(user.PubKey)
+	if err != nil {
+		sourceLog.Error(err)
+		return err
+	}
+	isValid := s.morRpc.VerifySignature(msg.Params, req.Signature, pubKeyHex, sourceLog)
 	if !isValid {
 		err := fmt.Errorf("invalid signature")
 		sourceLog.Error(err)

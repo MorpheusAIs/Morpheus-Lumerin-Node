@@ -1,14 +1,39 @@
 package lib
 
 import (
+	"encoding"
+	"fmt"
+	"regexp"
+
 	"github.com/ethereum/go-ethereum/common"
+)
+
+var (
+	// ethAddressRegexString = `^0x[0-9a-fA-F]{40}$`
+	// ethAddressRegex       = regexp.MustCompile(ethAddressRegexString)
+
+	hexadecimalRegexString = "^(0[xX])?[0-9a-fA-F]+$"
+	hexadecimalRegex       = regexp.MustCompile(hexadecimalRegexString)
+
+	ErrInvalidEthAddress = fmt.Errorf("invalid ethereum address")
 )
 
 // Arbitrary length hex string represented internally as a byte slice
 type HexString []byte
 
-func NewHexString(s string) HexString {
-	return common.FromHex(s)
+func StringToHexString(s string) (HexString, error) {
+	if !hexadecimalRegex.MatchString(s) {
+		return nil, WrapError(ErrInvalidEthAddress, fmt.Errorf("%s", s))
+	}
+	return common.FromHex(s), nil
+}
+
+func MustStringToHexString(s string) HexString {
+	h, err := StringToHexString(s)
+	if err != nil {
+		panic(err)
+	}
+	return h
 }
 
 func (b *HexString) UnmarshalJSON(data []byte) error {
@@ -16,13 +41,26 @@ func (b *HexString) UnmarshalJSON(data []byte) error {
 	if len(str) > 0 && str[0] == '"' {
 		str = str[1 : len(str)-1]
 	}
+	if !hexadecimalRegex.MatchString(str) {
+		return WrapError(ErrInvalidEthAddress, fmt.Errorf("%s", str))
+	}
 	d := common.FromHex(str)
 	*b = d
 	return nil
 }
 
+func (b *HexString) UnmarshalText(data []byte) error {
+	dataStr := string(data)
+	if !hexadecimalRegex.MatchString(dataStr) {
+		return WrapError(ErrInvalidEthAddress, fmt.Errorf("%s", dataStr))
+	}
+	d := common.FromHex(string(data))
+	*b = d
+	return nil
+}
+
 func (b HexString) String() string {
-	return b.String()
+	return b.Hex()
 }
 
 func (b HexString) Hex() string {
@@ -35,3 +73,5 @@ func (b HexString) Hex() string {
 func (b HexString) MarshalJSON() ([]byte, error) {
 	return []byte(`"` + b.String() + `"`), nil
 }
+
+var _ encoding.TextUnmarshaler = &HexString{}

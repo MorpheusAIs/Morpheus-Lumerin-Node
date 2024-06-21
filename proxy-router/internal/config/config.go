@@ -21,9 +21,9 @@ type Config struct {
 	}
 	Environment string `env:"ENVIRONMENT" flag:"environment"`
 	Marketplace struct {
-		DiamondContractAddress common.Address `env:"DIAMOND_CONTRACT_ADDRESS" flag:"diamond-address"   validate:"required_if=Disable false,omitempty,eth_addr"`
-		MorTokenAddress        common.Address `env:"MOR_TOKEN_ADDRESS"        flag:"mor-token-address" validate:"required_if=Disable false,omitempty,eth_addr"`
-		WalletPrivateKey       lib.HexString  `env:"WALLET_PRIVATE_KEY"       flag:"wallet-private-key"     desc:"if set, will use this private key to sign transactions, otherwise it will be retrieved from the system keychain"`
+		DiamondContractAddress *common.Address `env:"DIAMOND_CONTRACT_ADDRESS" flag:"diamond-address"   validate:"omitempty,eth_addr"`
+		MorTokenAddress        *common.Address `env:"MOR_TOKEN_ADDRESS"        flag:"mor-token-address" validate:"omitempty,eth_addr"`
+		WalletPrivateKey       *lib.HexString  `env:"WALLET_PRIVATE_KEY"       flag:"wallet-private-key"     desc:"if set, will use this private key to sign transactions, otherwise it will be retrieved from the system keychain"`
 	}
 	Log struct {
 		Color           bool   `env:"LOG_COLOR"            flag:"log-color"`
@@ -132,6 +132,9 @@ func (cfg *Config) GetSanitized() interface{} {
 
 	publicCfg.Blockchain.EthLegacyTx = cfg.Blockchain.EthLegacyTx
 	publicCfg.Environment = cfg.Environment
+
+	publicCfg.Marketplace.DiamondContractAddress = cfg.Marketplace.DiamondContractAddress
+	publicCfg.Marketplace.MorTokenAddress = cfg.Marketplace.MorTokenAddress
 
 	publicCfg.Log.Color = cfg.Log.Color
 	publicCfg.Log.FolderPath = cfg.Log.FolderPath

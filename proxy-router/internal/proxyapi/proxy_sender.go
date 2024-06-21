@@ -122,12 +122,16 @@ func (p *ProxyServiceSender) SendPrompt(ctx context.Context, resWriter Responder
 	}
 
 	requestID := "1"
-	promptRequest, err := msg.NewMorRpc().SessionPromptRequest(sessionID, prompt, lib.NewHexString(provider.PubKey), prKey, requestID)
+	pubKey, err := lib.StringToHexString(provider.PubKey)
+	if err != nil {
+		return lib.WrapError(ErrCreateReq, err)
+	}
+	promptRequest, err := msg.NewMorRpc().SessionPromptRequest(sessionID, prompt, pubKey, prKey, requestID)
 	if err != nil {
 		return lib.WrapError(ErrCreateReq, err)
 	}
 
-	return p.rpcRequestStream(ctx, resWriter, provider.Url, promptRequest, lib.NewHexString(provider.PubKey))
+	return p.rpcRequestStream(ctx, resWriter, provider.Url, promptRequest, pubKey)
 }
 
 func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msg.RpcMessage) (*msg.RpcResponse, int, gin.H) {
