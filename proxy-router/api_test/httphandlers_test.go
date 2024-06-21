@@ -15,13 +15,13 @@ import (
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apibus"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/handlers/httphandlers"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/wallet"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/rpcproxy"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -52,7 +52,7 @@ func TestNewHTTPHandlerIntegration(t *testing.T) {
 	}
 
 	// Create a new instance of the HTTPHandler.
-	handler := httphandlers.NewHTTPHandler(apiBus)
+	handler := httphandlers.CreateHTTPServer(apiBus)
 
 	server := httptest.NewServer(handler)
 	defer server.Close()
@@ -263,9 +263,9 @@ func InitializeApiBus(t *testing.T) *apibus.ApiBus {
 	sessionStorage := storages.NewSessionStorage(log)
 
 	wlt := wallet.NewEnvWallet(WALLET_PRIVATE_KEY)
-	rpcProxy := rpcproxy.NewRpcProxy(ethClient, diamondContractAddr, morContractAddr, EXPLORER_API_URL, wlt, sessionStorage, log, ETH_LEGACY_TX)
-	proxyRouterApi := proxyapi.NewProxyRouterApi(nil, &url.URL{}, wlt, nil, derived, time.Now(), contractLogStorage, sessionStorage, log)
+	blockchainApi := blockchainapi.NewBlockchainService(ethClient, diamondContractAddr, morContractAddr, EXPLORER_API_URL, wlt, sessionStorage, log, ETH_LEGACY_TX)
+	proxyRouterApi := proxyapi.NewProxySender(nil, &url.URL{}, wlt, nil, derived, time.Now(), contractLogStorage, sessionStorage, log)
 
-	apiBus := apibus.NewApiBus(rpcProxy, aiengine.NewAiEngine(), proxyRouterApi, wlt)
+	apiBus := apibus.NewApiBus(blockchainApi, aiengine.NewAiEngine(), proxyRouterApi, wlt)
 	return apiBus
 }

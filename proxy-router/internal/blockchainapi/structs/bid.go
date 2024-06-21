@@ -7,9 +7,9 @@ import (
 )
 
 type Bid struct {
-	Id             string
+	Id             common.Hash
 	Provider       common.Address
-	ModelAgentId   string
+	ModelAgentId   common.Hash
 	PricePerSecond *big.Int
 	Nonce          *big.Int
 	CreatedAt      *big.Int

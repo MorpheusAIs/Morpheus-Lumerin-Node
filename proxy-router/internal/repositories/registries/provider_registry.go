@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/providerregistry"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -24,10 +23,10 @@ type ProviderRegistry struct {
 	// deps
 	providerRegistry *providerregistry.ProviderRegistry
 	client           *ethclient.Client
-	log              interfaces.ILogger
+	log              lib.ILogger
 }
 
-func NewProviderRegistry(providerRegistryAddr common.Address, client *ethclient.Client, log interfaces.ILogger) *ProviderRegistry {
+func NewProviderRegistry(providerRegistryAddr common.Address, client *ethclient.Client, log lib.ILogger) *ProviderRegistry {
 	pr, err := providerregistry.NewProviderRegistry(providerRegistryAddr, client)
 	if err != nil {
 		panic("invalid provider registry ABI")
@@ -46,15 +45,15 @@ func NewProviderRegistry(providerRegistryAddr common.Address, client *ethclient.
 	}
 }
 
-func (g *ProviderRegistry) GetAllProviders(ctx context.Context) ([]string, []providerregistry.Provider, error) {
+func (g *ProviderRegistry) GetAllProviders(ctx context.Context) ([]common.Address, []providerregistry.Provider, error) {
 	providerAddrs, providers, err := g.providerRegistry.ProviderGetAll(&bind.CallOpts{Context: ctx})
 	if err != nil {
 		return nil, nil, err
 	}
 
-	addresses := make([]string, len(providerAddrs))
+	addresses := make([]common.Address, len(providerAddrs))
 	for i, address := range providerAddrs {
-		addresses[i] = address.Hex()
+		addresses[i] = address
 	}
 
 	return addresses, providers, nil

@@ -4,18 +4,18 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"fmt"
 	"net"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/morrpc"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi"
+	morrpc "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi/morrpcmessage"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/transport"
 )
 
 func NewTCPHandler(
-	log, connLog interfaces.ILogger,
-	schedulerLogFactory func(contractID string) (interfaces.ILogger, error),
-	morRpcHandler *MorRpcHandler,
+	log, connLog lib.ILogger,
+	schedulerLogFactory func(contractID string) (lib.ILogger, error),
+	morRpcHandler *proxyapi.MORRPCController,
 ) transport.Handler {
 	return func(ctx context.Context, conn net.Conn) {
 		addr := conn.RemoteAddr().String()
@@ -26,7 +26,7 @@ func NewTCPHandler(
 			conn.Close()
 		}()
 
-		msg, err := getMessage(conn)
+		msg, err := getMessageV2(conn)
 		if err != nil {
 			sourceLog.Error("Error reading message", err)
 			return
@@ -38,7 +38,7 @@ func NewTCPHandler(
 				sourceLog.Error("Error sending message", err)
 				return err
 			}
-			fmt.Println("sent message")
+			sourceLog.Debug("sent message")
 			return err
 		})
 		if err != nil {
@@ -53,14 +53,14 @@ func sendMsg(conn net.Conn, msg *morrpc.RpcResponse) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return conn.Write([]byte(msgJson))
+	return conn.Write(msgJson)
 }
 
-func getMessage(conn net.Conn) (*morrpc.RpcMessage, error) {
+func getMessageV2(conn net.Conn) (*morrpc.RPCMessageV2, error) {
 	reader := bufio.NewReader(conn)
 	d := json.NewDecoder(reader)
 
-	var msg *morrpc.RpcMessage
+	var msg *morrpc.RPCMessageV2
 	err := d.Decode(&msg)
 	if err != nil {
 		return nil, err

@@ -6,14 +6,10 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-type Model struct {
-	Id        string
-	IpfsCID   string
-	Fee       *big.Int
+type Provider struct {
+	Address   common.Address
+	Endpoint  string
 	Stake     *big.Int
-	Owner     common.Address
-	Name      string
-	Tags      []string
 	CreatedAt *big.Int
 	IsDeleted bool
 }

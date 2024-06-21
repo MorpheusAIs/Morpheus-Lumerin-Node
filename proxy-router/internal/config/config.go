@@ -3,10 +3,13 @@ package config
 import (
 	"fmt"
 	"runtime"
+
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/ethereum/go-ethereum/common"
 )
 
 type DerivedConfig struct {
-	WalletAddress string
+	WalletAddress common.Address
 }
 
 // Validation tags described here: https://pkg.go.dev/github.com/go-playground/validator/v10
@@ -18,9 +21,9 @@ type Config struct {
 	}
 	Environment string `env:"ENVIRONMENT" flag:"environment"`
 	Marketplace struct {
-		DiamondContractAddress string `env:"DIAMOND_CONTRACT_ADDRESS" flag:"diamond-address"   validate:"required_if=Disable false,omitempty,eth_addr"`
-		MorTokenAddress        string `env:"MOR_TOKEN_ADDRESS"        flag:"mor-token-address" validate:"required_if=Disable false,omitempty,eth_addr"`
-		WalletPrivateKey       string `env:"WALLET_PRIVATE_KEY"       flag:"wallet-private-key"     desc:"if set, will use this private key to sign transactions, otherwise it will be retrieved from the system keychain"`
+		DiamondContractAddress common.Address `env:"DIAMOND_CONTRACT_ADDRESS" flag:"diamond-address"   validate:"required_if=Disable false,omitempty,eth_addr"`
+		MorTokenAddress        common.Address `env:"MOR_TOKEN_ADDRESS"        flag:"mor-token-address" validate:"required_if=Disable false,omitempty,eth_addr"`
+		WalletPrivateKey       lib.HexString  `env:"WALLET_PRIVATE_KEY"       flag:"wallet-private-key"     desc:"if set, will use this private key to sign transactions, otherwise it will be retrieved from the system keychain"`
 	}
 	Log struct {
 		Color           bool   `env:"LOG_COLOR"            flag:"log-color"`

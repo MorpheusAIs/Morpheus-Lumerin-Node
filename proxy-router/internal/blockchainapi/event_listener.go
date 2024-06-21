@@ -1,4 +1,4 @@
-package rpcproxy
+package blockchainapi
 
 import (
 	"context"
@@ -68,9 +68,12 @@ func (e *EventsListener) handleSessionOpened(event *sessionrouter.SessionRouterS
 	sessionId := lib.BytesToString(event.SessionId[:])
 	e.log.Debugf("received open session router event, sessionId %s", sessionId)
 
+	// TDO: pull session from bc
+	// add
 	err := e.store.AddSession(&storages.Session{
 		Id:       sessionId,
 		UserAddr: event.UserAddress.Hex(),
+		// add more fields endsAt
 	})
 	if err != nil {
 		return err

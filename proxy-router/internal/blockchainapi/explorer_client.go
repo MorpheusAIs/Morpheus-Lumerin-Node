@@ -1,11 +1,12 @@
-package rpcproxy
+package blockchainapi
 
 import (
 	"encoding/json"
 	"fmt"
 	"net/http"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/rpcproxy/structs"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi/structs"
+	"github.com/ethereum/go-ethereum/common"
 )
 
 type ExplorerClient struct {
@@ -20,8 +21,8 @@ func NewExplorerClient(explorerApiUrl string, morTokenAddr string) *ExplorerClie
 	}
 }
 
-func (e *ExplorerClient) GetEthTransactions(address string, page string, limit string) ([]structs.RawTransaction, error) {
-	query := fmt.Sprintf("?module=account&action=txlist&address=%s&page=%s&offset=%s", address, page, limit)
+func (e *ExplorerClient) GetEthTransactions(address common.Address, page uint64, limit uint8) ([]structs.RawTransaction, error) {
+	query := fmt.Sprintf("?module=account&action=txlist&address=%s&page=%d&offset=%d", address.Hex(), page, limit)
 	url := e.explorerApiUrl + query
 
 	transactions, err := e.doRequest(url)
@@ -31,8 +32,8 @@ func (e *ExplorerClient) GetEthTransactions(address string, page string, limit s
 	return transactions, nil
 }
 
-func (e *ExplorerClient) GetTokenTransactions(address string, page string, limit string) ([]structs.RawTransaction, error) {
-	query := fmt.Sprintf("?module=account&action=tokentx&contractaddress=%s&address=%s&page=%s&offset=%s", e.morTokenAddr, address, page, limit)
+func (e *ExplorerClient) GetTokenTransactions(address common.Address, page uint64, limit uint8) ([]structs.RawTransaction, error) {
+	query := fmt.Sprintf("?module=account&action=tokentx&contractaddress=%s&address=%s&page=%d&offset=%d", e.morTokenAddr, address.Hex(), page, limit)
 	url := e.explorerApiUrl + query
 
 	transactions, err := e.doRequest(url)

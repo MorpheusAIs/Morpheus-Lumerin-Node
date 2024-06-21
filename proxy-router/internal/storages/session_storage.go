@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 )
 
 type Session struct {
@@ -24,7 +24,7 @@ type SessionStorage struct {
 	db *Storage
 }
 
-func NewSessionStorage(log i.ILogger) *SessionStorage {
+func NewSessionStorage(log lib.ILogger) *SessionStorage {
 	return &SessionStorage{
 		db: NewStorage(log),
 	}

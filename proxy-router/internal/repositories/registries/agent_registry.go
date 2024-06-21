@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/agentregistry"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -24,10 +23,10 @@ type AgentRegistry struct {
 	// deps
 	agentRegistry *agentregistry.AgentRegistry
 	client        *ethclient.Client
-	log           interfaces.ILogger
+	log           lib.ILogger
 }
 
-func NewAgentRegistry(agentRegistryAddr common.Address, client *ethclient.Client, log interfaces.ILogger) *AgentRegistry {
+func NewAgentRegistry(agentRegistryAddr common.Address, client *ethclient.Client, log lib.ILogger) *AgentRegistry {
 	ar, err := agentregistry.NewAgentRegistry(agentRegistryAddr, client)
 	if err != nil {
 		panic("invalid agent registry ABI")

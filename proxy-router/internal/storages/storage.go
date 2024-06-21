@@ -1,8 +1,7 @@
 package storages
 
 import (
-	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
-
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	badger "github.com/dgraph-io/badger/v4"
 )
 
@@ -10,7 +9,7 @@ type Storage struct {
 	db *badger.DB
 }
 
-func NewStorage(log i.ILogger) *Storage {
+func NewStorage(log lib.ILogger) *Storage {
 	opts := badger.DefaultOptions("./data/badger")
 	opts.Logger = NewBadgerLogger(log)
 

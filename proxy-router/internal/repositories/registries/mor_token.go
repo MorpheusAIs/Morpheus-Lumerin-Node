@@ -5,7 +5,6 @@ import (
 	"math/big"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/morpheustoken"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -26,10 +25,10 @@ type MorToken struct {
 	// deps
 	mor    *morpheustoken.MorpheusToken
 	client *ethclient.Client
-	log    interfaces.ILogger
+	log    lib.ILogger
 }
 
-func NewMorToken(morTokenAddr common.Address, client *ethclient.Client, log interfaces.ILogger) *MorToken {
+func NewMorToken(morTokenAddr common.Address, client *ethclient.Client, log lib.ILogger) *MorToken {
 	mor, err := morpheustoken.NewMorpheusToken(morTokenAddr, client)
 	if err != nil {
 		panic("invalid mor ABI")

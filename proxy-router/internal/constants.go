@@ -1,10 +1,11 @@
 package constants
 
-import "net/http"
+const (
+	HEADER_ACCEPT       = "Accept"
+	HEADER_CONTENT_TYPE = "Content-Type"
+)
 
 const (
-	HTTP_STATUS_BAD_REQUEST    = http.StatusBadRequest
-	HTTP_STATUS_OK             = http.StatusOK
-	HTTP_INTERNAL_SERVER_ERROR = http.StatusInternalServerError
-	HTTP_CONFLICT              = http.StatusConflict
+	CONTENT_TYPE_JSON         = "application/json"
+	CONTENT_TYPE_EVENT_STREAM = "text/event-stream"
 )

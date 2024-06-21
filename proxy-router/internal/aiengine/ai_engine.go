@@ -11,11 +11,18 @@ import (
 
 	"fmt"
 
+	"github.com/gin-gonic/gin"
+	"github.com/sashabaranov/go-openai"
 	api "github.com/sashabaranov/go-openai"
 )
 
 type AiEngine struct {
 	client *api.Client
+}
+
+type ResponderFlusher interface {
+	http.ResponseWriter
+	http.Flusher
 }
 
 func NewAiEngine() *AiEngine {
@@ -132,4 +139,45 @@ func (aiEngine *AiEngine) PromptStream(ctx context.Context, req interface{}, chu
 	}
 
 	return resp, err
+}
+
+func (aiEngine *AiEngine) PromptCb(ctx *gin.Context, body *openai.ChatCompletionRequest) {
+	var response interface{}
+	var err error
+
+	if body.Stream {
+		response, err = aiEngine.PromptStream(ctx, body, func(response *openai.ChatCompletionStreamResponse) error {
+
+			marshalledResponse, err := json.Marshal(response)
+			if err != nil {
+				return err
+			}
+
+			ctx.Writer.Header().Set("Content-Type", "text/event-stream")
+
+			_, err = ctx.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", marshalledResponse)))
+			if err != nil {
+				return err
+			}
+
+			ctx.Writer.Flush()
+			return nil
+		})
+
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		ctx.JSON(http.StatusOK, response)
+		return
+	} else {
+		response, err = aiEngine.Prompt(ctx, body)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		ctx.JSON(http.StatusOK, response)
+		return
+	}
 }
