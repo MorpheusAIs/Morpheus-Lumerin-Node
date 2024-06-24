@@ -9,8 +9,8 @@ type Storage struct {
 	db *badger.DB
 }
 
-func NewStorage(log lib.ILogger) *Storage {
-	opts := badger.DefaultOptions("./data/badger")
+func NewStorage(log lib.ILogger, path string) *Storage {
+	opts := badger.DefaultOptions(path)
 	opts.Logger = NewBadgerLogger(log)
 
 	db, err := badger.Open(opts)

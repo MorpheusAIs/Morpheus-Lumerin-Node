@@ -17,7 +17,7 @@ type SendRequest struct {
 }
 
 type PathHex32ID struct {
-	ID common.Hash `uri:"id" binding:"required" validate:"hex32"`
+	ID lib.Hash `uri:"id" binding:"required" validate:"hex32"`
 }
 
 type PathEthAddrID struct {
@@ -44,8 +44,8 @@ type QueryApprove struct {
 }
 
 type QueryUserOrProvider struct {
-	User     common.Address `form:"user" binding:"omitempty" validate:"eth_addr"`
-	Provider common.Address `form:"provider" binding:"omitempty" validate:"eth_addr"`
+	User     lib.Address `form:"user" binding:"omitempty" validate:"eth_addr"`
+	Provider lib.Address `form:"provider" binding:"omitempty" validate:"eth_addr"`
 }
 
 type OpenSessionRequestV2 struct {

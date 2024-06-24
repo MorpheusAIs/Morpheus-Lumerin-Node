@@ -39,6 +39,7 @@ type Config struct {
 	Proxy struct {
 		Address        string `env:"PROXY_ADDRESS" flag:"proxy-address" validate:"required,hostname_port"`
 		MaxCachedDests int    `env:"PROXY_MAX_CACHED_DESTS" flag:"proxy-max-cached-dests" validate:"required,number" desc:"maximum number of cached destinations per proxy"`
+		StoragePath    string `env:"PROXY_STORAGE_PATH"    flag:"proxy-storage-path"    validate:"omitempty,dirpath" desc:"enables file storage and sets the folder path"`
 	}
 	System struct {
 		Enable           bool   `env:"SYS_ENABLE"              flag:"sys-enable" desc:"enable system level configuration adjustments"`
@@ -122,6 +123,10 @@ func (cfg *Config) SetDefaults() {
 	}
 	if cfg.Web.PublicUrl == "" {
 		cfg.Web.PublicUrl = fmt.Sprintf("http://%s", cfg.Web.Address)
+	}
+
+	if cfg.Proxy.StoragePath == "" {
+		cfg.Proxy.StoragePath = "./data/badger"
 	}
 }
 

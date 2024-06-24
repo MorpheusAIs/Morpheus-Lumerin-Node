@@ -196,7 +196,8 @@ func start() error {
 		return err
 	}
 
-	sessionStorage := storages.NewSessionStorage(log)
+	storage := storages.NewStorage(log, cfg.Proxy.StoragePath)
+	sessionStorage := storages.NewSessionStorage(storage)
 
 	var wallet interfaces.Wallet
 	if len(*cfg.Marketplace.WalletPrivateKey) > 0 {
@@ -214,12 +215,12 @@ func start() error {
 	sessionRouter := registries.NewSessionRouter(*cfg.Marketplace.DiamondContractAddress, ethClient, log)
 	eventListener := blockchainapi.NewEventsListener(ethClient, sessionStorage, sessionRouter, log)
 
-	blockchainController := blockchainapi.NewBlockchainController(blockchainApi)
+	blockchainController := blockchainapi.NewBlockchainController(blockchainApi, log)
 	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine)
 	walletController := walletapi.NewWalletController(wallet)
 
 	apiBus := apibus.NewApiBus(blockchainController, proxyController, walletController)
-	httpHandler := httphandlers.CreateHTTPServer(apiBus)
+	httpHandler := httphandlers.CreateHTTPServer(log, apiBus)
 	httpServer := transport.NewServer(cfg.Web.Address, httpHandler, log.Named("HTTP"))
 
 	// http server should shut down latest to keep pprof running

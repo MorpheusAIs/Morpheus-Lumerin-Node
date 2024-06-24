@@ -6,17 +6,20 @@ import (
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi/structs"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
 )
 
 type BlockchainController struct {
 	service *BlockchainService
+	log     lib.ILogger
 }
 
-func NewBlockchainController(service *BlockchainService) *BlockchainController {
+func NewBlockchainController(service *BlockchainService, log lib.ILogger) *BlockchainController {
 	c := &BlockchainController{
 		service: service,
+		log:     log,
 	}
 
 	return c
@@ -61,11 +64,12 @@ func (c *BlockchainController) getProviderClaimableBalance(ctx *gin.Context) {
 	var params structs.PathHex32ID
 	err := ctx.ShouldBindUri(&params)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	balance, err := c.service.GetProviderClaimableBalance(ctx, params.ID)
+	balance, err := c.service.GetProviderClaimableBalance(ctx, params.ID.ToCommon())
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -85,21 +89,23 @@ func (c *BlockchainController) getProviderClaimableBalance(ctx *gin.Context) {
 //		@Param 			id  path string true "Session ID"
 //		@Success		200	{object}	interface{}
 //		@Router			/proxy/sessions/${id}/providerClaim [post]
-func (s *BlockchainController) claimProviderBalance(ctx *gin.Context) {
+func (c *BlockchainController) claimProviderBalance(ctx *gin.Context) {
 	var params structs.PathHex32ID
 	err := ctx.ShouldBindUri(&params)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	to, amount, err := s.getSendParams(ctx)
+	to, amount, err := c.getSendParams(ctx)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	txHash, err := s.service.ClaimProviderBalance(ctx, params.ID, to, amount)
+	txHash, err := c.service.ClaimProviderBalance(ctx, params.ID.ToCommon(), to, amount)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -117,9 +123,10 @@ func (s *BlockchainController) claimProviderBalance(ctx *gin.Context) {
 //		@Produce		json
 //		@Success		200	{object}	[]interface{}
 //		@Router			/blockchain/providers [get]
-func (s *BlockchainController) getAllProviders(ctx *gin.Context) {
-	providers, err := s.service.GetAllProviders(ctx)
+func (c *BlockchainController) getAllProviders(ctx *gin.Context) {
+	providers, err := c.service.GetAllProviders(ctx)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -137,14 +144,15 @@ func (s *BlockchainController) getAllProviders(ctx *gin.Context) {
 //		@Param			sendeth	body		rpcproxy.SendRequest 	true	"Send Eth"
 //		@Success		200	{object}	interface{}
 //		@Router			/blockchain/send/eth [post]
-func (s *BlockchainController) sendETH(ctx *gin.Context) {
-	to, amount, err := s.getSendParams(ctx)
+func (c *BlockchainController) sendETH(ctx *gin.Context) {
+	to, amount, err := c.getSendParams(ctx)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	txHash, err := s.service.SendETH(ctx, to, amount)
+	txHash, err := c.service.SendETH(ctx, to, amount)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -163,14 +171,16 @@ func (s *BlockchainController) sendETH(ctx *gin.Context) {
 //		@Param			sendmor	body		rpcproxy.SendRequest 	true	"Send Mor"
 //		@Success		200	{object}	interface{}
 //		@Router			/blockchain/send/mor [post]
-func (s *BlockchainController) sendMOR(ctx *gin.Context) {
-	to, amount, err := s.getSendParams(ctx)
+func (c *BlockchainController) sendMOR(ctx *gin.Context) {
+	to, amount, err := c.getSendParams(ctx)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	txhash, err := s.service.SendMOR(ctx, to, amount)
+	txhash, err := c.service.SendMOR(ctx, to, amount)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	}
 
@@ -189,21 +199,23 @@ func (s *BlockchainController) sendMOR(ctx *gin.Context) {
 //		@Param 			id  path string true "Provider ID"
 //		@Success		200	{object}	[]interface{}
 //		@Router			/blockchain/providers/{id}/bids [get]
-func (s *BlockchainController) getBidsByProvider(ctx *gin.Context) {
+func (c *BlockchainController) getBidsByProvider(ctx *gin.Context) {
 	var params structs.PathEthAddrID
 	err := ctx.ShouldBindUri(&params)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	offset, limit, err := getOffsetLimit(ctx)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	bids, err := s.service.GetBidsByProvider(ctx, params.ID, offset, limit)
+	bids, err := c.service.GetBidsByProvider(ctx, params.ID, offset, limit)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -221,9 +233,10 @@ func (s *BlockchainController) getBidsByProvider(ctx *gin.Context) {
 //		@Produce		json
 //		@Success		200	{object}	[]interface{}
 //		@Router			/blockchain/models [get]
-func (s *BlockchainController) getAllModels(ctx *gin.Context) {
-	providers, err := s.service.GetAllModels(ctx)
+func (c *BlockchainController) getAllModels(ctx *gin.Context) {
+	providers, err := c.service.GetAllModels(ctx)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -243,21 +256,23 @@ func (s *BlockchainController) getAllModels(ctx *gin.Context) {
 //		@Param 			id  path string true "ModelAgent ID"
 //		@Success		200	{object}	[]interface{}
 //		@Router			/blockchain/models/{id}/bids [get]
-func (s *BlockchainController) getBidsByModelAgent(ctx *gin.Context) {
+func (c *BlockchainController) getBidsByModelAgent(ctx *gin.Context) {
 	var params structs.PathHex32ID
 	err := ctx.ShouldBindUri(&params)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	offset, limit, err := getOffsetLimit(ctx)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	bids, err := s.service.GetBidsByModelAgent(ctx, params.ID, offset, limit)
+	bids, err := c.service.GetBidsByModelAgent(ctx, params.ID.ToCommon(), offset, limit)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -296,14 +311,15 @@ func (s *BlockchainController) getBalance(ctx *gin.Context) {
 //		@Param 			limit	query	string	false	"Limit"
 //		@Success		200	{object}	[]interface{}
 //		@Router			/blockchain/transactions [get]
-func (s *BlockchainController) getTransactions(ctx *gin.Context) {
+func (c *BlockchainController) getTransactions(ctx *gin.Context) {
 	page, limit, err := getPageLimit(ctx)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	txs, err := s.service.GetTransactions(ctx, page, limit)
+	txs, err := c.service.GetTransactions(ctx, page, limit)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -321,15 +337,16 @@ func (s *BlockchainController) getTransactions(ctx *gin.Context) {
 //		@Param 			spender	query	string	true	"Spender address"
 //		@Success		200	{object}	interface{}
 //		@Router			/blockchain/allowance [get]
-func (s *BlockchainController) getAllowance(ctx *gin.Context) {
+func (c *BlockchainController) getAllowance(ctx *gin.Context) {
 	var query structs.QuerySpender
 	err := ctx.ShouldBindQuery(&query)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	allowance, err := s.service.GetAllowance(ctx, query.Spender)
+	allowance, err := c.service.GetAllowance(ctx, query.Spender)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -349,15 +366,16 @@ func (s *BlockchainController) getAllowance(ctx *gin.Context) {
 //		@Param 			amount	query	string	true	"Amount"
 //		@Success		200	{object}	interface{}
 //		@Router			/blockchain/allowance [post]
-func (s *BlockchainController) approve(ctx *gin.Context) {
+func (c *BlockchainController) approve(ctx *gin.Context) {
 	var query structs.QueryApprove
 	err := ctx.ShouldBindQuery(&query)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	tx, err := s.service.Approve(ctx, query.Spender, query.Amount.Unpack())
+	tx, err := c.service.Approve(ctx, query.Spender, query.Amount.Unpack())
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -377,14 +395,15 @@ func (s *BlockchainController) approve(ctx *gin.Context) {
 //		@Param			opensession	body		rpcproxy.OpenSessionRequest 	true	"Open session"
 //		@Success		200	{object}	interface{}
 //		@Router			/blockchain/sessions [post]
-func (s *BlockchainController) openSession(ctx *gin.Context) {
+func (c *BlockchainController) openSession(ctx *gin.Context) {
 	var reqPayload structs.OpenSessionRequest
 	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	txHash, err := s.service.OpenSession(ctx, reqPayload.Approval, reqPayload.ApprovalSig, reqPayload.Stake.Unpack())
+	txHash, err := c.service.OpenSession(ctx, reqPayload.Approval, reqPayload.ApprovalSig, reqPayload.Stake.Unpack())
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -420,15 +439,16 @@ func (s *BlockchainController) openSessionV2(ctx *gin.Context) {
 //		@Param 			id  path string true "Session ID"
 //		@Success		200	{object}	interface{}
 //		@Router			/blockchain/sessions/{id}/close [post]
-func (s *BlockchainController) closeSession(ctx *gin.Context) {
+func (c *BlockchainController) closeSession(ctx *gin.Context) {
 	var params structs.PathHex32ID
 	err := ctx.ShouldBindUri(&params)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	txHash, err := s.service.CloseSession(ctx, params.ID)
+	txHash, err := c.service.CloseSession(ctx, params.ID.ToCommon())
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -438,15 +458,16 @@ func (s *BlockchainController) closeSession(ctx *gin.Context) {
 	return
 }
 
-func (s *BlockchainController) getSession(ctx *gin.Context) {
+func (c *BlockchainController) getSession(ctx *gin.Context) {
 	var params structs.PathHex32ID
 	err := ctx.ShouldBindUri(&params)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	session, err := s.service.GetSession(ctx, params.ID)
+	session, err := c.service.GetSession(ctx, params.ID.ToCommon())
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -468,9 +489,10 @@ func (s *BlockchainController) getSession(ctx *gin.Context) {
 //		@Param 			user	query	string	false	"User address"
 //		@Success		200	{object}	[]interface{}
 //		@Router			/blockchain/sessions [get]
-func (s *BlockchainController) getSessions(ctx *gin.Context) {
+func (c *BlockchainController) getSessions(ctx *gin.Context) {
 	offset, limit, err := getOffsetLimit(ctx)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -478,23 +500,26 @@ func (s *BlockchainController) getSessions(ctx *gin.Context) {
 	var req structs.QueryUserOrProvider
 	err = ctx.ShouldBindQuery(&req)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	hasUser := req.User != common.Address{}
-	hasProvider := req.Provider != common.Address{}
+	hasUser := req.User != lib.Address{}
+	hasProvider := req.Provider != lib.Address{}
 
 	if !hasUser && !hasProvider {
+		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "user or provider is required"})
 		return
 	}
 	if hasUser && hasProvider {
+		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "only one of user or provider is allowed"})
 		return
 	}
 
-	sessions, err := s.service.GetSessions(ctx, req.User, req.Provider, offset, limit)
+	sessions, err := c.service.GetSessions(ctx, req.User.ToCommon(), req.Provider.ToCommon(), offset, limit)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

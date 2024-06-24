@@ -1,10 +1,15 @@
 package lib
 
 import (
+	"errors"
 	"math/big"
 	"math/rand"
 
 	"github.com/ethereum/go-ethereum/common"
+)
+
+var (
+	ErrInvalidAddress = errors.New("invalid address")
 )
 
 func GetRandomAddr() common.Address {
@@ -21,4 +26,23 @@ func RemoveHexPrefix(s string) string {
 		return s[2:]
 	}
 	return s
+}
+
+type Address struct {
+	common.Address
+}
+
+func (a *Address) UnmarshalParam(param string) error {
+	if param == "" {
+		return nil
+	}
+	if !common.IsHexAddress(param) {
+		return ErrInvalidAddress
+	}
+	a.Address = common.HexToAddress(param)
+	return nil
+}
+
+func (a Address) ToCommon() common.Address {
+	return a.Address
 }

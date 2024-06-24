@@ -16,6 +16,7 @@ import (
 	_ "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/docs"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 )
 
 type Registrable interface {
@@ -31,7 +32,7 @@ type Registrable interface {
 
 // @externalDocs.description  OpenAPI
 // @externalDocs.url          https://swagger.io/resources/open-api/
-func CreateHTTPServer(controllers ...Registrable) *gin.Engine {
+func CreateHTTPServer(log lib.ILogger, controllers ...Registrable) *gin.Engine {
 	ginValidatorInstance := binding.Validator.Engine().(*validator.Validate)
 	err := config.RegisterHex32(ginValidatorInstance)
 	if err != nil {
@@ -50,6 +51,8 @@ func CreateHTTPServer(controllers ...Registrable) *gin.Engine {
 		AllowOrigins: []string{"*"},
 		AllowHeaders: []string{"session_id"},
 	}))
+
+	r.Use(RequestLogger(log))
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	r.Any("/debug/pprof/*action", gin.WrapF(pprof.Index))
