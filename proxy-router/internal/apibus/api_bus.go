@@ -11,13 +11,13 @@ import (
 	"net/http"
 	"net/url"
 
-	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
-	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/rpcproxy"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/rpcproxy/structs"
+	constants "github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
+	i "github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/rpcproxy"
+	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/rpcproxy/structs"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
 	"github.com/sashabaranov/go-openai"
@@ -537,8 +537,10 @@ func (apiBus *ApiBus) GetSessions(ctx *gin.Context, offset *big.Int, limit uint8
 func (apiBus *ApiBus) RemoteOrLocalPrompt(ctx *gin.Context) (bool, int, interface{}) {
 	sessionId := ctx.GetHeader("session_id")
 	if sessionId == "" {
+		fmt.Println("session id is empty")
 		return apiBus.PromptLocal(ctx)
 	}
+	fmt.Println("session id is not empty: ", sessionId)
 	return apiBus.SendPrompt(ctx)
 }
 
@@ -560,7 +562,7 @@ func (apiBus *ApiBus) PromptLocal(ctx *gin.Context) (bool, int, interface{}) {
 
 	if req.Stream {
 		response, err = apiBus.PromptStream(ctx, req, func(response *openai.ChatCompletionStreamResponse) error {
-
+fmt.Printf("response: %v\n", response)
 			marshalledResponse, err := json.Marshal(response)
 
 			if err != nil {

@@ -32,6 +32,54 @@ func main() {
 		Usage: "A client to call the Morpheus Lumerin API",
 		Commands: []*cli.Command{
 			{
+				Name:    "healthcheck",
+				Aliases: []string{"he"},
+				Usage:   "check application health",
+				Action:  actions.healthcheck,
+			},
+			{
+				Name:    "wallet",
+				Aliases: []string{"w"},
+				Usage:   "morpheus wallet --privateKey <private-key>",
+				Action:  actions.setupWallet,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "privateKey",
+						Required: true,
+					},
+				},
+			},
+			{
+				Name:    "chat",
+				Aliases: []string{},
+				Usage:   "open interactive chat client",
+				Action:  actions.startChat,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "sessionId",
+						Required: false,
+					},
+				},
+			},
+			{
+				Name:    "blockchainModels",
+				Aliases: []string{"bm"},
+				Usage:   "list models",
+				Action:  actions.blockchainModels,
+			},
+			{
+				Name:    "openBlockchainSession",
+				Usage:   "open a blockchain session",
+				Aliases: []string{"obs"},
+				Action:  actions.openBlockchainSession,
+			},
+			{
+				Name:    "closeBlockchainSession",
+				Aliases: []string{"cbs"},
+				Usage:   "close a blockchain session",
+				Action:  actions.closeBlockchainSession,
+			},
+			{
 				Name:    "getAllowance",
 				Aliases: []string{"ga"},
 				Usage:   "get allowance",
@@ -58,12 +106,6 @@ func main() {
 						Required: true,
 					},
 				},
-			},
-			{
-				Name:    "healthcheck",
-				Aliases: []string{"he"},
-				Usage:   "check application health",
-				Action:  actions.healthcheck,
 			},
 			{
 				Name:    "proxyRouterConfig",
@@ -161,24 +203,6 @@ func main() {
 				},
 			},
 			{
-				Name:    "blockchainModels",
-				Aliases: []string{"bm"},
-				Usage:   "list models",
-				Action:  actions.blockchainModels,
-			},
-			{
-				Name:    "openBlockchainSession",
-				Usage:   "open a blockchain session",
-				Aliases: []string{"obs"},
-				Action:  actions.openBlockchainSession,
-			},
-			{
-				Name:    "closeBlockchainSession",
-				Aliases: []string{"cbs"},
-				Usage:   "close a blockchain session",
-				Action:  actions.closeBlockchainSession,
-			},
-			{
 				Name:    "createAndStreamChatCompletions",
 				Aliases: []string{"csc"},
 				Usage:   "create and stream chat completions",
@@ -208,18 +232,6 @@ func main() {
 					},
 				},
 			},
-			{
-				Name:    "chat",
-				Aliases: []string{},
-				Usage:   "open interactive chat client",
-				Action:  actions.startChat,
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:     "sessionId",
-						Required: false,
-					},
-				},
-			},
 		},
 	}
 
@@ -236,27 +248,51 @@ func NewActions(c *client.ApiGatewayClient) *actions {
 	return &actions{client: c}
 }
 
-var localProxyRouterUrl string;
-var contractAddress string;
-var userWalletAddress string;
-var bidId string;
-var provider string;
-var providerEndpoint string;
-var stake int;
+var localProxyRouterUrl string
+var contractAddress string
+var userWalletAddress string
+var bidId string
+var provider string
+var providerEndpoint string
+var stake int
+
+func (a *actions) setupWallet(cCtx *cli.Context) error {
+	return a.client.CreateWallet(cCtx.Context, cCtx.String("privateKey"))
+}
 
 func (a *actions) startChat(cCtx *cli.Context) error {
+	bidId := cCtx.String("bid")
 
-	// userWalletAddress := cCtx.String("wallet")
-	// stake := cCtx.Int("stake")
-	// localProxyRouterUrl := cCtx.String("localEndpoint")
-	// contractAddress := cCtx.String("contract")
-	// bidId := cCtx.String("bid")
-	// provider := cCtx.String("providerWallet")
-	// providerEndpoint := cCtx.String("providerEndpoint")
-	
-	// lib.OpenSession(cCtx.Context, localProxyRouterUrl, contractAddress, userWalletAddress, bidId, provider, providerEndpoint, stake)
+	if bidId == "" {
+		bidId = "0x921d3b1f984a7df85f9a640f834adb49f1c058a6564f914699fa63c1518a919e"
+	}
 
-	chat.Run("")
+	providerEndpoint := cCtx.String("providerEndpoint")
+
+	if providerEndpoint == "" {
+		providerEndpoint = "ironman1.dev.lumerin.io:3333"
+	}
+
+	sessionDuration := cCtx.Uint("sessionDuration")
+
+	if sessionDuration == 0 {
+		sessionDuration = 300
+	}
+
+	sessionRequest := &client.SessionRequest{
+		BidId:            bidId,
+		ProviderEndpoint: providerEndpoint,
+		SessionDuration:  sessionDuration,
+	}
+
+	session, err := a.client.OpenSession(cCtx.Context, sessionRequest)
+
+	if err != nil {
+		chat.Run("")
+	}
+
+	// chat.Run("")
+	chat.Run(session.SessionId)
 
 	return nil
 }
@@ -439,17 +475,17 @@ func (a *actions) blockchainModels(cCtx *cli.Context) error {
 
 func (a *actions) openBlockchainSession(cCtx *cli.Context) error {
 
-	session, err := a.client.OpenSession(cCtx.Context, &client.SessionRequest{
-		Approval: cCtx.String("approval"),
+	session, err := a.client.OpenStakeSession(cCtx.Context, &client.SessionStakeRequest{
+		Approval:    cCtx.String("approval"),
 		ApprovalSig: cCtx.String("approvalSig"),
-		Stake: cCtx.Uint64("stake"),
+		Stake:       cCtx.Uint64("stake"),
 	})
 
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("session opened: ", session.Id)
+	fmt.Println("session opened: ", session.SessionId)
 	return nil
 }
 

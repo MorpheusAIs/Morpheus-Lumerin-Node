@@ -56,6 +56,7 @@ func (c *ApiGatewayClient) getRequest(ctx context.Context, endpoint string, resu
 
 // Helper function to make POST requests
 func (c *ApiGatewayClient) postRequest(ctx context.Context, endpoint string, body interface{}, result interface{}) error {
+	fmt.Printf("body: %+v", body)
 	reqBody, err := json.Marshal(body)
 	if err != nil {
 		return err
@@ -82,7 +83,13 @@ func (c *ApiGatewayClient) postRequest(ctx context.Context, endpoint string, bod
 		return nil
 	}
 
-	return json.NewDecoder(resp.Body).Decode(result)
+	if result != nil {
+		err = json.NewDecoder(resp.Body).Decode(result)
+	}
+
+	fmt.Println("result: ", result)
+
+	return err
 }
 
 func (c *ApiGatewayClient) GetProxyRouterConfig(ctx context.Context) (interface{}, error) {
@@ -244,18 +251,40 @@ func (c *ApiGatewayClient) GetBidsByModelAgent(ctx context.Context, modelAgentId
 }
 
 type SessionRequest struct {
-	Approval    string `json:"approval"`
-	ApprovalSig string `json:"approvalSig"`
-	Stake       uint64 `json:"stake"`
+	BidId            string `json:"bidId" validate:"required"`
+	ProviderEndpoint string `json:"providerUrl" validate:"required"`
+	SessionDuration  uint   `json:"sessionDuration" validate:"required,number"`
+}
+
+type SessionStakeRequest struct {
+	Approval    string `json:"approval" validate:"required"`
+	ApprovalSig string `json:"approvalSig" validate:"required"`
+	Stake       uint64 `json:"stake" validate:"required,number"`
 }
 
 type Session struct {
-	Id string `json:"id"`
+	SessionId string `json:"sessionId"`
+}
+
+type WalletRequest struct {
+	PrivateKey string `json:"privateKey" validate:"required"`
+}
+
+func (c *ApiGatewayClient) OpenStakeSession(ctx context.Context, req *SessionStakeRequest) (session *Session, err error) {
+
+	err = c.postRequest(ctx, "/blockchain/sessions", req, session)
+
+	if err != nil {
+		return nil, fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
+	}
+
+	return session, nil
 }
 
 func (c *ApiGatewayClient) OpenSession(ctx context.Context, req *SessionRequest) (session *Session, err error) {
 
-	err = c.postRequest(ctx, "/blockchain/sessions", req, session)
+	session = &Session{}
+	err = c.postRequest(ctx, "/blockchain/sessions/v2", req, session)
 
 	if err != nil {
 		return nil, fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
@@ -286,4 +315,8 @@ func (c *ApiGatewayClient) ApproveAllowance(ctx context.Context, spender string,
 	endpoint := fmt.Sprintf("/blockchain/allowance?spender=%s&amount=%d", spender, amount)
 	err := c.postRequest(ctx, endpoint, nil, &result)
 	return result, err
+}
+
+func (c *ApiGatewayClient) CreateWallet(ctx context.Context, privateKey string) error {
+	return c.postRequest(ctx, "/wallet", &WalletRequest{PrivateKey: privateKey}, nil)
 }

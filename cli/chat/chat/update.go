@@ -2,6 +2,7 @@ package chat
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -40,7 +41,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			default:
 				m.messages = append(m.messages, userMessage(val), botMessage(""))
 
-				m.viewport.SetContent(strings.Join(m.messages, "\n\n"))
+				m.viewport.SetContent(strings.Join(m.messages, "\n\n") + "\n\n")
 
 				m.viewport.GotoBottom()
 
@@ -48,21 +49,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case completionMsg:
-		// fmt.Println("completion message received: ", msg)
 
-		newMessage := string(msg)
-		// m.messageChunks = append(m.messageChunks, newMessage)
+		newMessage := botMessage(string(msg))
 
-		// if m.messageChunks[0] == newMessage {
-		newMessage = botMessage(string(msg))
-		// }
-		// fmt.Println("messages: ", m.messages)
-		m.messages = append(m.messages[:len(m.messages)-1], wordWrap(newMessage, 78))
+		trimmedMessages := m.messages[:len(m.messages)-1]
 
-		m.viewport.SetContent(strings.Join(m.messages, "\n\n"))
-		// fmt.Println("messages: ", m.messages)
-		// fmt.Println("messageChunks: ", m.messageChunks)
-		m.viewport.GotoBottom()
+		file, _ := os.OpenFile("./test.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+
+		m.messages = append(trimmedMessages, wordWrap(newMessage, 78, file))
+
+		messageContent := strings.Join(m.messages, "\n\n")
+
+		m.viewport.SetContent(messageContent + "\n\n")
+		
+		file.WriteString(fmt.Sprintf("at bottom? %v", m.viewport.AtBottom()))
+		file.WriteString(fmt.Sprintf("past bottom? %v", m.viewport.PastBottom()))
 
 		return m, tea.Batch(tiCmd, vpCmd, waitForCompletion(m.completionChunkSub))
 	}
@@ -79,7 +80,7 @@ func botMessage(val string) string {
 }
 
 // WordWrap wraps the given string to fit within a specified width.
-func wordWrap(text string, width int) string {
+func wordWrap(text string, width int, file *os.File) string {
 	words := strings.Fields(text)
 	if len(words) == 0 {
 		return ""
@@ -105,6 +106,15 @@ func wordWrap(text string, width int) string {
 		currentLineLength += wordLength
 	}
 
+	file.WriteString("wrapped text: \n")
+	file.WriteString(wrappedText.String() + "\n\n\n")
+	file.WriteString("text: \n")
+	file.WriteString(text + "\n\n\n")
+	// fmt.Println("words: ", words)
+	// fmt.Println("wrappedText: ", wrappedText.String())
+//how much wood would a wood chuck chuck
+	// fmt.Println("words length: ", len(words))
+
 	return wrappedText.String()
 }
 
@@ -121,9 +131,10 @@ func streamCompletions(m model, val string) tea.Cmd {
 
 		m.err = m.sendChat(val, func(completion *openai.ChatCompletionStreamResponse) error {
 
-			newChunk += completion.Choices[0].Delta.Content
-
-			m.completionChunkSub <- newChunk
+			if completion.Choices[0].Delta.Content != "[DONE]" {
+				newChunk += completion.Choices[0].Delta.Content
+				m.completionChunkSub <- newChunk
+			}
 
 			return nil
 		})

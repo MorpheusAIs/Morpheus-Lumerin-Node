@@ -198,6 +198,7 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 		}
 		err = apiBus.SetupWallet(ctx, req.PrivateKey)
 		if err != nil {
+			fmt.Println("wallet error: ", err)
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
