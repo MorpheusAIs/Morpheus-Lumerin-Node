@@ -34,10 +34,13 @@ type ApiGatewayClient struct {
 // Helper function to make GET requests
 func (c *ApiGatewayClient) getRequest(ctx context.Context, endpoint string, result interface{}) error {
 	req, err := http.NewRequestWithContext(ctx, "GET", c.BaseURL+endpoint, nil)
+
 	if err != nil {
 		return err
 	}
+	
 	resp, err := c.HttpClient.Do(req)
+	
 	if err != nil {
 		fmt.Println("http client error: ", err)
 		return err
@@ -212,18 +215,18 @@ func (c *ApiGatewayClient) CreateNewProviderBid(ctx context.Context, model strin
 	err = c.postRequest(ctx, "/blockchain/providers/bids", &request, &result)
 
 	if err != nil {
-		return nil, fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
+		return nil, fmt.Errorf("internal error: %v", err)
 	}
 
 	return result, nil
 }
 
-func (c *ApiGatewayClient) GetAllModels(ctx context.Context) (result []string, err error) {
+func (c *ApiGatewayClient) GetAllModels(ctx context.Context) (result interface{}, err error) {
 
 	err = c.getRequest(ctx, "/blockchain/models", &result)
-
+	
 	if err != nil {
-		return nil, fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
+		return nil, fmt.Errorf("internal error: %v", err)
 	}
 
 	return result, nil

@@ -448,6 +448,7 @@ func (a *actions) createBlockchainProviderBid(cCtx *cli.Context) error {
 	fmt.Println("bid created for model ", model)
 	return nil
 }
+
 type Bid struct {
 	Id             string
 	Provider       common.Address
@@ -464,7 +465,7 @@ func (a *actions) blockchainProvidersBids(cCtx *cli.Context) error {
 	limit := cCtx.Uint("limit")
 
 	bidsResult, err := a.client.GetBidsByProvider(cCtx.Context, address, big.NewInt(offset), uint8(limit))
-	
+
 	if err != nil {
 		return err
 	}
@@ -484,12 +485,20 @@ func (a *actions) blockchainProvidersBids(cCtx *cli.Context) error {
 }
 
 func (a *actions) blockchainModels(cCtx *cli.Context) error {
-	models, err := a.client.GetAllModels(cCtx.Context)
+	modelsResult, err := a.client.GetAllModels(cCtx.Context)
 	if err != nil {
 		return err
 	}
-	jsonData, err := json.Marshal(models)
-	fmt.Println(string(jsonData))
+	modelsMap := modelsResult.(map[string]interface{})
+
+	models := modelsMap["models"].([]interface{})
+
+	// fmt.Println("models: ", models)
+	for _, item := range models {
+		model := item.(map[string]interface{})
+		fmt.Println("Model: ", model["Name"], " - ", model["Id"])
+		fmt.Println("\t- provider: ", model["Owner"], "\n")
+	}
 
 	return nil
 }

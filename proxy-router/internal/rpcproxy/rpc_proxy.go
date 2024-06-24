@@ -168,7 +168,7 @@ func (rpcProxy *RpcProxy) GetAllModels(ctx context.Context) (int, gin.H) {
 	if err != nil {
 		return constants.HTTP_STATUS_BAD_REQUEST, gin.H{"error": err.Error()}
 	}
-
+ 
 	result := make([]*structs.Model, len(ids))
 	for i, value := range models {
 		result[i] = &structs.Model{

@@ -2,6 +2,7 @@ package registries
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/contracts/modelregistry"
 	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
