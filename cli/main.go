@@ -10,6 +10,7 @@ import (
 
 	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/api-gateway/client"
 	chat "github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat"
+	"github.com/ethereum/go-ethereum/common"
 
 	dotenv "github.com/joho/godotenv"
 	"github.com/urfave/cli/v2"
@@ -447,18 +448,38 @@ func (a *actions) createBlockchainProviderBid(cCtx *cli.Context) error {
 	fmt.Println("bid created for model ", model)
 	return nil
 }
+type Bid struct {
+	Id             string
+	Provider       common.Address
+	ModelAgentId   string
+	PricePerSecond *big.Int
+	Nonce          *big.Int
+	CreatedAt      *big.Int
+	DeletedAt      *big.Int
+}
 
 func (a *actions) blockchainProvidersBids(cCtx *cli.Context) error {
 	address := cCtx.String("address")
 	offset := cCtx.Int64("offset")
 	limit := cCtx.Uint("limit")
 
-	bids, err := a.client.GetBidsByProvider(cCtx.Context, address, big.NewInt(offset), uint8(limit))
+	bidsResult, err := a.client.GetBidsByProvider(cCtx.Context, address, big.NewInt(offset), uint8(limit))
+	
 	if err != nil {
 		return err
 	}
-	jsonData, err := json.Marshal(bids)
-	fmt.Println(string(jsonData))
+
+	bidsMap := bidsResult.(map[string]interface{})
+
+	bids := bidsMap["bids"].([]interface{})
+
+	for _, item := range bids {
+		bid := item.(map[string]interface{})
+		fmt.Println("Bid: ", bid["Id"])
+		fmt.Println("\t- price per second: ", bid["PricePerSecond"])
+		fmt.Println("\t- model: ", bid["ModelAgentId"])
+	}
+
 	return nil
 }
 
