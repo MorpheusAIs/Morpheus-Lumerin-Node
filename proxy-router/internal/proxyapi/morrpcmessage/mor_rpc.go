@@ -12,64 +12,18 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
-type RpcError struct {
-	Message string `json:"message"`
-	Data    string `json:"data"`
-	Code    int    `json:"code"`
-}
-
-type RpcMessage struct {
-	ID     string                 `json:"id"`
-	Method string                 `json:"method"`
-	Params map[string]interface{} `json:"params"`
-}
-
-type RPCMessageV2 struct {
-	ID     string          `json:"id"`
-	Method string          `json:"method"`
-	Params json.RawMessage `json:"params"`
-}
-
-type RpcResponse struct {
-	ID     string   `json:"id"`
-	Result any      `json:"result"`
-	Error  RpcError `json:"error"`
-}
-
-// SessionReport represents the detailed session report
-type SessionReport struct {
-	SessionID string      `json:"sessionid"`
-	Start     uint        `json:"start"`
-	End       uint        `json:"end"`
-	Prompts   uint        `json:"prompts"`
-	Tokens    uint        `json:"tokens"`
-	Reqs      []ReqObject `json:"reqs"`
-}
-
-// ReqObject represents a request object within a session report
-type ReqObject struct {
-	Req  uint `json:"req"`
-	Res  uint `json:"res"`
-	Toks uint `json:"toks"`
-}
-
-var approvalAbi = []lib.AbiParameter{
-	{Type: "bytes32"},
-	{Type: "uint128"},
-}
-
 type MORRPCMessage struct{}
 
 func NewMorRpc() *MORRPCMessage {
 	return &MORRPCMessage{}
 }
 
-// Provider Node Communication
+// RESPONSES
 
 func (m *MORRPCMessage) InitiateSessionResponse(providerPubKey lib.HexString, userAddr common.Address, bidID common.Hash, providerPrivateKeyHex lib.HexString, requestID string) (*RpcResponse, error) {
 	timestamp := m.generateTimestamp()
 
-	approval, err := lib.EncodeAbiParameters(approvalAbi, []interface{}{bidID, big.NewInt(timestamp)})
+	approval, err := lib.EncodeAbiParameters(approvalAbi, []interface{}{bidID, big.NewInt(int64(timestamp))})
 	if err != nil {
 		return &RpcResponse{}, err
 	}
@@ -79,7 +33,7 @@ func (m *MORRPCMessage) InitiateSessionResponse(providerPubKey lib.HexString, us
 	}
 
 	params := constants.InitiateSessionResponse{
-		Message:     providerPubKey,
+		PubKey:      providerPubKey,
 		Approval:    approval,
 		ApprovalSig: approvalSig,
 		User:        userAddr,
@@ -100,38 +54,67 @@ func (m *MORRPCMessage) InitiateSessionResponse(providerPubKey lib.HexString, us
 }
 
 func (m *MORRPCMessage) SessionPromptResponse(message string, providerPrivateKeyHex lib.HexString, requestId string) (*RpcResponse, error) {
-	timestamp := m.generateTimestamp()
-	params := map[string]interface{}{
-		"message":   message,
-		"timestamp": timestamp,
+	params := SessionPromptRes{
+		Message:   message,
+		Timestamp: m.generateTimestamp(),
 	}
 
 	signature, err := m.generateSignature(params, providerPrivateKeyHex)
 	if err != nil {
 		return &RpcResponse{}, err
 	}
-	params["signature"] = signature
+	params.Signature = signature
 	return &RpcResponse{
 		ID:     requestId,
 		Result: params,
 	}, nil
 }
 
-func (m *MORRPCMessage) ResponseError(message string, privateKeyHex lib.HexString, requestId string) (*RpcResponse, error) {
-	timestamp := m.generateTimestamp()
-	params := map[string]interface{}{
-		"message":   message,
-		"timestamp": timestamp,
+func (m *MORRPCMessage) SessionReport(sessionID string, start uint, end uint, prompts uint, tokens uint, reqs []ReqObject, providerPrivateKeyHex lib.HexString, requestId string) (*RpcResponse, error) {
+	params := ReportRes{
+		Message: &SessionReport{
+			SessionID: sessionID,
+			Start:     start,
+			End:       end,
+			Prompts:   prompts,
+			Tokens:    tokens,
+			Reqs:      reqs,
+		},
+		Timestamp: m.generateTimestamp(),
 	}
 
-	signature, err := m.generateSignature(params, privateKeyHex)
+	signature, err := m.generateSignature(params, providerPrivateKeyHex)
 	if err != nil {
 		return &RpcResponse{}, err
 	}
-	params["signature"] = signature
+	params.Signature = signature
+
+	return &RpcResponse{
+		ID:     requestId,
+		Result: params,
+	}, nil
+}
+
+// ERRORS
+
+func (m *MORRPCMessage) ResponseError(message string, privateKeyHex lib.HexString, requestId string) (*RpcResponse, error) {
+	params2 := RpcError{
+		Message: message,
+		Code:    400,
+		Data: RPCErrorData{
+			Timestamp: m.generateTimestamp(),
+		},
+	}
+
+	signature, err := m.generateSignature(params2, privateKeyHex)
+	if err != nil {
+		return &RpcResponse{}, err
+	}
+	params2.Data.Signature = signature
+
 	return &RpcResponse{
 		ID:    requestId,
-		Error: RpcError{Message: message, Data: "", Code: 400},
+		Error: params2,
 	}, nil
 }
 
@@ -151,120 +134,106 @@ func (m *MORRPCMessage) SpendLimitError(privateKeyHex lib.HexString, requestId s
 	return m.ResponseError("Over spend limit", privateKeyHex, requestId)
 }
 
-// Session Report
+// REQUESTS
 
-func (m *MORRPCMessage) SessionReport(sessionID string, start uint, end uint, prompts uint, tokens uint, reqs []ReqObject, providerPrivateKeyHex lib.HexString, requestId string) (*RpcResponse, error) {
-	report := m.generateReport(sessionID, start, end, prompts, tokens, reqs)
-	reportJson, err := json.Marshal(report)
-	if err != nil {
-		return m.ResponseError("Failed to generate report", providerPrivateKeyHex, requestId)
-	}
-	reportStr := string(reportJson)
-
-	timestamp := m.generateTimestamp()
-	params := map[string]interface{}{
-		"message":   reportStr,
-		"timestamp": timestamp,
-	}
-	signature, err := m.generateSignature(params, providerPrivateKeyHex)
-	if err != nil {
-		return &RpcResponse{}, err
-	}
-	params["signature"] = signature
-	return &RpcResponse{
-		ID:     requestId,
-		Result: params,
-	}, nil
-}
-
-func (m *MORRPCMessage) generateReport(sessionID string, start uint, end uint, prompts uint, tokens uint, reqs []ReqObject) *SessionReport {
-	return &SessionReport{
-		SessionID: sessionID,
-		Start:     start,
-		End:       end,
-		Prompts:   prompts,
-		Tokens:    tokens,
-		Reqs:      reqs,
-	}
-}
-
-// User Node Communication
-
-func (m *MORRPCMessage) InitiateSessionRequest(user common.Address, provider common.Address, spend *big.Int, bidID common.Hash, userPrivateKeyHex lib.HexString, requestId string) (*RpcMessage, error) {
+func (m *MORRPCMessage) InitiateSessionRequest(user common.Address, provider common.Address, spend *big.Int, bidID common.Hash, userPrivateKeyHex lib.HexString, requestId string) (*RPCMessageV2, error) {
 	method := "session.request"
-	timestamp := m.generateTimestamp()
 	pbKey, err := lib.PubKeyFromPrivate(userPrivateKeyHex)
 	if err != nil {
-		return &RpcMessage{}, err
-	}
-	params := map[string]interface{}{
-		"timestamp": timestamp,
-		"user":      user,
-		"provider":  provider,
-		"key":       pbKey,
-		"spend":     spend.String(),
-		"bidid":     bidID,
+		return &RPCMessageV2{}, err
 	}
 
-	signature, err := m.generateSignature(params, userPrivateKeyHex)
-	if err != nil {
-		return &RpcMessage{}, err
+	params2 := SessionReq{
+		Timestamp: uint64(time.Now().UnixMilli()),
+		User:      user,
+		Key:       pbKey,
+		Spend:     lib.BigInt{Int: *spend},
+		BidID:     bidID,
 	}
-	params["signature"] = signature
-	return &RpcMessage{
+
+	signature, err := m.generateSignature(params2, userPrivateKeyHex)
+	if err != nil {
+		return &RPCMessageV2{}, err
+	}
+	params2.Signature = signature
+	serializedParams, err := json.Marshal(params2)
+	if err != nil {
+		return &RPCMessageV2{}, err
+	}
+	return &RPCMessageV2{
 		ID:     requestId,
 		Method: method,
-		Params: params,
+		Params: serializedParams,
 	}, nil
 }
 
-func (m *MORRPCMessage) SessionPromptRequest(sessionID common.Hash, prompt interface{}, providerPubKey lib.HexString, userPrivateKeyHex lib.HexString, requestId string) (*RpcMessage, error) {
+func (m *MORRPCMessage) SessionPromptRequest(sessionID common.Hash, prompt interface{}, providerPubKey lib.HexString, userPrivateKeyHex lib.HexString, requestId string) (*RPCMessageV2, error) {
 	method := "session.prompt"
-	timestamp := m.generateTimestamp()
-
 	promptStr, err := json.Marshal(prompt)
 	if err != nil {
-		return &RpcMessage{}, err
+		return &RPCMessageV2{}, err
 	}
-	params := map[string]interface{}{
-		"message":   string(promptStr),
-		"sessionid": sessionID.Hex(),
-		"timestamp": timestamp,
+	params2 := SessionPromptReq{
+		Message:   string(promptStr),
+		SessionID: sessionID,
+		Timestamp: uint64(time.Now().UnixMilli()),
 	}
-	signature, err := m.generateSignature(params, userPrivateKeyHex)
+	signature, err := m.generateSignature(params2, userPrivateKeyHex)
 	if err != nil {
-		return &RpcMessage{}, err
+		return &RPCMessageV2{}, err
 	}
-	params["signature"] = signature
-	return &RpcMessage{
+	params2.Signature = signature
+
+	serializedParams, err := json.Marshal(params2)
+	if err != nil {
+		return &RPCMessageV2{}, err
+	}
+	return &RPCMessageV2{
 		ID:     requestId,
 		Method: method,
-		Params: params,
+		Params: serializedParams,
 	}, nil
 }
 
-func (m *MORRPCMessage) SessionCloseRequest(sessionID common.Hash, userPrivateKeyHex lib.HexString, requestId string) (*RpcMessage, error) {
+func (m *MORRPCMessage) SessionCloseRequest(sessionID common.Hash, userPrivateKeyHex lib.HexString, requestId string) (*RPCMessageV2, error) {
 	method := "session.close"
-	timestamp := m.generateTimestamp()
-	params := map[string]interface{}{
-		"sessionid": sessionID.Hex(),
-		"timestamp": timestamp,
+	params := SessionCloseReq{
+		Timestamp: m.generateTimestamp(),
+		SessionID: sessionID,
 	}
+
 	signature, err := m.generateSignature(params, userPrivateKeyHex)
 	if err != nil {
-		return &RpcMessage{}, err
+		return &RPCMessageV2{}, err
 	}
-	params["signature"] = signature
-	return &RpcMessage{
+	params.Signature = signature
+	serializedParams, err := json.Marshal(params)
+	if err != nil {
+		return &RPCMessageV2{}, err
+	}
+	return &RPCMessageV2{
 		ID:     requestId,
 		Method: method,
-		Params: params,
+		Params: serializedParams,
 	}, nil
 }
 
-func (m *MORRPCMessage) generateTimestamp() int64 {
+// UTILS
+
+func (m *MORRPCMessage) VerifySignature(params any, signature lib.HexString, publicKey lib.HexString, sourceLog lib.ILogger) bool {
+	paramsBytes, err := json.Marshal(params)
+	fmt.Println("\n\nOUTPUT: ", string(paramsBytes))
+	if err != nil {
+		sourceLog.Error("Error marshalling params", err)
+		return false
+	}
+
+	return lib.VerifySignature(paramsBytes, signature, publicKey)
+}
+
+func (m *MORRPCMessage) generateTimestamp() uint64 {
 	now := time.Now()
-	return now.UnixMilli()
+	return uint64(now.UnixMilli())
 }
 
 // https://goethereumbook.org/signature-generate/
@@ -273,6 +242,7 @@ func (m *MORRPCMessage) generateSignature(params any, privateKeyHex lib.HexStrin
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println("\n\nINPUT: ", string(result))
 	privateKey, err := crypto.ToECDSA(privateKeyHex)
 	if err != nil {
 		return nil, err
@@ -283,14 +253,4 @@ func (m *MORRPCMessage) generateSignature(params any, privateKeyHex lib.HexStrin
 		return nil, err
 	}
 	return signature, nil
-}
-
-func (m *MORRPCMessage) VerifySignature(params any, signature lib.HexString, publicKey lib.HexString, sourceLog lib.ILogger) bool {
-	paramsBytes, err := json.Marshal(params)
-	if err != nil {
-		sourceLog.Error("Error marshalling params", err)
-		return false
-	}
-
-	return lib.VerifySignature(paramsBytes, signature, publicKey)
 }

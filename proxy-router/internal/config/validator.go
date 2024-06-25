@@ -2,11 +2,15 @@ package config
 
 import (
 	"reflect"
+	"regexp"
 	"strings"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/go-playground/validator/v10"
 )
+
+var hexadecimalRegex = regexp.MustCompile("^(0[xX])?[0-9a-fA-F]+$")
 
 func NewValidator() (*validator.Validate, error) {
 	valid := validator.New()
@@ -26,27 +30,55 @@ func NewValidator() (*validator.Validate, error) {
 		return nil, err
 	}
 
+	err = RegisterHexadecimal(valid)
+	if err != nil {
+		return nil, err
+	}
+
 	return valid, nil
+}
+
+// isHexadecimal is the validation function for validating if the current field's value is a valid hexadecimal.
+func isHexadecimal(fl string) bool {
+	return hexadecimalRegex.MatchString(fl)
+}
+
+func RegisterHexadecimal(v *validator.Validate) error {
+	return v.RegisterValidation("hexadecimal", func(fl validator.FieldLevel) bool {
+		kind := fl.Field().Kind()
+
+		if kind == reflect.String {
+			s := fl.Field().String()
+			return isHexadecimal(s)
+		}
+
+		if kind == reflect.Slice {
+			_, ok := fl.Field().Interface().(lib.HexString)
+			return ok
+		}
+
+		return false
+	})
 }
 
 func RegisterHex32(v *validator.Validate) error {
 	return v.RegisterValidation("hex32", func(fl validator.FieldLevel) bool {
 		kind := fl.Field().Kind()
 
-		if kind != reflect.String {
+		if kind == reflect.String {
 			s := fl.Field().String()
 
-			errs := v.Var(s, "hexadecimal")
-			if errs != nil {
+			if !isHexadecimal(s) {
 				return false
 			}
+
 			trimmed := strings.TrimPrefix(strings.TrimPrefix(s, "0x"), "0X")
 			return len(trimmed) == 32
 		}
 
 		if kind == reflect.Array {
-			arr := fl.Field().Interface().(common.Hash)
-			return len(arr) == 32
+			arr, ok := fl.Field().Interface().(common.Hash)
+			return ok && len(arr) == 32
 		}
 
 		return false
@@ -78,11 +110,8 @@ func RegisterEthAddr(v *validator.Validate) error {
 
 		// if stored as common.Address
 		if kind == reflect.Array {
-			arr := fl.Field().Interface().(common.Address)
-			if len(arr) != 20 {
-				return false
-			}
-			return true
+			arr, ok := fl.Field().Interface().(common.Address)
+			return ok && len(arr) == 20
 		}
 
 		return false

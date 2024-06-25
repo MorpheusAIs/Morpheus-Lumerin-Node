@@ -65,8 +65,7 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 			sourceLog.Error(err)
 			return err
 		}
-		sendResponse(r)
-		return nil
+		return sendResponse(r)
 	})
 
 	if err != nil {

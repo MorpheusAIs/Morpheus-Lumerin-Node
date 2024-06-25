@@ -49,21 +49,7 @@ type QueryUserOrProvider struct {
 }
 
 type OpenSessionRequestV2 struct {
-	BidId           common.Hash `json:"bidId"`
+	BidId           lib.Hash    `json:"bidId"`
 	ProviderUrl     string      `json:"providerUrl"`
 	SessionDuration *lib.BigInt `json:"sessionDuration"`
-}
-
-type InitiateSessionData struct {
-	Approval    string `json:"approval"`
-	ApprovalSig string `json:"approvalSig"`
-	Message     string `json:"message"`
-}
-
-type InitiateSessionResult struct {
-	Result InitiateSessionData `json:"result"`
-}
-
-type InitiateSessionResponse struct {
-	Response InitiateSessionResult `json:"response"`
 }

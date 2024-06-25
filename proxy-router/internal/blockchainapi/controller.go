@@ -272,7 +272,7 @@ func (c *BlockchainController) getBidsByModelAgent(ctx *gin.Context) {
 		return
 	}
 
-	bids, err := c.service.GetBidsByModelAgent(ctx, params.ID.ToCommon(), offset, limit)
+	bids, err := c.service.GetBidsByModelAgent(ctx, params.ID.Hash, offset, limit)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -420,7 +420,7 @@ func (s *BlockchainController) openSessionV2(ctx *gin.Context) {
 		return
 	}
 
-	txHash, err := s.service.OpenSessionV2(ctx, reqPayload.BidId, reqPayload.ProviderUrl, reqPayload.SessionDuration.Unpack())
+	txHash, err := s.service.OpenSessionV2(ctx, reqPayload.BidId.Hash, reqPayload.ProviderUrl, reqPayload.SessionDuration.Unpack())
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -593,7 +593,7 @@ func (c *BlockchainController) getBidByID(ctx *gin.Context) {
 		return
 	}
 
-	bid, err := c.service.GetBidByID(ctx, params.ID)
+	bid, err := c.service.GetBidByID(ctx, params.ID.Hash)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

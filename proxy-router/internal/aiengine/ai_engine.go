@@ -85,14 +85,16 @@ func requestChatCompletionStream(ctx context.Context, request *api.ChatCompletio
 
 		if strings.HasPrefix(line, "data: ") {
 			data := line[6:] // Skip the "data: " prefix
-			// fmt.Println("data: ", data)
 			var completion api.ChatCompletionStreamResponse
 			if err := json.Unmarshal([]byte(data), &completion); err != nil {
-				fmt.Printf("Error decoding response: %v\n", err)
+				fmt.Printf("Error decoding response: %v\nResponse%s\n", err, data)
 				continue
 			}
 			// Call the callback function with the unmarshalled completion
-			callback(completion)
+			err := callback(completion)
+			if err != nil {
+				return nil, fmt.Errorf("callback failed: %v", err)
+			}
 		}
 	}
 

@@ -70,7 +70,7 @@ func (p *ProxyServiceSender) InitiateSession(ctx context.Context, user common.Ad
 
 	msg, code, ginErr := p.rpcRequest(providerURL, initiateSessionRequest)
 	if ginErr != nil {
-		return nil, lib.WrapError(ErrProvider, fmt.Errorf("code: %s, msg: %s, error", code, msg, ginErr))
+		return nil, lib.WrapError(ErrProvider, fmt.Errorf("code: %d, msg: %v, error: %s", code, msg, ginErr))
 	}
 
 	typedMsg, ok := msg.Result.(*constants.InitiateSessionResponse)
@@ -86,8 +86,8 @@ func (p *ProxyServiceSender) InitiateSession(ctx context.Context, user common.Ad
 	signature := typedMsg.Signature
 	typedMsg.Signature = lib.HexString{}
 
-	providerPubKey := typedMsg.Message
-	if !p.validateMsgSignature(msg, signature, typedMsg.Message) {
+	providerPubKey := typedMsg.PubKey
+	if !p.validateMsgSignature(typedMsg, signature, typedMsg.PubKey) {
 		return nil, ErrInvalidSig
 	}
 
@@ -134,12 +134,12 @@ func (p *ProxyServiceSender) SendPrompt(ctx context.Context, resWriter Responder
 	return p.rpcRequestStream(ctx, resWriter, provider.Url, promptRequest, pubKey)
 }
 
-func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msg.RpcMessage) (*msg.RpcResponse, int, gin.H) {
+func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msg.RPCMessageV2) (*msg.RpcResponse, int, gin.H) {
 	conn, err := net.Dial("tcp", url)
 	if err != nil {
 		err = lib.WrapError(fmt.Errorf("failed to connect to provider"), err)
 		p.log.Errorf("%s", err)
-		return nil, http.StatusBadRequest, gin.H{"error": err.Error()}
+		return nil, http.StatusInternalServerError, gin.H{"error": err.Error()}
 	}
 	defer conn.Close()
 
@@ -147,13 +147,19 @@ func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msg.RpcMessage) 
 	if err != nil {
 		err = lib.WrapError(fmt.Errorf("failed to marshal request"), err)
 		p.log.Errorf("%s", err)
-		return nil, http.StatusBadRequest, gin.H{"error": err.Error()}
+		return nil, http.StatusInternalServerError, gin.H{"error": err.Error()}
 	}
-	conn.Write([]byte(msgJSON))
+	_, err = conn.Write(msgJSON)
+	if err != nil {
+		err = lib.WrapError(fmt.Errorf("failed to write request"), err)
+		p.log.Errorf("%s", err)
+		return nil, http.StatusInternalServerError, gin.H{"error": err.Error()}
+	}
 
 	// read response
 	reader := bufio.NewReader(conn)
 	d := json.NewDecoder(reader)
+
 	var msg *msg.RpcResponse
 	err = d.Decode(&msg)
 	if err != nil {
@@ -164,12 +170,7 @@ func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msg.RpcMessage) 
 	return msg, 0, nil
 }
 
-type ResponderFlusher interface {
-	http.ResponseWriter
-	http.Flusher
-}
-
-func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter ResponderFlusher, url string, rpcMessage *msg.RpcMessage, providerPublicKey lib.HexString) error {
+func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter ResponderFlusher, url string, rpcMessage *msg.RPCMessageV2, providerPublicKey lib.HexString) error {
 	prKey, err := p.privateKey.GetPrivateKey()
 	if err != nil {
 		return ErrMissingPrKey
@@ -195,7 +196,7 @@ func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter Res
 	// read response
 	reader := bufio.NewReader(conn)
 	d := json.NewDecoder(reader)
-	resWriter.Header().Set(constants.HEADER_CONTENT_TYPE, "text/event-stream")
+	resWriter.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_EVENT_STREAM)
 
 	for {
 		if ctx.Err() != nil {

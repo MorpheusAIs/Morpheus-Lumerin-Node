@@ -25,6 +25,10 @@ func (b *BigInt) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (b BigInt) MarshalJSON() ([]byte, error) {
+	return []byte(fmt.Sprintf("\"%s\"", b.String())), nil
+}
+
 func (b *BigInt) Unpack() *big.Int {
 	return &b.Int
 }

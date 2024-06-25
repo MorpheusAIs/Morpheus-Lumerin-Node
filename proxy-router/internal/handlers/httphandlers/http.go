@@ -42,8 +42,16 @@ func CreateHTTPServer(log lib.ILogger, controllers ...Registrable) *gin.Engine {
 	if err != nil {
 		panic(err)
 	}
+	err = config.RegisterEthAddr(ginValidatorInstance)
+	if err != nil {
+		panic(err)
+	}
+	err = config.RegisterHexadecimal(ginValidatorInstance)
+	if err != nil {
+		panic(err)
+	}
 
-	gin.SetMode(gin.ReleaseMode)
+	// gin.SetMode(gin.ReleaseMode)
 
 	r := gin.New()
 
@@ -52,7 +60,7 @@ func CreateHTTPServer(log lib.ILogger, controllers ...Registrable) *gin.Engine {
 		AllowHeaders: []string{"session_id"},
 	}))
 
-	r.Use(RequestLogger(log))
+	// r.Use(RequestLogger(log))
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	r.Any("/debug/pprof/*action", gin.WrapF(pprof.Index))

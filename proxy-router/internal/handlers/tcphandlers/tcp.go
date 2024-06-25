@@ -35,14 +35,14 @@ func NewTCPHandler(
 		err = morRpcHandler.Handle(ctx, *msg, sourceLog, func(resp *morrpc.RpcResponse) error {
 			_, err := sendMsg(conn, resp)
 			if err != nil {
-				sourceLog.Error("Error sending message", err)
+				sourceLog.Errorf("Error sending message: %s", err)
 				return err
 			}
 			sourceLog.Debug("sent message")
 			return err
 		})
 		if err != nil {
-			sourceLog.Error("Error handling message", err)
+			sourceLog.Errorf("Error handling message: %s\nMessage: %s\n", err, msg)
 			return
 		}
 	}

@@ -66,8 +66,8 @@ func (s *ProxyController) InitiateSession(ctx *gin.Context) {
 //		@Router			/v1/chat/completions [post]
 func (apiBus *ProxyController) Prompt(ctx *gin.Context) {
 	var (
-		body *openai.ChatCompletionRequest
-		head *PromptHead
+		body openai.ChatCompletionRequest
+		head PromptHead
 	)
 	if err := ctx.ShouldBindHeader(&head); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -80,11 +80,11 @@ func (apiBus *ProxyController) Prompt(ctx *gin.Context) {
 
 	if (head.SessionID == common.Hash{}) {
 		body.Stream = ctx.GetHeader(constants.HEADER_ACCEPT) == constants.CONTENT_TYPE_JSON
-		apiBus.aiEngine.PromptCb(ctx, body)
+		apiBus.aiEngine.PromptCb(ctx, &body)
 		return
 	}
 
-	err := apiBus.service.SendPrompt(ctx, ctx.Writer, body, head.SessionID)
+	err := apiBus.service.SendPrompt(ctx, ctx.Writer, &body, head.SessionID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

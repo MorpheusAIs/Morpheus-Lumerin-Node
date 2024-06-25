@@ -72,3 +72,35 @@ func TestBigIntUnmarshallValueNumber(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "123", a.F1.String())
 }
+
+func TestBigIntMarshallPointer(t *testing.T) {
+	a := struct {
+		F1 *BigInt
+	}{F1: &BigInt{}}
+	a.F1.SetString("123", 10)
+
+	dataJSON, err := json.Marshal(a)
+	require.NoError(t, err)
+	require.Equal(t, `{"F1":"123"}`, string(dataJSON))
+}
+
+func TestBigIntMarshallPointerNotSet(t *testing.T) {
+	a := struct {
+		F1 *BigInt
+	}{}
+
+	dataJSON, err := json.Marshal(a)
+	require.NoError(t, err)
+	require.Equal(t, `{"F1":null}`, string(dataJSON))
+}
+
+func TestBigIntMarshallValue(t *testing.T) {
+	a := struct {
+		F1 BigInt
+	}{}
+	a.F1.SetString("123", 10)
+
+	dataJSON, err := json.Marshal(a)
+	require.NoError(t, err)
+	require.Equal(t, `{"F1":"123"}`, string(dataJSON))
+}

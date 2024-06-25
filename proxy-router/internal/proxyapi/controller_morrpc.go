@@ -62,8 +62,9 @@ func (s *MORRPCController) sessionRequest(ctx context.Context, msg m.RPCMessageV
 	if err := s.validator.Struct(req); err != nil {
 		return lib.WrapError(ErrValidation, err)
 	}
-
-	isValid := s.morRpc.VerifySignature(msg.Params, req.Signature, req.Key, sourceLog)
+	sig := req.Signature
+	req.Signature = lib.HexString{}
+	isValid := s.morRpc.VerifySignature(req, sig, req.Key, sourceLog)
 	if !isValid {
 		err := ErrInvalidSig
 		sourceLog.Error(err)
@@ -76,8 +77,7 @@ func (s *MORRPCController) sessionRequest(ctx context.Context, msg m.RPCMessageV
 		return err
 	}
 
-	sendResponse(res)
-	return nil
+	return sendResponse(res)
 }
 
 func (s *MORRPCController) sessionPrompt(ctx context.Context, msg m.RPCMessageV2, sendResponse SendResponse, sourceLog lib.ILogger) error {
@@ -114,7 +114,11 @@ func (s *MORRPCController) sessionPrompt(ctx context.Context, msg m.RPCMessageV2
 		sourceLog.Error(err)
 		return err
 	}
-	isValid := s.morRpc.VerifySignature(msg.Params, req.Signature, pubKeyHex, sourceLog)
+
+	sig := req.Signature
+	req.Signature = lib.HexString{}
+
+	isValid := s.morRpc.VerifySignature(req, sig, pubKeyHex, sourceLog)
 	if !isValid {
 		err := fmt.Errorf("invalid signature")
 		sourceLog.Error(err)

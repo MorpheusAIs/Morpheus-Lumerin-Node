@@ -6,7 +6,7 @@ import (
 )
 
 type InitiateSessionResponse struct {
-	Message     lib.HexString  `json:"message" validate:"required,hexadecimal"`
+	PubKey      lib.HexString  `json:"message" validate:"required,hexadecimal"`
 	Approval    lib.HexString  `json:"approval" validate:"required,hexadecimal"`
 	ApprovalSig lib.HexString  `json:"approvalSig" validate:"required,hexadecimal"`
 	User        common.Address `json:"user" validate:"required,eth_addr"`

@@ -61,24 +61,25 @@ var (
 )
 
 func NewBlockchainService(
-	rpcClient *ethclient.Client,
+	ethClient *ethclient.Client,
 	diamonContractAddr common.Address,
 	morTokenAddr common.Address,
 	explorerApiUrl string,
 	privateKey interfaces.PrKeyProvider,
 	sessionStorage *storages.SessionStorage,
+	proxyService *proxyapi.ProxyServiceSender,
 	log lib.ILogger,
 	legacyTx bool,
 ) *BlockchainService {
-	providerRegistry := registries.NewProviderRegistry(diamonContractAddr, rpcClient, log)
-	modelRegistry := registries.NewModelRegistry(diamonContractAddr, rpcClient, log)
-	marketplace := registries.NewMarketplace(diamonContractAddr, rpcClient, log)
-	sessionRouter := registries.NewSessionRouter(diamonContractAddr, rpcClient, log)
-	morToken := registries.NewMorToken(morTokenAddr, rpcClient, log)
+	providerRegistry := registries.NewProviderRegistry(diamonContractAddr, ethClient, log)
+	modelRegistry := registries.NewModelRegistry(diamonContractAddr, ethClient, log)
+	marketplace := registries.NewMarketplace(diamonContractAddr, ethClient, log)
+	sessionRouter := registries.NewSessionRouter(diamonContractAddr, ethClient, log)
+	morToken := registries.NewMorToken(morTokenAddr, ethClient, log)
 
 	explorerClient := NewExplorerClient(explorerApiUrl, morTokenAddr.String())
 	return &BlockchainService{
-		ethClient:          rpcClient,
+		ethClient:          ethClient,
 		providerRegistry:   providerRegistry,
 		modelRegistry:      modelRegistry,
 		marketplace:        marketplace,
@@ -87,6 +88,7 @@ func NewBlockchainService(
 		privateKey:         privateKey,
 		morToken:           morToken,
 		explorerClient:     explorerClient,
+		proxyService:       proxyService,
 		sessionStorage:     sessionStorage,
 		diamonContractAddr: diamonContractAddr,
 	}
@@ -217,7 +219,7 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 	}
 
 	err = s.sessionStorage.AddSession(&storages.Session{
-		Id:           common.Hash(sessionID).Hex(),
+		Id:           sessionID.Hex(),
 		UserAddr:     userID.Hex(),
 		ProviderAddr: providerID.Hex(),
 	})
