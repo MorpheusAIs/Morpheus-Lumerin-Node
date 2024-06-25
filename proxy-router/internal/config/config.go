@@ -16,6 +16,7 @@ type DerivedConfig struct {
 type Config struct {
 	AIEngine struct {
 		OpenAIBaseURL string `env:"OPENAI_BASE_URL"     flag:"open-ai-base-url"   validate:"required,url"`
+		OpenAIKey     string `env:"OPENAI_API_KEY"      flag:"open-ai-api-key"`
 	}
 	Blockchain struct {
 		EthNodeAddress string `env:"ETH_NODE_ADDRESS"   flag:"eth-node-address"   validate:"required,url"`

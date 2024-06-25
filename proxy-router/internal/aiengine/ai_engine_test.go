@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 
@@ -13,8 +12,7 @@ import (
 )
 
 func AiEngine_Prompt(t *testing.T) {
-	aiEngine := NewAiEngine("http://localhost:11434/v1", lib.NewTestLogger())
-	ctx := context.Background()
+	aiEngine := NewAiEngine("http://localhost:11434/v1", "", lib.NewTestLogger())
 	req := &api.ChatCompletionRequest{
 		Model:     "llama2",
 		MaxTokens: 100,
@@ -24,7 +22,7 @@ func AiEngine_Prompt(t *testing.T) {
 				Content: "Hello, I am a test user"},
 		}, // This is a test
 	}
-	resp, err := aiEngine.Prompt(ctx, req)
+	resp, err := aiEngine.Prompt(context.Background(), req)
 	if err != nil {
 		t.Errorf("Prompt error: %v", err)
 	}
@@ -32,9 +30,7 @@ func AiEngine_Prompt(t *testing.T) {
 }
 
 func TestAiEngine_PromptStream(t *testing.T) {
-	os.Setenv("OPENAI_BASE_URL", "http://localhost:11434/v1")
-
-	ctx := context.Background()
+	aiEngine := NewAiEngine("http://localhost:11434/v1", "", lib.NewTestLogger())
 	req := &api.ChatCompletionRequest{
 		Model:     "llama2",
 		MaxTokens: 100,
@@ -48,7 +44,7 @@ func TestAiEngine_PromptStream(t *testing.T) {
 
 	choices := make([]api.ChatCompletionStreamChoice, 0)
 
-	resp, err := requestChatCompletionStream(ctx, req, func(response api.ChatCompletionStreamResponse) error {
+	resp, err := aiEngine.PromptStream(context.Background(), req, func(response *api.ChatCompletionStreamResponse) error {
 		choices = append(choices, response.Choices...)
 
 		if response.Choices[0].Delta.Content == "" {
