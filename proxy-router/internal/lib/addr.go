@@ -42,7 +42,3 @@ func (a *Address) UnmarshalParam(param string) error {
 	a.Address = common.HexToAddress(param)
 	return nil
 }
-
-func (a Address) ToCommon() common.Address {
-	return a.Address
-}

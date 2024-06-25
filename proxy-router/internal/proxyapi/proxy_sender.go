@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"time"
 
 	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
@@ -39,9 +38,9 @@ var (
 type ProxyServiceSender struct {
 	publicUrl      *url.URL
 	privateKey     interfaces.PrKeyProvider
-	appStartTime   time.Time
 	logStorage     *lib.Collection[*interfaces.LogStorage]
 	sessionStorage *storages.SessionStorage
+	morRPC         *msg.MORRPCMessage
 	log            lib.ILogger
 }
 
@@ -51,6 +50,7 @@ func NewProxySender(publicUrl *url.URL, privateKey interfaces.PrKeyProvider, log
 		privateKey:     privateKey,
 		logStorage:     logStorage,
 		sessionStorage: sessionStorage,
+		morRPC:         msg.NewMorRpc(),
 		log:            log,
 	}
 }
@@ -63,7 +63,7 @@ func (p *ProxyServiceSender) InitiateSession(ctx context.Context, user common.Ad
 		return nil, ErrMissingPrKey
 	}
 
-	initiateSessionRequest, err := msg.NewMorRpc().InitiateSessionRequest(user, provider, spend, bidID, prKey, requestID)
+	initiateSessionRequest, err := p.morRPC.InitiateSessionRequest(user, provider, spend, bidID, prKey, requestID)
 	if err != nil {
 		return nil, lib.WrapError(ErrCreateReq, err)
 	}
@@ -126,7 +126,7 @@ func (p *ProxyServiceSender) SendPrompt(ctx context.Context, resWriter Responder
 	if err != nil {
 		return lib.WrapError(ErrCreateReq, err)
 	}
-	promptRequest, err := msg.NewMorRpc().SessionPromptRequest(sessionID, prompt, pubKey, prKey, requestID)
+	promptRequest, err := p.morRPC.SessionPromptRequest(sessionID, prompt, pubKey, prKey, requestID)
 	if err != nil {
 		return lib.WrapError(ErrCreateReq, err)
 	}
@@ -257,7 +257,5 @@ func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter Res
 }
 
 func (p *ProxyServiceSender) validateMsgSignature(result any, signature lib.HexString, providerPubicKey lib.HexString) bool {
-	isValidSignature := msg.NewMorRpc().VerifySignature(result, signature, providerPubicKey, p.log)
-	p.log.Debugf("Is valid signature: %t", isValidSignature)
-	return isValidSignature
+	return p.morRPC.VerifySignature(result, signature, providerPubicKey, p.log)
 }

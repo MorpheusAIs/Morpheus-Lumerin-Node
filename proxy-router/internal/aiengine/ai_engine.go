@@ -5,12 +5,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"strings"
 
 	"fmt"
 
+	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/gin-gonic/gin"
 	"github.com/sashabaranov/go-openai"
 	api "github.com/sashabaranov/go-openai"
@@ -18,6 +21,7 @@ import (
 
 type AiEngine struct {
 	client *api.Client
+	log    lib.ILogger
 }
 
 type ResponderFlusher interface {
@@ -25,7 +29,11 @@ type ResponderFlusher interface {
 	http.Flusher
 }
 
-func NewAiEngine() *AiEngine {
+var (
+	ErrChatCompletion = errors.New("chat completion error")
+)
+
+func NewAiEngine(apiBaseURL string, log lib.ILogger) *AiEngine {
 	return &AiEngine{
 		client: api.NewClientWithConfig(api.ClientConfig{
 			BaseURL:    os.Getenv("OPENAI_BASE_URL"),
@@ -66,6 +74,7 @@ func requestChatCompletionStream(ctx context.Context, request *api.ChatCompletio
 	scanner := bufio.NewScanner(resp.Body)
 	for scanner.Scan() {
 		line := scanner.Text()
+
 		// Handle the completion of the stream
 		// if line == "data: [DONE]" {
 		// 	fmt.Println("Stream completed.")
@@ -87,6 +96,9 @@ func requestChatCompletionStream(ctx context.Context, request *api.ChatCompletio
 			data := line[6:] // Skip the "data: " prefix
 			var completion api.ChatCompletionStreamResponse
 			if err := json.Unmarshal([]byte(data), &completion); err != nil {
+				if strings.Index(data, "[DONE]") == -1 {
+
+				}
 				fmt.Printf("Error decoding response: %v\nResponse%s\n", err, data)
 				continue
 			}
@@ -119,7 +131,7 @@ func (aiEngine *AiEngine) Prompt(ctx context.Context, req interface{}) (*api.Cha
 	)
 
 	if err != nil {
-		fmt.Printf("ChatCompletion error: %v\n", err)
+		aiEngine.log.Errorf("chat completion err %s", err)
 		return nil, err
 	}
 	return &response, nil
@@ -127,20 +139,18 @@ func (aiEngine *AiEngine) Prompt(ctx context.Context, req interface{}) (*api.Cha
 
 type ChunkSubmit func(*api.ChatCompletionStreamResponse) error
 
-func (aiEngine *AiEngine) PromptStream(ctx context.Context, req interface{}, chunkSubmitCallback interface{}) (*api.ChatCompletionStreamResponse, error) {
-	request := req.(*api.ChatCompletionRequest)
-	chunkCallback := chunkSubmitCallback.(func(*api.ChatCompletionStreamResponse) error)
-
+func (aiEngine *AiEngine) PromptStream(ctx context.Context, request *api.ChatCompletionRequest, chunkCallback ChunkSubmit) (*api.ChatCompletionStreamResponse, error) {
 	resp, err := requestChatCompletionStream(ctx, request, func(completion api.ChatCompletionStreamResponse) error {
 		return chunkCallback(&completion)
 	})
 
 	if err != nil {
-		fmt.Printf("ChatCompletion error: %v\n", err)
+		err = lib.WrapError(ErrChatCompletion, err)
+		aiEngine.log.Error(err)
 		return nil, err
 	}
 
-	return resp, err
+	return resp, nil
 }
 
 func (aiEngine *AiEngine) PromptCb(ctx *gin.Context, body *openai.ChatCompletionRequest) {
@@ -155,7 +165,7 @@ func (aiEngine *AiEngine) PromptCb(ctx *gin.Context, body *openai.ChatCompletion
 				return err
 			}
 
-			ctx.Writer.Header().Set("Content-Type", "text/event-stream")
+			ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_EVENT_STREAM)
 
 			_, err = ctx.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", marshalledResponse)))
 			if err != nil {

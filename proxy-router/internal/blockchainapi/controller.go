@@ -69,7 +69,7 @@ func (c *BlockchainController) getProviderClaimableBalance(ctx *gin.Context) {
 		return
 	}
 
-	balance, err := c.service.GetProviderClaimableBalance(ctx, params.ID.ToCommon())
+	balance, err := c.service.GetProviderClaimableBalance(ctx, params.ID.Hash)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -105,7 +105,7 @@ func (c *BlockchainController) claimProviderBalance(ctx *gin.Context) {
 		return
 	}
 
-	txHash, err := c.service.ClaimProviderBalance(ctx, params.ID.ToCommon(), to, amount)
+	txHash, err := c.service.ClaimProviderBalance(ctx, params.ID.Hash, to, amount)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -448,7 +448,7 @@ func (c *BlockchainController) closeSession(ctx *gin.Context) {
 		return
 	}
 
-	txHash, err := c.service.CloseSession(ctx, params.ID.ToCommon())
+	txHash, err := c.service.CloseSession(ctx, params.ID.Hash)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -467,7 +467,7 @@ func (c *BlockchainController) getSession(ctx *gin.Context) {
 		return
 	}
 
-	session, err := c.service.GetSession(ctx, params.ID.ToCommon())
+	session, err := c.service.GetSession(ctx, params.ID.Hash)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -519,7 +519,7 @@ func (c *BlockchainController) getSessions(ctx *gin.Context) {
 		return
 	}
 
-	sessions, err := c.service.GetSessions(ctx, req.User.ToCommon(), req.Provider.ToCommon(), offset, limit)
+	sessions, err := c.service.GetSessions(ctx, req.User.Address, req.Provider.Address, offset, limit)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

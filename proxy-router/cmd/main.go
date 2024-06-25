@@ -210,7 +210,7 @@ func start() error {
 
 	proxyRouterApi := proxyapi.NewProxySender(publicUrl, wallet, contractLogStorage, sessionStorage, log)
 	blockchainApi := blockchainapi.NewBlockchainService(ethClient, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, cfg.Blockchain.ExplorerApiUrl, wallet, sessionStorage, proxyRouterApi, proxyLog, cfg.Blockchain.EthLegacyTx)
-	aiEngine := aiengine.NewAiEngine()
+	aiEngine := aiengine.NewAiEngine(cfg.AIEngine.OpenAIBaseURL, log)
 
 	sessionRouter := registries.NewSessionRouter(*cfg.Marketplace.DiamondContractAddress, ethClient, log)
 	eventListener := blockchainapi.NewEventsListener(ethClient, sessionStorage, sessionRouter, log)

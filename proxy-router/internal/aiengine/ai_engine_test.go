@@ -8,13 +8,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	api "github.com/sashabaranov/go-openai"
 )
 
 func AiEngine_Prompt(t *testing.T) {
-	os.Setenv("OPENAI_BASE_URL", "http://localhost:11434/v1")
-
-	aiEngine := NewAiEngine()
+	aiEngine := NewAiEngine("http://localhost:11434/v1", lib.NewTestLogger())
 	ctx := context.Background()
 	req := &api.ChatCompletionRequest{
 		Model:     "llama2",

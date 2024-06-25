@@ -28,10 +28,6 @@ func (h *Hash) UnmarshalParam(param string) error {
 	return nil
 }
 
-func (h Hash) ToCommon() common.Hash {
-	return h.Hash
-}
-
 func HexToHash(s string) (common.Hash, error) {
 	if has0xPrefix(s) {
 		s = s[2:]
