@@ -1,4 +1,4 @@
-package chatrequests
+package proxyapi
 
 type ChatMessagePartType string
 

@@ -744,7 +744,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/chatrequests.OpenAiCompletitionRequest"
+                            "$ref": "#/definitions/proxyapi.OpenAiCompletitionRequest"
                         }
                     },
                     {
@@ -815,7 +815,10 @@
         }
     },
     "definitions": {
-        "chatrequests.ChatCompletionMessage": {
+        "lib.BigInt": {
+            "type": "object"
+        },
+        "proxyapi.ChatCompletionMessage": {
             "type": "object",
             "properties": {
                 "content": {
@@ -824,7 +827,7 @@
                 "multiContent": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/chatrequests.ChatMessagePart"
+                        "$ref": "#/definitions/proxyapi.ChatMessagePart"
                     }
                 },
                 "name": {
@@ -840,7 +843,7 @@
                 }
             }
         },
-        "chatrequests.ChatCompletionResponseFormat": {
+        "proxyapi.ChatCompletionResponseFormat": {
             "type": "object",
             "properties": {
                 "type": {
@@ -848,32 +851,32 @@
                 }
             }
         },
-        "chatrequests.ChatMessageImageURL": {
+        "proxyapi.ChatMessageImageURL": {
             "type": "object",
             "properties": {
                 "detail": {
-                    "$ref": "#/definitions/chatrequests.ImageURLDetail"
+                    "$ref": "#/definitions/proxyapi.ImageURLDetail"
                 },
                 "url": {
                     "type": "string"
                 }
             }
         },
-        "chatrequests.ChatMessagePart": {
+        "proxyapi.ChatMessagePart": {
             "type": "object",
             "properties": {
                 "image_url": {
-                    "$ref": "#/definitions/chatrequests.ChatMessageImageURL"
+                    "$ref": "#/definitions/proxyapi.ChatMessageImageURL"
                 },
                 "text": {
                     "type": "string"
                 },
                 "type": {
-                    "$ref": "#/definitions/chatrequests.ChatMessagePartType"
+                    "$ref": "#/definitions/proxyapi.ChatMessagePartType"
                 }
             }
         },
-        "chatrequests.ChatMessagePartType": {
+        "proxyapi.ChatMessagePartType": {
             "type": "string",
             "enum": [
                 "text",
@@ -884,7 +887,7 @@
                 "ChatMessagePartTypeImageURL"
             ]
         },
-        "chatrequests.ImageURLDetail": {
+        "proxyapi.ImageURLDetail": {
             "type": "string",
             "enum": [
                 "high",
@@ -897,7 +900,7 @@
                 "ImageURLDetailAuto"
             ]
         },
-        "chatrequests.OpenAiCompletitionRequest": {
+        "proxyapi.OpenAiCompletitionRequest": {
             "type": "object",
             "properties": {
                 "frequency_penalty": {
@@ -923,7 +926,7 @@
                 "messages": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/chatrequests.ChatCompletionMessage"
+                        "$ref": "#/definitions/proxyapi.ChatCompletionMessage"
                     }
                 },
                 "model": {
@@ -936,7 +939,7 @@
                     "type": "number"
                 },
                 "response_format": {
-                    "$ref": "#/definitions/chatrequests.ChatCompletionResponseFormat"
+                    "$ref": "#/definitions/proxyapi.ChatCompletionResponseFormat"
                 },
                 "seed": {
                     "type": "integer"
@@ -967,9 +970,6 @@
                     "type": "string"
                 }
             }
-        },
-        "lib.BigInt": {
-            "type": "object"
         },
         "structs.OpenSessionRequest": {
             "type": "object"

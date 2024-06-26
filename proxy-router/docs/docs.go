@@ -751,7 +751,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/chatrequests.OpenAiCompletitionRequest"
+                            "$ref": "#/definitions/proxyapi.OpenAiCompletitionRequest"
                         }
                     },
                     {
@@ -822,7 +822,10 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "chatrequests.ChatCompletionMessage": {
+        "lib.BigInt": {
+            "type": "object"
+        },
+        "proxyapi.ChatCompletionMessage": {
             "type": "object",
             "properties": {
                 "content": {
@@ -831,7 +834,7 @@ const docTemplate = `{
                 "multiContent": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/chatrequests.ChatMessagePart"
+                        "$ref": "#/definitions/proxyapi.ChatMessagePart"
                     }
                 },
                 "name": {
@@ -847,7 +850,7 @@ const docTemplate = `{
                 }
             }
         },
-        "chatrequests.ChatCompletionResponseFormat": {
+        "proxyapi.ChatCompletionResponseFormat": {
             "type": "object",
             "properties": {
                 "type": {
@@ -855,32 +858,32 @@ const docTemplate = `{
                 }
             }
         },
-        "chatrequests.ChatMessageImageURL": {
+        "proxyapi.ChatMessageImageURL": {
             "type": "object",
             "properties": {
                 "detail": {
-                    "$ref": "#/definitions/chatrequests.ImageURLDetail"
+                    "$ref": "#/definitions/proxyapi.ImageURLDetail"
                 },
                 "url": {
                     "type": "string"
                 }
             }
         },
-        "chatrequests.ChatMessagePart": {
+        "proxyapi.ChatMessagePart": {
             "type": "object",
             "properties": {
                 "image_url": {
-                    "$ref": "#/definitions/chatrequests.ChatMessageImageURL"
+                    "$ref": "#/definitions/proxyapi.ChatMessageImageURL"
                 },
                 "text": {
                     "type": "string"
                 },
                 "type": {
-                    "$ref": "#/definitions/chatrequests.ChatMessagePartType"
+                    "$ref": "#/definitions/proxyapi.ChatMessagePartType"
                 }
             }
         },
-        "chatrequests.ChatMessagePartType": {
+        "proxyapi.ChatMessagePartType": {
             "type": "string",
             "enum": [
                 "text",
@@ -891,7 +894,7 @@ const docTemplate = `{
                 "ChatMessagePartTypeImageURL"
             ]
         },
-        "chatrequests.ImageURLDetail": {
+        "proxyapi.ImageURLDetail": {
             "type": "string",
             "enum": [
                 "high",
@@ -904,7 +907,7 @@ const docTemplate = `{
                 "ImageURLDetailAuto"
             ]
         },
-        "chatrequests.OpenAiCompletitionRequest": {
+        "proxyapi.OpenAiCompletitionRequest": {
             "type": "object",
             "properties": {
                 "frequency_penalty": {
@@ -930,7 +933,7 @@ const docTemplate = `{
                 "messages": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/chatrequests.ChatCompletionMessage"
+                        "$ref": "#/definitions/proxyapi.ChatCompletionMessage"
                     }
                 },
                 "model": {
@@ -943,7 +946,7 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "response_format": {
-                    "$ref": "#/definitions/chatrequests.ChatCompletionResponseFormat"
+                    "$ref": "#/definitions/proxyapi.ChatCompletionResponseFormat"
                 },
                 "seed": {
                     "type": "integer"
@@ -974,9 +977,6 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
-        },
-        "lib.BigInt": {
-            "type": "object"
         },
         "structs.OpenSessionRequest": {
             "type": "object"

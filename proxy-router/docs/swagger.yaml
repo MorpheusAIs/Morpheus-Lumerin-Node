@@ -1,12 +1,14 @@
 basePath: /
 definitions:
-  chatrequests.ChatCompletionMessage:
+  lib.BigInt:
+    type: object
+  proxyapi.ChatCompletionMessage:
     properties:
       content:
         type: string
       multiContent:
         items:
-          $ref: '#/definitions/chatrequests.ChatMessagePart'
+          $ref: '#/definitions/proxyapi.ChatMessagePart'
         type: array
       name:
         description: |-
@@ -22,28 +24,28 @@ definitions:
           assistant's prior request to call a tool.
         type: string
     type: object
-  chatrequests.ChatCompletionResponseFormat:
+  proxyapi.ChatCompletionResponseFormat:
     properties:
       type:
         type: string
     type: object
-  chatrequests.ChatMessageImageURL:
+  proxyapi.ChatMessageImageURL:
     properties:
       detail:
-        $ref: '#/definitions/chatrequests.ImageURLDetail'
+        $ref: '#/definitions/proxyapi.ImageURLDetail'
       url:
         type: string
     type: object
-  chatrequests.ChatMessagePart:
+  proxyapi.ChatMessagePart:
     properties:
       image_url:
-        $ref: '#/definitions/chatrequests.ChatMessageImageURL'
+        $ref: '#/definitions/proxyapi.ChatMessageImageURL'
       text:
         type: string
       type:
-        $ref: '#/definitions/chatrequests.ChatMessagePartType'
+        $ref: '#/definitions/proxyapi.ChatMessagePartType'
     type: object
-  chatrequests.ChatMessagePartType:
+  proxyapi.ChatMessagePartType:
     enum:
     - text
     - image_url
@@ -51,7 +53,7 @@ definitions:
     x-enum-varnames:
     - ChatMessagePartTypeText
     - ChatMessagePartTypeImageURL
-  chatrequests.ImageURLDetail:
+  proxyapi.ImageURLDetail:
     enum:
     - high
     - low
@@ -61,7 +63,7 @@ definitions:
     - ImageURLDetailHigh
     - ImageURLDetailLow
     - ImageURLDetailAuto
-  chatrequests.OpenAiCompletitionRequest:
+  proxyapi.OpenAiCompletitionRequest:
     properties:
       frequency_penalty:
         type: number
@@ -85,7 +87,7 @@ definitions:
         type: integer
       messages:
         items:
-          $ref: '#/definitions/chatrequests.ChatCompletionMessage'
+          $ref: '#/definitions/proxyapi.ChatCompletionMessage'
         type: array
       model:
         type: string
@@ -94,7 +96,7 @@ definitions:
       presence_penalty:
         type: number
       response_format:
-        $ref: '#/definitions/chatrequests.ChatCompletionResponseFormat'
+        $ref: '#/definitions/proxyapi.ChatCompletionResponseFormat'
       seed:
         type: integer
       stop:
@@ -117,8 +119,6 @@ definitions:
         type: number
       user:
         type: string
-    type: object
-  lib.BigInt:
     type: object
   structs.OpenSessionRequest:
     type: object
@@ -652,7 +652,7 @@ paths:
         name: prompt
         required: true
         schema:
-          $ref: '#/definitions/chatrequests.OpenAiCompletitionRequest'
+          $ref: '#/definitions/proxyapi.OpenAiCompletitionRequest'
       - description: Session ID
         in: header
         name: session_id
