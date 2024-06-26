@@ -32,13 +32,29 @@ type Address struct {
 	common.Address
 }
 
+func StringToAddress(s string) (Address, error) {
+	if !common.IsHexAddress(s) {
+		return Address{}, ErrInvalidAddress
+	}
+	return Address{common.HexToAddress(s)}, nil
+}
+
+func MustStringToAddress(s string) Address {
+	a, err := StringToAddress(s)
+	if err != nil {
+		panic(err)
+	}
+	return a
+}
+
 func (a *Address) UnmarshalParam(param string) error {
 	if param == "" {
 		return nil
 	}
-	if !common.IsHexAddress(param) {
-		return ErrInvalidAddress
+	addr, err := StringToAddress(param)
+	if err != nil {
+		return err
 	}
-	a.Address = common.HexToAddress(param)
+	*a = addr
 	return nil
 }

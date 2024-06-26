@@ -19,7 +19,6 @@ type MorToken struct {
 
 	// state
 	nonce  uint64
-	mutex  lib.Mutex
 	morABI *abi.ABI
 
 	// deps
@@ -42,7 +41,6 @@ func NewMorToken(morTokenAddr common.Address, client *ethclient.Client, log lib.
 		morTokenAddr: morTokenAddr,
 		client:       client,
 		morABI:       morABI,
-		mutex:        lib.NewMutex(),
 		log:          log,
 	}
 }

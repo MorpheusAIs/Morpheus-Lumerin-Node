@@ -15,6 +15,22 @@ type Hash struct {
 	common.Hash
 }
 
+func StringToHash(s string) (Hash, error) {
+	hs, err := HexToHash(s)
+	if err != nil {
+		return Hash{}, err
+	}
+	return Hash{hs}, nil
+}
+
+func MustStringToHash(s string) Hash {
+	hs, err := StringToHash(s)
+	if err != nil {
+		panic(err)
+	}
+	return hs
+}
+
 func (h *Hash) UnmarshalParam(param string) error {
 	if param == "" {
 		return nil

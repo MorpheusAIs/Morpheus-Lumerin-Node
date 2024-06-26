@@ -17,7 +17,6 @@ type ProviderRegistry struct {
 
 	// state
 	nonce uint64
-	mutex lib.Mutex
 	prABI *abi.ABI
 
 	// deps
@@ -40,7 +39,6 @@ func NewProviderRegistry(providerRegistryAddr common.Address, client *ethclient.
 		providerRegistryAddr: providerRegistryAddr,
 		client:               client,
 		prABI:                prABI,
-		mutex:                lib.NewMutex(),
 		log:                  log,
 	}
 }

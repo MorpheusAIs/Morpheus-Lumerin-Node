@@ -1,4 +1,4 @@
-package aiengine
+package test
 
 import (
 	"context"
@@ -7,12 +7,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	api "github.com/sashabaranov/go-openai"
 )
 
 func AiEngine_Prompt(t *testing.T) {
-	aiEngine := NewAiEngine("http://localhost:11434/v1", "", lib.NewTestLogger())
+	aiEngine := aiengine.NewAiEngine("http://localhost:11434/v1", "", lib.NewTestLogger())
 	req := &api.ChatCompletionRequest{
 		Model:     "llama2",
 		MaxTokens: 100,
@@ -30,7 +31,7 @@ func AiEngine_Prompt(t *testing.T) {
 }
 
 func TestAiEngine_PromptStream(t *testing.T) {
-	aiEngine := NewAiEngine("http://localhost:11434/v1", "", lib.NewTestLogger())
+	aiEngine := aiengine.NewAiEngine("http://localhost:11434/v1", "", lib.NewTestLogger())
 	req := &api.ChatCompletionRequest{
 		Model:     "llama2",
 		MaxTokens: 100,

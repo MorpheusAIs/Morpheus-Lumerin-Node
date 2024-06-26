@@ -41,11 +41,14 @@ func (b *HexString) UnmarshalJSON(data []byte) error {
 	if len(str) > 0 && str[0] == '"' {
 		str = str[1 : len(str)-1]
 	}
+	if len(str) == 0 {
+		*b = common.FromHex("")
+		return nil
+	}
 	if !hexadecimalRegex.MatchString(str) {
 		return WrapError(ErrInvalidHexString, fmt.Errorf(`"%s"`, str))
 	}
-	d := common.FromHex(str)
-	*b = d
+	*b = common.FromHex(str)
 	return nil
 }
 
@@ -64,9 +67,6 @@ func (b HexString) String() string {
 }
 
 func (b HexString) Hex() string {
-	if len(b) == 0 {
-		return ""
-	}
 	return BytesToString(b)
 }
 

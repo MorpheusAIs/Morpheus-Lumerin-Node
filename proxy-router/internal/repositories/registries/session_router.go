@@ -20,7 +20,6 @@ type SessionRouter struct {
 
 	// state
 	nonce uint64
-	mutex lib.Mutex
 	srABI *abi.ABI
 
 	// deps
@@ -49,7 +48,6 @@ func NewSessionRouter(sessionRouterAddr common.Address, client *ethclient.Client
 		sessionRouterAddr: sessionRouterAddr,
 		client:            client,
 		srABI:             srABI,
-		mutex:             lib.NewMutex(),
 		log:               log,
 	}
 }

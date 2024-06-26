@@ -17,7 +17,6 @@ type ModelRegistry struct {
 
 	// state
 	nonce uint64
-	mutex lib.Mutex
 	mrABI *abi.ABI
 
 	// deps
@@ -40,7 +39,6 @@ func NewModelRegistry(modelRegistryAddr common.Address, client *ethclient.Client
 		modelRegistryAddr: modelRegistryAddr,
 		client:            client,
 		mrABI:             mrABI,
-		mutex:             lib.NewMutex(),
 		log:               log,
 	}
 }

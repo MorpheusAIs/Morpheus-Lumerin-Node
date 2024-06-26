@@ -17,7 +17,6 @@ type AgentRegistry struct {
 
 	// state
 	nonce uint64
-	mutex lib.Mutex
 	arABI *abi.ABI
 
 	// deps
@@ -40,7 +39,6 @@ func NewAgentRegistry(agentRegistryAddr common.Address, client *ethclient.Client
 		agentRegistryAddr: agentRegistryAddr,
 		client:            client,
 		arABI:             arABI,
-		mutex:             lib.NewMutex(),
 		log:               log,
 	}
 }
