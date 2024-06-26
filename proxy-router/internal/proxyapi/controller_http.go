@@ -60,7 +60,7 @@ func (s *ProxyController) InitiateSession(ctx *gin.Context) {
 //		@Description	Send prompt to a local or remote model based on session id in header
 //	 	@Tags			wallet
 //		@Produce		json
-//		@Param			prompt	body		proxyapi.PromptRequest 	true	"Prompt"
+//		@Param			prompt	body		proxyapi.OpenAiCompletitionRequest 	true	"Prompt"
 //		@Param 			session_id header string false "Session ID"
 //		@Success		200	{object}	interface{}
 //		@Router			/v1/chat/completions [post]

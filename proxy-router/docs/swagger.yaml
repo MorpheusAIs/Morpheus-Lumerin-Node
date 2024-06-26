@@ -1,22 +1,64 @@
 basePath: /
 definitions:
-  apibus.OpenSessionRequestV2:
+  lib.BigInt:
+    type: object
+  proxyapi.OpenAiCompletitionRequest:
     properties:
-      bidId:
-        type: string
-      providerUrl:
-        type: string
-      sessionDuration:
+      best_of:
         type: integer
-    type: object
-  httphandlers.SetupWalletReqBody:
-    properties:
-      privateKey:
+      echo:
+        type: boolean
+      frequency_penalty:
+        type: number
+      logit_bias:
+        additionalProperties:
+          type: integer
+        description: |-
+          LogitBias is must be a token id string (specified by their token ID in the tokenizer), not a word string.
+          incorrect: `"logit_bias":{"You": 6}`, correct: `"logit_bias":{"1639": 6}`
+          refs: https://platform.openai.com/docs/api-reference/completions/create#completions/create-logit_bias
+        type: object
+      logprobs:
+        type: integer
+      max_tokens:
+        type: integer
+      model:
         type: string
-    required:
-    - privateKey
+      "n":
+        type: integer
+      presence_penalty:
+        type: number
+      prompt: {}
+      stop:
+        items:
+          type: string
+        type: array
+      stream:
+        type: boolean
+      suffix:
+        type: string
+      temperature:
+        type: number
+      top_p:
+        type: number
+      user:
+        type: string
     type: object
-  proxyapi.ConfigResponse:
+  structs.OpenSessionWithDurationRequest:
+    properties:
+      sessionDuration:
+        $ref: '#/definitions/lib.BigInt'
+    type: object
+  structs.OpenSessionWithDurationRequest:
+    properties:
+      sessionDuration:
+        $ref: '#/definitions/lib.BigInt'
+    type: object
+  structs.OpenSessionRequest:
+    type: object
+  structs.SendRequest:
+    type: object
+  system.ConfigResponse:
     properties:
       commit:
         type: string
@@ -25,7 +67,14 @@ definitions:
       version:
         type: string
     type: object
-  proxyapi.HealthCheckResponse:
+  system.FD:
+    properties:
+      id:
+        type: string
+      path:
+        type: string
+    type: object
+  system.HealthCheckResponse:
     properties:
       status:
         type: string
@@ -34,39 +83,14 @@ definitions:
       version:
         type: string
     type: object
-  proxyapi.PromptMessage:
+  walletapi.SetupWalletReqBody:
     properties:
-      content:
-        type: string
-      role:
-        type: string
-    type: object
-  proxyapi.PromptRequest:
-    properties:
-      messages:
+      privateKey:
         items:
-          $ref: '#/definitions/proxyapi.PromptMessage'
+          type: integer
         type: array
-      model:
-        type: string
-      stream:
-        type: boolean
-    type: object
-  rpcproxy.OpenSessionRequest:
-    properties:
-      approval:
-        type: string
-      approvalSig:
-        type: string
-      stake:
-        type: string
-    type: object
-  rpcproxy.SendRequest:
-    properties:
-      amount:
-        type: string
-      to:
-        type: string
+    required:
+    - privateKey
     type: object
 externalDocs:
   description: OpenAPI
@@ -133,6 +157,46 @@ paths:
       summary: Get ETH and MOR balance
       tags:
       - wallet
+  /blockchain/bids/:id/session:
+    post:
+      consumes:
+      - application/json
+      description: Full flow to open a session by bidId
+      parameters:
+      - description: Open session
+        in: body
+        name: opensession
+        required: true
+        schema:
+          $ref: '#/definitions/structs.OpenSessionWithDurationRequest'
+      - description: Bid ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Open Session by bidId in blockchain
+      tags:
+      - sessions
+  /blockchain/latestBlock:
+    get:
+      description: Get latest block number from blockchain
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Get Latest Block
+      tags:
+      - wallet
   /blockchain/models:
     get:
       description: Get models list from blokchain
@@ -148,6 +212,33 @@ paths:
       summary: Get models list
       tags:
       - wallet
+  /blockchain/models/:id/session:
+    post:
+      consumes:
+      - application/json
+      description: Full flow to open a session by modelId
+      parameters:
+      - description: Open session
+        in: body
+        name: opensession
+        required: true
+        schema:
+          $ref: '#/definitions/structs.OpenSessionWithDurationRequest'
+      - description: Model ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Open Session by ModelID in blockchain
+      tags:
+      - sessions
   /blockchain/models/{id}/bids:
     get:
       description: Get bids from blockchain by model agent
@@ -230,7 +321,7 @@ paths:
         name: sendeth
         required: true
         schema:
-          $ref: '#/definitions/rpcproxy.SendRequest'
+          $ref: '#/definitions/structs.SendRequest'
       produces:
       - application/json
       responses:
@@ -250,7 +341,7 @@ paths:
         name: sendmor
         required: true
         schema:
-          $ref: '#/definitions/rpcproxy.SendRequest'
+          $ref: '#/definitions/structs.SendRequest'
       produces:
       - application/json
       responses:
@@ -303,7 +394,7 @@ paths:
         name: opensession
         required: true
         schema:
-          $ref: '#/definitions/rpcproxy.OpenSessionRequest'
+          $ref: '#/definitions/structs.OpenSessionRequest'
       produces:
       - application/json
       responses:
@@ -346,28 +437,6 @@ paths:
       summary: Get Todays Budget
       tags:
       - wallet
-  /blockchain/sessions/v2:
-    post:
-      consumes:
-      - application/json
-      description: Full flow to open a session
-      parameters:
-      - description: Open session
-        in: body
-        name: opensessionv2
-        required: true
-        schema:
-          $ref: '#/definitions/apibus.OpenSessionRequestV2'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            type: object
-      summary: Open Session full flow
-      tags:
-      - sessions
   /blockchain/token/supply:
     get:
       description: Get MOR token supply from blockchain
@@ -414,8 +483,23 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/proxyapi.ConfigResponse'
+            $ref: '#/definitions/system.ConfigResponse'
       summary: Get Config
+      tags:
+      - healthcheck
+  /files:
+    get:
+      description: Returns opened files
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/system.FD'
+            type: array
+      summary: Get files
       tags:
       - healthcheck
   /healthcheck:
@@ -427,7 +511,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/proxyapi.HealthCheckResponse'
+            $ref: '#/definitions/system.HealthCheckResponse'
       summary: Healthcheck example
       tags:
       - healthcheck
@@ -440,7 +524,7 @@ paths:
         name: claim
         required: true
         schema:
-          $ref: '#/definitions/rpcproxy.SendRequest'
+          $ref: '#/definitions/structs.SendRequest'
       - description: Session ID
         in: path
         name: id
@@ -497,7 +581,7 @@ paths:
         name: prompt
         required: true
         schema:
-          $ref: '#/definitions/proxyapi.PromptRequest'
+          $ref: '#/definitions/proxyapi.OpenAiCompletitionRequest'
       - description: Session ID
         in: header
         name: session_id
@@ -533,7 +617,7 @@ paths:
         name: privatekey
         required: true
         schema:
-          $ref: '#/definitions/httphandlers.SetupWalletReqBody'
+          $ref: '#/definitions/walletapi.SetupWalletReqBody'
       produces:
       - application/json
       responses:

@@ -99,6 +99,67 @@ const docTemplate = `{
                 }
             }
         },
+        "/blockchain/bids/:id/session": {
+            "post": {
+                "description": "Full flow to open a session by bidId",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "Open Session by bidId in blockchain",
+                "parameters": [
+                    {
+                        "description": "Open session",
+                        "name": "opensession",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/structs.OpenSessionWithDurationRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Bid ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/latestBlock": {
+            "get": {
+                "description": "Get latest block number from blockchain",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "wallet"
+                ],
+                "summary": "Get Latest Block",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                }
+            }
+        },
         "/blockchain/models": {
             "get": {
                 "description": "Get models list from blokchain",
@@ -117,6 +178,47 @@ const docTemplate = `{
                             "items": {
                                 "type": "object"
                             }
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/models/:id/session": {
+            "post": {
+                "description": "Full flow to open a session by modelId",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "Open Session by ModelID in blockchain",
+                "parameters": [
+                    {
+                        "description": "Open session",
+                        "name": "opensession",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/structs.OpenSessionWithDurationRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Model ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object"
                         }
                     }
                 }
@@ -250,7 +352,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/rpcproxy.SendRequest"
+                            "$ref": "#/definitions/structs.SendRequest"
                         }
                     }
                 ],
@@ -281,7 +383,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/rpcproxy.SendRequest"
+                            "$ref": "#/definitions/structs.SendRequest"
                         }
                     }
                 ],
@@ -362,7 +464,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/rpcproxy.OpenSessionRequest"
+                            "$ref": "#/definitions/structs.OpenSessionRequest"
                         }
                     }
                 ],
@@ -386,40 +488,6 @@ const docTemplate = `{
                     "wallet"
                 ],
                 "summary": "Get Todays Budget",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object"
-                        }
-                    }
-                }
-            }
-        },
-        "/blockchain/sessions/v2": {
-            "post": {
-                "description": "Full flow to open a session",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "sessions"
-                ],
-                "summary": "Open Session full flow",
-                "parameters": [
-                    {
-                        "description": "Open session",
-                        "name": "opensessionv2",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/apibus.OpenSessionRequestV2"
-                        }
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -530,7 +598,30 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/proxyapi.ConfigResponse"
+                            "$ref": "#/definitions/system.ConfigResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/files": {
+            "get": {
+                "description": "Returns opened files",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "healthcheck"
+                ],
+                "summary": "Get files",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/system.FD"
+                            }
                         }
                     }
                 }
@@ -550,7 +641,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/proxyapi.HealthCheckResponse"
+                            "$ref": "#/definitions/system.HealthCheckResponse"
                         }
                     }
                 }
@@ -573,7 +664,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/rpcproxy.SendRequest"
+                            "$ref": "#/definitions/structs.SendRequest"
                         }
                     },
                     {
@@ -660,7 +751,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/proxyapi.PromptRequest"
+                            "$ref": "#/definitions/proxyapi.OpenAiCompletitionRequest"
                         }
                     },
                     {
@@ -715,7 +806,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/httphandlers.SetupWalletReqBody"
+                            "$ref": "#/definitions/walletapi.SetupWalletReqBody"
                         }
                     }
                 ],
@@ -731,32 +822,90 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "apibus.OpenSessionRequestV2": {
+        "lib.BigInt": {
+            "type": "object"
+        },
+        "proxyapi.OpenAiCompletitionRequest": {
             "type": "object",
             "properties": {
-                "bidId": {
-                    "type": "string"
-                },
-                "providerUrl": {
-                    "type": "string"
-                },
-                "sessionDuration": {
+                "best_of": {
                     "type": "integer"
-                }
-            }
-        },
-        "httphandlers.SetupWalletReqBody": {
-            "type": "object",
-            "required": [
-                "privateKey"
-            ],
-            "properties": {
-                "privateKey": {
+                },
+                "echo": {
+                    "type": "boolean"
+                },
+                "frequency_penalty": {
+                    "type": "number"
+                },
+                "logit_bias": {
+                    "description": "LogitBias is must be a token id string (specified by their token ID in the tokenizer), not a word string.\nincorrect: ` + "`" + `\"logit_bias\":{\"You\": 6}` + "`" + `, correct: ` + "`" + `\"logit_bias\":{\"1639\": 6}` + "`" + `\nrefs: https://platform.openai.com/docs/api-reference/completions/create#completions/create-logit_bias",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "logprobs": {
+                    "type": "integer"
+                },
+                "max_tokens": {
+                    "type": "integer"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "n": {
+                    "type": "integer"
+                },
+                "presence_penalty": {
+                    "type": "number"
+                },
+                "prompt": {},
+                "stop": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "stream": {
+                    "type": "boolean"
+                },
+                "suffix": {
+                    "type": "string"
+                },
+                "temperature": {
+                    "type": "number"
+                },
+                "top_p": {
+                    "type": "number"
+                },
+                "user": {
                     "type": "string"
                 }
             }
         },
-        "proxyapi.ConfigResponse": {
+        "structs.OpenSessionWithDurationRequest": {
+            "type": "object",
+            "properties": {
+                "sessionDuration": {
+                    "$ref": "#/definitions/lib.BigInt"
+                }
+            }
+        },
+        "structs.OpenSessionWithDurationRequest": {
+            "type": "object",
+            "properties": {
+                "sessionDuration": {
+                    "$ref": "#/definitions/lib.BigInt"
+                }
+            }
+        },
+        "structs.OpenSessionRequest": {
+            "type": "object"
+        },
+        "structs.SendRequest": {
+            "type": "object"
+        },
+        "system.ConfigResponse": {
             "type": "object",
             "properties": {
                 "commit": {
@@ -769,7 +918,18 @@ const docTemplate = `{
                 }
             }
         },
-        "proxyapi.HealthCheckResponse": {
+        "system.FD": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                }
+            }
+        },
+        "system.HealthCheckResponse": {
             "type": "object",
             "properties": {
                 "status": {
@@ -783,56 +943,17 @@ const docTemplate = `{
                 }
             }
         },
-        "proxyapi.PromptMessage": {
+        "walletapi.SetupWalletReqBody": {
             "type": "object",
+            "required": [
+                "privateKey"
+            ],
             "properties": {
-                "content": {
-                    "type": "string"
-                },
-                "role": {
-                    "type": "string"
-                }
-            }
-        },
-        "proxyapi.PromptRequest": {
-            "type": "object",
-            "properties": {
-                "messages": {
+                "privateKey": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/proxyapi.PromptMessage"
+                        "type": "integer"
                     }
-                },
-                "model": {
-                    "type": "string"
-                },
-                "stream": {
-                    "type": "boolean"
-                }
-            }
-        },
-        "rpcproxy.OpenSessionRequest": {
-            "type": "object",
-            "properties": {
-                "approval": {
-                    "type": "string"
-                },
-                "approvalSig": {
-                    "type": "string"
-                },
-                "stake": {
-                    "type": "string"
-                }
-            }
-        },
-        "rpcproxy.SendRequest": {
-            "type": "object",
-            "properties": {
-                "amount": {
-                    "type": "string"
-                },
-                "to": {
-                    "type": "string"
                 }
             }
         }

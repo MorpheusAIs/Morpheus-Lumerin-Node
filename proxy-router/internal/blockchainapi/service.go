@@ -52,6 +52,7 @@ var (
 	ErrSessionStore = errors.New("failed to store session")
 
 	ErrBid         = errors.New("failed to get bid")
+	ErrProvider    = errors.New("failed to get provider")
 	ErrTokenSupply = errors.New("failed to parse token supply")
 	ErrBudget      = errors.New("failed to parse token budget")
 	ErrMyAddress   = errors.New("failed to get my address")
@@ -490,7 +491,7 @@ func (s *BlockchainService) GetTransactions(ctx context.Context, page uint64, li
 	return allTrxs, nil
 }
 
-func (s *BlockchainService) OpenSessionV2(ctx context.Context, bidID common.Hash, providerURL string, duration *big.Int) (common.Hash, error) {
+func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.Hash, duration *big.Int) (common.Hash, error) {
 	supply, err := s.GetTokenSupply(ctx)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrTokenSupply, err)
@@ -514,7 +515,54 @@ func (s *BlockchainService) OpenSessionV2(ctx context.Context, bidID common.Hash
 		return common.Hash{}, lib.WrapError(ErrMyAddress, err)
 	}
 
-	initRes, err := s.proxyService.InitiateSession(ctx, userAddr, bid.Provider, stake, bidID, providerURL)
+	provider, err := s.providerRegistry.GetProviderById(ctx, bid.Provider)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrProvider, err)
+	}
+
+	initRes, err := s.proxyService.InitiateSession(ctx, userAddr, bid.Provider, stake, bidID, provider.Endpoint)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrInitSession, err)
+	}
+
+	_, err = s.Approve(ctx, s.diamonContractAddr, stake)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrApprove, err)
+	}
+
+	return s.OpenSession(ctx, initRes.Approval, initRes.ApprovalSig, stake)
+}
+
+func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID common.Hash, duration *big.Int) (common.Hash, error) {
+	supply, err := s.GetTokenSupply(ctx)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrTokenSupply, err)
+	}
+
+	budget, err := s.GetTodaysBudget(ctx)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrBudget, err)
+	}
+
+	bidID, bid, err := s.marketplace.GetBidByModelId(ctx, modelID)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrBid, err)
+	}
+
+	provider, err := s.providerRegistry.GetProviderById(ctx, bid.Provider)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrProvider, err)
+	}
+
+	totalCost := duration.Mul(bid.PricePerSecond, duration)
+	stake := totalCost.Div(totalCost.Mul(supply, totalCost), budget)
+
+	userAddr, err := s.GetMyAddress(ctx)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrMyAddress, err)
+	}
+
+	initRes, err := s.proxyService.InitiateSession(ctx, userAddr, bid.Provider, stake, bidID, provider.Endpoint)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrInitSession, err)
 	}
