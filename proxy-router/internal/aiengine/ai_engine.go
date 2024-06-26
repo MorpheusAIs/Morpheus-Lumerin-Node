@@ -56,14 +56,12 @@ func (a *AiEngine) Prompt(ctx context.Context, request *api.ChatCompletionReques
 	return &response, nil
 }
 
-func (aiEngine *AiEngine) PromptStream(ctx context.Context, request *api.ChatCompletionRequest, chunkCallback CompletionCallback) (*api.ChatCompletionStreamResponse, error) {
-	resp, err := aiEngine.requestChatCompletionStream(ctx, request, func(completion *api.ChatCompletionStreamResponse) error {
-		return chunkCallback(completion)
-	})
+func (a *AiEngine) PromptStream(ctx context.Context, request *api.ChatCompletionRequest, chunkCallback CompletionCallback) (*api.ChatCompletionStreamResponse, error) {
+	resp, err := a.requestChatCompletionStream(ctx, request, chunkCallback)
 
 	if err != nil {
 		err = lib.WrapError(ErrChatCompletion, err)
-		aiEngine.log.Error(err)
+		a.log.Error(err)
 		return nil, err
 	}
 
@@ -120,11 +118,11 @@ func (a *AiEngine) requestChatCompletionStream(ctx context.Context, request *api
 	}
 
 	if a.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+a.apiKey)
+		req.Header.Set(c.HEADER_AUTHORIZATION, fmt.Sprintf("%s %s", c.BEARER, a.apiKey))
 	}
 	req.Header.Set(c.HEADER_CONTENT_TYPE, c.CONTENT_TYPE_JSON)
 	req.Header.Set(c.HEADER_ACCEPT, c.CONTENT_TYPE_EVENT_STREAM)
-	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set(c.HEADER_CONNECTION, c.CONNECTION_KEEP_ALIVE)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -141,8 +139,8 @@ func (a *AiEngine) requestChatCompletionStream(ctx context.Context, request *api
 			data := line[6:] // Skip the "data: " prefix
 			var completion api.ChatCompletionStreamResponse
 			if err := json.Unmarshal([]byte(data), &completion); err != nil {
-				if strings.Index(data, "[DONE]") == -1 {
-					a.log.Infof("reached end of the response")
+				if strings.Index(data, "[DONE]") != -1 {
+					a.log.Debugf("reached end of the response")
 				} else {
 					a.log.Errorf("error decoding response: %s\n%s", err, line)
 				}

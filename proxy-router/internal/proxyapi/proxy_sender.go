@@ -13,7 +13,7 @@ import (
 	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
-	msg "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi/morrpcmessage"
+	msgs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi/morrpcmessage"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
@@ -28,6 +28,7 @@ var (
 	ErrInvalidSig       = fmt.Errorf("received invalid signature from provider")
 	ErrFailedStore      = fmt.Errorf("failed store user")
 	ErrInvalidResponse  = fmt.Errorf("invalid response")
+	ErrResponseErr      = fmt.Errorf("response error")
 	ErrDecrFailed       = fmt.Errorf("failed to decrypt ai response chunk")
 	ErrMasrshalFailed   = fmt.Errorf("failed to marshal response")
 	ErrDecode           = fmt.Errorf("failed to decode response")
@@ -40,7 +41,7 @@ type ProxyServiceSender struct {
 	privateKey     interfaces.PrKeyProvider
 	logStorage     *lib.Collection[*interfaces.LogStorage]
 	sessionStorage *storages.SessionStorage
-	morRPC         *msg.MORRPCMessage
+	morRPC         *msgs.MORRPCMessage
 	log            lib.ILogger
 }
 
@@ -50,12 +51,12 @@ func NewProxySender(publicUrl *url.URL, privateKey interfaces.PrKeyProvider, log
 		privateKey:     privateKey,
 		logStorage:     logStorage,
 		sessionStorage: sessionStorage,
-		morRPC:         msg.NewMorRpc(),
+		morRPC:         msgs.NewMorRpc(),
 		log:            log,
 	}
 }
 
-func (p *ProxyServiceSender) InitiateSession(ctx context.Context, user common.Address, provider common.Address, spend *big.Int, bidID common.Hash, providerURL string) (*constants.InitiateSessionResponse, error) {
+func (p *ProxyServiceSender) InitiateSession(ctx context.Context, user common.Address, provider common.Address, spend *big.Int, bidID common.Hash, providerURL string) (*msgs.SessionRes, error) {
 	requestID := "1"
 
 	prKey, err := p.privateKey.GetPrivateKey()
@@ -73,8 +74,17 @@ func (p *ProxyServiceSender) InitiateSession(ctx context.Context, user common.Ad
 		return nil, lib.WrapError(ErrProvider, fmt.Errorf("code: %d, msg: %v, error: %s", code, msg, ginErr))
 	}
 
-	typedMsg, ok := msg.Result.(*constants.InitiateSessionResponse)
-	if !ok {
+	if msg.Error != nil {
+		// TODO: verify signature
+		return nil, lib.WrapError(ErrResponseErr, fmt.Errorf("error: %v, result: %v", msg.Error.Message, msg.Error.Data))
+	}
+	if msg.Result == nil {
+		return nil, lib.WrapError(ErrInvalidResponse, fmt.Errorf("empty result and no error"))
+	}
+
+	var typedMsg *msgs.SessionRes
+	err = json.Unmarshal(*msg.Result, &typedMsg)
+	if err != nil {
 		return nil, lib.WrapError(ErrInvalidResponse, fmt.Errorf("expected InitiateSessionResponse, got %s", msg.Result))
 	}
 
@@ -134,7 +144,7 @@ func (p *ProxyServiceSender) SendPrompt(ctx context.Context, resWriter Responder
 	return p.rpcRequestStream(ctx, resWriter, provider.Url, promptRequest, pubKey)
 }
 
-func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msg.RPCMessageV2) (*msg.RpcResponse, int, gin.H) {
+func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage) (*msgs.RpcResponse, int, gin.H) {
 	conn, err := net.Dial("tcp", url)
 	if err != nil {
 		err = lib.WrapError(fmt.Errorf("failed to connect to provider"), err)
@@ -160,7 +170,7 @@ func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msg.RPCMessageV2
 	reader := bufio.NewReader(conn)
 	d := json.NewDecoder(reader)
 
-	var msg *msg.RpcResponse
+	var msg *msgs.RpcResponse
 	err = d.Decode(&msg)
 	if err != nil {
 		err = lib.WrapError(fmt.Errorf("failed to decode response"), err)
@@ -170,7 +180,7 @@ func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msg.RPCMessageV2
 	return msg, 0, nil
 }
 
-func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter ResponderFlusher, url string, rpcMessage *msg.RPCMessageV2, providerPublicKey lib.HexString) error {
+func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter ResponderFlusher, url string, rpcMessage *msgs.RPCMessage, providerPublicKey lib.HexString) error {
 	prKey, err := p.privateKey.GetPrivateKey()
 	if err != nil {
 		return ErrMissingPrKey
@@ -202,15 +212,23 @@ func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter Res
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		var msg *msg.RpcResponse
+		var msg *msgs.RpcResponse
 		err = d.Decode(&msg)
 		p.log.Debugf("Received stream msg:", msg)
 		if err != nil {
 			return lib.WrapError(ErrDecode, err)
 		}
 
+		if msg.Error != nil {
+			return lib.WrapError(ErrResponseErr, fmt.Errorf("error: %v, data: %v", msg.Error.Message, msg.Error.Data))
+		}
+
+		if msg.Result == nil {
+			return lib.WrapError(ErrInvalidResponse, fmt.Errorf("empty result and no error"))
+		}
+
 		var inferenceRes InferenceRes
-		err := json.Unmarshal([]byte(msg.Result.(string)), &msg)
+		err := json.Unmarshal(*msg.Result, &msg)
 		if err != nil {
 			return lib.WrapError(ErrInvalidResponse, err)
 		}

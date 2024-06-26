@@ -26,7 +26,7 @@ func NewTCPHandler(
 			conn.Close()
 		}()
 
-		msg, err := getMessageV2(conn)
+		msg, err := getMessage(conn)
 		if err != nil {
 			sourceLog.Error("Error reading message", err)
 			return
@@ -56,11 +56,11 @@ func sendMsg(conn net.Conn, msg *morrpc.RpcResponse) (int, error) {
 	return conn.Write(msgJson)
 }
 
-func getMessageV2(conn net.Conn) (*morrpc.RPCMessageV2, error) {
+func getMessage(conn net.Conn) (*morrpc.RPCMessage, error) {
 	reader := bufio.NewReader(conn)
 	d := json.NewDecoder(reader)
 
-	var msg *morrpc.RPCMessageV2
+	var msg *morrpc.RPCMessage
 	err := d.Decode(&msg)
 	if err != nil {
 		return nil, err

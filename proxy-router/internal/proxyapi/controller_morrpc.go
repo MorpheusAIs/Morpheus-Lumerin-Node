@@ -36,7 +36,7 @@ func NewMORRPCController(service *ProxyReceiver, validator *validator.Validate, 
 	return c
 }
 
-func (s *MORRPCController) Handle(ctx context.Context, msg m.RPCMessageV2, sourceLog lib.ILogger, sendResponse SendResponse) error {
+func (s *MORRPCController) Handle(ctx context.Context, msg m.RPCMessage, sourceLog lib.ILogger, sendResponse SendResponse) error {
 	switch msg.Method {
 	case "session.request":
 		return s.sessionRequest(ctx, msg, sendResponse, sourceLog)
@@ -52,7 +52,7 @@ var (
 	ErrUnmarshal  = fmt.Errorf("failed to unmarshal request")
 )
 
-func (s *MORRPCController) sessionRequest(ctx context.Context, msg m.RPCMessageV2, sendResponse SendResponse, sourceLog lib.ILogger) error {
+func (s *MORRPCController) sessionRequest(ctx context.Context, msg m.RPCMessage, sendResponse SendResponse, sourceLog lib.ILogger) error {
 	var req m.SessionReq
 	err := json.Unmarshal(msg.Params, &req)
 	if err != nil {
@@ -80,7 +80,7 @@ func (s *MORRPCController) sessionRequest(ctx context.Context, msg m.RPCMessageV
 	return sendResponse(res)
 }
 
-func (s *MORRPCController) sessionPrompt(ctx context.Context, msg m.RPCMessageV2, sendResponse SendResponse, sourceLog lib.ILogger) error {
+func (s *MORRPCController) sessionPrompt(ctx context.Context, msg m.RPCMessage, sendResponse SendResponse, sourceLog lib.ILogger) error {
 	var req m.SessionPromptReq
 	err := json.Unmarshal(msg.Params, &req)
 	if err != nil {

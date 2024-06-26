@@ -107,6 +107,7 @@ func (c *BlockchainController) claimProviderBalance(ctx *gin.Context) {
 
 	txHash, err := c.service.ClaimProviderBalance(ctx, params.ID.Hash, to, amount)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -154,6 +155,7 @@ func (c *BlockchainController) sendETH(ctx *gin.Context) {
 
 	txHash, err := c.service.SendETH(ctx, to, amount)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -182,6 +184,7 @@ func (c *BlockchainController) sendMOR(ctx *gin.Context) {
 	if err != nil {
 		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{"txHash": txhash.String()})
@@ -217,6 +220,7 @@ func (c *BlockchainController) getBidsByProvider(ctx *gin.Context) {
 
 	bids, err := c.service.GetBidsByProvider(ctx, params.ID, offset, limit)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -274,6 +278,7 @@ func (c *BlockchainController) getBidsByModelAgent(ctx *gin.Context) {
 
 	bids, err := c.service.GetBidsByModelAgent(ctx, params.ID.Hash, offset, limit)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -293,6 +298,7 @@ func (c *BlockchainController) getBidsByModelAgent(ctx *gin.Context) {
 func (s *BlockchainController) getBalance(ctx *gin.Context) {
 	ethBalance, morBalance, err := s.service.GetBalance(ctx)
 	if err != nil {
+		s.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -321,6 +327,7 @@ func (c *BlockchainController) getTransactions(ctx *gin.Context) {
 
 	txs, err := c.service.GetTransactions(ctx, page, limit)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -348,6 +355,7 @@ func (c *BlockchainController) getAllowance(ctx *gin.Context) {
 
 	allowance, err := c.service.GetAllowance(ctx, query.Spender)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -377,6 +385,7 @@ func (c *BlockchainController) approve(ctx *gin.Context) {
 
 	tx, err := c.service.Approve(ctx, query.Spender, query.Amount.Unpack())
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -405,6 +414,7 @@ func (c *BlockchainController) openSession(ctx *gin.Context) {
 
 	txHash, err := c.service.OpenSession(ctx, reqPayload.Approval, reqPayload.ApprovalSig, reqPayload.Stake.Unpack())
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -416,12 +426,14 @@ func (c *BlockchainController) openSession(ctx *gin.Context) {
 func (s *BlockchainController) openSessionV2(ctx *gin.Context) {
 	var reqPayload structs.OpenSessionRequestV2
 	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
+		s.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	txHash, err := s.service.OpenSessionV2(ctx, reqPayload.BidId.Hash, reqPayload.ProviderUrl, reqPayload.SessionDuration.Unpack())
 	if err != nil {
+		s.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -450,6 +462,7 @@ func (c *BlockchainController) closeSession(ctx *gin.Context) {
 
 	txHash, err := c.service.CloseSession(ctx, params.ID.Hash)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -469,6 +482,7 @@ func (c *BlockchainController) getSession(ctx *gin.Context) {
 
 	session, err := c.service.GetSession(ctx, params.ID.Hash)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -521,6 +535,7 @@ func (c *BlockchainController) getSessions(ctx *gin.Context) {
 
 	sessions, err := c.service.GetSessions(ctx, req.User.Address, req.Provider.Address, offset, limit)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -540,6 +555,7 @@ func (c *BlockchainController) getSessions(ctx *gin.Context) {
 func (s *BlockchainController) getBudget(ctx *gin.Context) {
 	budget, err := s.service.GetTodaysBudget(ctx)
 	if err != nil {
+		s.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -559,6 +575,7 @@ func (s *BlockchainController) getBudget(ctx *gin.Context) {
 func (s *BlockchainController) getSupply(ctx *gin.Context) {
 	supply, err := s.service.GetTokenSupply(ctx)
 	if err != nil {
+		s.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -578,6 +595,7 @@ func (s *BlockchainController) getSupply(ctx *gin.Context) {
 func (c *BlockchainController) getLatestBlock(ctx *gin.Context) {
 	block, err := c.service.GetLatestBlock(ctx)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -589,12 +607,14 @@ func (c *BlockchainController) getBidByID(ctx *gin.Context) {
 	var params structs.PathHex32ID
 	err := ctx.ShouldBindUri(&params)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	bid, err := c.service.GetBidByID(ctx, params.ID.Hash)
 	if err != nil {
+		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

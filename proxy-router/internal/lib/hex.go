@@ -15,7 +15,7 @@ var (
 	hexadecimalRegexString = "^(0[xX])?[0-9a-fA-F]+$"
 	hexadecimalRegex       = regexp.MustCompile(hexadecimalRegexString)
 
-	ErrInvalidEthAddress = fmt.Errorf("invalid ethereum address")
+	ErrInvalidHexString = fmt.Errorf("invalid hex string")
 )
 
 // Arbitrary length hex string represented internally as a byte slice
@@ -23,7 +23,7 @@ type HexString []byte
 
 func StringToHexString(s string) (HexString, error) {
 	if !hexadecimalRegex.MatchString(s) {
-		return nil, WrapError(ErrInvalidEthAddress, fmt.Errorf("%s", s))
+		return nil, WrapError(ErrInvalidHexString, fmt.Errorf(`"%s"`, s))
 	}
 	return common.FromHex(s), nil
 }
@@ -42,7 +42,7 @@ func (b *HexString) UnmarshalJSON(data []byte) error {
 		str = str[1 : len(str)-1]
 	}
 	if !hexadecimalRegex.MatchString(str) {
-		return WrapError(ErrInvalidEthAddress, fmt.Errorf("%s", str))
+		return WrapError(ErrInvalidHexString, fmt.Errorf(`"%s"`, str))
 	}
 	d := common.FromHex(str)
 	*b = d
@@ -52,7 +52,7 @@ func (b *HexString) UnmarshalJSON(data []byte) error {
 func (b *HexString) UnmarshalText(data []byte) error {
 	dataStr := string(data)
 	if !hexadecimalRegex.MatchString(dataStr) {
-		return WrapError(ErrInvalidEthAddress, fmt.Errorf("%s", dataStr))
+		return WrapError(ErrInvalidHexString, fmt.Errorf(`"%s"`, dataStr))
 	}
 	d := common.FromHex(string(data))
 	*b = d
