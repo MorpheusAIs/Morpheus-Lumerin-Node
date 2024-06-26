@@ -18,7 +18,8 @@ type ProxyController struct {
 
 func NewProxyController(service *ProxyServiceSender, aiEngine *aiengine.AiEngine) *ProxyController {
 	c := &ProxyController{
-		service: service,
+		service:  service,
+		aiEngine: aiEngine,
 	}
 
 	return c
@@ -64,7 +65,7 @@ func (s *ProxyController) InitiateSession(ctx *gin.Context) {
 //		@Param 			session_id header string false "Session ID"
 //		@Success		200	{object}	interface{}
 //		@Router			/v1/chat/completions [post]
-func (apiBus *ProxyController) Prompt(ctx *gin.Context) {
+func (c *ProxyController) Prompt(ctx *gin.Context) {
 	var (
 		body openai.ChatCompletionRequest
 		head PromptHead
@@ -80,11 +81,11 @@ func (apiBus *ProxyController) Prompt(ctx *gin.Context) {
 
 	if (head.SessionID == common.Hash{}) {
 		body.Stream = ctx.GetHeader(constants.HEADER_ACCEPT) == constants.CONTENT_TYPE_JSON
-		apiBus.aiEngine.PromptCb(ctx, &body)
+		c.aiEngine.PromptCb(ctx, &body)
 		return
 	}
 
-	err := apiBus.service.SendPrompt(ctx, ctx.Writer, &body, head.SessionID)
+	err := c.service.SendPrompt(ctx, ctx.Writer, &body, head.SessionID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

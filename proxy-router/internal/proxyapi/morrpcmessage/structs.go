@@ -16,6 +16,15 @@ type SessionReq struct {
 	BidID     common.Hash    `json:"bidid"     validate:"required,hex32"`
 }
 
+type SessionRes struct {
+	PubKey      lib.HexString  `json:"message" validate:"required,hexadecimal"`
+	Approval    lib.HexString  `json:"approval" validate:"required,hexadecimal"`
+	ApprovalSig lib.HexString  `json:"approvalSig" validate:"required,hexadecimal"`
+	User        common.Address `json:"user" validate:"required,eth_addr"`
+	Timestamp   uint64         `json:"timestamp" validate:"required,timestamp"`
+	Signature   lib.HexString  `json:"signature,omitempty" validate:"required,hexadecimal"`
+}
+
 type SessionPromptReq struct {
 	Signature lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
 	SessionID common.Hash   `json:"sessionid" validate:"required,hexadecimal"`
@@ -48,26 +57,20 @@ type RpcError struct {
 }
 
 type RPCErrorData struct {
-	Timestamp uint64        `json:"timestamp" validate:"required,number"`
-	Signature lib.HexString `json:"signature" validate:"required,hexadecimal"`
+	Timestamp uint64         `json:"timestamp" validate:"required,number"`
+	Signature *lib.HexString `json:"signature" validate:"required,hexadecimal"`
 }
 
-type RpcMessage struct {
-	ID     string                 `json:"id"`
-	Method string                 `json:"method"`
-	Params map[string]interface{} `json:"params"`
-}
-
-type RPCMessageV2 struct {
+type RPCMessage struct {
 	ID     string          `json:"id"`
 	Method string          `json:"method"`
 	Params json.RawMessage `json:"params"`
 }
 
 type RpcResponse struct {
-	ID     string   `json:"id"`
-	Result any      `json:"result"`
-	Error  RpcError `json:"error"`
+	ID     string           `json:"id"`
+	Result *json.RawMessage `json:"result"`
+	Error  *RpcError        `json:"error,omitempty"`
 }
 
 // SessionReport represents the detailed session report

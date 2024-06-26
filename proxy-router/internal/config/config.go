@@ -14,6 +14,10 @@ type DerivedConfig struct {
 
 // Validation tags described here: https://pkg.go.dev/github.com/go-playground/validator/v10
 type Config struct {
+	AIEngine struct {
+		OpenAIBaseURL string `env:"OPENAI_BASE_URL"     flag:"open-ai-base-url"   validate:"required,url"`
+		OpenAIKey     string `env:"OPENAI_API_KEY"      flag:"open-ai-api-key"`
+	}
 	Blockchain struct {
 		EthNodeAddress string `env:"ETH_NODE_ADDRESS"   flag:"eth-node-address"   validate:"required,url"`
 		EthLegacyTx    bool   `env:"ETH_NODE_LEGACY_TX" flag:"eth-node-legacy-tx" desc:"use it to disable EIP-1559 transactions"`
