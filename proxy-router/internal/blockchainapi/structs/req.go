@@ -48,8 +48,6 @@ type QueryUserOrProvider struct {
 	Provider lib.Address `form:"provider" binding:"omitempty" validate:"eth_addr"`
 }
 
-type OpenSessionRequestV2 struct {
-	BidId           lib.Hash    `json:"bidId"`
-	ProviderUrl     string      `json:"providerUrl"`
+type OpenSessionWithDurationRequest struct {
 	SessionDuration *lib.BigInt `json:"sessionDuration"`
 }

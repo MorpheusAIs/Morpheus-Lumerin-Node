@@ -45,7 +45,8 @@ func (c *BlockchainController) RegisterRoutes(r interfaces.Router) {
 	r.GET("/blockchain/sessions", c.getSessions)
 	r.GET("/blockchain/sessions/:id", c.getSession)
 	r.POST("/blockchain/sessions", c.openSession)
-	r.POST("/blockchain/sessions/v2", c.openSessionV2)
+	r.POST("/blockchain/bids/:id/session", c.openSessionByBid)
+	r.POST("/blockchain/models/:id/session", c.openSessionByModelId)
 	r.POST("/blockchain/sessions/:id/close", c.closeSession)
 	r.GET("/blockchain/sessions/budget", c.getBudget)
 	r.GET("/blockchain/token/supply", c.getSupply)
@@ -85,7 +86,7 @@ func (c *BlockchainController) getProviderClaimableBalance(ctx *gin.Context) {
 //		@Description	Claim provider balance from session
 //	 	@Tags			sessions
 //		@Produce		json
-//		@Param			claim	body		rpcproxy.SendRequest 	true	"Claim"
+//		@Param			claim	body		structs.SendRequest 	true	"Claim"
 //		@Param 			id  path string true "Session ID"
 //		@Success		200	{object}	interface{}
 //		@Router			/proxy/sessions/${id}/providerClaim [post]
@@ -142,7 +143,7 @@ func (c *BlockchainController) getAllProviders(ctx *gin.Context) {
 //		@Description	Send Eth to address
 //	 	@Tags			wallet
 //		@Produce		json
-//		@Param			sendeth	body		rpcproxy.SendRequest 	true	"Send Eth"
+//		@Param			sendeth	body		structs.SendRequest 	true	"Send Eth"
 //		@Success		200	{object}	interface{}
 //		@Router			/blockchain/send/eth [post]
 func (c *BlockchainController) sendETH(ctx *gin.Context) {
@@ -170,7 +171,7 @@ func (c *BlockchainController) sendETH(ctx *gin.Context) {
 //		@Description	Send Mor to address
 //	 	@Tags			wallet
 //		@Produce		json
-//		@Param			sendmor	body		rpcproxy.SendRequest 	true	"Send Mor"
+//		@Param			sendmor	body		structs.SendRequest 	true	"Send Mor"
 //		@Success		200	{object}	interface{}
 //		@Router			/blockchain/send/mor [post]
 func (c *BlockchainController) sendMOR(ctx *gin.Context) {
@@ -401,7 +402,7 @@ func (c *BlockchainController) approve(ctx *gin.Context) {
 //	 	@Tags			sessions
 //		@Produce		json
 //		@Accept			json
-//		@Param			opensession	body		rpcproxy.OpenSessionRequest 	true	"Open session"
+//		@Param			opensession	body		structs.OpenSessionRequest 	true	"Open session"
 //		@Success		200	{object}	interface{}
 //		@Router			/blockchain/sessions [post]
 func (c *BlockchainController) openSession(ctx *gin.Context) {
@@ -423,15 +424,68 @@ func (c *BlockchainController) openSession(ctx *gin.Context) {
 	return
 }
 
-func (s *BlockchainController) openSessionV2(ctx *gin.Context) {
-	var reqPayload structs.OpenSessionRequestV2
+// OpenSessionByBidId godoc
+//
+//		@Summary		Open Session by bidId in blockchain
+//		@Description	Full flow to open a session by bidId
+//	 	@Tags			sessions
+//		@Produce		json
+//		@Accept			json
+//		@Param			opensession	body		structs.OpenSessionWithDurationRequest 	true	"Open session"
+//		@Param 			id  path string true "Bid ID"
+//		@Success		200	{object}	interface{}
+//		@Router			/blockchain/bids/:id/session [post]
+func (s *BlockchainController) openSessionByBid(ctx *gin.Context) {
+	var reqPayload structs.OpenSessionWithDurationRequest
+	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var params structs.PathHex32ID
+	err := ctx.ShouldBindUri(&params)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	txHash, err := s.service.openSessionByBid(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack())
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"tx": txHash.Hex()})
+	return
+}
+
+// OpenSessionByModelId godoc
+//
+//		@Summary		Open Session by ModelID in blockchain
+//		@Description	Full flow to open a session by modelId
+//	 	@Tags			sessions
+//		@Produce		json
+//		@Accept			json
+//		@Param			opensession	body		structs.OpenSessionWithDurationRequest 	true	"Open session"
+//		@Param 			id  path string true "Model ID"
+//		@Success		200	{object}	interface{}
+//		@Router			/blockchain/models/:id/session [post]
+func (s *BlockchainController) openSessionByModelId(ctx *gin.Context) {
+	var reqPayload structs.OpenSessionWithDurationRequest
 	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
 		s.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	txHash, err := s.service.OpenSessionV2(ctx, reqPayload.BidId.Hash, reqPayload.ProviderUrl, reqPayload.SessionDuration.Unpack())
+	var params structs.PathHex32ID
+	err := ctx.ShouldBindUri(&params)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	txHash, err := s.service.OpenSessionByModelId(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack())
 	if err != nil {
 		s.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

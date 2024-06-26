@@ -58,3 +58,12 @@ func (g *ProviderRegistry) GetAllProviders(ctx context.Context) ([]common.Addres
 
 	return addresses, providers, nil
 }
+
+func (g *ProviderRegistry) GetProviderById(ctx context.Context, id common.Address) (*providerregistry.Provider, error) {
+	provider, err := g.providerRegistry.ProviderMap(&bind.CallOpts{Context: ctx}, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return &provider, nil
+}

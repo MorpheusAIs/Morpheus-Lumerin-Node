@@ -51,7 +51,7 @@ func (s *WalletController) GetWallet(ctx *gin.Context) {
 //		@Description	Set wallet private key
 //	 	@Tags			wallet
 //		@Produce		json
-//		@Param			privatekey	body	httphandlers.SetupWalletReqBody true	"Private key"
+//		@Param			privatekey	body	walletapi.SetupWalletReqBody true	"Private key"
 //		@Success		200	{object}	interface{}
 //		@Router			/wallet [post]
 func (s *WalletController) SetupWallet(ctx *gin.Context) {
