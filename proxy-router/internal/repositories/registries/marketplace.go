@@ -42,7 +42,7 @@ func (g *Marketplace) GetBidById(ctx context.Context, bidId [32]byte) (*marketpl
 	return &bid, nil
 }
 
-func (g *Marketplace) GetBidByModelId(ctx context.Context, modelId common.Hash) (common.Hash, *marketplace.Bid, error) {
+func (g *Marketplace) GetBestBidByModelId(ctx context.Context, modelId common.Hash) (common.Hash, *marketplace.Bid, error) {
 	limit := uint8(100)
 	offset := big.NewInt(0)
 

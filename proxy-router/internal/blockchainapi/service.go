@@ -544,7 +544,7 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 		return common.Hash{}, lib.WrapError(ErrBudget, err)
 	}
 
-	bidID, bid, err := s.marketplace.GetBidByModelId(ctx, modelID)
+	bidID, bid, err := s.marketplace.GetBestBidByModelId(ctx, modelID)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrBid, err)
 	}
