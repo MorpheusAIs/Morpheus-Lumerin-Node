@@ -107,13 +107,10 @@ const withChatState = WrappedComponent => {
       let sessionId = '';
 
       const bidId = selectedBid.Id;
-      const providerUrl = selectedBid.ProviderData.Endpoint.replace("http://", "");
 
       try {
-        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions/v2`;
+        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/bids/${bidId}/session`;
         const body = {
-          bidId,
-          providerUrl,
           sessionDuration: +duration * 60 // convert to seconds
         };
         const response = await fetch(path, {
