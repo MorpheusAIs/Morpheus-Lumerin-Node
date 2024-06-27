@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import { AddressSet } from "../libraries/KeySet.sol";
-import { AppStorage, Provider } from "../AppStorage.sol";
+import { AppStorage, Provider, PROVIDER_REWARD_LIMITER_PERIOD } from "../AppStorage.sol";
 import { LibOwner } from "../libraries/LibOwner.sol";
 
 contract ProviderRegistry {
@@ -68,12 +68,17 @@ contract ProviderRegistry {
     if (newStake < s.providerMinStake) {
       revert StakeTooLow();
     }
+    // if we add stake to an existing provider the limiter period is not reset
+    uint128 createdAt = provider.createdAt;
+    uint128 periodEnd = provider.limitPeriodEnd;
     if (provider.createdAt == 0) {
       s.activeProviders.insert(addr);
       s.providers.push(addr);
+      createdAt = uint128(block.timestamp);
+      periodEnd = createdAt + PROVIDER_REWARD_LIMITER_PERIOD;
     }
 
-    s.providerMap[addr] = Provider(endpoint, newStake, uint128(block.timestamp), false);
+    s.providerMap[addr] = Provider(endpoint, newStake, createdAt, periodEnd, provider.limitPeriodEarned, false);
 
     emit ProviderRegisteredUpdated(addr);
 

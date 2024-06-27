@@ -4,6 +4,7 @@ import hre from "hardhat";
 import { getAddress } from "viem";
 import { catchError, getTxTimestamp } from "./utils";
 import { deployDiamond, deploySingleProvider } from "./fixtures";
+import { DAY } from "../utils/time";
 
 describe("Provider registry", function () {
   describe("Actions", function () {
@@ -33,6 +34,8 @@ describe("Provider registry", function () {
         endpoint: expectedProvider.endpoint,
         stake: expectedProvider.stake,
         createdAt: expectedProvider.createdAt,
+        limitPeriodEarned: expectedProvider.limitPeriodEarned,
+        limitPeriodEnd: expectedProvider.limitPeriodEnd,
         isDeleted: false,
       });
       expect(events.length).eq(1);
@@ -167,7 +170,6 @@ describe("Provider registry", function () {
         [provider.account.address, updates.addStake, updates.endpoint],
         { account: provider.account },
       );
-      const timestamp = await getTxTimestamp(publicClient, txHash);
       const providerData = await providerRegistry.read.providerMap([
         provider.account.address,
       ]);
@@ -175,7 +177,9 @@ describe("Provider registry", function () {
       expect(providerData).deep.equal({
         endpoint: updates.endpoint,
         stake: expectedProvider.stake + updates.addStake,
-        createdAt: timestamp,
+        createdAt: expectedProvider.createdAt,
+        limitPeriodEarned: expectedProvider.limitPeriodEarned,
+        limitPeriodEnd: expectedProvider.limitPeriodEnd,
         isDeleted: expectedProvider.isDeleted,
       });
     });
@@ -219,6 +223,8 @@ describe("Provider registry", function () {
       expect(providerData).deep.equal({
         endpoint: expectedProvider.endpoint,
         stake: expectedProvider.stake,
+        limitPeriodEarned: expectedProvider.limitPeriodEarned,
+        limitPeriodEnd: expectedProvider.limitPeriodEnd,
         createdAt: expectedProvider.createdAt,
         isDeleted: expectedProvider.isDeleted,
       });
@@ -234,6 +240,8 @@ describe("Provider registry", function () {
       expect(providerData).deep.equal({
         endpoint: expectedProvider.endpoint,
         stake: expectedProvider.stake,
+        limitPeriodEarned: expectedProvider.limitPeriodEarned,
+        limitPeriodEnd: expectedProvider.limitPeriodEnd,
         createdAt: expectedProvider.createdAt,
         isDeleted: expectedProvider.isDeleted,
       });
@@ -252,6 +260,8 @@ describe("Provider registry", function () {
       expect(providers[0]).deep.equal({
         endpoint: expectedProvider.endpoint,
         stake: expectedProvider.stake,
+        limitPeriodEarned: expectedProvider.limitPeriodEarned,
+        limitPeriodEnd: expectedProvider.limitPeriodEnd,
         createdAt: expectedProvider.createdAt,
         isDeleted: expectedProvider.isDeleted,
       });
