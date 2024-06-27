@@ -2,6 +2,7 @@ import React, { useState, useContext } from 'react';
 import withBalanceBlockState from '../../store/hocs/withBalanceBlockState';
 import { EtherIcon } from '../icons/EtherIcon';
 import { LumerinLogoFull } from '../icons/LumerinLogoFull';
+import { toUSD } from '../../store/utils/syncAmounts';
 import { Balance } from './Balance';
 import {
   WalletBalanceHeader,
@@ -15,36 +16,29 @@ import {
   BalanceContainer,
   GlobalContainer
 } from './BalanceBlock.styles';
-import Spinner from '../common/Spinner';
-import { ToastsContext } from '../toasts';
 
 const WalletBalance = ({
-  lmrBalance,
-  lmrBalanceUSD,
-  ethBalance,
-  ethBalanceUSD,
-  symbol,
-  symbolEth
+  eth, mor
 }) => (
   <BalanceContainer>
     <CoinsRow>
-      <Primary data-testid="lmr-balance">
+      <Primary data-testid="mor-balance">
         <Balance
-          currency={symbol}
-          value={lmrBalance}
+          currency={mor.symbol}
+          value={+mor.value}
           icon={
             <LumerinLogoFull style={{ color: 'white', height: "2rem"}}/> 
           }
-          equivalentUSD={lmrBalanceUSD}
+          equivalentUSD={mor.usd}
           maxSignificantFractionDigits={0}
         />
       </Primary>
       <Primary data-testid="eth-balance">
         <Balance
-          currency={symbolEth}
-          value={ethBalance}
+          currency={eth.symbol}
+          value={+eth.value}
           icon={<EtherIcon size="3.3rem" />}
-          equivalentUSD={ethBalanceUSD}
+          equivalentUSD={eth.usd}
           maxSignificantFractionDigits={5}
         />
       </Primary>
@@ -53,13 +47,7 @@ const WalletBalance = ({
 );
 
 const BalanceBlock = ({
-  lmrBalance,
-  lmrBalanceUSD,
-  ethBalance,
-  ethBalanceUSD,
   onTabSwitch,
-  symbol,
-  symbolEth,
   ...props
 }) => {
   const handleTabSwitch = e => {
@@ -73,12 +61,8 @@ const BalanceBlock = ({
         <SecondaryContainer>
           <WalletBalance
             {...{
-              lmrBalance: props?.balances?.mor ? +props.balances.mor / 10 ** 18 : 0,
-              lmrBalanceUSD: props?.balances?.mor ? `$${((+props.balances.mor / 10 ** 18) * +props.rate).toFixed(0)}` : 0,
-              ethBalance:  props?.balances?.eth ? (+props.balances.eth / 10 ** 18) : 0,
-              ethBalanceUSD,
-              symbol,
-              symbolEth
+              eth: props.eth,
+              mor: props.mor
             }}
           />
           <BtnRow>

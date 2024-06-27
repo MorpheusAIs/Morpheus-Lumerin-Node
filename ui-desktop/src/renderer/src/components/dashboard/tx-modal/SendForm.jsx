@@ -302,8 +302,8 @@ export function SendForm(props) {
           <FooterLabel>{selectedCurrency.label} Balance</FooterLabel>
           <FooterLabel>
             {selectedCurrency.value === 'ETH'
-              ? `${props.ethBalanceWei.toFixed(6)} ≈ ${props.ethBalanceUSD}`
-              : `${props.lmrBalanceWei.toFixed(6)} ≈ ${props.lmrBalanceUSD}`}
+              ? `${props.eth.value.toFixed(6)} ≈ ${props.eth.usd}`
+              : `${props.mor.value.toFixed(6)} ≈ ${props.mor.usd}`}
           </FooterLabel>
         </FooterRow>
         <FooterRow>

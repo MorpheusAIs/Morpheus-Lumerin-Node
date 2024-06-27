@@ -45,40 +45,6 @@ const Container = styled.div`
 //   top: 15px;
 // `;
 
-const formatCurrency = ({
-  value,
-  currency,
-  maxSignificantFractionDigits = 5
-}) => {
-  let style = 'currency';
-
-  if (!currency) {
-    currency = undefined;
-    style = 'decimal';
-  }
-
-  if (value < 1) {
-    return new Intl.NumberFormat(navigator.language, {
-      style: style,
-      currency: currency,
-      maximumSignificantDigits: 5
-    }).format(value);
-  }
-
-  const integerDigits = value.toFixed(0).toString().length;
-  let fractionDigits = maxSignificantFractionDigits - integerDigits;
-  if (fractionDigits < 0) {
-    fractionDigits = 0;
-  }
-
-  return new Intl.NumberFormat(navigator.language, {
-    style: style,
-    currency: currency,
-    minimumFractionDigits: fractionDigits,
-    maximumFractionDigits: fractionDigits
-  }).format(value);
-};
-
 export default class Amount extends React.Component {
   // static propTypes = {
   //   isAttestationValid: PropTypes.bool,
@@ -103,6 +69,7 @@ export default class Amount extends React.Component {
 
   // eslint-disable-next-line complexity
   render() {
+
     return (
       <Container
         isPending={this.props.isPending}
@@ -113,18 +80,8 @@ export default class Amount extends React.Component {
         ) : (
           <ValueContainer>
             <DisplayValue
-              value={formatCurrency({ value: this.props.value, maxSignificantFractionDigits: this.props.symbol == "saMOR" ? 0 : 5 })}
-              post={
-                this.props.txType === 'import-requested' ||
-                this.props.txType === 'imported' ||
-                this.props.txType === 'exported'
-                  ? ` ${this.props.symbol}`
-                  : ` ${
-                      this.props.symbol === 'coin'
-                        ? this.props.coinSymbol
-                        : this.props.symbol
-                    }`
-              }
+              value={this.props.value}
+              post={this.props.symbol}
             />
             {/* <UsdValue>≈ {toUSD(this.props.value, this.props.rate)}$</UsdValue> */}
           </ValueContainer>
