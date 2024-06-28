@@ -17,9 +17,6 @@ func (m model) sendChat(prompt string, streamResponse client.CompletionCallback)
 
 	_, err := client.RequestChatCompletionStream(ctx, &m.openaiRequest, streamResponse, m.config.SessionId)
 
-	// fmt.Println("resp: ", response)
-	// fmt.Println("err: ", err)
-
 	if err != nil {
 		return err
 	}

@@ -287,6 +287,18 @@ func (apiBus *ApiBus) SendMor(ctx *gin.Context) (int, gin.H) {
 	return apiBus.rpcProxy.SendMor(ctx)
 }
 
+func (apiBus *ApiBus) GetAddress(ctx *gin.Context) (string, error) {
+	code, myAddr := apiBus.rpcProxy.GetMyAddr(ctx)
+	
+	if code != http.StatusOK {
+		return "", fmt.Errorf("failed to get my address")
+	}
+
+	userAddr := myAddr["address"].(string)
+
+	return userAddr, nil
+}
+
 // OpenSession godoc
 //
 //		@Summary		Open Session with Provider in blockchain
@@ -562,7 +574,7 @@ func (apiBus *ApiBus) PromptLocal(ctx *gin.Context) (bool, int, interface{}) {
 
 	if req.Stream {
 		response, err = apiBus.PromptStream(ctx, req, func(response *openai.ChatCompletionStreamResponse) error {
-fmt.Printf("response: %v\n", response)
+			fmt.Printf("response: %v\n", response)
 			marshalledResponse, err := json.Marshal(response)
 
 			if err != nil {

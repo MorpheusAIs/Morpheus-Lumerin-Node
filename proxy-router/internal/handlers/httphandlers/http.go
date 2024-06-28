@@ -205,6 +205,17 @@ func NewHTTPHandler(apiBus *apibus.ApiBus) *gin.Engine {
 		ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
 	}))
 
+	r.GET("/wallet", (func(ctx *gin.Context) {
+
+		address, err := apiBus.GetAddress(ctx)
+		if err != nil {
+			fmt.Println("wallet error: ", err)
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		ctx.JSON(http.StatusOK, gin.H{"address": address})
+	}))
+
 	r.Any("/debug/pprof/*action", gin.WrapF(pprof.Index))
 
 	if err := r.SetTrustedProxies(nil); err != nil {

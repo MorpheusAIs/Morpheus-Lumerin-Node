@@ -1,7 +1,6 @@
 package chat
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/charmbracelet/bubbles/textarea"
@@ -32,7 +31,6 @@ func New(cfg common.Config) model {
 	vp.SetContent(common.ChatWelcomeMessage)
 	vp.Style = style.Viewport
 
-	fmt.Printf("config: %+v", cfg)
 	// client := openai.NewClient(cfg.OpenaiAPIKey)
 	client := openai.NewClientWithConfig(openai.ClientConfig{
 		BaseURL:    cfg.OpenaiBaseUrl,

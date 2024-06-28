@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"strconv"
 
 	"github.com/sashabaranov/go-openai"
 )
@@ -38,9 +39,9 @@ func (c *ApiGatewayClient) getRequest(ctx context.Context, endpoint string, resu
 	if err != nil {
 		return err
 	}
-	
+
 	resp, err := c.HttpClient.Do(req)
-	
+
 	if err != nil {
 		fmt.Println("http client error: ", err)
 		return err
@@ -59,7 +60,7 @@ func (c *ApiGatewayClient) getRequest(ctx context.Context, endpoint string, resu
 
 // Helper function to make POST requests
 func (c *ApiGatewayClient) postRequest(ctx context.Context, endpoint string, body interface{}, result interface{}) error {
-	fmt.Printf("body: %+v", body)
+	// fmt.Printf("body: %+v", body)
 	reqBody, err := json.Marshal(body)
 	if err != nil {
 		return err
@@ -67,7 +68,7 @@ func (c *ApiGatewayClient) postRequest(ctx context.Context, endpoint string, bod
 
 	reader := bytes.NewReader(reqBody)
 
-	fmt.Println("post path: ", c.BaseURL+endpoint)
+	// fmt.Println("post path: ", c.BaseURL+endpoint)
 	req, err := http.NewRequestWithContext(ctx, "POST", c.BaseURL+endpoint, reader)
 	if err != nil {
 		return err
@@ -76,6 +77,8 @@ func (c *ApiGatewayClient) postRequest(ctx context.Context, endpoint string, bod
 	if err != nil {
 		return err
 	}
+
+	// fmt.Printf("%+v", resp.Body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -90,7 +93,7 @@ func (c *ApiGatewayClient) postRequest(ctx context.Context, endpoint string, bod
 		err = json.NewDecoder(resp.Body).Decode(result)
 	}
 
-	fmt.Println("result: ", result)
+	// fmt.Println("result: ", result)
 
 	return err
 }
@@ -105,7 +108,7 @@ func (c *ApiGatewayClient) GetProxyRouterFiles(ctx context.Context) (interface{}
 	var result map[string]interface{}
 	err := c.getRequest(ctx, "/files", &result)
 	if err != nil {
-		return nil, fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
+		return nil, fmt.Errorf("internal error: %v", err)
 	}
 	return result, nil
 }
@@ -122,7 +125,7 @@ func (c *ApiGatewayClient) InitiateSession(ctx context.Context) (interface{}, er
 	err := c.postRequest(ctx, "/proxy/sessions/initiate", nil, &result)
 
 	if err != nil {
-		return nil, fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
+		return nil, fmt.Errorf("internal error: %v", err)
 	}
 
 	return result, nil
@@ -185,7 +188,7 @@ func (c *ApiGatewayClient) GetAllProviders(ctx context.Context) (result map[stri
 	err = c.getRequest(ctx, "/blockchain/providers", &result)
 
 	if err != nil {
-		return nil, fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
+		return nil, fmt.Errorf("internal error: %v", err)
 	}
 
 	return result, nil
@@ -200,7 +203,7 @@ func (c *ApiGatewayClient) CreateNewProvider(ctx context.Context, addStake uint6
 	err = c.postRequest(ctx, "/blockchain/providers", &request, &result)
 
 	if err != nil {
-		return nil, fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
+		return nil, fmt.Errorf("internal error: %v", err)
 	}
 
 	return result, nil
@@ -224,7 +227,7 @@ func (c *ApiGatewayClient) CreateNewProviderBid(ctx context.Context, model strin
 func (c *ApiGatewayClient) GetAllModels(ctx context.Context) (result interface{}, err error) {
 
 	err = c.getRequest(ctx, "/blockchain/models", &result)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("internal error: %v", err)
 	}
@@ -236,7 +239,7 @@ func (c *ApiGatewayClient) GetBidsByProvider(ctx context.Context, providerAddr s
 	endpoint := fmt.Sprintf("/blockchain/providers/%s/bids?offset=%s&limit=%d", providerAddr, offset.String(), limit)
 	err = c.getRequest(ctx, endpoint, &bids)
 	if err != nil {
-		return nil, fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
+		return nil, fmt.Errorf("internal error: %v", err)
 	}
 	return bids, err
 }
@@ -247,16 +250,14 @@ func (c *ApiGatewayClient) GetBidsByModelAgent(ctx context.Context, modelAgentId
 	err = c.getRequest(ctx, endpoint, &result)
 
 	if err != nil {
-		return nil, fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
+		return nil, fmt.Errorf("internal error: %v", err)
 	}
 
 	return result, err
 }
 
 type SessionRequest struct {
-	BidId            string `json:"bidId" validate:"required"`
-	ProviderEndpoint string `json:"providerUrl" validate:"required"`
-	SessionDuration  uint   `json:"sessionDuration" validate:"required,number"`
+	ModelId          string `json:"modelId" validate:"required"`
 }
 
 type SessionStakeRequest struct {
@@ -269,8 +270,38 @@ type Session struct {
 	SessionId string `json:"sessionId"`
 }
 
+type CloseSessionRequest struct {
+	SessionId string `json:"id" validate:"required"`
+}
+
+type SessionListItem struct {
+	Bid             string `json:"BidId"`
+	Sesssion        string `json:"Id"`
+	ModelORAgent    string `json:"ModelAgentId"`
+	PricePerSecond  uint64 `json:"PricePerSecond"`
+	Provider        string `json:"Provider"`
+	User            string `json:"User"`
+	ClosedAt        uint64 `json:"ClosedAt"`
+	CloseoutReceipt string `json:"CloseoutReceipt"`
+	CloseoutType    uint   `json:"CloseoutType"`
+	EndsAt          uint64 `json:"EndsAt"`
+}
+
 type WalletRequest struct {
 	PrivateKey string `json:"privateKey" validate:"required"`
+}
+
+func (c *ApiGatewayClient) ListUserSessions(ctx context.Context, user string) (result []SessionListItem, err error) {
+
+	response := map[string][]SessionListItem{}
+
+	err = c.getRequest(ctx, fmt.Sprintf("/blockchain/sessions?user=%s", user), &response)
+	// fmt.Println("response: ", response)
+	if err != nil {
+		return nil, fmt.Errorf("internal error: %v", err)
+	}
+
+	return response["sessions"], nil
 }
 
 func (c *ApiGatewayClient) OpenStakeSession(ctx context.Context, req *SessionStakeRequest) (session *Session, err error) {
@@ -278,7 +309,7 @@ func (c *ApiGatewayClient) OpenStakeSession(ctx context.Context, req *SessionSta
 	err = c.postRequest(ctx, "/blockchain/sessions", req, session)
 
 	if err != nil {
-		return nil, fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
+		return nil, fmt.Errorf("internal error: %v", err)
 	}
 
 	return session, nil
@@ -290,17 +321,18 @@ func (c *ApiGatewayClient) OpenSession(ctx context.Context, req *SessionRequest)
 	err = c.postRequest(ctx, "/blockchain/sessions/v2", req, session)
 
 	if err != nil {
-		return nil, fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
+		return nil, fmt.Errorf("internal error: %v", err)
 	}
 
 	return session, nil
 }
 
-func (c *ApiGatewayClient) CloseSession(ctx context.Context) error {
-	err := c.postRequest(ctx, "/blockchain/sessions/:id/close", nil, nil)
+func (c *ApiGatewayClient) CloseSession(ctx context.Context, sessionId string) error {
+
+	err := c.postRequest(ctx, fmt.Sprintf("/blockchain/sessions/%s/close", sessionId), nil, nil)
 
 	if err != nil {
-		return fmt.Errorf("internal error: %v; http status: %v", err, http.StatusInternalServerError)
+		return fmt.Errorf("internal error: %v", err)
 	}
 
 	return nil
@@ -322,4 +354,46 @@ func (c *ApiGatewayClient) ApproveAllowance(ctx context.Context, spender string,
 
 func (c *ApiGatewayClient) CreateWallet(ctx context.Context, privateKey string) error {
 	return c.postRequest(ctx, "/wallet", &WalletRequest{PrivateKey: privateKey}, nil)
+}
+
+type WalletResponse struct {
+	Address string `json:"address"`
+}
+
+func (c *ApiGatewayClient) GetWallet(ctx context.Context) (*WalletResponse, error) {
+	response := &WalletResponse{}
+
+	err := c.getRequest(ctx, "/wallet", response)
+
+	if err != nil {
+		return nil, fmt.Errorf("internal error: %v", err)
+	}
+
+	return response, nil
+}
+
+func (c *ApiGatewayClient) GetBalance(ctx context.Context) (eth uint64, mor uint64, err error) {
+	response := map[string]interface{}{}
+
+	err = c.getRequest(ctx, "/blockchain/balance", &response)
+
+	if err != nil {
+		return 0, 0, fmt.Errorf("internal error: %v", err)
+	}
+
+	fmt.Println(len(response["eth"].(string)))
+
+	eth, err = strconv.ParseUint(response["eth"].(string), 10, 64)
+
+	if err != nil {
+		return 0, 0, fmt.Errorf("error converting eth balance from string to number: %v", err)
+	}
+
+	mor, err = strconv.ParseUint(response["mor"].(string), 10, 64)
+
+	if err != nil {
+		return 0, 0, fmt.Errorf("error converting mor balance from string to number: %v", err)
+	}
+
+	return eth, mor, nil
 }

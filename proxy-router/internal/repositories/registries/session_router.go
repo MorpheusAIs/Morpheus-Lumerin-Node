@@ -111,29 +111,36 @@ func (g *SessionRouter) GetSessionsByUser(ctx context.Context, userAddr common.A
 }
 
 func (g *SessionRouter) CloseSession(ctx *bind.TransactOpts, sessionId string, privateKeyHex string) (string, error) {
+	// fmt.Println("session id: ", sessionId)
 	id := [32]byte(common.FromHex(sessionId))
-
+	// fmt.Println("id: ", id)
 	ips := uint32(1)
 	timestamp := big.NewInt(time.Now().UnixMilli())
 	report, err := lib.EncodeAbiParameters(closeReportAbi, []interface{}{id, timestamp, ips})
+
 	if err != nil {
+		// fmt.Println("report err: ", err)
 		return "", err
 	}
 
 	signature, err := lib.SignEthMessage(report, privateKeyHex)
 	if err != nil {
+		// fmt.Println("signature err: ", err)
 		return "", err
 	}
 
 	sessionTx, err := g.sessionRouter.CloseSession(ctx, report, signature)
 	if err != nil {
+		// fmt.Println("sessionTx err: ", err)
+		// fmt.Println("sessionTx: ", sessionTx)
 		return "", lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
 	}
 
 	// Wait for the transaction receipt
 	receipt, err := bind.WaitMined(context.Background(), g.client, sessionTx)
 	if err != nil {
-		fmt.Println(err)
+		// fmt.Println("receipt err: ", err)
+		// fmt.Println(err)
 		return "", err
 	}
 

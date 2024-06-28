@@ -2,7 +2,6 @@ package mainchat
 
 import (
 	"flag"
-	"fmt"
 	"os"
 
 	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/chat"
@@ -20,7 +19,7 @@ func init() {
 
 	flag.BoolVar(&opt.Remove, "rm", false, "Remove configuration file")
 
-	flag.BoolVar(&opt.Version, "V", false, "Show current version")
+	flag.BoolVar(&opt.Version, "v", false, "Show current version")
 	flag.BoolVar(&opt.Version, "version", false, "Show current version")
 
 	openAiBaseUrl := os.Getenv("OPENAI_BASE_URL")
@@ -57,25 +56,22 @@ func init() {
 	// }
 }
 
-func main(sessionId string) {
+func Run(opt *common.Options) {
 	cfgPath := common.GetConfigPath()
-fmt.Println("config path: ", cfgPath)
+	
 	cfg, err := config.Load(cfgPath)
-	fmt.Println("err: ", err)
+	
 	if err == nil {
-		cfg.SessionId = sessionId
+		cfg.SessionId = opt.Session
 		m = chat.New(cfg)
 
 		if opt.Edit {
-			m = config.New(sessionId, cfg)
+			m = config.New(opt.Session, cfg)
 		}
-	} else { 
-		m = config.New(sessionId)
+	} else {
+		m = config.New(opt.Session)
 	}
 
 	util.RunProgram(m)
 }
 
-func Run(sessionId string) {
-	main(sessionId)
-}

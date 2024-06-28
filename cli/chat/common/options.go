@@ -5,5 +5,6 @@ type Options struct {
 	List    bool
 	Remove  bool
 	Version bool
-	OpenAIBaseUrl string
+	Session string
+	PrivateKey string
 }

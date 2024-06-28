@@ -110,10 +110,6 @@ func wordWrap(text string, width int, file *os.File) string {
 	file.WriteString(wrappedText.String() + "\n\n\n")
 	file.WriteString("text: \n")
 	file.WriteString(text + "\n\n\n")
-	// fmt.Println("words: ", words)
-	// fmt.Println("wrappedText: ", wrappedText.String())
-//how much wood would a wood chuck chuck
-	// fmt.Println("words length: ", len(words))
 
 	return wrappedText.String()
 }
