@@ -204,7 +204,7 @@ describe("session closeout", function () {
     expect(providerClaimed).to.equal(exp.totalCost);
   });
 
-  it.only("should limit reward by stake amount", async function () {
+  it("should limit reward by stake amount", async function () {
     const {
       sessionRouter,
       marketplace,
