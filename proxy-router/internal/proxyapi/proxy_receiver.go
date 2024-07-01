@@ -47,7 +47,6 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 			return err
 		}
 
-		fmt.Println(lib.RemoveHexPrefix(userPubKey))
 		encryptedResponse, err := lib.EncryptString(string(marshalledResponse), lib.RemoveHexPrefix(userPubKey))
 		if err != nil {
 			return err
