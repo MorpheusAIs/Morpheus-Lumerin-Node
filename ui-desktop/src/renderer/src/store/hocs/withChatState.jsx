@@ -104,8 +104,6 @@ const withChatState = WrappedComponent => {
 
     onOpenSession = async ({ selectedBid, duration }) => {
       this.context.toast('info', 'Processing...');
-      let sessionId = '';
-
       const bidId = selectedBid.Id;
 
       try {
@@ -123,16 +121,14 @@ const withChatState = WrappedComponent => {
           console.log("Failed initiate session", dataResponse);
           return;
         }
-        sessionId = dataResponse.sessionId;
+        this.context.toast('success', 'Session successfully created');
+        return dataResponse.tx;
       }
       catch (e) {
         console.error(e);
         this.context.toast('error', 'Failed to open session');
         return;
       }
-
-      this.context.toast('success', 'Session successfully created');
-      return { sessionId };
     }
 
     render() {
