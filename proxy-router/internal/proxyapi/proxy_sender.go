@@ -235,7 +235,6 @@ func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter Res
 		sig := inferenceRes.Signature
 		inferenceRes.Signature = []byte{}
 
-		fmt.Println(providerPublicKey, providerPublicKey.Hex())
 		if !p.validateMsgSignature(inferenceRes, sig, providerPublicKey) {
 			return ErrInvalidSig
 		}
