@@ -219,7 +219,7 @@ func (c *BlockchainController) getBidsByProvider(ctx *gin.Context) {
 		return
 	}
 
-	bids, err := c.service.GetBidsByProvider(ctx, params.ID, offset, limit)
+	bids, err := c.service.GetBidsByProvider(ctx, params.ID.Address, offset, limit)
 	if err != nil {
 		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
