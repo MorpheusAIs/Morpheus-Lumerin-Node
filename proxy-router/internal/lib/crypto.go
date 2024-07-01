@@ -16,8 +16,10 @@ var (
 )
 
 func DecodeBytes(bytes []byte, privateKey string) ([]byte, error) {
+	fmt.Println("privateKey", privateKey)
 	pkECDSA, err := crypto.ToECDSA(common.FromHex(privateKey))
 	if err != nil {
+		fmt.Println("error decoding private key")
 		return nil, WrapError(ErrInvalidPrivateKey, err)
 	}
 

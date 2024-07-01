@@ -71,7 +71,7 @@ func (a *AiEngine) PromptStream(ctx context.Context, request *api.ChatCompletion
 func (a *AiEngine) PromptCb(ctx *gin.Context, body *openai.ChatCompletionRequest) {
 	if body.Stream {
 		response, err := a.PromptStream(ctx, body, func(response *openai.ChatCompletionStreamResponse) error {
-
+			fmt.Println("response", response)
 			marshalledResponse, err := json.Marshal(response)
 			if err != nil {
 				return err

@@ -216,37 +216,46 @@ func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter Res
 		err = d.Decode(&msg)
 		p.log.Debugf("Received stream msg:", msg)
 		if err != nil {
+			fmt.Println("err", err)
 			return lib.WrapError(ErrDecode, err)
 		}
 
 		if msg.Error != nil {
+			fmt.Println("msg.Error", msg.Error)
 			return lib.WrapError(ErrResponseErr, fmt.Errorf("error: %v, data: %v", msg.Error.Message, msg.Error.Data))
 		}
 
 		if msg.Result == nil {
+			fmt.Println("empty result and no error")
 			return lib.WrapError(ErrInvalidResponse, fmt.Errorf("empty result and no error"))
 		}
 
 		var inferenceRes InferenceRes
-		err := json.Unmarshal(*msg.Result, &msg)
+		err := json.Unmarshal(*msg.Result, &inferenceRes)
 		if err != nil {
+			fmt.Println("err", err)
 			return lib.WrapError(ErrInvalidResponse, err)
 		}
 		sig := inferenceRes.Signature
 		inferenceRes.Signature = []byte{}
 
+		fmt.Println(providerPublicKey, providerPublicKey.Hex())
 		if !p.validateMsgSignature(inferenceRes, sig, providerPublicKey) {
+			fmt.Println("invalid signature")
 			return ErrInvalidSig
 		}
 
-		aiResponse, err := lib.DecodeBytes(inferenceRes.Message, prKey.String())
+		fmt.Println(inferenceRes.Message)
+		aiResponse, err := lib.DecodeBytes(inferenceRes.Message, lib.RemoveHexPrefix(prKey.Hex()))
 		if err != nil {
+			fmt.Println("err2", err)
 			return lib.WrapError(ErrDecrFailed, err)
 		}
 
 		var payload openai.ChatCompletionResponse
 		err = json.Unmarshal(aiResponse, &payload)
 		if err != nil {
+			fmt.Println("err3", err)
 			return lib.WrapError(ErrInvalidResponse, err)
 		}
 
@@ -254,15 +263,18 @@ func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter Res
 		choices := payload.Choices
 		for _, choice := range choices {
 			if choice.FinishReason == openai.FinishReasonStop {
+				fmt.Println("stop")
 				stop = true
 			}
 		}
 
 		if ctx.Err() != nil {
+			fmt.Println("ctx.Err()", ctx.Err())
 			return ctx.Err()
 		}
 		_, err = resWriter.Write([]byte(fmt.Sprintf("data: %s\n\n", aiResponse)))
 		if err != nil {
+			fmt.Println("err4", err)
 			return err
 		}
 		resWriter.Flush()
