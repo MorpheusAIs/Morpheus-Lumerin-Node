@@ -75,7 +75,7 @@ export const BtnAccent = styled(Btn)`
 export const BtnRow = styled.div`
   display: flex;
   flex-direction: row;
-  width: 250px;
+  width: 180px;
   height: 100%;
   align-items: center;
   justify-content: space-between;

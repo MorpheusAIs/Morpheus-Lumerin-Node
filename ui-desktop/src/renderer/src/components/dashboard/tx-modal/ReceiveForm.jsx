@@ -51,15 +51,12 @@ export function ReceiveForm({
   activeTab,
   address,
   onRequestClose,
-  lmrBalanceUSD,
-  lmrBalanceWei,
-  ethBalanceUSD,
-  ethBalanceWei,
   copyToClipboard,
   explorerUrl,
-  symbol,
-  symbolEth
+  eth,
+  mor
 }) {
+  console.log("te", eth, mor);
   const context = useContext(ToastsContext);
 
   const handleCopyToClipboard = () => {
@@ -87,20 +84,20 @@ export function ReceiveForm({
       <Footer>
         <FooterRow>
           <FooterBlock>
-            <FooterLabel>{symbol} Address</FooterLabel>
-            <FooterSublabel>{abbreviateAddress(address, 8)}</FooterSublabel>
+            <FooterLabel>{mor.symbol} Address</FooterLabel>
+            <FooterSublabel>{abbreviateAddress(address, 6)}</FooterSublabel>
           </FooterBlock>
           <CopyBtn onClick={handleCopyToClipboard}>
             <CopyIcon fill="#20dc8e" size="3.8rem"/>
           </CopyBtn>
         </FooterRow>
-        <FooterLabel>{symbol} Balance</FooterLabel>
+        <FooterLabel>{mor.symbol} Balance</FooterLabel>
         <FooterSublabel>
-          {lmrBalanceWei.toFixed(6)} {symbol} ≈ {lmrBalanceUSD || 0}
+          {mor.value.toFixed(6)} {mor.symbol} ≈ {mor.usd || 0}
         </FooterSublabel>
-        <FooterLabel>{symbolEth} Balance</FooterLabel>
+        <FooterLabel>{eth.symbol} Balance</FooterLabel>
         <FooterSublabel>
-          {ethBalanceWei.toFixed(6)} {symbolEth} ≈ {ethBalanceUSD || 0}
+          {eth.value.toFixed(6)} {eth.symbol} ≈ {eth.usd || 0}
         </FooterSublabel>
         <Divider style={{ margin: '2rem 0' }} />
         <BtnAccent
