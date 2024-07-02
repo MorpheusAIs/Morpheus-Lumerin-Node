@@ -74,14 +74,14 @@ const BalanceBlock = ({
             >
               Receive
             </BtnAccent>
-            <BtnAccent
+            {/* <BtnAccent
               data-modal="send"
               data-testid="send-btn"
               onClick={handleTabSwitch}
               block
             >
               Send
-            </BtnAccent>
+            </BtnAccent> */}
           </BtnRow>
         </SecondaryContainer>
       </Container>

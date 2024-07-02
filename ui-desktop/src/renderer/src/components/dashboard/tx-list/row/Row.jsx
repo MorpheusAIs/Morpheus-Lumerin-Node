@@ -65,7 +65,7 @@ const formatCurrency = ({
 
 const Row = ({ tx, explorerUrl, morAddress }) => {
   const morTransaction = tx.isMor;
-  const formatedValue = formatCurrency({ value: tx.value, maxSignificantFractionDigits: 5 });
+  const formatedValue = formatCurrency({ value: tx.value, maxSignificantFractionDigits: morTransaction ? 3 : 5 });
 
   return (
   	<Container onClick={() => window.openLink(explorerUrl)}>
