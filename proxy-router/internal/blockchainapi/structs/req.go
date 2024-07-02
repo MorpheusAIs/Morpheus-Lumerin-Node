@@ -21,7 +21,7 @@ type PathHex32ID struct {
 }
 
 type PathEthAddrID struct {
-	ID common.Address `uri:"id" binding:"required" validate:"eth_addr"`
+	ID lib.Address `uri:"id" binding:"required" validate:"eth_addr"`
 }
 
 type QueryOffsetLimit struct {
