@@ -389,9 +389,10 @@ export const providerReport = {
   timestamp: 10000,
 };
 export const reportAbi = [
-  { type: "bytes32" },
-  { type: "uint128" },
-  { type: "uint32" },
+  { type: "bytes32" }, // sessionID
+  { type: "uint128" }, // timestamp
+  { type: "uint32" }, // tokens per second / tps
+  { type: "uint32" }, // time to first token in milliseconds / ttftMs
 ];
 
 export const approvalAbi = [{ type: "bytes32" }, { type: "uint128" }];

@@ -51,6 +51,8 @@ struct Session {
   uint256 openedAt;
   uint256 endsAt; // expected end time considering the stake provided
   uint256 closedAt;
+  uint32 tps; // average tokens per second
+  uint32 ttftMs; // average time to first token, milliseconds
 }
 
 struct OnHold {

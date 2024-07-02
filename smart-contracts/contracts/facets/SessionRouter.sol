@@ -153,7 +153,9 @@ contract SessionRouter {
         providerWithdrawnAmount: 0,
         openedAt: uint128(block.timestamp),
         endsAt: endsAt,
-        closedAt: 0
+        closedAt: 0,
+        tps: 0,
+        ttftMs: 0
       })
     );
 
@@ -175,7 +177,7 @@ contract SessionRouter {
 
   function closeSession(bytes memory receiptEncoded, bytes memory signature) external {
     // reverts without specific error if cannot decode abi
-    (bytes32 sessionId, uint128 timestampMs, ) = abi.decode(receiptEncoded, (bytes32, uint128, uint32));
+    (bytes32 sessionId, uint128 timestampMs, uint32 tps, uint32 ttftMs) = abi.decode(receiptEncoded, (bytes32, uint128, uint32, uint32));
     if (timestampMs / 1000 < block.timestamp - SIGNATURE_TTL) {
       revert SignatureExpired();
     }
@@ -198,8 +200,10 @@ contract SessionRouter {
     s.activeSessionsCount--;
 
     // update session record
-    session.closeoutReceipt = receiptEncoded;
+    session.closeoutReceipt = receiptEncoded; //TODO: remove that field in favor of tps and ttftMs
     session.closedAt = uint128(block.timestamp);
+    session.tps = tps;
+    session.ttftMs = ttftMs;
 
     // calculate provider withdraw
     uint256 providerWithdraw;
