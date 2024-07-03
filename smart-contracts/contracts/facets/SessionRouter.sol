@@ -4,13 +4,15 @@ pragma solidity ^0.8.24;
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import { MessageHashUtils } from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import { KeySet, Uint256Set } from "../libraries/KeySet.sol";
-import { AppStorage, Session, Bid, OnHold, Pool, Provider, PROVIDER_REWARD_LIMITER_PERIOD } from "../AppStorage.sol";
+import { AppStorage, Session, Bid, OnHold, Pool, Provider, PROVIDER_REWARD_LIMITER_PERIOD, ProviderModelStats, ModelStats } from "../AppStorage.sol";
 import { LibOwner } from "../libraries/LibOwner.sol";
+import { LibSD } from "../libraries/LibSD.sol";
 import { LinearDistributionIntervalDecrease } from "../libraries/LinearDistributionIntervalDecrease.sol";
 
 contract SessionRouter {
   using KeySet for KeySet.Set;
   using Uint256Set for Uint256Set.Set;
+  using LibSD for LibSD.SD;
 
   AppStorage internal s;
 
@@ -153,9 +155,7 @@ contract SessionRouter {
         providerWithdrawnAmount: 0,
         openedAt: uint128(block.timestamp),
         endsAt: endsAt,
-        closedAt: 0,
-        tps: 0,
-        ttftMs: 0
+        closedAt: 0
       })
     );
 
@@ -177,7 +177,7 @@ contract SessionRouter {
 
   function closeSession(bytes memory receiptEncoded, bytes memory signature) external {
     // reverts without specific error if cannot decode abi
-    (bytes32 sessionId, uint128 timestampMs, uint32 tps, uint32 ttftMs) = abi.decode(receiptEncoded, (bytes32, uint128, uint32, uint32));
+    (bytes32 sessionId, uint128 timestampMs, uint32 tpsScaled1000, uint32 ttftMs) = abi.decode(receiptEncoded, (bytes32, uint128, uint32, uint32));
     if (timestampMs / 1000 < block.timestamp - SIGNATURE_TTL) {
       revert SignatureExpired();
     }
@@ -202,8 +202,6 @@ contract SessionRouter {
     // update session record
     session.closeoutReceipt = receiptEncoded; //TODO: remove that field in favor of tps and ttftMs
     session.closedAt = uint128(block.timestamp);
-    session.tps = tps;
-    session.ttftMs = ttftMs;
 
     // calculate provider withdraw
     uint256 providerWithdraw;
@@ -223,8 +221,34 @@ contract SessionRouter {
       uint256 costTillToday = durationTillToday * session.pricePerSecond;
       providerWithdraw = costTillToday - session.providerWithdrawnAmount;
     }
+    
+    // updating provider stats
+    ProviderModelStats storage prStats = s.stats[session.modelAgentId][session.provider];
+    ModelStats storage modelStats = s.modelStats[session.modelAgentId];
 
-    if (!noDispute) {
+    prStats.totalCount++;
+
+    if (noDispute) {
+      if (prStats.successCount > 0){
+        // stats for this provider-model pair already contribute to average model stats
+        modelStats.tpsScaled1000.remove(int32(prStats.tpsScaled1000.mean), int32(modelStats.count-1));
+        modelStats.ttftMs.remove(int32(prStats.ttftMs.mean), int32(modelStats.count-1));
+      } else{
+        // stats for this provider-model pair do not contribute
+        modelStats.count++;
+      }
+
+      // update provider-model stats
+      prStats.successCount++;
+      prStats.totalDuration += uint32(session.closedAt - session.openedAt);
+      prStats.tpsScaled1000.add(int32(tpsScaled1000), int32(prStats.successCount));
+      prStats.ttftMs.add(int32(ttftMs), int32(prStats.successCount));
+
+      // update model stats
+      modelStats.totalDuration.add(int32(prStats.totalDuration), int32(modelStats.count));
+      modelStats.tpsScaled1000.add(int32(prStats.tpsScaled1000.mean), int32(modelStats.count));
+      modelStats.ttftMs.add(int32(prStats.ttftMs.mean), int32(modelStats.count));
+    } else {
       session.closeoutType = 1;
     }
 
@@ -434,6 +458,14 @@ contract SessionRouter {
     return totalSupply + s.totalClaimed;
   }
 
+  /////////////////////////
+  //   STATS FUNCTIONS   //
+  /////////////////////////
+
+  function totalSessions(address providerAddr) private view returns (uint256) {
+    return s.providerSessions[providerAddr].length;
+  }
+
   /// @notice sets distibution pool configuration
   /// @dev parameters should be the same as in Ethereum L1 Distribution contract
   /// @dev at address 0x47176B2Af9885dC6C4575d4eFd63895f7Aaa4790
@@ -483,4 +515,16 @@ contract SessionRouter {
   function maxUint256(uint256 a, uint256 b) private pure returns (uint256) {
     return a > b ? a : b;
   }
+
+  // function add(int256 oldMean, int256 oldSqSum, int256 count, int256 x) private pure returns (int256, int256) {
+  //   int256 mean = oldMean + (x - oldMean) / count;
+  //   int256 sqSum = oldSqSum + (x - oldMean) * (x - mean);
+  //   return (mean, sqSum);
+  // }
+
+  // function variance(int256 sqSum, int256 count) internal view returns (int256) {
+  //   return sqSum / (count - 1);
+  // }
 }
+
+

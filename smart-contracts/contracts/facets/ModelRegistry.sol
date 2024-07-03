@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.24;
 
-import { AppStorage, Model } from "../AppStorage.sol";
+import { AppStorage, Model, ModelStats } from "../AppStorage.sol";
 import { KeySet } from "../libraries/KeySet.sol";
 import { LibOwner } from "../libraries/LibOwner.sol";
 
@@ -124,6 +124,15 @@ contract ModelRegistry {
   /// @notice Returns the minimum stake required for a model
   function modelMinStake() external view returns (uint256) {
     return s.modelMinStake;
+  }
+
+  function modelStats(bytes32 id) external view returns (ModelStats memory) {
+    return s.modelStats[id];
+  }
+
+  function modelResetStats(bytes32 id) external {
+    LibOwner._onlyOwner();
+    delete s.modelStats[id];
   }
 
   // TODO: implement these functions

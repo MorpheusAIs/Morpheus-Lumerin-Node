@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import { KeySet, AddressSet, Uint256Set } from "./libraries/KeySet.sol";
+import { LibSD } from "./libraries/LibSD.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 
@@ -14,6 +15,22 @@ struct Provider {
   uint128 limitPeriodEnd; // timestamp of the limiter period end
   uint256 limitPeriodEarned; // total earned during the last limiter period
   bool isDeleted;
+}
+
+struct ProviderModelStats{
+  LibSD.SD tpsScaled1000; // tokens per second running average
+  LibSD.SD ttftMs; // time to first token running average in milliseconds
+  uint32 totalDuration; // total duration of sessions
+  uint32 successCount; // number of observations
+  uint32 totalCount;
+  // TODO: consider adding SD with weldford algorithm
+}
+
+struct ModelStats {
+  LibSD.SD tpsScaled1000;
+  LibSD.SD ttftMs;
+  LibSD.SD totalDuration;
+  uint32 count;
 }
 
 struct Model {
@@ -51,8 +68,6 @@ struct Session {
   uint256 openedAt;
   uint256 endsAt; // expected end time considering the stake provided
   uint256 closedAt;
-  uint32 tps; // average tokens per second
-  uint32 ttftMs; // average time to first token, milliseconds
 }
 
 struct OnHold {
@@ -106,6 +121,11 @@ struct AppStorage {
   mapping(address => OnHold[]) userOnHold; // user address => balance
   mapping(bytes => bool) approvalMap; // provider approval => true if approval was already used
   uint64 activeSessionsCount;
+  //
+  // STATS
+  //
+  mapping(bytes32 => mapping(address => ProviderModelStats)) stats; // modelId => provider => stats
+  mapping(bytes32 => ModelStats) modelStats;
   //
   // OTHER
   //
