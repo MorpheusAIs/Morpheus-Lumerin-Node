@@ -7,17 +7,13 @@ import {
   getStake,
 } from "../fixtures";
 import { ArtifactsMap } from "hardhat/types/artifacts";
-import {
-  GetContractReturnType,
-  WalletClient,
-} from "@nomicfoundation/hardhat-viem/types";
+import { GetContractReturnType } from "@nomicfoundation/hardhat-viem/types";
 import { getSessionId } from "../utils";
-import { PublicClient } from "@nomicfoundation/hardhat-viem/types";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { HOUR, SECOND } from "../../utils/time";
 
 describe("Session router - stats tests", function () {
-  it.only("should update provider-model stats", async function () {
+  it("should update provider-model stats", async function () {
     const {
       sessionRouter,
       expectedSession: exp,

@@ -317,16 +317,16 @@ describe("Model registry", function () {
       expect(stats).deep.equal({
         count: 0,
         totalDuration: {
-          mean: 0,
-          sqSum: 0,
+          mean: 0n,
+          sqSum: 0n,
         },
         tpsScaled1000: {
-          mean: 0,
-          sqSum: 0,
+          mean: 0n,
+          sqSum: 0n,
         },
         ttftMs: {
-          mean: 0,
-          sqSum: 0,
+          mean: 0n,
+          sqSum: 0n,
         },
       });
     });

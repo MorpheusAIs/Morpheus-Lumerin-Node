@@ -67,10 +67,10 @@ describe("Marketplace", function () {
       const timestamp = await getTxTimestamp(publicClient, txHash);
 
       // check indexes are updated
-      const newBids1 = await marketplace.read.getActiveBidsByProvider([
+      const [, newBids1] = await marketplace.read.getActiveBidsByProvider([
         expBid.providerAddr,
       ]);
-      const newBids2 = await marketplace.read.getActiveBidsByModelAgent([
+      const [, newBids2] = await marketplace.read.getActiveBidsByModelAgent([
         expBid.modelId,
       ]);
 
@@ -97,19 +97,19 @@ describe("Marketplace", function () {
       });
 
       // check old bid is still queried
-      const oldBids1 = await marketplace.read.getBidsByProvider([
+      const [, oldBids1] = await marketplace.read.getBidsByProvider([
         expBid.providerAddr,
         0n,
         100,
       ]);
-      const oldBids2 = await marketplace.read.getBidsByModelAgent([
+      const [, oldBids2] = await marketplace.read.getBidsByModelAgent([
         expBid.modelId,
         0n,
         100,
       ]);
       expect(oldBids1).to.be.deep.equal(oldBids2);
       expect(oldBids1.length).to.be.equal(2);
-      expect(oldBids1[1][1]).to.be.deep.equal({
+      expect(oldBids1[1]).to.be.deep.equal({
         provider: expBid.providerAddr,
         modelAgentId: expBid.modelId,
         pricePerSecond: expBid.pricePerSecond,
@@ -121,12 +121,14 @@ describe("Marketplace", function () {
 
     it("Should query by provider", async function () {
       const { marketplace, expectedBid } = await loadFixture(deploySingleBid);
-      const data = await marketplace.read.getActiveBidsByProvider([
+      const [bidIds, bids] = await marketplace.read.getActiveBidsByProvider([
         expectedBid.providerAddr,
       ]);
 
-      expect(data.length).to.equal(1);
-      expect(data[0]).to.deep.equal({
+      expect(bidIds.length).to.equal(1);
+      expect(bids.length).to.equal(1);
+      expect(bidIds[0]).to.equal(expectedBid.id);
+      expect(bids[0]).to.deep.equal({
         provider: expectedBid.providerAddr,
         modelAgentId: expectedBid.modelId,
         pricePerSecond: expectedBid.pricePerSecond,
@@ -138,12 +140,12 @@ describe("Marketplace", function () {
 
     it("Should query by provider with pagination", async function () {
       const { marketplace, expectedBid } = await loadFixture(deploySingleBid);
-      const data = await marketplace.read.getActiveBidsByProvider([
+      const [_, bids] = await marketplace.read.getActiveBidsByProvider([
         expectedBid.providerAddr,
       ]);
 
-      expect(data.length).to.equal(1);
-      expect(data[0]).to.deep.equal({
+      expect(bids.length).to.equal(1);
+      expect(bids[0]).to.deep.equal({
         provider: expectedBid.providerAddr,
         modelAgentId: expectedBid.modelId,
         pricePerSecond: expectedBid.pricePerSecond,
@@ -155,12 +157,12 @@ describe("Marketplace", function () {
 
     it("Should query by modelId", async function () {
       const { marketplace, expectedBid } = await loadFixture(deploySingleBid);
-      const data = await marketplace.read.getActiveBidsByModelAgent([
+      const [bidIds, bids] = await marketplace.read.getActiveBidsByModelAgent([
         expectedBid.modelId,
       ]);
 
-      expect(data.length).to.equal(1);
-      expect(data[0]).to.deep.equal({
+      expect(bids.length).to.equal(1);
+      expect(bids[0]).to.deep.equal({
         provider: expectedBid.providerAddr,
         modelAgentId: expectedBid.modelId,
         pricePerSecond: expectedBid.pricePerSecond,
