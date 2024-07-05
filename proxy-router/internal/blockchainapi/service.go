@@ -59,6 +59,8 @@ var (
 	ErrInitSession = errors.New("failed to initiate session")
 	ErrApprove     = errors.New("failed to approve")
 	ErrMarshal     = errors.New("failed to marshal open session payload")
+
+	ErrNoBid = errors.New("no bids available")
 )
 
 func NewBlockchainService(
@@ -201,6 +203,17 @@ func (s *BlockchainService) GetBidByID(ctx context.Context, ID common.Hash) (*st
 		DeletedAt:      bid.DeletedAt,
 		PricePerSecond: bid.PricePerSecond,
 	}, nil
+}
+
+func (s *BlockchainService) GetRatedBids(ctx context.Context, modelID common.Hash) ([]ScoredBid, error) {
+	bidIDs, bids, providerModelStats, modelStats, err := s.marketplace.GetAllBidsWithRating(ctx, modelID)
+	if err != nil {
+		return nil, err
+	}
+
+	ratedBids := rateBids(bidIDs, bids, providerModelStats, modelStats)
+
+	return ratedBids, nil
 }
 
 func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalSig []byte, stake *big.Int) (common.Hash, error) {
@@ -390,7 +403,7 @@ func (s *BlockchainService) GetTodaysBudget(ctx context.Context) (*big.Int, erro
 	return s.sessionRouter.GetTodaysBudget(ctx)
 }
 
-func (s *BlockchainService) ClaimProviderBalance(ctx context.Context, sessionID [32]byte, to common.Address, amount *big.Int) (common.Hash, error) {
+func (s *BlockchainService) ClaimProviderBalance(ctx context.Context, sessionID [32]byte, amount *big.Int) (common.Hash, error) {
 	prKey, err := s.privateKey.GetPrivateKey()
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrPrKey, err)
@@ -401,7 +414,7 @@ func (s *BlockchainService) ClaimProviderBalance(ctx context.Context, sessionID 
 		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
 	}
 
-	txHash, err := s.sessionRouter.ClaimProviderBalance(transactOpt, sessionID, amount, to)
+	txHash, err := s.sessionRouter.ClaimProviderBalance(transactOpt, sessionID, amount)
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -544,17 +557,27 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 		return common.Hash{}, lib.WrapError(ErrBudget, err)
 	}
 
-	bidID, bid, err := s.marketplace.GetBestBidByModelId(ctx, modelID)
+	bidIDs, bids, providerStats, modelStats, err := s.marketplace.GetAllBidsWithRating(ctx, modelID)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrBid, err)
 	}
 
-	provider, err := s.providerRegistry.GetProviderById(ctx, bid.Provider)
+	if len(bids) == 0 {
+		return common.Hash{}, ErrNoBid
+	}
+
+	scoredBids := rateBids(bidIDs, bids, providerStats, modelStats)
+	for _, bid := range scoredBids {
+	}
+
+	bid := scoredBids[0]
+
+	provider, err := s.providerRegistry.GetProviderById(ctx, bid.Bid.Provider)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrProvider, err)
 	}
 
-	totalCost := duration.Mul(bid.PricePerSecond, duration)
+	totalCost := duration.Mul(bid.Bid.PricePerSecond, duration)
 	stake := totalCost.Div(totalCost.Mul(supply, totalCost), budget)
 
 	userAddr, err := s.GetMyAddress(ctx)
@@ -562,7 +585,7 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 		return common.Hash{}, lib.WrapError(ErrMyAddress, err)
 	}
 
-	initRes, err := s.proxyService.InitiateSession(ctx, userAddr, bid.Provider, stake, bidID, provider.Endpoint)
+	initRes, err := s.proxyService.InitiateSession(ctx, userAddr, bid.Bid.Provider, stake, bid.ID, provider.Endpoint)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrInitSession, err)
 	}

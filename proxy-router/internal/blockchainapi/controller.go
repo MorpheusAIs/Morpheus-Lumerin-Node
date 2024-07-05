@@ -41,6 +41,7 @@ func (c *BlockchainController) RegisterRoutes(r interfaces.Router) {
 	r.GET("/blockchain/providers/:id/bids", c.getBidsByProvider)
 	r.GET("/blockchain/models", c.getAllModels)
 	r.GET("/blockchain/models/:id/bids", c.getBidsByModelAgent)
+	r.GET("/blockchain/models/:id/bids/rated", c.getRatedBids)
 	r.GET("/blockchain/bids/:id", c.getBidByID)
 	r.GET("/blockchain/sessions", c.getSessions)
 	r.GET("/blockchain/sessions/:id", c.getSession)
@@ -99,14 +100,14 @@ func (c *BlockchainController) claimProviderBalance(ctx *gin.Context) {
 		return
 	}
 
-	to, amount, err := c.getSendParams(ctx)
+	_, amount, err := c.getSendParams(ctx)
 	if err != nil {
 		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	txHash, err := c.service.ClaimProviderBalance(ctx, params.ID.Hash, to, amount)
+	txHash, err := c.service.ClaimProviderBalance(ctx, params.ID.Hash, amount)
 	if err != nil {
 		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -674,6 +675,26 @@ func (c *BlockchainController) getBidByID(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{"bid": bid})
+	return
+}
+
+func (c *BlockchainController) getRatedBids(ctx *gin.Context) {
+	var params structs.PathHex32ID
+	err := ctx.ShouldBindUri(&params)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	bids, err := c.service.GetRatedBids(ctx, params.ID.Hash)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"bids": bids})
 	return
 }
 

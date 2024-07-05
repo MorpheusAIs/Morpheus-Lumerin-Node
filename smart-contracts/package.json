@@ -14,7 +14,8 @@
     "node-local": "hardhat node",
     "deploy-local": "hardhat run --network localhost scripts/deploy-local.ts",
     "format": "prettier --write \"contracts/**/*.sol\"",
-    "lint": "solhint \"contracts/[!diamond]*/[!Test]*.sol\""
+    "lint": "solhint \"contracts/[!diamond]*/[!Test]*.sol\"",
+    "copy-bindings": "cp -r bindings/go/contracts/facets/* ../proxy-router/contracts"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ignition": "^0.15.2",
