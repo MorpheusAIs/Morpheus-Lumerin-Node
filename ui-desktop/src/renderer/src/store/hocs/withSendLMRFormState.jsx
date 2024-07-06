@@ -8,7 +8,6 @@ import React, { useState } from 'react';
 
 const withSendLMRFormState = Component => {
   const WrappedComponent = ({
-    lmrDefaultGasLimit,
     mainTokenAddress,
     chainGasPrice,
     availableLMR,
@@ -17,7 +16,6 @@ const withSendLMRFormState = Component => {
     from
   }) => {
     const props = {
-      lmrDefaultGasLimit,
       mainTokenAddress,
       chainGasPrice,
       availableLMR,
@@ -26,15 +24,7 @@ const withSendLMRFormState = Component => {
       from
     };
 
-    const displayName = `withSendLMRFormState(${Component.displayName ||
-      Component.name})`;
 
-    const [gasEstimateError, setGasEstimateError] = useState(false);
-    const [useCustomGas, setUseCustomGas] = useState(false);
-    const [gasPrice, setGasPrice] = useState(
-      client.fromWei(this.props.chainGasPrice, 'gwei')
-    );
-    const [gasLimit, setGasLimit] = useState(lmrDefaultGasLimit);
     const [errors, setErrors] = useState({});
 
     const [inputs, setInputs] = useState({ toAddress: null, lmrAmount: null });
@@ -49,10 +39,6 @@ const withSendLMRFormState = Component => {
     };
 
     const resetForm = () => {
-      setGasEstimateError(false);
-      setUseCustomGas(false);
-      setGasPrice(client.fromWei(this.props.chainGasPrice, 'gwei'));
-      setGasLimit(lmrDefaultGasLimit);
       setErrors({});
       setInputs({ toAddress: null, lmrAmount: null });
     };
@@ -140,9 +126,7 @@ const withSendLMRFormState = Component => {
   };
 
   const mapStateToProps = state => ({
-    lmrDefaultGasLimit: selectors.getChainConfig(state).lmrDefaultGasLimit,
     mainTokenAddress: selectors.getChainConfig(state).mainTokenAddress,
-    chainGasPrice: selectors.getChainGasPrice(state),
     availableLMR: selectors.getLmrBalanceWei(state),
     from: selectors.getWalletAddress(state),
     symbol: selectors.getCoinSymbol(state)

@@ -2,18 +2,9 @@
 
 const { merge, union } = require('lodash')
 const EventEmitter = require('events')
-const logger = require('./logger');
+const logger = require('./logger')
 
-const pluginCreators = [
-  require('./plugins/rates'),
-  require('./plugins/eth'),
-  require('./plugins/explorer'),
-  require('./plugins/wallet'),
-  require('./plugins/token'),
-  require('./plugins/lumerin'),
-  require('./plugins/proxy-router'),
-  require('./plugins/devices'),
-]
+const pluginCreators = [require('./plugins/rates')]
 
 function createCore() {
   let eventBus

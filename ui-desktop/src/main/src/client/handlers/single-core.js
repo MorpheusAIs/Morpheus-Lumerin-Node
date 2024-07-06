@@ -1,6 +1,5 @@
 import logger from '../../../logger'
 
-const pTimeout = require('p-timeout')
 import auth from '../auth'
 import keys from '../keys'
 import config from '../../../config'
@@ -22,7 +21,7 @@ export const withAuth =
         return wallet.getSeed(data.password)
       })
       .then((seed, index) => {
-        return api.wallet.createPrivateKey(seed, index)
+        return wallet.createPrivateKey(seed, index)
       })
       .then((privateKey) => fn(privateKey, data))
   }
@@ -138,7 +137,7 @@ export const setContractDeleteStatus = async function (data, { api }) {
 export function createWallet(data, core, isOpen = true) {
   const seed = keys.mnemonicToSeedHex(data.mnemonic)
   const entropy = keys.mnemonicToEntropy(data.mnemonic)
-  const walletAddress = core.api.wallet.createAddress(seed)
+  const walletAddress = wallet.createAddress(seed)
 
   return Promise.all([
     wallet.setSeed(seed, data.password),
@@ -147,20 +146,6 @@ export function createWallet(data, core, isOpen = true) {
   ])
     .then(() => core.emitter.emit('create-wallet', { address: walletAddress }))
     .then(() => isOpen && openWallet(core, data.password))
-}
-
-export const restartProxyRouter = async (data, { emitter, api }) => {
-  const password = await auth.getSessionPassword()
-
-  await api['proxy-router']
-    .kill(config.chain.proxyPort)
-    .catch((err) => logger.error('proxy router err', err))
-
-  emitter.emit('open-proxy-router', { password })
-}
-
-export const stopProxyRouter = async (data, { emitter, api }) => {
-  await api['proxy-router'].kill(config.chain.proxyPort).catch(logger.error)
 }
 
 export async function openWallet({ emitter }, password) {
@@ -184,6 +169,18 @@ export const onboardingCompleted = (data, core) => {
         true
       )
     )
+    .then(() => {
+      return wallet.createPrivateKey(wallet.getSeed(data.password))
+    })
+    .then((privateKey) => {
+      const { proxyUrl } = data
+      return fetch(`${proxyUrl}/wallet`, {
+        method: 'POST',
+        body: JSON.stringify({
+          privateKey
+        })
+      })
+    })
     .then(() => true)
     .catch((err) => ({ error: new WalletError('Onboarding unable to be completed: ', err) }))
 }
@@ -272,16 +269,6 @@ export function refreshAllContracts({}, { api }) {
   return api.contracts.refreshContracts(null, walletId)
 }
 
-export function refreshTransaction({ hash, address }, { api }) {
-  return pTimeout(api.explorer.refreshTransaction(hash, address), config.scanTransactionTimeout)
-    .then(() => ({ success: true }))
-    .catch((error) => ({ error, success: false }))
-}
-
-export const getGasLimit = (data, { api }) => api.wallet.getGasLimit(data)
-
-export const getGasPrice = (data, { api }) => api.wallet.getGasPrice(data)
-
 export const sendLmr = async (data, { api }) =>
   withAuth(api.lumerin.sendLmr)(
     {
@@ -317,15 +304,13 @@ export const getAddressAndPrivateKey = async (data, { api }) => {
   }
 
   const seed = wallet.getSeed(data.password)
-  return api.wallet.getAddressAndPrivateKey(seed, undefined)
+  return wallet.getAddressAndPrivateKey(seed, undefined)
 }
 
 export const refreshProxyRouterConnection = async (data, { api }) =>
   api['proxy-router'].refreshConnectionsStream(data)
 
 export const getLocalIp = async ({}, { api }) => api['proxy-router'].getLocalIp()
-
-export const isProxyPortPublic = async (data, { api }) => api['proxy-router'].isProxyPortPublic(data)
 
 export const logout = async (data) => {
   return cleanupDb()
@@ -356,7 +341,6 @@ export function getPastTransactions({ address, page, pageSize }, { api }) {
 }
 
 export default {
-  // refreshAllSockets,
   refreshAllContracts,
   purchaseContract,
   createContract,
@@ -365,10 +349,7 @@ export default {
   recoverFromMnemonic,
   onLoginSubmit,
   refreshAllTransactions,
-  refreshTransaction,
   createWallet,
-  getGasLimit,
-  getGasPrice,
   openWallet,
   sendLmr,
   sendEth,
@@ -381,14 +362,11 @@ export default {
   logout,
   getLocalIp,
   getPoolAddress,
-  restartProxyRouter,
   claimFaucet,
   revealSecretPhrase,
   hasStoredSecretPhrase,
   getPastTransactions,
   setContractDeleteStatus,
   editContract,
-  getMarketplaceFee,
-  isProxyPortPublic,
-  stopProxyRouter
+  getMarketplaceFee
 }

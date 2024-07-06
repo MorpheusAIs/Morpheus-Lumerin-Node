@@ -180,3 +180,15 @@ export const Title = styled.label`
   @media (min-width: 1200px) {
   }
 `;
+
+export const LoadingCover = styled.div`
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.4);
+
+    z-index: 5;
+`

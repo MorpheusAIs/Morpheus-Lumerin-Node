@@ -23,6 +23,7 @@ const Container = styled.div`
   bottom: 0;
   z-index: 3;
   border-right: 1px solid rgba(255, 255, 255, 0.16);
+  background: #03160e!important
 
   .sidebar-address {
     display: none;

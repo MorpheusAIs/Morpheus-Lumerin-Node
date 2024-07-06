@@ -1,4 +1,3 @@
-import React from "react";
 import { LayoutHeader } from '../common/LayoutHeader'
 import { View } from '../common/View'
 
