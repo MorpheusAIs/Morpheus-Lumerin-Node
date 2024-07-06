@@ -3,14 +3,15 @@ package storages
 import (
 	"encoding/json"
 	"fmt"
-
-	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
+	"math/big"
+	"strings"
 )
 
 type Session struct {
 	Id           string
 	UserAddr     string
 	ProviderAddr string
+	EndsAt       *big.Int
 }
 
 type User struct {
@@ -23,13 +24,14 @@ type SessionStorage struct {
 	db *Storage
 }
 
-func NewSessionStorage(log i.ILogger) *SessionStorage {
+func NewSessionStorage(storage *Storage) *SessionStorage {
 	return &SessionStorage{
-		db: NewStorage(log),
+		db: storage,
 	}
 }
 
 func (s *SessionStorage) GetSession(id string) (*Session, bool) {
+	id = strings.ToLower(id)
 	key := fmt.Sprintf("session:%s", id)
 
 	sessionJson, err := s.db.Get([]byte(key))
@@ -47,6 +49,7 @@ func (s *SessionStorage) GetSession(id string) (*Session, bool) {
 }
 
 func (s *SessionStorage) GetUser(addr string) (*User, bool) {
+	addr = strings.ToLower(addr)
 	key := fmt.Sprintf("user:%s", addr)
 	userJson, err := s.db.Get([]byte(key))
 	if err != nil {
@@ -63,7 +66,8 @@ func (s *SessionStorage) GetUser(addr string) (*User, bool) {
 }
 
 func (s *SessionStorage) AddSession(session *Session) error {
-	key := fmt.Sprintf("session:%s", session.Id)
+	sessionId := strings.ToLower(session.Id)
+	key := fmt.Sprintf("session:%s", sessionId)
 	sessionJson, err := json.Marshal(session)
 	if err != nil {
 		return err
@@ -77,7 +81,8 @@ func (s *SessionStorage) AddSession(session *Session) error {
 }
 
 func (s *SessionStorage) AddUser(user *User) error {
-	key := fmt.Sprintf("user:%s", user.Addr)
+	addr := strings.ToLower(user.Addr)
+	key := fmt.Sprintf("user:%s", addr)
 	userJson, err := json.Marshal(user)
 	if err != nil {
 		return err
@@ -91,7 +96,8 @@ func (s *SessionStorage) AddUser(user *User) error {
 }
 
 func (s *SessionStorage) RemoveSession(id string) error {
-	key := fmt.Sprintf("session:%s", id)
+	sessionId := strings.ToLower(id)
+	key := fmt.Sprintf("session:%s", sessionId)
 	err := s.db.Delete([]byte(key))
 	if err != nil {
 		return err

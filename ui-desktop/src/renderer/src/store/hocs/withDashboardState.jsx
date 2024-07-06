@@ -31,11 +31,7 @@ const withDashboardState = WrappedComponent => {
 
     onWalletRefresh = () => {
       this.setState({ refreshStatus: 'pending', refreshError: null });
-      this.props.client
-        .refreshAllTransactions({
-          address: this.props.address,
-          chain: this.props.chain
-        })
+      this.props.client.getTransactions()
         .then(() => this.setState({ refreshStatus: 'success' }))
         .catch(() => {
           this.context.toast(
@@ -49,11 +45,25 @@ const withDashboardState = WrappedComponent => {
         });
     };
 
-    onInit = async () => {
+    loadTransactions =  async (page = 0, pageSize = 15) => {
+      this.setState({ refreshStatus: 'pending', refreshError: null });
+      const transactions = await this.props.client.getTransactions(page, pageSize);
+      this.setState({ refreshStatus: 'success' })
+  
+      // if (page && pageSize) {
+      //   const hasNextPage = transactions.length;
+      //   this.props.nextPage({
+      //     hasNextPage: Boolean(hasNextPage),
+      //     page: page + 1,
+      //   })
+      // }
+      return transactions;
+    }
+
+    getBalances = async () => {
       var balances = await this.props.client.getBalances();
-      var transactions = await this.props.client.getTransactions();
       var rate = await this.props.client.getRates();
-      return { balances, transactions, rate };
+      return { balances, rate };
     }
 
     render() {
@@ -71,8 +81,9 @@ const withDashboardState = WrappedComponent => {
           sendDisabledReason={sendDisabledReason}
           copyToClipboard={this.props.client.copyToClipboard}
           onWalletRefresh={this.onWalletRefresh}
-          onInit={this.onInit}
+          getBalances={this.getBalances}
           sendDisabled={sendLmrFeatureStatus !== 'ok'}
+          loadTransactions={this.loadTransactions}
           {...this.props}
           {...this.state}
         />
@@ -84,10 +95,68 @@ const withDashboardState = WrappedComponent => {
     syncStatus: selectors.getTxSyncStatus(state),
     sendLmrFeatureStatus: selectors.sendLmrFeatureStatus(state),
     hasTransactions: selectors.hasTransactions(state),
-    address: selectors.getWalletAddress(state)
+    address: selectors.getWalletAddress(state),
+    ethCoinPrice: selectors.getRateEth(state),
+    symbol: selectors.getCoinSymbol(state),
+    symbolEth: selectors.getSymbolEth(state),
+    page: selectors.getTransactionPage(state),
+    pageSize: selectors.getTransactionPageSize(state),
+    hasNextPage: selectors.getHasNextPage(state),
   });
 
-  return withClient(connect(mapStateToProps)(Container));
+  const mapDispatchToProps = dispatch => ({
+    nextPage: data => dispatch({ type: 'transactions-next-page', payload: data }),
+});
+
+
+  return withClient(connect(mapStateToProps, mapDispatchToProps)(Container));
 };
 
 export default withDashboardState;
+
+function mapApiResponseToTrxReceipt(trx){
+  const transaction = {
+    from: trx.from,
+    to: trx.to,
+    value: trx.value,
+    input: trx.input,
+    gas: trx.gas,
+    gasPrice: trx.gasPrice,
+    hash: trx.hash,
+    nonce: trx.nonce,
+    logIndex: trx.logIndex, // emitted only in events, used to differentiate between LMR transfers within one transaction 
+    // maxFeePerGas: params.maxFeePerGas,
+    // maxPriorityFeePerGas: params.maxPriorityFeePerGas,
+  }
+
+  if (trx.returnValues){
+    transaction.from = trx.returnValues.from;
+    transaction.to = trx.returnValues.to;
+    transaction.value = trx.returnValues.value;
+    transaction.hash = trx.transactionHash;
+  }
+
+  const receipt = {
+    transactionHash: trx.hash,
+    transactionIndex: trx.transactionIndex,
+    blockHash: trx.blockHash,
+    blockNumber: trx.blockNumber,
+    from: trx.from,
+    to: trx.to,
+    value: trx.value,
+    contractAddress: trx.contractAddress,
+    cumulativeGasUsed: trx.cumulativeGasUsed,
+    gasUsed: trx.gasUsed,
+    tokenSymbol: trx.tokenSymbol,
+  }
+
+  if (trx.returnValues){
+    receipt.from = trx.returnValues.from;
+    receipt.to = trx.returnValues.to;
+    receipt.value = trx.returnValues.value;
+    receipt.transactionHash = trx.transactionHash;
+    receipt.tokenSymbol = trx.address === config.chain.mainTokenAddress ? 'MOR' : undefined;
+  }
+
+  return {transaction, receipt}
+}

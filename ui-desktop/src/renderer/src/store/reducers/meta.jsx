@@ -20,7 +20,6 @@ const reducer = handleActions(
       ...state,
       ...get(payload, 'meta', initialState),
       isConnected: null, // ignore web3 connection status persisted state
-      gasPrice: get(payload, 'meta.gasPrice', payload.config.defaultGasPrice)
     }),
 
     'indexer-connection-status-changed': (state, { payload }) => ({

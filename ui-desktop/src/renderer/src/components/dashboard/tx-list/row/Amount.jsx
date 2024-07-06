@@ -69,6 +69,7 @@ export default class Amount extends React.Component {
 
   // eslint-disable-next-line complexity
   render() {
+
     return (
       <Container
         isPending={this.props.isPending}
@@ -79,18 +80,8 @@ export default class Amount extends React.Component {
         ) : (
           <ValueContainer>
             <DisplayValue
-              value={new BigNumber(this.props.value).dp(8).toString(10)}
-              post={
-                this.props.txType === 'import-requested' ||
-                this.props.txType === 'imported' ||
-                this.props.txType === 'exported'
-                  ? ` ${this.props.symbol}`
-                  : ` ${
-                      this.props.symbol === 'coin'
-                        ? this.props.coinSymbol
-                        : this.props.symbol
-                    }`
-              }
+              value={this.props.value}
+              post={this.props.symbol}
             />
             {/* <UsdValue>≈ {toUSD(this.props.value, this.props.rate)}$</UsdValue> */}
           </ValueContainer>

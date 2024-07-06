@@ -5,21 +5,11 @@ import OfflineWarning from './OfflineWarning'
 // import ChangePassword from './ChangePassword'
 import Dashboard from './dashboard/Dashboard'
 import Sidebar from './sidebar/Sidebar'
-import Marketplace from './contracts/Marketplace'
 import Chat from './chat/Chat';
 import { Models } from './models/Models'
 import { Agents } from './agents/Agents'
+import Settings from './settings/Settings';
 import Bids from './bids/Bids'
-
-// import Sockets from './sockets/Sockets'
-// import Reports from './reports/Reports'
-// import Indicies from './indicies/Indicies'
-// import Tools from './tools/Tools'
-// import SellerHub from './contracts/SellerHub'
-// import Devices from './devices/Devices'
-// import BuyerHub from './contracts/BuyerHub'
-// import AutoPriceAdjuster from './AutoPriceAdjuster'
-
 import 'bootstrap/dist/css/bootstrap.min.css';
 import Providers from './providers/Providers'
 
@@ -52,6 +42,7 @@ const Main = styled.div`
   overflow-y: hidden;
   min-height: 100vh;
   padding-top: 1.4rem;
+  position: relative;
 `
 
 export const Layout = () => (
@@ -68,17 +59,7 @@ export const Layout = () => (
         <Route path="/models" component={Models} />
         <Route path="/bids" component={Bids} />
         <Route path="/providers" component={Providers} />
-        {/* <Route path="/sockets" component={Sockets} />
-        <Route path="/seller-hub" component={SellerHub} />
-        <Route path="/buyer-hub" component={BuyerHub} /> */}
-        {/* <Route path="/marketplace" component={Marketplace} /> */}
-        {/* TODO - Finish up reports 
-        <Route path="/reports" component={Reports} />
-        <Route path="/indicies" component={Indicies} />
-        <Route path="/tools" component={Tools} />
-        <Route path="/change-pass" component={ChangePassword} />
-        <Route path="/devices" component={Devices} />
-        */}
+        <Route path="/settings" component={Settings} />
       </Switch>
     </Main>
     {/* <AutoPriceAdjuster /> */}

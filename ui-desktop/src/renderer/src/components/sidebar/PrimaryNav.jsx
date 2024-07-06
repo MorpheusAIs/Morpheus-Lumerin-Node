@@ -10,8 +10,12 @@ const Container = styled.div`
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding-left: 2.2rem;
+  
   max-height: 10%;
+
+  @media (min-width: 800px) {
+    padding-left: 2.2rem;
+  }
 `;
 
 const Button = styled(NavLink)`

@@ -1,22 +1,10 @@
 //import Modal from '../../contracts/modals/Modal';
-import React, { useEffect, useState } from 'react';
 import { List as RVList, AutoSizer } from 'react-virtualized';
 import Modal from '../../contracts/modals/Modal';
 import styled from 'styled-components';
 import {
     TitleWrapper,
-    Title,
-    Subtitle,
-    Form,
-    InputGroup,
-    Row,
-    Input,
-    Label,
-    Sublabel,
-    // Modal,
-    Body,
-    CloseModal
-} from '../../contracts/modals/CreateContractModal.styles';
+    Title} from '../../contracts/modals/CreateContractModal.styles';
 
 import ModelRow from './ModelRow';
 
