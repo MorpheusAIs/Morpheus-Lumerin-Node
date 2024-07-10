@@ -12,6 +12,8 @@ type Session struct {
 	UserAddr     string
 	ProviderAddr string
 	EndsAt       *big.Int
+	TPSArr       []int
+	TTFTArr      []int
 }
 
 type User struct {

@@ -34,11 +34,17 @@ type SessionPromptReq struct {
 
 type SessionCloseReq struct {
 	Signature lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
-	SessionID common.Hash   `json:"sessionid"           validate:"required,hexadecimal"`
+	Message   string        `json:"message"           validate:"required,hexadecimal"`
 	Timestamp uint64        `json:"timestamp"           validate:"required,number"`
 }
 
 type SessionPromptRes struct {
+	Message   string        `json:"message"             validate:"required"`
+	Signature lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
+	Timestamp uint64        `json:"timestamp"           validate:"required,number"`
+}
+
+type SessionReportRes struct {
 	Message   string        `json:"message"             validate:"required"`
 	Signature lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
 	Timestamp uint64        `json:"timestamp"           validate:"required,number"`
@@ -93,4 +99,11 @@ type ReqObject struct {
 var approvalAbi = []lib.AbiParameter{
 	{Type: "bytes32"},
 	{Type: "uint128"},
+}
+
+var sessionReportAbi = []lib.AbiParameter{
+	{Type: "bytes32"},
+	{Type: "uint128"},
+	{Type: "uint32"},
+	{Type: "uint32"},
 }

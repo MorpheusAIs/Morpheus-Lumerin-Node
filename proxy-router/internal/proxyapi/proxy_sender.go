@@ -113,6 +113,67 @@ func (p *ProxyServiceSender) InitiateSession(ctx context.Context, user common.Ad
 	return typedMsg, nil
 }
 
+func (p *ProxyServiceSender) GetSessionReport(ctx context.Context, sessionID common.Hash) (*msgs.SessionReportRes, error) {
+	requestID := "1"
+
+	prKey, err := p.privateKey.GetPrivateKey()
+	if err != nil {
+		return nil, ErrMissingPrKey
+	}
+
+	session, ok := p.sessionStorage.GetSession(sessionID.Hex())
+	if !ok {
+		return nil, ErrSessionNotFound
+	}
+	provider, ok := p.sessionStorage.GetUser(session.ProviderAddr)
+	if !ok {
+		return nil, ErrProviderNotFound
+	}
+
+	getSessionReportRequest, err := p.morRPC.SessionCloseRequest(sessionID, prKey, requestID)
+	if err != nil {
+		return nil, lib.WrapError(ErrCreateReq, err)
+	}
+
+	msg, code, ginErr := p.rpcRequest(provider.Url, getSessionReportRequest)
+	if ginErr != nil {
+		return nil, lib.WrapError(ErrProvider, fmt.Errorf("code: %d, msg: %v, error: %s", code, msg, ginErr))
+	}
+
+	if msg.Error != nil {
+		// TODO: verify signature
+		return nil, lib.WrapError(ErrResponseErr, fmt.Errorf("error: %v, result: %v", msg.Error.Message, msg.Error.Data))
+	}
+	if msg.Result == nil {
+		return nil, lib.WrapError(ErrInvalidResponse, fmt.Errorf("empty result and no error"))
+	}
+
+	var typedMsg *msgs.SessionReportRes
+	err = json.Unmarshal(*msg.Result, &typedMsg)
+	if err != nil {
+		return nil, lib.WrapError(ErrInvalidResponse, fmt.Errorf("expected SessionCloseRespose, got %s", msg.Result))
+	}
+
+	err = binding.Validator.ValidateStruct(typedMsg)
+	if err != nil {
+		return nil, lib.WrapError(ErrInvalidResponse, err)
+	}
+
+	signature := typedMsg.Signature
+	typedMsg.Signature = lib.HexString{}
+
+	hexPubKey, err := lib.StringToHexString(provider.PubKey)
+	if err != nil {
+		return nil, lib.WrapError(ErrInvalidResponse, err)
+	}
+
+	if !p.validateMsgSignature(typedMsg, signature, hexPubKey) {
+		return nil, ErrInvalidSig
+	}
+
+	return typedMsg, nil
+}
+
 func (p *ProxyServiceSender) SendPrompt(ctx context.Context, resWriter ResponderFlusher, prompt *openai.ChatCompletionRequest, sessionID common.Hash) error {
 	session, ok := p.sessionStorage.GetSession(sessionID.Hex())
 	if !ok {

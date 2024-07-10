@@ -42,14 +42,15 @@ type BlockchainService struct {
 }
 
 var (
-	ErrPrKey        = errors.New("cannot get private key")
-	ErrTxOpts       = errors.New("failed to get transactOpts")
-	ErrNonce        = errors.New("failed to get nonce")
-	ErrEstimateGas  = errors.New("failed to estimate gas")
-	ErrSignTx       = errors.New("failed to sign transaction")
-	ErrSendTx       = errors.New("failed to send transaction")
-	ErrWaitMined    = errors.New("failed to wait for transaction to be mined")
-	ErrSessionStore = errors.New("failed to store session")
+	ErrPrKey         = errors.New("cannot get private key")
+	ErrTxOpts        = errors.New("failed to get transactOpts")
+	ErrNonce         = errors.New("failed to get nonce")
+	ErrEstimateGas   = errors.New("failed to estimate gas")
+	ErrSignTx        = errors.New("failed to sign transaction")
+	ErrSendTx        = errors.New("failed to send transaction")
+	ErrWaitMined     = errors.New("failed to wait for transaction to be mined")
+	ErrSessionStore  = errors.New("failed to store session")
+	ErrSessionReport = errors.New("failed to get session report from provider")
 
 	ErrBid         = errors.New("failed to get bid")
 	ErrProvider    = errors.New("failed to get provider")
@@ -250,12 +251,17 @@ func (s *BlockchainService) CloseSession(ctx context.Context, sessionID common.H
 		return common.Hash{}, lib.WrapError(ErrPrKey, err)
 	}
 
+	report, err := s.proxyService.GetSessionReport(ctx, sessionID)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrSessionReport, err)
+	}
+
 	transactOpt, err := s.getTransactOpts(ctx, prKey)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
 	}
 
-	tx, err := s.sessionRouter.CloseSession(transactOpt, sessionID, prKey)
+	tx, err := s.sessionRouter.CloseSession(transactOpt, sessionID, lib.HexString(report.Message), prKey)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrSendTx, err)
 	}
@@ -567,8 +573,8 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 	}
 
 	scoredBids := rateBids(bidIDs, bids, providerStats, modelStats)
-	for _, bid := range scoredBids {
-	}
+	// for _, bid := range scoredBids {
+	// }
 
 	bid := scoredBids[0]
 

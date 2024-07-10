@@ -101,14 +101,7 @@ func (g *SessionRouter) GetSessionsByUser(ctx context.Context, userAddr common.A
 	return sessions, nil
 }
 
-func (g *SessionRouter) CloseSession(ctx *bind.TransactOpts, sessionID common.Hash, privateKeyHex lib.HexString) (common.Hash, error) {
-	ips := uint32(1)
-	timestamp := big.NewInt(time.Now().UnixMilli())
-	report, err := lib.EncodeAbiParameters(closeReportAbi, []interface{}{sessionID, timestamp, ips})
-	if err != nil {
-		return common.Hash{}, err
-	}
-
+func (g *SessionRouter) CloseSession(ctx *bind.TransactOpts, sessionID common.Hash, report []byte, privateKeyHex lib.HexString) (common.Hash, error) {
 	signature, err := lib.SignEthMessageV2(report, privateKeyHex)
 	if err != nil {
 		return common.Hash{}, err
