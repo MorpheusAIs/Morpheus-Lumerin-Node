@@ -56,24 +56,33 @@ contract Marketplace {
   }
 
     /// @notice returns active bids by model or agent id
-  function getActiveBidsRatingByModelAgent(bytes32 modelAgentId) external view returns (bytes32[] memory, Bid[] memory, ProviderModelStats[] memory, ModelStats memory) {
+  function getActiveBidsRatingByModelAgent(bytes32 modelAgentId, uint256 offset, uint8 limit) external view returns (bytes32[] memory, Bid[] memory, ProviderModelStats[] memory) {
     KeySet.Set storage modelAgentBidsSet = s.modelAgentActiveBids[modelAgentId];
     uint256 length = modelAgentBidsSet.count();
+
+    if (length < offset) {
+      return (new bytes32[](0), new Bid[](0), new ProviderModelStats[](0));
+    }
+    uint8 size = offset + limit > length ? uint8(length - offset) : limit;
 
     Bid[] memory _bids = new Bid[](length);
     bytes32[] memory bidIds = new bytes32[](length);
     ProviderModelStats[] memory _stats = new ProviderModelStats[](length);
-    ModelStats memory modelStats = s.modelStats[modelAgentId];
 
-    for (uint i = 0; i < length; i++) {
-      bytes32 id = modelAgentBidsSet.keyAtIndex(i);
+    for (uint i = 0; i < size; i++) {
+      uint256 index = length - offset - i - 1;
+      bytes32 id = modelAgentBidsSet.keyAtIndex(index);
       bidIds[i] = id;
       Bid memory bid = s.bidMap[id];
       _bids[i] = bid;
       _stats[i] = s.stats[modelAgentId][bid.provider];
     }
 
-    return (bidIds, _bids, _stats, modelStats);
+    return (bidIds, _bids, _stats);
+  }
+
+  function getModelStats(bytes32 modelID) external view returns (ModelStats memory){
+    return s.modelStats[modelID];
   }
 
   /// @notice returns all bids by provider sorted from newest to oldest
