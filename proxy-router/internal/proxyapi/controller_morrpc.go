@@ -43,7 +43,7 @@ func (s *MORRPCController) Handle(ctx context.Context, msg m.RPCMessage, sourceL
 		return s.sessionRequest(ctx, msg, sendResponse, sourceLog)
 	case "session.prompt":
 		return s.sessionPrompt(ctx, msg, sendResponse, sourceLog)
-	case "session.close":
+	case "session.report":
 		return s.sessionReport(ctx, msg, sendResponse, sourceLog)
 	default:
 		return lib.WrapError(ErrUnknownMethod, fmt.Errorf("unknown method: %s", msg.Method))
@@ -51,8 +51,9 @@ func (s *MORRPCController) Handle(ctx context.Context, msg m.RPCMessage, sourceL
 }
 
 var (
-	ErrValidation = fmt.Errorf("request validation failed")
-	ErrUnmarshal  = fmt.Errorf("failed to unmarshal request")
+	ErrValidation     = fmt.Errorf("request validation failed")
+	ErrUnmarshal      = fmt.Errorf("failed to unmarshal request")
+	ErrGenerateReport = fmt.Errorf("failed to generate report")
 )
 
 func (s *MORRPCController) sessionRequest(ctx context.Context, msg m.RPCMessage, sendResponse SendResponse, sourceLog lib.ILogger) error {
@@ -139,8 +140,6 @@ func (s *MORRPCController) sessionPrompt(ctx context.Context, msg m.RPCMessage, 
 	ttftMs, totalTokens, err := s.service.SessionPrompt(ctx, msg.ID, user.PubKey, &req, sendResponse, sourceLog)
 	requestTime := int(time.Now().Unix() - now)
 
-	fmt.Println("TTFT: ", ttftMs)
-	fmt.Println("TPS: ", totalTokens/requestTime)
 	if err == nil {
 		session.TTFTArr = append(session.TTFTArr, ttftMs)
 		session.TPSArr = append(session.TPSArr, totalTokens/requestTime)
@@ -150,7 +149,7 @@ func (s *MORRPCController) sessionPrompt(ctx context.Context, msg m.RPCMessage, 
 }
 
 func (s *MORRPCController) sessionReport(ctx context.Context, msg m.RPCMessage, sendResponse SendResponse, sourceLog lib.ILogger) error {
-	var req m.SessionCloseReq
+	var req m.SessionReportReq
 	err := json.Unmarshal(msg.Params, &req)
 	if err != nil {
 		err := lib.WrapError(ErrUnmarshal, err)
@@ -198,7 +197,7 @@ func (s *MORRPCController) sessionReport(ctx context.Context, msg m.RPCMessage, 
 	res, err := s.service.SessionReport(ctx, msg.ID, msg.ID, session, sourceLog)
 	if err != nil {
 		sourceLog.Error(err)
-		return err
+		return ErrGenerateReport
 	}
 
 	return sendResponse(res)

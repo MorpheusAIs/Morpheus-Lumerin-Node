@@ -130,7 +130,7 @@ func (p *ProxyServiceSender) GetSessionReport(ctx context.Context, sessionID com
 		return nil, ErrProviderNotFound
 	}
 
-	getSessionReportRequest, err := p.morRPC.SessionCloseRequest(sessionID, prKey, requestID)
+	getSessionReportRequest, err := p.morRPC.SessionReportRequest(sessionID, prKey, requestID)
 	if err != nil {
 		return nil, lib.WrapError(ErrCreateReq, err)
 	}
@@ -151,7 +151,7 @@ func (p *ProxyServiceSender) GetSessionReport(ctx context.Context, sessionID com
 	var typedMsg *msgs.SessionReportRes
 	err = json.Unmarshal(*msg.Result, &typedMsg)
 	if err != nil {
-		return nil, lib.WrapError(ErrInvalidResponse, fmt.Errorf("expected SessionCloseRespose, got %s", msg.Result))
+		return nil, lib.WrapError(ErrInvalidResponse, fmt.Errorf("expected SessionReportRespose, got %s", msg.Result))
 	}
 
 	err = binding.Validator.ValidateStruct(typedMsg)

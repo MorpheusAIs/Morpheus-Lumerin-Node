@@ -32,7 +32,7 @@ type SessionPromptReq struct {
 	Timestamp uint64        `json:"timestamp" validate:"required,number"`
 }
 
-type SessionCloseReq struct {
+type SessionReportReq struct {
 	Signature lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
 	Message   string        `json:"message"           validate:"required,hexadecimal"`
 	Timestamp uint64        `json:"timestamp"           validate:"required,number"`
@@ -45,7 +45,7 @@ type SessionPromptRes struct {
 }
 
 type SessionReportRes struct {
-	Message   string        `json:"message"             validate:"required"`
+	Message   lib.HexString `json:"message"             validate:"required"`
 	Signature lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
 	Timestamp uint64        `json:"timestamp"           validate:"required,number"`
 }
