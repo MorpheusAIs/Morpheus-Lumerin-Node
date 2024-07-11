@@ -31,7 +31,7 @@ contract Marketplace {
 
     Bid[] memory _bids = new Bid[](length);
     bytes32[] memory bidIds = new bytes32[](length);
-    for (uint i = 0; i < providerBidsSet.count(); i++) {
+    for (uint i = 0; i < length; i++) {
       bytes32 id = providerBidsSet.keyAtIndex(i);
       bidIds[i] = id;
       _bids[i] = s.bidMap[id];
