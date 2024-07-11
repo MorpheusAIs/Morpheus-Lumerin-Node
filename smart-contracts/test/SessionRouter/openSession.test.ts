@@ -7,6 +7,7 @@ import hre from "hardhat";
 import { deploySingleBid, getProviderApproval } from "../fixtures";
 import {
   NewDate,
+  mine,
   catchError,
   getHex,
   getSessionId,
@@ -14,13 +15,19 @@ import {
   nowChain,
   randomBytes,
   randomBytes32,
+  setAutomine,
   startOfTheDay,
 } from "../utils";
-import { DAY, HOUR, MINUTE, SECOND } from "../../utils/time";
-import { UnknownRpcError, formatUnits } from "viem";
+import { DAY, HOUR, SECOND } from "../../utils/time";
+import { UnknownRpcError } from "viem";
+import { waitForTransactionReceipt } from "viem/_types/actions/public/waitForTransactionReceipt";
 
 describe("session actions", function () {
   describe("positive cases", function () {
+    this.afterAll(async function () {
+      await setAutomine(hre, true);
+    });
+
     it("should open session without error", async function () {
       const {
         sessionRouter,
@@ -124,6 +131,57 @@ describe("session actions", function () {
 
       expect(srAfter - srBefore).to.equal(exp.stake);
       expect(userBefore - userAfter).to.equal(exp.stake);
+    });
+
+    it("should allow opening two sessions in the same block", async function () {
+      const {
+        sessionRouter,
+        expectedSession: exp,
+        user,
+        owner,
+        publicClient,
+        provider,
+        tokenMOR,
+      } = await loadFixture(deploySingleBid);
+
+      await tokenMOR.write.transfer([user.account.address, exp.stake * 2n], {
+        account: owner.account.address,
+      });
+      await tokenMOR.write.approve([sessionRouter.address, exp.stake * 2n], {
+        account: user.account.address,
+      });
+
+      const apprv1 = await getProviderApproval(provider, exp.bidID);
+      await time.increase(1);
+      const apprv2 = await getProviderApproval(provider, exp.bidID);
+
+      await setAutomine(hre, false);
+
+      const openSession1 = await sessionRouter.simulate.openSession(
+        [exp.stake, apprv1.msg, apprv1.signature],
+        { account: user.account.address },
+      );
+      const openTx1 = await user.writeContract(openSession1.request);
+
+      const openSession2 = await sessionRouter.simulate.openSession(
+        [exp.stake, apprv2.msg, apprv2.signature],
+        { account: user.account.address },
+      );
+      const openTx2 = await user.writeContract(openSession2.request);
+
+      await mine(hre);
+      await setAutomine(hre, true);
+
+      const sessionId1 = await getSessionId(publicClient, hre, openTx1);
+      const sessionId2 = await getSessionId(publicClient, hre, openTx2);
+
+      expect(sessionId1).not.to.equal(sessionId2);
+
+      const session1 = await sessionRouter.read.getSession([sessionId1]);
+      const session2 = await sessionRouter.read.getSession([sessionId2]);
+
+      expect(session1.stake).to.equal(exp.stake);
+      expect(session2.stake).to.equal(exp.stake);
     });
   });
 

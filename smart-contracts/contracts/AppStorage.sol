@@ -5,7 +5,6 @@ import { KeySet, AddressSet, Uint256Set } from "./libraries/KeySet.sol";
 import { LibSD } from "./libraries/LibSD.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-
 uint128 constant PROVIDER_REWARD_LIMITER_PERIOD = 365 days; // reward for this period will be limited by the stake
 
 struct Provider {
@@ -115,6 +114,7 @@ struct AppStorage {
   mapping(address => uint256[]) userSessions; // user address => all session indexes
   mapping(address => uint256[]) providerSessions; // provider address => all session indexes
   mapping(bytes32 => uint256[]) modelSessions; // modelId => all session indexes
+  uint256 sessionNonce; // used to generate unique session id
   // active sessions
   mapping(address => Uint256Set.Set) userActiveSessions; // user address => active session indexes
   mapping(address => Uint256Set.Set) providerActiveSessions; // provider address => active session indexes

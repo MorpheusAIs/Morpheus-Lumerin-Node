@@ -140,7 +140,7 @@ contract SessionRouter {
       revert SessionTooShort();
     }
 
-    sessionId = keccak256(abi.encodePacked(sender, bid.provider, _stake, block.number));
+    sessionId = keccak256(abi.encodePacked(sender, bid.provider, _stake, s.sessionNonce++));
     s.sessions.push(
       Session({
         id: sessionId,
