@@ -312,7 +312,7 @@ contract SessionRouter {
     // if session was ended but not closed  -
     // if session was not ended             - provider can claim all funds except for today's session cost
 
-    uint256 claimIntervalEnd = minUint256(startOfTheDay(block.timestamp), session.endsAt);
+    uint256 claimIntervalEnd = minUint256(minUint256(startOfTheDay(block.timestamp), session.endsAt), session.closedAt);
     uint256 claimableDuration = maxUint256(claimIntervalEnd, session.openedAt) - session.openedAt;
     uint256 totalCost = claimableDuration * session.pricePerSecond;
     uint256 withdrawableAmount = totalCost - session.providerWithdrawnAmount;

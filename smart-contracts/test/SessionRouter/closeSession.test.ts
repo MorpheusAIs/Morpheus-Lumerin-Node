@@ -158,6 +158,8 @@ describe("session closeout", function () {
 
     // verify session is closed with dispute
     const session = await sessionRouter.read.getSession([sessionId]);
+    const totalCost =
+      session.pricePerSecond * (session.closedAt - session.openedAt);
 
     // verify balances
     const userBalanceAfter = await tokenMOR.read.balanceOf([
@@ -188,7 +190,7 @@ describe("session closeout", function () {
     await time.increase((1 * DAY) / SECOND);
     const claimableProvider2 =
       await sessionRouter.read.getProviderClaimableBalance([sessionId]);
-    expect(claimableProvider2).to.equal(exp.totalCost);
+    expect(claimableProvider2).to.equal(totalCost);
 
     // claim provider balance
     await sessionRouter.write.claimProviderBalance([
@@ -201,7 +203,7 @@ describe("session closeout", function () {
       provider.account.address,
     ]);
     const providerClaimed = providerBalanceAfterClaim - providerBalanceAfter;
-    expect(providerClaimed).to.equal(exp.totalCost);
+    expect(providerClaimed).to.equal(totalCost);
   });
 
   it("should limit reward by stake amount", async function () {
