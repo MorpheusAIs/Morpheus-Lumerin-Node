@@ -59,6 +59,39 @@ func (m *MORRPCMessage) InitiateSessionResponse(providerPubKey lib.HexString, us
 	}, nil
 }
 
+func (m *MORRPCMessage) SessionReportResponse(providerPubKey lib.HexString, tps uint32, ttfp uint32, sessionID common.Hash, providerPrivateKeyHex lib.HexString, requestID string) (*RpcResponse, error) {
+	timestamp := m.generateTimestamp()
+
+	report, err := lib.EncodeAbiParameters(sessionReportAbi, []interface{}{sessionID, big.NewInt(int64(timestamp)), tps, ttfp})
+	if err != nil {
+		return &RpcResponse{}, err
+	}
+
+	params := SessionReportRes{
+		Timestamp: timestamp,
+		Message:   report,
+	}
+
+	signature, err := m.generateSignature(params, providerPrivateKeyHex)
+	if err != nil {
+		return &RpcResponse{}, err
+	}
+
+	params.Signature = signature
+
+	paramsBytes, err := json.Marshal(params)
+	if err != nil {
+		return &RpcResponse{}, err
+	}
+
+	paramsJSON := json.RawMessage(paramsBytes)
+
+	return &RpcResponse{
+		ID:     requestID,
+		Result: &paramsJSON,
+	}, nil
+}
+
 func (m *MORRPCMessage) SessionPromptResponse(message string, providerPrivateKeyHex lib.HexString, requestId string) (*RpcResponse, error) {
 	params := SessionPromptRes{
 		Message:   message,
@@ -216,11 +249,12 @@ func (m *MORRPCMessage) SessionPromptRequest(sessionID common.Hash, prompt inter
 	}, nil
 }
 
-func (m *MORRPCMessage) SessionCloseRequest(sessionID common.Hash, userPrivateKeyHex lib.HexString, requestId string) (*RPCMessage, error) {
-	method := "session.close"
-	params := SessionCloseReq{
+func (m *MORRPCMessage) SessionReportRequest(sessionID common.Hash, userPrivateKeyHex lib.HexString, requestId string) (*RPCMessage, error) {
+	method := "session.report"
+
+	params := SessionReportReq{
 		Timestamp: m.generateTimestamp(),
-		SessionID: sessionID,
+		Message:   sessionID.Hex(),
 	}
 
 	signature, err := m.generateSignature(params, userPrivateKeyHex)
