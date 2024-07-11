@@ -35,6 +35,7 @@ contract SessionRouter {
   error SessionTooShort();
   error SessionNotFound();
   error SessionAlreadyClosed();
+  error SessionNotClosed();
 
   error BidNotFound();
   error CannotDecodeAbi();
@@ -317,8 +318,12 @@ contract SessionRouter {
 
   /// @notice deletes session from the history
   function deleteHistory(bytes32 sessionId) external {
-    Session storage session = s.sessions[s.sessionMap[sessionId]];
+    uint256 sessionIndex = s.sessionMap[sessionId];
+    Session storage session = s.sessions[sessionIndex];
     LibOwner._senderOrOwner(session.user);
+    if (session.closedAt == 0) {
+      revert SessionNotClosed();
+    }
     session.user = address(0);
   }
 

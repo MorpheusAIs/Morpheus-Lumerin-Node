@@ -6,10 +6,16 @@ import {
   keccak256,
   parseUnits,
 } from "viem/utils";
-import { getHex, getTxTimestamp, now, nowChain, randomBytes32 } from "./utils";
+import {
+  getHex,
+  getSessionId,
+  getTxTimestamp,
+  nowChain,
+  randomBytes32,
+} from "./utils";
 import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
 import { FacetCutAction, getSelectors } from "../libraries/diamond";
-import { DAY, HOUR, MINUTE, SECOND } from "../utils/time";
+import { DAY, HOUR, SECOND } from "../utils/time";
 import {
   GetContractReturnType,
   WalletClient,
@@ -388,6 +394,60 @@ export async function deploySingleBid() {
     getDuration,
     approveUserFunds,
     user,
+  };
+}
+
+export async function openSession() {
+  const {
+    sessionRouter,
+    provider,
+    expectedSession: exp,
+    user,
+    publicClient,
+  } = await loadFixture(deploySingleBid);
+
+  // open session
+  const { msg, signature } = await getProviderApproval(provider, exp.bidID);
+  const openTx = await sessionRouter.write.openSession(
+    [exp.stake, msg, signature],
+    { account: user.account.address },
+  );
+  const sessionId = await getSessionId(publicClient, hre, openTx);
+  await time.increase(exp.durationSeconds * 2n);
+
+  return {
+    sessionRouter,
+    provider,
+    expectedSession: exp,
+    user,
+    publicClient,
+    sessionId,
+  };
+}
+
+export async function openEarlyCloseSession() {
+  const {
+    sessionRouter,
+    provider,
+    expectedSession: exp,
+    user,
+    publicClient,
+    sessionId,
+  } = await loadFixture(openSession);
+
+  // close session
+  const report = await getReport(provider, sessionId, 10, 10);
+  await sessionRouter.write.closeSession([report.msg, report.sig], {
+    account: user.account,
+  });
+
+  return {
+    sessionRouter,
+    provider,
+    expectedSession: exp,
+    user,
+    publicClient,
+    sessionId,
   };
 }
 
