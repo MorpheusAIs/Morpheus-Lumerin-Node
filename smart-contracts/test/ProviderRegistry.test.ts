@@ -149,6 +149,73 @@ describe("Provider registry", function () {
 
       it.skip("Should block withdrawing whole stake if provider already earned", async function () {});
       it.skip("Should allow withdrawing remaining stake after limit period", async function () {});
+
+      it("Should correctly reregister provider", async function () {
+        const {
+          providerRegistry,
+          provider,
+          expectedProvider: exp,
+          tokenMOR,
+        } = await loadFixture(deploySingleProvider);
+
+        // check indexes
+        expect(await providerRegistry.read.providerGetCount()).eq(1n);
+        expect(await providerRegistry.read.providers([0n])).eq(
+          getAddress(provider.account.address),
+        );
+        expect(await providerRegistry.read.providerGetIds()).deep.equal([
+          getAddress(provider.account.address),
+        ]);
+
+        // deregister
+        await providerRegistry.write.providerDeregister(
+          [provider.account.address],
+          { account: provider.account },
+        );
+
+        // check indexes
+        expect(await providerRegistry.read.providerGetCount()).eq(0n);
+        expect(await providerRegistry.read.providerGetIds()).deep.equal([]);
+        expect(await providerRegistry.read.providers([0n])).eq(
+          getAddress(provider.account.address),
+        );
+
+        const provider2 = {
+          endpoint: "new-endpoint-2",
+          stake: 123n,
+          limitPeriodEarned: exp.limitPeriodEarned,
+          limitPeriodEnd: exp.limitPeriodEnd,
+          createdAt: exp.createdAt,
+        };
+
+        // register again
+        await tokenMOR.write.transfer([
+          provider.account.address,
+          provider2.stake,
+        ]);
+        await tokenMOR.write.approve(
+          [providerRegistry.address, provider2.stake],
+          { account: provider.account },
+        );
+        await providerRegistry.write.providerRegister(
+          [provider.account.address, provider2.stake, provider2.endpoint],
+          { account: provider.account },
+        );
+
+        // check indexes
+        expect(await providerRegistry.read.providerGetCount()).eq(1n);
+        expect(await providerRegistry.read.providers([0n])).eq(
+          getAddress(provider.account.address),
+        );
+        expect(await providerRegistry.read.providerGetIds()).deep.equal([
+          getAddress(provider.account.address),
+        ]);
+
+        // check record
+        expect(
+          await providerRegistry.read.providerMap([provider.account.address]),
+        ).deep.include(provider2);
+      });
     });
 
     it("Should update stake and url", async function () {

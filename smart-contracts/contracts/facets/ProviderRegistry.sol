@@ -74,14 +74,23 @@ contract ProviderRegistry {
     // if we add stake to an existing provider the limiter period is not reset
     uint128 createdAt = provider.createdAt;
     uint128 periodEnd = provider.limitPeriodEnd;
-    if (provider.createdAt == 0) {
+    if (createdAt == 0) {
       s.activeProviders.insert(addr);
       s.providers.push(addr);
       createdAt = uint128(block.timestamp);
       periodEnd = createdAt + PROVIDER_REWARD_LIMITER_PERIOD;
+    } else if (provider.isDeleted) {
+      s.activeProviders.insert(addr);
     }
 
-    s.providerMap[addr] = Provider(endpoint, newStake, createdAt, periodEnd, provider.limitPeriodEarned, false);
+    s.providerMap[addr] = Provider({
+      endpoint: endpoint,
+      stake: newStake,
+      createdAt: createdAt,
+      limitPeriodEnd: periodEnd,
+      limitPeriodEarned: provider.limitPeriodEarned,
+      isDeleted: false
+    });
 
     emit ProviderRegisteredUpdated(addr);
 
@@ -110,7 +119,7 @@ contract ProviderRegistry {
       revert ErrProviderNotDeleted();
     }
 
-    if (p.stake == 0){
+    if (p.stake == 0) {
       revert ErrNoStake();
     }
 
@@ -124,10 +133,10 @@ contract ProviderRegistry {
   }
 
   /// @notice Returns the withdrawable stake for a provider
-  /// @dev    If the provider already earned this period then withdrawable stake 
+  /// @dev    If the provider already earned this period then withdrawable stake
   ///         is limited by the amount earning that remains in the current period.
   ///         It is done to prevent the provider from withdrawing and then staking
-  ///         again from a different address, which bypasses the limitation. 
+  ///         again from a different address, which bypasses the limitation.
   function getWithdrawableStake(Provider memory p) private view returns (uint256) {
     if (uint128(block.timestamp) > p.limitPeriodEnd) {
       return p.stake;
