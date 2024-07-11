@@ -16,6 +16,7 @@ contract ModelRegistry {
 
   error ModelNotFound();
   error StakeTooLow();
+  error ModelHasActiveBids();
 
   /// @notice Returns model struct by id
   function modelMap(bytes32 id) external view returns (Model memory) {
@@ -112,6 +113,10 @@ contract ModelRegistry {
   function modelDeregister(bytes32 id) external {
     Model storage model = s.modelMap[id];
     LibOwner._senderOrOwner(model.owner);
+
+    if (s.modelAgentActiveBids[id].count() > 0) {
+      revert ModelHasActiveBids();
+    }
 
     s.activeModels.remove(id); // reverts with KeyNotFound()
     model.isDeleted = true;

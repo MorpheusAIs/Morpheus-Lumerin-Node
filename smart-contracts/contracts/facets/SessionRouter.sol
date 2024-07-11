@@ -111,8 +111,6 @@ contract SessionRouter {
     bytes memory providerApproval,
     bytes memory signature
   ) external returns (bytes32 sessionId) {
-    address sender = msg.sender;
-
     // reverts without specific error if cannot decode abi
     (bytes32 bidId, uint128 timestampMs) = abi.decode(providerApproval, (bytes32, uint128));
 
@@ -139,11 +137,11 @@ contract SessionRouter {
       revert SessionTooShort();
     }
 
-    sessionId = keccak256(abi.encodePacked(sender, bid.provider, _stake, s.sessionNonce++));
+    sessionId = keccak256(abi.encodePacked(msg.sender, bid.provider, _stake, s.sessionNonce++));
     s.sessions.push(
       Session({
         id: sessionId,
-        user: sender,
+        user: msg.sender,
         provider: bid.provider,
         modelAgentId: bid.modelAgentId,
         bidID: bidId,
@@ -160,16 +158,16 @@ contract SessionRouter {
 
     uint256 sessionIndex = s.sessions.length - 1;
     s.sessionMap[sessionId] = sessionIndex;
-    s.userSessions[sender].push(sessionIndex);
+    s.userSessions[msg.sender].push(sessionIndex);
     s.providerSessions[bid.provider].push(sessionIndex);
     s.modelSessions[bid.modelAgentId].push(sessionIndex);
 
-    s.userActiveSessions[sender].insert(sessionIndex);
+    s.userActiveSessions[msg.sender].insert(sessionIndex);
     s.providerActiveSessions[bid.provider].insert(sessionIndex);
     s.activeSessionsCount++;
 
-    emit SessionOpened(sender, sessionId, bid.provider);
-    s.token.transferFrom(sender, address(this), _stake); // errors with Insufficient Allowance if not approved
+    emit SessionOpened(msg.sender, sessionId, bid.provider);
+    s.token.transferFrom(msg.sender, address(this), _stake); // errors with Insufficient Allowance if not approved
 
     return sessionId;
   }

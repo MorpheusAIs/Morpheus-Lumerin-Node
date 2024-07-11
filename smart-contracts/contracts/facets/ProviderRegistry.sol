@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.24;
 
-import { AddressSet } from "../libraries/KeySet.sol";
+import { AddressSet, KeySet } from "../libraries/KeySet.sol";
 import { AppStorage, Provider, PROVIDER_REWARD_LIMITER_PERIOD } from "../AppStorage.sol";
 import { LibOwner } from "../libraries/LibOwner.sol";
 
 contract ProviderRegistry {
   using AddressSet for AddressSet.Set;
+  using KeySet for KeySet.Set;
 
   AppStorage internal s;
 
@@ -18,6 +19,7 @@ contract ProviderRegistry {
   error ErrProviderNotDeleted();
   error ErrNoStake();
   error ErrNoWithdrawableStake();
+  error ProviderHasActiveBids();
 
   /// @notice Returns provider struct by address
   function providerMap(address addr) external view returns (Provider memory) {
@@ -100,8 +102,11 @@ contract ProviderRegistry {
   /// @notice Deregisters a provider
   function providerDeregister(address addr) external {
     LibOwner._senderOrOwner(addr);
-    s.activeProviders.remove(addr);
+    if (s.providerActiveBids[addr].count() > 0) {
+      revert ProviderHasActiveBids();
+    }
 
+    s.activeProviders.remove(addr);
     emit ProviderDeregistered(addr);
 
     Provider storage p = s.providerMap[addr];

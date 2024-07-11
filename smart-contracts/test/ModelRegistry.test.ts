@@ -2,7 +2,7 @@ import { loadFixture } from "@nomicfoundation/hardhat-toolbox-viem/network-helpe
 import { expect } from "chai";
 import hre from "hardhat";
 import { getAddress } from "viem";
-import { deployDiamond, deploySingleModel } from "./fixtures";
+import { deployDiamond, deploySingleBid, deploySingleModel } from "./fixtures";
 import {
   catchError,
   getHex,
@@ -162,6 +162,28 @@ describe("Model registry", function () {
       const balanceAfter = await tokenMOR.read.balanceOf([expectedModel.owner]);
 
       expect(balanceAfter - balanceBefore).eq(expectedModel.stake);
+    });
+
+    it("should error when deregistering a model that has bids", async function () {
+      const { modelRegistry, expectedModel, marketplace, expectedBid } =
+        await loadFixture(deploySingleBid);
+
+      // try deregistering model
+      await catchError(modelRegistry.abi, "ModelHasActiveBids", async () => {
+        await modelRegistry.write.modelDeregister([expectedModel.modelId], {
+          account: expectedModel.owner,
+        });
+      });
+
+      // remove bid
+      await marketplace.write.deleteModelAgentBid([expectedBid.id], {
+        account: expectedBid.providerAddr,
+      });
+
+      // deregister model
+      await modelRegistry.write.modelDeregister([expectedModel.modelId], {
+        account: expectedModel.owner,
+      });
     });
 
     it("Should update existing model", async function () {

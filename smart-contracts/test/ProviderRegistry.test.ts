@@ -3,7 +3,11 @@ import { expect } from "chai";
 import hre from "hardhat";
 import { getAddress } from "viem";
 import { PanicOutOfBoundsRegexp, catchError } from "./utils";
-import { deployDiamond, deploySingleProvider } from "./fixtures";
+import {
+  deployDiamond,
+  deploySingleBid,
+  deploySingleProvider,
+} from "./fixtures";
 
 describe("Provider registry", function () {
   describe("Actions", function () {
@@ -145,6 +149,34 @@ describe("Provider registry", function () {
         ]);
 
         expect(balanceAfter - balanceBefore).eq(expectedProvider.stake);
+      });
+
+      it("should error when deregistering a model that has bids", async function () {
+        const { providerRegistry, marketplace, expectedBid } =
+          await loadFixture(deploySingleBid);
+
+        // try deregistering model
+        await catchError(
+          providerRegistry.abi,
+          "ProviderHasActiveBids",
+          async () => {
+            await providerRegistry.write.providerDeregister(
+              [expectedBid.providerAddr],
+              { account: expectedBid.providerAddr },
+            );
+          },
+        );
+
+        // remove bid
+        await marketplace.write.deleteModelAgentBid([expectedBid.id], {
+          account: expectedBid.providerAddr,
+        });
+
+        // deregister model
+        await providerRegistry.write.providerDeregister(
+          [expectedBid.providerAddr],
+          { account: expectedBid.providerAddr },
+        );
       });
 
       it.skip("Should block withdrawing whole stake if provider already earned", async function () {});

@@ -203,8 +203,14 @@ export async function deploySingleProvider() {
 }
 
 export async function deploySingleModel() {
-  const { owner, provider, publicClient, tokenMOR, modelRegistry } =
-    await loadFixture(deployDiamond);
+  const {
+    owner,
+    provider,
+    publicClient,
+    tokenMOR,
+    modelRegistry,
+    marketplace,
+  } = await loadFixture(deployDiamond);
 
   const expectedModel = {
     modelId: randomBytes32(),
@@ -239,6 +245,7 @@ export async function deploySingleModel() {
     provider,
     publicClient,
     tokenMOR,
+    marketplace,
   };
 }
 export async function deploySingleBid() {
