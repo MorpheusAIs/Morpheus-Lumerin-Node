@@ -5,7 +5,13 @@ import {
 import { expect } from "chai";
 import hre from "hardhat";
 import { deploySingleBid, getProviderApproval, getReport } from "../fixtures";
-import { getSessionId, getTxTimestamp, nowChain } from "../utils";
+import {
+  catchError,
+  expectError,
+  getSessionId,
+  getTxTimestamp,
+  nowChain,
+} from "../utils";
 import { DAY, SECOND } from "../../utils/time";
 import { expectAlmostEqual, expectAlmostEqualDelta } from "../../utils/compare";
 import { getAddress, parseUnits } from "viem";
@@ -204,6 +210,36 @@ describe("session closeout", function () {
     ]);
     const providerClaimed = providerBalanceAfterClaim - providerBalanceAfter;
     expect(providerClaimed).to.equal(totalCost);
+  });
+
+  it("should error when not a user trying to close", async function () {
+    const {
+      sessionRouter,
+      provider,
+      expectedSession: exp,
+      user,
+      publicClient,
+    } = await loadFixture(deploySingleBid);
+
+    // open session
+    const { msg, signature } = await getProviderApproval(provider, exp.bidID);
+    const openTx = await sessionRouter.write.openSession(
+      [exp.stake, msg, signature],
+      { account: user.account.address },
+    );
+    const sessionId = await getSessionId(publicClient, hre, openTx);
+
+    // wait half of the session
+    await time.increase(exp.durationSeconds / 2n - 1n);
+
+    // close session with user signature
+    const report = await getReport(user, sessionId, 10);
+
+    await catchError(sessionRouter.abi, "NotSenderOrOwner", async () => {
+      await sessionRouter.write.closeSession([report.msg, report.sig], {
+        account: provider.account,
+      });
+    });
   });
 
   it("should limit reward by stake amount", async function () {

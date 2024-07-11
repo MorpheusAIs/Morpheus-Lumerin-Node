@@ -26,7 +26,6 @@ contract SessionRouter {
   event SessionClosed(address indexed userAddress, bytes32 indexed sessionId, address indexed providerId);
 
   // errors
-  error NotUserOrProvider();
   error NotEnoughWithdrawableBalance(); // means that there is not enough funds at all or some funds are still locked
   error WithdrawableBalanceLimitByStakeReached(); // means that user can't withdraw more funds because of the limit which equals to the stake
   error ProviderSignatureMismatch();
@@ -187,9 +186,7 @@ contract SessionRouter {
     if (session.openedAt == 0) {
       revert SessionNotFound();
     }
-    if (session.user != msg.sender && session.provider != msg.sender) {
-      revert NotUserOrProvider();
-    }
+    LibOwner._senderOrOwner(session.user);
     if (session.closedAt != 0) {
       revert SessionAlreadyClosed();
     }
