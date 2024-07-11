@@ -138,12 +138,18 @@ func (s *MORRPCController) sessionPrompt(ctx context.Context, msg m.RPCMessage, 
 
 	now := time.Now().Unix()
 	ttftMs, totalTokens, err := s.service.SessionPrompt(ctx, msg.ID, user.PubKey, &req, sendResponse, sourceLog)
-	requestTime := int(time.Now().Unix() - now)
+	if err != nil {
+		sourceLog.Error(err)
+		return err
+	}
 
-	if err == nil {
-		session.TTFTArr = append(session.TTFTArr, ttftMs)
-		session.TPSArr = append(session.TPSArr, totalTokens/requestTime)
-		s.sessionStorage.AddSession(session)
+	requestDuration := int(time.Now().Unix() - now)
+	session.TTFTMsArr = append(session.TTFTMsArr, ttftMs)
+	session.TPSScaled1000Arr = append(session.TPSScaled1000Arr, totalTokens*1000/requestDuration)
+	err = s.sessionStorage.AddSession(session)
+	if err != nil {
+		sourceLog.Error(err)
+		return err
 	}
 	return err
 }

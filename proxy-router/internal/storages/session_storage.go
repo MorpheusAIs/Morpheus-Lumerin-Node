@@ -8,12 +8,12 @@ import (
 )
 
 type Session struct {
-	Id           string
-	UserAddr     string
-	ProviderAddr string
-	EndsAt       *big.Int
-	TPSArr       []int
-	TTFTArr      []int
+	Id               string
+	UserAddr         string
+	ProviderAddr     string
+	EndsAt           *big.Int
+	TPSScaled1000Arr []int
+	TTFTMsArr        []int
 }
 
 type User struct {

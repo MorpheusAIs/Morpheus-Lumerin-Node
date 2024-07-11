@@ -129,18 +129,18 @@ func (s *ProxyReceiver) SessionReport(ctx context.Context, msgID string, reqID s
 
 	tps := 0
 	ttft := 0
-	for _, tpsVal := range session.TPSArr {
+	for _, tpsVal := range session.TPSScaled1000Arr {
 		tps += tpsVal
 	}
-	for _, ttftVal := range session.TTFTArr {
+	for _, ttftVal := range session.TTFTMsArr {
 		ttft += ttftVal
 	}
 
-	if len(session.TPSArr) != 0 {
-		tps /= len(session.TPSArr)
+	if len(session.TPSScaled1000Arr) != 0 {
+		tps /= len(session.TPSScaled1000Arr)
 	}
-	if len(session.TTFTArr) != 0 {
-		ttft /= len(session.TTFTArr)
+	if len(session.TTFTMsArr) != 0 {
+		ttft /= len(session.TTFTMsArr)
 	}
 
 	response, err := s.morRpc.SessionReportResponse(
