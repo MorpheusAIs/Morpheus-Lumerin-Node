@@ -138,7 +138,7 @@ struct AppStorage {
   uint256 modelMinStake;
   uint256 providerMinStake;
   Pool[] pools; // distribution pools configuration that mirrors L1 contract
-  uint256 totalClaimed; // total amount of MOR claimend by providers
+  uint256 totalClaimed; // total amount of MOR claimed by providers
 }
 
 library LibAppStorage {

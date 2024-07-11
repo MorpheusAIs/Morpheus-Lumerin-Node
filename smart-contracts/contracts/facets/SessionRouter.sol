@@ -436,7 +436,7 @@ contract SessionRouter {
       uint128(startOfTheDay(timestamp))
     );
 
-    return periodReward + s.totalClaimed;
+    return periodReward - s.totalClaimed;
   }
 
   // returns total amount of MOR tokens that were distributed across all pools
