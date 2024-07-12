@@ -338,33 +338,37 @@ const Chat = (props) => {
         call(value).finally(() => setIsSpinning(false));
         setValue("");
     }
-    const onBidSelect = ({ bidId, modelId }) => {
+    const onBidSelect = ({ bidId, modelId, isLocal }) => {
         setMessages([]);
         setActiveSession(undefined);
         setIsReadonly(false);
+        abort = true;
 
-        if (bidId) {
-            const selectedBid = (chainData.models
-                .find((x: any) => x.bids.find(b => b.Id == bidId)) as any)
-                .bids.find(b => b.Id == bidId);
-
-            const openSessions = sessions.filter(s => !isClosed(s));
-            const openBidSession = openSessions.find(s => s.BidID == selectedBid.Id);
-
-            if (openBidSession) {
-                onSetActiveSession({ sessionId: openBidSession.Id })
-            }
-
-            setSelectedBid(selectedBid);
-        }
-        else {
+        if(isLocal) {
             const selectedBid = chainData.models
                 .find(x => x.Id == modelId)
                 .bids.find(b => b.Provider == 'Local');
 
             setSelectedBid(selectedBid);
+            return;
         }
-        abort = true;
+
+        if(!bidId) {
+            return;
+        }
+
+        const selectedBid = (chainData.models
+            .find((x: any) => x.bids.find(b => b.Id == bidId)) as any)
+            .bids.find(b => b.Id == bidId);
+
+        const openSessions = sessions.filter(s => !isClosed(s));
+        const openBidSession = openSessions.find(s => s.BidID == selectedBid.Id);
+
+        if (openBidSession) {
+            onSetActiveSession({ sessionId: openBidSession.Id })
+        }
+
+        setSelectedBid(selectedBid);
     }
 
     return (
