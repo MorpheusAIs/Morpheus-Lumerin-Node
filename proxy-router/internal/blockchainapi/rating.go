@@ -5,13 +5,12 @@ import (
 	"sort"
 
 	m "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/marketplace"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi/structs"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
-	"github.com/ethereum/go-ethereum/common"
 )
 
 type ScoredBid struct {
-	ID    common.Hash
-	Bid   m.Bid
+	Bid   structs.Bid
 	Score float64
 }
 
@@ -22,11 +21,18 @@ func rateBids(bidIds [][32]byte, bids []m.Bid, pmStats []m.ProviderModelStats, m
 		score := getScore(bids[i], pmStats[i], mStats)
 		if math.IsNaN(score) || math.IsInf(score, 0) {
 			log.Errorf("provider score is not valid %d for bid %v, pmStats %v, mStats %v", score, bidIds[i], pmStats[i], mStats)
+			score = 0
 		}
-		score = 0
 		scoredBid := ScoredBid{
-			ID:    bidIds[i],
-			Bid:   bids[i],
+			Bid: structs.Bid{
+				Id:             bidIds[i],
+				Provider:       bids[i].Provider,
+				PricePerSecond: bids[i].PricePerSecond,
+				ModelAgentId:   bids[i].ModelAgentId,
+				Nonce:          bids[i].Nonce,
+				CreatedAt:      bids[i].CreatedAt,
+				DeletedAt:      bids[i].DeletedAt,
+			},
 			Score: score,
 		}
 		scoredBids[i] = scoredBid

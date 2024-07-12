@@ -575,7 +575,7 @@ func (s *BlockchainService) tryOpenSession(ctx context.Context, bid ScoredBid, d
 	totalCost := duration.Mul(bid.Bid.PricePerSecond, duration)
 	stake := totalCost.Div(totalCost.Mul(supply, totalCost), budget)
 
-	initRes, err := s.proxyService.InitiateSession(ctx, userAddr, bid.Bid.Provider, stake, bid.ID, provider.Endpoint)
+	initRes, err := s.proxyService.InitiateSession(ctx, userAddr, bid.Bid.Provider, stake, bid.Bid.Id, provider.Endpoint)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrInitSession, err)
 	}
