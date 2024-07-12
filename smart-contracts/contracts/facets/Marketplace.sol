@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.24;
 
-import { AppStorage, Bid } from "../AppStorage.sol";
+import { AppStorage, Bid, ProviderModelStats, ModelStats } from "../AppStorage.sol";
 import { KeySet, AddressSet } from "../libraries/KeySet.sol";
 import { LibOwner } from "../libraries/LibOwner.sol";
 
@@ -26,7 +26,7 @@ contract Marketplace {
     return s.bidMap[bidId];
   }
 
-  function getActiveBidsByProvider(address provider) external view returns (Bid[] memory) {
+  function getActiveBidsByProvider(address provider) external view returns (bytes32[] memory, Bid[] memory) {
     KeySet.Set storage providerBidsSet = s.providerActiveBids[provider];
     uint256 length = providerBidsSet.count();
 
@@ -37,11 +37,11 @@ contract Marketplace {
       bidIds[i] = id;
       _bids[i] = s.bidMap[id];
     }
-    return _bids;
+    return (bidIds, _bids);
   }
 
   /// @notice returns active bids by model or agent id
-  function getActiveBidsByModelAgent(bytes32 modelAgentId) external view returns (Bid[] memory) {
+  function getActiveBidsByModelAgent(bytes32 modelAgentId) external view returns (bytes32[] memory, Bid[] memory) {
     KeySet.Set storage modelAgentBidsSet = s.modelAgentActiveBids[modelAgentId];
     uint256 length = modelAgentBidsSet.count();
 
@@ -52,7 +52,37 @@ contract Marketplace {
       bidIds[i] = id;
       _bids[i] = s.bidMap[id];
     }
-    return _bids;
+    return (bidIds, _bids);
+  }
+
+    /// @notice returns active bids by model or agent id
+  function getActiveBidsRatingByModelAgent(bytes32 modelAgentId, uint256 offset, uint8 limit) external view returns (bytes32[] memory, Bid[] memory, ProviderModelStats[] memory) {
+    KeySet.Set storage modelAgentBidsSet = s.modelAgentActiveBids[modelAgentId];
+    uint256 length = modelAgentBidsSet.count();
+
+    if (length < offset) {
+      return (new bytes32[](0), new Bid[](0), new ProviderModelStats[](0));
+    }
+    uint8 size = offset + limit > length ? uint8(length - offset) : limit;
+
+    Bid[] memory _bids = new Bid[](length);
+    bytes32[] memory bidIds = new bytes32[](length);
+    ProviderModelStats[] memory _stats = new ProviderModelStats[](length);
+
+    for (uint i = 0; i < size; i++) {
+      uint256 index = length - offset - i - 1;
+      bytes32 id = modelAgentBidsSet.keyAtIndex(index);
+      bidIds[i] = id;
+      Bid memory bid = s.bidMap[id];
+      _bids[i] = bid;
+      _stats[i] = s.stats[modelAgentId][bid.provider];
+    }
+
+    return (bidIds, _bids, _stats);
+  }
+
+  function getModelStats(bytes32 modelID) external view returns (ModelStats memory){
+    return s.modelStats[modelID];
   }
 
   /// @notice returns all bids by provider sorted from newest to oldest

@@ -305,5 +305,30 @@ describe("Model registry", function () {
         });
       });
     });
+
+    it("Should get model stats", async function () {
+      const { modelRegistry, expectedModel } =
+        await loadFixture(deploySingleModel);
+
+      const stats = await modelRegistry.read.modelStats([
+        expectedModel.modelId,
+      ]);
+
+      expect(stats).deep.equal({
+        count: 0,
+        totalDuration: {
+          mean: 0n,
+          sqSum: 0n,
+        },
+        tpsScaled1000: {
+          mean: 0n,
+          sqSum: 0n,
+        },
+        ttftMs: {
+          mean: 0n,
+          sqSum: 0n,
+        },
+      });
+    });
   });
 });

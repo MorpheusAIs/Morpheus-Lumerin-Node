@@ -31,15 +31,17 @@ var (
 
 // Provider is an auto generated low-level Go binding around an user-defined struct.
 type Provider struct {
-	Endpoint  string
-	Stake     *big.Int
-	CreatedAt *big.Int
-	IsDeleted bool
+	Endpoint          string
+	Stake             *big.Int
+	CreatedAt         *big.Int
+	LimitPeriodEnd    *big.Int
+	LimitPeriodEarned *big.Int
+	IsDeleted         bool
 }
 
 // ProviderRegistryMetaData contains all meta data concerning the ProviderRegistry contract.
 var ProviderRegistryMetaData = &bind.MetaData{
-	ABI: "[{\"inputs\":[],\"name\":\"KeyExists\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"KeyNotFound\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_user\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_contractOwner\",\"type\":\"address\"}],\"name\":\"NotContractOwner\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotSenderOrOwner\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"StakeTooLow\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroKey\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"}],\"name\":\"ProviderDeregistered\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newStake\",\"type\":\"uint256\"}],\"name\":\"ProviderMinStakeUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"}],\"name\":\"ProviderRegisteredUpdated\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"addr\",\"type\":\"address\"}],\"name\":\"providerDeregister\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"providerGetAll\",\"outputs\":[{\"internalType\":\"address[]\",\"name\":\"\",\"type\":\"address[]\"},{\"components\":[{\"internalType\":\"string\",\"name\":\"endpoint\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"stake\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"bool\",\"name\":\"isDeleted\",\"type\":\"bool\"}],\"internalType\":\"structProvider[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"index\",\"type\":\"uint256\"}],\"name\":\"providerGetByIndex\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"addr\",\"type\":\"address\"},{\"components\":[{\"internalType\":\"string\",\"name\":\"endpoint\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"stake\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"bool\",\"name\":\"isDeleted\",\"type\":\"bool\"}],\"internalType\":\"structProvider\",\"name\":\"provider\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"providerGetCount\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"count\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"providerGetIds\",\"outputs\":[{\"internalType\":\"address[]\",\"name\":\"\",\"type\":\"address[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"addr\",\"type\":\"address\"}],\"name\":\"providerMap\",\"outputs\":[{\"components\":[{\"internalType\":\"string\",\"name\":\"endpoint\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"stake\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"bool\",\"name\":\"isDeleted\",\"type\":\"bool\"}],\"internalType\":\"structProvider\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"providerMinStake\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"addr\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"addStake\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"endpoint\",\"type\":\"string\"}],\"name\":\"providerRegister\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_minStake\",\"type\":\"uint256\"}],\"name\":\"providerSetMinStake\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"index\",\"type\":\"uint256\"}],\"name\":\"providers\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"addr\",\"type\":\"address\"}],\"name\":\"providrerExists\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"}]",
+	ABI: "[{\"inputs\":[],\"name\":\"ErrNoStake\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ErrNoWithdrawableStake\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ErrProviderNotDeleted\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"KeyExists\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"KeyNotFound\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_user\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_contractOwner\",\"type\":\"address\"}],\"name\":\"NotContractOwner\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotSenderOrOwner\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"StakeTooLow\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroKey\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"}],\"name\":\"ProviderDeregistered\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newStake\",\"type\":\"uint256\"}],\"name\":\"ProviderMinStakeUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"}],\"name\":\"ProviderRegisteredUpdated\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"addr\",\"type\":\"address\"}],\"name\":\"providerDeregister\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"addr\",\"type\":\"address\"}],\"name\":\"providerExists\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"providerGetAll\",\"outputs\":[{\"internalType\":\"address[]\",\"name\":\"\",\"type\":\"address[]\"},{\"components\":[{\"internalType\":\"string\",\"name\":\"endpoint\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"stake\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"uint128\",\"name\":\"limitPeriodEnd\",\"type\":\"uint128\"},{\"internalType\":\"uint256\",\"name\":\"limitPeriodEarned\",\"type\":\"uint256\"},{\"internalType\":\"bool\",\"name\":\"isDeleted\",\"type\":\"bool\"}],\"internalType\":\"structProvider[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"index\",\"type\":\"uint256\"}],\"name\":\"providerGetByIndex\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"addr\",\"type\":\"address\"},{\"components\":[{\"internalType\":\"string\",\"name\":\"endpoint\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"stake\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"uint128\",\"name\":\"limitPeriodEnd\",\"type\":\"uint128\"},{\"internalType\":\"uint256\",\"name\":\"limitPeriodEarned\",\"type\":\"uint256\"},{\"internalType\":\"bool\",\"name\":\"isDeleted\",\"type\":\"bool\"}],\"internalType\":\"structProvider\",\"name\":\"provider\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"providerGetCount\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"count\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"providerGetIds\",\"outputs\":[{\"internalType\":\"address[]\",\"name\":\"\",\"type\":\"address[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"addr\",\"type\":\"address\"}],\"name\":\"providerMap\",\"outputs\":[{\"components\":[{\"internalType\":\"string\",\"name\":\"endpoint\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"stake\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"uint128\",\"name\":\"limitPeriodEnd\",\"type\":\"uint128\"},{\"internalType\":\"uint256\",\"name\":\"limitPeriodEarned\",\"type\":\"uint256\"},{\"internalType\":\"bool\",\"name\":\"isDeleted\",\"type\":\"bool\"}],\"internalType\":\"structProvider\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"providerMinStake\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"addr\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"addStake\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"endpoint\",\"type\":\"string\"}],\"name\":\"providerRegister\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_minStake\",\"type\":\"uint256\"}],\"name\":\"providerSetMinStake\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"addr\",\"type\":\"address\"}],\"name\":\"providerWithdrawStake\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"index\",\"type\":\"uint256\"}],\"name\":\"providers\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"}]",
 }
 
 // ProviderRegistryABI is the input ABI used to generate the binding from.
@@ -188,9 +190,40 @@ func (_ProviderRegistry *ProviderRegistryTransactorRaw) Transact(opts *bind.Tran
 	return _ProviderRegistry.Contract.contract.Transact(opts, method, params...)
 }
 
+// ProviderExists is a free data retrieval call binding the contract method 0xdfc03505.
+//
+// Solidity: function providerExists(address addr) view returns(bool)
+func (_ProviderRegistry *ProviderRegistryCaller) ProviderExists(opts *bind.CallOpts, addr common.Address) (bool, error) {
+	var out []interface{}
+	err := _ProviderRegistry.contract.Call(opts, &out, "providerExists", addr)
+
+	if err != nil {
+		return *new(bool), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(bool)).(*bool)
+
+	return out0, err
+
+}
+
+// ProviderExists is a free data retrieval call binding the contract method 0xdfc03505.
+//
+// Solidity: function providerExists(address addr) view returns(bool)
+func (_ProviderRegistry *ProviderRegistrySession) ProviderExists(addr common.Address) (bool, error) {
+	return _ProviderRegistry.Contract.ProviderExists(&_ProviderRegistry.CallOpts, addr)
+}
+
+// ProviderExists is a free data retrieval call binding the contract method 0xdfc03505.
+//
+// Solidity: function providerExists(address addr) view returns(bool)
+func (_ProviderRegistry *ProviderRegistryCallerSession) ProviderExists(addr common.Address) (bool, error) {
+	return _ProviderRegistry.Contract.ProviderExists(&_ProviderRegistry.CallOpts, addr)
+}
+
 // ProviderGetAll is a free data retrieval call binding the contract method 0x86af8fdc.
 //
-// Solidity: function providerGetAll() view returns(address[], (string,uint256,uint128,bool)[])
+// Solidity: function providerGetAll() view returns(address[], (string,uint256,uint128,uint128,uint256,bool)[])
 func (_ProviderRegistry *ProviderRegistryCaller) ProviderGetAll(opts *bind.CallOpts) ([]common.Address, []Provider, error) {
 	var out []interface{}
 	err := _ProviderRegistry.contract.Call(opts, &out, "providerGetAll")
@@ -208,21 +241,21 @@ func (_ProviderRegistry *ProviderRegistryCaller) ProviderGetAll(opts *bind.CallO
 
 // ProviderGetAll is a free data retrieval call binding the contract method 0x86af8fdc.
 //
-// Solidity: function providerGetAll() view returns(address[], (string,uint256,uint128,bool)[])
+// Solidity: function providerGetAll() view returns(address[], (string,uint256,uint128,uint128,uint256,bool)[])
 func (_ProviderRegistry *ProviderRegistrySession) ProviderGetAll() ([]common.Address, []Provider, error) {
 	return _ProviderRegistry.Contract.ProviderGetAll(&_ProviderRegistry.CallOpts)
 }
 
 // ProviderGetAll is a free data retrieval call binding the contract method 0x86af8fdc.
 //
-// Solidity: function providerGetAll() view returns(address[], (string,uint256,uint128,bool)[])
+// Solidity: function providerGetAll() view returns(address[], (string,uint256,uint128,uint128,uint256,bool)[])
 func (_ProviderRegistry *ProviderRegistryCallerSession) ProviderGetAll() ([]common.Address, []Provider, error) {
 	return _ProviderRegistry.Contract.ProviderGetAll(&_ProviderRegistry.CallOpts)
 }
 
 // ProviderGetByIndex is a free data retrieval call binding the contract method 0xb8eed333.
 //
-// Solidity: function providerGetByIndex(uint256 index) view returns(address addr, (string,uint256,uint128,bool) provider)
+// Solidity: function providerGetByIndex(uint256 index) view returns(address addr, (string,uint256,uint128,uint128,uint256,bool) provider)
 func (_ProviderRegistry *ProviderRegistryCaller) ProviderGetByIndex(opts *bind.CallOpts, index *big.Int) (struct {
 	Addr     common.Address
 	Provider Provider
@@ -247,7 +280,7 @@ func (_ProviderRegistry *ProviderRegistryCaller) ProviderGetByIndex(opts *bind.C
 
 // ProviderGetByIndex is a free data retrieval call binding the contract method 0xb8eed333.
 //
-// Solidity: function providerGetByIndex(uint256 index) view returns(address addr, (string,uint256,uint128,bool) provider)
+// Solidity: function providerGetByIndex(uint256 index) view returns(address addr, (string,uint256,uint128,uint128,uint256,bool) provider)
 func (_ProviderRegistry *ProviderRegistrySession) ProviderGetByIndex(index *big.Int) (struct {
 	Addr     common.Address
 	Provider Provider
@@ -257,7 +290,7 @@ func (_ProviderRegistry *ProviderRegistrySession) ProviderGetByIndex(index *big.
 
 // ProviderGetByIndex is a free data retrieval call binding the contract method 0xb8eed333.
 //
-// Solidity: function providerGetByIndex(uint256 index) view returns(address addr, (string,uint256,uint128,bool) provider)
+// Solidity: function providerGetByIndex(uint256 index) view returns(address addr, (string,uint256,uint128,uint128,uint256,bool) provider)
 func (_ProviderRegistry *ProviderRegistryCallerSession) ProviderGetByIndex(index *big.Int) (struct {
 	Addr     common.Address
 	Provider Provider
@@ -329,7 +362,7 @@ func (_ProviderRegistry *ProviderRegistryCallerSession) ProviderGetIds() ([]comm
 
 // ProviderMap is a free data retrieval call binding the contract method 0xa6c87915.
 //
-// Solidity: function providerMap(address addr) view returns((string,uint256,uint128,bool))
+// Solidity: function providerMap(address addr) view returns((string,uint256,uint128,uint128,uint256,bool))
 func (_ProviderRegistry *ProviderRegistryCaller) ProviderMap(opts *bind.CallOpts, addr common.Address) (Provider, error) {
 	var out []interface{}
 	err := _ProviderRegistry.contract.Call(opts, &out, "providerMap", addr)
@@ -346,14 +379,14 @@ func (_ProviderRegistry *ProviderRegistryCaller) ProviderMap(opts *bind.CallOpts
 
 // ProviderMap is a free data retrieval call binding the contract method 0xa6c87915.
 //
-// Solidity: function providerMap(address addr) view returns((string,uint256,uint128,bool))
+// Solidity: function providerMap(address addr) view returns((string,uint256,uint128,uint128,uint256,bool))
 func (_ProviderRegistry *ProviderRegistrySession) ProviderMap(addr common.Address) (Provider, error) {
 	return _ProviderRegistry.Contract.ProviderMap(&_ProviderRegistry.CallOpts, addr)
 }
 
 // ProviderMap is a free data retrieval call binding the contract method 0xa6c87915.
 //
-// Solidity: function providerMap(address addr) view returns((string,uint256,uint128,bool))
+// Solidity: function providerMap(address addr) view returns((string,uint256,uint128,uint128,uint256,bool))
 func (_ProviderRegistry *ProviderRegistryCallerSession) ProviderMap(addr common.Address) (Provider, error) {
 	return _ProviderRegistry.Contract.ProviderMap(&_ProviderRegistry.CallOpts, addr)
 }
@@ -420,37 +453,6 @@ func (_ProviderRegistry *ProviderRegistryCallerSession) Providers(index *big.Int
 	return _ProviderRegistry.Contract.Providers(&_ProviderRegistry.CallOpts, index)
 }
 
-// ProvidrerExists is a free data retrieval call binding the contract method 0xf60e9726.
-//
-// Solidity: function providrerExists(address addr) view returns(bool)
-func (_ProviderRegistry *ProviderRegistryCaller) ProvidrerExists(opts *bind.CallOpts, addr common.Address) (bool, error) {
-	var out []interface{}
-	err := _ProviderRegistry.contract.Call(opts, &out, "providrerExists", addr)
-
-	if err != nil {
-		return *new(bool), err
-	}
-
-	out0 := *abi.ConvertType(out[0], new(bool)).(*bool)
-
-	return out0, err
-
-}
-
-// ProvidrerExists is a free data retrieval call binding the contract method 0xf60e9726.
-//
-// Solidity: function providrerExists(address addr) view returns(bool)
-func (_ProviderRegistry *ProviderRegistrySession) ProvidrerExists(addr common.Address) (bool, error) {
-	return _ProviderRegistry.Contract.ProvidrerExists(&_ProviderRegistry.CallOpts, addr)
-}
-
-// ProvidrerExists is a free data retrieval call binding the contract method 0xf60e9726.
-//
-// Solidity: function providrerExists(address addr) view returns(bool)
-func (_ProviderRegistry *ProviderRegistryCallerSession) ProvidrerExists(addr common.Address) (bool, error) {
-	return _ProviderRegistry.Contract.ProvidrerExists(&_ProviderRegistry.CallOpts, addr)
-}
-
 // ProviderDeregister is a paid mutator transaction binding the contract method 0x2ca36c49.
 //
 // Solidity: function providerDeregister(address addr) returns()
@@ -512,6 +514,27 @@ func (_ProviderRegistry *ProviderRegistrySession) ProviderSetMinStake(_minStake 
 // Solidity: function providerSetMinStake(uint256 _minStake) returns()
 func (_ProviderRegistry *ProviderRegistryTransactorSession) ProviderSetMinStake(_minStake *big.Int) (*types.Transaction, error) {
 	return _ProviderRegistry.Contract.ProviderSetMinStake(&_ProviderRegistry.TransactOpts, _minStake)
+}
+
+// ProviderWithdrawStake is a paid mutator transaction binding the contract method 0x8209d9ed.
+//
+// Solidity: function providerWithdrawStake(address addr) returns()
+func (_ProviderRegistry *ProviderRegistryTransactor) ProviderWithdrawStake(opts *bind.TransactOpts, addr common.Address) (*types.Transaction, error) {
+	return _ProviderRegistry.contract.Transact(opts, "providerWithdrawStake", addr)
+}
+
+// ProviderWithdrawStake is a paid mutator transaction binding the contract method 0x8209d9ed.
+//
+// Solidity: function providerWithdrawStake(address addr) returns()
+func (_ProviderRegistry *ProviderRegistrySession) ProviderWithdrawStake(addr common.Address) (*types.Transaction, error) {
+	return _ProviderRegistry.Contract.ProviderWithdrawStake(&_ProviderRegistry.TransactOpts, addr)
+}
+
+// ProviderWithdrawStake is a paid mutator transaction binding the contract method 0x8209d9ed.
+//
+// Solidity: function providerWithdrawStake(address addr) returns()
+func (_ProviderRegistry *ProviderRegistryTransactorSession) ProviderWithdrawStake(addr common.Address) (*types.Transaction, error) {
+	return _ProviderRegistry.Contract.ProviderWithdrawStake(&_ProviderRegistry.TransactOpts, addr)
 }
 
 // ProviderRegistryProviderDeregisteredIterator is returned from FilterProviderDeregistered and is used to iterate over the raw logs and unpacked data for ProviderDeregistered events raised by the ProviderRegistry contract.

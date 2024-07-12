@@ -2,7 +2,6 @@ import hre from "hardhat";
 import {
   encodeAbiParameters,
   encodeFunctionData,
-  encodePacked,
   getAddress,
   keccak256,
   parseUnits,
@@ -15,6 +14,7 @@ import {
   GetContractReturnType,
   WalletClient,
 } from "@nomicfoundation/hardhat-viem/types";
+import { ArtifactsMap } from "hardhat/types";
 
 export async function deployMORtoken() {
   const [owner] = await hre.viem.getWalletClients();
@@ -389,9 +389,10 @@ export const providerReport = {
   timestamp: 10000,
 };
 export const reportAbi = [
-  { type: "bytes32" },
-  { type: "uint128" },
-  { type: "uint32" },
+  { type: "bytes32" }, // sessionID
+  { type: "uint128" }, // timestamp
+  { type: "uint32" }, // tokens per second / tps
+  { type: "uint32" }, // time to first token in milliseconds / ttftMs
 ];
 
 export const approvalAbi = [{ type: "bytes32" }, { type: "uint128" }];
@@ -415,10 +416,16 @@ export const getProviderApproval = async (
 export const getReport = async (
   reporter: WalletClient,
   sessionId: `0x${string}`,
-  ips: number,
+  tps: number,
+  ttftMs: number,
 ) => {
   const timestampMs = (await time.latest()) * 1000;
-  const msg = encodeAbiParameters(reportAbi, [sessionId, timestampMs, ips]);
+  const msg = encodeAbiParameters(reportAbi, [
+    sessionId,
+    timestampMs,
+    tps * 1000,
+    ttftMs,
+  ]);
   const sig = await reporter.signMessage({
     message: { raw: keccak256(msg) },
   });
@@ -428,3 +435,14 @@ export const getReport = async (
     sig,
   };
 };
+
+export async function getStake(
+  sr: GetContractReturnType<ArtifactsMap["SessionRouter"]["abi"]>,
+  durationSeconds: bigint,
+  pricePerSecond: bigint,
+): Promise<bigint> {
+  const totalCost = pricePerSecond * durationSeconds;
+  const totalSupply = await sr.read.totalMORSupply([await nowChain()]);
+  const todaysBudget = await sr.read.getTodaysBudget([await nowChain()]);
+  return (totalCost * totalSupply * 100n) / todaysBudget;
+}

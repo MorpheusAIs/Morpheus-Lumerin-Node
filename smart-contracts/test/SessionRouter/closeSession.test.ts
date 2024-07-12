@@ -39,7 +39,7 @@ describe("session closeout", function () {
     ]);
 
     // close session
-    const report = await getReport(provider, sessionId, 10);
+    const report = await getReport(provider, sessionId, 10, 1000);
     await sessionRouter.write.closeSession([report.msg, report.sig], {
       account: user.account,
     });
@@ -98,7 +98,7 @@ describe("session closeout", function () {
     ]);
 
     // close session
-    const report = await getReport(provider, sessionId, 10);
+    const report = await getReport(provider, sessionId, 10, 1000);
     await sessionRouter.write.closeSession([report.msg, report.sig], {
       account: user.account,
     });
@@ -151,7 +151,7 @@ describe("session closeout", function () {
     ]);
 
     // close session with user signature
-    const report = await getReport(user, sessionId, 10);
+    const report = await getReport(user, sessionId, 10, 1000);
     await sessionRouter.write.closeSession([report.msg, report.sig], {
       account: user.account,
     });
@@ -295,7 +295,7 @@ describe("session closeout", function () {
       provider.account.address,
     ]);
     // close session without dispute
-    const report = await getReport(provider, sessionId, 10);
+    const report = await getReport(provider, sessionId, 10, 1000);
     await sessionRouter.write.closeSession([report.msg, report.sig], {
       account: user.account,
     });
