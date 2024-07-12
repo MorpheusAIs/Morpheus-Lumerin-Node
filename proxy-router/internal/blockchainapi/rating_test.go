@@ -1,100 +1,49 @@
 package blockchainapi
 
 import (
-	"fmt"
 	"math"
-	"math/big"
 	"testing"
 
 	m "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/marketplace"
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRating(t *testing.T) {
 	bidIds, bids, pmStats, mStats := sampleDataTPS()
 
-	scoredBids := rateBids(bidIds, bids, pmStats, mStats)
+	scoredBids := rateBids(bidIds, bids, pmStats, mStats, lib.NewTestLogger())
 
-	for _, scoredBid := range scoredBids {
-		fmt.Printf(" score %.5f\n bidID: %s\n\n", scoredBid.Score, scoredBid.ID)
+	for i := 1; i < len(scoredBids); i++ {
+		require.GreaterOrEqual(t, scoredBids[i-1].Score, scoredBids[i].Score, "scoredBids not sorted")
 	}
-
 }
 
-func FromDecimal(value *big.Int, decimals int) float64 {
-	return float64(value.Int64()) / float64(math.Pow10(decimals))
+func TestGetScoreZeroObservations(t *testing.T) {
+	_, bids, _, _ := sampleDataTPS()
+	score := getScore(bids[0], m.ProviderModelStats{}, m.ModelStats{})
+	if math.IsNaN(score) {
+		require.Fail(t, "score is NaN")
+	}
 }
 
-func ToDecimal(value float64, decimals int) *big.Int {
-	a, _ := big.NewFloat(0).Mul(big.NewFloat(math.Pow10(decimals)), big.NewFloat(value)).Int(nil)
-	return a
-}
-
-const DecimalsMOR = 18
-
-func sampleDataTPS() ([][32]byte, []m.Bid, []m.ProviderModelStats, m.ModelStats) {
-	modelID := common.HexToHash("0x01")
-	bidIds := [][32]byte{
-		{0x01},
-		{0x02},
-		{0x03},
-	}
-
-	bids := []m.Bid{
-		{
-			PricePerSecond: ToDecimal(10, DecimalsMOR),
-			Provider:       common.HexToAddress("0x01"),
-			ModelAgentId:   modelID,
-			Nonce:          common.Big0,
-			CreatedAt:      common.Big1,
-			DeletedAt:      common.Big0,
-		},
-		{
-			PricePerSecond: ToDecimal(10, DecimalsMOR),
-			Provider:       common.HexToAddress("0x02"),
-			ModelAgentId:   modelID,
-			Nonce:          common.Big0,
-			CreatedAt:      common.Big1,
-			DeletedAt:      common.Big0,
-		},
-		{
-			PricePerSecond: ToDecimal(10, DecimalsMOR),
-			Provider:       common.HexToAddress("0x03"),
-			ModelAgentId:   modelID,
-			Nonce:          common.Big0,
-			CreatedAt:      common.Big1,
-			DeletedAt:      common.Big0,
-		},
-	}
-	pmStats := []m.ProviderModelStats{
-		{
-			TpsScaled1000: m.LibSDSD{Mean: 10, SqSum: 100},
-			TtftMs:        m.LibSDSD{Mean: 20, SqSum: 200},
-			TotalDuration: 30,
-			SuccessCount:  6,
-			TotalCount:    10,
-		},
-		{
-			TpsScaled1000: m.LibSDSD{Mean: 20, SqSum: 100},
-			TtftMs:        m.LibSDSD{Mean: 20, SqSum: 200},
-			TotalDuration: 30,
-			SuccessCount:  6,
-			TotalCount:    10,
-		},
-		{
-			TpsScaled1000: m.LibSDSD{Mean: 30, SqSum: 100},
-			TtftMs:        m.LibSDSD{Mean: 20, SqSum: 200},
-			TotalDuration: 30,
-			SuccessCount:  6,
-			TotalCount:    10,
-		},
+func TestGetScoreSingleObservation(t *testing.T) {
+	_, bids, _, _ := sampleDataTPS()
+	pmStats := m.ProviderModelStats{
+		TpsScaled1000: m.LibSDSD{Mean: 1000, SqSum: 0},
+		TtftMs:        m.LibSDSD{Mean: 1000, SqSum: 0},
+		TotalDuration: 1000,
+		SuccessCount:  1,
+		TotalCount:    1,
 	}
 	mStats := m.ModelStats{
-		TpsScaled1000: m.LibSDSD{Mean: 20, SqSum: 100},
-		TtftMs:        m.LibSDSD{Mean: 20, SqSum: 200},
-		TotalDuration: m.LibSDSD{Mean: 30, SqSum: 300},
-		Count:         3,
+		TpsScaled1000: m.LibSDSD{Mean: 1000, SqSum: 0},
+		TtftMs:        m.LibSDSD{Mean: 1000, SqSum: 0},
+		TotalDuration: m.LibSDSD{Mean: 1000, SqSum: 0},
+		Count:         1,
 	}
-
-	return bidIds, bids, pmStats, mStats
+	score := getScore(bids[0], pmStats, mStats)
+	if math.IsNaN(score) {
+		require.Fail(t, "score is NaN")
+	}
 }

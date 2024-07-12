@@ -205,7 +205,7 @@ func (s *BlockchainService) GetRatedBids(ctx context.Context, modelID common.Has
 		return nil, err
 	}
 
-	ratedBids := rateBids(bidIDs, bids, providerModelStats, modelStats)
+	ratedBids := rateBids(bidIDs, bids, providerModelStats, modelStats, s.log)
 
 	return ratedBids, nil
 }
@@ -553,7 +553,7 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 		return common.Hash{}, lib.WrapError(ErrMyAddress, err)
 	}
 
-	scoredBids := rateBids(bidIDs, bids, providerStats, modelStats)
+	scoredBids := rateBids(bidIDs, bids, providerStats, modelStats, s.log)
 	for i, bid := range scoredBids {
 		s.log.Infof("trying to open session with provider #%d %s", i, bid.Bid.Provider.String())
 		hash, err := s.tryOpenSession(ctx, bid, duration, supply, budget, userAddr)
