@@ -63,6 +63,7 @@ jobs:
           cd ../proxy-router
           make build
           cd ../ui-desktop
+          cp ./.env.example .env
           yarn build:linux
 
       - name: Determine tag name
@@ -129,6 +130,7 @@ jobs:
           cd ../proxy-router
           make build
           cd ../ui-desktop
+          cp ./.env.example .env
           yarn build:mac
 
       - name: Determine tag name
@@ -197,6 +199,7 @@ jobs:
           cd ../proxy-router
           make build
           cd ../ui-desktop
+          cp ./.env.example .env
           yarn build:mac
 
       - name: Determine tag name
@@ -269,6 +272,7 @@ jobs:
           cd ../proxy-router
           make build
           cd ../ui-desktop
+          cp ./.env.example .env
           yarn build:win
 
       - name: Determine tag name
