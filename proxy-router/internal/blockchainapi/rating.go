@@ -45,7 +45,13 @@ func getScore(bid m.Bid, pmStats m.ProviderModelStats, mStats m.ModelStats) floa
 
 	priceFloatDecimal, _ := bid.PricePerSecond.Float64()
 	priceFloat := priceFloatDecimal / math.Pow10(18)
-	return (tpsScore + ttftScore + durationScore + successScore) / priceFloat
+
+	result := (tpsScore + ttftScore + durationScore + successScore) / priceFloat
+
+	if math.IsNaN(result) {
+		return 0
+	}
+	return result
 }
 
 // normZIndex normalizes the value using z-index
