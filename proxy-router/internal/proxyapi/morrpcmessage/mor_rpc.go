@@ -67,9 +67,15 @@ func (m *MORRPCMessage) SessionReportResponse(providerPubKey lib.HexString, tps 
 		return &RpcResponse{}, err
 	}
 
+	signedReport, err := lib.SignEthMessageV2(report, providerPrivateKeyHex)
+	if err != nil {
+		return &RpcResponse{}, err
+	}
+
 	params := SessionReportRes{
-		Timestamp: timestamp,
-		Message:   report,
+		Timestamp:    timestamp,
+		Message:      report,
+		SignedReport: signedReport,
 	}
 
 	signature, err := m.generateSignature(params, providerPrivateKeyHex)
