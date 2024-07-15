@@ -175,7 +175,10 @@ contract SessionRouter {
 
   function closeSession(bytes memory receiptEncoded, bytes memory signature) external {
     // reverts without specific error if cannot decode abi
-    (bytes32 sessionId, uint128 timestampMs, uint32 tpsScaled1000, uint32 ttftMs) = abi.decode(receiptEncoded, (bytes32, uint128, uint32, uint32));
+    (bytes32 sessionId, uint128 timestampMs, uint32 tpsScaled1000, uint32 ttftMs) = abi.decode(
+      receiptEncoded,
+      (bytes32, uint128, uint32, uint32)
+    );
     if (timestampMs / 1000 < block.timestamp - SIGNATURE_TTL) {
       revert SignatureExpired();
     }
@@ -217,7 +220,7 @@ contract SessionRouter {
       uint256 costTillToday = durationTillToday * session.pricePerSecond;
       providerWithdraw = costTillToday - session.providerWithdrawnAmount;
     }
-    
+
     // updating provider stats
     ProviderModelStats storage prStats = s.stats[session.modelAgentId][session.provider];
     ModelStats storage modelStats = s.modelStats[session.modelAgentId];
@@ -225,11 +228,11 @@ contract SessionRouter {
     prStats.totalCount++;
 
     if (noDispute) {
-      if (prStats.successCount > 0){
+      if (prStats.successCount > 0) {
         // stats for this provider-model pair already contribute to average model stats
-        modelStats.tpsScaled1000.remove(int32(prStats.tpsScaled1000.mean), int32(modelStats.count-1));
-        modelStats.ttftMs.remove(int32(prStats.ttftMs.mean), int32(modelStats.count-1));
-      } else{
+        modelStats.tpsScaled1000.remove(int32(prStats.tpsScaled1000.mean), int32(modelStats.count - 1));
+        modelStats.ttftMs.remove(int32(prStats.ttftMs.mean), int32(modelStats.count - 1));
+      } else {
         // stats for this provider-model pair do not contribute
         modelStats.count++;
       }
@@ -261,8 +264,7 @@ contract SessionRouter {
         OnHold({ amount: userStakeToLock, releaseAt: uint128(block.timestamp + 1 days) })
       );
     }
-
-    uint256 userWithdraw = session.stake - userStakeToLock;
+    uint256 userWithdraw = session.stake > userStakeToLock ? session.stake - userStakeToLock : 0;
 
     emit SessionClosed(session.user, sessionId, session.provider);
 
@@ -526,5 +528,3 @@ contract SessionRouter {
   //   return sqSum / (count - 1);
   // }
 }
-
-
