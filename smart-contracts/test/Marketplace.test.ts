@@ -189,15 +189,17 @@ describe("Marketplace", function () {
       });
 
       // check indexes are updated
-      const newBids1 = await marketplace.read.getActiveBidsByProvider([
+      const [bidIds1, bids1] = await marketplace.read.getActiveBidsByProvider([
         expectedBid.providerAddr,
       ]);
-      const newBids2 = await marketplace.read.getActiveBidsByModelAgent([
-        expectedBid.modelId,
-      ]);
+      const [bidIds2, bids2] = await marketplace.read.getActiveBidsByModelAgent(
+        [expectedBid.modelId],
+      );
 
-      expect(newBids1).to.be.deep.equal(newBids2);
-      expect(newBids1.length).to.be.equal(0);
+      expect(bidIds1.length).to.be.equal(0);
+      expect(bids1.length).to.be.equal(0);
+      expect(bidIds2.length).to.be.equal(0);
+      expect(bids2.length).to.be.equal(0);
 
       // check bid is deleted
       const data = await marketplace.read.bidMap([expectedBid.id]);

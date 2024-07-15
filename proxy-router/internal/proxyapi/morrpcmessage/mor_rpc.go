@@ -22,7 +22,7 @@ func NewMorRpc() *MORRPCMessage {
 func (m *MORRPCMessage) InitiateSessionResponse(providerPubKey lib.HexString, userAddr common.Address, bidID common.Hash, providerPrivateKeyHex lib.HexString, requestID string) (*RpcResponse, error) {
 	timestamp := m.generateTimestamp()
 
-	approval, err := lib.EncodeAbiParameters(approvalAbi, []interface{}{bidID, big.NewInt(int64(timestamp))})
+	approval, err := lib.EncodeAbiParameters(approvalAbi, []interface{}{bidID, userAddr, big.NewInt(int64(timestamp))})
 	if err != nil {
 		return &RpcResponse{}, err
 	}
@@ -303,7 +303,6 @@ func (m *MORRPCMessage) generateSignature(params any, privateKeyHex lib.HexStrin
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("\n\nINPUT: ", string(result))
 	privateKey, err := crypto.ToECDSA(privateKeyHex)
 	if err != nil {
 		return nil, err

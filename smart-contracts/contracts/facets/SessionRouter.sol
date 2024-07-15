@@ -31,6 +31,7 @@ contract SessionRouter {
   error ProviderSignatureMismatch();
   error SignatureExpired();
   error DuplicateApproval();
+  error ApprovedForAnotherUser(); // means that approval generated for another user address, protection from front-running
 
   error SessionTooShort();
   error SessionNotFound();
@@ -113,7 +114,10 @@ contract SessionRouter {
     bytes memory signature
   ) external returns (bytes32 sessionId) {
     // reverts without specific error if cannot decode abi
-    (bytes32 bidId, uint128 timestampMs) = abi.decode(providerApproval, (bytes32, uint128));
+    (bytes32 bidId, address user, uint128 timestampMs) = abi.decode(providerApproval, (bytes32, address, uint128));
+    if (user != msg.sender) {
+      revert ApprovedForAnotherUser();
+    }
 
     if (timestampMs / 1000 < block.timestamp - SIGNATURE_TTL) {
       revert SignatureExpired();

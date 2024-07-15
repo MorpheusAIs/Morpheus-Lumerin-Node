@@ -99,6 +99,7 @@ type ReqObject struct {
 
 var approvalAbi = []lib.AbiParameter{
 	{Type: "bytes32"},
+	{Type: "address"},
 	{Type: "uint128"},
 }
 

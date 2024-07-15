@@ -28,7 +28,11 @@ describe("session closeout", function () {
     } = await loadFixture(deploySingleBid);
 
     // open session
-    const { msg, signature } = await getProviderApproval(provider, exp.bidID);
+    const { msg, signature } = await getProviderApproval(
+      provider,
+      user.account.address,
+      exp.bidID,
+    );
     const openTx = await sessionRouter.write.openSession(
       [exp.stake, msg, signature],
       { account: user.account.address },
@@ -87,7 +91,11 @@ describe("session closeout", function () {
     } = await loadFixture(deploySingleBid);
 
     // open session
-    const { msg, signature } = await getProviderApproval(provider, exp.bidID);
+    const { msg, signature } = await getProviderApproval(
+      provider,
+      user.account.address,
+      exp.bidID,
+    );
     const openTx = await sessionRouter.write.openSession(
       [exp.stake, msg, signature],
       { account: user.account.address },
@@ -139,7 +147,11 @@ describe("session closeout", function () {
     } = await loadFixture(deploySingleBid);
 
     // open session
-    const { msg, signature } = await getProviderApproval(provider, exp.bidID);
+    const { msg, signature } = await getProviderApproval(
+      provider,
+      user.account.address,
+      exp.bidID,
+    );
     const openTx = await sessionRouter.write.openSession(
       [exp.stake, msg, signature],
       { account: user.account.address },
@@ -222,7 +234,11 @@ describe("session closeout", function () {
     } = await loadFixture(deploySingleBid);
 
     // open session
-    const { msg, signature } = await getProviderApproval(provider, exp.bidID);
+    const { msg, signature } = await getProviderApproval(
+      provider,
+      user.account.address,
+      exp.bidID,
+    );
     const openTx = await sessionRouter.write.openSession(
       [exp.stake, msg, signature],
       { account: user.account.address },
@@ -233,7 +249,7 @@ describe("session closeout", function () {
     await time.increase(exp.durationSeconds / 2n - 1n);
 
     // close session with user signature
-    const report = await getReport(user, sessionId, 10);
+    const report = await getReport(user, sessionId, 10, 10);
 
     await catchError(sessionRouter.abi, "NotSenderOrOwner", async () => {
       await sessionRouter.write.closeSession([report.msg, report.sig], {
@@ -318,6 +334,7 @@ describe("session closeout", function () {
     // open session
     const { msg, signature } = await getProviderApproval(
       provider,
+      user.account.address,
       expectedSession.bidID,
     );
     const openTx = await sessionRouter.write.openSession(

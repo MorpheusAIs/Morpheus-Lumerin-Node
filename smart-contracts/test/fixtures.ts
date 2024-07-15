@@ -407,7 +407,11 @@ export async function openSession() {
   } = await loadFixture(deploySingleBid);
 
   // open session
-  const { msg, signature } = await getProviderApproval(provider, exp.bidID);
+  const { msg, signature } = await getProviderApproval(
+    provider,
+    user.account.address,
+    exp.bidID,
+  );
   const openTx = await sessionRouter.write.openSession(
     [exp.stake, msg, signature],
     { account: user.account.address },
@@ -462,14 +466,23 @@ export const reportAbi = [
   { type: "uint32" }, // time to first token in milliseconds / ttftMs
 ];
 
-export const approvalAbi = [{ type: "bytes32" }, { type: "uint128" }];
+export const approvalAbi = [
+  { type: "bytes32" },
+  { type: "address" },
+  { type: "uint128" },
+];
 
 export const getProviderApproval = async (
   provider: WalletClient,
+  user: `0x${string}`,
   bidId: `0x${string}`,
 ) => {
   const timestampMs = (await time.latest()) * 1000;
-  const msg = encodeAbiParameters(approvalAbi, [bidId, BigInt(timestampMs)]);
+  const msg = encodeAbiParameters(approvalAbi, [
+    bidId,
+    user,
+    BigInt(timestampMs),
+  ]);
   const signature = await provider.signMessage({
     message: { raw: keccak256(msg) },
   });

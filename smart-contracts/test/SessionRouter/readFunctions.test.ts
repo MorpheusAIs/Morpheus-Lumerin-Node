@@ -51,7 +51,11 @@ describe("Session router", function () {
       } = await loadFixture(deploySingleBid);
 
       // open session
-      const { msg, signature } = await getProviderApproval(provider, exp.bidID);
+      const { msg, signature } = await getProviderApproval(
+        provider,
+        user.account.address,
+        exp.bidID,
+      );
       const openTx = await sessionRouter.write.openSession(
         [exp.stake, msg, signature],
         { account: user.account.address },
@@ -61,7 +65,7 @@ describe("Session router", function () {
       await time.increase(exp.durationSeconds / 2n - 1n);
 
       // close session with dispute / user report
-      const report = await getReport(user, sessionId, 10);
+      const report = await getReport(user, sessionId, 10, 10);
       await sessionRouter.write.closeSession([report.msg, report.sig], {
         account: user.account,
       });
