@@ -254,7 +254,7 @@ func (s *BlockchainService) CloseSession(ctx context.Context, sessionID common.H
 		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
 	}
 
-	tx, err := s.sessionRouter.CloseSession(transactOpt, sessionID, report.Message, prKey)
+	tx, err := s.sessionRouter.CloseSession(transactOpt, sessionID, report.Message, report.SignedReport, prKey)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrSendTx, err)
 	}
