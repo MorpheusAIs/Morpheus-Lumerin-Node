@@ -5,13 +5,7 @@ import {
 import { expect } from "chai";
 import hre from "hardhat";
 import { deploySingleBid, getProviderApproval, getReport } from "../fixtures";
-import {
-  catchError,
-  expectError,
-  getSessionId,
-  getTxTimestamp,
-  nowChain,
-} from "../utils";
+import { catchError, getSessionId, getTxTimestamp, nowChain } from "../utils";
 import { DAY, SECOND } from "../../utils/time";
 import { expectAlmostEqual, expectAlmostEqualDelta } from "../../utils/compare";
 import { getAddress, parseUnits } from "viem";

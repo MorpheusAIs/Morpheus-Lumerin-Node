@@ -404,6 +404,7 @@ export async function openSession() {
     expectedSession: exp,
     user,
     publicClient,
+    tokenMOR,
   } = await loadFixture(deploySingleBid);
 
   // open session
@@ -417,7 +418,6 @@ export async function openSession() {
     { account: user.account.address },
   );
   const sessionId = await getSessionId(publicClient, hre, openTx);
-  await time.increase(exp.durationSeconds * 2n);
 
   return {
     sessionRouter,
@@ -426,6 +426,7 @@ export async function openSession() {
     user,
     publicClient,
     sessionId,
+    tokenMOR,
   };
 }
 
@@ -437,7 +438,11 @@ export async function openEarlyCloseSession() {
     user,
     publicClient,
     sessionId,
+    tokenMOR,
   } = await loadFixture(openSession);
+
+  // wait for half of the session
+  await time.increase(exp.durationSeconds / 2n);
 
   // close session
   const report = await getReport(provider, sessionId, 10, 10);
@@ -452,6 +457,8 @@ export async function openEarlyCloseSession() {
     user,
     publicClient,
     sessionId,
+    tokenMOR,
+    expectedOnHold: exp.stake / 2n,
   };
 }
 

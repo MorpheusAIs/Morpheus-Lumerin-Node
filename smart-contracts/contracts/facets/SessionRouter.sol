@@ -208,7 +208,8 @@ contract SessionRouter {
 
     // calculate provider withdraw
     uint256 providerWithdraw;
-    bool isClosingLate = startOfTheDay(block.timestamp) > startOfTheDay(session.endsAt);
+    uint256 startOfToday = startOfTheDay(block.timestamp);
+    bool isClosingLate = startOfToday > startOfTheDay(session.endsAt);
     bool noDispute = isValidReceipt(session.provider, receiptEncoded, signature);
 
     if (noDispute || isClosingLate) {
@@ -219,8 +220,7 @@ contract SessionRouter {
     } else {
       // session was closed on the same day or earlier with dispute
       // withdraw all funds except for today's session cost
-      uint256 durationTillToday = startOfTheDay(block.timestamp) -
-        minUint256(session.openedAt, startOfTheDay(block.timestamp));
+      uint256 durationTillToday = startOfToday - minUint256(session.openedAt, startOfToday);
       uint256 costTillToday = durationTillToday * session.pricePerSecond;
       providerWithdraw = costTillToday - session.providerWithdrawnAmount;
     }
@@ -260,15 +260,12 @@ contract SessionRouter {
     if (!isClosingLate) {
       // session was closed on the same day
       // lock today's stake
-      uint256 todaysDuration = minUint256(session.endsAt, block.timestamp) -
-        maxUint256(startOfTheDay(block.timestamp), session.openedAt);
+      uint256 todaysDuration = minUint256(session.endsAt, block.timestamp) - maxUint256(startOfToday, session.openedAt);
       uint256 todaysCost = todaysDuration * session.pricePerSecond;
-      userStakeToLock = stipendToStake(todaysCost, startOfTheDay(block.timestamp));
-      s.userOnHold[session.user].push(
-        OnHold({ amount: userStakeToLock, releaseAt: uint128(block.timestamp + 1 days) })
-      );
+      userStakeToLock = minUint256(session.stake, stipendToStake(todaysCost, startOfToday));
+      s.userOnHold[session.user].push(OnHold({ amount: userStakeToLock, releaseAt: uint128(startOfToday + 1 days) }));
     }
-    uint256 userWithdraw = session.stake > userStakeToLock ? session.stake - userStakeToLock : 0;
+    uint256 userWithdraw = session.stake - userStakeToLock;
 
     emit SessionClosed(session.user, sessionId, session.provider);
 

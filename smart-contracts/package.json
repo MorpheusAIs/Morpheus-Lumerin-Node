@@ -33,7 +33,7 @@
     "@types/mocha": ">=9.1.0",
     "@types/node": ">=18.0.0",
     "chai": "^4.2.0",
-    "hardhat": "^2.22.3",
+    "hardhat": "^2.22.6",
     "hardhat-gas-reporter": "^2.1.1",
     "morpheus-smart-contracts": "git+ssh://github.com/MorpheusAIs/SmartContracts.git#753accd",
     "prettier": "^3.2.5",
