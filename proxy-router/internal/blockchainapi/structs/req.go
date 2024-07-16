@@ -35,7 +35,7 @@ type QueryPageLimit struct {
 }
 
 type QuerySpender struct {
-	Spender common.Address `form:"spender" binding:"required" validate:"eth_addr"`
+	Spender lib.Address `form:"spender" binding:"required" validate:"eth_addr"`
 }
 
 type QueryApprove struct {

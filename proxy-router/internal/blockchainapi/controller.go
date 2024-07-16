@@ -415,7 +415,7 @@ func (c *BlockchainController) getAllowance(ctx *gin.Context) {
 		return
 	}
 
-	allowance, err := c.service.GetAllowance(ctx, query.Spender)
+	allowance, err := c.service.GetAllowance(ctx, query.Spender.Address)
 	if err != nil {
 		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -445,7 +445,7 @@ func (c *BlockchainController) approve(ctx *gin.Context) {
 		return
 	}
 
-	tx, err := c.service.Approve(ctx, query.Spender, query.Amount.Unpack())
+	tx, err := c.service.Approve(ctx, query.Spender.Address, query.Amount.Unpack())
 	if err != nil {
 		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
