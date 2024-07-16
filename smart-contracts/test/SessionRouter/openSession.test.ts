@@ -4,7 +4,11 @@ import {
 } from "@nomicfoundation/hardhat-toolbox-viem/network-helpers";
 import { expect } from "chai";
 import hre from "hardhat";
-import { deploySingleBid, getProviderApproval } from "../fixtures";
+import {
+  deploySingleBid,
+  getProviderApproval,
+  openEarlyCloseSession,
+} from "../fixtures";
 import {
   NewDate,
   mine,
@@ -207,6 +211,128 @@ describe("session actions", function () {
       expect(session1.stake).to.equal(exp.stake);
       expect(session2.stake).to.equal(exp.stake);
     });
+
+    it("should partially use remaining staked tokens for the opening session", async function () {
+      const { sessionRouter, user, provider, expectedSession, tokenMOR } =
+        await loadFixture(openEarlyCloseSession);
+      await time.increaseTo(
+        startOfTheDay(await nowChain()) + BigInt(DAY / SECOND),
+      );
+
+      const [avail] = await sessionRouter.read.withdrawableUserStake([
+        user.account.address,
+        255,
+      ]);
+      expect(avail > 0).to.be.true;
+
+      // reset allowance
+      await tokenMOR.write.approve([sessionRouter.address, 0n], {
+        account: user.account.address,
+      });
+
+      const stake = avail / 2n;
+
+      const approval = await getProviderApproval(
+        provider,
+        user.account.address,
+        expectedSession.bidID,
+      );
+      const openSession = await sessionRouter.simulate.openSession(
+        [stake, approval.msg, approval.signature],
+        { account: user.account.address },
+      );
+      await user.writeContract(openSession.request);
+
+      const [avail2] = await sessionRouter.read.withdrawableUserStake([
+        user.account.address,
+        255,
+      ]);
+      expect(avail2).to.be.equal(stake);
+    });
+
+    it("should use all remaining staked tokens for the opening session", async function () {
+      const { sessionRouter, user, provider, expectedSession, tokenMOR } =
+        await loadFixture(openEarlyCloseSession);
+      await time.increaseTo(
+        startOfTheDay(await nowChain()) + BigInt(DAY / SECOND),
+      );
+
+      const [avail] = await sessionRouter.read.withdrawableUserStake([
+        user.account.address,
+        255,
+      ]);
+      expect(avail > 0).to.be.true;
+
+      // reset allowance
+      await tokenMOR.write.approve([sessionRouter.address, 0n], {
+        account: user.account.address,
+      });
+
+      const approval = await getProviderApproval(
+        provider,
+        user.account.address,
+        expectedSession.bidID,
+      );
+      const openSession = await sessionRouter.simulate.openSession(
+        [avail, approval.msg, approval.signature],
+        { account: user.account.address },
+      );
+      await user.writeContract(openSession.request);
+
+      const [avail2] = await sessionRouter.read.withdrawableUserStake([
+        user.account.address,
+        255,
+      ]);
+      expect(avail2).to.be.equal(0n);
+    });
+
+    it("should use remaining staked tokens and allowance for opening session", async function () {
+      const { sessionRouter, user, provider, expectedSession, tokenMOR } =
+        await loadFixture(openEarlyCloseSession);
+      await time.increaseTo(
+        startOfTheDay(await nowChain()) + BigInt(DAY / SECOND),
+      );
+
+      const [avail] = await sessionRouter.read.withdrawableUserStake([
+        user.account.address,
+        255,
+      ]);
+      expect(avail > 0).to.be.true;
+
+      const allowancePart = 1000n;
+      const balanceBefore = await tokenMOR.read.balanceOf([
+        user.account.address,
+      ]);
+
+      // reset allowance
+      await tokenMOR.write.approve([sessionRouter.address, allowancePart], {
+        account: user.account.address,
+      });
+
+      const approval = await getProviderApproval(
+        provider,
+        user.account.address,
+        expectedSession.bidID,
+      );
+      const openSession = await sessionRouter.simulate.openSession(
+        [avail + allowancePart, approval.msg, approval.signature],
+        { account: user.account.address },
+      );
+      await user.writeContract(openSession.request);
+
+      // check all onHold used
+      const [avail2] = await sessionRouter.read.withdrawableUserStake([
+        user.account.address,
+        255,
+      ]);
+      expect(avail2).to.be.equal(0n);
+
+      // check allowance used
+      const balanceAfter = await tokenMOR.read.balanceOf([
+        user.account.address,
+      ]);
+      expect(balanceBefore - balanceAfter).to.be.equal(allowancePart);
+    });
   });
 
   describe("negative cases", function () {
@@ -233,6 +359,7 @@ describe("session actions", function () {
         },
       );
     });
+
     it("should error when approval bytes is invalid abi data", async function () {
       const {
         sessionRouter,

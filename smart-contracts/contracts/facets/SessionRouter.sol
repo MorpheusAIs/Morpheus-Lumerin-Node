@@ -172,6 +172,12 @@ contract SessionRouter {
     s.activeSessionsCount++;
 
     emit SessionOpened(msg.sender, sessionId, bid.provider);
+
+    // try to use locked stake first, but limit iterations to 20
+    // if user has more than 20 onHold entries, they will have to use withdrawUserStake separately
+    uint256 removed = _removeUserStake(_stake, 10);
+    _stake -= removed;
+
     s.token.transferFrom(msg.sender, address(this), _stake); // errors with Insufficient Allowance if not approved
 
     return sessionId;
@@ -384,7 +390,7 @@ contract SessionRouter {
 
     // the only loop that is not avoidable
     while (i < onHoldEntries.length && iterations-- > 0) {
-      if (block.timestamp > onHoldEntries[i].releaseAt) {
+      if (block.timestamp >= onHoldEntries[i].releaseAt) {
         balance += onHoldEntries[i].amount;
 
         if (balance >= amountToRemove) {
