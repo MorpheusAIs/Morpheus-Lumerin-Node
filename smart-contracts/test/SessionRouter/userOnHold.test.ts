@@ -4,6 +4,7 @@ import { openEarlyCloseSession } from "../fixtures";
 import { DAY, HOUR, SECOND } from "../../utils/time";
 import { catchError, randomAddress } from "../utils";
 import { expectAlmostEqual } from "../../utils/compare";
+import { maxUint8 } from "viem";
 
 describe("User on hold tests", () => {
   it("user stake should be locked right after closeout", async () => {
@@ -14,6 +15,7 @@ describe("User on hold tests", () => {
     // right after closeout
     const [available, onHold] = await sessionRouter.read.withdrawableUserStake([
       user.account.address,
+      Number(maxUint8),
     ]);
     expect(available).to.equal(0n);
     expectAlmostEqual(onHold, expectedOnHold, 0.01);
@@ -27,7 +29,10 @@ describe("User on hold tests", () => {
     // before next day
     await time.increaseTo(startOfTomorrow(await time.latest()) - HOUR / SECOND);
     const [available3, onHold3] =
-      await sessionRouter.read.withdrawableUserStake([user.account.address]);
+      await sessionRouter.read.withdrawableUserStake([
+        user.account.address,
+        Number(maxUint8),
+      ]);
     expect(available3).to.equal(0n);
     expectAlmostEqual(onHold3, expectedOnHold, 0.01);
   });
@@ -39,16 +44,21 @@ describe("User on hold tests", () => {
 
     await time.increaseTo(startOfTomorrow(await time.latest()));
     const [available2, onHold2] =
-      await sessionRouter.read.withdrawableUserStake([user.account.address]);
+      await sessionRouter.read.withdrawableUserStake([
+        user.account.address,
+        Number(maxUint8),
+      ]);
     expectAlmostEqual(available2, expectedOnHold, 0.01);
     expect(onHold2).to.equal(0n);
 
-    const randomAddr = randomAddress();
-    await sessionRouter.write.withdrawUserStake([available2, randomAddr], {
-      account: user.account.address,
-    });
-    const balance = await tokenMOR.read.balanceOf([randomAddr]);
-    expectAlmostEqual(balance, expectedOnHold, 0.01);
+    const balanceBefore = await tokenMOR.read.balanceOf([user.account.address]);
+    await sessionRouter.write.withdrawUserStake(
+      [available2, Number(maxUint8)],
+      { account: user.account.address },
+    );
+    const balanceAfter = await tokenMOR.read.balanceOf([user.account.address]);
+    const balanceDelta = balanceAfter - balanceBefore;
+    expectAlmostEqual(balanceDelta, expectedOnHold, 0.01);
   });
 
   it("user shouldn't be able to withdraw more than there is available stake", async () => {
@@ -57,6 +67,7 @@ describe("User on hold tests", () => {
     await time.increaseTo(startOfTomorrow(await time.latest()));
     const [available2] = await sessionRouter.read.withdrawableUserStake([
       user.account.address,
+      Number(maxUint8),
     ]);
 
     // check that user can't withdraw twice
@@ -65,10 +76,8 @@ describe("User on hold tests", () => {
       "NotEnoughWithdrawableBalance",
       async () => {
         await sessionRouter.write.withdrawUserStake(
-          [available2 * 2n, randomAddress()],
-          {
-            account: user.account.address,
-          },
+          [available2 * 2n, Number(maxUint8)],
+          { account: user.account.address },
         );
       },
     );

@@ -8,7 +8,7 @@ import { deploySingleBid, getProviderApproval, getReport } from "../fixtures";
 import { catchError, getSessionId, getTxTimestamp, nowChain } from "../utils";
 import { DAY, SECOND } from "../../utils/time";
 import { expectAlmostEqual, expectAlmostEqualDelta } from "../../utils/compare";
-import { getAddress, parseUnits } from "viem";
+import { getAddress, maxUint8, parseUnits } from "viem";
 
 describe("session closeout", function () {
   it("should open short (<1D) session and close after expiration", async function () {
@@ -185,7 +185,10 @@ describe("session closeout", function () {
       await sessionRouter.read.getProviderClaimableBalance([session.id]);
 
     const [userAvail, userHold] =
-      await sessionRouter.read.withdrawableUserStake([session.user]);
+      await sessionRouter.read.withdrawableUserStake([
+        session.user,
+        Number(maxUint8),
+      ]);
 
     expect(session.closeoutType).to.equal(1n);
     expect(providerBalanceAfter - providerBalanceBefore).to.equal(0n);

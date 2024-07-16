@@ -340,8 +340,12 @@ contract SessionRouter {
   }
 
   /// @notice returns amount of withdrawable user stake and one on hold
-  function withdrawableUserStake(address userAddr) external view returns (uint256 avail, uint256 hold) {
+  function withdrawableUserStake(
+    address userAddr,
+    uint8 iterations
+  ) external view returns (uint256 avail, uint256 hold) {
     OnHold[] memory onHold = s.userOnHold[userAddr];
+    iterations = iterations > onHold.length ? uint8(onHold.length) : iterations;
     for (uint i = 0; i < onHold.length; i++) {
       uint256 amount = onHold[i].amount;
       if (block.timestamp < onHold[i].releaseAt) {
@@ -354,44 +358,52 @@ contract SessionRouter {
   }
 
   /// @notice withdraws user stake
-  function withdrawUserStake(uint256 amountToWithdraw, address to) external {
-    uint256 balance = 0;
-    address sender = msg.sender;
-
+  /// @param amountToWithdraw amount of funds to withdraw, maxUint256 means all available
+  /// @param iterations number of entries to process
+  function withdrawUserStake(uint256 amountToWithdraw, uint8 iterations) external {
     // withdraw all available funds if amountToWithdraw is 0
     if (amountToWithdraw == 0) {
       amountToWithdraw = type(uint256).max;
     }
 
-    OnHold[] storage onHoldEntries = s.userOnHold[sender];
+    uint256 removed = _removeUserStake(amountToWithdraw, iterations);
+    if (removed < amountToWithdraw) {
+      revert NotEnoughWithdrawableBalance();
+    }
+
+    s.token.transfer(msg.sender, amountToWithdraw);
+  }
+
+  /// @dev removes user stake amount from onHold entries
+  function _removeUserStake(uint256 amountToRemove, uint8 iterations) private returns (uint256) {
+    uint256 balance = 0;
+
+    OnHold[] storage onHoldEntries = s.userOnHold[msg.sender];
+    iterations = iterations > onHoldEntries.length ? uint8(onHoldEntries.length) : iterations;
     uint i = 0;
 
     // the only loop that is not avoidable
-    while (i < onHoldEntries.length) {
+    while (i < onHoldEntries.length && iterations-- > 0) {
       if (block.timestamp > onHoldEntries[i].releaseAt) {
         balance += onHoldEntries[i].amount;
 
-        if (balance >= amountToWithdraw) {
-          uint256 delta = balance - amountToWithdraw;
+        if (balance >= amountToRemove) {
+          uint256 delta = balance - amountToRemove;
           onHoldEntries[i].amount = delta;
-          s.token.transfer(to, amountToWithdraw);
-          return;
+          return amountToRemove;
         }
 
         // removes entry from array
-        onHoldEntries[i] = onHoldEntries[onHoldEntries.length - 1];
+        if (onHoldEntries.length > 0) {
+          onHoldEntries[i] = onHoldEntries[onHoldEntries.length - 1];
+        }
         onHoldEntries.pop();
       } else {
         i++;
       }
     }
 
-    if (amountToWithdraw == type(uint256).max) {
-      s.token.transfer(to, balance);
-      return;
-    }
-
-    revert NotEnoughWithdrawableBalance();
+    return balance;
   }
 
   /// @notice returns stipend of user based on their stake
