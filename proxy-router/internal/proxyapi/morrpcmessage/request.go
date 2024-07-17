@@ -96,16 +96,3 @@ type ReqObject struct {
 	Res  uint `json:"res"`
 	Toks uint `json:"toks"`
 }
-
-var approvalAbi = []lib.AbiParameter{
-	{Type: "bytes32"},
-	{Type: "address"},
-	{Type: "uint128"},
-}
-
-var sessionReportAbi = []lib.AbiParameter{
-	{Type: "bytes32"},
-	{Type: "uint128"},
-	{Type: "uint32"},
-	{Type: "uint32"},
-}
