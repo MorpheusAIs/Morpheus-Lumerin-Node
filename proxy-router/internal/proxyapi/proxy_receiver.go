@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
@@ -18,18 +19,20 @@ import (
 type ProxyReceiver struct {
 	privateKeyHex  lib.HexString
 	publicKeyHex   lib.HexString
+	chainID        *big.Int
 	morRpc         *m.MORRPCMessage
 	sessionStorage *storages.SessionStorage
 	aiEngine       *aiengine.AiEngine
 }
 
-func NewProxyReceiver(privateKeyHex, publicKeyHex lib.HexString, sessionStorage *storages.SessionStorage, aiEngine *aiengine.AiEngine) *ProxyReceiver {
+func NewProxyReceiver(privateKeyHex, publicKeyHex lib.HexString, sessionStorage *storages.SessionStorage, aiEngine *aiengine.AiEngine, chainID *big.Int) *ProxyReceiver {
 	return &ProxyReceiver{
 		privateKeyHex:  privateKeyHex,
 		publicKeyHex:   publicKeyHex,
 		morRpc:         m.NewMorRpc(),
 		sessionStorage: sessionStorage,
 		aiEngine:       aiEngine,
+		chainID:        chainID,
 	}
 }
 
@@ -103,6 +106,7 @@ func (s *ProxyReceiver) SessionRequest(ctx context.Context, msgID string, reqID 
 		req.BidID,
 		s.privateKeyHex,
 		reqID,
+		s.chainID,
 	)
 	if err != nil {
 		err := lib.WrapError(fmt.Errorf("failed to create response"), err)
@@ -150,6 +154,7 @@ func (s *ProxyReceiver) SessionReport(ctx context.Context, msgID string, reqID s
 		common.HexToHash(session.Id),
 		s.privateKeyHex,
 		reqID,
+		s.chainID,
 	)
 	if err != nil {
 		err := lib.WrapError(fmt.Errorf("failed to create response"), err)

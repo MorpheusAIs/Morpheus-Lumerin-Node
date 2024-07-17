@@ -468,16 +468,18 @@ export const providerReport = {
 };
 export const reportAbi = [
   { type: "bytes32" }, // sessionID
+  { type: "uint256" }, // chainID
   { type: "uint128" }, // timestamp
   { type: "uint32" }, // tokens per second / tps
   { type: "uint32" }, // time to first token in milliseconds / ttftMs
-];
+] as const;
 
 export const approvalAbi = [
-  { type: "bytes32" },
-  { type: "address" },
-  { type: "uint128" },
-];
+  { type: "bytes32" }, // bidID
+  { type: "uint256" }, // chainID
+  { type: "address" }, // user
+  { type: "uint128" }, // timestamp
+] as const;
 
 export const getProviderApproval = async (
   provider: WalletClient,
@@ -487,6 +489,7 @@ export const getProviderApproval = async (
   const timestampMs = (await time.latest()) * 1000;
   const msg = encodeAbiParameters(approvalAbi, [
     bidId,
+    BigInt(hre.network.config.chainId!),
     user,
     BigInt(timestampMs),
   ]);
@@ -509,7 +512,8 @@ export const getReport = async (
   const timestampMs = (await time.latest()) * 1000;
   const msg = encodeAbiParameters(reportAbi, [
     sessionId,
-    timestampMs,
+    BigInt(hre.network.config.chainId!),
+    BigInt(timestampMs),
     tps * 1000,
     ttftMs,
   ]);

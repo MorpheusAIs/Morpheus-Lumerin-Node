@@ -30,6 +30,7 @@ contract SessionRouter {
   error WithdrawableBalanceLimitByStakeReached(); // means that user can't withdraw more funds because of the limit which equals to the stake
   error ProviderSignatureMismatch();
   error SignatureExpired();
+  error WrongChaidId();
   error DuplicateApproval();
   error ApprovedForAnotherUser(); // means that approval generated for another user address, protection from front-running
 
@@ -114,11 +115,16 @@ contract SessionRouter {
     bytes memory signature
   ) external returns (bytes32 sessionId) {
     // reverts without specific error if cannot decode abi
-    (bytes32 bidId, address user, uint128 timestampMs) = abi.decode(providerApproval, (bytes32, address, uint128));
+    (bytes32 bidId, uint256 chainId, address user, uint128 timestampMs) = abi.decode(
+      providerApproval,
+      (bytes32, uint256, address, uint128)
+    );
     if (user != msg.sender) {
       revert ApprovedForAnotherUser();
     }
-
+    if (chainId != block.chainid) {
+      revert WrongChaidId();
+    }
     if (timestampMs / 1000 < block.timestamp - SIGNATURE_TTL) {
       revert SignatureExpired();
     }
@@ -185,10 +191,13 @@ contract SessionRouter {
 
   function closeSession(bytes memory receiptEncoded, bytes memory signature) external {
     // reverts without specific error if cannot decode abi
-    (bytes32 sessionId, uint128 timestampMs, uint32 tpsScaled1000, uint32 ttftMs) = abi.decode(
+    (bytes32 sessionId, uint256 chainId, uint128 timestampMs, uint32 tpsScaled1000, uint32 ttftMs) = abi.decode(
       receiptEncoded,
-      (bytes32, uint128, uint32, uint32)
+      (bytes32, uint256, uint128, uint32, uint32)
     );
+    if (chainId != block.chainid) {
+      revert WrongChaidId();
+    }
     if (timestampMs / 1000 < block.timestamp - SIGNATURE_TTL) {
       revert SignatureExpired();
     }
@@ -536,14 +545,4 @@ contract SessionRouter {
   function maxUint256(uint256 a, uint256 b) private pure returns (uint256) {
     return a > b ? a : b;
   }
-
-  // function add(int256 oldMean, int256 oldSqSum, int256 count, int256 x) private pure returns (int256, int256) {
-  //   int256 mean = oldMean + (x - oldMean) / count;
-  //   int256 sqSum = oldSqSum + (x - oldMean) * (x - mean);
-  //   return (mean, sqSum);
-  // }
-
-  // function variance(int256 sqSum, int256 count) internal view returns (int256) {
-  //   return sqSum / (count - 1);
-  // }
 }
