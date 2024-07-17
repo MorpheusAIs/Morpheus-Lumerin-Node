@@ -15,12 +15,7 @@ const trans = keyframes`
 export const Container = styled.div`
   animation: 0.5s ${trans};
   animation-fill-mode: forwards;
-  background-color: ${p =>
-    p.negative
-      ? p.theme.colors.morMain
-      : p.darker
-      ? p.theme.colors.darker
-      : p.theme.colors.dark};
+  background-color: ${p => p.theme.colors.morMain};
   max-width: ${p => p.maxWidth || 'auto'};
   font-size: 1.3rem;
   padding: 8px 12px;
@@ -43,12 +38,7 @@ export const Container = styled.div`
     border: 5px solid transparent;
     z-index: 1;
     border-bottom: none;
-    border-top-color: ${p =>
-      p.negative
-        ? p.theme.colors.morMain
-        : p.darker
-        ? p.theme.colors.darker
-        : p.theme.colors.dark};
+    border-top-color: ${p => p.theme.colors.morMain};
   }
 `;
 

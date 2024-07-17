@@ -3,15 +3,15 @@ package storages
 import (
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"strings"
-
-	i "github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 )
 
 type Session struct {
 	Id           string
 	UserAddr     string
 	ProviderAddr string
+	EndsAt       *big.Int
 }
 
 type User struct {
@@ -24,9 +24,9 @@ type SessionStorage struct {
 	db *Storage
 }
 
-func NewSessionStorage(log i.ILogger) *SessionStorage {
+func NewSessionStorage(storage *Storage) *SessionStorage {
 	return &SessionStorage{
-		db: NewStorage(log),
+		db: storage,
 	}
 }
 

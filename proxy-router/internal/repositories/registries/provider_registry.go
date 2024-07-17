@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/contracts/providerregistry"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/providerregistry"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -20,16 +19,15 @@ type ProviderRegistry struct {
 
 	// state
 	nonce uint64
-	mutex lib.Mutex
 	prABI *abi.ABI
 
 	// deps
 	providerRegistry *providerregistry.ProviderRegistry
 	client           *ethclient.Client
-	log              interfaces.ILogger
+	log              lib.ILogger
 }
 
-func NewProviderRegistry(providerRegistryAddr common.Address, client *ethclient.Client, log interfaces.ILogger) *ProviderRegistry {
+func NewProviderRegistry(providerRegistryAddr common.Address, client *ethclient.Client, log lib.ILogger) *ProviderRegistry {
 	pr, err := providerregistry.NewProviderRegistry(providerRegistryAddr, client)
 	if err != nil {
 		panic("invalid provider registry ABI")
@@ -43,20 +41,19 @@ func NewProviderRegistry(providerRegistryAddr common.Address, client *ethclient.
 		providerRegistryAddr: providerRegistryAddr,
 		client:               client,
 		prABI:                prABI,
-		mutex:                lib.NewMutex(),
 		log:                  log,
 	}
 }
 
-func (g *ProviderRegistry) GetAllProviders(ctx context.Context) ([]string, []providerregistry.Provider, error) {
+func (g *ProviderRegistry) GetAllProviders(ctx context.Context) ([]common.Address, []providerregistry.Provider, error) {
 	providerAddrs, providers, err := g.providerRegistry.ProviderGetAll(&bind.CallOpts{Context: ctx})
 	if err != nil {
 		return nil, nil, err
 	}
 
-	addresses := make([]string, len(providerAddrs))
+	addresses := make([]common.Address, len(providerAddrs))
 	for i, address := range providerAddrs {
-		addresses[i] = address.Hex()
+		addresses[i] = address
 	}
 
 	return addresses, providers, nil
@@ -90,4 +87,13 @@ func (g *ProviderRegistry) CreateNewProvider(ctx *bind.TransactOpts, address str
 	}
 
 	return fmt.Errorf("OpenSession event not found in transaction logs")
+}
+
+func (g *ProviderRegistry) GetProviderById(ctx context.Context, id common.Address) (*providerregistry.Provider, error) {
+	provider, err := g.providerRegistry.ProviderMap(&bind.CallOpts{Context: ctx}, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return &provider, nil
 }

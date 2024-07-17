@@ -50,7 +50,7 @@ const Chat = (props) => {
     const [activeSession, setActiveSession] = useState<any>(undefined);
 
     const [chainData, setChainData] = useState<any>(null);
-    const [sessionTitles, setSessionTitles] = useState<{sessionId: string, title: string }[]>([]);
+    const [sessionTitles, setSessionTitles] = useState<{ sessionId: string, title: string }[]>([]);
 
     const [openSessionModal, setOpenSessionModal] = useState(false);
     const [openChangeModal, setOpenChangeModal] = useState(false);
@@ -65,30 +65,23 @@ const Chat = (props) => {
     const isDisabled = (!activeSession && !isLocal) || isReadonly;
 
     useEffect(() => {
-        chatBlockRef?.current?.addEventListener('wheel', (event: any) => {
-            const isUp = event.wheelDelta ? event.wheelDelta > 0 : event.deltaY < 0;
-            if(isUp) {
-                cancelScroll = true;
-            }
-        });
-
         (async () => {
             const meta = await props.getMetaInfo();
             const chainData = await props.getModelsData();
             const titles = await props.client.getTitles();
-            setSessionTitles(titles.map(t => ({ sessionId: t._id, title: t.title})));
-            
+            setSessionTitles(titles.map(t => ({ sessionId: t._id, title: t.title })));
+
             const sessions = await props.getSessionsByUser(props.address);
             const openSessions = sessions.filter(s => !isClosed(s));
 
-            if(openSessions.length) {
+            if (openSessions.length) {
                 const latestSession = openSessions[0];
                 const openBid = (chainData.models
                     .find((x: any) => x.bids.find(b => b.Id == latestSession.BidID)) as any)
                     ?.bids?.find(b => b.Id == latestSession.BidID);
-                if(openBid){
+                if (openBid) {
                     setSelectedBid(openBid);
-                    await onSetActiveSession({ sessionId: latestSession.Id})
+                    await onSetActiveSession({ sessionId: latestSession.Id })
                 }
             }
             else {
@@ -96,7 +89,7 @@ const Chat = (props) => {
                     .find((x: any) => x.bids.find(b => b.Provider == 'Local')) as any).bids.find(b => b.Provider == 'Local');
                 setSelectedBid(defaultSelectedBid);
             }
-            
+
             setMeta(meta);
             setChainData(chainData)
             setSessions(sessions);
@@ -113,21 +106,21 @@ const Chat = (props) => {
     }
 
     const scrollToBottom = () => {
-        if(!cancelScroll) {
+        if (!cancelScroll) {
             chatBlockRef.current?.scroll({ top: chatBlockRef.current.scrollHeight, behavior: 'smooth' })
         }
     }
 
-    const onOpenSession = async ({ stake }) => {
-        console.log("open-session", stake);
+    const onOpenSession = async ({ duration }) => {
+        console.log("open-session", duration);
 
         try {
-            const openedSession = await props.onOpenSession({ stake, selectedBid });
+            const openedSession = await props.onOpenSession({ selectedBid, duration });
             if (!openedSession) {
                 return;
             }
-    
-            setActiveSession(openedSession);
+
+            setActiveSession({ sessionId: openedSession });
             await refreshSessions();
         }
         finally {
@@ -137,14 +130,14 @@ const Chat = (props) => {
 
     const onSetActiveSession = async (session) => {
         setActiveSession(session);
-        if(session) {
+        if (session) {
             try {
                 const history = await props.client.getChatHistory(session.sessionId);
                 if (history.length) {
                     setMessages(history[0].messages || []);
                 }
             }
-            catch(e) {
+            catch (e) {
                 props.toasts.toast('error', 'Failed to load chat history');
             }
         }
@@ -158,8 +151,15 @@ const Chat = (props) => {
     const closeSession = async (sessionId: string) => {
         await props.closeSession(sessionId);
         await refreshSessions();
+
+        if(activeSession.sessionId == sessionId) {
+            const defaultSelectedBid = (chainData.models
+                .find((x: any) => x.bids.find(b => b.Provider == 'Local')) as any).bids.find(b => b.Provider == 'Local');
+            setSelectedBid(defaultSelectedBid);
+            setMessages([]);
+        }
     }
-    
+
     const selectSession = async (sessionId: string) => {
         const findBid = (id) => {
             return (chainData.models
@@ -173,7 +173,7 @@ const Chat = (props) => {
         const openSessions = sessions.filter(s => !isClosed(s));
         const openSession = openSessions.find(s => s.Id == sessionId);
 
-        if(!openSession) {
+        if (!openSession) {
             setIsReadonly(true)
 
             const closedSession = sessions.find(s => s.Id == sessionId);
@@ -192,7 +192,34 @@ const Chat = (props) => {
         }
     }
 
+    const registerScrollEvent = (register) => {
+        cancelScroll = false;
+        const handler = (event: any) => {
+            const isUp = event.wheelDelta ? event.wheelDelta > 0 : event.deltaY < 0;
+            if (isUp) {
+                cancelScroll = true;
+            }
+            else {
+                if(!chatBlockRef?.current || !cancelScroll) {
+                    return;
+                }
+                // Return scrolling if scrolled to div end 
+                if((chatBlockRef.current.offsetHeight + chatBlockRef.current.scrollTop) >= chatBlockRef.current.scrollHeight) {
+                    cancelScroll = false;
+                }
+            }
+        };
+
+        if (register) {
+            chatBlockRef?.current?.addEventListener('wheel', handler);
+        }
+        else {
+            chatBlockRef?.current?.removeEventListener('wheel', handler);
+        }
+    }
+
     const call = async (message) => {
+        scrollToBottom();
         const chatHistory = messages.map(m => ({ role: m.role, content: m.text }))
 
         let memoState = [...messages, { id: makeId(6), text: value, ...userMessage }];
@@ -204,7 +231,7 @@ const Chat = (props) => {
         if (!isLocal) {
             headers["session_id"] = activeSession.sessionId;
         }
-        
+
         const response = await fetch(`${props.config.chain.localProxyRouterUrl}/v1/chat/completions`, {
             method: 'POST',
             headers,
@@ -242,6 +269,7 @@ const Chat = (props) => {
         }
 
         const reader = response.body.getReader()
+        registerScrollEvent(true);
 
         try {
             while (true) {
@@ -249,13 +277,13 @@ const Chat = (props) => {
                     await reader.cancel();
                     abort = false;
                 }
-    
+
                 const { value, done } = await reader.read();
                 if (done) {
                     setIsSpinning(false);
                     break;
                 }
-    
+
                 const decodedString = textDecoder.decode(value, { stream: true });
                 const parts = parseDataChunk(decodedString);
                 parts.forEach(part => {
@@ -272,15 +300,15 @@ const Chat = (props) => {
                 })
             }
         }
-        catch(e) {
+        catch (e) {
             console.error(e);
         }
 
         console.log("Flush to storage");
         await props.client.saveChatHistory({ sessionId: activeSession.sessionId, messages: memoState });
         console.log("Stored succesfully");
-       
-        cancelScroll = false;
+
+        registerScrollEvent(false);
         return memoState;
     }
 
@@ -299,8 +327,8 @@ const Chat = (props) => {
             return;
         }
 
-        if(!isLocal && messages.length === 0) {
-            const title = { sessionId: activeSession.sessionId, title: value};
+        if (!isLocal && messages.length === 0) {
+            const title = { sessionId: activeSession.sessionId, title: value };
             props.client.saveTitle(title).then(() => {
                 setSessionTitles([...sessionTitles, title]);
             }).catch(console.error);
@@ -309,23 +337,22 @@ const Chat = (props) => {
         setIsSpinning(true);
         call(value).finally(() => setIsSpinning(false));
         setValue("");
-        scrollToBottom();
     }
     const onBidSelect = ({ bidId, modelId }) => {
         setMessages([]);
         setActiveSession(undefined);
         setIsReadonly(false);
 
-        if(bidId) {
+        if (bidId) {
             const selectedBid = (chainData.models
                 .find((x: any) => x.bids.find(b => b.Id == bidId)) as any)
                 .bids.find(b => b.Id == bidId);
 
             const openSessions = sessions.filter(s => !isClosed(s));
             const openBidSession = openSessions.find(s => s.BidID == selectedBid.Id);
-            
+
             if (openBidSession) {
-                onSetActiveSession({ sessionId: openBidSession.Id})
+                onSetActiveSession({ sessionId: openBidSession.Id })
             }
 
             setSelectedBid(selectedBid);
@@ -333,7 +360,7 @@ const Chat = (props) => {
         else {
             const selectedBid = chainData.models
                 .find(x => x.Id == modelId)
-                .bids.find(b => b.Provider == 'Local');;
+                .bids.find(b => b.Provider == 'Local');
 
             setSelectedBid(selectedBid);
         }
@@ -343,9 +370,9 @@ const Chat = (props) => {
     return (
         <>
             {
-                isLoading && 
+                isLoading &&
                 <LoadingCover>
-                    <Spinner style={{ width: '5rem',  height: '5rem'}} animation="border" variant="success" />
+                    <Spinner style={{ width: '5rem', height: '5rem' }} animation="border" variant="success" />
                 </LoadingCover>
             }
             <Drawer

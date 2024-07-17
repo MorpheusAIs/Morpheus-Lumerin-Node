@@ -29,8 +29,43 @@ const IconContainer = styled.div`
   width: 40px;
 `;
 
-const Row = ({ tx, explorerUrl, symbol, symbolEth, morAddress }) => {
+const formatCurrency = ({
+  value,
+  currency,
+  maxSignificantFractionDigits = 5
+}) => {
+  let style = 'currency';
+
+  if (!currency) {
+    currency = undefined;
+    style = 'decimal';
+  }
+
+  if (value < 1) {
+    return new Intl.NumberFormat(navigator.language, {
+      style: style,
+      currency: currency,
+      maximumSignificantDigits: 5
+    }).format(value);
+  }
+
+  const integerDigits = value.toFixed(0).toString().length;
+  let fractionDigits = maxSignificantFractionDigits - integerDigits;
+  if (fractionDigits < 0) {
+    fractionDigits = 0;
+  }
+
+  return new Intl.NumberFormat(navigator.language, {
+    style: style,
+    currency: currency,
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits
+  }).format(value);
+};
+
+const Row = ({ tx, explorerUrl, morAddress }) => {
   const morTransaction = tx.isMor;
+  const formatedValue = formatCurrency({ value: tx.value, maxSignificantFractionDigits: morTransaction ? 3 : 5 });
 
   return (
   	<Container onClick={() => window.openLink(explorerUrl)}>
@@ -44,7 +79,7 @@ const Row = ({ tx, explorerUrl, symbol, symbolEth, morAddress }) => {
     	<IconContainer>
       	<TxIcon txType={tx.txType} />
     	</IconContainer>
-    	<Amount {...tx} symbol={morTransaction ? "saMOR" : symbolEth} />
+    	<Amount {...tx} symbol={tx.symbol} value={formatedValue} />
     	<Details {...tx} />
   	</Container>
 	);
