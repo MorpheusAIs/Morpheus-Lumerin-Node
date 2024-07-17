@@ -67,16 +67,24 @@ const withChatState = WrappedComponent => {
       const providersMap = providers.reduce((a, b) => ({ ...a, [b.Address.toLowerCase()]: b }), {});
       let result = [];
 
+      const localModelId = "0x6a4813e866a48da528c533e706344ea853a1d3f21e37b4c8e7ffd5ff25779018";
+
       for (const model of models) {
         const id = model.Id;
-        const bids = (await this.getBitsByModels(id)).filter(b => !b.DeletedAt);
-        if (!bids.length) {
+
+        let bids = (await this.getBitsByModels(id))
+          .filter(b => !b.DeletedAt)
+          .map(b => ({ ...b, ProviderData: providersMap[b.Provider.toLowerCase()], Model: model }));
+
+        if(id == localModelId) {
+          bids.push({ Provider: "Local", Model: model });
+        }
+
+        if(!bids.length) {
           continue;
         }
 
-        const bidsWithProviders = bids.map(b => ({ ...b, ProviderData: providersMap[b.Provider.toLowerCase()], Model: model }))
-
-        result.push({ ...model, bids: model.Name == "Llama 2.0" ? [...bidsWithProviders, { Provider: "Local", Model: model }] : bidsWithProviders })
+        result.push({ ...model, bids })
       }
 
       return { models: result, providers }
