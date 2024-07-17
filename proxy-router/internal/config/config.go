@@ -132,7 +132,7 @@ func (cfg *Config) SetDefaults() {
 	}
 
 	if cfg.Proxy.StoragePath == "" {
-		cfg.Proxy.StoragePath = "./data/badger"
+		cfg.Proxy.StoragePath = "./data/badger/"
 	}
 }
 
