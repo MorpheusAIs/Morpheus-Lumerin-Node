@@ -46,7 +46,7 @@ type SessionPromptRes struct {
 
 type SessionReportRes struct {
 	Message      lib.HexString `json:"message"             validate:"required"`
-	SignedReport lib.HexString `json:"signedReport" 	   validate:"required"`
+	SignedReport lib.HexString `json:"signedReport"        validate:"required"`
 	Signature    lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
 	Timestamp    uint64        `json:"timestamp"           validate:"required,number"`
 }
