@@ -6,10 +6,16 @@ import {
   keccak256,
   parseUnits,
 } from "viem/utils";
-import { getHex, getTxTimestamp, now, nowChain, randomBytes32 } from "./utils";
+import {
+  getHex,
+  getSessionId,
+  getTxTimestamp,
+  nowChain,
+  randomBytes32,
+} from "./utils";
 import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
 import { FacetCutAction, getSelectors } from "../libraries/diamond";
-import { DAY, HOUR, MINUTE, SECOND } from "../utils/time";
+import { DAY, HOUR, SECOND } from "../utils/time";
 import {
   GetContractReturnType,
   WalletClient,
@@ -203,8 +209,14 @@ export async function deploySingleProvider() {
 }
 
 export async function deploySingleModel() {
-  const { owner, provider, publicClient, tokenMOR, modelRegistry } =
-    await loadFixture(deployDiamond);
+  const {
+    owner,
+    provider,
+    publicClient,
+    tokenMOR,
+    modelRegistry,
+    marketplace,
+  } = await loadFixture(deployDiamond);
 
   const expectedModel = {
     modelId: randomBytes32(),
@@ -239,6 +251,7 @@ export async function deploySingleModel() {
     provider,
     publicClient,
     tokenMOR,
+    marketplace,
   };
 }
 export async function deploySingleBid() {
@@ -384,25 +397,102 @@ export async function deploySingleBid() {
   };
 }
 
+export async function openSession() {
+  const {
+    sessionRouter,
+    provider,
+    expectedSession: exp,
+    user,
+    publicClient,
+    tokenMOR,
+  } = await loadFixture(deploySingleBid);
+
+  // open session
+  const { msg, signature } = await getProviderApproval(
+    provider,
+    user.account.address,
+    exp.bidID,
+  );
+  const openTx = await sessionRouter.write.openSession(
+    [exp.stake, msg, signature],
+    { account: user.account.address },
+  );
+  const sessionId = await getSessionId(publicClient, hre, openTx);
+
+  return {
+    sessionRouter,
+    provider,
+    expectedSession: exp,
+    user,
+    publicClient,
+    sessionId,
+    tokenMOR,
+  };
+}
+
+export async function openEarlyCloseSession() {
+  const {
+    sessionRouter,
+    provider,
+    expectedSession: exp,
+    user,
+    publicClient,
+    sessionId,
+    tokenMOR,
+  } = await loadFixture(openSession);
+
+  // wait for half of the session
+  await time.increase(exp.durationSeconds / 2n);
+
+  // close session
+  const report = await getReport(provider, sessionId, 10, 10);
+  await sessionRouter.write.closeSession([report.msg, report.sig], {
+    account: user.account,
+  });
+
+  return {
+    sessionRouter,
+    provider,
+    expectedSession: exp,
+    user,
+    publicClient,
+    sessionId,
+    tokenMOR,
+    expectedOnHold: exp.stake / 2n,
+  };
+}
+
 export const providerReport = {
   ips: 128,
   timestamp: 10000,
 };
 export const reportAbi = [
   { type: "bytes32" }, // sessionID
+  { type: "uint256" }, // chainID
   { type: "uint128" }, // timestamp
   { type: "uint32" }, // tokens per second / tps
   { type: "uint32" }, // time to first token in milliseconds / ttftMs
-];
+] as const;
 
-export const approvalAbi = [{ type: "bytes32" }, { type: "uint128" }];
+export const approvalAbi = [
+  { type: "bytes32" }, // bidID
+  { type: "uint256" }, // chainID
+  { type: "address" }, // user
+  { type: "uint128" }, // timestamp
+] as const;
 
 export const getProviderApproval = async (
   provider: WalletClient,
+  user: `0x${string}`,
   bidId: `0x${string}`,
 ) => {
   const timestampMs = (await time.latest()) * 1000;
-  const msg = encodeAbiParameters(approvalAbi, [bidId, BigInt(timestampMs)]);
+  const msg = encodeAbiParameters(approvalAbi, [
+    bidId,
+    BigInt(hre.network.config.chainId!),
+    user,
+    BigInt(timestampMs),
+  ]);
   const signature = await provider.signMessage({
     message: { raw: keccak256(msg) },
   });
@@ -422,7 +512,8 @@ export const getReport = async (
   const timestampMs = (await time.latest()) * 1000;
   const msg = encodeAbiParameters(reportAbi, [
     sessionId,
-    timestampMs,
+    BigInt(hre.network.config.chainId!),
+    BigInt(timestampMs),
     tps * 1000,
     ttftMs,
   ]);

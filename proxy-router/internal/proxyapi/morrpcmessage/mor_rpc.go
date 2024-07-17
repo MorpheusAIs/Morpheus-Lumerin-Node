@@ -19,10 +19,10 @@ func NewMorRpc() *MORRPCMessage {
 
 // RESPONSES
 
-func (m *MORRPCMessage) InitiateSessionResponse(providerPubKey lib.HexString, userAddr common.Address, bidID common.Hash, providerPrivateKeyHex lib.HexString, requestID string) (*RpcResponse, error) {
+func (m *MORRPCMessage) InitiateSessionResponse(providerPubKey lib.HexString, userAddr common.Address, bidID common.Hash, providerPrivateKeyHex lib.HexString, requestID string, chainID *big.Int) (*RpcResponse, error) {
 	timestamp := m.generateTimestamp()
 
-	approval, err := lib.EncodeAbiParameters(approvalAbi, []interface{}{bidID, big.NewInt(int64(timestamp))})
+	approval, err := lib.EncodeAbiParameters(approvalAbi, []interface{}{bidID, chainID, userAddr, big.NewInt(int64(timestamp))})
 	if err != nil {
 		return &RpcResponse{}, err
 	}
@@ -59,10 +59,10 @@ func (m *MORRPCMessage) InitiateSessionResponse(providerPubKey lib.HexString, us
 	}, nil
 }
 
-func (m *MORRPCMessage) SessionReportResponse(providerPubKey lib.HexString, tps uint32, ttfp uint32, sessionID common.Hash, providerPrivateKeyHex lib.HexString, requestID string) (*RpcResponse, error) {
+func (m *MORRPCMessage) SessionReportResponse(providerPubKey lib.HexString, tps uint32, ttfp uint32, sessionID common.Hash, providerPrivateKeyHex lib.HexString, requestID string, chainID *big.Int) (*RpcResponse, error) {
 	timestamp := m.generateTimestamp()
 
-	report, err := lib.EncodeAbiParameters(sessionReportAbi, []interface{}{sessionID, big.NewInt(int64(timestamp)), tps, ttfp})
+	report, err := lib.EncodeAbiParameters(sessionReportAbi, []interface{}{sessionID, chainID, big.NewInt(int64(timestamp)), tps, ttfp})
 	if err != nil {
 		return &RpcResponse{}, err
 	}
@@ -303,7 +303,6 @@ func (m *MORRPCMessage) generateSignature(params any, privateKeyHex lib.HexStrin
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("\n\nINPUT: ", string(result))
 	privateKey, err := crypto.ToECDSA(privateKeyHex)
 	if err != nil {
 		return nil, err

@@ -16,6 +16,7 @@ contract ModelRegistry {
 
   error ModelNotFound();
   error StakeTooLow();
+  error ModelHasActiveBids();
 
   /// @notice Returns model struct by id
   function modelMap(bytes32 id) external view returns (Model memory) {
@@ -79,17 +80,24 @@ contract ModelRegistry {
     if (newStake < s.modelMinStake) {
       revert StakeTooLow();
     }
-    if (model.stake == 0) {
+
+    uint128 createdAt = model.createdAt;
+    if (createdAt == 0) {
+      // model never existed
       s.activeModels.insert(modelId);
       s.models.push(modelId);
+      createdAt = uint128(block.timestamp);
     } else {
       LibOwner._senderOrOwner(s.modelMap[modelId].owner);
+      if (model.isDeleted) {
+        s.activeModels.insert(modelId);
+      }
     }
 
     s.modelMap[modelId] = Model({
       fee: fee,
       stake: newStake,
-      createdAt: uint128(block.timestamp),
+      createdAt: createdAt,
       ipfsCID: ipfsCID,
       owner: owner,
       name: name,
@@ -106,9 +114,14 @@ contract ModelRegistry {
     Model storage model = s.modelMap[id];
     LibOwner._senderOrOwner(model.owner);
 
+    if (s.modelAgentActiveBids[id].count() > 0) {
+      revert ModelHasActiveBids();
+    }
+
     s.activeModels.remove(id); // reverts with KeyNotFound()
     model.isDeleted = true;
     uint256 stake = model.stake;
+    model.stake = 0;
 
     emit ModelDeregistered(model.owner, id);
     s.token.transfer(model.owner, stake);

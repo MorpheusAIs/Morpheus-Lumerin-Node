@@ -2,7 +2,7 @@ import { loadFixture } from "@nomicfoundation/hardhat-toolbox-viem/network-helpe
 import { expect } from "chai";
 import hre from "hardhat";
 import { getAddress } from "viem";
-import { deployDiamond, deploySingleModel } from "./fixtures";
+import { deployDiamond, deploySingleBid, deploySingleModel } from "./fixtures";
 import {
   catchError,
   getHex,
@@ -164,6 +164,28 @@ describe("Model registry", function () {
       expect(balanceAfter - balanceBefore).eq(expectedModel.stake);
     });
 
+    it("should error when deregistering a model that has bids", async function () {
+      const { modelRegistry, expectedModel, marketplace, expectedBid } =
+        await loadFixture(deploySingleBid);
+
+      // try deregistering model
+      await catchError(modelRegistry.abi, "ModelHasActiveBids", async () => {
+        await modelRegistry.write.modelDeregister([expectedModel.modelId], {
+          account: expectedModel.owner,
+        });
+      });
+
+      // remove bid
+      await marketplace.write.deleteModelAgentBid([expectedBid.id], {
+        account: expectedBid.providerAddr,
+      });
+
+      // deregister model
+      await modelRegistry.write.modelDeregister([expectedModel.modelId], {
+        account: expectedModel.owner,
+      });
+    });
+
     it("Should update existing model", async function () {
       const {
         modelRegistry,
@@ -206,7 +228,7 @@ describe("Model registry", function () {
         owner: getAddress(updates.owner),
         name: updates.name,
         tags: updates.tags,
-        createdAt: timestamp,
+        createdAt: expectedModel.createdAt,
         isDeleted: expectedModel.isDeleted,
       });
     });
@@ -239,6 +261,54 @@ describe("Model registry", function () {
         owner: getAddress(provider.account.address),
       });
       expect(events.length).eq(1);
+    });
+
+    it("should reregister model", async function () {
+      const { modelRegistry, expectedModel, tokenMOR, owner } =
+        await loadFixture(deploySingleModel);
+
+      // check indexes
+      expect(await modelRegistry.read.modelGetCount()).eq(1n);
+      expect(await modelRegistry.read.models([0n])).eq(expectedModel.modelId);
+      expect(await modelRegistry.read.modelGetIds()).deep.equal([
+        expectedModel.modelId,
+      ]);
+
+      // deregister
+      await modelRegistry.write.modelDeregister([expectedModel.modelId]);
+
+      // check indexes
+      expect(await modelRegistry.read.models([0n])).eq(expectedModel.modelId);
+      expect(await modelRegistry.read.modelGetCount()).eq(0n);
+      expect(await modelRegistry.read.modelGetIds()).deep.equal([]);
+
+      // reregister
+      const modelId = expectedModel.modelId;
+      const model2 = {
+        ipfsCID: randomBytes32(),
+        fee: 100n,
+        stake: 100n,
+        owner: getAddress(owner.account.address),
+        name: "model2",
+        tags: ["model", "2"],
+        createdAt: expectedModel.createdAt,
+      };
+      await tokenMOR.write.transfer([owner.account.address, model2.stake]);
+      await tokenMOR.write.approve([modelRegistry.address, model2.stake]);
+      await modelRegistry.write.modelRegister([
+        modelId,
+        model2.ipfsCID,
+        model2.fee,
+        model2.stake,
+        model2.owner,
+        model2.name,
+        model2.tags,
+      ]);
+      // check indexes
+      expect(await modelRegistry.read.modelGetCount()).eq(1n);
+      expect(await modelRegistry.read.models([0n])).eq(modelId);
+      expect(await modelRegistry.read.modelGetIds()).deep.equal([modelId]);
+      expect(await modelRegistry.read.modelMap([modelId])).deep.include(model2);
     });
   });
 

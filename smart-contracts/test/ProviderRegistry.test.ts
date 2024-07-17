@@ -3,7 +3,11 @@ import { expect } from "chai";
 import hre from "hardhat";
 import { getAddress } from "viem";
 import { PanicOutOfBoundsRegexp, catchError } from "./utils";
-import { deployDiamond, deploySingleProvider } from "./fixtures";
+import {
+  deployDiamond,
+  deploySingleBid,
+  deploySingleProvider,
+} from "./fixtures";
 
 describe("Provider registry", function () {
   describe("Actions", function () {
@@ -147,8 +151,103 @@ describe("Provider registry", function () {
         expect(balanceAfter - balanceBefore).eq(expectedProvider.stake);
       });
 
+      it("should error when deregistering a model that has bids", async function () {
+        const { providerRegistry, marketplace, expectedBid } =
+          await loadFixture(deploySingleBid);
+
+        // try deregistering model
+        await catchError(
+          providerRegistry.abi,
+          "ProviderHasActiveBids",
+          async () => {
+            await providerRegistry.write.providerDeregister(
+              [expectedBid.providerAddr],
+              { account: expectedBid.providerAddr },
+            );
+          },
+        );
+
+        // remove bid
+        await marketplace.write.deleteModelAgentBid([expectedBid.id], {
+          account: expectedBid.providerAddr,
+        });
+
+        // deregister model
+        await providerRegistry.write.providerDeregister(
+          [expectedBid.providerAddr],
+          { account: expectedBid.providerAddr },
+        );
+      });
+
       it.skip("Should block withdrawing whole stake if provider already earned", async function () {});
       it.skip("Should allow withdrawing remaining stake after limit period", async function () {});
+
+      it("Should correctly reregister provider", async function () {
+        const {
+          providerRegistry,
+          provider,
+          expectedProvider: exp,
+          tokenMOR,
+        } = await loadFixture(deploySingleProvider);
+
+        // check indexes
+        expect(await providerRegistry.read.providerGetCount()).eq(1n);
+        expect(await providerRegistry.read.providers([0n])).eq(
+          getAddress(provider.account.address),
+        );
+        expect(await providerRegistry.read.providerGetIds()).deep.equal([
+          getAddress(provider.account.address),
+        ]);
+
+        // deregister
+        await providerRegistry.write.providerDeregister(
+          [provider.account.address],
+          { account: provider.account },
+        );
+
+        // check indexes
+        expect(await providerRegistry.read.providerGetCount()).eq(0n);
+        expect(await providerRegistry.read.providerGetIds()).deep.equal([]);
+        expect(await providerRegistry.read.providers([0n])).eq(
+          getAddress(provider.account.address),
+        );
+
+        const provider2 = {
+          endpoint: "new-endpoint-2",
+          stake: 123n,
+          limitPeriodEarned: exp.limitPeriodEarned,
+          limitPeriodEnd: exp.limitPeriodEnd,
+          createdAt: exp.createdAt,
+        };
+
+        // register again
+        await tokenMOR.write.transfer([
+          provider.account.address,
+          provider2.stake,
+        ]);
+        await tokenMOR.write.approve(
+          [providerRegistry.address, provider2.stake],
+          { account: provider.account },
+        );
+        await providerRegistry.write.providerRegister(
+          [provider.account.address, provider2.stake, provider2.endpoint],
+          { account: provider.account },
+        );
+
+        // check indexes
+        expect(await providerRegistry.read.providerGetCount()).eq(1n);
+        expect(await providerRegistry.read.providers([0n])).eq(
+          getAddress(provider.account.address),
+        );
+        expect(await providerRegistry.read.providerGetIds()).deep.equal([
+          getAddress(provider.account.address),
+        ]);
+
+        // check record
+        expect(
+          await providerRegistry.read.providerMap([provider.account.address]),
+        ).deep.include(provider2);
+      });
     });
 
     it("Should update stake and url", async function () {

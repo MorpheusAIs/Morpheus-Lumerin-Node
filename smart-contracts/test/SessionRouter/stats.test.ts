@@ -11,12 +11,14 @@ import { GetContractReturnType } from "@nomicfoundation/hardhat-viem/types";
 import { getSessionId } from "../utils";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { HOUR, SECOND } from "../../utils/time";
+import { expect } from "chai";
 
 describe("Session router - stats tests", function () {
   it("should update provider-model stats", async function () {
     const {
       sessionRouter,
       expectedSession: exp,
+      expectedBid,
       marketplace,
       tokenMOR,
     } = await loadFixture(deploySingleBid);
@@ -45,11 +47,26 @@ describe("Session router - stats tests", function () {
       true,
     );
 
-    const stats = await marketplace.read.getActiveBidsRatingByModelAgent([
-      exp.modelAgentId,
-    ]);
+    const [bidIds, bids, stats] =
+      await marketplace.read.getActiveBidsRatingByModelAgent([
+        exp.modelAgentId,
+        0n,
+        100,
+      ]);
 
-    console.dir(stats, { depth: 5 });
+    expect(bidIds).to.deep.equal([exp.bidID]);
+    expect(bids[0]).to.deep.equal({
+      modelAgentId: expectedBid.modelId,
+      nonce: expectedBid.nonce,
+      pricePerSecond: expectedBid.pricePerSecond,
+      provider: expectedBid.providerAddr,
+      createdAt: expectedBid.createdAt,
+      deletedAt: expectedBid.deletedAt,
+    });
+    expect(stats[0].successCount).to.equal(2);
+    expect(stats[0].totalCount).to.equal(2);
+    expect(Number(stats[0].tpsScaled1000.mean)).to.greaterThan(0);
+    expect(Number(stats[0].ttftMs.mean)).to.greaterThan(0);
   });
 });
 
@@ -68,7 +85,11 @@ async function openCloseSession(
   const publicClient = await hre.viem.getPublicClient();
 
   // open session
-  const { msg, signature } = await getProviderApproval(provider, bidID);
+  const { msg, signature } = await getProviderApproval(
+    provider,
+    user.account.address,
+    bidID,
+  );
   const stake = await getStake(sr, durationSeconds, pricePerSecond);
 
   await mor.write.transfer([user.account.address, stake], {
