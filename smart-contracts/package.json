@@ -11,8 +11,7 @@
     "report": "open ./coverage/index.html",
     "verify": "hardhat verify",
     "bindings-go": "hardhat gobind",
-    "node-local": "hardhat node",
-    "deploy-local": "hardhat run --network localhost scripts/deploy-local.ts",
+    "node-local": "./node-local.sh",
     "format": "prettier --write \"contracts/**/*.sol\"",
     "lint": "solhint \"contracts/[!diamond]*/[!Test]*.sol\"",
     "copy-bindings": "cp -r bindings/go/contracts/facets/* ../proxy-router/contracts"
