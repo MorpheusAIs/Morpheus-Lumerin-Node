@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math/big"
 	"runtime"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
@@ -10,6 +11,7 @@ import (
 
 type DerivedConfig struct {
 	WalletAddress common.Address
+	ChainID       *big.Int
 }
 
 // Validation tags described here: https://pkg.go.dev/github.com/go-playground/validator/v10

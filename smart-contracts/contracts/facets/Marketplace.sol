@@ -18,7 +18,6 @@ contract Marketplace {
   error ProviderNotFound();
   error ModelOrAgentNotFound();
   error ActiveBidNotFound();
-  error BidNotFound();
   error BidTaken();
   error NotEnoughBalance();
 
@@ -32,7 +31,7 @@ contract Marketplace {
 
     Bid[] memory _bids = new Bid[](length);
     bytes32[] memory bidIds = new bytes32[](length);
-    for (uint i = 0; i < providerBidsSet.count(); i++) {
+    for (uint i = 0; i < length; i++) {
       bytes32 id = providerBidsSet.keyAtIndex(i);
       bidIds[i] = id;
       _bids[i] = s.bidMap[id];
@@ -156,7 +155,11 @@ contract Marketplace {
     // TEST IT if it increments nonce correctly
     uint256 nonce = s.providerModelAgentNonce[keccak256(abi.encodePacked(provider, modelAgentId))]++;
     if (nonce > 0) {
-      deleteModelAgentBid(keccak256(abi.encodePacked(provider, modelAgentId, nonce - 1)));
+      bytes32 oldBidId = keccak256(abi.encodePacked(provider, modelAgentId, nonce - 1));
+      Bid storage bid = s.bidMap[oldBidId];
+      if (isBidActive(bid)) {
+        deleteBid(oldBidId, bid);
+      }
     }
 
     bidId = keccak256(abi.encodePacked(provider, modelAgentId, nonce));
@@ -190,12 +193,18 @@ contract Marketplace {
   /// @notice deletes a bid
   function deleteModelAgentBid(bytes32 bidId) public {
     Bid storage bid = s.bidMap[bidId];
-    if (bid.createdAt == 0 || bid.deletedAt != 0) {
+    if (!isBidActive(bid)) {
       revert ActiveBidNotFound();
     }
 
     LibOwner._senderOrOwner(bid.provider);
 
+    deleteBid(bidId, bid);
+  }
+
+  ///
+  /// @dev passing bidId and bid storage to avoid double storage access
+  function deleteBid(bytes32 bidId, Bid storage bid) private {
     bid.deletedAt = uint128(block.timestamp);
     // indexes update
     s.activeBids.remove(bidId);
@@ -226,5 +235,9 @@ contract Marketplace {
     // emits ERC-20 transfer event
     s.feeBalance -= amount;
     s.token.transfer(addr, amount);
+  }
+
+  function isBidActive(Bid memory bid) private pure returns (bool) {
+    return bid.createdAt != 0 && bid.deletedAt == 0;
   }
 }

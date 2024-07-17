@@ -46,7 +46,7 @@ type SessionPromptRes struct {
 
 type SessionReportRes struct {
 	Message      lib.HexString `json:"message"             validate:"required"`
-	SignedReport lib.HexString `json:"signedReport" 	   validate:"required"`
+	SignedReport lib.HexString `json:"signedReport"        validate:"required"`
 	Signature    lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
 	Timestamp    uint64        `json:"timestamp"           validate:"required,number"`
 }
@@ -95,16 +95,4 @@ type ReqObject struct {
 	Req  uint `json:"req"`
 	Res  uint `json:"res"`
 	Toks uint `json:"toks"`
-}
-
-var approvalAbi = []lib.AbiParameter{
-	{Type: "bytes32"},
-	{Type: "uint128"},
-}
-
-var sessionReportAbi = []lib.AbiParameter{
-	{Type: "bytes32"},
-	{Type: "uint128"},
-	{Type: "uint32"},
-	{Type: "uint32"},
 }
