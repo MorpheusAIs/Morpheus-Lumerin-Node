@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/common"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/style"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/common"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/style"
 )
 
 func (m model) View() string {

@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/api-gateway/client"
-	chat "github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat"
-	chatCommon "github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/common"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/api-gateway/client"
+	chat "github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat"
+	chatCommon "github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/common"
 	"github.com/ethereum/go-ethereum/common"
 
 	dotenv "github.com/joho/godotenv"

@@ -5,8 +5,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/common"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/style"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/common"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/style"
 )
 
 func New(sessionId string, cfgs ...common.Config) model {

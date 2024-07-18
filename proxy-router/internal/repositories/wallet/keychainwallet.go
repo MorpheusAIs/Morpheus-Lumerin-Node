@@ -4,8 +4,8 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/lib"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/repositories/keychain"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/keychain"
 	hdwallet "github.com/miguelmota/go-ethereum-hdwallet"
 )
 

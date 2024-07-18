@@ -3,8 +3,8 @@ package style
 import (
 	"fmt"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/util"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/util"
 )
 
 var (

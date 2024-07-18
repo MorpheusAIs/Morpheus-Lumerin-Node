@@ -3,7 +3,7 @@ package chat
 import (
 	"context"
 
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/api-gateway/client"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/api-gateway/client"
 	"github.com/sashabaranov/go-openai"
 )
 

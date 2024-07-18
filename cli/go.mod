@@ -1,11 +1,11 @@
-module github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli
+module github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli
 
 go 1.22.0
 
 toolchain go1.22.3
 
 require (
-	github.com/Lumerin-protocol/Morpheus-Lumerin-Node/api-gateway v0.0.3
+	github.com/MorpheusAIs/Morpheus-Lumerin-Node/api-gateway v0.0.3
 	github.com/charmbracelet/bubbles v0.15.0
 	github.com/charmbracelet/bubbletea v0.23.2
 	github.com/charmbracelet/lipgloss v0.7.1
@@ -14,7 +14,7 @@ require (
 	github.com/urfave/cli/v2 v2.27.2
 )
 
-// require github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat v1.0.1
+// require github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat v1.0.1
 
 require (
 	github.com/atotto/clipboard v0.1.4 // indirect
@@ -46,6 +46,6 @@ require (
 	golang.org/x/text v0.15.0 // indirect
 )
 
-replace github.com/Lumerin-protocol/Morpheus-Lumerin-Node/api-gateway => ../api-gateway
+replace github.com/MorpheusAIs/Morpheus-Lumerin-Node/api-gateway => ../api-gateway
 
-replace github.com/Lumerin-protocol/Morpheus-Lumerin-Node/api-gateway/client => ../api-gateway/client
+replace github.com/MorpheusAIs/Morpheus-Lumerin-Node/api-gateway/client => ../api-gateway/client

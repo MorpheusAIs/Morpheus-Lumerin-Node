@@ -1,9 +1,9 @@
 package chat
 
 import (
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/common"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/common"
 	"github.com/sashabaranov/go-openai"
 )
 

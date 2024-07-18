@@ -5,7 +5,7 @@ import (
 	"path"
 	"testing"
 
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 )
 
 func TestSanitizeFilenameFilesystem(t *testing.T) {

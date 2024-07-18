@@ -1,4 +1,4 @@
-module github.com/Lumerin-protocol/Morpheus-Lumerin-Node/api-gateway
+module github.com/MorpheusAIs/Morpheus-Lumerin-Node/api-gateway
 
 go 1.22.0
 

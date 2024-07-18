@@ -27,7 +27,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/walletapi"
 	"github.com/ethereum/go-ethereum/ethclient"
 
-	docs "github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/docs"
+	docs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/docs"
 )
 
 const (

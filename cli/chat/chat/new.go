@@ -7,8 +7,8 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/sashabaranov/go-openai"
 
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/common"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/style"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/common"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/style"
 )
 
 func New(cfg common.Config) model {

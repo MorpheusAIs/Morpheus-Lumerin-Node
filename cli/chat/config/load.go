@@ -7,7 +7,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/common"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/common"
 )
 
 func Load(path string) (common.Config, error) {

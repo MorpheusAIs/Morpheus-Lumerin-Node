@@ -13,10 +13,10 @@ import (
 	// gin-swagger middleware
 	swaggerFiles "github.com/swaggo/files"
 
-	_ "github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/docs"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/config"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	_ "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/docs"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 )
 
 type Registrable interface {

@@ -3,10 +3,10 @@ package config
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/chat"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/common"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/style"
-	"github.com/Lumerin-protocol/Morpheus-Lumerin-Node/cli/chat/util"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/chat"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/common"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/style"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/util"
 )
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
