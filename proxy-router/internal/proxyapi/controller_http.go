@@ -81,13 +81,16 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 		return
 	}
 
-	body.Model = c.GetModelForPrompt()
 	if (head.SessionID == lib.Hash{}) {
 		body.Stream = ctx.GetHeader(constants.HEADER_ACCEPT) == constants.CONTENT_TYPE_JSON
+		// TODO: Implement logic to get model based on prompt for local session, for now return default model
+		body.Model = c.GetModelForPrompt()
 		c.aiEngine.PromptCb(ctx, &body)
 		return
 	}
 
+	// TODO: Implement logic to get model based on session id for remote session, for now return default model
+	body.Model = c.GetModelForPrompt()
 	err := c.service.SendPrompt(ctx, ctx.Writer, &body, head.SessionID.Hash)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
