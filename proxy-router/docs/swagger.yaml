@@ -314,14 +314,6 @@ paths:
     get:
       description: Get bids from blockchain by model agent
       parameters:
-      - description: Offset
-        in: query
-        name: offset
-        type: string
-      - description: Limit
-        in: query
-        name: limit
-        type: string
       - description: ModelAgent ID
         in: path
         name: id
@@ -336,7 +328,7 @@ paths:
             items:
               type: object
             type: array
-      summary: "Get Bids by\tModel Agent"
+      summary: "Get Active Bids by\tModel Agent"
       tags:
       - wallet
   /blockchain/providers:
@@ -366,6 +358,27 @@ paths:
         in: query
         name: limit
         type: string
+      - description: Provider ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: object
+            type: array
+      summary: Get Bids by Provider
+      tags:
+      - wallet
+  /blockchain/providers/{id}/bids/active:
+    get:
+      description: Get bids from blockchain by provider
+      parameters:
       - description: Provider ID
         in: path
         name: id

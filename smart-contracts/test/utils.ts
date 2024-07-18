@@ -167,3 +167,33 @@ export const NewDate = (timestamp: bigint): Date => {
 
 export const PanicOutOfBoundsRegexp =
   /.*reverted with panic code 0x32 (Array accessed at an out-of-bounds or negative index)*/;
+
+// set hardhat automine
+export const setAutomine = async (
+  hre: HardhatRuntimeEnvironment,
+  enabled: boolean,
+): Promise<boolean> => {
+  const pc = await hre.viem.getPublicClient();
+  return pc.request({ method: "evm_setAutomine", params: [!!enabled] } as any);
+};
+
+export const setIntervalMining = async (
+  hre: HardhatRuntimeEnvironment,
+  interval: number,
+): Promise<boolean> => {
+  const pc = await hre.viem.getPublicClient();
+  return pc.request({
+    method: "evm_setIntervalMining",
+    params: [interval],
+  } as any);
+};
+
+// mine new block
+export const mine = async (
+  hre: HardhatRuntimeEnvironment,
+): Promise<boolean> => {
+  const pc = await hre.viem.getPublicClient();
+  return pc.request({
+    method: "evm_mine",
+  } as any);
+};

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"os"
 	"time"
@@ -21,11 +22,12 @@ type HealthCheckResponse struct {
 }
 
 type SystemController struct {
-	config        *config.Config
-	derivedConfig *config.DerivedConfig
-	sysConfig     *SystemConfigurator
-	appStartTime  time.Time
-	log           lib.ILogger
+	config       *config.Config
+	wallet       interfaces.Wallet
+	sysConfig    *SystemConfigurator
+	appStartTime time.Time
+	chainID      *big.Int
+	log          lib.ILogger
 }
 
 type ConfigResponse struct {
@@ -35,20 +37,23 @@ type ConfigResponse struct {
 	Config        interface{}
 }
 
-func NewSystemController(r interfaces.Router, config *config.Config, derived *config.DerivedConfig, sysConfig *SystemConfigurator, appStartTime time.Time, log lib.ILogger) *SystemController {
+func NewSystemController(config *config.Config, wallet interfaces.Wallet, sysConfig *SystemConfigurator, appStartTime time.Time, chainID *big.Int, log lib.ILogger) *SystemController {
 	c := &SystemController{
-		config:        config,
-		derivedConfig: derived,
-		sysConfig:     sysConfig,
-		appStartTime:  appStartTime,
-		log:           log,
+		config:       config,
+		wallet:       wallet,
+		sysConfig:    sysConfig,
+		appStartTime: appStartTime,
+		chainID:      chainID,
+		log:          log,
 	}
 
-	r.GET("/healthcheck", c.HealthCheck)
-	r.GET("/config", c.GetConfig)
-	r.GET("/files", c.GetFiles)
-
 	return c
+}
+
+func (s *SystemController) RegisterRoutes(r interfaces.Router) {
+	r.GET("/healthcheck", s.HealthCheck)
+	r.GET("/config", s.GetConfig)
+	r.GET("/files", s.GetFiles)
 }
 
 // HealthCheck godoc
@@ -76,11 +81,24 @@ func (s *SystemController) HealthCheck(ctx *gin.Context) {
 //		@Success		200	{object}	ConfigResponse
 //		@Router			/config [get]
 func (s *SystemController) GetConfig(ctx *gin.Context) {
+	prkey, err := s.wallet.GetPrivateKey()
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	addr, err := lib.PrivKeyBytesToAddr(prkey)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	ctx.JSON(http.StatusOK, &ConfigResponse{
-		Version:       config.BuildVersion,
-		Commit:        config.Commit,
-		Config:        s.config.GetSanitized(),
-		DerivedConfig: s.derivedConfig,
+		Version: config.BuildVersion,
+		Commit:  config.Commit,
+		Config:  s.config.GetSanitized(),
+		DerivedConfig: config.DerivedConfig{
+			WalletAddress: addr,
+			ChainID:       s.chainID,
+		},
 	})
 }
 

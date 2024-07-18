@@ -63,6 +63,8 @@ func (e *EventsListener) controller(event interface{}) error {
 	switch ev := event.(type) {
 	case *sessionrouter.SessionRouterSessionOpened:
 		return e.handleSessionOpened(ev)
+	case *sessionrouter.SessionRouterSessionClosed:
+		return e.handleSessionClosed(ev)
 	}
 	return nil
 }
@@ -100,6 +102,25 @@ func (e *EventsListener) handleSessionOpened(event *sessionrouter.SessionRouterS
 		EndsAt:   session.EndsAt,
 	})
 	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (e *EventsListener) handleSessionClosed(event *sessionrouter.SessionRouterSessionClosed) error {
+	sessionId := lib.BytesToString(event.SessionId[:])
+	e.log.Debugf("received close session router event, sessionId %s", sessionId)
+
+	_, ok := e.store.GetSession(sessionId)
+	if !ok {
+		e.log.Debugf("session not found in storage, sessionId %s", sessionId)
+		return nil
+	}
+
+	err := e.store.RemoveSession(sessionId)
+	if err != nil {
+		e.log.Errorf("failed to remove session from storage: %s, sessionId %s", err, sessionId)
 		return err
 	}
 

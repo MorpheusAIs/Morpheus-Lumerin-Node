@@ -4,44 +4,59 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
+	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	m "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi/morrpcmessage"
 	msg "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi/morrpcmessage"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/sashabaranov/go-openai"
 )
 
 type ProxyReceiver struct {
 	privateKeyHex  lib.HexString
 	publicKeyHex   lib.HexString
+	chainID        *big.Int
 	morRpc         *m.MORRPCMessage
 	sessionStorage *storages.SessionStorage
 	aiEngine       *aiengine.AiEngine
 }
 
-func NewProxyReceiver(privateKeyHex, publicKeyHex lib.HexString, sessionStorage *storages.SessionStorage, aiEngine *aiengine.AiEngine) *ProxyReceiver {
+func NewProxyReceiver(privateKeyHex, publicKeyHex lib.HexString, sessionStorage *storages.SessionStorage, aiEngine *aiengine.AiEngine, chainID *big.Int) *ProxyReceiver {
 	return &ProxyReceiver{
 		privateKeyHex:  privateKeyHex,
 		publicKeyHex:   publicKeyHex,
 		morRpc:         m.NewMorRpc(),
 		sessionStorage: sessionStorage,
 		aiEngine:       aiEngine,
+		chainID:        chainID,
 	}
 }
 
-func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, userPubKey string, rq *m.SessionPromptReq, sendResponse SendResponse, sourceLog lib.ILogger) error {
+func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, userPubKey string, rq *m.SessionPromptReq, sendResponse SendResponse, sourceLog lib.ILogger) (int, int, error) {
 	var req *openai.ChatCompletionRequest
 
 	err := json.Unmarshal([]byte(rq.Message), &req)
 	if err != nil {
 		err := lib.WrapError(fmt.Errorf("failed to unmarshal prompt"), err)
 		sourceLog.Error(err)
-		return err
+		return 0, 0, err
 	}
 
+	ttftMs := 0
+	totalTokens := 0
+	now := time.Now().UnixMilli()
+
 	_, err = s.aiEngine.PromptStream(ctx, req, func(response *openai.ChatCompletionStreamResponse) error {
+		totalTokens += len(response.Choices)
+
+		if ttftMs == 0 {
+			ttftMs = int(time.Now().UnixMilli() - now)
+		}
+
 		marshalledResponse, err := json.Marshal(response)
 		if err != nil {
 			return err
@@ -69,9 +84,9 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 	if err != nil {
 		err := lib.WrapError(fmt.Errorf("failed to prompt"), err)
 		sourceLog.Error(err)
-		return err
+		return 0, 0, err
 	}
-	return nil
+	return ttftMs, totalTokens, nil
 }
 
 func (s *ProxyReceiver) SessionRequest(ctx context.Context, msgID string, reqID string, req *m.SessionReq, sourceLog lib.ILogger) (*msg.RpcResponse, error) {
@@ -91,6 +106,7 @@ func (s *ProxyReceiver) SessionRequest(ctx context.Context, msgID string, reqID 
 		req.BidID,
 		s.privateKeyHex,
 		reqID,
+		s.chainID,
 	)
 	if err != nil {
 		err := lib.WrapError(fmt.Errorf("failed to create response"), err)
@@ -109,5 +125,42 @@ func (s *ProxyReceiver) SessionRequest(ctx context.Context, msgID string, reqID 
 		sourceLog.Error(err)
 		return nil, err
 	}
+	return response, nil
+}
+
+func (s *ProxyReceiver) SessionReport(ctx context.Context, msgID string, reqID string, session *storages.Session, sourceLog lib.ILogger) (*msg.RpcResponse, error) {
+	sourceLog.Debugf("Received session report request for %s, timestamp: %s", session.Id)
+
+	tps := 0
+	ttft := 0
+	for _, tpsVal := range session.TPSScaled1000Arr {
+		tps += tpsVal
+	}
+	for _, ttftVal := range session.TTFTMsArr {
+		ttft += ttftVal
+	}
+
+	if len(session.TPSScaled1000Arr) != 0 {
+		tps /= len(session.TPSScaled1000Arr)
+	}
+	if len(session.TTFTMsArr) != 0 {
+		ttft /= len(session.TTFTMsArr)
+	}
+
+	response, err := s.morRpc.SessionReportResponse(
+		s.publicKeyHex,
+		uint32(tps),
+		uint32(ttft),
+		common.HexToHash(session.Id),
+		s.privateKeyHex,
+		reqID,
+		s.chainID,
+	)
+	if err != nil {
+		err := lib.WrapError(fmt.Errorf("failed to create response"), err)
+		sourceLog.Error(err)
+		return nil, err
+	}
+
 	return response, nil
 }

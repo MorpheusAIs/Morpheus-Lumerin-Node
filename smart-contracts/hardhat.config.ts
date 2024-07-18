@@ -7,6 +7,13 @@ import "./tasks/upgrade";
 import { HardhatUserConfig } from "hardhat/config";
 
 const config: HardhatUserConfig = {
+  networks: {
+    hardhat: {
+      initialDate: "2024-07-16T01:00:00.000Z",
+      gas: "auto", // required for tests where two transactions should be mined in the same block
+      // loggingEnabled: true,
+    },
+  },
   solidity: {
     version: "0.8.24",
     settings: {
@@ -14,6 +21,7 @@ const config: HardhatUserConfig = {
         enabled: true,
         runs: 200,
       },
+      viaIR: true,
     },
   },
   mocha: {
