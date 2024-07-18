@@ -11,7 +11,7 @@ import { IconEdit, IconX } from '@tabler/icons-react';
 const RowContainer = styled.div`
   padding: 1.2rem 0;
   display: grid;
-  grid-template-columns: ${p => p.useSelect ? '2fr 6fr' : '2fr 4fr 2fr'};
+  grid-template-columns: 2fr 4fr 160px;
   text-align: center;
   box-shadow: 0 -1px 0 0 ${p => p.theme.colors.morMain} inset;
   color: ${p => p.theme.colors.morMain};
@@ -22,6 +22,15 @@ const FlexCenter = styled.div`
   justify-content: center;
   align-items: center;
 `;
+
+const Buttons = styled.div`
+display: flex;
+justify-content: end;
+min-width: 150px;
+width: 150px;
+align-items: center;
+gap: 10px;
+`
 
 const PriceContainer = styled.div`
     display: flex;
@@ -72,34 +81,44 @@ const selectorStyles = {
 function ModelRow(props) {
     const bids = props?.model?.bids || [];
     const modelId = props?.model?.Id || '';
-    const hasLocal = bids.find(x => !x.Id);
+    const hasLocal = props?.model?.hasLocal;
+    const hasBids = Boolean(bids.length);
 
     const [selected, changeSelected] = useState<any>();
     const [useSelect, setUseSelect] = useState<boolean>();
     const [targetBid, setTargetBid] = useState<any>();
 
-    useEffect(() => {
-        const sortedBids = bids.filter(x => x.Id).sort((a, b) => a.PricePerSecond - b.PricePerSecond);
-        const cheapItem = sortedBids[0];
-        setTargetBid(cheapItem)
-    }, [])
-
-    const options = bids.filter(x => x.Id).map(x => {
+    const options = bids.map(x => {
         return ({ value: x.Id, label: `${abbreviateAddress(x.Provider || "", 3)} ${formatSmallNumber(x.PricePerSecond / (10 ** 18))} MOR` })
     });
 
     const handleChangeModel = () => {
-        props.onChangeModel({ modelId, bidId: targetBid.Id})
+        props.onChangeModel({ modelId, bidId: targetBid?.Id })
     }
 
     const selectLocal = () => {
-        props.onChangeModel({ modelId, isLocal: true }) 
+        props.onChangeModel({ modelId, isLocal: true })
     }
 
     const onChangeSelector = (data) => {
-        setUseSelect(false);
         const bid = bids.find(x => x.Id == data.value);
-        setTargetBid({...bid, customSelection: true});
+        setTargetBid({ ...bid, customSelection: true });
+    }
+
+    const formatPrice = () => {
+        if (targetBid) {
+            return `${formatSmallNumber(targetBid?.PricePerSecond / (10 ** 18))} MOR`;
+        }
+
+        const prices = bids.filter(x => x.Id).map(x => x.PricePerSecond);
+        if (prices.length == 1) {
+            return `${formatSmallNumber(prices[0] / (10 ** 18))} MOR`;
+        }
+
+        const minPrice = Math.min(prices);
+        const maxPrice = Math.max(prices);
+
+        return `${formatSmallNumber(minPrice / (10 ** 18))} - ${formatSmallNumber(maxPrice / (10 ** 18))} MOR`
     }
 
     return (
@@ -111,7 +130,7 @@ function ModelRow(props) {
                 {
                     useSelect
                         ? <div style={{ width: '100%', display: 'flex', alignItems: 'center' }}>
-                            <div style={{ marginRight: '10px', width: '80%' }}>
+                            <div style={{ marginRight: '10px', width: '95%' }}>
                                 <Select
                                     menuPlacement='auto'
                                     onChange={onChangeSelector}
@@ -122,30 +141,39 @@ function ModelRow(props) {
 
                             <IconX width={'1.5rem'} style={{ cursor: 'pointer' }} onClick={() => {
                                 setUseSelect(!useSelect);
+                                setTargetBid(undefined);
                                 changeSelected(undefined);
                             }}></IconX>
                         </div>
                         : <div>
-                            <FlexCenter>
-                                <span
-                                    data-rh-negative
-                                    data-rh={`Bid ID: ${abbreviateAddress(targetBid?.Id || "", 5)}`}
-                                    style={{ marginRight: '10px' }}>
-                                    {formatSmallNumber(targetBid?.PricePerSecond / (10 ** 18))} MOR
-                                </span>
-                                <IconEdit width={'1.5rem'} style={{ cursor: 'pointer' }} onClick={() => setUseSelect(!useSelect)}></IconEdit>
-                            </FlexCenter>
                             {
-                                hasLocal &&
-                                <UseLocalBlock onClick={selectLocal}>Use Local</UseLocalBlock>
+                                hasBids ? <FlexCenter>
+                                    <span
+                                        data-rh-negative
+                                        data-rh={`Bid ID: ${abbreviateAddress(targetBid?.Id || "", 5)}`}
+                                        style={{ marginRight: '10px' }}>
+                                        {formatPrice()}
+                                    </span>
+                                    
+                                    {/* <IconEdit width={'1.5rem'} style={{ cursor: 'pointer' }} onClick={() => setUseSelect(!useSelect)}></IconEdit> */}
+                                </FlexCenter>
+                                    : <FlexCenter>-</FlexCenter>
+
                             }
+
                         </div>
                 }
             </PriceContainer>
-            {!useSelect &&
-                <FlexCenter>
-                    <RightBtn block onClick={handleChangeModel}>Change</RightBtn>
-                </FlexCenter>}
+            <Buttons>
+                {
+                    hasLocal &&
+                    <RightBtn block onClick={selectLocal}>Local</RightBtn>
+                }
+                {
+                    hasBids &&
+                    <RightBtn block onClick={handleChangeModel}>Select</RightBtn>
+                }
+            </Buttons>
         </RowContainer>
     );
 }

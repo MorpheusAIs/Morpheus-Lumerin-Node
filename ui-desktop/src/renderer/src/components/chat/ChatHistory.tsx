@@ -62,7 +62,7 @@ export const ChatHistory = (props: ChatHistoryProps) => {
             </Title>
             <div className='history-scroll-block'>
                 {
-                    sessions?.length && (
+                    sessions?.length ? (
                         sessions.map(a => {
                             const titleObj = props.sessionTitles.find(t => t.sessionId.toLowerCase() == String(a.Id).toLowerCase());
                             const title = titleObj?.title || "";
@@ -81,6 +81,7 @@ export const ChatHistory = (props: ChatHistoryProps) => {
                             )
                         }
                         ))
+                        : <div>You have not any sessions</div>
                 }
             </div>
         </Container>

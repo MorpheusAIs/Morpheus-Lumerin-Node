@@ -95,7 +95,6 @@ export default function PrimaryNav({ parent, activeIndex, setActiveIndex }) {
 
       <Button
         onClick={() => setActiveIndex(1)}
-        activeClassName="active"
         to="/chat"
       >
         <IconWrapper>
@@ -106,7 +105,6 @@ export default function PrimaryNav({ parent, activeIndex, setActiveIndex }) {
 
       <Button
         onClick={() => setActiveIndex(2)}
-        activeClassName="active"
         to="/media"
       >
         <IconWrapper>
@@ -118,7 +116,6 @@ export default function PrimaryNav({ parent, activeIndex, setActiveIndex }) {
 
       <Button
         onClick={() => setActiveIndex(3)}
-        activeClassName="active"
         to="/models"
       >
         <IconWrapper>
@@ -130,7 +127,6 @@ export default function PrimaryNav({ parent, activeIndex, setActiveIndex }) {
 
       <Button
         onClick={() => setActiveIndex(4)}
-        activeClassName="active"
         to="/agents"
       >
         <IconWrapper>
@@ -141,7 +137,6 @@ export default function PrimaryNav({ parent, activeIndex, setActiveIndex }) {
 
       <Button
         onClick={() => setActiveIndex(5)}
-        activeClassName="active"
         to="/providers"
       >
         <IconWrapper>
