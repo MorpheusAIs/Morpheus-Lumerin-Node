@@ -28,6 +28,7 @@ func NewProxyController(service *ProxyServiceSender, aiEngine *aiengine.AiEngine
 func (s *ProxyController) RegisterRoutes(r interfaces.Router) {
 	r.POST("/proxy/sessions/initiate", s.InitiateSession)
 	r.POST("/v1/chat/completions", s.Prompt)
+	r.GET("/v1/models", s.Models)
 }
 
 // InitiateSession godoc
@@ -80,6 +81,7 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 		return
 	}
 
+	body.Model = c.GetModelForPrompt()
 	if (head.SessionID == lib.Hash{}) {
 		body.Stream = ctx.GetHeader(constants.HEADER_ACCEPT) == constants.CONTENT_TYPE_JSON
 		c.aiEngine.PromptCb(ctx, &body)
@@ -93,4 +95,24 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 	}
 
 	return
+}
+
+// GetLocalModels godoc
+//
+//		@Summary		Get local models
+//	 	@Tags			wallet
+//		@Produce		json
+//		@Success		200	{object}	[]aiengine.LocalModel
+//		@Router			/v1/models [get]
+func (c *ProxyController) Models(ctx *gin.Context) {
+	models, err := c.aiEngine.GetLocalModels()
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, models)
+}
+
+func (c *ProxyController) GetModelForPrompt() string {
+	return "llama2"
 }
