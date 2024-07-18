@@ -1,5 +1,4 @@
 import hre from "hardhat";
-import fs from "node:fs";
 
 async function main() {
   const data = {

@@ -2,7 +2,6 @@ import hre from "hardhat";
 import {
   encodeAbiParameters,
   encodeFunctionData,
-  encodePacked,
   getAddress,
   keccak256,
   parseUnits,
@@ -10,7 +9,7 @@ import {
 import { getHex, getTxTimestamp, now, randomBytes32 } from "./utils";
 import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
 import { FacetCutAction, getSelectors } from "../libraries/diamond";
-import { HOUR, MINUTE, SECOND } from "../utils/time";
+import { DAY, HOUR, MINUTE, SECOND } from "../utils/time";
 import {
   GetContractReturnType,
   WalletClient,
@@ -27,6 +26,61 @@ export async function deployMORtoken() {
     tokenMOR,
     decimalsMOR,
     owner,
+  };
+}
+
+export async function deployLMRtoken() {
+  const [owner] = await hre.viem.getWalletClients();
+
+  // Contracts are deployed using the first signer/account by default
+  const tokenLMR = await hre.viem.deployContract(
+    "contracts/LumerinToken.sol:LumerinToken",
+    [],
+  );
+  const decimalsLMR = await tokenLMR.read.decimals();
+
+  const a = await tokenLMR.read.balanceOf([owner.account.address]);
+  console.log("balance of owner", a.toString());
+  console.log("decimals", decimalsLMR);
+  return {
+    tokenLMR,
+    decimalsLMR,
+    owner,
+  };
+}
+
+export async function deployStaking() {
+  const [owner, _, user] = await hre.viem.getWalletClients();
+  const { tokenMOR, decimalsMOR } = await deployMORtoken();
+  const { tokenLMR, decimalsLMR } = await deployLMRtoken();
+
+  const staking = await hre.viem.deployContract(
+    "contracts/StakingRewards.sol:StakingRewards",
+    [tokenMOR.address, tokenLMR.address],
+  );
+
+  const reward = 1000n * 10n ** BigInt(decimalsMOR);
+  const duration = (7 * DAY) / SECOND;
+
+  await tokenMOR.write.transfer([staking.address, reward]);
+  await staking.write.setRewardsDuration([BigInt(duration)]);
+  await staking.write.notifyRewardAmount([reward]);
+
+  await tokenLMR.write.transfer([
+    user.account.address,
+    parseUnits("1000", decimalsLMR),
+  ]);
+
+  return {
+    staking,
+    decimalsMOR,
+    decimalsLMR,
+    tokenMOR,
+    tokenLMR,
+    user,
+    owner,
+    reward,
+    duration,
   };
 }
 
