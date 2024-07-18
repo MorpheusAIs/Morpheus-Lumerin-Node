@@ -12,3 +12,9 @@ type ResponderFlusher interface {
 }
 
 type CompletionCallback func(completion *api.ChatCompletionStreamResponse) error
+
+type LocalModel struct {
+	Id    string
+	Name  string
+	Model string
+}
