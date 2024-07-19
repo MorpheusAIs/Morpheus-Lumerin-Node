@@ -233,20 +233,8 @@ const docTemplate = `{
                 "tags": [
                     "wallet"
                 ],
-                "summary": "Get Bids by\tModel Agent",
+                "summary": "Get Active Bids by\tModel Agent",
                 "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Offset",
-                        "name": "offset",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Limit",
-                        "name": "limit",
-                        "in": "query"
-                    },
                     {
                         "type": "string",
                         "description": "ModelAgent ID",
@@ -314,6 +302,38 @@ const docTemplate = `{
                         "name": "limit",
                         "in": "query"
                     },
+                    {
+                        "type": "string",
+                        "description": "Provider ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "object"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/providers/{id}/bids/active": {
+            "get": {
+                "description": "Get bids from blockchain by provider",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "wallet"
+                ],
+                "summary": "Get Bids by Provider",
+                "parameters": [
                     {
                         "type": "string",
                         "description": "Provider ID",

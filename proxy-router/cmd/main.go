@@ -64,9 +64,10 @@ func start() error {
 
 	mainLogFilePath := ""
 	logFolderPath := ""
+	appStartTime := time.Now()
 
 	if cfg.Log.FolderPath != "" {
-		folderName := lib.SanitizeFilename(time.Now().Format("2006-01-02T15-04-05Z07:00"))
+		folderName := lib.SanitizeFilename(appStartTime.Format("2006-01-02T15-04-05Z07:00"))
 		logFolderPath = filepath.Join(cfg.Log.FolderPath, folderName)
 		err = os.MkdirAll(logFolderPath, os.ModePerm)
 		if err != nil {
@@ -185,11 +186,11 @@ func start() error {
 	if err != nil {
 		return lib.WrapError(ErrConnectToEthNode, err)
 	}
-	block, err := ethClient.BlockNumber(ctx)
+	chainID, err := ethClient.ChainID(ctx)
 	if err != nil {
 		return lib.WrapError(ErrConnectToEthNode, err)
 	}
-	appLog.Infof("connected to ethereum node: %s, block: %d", cfg.Blockchain.EthNodeAddress, block)
+	appLog.Infof("connected to ethereum node: %s, chainID: %d", cfg.Blockchain.EthNodeAddress, chainID)
 
 	publicUrl, err := url.Parse(cfg.Web.PublicUrl)
 	if err != nil {
@@ -218,8 +219,9 @@ func start() error {
 	blockchainController := blockchainapi.NewBlockchainController(blockchainApi, log)
 	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine)
 	walletController := walletapi.NewWalletController(wallet)
+	systemController := system.NewSystemController(&cfg, wallet, sysConfig, appStartTime, chainID, log)
 
-	apiBus := apibus.NewApiBus(blockchainController, proxyController, walletController)
+	apiBus := apibus.NewApiBus(blockchainController, proxyController, walletController, systemController)
 	httpHandler := httphandlers.CreateHTTPServer(log, apiBus)
 	httpServer := transport.NewServer(cfg.Web.Address, httpHandler, log.Named("HTTP"))
 
@@ -231,7 +233,7 @@ func start() error {
 		cancel()
 	}()
 
-	proxy := proxyctl.NewProxyCtl(eventListener, wallet, log, connLog, cfg.Proxy.Address, schedulerLogFactory, sessionStorage, valid, aiEngine)
+	proxy := proxyctl.NewProxyCtl(eventListener, wallet, chainID, log, connLog, cfg.Proxy.Address, schedulerLogFactory, sessionStorage, valid, aiEngine)
 	err = proxy.Run(ctx)
 
 	cancelServer()

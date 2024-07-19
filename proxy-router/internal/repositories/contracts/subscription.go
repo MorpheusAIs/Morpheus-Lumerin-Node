@@ -20,6 +20,8 @@ func BlockchainEventFactory(name string) interface{} {
 	switch name {
 	case "SessionOpened":
 		return new(sessionrouter.SessionRouterSessionOpened)
+	case "SessionClosed":
+		return new(sessionrouter.SessionRouterSessionClosed)
 	default:
 		return nil
 	}

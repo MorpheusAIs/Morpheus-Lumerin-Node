@@ -39,9 +39,32 @@ type Bid struct {
 	DeletedAt      *big.Int
 }
 
+// LibSDSD is an auto generated low-level Go binding around an user-defined struct.
+type LibSDSD struct {
+	Mean  int64
+	SqSum int64
+}
+
+// ModelStats is an auto generated low-level Go binding around an user-defined struct.
+type ModelStats struct {
+	TpsScaled1000 LibSDSD
+	TtftMs        LibSDSD
+	TotalDuration LibSDSD
+	Count         uint32
+}
+
+// ProviderModelStats is an auto generated low-level Go binding around an user-defined struct.
+type ProviderModelStats struct {
+	TpsScaled1000 LibSDSD
+	TtftMs        LibSDSD
+	TotalDuration uint32
+	SuccessCount  uint32
+	TotalCount    uint32
+}
+
 // MarketplaceMetaData contains all meta data concerning the Marketplace contract.
 var MarketplaceMetaData = &bind.MetaData{
-	ABI: "[{\"inputs\":[],\"name\":\"ActiveBidNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"BidNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"BidTaken\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"KeyExists\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"KeyNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ModelOrAgentNotFound\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_user\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_contractOwner\",\"type\":\"address\"}],\"name\":\"NotContractOwner\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotEnoughBalance\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotSenderOrOwner\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ProviderNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroKey\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"modelAgentId\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"nonce\",\"type\":\"uint256\"}],\"name\":\"BidDeleted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"modelAgentId\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"nonce\",\"type\":\"uint256\"}],\"name\":\"BidPosted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"bidFee\",\"type\":\"uint256\"}],\"name\":\"FeeUpdated\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"bidFee\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"bidId\",\"type\":\"bytes32\"}],\"name\":\"bidMap\",\"outputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"modelAgentId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"nonce\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"uint128\",\"name\":\"deletedAt\",\"type\":\"uint128\"}],\"internalType\":\"structBid\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"bidId\",\"type\":\"bytes32\"}],\"name\":\"deleteModelAgentBid\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelAgentId\",\"type\":\"bytes32\"}],\"name\":\"getActiveBidsByModelAgent\",\"outputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"modelAgentId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"nonce\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"uint128\",\"name\":\"deletedAt\",\"type\":\"uint128\"}],\"internalType\":\"structBid[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"}],\"name\":\"getActiveBidsByProvider\",\"outputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"modelAgentId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"nonce\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"uint128\",\"name\":\"deletedAt\",\"type\":\"uint128\"}],\"internalType\":\"structBid[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelAgentId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"offset\",\"type\":\"uint256\"},{\"internalType\":\"uint8\",\"name\":\"limit\",\"type\":\"uint8\"}],\"name\":\"getBidsByModelAgent\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"},{\"components\":[{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"modelAgentId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"nonce\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"uint128\",\"name\":\"deletedAt\",\"type\":\"uint128\"}],\"internalType\":\"structBid[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"offset\",\"type\":\"uint256\"},{\"internalType\":\"uint8\",\"name\":\"limit\",\"type\":\"uint8\"}],\"name\":\"getBidsByProvider\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"},{\"components\":[{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"modelAgentId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"nonce\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"uint128\",\"name\":\"deletedAt\",\"type\":\"uint128\"}],\"internalType\":\"structBid[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"providerAddr\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"}],\"name\":\"postModelBid\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"bidId\",\"type\":\"bytes32\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_bidFee\",\"type\":\"uint256\"}],\"name\":\"setBidFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"addr\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"withdraw\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
+	ABI: "[{\"inputs\":[],\"name\":\"ActiveBidNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"BidTaken\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"KeyExists\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"KeyNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ModelOrAgentNotFound\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_user\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_contractOwner\",\"type\":\"address\"}],\"name\":\"NotContractOwner\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotEnoughBalance\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotSenderOrOwner\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ProviderNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroKey\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"modelAgentId\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"nonce\",\"type\":\"uint256\"}],\"name\":\"BidDeleted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"modelAgentId\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"nonce\",\"type\":\"uint256\"}],\"name\":\"BidPosted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"bidFee\",\"type\":\"uint256\"}],\"name\":\"FeeUpdated\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"bidFee\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"bidId\",\"type\":\"bytes32\"}],\"name\":\"bidMap\",\"outputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"modelAgentId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"nonce\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"uint128\",\"name\":\"deletedAt\",\"type\":\"uint128\"}],\"internalType\":\"structBid\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"bidId\",\"type\":\"bytes32\"}],\"name\":\"deleteModelAgentBid\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelAgentId\",\"type\":\"bytes32\"}],\"name\":\"getActiveBidsByModelAgent\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"},{\"components\":[{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"modelAgentId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"nonce\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"uint128\",\"name\":\"deletedAt\",\"type\":\"uint128\"}],\"internalType\":\"structBid[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"}],\"name\":\"getActiveBidsByProvider\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"},{\"components\":[{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"modelAgentId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"nonce\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"uint128\",\"name\":\"deletedAt\",\"type\":\"uint128\"}],\"internalType\":\"structBid[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelAgentId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"offset\",\"type\":\"uint256\"},{\"internalType\":\"uint8\",\"name\":\"limit\",\"type\":\"uint8\"}],\"name\":\"getActiveBidsRatingByModelAgent\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"},{\"components\":[{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"modelAgentId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"nonce\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"uint128\",\"name\":\"deletedAt\",\"type\":\"uint128\"}],\"internalType\":\"structBid[]\",\"name\":\"\",\"type\":\"tuple[]\"},{\"components\":[{\"components\":[{\"internalType\":\"int64\",\"name\":\"mean\",\"type\":\"int64\"},{\"internalType\":\"int64\",\"name\":\"sqSum\",\"type\":\"int64\"}],\"internalType\":\"structLibSD.SD\",\"name\":\"tpsScaled1000\",\"type\":\"tuple\"},{\"components\":[{\"internalType\":\"int64\",\"name\":\"mean\",\"type\":\"int64\"},{\"internalType\":\"int64\",\"name\":\"sqSum\",\"type\":\"int64\"}],\"internalType\":\"structLibSD.SD\",\"name\":\"ttftMs\",\"type\":\"tuple\"},{\"internalType\":\"uint32\",\"name\":\"totalDuration\",\"type\":\"uint32\"},{\"internalType\":\"uint32\",\"name\":\"successCount\",\"type\":\"uint32\"},{\"internalType\":\"uint32\",\"name\":\"totalCount\",\"type\":\"uint32\"}],\"internalType\":\"structProviderModelStats[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelAgentId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"offset\",\"type\":\"uint256\"},{\"internalType\":\"uint8\",\"name\":\"limit\",\"type\":\"uint8\"}],\"name\":\"getBidsByModelAgent\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"},{\"components\":[{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"modelAgentId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"nonce\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"uint128\",\"name\":\"deletedAt\",\"type\":\"uint128\"}],\"internalType\":\"structBid[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"offset\",\"type\":\"uint256\"},{\"internalType\":\"uint8\",\"name\":\"limit\",\"type\":\"uint8\"}],\"name\":\"getBidsByProvider\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"},{\"components\":[{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"modelAgentId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"nonce\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"uint128\",\"name\":\"deletedAt\",\"type\":\"uint128\"}],\"internalType\":\"structBid[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelID\",\"type\":\"bytes32\"}],\"name\":\"getModelStats\",\"outputs\":[{\"components\":[{\"components\":[{\"internalType\":\"int64\",\"name\":\"mean\",\"type\":\"int64\"},{\"internalType\":\"int64\",\"name\":\"sqSum\",\"type\":\"int64\"}],\"internalType\":\"structLibSD.SD\",\"name\":\"tpsScaled1000\",\"type\":\"tuple\"},{\"components\":[{\"internalType\":\"int64\",\"name\":\"mean\",\"type\":\"int64\"},{\"internalType\":\"int64\",\"name\":\"sqSum\",\"type\":\"int64\"}],\"internalType\":\"structLibSD.SD\",\"name\":\"ttftMs\",\"type\":\"tuple\"},{\"components\":[{\"internalType\":\"int64\",\"name\":\"mean\",\"type\":\"int64\"},{\"internalType\":\"int64\",\"name\":\"sqSum\",\"type\":\"int64\"}],\"internalType\":\"structLibSD.SD\",\"name\":\"totalDuration\",\"type\":\"tuple\"},{\"internalType\":\"uint32\",\"name\":\"count\",\"type\":\"uint32\"}],\"internalType\":\"structModelStats\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"providerAddr\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"}],\"name\":\"postModelBid\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"bidId\",\"type\":\"bytes32\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_bidFee\",\"type\":\"uint256\"}],\"name\":\"setBidFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"addr\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"withdraw\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
 }
 
 // MarketplaceABI is the input ABI used to generate the binding from.
@@ -254,64 +277,99 @@ func (_Marketplace *MarketplaceCallerSession) BidMap(bidId [32]byte) (Bid, error
 
 // GetActiveBidsByModelAgent is a free data retrieval call binding the contract method 0x873d94d5.
 //
-// Solidity: function getActiveBidsByModelAgent(bytes32 modelAgentId) view returns((address,bytes32,uint256,uint256,uint128,uint128)[])
-func (_Marketplace *MarketplaceCaller) GetActiveBidsByModelAgent(opts *bind.CallOpts, modelAgentId [32]byte) ([]Bid, error) {
+// Solidity: function getActiveBidsByModelAgent(bytes32 modelAgentId) view returns(bytes32[], (address,bytes32,uint256,uint256,uint128,uint128)[])
+func (_Marketplace *MarketplaceCaller) GetActiveBidsByModelAgent(opts *bind.CallOpts, modelAgentId [32]byte) ([][32]byte, []Bid, error) {
 	var out []interface{}
 	err := _Marketplace.contract.Call(opts, &out, "getActiveBidsByModelAgent", modelAgentId)
 
 	if err != nil {
-		return *new([]Bid), err
+		return *new([][32]byte), *new([]Bid), err
 	}
 
-	out0 := *abi.ConvertType(out[0], new([]Bid)).(*[]Bid)
+	out0 := *abi.ConvertType(out[0], new([][32]byte)).(*[][32]byte)
+	out1 := *abi.ConvertType(out[1], new([]Bid)).(*[]Bid)
 
-	return out0, err
+	return out0, out1, err
 
 }
 
 // GetActiveBidsByModelAgent is a free data retrieval call binding the contract method 0x873d94d5.
 //
-// Solidity: function getActiveBidsByModelAgent(bytes32 modelAgentId) view returns((address,bytes32,uint256,uint256,uint128,uint128)[])
-func (_Marketplace *MarketplaceSession) GetActiveBidsByModelAgent(modelAgentId [32]byte) ([]Bid, error) {
+// Solidity: function getActiveBidsByModelAgent(bytes32 modelAgentId) view returns(bytes32[], (address,bytes32,uint256,uint256,uint128,uint128)[])
+func (_Marketplace *MarketplaceSession) GetActiveBidsByModelAgent(modelAgentId [32]byte) ([][32]byte, []Bid, error) {
 	return _Marketplace.Contract.GetActiveBidsByModelAgent(&_Marketplace.CallOpts, modelAgentId)
 }
 
 // GetActiveBidsByModelAgent is a free data retrieval call binding the contract method 0x873d94d5.
 //
-// Solidity: function getActiveBidsByModelAgent(bytes32 modelAgentId) view returns((address,bytes32,uint256,uint256,uint128,uint128)[])
-func (_Marketplace *MarketplaceCallerSession) GetActiveBidsByModelAgent(modelAgentId [32]byte) ([]Bid, error) {
+// Solidity: function getActiveBidsByModelAgent(bytes32 modelAgentId) view returns(bytes32[], (address,bytes32,uint256,uint256,uint128,uint128)[])
+func (_Marketplace *MarketplaceCallerSession) GetActiveBidsByModelAgent(modelAgentId [32]byte) ([][32]byte, []Bid, error) {
 	return _Marketplace.Contract.GetActiveBidsByModelAgent(&_Marketplace.CallOpts, modelAgentId)
 }
 
 // GetActiveBidsByProvider is a free data retrieval call binding the contract method 0x9fdaffd0.
 //
-// Solidity: function getActiveBidsByProvider(address provider) view returns((address,bytes32,uint256,uint256,uint128,uint128)[])
-func (_Marketplace *MarketplaceCaller) GetActiveBidsByProvider(opts *bind.CallOpts, provider common.Address) ([]Bid, error) {
+// Solidity: function getActiveBidsByProvider(address provider) view returns(bytes32[], (address,bytes32,uint256,uint256,uint128,uint128)[])
+func (_Marketplace *MarketplaceCaller) GetActiveBidsByProvider(opts *bind.CallOpts, provider common.Address) ([][32]byte, []Bid, error) {
 	var out []interface{}
 	err := _Marketplace.contract.Call(opts, &out, "getActiveBidsByProvider", provider)
 
 	if err != nil {
-		return *new([]Bid), err
+		return *new([][32]byte), *new([]Bid), err
 	}
 
-	out0 := *abi.ConvertType(out[0], new([]Bid)).(*[]Bid)
+	out0 := *abi.ConvertType(out[0], new([][32]byte)).(*[][32]byte)
+	out1 := *abi.ConvertType(out[1], new([]Bid)).(*[]Bid)
 
-	return out0, err
+	return out0, out1, err
 
 }
 
 // GetActiveBidsByProvider is a free data retrieval call binding the contract method 0x9fdaffd0.
 //
-// Solidity: function getActiveBidsByProvider(address provider) view returns((address,bytes32,uint256,uint256,uint128,uint128)[])
-func (_Marketplace *MarketplaceSession) GetActiveBidsByProvider(provider common.Address) ([]Bid, error) {
+// Solidity: function getActiveBidsByProvider(address provider) view returns(bytes32[], (address,bytes32,uint256,uint256,uint128,uint128)[])
+func (_Marketplace *MarketplaceSession) GetActiveBidsByProvider(provider common.Address) ([][32]byte, []Bid, error) {
 	return _Marketplace.Contract.GetActiveBidsByProvider(&_Marketplace.CallOpts, provider)
 }
 
 // GetActiveBidsByProvider is a free data retrieval call binding the contract method 0x9fdaffd0.
 //
-// Solidity: function getActiveBidsByProvider(address provider) view returns((address,bytes32,uint256,uint256,uint128,uint128)[])
-func (_Marketplace *MarketplaceCallerSession) GetActiveBidsByProvider(provider common.Address) ([]Bid, error) {
+// Solidity: function getActiveBidsByProvider(address provider) view returns(bytes32[], (address,bytes32,uint256,uint256,uint128,uint128)[])
+func (_Marketplace *MarketplaceCallerSession) GetActiveBidsByProvider(provider common.Address) ([][32]byte, []Bid, error) {
 	return _Marketplace.Contract.GetActiveBidsByProvider(&_Marketplace.CallOpts, provider)
+}
+
+// GetActiveBidsRatingByModelAgent is a free data retrieval call binding the contract method 0xa69a4dd4.
+//
+// Solidity: function getActiveBidsRatingByModelAgent(bytes32 modelAgentId, uint256 offset, uint8 limit) view returns(bytes32[], (address,bytes32,uint256,uint256,uint128,uint128)[], ((int64,int64),(int64,int64),uint32,uint32,uint32)[])
+func (_Marketplace *MarketplaceCaller) GetActiveBidsRatingByModelAgent(opts *bind.CallOpts, modelAgentId [32]byte, offset *big.Int, limit uint8) ([][32]byte, []Bid, []ProviderModelStats, error) {
+	var out []interface{}
+	err := _Marketplace.contract.Call(opts, &out, "getActiveBidsRatingByModelAgent", modelAgentId, offset, limit)
+
+	if err != nil {
+		return *new([][32]byte), *new([]Bid), *new([]ProviderModelStats), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new([][32]byte)).(*[][32]byte)
+	out1 := *abi.ConvertType(out[1], new([]Bid)).(*[]Bid)
+	out2 := *abi.ConvertType(out[2], new([]ProviderModelStats)).(*[]ProviderModelStats)
+
+	return out0, out1, out2, err
+
+}
+
+// GetActiveBidsRatingByModelAgent is a free data retrieval call binding the contract method 0xa69a4dd4.
+//
+// Solidity: function getActiveBidsRatingByModelAgent(bytes32 modelAgentId, uint256 offset, uint8 limit) view returns(bytes32[], (address,bytes32,uint256,uint256,uint128,uint128)[], ((int64,int64),(int64,int64),uint32,uint32,uint32)[])
+func (_Marketplace *MarketplaceSession) GetActiveBidsRatingByModelAgent(modelAgentId [32]byte, offset *big.Int, limit uint8) ([][32]byte, []Bid, []ProviderModelStats, error) {
+	return _Marketplace.Contract.GetActiveBidsRatingByModelAgent(&_Marketplace.CallOpts, modelAgentId, offset, limit)
+}
+
+// GetActiveBidsRatingByModelAgent is a free data retrieval call binding the contract method 0xa69a4dd4.
+//
+// Solidity: function getActiveBidsRatingByModelAgent(bytes32 modelAgentId, uint256 offset, uint8 limit) view returns(bytes32[], (address,bytes32,uint256,uint256,uint128,uint128)[], ((int64,int64),(int64,int64),uint32,uint32,uint32)[])
+func (_Marketplace *MarketplaceCallerSession) GetActiveBidsRatingByModelAgent(modelAgentId [32]byte, offset *big.Int, limit uint8) ([][32]byte, []Bid, []ProviderModelStats, error) {
+	return _Marketplace.Contract.GetActiveBidsRatingByModelAgent(&_Marketplace.CallOpts, modelAgentId, offset, limit)
 }
 
 // GetBidsByModelAgent is a free data retrieval call binding the contract method 0xa87665ec.
@@ -376,6 +434,37 @@ func (_Marketplace *MarketplaceSession) GetBidsByProvider(provider common.Addres
 // Solidity: function getBidsByProvider(address provider, uint256 offset, uint8 limit) view returns(bytes32[], (address,bytes32,uint256,uint256,uint128,uint128)[])
 func (_Marketplace *MarketplaceCallerSession) GetBidsByProvider(provider common.Address, offset *big.Int, limit uint8) ([][32]byte, []Bid, error) {
 	return _Marketplace.Contract.GetBidsByProvider(&_Marketplace.CallOpts, provider, offset, limit)
+}
+
+// GetModelStats is a free data retrieval call binding the contract method 0xce535723.
+//
+// Solidity: function getModelStats(bytes32 modelID) view returns(((int64,int64),(int64,int64),(int64,int64),uint32))
+func (_Marketplace *MarketplaceCaller) GetModelStats(opts *bind.CallOpts, modelID [32]byte) (ModelStats, error) {
+	var out []interface{}
+	err := _Marketplace.contract.Call(opts, &out, "getModelStats", modelID)
+
+	if err != nil {
+		return *new(ModelStats), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(ModelStats)).(*ModelStats)
+
+	return out0, err
+
+}
+
+// GetModelStats is a free data retrieval call binding the contract method 0xce535723.
+//
+// Solidity: function getModelStats(bytes32 modelID) view returns(((int64,int64),(int64,int64),(int64,int64),uint32))
+func (_Marketplace *MarketplaceSession) GetModelStats(modelID [32]byte) (ModelStats, error) {
+	return _Marketplace.Contract.GetModelStats(&_Marketplace.CallOpts, modelID)
+}
+
+// GetModelStats is a free data retrieval call binding the contract method 0xce535723.
+//
+// Solidity: function getModelStats(bytes32 modelID) view returns(((int64,int64),(int64,int64),(int64,int64),uint32))
+func (_Marketplace *MarketplaceCallerSession) GetModelStats(modelID [32]byte) (ModelStats, error) {
+	return _Marketplace.Contract.GetModelStats(&_Marketplace.CallOpts, modelID)
 }
 
 // DeleteModelAgentBid is a paid mutator transaction binding the contract method 0x42856b75.

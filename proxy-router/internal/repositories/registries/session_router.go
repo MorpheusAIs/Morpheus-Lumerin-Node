@@ -101,20 +101,8 @@ func (g *SessionRouter) GetSessionsByUser(ctx context.Context, userAddr common.A
 	return sessions, nil
 }
 
-func (g *SessionRouter) CloseSession(ctx *bind.TransactOpts, sessionID common.Hash, privateKeyHex lib.HexString) (common.Hash, error) {
-	ips := uint32(1)
-	timestamp := big.NewInt(time.Now().UnixMilli())
-	report, err := lib.EncodeAbiParameters(closeReportAbi, []interface{}{sessionID, timestamp, ips})
-	if err != nil {
-		return common.Hash{}, err
-	}
-
-	signature, err := lib.SignEthMessageV2(report, privateKeyHex)
-	if err != nil {
-		return common.Hash{}, err
-	}
-
-	sessionTx, err := g.sessionRouter.CloseSession(ctx, report, signature)
+func (g *SessionRouter) CloseSession(ctx *bind.TransactOpts, sessionID common.Hash, report []byte, signedReport []byte, privateKeyHex lib.HexString) (common.Hash, error) {
+	sessionTx, err := g.sessionRouter.CloseSession(ctx, report, signedReport)
 	if err != nil {
 		return common.Hash{}, lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
 	}
@@ -136,8 +124,8 @@ func (g *SessionRouter) GetProviderClaimableBalance(ctx context.Context, session
 	return balance, nil
 }
 
-func (g *SessionRouter) ClaimProviderBalance(ctx *bind.TransactOpts, sessionId [32]byte, amount *big.Int, to common.Address) (common.Hash, error) {
-	tx, err := g.sessionRouter.ClaimProviderBalance(ctx, sessionId, amount, to)
+func (g *SessionRouter) ClaimProviderBalance(ctx *bind.TransactOpts, sessionId [32]byte, amount *big.Int) (common.Hash, error) {
+	tx, err := g.sessionRouter.ClaimProviderBalance(ctx, sessionId, amount)
 	if err != nil {
 		return common.Hash{}, lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
 	}

@@ -159,3 +159,14 @@ func (a *AiEngine) requestChatCompletionStream(ctx context.Context, request *api
 
 	return nil, err
 }
+
+func (a *AiEngine) GetLocalModels() ([]LocalModel, error) {
+	models := []LocalModel{
+		{
+			Id:    "0x6a4813e866a48da528c533e706344ea853a1d3f21e37b4c8e7ffd5ff25779018",
+			Name:  "LLama2:7b",
+			Model: "llama2",
+		},
+	}
+	return models, nil
+}
