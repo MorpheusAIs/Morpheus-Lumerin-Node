@@ -1,13 +1,11 @@
 import { IERC20 } from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import { SafeMath } from "./SafeMath.sol";
-import "hardhat/console.sol";
 
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+// Refer to https://www.rareskills.io/post/staking-algorithm
 contract StakingMasterChef {
-  using SafeMath for uint256;
   using SafeERC20 for IERC20;
 
   uint256 constant PRECISION = 1e12;
@@ -46,6 +44,11 @@ contract StakingMasterChef {
   event Deposit(address indexed user, uint256 amount);
   event Withdraw(address indexed user, uint256 amount);
 
+  error AlreadyStaked();
+  error LockPeriodNotOver();
+  error InsufficientBalance();
+  error Unauthorized();
+
   constructor(IERC20 _rewardToken, IERC20 _stakingToken, address _fundingAccount, uint256 _rewardPerSecond) {
     owner = msg.sender;
     rewardToken = _rewardToken;
@@ -57,36 +60,30 @@ contract StakingMasterChef {
 
   // Update reward variables of the given pool to be up-to-date.
   function updatePool() public {
-    // TODO:
-    // Place to withdraw MOR from distribution contract
     if (block.timestamp <= lastRewardTime) {
       return;
     }
-    // uint256 totalStaked = stakingToken.balanceOf(address(this));
-    // if (totalStaked == 0) {
-    //   lastRewardTime = block.timestamp;
-    //   return;
-    // }
+
     if (totalShares == 0) {
       lastRewardTime = block.timestamp;
       return;
     }
-    uint256 rewardScaled = (block.timestamp - lastRewardTime) * rewardPerSecond * PRECISION;
-    accRewardPerShareScaled = accRewardPerShareScaled + (rewardScaled / totalShares);
+    accRewardPerShareScaled = getRewardPerShareScaled();
     lastRewardTime = block.timestamp;
   }
 
+  function getRewardPerShareScaled() private view returns (uint256) {
+    uint256 rewardScaled = (block.timestamp - lastRewardTime) * rewardPerSecond * PRECISION;
+    return accRewardPerShareScaled + (rewardScaled / totalShares);
+  }
+
   // Deposit staking token
-  function deposit(uint256 _amount, uint8 _duration) public {
+  function deposit(uint256 _amount, uint8 _duration) external {
     UserInfo storage user = userInfo[msg.sender];
     updatePool();
 
-    // if user already staked TODO
     if (user.amount > 0) {
-      revert("User already staked");
-      // uint256 rewardFromStart = (user.shareAmount * accRewardPerShareScaled) / PRECISION;
-      // uint256 pending = rewardFromStart - user.rewardDebt;
-      // safeTransfer(msg.sender, pending);
+      revert AlreadyStaked();
     }
 
     stakingToken.safeTransferFrom(address(msg.sender), address(this), _amount);
@@ -103,11 +100,15 @@ contract StakingMasterChef {
     emit Deposit(msg.sender, _amount);
   }
 
-  // Withdraw LP tokens from MasterChef.
-  function withdraw(uint256 _amount) public {
+  /// @notice Withdraw staking token
+  function withdraw(uint256 _amount) external {
     UserInfo storage user = userInfo[msg.sender];
-    require(block.timestamp >= user.lockEndsAt, "withdraw: lock period not over");
-    require(user.amount >= _amount, "withdraw: insufficient balance");
+    if (block.timestamp < user.lockEndsAt) {
+      revert LockPeriodNotOver();
+    }
+    if (user.amount < _amount) {
+      revert InsufficientBalance();
+    }
     updatePool();
 
     uint256 reward = (user.shareAmount * accRewardPerShareScaled) / PRECISION - user.rewardDebt;
@@ -124,25 +125,34 @@ contract StakingMasterChef {
     emit Withdraw(msg.sender, _amount);
   }
 
+  /// @notice View function to see up-to-date reward on frontend.
+  function getReward(address _user) external view returns (uint256) {
+    if (block.timestamp <= lastRewardTime) {
+      return 0;
+    }
+
+    if (totalShares == 0) {
+      return 0;
+    }
+    UserInfo memory user = userInfo[_user];
+    return (user.shareAmount * getRewardPerShareScaled()) / PRECISION - user.rewardDebt;
+  }
+
+  function withdrawReward() external {
+    updatePool();
+
+    UserInfo storage user = userInfo[msg.sender];
+    uint256 rewardFromStart = (user.shareAmount * accRewardPerShareScaled) / PRECISION;
+    uint256 reward = rewardFromStart - user.rewardDebt;
+    user.rewardDebt = rewardFromStart;
+    safeTransfer(msg.sender, reward);
+  }
+
   // Safe reward transfer function, just in case if rounding error causes pool to not have enough reward token.
   function safeTransfer(address _to, uint256 _amount) internal {
     uint256 morRewardBalance = rewardToken.allowance(fundingAccount, address(this));
-    rewardToken.transferFrom(fundingAccount, _to, min(morRewardBalance, _amount));
+    rewardToken.safeTransferFrom(fundingAccount, _to, min(morRewardBalance, _amount));
   }
-
-  // function getLockPeriod(uint8 _period) public pure returns (uint256, uint256) {
-  //   if (_period == 0) {
-  //     return (7 days, (100 * PRECISION) / 100);
-  //   } else if (_period == 1) {
-  //     return (30 days, (115 * PRECISION) / 100);
-  //   } else if (_period == 2) {
-  //     return (180 days, (135 * PRECISION) / 100);
-  //   } else if (_period == 3) {
-  //     return (365 days, (150 * PRECISION) / 100);
-  //   } else {
-  //     revert("Invalid lock period");
-  //   }
-  // }
 
   function getLockPeriod(uint8 _period) public view returns (uint256, uint256) {
     return (lockPeriod[_period].lockPeriodSeconds, lockPeriod[_period].multiplierScaled);
@@ -157,7 +167,9 @@ contract StakingMasterChef {
   }
 
   modifier onlyOwner() {
-    require(msg.sender == owner, "not authorized");
+    if (msg.sender != owner) {
+      revert Unauthorized();
+    }
     _;
   }
 }
