@@ -49,7 +49,7 @@ describe.only("Staking contract", () => {
     await tokenLMR.write.approve([staking.address, stakingAmount], {
       account: accounts.bob.account,
     });
-    const bobDepositTx = await staking.write.deposit([stakingAmount], {
+    const bobDepositTx = await staking.write.deposit([stakingAmount, 0], {
       account: accounts.bob.account,
     });
     await time.increase(5 * (DAY / SECOND));
@@ -80,7 +80,7 @@ describe.only("Staking contract", () => {
       totalEarnAlice,
     );
 
-    await time.increase(1 * (HOUR / SECOND));
+    await time.increase(2 * (DAY / SECOND));
 
     const bobMorBalanceBefore = await tokenMOR.read.balanceOf([
       accounts.bob.account.address,

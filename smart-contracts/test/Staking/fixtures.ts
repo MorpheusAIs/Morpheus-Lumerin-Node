@@ -47,7 +47,7 @@ export async function aliceStakes() {
   await tokenLMR.write.approve([staking.address, stakingAmount], {
     account: alice.account,
   });
-  const depositTx = await staking.write.deposit([stakingAmount], {
+  const depositTx = await staking.write.deposit([stakingAmount, 0], {
     account: alice.account,
   });
 
