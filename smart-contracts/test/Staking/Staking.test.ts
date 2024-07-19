@@ -20,7 +20,7 @@ describe.only("Staking contract", () => {
       alice.account.address,
     ]);
     const withdrawTx = await staking.write.withdraw(
-      [0n, stakes.alice.stakingAmount],
+      [stakes.alice.stakingAmount],
       {
         account: alice.account,
       },
@@ -49,7 +49,7 @@ describe.only("Staking contract", () => {
     await tokenLMR.write.approve([staking.address, stakingAmount], {
       account: accounts.bob.account,
     });
-    const bobDepositTx = await staking.write.deposit([0n, stakingAmount], {
+    const bobDepositTx = await staking.write.deposit([stakingAmount], {
       account: accounts.bob.account,
     });
     await time.increase(5 * (DAY / SECOND));
@@ -58,7 +58,7 @@ describe.only("Staking contract", () => {
       accounts.alice.account.address,
     ]);
     const aliceWithdrawTx = await staking.write.withdraw(
-      [0n, stakes.alice.stakingAmount],
+      [stakes.alice.stakingAmount],
       {
         account: accounts.alice.account,
       },
@@ -85,7 +85,7 @@ describe.only("Staking contract", () => {
     const bobMorBalanceBefore = await tokenMOR.read.balanceOf([
       accounts.bob.account.address,
     ]);
-    const bobWithdrawTx = await staking.write.withdraw([0n, stakingAmount], {
+    const bobWithdrawTx = await staking.write.withdraw([stakingAmount], {
       account: accounts.bob.account,
     });
     const bobMorBalanceAfter = await tokenMOR.read.balanceOf([

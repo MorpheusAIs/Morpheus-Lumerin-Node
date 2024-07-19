@@ -6,10 +6,6 @@ export async function setupStaking() {
 
   const tokenMOR = await hre.viem.deployContract("MorpheusToken", []);
   const tokenLMR = await hre.viem.deployContract("LumerinToken", []);
-  const staking = await hre.viem.deployContract("StakingMasterChef", [
-    tokenMOR.address,
-    owner.account.address,
-  ]);
 
   const expPool = {
     rewardPerSecond: 100n,
@@ -18,11 +14,11 @@ export async function setupStaking() {
     totalReward: 1_000_000_000_000n,
   };
 
-  // setup pool
-  await staking.write.add([
+  const staking = await hre.viem.deployContract("StakingMasterChef", [
+    tokenMOR.address,
+    tokenLMR.address,
+    owner.account.address,
     expPool.rewardPerSecond,
-    expPool.stakingToken.address,
-    false,
   ]);
 
   // approve funds for staking
@@ -51,7 +47,7 @@ export async function aliceStakes() {
   await tokenLMR.write.approve([staking.address, stakingAmount], {
     account: alice.account,
   });
-  const depositTx = await staking.write.deposit([0n, stakingAmount], {
+  const depositTx = await staking.write.deposit([stakingAmount], {
     account: alice.account,
   });
 
