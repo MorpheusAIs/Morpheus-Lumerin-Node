@@ -322,7 +322,7 @@ func (c *BlockchainController) getBidsByModelAgent(ctx *gin.Context) {
 
 // GetActiveBidsByModel godoc
 //
-//		@Summary		Get Active Bids by	Model Agent
+//		@Summary		Get Active Bids by Model
 //		@Description	Get bids from blockchain by model agent
 //	 	@Tags			wallet
 //		@Produce		json

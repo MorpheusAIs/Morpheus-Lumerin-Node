@@ -192,7 +192,7 @@ const docTemplate = `{
                 "tags": [
                     "wallet"
                 ],
-                "summary": "Get Active Bids by Model Agent",
+                "summary": "Get Active Bids by Model",
                 "parameters": [
                     {
                         "type": "string",

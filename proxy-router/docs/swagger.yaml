@@ -310,7 +310,7 @@ paths:
             items:
               type: object
             type: array
-      summary: Get Active Bids by Model Agent
+      summary: Get Active Bids by Model
       tags:
       - wallet
   /blockchain/models/{id}/session:
