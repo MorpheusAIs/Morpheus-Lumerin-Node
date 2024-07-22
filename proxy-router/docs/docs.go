@@ -99,7 +99,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/blockchain/bids/:id/session": {
+        "/blockchain/bids/{id}/session": {
             "post": {
                 "description": "Full flow to open a session by bidId",
                 "consumes": [
@@ -183,7 +183,39 @@ const docTemplate = `{
                 }
             }
         },
-        "/blockchain/models/:id/session": {
+        "/blockchain/models/{id}/bids": {
+            "get": {
+                "description": "Get bids from blockchain by model agent",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "wallet"
+                ],
+                "summary": "Get Active Bids by\tModel Agent",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ModelAgent ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "object"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/models/{id}/session": {
             "post": {
                 "description": "Full flow to open a session by modelId",
                 "consumes": [
@@ -219,38 +251,6 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "type": "object"
-                        }
-                    }
-                }
-            }
-        },
-        "/blockchain/models/{id}/bids": {
-            "get": {
-                "description": "Get bids from blockchain by model agent",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "wallet"
-                ],
-                "summary": "Get Active Bids by\tModel Agent",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "ModelAgent ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "object"
-                            }
                         }
                     }
                 }
@@ -667,7 +667,27 @@ const docTemplate = `{
                 }
             }
         },
-        "/proxy/sessions/${id}/providerClaim": {
+        "/proxy/sessions/initiate": {
+            "post": {
+                "description": "sends a handshake to the provider",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "Initiate Session with Provider",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                }
+            }
+        },
+        "/proxy/sessions/{id}/providerClaim": {
             "post": {
                 "description": "Claim provider balance from session",
                 "produces": [
@@ -705,7 +725,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/proxy/sessions/${id}/providerClaimableBalance": {
+        "/proxy/sessions/{id}/providerClaimableBalance": {
             "get": {
                 "description": "Get provider claimable balance from session",
                 "produces": [
@@ -724,26 +744,6 @@ const docTemplate = `{
                         "required": true
                     }
                 ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object"
-                        }
-                    }
-                }
-            }
-        },
-        "/proxy/sessions/initiate": {
-            "post": {
-                "description": "sends a handshake to the provider",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "sessions"
-                ],
-                "summary": "Initiate Session with Provider",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -786,6 +786,28 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "type": "object"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/models": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "wallet"
+                ],
+                "summary": "Get local models",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/aiengine.LocalModel"
+                            }
                         }
                     }
                 }
@@ -842,6 +864,20 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "aiengine.LocalModel": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "lib.BigInt": {
             "type": "object"
         },
