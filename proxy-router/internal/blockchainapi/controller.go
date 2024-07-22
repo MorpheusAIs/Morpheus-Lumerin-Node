@@ -63,7 +63,7 @@ func (c *BlockchainController) RegisterRoutes(r interfaces.Router) {
 //		@Produce		json
 //		@Param 			id  path string true "Session ID"
 //		@Success		200	{object}	interface{}
-//		@Router			/proxy/sessions/${id}/providerClaimableBalance [get]
+//		@Router			/proxy/sessions/{id}/providerClaimableBalance [get]
 func (c *BlockchainController) getProviderClaimableBalance(ctx *gin.Context) {
 	var params structs.PathHex32ID
 	err := ctx.ShouldBindUri(&params)
@@ -92,7 +92,7 @@ func (c *BlockchainController) getProviderClaimableBalance(ctx *gin.Context) {
 //		@Param			claim	body		structs.SendRequest 	true	"Claim"
 //		@Param 			id  path string true "Session ID"
 //		@Success		200	{object}	interface{}
-//		@Router			/proxy/sessions/${id}/providerClaim [post]
+//		@Router			/proxy/sessions/{id}/providerClaim [post]
 func (c *BlockchainController) claimProviderBalance(ctx *gin.Context) {
 	var params structs.PathHex32ID
 	err := ctx.ShouldBindUri(&params)
@@ -322,7 +322,7 @@ func (c *BlockchainController) getBidsByModelAgent(ctx *gin.Context) {
 
 // GetActiveBidsByModel godoc
 //
-//		@Summary		Get Active Bids by	Model Agent
+//		@Summary		Get Active Bids by Model
 //		@Description	Get bids from blockchain by model agent
 //	 	@Tags			wallet
 //		@Produce		json
@@ -495,7 +495,7 @@ func (c *BlockchainController) openSession(ctx *gin.Context) {
 //		@Param			opensession	body		structs.OpenSessionWithDurationRequest 	true	"Open session"
 //		@Param 			id  path string true "Bid ID"
 //		@Success		200	{object}	interface{}
-//		@Router			/blockchain/bids/:id/session [post]
+//		@Router			/blockchain/bids/{id}/session [post]
 func (s *BlockchainController) openSessionByBid(ctx *gin.Context) {
 	var reqPayload structs.OpenSessionWithDurationRequest
 	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
@@ -530,7 +530,7 @@ func (s *BlockchainController) openSessionByBid(ctx *gin.Context) {
 //		@Param			opensession	body		structs.OpenSessionWithDurationRequest 	true	"Open session"
 //		@Param 			id  path string true "Model ID"
 //		@Success		200	{object}	interface{}
-//		@Router			/blockchain/models/:id/session [post]
+//		@Router			/blockchain/models/{id}/session [post]
 func (s *BlockchainController) openSessionByModelId(ctx *gin.Context) {
 	var reqPayload structs.OpenSessionWithDurationRequest
 	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
