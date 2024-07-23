@@ -16,12 +16,11 @@ This document provides a step-by-step guide to setting up a Consumer Node for th
 ### A. Proxy-Router CLI Setup  
 #### 1. Install OS-Specific Dependencies
 * git (https://git-scm.com/)
-* nodejs (https://nodejs.org/)
 * go (https://golang.org/)
 
 #### 2. Clone & Navigate to the Repository
 ```bash
-git clone https://github.com/Lumerin-protocol/Morpheus-Lumerin-Node.git
+git clone https://github.com/Lumerin-protocol/Morpheus-Lumerin-Node.git #this will get you the DEV branch (daily updates)
 cd Morpheus-Lumerin-Node/proxy-router
 ```
 #### 3. Edit the .env configuration file
@@ -62,7 +61,7 @@ Loaded config: {AIEngine:{OpenAIBaseURL: OpenAIKey:} Blockchain:{EthNodeAddress:
 ==================================
 ### B. Authorize the contract to spend on your behalf
 Either via the swagger interface http://localhost:8082/swagger/index.html#/wallet/post_blockchain_allowance or following CLI, you can authorize the contract to spend on your behalf. **This only needs to be done once per wallet, or when funds have been depleted.**
-`curl -X 'POST' 'http://localhost:8082/blockchain/allowance?spender=<local_wallet_id>&amount=<MOR_amount>' -H 'accept: application/json' -d ''` 
+`curl -X 'POST' 'http://localhost:8082/blockchain/approve?spender=0x8e19288d908b2d9F8D7C539c74C899808AC3dE45&amount=3' -H 'accept: application/json' -d ''` # Approve the contract to spend 3 saMOR tokens on your behalf
 
 ### C. Query the blockchain for various models / providers (Get ModelID)
 You can query the blockchain for various models and providers to get the ModelID. This can be done via the swagger interface http://localhost:8082/swagger/index.html#/marketplace/get_marketplace_models or following CLI:
