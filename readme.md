@@ -12,7 +12,7 @@ The steps listed below are for both the Consumer and Provider to get started wit
 
 ## Tokens and Contract Information 
 * Morpheus saMOR Token: `0xc1664f994fd3991f98ae944bc16b9aed673ef5fd` 
-* Lumerin Morpheus Smart Contract : `0x70768f0fF919e194E11aBFC3a2eDF43213359dc1`
+* Lumerin Morpheus Smart Contract : `0x8e19288d908b2d9F8D7C539c74C899808AC3dE45`
 * Blockchain Explorer: `https://sepolia.arbiscan.io/`
 
 ## Prerequisites
