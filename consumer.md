@@ -5,25 +5,26 @@ This document provides a step-by-step guide to setting up a Consumer Node for th
 * Create or use an existing ERC-20 wallet that has saMOR and saETH (Sepolia Arbitrum) tokens - you can use Metamask (new wallet..not derived) or any other ERC-20 wallet.  You will need to have access to the wallet's private key **NEVER SHARE THIS WITH ANYONE** for steps below to authorize the contract to spend on your behalf.
 
 ## TL;DR
-A. Install and Configure the proxy-router node 
-B. Authorize the contract to spend on your behalf  
-C. Query the blockchain for various models / providers (Get ModelID)
-D. Create a session with the provider (Create Session)
-E. Interact with the provider (Send Data, Get Data)
+* Install and Configure the proxy-router node (once)
+* Authorize the contract to spend on your behalf (once)  
+* Query the blockchain for various models / providers & get the ModelID `Id` (every session)
+* Create a session with the provider using the ModelID `Id` (every session)
+* Interact with the provider by sending the prompt (every session)
 
 ## Detail:
+==================================
 ### A. Proxy-Router CLI Setup  
-1. Install OS-Specific Dependencies
+#### 1. Install OS-Specific Dependencies
 * git (https://git-scm.com/)
 * nodejs (https://nodejs.org/)
 * go (https://golang.org/)
 
-2. Clone & Navigate to the Repository
+#### 2. Clone & Navigate to the Repository
 ```bash
 git clone https://github.com/Lumerin-protocol/Morpheus-Lumerin-Node.git
 cd Morpheus-Lumerin-Node/proxy-router
 ```
-3. Edit the .env configuration file
+#### 3. Edit the .env configuration file
 ```bash 
 cp .env.example .env
 vi .env 
@@ -33,14 +34,14 @@ Modify the following entries to match your configuration for wallet and ethereum
 * `ETH_NODE_ADDRESS=wss://` # Recommend using your own private ETH Node Address for better performance (via Alchemy or Infura)
 Save the .env file and exit the editor 
 
-4. Build and start the proxy-router 
+#### 4. Build and start the proxy-router 
 ```bash 
 ./build.sh
 go run cmd/main.go
 ```
 After the iniial setup, you can execute `git pull` to get the latest updates and re-run the `./build.sh` and `go run cmd/main.go` to update the proxy-router with the latest changes.
 
-5. Confirm that the build is successful and console should show similar to below after started (and listening on specified ports 8082 for Swagger API and 3333 for the proxy-router):
+#### 5. Confirm that the build is successful and console should show similar to below after started (and listening on specified ports 8082 for Swagger API and 3333 for the proxy-router):
 
 You can also test http://localhost:8082/swagger/index.html to confirm the API is running and accessible.
 
@@ -58,7 +59,7 @@ Loaded config: {AIEngine:{OpenAIBaseURL: OpenAIKey:} Blockchain:{EthNodeAddress:
 2024-07-23T12:58:08.290841	INFO	started watching events, address 0x8e19288d908b2d9F8D7C539c74C899808AC3dE45
 2024-07-23T12:58:08.290866	INFO	TCP	tcp server is listening: 0.0.0.0:3333
 ```
-
+==================================
 ### B. Authorize the contract to spend on your behalf
 Either via the swagger interface http://localhost:8082/swagger/index.html#/wallet/post_blockchain_allowance or following CLI, you can authorize the contract to spend on your behalf. **This only needs to be done once per wallet, or when funds have been depleted.**
 `curl -X 'POST' 'http://localhost:8082/blockchain/allowance?spender=<local_wallet_id>&amount=<MOR_amount>' -H 'accept: application/json' -d ''` 
@@ -168,3 +169,4 @@ curl -X 'POST' \
   "stream": true
   }'
 ```
+
