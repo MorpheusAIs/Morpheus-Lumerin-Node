@@ -238,6 +238,98 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 	return sessionID, err
 }
 
+func (s *BlockchainService) CreateNewProvider(ctx context.Context, stake *lib.BigInt, endpoint string) (*structs.Provider, error) {
+	prKey, err := s.privateKey.GetPrivateKey()
+	if err != nil {
+		return nil, lib.WrapError(ErrPrKey, err)
+	}
+
+	transactOpt, err := s.getTransactOpts(ctx, prKey)
+	if err != nil {
+		return nil, lib.WrapError(ErrTxOpts, err)
+	}
+
+	err = s.providerRegistry.CreateNewProvider(transactOpt, transactOpt.From, stake, endpoint)
+	if err != nil {
+		return nil, lib.WrapError(ErrSendTx, err)
+	}
+
+	provider, err := s.providerRegistry.GetProviderById(ctx, transactOpt.From)
+	if err != nil {
+		return nil, lib.WrapError(ErrProvider, err)
+	}
+
+	return &structs.Provider{
+		Address:   transactOpt.From,
+		Endpoint:  provider.Endpoint,
+		Stake:     provider.Stake,
+		IsDeleted: provider.IsDeleted,
+		CreatedAt: provider.CreatedAt,
+	}, nil
+}
+
+func (s *BlockchainService) CreateNewModel(ctx context.Context, modelID common.Hash, ipfsID common.Hash, fee *lib.BigInt, stake *lib.BigInt, name string, tags []string) (*structs.Model, error) {
+	prKey, err := s.privateKey.GetPrivateKey()
+	if err != nil {
+		return nil, lib.WrapError(ErrPrKey, err)
+	}
+
+	transactOpt, err := s.getTransactOpts(ctx, prKey)
+	if err != nil {
+		return nil, lib.WrapError(ErrTxOpts, err)
+	}
+
+	err = s.modelRegistry.CreateNewModel(transactOpt, modelID, ipfsID, fee, stake, transactOpt.From, name, tags)
+	if err != nil {
+		return nil, lib.WrapError(ErrSendTx, err)
+	}
+
+	model, err := s.modelRegistry.GetModelById(ctx, modelID)
+	if err != nil {
+		return nil, lib.WrapError(ErrModel, err)
+	}
+
+	return &structs.Model{
+		Id:        modelID,
+		IpfsCID:   model.IpfsCID,
+		Fee:       model.Fee,
+		Stake:     model.Stake,
+		Owner:     model.Owner,
+		Name:      model.Name,
+		Tags:      model.Tags,
+		CreatedAt: model.CreatedAt,
+		IsDeleted: model.IsDeleted,
+	}, nil
+}
+
+func (s *BlockchainService) CreateNewBid(ctx context.Context, modelID common.Hash, pricePerSecond *lib.BigInt) (*structs.Bid, error) {
+	prKey, err := s.privateKey.GetPrivateKey()
+	if err != nil {
+		return nil, lib.WrapError(ErrPrKey, err)
+	}
+
+	transactOpt, err := s.getTransactOpts(ctx, prKey)
+	if err != nil {
+		return nil, lib.WrapError(ErrTxOpts, err)
+	}
+
+	err = s.marketplace.PostModelBid(transactOpt, transactOpt.From, modelID, &pricePerSecond.Int)
+	if err != nil {
+		return nil, lib.WrapError(ErrSendTx, err)
+	}
+
+	ids, bids, err := s.marketplace.GetBidsByProvider(ctx, transactOpt.From, big.NewInt(0), 1)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(ids) == 0 {
+		return nil, ErrNoBid
+	}
+
+	return mapBid(ids[0], bids[0]), nil
+}
+
 func (s *BlockchainService) CloseSession(ctx context.Context, sessionID common.Hash) (common.Hash, error) {
 	prKey, err := s.privateKey.GetPrivateKey()
 	if err != nil {

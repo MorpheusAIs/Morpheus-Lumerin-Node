@@ -35,9 +35,8 @@ func NewMarketplace(marketplaceAddr common.Address, client *ethclient.Client, lo
 	}
 }
 
-func (g *Marketplace) PostModelBid(ctx *bind.TransactOpts, provider string, model [32]byte, pricePerSecond *big.Int) error {
-	fmt.Println("PostModelBid", provider, model, pricePerSecond)
-	tx, err := g.marketplace.PostModelBid(ctx, common.HexToAddress(provider), model, pricePerSecond)
+func (g *Marketplace) PostModelBid(ctx *bind.TransactOpts, provider common.Address, model common.Hash, pricePerSecond *big.Int) error {
+	tx, err := g.marketplace.PostModelBid(ctx, provider, model, pricePerSecond)
 	if err != nil {
 		return lib.TryConvertGethError(err, marketplace.MarketplaceMetaData)
 	}
