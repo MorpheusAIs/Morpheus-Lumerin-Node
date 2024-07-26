@@ -11,24 +11,26 @@ export async function setupStaking() {
 
   const startDate =
     BigInt(new Date("2024-07-16T01:00:00.000Z").getTime()) / 1000n;
-  const endDate = startDate + BigInt((400 * DAY) / SECOND);
+  const duration = 400n * BigInt(DAY / SECOND);
+  const endDate = startDate + duration;
+  const rewardPerSecond = 100n;
 
   const expPool = {
     id: 0n,
-    rewardPerSecond: 100n,
+    rewardPerSecond,
     stakingToken: tokenLMR,
     rewardToken: tokenMOR,
-    totalReward: 1_000_000_000_000n,
+    totalReward: rewardPerSecond * duration,
     lockDurations: <{ durationSeconds: bigint; multiplierScaled: bigint }[]>[],
     precision: 0n,
     startDate,
     endDate,
+    duration,
   };
 
   const staking = await hre.viem.deployContract("StakingMasterChef", [
     tokenLMR.address,
     tokenMOR.address,
-    owner.account.address,
   ]);
 
   const PRECISION = await staking.read.PRECISION();
@@ -53,17 +55,17 @@ export async function setupStaking() {
     },
   ];
 
+  await tokenMOR.write.approve([staking.address, expPool.totalReward]);
+
+  // create a pool
   await staking.write.addPool([
-    expPool.rewardPerSecond,
     expPool.startDate,
-    expPool.endDate,
+    expPool.duration,
+    expPool.totalReward,
     expPool.lockDurations,
   ]);
 
   expPool.id = 0n;
-
-  // approve funds for staking
-  await tokenMOR.write.approve([staking.address, expPool.totalReward]);
 
   // top up accounts
   await tokenLMR.write.transfer([alice.account.address, 1_000_000n]);

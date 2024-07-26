@@ -9,7 +9,7 @@ contract StakingMasterChef {
   using SafeERC20 for IERC20;
 
   struct Pool {
-    uint256 rewardPerSecond; // reward tokens per second
+    uint256 rewardPerSecondScaled; // reward tokens per second, times `PRECISION`
     uint256 lastRewardTime; // last time rewards were distributed
     uint256 accRewardPerShareScaled; // accumulated reward per share, times `PRECISION`
     uint256 totalShares; // total shares of reward token
@@ -55,42 +55,44 @@ contract StakingMasterChef {
   error LockDurationExceedsStakingRange(); // lock duration exceeds staking range, choose a shorter lock duration
   error NoRewardAvailable();
 
-  constructor(IERC20 _stakingToken, IERC20 _rewardToken, address _fundingAccount) {
+  constructor(IERC20 _stakingToken, IERC20 _rewardToken) {
     owner = msg.sender;
     stakingToken = _stakingToken;
     rewardToken = _rewardToken;
-    fundingAccount = _fundingAccount;
   }
 
   /// @notice Add a new pool
-  /// @param _rewardPerSecond how many reward tokens are distributed per second of the staking between all of the participants
   /// @param _startTime time when the staking starts, epoch seconds
-  /// @param _endTime time when the staking ends, epoch seconds
+  /// @param _duration pool duration in seconds
   /// @param _lockDurations predefined lock durations for this pool with corresponding multipliers
   /// @return poolId the id of the new pool
   function addPool(
-    uint256 _rewardPerSecond,
     uint256 _startTime,
-    uint256 _endTime,
+    uint256 _duration,
+    uint256 _totalReward,
     LockDuration[] memory _lockDurations
   ) external onlyOwner returns (uint256) {
     // TODO: enforce there is enough funds for the rewards
 
     // if lock duration is longer than pool duration it is accepted,
     // but nobody will be able to stake with that lock duration
+    uint256 endTime = _startTime + _duration;
     uint256 poolId = pools.length;
     pools.push(
       Pool({
         startTime: _startTime,
         lastRewardTime: _startTime,
-        endTime: _endTime,
-        rewardPerSecond: _rewardPerSecond,
+        endTime: endTime,
+        rewardPerSecondScaled: (_totalReward * PRECISION) / _duration,
         lockDuration: _lockDurations,
         accRewardPerShareScaled: 0,
         totalShares: 0
       })
     );
-    emit PoolAdded(poolId, _startTime, _endTime);
+    emit PoolAdded(poolId, _startTime, endTime);
+
+    rewardToken.safeTransferFrom(msg.sender, address(this), _totalReward);
+
     return poolId;
   }
 
@@ -105,9 +107,12 @@ contract StakingMasterChef {
   function stopPool(uint256 poolId) external onlyOwner poolExists(poolId) {
     Pool storage pool = pools[poolId]; // errors if poolId is invalid
     _updatePoolReward(pool);
+    uint256 oldEndTime = pool.endTime;
     pool.endTime = block.timestamp;
     emit PoolStopped(poolId);
-    // TODO: withdraw all remaining rewards
+
+    uint256 undistributedReward = ((oldEndTime - block.timestamp) * pool.rewardPerSecondScaled) / PRECISION;
+    safeTransfer(msg.sender, undistributedReward);
   }
 
   /// @notice Manually update pool reward variables
@@ -136,7 +141,7 @@ contract StakingMasterChef {
 
   /// @dev calculate reward per share scaled without updating the pool
   function getRewardPerShareScaled(Pool memory pool, uint256 timestamp) private pure returns (uint256) {
-    uint256 rewardScaled = (timestamp - pool.lastRewardTime) * pool.rewardPerSecond * PRECISION;
+    uint256 rewardScaled = (timestamp - pool.lastRewardTime) * pool.rewardPerSecondScaled;
     return pool.accRewardPerShareScaled + (rewardScaled / pool.totalShares);
   }
 
@@ -265,8 +270,8 @@ contract StakingMasterChef {
 
   /// @dev Safe reward transfer function, just in case if rounding error causes pool to not have enough reward token.
   function safeTransfer(address _to, uint256 _amount) private {
-    uint256 rewardBalance = rewardToken.allowance(fundingAccount, address(this));
-    rewardToken.safeTransferFrom(fundingAccount, _to, min(rewardBalance, _amount));
+    uint256 rewardBalance = rewardToken.balanceOf(address(this));
+    rewardToken.safeTransfer(_to, min(rewardBalance, _amount));
   }
 
   function min(uint256 a, uint256 b) private pure returns (uint256) {

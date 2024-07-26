@@ -42,18 +42,22 @@ describe("Staking contract - stake", () => {
 
   it("should error if staking before start date", async () => {
     const {
-      contracts: { staking, tokenLMR },
+      contracts: { staking, tokenLMR, tokenMOR },
       expPool,
       accounts: { alice },
     } = await loadFixture(setupStaking);
 
     const now = await time.latest();
-    const startTime = now + DAY / SECOND;
-    const endTime = startTime + (10 * DAY) / SECOND;
+    const startTime = BigInt(now + DAY / SECOND);
+    const duration = 10n * BigInt(DAY / SECOND);
+    const rewardPerSecond = 100n;
+    const totalReward = rewardPerSecond * BigInt(duration);
+
+    await tokenMOR.write.approve([staking.address, totalReward]);
     const tx = await staking.write.addPool([
-      100n,
-      BigInt(startTime),
-      BigInt(endTime),
+      startTime,
+      duration,
+      totalReward,
       [
         {
           durationSeconds: BigInt(DAY / SECOND),
