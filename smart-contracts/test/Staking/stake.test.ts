@@ -33,7 +33,7 @@ describe("Staking contract - stake", () => {
       accounts: { alice },
     } = await loadFixture(aliceStakes);
 
-    await catchError(staking.abi, "PoolNotFound", async () => {
+    await catchError(staking.abi, "PoolOrStakeNotFound", async () => {
       await staking.write.stake([100n, 1000n, 0], {
         account: alice.account,
       });

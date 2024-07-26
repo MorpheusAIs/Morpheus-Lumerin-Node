@@ -49,7 +49,7 @@ describe("Staking contract - getReward", () => {
       stakes,
     } = await loadFixture(aliceStakes);
 
-    await catchError(staking.abi, "StakeNotFound", async () => {
+    await catchError(staking.abi, "PoolOrStakeNotFound", async () => {
       await staking.read.getReward([
         alice.account.address,
         stakes.alice.poolId,
@@ -65,7 +65,7 @@ describe("Staking contract - getReward", () => {
       stakes,
     } = await loadFixture(aliceStakes);
 
-    await catchError(staking.abi, "StakeNotFound", async () => {
+    await catchError(staking.abi, "PoolOrStakeNotFound", async () => {
       await staking.read.getReward([
         bob.account.address,
         stakes.alice.poolId,
@@ -81,7 +81,7 @@ describe("Staking contract - getReward", () => {
       stakes,
     } = await loadFixture(aliceStakes);
 
-    await catchError(staking.abi, "PoolNotFound", async () => {
+    await catchError(staking.abi, "PoolOrStakeNotFound", async () => {
       await staking.read.getReward([
         alice.account.address,
         stakes.alice.poolId + 1n,

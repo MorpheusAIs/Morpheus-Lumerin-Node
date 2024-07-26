@@ -52,7 +52,7 @@ describe("Staking contract - unstake", () => {
       expPool,
     } = await loadFixture(aliceStakes);
 
-    await catchError(staking.abi, "PoolNotFound", async () => {
+    await catchError(staking.abi, "PoolOrStakeNotFound", async () => {
       await staking.write.unstake([expPool.id + 1n, alice.stakeId], {
         account: accounts.alice.account,
       });
@@ -66,7 +66,7 @@ describe("Staking contract - unstake", () => {
       accounts,
     } = await loadFixture(aliceStakes);
 
-    await catchError(staking.abi, "StakeNotFound", async () => {
+    await catchError(staking.abi, "PoolOrStakeNotFound", async () => {
       await staking.write.unstake([alice.poolId, alice.stakeId + 1n], {
         account: accounts.alice.account,
       });

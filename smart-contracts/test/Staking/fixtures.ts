@@ -96,9 +96,7 @@ export async function aliceStakes() {
   });
   const depositTx = await staking.write.stake(
     [poolId, stakingAmount, lockDurationId],
-    {
-      account: alice.account,
-    },
+    { account: alice.account },
   );
 
   const stakeId = await getStakeId(depositTx);
