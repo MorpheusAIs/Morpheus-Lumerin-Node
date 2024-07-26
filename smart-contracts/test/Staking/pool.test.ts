@@ -35,7 +35,7 @@ describe("Staking contract - Add pool", () => {
 
     await tokenMOR.write.approve([staking.address, expPool.totalReward]);
 
-    await catchError(staking.abi, "Unauthorized", async () => {
+    await catchError(staking.abi, "OwnableUnauthorizedAccount", async () => {
       await staking.write.addPool(
         [
           expPool.startDate,
@@ -150,7 +150,7 @@ describe("Staking contract - Stop pool", () => {
       accounts: { alice },
     } = await loadFixture(aliceStakes);
 
-    await catchError(staking.abi, "Unauthorized", async () => {
+    await catchError(staking.abi, "OwnableUnauthorizedAccount", async () => {
       await staking.write.stopPool([expPool.id], {
         account: alice.account,
       });
@@ -244,7 +244,7 @@ describe("Staking contract - updatePoolReward", () => {
     const [, lastRewardTimeBf, rewardPerShareBf] = await staking.read.pools([
       expPool.id,
     ]);
-    await staking.write.updatePoolReward([expPool.id]);
+    await staking.write.recalculatePoolReward([expPool.id]);
     const [, lastRewardTimeAf, rewardPerShareAf] = await staking.read.pools([
       expPool.id,
     ]);

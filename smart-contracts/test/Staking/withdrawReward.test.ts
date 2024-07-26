@@ -53,7 +53,7 @@ describe("Staking contract - withdrawReward", () => {
       stakes,
     } = await loadFixture(aliceStakes);
 
-    await catchError(staking.abi, "PoolOrStakeNotFound", async () => {
+    await catchError(staking.abi, "PoolOrStakeNotExists", async () => {
       await staking.write.withdrawReward(
         [stakes.alice.poolId + 1n, stakes.alice.stakeId],
         { account: alice.account },
@@ -68,7 +68,7 @@ describe("Staking contract - withdrawReward", () => {
       stakes,
     } = await loadFixture(aliceStakes);
 
-    await catchError(staking.abi, "PoolOrStakeNotFound", async () => {
+    await catchError(staking.abi, "PoolOrStakeNotExists", async () => {
       await staking.write.withdrawReward(
         [stakes.alice.poolId, stakes.alice.stakeId + 1n],
         { account: alice.account },

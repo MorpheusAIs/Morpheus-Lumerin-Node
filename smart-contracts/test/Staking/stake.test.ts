@@ -33,7 +33,7 @@ describe("Staking contract - stake", () => {
       accounts: { alice },
     } = await loadFixture(aliceStakes);
 
-    await catchError(staking.abi, "PoolOrStakeNotFound", async () => {
+    await catchError(staking.abi, "PoolOrStakeNotExists", async () => {
       await staking.write.stake([100n, 1000n, 0], {
         account: alice.account,
       });
@@ -122,7 +122,7 @@ describe("Staking contract - stake", () => {
 
     await catchError(
       staking.abi,
-      "LockDurationExceedsStakingRange",
+      "LockReleaseTimePastPoolEndTime",
       async () => {
         await staking.write.stake([expPool.id, stakeAmount, 0], {
           account: alice.account,
