@@ -129,6 +129,53 @@ definitions:
       user:
         type: string
     type: object
+  structs.CreateBidRequest:
+    properties:
+      modelID:
+        type: string
+      pricePerSecond:
+        $ref: '#/definitions/lib.BigInt'
+    required:
+    - modelID
+    - pricePerSecond
+    type: object
+  structs.CreateModelRequest:
+    properties:
+      fee:
+        $ref: '#/definitions/lib.BigInt'
+      id:
+        type: string
+      ipfsID:
+        type: string
+      name:
+        maxLength: 64
+        minLength: 1
+        type: string
+      stake:
+        $ref: '#/definitions/lib.BigInt'
+      tags:
+        items:
+          type: string
+        maxItems: 64
+        minItems: 1
+        type: array
+    required:
+    - fee
+    - ipfsID
+    - name
+    - stake
+    - tags
+    type: object
+  structs.CreateProviderRequest:
+    properties:
+      endpoint:
+        type: string
+      stake:
+        $ref: '#/definitions/lib.BigInt'
+    required:
+    - endpoint
+    - stake
+    type: object
   structs.OpenSessionRequest:
     type: object
   structs.OpenSessionWithDurationRequest:
@@ -201,6 +248,7 @@ paths:
       summary: Get Allowance for MOR
       tags:
       - wallet
+  /blockchain/approve:
     post:
       description: Approve MOR allowance for spender
       parameters:
@@ -237,7 +285,28 @@ paths:
       summary: Get ETH and MOR balance
       tags:
       - wallet
-  /blockchain/bids/{id}/session:
+  /blockchain/bids:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Bid
+        in: body
+        name: bid
+        required: true
+        schema:
+          $ref: '#/definitions/structs.CreateBidRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Creates bid in blockchain
+      tags:
+      - wallet
+  /blockchain/bids/:id/session:
     post:
       consumes:
       - application/json
@@ -292,28 +361,27 @@ paths:
       summary: Get models list
       tags:
       - wallet
-  /blockchain/models/{id}/bids:
-    get:
-      description: Get bids from blockchain by model agent
+    post:
+      consumes:
+      - application/json
       parameters:
-      - description: ModelAgent ID
-        in: path
-        name: id
+      - description: Model
+        in: body
+        name: model
         required: true
-        type: string
+        schema:
+          $ref: '#/definitions/structs.CreateModelRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            items:
-              type: object
-            type: array
-      summary: Get Active Bids by Model
+            type: object
+      summary: Creates model in blockchain
       tags:
       - wallet
-  /blockchain/models/{id}/session:
+  /blockchain/models/:id/session:
     post:
       consumes:
       - application/json
@@ -353,6 +421,26 @@ paths:
               type: object
             type: array
       summary: Get providers list
+      tags:
+      - wallet
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Provider
+        in: body
+        name: provider
+        required: true
+        schema:
+          $ref: '#/definitions/structs.CreateProviderRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Creates or updates provider in blockchain
       tags:
       - wallet
   /blockchain/providers/{id}/bids:

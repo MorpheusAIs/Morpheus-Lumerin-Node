@@ -36,7 +36,9 @@
                         }
                     }
                 }
-            },
+            }
+        },
+        "/blockchain/approve": {
             "post": {
                 "description": "Approve MOR allowance for spender",
                 "produces": [
@@ -92,7 +94,40 @@
                 }
             }
         },
-        "/blockchain/bids/{id}/session": {
+        "/blockchain/bids": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "wallet"
+                ],
+                "summary": "Creates bid in blockchain",
+                "parameters": [
+                    {
+                        "description": "Bid",
+                        "name": "bid",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/structs.CreateBidRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/bids/:id/session": {
             "post": {
                 "description": "Full flow to open a session by bidId",
                 "consumes": [
@@ -171,6 +206,37 @@
                             "items": {
                                 "type": "object"
                             }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "wallet"
+                ],
+                "summary": "Creates model in blockchain",
+                "parameters": [
+                    {
+                        "description": "Model",
+                        "name": "model",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/structs.CreateModelRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object"
                         }
                     }
                 }
@@ -267,6 +333,37 @@
                             "items": {
                                 "type": "object"
                             }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "wallet"
+                ],
+                "summary": "Creates or updates provider in blockchain",
+                "parameters": [
+                    {
+                        "description": "Provider",
+                        "name": "provider",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/structs.CreateProviderRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object"
                         }
                     }
                 }
@@ -1024,6 +1121,73 @@
                 },
                 "user": {
                     "type": "string"
+                }
+            }
+        },
+        "structs.CreateBidRequest": {
+            "type": "object",
+            "required": [
+                "modelID",
+                "pricePerSecond"
+            ],
+            "properties": {
+                "modelID": {
+                    "type": "string"
+                },
+                "pricePerSecond": {
+                    "$ref": "#/definitions/lib.BigInt"
+                }
+            }
+        },
+        "structs.CreateModelRequest": {
+            "type": "object",
+            "required": [
+                "fee",
+                "ipfsID",
+                "name",
+                "stake",
+                "tags"
+            ],
+            "properties": {
+                "fee": {
+                    "$ref": "#/definitions/lib.BigInt"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "ipfsID": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 1
+                },
+                "stake": {
+                    "$ref": "#/definitions/lib.BigInt"
+                },
+                "tags": {
+                    "type": "array",
+                    "maxItems": 64,
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "structs.CreateProviderRequest": {
+            "type": "object",
+            "required": [
+                "endpoint",
+                "stake"
+            ],
+            "properties": {
+                "endpoint": {
+                    "type": "string"
+                },
+                "stake": {
+                    "$ref": "#/definitions/lib.BigInt"
                 }
             }
         },
