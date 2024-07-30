@@ -49,7 +49,7 @@ contract StakingMasterChef is Ownable {
   error LockReleaseTimePastPoolEndTime(); // lock duration exceeds staking range, choose a shorter lock duration
   error NoRewardAvailable();
 
-  constructor(IERC20 _stakingToken, IERC20 _rewardToken) Ownable(msg.sender) {
+  constructor(IERC20 _stakingToken, IERC20 _rewardToken) Ownable(_msgSender()) {
     stakingToken = _stakingToken;
     rewardToken = _rewardToken;
   }
@@ -81,7 +81,7 @@ contract StakingMasterChef is Ownable {
     );
     emit PoolAdded(poolId, _startTime, endTime);
 
-    rewardToken.transferFrom(msg.sender, address(this), _totalReward);
+    rewardToken.transferFrom(_msgSender(), address(this), _totalReward);
 
     return poolId;
   }
@@ -103,7 +103,7 @@ contract StakingMasterChef is Ownable {
     emit PoolStopped(_poolId);
 
     uint256 undistributedReward = ((oldEndTime - block.timestamp) * pool.rewardPerSecondScaled) / PRECISION;
-    safeTransfer(msg.sender, undistributedReward);
+    safeTransfer(_msgSender(), undistributedReward);
   }
 
   /// @notice Manually update pool reward variables
@@ -157,7 +157,7 @@ contract StakingMasterChef is Ownable {
     uint256 userShares = (_amount * lock.multiplierScaled) / PRECISION;
     pool.totalShares += userShares;
 
-    UserStake[] storage userStakes = poolUserStakes[_poolId][msg.sender];
+    UserStake[] storage userStakes = poolUserStakes[_poolId][_msgSender()];
     uint256 stakeId = userStakes.length;
     userStakes.push(
       UserStake({
@@ -168,8 +168,8 @@ contract StakingMasterChef is Ownable {
       })
     );
 
-    emit Stake(msg.sender, _poolId, stakeId, _amount);
-    stakingToken.transferFrom(address(msg.sender), address(this), _amount);
+    emit Stake(_msgSender(), _poolId, stakeId, _amount);
+    stakingToken.transferFrom(address(_msgSender()), address(this), _amount);
 
     return stakeId;
   }
@@ -178,7 +178,7 @@ contract StakingMasterChef is Ownable {
   /// @param _poolId the id of the pool
   /// @param _stakeId the id of the stake
   function unstake(uint256 _poolId, uint256 _stakeId) external {
-    UserStake[] storage userStakes = poolUserStakes[_poolId][msg.sender];
+    UserStake[] storage userStakes = poolUserStakes[_poolId][_msgSender()];
     if (_stakeId >= userStakes.length) {
       revert PoolOrStakeNotExists();
     }
@@ -203,10 +203,10 @@ contract StakingMasterChef is Ownable {
     userStake.shareAmount = 0;
     userStake.lockEndsAt = 0;
 
-    emit Unstake(msg.sender, _poolId, _stakeId, unstakeAmount);
+    emit Unstake(_msgSender(), _poolId, _stakeId, unstakeAmount);
 
-    safeTransfer(msg.sender, reward);
-    stakingToken.transfer(address(msg.sender), unstakeAmount);
+    safeTransfer(_msgSender(), reward);
+    stakingToken.transfer(address(_msgSender()), unstakeAmount);
   }
 
   /// @notice Get stake of a user in a pool
@@ -261,7 +261,7 @@ contract StakingMasterChef is Ownable {
   /// @param _poolId the id of the pool
   /// @param _stakeId the id of the stake
   function withdrawReward(uint256 _poolId, uint256 _stakeId) external {
-    UserStake[] storage userStakes = poolUserStakes[_poolId][msg.sender];
+    UserStake[] storage userStakes = poolUserStakes[_poolId][_msgSender()];
     if (_stakeId >= userStakes.length) {
       revert PoolOrStakeNotExists();
     }
@@ -276,8 +276,8 @@ contract StakingMasterChef is Ownable {
     }
     userStake.rewardDebt = rewardFromStart;
 
-    emit RewardWithdrawal(msg.sender, _poolId, _stakeId, reward);
-    safeTransfer(msg.sender, reward);
+    emit RewardWithdrawal(_msgSender(), _poolId, _stakeId, reward);
+    safeTransfer(_msgSender(), reward);
   }
 
   /// @dev Safe reward transfer function, just in case if rounding error causes pool to not have enough reward token.
