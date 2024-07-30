@@ -37,6 +37,7 @@ const config: HardhatUserConfig = {
     L2Etherscan: process.env.ETHERSCAN_API_KEY,
     L2: "arbitrum",
     L1: "ethereum",
+    reportPureAndViewMethods: true,
   },
   gobind: {
     outdir: "./bindings/go",
