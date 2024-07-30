@@ -1,13 +1,13 @@
 import hre from "hardhat";
 import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
-import { DAY, SECOND } from "../../utils/time";
+import { DAY, MILLISECOND, SECOND } from "../../utils/time";
 import { getStakeId } from "./utils";
 
 export async function setupStaking() {
   const [owner, alice, bob, carol] = await hre.viem.getWalletClients();
 
   const tokenMOR = await hre.viem.deployContract("MorpheusToken", []);
-  const tokenLMR = await hre.viem.deployContract("LumerinToken", []);
+  const tokenLMR = await deployLMR();
 
   const startDate =
     BigInt(new Date("2024-07-16T01:00:00.000Z").getTime()) / 1000n;
@@ -36,24 +36,7 @@ export async function setupStaking() {
   const PRECISION = await staking.read.PRECISION();
 
   expPool.precision = PRECISION;
-  expPool.lockDurations = [
-    {
-      durationSeconds: BigInt((7 * DAY) / SECOND),
-      multiplierScaled: 1n * PRECISION,
-    },
-    {
-      durationSeconds: BigInt((30 * DAY) / SECOND),
-      multiplierScaled: (115n * PRECISION) / 100n,
-    },
-    {
-      durationSeconds: BigInt((180 * DAY) / SECOND),
-      multiplierScaled: (135n * PRECISION) / 100n,
-    },
-    {
-      durationSeconds: BigInt((365 * DAY) / SECOND),
-      multiplierScaled: (150n * PRECISION) / 100n,
-    },
-  ];
+  expPool.lockDurations = getDefaultDurations(PRECISION);
 
   await tokenMOR.write.approve([staking.address, expPool.totalReward]);
 
@@ -144,4 +127,88 @@ export async function aliceAndBobStake() {
       },
     },
   };
+}
+
+export async function deployLMR() {
+  console.log("Deploying LMR token...");
+  const tx = await hre.viem.sendDeploymentTransaction("LumerinToken", []);
+  console.log("LMR token deployed to address:", tx.contract.address);
+  console.log("Transaction hash:", tx.deploymentTransaction.hash);
+  return tx.contract;
+}
+
+export function getDefaultDurations(PRECISION: bigint) {
+  return [
+    {
+      durationSeconds: BigInt((7 * DAY) / SECOND),
+      multiplierScaled: 1n * PRECISION,
+    },
+    {
+      durationSeconds: BigInt((30 * DAY) / SECOND),
+      multiplierScaled: (115n * PRECISION) / 100n,
+    },
+    {
+      durationSeconds: BigInt((180 * DAY) / SECOND),
+      multiplierScaled: (135n * PRECISION) / 100n,
+    },
+    {
+      durationSeconds: BigInt((365 * DAY) / SECOND),
+      multiplierScaled: (150n * PRECISION) / 100n,
+    },
+  ];
+}
+
+export async function deployStaking(
+  lmrAddress: `0x${string}`,
+  morAddress: `0x${string}`,
+) {
+  console.log("Deploying staking contract ...");
+  const staking = await hre.viem.deployContract("StakingMasterChef", [
+    lmrAddress,
+    morAddress,
+  ]);
+  console.log("Staking deployed to:", staking.address);
+  const precision = await staking.read.PRECISION();
+
+  return { staking, precision };
+}
+
+export async function setupPools(
+  stakingAddress: `0x${string}`,
+  pools: {
+    startDate: bigint;
+    durationSeconds: bigint;
+    totalReward: bigint;
+    lockDurations: { durationSeconds: bigint; multiplierScaled: bigint }[];
+  }[],
+) {
+  const staking = await hre.viem.getContractAt(
+    "StakingMasterChef",
+    stakingAddress,
+  );
+  const precision = await staking.read.PRECISION();
+
+  for (const pool of pools) {
+    console.log("Adding pool ...");
+    await staking.write.addPool([
+      pool.startDate,
+      pool.durationSeconds,
+      pool.totalReward,
+      pool.lockDurations.map((ld) => ({
+        durationSeconds: ld.durationSeconds,
+        multiplierScaled: ld.multiplierScaled,
+      })),
+    ]);
+    console.log(
+      `Pool added: startTime=${pool.startDate}, duration=${pool.durationSeconds} seconds, totalReward=${pool.totalReward}`,
+    );
+    console.log(
+      pool.lockDurations
+        .map(
+          (ld, i) =>
+            `id=${i} duration=${ld.durationSeconds} seconds, multiplier=${Number(ld.multiplierScaled) / Number(precision)}`,
+        )
+        .join("\n"),
+    );
+  }
 }
