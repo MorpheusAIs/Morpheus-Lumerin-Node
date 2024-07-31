@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	c "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
+	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/gin-gonic/gin"
 	"github.com/sashabaranov/go-openai"
@@ -29,7 +30,7 @@ type AiEngine struct {
 
 var (
 	ErrChatCompletion                = errors.New("chat completion error")
-	ErrImageGenerationInvalidReqeust = errors.New("invalid prodia image generation request")
+	ErrImageGenerationInvalidRequest = errors.New("invalid prodia image generation request")
 	ErrImageGenerationRequest        = errors.New("image generation error")
 	ErrJobCheckRequest               = errors.New("job status check error")
 	ErrJobFailed                     = errors.New("job failed")
@@ -72,15 +73,15 @@ func (a *AiEngine) PromptProdiaImage(ctx context.Context, request *ProdiaGenerat
 	}
 	payload, err := json.Marshal(body)
 	if err != nil {
-		err = lib.WrapError(ErrImageGenerationInvalidReqeust, err)
+		err = lib.WrapError(ErrImageGenerationInvalidRequest, err)
 		a.log.Error(err)
 		return err
 	}
 
 	req, _ := http.NewRequest("POST", url, bytes.NewReader(payload))
 
-	req.Header.Add("accept", "application/json")
-	req.Header.Add("content-type", "application/json")
+	req.Header.Add("accept", constants.CONTENT_TYPE_JSON)
+	req.Header.Add("content-type", constants.CONTENT_TYPE_JSON)
 	req.Header.Add("X-Prodia-Key", apiKey)
 
 	res, err := http.DefaultClient.Do(req)
@@ -95,7 +96,7 @@ func (a *AiEngine) PromptProdiaImage(ctx context.Context, request *ProdiaGenerat
 
 	bodyStr := string(response)
 	if strings.Contains(bodyStr, "Invalid Generation Parameters") {
-		return ErrImageGenerationInvalidReqeust
+		return ErrImageGenerationInvalidRequest
 	}
 
 	result := ProdiaGenerationResult{}
@@ -106,7 +107,7 @@ func (a *AiEngine) PromptProdiaImage(ctx context.Context, request *ProdiaGenerat
 		return err
 	}
 
-	job, err := a.waitJobResult(result.Job, apiKey)
+	job, err := a.waitJobResult(ctx, result.Job, apiKey)
 	if err != nil {
 		err = lib.WrapError(ErrImageGenerationRequest, err)
 		a.log.Error(err)
@@ -116,12 +117,17 @@ func (a *AiEngine) PromptProdiaImage(ctx context.Context, request *ProdiaGenerat
 	return chunkCallback(job)
 }
 
-func (a *AiEngine) waitJobResult(jobID string, apiKey string) (*ProdiaGenerationResult, error) {
+func (a *AiEngine) waitJobResult(ctx context.Context, jobID string, apiKey string) (*ProdiaGenerationResult, error) {
 	url := fmt.Sprintf("https://api.prodia.com/v1/job/%s", jobID)
 
-	req, _ := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		err = lib.WrapError(ErrJobCheckRequest, err)
+		a.log.Error(err)
+		return nil, err
+	}
 
-	req.Header.Add("accept", "application/json")
+	req.Header.Add("accept", constants.CONTENT_TYPE_JSON)
 	req.Header.Add("X-Prodia-Key", apiKey)
 
 	res, err := http.DefaultClient.Do(req)
@@ -132,10 +138,20 @@ func (a *AiEngine) waitJobResult(jobID string, apiKey string) (*ProdiaGeneration
 	}
 
 	defer res.Body.Close()
-	body, _ := io.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		err = lib.WrapError(ErrJobCheckRequest, err)
+		a.log.Error(err)
+		return nil, err
+	}
 
 	var result ProdiaGenerationResult
-	json.Unmarshal(body, &result)
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		err = lib.WrapError(ErrJobCheckRequest, err)
+		a.log.Error(err)
+		return nil, err
+	}
 
 	if result.Status == "succeeded" {
 		return &result, nil
@@ -145,8 +161,12 @@ func (a *AiEngine) waitJobResult(jobID string, apiKey string) (*ProdiaGeneration
 		return nil, ErrJobFailed
 	}
 
-	time.Sleep(1 * time.Second)
-	return a.waitJobResult(jobID, apiKey)
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-time.After(1 * time.Second):
+	}
+	return a.waitJobResult(ctx, jobID, apiKey)
 }
 
 func (a *AiEngine) PromptStream(ctx context.Context, request *api.ChatCompletionRequest, chunkCallback CompletionCallback) (*api.ChatCompletionStreamResponse, error) {
