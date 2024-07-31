@@ -106,7 +106,7 @@ func (a *AiEngine) PromptProdiaImage(ctx context.Context, request *ProdiaGenerat
 		return err
 	}
 
-	job, err := a.waitJobResult(result.Job)
+	job, err := a.waitJobResult(result.Job, apiKey)
 	if err != nil {
 		err = lib.WrapError(ErrImageGenerationRequest, err)
 		a.log.Error(err)
@@ -116,13 +116,13 @@ func (a *AiEngine) PromptProdiaImage(ctx context.Context, request *ProdiaGenerat
 	return chunkCallback(job)
 }
 
-func (a *AiEngine) waitJobResult(jobID string) (*ProdiaGenerationResult, error) {
+func (a *AiEngine) waitJobResult(jobID string, apiKey string) (*ProdiaGenerationResult, error) {
 	url := fmt.Sprintf("https://api.prodia.com/v1/job/%s", jobID)
 
 	req, _ := http.NewRequest("GET", url, nil)
 
 	req.Header.Add("accept", "application/json")
-	req.Header.Add("X-Prodia-Key", "104ac6f1-4b23-4362-a336-d5b6e488132f")
+	req.Header.Add("X-Prodia-Key", apiKey)
 
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -146,7 +146,7 @@ func (a *AiEngine) waitJobResult(jobID string) (*ProdiaGenerationResult, error) 
 	}
 
 	time.Sleep(1 * time.Second)
-	return a.waitJobResult(jobID)
+	return a.waitJobResult(jobID, apiKey)
 }
 
 func (a *AiEngine) PromptStream(ctx context.Context, request *api.ChatCompletionRequest, chunkCallback CompletionCallback) (*api.ChatCompletionStreamResponse, error) {
