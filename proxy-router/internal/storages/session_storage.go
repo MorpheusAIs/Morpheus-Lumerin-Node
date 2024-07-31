@@ -14,6 +14,10 @@ type Session struct {
 	EndsAt           *big.Int
 	TPSScaled1000Arr []int
 	TTFTMsArr        []int
+
+	ModelID      string
+	ModelName    string
+	ModelApiType string
 }
 
 type User struct {

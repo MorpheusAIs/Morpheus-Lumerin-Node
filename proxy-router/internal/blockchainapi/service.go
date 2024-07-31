@@ -221,18 +221,9 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
 	}
 
-	sessionID, providerID, userID, err := s.sessionRouter.OpenSession(transactOpt, approval, approvalSig, stake, prKey)
+	sessionID, _, _, err := s.sessionRouter.OpenSession(transactOpt, approval, approvalSig, stake, prKey)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrSendTx, err)
-	}
-
-	err = s.sessionStorage.AddSession(&storages.Session{
-		Id:           sessionID.Hex(),
-		UserAddr:     userID.Hex(),
-		ProviderAddr: providerID.Hex(),
-	})
-	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrSessionStore, err)
 	}
 
 	return sessionID, err

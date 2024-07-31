@@ -6,8 +6,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"fmt"
 
@@ -26,7 +28,11 @@ type AiEngine struct {
 }
 
 var (
-	ErrChatCompletion = errors.New("chat completion error")
+	ErrChatCompletion                = errors.New("chat completion error")
+	ErrImageGenerationInvalidReqeust = errors.New("invalid prodia image generation request")
+	ErrImageGenerationRequest        = errors.New("image generation error")
+	ErrJobCheckRequest               = errors.New("job status check error")
+	ErrJobFailed                     = errors.New("job failed")
 )
 
 func NewAiEngine(apiBaseURL, apiKey string, log lib.ILogger) *AiEngine {
@@ -56,6 +62,93 @@ func (a *AiEngine) Prompt(ctx context.Context, request *api.ChatCompletionReques
 	return &response, nil
 }
 
+func (a *AiEngine) PromptProdiaImage(ctx context.Context, request *ProdiaGenerationRequest, chunkCallback CompletionCallback) error {
+	url := request.ApiUrl
+	apiKey := request.ApiKey
+
+	body := map[string]string{
+		"model":  request.Model,
+		"prompt": request.Prompt,
+	}
+	payload, err := json.Marshal(body)
+	if err != nil {
+		err = lib.WrapError(ErrImageGenerationInvalidReqeust, err)
+		a.log.Error(err)
+		return err
+	}
+
+	req, _ := http.NewRequest("POST", url, bytes.NewReader(payload))
+
+	req.Header.Add("accept", "application/json")
+	req.Header.Add("content-type", "application/json")
+	req.Header.Add("X-Prodia-Key", apiKey)
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		err = lib.WrapError(ErrImageGenerationRequest, err)
+		a.log.Error(err)
+		return err
+	}
+
+	defer res.Body.Close()
+	response, _ := io.ReadAll(res.Body)
+
+	bodyStr := string(response)
+	if strings.Contains(bodyStr, "Invalid Generation Parameters") {
+		return ErrImageGenerationInvalidReqeust
+	}
+
+	result := ProdiaGenerationResult{}
+	err = json.Unmarshal(response, &result)
+	if err != nil {
+		err = lib.WrapError(ErrImageGenerationRequest, err)
+		a.log.Error(err)
+		return err
+	}
+
+	job, err := a.waitJobResult(result.Job)
+	if err != nil {
+		err = lib.WrapError(ErrImageGenerationRequest, err)
+		a.log.Error(err)
+		return err
+	}
+
+	return chunkCallback(job)
+}
+
+func (a *AiEngine) waitJobResult(jobID string) (*ProdiaGenerationResult, error) {
+	url := fmt.Sprintf("https://api.prodia.com/v1/job/%s", jobID)
+
+	req, _ := http.NewRequest("GET", url, nil)
+
+	req.Header.Add("accept", "application/json")
+	req.Header.Add("X-Prodia-Key", "104ac6f1-4b23-4362-a336-d5b6e488132f")
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		err = lib.WrapError(ErrJobCheckRequest, err)
+		a.log.Error(err)
+		return nil, err
+	}
+
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+
+	var result ProdiaGenerationResult
+	json.Unmarshal(body, &result)
+
+	if result.Status == "succeeded" {
+		return &result, nil
+	}
+
+	if result.Status == "failed" {
+		return nil, ErrJobFailed
+	}
+
+	time.Sleep(1 * time.Second)
+	return a.waitJobResult(jobID)
+}
+
 func (a *AiEngine) PromptStream(ctx context.Context, request *api.ChatCompletionRequest, chunkCallback CompletionCallback) (*api.ChatCompletionStreamResponse, error) {
 	resp, err := a.requestChatCompletionStream(ctx, request, chunkCallback)
 
@@ -70,7 +163,7 @@ func (a *AiEngine) PromptStream(ctx context.Context, request *api.ChatCompletion
 
 func (a *AiEngine) PromptCb(ctx *gin.Context, body *openai.ChatCompletionRequest) {
 	if body.Stream {
-		response, err := a.PromptStream(ctx, body, func(response *openai.ChatCompletionStreamResponse) error {
+		response, err := a.PromptStream(ctx, body, func(response interface{}) error {
 			marshalledResponse, err := json.Marshal(response)
 			if err != nil {
 				return err
