@@ -7,7 +7,8 @@ import (
 )
 
 type ModelConfigLoader struct {
-	log *lib.Logger
+	log          *lib.Logger
+	modelConfigs ModelConfigs
 }
 
 type ModelConfig struct {
@@ -21,15 +22,12 @@ type ModelConfigs map[string]ModelConfig
 
 func NewModelConfigLoader(log *lib.Logger) *ModelConfigLoader {
 	return &ModelConfigLoader{
-		log: log,
+		log:          log,
+		modelConfigs: ModelConfigs{},
 	}
 }
 
-func (e *ModelConfigLoader) ModelConfigFromID(ID string) *ModelConfig {
-	if ID == "" {
-		return &ModelConfig{}
-	}
-
+func (e *ModelConfigLoader) Init() error {
 	filePath := "models-config.json"
 	modelsConfig, err := lib.ReadJSONFile(filePath)
 	if err != nil {
@@ -38,17 +36,25 @@ func (e *ModelConfigLoader) ModelConfigFromID(ID string) *ModelConfig {
 		e.log.Warn("trying to load models config from persistent storage")
 		// TODO: load models config from persistent storage
 
-		return &ModelConfig{}
+		return err
 	}
 
 	var modelConfigs ModelConfigs
 	err = json.Unmarshal([]byte(modelsConfig), &modelConfigs)
 	if err != nil {
 		e.log.Errorf("failed to unmarshal models config: %s", err)
+		return err
+	}
+	e.modelConfigs = modelConfigs
+	return nil
+}
+
+func (e *ModelConfigLoader) ModelConfigFromID(ID string) *ModelConfig {
+	if ID == "" {
 		return &ModelConfig{}
 	}
 
-	modelConfig := modelConfigs[ID]
+	modelConfig := e.modelConfigs[ID]
 	if modelConfig == (ModelConfig{}) {
 		e.log.Errorf("model config not found for ID: %s", ID)
 		return &ModelConfig{}

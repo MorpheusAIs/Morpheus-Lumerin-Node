@@ -23,8 +23,7 @@ type EventsListener struct {
 	modelConfigLoader *config.ModelConfigLoader
 }
 
-func NewEventsListener(client *ethclient.Client, store *storages.SessionStorage, sessionRouter *registries.SessionRouter, wallet interfaces.Wallet, log *lib.Logger) *EventsListener {
-	modelConfigLoader := config.NewModelConfigLoader(log)
+func NewEventsListener(client *ethclient.Client, store *storages.SessionStorage, sessionRouter *registries.SessionRouter, wallet interfaces.Wallet, modelConfigLoader *config.ModelConfigLoader, log *lib.Logger) *EventsListener {
 	return &EventsListener{
 		store:             store,
 		log:               log,
