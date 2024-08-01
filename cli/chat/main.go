@@ -2,6 +2,7 @@ package mainchat
 
 import (
 	"flag"
+	"fmt"
 	"os"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/chat"
@@ -57,21 +58,45 @@ func init() {
 }
 
 func Run(opt *common.Options) {
-	cfgPath := common.GetConfigPath()
-	
-	cfg, err := config.Load(cfgPath)
-	
-	if err == nil {
-		cfg.SessionId = opt.Session
-		m = chat.New(cfg)
 
-		if opt.Edit {
-			m = config.New(opt.Session, cfg)
+	switch {
+	case opt.List:
+		listAllModels()
+	case opt.Remove:
+		removeConfig()
+	case opt.Version:
+		showVersion()
+	default:
+
+		cfgPath := common.GetConfigPath()
+fmt.Println("cfgPath: ", cfgPath)
+		cfg, err := config.Load(cfgPath)
+
+		fmt.Printf("cfg: %+v\n", cfg)
+		fmt.Printf("err: %v\n", err)
+		if opt.Session != "" {
+			cfg.SessionId = opt.Session
 		}
-	} else {
-		m = config.New(opt.Session)
+
+		if opt.Model != "" {
+			cfg.ModelId = opt.Model
+		}
+
+		if opt.PrivateKey != "" {
+			cfg.WalletKey = opt.PrivateKey
+		}
+		fmt.Printf("cfg with options: %+v\n", cfg)
+
+		if err == nil {
+			m = chat.New(cfg)
+
+			if opt.Edit {
+				m = config.New(cfg)
+			}
+		} else {
+			m = config.New()
+		}
+
+		util.RunProgram(m)
 	}
-
-	util.RunProgram(m)
 }
-

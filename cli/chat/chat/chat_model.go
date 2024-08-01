@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/api-gateway/client"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/common"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -15,7 +16,8 @@ type model struct {
 	textarea textarea.Model
 	viewport viewport.Model
 
-	openaiClient  *openai.Client
+	openaiClient  *client.ApiGatewayClient
+
 	openaiRequest openai.ChatCompletionRequest
 
 	completionChunkSub       chan string // receive chat stream chunks

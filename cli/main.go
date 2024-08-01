@@ -347,6 +347,10 @@ func (a *actions) startChat(cCtx *cli.Context) error {
 		ModelId: modelId,
 	}
 
+	fmt.Printf("Session request: %+v\n", sessionRequest)
+
+	session, err := a.client.OpenSession(cCtx.Context, sessionRequest)
+
 	options := &chatCommon.Options{
 		Edit:       cCtx.Bool("edit"),
 		List:       cCtx.Bool("list"),
@@ -354,10 +358,12 @@ func (a *actions) startChat(cCtx *cli.Context) error {
 		Version:    cCtx.Bool("version"),
 	}
 
-	session, err := a.client.OpenSession(cCtx.Context, sessionRequest)
-
 	if err == nil {
 		options.Session = session.SessionId
+	}
+
+	if options.Session == "" && modelId != "" {
+		options.Model = modelId
 	}
 
 	chat.Run(options)

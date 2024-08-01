@@ -1,6 +1,7 @@
 package blockchainapi
 
 import (
+	"fmt"
 	"math/big"
 	"net/http"
 
@@ -534,6 +535,7 @@ func (s *BlockchainController) openSessionByBid(ctx *gin.Context) {
 func (s *BlockchainController) openSessionByModelId(ctx *gin.Context) {
 	var reqPayload structs.OpenSessionWithDurationRequest
 	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
+		fmt.Printf("error binding json: %v\n", err)
 		s.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -542,10 +544,18 @@ func (s *BlockchainController) openSessionByModelId(ctx *gin.Context) {
 	var params structs.PathHex32ID
 	err := ctx.ShouldBindUri(&params)
 	if err != nil {
+		fmt.Printf("error binding uri: %v\n", err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
+	fmt.Printf("params: %v\n", &params)
+
+	if reqPayload.SessionDuration == nil {
+		reqPayload.SessionDuration = &lib.BigInt{Int: *big.NewInt(1800)}
+	}
+
+//TODO: figure out the source of the nil reference exception when this execution path is triggered by the chat cli
 	sessionId, err := s.service.OpenSessionByModelId(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack())
 	if err != nil {
 		s.log.Error(err)
