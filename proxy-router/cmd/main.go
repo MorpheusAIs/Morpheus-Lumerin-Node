@@ -215,7 +215,7 @@ func start() error {
 
 	sessionRouter := registries.NewSessionRouter(*cfg.Marketplace.DiamondContractAddress, ethClient, log)
 
-	modelConfigLoader := config.NewModelConfigLoader(log)
+	modelConfigLoader := config.NewModelConfigLoader(cfg.Proxy.ModelsConfigPath, log)
 	err = modelConfigLoader.Init()
 	if err != nil {
 		log.Warnf("failed to load model config: %s, run with empty", err)
