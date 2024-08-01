@@ -9,6 +9,7 @@ import (
 type ModelConfigLoader struct {
 	log          *lib.Logger
 	modelConfigs ModelConfigs
+	path         string
 }
 
 type ModelConfig struct {
@@ -20,15 +21,21 @@ type ModelConfig struct {
 
 type ModelConfigs map[string]ModelConfig
 
-func NewModelConfigLoader(log *lib.Logger) *ModelConfigLoader {
+func NewModelConfigLoader(path string, log *lib.Logger) *ModelConfigLoader {
 	return &ModelConfigLoader{
 		log:          log,
 		modelConfigs: ModelConfigs{},
+		path:         path,
 	}
 }
 
 func (e *ModelConfigLoader) Init() error {
 	filePath := "models-config.json"
+	if e.path != "" {
+		filePath = e.path
+	}
+
+	e.log.Warnf("loading models config from file: %s", filePath)
 	modelsConfig, err := lib.ReadJSONFile(filePath)
 	if err != nil {
 		e.log.Errorf("failed to read models config file: %s", err)
