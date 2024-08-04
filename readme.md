@@ -39,7 +39,7 @@ The steps listed below are for both the Consumer and Provider to get started wit
 3. Extract the zip to a local folder (examples)
     * Windows: `(%USERPROFILE%)/Downloads/morpheus)` 
     * Linux & MacOS: `~/Downloads/morpheus`
-    * On MacOS you may need to execute `xattr -c mor-launch proxy-router ui-desktop.app` in a command window to remove the quarantine flag on MacOS
+    * On MacOS you may need to execute `xattr -c mor-launch proxy-router ui-desktop.app llama-server` in a command window to remove the quarantine flag on MacOS
 4. Edit the .env file (this is a hidden file, please use your OS specific method to show hidden files) 
     * Change `ETH_NODE_ADDRESS=` (you can setup a free one in Alchemy or Infura) 
     * Change `WALLET_PRIVATE_KEY=` This will be the private key of the Wallet you setup previously
