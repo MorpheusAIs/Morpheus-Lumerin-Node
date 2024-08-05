@@ -29,13 +29,14 @@ const AmountInput = styled.input`
   font-size: 4rem;
   width: 100%;
   text-align: center;
+  background: #03160e!important;
   outline: none;
   border: none;
   color: ${({ isActive, theme }) =>
-    isActive ? theme.colors.primary : theme.colors.dark};
+    isActive ? theme.colors.morMain : theme.colors.morMain};
 
   ::placeholder {
-    color: ${p => p.theme.colors.dark};
+    color: ${p => p.theme.colors.morMain};
   }
 
   &[type='number']::-webkit-inner-spin-button,
@@ -103,20 +104,22 @@ const WalletInput = styled.input`
   color: ${p => p.theme.colors.dark};
   font-weight: 300;
   font-size: 16px;
+  background: #03160e!important;
   outline: none;
   border-radius: 5px;
   border-style: solid;
-  border-color: ${p => p.theme.colors.lightBG};
-  border-width: 1px;
   padding: 8px 20px 6px 60px;
+  border: none!important;
 `;
 
 const SendBtn = styled(BaseBtn)`
   width: 100%;
   height: 50px;
   border-radius: 5px;
+  color: black;
+  font-weight: 600;
   background-color: ${({ isActive, theme }) =>
-    isActive ? theme.colors.lumerin.helpertextGray : theme.colors.primary};
+    isActive ? theme.colors.lumerin.helpertextGray : theme.colors.morMain};
 `;
 
 const IconContainer = styled.div`
@@ -138,10 +141,14 @@ const LMR_MODE = 'coinAmount';
 const USD_MODE = 'usdAmount';
 
 const selectorStyles = {
-  control: (base, state) => ({ ...base, borderColor: '#0e4353', width: '100%' }),
+  singleValue: provided => ({
+    ...provided,
+    color: 'white'
+  }),
+  control: (base, state) => ({ ...base, borderColor: '#20dc8e', color: '#FFFFFF', backgroundColor: '#03160e',  width: '100%' }),
   option: (base, state) => ({
     ...base,
-    backgroundColor: state.isSelected ? '#0e4353' : undefined,
+    backgroundColor: state.isSelected ? '#03160e' : undefined,
     color: state.isSelected ? '#FFFFFF' : undefined,
     ':active': {
       ...base[':active'],
@@ -225,7 +232,7 @@ export function SendForm(props) {
     <>
       <HeaderWrapper>
         <BackBtn data-modal="send" onClick={props.onRequestClose}>
-          <BackIcon size="2.4rem" fill="black" />
+          <BackIcon size="2.4rem" fill="white" />
         </BackBtn>
         <Header>You are sending</Header>
       </HeaderWrapper>
@@ -295,8 +302,8 @@ export function SendForm(props) {
           <FooterLabel>{selectedCurrency.label} Balance</FooterLabel>
           <FooterLabel>
             {selectedCurrency.value === 'ETH'
-              ? `${props.ethBalanceWei.toFixed(6)} ≈ ${props.ethBalanceUSD}`
-              : `${props.lmrBalanceWei.toFixed(6)} ≈ ${props.lmrBalanceUSD}`}
+              ? `${props.eth.value.toFixed(6)} ≈ ${props.eth.usd}`
+              : `${props.mor.value.toFixed(6)} ≈ ${props.mor.usd}`}
           </FooterLabel>
         </FooterRow>
         <FooterRow>

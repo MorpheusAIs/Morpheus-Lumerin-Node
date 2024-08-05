@@ -84,13 +84,6 @@ function ModelsTable({
     history.push("/bids");
   }
 
-  useEffect(() => {
-    // getAllModels().then(data => {
-    //   console.log("🚀 ~ getAllModels ~ data:", data)
-    //   setModels(data.filter(d => !d.IsDeleted));
-    // });
-  }, [])
-
   return (<Container>
      {
       models.length ? models.map((x => (<div>{ModelCard({ onSelect, model: x})}</div>))) : null

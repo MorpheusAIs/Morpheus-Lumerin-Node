@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.24;
 
-import { AddressSet } from "../libraries/KeySet.sol";
-import { AppStorage, Provider } from "../AppStorage.sol";
+import { AddressSet, KeySet } from "../libraries/KeySet.sol";
+import { AppStorage, Provider, PROVIDER_REWARD_LIMITER_PERIOD } from "../AppStorage.sol";
 import { LibOwner } from "../libraries/LibOwner.sol";
 
 contract ProviderRegistry {
   using AddressSet for AddressSet.Set;
+  using KeySet for KeySet.Set;
 
   AppStorage internal s;
 
@@ -15,6 +16,10 @@ contract ProviderRegistry {
   event ProviderMinStakeUpdated(uint256 newStake);
 
   error StakeTooLow();
+  error ErrProviderNotDeleted();
+  error ErrNoStake();
+  error ErrNoWithdrawableStake();
+  error ProviderHasActiveBids();
 
   /// @notice Returns provider struct by address
   function providerMap(address addr) external view returns (Provider memory) {
@@ -68,12 +73,26 @@ contract ProviderRegistry {
     if (newStake < s.providerMinStake) {
       revert StakeTooLow();
     }
-    if (provider.createdAt == 0) {
+    // if we add stake to an existing provider the limiter period is not reset
+    uint128 createdAt = provider.createdAt;
+    uint128 periodEnd = provider.limitPeriodEnd;
+    if (createdAt == 0) {
       s.activeProviders.insert(addr);
       s.providers.push(addr);
+      createdAt = uint128(block.timestamp);
+      periodEnd = createdAt + PROVIDER_REWARD_LIMITER_PERIOD;
+    } else if (provider.isDeleted) {
+      s.activeProviders.insert(addr);
     }
 
-    s.providerMap[addr] = Provider(endpoint, newStake, uint128(block.timestamp), false);
+    s.providerMap[addr] = Provider({
+      endpoint: endpoint,
+      stake: newStake,
+      createdAt: createdAt,
+      limitPeriodEnd: periodEnd,
+      limitPeriodEarned: provider.limitPeriodEarned,
+      isDeleted: false
+    });
 
     emit ProviderRegisteredUpdated(addr);
 
@@ -83,13 +102,51 @@ contract ProviderRegistry {
   /// @notice Deregisters a provider
   function providerDeregister(address addr) external {
     LibOwner._senderOrOwner(addr);
+    if (s.providerActiveBids[addr].count() > 0) {
+      revert ProviderHasActiveBids();
+    }
+
     s.activeProviders.remove(addr);
-
-    s.providerMap[addr].isDeleted = true;
-    uint256 stake = s.providerMap[addr].stake;
-
     emit ProviderDeregistered(addr);
-    s.token.transfer(addr, stake);
+
+    Provider storage p = s.providerMap[addr];
+    uint256 withdrawable = getWithdrawableStake(p);
+    p.stake -= withdrawable;
+    p.isDeleted = true;
+    s.token.transfer(addr, withdrawable);
+  }
+
+  /// @notice Withdraws stake from a provider after it has been deregistered
+  ///         Allows to withdraw the stake after provider reward period has ended
+  function providerWithdrawStake(address addr) external {
+    Provider storage p = s.providerMap[addr];
+    if (!p.isDeleted) {
+      revert ErrProviderNotDeleted();
+    }
+
+    if (p.stake == 0) {
+      revert ErrNoStake();
+    }
+
+    uint256 withdrawable = getWithdrawableStake(p);
+    if (withdrawable == 0) {
+      revert ErrNoWithdrawableStake();
+    }
+
+    p.stake -= withdrawable;
+    s.token.transfer(addr, withdrawable);
+  }
+
+  /// @notice Returns the withdrawable stake for a provider
+  /// @dev    If the provider already earned this period then withdrawable stake
+  ///         is limited by the amount earning that remains in the current period.
+  ///         It is done to prevent the provider from withdrawing and then staking
+  ///         again from a different address, which bypasses the limitation.
+  function getWithdrawableStake(Provider memory p) private view returns (uint256) {
+    if (uint128(block.timestamp) > p.limitPeriodEnd) {
+      return p.stake;
+    }
+    return p.stake - p.limitPeriodEarned;
   }
 
   /// @notice Sets the minimum stake required for a provider

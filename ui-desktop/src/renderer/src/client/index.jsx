@@ -90,12 +90,7 @@ const createClient = function (createStore) {
   }
 
   const forwardedMethods = {
-    // refreshAllSockets: utils.forwardToMainProcess(
-    //   'refresh-all-sockets',
-    //   120000
-    // ),
     refreshAllTransactions: utils.forwardToMainProcess('refresh-all-transactions', 120000),
-    refreshTransaction: utils.forwardToMainProcess('refresh-transaction', 120000),
     refreshAllContracts: utils.forwardToMainProcess('refresh-all-contracts', 120000),
     onOnboardingCompleted: utils.forwardToMainProcess('onboarding-completed'),
     recoverFromMnemonic: utils.forwardToMainProcess('recover-from-mnemonic'),
@@ -108,8 +103,6 @@ const createClient = function (createStore) {
     editContract: utils.forwardToMainProcess('edit-contract', 750000),
     cancelContract: utils.forwardToMainProcess('cancel-contract', 750000),
     setDeleteContractStatus: utils.forwardToMainProcess('set-delete-contract-status', 750000),
-    getGasLimit: utils.forwardToMainProcess('get-gas-limit'),
-    getGasPrice: utils.forwardToMainProcess('get-gas-price'),
     getPastTransactions: utils.forwardToMainProcess('get-past-transactions', 750000),
     sendLmr: utils.forwardToMainProcess('send-lmr', 750000),
     sendEth: utils.forwardToMainProcess('send-eth', 750000),
@@ -121,7 +114,6 @@ const createClient = function (createStore) {
     getLmrTransferGasLimit: utils.forwardToMainProcess('get-lmr-transfer-gas-limit'),
     logout: utils.forwardToMainProcess('logout'),
     getLocalIp: utils.forwardToMainProcess('get-local-ip'),
-    isProxyPortPublic: utils.forwardToMainProcess('is-proxy-port-public'),
     getPoolAddress: utils.forwardToMainProcess('get-pool-address'),
     revealSecretPhrase: utils.forwardToMainProcess('reveal-secret-phrase'),
     getPrivateKey: utils.forwardToMainProcess('get-private-key'),
@@ -130,8 +122,6 @@ const createClient = function (createStore) {
     getDefaultCurrencySetting: utils.forwardToMainProcess('get-default-currency-settings'),
     setDefaultCurrencySetting: utils.forwardToMainProcess('set-default-currency-settings'),
     saveProxyRouterSettings: utils.forwardToMainProcess('save-proxy-router-settings'),
-    restartProxyRouter: utils.forwardToMainProcess('restart-proxy-router'),
-    stopProxyRouter: utils.forwardToMainProcess('stop-proxy-router'),
     getMarketplaceFee: utils.forwardToMainProcess('get-marketplace-fee'),
     claimFaucet: utils.forwardToMainProcess('claim-faucet', 750000),
     getCustomEnvValues: utils.forwardToMainProcess('get-custom-env-values'),
@@ -149,6 +139,11 @@ const createClient = function (createStore) {
     getRates: utils.forwardToMainProcess('get-rates'),
     getTodaysBudget: utils.forwardToMainProcess('get-todays-budget'),
     getTokenSupply: utils.forwardToMainProcess('get-supply'),
+    // Chat History
+    getChatHistory: utils.forwardToMainProcess('get-chat-history', 750000),
+    saveChatHistory: utils.forwardToMainProcess('save-chat-history', 750000),
+    getTitles: utils.forwardToMainProcess('get-chat-titles', 750000),
+    saveTitle: utils.forwardToMainProcess('save-chat-title', 750000),
   }
 
   const api = {

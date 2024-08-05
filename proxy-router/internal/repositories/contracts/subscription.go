@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/sessionrouter"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -21,13 +20,15 @@ func BlockchainEventFactory(name string) interface{} {
 	switch name {
 	case "SessionOpened":
 		return new(sessionrouter.SessionRouterSessionOpened)
+	case "SessionClosed":
+		return new(sessionrouter.SessionRouterSessionClosed)
 	default:
 		return nil
 	}
 }
 
 // WatchContractEvents watches for all events from the contract and converts them to the concrete type, using mapper
-func WatchContractEvents(ctx context.Context, client EthereumClient, contractAddr common.Address, mapper EventMapper, log interfaces.ILogger) (*lib.Subscription, error) {
+func WatchContractEvents(ctx context.Context, client EthereumClient, contractAddr common.Address, mapper EventMapper, log lib.ILogger) (*lib.Subscription, error) {
 	sink := make(chan interface{})
 
 	return lib.NewSubscription(func(quit <-chan struct{}) error {

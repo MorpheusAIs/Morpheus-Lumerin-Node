@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Modal from '../../contracts/modals/Modal';
 import {
   TitleWrapper,
@@ -15,9 +15,23 @@ import {
 
 const OpenSessionModal = ({ isActive, handleClose, budget, supply, pricePerSecond, triggerOpen }) => {
 
-  const [duration, setDuration] = useState<number | undefined>(undefined);
-  const [morStake, setMorStake] = useState<number | undefined>(undefined);
+  const [duration, setDuration] = useState<number>(5);
+  const [morStake, setMorStake] = useState<number>(0);
 
+  useEffect(() => {
+    setMorStake(calculateStake(5));
+  }, [pricePerSecond])
+
+  const calculateStake = (value) => {
+    if(!pricePerSecond) {
+      return 0;
+    }
+    const totalCost = pricePerSecond * value * 60;
+    const stake = totalCost * +supply / +budget;
+    return stake;
+  }
+
+  const isDisabled = +duration < 5 || +duration > 1440;
 
   if (!isActive) {
     return <></>;
@@ -33,14 +47,11 @@ const OpenSessionModal = ({ isActive, handleClose, budget, supply, pricePerSecon
           <Label htmlFor="time">Session Duration (in minutes)</Label>
           <Input
             placeholder="# of minutes"
-            value={duration}
+            value={duration?.toString()}
             onChange={(e) => {
-
               const value = Number(e.target.value);
-              const totalCost = pricePerSecond * value * 60;
-              const stake = totalCost * +supply / +budget;
-              setMorStake(stake);
               setDuration(value);
+              setMorStake(calculateStake(value));
             }}
             type="number"
             min={5}
@@ -49,34 +60,26 @@ const OpenSessionModal = ({ isActive, handleClose, budget, supply, pricePerSecon
             id="time"
           />
           <Sublabel>Session Length (min 5, max 1440)</Sublabel>
-          {/* {formState?.errors?.time?.type === 'required' && (
-                  <ErrorLabel>Duration is required</ErrorLabel>
-                )}
-                {formState?.errors?.time?.type === 'min' && (
-                  <ErrorLabel>{'Minimum 24 hours'}</ErrorLabel>
-                )}
-                {formState?.errors?.time?.type === 'max' && (
-                  <ErrorLabel>{'Maximum 48 hours'}</ErrorLabel>
-                )} */}
         </InputGroup>
       </Row>
       {
-        duration && morStake && (
+        duration && !isDisabled && morStake ? (
           <Row style={{ margin: "20px 0" }}>
             Funds to Stake: {(morStake / 10 ** 18).toFixed(2)} MOR
           </Row>
-        )
+        ) : null
       }
       <InputGroup
         style={{
           textAlign: 'center',
           justifyContent: 'space-between',
+          marginTop: '30px',
           height: '60px'
         }}
       >
         <Row style={{ justifyContent: 'center' }}>
           {/* <LeftBtn onClick={handleSaveDraft}>Save as Draft</LeftBtn> */}
-          <RightBtn onClick={() => triggerOpen({ stake: morStake, duration })}>
+          <RightBtn onClick={() => triggerOpen({ stake: morStake, duration })} disabled={isDisabled}>
             {"Open"}
           </RightBtn>
         </Row>

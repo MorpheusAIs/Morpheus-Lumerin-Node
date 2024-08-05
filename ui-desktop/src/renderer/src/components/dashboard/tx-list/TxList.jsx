@@ -69,20 +69,20 @@ const Title = styled.div`
 
 export const TxList = ({
   transactions,
-  hasNextPage,
-  getPastTransactions,
-  isNextPageLoading,
+  loadNextTransactions,
   hasTransactions,
-  onWalletRefresh,
   syncStatus,
-  client
+  hasNextPage,
+  ...props
 }) => {
-  const handleClick = e => {
-    if (!window.isDev || !e.shiftKey || !e.altKey) return;
 
-    client.onTransactionLinkClick(e.currentTarget.dataset.hash);
-  };
-  // transactions = [];
+  const [nextPageLoading, setNextPageLoading] = useState(false);
+
+  const load = async () => {
+    setNextPageLoading(true);
+    await loadNextTransactions();
+    setNextPageLoading(false);
+  }
   return (
     <Container data-testid="tx-list">
       <Flex.Row grow="1">
@@ -100,15 +100,15 @@ export const TxList = ({
 
             // Only load 1 page of items at a time.
             // Pass an empty callback to InfiniteLoader in case it asks us to load more than once.
-            const loadMoreRows = isNextPageLoading
+            const loadMoreRows = nextPageLoading
               ? () => {}
               : () => {
-                  getPastTransactions();
+                load();
                 };
 
             // Every row is loaded except for our loading indicator row.
             const isRowLoaded = ({ index }) => {
-              return !hasNextPage || index < rowCount - 1;
+              return !transactions.length || index < rowCount - 1;
             };
 
             const rowRenderer = ({ key, style, index }) =>
@@ -132,7 +132,7 @@ export const TxList = ({
             return (
               <React.Fragment>
                 <Header
-                  onWalletRefresh={onWalletRefresh}
+                  onWalletRefresh={() => {}}
                   hasTransactions={hasTransactions}
                   onFilterChange={onFilterChange}
                   activeFilter={activeFilter}

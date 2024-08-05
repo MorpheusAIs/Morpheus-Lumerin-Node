@@ -33,6 +33,10 @@ const withChatState = WrappedComponent => {
         const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/providers`
         const response = await fetch(path);
         const data = await response.json();
+        if (data.error) {
+          console.error(data.error);
+          return [];
+        }
         return data.providers;
       }
       catch (e) {
@@ -56,32 +60,64 @@ const withChatState = WrappedComponent => {
       }
     }
 
+    getBidsRatingByModel = async (modelId) => {
+      try {
+        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/models/${modelId}/bids/rated`;
+        const response = await fetch(path);
+        const data = await response.json();
+        if (data.error) {
+          console.error(data.error);
+          return [];
+        }
+        return data.bids;
+      }
+      catch (e) {
+        console.log("Error", e)
+        return [];
+      }
+    }
+
     getAllModels = async () => {
       const result = await this.props.client.getAllModels();
       return result;
     }
 
+    getLocalModels = async () => {
+      try {
+        const path = `${this.props.config.chain.localProxyRouterUrl}/v1/models`;
+        const response = await fetch(path);
+        if (!response.ok) {
+          return [];
+        }
+        return await response.json();
+      }
+      catch (e) {
+        console.log("Error", e)
+        return [];
+      }
+    }
+
     getModelsData = async () => {
+      const localModels = await this.getLocalModels();
       const models = (await this.getAllModels()).filter(m => !m.IsDeleted);
       const providers = (await this.getProviders()).filter(m => !m.IsDeleted);
       const providersMap = providers.reduce((a, b) => ({ ...a, [b.Address.toLowerCase()]: b }), {});
-      let result = [];
+      const result = [];
 
       for (const model of models) {
         const id = model.Id;
-        const bids = (await this.getBitsByModels(id)).filter(b => !b.DeletedAt);
-        if (!bids.length) {
-          continue;
-        }
 
-        const bidsWithProviders = bids.map(b => ({ ...b, ProviderData: providersMap[b.Provider.toLowerCase()], Model: model }))
+        const bids = (await this.getBitsByModels(id))
+          .filter(b => !b.DeletedAt)
+          .map(b => ({ ...b, ProviderData: providersMap[b.Provider.toLowerCase()], Model: model }));
 
-        result.push({ ...model, bids: model.Name == "Llama 2.0" ? [...bidsWithProviders, { Provider: "Local", Model: model }] : bidsWithProviders })
+        const localModel = localModels.find(lm => lm.Id == id);
+
+        result.push({ ...model, bids, hasLocal: Boolean(localModel) })
       }
 
-      return { models: result, providers }
+      return { models: result.filter(r => r.bids.length || r.hasLocal), providers }
     }
-
 
     getMetaInfo = async () => {
       var budget = await this.props.client.getTodaysBudget();
@@ -90,6 +126,9 @@ const withChatState = WrappedComponent => {
     }
 
     getSessionsByUser = async (user) => {
+      if(!user) {
+        return;
+      }
       try {
         const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions?user=${user}`;
         const response = await fetch(path);
@@ -102,22 +141,13 @@ const withChatState = WrappedComponent => {
       }
     }
 
-    onOpenSession = async ({ selectedBid, stake }) => {
-      console.log("open-session", stake);
+    onOpenSession = async ({ modelId, duration }) => {
       this.context.toast('info', 'Processing...');
-      let signature = {};
-      let sessionId = '';
-
-      const bidId = selectedBid.Id;
 
       try {
-        const path = `${this.props.config.chain.localProxyRouterUrl}/proxy/sessions/initiate`;
+        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/models/${modelId}/session`;
         const body = {
-          user: this.props.address,
-          provider: selectedBid.Provider,
-          spend: Number(stake),
-          bidId,
-          providerUrl: selectedBid.ProviderData.Endpoint.replace("http://", "")
+          sessionDuration: +duration // convert to seconds
         };
         const response = await fetch(path, {
           method: "POST",
@@ -125,63 +155,22 @@ const withChatState = WrappedComponent => {
         });
         const dataResponse = await response.json();
         if (!response.ok) {
-          this.context.toast('error', 'Failed to initiate session');
+          this.context.toast('error', 'Failed to open session');
           console.log("Failed initiate session", dataResponse);
           return;
         }
-        signature = dataResponse.response.result;
+        this.context.toast('success', 'Session successfully created');
+        return dataResponse.sessionId;
       }
       catch (e) {
         console.error(e);
-        this.context.toast('error', 'Failed to initiate session');
+        this.context.toast('error', 'Failed to open session');
         return;
       }
+    }
 
-      try {
-        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/approve?amount=${BigInt(stake).toString()}&spender=${this.props.config.chain.diamondAddress}`;
-        const response = await fetch(path, {
-          method: "POST",
-        });
-        const dataResponse = await response.json();
-        if (!response.ok) {
-          this.context.toast('error', 'Failed to increase allowance');
-          console.log("Failed to increase allowance", dataResponse);
-          return;
-        }
-      }
-      catch (e) {
-        console.error(e);
-        this.context.toast('error', 'Failed to increase allowance');
-        return;
-      }
-
-      try {
-        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions`;
-        const body = {
-          approval: signature.approval,
-          approvalSig: signature.approvalSig,
-          stake: BigInt(stake).toString(),
-        };
-        const response = await fetch(path, {
-          method: "POST",
-          body: JSON.stringify(body)
-        });
-        const dataResponse = await response.json();
-        if (!response.ok) {
-          this.context.toast('error', 'Failed to set session');
-          console.log("Failed to set session", dataResponse);
-          return;
-        }
-        sessionId = dataResponse.sessionId;
-      }
-      catch (e) {
-        console.error(e);
-        this.context.toast('error', 'Failed to set session');
-        return;
-      }
-
-      this.context.toast('success', 'Session successfully created');
-      return { sessionId, signature };
+    getBalances = async () => {
+      return await this.props.client.getBalances();
     }
 
     render() {
@@ -195,6 +184,8 @@ const withChatState = WrappedComponent => {
           getSessionsByUser={this.getSessionsByUser}
           closeSession={this.closeSession}
           onOpenSession={this.onOpenSession}
+          getBalances={this.getBalances}
+          toasts={this.context}
           {...this.state}
           {...this.props}
         />
@@ -204,9 +195,6 @@ const withChatState = WrappedComponent => {
 
   const mapStateToProps = (state, props) => ({
     // selectedCurrency: selectors.getSellerSelectedCurrency(state),
-    // isLocalProxyRouter: selectors.getIsLocalProxyRouter(state),
-    // titanLightningPool: state.config.chain.titanLightningPool,
-    // titanLightningDashboard: state.config.chain.titanLightningDashboard,
     config: state.config,
     selectedBid: state.models.selectedBid,
     model: state.models.selectedModel,

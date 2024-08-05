@@ -14,7 +14,9 @@ const Container = styled.div`
   justify-content: space-between;
   max-height: 10%;
   color: ${p => p.theme.colors.morMain}
-  padding-left: 2.2rem;
+  @media (min-width: 800px) {
+    padding-left: 2.2rem;
+  }
 `;
 
 const Button = styled(NavLink)`
@@ -138,7 +140,7 @@ function SecondaryNav({
        */}
 
       <Button
-        onClick={() => setActiveIndex(5)}
+        onClick={() => setActiveIndex(6)}
         activeClassName="active"
         data-testid="tools-nav-btn"
         parent={parent}

@@ -52,9 +52,6 @@ const withModelsState = WrappedComponent => {
 
   const mapStateToProps = (state, props) => ({
     // selectedCurrency: selectors.getSellerSelectedCurrency(state),
-    // isLocalProxyRouter: selectors.getIsLocalProxyRouter(state),
-    // titanLightningPool: state.config.chain.titanLightningPool,
-    // titanLightningDashboard: state.config.chain.titanLightningDashboard,
     config: state.config
   });
 

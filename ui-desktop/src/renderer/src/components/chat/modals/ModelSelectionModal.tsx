@@ -1,21 +1,10 @@
 //import Modal from '../../contracts/modals/Modal';
-import React, { useEffect, useState } from 'react';
 import { List as RVList, AutoSizer } from 'react-virtualized';
 import Modal from '../../contracts/modals/Modal';
 import styled from 'styled-components';
 import {
     TitleWrapper,
-    Title,
-    Subtitle,
-    Form,
-    InputGroup,
-    Row,
-    Input,
-    Label,
-    Sublabel,
-    // Modal,
-    Body,
-    CloseModal
+    Title
 } from '../../contracts/modals/CreateContractModal.styles';
 
 import ModelRow from './ModelRow';
@@ -45,6 +34,11 @@ const ModelSelectionModal = ({ isActive, handleClose, models, onChangeModel }) =
         return <></>;
     }
 
+    const changeModelHandler = (data) => {
+        onChangeModel(data);
+        handleClose();
+    }
+
     return (
         <Modal onClose={handleClose} bodyProps={bodyProps}
         >
@@ -54,11 +48,7 @@ const ModelSelectionModal = ({ isActive, handleClose, models, onChangeModel }) =
             <AutoSizer width={400} height={500}>
                 {({ width, height }) => (
                     <RVContainer
-                        rowRenderer={rowRenderer(models, (id) => {
-                            onChangeModel(id);
-                            handleClose();
-                        }
-                        )}
+                        rowRenderer={rowRenderer(models, changeModelHandler)}
                         rowHeight={100}
                         rowCount={models.length}
                         height={height || 500} // defaults for tests

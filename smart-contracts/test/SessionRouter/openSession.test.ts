@@ -4,9 +4,14 @@ import {
 } from "@nomicfoundation/hardhat-toolbox-viem/network-helpers";
 import { expect } from "chai";
 import hre from "hardhat";
-import { deploySingleBid, getProviderApproval } from "../fixtures";
+import {
+  deploySingleBid,
+  getProviderApproval,
+  openEarlyCloseSession,
+} from "../fixtures";
 import {
   NewDate,
+  mine,
   catchError,
   getHex,
   getSessionId,
@@ -14,13 +19,19 @@ import {
   nowChain,
   randomBytes,
   randomBytes32,
+  setAutomine,
   startOfTheDay,
+  randomAddress,
 } from "../utils";
-import { DAY, HOUR, MINUTE, SECOND } from "../../utils/time";
-import { UnknownRpcError, formatUnits } from "viem";
+import { DAY, HOUR, SECOND } from "../../utils/time";
+import { UnknownRpcError } from "viem";
 
 describe("session actions", function () {
   describe("positive cases", function () {
+    this.afterAll(async function () {
+      await setAutomine(hre, true);
+    });
+
     it("should open session without error", async function () {
       const {
         sessionRouter,
@@ -30,7 +41,11 @@ describe("session actions", function () {
         provider,
       } = await loadFixture(deploySingleBid);
 
-      const { msg, signature } = await getProviderApproval(provider, exp.bidID);
+      const { msg, signature } = await getProviderApproval(
+        provider,
+        user.account.address,
+        exp.bidID,
+      );
       const openTx = await sessionRouter.write.openSession(
         [exp.stake, msg, signature],
         { account: user.account },
@@ -49,7 +64,11 @@ describe("session actions", function () {
         publicClient,
       } = await loadFixture(deploySingleBid);
 
-      const { msg, signature } = await getProviderApproval(provider, exp.bidID);
+      const { msg, signature } = await getProviderApproval(
+        provider,
+        user.account.address,
+        exp.bidID,
+      );
       const hash = await sessionRouter.write.openSession(
         [exp.stake, msg, signature],
         { account: user.account },
@@ -72,7 +91,11 @@ describe("session actions", function () {
         provider,
       } = await loadFixture(deploySingleBid);
 
-      const { msg, signature } = await getProviderApproval(provider, exp.bidID);
+      const { msg, signature } = await getProviderApproval(
+        provider,
+        user.account.address,
+        exp.bidID,
+      );
       const openTx = await sessionRouter.write.openSession(
         [exp.stake, msg, signature],
         { account: user.account },
@@ -112,7 +135,11 @@ describe("session actions", function () {
       const srBefore = await tokenMOR.read.balanceOf([sessionRouter.address]);
       const userBefore = await tokenMOR.read.balanceOf([user.account.address]);
 
-      const { msg, signature } = await getProviderApproval(provider, exp.bidID);
+      const { msg, signature } = await getProviderApproval(
+        provider,
+        user.account.address,
+        exp.bidID,
+      );
       const txHash = await sessionRouter.write.openSession(
         [exp.stake, msg, signature],
         { account: user.account },
@@ -125,15 +152,219 @@ describe("session actions", function () {
       expect(srAfter - srBefore).to.equal(exp.stake);
       expect(userBefore - userAfter).to.equal(exp.stake);
     });
+
+    it("should allow opening two sessions in the same block", async function () {
+      const {
+        sessionRouter,
+        expectedSession: exp,
+        user,
+        owner,
+        publicClient,
+        provider,
+        tokenMOR,
+      } = await loadFixture(deploySingleBid);
+
+      await tokenMOR.write.transfer([user.account.address, exp.stake * 2n], {
+        account: owner.account.address,
+      });
+      await tokenMOR.write.approve([sessionRouter.address, exp.stake * 2n], {
+        account: user.account.address,
+      });
+
+      const apprv1 = await getProviderApproval(
+        provider,
+        user.account.address,
+        exp.bidID,
+      );
+      await time.increase(1);
+      const apprv2 = await getProviderApproval(
+        provider,
+        user.account.address,
+        exp.bidID,
+      );
+
+      await setAutomine(hre, false);
+
+      const openSession1 = await sessionRouter.simulate.openSession(
+        [exp.stake, apprv1.msg, apprv1.signature],
+        { account: user.account.address },
+      );
+      const openTx1 = await user.writeContract(openSession1.request);
+
+      const openSession2 = await sessionRouter.simulate.openSession(
+        [exp.stake, apprv2.msg, apprv2.signature],
+        { account: user.account.address },
+      );
+      const openTx2 = await user.writeContract(openSession2.request);
+
+      await mine(hre);
+      await setAutomine(hre, true);
+
+      const sessionId1 = await getSessionId(publicClient, hre, openTx1);
+      const sessionId2 = await getSessionId(publicClient, hre, openTx2);
+
+      expect(sessionId1).not.to.equal(sessionId2);
+
+      const session1 = await sessionRouter.read.getSession([sessionId1]);
+      const session2 = await sessionRouter.read.getSession([sessionId2]);
+
+      expect(session1.stake).to.equal(exp.stake);
+      expect(session2.stake).to.equal(exp.stake);
+    });
+
+    it("should partially use remaining staked tokens for the opening session", async function () {
+      const { sessionRouter, user, provider, expectedSession, tokenMOR } =
+        await loadFixture(openEarlyCloseSession);
+      await time.increaseTo(
+        startOfTheDay(await nowChain()) + BigInt(DAY / SECOND),
+      );
+
+      const [avail] = await sessionRouter.read.withdrawableUserStake([
+        user.account.address,
+        255,
+      ]);
+      expect(avail > 0).to.be.true;
+
+      // reset allowance
+      await tokenMOR.write.approve([sessionRouter.address, 0n], {
+        account: user.account.address,
+      });
+
+      const stake = avail / 2n;
+
+      const approval = await getProviderApproval(
+        provider,
+        user.account.address,
+        expectedSession.bidID,
+      );
+      const openSession = await sessionRouter.simulate.openSession(
+        [stake, approval.msg, approval.signature],
+        { account: user.account.address },
+      );
+      await user.writeContract(openSession.request);
+
+      const [avail2] = await sessionRouter.read.withdrawableUserStake([
+        user.account.address,
+        255,
+      ]);
+      expect(avail2).to.be.equal(stake);
+    });
+
+    it("should use all remaining staked tokens for the opening session", async function () {
+      const { sessionRouter, user, provider, expectedSession, tokenMOR } =
+        await loadFixture(openEarlyCloseSession);
+      await time.increaseTo(
+        startOfTheDay(await nowChain()) + BigInt(DAY / SECOND),
+      );
+
+      const [avail] = await sessionRouter.read.withdrawableUserStake([
+        user.account.address,
+        255,
+      ]);
+      expect(avail > 0).to.be.true;
+
+      // reset allowance
+      await tokenMOR.write.approve([sessionRouter.address, 0n], {
+        account: user.account.address,
+      });
+
+      const approval = await getProviderApproval(
+        provider,
+        user.account.address,
+        expectedSession.bidID,
+      );
+      const openSession = await sessionRouter.simulate.openSession(
+        [avail, approval.msg, approval.signature],
+        { account: user.account.address },
+      );
+      await user.writeContract(openSession.request);
+
+      const [avail2] = await sessionRouter.read.withdrawableUserStake([
+        user.account.address,
+        255,
+      ]);
+      expect(avail2).to.be.equal(0n);
+    });
+
+    it("should use remaining staked tokens and allowance for opening session", async function () {
+      const { sessionRouter, user, provider, expectedSession, tokenMOR } =
+        await loadFixture(openEarlyCloseSession);
+      await time.increaseTo(
+        startOfTheDay(await nowChain()) + BigInt(DAY / SECOND),
+      );
+
+      const [avail] = await sessionRouter.read.withdrawableUserStake([
+        user.account.address,
+        255,
+      ]);
+      expect(avail > 0).to.be.true;
+
+      const allowancePart = 1000n;
+      const balanceBefore = await tokenMOR.read.balanceOf([
+        user.account.address,
+      ]);
+
+      // reset allowance
+      await tokenMOR.write.approve([sessionRouter.address, allowancePart], {
+        account: user.account.address,
+      });
+
+      const approval = await getProviderApproval(
+        provider,
+        user.account.address,
+        expectedSession.bidID,
+      );
+      const openSession = await sessionRouter.simulate.openSession(
+        [avail + allowancePart, approval.msg, approval.signature],
+        { account: user.account.address },
+      );
+      await user.writeContract(openSession.request);
+
+      // check all onHold used
+      const [avail2] = await sessionRouter.read.withdrawableUserStake([
+        user.account.address,
+        255,
+      ]);
+      expect(avail2).to.be.equal(0n);
+
+      // check allowance used
+      const balanceAfter = await tokenMOR.read.balanceOf([
+        user.account.address,
+      ]);
+      expect(balanceBefore - balanceAfter).to.be.equal(allowancePart);
+    });
   });
 
   describe("negative cases", function () {
-    it("should error when approval bytes is invalid abi data", async function () {
+    it("should error when approval generated for a different user", async function () {
       const {
         sessionRouter,
         expectedSession: exp,
         user,
         provider,
+      } = await loadFixture(deploySingleBid);
+
+      const { msg, signature } = await getProviderApproval(
+        provider,
+        randomAddress(),
+        exp.bidID,
+      );
+      await catchError(
+        sessionRouter.abi,
+        "ApprovedForAnotherUser",
+        async () => {
+          await sessionRouter.write.openSession([exp.stake, msg, signature], {
+            account: user.account,
+          });
+        },
+      );
+    });
+
+    it("should error when approval bytes is invalid abi data", async function () {
+      const {
+        sessionRouter,
+        expectedSession: exp,
+        user,
       } = await loadFixture(deploySingleBid);
       try {
         await sessionRouter.write.openSession([exp.stake, "0x0", "0x0"], {
@@ -152,7 +383,11 @@ describe("session actions", function () {
         provider,
       } = await loadFixture(deploySingleBid);
 
-      const { msg, signature } = await getProviderApproval(provider, exp.bidID);
+      const { msg, signature } = await getProviderApproval(
+        provider,
+        user.account.address,
+        exp.bidID,
+      );
       const ttl = await sessionRouter.read.SIGNATURE_TTL();
       await time.increase(ttl + 1);
 
@@ -173,6 +408,7 @@ describe("session actions", function () {
 
       const { msg, signature } = await getProviderApproval(
         provider,
+        user.account.address,
         randomBytes32(),
       );
       await catchError(sessionRouter.abi, "BidNotFound", async () => {
@@ -195,7 +431,11 @@ describe("session actions", function () {
         account: provider.account,
       });
 
-      const { msg, signature } = await getProviderApproval(provider, exp.bidID);
+      const { msg, signature } = await getProviderApproval(
+        provider,
+        user.account.address,
+        exp.bidID,
+      );
       await catchError(sessionRouter.abi, "BidNotFound", async () => {
         await sessionRouter.write.openSession([exp.stake, msg, signature], {
           account: user.account,
@@ -211,7 +451,11 @@ describe("session actions", function () {
         provider,
       } = await loadFixture(deploySingleBid);
 
-      const { msg } = await getProviderApproval(provider, exp.bidID);
+      const { msg } = await getProviderApproval(
+        provider,
+        user.account.address,
+        exp.bidID,
+      );
       await catchError(
         sessionRouter.abi,
         "ECDSAInvalidSignatureLength",
@@ -231,7 +475,11 @@ describe("session actions", function () {
         provider,
       } = await loadFixture(deploySingleBid);
 
-      const { msg } = await getProviderApproval(provider, exp.bidID);
+      const { msg } = await getProviderApproval(
+        provider,
+        user.account.address,
+        exp.bidID,
+      );
       const sig = randomBytes(65);
 
       await catchError(
@@ -254,7 +502,11 @@ describe("session actions", function () {
         approveUserFunds,
       } = await loadFixture(deploySingleBid);
 
-      const { msg, signature } = await getProviderApproval(provider, exp.bidID);
+      const { msg, signature } = await getProviderApproval(
+        provider,
+        user.account.address,
+        exp.bidID,
+      );
       await sessionRouter.write.openSession([exp.stake, msg, signature], {
         account: user.account.address,
       });
@@ -277,7 +529,11 @@ describe("session actions", function () {
         approveUserFunds,
       } = await loadFixture(deploySingleBid);
 
-      const appr1 = await getProviderApproval(provider, exp.bidID);
+      const appr1 = await getProviderApproval(
+        provider,
+        user.account.address,
+        exp.bidID,
+      );
       await sessionRouter.write.openSession(
         [exp.stake, appr1.msg, appr1.signature],
         {
@@ -286,7 +542,11 @@ describe("session actions", function () {
       );
 
       await approveUserFunds(exp.stake);
-      const appr2 = await getProviderApproval(provider, exp.bidID);
+      const appr2 = await getProviderApproval(
+        provider,
+        user.account.address,
+        exp.bidID,
+      );
       await sessionRouter.write.openSession(
         [exp.stake, appr2.msg, appr2.signature],
         {
@@ -304,7 +564,11 @@ describe("session actions", function () {
         tokenMOR,
       } = await loadFixture(deploySingleBid);
 
-      const { msg, signature } = await getProviderApproval(provider, exp.bidID);
+      const { msg, signature } = await getProviderApproval(
+        provider,
+        user.account.address,
+        exp.bidID,
+      );
       await catchError(tokenMOR.abi, "ERC20InsufficientAllowance", async () => {
         await sessionRouter.write.openSession(
           [exp.stake * 2n, msg, signature],
@@ -330,7 +594,11 @@ describe("session actions", function () {
         account: user.account,
       });
 
-      const { msg, signature } = await getProviderApproval(provider, exp.bidID);
+      const { msg, signature } = await getProviderApproval(
+        provider,
+        user.account.address,
+        exp.bidID,
+      );
       await catchError(tokenMOR.abi, "ERC20InsufficientBalance", async () => {
         await sessionRouter.write.openSession([stake, msg, signature], {
           account: user.account,
@@ -354,7 +622,11 @@ describe("verify session end time", function () {
     const durationSeconds = BigInt(HOUR / SECOND);
     const stake = await getStake(durationSeconds, exp.pricePerSecond);
 
-    const { msg, signature } = await getProviderApproval(provider, exp.bidID);
+    const { msg, signature } = await getProviderApproval(
+      provider,
+      user.account.address,
+      exp.bidID,
+    );
     const txHash = await sessionRouter.write.openSession(
       [stake, msg, signature],
       { account: user.account },
@@ -389,7 +661,11 @@ describe("verify session end time", function () {
     const stake = await getStake(durationSeconds, exp.pricePerSecond);
     await approveUserFunds(stake);
 
-    const { msg, signature } = await getProviderApproval(provider, exp.bidID);
+    const { msg, signature } = await getProviderApproval(
+      provider,
+      user.account.address,
+      exp.bidID,
+    );
     const txHash = await sessionRouter.write.openSession(
       [stake, msg, signature],
       { account: user.account },
@@ -429,7 +705,11 @@ describe("verify session end time", function () {
 
     await approveUserFunds(stake);
 
-    const { msg, signature } = await getProviderApproval(provider, exp.bidID);
+    const { msg, signature } = await getProviderApproval(
+      provider,
+      user.account.address,
+      exp.bidID,
+    );
     const txHash = await sessionRouter.write.openSession(
       [stake, msg, signature],
       { account: user.account },

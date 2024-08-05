@@ -1,7 +1,7 @@
-import React, { createRef, useContext, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 // import component 👇
 import Drawer from 'react-modern-drawer'
-import { IconHistory, IconArrowUp, IconServer, IconWorld } from '@tabler/icons-react';
+import { IconHistory, IconArrowUp, IconServer, IconInfinity } from '@tabler/icons-react';
 import {
     View,
     ContainerTitle,
@@ -16,7 +16,8 @@ import {
     ChatBlock,
     CustomTextArrea,
     Control,
-    SendBtn
+    SendBtn,
+    LoadingCover
 } from './Chat.styles';
 import { BtnAccent } from '../dashboard/BalanceBlock.styles';
 import { withRouter } from 'react-router-dom';
@@ -27,35 +28,19 @@ import 'react-modern-drawer/dist/index.css'
 import './Chat.css'
 import { ChatHistory } from './ChatHistory';
 import Spinner from 'react-bootstrap/Spinner';
-import OpenSessionModal from './modals/OpenSessionModal';
 import ModelSelectionModal from './modals/ModelSelectionModal';
-
-const colors = [
-    '#1899cb', '#da4d76', '#d66b38', '#d39d00', '#b46fc4', '#269c68', '#86858a'
-];
-
-const getColor = (name) => {
-    if (!name) {
-        return;
-    }
-    return colors[(getHashCode(name) + 1) % colors.length]
-}
-
-const parse = (decodedChunk) => {
-    const lines = decodedChunk.split('\n');
-    const trimmedData = lines.map(line => line.replace(/^data: /, "").trim());
-    const filteredData = trimmedData.filter(line => !["", "[DONE]"].includes(line));
-    const parsedData = filteredData.map(line => JSON.parse(line));
-
-    return parsedData;
-}
+import { parseDataChunk, makeId, getColor, isClosed } from './utils';
+import {Cooldown} from './Cooldown';
 
 let abort = false;
+let cancelScroll = false;
+const userMessage = { user: 'Me', role: "user", icon: "M", color: "#20dc8e" };
 
 const Chat = (props) => {
     const chatBlockRef = useRef<null | HTMLDivElement>(null);
 
     const [value, setValue] = useState("");
+    const [isLoading, setIsLoading] = useState(true);
 
     const [sessions, setSessions] = useState<any>();
 
@@ -65,63 +50,224 @@ const Chat = (props) => {
     const [activeSession, setActiveSession] = useState<any>(undefined);
 
     const [chainData, setChainData] = useState<any>(null);
+    const [sessionTitles, setSessionTitles] = useState<{ sessionId: string, title: string }[]>([]);
 
-    const [openSessionModal, setOpenSessionModal] = useState(false);
     const [openChangeModal, setOpenChangeModal] = useState(false);
+    const [isReadonly, setIsReadonly] = useState(false);
 
     const [selectedBid, setSelectedBid] = useState<any>(null);
+    const [selectedModel, setSelectedModel] = useState<any>(undefined);
+    const [requiredStake, setRequiredStake] = useState<{ min: Number, max: number }>({ min: 0, max: 0 })
+    const [balances, setBalances] = useState<{ eth: Number, mor: number }>({ eth: 0, mor: 0});
 
-    const modelName = selectedBid?.Model?.Name || "Model";
+    const modelName = selectedModel?.Name || "Model";
+    const isLocal = selectedModel?.useLocal;
 
-    const isLocal = selectedBid?.Provider == 'Local';
     const providerAddress = isLocal ? "(local)" : selectedBid?.Provider ? abbreviateAddress(selectedBid?.Provider, 4) : null;
+    const isDisabled = (!activeSession && !isLocal) || isReadonly;
+    const isEnoughFunds = Number(balances.mor) > Number(requiredStake.min);
 
     useEffect(() => {
-        props.getMetaInfo().then((meta) => {
+        (async () => {
+            const [meta, chainData, titles, userBalances] = await Promise.all([
+                props.getMetaInfo(),
+                props.getModelsData(),
+                props.client.getTitles(),
+                props.getBalances()]);
+
+            setBalances(userBalances)
+
+            setSessionTitles(titles.map(t => ({ sessionId: t._id, title: t.title })));
+
+            const sessions = await props.getSessionsByUser(props.address);
+            const openSessions = sessions.filter(s => !isClosed(s));
+
+            if (openSessions.length) {
+                const latestSession = openSessions[0];
+                const latestSessionModel = (chainData.models.find((m: any) => m.Id == latestSession.ModelAgentId));
+                if (latestSessionModel) {
+                    setSelectedModel(latestSessionModel);
+                }
+
+                const openBid = latestSessionModel?.bids?.find(b => b.Id == latestSession.BidID);
+                if (openBid) {
+                    setSelectedBid(openBid);
+                }
+                await onSetActiveSession({ sessionId: latestSession.Id, endDate: latestSession.EndsAt })
+            }
+            else {
+                const localModel = (chainData?.models?.find((m: any) => m.hasLocal));
+                if (localModel) {
+                    setSelectedModel({ ...localModel, useLocal: true });
+                }
+            }
+
             setMeta(meta);
-        });
-        props.getModelsData().then((chainData) => {
-            setChainData(chainData);
-            const defaultSelectedBid = (chainData.models
-                .find((x: any) => x.bids.find(b => b.Provider == 'Local')) as any).bids.find(b => b.Provider == 'Local');
-            setSelectedBid(defaultSelectedBid);
-        });
-        refreshSessions();
+            setChainData(chainData)
+            setSessions(sessions);
+        })().then(() => {
+            setIsLoading(false);
+        })
     }, [])
 
     const [messages, setMessages] = useState<any>([]);
 
     const [isOpen, setIsOpen] = useState(false);
+
     const toggleDrawer = () => {
         setIsOpen((prevState) => !prevState)
     }
 
-    const scrollToBottom = () => {
-        chatBlockRef.current?.scroll({ top: chatBlockRef.current.scrollHeight, behavior: 'smooth' })
+    const selectLocalModel = () => {
+        const localModel = (chainData?.models?.find((m: any) => m.hasLocal));
+        if (localModel) {
+            setSelectedModel({ ...localModel, useLocal: true });
+        }
     }
 
-    const onOpenSession = ({ stake }) => {
-        console.log("open-session", stake);
+    const scrollToBottom = () => {
+        if (!cancelScroll) {
+            chatBlockRef.current?.scroll({ top: chatBlockRef.current.scrollHeight, behavior: 'smooth' })
+        }
+    }
 
-        props.onOpenSession({ stake, selectedBid }).then((res) => {
-            if (!res) {
+    const calculateAcceptableDuration = (pricePerSecond: number, balance: number, stakingInfo) => {
+        const delta = 60; // 1 minute
+
+        if(balance > requiredStake.max) {
+            return 24 * 60 * 60; // 1 day in seconds
+        }
+
+        const targetDuration = Math.round((balance * Number(stakingInfo.budget)) / (Number(stakingInfo.supply) * pricePerSecond))
+        
+        if(targetDuration - delta < 5 * 60) {
+            return 5 * 60;
+        }
+
+        return (targetDuration - (targetDuration % 60)) - delta;
+    }
+
+    const onOpenSession = async () => {
+        setIsLoading(true);
+
+        const prices = selectedModel.bids.map(x => x.PricePerSecond);
+        const maxPrice = Math.max(prices);
+        const duration = calculateAcceptableDuration(maxPrice, Number(balances.mor), meta);
+
+        console.log("open-session", duration);
+
+        try {
+            const openedSession = await props.onOpenSession({ modelId: selectedModel.Id, duration });
+            if (!openedSession) {
                 return;
             }
-            setActiveSession(res);
-            refreshSessions();
-        })
+
+            setActiveSession({ sessionId: openedSession });
+            await refreshSessions();
+        }
+        finally {
+            setIsLoading(false);
+        }
     }
 
-    const refreshSessions = () => {
-        return props.getSessionsByUser(props.address).then(setSessions);
+    const onSetActiveSession = async (session) => {
+        setActiveSession(session);
+        if (session) {
+            try {
+                const history = await props.client.getChatHistory(session.sessionId);
+                if (history.length) {
+                    setMessages(history[0].messages || []);
+                }
+            }
+            catch (e) {
+                props.toasts.toast('error', 'Failed to load chat history');
+            }
+        }
     }
 
-    const closeSession = (sessionId: string) => {
-        props.closeSession(sessionId).then(refreshSessions);
+    const refreshSessions = async () => {
+        const sessions = await props.getSessionsByUser(props.address);
+        setSessions(sessions);
+    }
+
+    const closeSession = async (sessionId: string) => {
+        await props.closeSession(sessionId);
+        await refreshSessions();
+
+        if (activeSession.sessionId == sessionId) {
+            selectLocalModel();
+            setMessages([]);
+        }
+    }
+
+    const selectSession = async (sessionId: string) => {
+        const findBid = (id) => {
+            return (chainData.models
+                .find((x: any) => x.bids.find(b => b.Id == id)) as any)
+                .bids.find(b => b.Id == id);
+        }
+
+        console.log("select-session", sessionId)
+        toggleDrawer();
+
+        const openSessions = sessions.filter(s => !isClosed(s));
+        const openSession = openSessions.find(s => s.Id == sessionId);
+
+        if (!openSession) {
+            setIsReadonly(true)
+
+            const closedSession = sessions.find(s => s.Id == sessionId);
+            if (closedSession) {
+                await onSetActiveSession({ sessionId: closedSession.Id  })
+                const selectedBid = findBid(closedSession.BidID);
+                setSelectedBid(selectedBid);
+                const selectedModel = chainData.models.find((m: any) => m.Id == closedSession.ModelAgentId);
+                setSelectedModel(selectedModel);
+            }
+            return;
+        }
+        else {
+            setIsReadonly(false)
+            await onSetActiveSession({ sessionId: openSession.Id, endDate: openSession.EndsAt  })
+            const selectedBid = findBid(openSession.BidID);
+            setSelectedBid(selectedBid);
+            const selectedModel = chainData.models.find((m: any) => m.Id == openSession.ModelAgentId);
+            setSelectedModel(selectedModel);
+        }
+    }
+
+    const registerScrollEvent = (register) => {
+        cancelScroll = false;
+        const handler = (event: any) => {
+            const isUp = event.wheelDelta ? event.wheelDelta > 0 : event.deltaY < 0;
+            if (isUp) {
+                cancelScroll = true;
+            }
+            else {
+                if (!chatBlockRef?.current || !cancelScroll) {
+                    return;
+                }
+                // Return scrolling if scrolled to div end 
+                if ((chatBlockRef.current.offsetHeight + chatBlockRef.current.scrollTop) >= chatBlockRef.current.scrollHeight) {
+                    cancelScroll = false;
+                }
+            }
+        };
+
+        if (register) {
+            chatBlockRef?.current?.addEventListener('wheel', handler);
+        }
+        else {
+            chatBlockRef?.current?.removeEventListener('wheel', handler);
+        }
     }
 
     const call = async (message) => {
+        scrollToBottom();
         const chatHistory = messages.map(m => ({ role: m.role, content: m.text }))
+
+        let memoState = [...messages, { id: makeId(6), text: value, ...userMessage }];
+        setMessages(memoState);
 
         const headers = {
             "Accept": "application/json"
@@ -129,12 +275,11 @@ const Chat = (props) => {
         if (!isLocal) {
             headers["session_id"] = activeSession.sessionId;
         }
-        
+
         const response = await fetch(`${props.config.chain.localProxyRouterUrl}/v1/chat/completions`, {
             method: 'POST',
             headers,
             body: JSON.stringify({
-                model: "llama2:latest",
                 stream: true,
                 messages: [
                     ...chatHistory,
@@ -155,68 +300,140 @@ const Chat = (props) => {
 
         if (!response.ok) {
             console.log("Failed", await response.json())
+            props.toasts.toast('error', 'Failed to send prompt');
+            return;
         }
 
         const textDecoder = new TextDecoder();
 
-        if (response.body != null) {
-            const reader = response.body.getReader()
+        if (!response.body) {
+            console.error("Body is missed");
+            return;
+        }
 
-            let memoState = [...messages, { id: "some", user: 'Me', text: value, role: "user", icon: "M", color: "#20dc8e" }];
+        const reader = response.body.getReader()
+        registerScrollEvent(true);
 
+        try {
             while (true) {
                 if (abort) {
                     await reader.cancel();
                     abort = false;
                 }
+
                 const { value, done } = await reader.read();
                 if (done) {
                     setIsSpinning(false);
                     break;
                 }
+
                 const decodedString = textDecoder.decode(value, { stream: true });
-                const parts = parse(decodedString);
+                const parts = parseDataChunk(decodedString);
                 parts.forEach(part => {
                     if (!part?.id) {
                         return;
                     }
                     const message = memoState.find(m => m.id == part.id);
                     const otherMessages = memoState.filter(m => m.id != part.id);
-                    const text = `${message?.text || ''}${part?.choices[0]?.delta?.content || ''}`;
+                    const text = `${message?.text || ''}${part?.choices[0]?.delta?.content || ''}`.replace("<|im_start|>", "").replace("<|im_end|>", "");
                     const result = [...otherMessages, { id: part.id, user: modelName, role: "assistant", text: text, icon: modelName.toUpperCase()[0], color: getColor(modelName.toUpperCase()[0]) }];
                     memoState = result;
                     setMessages(result);
                     scrollToBottom();
                 })
             }
-
         }
+        catch (e) {
+            console.error(e);
+        }
+
+        console.log("Flush to storage");
+        await props.client.saveChatHistory({ sessionId: activeSession.sessionId, messages: memoState });
+        console.log("Stored succesfully");
+
+        registerScrollEvent(false);
+        return memoState;
     }
 
     const handleSubmit = () => {
+        if (!value) {
+            return;
+        }
+
+        if (abort) {
+            abort = false;
+        }
+
         if (isSpinning) {
             abort = true;
             setIsSpinning(false);
             return;
         }
 
-        if (!value) {
-            return;
+        if (!isLocal && messages.length === 0) {
+            const title = { sessionId: activeSession.sessionId, title: value };
+            props.client.saveTitle(title).then(() => {
+                setSessionTitles([...sessionTitles, title]);
+            }).catch(console.error);
         }
 
         setIsSpinning(true);
-        setMessages([...messages, { id: "some", user: 'Me', text: value, role: "user", icon: "M", color: "#20dc8e" }]);
-        call(value).then(() => {
-            setIsSpinning(false);
-        });
+        call(value).finally(() => setIsSpinning(false));
         setValue("");
-        scrollToBottom();
     }
 
-    const price = selectedBid?.PricePerSecond ? selectedBid?.PricePerSecond / (10 ** 18) : 0;
+
+    const calculateStake = (pricePerSecond, durationInMin) => {
+        const totalCost = pricePerSecond * durationInMin * 60;
+        const stake = totalCost * Number(meta.supply) / Number(meta.budget);
+        return stake;
+    }
+
+    const onBidSelect = ({ modelId, isLocal }) => {
+        // TODO: Add support for custom Bid.
+        setMessages([]);
+        setActiveSession(undefined);
+        setIsReadonly(false);
+        abort = true;
+
+        if (isLocal) {
+            debugger;
+            const localModel = (chainData?.models?.find((m: any) => m.hasLocal));
+            if (localModel) {
+                setSelectedModel({ ...localModel, useLocal: true });
+            }
+            return;
+        }
+
+        const selectedModel = chainData.models.find((m: any) => m.Id == modelId);
+        setSelectedModel(selectedModel);
+
+        const openSessions = sessions.filter(s => !isClosed(s));
+        const openModelSession = openSessions.find(s => s.ModelAgentId == modelId);
+
+        if (openModelSession) {
+            const selectedBid = selectedModel.bids.find(b => b.Id == openModelSession.BidID);
+            if (selectedBid) {
+                setSelectedBid(selectedBid);
+            }
+            onSetActiveSession({ sessionId: openModelSession.Id })
+            return;
+        }
+
+        const prices = selectedModel.bids.map(x => x.PricePerSecond);
+        const maxPrice = Math.max(prices);
+
+        setRequiredStake({ min: calculateStake(maxPrice, 5), max: calculateStake(maxPrice, 24 * 60) })
+    }
 
     return (
         <>
+            {
+                isLoading &&
+                <LoadingCover>
+                    <Spinner style={{ width: '5rem', height: '5rem' }} animation="border" variant="success" />
+                </LoadingCover>
+            }
             <Drawer
                 open={isOpen}
                 onClose={toggleDrawer}
@@ -224,7 +441,11 @@ const Chat = (props) => {
                 className='history-drawer'
             >
                 <ChatHistory
+                    sessionTitles={sessionTitles}
                     sessions={sessions}
+                    models={chainData?.models || []}
+                    onSelectSession={selectSession}
+                    refreshSessions={refreshSessions}
                     onCloseSession={closeSession} />
             </Drawer>
             <View>
@@ -234,27 +455,30 @@ const Chat = (props) => {
                         <div className='d-flex' style={{ alignItems: 'center' }}>
                             <div className='d-flex model-selector'>
                                 <div className='model-selector__info'>
-                                    <h3>{selectedBid?.Model?.Name}</h3>
+                                    <h3>{modelName}</h3>
                                     {
                                         isLocal ?
                                             (
                                                 <>
                                                     <span>(local)</span>
-                                                    <span>0 MOR/sec</span>
                                                 </>
                                             )
                                             : (
                                                 <>
                                                     <span>{providerAddress}</span>
-                                                    <span>{price} MOR/sec</span>
                                                 </>
                                             )
                                     }
                                 </div>
-                                <div className='model-selector__icons'>
-                                    <IconServer width={'1.5rem'} color='#20dc8e'></IconServer>
-                                    <IconWorld width={'1.5rem'}></IconWorld>
-                                </div>
+                                {
+
+                                    !isLocal && activeSession?.endDate && (
+                                        <div className='model-selector__icons'>
+                                            <Cooldown endDate={activeSession?.endDate} />
+                                        </div>
+                                    )
+                                }
+
                             </div>
                             <BtnAccent className='change-modal' onClick={() => setOpenChangeModal(true)}>Change Model</BtnAccent>
                         </div>
@@ -262,10 +486,10 @@ const Chat = (props) => {
                 </ContainerTitle>
                 <ChatTitleContainer>
                     <ChatAvatar>
-                        <Avatar style={{ color: 'white' }} color={getColor(selectedBid?.Model?.Name[0])}>
-                            {selectedBid?.Model?.Name[0]}
+                        <Avatar style={{ color: 'white' }} color={getColor(modelName[0])}>
+                            {modelName[0]}
                         </Avatar>
-                        <div style={{ marginLeft: '10px' }}>{selectedBid?.Model?.Name}</div>
+                        <div style={{ marginLeft: '10px' }}>{modelName}</div>
                     </ChatAvatar>
                     <div>Provider: {isLocal ? "(local)" : providerAddress}</div>
                     <div>
@@ -279,27 +503,35 @@ const Chat = (props) => {
                     <ChatBlock ref={chatBlockRef} className={!messages?.length ? 'createSessionMode' : null}>
                         {
                             messages?.length ? messages.map(x => (
-                                <Message key={makeid(6)} message={x}></Message>
+                                <Message key={makeId(6)} message={x}></Message>
                             ))
-                                : (!isLocal && !activeSession && <div className='session-container' style={{ width: '400px' }}>
-                                    <div className='session-title'>To perform promt please create session and choose desired session time</div>
-                                    <div className='session-title'>Session will be created for selected Model</div>
+                                : (!isLocal && !activeSession && 
+                                <div className='session-container' style={{ width: '400px' }}>
+                                    {
+                                        isEnoughFunds ?
+                                        <>
+                                            <div className='session-title'>Staked MOR funds will be reserved to start session</div>
+                                            <div className='session-title'>Session may last from 5 mins to 24 hours depending on staked funds (min: {(Number(requiredStake.min) / 10 ** 18).toFixed(2)}, max: {(Number(requiredStake.max) / 10 ** 18).toFixed(2)} MOR)</div>
+                                        </> :
+                                        <div className='session-title'>To start session required balance should be at least {(Number(requiredStake.min) / 10 ** 18).toFixed(2)} MOR</div>
+                                    }
                                     <div>
                                         <BtnAccent
                                             data-modal="receive"
                                             data-testid="receive-btn"
                                             styles={{ marginLeft: '0' }}
-                                            onClick={() => setOpenSessionModal(true)}
-                                            block
+                                            block={requiredStake.min}
+                                            onClick={onOpenSession}
+                                            disabled={!isEnoughFunds}
                                         >
-                                            Create Session
+                                            Start
                                         </BtnAccent></div>
                                 </div>)
                         }
                     </ChatBlock>
                     <Control>
                         <CustomTextArrea
-                            disabled={!activeSession}
+                            disabled={isDisabled}
                             onKeyPress={(e) => {
                                 if (e.key === 'Enter') {
                                     e.preventDefault();
@@ -308,35 +540,20 @@ const Chat = (props) => {
                             }}
                             value={value}
                             onChange={ev => setValue(ev.target.value)}
-                            // style={{ background: 'transparent', boxSizing: 'border-box'}}
-                            placeholder={"Ask me anything..."}
+                            placeholder={isReadonly ? "Session is closed. Chat in ReadOnly Mode" : "Ask me anything..."}
                             minRows={1}
                             maxRows={6} />
-                        <SendBtn disabled={!activeSession} onClick={handleSubmit}>{
+                        <SendBtn disabled={isDisabled} onClick={handleSubmit}>{
                             isSpinning ? <Spinner animation="border" /> : <IconArrowUp size={"26px"}></IconArrowUp>
                         }</SendBtn>
                     </Control>
                 </Container>
             </View>
-            <OpenSessionModal
-                pricePerSecond={selectedBid?.PricePerSecond}
-                {...meta}
-                isActive={openSessionModal}
-                triggerOpen={(data) => {
-                    setOpenSessionModal(false)
-                    onOpenSession(data);
-                }}
-                handleClose={() => setOpenSessionModal(false)} />
             <ModelSelectionModal
                 models={(chainData as any)?.models}
                 isActive={openChangeModal}
-                onChangeModel={(id) => {
-                    const defaultSelectedBid = (chainData.models
-                        .find((x: any) => x.bids.find(b => b.Id == id)) as any)
-                        .bids.find(b => b.Id == id);
-
-                    setSelectedBid(defaultSelectedBid);
-                    setMessages([]);
+                onChangeModel={(eventData) => {
+                    onBidSelect(eventData);
                 }}
                 handleClose={() => setOpenChangeModal(false)} />
         </>
@@ -354,28 +571,6 @@ const Message = ({ message }) => {
                 <MessageBody>{message.text}</MessageBody>
             </div>
         </div>)
-}
-
-function makeid(length) {
-    let result = '';
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    const charactersLength = characters.length;
-    let counter = 0;
-    while (counter < length) {
-        result += characters.charAt(Math.floor(Math.random() * charactersLength));
-        counter += 1;
-    }
-    return result;
-}
-
-function getHashCode(string) {
-    var hash = 0;
-    for (var i = 0; i < string.length; i++) {
-        var code = string.charCodeAt(i);
-        hash = ((hash << 5) - hash) + code;
-        hash = hash & hash; // Convert to 32bit integer
-    }
-    return Math.abs(hash);
 }
 
 export default withRouter(withChatState(Chat));

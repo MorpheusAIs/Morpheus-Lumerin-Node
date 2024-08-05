@@ -1,13 +1,191 @@
 basePath: /
 definitions:
-  httphandlers.SetupWalletReqBody:
+  aiengine.LocalModel:
     properties:
-      privateKey:
+      id:
         type: string
-    required:
-    - privateKey
+      model:
+        type: string
+      name:
+        type: string
     type: object
-  proxyapi.ConfigResponse:
+  lib.BigInt:
+    type: object
+  proxyapi.ChatCompletionMessage:
+    properties:
+      content:
+        type: string
+      multiContent:
+        items:
+          $ref: '#/definitions/proxyapi.ChatMessagePart'
+        type: array
+      name:
+        description: |-
+          This property isn't in the official documentation, but it's in
+          the documentation for the official library for python:
+          - https://github.com/openai/openai-python/blob/main/chatml.md
+          - https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
+        type: string
+      role:
+        type: string
+      tool_call_id:
+        description: For Role=tool prompts this should be set to the ID given in the
+          assistant's prior request to call a tool.
+        type: string
+    type: object
+  proxyapi.ChatCompletionResponseFormat:
+    properties:
+      type:
+        type: string
+    type: object
+  proxyapi.ChatMessageImageURL:
+    properties:
+      detail:
+        $ref: '#/definitions/proxyapi.ImageURLDetail'
+      url:
+        type: string
+    type: object
+  proxyapi.ChatMessagePart:
+    properties:
+      image_url:
+        $ref: '#/definitions/proxyapi.ChatMessageImageURL'
+      text:
+        type: string
+      type:
+        $ref: '#/definitions/proxyapi.ChatMessagePartType'
+    type: object
+  proxyapi.ChatMessagePartType:
+    enum:
+    - text
+    - image_url
+    type: string
+    x-enum-varnames:
+    - ChatMessagePartTypeText
+    - ChatMessagePartTypeImageURL
+  proxyapi.ImageURLDetail:
+    enum:
+    - high
+    - low
+    - auto
+    type: string
+    x-enum-varnames:
+    - ImageURLDetailHigh
+    - ImageURLDetailLow
+    - ImageURLDetailAuto
+  proxyapi.OpenAiCompletitionRequest:
+    properties:
+      frequency_penalty:
+        type: number
+      function_call:
+        description: 'Deprecated: use ToolChoice instead.'
+      logit_bias:
+        additionalProperties:
+          type: integer
+        description: |-
+          LogitBias is must be a token id string (specified by their token ID in the tokenizer), not a word string.
+          incorrect: `"logit_bias":{"You": 6}`, correct: `"logit_bias":{"1639": 6}`
+          refs: https://platform.openai.com/docs/api-reference/chat/create#chat/create-logit_bias
+        type: object
+      logprobs:
+        description: |-
+          LogProbs indicates whether to return log probabilities of the output tokens or not.
+          If true, returns the log probabilities of each output token returned in the content of message.
+          This option is currently not available on the gpt-4-vision-preview model.
+        type: boolean
+      max_tokens:
+        type: integer
+      messages:
+        items:
+          $ref: '#/definitions/proxyapi.ChatCompletionMessage'
+        type: array
+      model:
+        type: string
+      "n":
+        type: integer
+      presence_penalty:
+        type: number
+      response_format:
+        $ref: '#/definitions/proxyapi.ChatCompletionResponseFormat'
+      seed:
+        type: integer
+      stop:
+        items:
+          type: string
+        type: array
+      stream:
+        type: boolean
+      temperature:
+        type: number
+      tool_choice:
+        description: This can be either a string or an ToolChoice object.
+      top_logprobs:
+        description: |-
+          TopLogProbs is an integer between 0 and 5 specifying the number of most likely tokens to return at each
+          token position, each with an associated log probability.
+          logprobs must be set to true if this parameter is used.
+        type: integer
+      top_p:
+        type: number
+      user:
+        type: string
+    type: object
+  structs.CreateBidRequest:
+    properties:
+      modelID:
+        type: string
+      pricePerSecond:
+        $ref: '#/definitions/lib.BigInt'
+    required:
+    - modelID
+    - pricePerSecond
+    type: object
+  structs.CreateModelRequest:
+    properties:
+      fee:
+        $ref: '#/definitions/lib.BigInt'
+      id:
+        type: string
+      ipfsID:
+        type: string
+      name:
+        maxLength: 64
+        minLength: 1
+        type: string
+      stake:
+        $ref: '#/definitions/lib.BigInt'
+      tags:
+        items:
+          type: string
+        maxItems: 64
+        minItems: 1
+        type: array
+    required:
+    - fee
+    - ipfsID
+    - name
+    - stake
+    - tags
+    type: object
+  structs.CreateProviderRequest:
+    properties:
+      endpoint:
+        type: string
+      stake:
+        $ref: '#/definitions/lib.BigInt'
+    required:
+    - endpoint
+    - stake
+    type: object
+  structs.OpenSessionRequest:
+    type: object
+  structs.OpenSessionWithDurationRequest:
+    properties:
+      sessionDuration:
+        $ref: '#/definitions/lib.BigInt'
+    type: object
+  structs.SendRequest:
+    type: object
+  system.ConfigResponse:
     properties:
       commit:
         type: string
@@ -16,7 +194,14 @@ definitions:
       version:
         type: string
     type: object
-  proxyapi.HealthCheckResponse:
+  system.FD:
+    properties:
+      id:
+        type: string
+      path:
+        type: string
+    type: object
+  system.HealthCheckResponse:
     properties:
       status:
         type: string
@@ -25,39 +210,14 @@ definitions:
       version:
         type: string
     type: object
-  proxyapi.PromptMessage:
+  walletapi.SetupWalletReqBody:
     properties:
-      content:
-        type: string
-      role:
-        type: string
-    type: object
-  proxyapi.PromptRequest:
-    properties:
-      messages:
+      privateKey:
         items:
-          $ref: '#/definitions/proxyapi.PromptMessage'
+          type: integer
         type: array
-      model:
-        type: string
-      stream:
-        type: boolean
-    type: object
-  rpcproxy.OpenSessionRequest:
-    properties:
-      approval:
-        type: string
-      approvalSig:
-        type: string
-      stake:
-        type: string
-    type: object
-  rpcproxy.SendRequest:
-    properties:
-      amount:
-        type: string
-      to:
-        type: string
+    required:
+    - privateKey
     type: object
 externalDocs:
   description: OpenAPI
@@ -88,6 +248,7 @@ paths:
       summary: Get Allowance for MOR
       tags:
       - wallet
+  /blockchain/approve:
     post:
       description: Approve MOR allowance for spender
       parameters:
@@ -124,6 +285,67 @@ paths:
       summary: Get ETH and MOR balance
       tags:
       - wallet
+  /blockchain/bids:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Bid
+        in: body
+        name: bid
+        required: true
+        schema:
+          $ref: '#/definitions/structs.CreateBidRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Creates bid in blockchain
+      tags:
+      - wallet
+  /blockchain/bids/:id/session:
+    post:
+      consumes:
+      - application/json
+      description: Full flow to open a session by bidId
+      parameters:
+      - description: Open session
+        in: body
+        name: opensession
+        required: true
+        schema:
+          $ref: '#/definitions/structs.OpenSessionWithDurationRequest'
+      - description: Bid ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Open Session by bidId in blockchain
+      tags:
+      - sessions
+  /blockchain/latestBlock:
+    get:
+      description: Get latest block number from blockchain
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Get Latest Block
+      tags:
+      - wallet
   /blockchain/models:
     get:
       description: Get models list from blokchain
@@ -139,19 +361,39 @@ paths:
       summary: Get models list
       tags:
       - wallet
-  /blockchain/models/{id}/bids:
-    get:
-      description: Get bids from blockchain by model agent
+    post:
+      consumes:
+      - application/json
       parameters:
-      - description: Offset
-        in: query
-        name: offset
-        type: string
-      - description: Limit
-        in: query
-        name: limit
-        type: string
-      - description: ModelAgent ID
+      - description: Model
+        in: body
+        name: model
+        required: true
+        schema:
+          $ref: '#/definitions/structs.CreateModelRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Creates model in blockchain
+      tags:
+      - wallet
+  /blockchain/models/:id/session:
+    post:
+      consumes:
+      - application/json
+      description: Full flow to open a session by modelId
+      parameters:
+      - description: Open session
+        in: body
+        name: opensession
+        required: true
+        schema:
+          $ref: '#/definitions/structs.OpenSessionWithDurationRequest'
+      - description: Model ID
         in: path
         name: id
         required: true
@@ -162,12 +404,10 @@ paths:
         "200":
           description: OK
           schema:
-            items:
-              type: object
-            type: array
-      summary: "Get Bids by\tModel Agent"
+            type: object
+      summary: Open Session by ModelID in blockchain
       tags:
-      - wallet
+      - sessions
   /blockchain/providers:
     get:
       description: Get providers list from blokchain
@@ -181,6 +421,26 @@ paths:
               type: object
             type: array
       summary: Get providers list
+      tags:
+      - wallet
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Provider
+        in: body
+        name: provider
+        required: true
+        schema:
+          $ref: '#/definitions/structs.CreateProviderRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Creates or updates provider in blockchain
       tags:
       - wallet
   /blockchain/providers/{id}/bids:
@@ -212,6 +472,27 @@ paths:
       summary: Get Bids by Provider
       tags:
       - wallet
+  /blockchain/providers/{id}/bids/active:
+    get:
+      description: Get bids from blockchain by provider
+      parameters:
+      - description: Provider ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: object
+            type: array
+      summary: Get Bids by Provider
+      tags:
+      - wallet
   /blockchain/send/eth:
     post:
       description: Send Eth to address
@@ -221,7 +502,7 @@ paths:
         name: sendeth
         required: true
         schema:
-          $ref: '#/definitions/rpcproxy.SendRequest'
+          $ref: '#/definitions/structs.SendRequest'
       produces:
       - application/json
       responses:
@@ -241,7 +522,7 @@ paths:
         name: sendmor
         required: true
         schema:
-          $ref: '#/definitions/rpcproxy.SendRequest'
+          $ref: '#/definitions/structs.SendRequest'
       produces:
       - application/json
       responses:
@@ -294,7 +575,7 @@ paths:
         name: opensession
         required: true
         schema:
-          $ref: '#/definitions/rpcproxy.OpenSessionRequest'
+          $ref: '#/definitions/structs.OpenSessionRequest'
       produces:
       - application/json
       responses:
@@ -383,8 +664,23 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/proxyapi.ConfigResponse'
+            $ref: '#/definitions/system.ConfigResponse'
       summary: Get Config
+      tags:
+      - healthcheck
+  /files:
+    get:
+      description: Returns opened files
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/system.FD'
+            type: array
+      summary: Get files
       tags:
       - healthcheck
   /healthcheck:
@@ -396,11 +692,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/proxyapi.HealthCheckResponse'
+            $ref: '#/definitions/system.HealthCheckResponse'
       summary: Healthcheck example
       tags:
       - healthcheck
-  /proxy/sessions/${id}/providerClaim:
+  /proxy/sessions/{id}/providerClaim:
     post:
       description: Claim provider balance from session
       parameters:
@@ -409,7 +705,7 @@ paths:
         name: claim
         required: true
         schema:
-          $ref: '#/definitions/rpcproxy.SendRequest'
+          $ref: '#/definitions/structs.SendRequest'
       - description: Session ID
         in: path
         name: id
@@ -425,7 +721,7 @@ paths:
       summary: Claim Provider Balance
       tags:
       - sessions
-  /proxy/sessions/${id}/providerClaimableBalance:
+  /proxy/sessions/{id}/providerClaimableBalance:
     get:
       description: Get provider claimable balance from session
       parameters:
@@ -466,7 +762,7 @@ paths:
         name: prompt
         required: true
         schema:
-          $ref: '#/definitions/proxyapi.PromptRequest'
+          $ref: '#/definitions/proxyapi.OpenAiCompletitionRequest'
       - description: Session ID
         in: header
         name: session_id
@@ -479,6 +775,20 @@ paths:
           schema:
             type: object
       summary: Send Local Or Remote Prompt
+      tags:
+      - wallet
+  /v1/models:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/aiengine.LocalModel'
+            type: array
+      summary: Get local models
       tags:
       - wallet
   /wallet:
@@ -502,7 +812,7 @@ paths:
         name: privatekey
         required: true
         schema:
-          $ref: '#/definitions/httphandlers.SetupWalletReqBody'
+          $ref: '#/definitions/walletapi.SetupWalletReqBody'
       produces:
       - application/json
       responses:

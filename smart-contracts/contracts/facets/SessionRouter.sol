@@ -4,13 +4,15 @@ pragma solidity ^0.8.24;
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import { MessageHashUtils } from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import { KeySet, Uint256Set } from "../libraries/KeySet.sol";
-import { AppStorage, Session, Bid, OnHold, Pool } from "../AppStorage.sol";
+import { AppStorage, Session, Bid, OnHold, Pool, Provider, PROVIDER_REWARD_LIMITER_PERIOD, ProviderModelStats, ModelStats } from "../AppStorage.sol";
 import { LibOwner } from "../libraries/LibOwner.sol";
+import { LibSD } from "../libraries/LibSD.sol";
 import { LinearDistributionIntervalDecrease } from "../libraries/LinearDistributionIntervalDecrease.sol";
 
 contract SessionRouter {
   using KeySet for KeySet.Set;
   using Uint256Set for Uint256Set.Set;
+  using LibSD for LibSD.SD;
 
   AppStorage internal s;
 
@@ -24,15 +26,18 @@ contract SessionRouter {
   event SessionClosed(address indexed userAddress, bytes32 indexed sessionId, address indexed providerId);
 
   // errors
-  error NotUserOrProvider();
   error NotEnoughWithdrawableBalance(); // means that there is not enough funds at all or some funds are still locked
+  error WithdrawableBalanceLimitByStakeReached(); // means that user can't withdraw more funds because of the limit which equals to the stake
   error ProviderSignatureMismatch();
   error SignatureExpired();
+  error WrongChaidId();
   error DuplicateApproval();
+  error ApprovedForAnotherUser(); // means that approval generated for another user address, protection from front-running
 
   error SessionTooShort();
   error SessionNotFound();
   error SessionAlreadyClosed();
+  error SessionNotClosed();
 
   error BidNotFound();
   error CannotDecodeAbi();
@@ -109,11 +114,17 @@ contract SessionRouter {
     bytes memory providerApproval,
     bytes memory signature
   ) external returns (bytes32 sessionId) {
-    address sender = msg.sender;
-
     // reverts without specific error if cannot decode abi
-    (bytes32 bidId, uint128 timestampMs) = abi.decode(providerApproval, (bytes32, uint128));
-
+    (bytes32 bidId, uint256 chainId, address user, uint128 timestampMs) = abi.decode(
+      providerApproval,
+      (bytes32, uint256, address, uint128)
+    );
+    if (user != msg.sender) {
+      revert ApprovedForAnotherUser();
+    }
+    if (chainId != block.chainid) {
+      revert WrongChaidId();
+    }
     if (timestampMs / 1000 < block.timestamp - SIGNATURE_TTL) {
       revert SignatureExpired();
     }
@@ -137,11 +148,11 @@ contract SessionRouter {
       revert SessionTooShort();
     }
 
-    sessionId = keccak256(abi.encodePacked(sender, bid.provider, _stake, block.number));
+    sessionId = keccak256(abi.encodePacked(msg.sender, bid.provider, _stake, s.sessionNonce++));
     s.sessions.push(
       Session({
         id: sessionId,
-        user: sender,
+        user: msg.sender,
         provider: bid.provider,
         modelAgentId: bid.modelAgentId,
         bidID: bidId,
@@ -158,23 +169,35 @@ contract SessionRouter {
 
     uint256 sessionIndex = s.sessions.length - 1;
     s.sessionMap[sessionId] = sessionIndex;
-    s.userSessions[sender].push(sessionIndex);
+    s.userSessions[msg.sender].push(sessionIndex);
     s.providerSessions[bid.provider].push(sessionIndex);
     s.modelSessions[bid.modelAgentId].push(sessionIndex);
 
-    s.userActiveSessions[sender].insert(sessionIndex);
+    s.userActiveSessions[msg.sender].insert(sessionIndex);
     s.providerActiveSessions[bid.provider].insert(sessionIndex);
     s.activeSessionsCount++;
 
-    emit SessionOpened(sender, sessionId, bid.provider);
-    s.token.transferFrom(sender, address(this), _stake); // errors with Insufficient Allowance if not approved
+    emit SessionOpened(msg.sender, sessionId, bid.provider);
+
+    // try to use locked stake first, but limit iterations to 20
+    // if user has more than 20 onHold entries, they will have to use withdrawUserStake separately
+    uint256 removed = _removeUserStake(_stake, 10);
+    _stake -= removed;
+
+    s.token.transferFrom(msg.sender, address(this), _stake); // errors with Insufficient Allowance if not approved
 
     return sessionId;
   }
 
   function closeSession(bytes memory receiptEncoded, bytes memory signature) external {
     // reverts without specific error if cannot decode abi
-    (bytes32 sessionId, uint128 timestampMs, ) = abi.decode(receiptEncoded, (bytes32, uint128, uint32));
+    (bytes32 sessionId, uint256 chainId, uint128 timestampMs, uint32 tpsScaled1000, uint32 ttftMs) = abi.decode(
+      receiptEncoded,
+      (bytes32, uint256, uint128, uint32, uint32)
+    );
+    if (chainId != block.chainid) {
+      revert WrongChaidId();
+    }
     if (timestampMs / 1000 < block.timestamp - SIGNATURE_TTL) {
       revert SignatureExpired();
     }
@@ -184,9 +207,7 @@ contract SessionRouter {
     if (session.openedAt == 0) {
       revert SessionNotFound();
     }
-    if (session.user != msg.sender && session.provider != msg.sender) {
-      revert NotUserOrProvider();
-    }
+    LibOwner._senderOrOwner(session.user);
     if (session.closedAt != 0) {
       revert SessionAlreadyClosed();
     }
@@ -197,12 +218,13 @@ contract SessionRouter {
     s.activeSessionsCount--;
 
     // update session record
-    session.closeoutReceipt = receiptEncoded;
+    session.closeoutReceipt = receiptEncoded; //TODO: remove that field in favor of tps and ttftMs
     session.closedAt = uint128(block.timestamp);
 
     // calculate provider withdraw
     uint256 providerWithdraw;
-    bool isClosingLate = startOfTheDay(block.timestamp) > startOfTheDay(session.endsAt);
+    uint256 startOfToday = startOfTheDay(block.timestamp);
+    bool isClosingLate = startOfToday > startOfTheDay(session.endsAt);
     bool noDispute = isValidReceipt(session.provider, receiptEncoded, signature);
 
     if (noDispute || isClosingLate) {
@@ -213,38 +235,59 @@ contract SessionRouter {
     } else {
       // session was closed on the same day or earlier with dispute
       // withdraw all funds except for today's session cost
-      uint256 durationTillToday = startOfTheDay(block.timestamp) -
-        minUint256(session.openedAt, startOfTheDay(block.timestamp));
+      uint256 durationTillToday = startOfToday - minUint256(session.openedAt, startOfToday);
       uint256 costTillToday = durationTillToday * session.pricePerSecond;
       providerWithdraw = costTillToday - session.providerWithdrawnAmount;
     }
 
-    if (!noDispute) {
+    // updating provider stats
+    ProviderModelStats storage prStats = s.stats[session.modelAgentId][session.provider];
+    ModelStats storage modelStats = s.modelStats[session.modelAgentId];
+
+    prStats.totalCount++;
+
+    if (noDispute) {
+      if (prStats.successCount > 0) {
+        // stats for this provider-model pair already contribute to average model stats
+        modelStats.tpsScaled1000.remove(int32(prStats.tpsScaled1000.mean), int32(modelStats.count - 1));
+        modelStats.ttftMs.remove(int32(prStats.ttftMs.mean), int32(modelStats.count - 1));
+      } else {
+        // stats for this provider-model pair do not contribute
+        modelStats.count++;
+      }
+
+      // update provider-model stats
+      prStats.successCount++;
+      prStats.totalDuration += uint32(session.closedAt - session.openedAt);
+      prStats.tpsScaled1000.add(int32(tpsScaled1000), int32(prStats.successCount));
+      prStats.ttftMs.add(int32(ttftMs), int32(prStats.successCount));
+
+      // update model stats
+      modelStats.totalDuration.add(int32(prStats.totalDuration), int32(modelStats.count));
+      modelStats.tpsScaled1000.add(int32(prStats.tpsScaled1000.mean), int32(modelStats.count));
+      modelStats.ttftMs.add(int32(prStats.ttftMs.mean), int32(modelStats.count));
+    } else {
       session.closeoutType = 1;
     }
-
-    session.providerWithdrawnAmount += providerWithdraw;
 
     // we have to lock today's stake so the user won't get the reward twice
     uint256 userStakeToLock = 0;
     if (!isClosingLate) {
       // session was closed on the same day
       // lock today's stake
-      uint256 todaysDuration = minUint256(session.endsAt, block.timestamp) -
-        maxUint256(startOfTheDay(block.timestamp), session.openedAt);
+      uint256 todaysDuration = minUint256(session.endsAt, block.timestamp) - maxUint256(startOfToday, session.openedAt);
       uint256 todaysCost = todaysDuration * session.pricePerSecond;
-      userStakeToLock = stipendToStake(todaysCost, startOfTheDay(block.timestamp));
-      s.userOnHold[session.user].push(
-        OnHold({ amount: userStakeToLock, releaseAt: uint128(block.timestamp + 1 days) })
-      );
+      userStakeToLock = minUint256(session.stake, stipendToStake(todaysCost, startOfToday));
+      s.userOnHold[session.user].push(OnHold({ amount: userStakeToLock, releaseAt: uint128(startOfToday + 1 days) }));
     }
-
     uint256 userWithdraw = session.stake - userStakeToLock;
 
     emit SessionClosed(session.user, sessionId, session.provider);
 
-    // withdraw provider and user funds
-    s.token.transferFrom(s.fundingAccount, session.provider, providerWithdraw);
+    // withdraw provider
+    rewardProvider(session, providerWithdraw, false);
+
+    // withdraw user
     s.token.transfer(session.user, userWithdraw);
   }
 
@@ -260,7 +303,7 @@ contract SessionRouter {
   }
 
   /// @notice allows provider to claim their funds
-  function claimProviderBalance(bytes32 sessionId, uint256 amountToWithdraw, address to) external {
+  function claimProviderBalance(bytes32 sessionId, uint256 amountToWithdraw) external {
     Session storage session = s.sessions[s.sessionMap[sessionId]];
     if (session.openedAt == 0) {
       revert SessionNotFound();
@@ -268,25 +311,22 @@ contract SessionRouter {
     LibOwner._senderOrOwner(session.provider);
 
     uint256 withdrawableAmount = _getProviderClaimableBalance(session);
-
     if (amountToWithdraw > withdrawableAmount) {
       revert NotEnoughWithdrawableBalance();
     }
 
-    session.providerWithdrawnAmount += amountToWithdraw;
-    s.totalClaimed += amountToWithdraw;
-    s.token.transferFrom(s.fundingAccount, to, amountToWithdraw);
+    rewardProvider(session, amountToWithdraw, true);
     return;
   }
 
-  function _getProviderClaimableBalance(Session memory session) internal view returns (uint256) {
+  function _getProviderClaimableBalance(Session memory session) private view returns (uint256) {
     // if session was closed with no dispute - provider already got all funds
     //
     // if session was closed with dispute   -
     // if session was ended but not closed  -
     // if session was not ended             - provider can claim all funds except for today's session cost
 
-    uint256 claimIntervalEnd = minUint256(startOfTheDay(block.timestamp), session.endsAt);
+    uint256 claimIntervalEnd = minUint256(minUint256(startOfTheDay(block.timestamp), session.endsAt), session.closedAt);
     uint256 claimableDuration = maxUint256(claimIntervalEnd, session.openedAt) - session.openedAt;
     uint256 totalCost = claimableDuration * session.pricePerSecond;
     uint256 withdrawableAmount = totalCost - session.providerWithdrawnAmount;
@@ -296,8 +336,12 @@ contract SessionRouter {
 
   /// @notice deletes session from the history
   function deleteHistory(bytes32 sessionId) external {
-    Session storage session = s.sessions[s.sessionMap[sessionId]];
+    uint256 sessionIndex = s.sessionMap[sessionId];
+    Session storage session = s.sessions[sessionIndex];
     LibOwner._senderOrOwner(session.user);
+    if (session.closedAt == 0) {
+      revert SessionNotClosed();
+    }
     session.user = address(0);
   }
 
@@ -311,8 +355,12 @@ contract SessionRouter {
   }
 
   /// @notice returns amount of withdrawable user stake and one on hold
-  function withdrawableUserStake(address userAddr) external view returns (uint256 avail, uint256 hold) {
+  function withdrawableUserStake(
+    address userAddr,
+    uint8 iterations
+  ) external view returns (uint256 avail, uint256 hold) {
     OnHold[] memory onHold = s.userOnHold[userAddr];
+    iterations = iterations > onHold.length ? uint8(onHold.length) : iterations;
     for (uint i = 0; i < onHold.length; i++) {
       uint256 amount = onHold[i].amount;
       if (block.timestamp < onHold[i].releaseAt) {
@@ -325,44 +373,52 @@ contract SessionRouter {
   }
 
   /// @notice withdraws user stake
-  function withdrawUserStake(uint256 amountToWithdraw, address to) external {
-    uint256 balance = 0;
-    address sender = msg.sender;
-
+  /// @param amountToWithdraw amount of funds to withdraw, maxUint256 means all available
+  /// @param iterations number of entries to process
+  function withdrawUserStake(uint256 amountToWithdraw, uint8 iterations) external {
     // withdraw all available funds if amountToWithdraw is 0
     if (amountToWithdraw == 0) {
       amountToWithdraw = type(uint256).max;
     }
 
-    OnHold[] storage onHoldEntries = s.userOnHold[sender];
+    uint256 removed = _removeUserStake(amountToWithdraw, iterations);
+    if (removed < amountToWithdraw) {
+      revert NotEnoughWithdrawableBalance();
+    }
+
+    s.token.transfer(msg.sender, amountToWithdraw);
+  }
+
+  /// @dev removes user stake amount from onHold entries
+  function _removeUserStake(uint256 amountToRemove, uint8 iterations) private returns (uint256) {
+    uint256 balance = 0;
+
+    OnHold[] storage onHoldEntries = s.userOnHold[msg.sender];
+    iterations = iterations > onHoldEntries.length ? uint8(onHoldEntries.length) : iterations;
     uint i = 0;
 
     // the only loop that is not avoidable
-    while (i < onHoldEntries.length) {
-      if (block.timestamp > onHoldEntries[i].releaseAt) {
+    while (i < onHoldEntries.length && iterations-- > 0) {
+      if (block.timestamp >= onHoldEntries[i].releaseAt) {
         balance += onHoldEntries[i].amount;
 
-        if (balance >= amountToWithdraw) {
-          uint256 delta = balance - amountToWithdraw;
+        if (balance >= amountToRemove) {
+          uint256 delta = balance - amountToRemove;
           onHoldEntries[i].amount = delta;
-          s.token.transfer(to, amountToWithdraw);
-          return;
+          return amountToRemove;
         }
 
         // removes entry from array
-        onHoldEntries[i] = onHoldEntries[onHoldEntries.length - 1];
+        if (onHoldEntries.length > 0) {
+          onHoldEntries[i] = onHoldEntries[onHoldEntries.length - 1];
+        }
         onHoldEntries.pop();
       } else {
         i++;
       }
     }
 
-    if (amountToWithdraw == type(uint256).max) {
-      s.token.transfer(to, balance);
-      return;
-    }
-
-    revert NotEnoughWithdrawableBalance();
+    return balance;
   }
 
   /// @notice returns stipend of user based on their stake
@@ -410,7 +466,7 @@ contract SessionRouter {
       uint128(startOfTheDay(timestamp))
     );
 
-    return periodReward + s.totalClaimed;
+    return periodReward - s.totalClaimed;
   }
 
   // returns total amount of MOR tokens that were distributed across all pools
@@ -432,6 +488,14 @@ contract SessionRouter {
     return totalSupply + s.totalClaimed;
   }
 
+  /////////////////////////
+  //   STATS FUNCTIONS   //
+  /////////////////////////
+
+  function totalSessions(address providerAddr) private view returns (uint256) {
+    return s.providerSessions[providerAddr].length;
+  }
+
   /// @notice sets distibution pool configuration
   /// @dev parameters should be the same as in Ethereum L1 Distribution contract
   /// @dev at address 0x47176B2Af9885dC6C4575d4eFd63895f7Aaa4790
@@ -441,15 +505,44 @@ contract SessionRouter {
     s.pools[index] = pool;
   }
 
-  function startOfTheDay(uint256 timestamp) public pure returns (uint256) {
+  function maybeResetProviderRewardLimiter(Provider storage provider) private {
+    if (block.timestamp > provider.limitPeriodEnd) {
+      provider.limitPeriodEnd += PROVIDER_REWARD_LIMITER_PERIOD;
+      provider.limitPeriodEarned = 0;
+    }
+  }
+
+  /// @notice sends provider reward considering stake as the limit for the reward
+  /// @param session session storage object
+  /// @param reward amount of reward to send
+  /// @param revertOnReachingLimit if true function will revert if reward is more than stake, otherwise just limit the reward
+  function rewardProvider(Session storage session, uint256 reward, bool revertOnReachingLimit) private {
+    Provider storage provider = s.providerMap[session.provider];
+    maybeResetProviderRewardLimiter(provider);
+    uint256 limit = provider.stake - provider.limitPeriodEarned;
+
+    if (reward > limit) {
+      if (revertOnReachingLimit) {
+        revert WithdrawableBalanceLimitByStakeReached();
+      }
+      reward = limit;
+    }
+
+    session.providerWithdrawnAmount += reward;
+    s.totalClaimed += reward;
+    provider.limitPeriodEarned += reward;
+    s.token.transferFrom(s.fundingAccount, session.provider, reward);
+  }
+
+  function startOfTheDay(uint256 timestamp) private pure returns (uint256) {
     return timestamp - (timestamp % 1 days);
   }
 
-  function minUint256(uint256 a, uint256 b) internal pure returns (uint256) {
+  function minUint256(uint256 a, uint256 b) private pure returns (uint256) {
     return a < b ? a : b;
   }
 
-  function maxUint256(uint256 a, uint256 b) internal pure returns (uint256) {
+  function maxUint256(uint256 a, uint256 b) private pure returns (uint256) {
     return a > b ? a : b;
   }
 }

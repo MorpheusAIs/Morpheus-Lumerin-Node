@@ -7,13 +7,25 @@ import "./tasks/upgrade";
 import { HardhatUserConfig } from "hardhat/config";
 
 const config: HardhatUserConfig = {
+  networks: {
+    hardhat: {
+      initialDate: "2024-07-16T01:00:00.000Z",
+      gas: "auto", // required for tests where two transactions should be mined in the same block
+      // loggingEnabled: true,
+    },
+  },
   solidity: {
     version: "0.8.24",
     settings: {
       optimizer: {
         enabled: true,
-        runs: 200,
+        runs: 1000,
+        details: {
+          yul: true,
+          constantOptimizer: true,
+        },
       },
+      viaIR: true,
     },
   },
   mocha: {
@@ -24,10 +36,13 @@ const config: HardhatUserConfig = {
     outputJSON: true,
     outputJSONFile: "gas.json",
     coinmarketcap: process.env.COINMARKETCAP_API_KEY,
+    reportPureAndViewMethods: true,
     darkMode: true,
     currency: "USD",
-    L2Etherscan: process.env.ETHERSCAN_API_KEY,
-    L2: "arbitrum",
+    // offline: true,
+    // L2Etherscan: process.env.ETHERSCAN_API_KEY,
+    // L2: "arbitrum",
+    L1Etherscan: process.env.ETHERSCAN_API_KEY,
     L1: "ethereum",
   },
   gobind: {

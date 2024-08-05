@@ -2,13 +2,34 @@
 pragma solidity ^0.8.0;
 
 import { KeySet, AddressSet, Uint256Set } from "./libraries/KeySet.sol";
+import { LibSD } from "./libraries/LibSD.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+uint128 constant PROVIDER_REWARD_LIMITER_PERIOD = 365 days; // reward for this period will be limited by the stake
 
 struct Provider {
   string endpoint; // example 'domain.com:1234'
-  uint256 stake; // stake amount
+  uint256 stake; // stake amount, which also server as a reward limiter
   uint128 createdAt; // timestamp of the registration
+  uint128 limitPeriodEnd; // timestamp of the limiter period end
+  uint256 limitPeriodEarned; // total earned during the last limiter period
   bool isDeleted;
+}
+
+struct ProviderModelStats{
+  LibSD.SD tpsScaled1000; // tokens per second running average
+  LibSD.SD ttftMs; // time to first token running average in milliseconds
+  uint32 totalDuration; // total duration of sessions
+  uint32 successCount; // number of observations
+  uint32 totalCount;
+  // TODO: consider adding SD with weldford algorithm
+}
+
+struct ModelStats {
+  LibSD.SD tpsScaled1000;
+  LibSD.SD ttftMs;
+  LibSD.SD totalDuration;
+  uint32 count;
 }
 
 struct Model {
@@ -93,12 +114,18 @@ struct AppStorage {
   mapping(address => uint256[]) userSessions; // user address => all session indexes
   mapping(address => uint256[]) providerSessions; // provider address => all session indexes
   mapping(bytes32 => uint256[]) modelSessions; // modelId => all session indexes
+  uint256 sessionNonce; // used to generate unique session id
   // active sessions
   mapping(address => Uint256Set.Set) userActiveSessions; // user address => active session indexes
   mapping(address => Uint256Set.Set) providerActiveSessions; // provider address => active session indexes
   mapping(address => OnHold[]) userOnHold; // user address => balance
   mapping(bytes => bool) approvalMap; // provider approval => true if approval was already used
   uint64 activeSessionsCount;
+  //
+  // STATS
+  //
+  mapping(bytes32 => mapping(address => ProviderModelStats)) stats; // modelId => provider => stats
+  mapping(bytes32 => ModelStats) modelStats;
   //
   // OTHER
   //
@@ -111,7 +138,7 @@ struct AppStorage {
   uint256 modelMinStake;
   uint256 providerMinStake;
   Pool[] pools; // distribution pools configuration that mirrors L1 contract
-  uint256 totalClaimed; // total amount of MOR claimend by providers
+  uint256 totalClaimed; // total amount of MOR claimed by providers
 }
 
 library LibAppStorage {

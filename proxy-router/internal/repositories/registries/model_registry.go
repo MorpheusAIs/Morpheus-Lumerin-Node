@@ -2,9 +2,9 @@ package registries
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/modelregistry"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -18,16 +18,15 @@ type ModelRegistry struct {
 
 	// state
 	nonce uint64
-	mutex lib.Mutex
 	mrABI *abi.ABI
 
 	// deps
 	modelRegistry *modelregistry.ModelRegistry
 	client        *ethclient.Client
-	log           interfaces.ILogger
+	log           lib.ILogger
 }
 
-func NewModelRegistry(modelRegistryAddr common.Address, client *ethclient.Client, log interfaces.ILogger) *ModelRegistry {
+func NewModelRegistry(modelRegistryAddr common.Address, client *ethclient.Client, log lib.ILogger) *ModelRegistry {
 	mr, err := modelregistry.NewModelRegistry(modelRegistryAddr, client)
 	if err != nil {
 		panic("invalid model registry ABI")
@@ -41,7 +40,6 @@ func NewModelRegistry(modelRegistryAddr common.Address, client *ethclient.Client
 		modelRegistryAddr: modelRegistryAddr,
 		client:            client,
 		mrABI:             mrABI,
-		mutex:             lib.NewMutex(),
 		log:               log,
 	}
 }
@@ -53,4 +51,39 @@ func (g *ModelRegistry) GetAllModels(ctx context.Context) ([][32]byte, []modelre
 	}
 
 	return adresses, models, nil
+}
+
+func (g *ModelRegistry) CreateNewModel(ctx *bind.TransactOpts, modelId common.Hash, ipfsID common.Hash, fee *lib.BigInt, stake *lib.BigInt, owner common.Address, name string, tags []string) error {
+	tx, err := g.modelRegistry.ModelRegister(ctx, modelId, ipfsID, &fee.Int, &stake.Int, owner, name, tags)
+
+	if err != nil {
+		return lib.TryConvertGethError(err, modelregistry.ModelRegistryMetaData)
+	}
+
+	// Wait for the transaction receipt
+	receipt, err := bind.WaitMined(context.Background(), g.client, tx)
+	if err != nil {
+		return lib.TryConvertGethError(err, modelregistry.ModelRegistryMetaData)
+	}
+
+	// Find the event log
+	for _, log := range receipt.Logs {
+		_, err := g.modelRegistry.ParseModelRegisteredUpdated(*log)
+
+		if err != nil {
+			continue // not our event, skip it
+		}
+
+		return nil
+	}
+
+	return fmt.Errorf("ModelRegistered event not found in transaction logs")
+}
+
+func (g *ModelRegistry) GetModelById(ctx context.Context, modelId common.Hash) (*modelregistry.Model, error) {
+	model, err := g.modelRegistry.ModelMap(&bind.CallOpts{Context: ctx}, modelId)
+	if err != nil {
+		return nil, err
+	}
+	return &model, nil
 }

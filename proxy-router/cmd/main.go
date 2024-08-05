@@ -12,6 +12,7 @@ import (
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apibus"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/handlers/httphandlers"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
@@ -21,10 +22,9 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/transport"
 	wlt "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/wallet"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/rpcproxy"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/walletapi"
 	"github.com/ethereum/go-ethereum/ethclient"
 
 	docs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/docs"
@@ -49,8 +49,13 @@ func main() {
 }
 
 func start() error {
+	valid, err := config.NewValidator()
+	if err != nil {
+		return err
+	}
+
 	var cfg config.Config
-	err := config.LoadConfig(&cfg, &os.Args)
+	err = config.LoadConfig(&cfg, &os.Args, valid)
 	if err != nil {
 		return err
 	}
@@ -59,9 +64,10 @@ func start() error {
 
 	mainLogFilePath := ""
 	logFolderPath := ""
+	appStartTime := time.Now()
 
 	if cfg.Log.FolderPath != "" {
-		folderName := lib.SanitizeFilename(time.Now().Format("2006-01-02T15-04-05Z07:00"))
+		folderName := lib.SanitizeFilename(appStartTime.Format("2006-01-02T15-04-05Z07:00"))
 		logFolderPath = filepath.Join(cfg.Log.FolderPath, folderName)
 		err = os.MkdirAll(logFolderPath, os.ModePerm)
 		if err != nil {
@@ -100,7 +106,7 @@ func start() error {
 		return err
 	}
 
-	schedulerLogFactory := func(remoteAddr string) (interfaces.ILogger, error) {
+	schedulerLogFactory := func(remoteAddr string) (lib.ILogger, error) {
 		fp := ""
 		if logFolderPath != "" {
 			fp = filepath.Join(logFolderPath, fmt.Sprintf("scheduler-%s.log", lib.SanitizeFilename(remoteAddr)))
@@ -110,7 +116,7 @@ func start() error {
 
 	contractLogStorage := lib.NewCollection[*interfaces.LogStorage]()
 
-	// contractLogFactory := func(contractID string) (interfaces.ILogger, error) {
+	// contractLogFactory := func(contractID string) (lib.ILogger, error) {
 	// 	logStorage := interfaces.NewLogStorage(contractID)
 	// 	contractLogStorage.Store(logStorage)
 	// 	fp := ""
@@ -180,42 +186,50 @@ func start() error {
 	if err != nil {
 		return lib.WrapError(ErrConnectToEthNode, err)
 	}
-	block, err := ethClient.BlockNumber(ctx)
+	chainID, err := ethClient.ChainID(ctx)
 	if err != nil {
 		return lib.WrapError(ErrConnectToEthNode, err)
 	}
-	appLog.Infof("connected to ethereum node: %s, block: %d", cfg.Blockchain.EthNodeAddress, block)
+	appLog.Infof("connected to ethereum node: %s, chainID: %d", cfg.Blockchain.EthNodeAddress, chainID)
 
 	publicUrl, err := url.Parse(cfg.Web.PublicUrl)
 	if err != nil {
 		return err
 	}
 
-	sessionStorage := storages.NewSessionStorage(log)
+	storage := storages.NewStorage(log, cfg.Proxy.StoragePath)
+	sessionStorage := storages.NewSessionStorage(storage)
 
 	var wallet interfaces.Wallet
-	if cfg.Marketplace.WalletPrivateKey != "" {
-		wallet = wlt.NewEnvWallet(cfg.Marketplace.WalletPrivateKey)
+	if len(*cfg.Marketplace.WalletPrivateKey) > 0 {
+		wallet = wlt.NewEnvWallet(*cfg.Marketplace.WalletPrivateKey)
 		log.Warnf("Using env wallet. Private key persistance unavailable")
 	} else {
 		wallet = wlt.NewKeychainWallet()
 		log.Infof("Using keychain wallet")
 	}
 
-	diamondContractAddr := common.HexToAddress(cfg.Marketplace.DiamondContractAddress)
-	morContractAddr := common.HexToAddress(cfg.Marketplace.MorTokenAddress)
+	proxyRouterApi := proxyapi.NewProxySender(publicUrl, wallet, contractLogStorage, sessionStorage, log)
+	blockchainApi := blockchainapi.NewBlockchainService(ethClient, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, cfg.Blockchain.ExplorerApiUrl, wallet, sessionStorage, proxyRouterApi, proxyLog, cfg.Blockchain.EthLegacyTx)
+	aiEngine := aiengine.NewAiEngine(cfg.AIEngine.OpenAIBaseURL, cfg.AIEngine.OpenAIKey, log)
 
-	rpcProxy := rpcproxy.NewRpcProxy(ethClient, diamondContractAddr, morContractAddr, cfg.Blockchain.ExplorerApiUrl, wallet, sessionStorage, proxyLog, cfg.Blockchain.EthLegacyTx)
-	proxyRouterApi := proxyapi.NewProxyRouterApi(sysConfig, publicUrl, wallet, &cfg, nil, time.Now(), contractLogStorage, sessionStorage, log)
-	aiEngine := aiengine.NewAiEngine()
+	sessionRouter := registries.NewSessionRouter(*cfg.Marketplace.DiamondContractAddress, ethClient, log)
 
-	sessionRouter := registries.NewSessionRouter(diamondContractAddr, ethClient, log)
-	eventListener := rpcproxy.NewEventsListener(ethClient, sessionStorage, sessionRouter, log)
+	modelConfigLoader := config.NewModelConfigLoader(cfg.Proxy.ModelsConfigPath, log)
+	err = modelConfigLoader.Init()
+	if err != nil {
+		log.Warnf("failed to load model config: %s, run with empty", err)
+	}
+	eventListener := blockchainapi.NewEventsListener(ethClient, sessionStorage, sessionRouter, wallet, modelConfigLoader, log)
 
-	apiBus := apibus.NewApiBus(rpcProxy, aiEngine, proxyRouterApi, wallet)
+	blockchainController := blockchainapi.NewBlockchainController(blockchainApi, log)
+	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine)
+	walletController := walletapi.NewWalletController(wallet)
+	systemController := system.NewSystemController(&cfg, wallet, sysConfig, appStartTime, chainID, log)
 
-	handl := httphandlers.NewHTTPHandler(apiBus)
-	httpServer := transport.NewServer(cfg.Web.Address, handl, log.Named("HTTP"))
+	apiBus := apibus.NewApiBus(blockchainController, proxyController, walletController, systemController)
+	httpHandler := httphandlers.CreateHTTPServer(log, apiBus)
+	httpServer := transport.NewServer(cfg.Web.Address, httpHandler, log.Named("HTTP"))
 
 	// http server should shut down latest to keep pprof running
 	serverErrCh := make(chan error, 1)
@@ -225,7 +239,7 @@ func start() error {
 		cancel()
 	}()
 
-	proxy := proxyctl.NewProxyCtl(eventListener, wallet, log, connLog, cfg.Proxy.Address, schedulerLogFactory, sessionStorage, apiBus)
+	proxy := proxyctl.NewProxyCtl(eventListener, wallet, chainID, log, connLog, cfg.Proxy.Address, schedulerLogFactory, sessionStorage, modelConfigLoader, valid, aiEngine)
 	err = proxy.Run(ctx)
 
 	cancelServer()
