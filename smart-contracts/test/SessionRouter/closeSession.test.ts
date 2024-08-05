@@ -5,10 +5,10 @@ import {
 import { expect } from "chai";
 import hre from "hardhat";
 import { deploySingleBid, getProviderApproval, getReport } from "../fixtures";
-import { getSessionId, getTxTimestamp, nowChain } from "../utils";
+import { catchError, getSessionId, getTxTimestamp, nowChain } from "../utils";
 import { DAY, SECOND } from "../../utils/time";
 import { expectAlmostEqual, expectAlmostEqualDelta } from "../../utils/compare";
-import { getAddress, parseUnits } from "viem";
+import { getAddress, maxUint8, parseUnits } from "viem";
 
 describe("session closeout", function () {
   it("should open short (<1D) session and close after expiration", async function () {
@@ -22,7 +22,11 @@ describe("session closeout", function () {
     } = await loadFixture(deploySingleBid);
 
     // open session
-    const { msg, signature } = await getProviderApproval(provider, exp.bidID);
+    const { msg, signature } = await getProviderApproval(
+      provider,
+      user.account.address,
+      exp.bidID,
+    );
     const openTx = await sessionRouter.write.openSession(
       [exp.stake, msg, signature],
       { account: user.account.address },
@@ -39,7 +43,7 @@ describe("session closeout", function () {
     ]);
 
     // close session
-    const report = await getReport(provider, sessionId, 10);
+    const report = await getReport(provider, sessionId, 10, 1000);
     await sessionRouter.write.closeSession([report.msg, report.sig], {
       account: user.account,
     });
@@ -81,7 +85,11 @@ describe("session closeout", function () {
     } = await loadFixture(deploySingleBid);
 
     // open session
-    const { msg, signature } = await getProviderApproval(provider, exp.bidID);
+    const { msg, signature } = await getProviderApproval(
+      provider,
+      user.account.address,
+      exp.bidID,
+    );
     const openTx = await sessionRouter.write.openSession(
       [exp.stake, msg, signature],
       { account: user.account.address },
@@ -98,7 +106,7 @@ describe("session closeout", function () {
     ]);
 
     // close session
-    const report = await getReport(provider, sessionId, 10);
+    const report = await getReport(provider, sessionId, 10, 1000);
     await sessionRouter.write.closeSession([report.msg, report.sig], {
       account: user.account,
     });
@@ -133,7 +141,11 @@ describe("session closeout", function () {
     } = await loadFixture(deploySingleBid);
 
     // open session
-    const { msg, signature } = await getProviderApproval(provider, exp.bidID);
+    const { msg, signature } = await getProviderApproval(
+      provider,
+      user.account.address,
+      exp.bidID,
+    );
     const openTx = await sessionRouter.write.openSession(
       [exp.stake, msg, signature],
       { account: user.account.address },
@@ -151,13 +163,15 @@ describe("session closeout", function () {
     ]);
 
     // close session with user signature
-    const report = await getReport(user, sessionId, 10);
+    const report = await getReport(user, sessionId, 10, 1000);
     await sessionRouter.write.closeSession([report.msg, report.sig], {
       account: user.account,
     });
 
     // verify session is closed with dispute
     const session = await sessionRouter.read.getSession([sessionId]);
+    const totalCost =
+      session.pricePerSecond * (session.closedAt - session.openedAt);
 
     // verify balances
     const userBalanceAfter = await tokenMOR.read.balanceOf([
@@ -171,7 +185,10 @@ describe("session closeout", function () {
       await sessionRouter.read.getProviderClaimableBalance([session.id]);
 
     const [userAvail, userHold] =
-      await sessionRouter.read.withdrawableUserStake([session.user]);
+      await sessionRouter.read.withdrawableUserStake([
+        session.user,
+        Number(maxUint8),
+      ]);
 
     expect(session.closeoutType).to.equal(1n);
     expect(providerBalanceAfter - providerBalanceBefore).to.equal(0n);
@@ -188,7 +205,7 @@ describe("session closeout", function () {
     await time.increase((1 * DAY) / SECOND);
     const claimableProvider2 =
       await sessionRouter.read.getProviderClaimableBalance([sessionId]);
-    expect(claimableProvider2).to.equal(exp.totalCost);
+    expect(claimableProvider2).to.equal(totalCost);
 
     // claim provider balance
     await sessionRouter.write.claimProviderBalance([
@@ -201,7 +218,41 @@ describe("session closeout", function () {
       provider.account.address,
     ]);
     const providerClaimed = providerBalanceAfterClaim - providerBalanceAfter;
-    expect(providerClaimed).to.equal(exp.totalCost);
+    expect(providerClaimed).to.equal(totalCost);
+  });
+
+  it("should error when not a user trying to close", async function () {
+    const {
+      sessionRouter,
+      provider,
+      expectedSession: exp,
+      user,
+      publicClient,
+    } = await loadFixture(deploySingleBid);
+
+    // open session
+    const { msg, signature } = await getProviderApproval(
+      provider,
+      user.account.address,
+      exp.bidID,
+    );
+    const openTx = await sessionRouter.write.openSession(
+      [exp.stake, msg, signature],
+      { account: user.account.address },
+    );
+    const sessionId = await getSessionId(publicClient, hre, openTx);
+
+    // wait half of the session
+    await time.increase(exp.durationSeconds / 2n - 1n);
+
+    // close session with user signature
+    const report = await getReport(user, sessionId, 10, 10);
+
+    await catchError(sessionRouter.abi, "NotSenderOrOwner", async () => {
+      await sessionRouter.write.closeSession([report.msg, report.sig], {
+        account: provider.account,
+      });
+    });
   });
 
   it("should limit reward by stake amount", async function () {
@@ -280,6 +331,7 @@ describe("session closeout", function () {
     // open session
     const { msg, signature } = await getProviderApproval(
       provider,
+      user.account.address,
       expectedSession.bidID,
     );
     const openTx = await sessionRouter.write.openSession(
@@ -295,7 +347,7 @@ describe("session closeout", function () {
       provider.account.address,
     ]);
     // close session without dispute
-    const report = await getReport(provider, sessionId, 10);
+    const report = await getReport(provider, sessionId, 10, 1000);
     await sessionRouter.write.closeSession([report.msg, report.sig], {
       account: user.account,
     });

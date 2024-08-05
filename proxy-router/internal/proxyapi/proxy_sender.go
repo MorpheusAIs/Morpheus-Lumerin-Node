@@ -11,6 +11,7 @@ import (
 	"net/url"
 
 	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	msgs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi/morrpcmessage"
@@ -108,6 +109,67 @@ func (p *ProxyServiceSender) InitiateSession(ctx context.Context, user common.Ad
 	})
 	if err != nil {
 		return nil, lib.WrapError(ErrFailedStore, err)
+	}
+
+	return typedMsg, nil
+}
+
+func (p *ProxyServiceSender) GetSessionReport(ctx context.Context, sessionID common.Hash) (*msgs.SessionReportRes, error) {
+	requestID := "1"
+
+	prKey, err := p.privateKey.GetPrivateKey()
+	if err != nil {
+		return nil, ErrMissingPrKey
+	}
+
+	session, ok := p.sessionStorage.GetSession(sessionID.Hex())
+	if !ok {
+		return nil, ErrSessionNotFound
+	}
+	provider, ok := p.sessionStorage.GetUser(session.ProviderAddr)
+	if !ok {
+		return nil, ErrProviderNotFound
+	}
+
+	getSessionReportRequest, err := p.morRPC.SessionReportRequest(sessionID, prKey, requestID)
+	if err != nil {
+		return nil, lib.WrapError(ErrCreateReq, err)
+	}
+
+	msg, code, ginErr := p.rpcRequest(provider.Url, getSessionReportRequest)
+	if ginErr != nil {
+		return nil, lib.WrapError(ErrProvider, fmt.Errorf("code: %d, msg: %v, error: %s", code, msg, ginErr))
+	}
+
+	if msg.Error != nil {
+		// TODO: verify signature
+		return nil, lib.WrapError(ErrResponseErr, fmt.Errorf("error: %v, result: %v", msg.Error.Message, msg.Error.Data))
+	}
+	if msg.Result == nil {
+		return nil, lib.WrapError(ErrInvalidResponse, fmt.Errorf("empty result and no error"))
+	}
+
+	var typedMsg *msgs.SessionReportRes
+	err = json.Unmarshal(*msg.Result, &typedMsg)
+	if err != nil {
+		return nil, lib.WrapError(ErrInvalidResponse, fmt.Errorf("expected SessionReportRespose, got %s", msg.Result))
+	}
+
+	err = binding.Validator.ValidateStruct(typedMsg)
+	if err != nil {
+		return nil, lib.WrapError(ErrInvalidResponse, err)
+	}
+
+	signature := typedMsg.Signature
+	typedMsg.Signature = lib.HexString{}
+
+	hexPubKey, err := lib.StringToHexString(provider.PubKey)
+	if err != nil {
+		return nil, lib.WrapError(ErrInvalidResponse, err)
+	}
+
+	if !p.validateMsgSignature(typedMsg, signature, hexPubKey) {
+		return nil, ErrInvalidSig
 	}
 
 	return typedMsg, nil
@@ -252,15 +314,20 @@ func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter Res
 
 		var payload openai.ChatCompletionResponse
 		err = json.Unmarshal(aiResponse, &payload)
-		if err != nil {
-			return lib.WrapError(ErrInvalidResponse, err)
-		}
-
-		var stop = false
-		choices := payload.Choices
-		for _, choice := range choices {
-			if choice.FinishReason == openai.FinishReasonStop {
-				stop = true
+		var stop = true
+		if err == nil {
+			stop = false
+			choices := payload.Choices
+			for _, choice := range choices {
+				if choice.FinishReason == openai.FinishReasonStop {
+					stop = true
+				}
+			}
+		} else {
+			var payload aiengine.ProdiaGenerationResult
+			err = json.Unmarshal(aiResponse, &payload)
+			if err != nil {
+				return lib.WrapError(ErrInvalidResponse, err)
 			}
 		}
 

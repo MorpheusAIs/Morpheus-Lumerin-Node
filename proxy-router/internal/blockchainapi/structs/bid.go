@@ -15,3 +15,9 @@ type Bid struct {
 	CreatedAt      *big.Int
 	DeletedAt      *big.Int
 }
+
+type ScoredBid struct {
+	ID    common.Hash
+	Bid   Bid
+	Score float64
+}

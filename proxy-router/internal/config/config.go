@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math/big"
 	"runtime"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
@@ -10,6 +11,7 @@ import (
 
 type DerivedConfig struct {
 	WalletAddress common.Address
+	ChainID       *big.Int
 }
 
 // Validation tags described here: https://pkg.go.dev/github.com/go-playground/validator/v10
@@ -41,9 +43,10 @@ type Config struct {
 		LevelContract   string `env:"LOG_LEVEL_CONTRACT"   flag:"log-level-contract"   validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
 	}
 	Proxy struct {
-		Address        string `env:"PROXY_ADDRESS" flag:"proxy-address" validate:"required,hostname_port"`
-		MaxCachedDests int    `env:"PROXY_MAX_CACHED_DESTS" flag:"proxy-max-cached-dests" validate:"required,number" desc:"maximum number of cached destinations per proxy"`
-		StoragePath    string `env:"PROXY_STORAGE_PATH"    flag:"proxy-storage-path"    validate:"omitempty,dirpath" desc:"enables file storage and sets the folder path"`
+		Address          string `env:"PROXY_ADDRESS" flag:"proxy-address" validate:"required,hostname_port"`
+		MaxCachedDests   int    `env:"PROXY_MAX_CACHED_DESTS" flag:"proxy-max-cached-dests" validate:"required,number" desc:"maximum number of cached destinations per proxy"`
+		StoragePath      string `env:"PROXY_STORAGE_PATH"    flag:"proxy-storage-path"    validate:"omitempty,dirpath" desc:"enables file storage and sets the folder path"`
+		ModelsConfigPath string `env:"MODELS_CONFIG_PATH" flag:"models-config-path" validate:"omitempty"`
 	}
 	System struct {
 		Enable           bool   `env:"SYS_ENABLE"              flag:"sys-enable" desc:"enable system level configuration adjustments"`
@@ -130,7 +133,7 @@ func (cfg *Config) SetDefaults() {
 	}
 
 	if cfg.Proxy.StoragePath == "" {
-		cfg.Proxy.StoragePath = "./data/badger"
+		cfg.Proxy.StoragePath = "./data/badger/"
 	}
 }
 

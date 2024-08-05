@@ -3,6 +3,7 @@ import {
   Abi,
   BaseError,
   ContractFunctionRevertedError,
+  InvalidInputRpcError,
   UnknownRpcError,
   parseEventLogs,
 } from "viem";
@@ -87,7 +88,6 @@ export function expectError<const TAbi extends Abi | readonly unknown[]>(
     }
   }
 
-  console.error(err);
   throw new Error(
     `Expected one of blockchain custom errors "${errors.join(" | ")}" was not thrown\n\n${err}`,
     { cause: err },
@@ -100,11 +100,13 @@ export function isErr<const TAbi extends Abi | readonly unknown[]>(
   error: DecodeErrorResultReturnType<TAbi>["errorName"],
 ): boolean {
   if (err instanceof BaseError) {
-    const revertError = err.walk(
-      (err) =>
+    const revertError = err.walk((err) => {
+      return (
+        err instanceof InvalidInputRpcError ||
         err instanceof ContractFunctionRevertedError ||
-        err instanceof UnknownRpcError,
-    );
+        err instanceof UnknownRpcError
+      );
+    });
 
     // support for regular provider
     if (revertError instanceof ContractFunctionRevertedError) {
@@ -115,22 +117,52 @@ export function isErr<const TAbi extends Abi | readonly unknown[]>(
     }
 
     // support for hardhat node
-    if (revertError instanceof UnknownRpcError) {
-      const cause = revertError.cause as any;
-      if (cause.data) {
-        try {
-          const decodedError = decodeErrorResult({ abi, data: cause.data });
-          if (decodedError.errorName === error) {
-            return true;
-          }
-        } catch (e) {
-          console.error(e);
-          return false;
+    let data: `0x${string}` = "0x";
+    if (revertError instanceof InvalidInputRpcError) {
+      data = (revertError?.cause as any)?.data?.data;
+    } else if (revertError instanceof UnknownRpcError) {
+      data = (revertError.cause as any)?.data;
+    }
+
+    if (data) {
+      try {
+        const decodedError = decodeErrorResult({ abi, data });
+        if (decodedError.errorName === error) {
+          return true;
         }
+      } catch (e) {
+        console.error("!!!!", e);
+        return false;
       }
     }
   }
+
+  console.error(err);
   return false;
+}
+
+interface BalanceOf {
+  read: {
+    balanceOf: (
+      a: [`0x${string}`],
+      b?: { blockNumber?: bigint },
+    ) => Promise<bigint>;
+  };
+}
+
+/** Returns the change of address token balance due to the transaction */
+export async function getTxDeltaBalance(
+  pc: PublicClient,
+  txHash: `0x${string}`,
+  address: `0x${string}`,
+  token: BalanceOf,
+): Promise<bigint> {
+  const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
+  const before = await token.read.balanceOf([address], {
+    blockNumber: receipt.blockNumber - 1n,
+  });
+  const after = await token.read.balanceOf([address]);
+  return after - before;
 }
 
 export const getHex = (buffer: Buffer, padding = 32): `0x${string}` => {
@@ -167,3 +199,33 @@ export const NewDate = (timestamp: bigint): Date => {
 
 export const PanicOutOfBoundsRegexp =
   /.*reverted with panic code 0x32 (Array accessed at an out-of-bounds or negative index)*/;
+
+// set hardhat automine
+export const setAutomine = async (
+  hre: HardhatRuntimeEnvironment,
+  enabled: boolean,
+): Promise<boolean> => {
+  const pc = await hre.viem.getPublicClient();
+  return pc.request({ method: "evm_setAutomine", params: [!!enabled] } as any);
+};
+
+export const setIntervalMining = async (
+  hre: HardhatRuntimeEnvironment,
+  interval: number,
+): Promise<boolean> => {
+  const pc = await hre.viem.getPublicClient();
+  return pc.request({
+    method: "evm_setIntervalMining",
+    params: [interval],
+  } as any);
+};
+
+// mine new block
+export const mine = async (
+  hre: HardhatRuntimeEnvironment,
+): Promise<boolean> => {
+  const pc = await hre.viem.getPublicClient();
+  return pc.request({
+    method: "evm_mine",
+  } as any);
+};

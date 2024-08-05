@@ -1,6 +1,7 @@
 package blockchainapi
 
 import (
+	"crypto/rand"
 	"math/big"
 	"net/http"
 
@@ -38,10 +39,16 @@ func (c *BlockchainController) RegisterRoutes(r interfaces.Router) {
 	r.GET("/blockchain/latestBlock", c.getLatestBlock)
 
 	r.GET("/blockchain/providers", c.getAllProviders)
+	r.POST("/blockchain/providers", c.createProvider)
 	r.GET("/blockchain/providers/:id/bids", c.getBidsByProvider)
+	r.GET("/blockchain/providers/:id/bids/active", c.getActiveBidsByProvider)
 	r.GET("/blockchain/models", c.getAllModels)
+	r.POST("/blockchain/models", c.createNewModel)
 	r.GET("/blockchain/models/:id/bids", c.getBidsByModelAgent)
+	r.GET("/blockchain/models/:id/bids/rated", c.getRatedBids)
+	r.GET("/blockchain/models/:id/bids/active", c.getActiveBidsByModel)
 	r.GET("/blockchain/bids/:id", c.getBidByID)
+	r.POST("/blockchain/bids", c.createNewBid)
 	r.GET("/blockchain/sessions", c.getSessions)
 	r.GET("/blockchain/sessions/:id", c.getSession)
 	r.POST("/blockchain/sessions", c.openSession)
@@ -60,7 +67,7 @@ func (c *BlockchainController) RegisterRoutes(r interfaces.Router) {
 //		@Produce		json
 //		@Param 			id  path string true "Session ID"
 //		@Success		200	{object}	interface{}
-//		@Router			/proxy/sessions/${id}/providerClaimableBalance [get]
+//		@Router			/proxy/sessions/{id}/providerClaimableBalance [get]
 func (c *BlockchainController) getProviderClaimableBalance(ctx *gin.Context) {
 	var params structs.PathHex32ID
 	err := ctx.ShouldBindUri(&params)
@@ -89,7 +96,7 @@ func (c *BlockchainController) getProviderClaimableBalance(ctx *gin.Context) {
 //		@Param			claim	body		structs.SendRequest 	true	"Claim"
 //		@Param 			id  path string true "Session ID"
 //		@Success		200	{object}	interface{}
-//		@Router			/proxy/sessions/${id}/providerClaim [post]
+//		@Router			/proxy/sessions/{id}/providerClaim [post]
 func (c *BlockchainController) claimProviderBalance(ctx *gin.Context) {
 	var params structs.PathHex32ID
 	err := ctx.ShouldBindUri(&params)
@@ -99,14 +106,14 @@ func (c *BlockchainController) claimProviderBalance(ctx *gin.Context) {
 		return
 	}
 
-	to, amount, err := c.getSendParams(ctx)
+	_, amount, err := c.getSendParams(ctx)
 	if err != nil {
 		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	txHash, err := c.service.ClaimProviderBalance(ctx, params.ID.Hash, to, amount)
+	txHash, err := c.service.ClaimProviderBalance(ctx, params.ID.Hash, amount)
 	if err != nil {
 		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -230,6 +237,35 @@ func (c *BlockchainController) getBidsByProvider(ctx *gin.Context) {
 	return
 }
 
+// GetActiveBidsByProvider godoc
+//
+//		@Summary		Get Bids by Provider
+//		@Description	Get bids from blockchain by provider
+//	 	@Tags			wallet
+//		@Produce		json
+//		@Param 			id  path string true "Provider ID"
+//		@Success		200	{object}	[]interface{}
+//		@Router			/blockchain/providers/{id}/bids/active [get]
+func (c *BlockchainController) getActiveBidsByProvider(ctx *gin.Context) {
+	var params structs.PathEthAddrID
+	err := ctx.ShouldBindUri(&params)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	bids, err := c.service.GetActiveBidsByProvider(ctx, params.ID.Address)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"bids": bids})
+	return
+}
+
 // GetModels godoc
 //
 //		@Summary		Get models list
@@ -278,6 +314,35 @@ func (c *BlockchainController) getBidsByModelAgent(ctx *gin.Context) {
 	}
 
 	bids, err := c.service.GetBidsByModelAgent(ctx, params.ID.Hash, offset, limit)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"bids": bids})
+	return
+}
+
+// GetActiveBidsByModel godoc
+//
+//		@Summary		Get Active Bids by Model
+//		@Description	Get bids from blockchain by model agent
+//	 	@Tags			wallet
+//		@Produce		json
+//		@Param 			id  path string true "ModelAgent ID"
+//		@Success		200	{object}	[]interface{}
+//		@Router			/blockchain/models/{id}/bids [get]
+func (c *BlockchainController) getActiveBidsByModel(ctx *gin.Context) {
+	var params structs.PathHex32ID
+	err := ctx.ShouldBindUri(&params)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	bids, err := c.service.GetActiveBidsByModel(ctx, params.ID.Hash)
 	if err != nil {
 		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -354,7 +419,7 @@ func (c *BlockchainController) getAllowance(ctx *gin.Context) {
 		return
 	}
 
-	allowance, err := c.service.GetAllowance(ctx, query.Spender)
+	allowance, err := c.service.GetAllowance(ctx, query.Spender.Address)
 	if err != nil {
 		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -374,7 +439,7 @@ func (c *BlockchainController) getAllowance(ctx *gin.Context) {
 //		@Param 			spender	query	string	true	"Spender address"
 //		@Param 			amount	query	string	true	"Amount"
 //		@Success		200	{object}	interface{}
-//		@Router			/blockchain/allowance [post]
+//		@Router			/blockchain/approve [post]
 func (c *BlockchainController) approve(ctx *gin.Context) {
 	var query structs.QueryApprove
 	err := ctx.ShouldBindQuery(&query)
@@ -384,7 +449,7 @@ func (c *BlockchainController) approve(ctx *gin.Context) {
 		return
 	}
 
-	tx, err := c.service.Approve(ctx, query.Spender, query.Amount.Unpack())
+	tx, err := c.service.Approve(ctx, query.Spender.Address, query.Amount.Unpack())
 	if err != nil {
 		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -434,7 +499,7 @@ func (c *BlockchainController) openSession(ctx *gin.Context) {
 //		@Param			opensession	body		structs.OpenSessionWithDurationRequest 	true	"Open session"
 //		@Param 			id  path string true "Bid ID"
 //		@Success		200	{object}	interface{}
-//		@Router			/blockchain/bids/:id/session [post]
+//		@Router			/blockchain/bids/{id}/session [post]
 func (s *BlockchainController) openSessionByBid(ctx *gin.Context) {
 	var reqPayload structs.OpenSessionWithDurationRequest
 	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
@@ -469,7 +534,7 @@ func (s *BlockchainController) openSessionByBid(ctx *gin.Context) {
 //		@Param			opensession	body		structs.OpenSessionWithDurationRequest 	true	"Open session"
 //		@Param 			id  path string true "Model ID"
 //		@Success		200	{object}	interface{}
-//		@Router			/blockchain/models/:id/session [post]
+//		@Router			/blockchain/models/{id}/session [post]
 func (s *BlockchainController) openSessionByModelId(ctx *gin.Context) {
 	var reqPayload structs.OpenSessionWithDurationRequest
 	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
@@ -674,6 +739,127 @@ func (c *BlockchainController) getBidByID(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{"bid": bid})
+	return
+}
+
+func (c *BlockchainController) getRatedBids(ctx *gin.Context) {
+	var params structs.PathHex32ID
+	err := ctx.ShouldBindUri(&params)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	bids, err := c.service.GetRatedBids(ctx, params.ID.Hash)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"bids": bids})
+	return
+}
+
+// СreateNewProvider godoc
+//
+//		@Summary		Creates or updates provider in blockchain
+//	 	@Tags			wallet
+//		@Produce		json
+//		@Accept			json
+//		@Param			provider	body		structs.CreateProviderRequest 	true	"Provider"
+//		@Success		200	{object}	interface{}
+//		@Router			/blockchain/providers [post]
+func (c *BlockchainController) createProvider(ctx *gin.Context) {
+	var provider structs.CreateProviderRequest
+	if err := ctx.ShouldBindJSON(&provider); err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	result, err := c.service.CreateNewProvider(ctx, provider.Stake, provider.Endpoint)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"provider": result})
+	return
+}
+
+// CreateNewModel godoc
+//
+//		@Summary		Creates model in blockchain
+//	 	@Tags			wallet
+//		@Produce		json
+//		@Accept			json
+//		@Param			model	body		structs.CreateModelRequest 	true	"Model"
+//		@Success		200	{object}	interface{}
+//		@Router			/blockchain/models [post]
+func (c *BlockchainController) createNewModel(ctx *gin.Context) {
+	var model structs.CreateModelRequest
+	if err := ctx.ShouldBindJSON(&model); err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var modelId common.Hash
+	if model.ID == "" {
+		var hash common.Hash
+		_, err := rand.Read(hash[:])
+		if err != nil {
+			c.log.Error(err)
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		modelId = hash
+	} else {
+		modelId = common.HexToHash(model.ID)
+	}
+	ipsfHash := common.HexToHash(model.IpfsID)
+
+	result, err := c.service.CreateNewModel(ctx, modelId, ipsfHash, model.Fee, model.Stake, model.Name, model.Tags)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"model": result})
+	return
+
+}
+
+// CreateBidRequest godoc
+//
+//		@Summary		Creates bid in blockchain
+//	 	@Tags			wallet
+//		@Produce		json
+//		@Accept			json
+//		@Param			bid	body		structs.CreateBidRequest 	true	"Bid"
+//		@Success		200	{object}	interface{}
+//		@Router			/blockchain/bids [post]
+func (c *BlockchainController) createNewBid(ctx *gin.Context) {
+	var bid structs.CreateBidRequest
+	if err := ctx.ShouldBindJSON(&bid); err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	modelId := common.HexToHash(bid.ModelID)
+	result, err := c.service.CreateNewBid(ctx, modelId, bid.PricePerSecond)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"bid": result})
 	return
 }
 

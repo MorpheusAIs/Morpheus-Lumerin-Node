@@ -2,9 +2,11 @@ package proxyctl
 
 import (
 	"context"
+	"math/big"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/handlers/tcphandlers"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
@@ -45,21 +47,24 @@ type Proxy struct {
 	eventListener       *blockchainapi.EventsListener
 	wallet              interfaces.PrKeyProvider
 	proxyAddr           string
+	chainID             *big.Int
 	sessionStorage      *storages.SessionStorage
 	log                 *lib.Logger
 	connLog             *lib.Logger
 	schedulerLogFactory SchedulerLogFactory
 	aiEngine            *aiengine.AiEngine
 	validator           *validator.Validate
+	modelConfigLoader   *config.ModelConfigLoader
 
 	state lib.AtomicValue[ProxyState]
 	tsk   *lib.Task
 }
 
 // NewProxyCtl creates a new Proxy controller instance
-func NewProxyCtl(eventListerer *blockchainapi.EventsListener, wallet interfaces.PrKeyProvider, log *lib.Logger, connLog *lib.Logger, proxyAddr string, scl SchedulerLogFactory, sessionStorage *storages.SessionStorage, valid *validator.Validate, aiEngine *aiengine.AiEngine) *Proxy {
+func NewProxyCtl(eventListerer *blockchainapi.EventsListener, wallet interfaces.PrKeyProvider, chainID *big.Int, log *lib.Logger, connLog *lib.Logger, proxyAddr string, scl SchedulerLogFactory, sessionStorage *storages.SessionStorage, modelConfigLoader *config.ModelConfigLoader, valid *validator.Validate, aiEngine *aiengine.AiEngine) *Proxy {
 	return &Proxy{
 		eventListener:       eventListerer,
+		chainID:             chainID,
 		wallet:              wallet,
 		log:                 log,
 		connLog:             connLog,
@@ -68,6 +73,7 @@ func NewProxyCtl(eventListerer *blockchainapi.EventsListener, wallet interfaces.
 		sessionStorage:      sessionStorage,
 		aiEngine:            aiEngine,
 		validator:           valid,
+		modelConfigLoader:   modelConfigLoader,
 	}
 }
 
@@ -130,7 +136,7 @@ func (p *Proxy) run(ctx context.Context, prKey lib.HexString) error {
 		return err
 	}
 
-	proxyReceiver := proxyapi.NewProxyReceiver(prKey, pubKey, p.sessionStorage, p.aiEngine)
+	proxyReceiver := proxyapi.NewProxyReceiver(prKey, pubKey, p.sessionStorage, p.aiEngine, p.chainID, p.modelConfigLoader)
 
 	morTcpHandler := proxyapi.NewMORRPCController(proxyReceiver, p.validator, p.sessionStorage)
 	tcpHandler := tcphandlers.NewTCPHandler(

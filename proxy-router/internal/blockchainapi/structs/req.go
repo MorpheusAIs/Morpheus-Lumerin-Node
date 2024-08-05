@@ -35,7 +35,7 @@ type QueryPageLimit struct {
 }
 
 type QuerySpender struct {
-	Spender common.Address `form:"spender" binding:"required" validate:"eth_addr"`
+	Spender lib.Address `form:"spender" binding:"required" validate:"eth_addr"`
 }
 
 type QueryApprove struct {
@@ -50,4 +50,23 @@ type QueryUserOrProvider struct {
 
 type OpenSessionWithDurationRequest struct {
 	SessionDuration *lib.BigInt `json:"sessionDuration"`
+}
+
+type CreateBidRequest struct {
+	ModelID        string      `json:"modelID" binding:"required" validate:"hex32"`
+	PricePerSecond *lib.BigInt `json:"pricePerSecond" binding:"required" validate:"number,gt=0"`
+}
+
+type CreateProviderRequest struct {
+	Stake    *lib.BigInt `json:"stake" binding:"required" validate:"number"`
+	Endpoint string      `json:"endpoint" binding:"required" validate:"string"`
+}
+
+type CreateModelRequest struct {
+	ID     string      `json:"id" binding:"omitempty" validate:"hex32"`
+	IpfsID string      `json:"ipfsID" binding:"required" validate:"hex32"`
+	Fee    *lib.BigInt `json:"fee" binding:"required" validate:"number"`
+	Stake  *lib.BigInt `json:"stake" binding:"required" validate:"number"`
+	Name   string      `json:"name" binding:"required" validate:"min=1,max=64"`
+	Tags   []string    `json:"tags" binding:"required" validate:"min=1,max=64,dive,min=1,max=64"`
 }

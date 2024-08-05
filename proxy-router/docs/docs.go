@@ -43,7 +43,9 @@ const docTemplate = `{
                         }
                     }
                 }
-            },
+            }
+        },
+        "/blockchain/approve": {
             "post": {
                 "description": "Approve MOR allowance for spender",
                 "produces": [
@@ -89,6 +91,39 @@ const docTemplate = `{
                     "wallet"
                 ],
                 "summary": "Get ETH and MOR balance",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/bids": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "wallet"
+                ],
+                "summary": "Creates bid in blockchain",
+                "parameters": [
+                    {
+                        "description": "Bid",
+                        "name": "bid",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/structs.CreateBidRequest"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -181,9 +216,72 @@ const docTemplate = `{
                         }
                     }
                 }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "wallet"
+                ],
+                "summary": "Creates model in blockchain",
+                "parameters": [
+                    {
+                        "description": "Model",
+                        "name": "model",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/structs.CreateModelRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                }
             }
         },
-        "/blockchain/models/:id/session": {
+        "/blockchain/models/{id}/bids": {
+            "get": {
+                "description": "Get bids from blockchain by model agent",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "wallet"
+                ],
+                "summary": "Get Active Bids by Model",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ModelAgent ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "object"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/models/{id}/session": {
             "post": {
                 "description": "Full flow to open a session by modelId",
                 "consumes": [
@@ -224,50 +322,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/blockchain/models/{id}/bids": {
-            "get": {
-                "description": "Get bids from blockchain by model agent",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "wallet"
-                ],
-                "summary": "Get Bids by\tModel Agent",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Offset",
-                        "name": "offset",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Limit",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "ModelAgent ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "object"
-                            }
-                        }
-                    }
-                }
-            }
-        },
         "/blockchain/providers": {
             "get": {
                 "description": "Get providers list from blokchain",
@@ -286,6 +340,37 @@ const docTemplate = `{
                             "items": {
                                 "type": "object"
                             }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "wallet"
+                ],
+                "summary": "Creates or updates provider in blockchain",
+                "parameters": [
+                    {
+                        "description": "Provider",
+                        "name": "provider",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/structs.CreateProviderRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object"
                         }
                     }
                 }
@@ -314,6 +399,38 @@ const docTemplate = `{
                         "name": "limit",
                         "in": "query"
                     },
+                    {
+                        "type": "string",
+                        "description": "Provider ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "object"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/providers/{id}/bids/active": {
+            "get": {
+                "description": "Get bids from blockchain by provider",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "wallet"
+                ],
+                "summary": "Get Bids by Provider",
+                "parameters": [
                     {
                         "type": "string",
                         "description": "Provider ID",
@@ -647,7 +764,27 @@ const docTemplate = `{
                 }
             }
         },
-        "/proxy/sessions/${id}/providerClaim": {
+        "/proxy/sessions/initiate": {
+            "post": {
+                "description": "sends a handshake to the provider",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "Initiate Session with Provider",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                }
+            }
+        },
+        "/proxy/sessions/{id}/providerClaim": {
             "post": {
                 "description": "Claim provider balance from session",
                 "produces": [
@@ -685,7 +822,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/proxy/sessions/${id}/providerClaimableBalance": {
+        "/proxy/sessions/{id}/providerClaimableBalance": {
             "get": {
                 "description": "Get provider claimable balance from session",
                 "produces": [
@@ -704,26 +841,6 @@ const docTemplate = `{
                         "required": true
                     }
                 ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object"
-                        }
-                    }
-                }
-            }
-        },
-        "/proxy/sessions/initiate": {
-            "post": {
-                "description": "sends a handshake to the provider",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "sessions"
-                ],
-                "summary": "Initiate Session with Provider",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -766,6 +883,28 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "type": "object"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/models": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "wallet"
+                ],
+                "summary": "Get local models",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/aiengine.LocalModel"
+                            }
                         }
                     }
                 }
@@ -822,6 +961,20 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "aiengine.LocalModel": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "lib.BigInt": {
             "type": "object"
         },
@@ -975,6 +1128,73 @@ const docTemplate = `{
                 },
                 "user": {
                     "type": "string"
+                }
+            }
+        },
+        "structs.CreateBidRequest": {
+            "type": "object",
+            "required": [
+                "modelID",
+                "pricePerSecond"
+            ],
+            "properties": {
+                "modelID": {
+                    "type": "string"
+                },
+                "pricePerSecond": {
+                    "$ref": "#/definitions/lib.BigInt"
+                }
+            }
+        },
+        "structs.CreateModelRequest": {
+            "type": "object",
+            "required": [
+                "fee",
+                "ipfsID",
+                "name",
+                "stake",
+                "tags"
+            ],
+            "properties": {
+                "fee": {
+                    "$ref": "#/definitions/lib.BigInt"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "ipfsID": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 1
+                },
+                "stake": {
+                    "$ref": "#/definitions/lib.BigInt"
+                },
+                "tags": {
+                    "type": "array",
+                    "maxItems": 64,
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "structs.CreateProviderRequest": {
+            "type": "object",
+            "required": [
+                "endpoint",
+                "stake"
+            ],
+            "properties": {
+                "endpoint": {
+                    "type": "string"
+                },
+                "stake": {
+                    "$ref": "#/definitions/lib.BigInt"
                 }
             }
         },

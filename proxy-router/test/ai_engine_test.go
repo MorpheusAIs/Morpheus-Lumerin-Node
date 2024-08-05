@@ -45,10 +45,14 @@ func TestAiEngine_PromptStream(t *testing.T) {
 
 	choices := make([]api.ChatCompletionStreamChoice, 0)
 
-	resp, err := aiEngine.PromptStream(context.Background(), req, func(response *api.ChatCompletionStreamResponse) error {
-		choices = append(choices, response.Choices...)
+	resp, err := aiEngine.PromptStream(context.Background(), req, func(response interface{}) error {
+		r, ok := response.(*api.ChatCompletionStreamResponse)
+		if !ok {
+			return errors.New("invalid response")
+		}
+		choices = append(choices, r.Choices...)
 
-		if response.Choices[0].Delta.Content == "" {
+		if r.Choices[0].Delta.Content == "" {
 			return errors.New("empty response")
 		}
 

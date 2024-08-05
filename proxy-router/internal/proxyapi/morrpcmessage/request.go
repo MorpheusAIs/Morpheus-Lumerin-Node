@@ -32,9 +32,9 @@ type SessionPromptReq struct {
 	Timestamp uint64        `json:"timestamp" validate:"required,number"`
 }
 
-type SessionCloseReq struct {
+type SessionReportReq struct {
 	Signature lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
-	SessionID common.Hash   `json:"sessionid"           validate:"required,hexadecimal"`
+	Message   string        `json:"message"           validate:"required,hexadecimal"`
 	Timestamp uint64        `json:"timestamp"           validate:"required,number"`
 }
 
@@ -42,6 +42,13 @@ type SessionPromptRes struct {
 	Message   string        `json:"message"             validate:"required"`
 	Signature lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
 	Timestamp uint64        `json:"timestamp"           validate:"required,number"`
+}
+
+type SessionReportRes struct {
+	Message      lib.HexString `json:"message"             validate:"required"`
+	SignedReport lib.HexString `json:"signedReport"        validate:"required"`
+	Signature    lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
+	Timestamp    uint64        `json:"timestamp"           validate:"required,number"`
 }
 
 type ReportRes struct {
@@ -88,9 +95,4 @@ type ReqObject struct {
 	Req  uint `json:"req"`
 	Res  uint `json:"res"`
 	Toks uint `json:"toks"`
-}
-
-var approvalAbi = []lib.AbiParameter{
-	{Type: "bytes32"},
-	{Type: "uint128"},
 }
