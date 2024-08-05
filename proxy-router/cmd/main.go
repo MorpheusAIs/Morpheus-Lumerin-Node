@@ -214,7 +214,13 @@ func start() error {
 	aiEngine := aiengine.NewAiEngine(cfg.AIEngine.OpenAIBaseURL, cfg.AIEngine.OpenAIKey, log)
 
 	sessionRouter := registries.NewSessionRouter(*cfg.Marketplace.DiamondContractAddress, ethClient, log)
-	eventListener := blockchainapi.NewEventsListener(ethClient, sessionStorage, sessionRouter, wallet, log)
+
+	modelConfigLoader := config.NewModelConfigLoader(cfg.Proxy.ModelsConfigPath, log)
+	err = modelConfigLoader.Init()
+	if err != nil {
+		log.Warnf("failed to load model config: %s, run with empty", err)
+	}
+	eventListener := blockchainapi.NewEventsListener(ethClient, sessionStorage, sessionRouter, wallet, modelConfigLoader, log)
 
 	blockchainController := blockchainapi.NewBlockchainController(blockchainApi, log)
 	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine)
@@ -233,7 +239,7 @@ func start() error {
 		cancel()
 	}()
 
-	proxy := proxyctl.NewProxyCtl(eventListener, wallet, chainID, log, connLog, cfg.Proxy.Address, schedulerLogFactory, sessionStorage, valid, aiEngine)
+	proxy := proxyctl.NewProxyCtl(eventListener, wallet, chainID, log, connLog, cfg.Proxy.Address, schedulerLogFactory, sessionStorage, modelConfigLoader, valid, aiEngine)
 	err = proxy.Run(ctx)
 
 	cancelServer()

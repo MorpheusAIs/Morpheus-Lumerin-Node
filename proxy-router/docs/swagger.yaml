@@ -1,5 +1,14 @@
 basePath: /
 definitions:
+  aiengine.LocalModel:
+    properties:
+      id:
+        type: string
+      model:
+        type: string
+      name:
+        type: string
+    type: object
   lib.BigInt:
     type: object
   proxyapi.ChatCompletionMessage:
@@ -120,6 +129,53 @@ definitions:
       user:
         type: string
     type: object
+  structs.CreateBidRequest:
+    properties:
+      modelID:
+        type: string
+      pricePerSecond:
+        $ref: '#/definitions/lib.BigInt'
+    required:
+    - modelID
+    - pricePerSecond
+    type: object
+  structs.CreateModelRequest:
+    properties:
+      fee:
+        $ref: '#/definitions/lib.BigInt'
+      id:
+        type: string
+      ipfsID:
+        type: string
+      name:
+        maxLength: 64
+        minLength: 1
+        type: string
+      stake:
+        $ref: '#/definitions/lib.BigInt'
+      tags:
+        items:
+          type: string
+        maxItems: 64
+        minItems: 1
+        type: array
+    required:
+    - fee
+    - ipfsID
+    - name
+    - stake
+    - tags
+    type: object
+  structs.CreateProviderRequest:
+    properties:
+      endpoint:
+        type: string
+      stake:
+        $ref: '#/definitions/lib.BigInt'
+    required:
+    - endpoint
+    - stake
+    type: object
   structs.OpenSessionRequest:
     type: object
   structs.OpenSessionWithDurationRequest:
@@ -192,6 +248,7 @@ paths:
       summary: Get Allowance for MOR
       tags:
       - wallet
+  /blockchain/approve:
     post:
       description: Approve MOR allowance for spender
       parameters:
@@ -226,6 +283,27 @@ paths:
           schema:
             type: object
       summary: Get ETH and MOR balance
+      tags:
+      - wallet
+  /blockchain/bids:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Bid
+        in: body
+        name: bid
+        required: true
+        schema:
+          $ref: '#/definitions/structs.CreateBidRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Creates bid in blockchain
       tags:
       - wallet
   /blockchain/bids/:id/session:
@@ -283,6 +361,26 @@ paths:
       summary: Get models list
       tags:
       - wallet
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Model
+        in: body
+        name: model
+        required: true
+        schema:
+          $ref: '#/definitions/structs.CreateModelRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Creates model in blockchain
+      tags:
+      - wallet
   /blockchain/models/:id/session:
     post:
       consumes:
@@ -310,27 +408,6 @@ paths:
       summary: Open Session by ModelID in blockchain
       tags:
       - sessions
-  /blockchain/models/{id}/bids:
-    get:
-      description: Get bids from blockchain by model agent
-      parameters:
-      - description: ModelAgent ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              type: object
-            type: array
-      summary: "Get Active Bids by\tModel Agent"
-      tags:
-      - wallet
   /blockchain/providers:
     get:
       description: Get providers list from blokchain
@@ -344,6 +421,26 @@ paths:
               type: object
             type: array
       summary: Get providers list
+      tags:
+      - wallet
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Provider
+        in: body
+        name: provider
+        required: true
+        schema:
+          $ref: '#/definitions/structs.CreateProviderRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Creates or updates provider in blockchain
       tags:
       - wallet
   /blockchain/providers/{id}/bids:
@@ -599,7 +696,7 @@ paths:
       summary: Healthcheck example
       tags:
       - healthcheck
-  /proxy/sessions/${id}/providerClaim:
+  /proxy/sessions/{id}/providerClaim:
     post:
       description: Claim provider balance from session
       parameters:
@@ -624,7 +721,7 @@ paths:
       summary: Claim Provider Balance
       tags:
       - sessions
-  /proxy/sessions/${id}/providerClaimableBalance:
+  /proxy/sessions/{id}/providerClaimableBalance:
     get:
       description: Get provider claimable balance from session
       parameters:
@@ -678,6 +775,20 @@ paths:
           schema:
             type: object
       summary: Send Local Or Remote Prompt
+      tags:
+      - wallet
+  /v1/models:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/aiengine.LocalModel'
+            type: array
+      summary: Get local models
       tags:
       - wallet
   /wallet:
