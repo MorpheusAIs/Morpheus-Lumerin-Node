@@ -1,4 +1,4 @@
-# Consumer Node Setup (Draft - 2024-07-23)
+# Consumer Node Setup from Source (Draft - 2024-08-05)
 This document provides a step-by-step guide to setting up a Consumer Node for the Morepheus Network so that you can setup session and interact with the remote providers.
 
 ## Pre-requisites:

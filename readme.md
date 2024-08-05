@@ -39,12 +39,13 @@ The steps listed below are for both the Consumer and Provider to get started wit
 3. Extract the zip to a local folder (examples)
     * Windows: `(%USERPROFILE%)/Downloads/morpheus)` 
     * Linux & MacOS: `~/Downloads/morpheus`
-    * On MacOS you may need to execute `xattr -c mor-launch proxy-router ui-desktop.app` in a command window to remove the quarantine flag on MacOS
+    * On MacOS you may need to execute `xattr -c mor-launch proxy-router ui-desktop.app llama-server` in a command window to remove the quarantine flag on MacOS
 4. Edit the .env file (this is a hidden file, please use your OS specific method to show hidden files) 
     * Change `ETH_NODE_ADDRESS=` (you can setup a free one in Alchemy or Infura) 
     * Change `WALLET_PRIVATE_KEY=` This will be the private key of the Wallet you setup previously
 
-### Consumer (Local LLM, Proxy-Router & UI-Desktop): 
+### Consumer from Package (Local LLM, Proxy-Router & UI-Desktop): 
+Please see /consumer.md for building from git source 
 1. Assuming that you have already setup the prerequisites and downloaded the latest release, you can follow the steps below to get started
 2. Launch the node - this should open a command window to see local LLM model server and proxy-router start and then should launch the user interface  
     * Windows: Double click the `mor-launch.exe` (You will need to tell Windows Defender this is ok to run) 
@@ -82,7 +83,6 @@ The steps listed below are for both the Consumer and Provider to get started wit
 ### Provider (Local LLM to offer, Proxy-Router running as background/service): 
 This section is used for offering your hosted LLM model to the network for others to use.
 
-**At this time, we are not onboarding any new providers, but you can follow the steps below to see how it would work and will be automated and simplified in the future.**
 1. SETUP PROVIDER / MODEL / BID: 
     1. WEB3/Arbiscan/Metamask: Authorize Diamond Contract to spend on the Provider's behalf 
         1. https://sepolia.arbiscan.io/address/0xc1664f994fd3991f98ae944bc16b9aed673ef5fd#writeContract 
@@ -123,5 +123,33 @@ This section is used for offering your hosted LLM model to the network for other
         * Windows: Double click the `proxy-router.exe` (You will need to tell Windows Defender this is ok to run)  
         * Linux & MacOS: Open a terminal and navigate to the folder and run `./proxy-router`from the morpheus/proxy-router folder
     * This will start the proxy-router in the background and begin monitoring the blockchain for events
-4. VERIFY PROVIDER SETUP 
+4. (OPTIONAL) - External Provider or Pass through 
+    * In some cases you will want to leverage external or existing AI Providers in the network via their own, private API
+    * Dependencies: 
+        * `model-config.json` file in the proxy-router directory
+        * proxy-router .env file for proxy-router must also be updated to include `MODELS_CONFIG_PATH=<path_to_proxy-router>/models-config.json`
+    * Once your provider is up and running, deploy a new model and model bid via the diamond contract (you will need the `model_ID` for the configuration)
+    * Edit the model-config.json to the following json format ... with 
+    * The JSON ID will be the ModelID that you created above, modelName, apiTYpe, apiURL and apiKey are from the external provider and specific to their offered models 
+    * Once the model-config.json file is updated, the morpheus node will need to be restarted to pick up the new configuration (not all models (eg: image generation can be utilized via the UI-Desktop, but API integration is possible)
+
+```
+#model-config.json 
+{
+    "0x4b5d6c2d3e4f5a6b7c8de7f89a0b19e07f4a6e1f2c3a3c28d9d5e6": {
+        "modelName": "v1-5-specialmodel.modelversion [externalmodel]",
+        "apiType": "provider_api_type",
+        "apiUrl": "https://api.externalmodel.com/v1/xyz/generate",
+        "apiKey": "api-key-from-external-provider"
+    },
+    "0xb2c8a6b2c1d9ed7f0e9a3b4c2d6e5f14f9b8c3a7e5d6a1a0b9c7d8e4f30f4a7b": {
+        "modelName": "v1-7-specialmodel2.modelversion [externalmodel]",
+        "apiType": "provider_api_type",
+        "apiUrl": "https://api.externalmodel.com/v1/abc/generate",
+        "apiKey": "api-key-from-external-provider"
+    }
+}
+```
+
+5. VERIFY PROVIDER SETUP 
     * On a separate machine and with a separate wallet, you can follow the consumer steps above to verify that your model is available and working correctly
