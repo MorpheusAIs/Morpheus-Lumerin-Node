@@ -363,12 +363,12 @@ contract SessionRouter {
     OnHold[] storage onHold = s.userOnHold[userAddr];
 
     uint256 length = onHold.length;
-    if (length < offset) {
+    if (length <= offset) {
       return (avail, hold);
     }
 
     uint8 size = offset + limit > length ? uint8(length - offset) : limit;
-    for (uint i = 0; i < size; i++) {
+    for (uint i = offset; i < offset + size; i++) {
       OnHold storage hh = onHold[i];
       if (block.timestamp < hh.releaseAt) {
         hold += hh.amount;
