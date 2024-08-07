@@ -4,6 +4,13 @@
 - This is a simple guide to get the Llama.cpp model, Lumerin proxy-router and ui-desktop from source running on a Mac
 - This is a guide for a developer or someone familiar with the codebase and build process
 - Wallet: if you’re going to start with an existing wallet from something like MetaMask (recommended)…make sure it’s a tier 1, not a derived or secondary address. Desktop-ui recover from mnemonic won’t work properly if you try to recover a secondary address with the primary mnemonic.  
+- Install & Configure OS-Specific Dependencies
+  * git (https://git-scm.com/)
+  * go (https://golang.org/)
+  * node (https://nodejs.org/)
+  * make (https://www.gnu.org/software/make/)
+  * yarn (https://yarnpkg.com/)
+
 - Four basic steps: 
     1. Clone, build select model and run local Llama.cpp model
     2. Clone the Morpheus-Lumerin-Node repo from Github 
