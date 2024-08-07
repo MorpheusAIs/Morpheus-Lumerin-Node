@@ -3,6 +3,7 @@
 ### Overview
 - This is a simple guide to get the Llama.cpp model, Lumerin proxy-router and ui-desktop from source running on a Mac
 - This is a guide for a developer or someone familiar with the codebase and build process
+- Wallet: if you’re going to start with an existing wallet from something like MetaMask (recommended)…make sure it’s a tier 1, not a derived or secondary address. Desktop-ui recover from mnemonic won’t work properly if you try to recover a secondary address with the primary mnemonic.  
 - Four basic steps: 
     1. Clone, build select model and run local Llama.cpp model
     2. Clone the Morpheus-Lumerin-Node repo from Github 
@@ -22,16 +23,15 @@ make
 ```
 
 **2. Set General Variables:** 
+* In same CLI window set the variables that the model command line will use (or you can build out a .env file with these and the others below)
   ```sh
-  # In same CLI window set the variables that the model command line will use (or you can build out a .env file with these and the others below)
   model_host=127.0.0.1
   model_port=8080
   ```
 
 **3. Set Model Specific Variables:** (pick one of the variable blocks below)
 * https://huggingface.co/TheBloke
-  * Llama-2-7B-Chat-GGUF / llama-2-7b-chat.Q5_K_M.gguf 
-    * 7.28GB RAM required
+  * Llama-2-7B-Chat-GGUF / llama-2-7b-chat.Q5_K_M.gguf (7.28GB RAM required)
     ```
     model_url=https://huggingface.co/TheBloke
     model_collection=Llama-2-7B-Chat-GGUF
