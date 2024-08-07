@@ -13,6 +13,7 @@
 ## **A. LLAMA.CPP**
 * Open first terminal / cli window 
 * You will need to know what port you want the local mode to listen on (8080 in this example)
+* This work should only need to be done once as it provides a local model for validation of the local proxy-router
 
 **1. Clone LLamaCPP Repo & Build**
 ```sh
@@ -64,6 +65,7 @@ wget -O models/${model_file_name} ${model_url}/${model_collection}/resolve/main/
 
 * OPTIONAL To leave this running in the background (and tail -f nohup.out to monitor)
 ```sh 
+wget -O models/${model_file_name} ${model_url}/${model_collection}/resolve/main/${model_file_name} 
 nohup ./llama-server -m models/${model_file_name} --host ${model_host} --port ${model_port} --n-gpu-layers 4096 &
 tail -f nohup.out
 ```
@@ -110,7 +112,7 @@ go run cmd/main.go
 2024-08-07T11:35:49.116924	INFO	HTTP	http server is listening: 0.0.0.0:8082
 2024-08-07T11:35:49.116962	INFO	TCP	tcp server is listening: 0.0.0.0:3333
 ```
-- Navigate to `http://localhost:8082` in a browser to see the proxy-router interface and test the Swagger API
+- Navigate to `http://localhost:8082/swagger/index.htmlß` in a browser to see the proxy-router interface and test the Swagger API
 
 **- NOTE** if you would like to interact directly with your proxy-router without the UI, see the instructions in [/docs/proxy-router-api-direct.md](/docs/proxy-router-api-direct.md)
 
