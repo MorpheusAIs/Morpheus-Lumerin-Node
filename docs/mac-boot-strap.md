@@ -112,7 +112,7 @@ go run cmd/main.go
 2024-08-07T11:35:49.116924	INFO	HTTP	http server is listening: 0.0.0.0:8082
 2024-08-07T11:35:49.116962	INFO	TCP	tcp server is listening: 0.0.0.0:3333
 ```
-- Navigate to `http://localhost:8082/swagger/index.htmlß` in a browser to see the proxy-router interface and test the Swagger API
+- Navigate to `http://localhost:8082/swagger/index.html` in a browser to see the proxy-router interface and test the Swagger API
 
 **- NOTE** if you would like to interact directly with your proxy-router without the UI, see the instructions in [/docs/proxy-router-api-direct.md](/docs/proxy-router-api-direct.md)
 
