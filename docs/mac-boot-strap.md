@@ -18,8 +18,7 @@
 ```sh
 git clone https://github.com/ggerganov/llama.cpp.git
 cd llama.cpp
-make
-# optional for parallel build: make -j 8 
+make -j 8
 ```
 
 **2. Set General Variables:** 
