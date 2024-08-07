@@ -94,12 +94,12 @@ This section is used for offering your hosted LLM model to the network for other
         6. The Diamond Contract is now authorized to spend MOR on provider's behalf 
     2. Create Provider in the Diamond contract via swagger api:
         1. Start proxy-router 
-        1. http://localhost:8082/swagger/index.html#/wallet/post_blockchain_providers
+        1. http://localhost:8082/swagger/index.html#/providers/post_blockchain_providers
         3. Enter required fields:   
             2. addStake = Amount of stake for provider to risk - Stake can be 0 now 
             3. Endpoint = Publicly accessible endpoint for provider (ip:port or fqdn:port no protocol) eg: `mycoolmornode.domain.com:3989`
     3. Create Model in the contract:
-        1. Go to http://localhost:8082/swagger/index.html#/wallet/post_blockchain_models and enter
+        1. Go to http://localhost:8082/swagger/index.html#/models/post_blockchain_models and enter
             1. modelId: random 32byte/hex that will uniquely identify model (uuid)
             2. ipfsCID: another random32byte/hex for future use (model library)
             3. Fee: fee for the model usage - 0 for now
@@ -109,7 +109,7 @@ This section is used for offering your hosted LLM model to the network for other
             7. tags: array of tag strings for the model 
             8. Capture the `modelID` from the JSON response
     4. Offer Model Bid in the contract: 
-        1. Navigate to http://localhost:8082/swagger/index.html#/wallet/post_blockchain_bids and enter
+        1. Navigate to http://localhost:8082/swagger/index.html#/bids/post_blockchain_bids and enter
             1. modelID: Model ID Created in last step: 
             2. pricePerSecond: this is in 1*10^18 format so 100000000000 should make 5 minutes for the session around 37.5 saMOR 
             3. Click Execute 

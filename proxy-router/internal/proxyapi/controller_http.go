@@ -104,7 +104,7 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 // GetLocalModels godoc
 //
 //	@Summary	Get local models
-//	@Tags		wallet
+//	@Tags		chat
 //	@Produce	json
 //	@Success	200	{object}	[]aiengine.LocalModel
 //	@Router		/v1/models [get]

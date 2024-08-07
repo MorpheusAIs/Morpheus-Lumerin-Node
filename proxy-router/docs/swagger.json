@@ -16,7 +16,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "transactions"
                 ],
                 "summary": "Get Allowance for MOR",
                 "parameters": [
@@ -45,7 +45,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "transactions"
                 ],
                 "summary": "Approve MOR allowance",
                 "parameters": [
@@ -81,7 +81,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "transactions"
                 ],
                 "summary": "Get ETH and MOR balance",
                 "responses": {
@@ -103,7 +103,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "bids"
                 ],
                 "summary": "Creates bid in blockchain",
                 "parameters": [
@@ -134,7 +134,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "bids"
                 ],
                 "summary": "Get Bid by ID",
                 "parameters": [
@@ -204,7 +204,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "transactions"
                 ],
                 "summary": "Get Latest Block",
                 "responses": {
@@ -224,7 +224,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "models"
                 ],
                 "summary": "Get models list",
                 "responses": {
@@ -244,7 +244,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "models"
                 ],
                 "summary": "Creates model in blockchain",
                 "parameters": [
@@ -275,7 +275,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "bids"
                 ],
                 "summary": "Get Active Bids by Model",
                 "parameters": [
@@ -304,7 +304,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "bids"
                 ],
                 "summary": "Get Rated Bids",
                 "parameters": [
@@ -374,7 +374,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "providers"
                 ],
                 "summary": "Get providers list",
                 "responses": {
@@ -394,7 +394,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "providers"
                 ],
                 "summary": "Creates or updates provider in blockchain",
                 "parameters": [
@@ -425,7 +425,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "bids"
                 ],
                 "summary": "Get Bids by Provider",
                 "parameters": [
@@ -466,7 +466,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "bids"
                 ],
                 "summary": "Get Bids by Provider",
                 "parameters": [
@@ -495,7 +495,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "transactions"
                 ],
                 "summary": "Send Eth",
                 "parameters": [
@@ -526,7 +526,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "transactions"
                 ],
                 "summary": "Send Mor",
                 "parameters": [
@@ -635,7 +635,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "sessions"
                 ],
                 "summary": "Get Todays Budget",
                 "responses": {
@@ -713,7 +713,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "sessions"
                 ],
                 "summary": "Get Token Supply",
                 "responses": {
@@ -733,7 +733,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "transactions"
                 ],
                 "summary": "Get Transactions",
                 "parameters": [
@@ -964,7 +964,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "chat"
                 ],
                 "summary": "Get local models",
                 "responses": {
@@ -994,7 +994,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/walletapi.WalletRes"
                         }
                     }
                 }
@@ -1023,7 +1023,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/walletapi.statusRes"
                         }
                     }
                 }
@@ -1942,6 +1942,24 @@
             "properties": {
                 "privateKey": {
                     "type": "string"
+                }
+            }
+        },
+        "walletapi.WalletRes": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string",
+                    "example": "0x1234"
+                }
+            }
+        },
+        "walletapi.statusRes": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "example": "ok"
                 }
             }
         }

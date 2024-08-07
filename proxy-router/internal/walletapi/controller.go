@@ -31,7 +31,7 @@ func (s *WalletController) RegisterRoutes(r interfaces.Router) {
 //	@Description	Get wallet address
 //	@Tags			wallet
 //	@Produce		json
-//	@Success		200	{object}	interface{}
+//	@Success		200	{object}	WalletRes
 //	@Router			/wallet [get]
 func (s *WalletController) GetWallet(ctx *gin.Context) {
 	prKey, err := s.service.GetPrivateKey()
@@ -42,7 +42,7 @@ func (s *WalletController) GetWallet(ctx *gin.Context) {
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 	}
-	ctx.JSON(http.StatusOK, gin.H{"address": addr})
+	ctx.JSON(http.StatusOK, WalletRes{Address: addr})
 }
 
 // SetupWallet godoc
@@ -52,7 +52,7 @@ func (s *WalletController) GetWallet(ctx *gin.Context) {
 //	@Tags			wallet
 //	@Produce		json
 //	@Param			privatekey	body		walletapi.SetupWalletReqBody	true	"Private key"
-//	@Success		200			{object}	interface{}
+//	@Success		200			{object}	statusRes
 //	@Router			/wallet [post]
 func (s *WalletController) SetupWallet(ctx *gin.Context) {
 	var req SetupWalletReqBody
@@ -66,5 +66,5 @@ func (s *WalletController) SetupWallet(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
+	ctx.JSON(http.StatusOK, OkRes())
 }

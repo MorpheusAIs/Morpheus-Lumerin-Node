@@ -23,7 +23,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "transactions"
                 ],
                 "summary": "Get Allowance for MOR",
                 "parameters": [
@@ -52,7 +52,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "transactions"
                 ],
                 "summary": "Approve MOR allowance",
                 "parameters": [
@@ -88,7 +88,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "transactions"
                 ],
                 "summary": "Get ETH and MOR balance",
                 "responses": {
@@ -110,7 +110,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "bids"
                 ],
                 "summary": "Creates bid in blockchain",
                 "parameters": [
@@ -141,7 +141,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "bids"
                 ],
                 "summary": "Get Bid by ID",
                 "parameters": [
@@ -211,7 +211,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "transactions"
                 ],
                 "summary": "Get Latest Block",
                 "responses": {
@@ -231,7 +231,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "models"
                 ],
                 "summary": "Get models list",
                 "responses": {
@@ -251,7 +251,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "models"
                 ],
                 "summary": "Creates model in blockchain",
                 "parameters": [
@@ -282,7 +282,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "bids"
                 ],
                 "summary": "Get Active Bids by Model",
                 "parameters": [
@@ -311,7 +311,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "bids"
                 ],
                 "summary": "Get Rated Bids",
                 "parameters": [
@@ -381,7 +381,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "providers"
                 ],
                 "summary": "Get providers list",
                 "responses": {
@@ -401,7 +401,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "providers"
                 ],
                 "summary": "Creates or updates provider in blockchain",
                 "parameters": [
@@ -432,7 +432,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "bids"
                 ],
                 "summary": "Get Bids by Provider",
                 "parameters": [
@@ -473,7 +473,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "bids"
                 ],
                 "summary": "Get Bids by Provider",
                 "parameters": [
@@ -502,7 +502,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "transactions"
                 ],
                 "summary": "Send Eth",
                 "parameters": [
@@ -533,7 +533,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "transactions"
                 ],
                 "summary": "Send Mor",
                 "parameters": [
@@ -642,7 +642,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "sessions"
                 ],
                 "summary": "Get Todays Budget",
                 "responses": {
@@ -720,7 +720,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "sessions"
                 ],
                 "summary": "Get Token Supply",
                 "responses": {
@@ -740,7 +740,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "transactions"
                 ],
                 "summary": "Get Transactions",
                 "parameters": [
@@ -971,7 +971,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "chat"
                 ],
                 "summary": "Get local models",
                 "responses": {
@@ -1001,7 +1001,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/walletapi.WalletRes"
                         }
                     }
                 }
@@ -1030,7 +1030,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/walletapi.statusRes"
                         }
                     }
                 }
@@ -1949,6 +1949,24 @@ const docTemplate = `{
             "properties": {
                 "privateKey": {
                     "type": "string"
+                }
+            }
+        },
+        "walletapi.WalletRes": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string",
+                    "example": "0x1234"
+                }
+            }
+        },
+        "walletapi.statusRes": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "example": "ok"
                 }
             }
         }

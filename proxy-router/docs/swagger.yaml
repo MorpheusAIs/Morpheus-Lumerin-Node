@@ -635,6 +635,18 @@ definitions:
     required:
     - privateKey
     type: object
+  walletapi.WalletRes:
+    properties:
+      address:
+        example: "0x1234"
+        type: string
+    type: object
+  walletapi.statusRes:
+    properties:
+      status:
+        example: ok
+        type: string
+    type: object
 externalDocs:
   description: OpenAPI
   url: https://swagger.io/resources/open-api/
@@ -663,7 +675,7 @@ paths:
             $ref: '#/definitions/structs.AllowanceRes'
       summary: Get Allowance for MOR
       tags:
-      - wallet
+      - transactions
   /blockchain/approve:
     post:
       description: Approve MOR allowance for spender
@@ -687,7 +699,7 @@ paths:
             $ref: '#/definitions/structs.TxRes'
       summary: Approve MOR allowance
       tags:
-      - wallet
+      - transactions
   /blockchain/balance:
     get:
       description: Get ETH and MOR balance of the user
@@ -700,7 +712,7 @@ paths:
             $ref: '#/definitions/structs.TokenBalanceRes'
       summary: Get ETH and MOR balance
       tags:
-      - wallet
+      - transactions
   /blockchain/bids:
     post:
       consumes:
@@ -721,7 +733,7 @@ paths:
             $ref: '#/definitions/structs.BidRes'
       summary: Creates bid in blockchain
       tags:
-      - wallet
+      - bids
   /blockchain/bids/{id}:
     get:
       description: Get bid from blockchain by ID
@@ -740,7 +752,7 @@ paths:
             $ref: '#/definitions/structs.BidRes'
       summary: Get Bid by ID
       tags:
-      - wallet
+      - bids
   /blockchain/bids/{id}/session:
     post:
       consumes:
@@ -780,7 +792,7 @@ paths:
             $ref: '#/definitions/structs.BlockRes'
       summary: Get Latest Block
       tags:
-      - wallet
+      - transactions
   /blockchain/models:
     get:
       description: Get models list from blokchain
@@ -793,7 +805,7 @@ paths:
             $ref: '#/definitions/structs.ModelsRes'
       summary: Get models list
       tags:
-      - wallet
+      - models
     post:
       consumes:
       - application/json
@@ -813,7 +825,7 @@ paths:
             $ref: '#/definitions/structs.ModelRes'
       summary: Creates model in blockchain
       tags:
-      - wallet
+      - models
   /blockchain/models/{id}/bids:
     get:
       description: Get bids from blockchain by model agent
@@ -832,7 +844,7 @@ paths:
             $ref: '#/definitions/structs.BidsRes'
       summary: Get Active Bids by Model
       tags:
-      - wallet
+      - bids
   /blockchain/models/{id}/bids/rated:
     get:
       description: Get rated bids from blockchain by model
@@ -851,7 +863,7 @@ paths:
             $ref: '#/definitions/structs.ScoredBidsRes'
       summary: Get Rated Bids
       tags:
-      - wallet
+      - bids
   /blockchain/models/{id}/session:
     post:
       consumes:
@@ -891,7 +903,7 @@ paths:
             $ref: '#/definitions/structs.ProvidersRes'
       summary: Get providers list
       tags:
-      - wallet
+      - providers
     post:
       consumes:
       - application/json
@@ -911,7 +923,7 @@ paths:
             $ref: '#/definitions/structs.ProviderRes'
       summary: Creates or updates provider in blockchain
       tags:
-      - wallet
+      - providers
   /blockchain/providers/{id}/bids:
     get:
       description: Get bids from blockchain by provider
@@ -938,7 +950,7 @@ paths:
             $ref: '#/definitions/structs.BidsRes'
       summary: Get Bids by Provider
       tags:
-      - wallet
+      - bids
   /blockchain/providers/{id}/bids/active:
     get:
       description: Get bids from blockchain by provider
@@ -957,7 +969,7 @@ paths:
             $ref: '#/definitions/structs.BidsRes'
       summary: Get Bids by Provider
       tags:
-      - wallet
+      - bids
   /blockchain/send/eth:
     post:
       description: Send Eth to address
@@ -977,7 +989,7 @@ paths:
             $ref: '#/definitions/structs.TxRes'
       summary: Send Eth
       tags:
-      - wallet
+      - transactions
   /blockchain/send/mor:
     post:
       description: Send Mor to address
@@ -997,7 +1009,7 @@ paths:
             $ref: '#/definitions/structs.TxRes'
       summary: Send Mor
       tags:
-      - wallet
+      - transactions
   /blockchain/sessions:
     get:
       description: Get sessions from blockchain by user or provider
@@ -1099,7 +1111,7 @@ paths:
             $ref: '#/definitions/structs.BudgetRes'
       summary: Get Todays Budget
       tags:
-      - wallet
+      - sessions
   /blockchain/token/supply:
     get:
       description: Get MOR token supply from blockchain
@@ -1112,7 +1124,7 @@ paths:
             $ref: '#/definitions/structs.SupplyRes'
       summary: Get Token Supply
       tags:
-      - wallet
+      - sessions
   /blockchain/transactions:
     get:
       description: Get MOR and ETH transactions
@@ -1134,7 +1146,7 @@ paths:
             $ref: '#/definitions/structs.TransactionsRes'
       summary: Get Transactions
       tags:
-      - wallet
+      - transactions
   /config:
     get:
       description: Return the current config of proxy router
@@ -1277,7 +1289,7 @@ paths:
             type: array
       summary: Get local models
       tags:
-      - wallet
+      - chat
   /wallet:
     get:
       description: Get wallet address
@@ -1287,7 +1299,7 @@ paths:
         "200":
           description: OK
           schema:
-            type: object
+            $ref: '#/definitions/walletapi.WalletRes'
       summary: Get Wallet
       tags:
       - wallet
@@ -1306,7 +1318,7 @@ paths:
         "200":
           description: OK
           schema:
-            type: object
+            $ref: '#/definitions/walletapi.statusRes'
       summary: Set Wallet
       tags:
       - wallet

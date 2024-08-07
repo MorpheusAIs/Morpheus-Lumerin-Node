@@ -28,28 +28,35 @@ func NewBlockchainController(service *BlockchainService, log lib.ILogger) *Block
 }
 
 func (c *BlockchainController) RegisterRoutes(r interfaces.Router) {
-	r.GET("/proxy/sessions/:id/providerClaimableBalance", c.getProviderClaimableBalance)
-	r.POST("/proxy/sessions/:id/providerClaim", c.claimProviderBalance)
-
+	// transactions
 	r.GET("/blockchain/balance", c.getBalance)
-	r.POST("/blockchain/send/eth", c.sendETH)
-	r.POST("/blockchain/send/mor", c.sendMOR)
 	r.GET("/blockchain/transactions", c.getTransactions)
 	r.GET("/blockchain/allowance", c.getAllowance)
-	r.POST("/blockchain/approve", c.approve)
 	r.GET("/blockchain/latestBlock", c.getLatestBlock)
+	r.POST("/blockchain/approve", c.approve)
+	r.POST("/blockchain/send/eth", c.sendETH)
+	r.POST("/blockchain/send/mor", c.sendMOR)
 
+	// providers
 	r.GET("/blockchain/providers", c.getAllProviders)
 	r.POST("/blockchain/providers", c.createProvider)
-	r.GET("/blockchain/providers/:id/bids", c.getBidsByProvider)
-	r.GET("/blockchain/providers/:id/bids/active", c.getActiveBidsByProvider)
+
+	// models
 	r.GET("/blockchain/models", c.getAllModels)
 	r.POST("/blockchain/models", c.createNewModel)
+
+	// bids
+	r.POST("/blockchain/bids", c.createNewBid)
+	r.GET("/blockchain/bids/:id", c.getBidByID)
 	r.GET("/blockchain/models/:id/bids", c.getBidsByModelAgent)
 	r.GET("/blockchain/models/:id/bids/rated", c.getRatedBids)
 	r.GET("/blockchain/models/:id/bids/active", c.getActiveBidsByModel)
-	r.GET("/blockchain/bids/:id", c.getBidByID)
-	r.POST("/blockchain/bids", c.createNewBid)
+	r.GET("/blockchain/providers/:id/bids", c.getBidsByProvider)
+	r.GET("/blockchain/providers/:id/bids/active", c.getActiveBidsByProvider)
+
+	// sessions
+	r.GET("/proxy/sessions/:id/providerClaimableBalance", c.getProviderClaimableBalance)
+	r.POST("/proxy/sessions/:id/providerClaim", c.claimProviderBalance)
 	r.GET("/blockchain/sessions", c.getSessions)
 	r.GET("/blockchain/sessions/:id", c.getSession)
 	r.POST("/blockchain/sessions", c.openSession)
@@ -129,7 +136,7 @@ func (c *BlockchainController) claimProviderBalance(ctx *gin.Context) {
 //
 //	@Summary		Get providers list
 //	@Description	Get providers list from blokchain
-//	@Tags			wallet
+//	@Tags			providers
 //	@Produce		json
 //	@Success		200	{object}	structs.ProvidersRes
 //	@Router			/blockchain/providers [get]
@@ -149,7 +156,7 @@ func (c *BlockchainController) getAllProviders(ctx *gin.Context) {
 //
 //	@Summary		Send Eth
 //	@Description	Send Eth to address
-//	@Tags			wallet
+//	@Tags			transactions
 //	@Produce		json
 //	@Param			sendeth	body		structs.SendRequest	true	"Send Eth"
 //	@Success		200		{object}	structs.TxRes
@@ -177,7 +184,7 @@ func (c *BlockchainController) sendETH(ctx *gin.Context) {
 //
 //	@Summary		Send Mor
 //	@Description	Send Mor to address
-//	@Tags			wallet
+//	@Tags			transactions
 //	@Produce		json
 //	@Param			sendmor	body		structs.SendRequest	true	"Send Mor"
 //	@Success		200		{object}	structs.TxRes
@@ -204,7 +211,7 @@ func (c *BlockchainController) sendMOR(ctx *gin.Context) {
 //
 //	@Summary		Get Bids by Provider
 //	@Description	Get bids from blockchain by provider
-//	@Tags			wallet
+//	@Tags			bids
 //	@Produce		json
 //	@Param			offset	query		string	false	"Offset"
 //	@Param			limit	query		string	false	"Limit"
@@ -242,7 +249,7 @@ func (c *BlockchainController) getBidsByProvider(ctx *gin.Context) {
 //
 //	@Summary		Get Bids by Provider
 //	@Description	Get bids from blockchain by provider
-//	@Tags			wallet
+//	@Tags			bids
 //	@Produce		json
 //	@Param			id	path		string	true	"Provider ID"
 //	@Success		200	{object}	structs.BidsRes
@@ -271,7 +278,7 @@ func (c *BlockchainController) getActiveBidsByProvider(ctx *gin.Context) {
 //
 //	@Summary		Get models list
 //	@Description	Get models list from blokchain
-//	@Tags			wallet
+//	@Tags			models
 //	@Produce		json
 //	@Success		200	{object}	structs.ModelsRes
 //	@Router			/blockchain/models [get]
@@ -291,7 +298,7 @@ func (c *BlockchainController) getAllModels(ctx *gin.Context) {
 //
 //	@Summary		Get Bids by	Model Agent
 //	@Description	Get bids from blockchain by model agent
-//	@Tags			wallet
+//	@Tags			bids
 //	@Produce		json
 //	@Param			offset	query		string	false	"Offset"
 //	@Param			limit	query		string	false	"Limit"
@@ -329,7 +336,7 @@ func (c *BlockchainController) getBidsByModelAgent(ctx *gin.Context) {
 //
 //	@Summary		Get Active Bids by Model
 //	@Description	Get bids from blockchain by model agent
-//	@Tags			wallet
+//	@Tags			bids
 //	@Produce		json
 //	@Param			id	path		string	true	"ModelAgent ID"
 //	@Success		200	{object}	structs.BidsRes
@@ -358,7 +365,7 @@ func (c *BlockchainController) getActiveBidsByModel(ctx *gin.Context) {
 //
 //	@Summary		Get ETH and MOR balance
 //	@Description	Get ETH and MOR balance of the user
-//	@Tags			wallet
+//	@Tags			transactions
 //	@Produce		json
 //	@Success		200	{object}	structs.TokenBalanceRes
 //	@Router			/blockchain/balance [get]
@@ -381,7 +388,7 @@ func (s *BlockchainController) getBalance(ctx *gin.Context) {
 //
 //	@Summary		Get Transactions
 //	@Description	Get MOR and ETH transactions
-//	@Tags			wallet
+//	@Tags			transactions
 //	@Produce		json
 //	@Param			page	query		string	false	"Page"
 //	@Param			limit	query		string	false	"Limit"
@@ -409,7 +416,7 @@ func (c *BlockchainController) getTransactions(ctx *gin.Context) {
 //
 //	@Summary		Get Allowance for MOR
 //	@Description	Get MOR allowance for spender
-//	@Tags			wallet
+//	@Tags			transactions
 //	@Produce		json
 //	@Param			spender	query		string	true	"Spender address"
 //	@Success		200		{object}	structs.AllowanceRes
@@ -438,7 +445,7 @@ func (c *BlockchainController) getAllowance(ctx *gin.Context) {
 //
 //	@Summary		Approve MOR allowance
 //	@Description	Approve MOR allowance for spender
-//	@Tags			wallet
+//	@Tags			transactions
 //	@Produce		json
 //	@Param			spender	query		string	true	"Spender address"
 //	@Param			amount	query		string	true	"Amount"
@@ -680,7 +687,7 @@ func (c *BlockchainController) getSessions(ctx *gin.Context) {
 //
 //	@Summary		Get Todays Budget
 //	@Description	Get todays budget from blockchain
-//	@Tags			wallet
+//	@Tags			sessions
 //	@Produce		json
 //	@Success		200	{object}	structs.BudgetRes
 //	@Router			/blockchain/sessions/budget [get]
@@ -700,7 +707,7 @@ func (s *BlockchainController) getBudget(ctx *gin.Context) {
 //
 //	@Summary		Get Token Supply
 //	@Description	Get MOR token supply from blockchain
-//	@Tags			wallet
+//	@Tags			sessions
 //	@Produce		json
 //	@Success		200	{object}	structs.SupplyRes
 //	@Router			/blockchain/token/supply [get]
@@ -720,7 +727,7 @@ func (s *BlockchainController) getSupply(ctx *gin.Context) {
 //
 //	@Summary		Get Latest Block
 //	@Description	Get latest block number from blockchain
-//	@Tags			wallet
+//	@Tags			transactions
 //	@Produce		json
 //	@Success		200	{object}	structs.BlockRes
 //	@Router			/blockchain/latestBlock [get]
@@ -739,7 +746,7 @@ func (c *BlockchainController) getLatestBlock(ctx *gin.Context) {
 //
 //	@Summary		Get Bid by ID
 //	@Description	Get bid from blockchain by ID
-//	@Tags			wallet
+//	@Tags			bids
 //	@Produce		json
 //	@Param			id	path		string	true	"Bid ID"
 //	@Success		200	{object}	structs.BidRes
@@ -768,7 +775,7 @@ func (c *BlockchainController) getBidByID(ctx *gin.Context) {
 //
 //	@Summary		Get Rated Bids
 //	@Description	Get rated bids from blockchain by model
-//	@Tags			wallet
+//	@Tags			bids
 //	@Produce		json
 //	@Param			id	path		string	true	"Model ID"
 //	@Success		200	{object}	structs.ScoredBidsRes
@@ -796,7 +803,7 @@ func (c *BlockchainController) getRatedBids(ctx *gin.Context) {
 // СreateNewProvider godoc
 //
 //	@Summary	Creates or updates provider in blockchain
-//	@Tags		wallet
+//	@Tags		providers
 //	@Produce	json
 //	@Accept		json
 //	@Param		provider	body		structs.CreateProviderRequest	true	"Provider"
@@ -824,7 +831,7 @@ func (c *BlockchainController) createProvider(ctx *gin.Context) {
 // CreateNewModel godoc
 //
 //	@Summary	Creates model in blockchain
-//	@Tags		wallet
+//	@Tags		models
 //	@Produce	json
 //	@Accept		json
 //	@Param		model	body		structs.CreateModelRequest	true	"Model"
@@ -868,7 +875,7 @@ func (c *BlockchainController) createNewModel(ctx *gin.Context) {
 // CreateBidRequest godoc
 //
 //	@Summary	Creates bid in blockchain
-//	@Tags		wallet
+//	@Tags		bids
 //	@Produce	json
 //	@Accept		json
 //	@Param		bid	body		structs.CreateBidRequest	true	"Bid"
