@@ -1,4 +1,4 @@
-// Replace lib.BigInt int
+// Replacements for input fields with custom types used for swagger
 replace internal/lib.BigInt string
 replace internal/lib.HexString string
 replace common.Hash string

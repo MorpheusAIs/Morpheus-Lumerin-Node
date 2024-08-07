@@ -15,6 +15,7 @@ The steps listed below are for both the Consumer and Provider to get started wit
 * Lumerin Morpheus Smart Contract : `0x8e19288d908b2d9F8D7C539c74C899808AC3dE45`
     * Interact with the Morpheus Contract: https://louper.dev/diamond/0x8e19288d908b2d9F8D7C539c74C899808AC3dE45?network=arbitrumSepolia#write
 * Blockchain Explorer: `https://sepolia.arbiscan.io/`
+* Swagger API: `http://localhost:8082/swagger/index.html`
 
 ## Prerequisites
 * **WALLET:** For testing, you will need both `saMOR` and `saETH` tokens in your wallet. You should be able to get either of these from the usual Sepolia Arbitrum testnet faucets.
@@ -91,29 +92,27 @@ This section is used for offering your hosted LLM model to the network for other
         4. Spender Address = Diamond Contract 
         5. Authorized Amount = remember that this is in the form 1*10^18 so make sure there's enough MOR granted to cover the contract fees 
         6. The Diamond Contract is now authorized to spend MOR on provider's behalf 
-    2. Create Provider in the Diamond contract via Louper:  
-        1.https://louper.dev/diamond/0x8e19288d908b2d9F8D7C539c74C899808AC3dE45?network=arbitrumSepolia#write 
-        2. Connect Wallet (approve via MM) 
-        3. Select ProviderRegistry/providerRegister function 
-            1. addr = Provider address 
+    2. Create Provider in the Diamond contract via swagger api:
+        1. Start proxy-router 
+        1. http://localhost:8082/swagger/index.html#/wallet/post_blockchain_providers
+        3. Enter required fields:   
             2. addStake = Amount of stake for provider to risk - Stake can be 0 now 
             3. Endpoint = Publicly accessible endpoint for provider (ip:port or fqdn:port no protocol) eg: `mycoolmornode.domain.com:3989`
     3. Create Model in the contract:
-        1. Select ModelRegistry/modelRegister function
+        1. Go to http://localhost:8082/swagger/index.html#/wallet/post_blockchain_models and enter
             1. modelId: random 32byte/hex that will uniquely identify model (uuid)
             2. ipfsCID: another random32byte/hex for future use (model library)
             3. Fee: fee for the model usage - 0 for now
             4. addStake: stake for model usage - 0 for now 
             5. Owner: Provider Wallet Address 
             6. name: Human Readable model like "Llama 2.0" or "Mistral 2.5" or "Collective Cognition 1.1" 
-            7. tags: comma delimited tags for the model 
+            7. tags: array of tag strings for the model 
             8. Capture the `modelID` from the JSON response
     4. Offer Model Bid in the contract: 
-        1. Select Marketplace/postModelBid function
-            1. providerAddr: Provider Wallet Address
-            2. modelID: Model ID Created in last step: 
-            3. pricePerSecond: this is in 1*10^18 format so 100000000000 should make 5 minutes for the session around 37.5 saMOR) 
-            4. Click WRITE and confirm via MM 
+        1. Navigate to http://localhost:8082/swagger/index.html#/wallet/post_blockchain_bids and enter
+            1. modelID: Model ID Created in last step: 
+            2. pricePerSecond: this is in 1*10^18 format so 100000000000 should make 5 minutes for the session around 37.5 saMOR 
+            3. Click Execute 
 2. LAUNCH LOCAL MODEL:
     * On your server (that is accessible at the `provider endpoint` you provided in the contract), launch the local model server
     * You can use the provided `llama.cpp` and `tinyllama` model to test locally
