@@ -23,7 +23,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "transactions"
                 ],
                 "summary": "Get Allowance for MOR",
                 "parameters": [
@@ -39,7 +39,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/structs.AllowanceRes"
                         }
                     }
                 }
@@ -52,7 +52,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "transactions"
                 ],
                 "summary": "Approve MOR allowance",
                 "parameters": [
@@ -75,7 +75,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/structs.TxRes"
                         }
                     }
                 }
@@ -88,14 +88,14 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "transactions"
                 ],
                 "summary": "Get ETH and MOR balance",
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/structs.TokenBalanceRes"
                         }
                     }
                 }
@@ -110,7 +110,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "bids"
                 ],
                 "summary": "Creates bid in blockchain",
                 "parameters": [
@@ -128,13 +128,42 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/structs.BidRes"
                         }
                     }
                 }
             }
         },
-        "/blockchain/bids/:id/session": {
+        "/blockchain/bids/{id}": {
+            "get": {
+                "description": "Get bid from blockchain by ID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bids"
+                ],
+                "summary": "Get Bid by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bid ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.BidRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/bids/{id}/session": {
             "post": {
                 "description": "Full flow to open a session by bidId",
                 "consumes": [
@@ -169,7 +198,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/structs.OpenSessionRes"
                         }
                     }
                 }
@@ -182,14 +211,14 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "transactions"
                 ],
                 "summary": "Get Latest Block",
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/structs.BlockRes"
                         }
                     }
                 }
@@ -202,17 +231,14 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "models"
                 ],
                 "summary": "Get models list",
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "object"
-                            }
+                            "$ref": "#/definitions/structs.ModelsRes"
                         }
                     }
                 }
@@ -225,7 +251,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "models"
                 ],
                 "summary": "Creates model in blockchain",
                 "parameters": [
@@ -243,7 +269,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/structs.ModelRes"
                         }
                     }
                 }
@@ -256,7 +282,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "bids"
                 ],
                 "summary": "Get Active Bids by Model",
                 "parameters": [
@@ -272,10 +298,36 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "object"
-                            }
+                            "$ref": "#/definitions/structs.BidsRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/models/{id}/bids/rated": {
+            "get": {
+                "description": "Get rated bids from blockchain by model",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bids"
+                ],
+                "summary": "Get Rated Bids",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Model ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.ScoredBidsRes"
                         }
                     }
                 }
@@ -316,7 +368,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/structs.OpenSessionRes"
                         }
                     }
                 }
@@ -329,17 +381,14 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "providers"
                 ],
                 "summary": "Get providers list",
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "object"
-                            }
+                            "$ref": "#/definitions/structs.ProvidersRes"
                         }
                     }
                 }
@@ -352,7 +401,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "providers"
                 ],
                 "summary": "Creates or updates provider in blockchain",
                 "parameters": [
@@ -370,7 +419,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/structs.ProviderRes"
                         }
                     }
                 }
@@ -383,7 +432,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "bids"
                 ],
                 "summary": "Get Bids by Provider",
                 "parameters": [
@@ -411,10 +460,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "object"
-                            }
+                            "$ref": "#/definitions/structs.BidsRes"
                         }
                     }
                 }
@@ -427,7 +473,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "bids"
                 ],
                 "summary": "Get Bids by Provider",
                 "parameters": [
@@ -443,10 +489,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "object"
-                            }
+                            "$ref": "#/definitions/structs.BidsRes"
                         }
                     }
                 }
@@ -459,7 +502,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "transactions"
                 ],
                 "summary": "Send Eth",
                 "parameters": [
@@ -477,7 +520,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/structs.TxRes"
                         }
                     }
                 }
@@ -490,7 +533,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "transactions"
                 ],
                 "summary": "Send Mor",
                 "parameters": [
@@ -508,7 +551,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/structs.TxRes"
                         }
                     }
                 }
@@ -554,10 +597,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "object"
-                            }
+                            "$ref": "#/definitions/structs.SessionsRes"
                         }
                     }
                 }
@@ -589,7 +629,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/structs.OpenSessionRes"
                         }
                     }
                 }
@@ -602,14 +642,43 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "sessions"
                 ],
                 "summary": "Get Todays Budget",
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/structs.BudgetRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/sessions/{id}": {
+            "get": {
+                "description": "Returns session by ID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "Get session",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Session ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.SessionRes"
                         }
                     }
                 }
@@ -638,7 +707,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/structs.TxRes"
                         }
                     }
                 }
@@ -651,14 +720,14 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "sessions"
                 ],
                 "summary": "Get Token Supply",
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/structs.SupplyRes"
                         }
                     }
                 }
@@ -671,7 +740,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "transactions"
                 ],
                 "summary": "Get Transactions",
                 "parameters": [
@@ -692,10 +761,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "object"
-                            }
+                            "$ref": "#/definitions/structs.TransactionsRes"
                         }
                     }
                 }
@@ -771,14 +837,25 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "sessions"
+                    "chat"
                 ],
                 "summary": "Initiate Session with Provider",
+                "parameters": [
+                    {
+                        "description": "Initiate Session",
+                        "name": "initiateSession",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.InitiateSessionReq"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/morrpcmesssage.SessionRes"
                         }
                     }
                 }
@@ -801,7 +878,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/structs.SendRequest"
+                            "$ref": "#/definitions/structs.AmountReq"
                         }
                     },
                     {
@@ -816,7 +893,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/structs.TxRes"
                         }
                     }
                 }
@@ -845,7 +922,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/structs.BalanceRes"
                         }
                     }
                 }
@@ -855,13 +932,19 @@ const docTemplate = `{
             "post": {
                 "description": "Send prompt to a local or remote model based on session id in header",
                 "produces": [
-                    "application/json"
+                    "text/event-stream"
                 ],
                 "tags": [
-                    "wallet"
+                    "chat"
                 ],
                 "summary": "Send Local Or Remote Prompt",
                 "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Session ID",
+                        "name": "session_id",
+                        "in": "header"
+                    },
                     {
                         "description": "Prompt",
                         "name": "prompt",
@@ -870,19 +953,13 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/proxyapi.OpenAiCompletitionRequest"
                         }
-                    },
-                    {
-                        "type": "string",
-                        "description": "Session ID",
-                        "name": "session_id",
-                        "in": "header"
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/proxyapi.ChatCompletionResponse"
                         }
                     }
                 }
@@ -894,7 +971,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "wallet"
+                    "chat"
                 ],
                 "summary": "Get local models",
                 "responses": {
@@ -924,7 +1001,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/walletapi.WalletRes"
                         }
                     }
                 }
@@ -953,7 +1030,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/walletapi.statusRes"
                         }
                     }
                 }
@@ -975,8 +1052,58 @@ const docTemplate = `{
                 }
             }
         },
-        "lib.BigInt": {
-            "type": "object"
+        "morrpcmesssage.SessionRes": {
+            "type": "object",
+            "required": [
+                "approval",
+                "approvalSig",
+                "message",
+                "signature",
+                "timestamp",
+                "user"
+            ],
+            "properties": {
+                "approval": {
+                    "type": "string"
+                },
+                "approvalSig": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "signature": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "integer"
+                },
+                "user": {
+                    "type": "string"
+                }
+            }
+        },
+        "proxyapi.ChatCompletionChoice": {
+            "type": "object",
+            "properties": {
+                "finish_reason": {
+                    "description": "FinishReason\nstop: API returned complete message,\nor a message terminated by one of the stop sequences provided via the stop parameter\nlength: Incomplete model output due to max_tokens parameter or token limit\nfunction_call: The model decided to call a function\ncontent_filter: Omitted content due to a flag from our content filters\nnull: API response still in progress or incomplete",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/proxyapi.FinishReason"
+                        }
+                    ]
+                },
+                "index": {
+                    "type": "integer"
+                },
+                "logprobs": {
+                    "$ref": "#/definitions/proxyapi.LogProbs"
+                },
+                "message": {
+                    "$ref": "#/definitions/proxyapi.ChatCompletionMessage"
+                }
+            }
         },
         "proxyapi.ChatCompletionMessage": {
             "type": "object",
@@ -1000,6 +1127,35 @@ const docTemplate = `{
                 "tool_call_id": {
                     "description": "For Role=tool prompts this should be set to the ID given in the assistant's prior request to call a tool.",
                     "type": "string"
+                }
+            }
+        },
+        "proxyapi.ChatCompletionResponse": {
+            "type": "object",
+            "properties": {
+                "choices": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/proxyapi.ChatCompletionChoice"
+                    }
+                },
+                "created": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "object": {
+                    "type": "string"
+                },
+                "system_fingerprint": {
+                    "type": "string"
+                },
+                "usage": {
+                    "$ref": "#/definitions/proxyapi.Usage"
                 }
             }
         },
@@ -1047,6 +1203,15 @@ const docTemplate = `{
                 "ChatMessagePartTypeImageURL"
             ]
         },
+        "proxyapi.FinishReason": {
+            "type": "string",
+            "enum": [
+                "stop"
+            ],
+            "x-enum-varnames": [
+                "FinishReasonStop"
+            ]
+        },
         "proxyapi.ImageURLDetail": {
             "type": "string",
             "enum": [
@@ -1059,6 +1224,70 @@ const docTemplate = `{
                 "ImageURLDetailLow",
                 "ImageURLDetailAuto"
             ]
+        },
+        "proxyapi.InitiateSessionReq": {
+            "type": "object",
+            "required": [
+                "bidId",
+                "provider",
+                "providerUrl",
+                "spend",
+                "user"
+            ],
+            "properties": {
+                "bidId": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "providerUrl": {
+                    "type": "string"
+                },
+                "spend": {
+                    "type": "string"
+                },
+                "user": {
+                    "type": "string"
+                }
+            }
+        },
+        "proxyapi.LogProb": {
+            "type": "object",
+            "properties": {
+                "bytes": {
+                    "description": "Omitting the field if it is null",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "logprob": {
+                    "type": "number"
+                },
+                "token": {
+                    "type": "string"
+                },
+                "top_logprobs": {
+                    "description": "TopLogProbs is a list of the most likely tokens and their log probability, at this token position.\nIn rare cases, there may be fewer than the number of requested top_logprobs returned.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/proxyapi.TopLogProbs"
+                    }
+                }
+            }
+        },
+        "proxyapi.LogProbs": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "description": "Content is a list of message content tokens with log probability information.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/proxyapi.LogProb"
+                    }
+                }
+            }
         },
         "proxyapi.OpenAiCompletitionRequest": {
             "type": "object",
@@ -1131,6 +1360,128 @@ const docTemplate = `{
                 }
             }
         },
+        "proxyapi.TopLogProbs": {
+            "type": "object",
+            "properties": {
+                "bytes": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "logprob": {
+                    "type": "number"
+                },
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "proxyapi.Usage": {
+            "type": "object",
+            "properties": {
+                "completion_tokens": {
+                    "type": "integer"
+                },
+                "prompt_tokens": {
+                    "type": "integer"
+                },
+                "total_tokens": {
+                    "type": "integer"
+                }
+            }
+        },
+        "structs.AllowanceRes": {
+            "type": "object",
+            "properties": {
+                "allowance": {
+                    "type": "string",
+                    "example": "100000000"
+                }
+            }
+        },
+        "structs.AmountReq": {
+            "type": "object",
+            "required": [
+                "amount"
+            ],
+            "properties": {
+                "amount": {
+                    "type": "string"
+                }
+            }
+        },
+        "structs.BalanceRes": {
+            "type": "object",
+            "properties": {
+                "balance": {
+                    "type": "string"
+                }
+            }
+        },
+        "structs.Bid": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "deletedAt": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "modelAgentId": {
+                    "type": "string"
+                },
+                "nonce": {
+                    "type": "string"
+                },
+                "pricePerSecond": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                }
+            }
+        },
+        "structs.BidRes": {
+            "type": "object",
+            "properties": {
+                "bid": {
+                    "$ref": "#/definitions/structs.Bid"
+                }
+            }
+        },
+        "structs.BidsRes": {
+            "type": "object",
+            "properties": {
+                "bids": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/structs.Bid"
+                    }
+                }
+            }
+        },
+        "structs.BlockRes": {
+            "type": "object",
+            "properties": {
+                "block": {
+                    "type": "integer",
+                    "example": 1234
+                }
+            }
+        },
+        "structs.BudgetRes": {
+            "type": "object",
+            "properties": {
+                "budget": {
+                    "type": "string",
+                    "example": "100000000"
+                }
+            }
+        },
         "structs.CreateBidRequest": {
             "type": "object",
             "required": [
@@ -1142,7 +1493,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "pricePerSecond": {
-                    "$ref": "#/definitions/lib.BigInt"
+                    "type": "string"
                 }
             }
         },
@@ -1157,21 +1508,26 @@ const docTemplate = `{
             ],
             "properties": {
                 "fee": {
-                    "$ref": "#/definitions/lib.BigInt"
+                    "type": "string",
+                    "example": "123000000000"
                 },
                 "id": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "0x1234"
                 },
                 "ipfsID": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "0x1234"
                 },
                 "name": {
                     "type": "string",
                     "maxLength": 64,
-                    "minLength": 1
+                    "minLength": 1,
+                    "example": "Llama 2.0"
                 },
                 "stake": {
-                    "$ref": "#/definitions/lib.BigInt"
+                    "type": "string",
+                    "example": "123000000000"
                 },
                 "tags": {
                     "type": "array",
@@ -1191,26 +1547,361 @@ const docTemplate = `{
             ],
             "properties": {
                 "endpoint": {
+                    "type": "string",
+                    "example": "mycoolmornode.domain.com:3989"
+                },
+                "stake": {
+                    "type": "string",
+                    "example": "123000000000"
+                }
+            }
+        },
+        "structs.Model": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "fee": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "ipfsCID": {
+                    "type": "string"
+                },
+                "isDeleted": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "owner": {
                     "type": "string"
                 },
                 "stake": {
-                    "$ref": "#/definitions/lib.BigInt"
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "structs.ModelRes": {
+            "type": "object",
+            "properties": {
+                "model": {
+                    "$ref": "#/definitions/structs.Model"
+                }
+            }
+        },
+        "structs.ModelsRes": {
+            "type": "object",
+            "properties": {
+                "models": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/structs.Model"
+                    }
                 }
             }
         },
         "structs.OpenSessionRequest": {
-            "type": "object"
+            "type": "object",
+            "required": [
+                "approval",
+                "approvalSig",
+                "stake"
+            ],
+            "properties": {
+                "approval": {
+                    "type": "string",
+                    "format": "hex",
+                    "example": "0x1234"
+                },
+                "approvalSig": {
+                    "type": "string",
+                    "format": "hex",
+                    "example": "0x1234"
+                },
+                "stake": {
+                    "type": "string",
+                    "example": "123000000000"
+                }
+            }
+        },
+        "structs.OpenSessionRes": {
+            "type": "object",
+            "properties": {
+                "sessionID": {
+                    "type": "string",
+                    "example": "0x1234"
+                }
+            }
         },
         "structs.OpenSessionWithDurationRequest": {
             "type": "object",
             "properties": {
                 "sessionDuration": {
-                    "$ref": "#/definitions/lib.BigInt"
+                    "type": "string"
+                }
+            }
+        },
+        "structs.Provider": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "endpoint": {
+                    "type": "string"
+                },
+                "isDeleted": {
+                    "type": "boolean"
+                },
+                "stake": {
+                    "type": "string"
+                }
+            }
+        },
+        "structs.ProviderRes": {
+            "type": "object",
+            "properties": {
+                "provider": {
+                    "$ref": "#/definitions/structs.Provider"
+                }
+            }
+        },
+        "structs.ProvidersRes": {
+            "type": "object",
+            "properties": {
+                "providers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/structs.Provider"
+                    }
+                }
+            }
+        },
+        "structs.RawTransaction": {
+            "type": "object",
+            "properties": {
+                "blockHash": {
+                    "type": "string"
+                },
+                "blockNumber": {
+                    "type": "string"
+                },
+                "confirmations": {
+                    "type": "string"
+                },
+                "contractAddress": {
+                    "type": "string"
+                },
+                "cumulativeGasUsed": {
+                    "type": "string"
+                },
+                "from": {
+                    "type": "string"
+                },
+                "functionName": {
+                    "type": "string"
+                },
+                "gas": {
+                    "type": "string"
+                },
+                "gasPrice": {
+                    "type": "string"
+                },
+                "gasPriceBid": {
+                    "type": "string"
+                },
+                "gasUsed": {
+                    "type": "string"
+                },
+                "hash": {
+                    "type": "string"
+                },
+                "input": {
+                    "type": "string"
+                },
+                "isError": {
+                    "type": "string"
+                },
+                "methodId": {
+                    "type": "string"
+                },
+                "nonce": {
+                    "type": "string"
+                },
+                "timeStamp": {
+                    "type": "string"
+                },
+                "to": {
+                    "type": "string"
+                },
+                "transactionIndex": {
+                    "type": "string"
+                },
+                "txreceipt_status": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
+        "structs.ScoredBid": {
+            "type": "object",
+            "properties": {
+                "bid": {
+                    "$ref": "#/definitions/structs.Bid"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "score": {
+                    "type": "number"
+                }
+            }
+        },
+        "structs.ScoredBidsRes": {
+            "type": "object",
+            "properties": {
+                "bids": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/structs.ScoredBid"
+                    }
                 }
             }
         },
         "structs.SendRequest": {
-            "type": "object"
+            "type": "object",
+            "required": [
+                "amount",
+                "to"
+            ],
+            "properties": {
+                "amount": {
+                    "type": "string"
+                },
+                "to": {
+                    "type": "string"
+                }
+            }
+        },
+        "structs.Session": {
+            "type": "object",
+            "properties": {
+                "bidID": {
+                    "type": "string"
+                },
+                "closedAt": {
+                    "type": "string"
+                },
+                "closeoutReceipt": {
+                    "type": "string"
+                },
+                "closeoutType": {
+                    "type": "string"
+                },
+                "endsAt": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "modelAgentId": {
+                    "type": "string"
+                },
+                "openedAt": {
+                    "type": "string"
+                },
+                "pricePerSecond": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "providerWithdrawnAmount": {
+                    "type": "string"
+                },
+                "stake": {
+                    "type": "string"
+                },
+                "user": {
+                    "type": "string"
+                }
+            }
+        },
+        "structs.SessionRes": {
+            "type": "object",
+            "properties": {
+                "session": {
+                    "$ref": "#/definitions/structs.Session"
+                }
+            }
+        },
+        "structs.SessionsRes": {
+            "type": "object",
+            "properties": {
+                "sessions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/structs.Session"
+                    }
+                }
+            }
+        },
+        "structs.SupplyRes": {
+            "type": "object",
+            "properties": {
+                "supply": {
+                    "type": "string",
+                    "example": "100000000"
+                }
+            }
+        },
+        "structs.TokenBalanceRes": {
+            "type": "object",
+            "properties": {
+                "eth": {
+                    "type": "string",
+                    "example": "100000000"
+                },
+                "mor": {
+                    "type": "string",
+                    "example": "100000000"
+                }
+            }
+        },
+        "structs.TransactionsRes": {
+            "type": "object",
+            "properties": {
+                "transactions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/structs.RawTransaction"
+                    }
+                }
+            }
+        },
+        "structs.TxRes": {
+            "type": "object",
+            "properties": {
+                "tx": {
+                    "type": "string",
+                    "example": "0x1234"
+                }
+            }
         },
         "system.ConfigResponse": {
             "type": "object",
@@ -1257,10 +1948,25 @@ const docTemplate = `{
             ],
             "properties": {
                 "privateKey": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
+                    "type": "string"
+                }
+            }
+        },
+        "walletapi.WalletRes": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string",
+                    "example": "0x1234"
+                }
+            }
+        },
+        "walletapi.statusRes": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "example": "ok"
                 }
             }
         }
@@ -1277,8 +1983,8 @@ var SwaggerInfo = &swag.Spec{
 	Host:             "",
 	BasePath:         "/",
 	Schemes:          []string{},
-	Title:            "ApiBus Example API",
-	Description:      "This is a sample server celler server.",
+	Title:            "Morpheus Lumerin Node API",
+	Description:      "API for Morpheus Lumerin Node",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",
