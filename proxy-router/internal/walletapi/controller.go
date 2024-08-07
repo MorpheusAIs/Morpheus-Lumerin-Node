@@ -27,12 +27,12 @@ func (s *WalletController) RegisterRoutes(r interfaces.Router) {
 
 // GetWallet godoc
 //
-//		@Summary		Get Wallet
-//		@Description	Get wallet address
-//	 	@Tags			wallet
-//		@Produce		json
-//		@Success		200	{object}	interface{}
-//		@Router			/wallet [get]
+//	@Summary		Get Wallet
+//	@Description	Get wallet address
+//	@Tags			wallet
+//	@Produce		json
+//	@Success		200	{object}	interface{}
+//	@Router			/wallet [get]
 func (s *WalletController) GetWallet(ctx *gin.Context) {
 	prKey, err := s.service.GetPrivateKey()
 	if err != nil {
@@ -47,13 +47,13 @@ func (s *WalletController) GetWallet(ctx *gin.Context) {
 
 // SetupWallet godoc
 //
-//		@Summary		Set Wallet
-//		@Description	Set wallet private key
-//	 	@Tags			wallet
-//		@Produce		json
-//		@Param			privatekey	body	walletapi.SetupWalletReqBody true	"Private key"
-//		@Success		200	{object}	interface{}
-//		@Router			/wallet [post]
+//	@Summary		Set Wallet
+//	@Description	Set wallet private key
+//	@Tags			wallet
+//	@Produce		json
+//	@Param			privatekey	body		walletapi.SetupWalletReqBody	true	"Private key"
+//	@Success		200			{object}	interface{}
+//	@Router			/wallet [post]
 func (s *WalletController) SetupWallet(ctx *gin.Context) {
 	var req SetupWalletReqBody
 	err := ctx.ShouldBindJSON(&req)

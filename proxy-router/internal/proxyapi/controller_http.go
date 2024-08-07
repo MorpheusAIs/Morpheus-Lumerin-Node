@@ -33,12 +33,13 @@ func (s *ProxyController) RegisterRoutes(r interfaces.Router) {
 
 // InitiateSession godoc
 //
-//		@Summary		Initiate Session with Provider
-//		@Description	sends a handshake to the provider
-//	 	@Tags			sessions
-//		@Produce		json
-//		@Success		200	{object}	interface{}
-//		@Router			/proxy/sessions/initiate [post]
+//	@Summary		Initiate Session with Provider
+//	@Description	sends a handshake to the provider
+//	@Tags			chat
+//	@Produce		json
+//	@Param			initiateSession	body		proxyapi.InitiateSessionReq	true	"Initiate Session"
+//	@Success		200				{object}	morrpcmesssage.SessionRes
+//	@Router			/proxy/sessions/initiate [post]
 func (s *ProxyController) InitiateSession(ctx *gin.Context) {
 	var req *InitiateSessionReq
 
@@ -58,14 +59,14 @@ func (s *ProxyController) InitiateSession(ctx *gin.Context) {
 
 // SendPrompt godoc
 //
-//		@Summary		Send Local Or Remote Prompt
-//		@Description	Send prompt to a local or remote model based on session id in header
-//	 	@Tags			wallet
-//		@Produce		json
-//		@Param			prompt	body		proxyapi.OpenAiCompletitionRequest 	true	"Prompt"
-//		@Param 			session_id header string false "Session ID"
-//		@Success		200	{object}	interface{}
-//		@Router			/v1/chat/completions [post]
+//	@Summary		Send Local Or Remote Prompt
+//	@Description	Send prompt to a local or remote model based on session id in header
+//	@Tags			chat
+//	@Produce		text/event-stream
+//	@Param			session_id	header		string								false	"Session ID"
+//	@Param			prompt		body		proxyapi.OpenAiCompletitionRequest	true	"Prompt"
+//	@Success		200			{object}	proxyapi.ChatCompletionResponse
+//	@Router			/v1/chat/completions [post]
 func (c *ProxyController) Prompt(ctx *gin.Context) {
 	var (
 		body openai.ChatCompletionRequest
@@ -102,11 +103,11 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 
 // GetLocalModels godoc
 //
-//		@Summary		Get local models
-//	 	@Tags			wallet
-//		@Produce		json
-//		@Success		200	{object}	[]aiengine.LocalModel
-//		@Router			/v1/models [get]
+//	@Summary	Get local models
+//	@Tags		wallet
+//	@Produce	json
+//	@Success	200	{object}	[]aiengine.LocalModel
+//	@Router		/v1/models [get]
 func (c *ProxyController) Models(ctx *gin.Context) {
 	models, err := c.aiEngine.GetLocalModels()
 	if err != nil {

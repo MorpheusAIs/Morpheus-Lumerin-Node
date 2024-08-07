@@ -1,0 +1,7 @@
+// Replace lib.BigInt int
+replace internal/lib.BigInt string
+replace internal/lib.HexString string
+replace common.Hash string
+replace common.Address string
+replace big.Int string
+replace error string
