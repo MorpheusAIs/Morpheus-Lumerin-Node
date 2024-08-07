@@ -57,14 +57,17 @@ make -j 8
 
 
 **4. Download and run the model using the variables set above:**
-```
+```sh
 wget -O models/${model_file_name} ${model_url}/${model_collection}/resolve/main/${model_file_name}  
 ./llama-server -m models/${model_file_name} --host ${model_host} --port ${model_port} --n-gpu-layers 4096
-
-# OPTIONAL: 
-# To leave this running in the background (and tail -f nohup.out to monitor)
-# nohup ./llama-server -m models/${model_file_name} --host ${model_host} --port ${model_port} --n-gpu-layers 4096 &
 ```
+
+* OPTIONAL To leave this running in the background (and tail -f nohup.out to monitor)
+```sh 
+nohup ./llama-server -m models/${model_file_name} --host ${model_host} --port ${model_port} --n-gpu-layers 4096 &
+tail -f nohup.out
+```
+
 **5. Validate that the local model is running:** 
 * Navigate to `http://127.0.0.1:8080` in a browser to see the model interface and test inferrence 
 * You should also see (in the terminal window) the interaction with the model and the responses
