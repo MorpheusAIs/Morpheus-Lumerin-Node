@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import styled from 'styled-components';
 import Select from "react-select";
 import {
@@ -6,15 +6,22 @@ import {
 } from '../../contracts/modals/CreateContractModal.styles';
 import { abbreviateAddress } from '../../../utils';
 import { formatSmallNumber } from '../utils';
-import { IconEdit, IconX } from '@tabler/icons-react';
+import { IconX } from '@tabler/icons-react';
 
 const RowContainer = styled.div`
   padding: 1.2rem 0;
   display: grid;
   grid-template-columns: 2fr 4fr 160px;
   text-align: center;
-  box-shadow: 0 -1px 0 0 ${p => p.theme.colors.morMain} inset;
+  border: ${p => p.theme.colors.morMain} solid 0.5px;
   color: ${p => p.theme.colors.morMain};
+  background: rgba(0,0,0, 0.1);
+  border-radius: 5px;
+  margin-bottom: 5px;
+
+  &:last-child {
+    margin-bottom: 0
+  }
 `;
 
 const FlexCenter = styled.div`
@@ -38,17 +45,8 @@ const PriceContainer = styled.div`
     align-items: center;
 `
 
-const UseLocalBlock = styled(FlexCenter)`
-    text-decoration: underline;
-    cursor: pointer;
-
-    &:hover {
-        opacity: 0.8;
-    }
-`
-
 const selectorStyles = {
-    control: (base, state) => ({ ...base, borderColor: '#20dc8e', width: '100%', background: 'transparent' }),
+    control: (base) => ({ ...base, borderColor: '#20dc8e', width: '100%', background: 'transparent' }),
     option: (base, state) => ({
         ...base,
         backgroundColor: state.isSelected ? '#0e4353' : "#03160e",
@@ -154,7 +152,7 @@ function ModelRow(props) {
                                         style={{ marginRight: '10px' }}>
                                         {formatPrice()}
                                     </span>
-                                    
+
                                     {/* <IconEdit width={'1.5rem'} style={{ cursor: 'pointer' }} onClick={() => setUseSelect(!useSelect)}></IconEdit> */}
                                 </FlexCenter>
                                     : <FlexCenter>-</FlexCenter>
