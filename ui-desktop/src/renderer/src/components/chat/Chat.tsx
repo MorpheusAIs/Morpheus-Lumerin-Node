@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 // import component 👇
 import Drawer from 'react-modern-drawer'
-import { IconHistory, IconArrowUp, IconServer, IconInfinity } from '@tabler/icons-react';
+import { IconHistory, IconArrowUp } from '@tabler/icons-react';
 import {
     View,
     ContainerTitle,
@@ -28,9 +28,10 @@ import 'react-modern-drawer/dist/index.css'
 import './Chat.css'
 import { ChatHistory } from './ChatHistory';
 import Spinner from 'react-bootstrap/Spinner';
+import Image from 'react-bootstrap/Image';
 import ModelSelectionModal from './modals/ModelSelectionModal';
 import { parseDataChunk, makeId, getColor, isClosed } from './utils';
-import {Cooldown} from './Cooldown';
+import { Cooldown } from './Cooldown';
 
 let abort = false;
 let cancelScroll = false;
@@ -41,7 +42,8 @@ const Chat = (props) => {
 
     const [value, setValue] = useState("");
     const [isLoading, setIsLoading] = useState(true);
-
+    const [messages, setMessages] = useState<any>([]);
+    const [isOpen, setIsOpen] = useState(false);
     const [sessions, setSessions] = useState<any>();
 
     const [isSpinning, setIsSpinning] = useState(false);
@@ -58,7 +60,7 @@ const Chat = (props) => {
     const [selectedBid, setSelectedBid] = useState<any>(null);
     const [selectedModel, setSelectedModel] = useState<any>(undefined);
     const [requiredStake, setRequiredStake] = useState<{ min: Number, max: number }>({ min: 0, max: 0 })
-    const [balances, setBalances] = useState<{ eth: Number, mor: number }>({ eth: 0, mor: 0});
+    const [balances, setBalances] = useState<{ eth: Number, mor: number }>({ eth: 0, mor: 0 });
 
     const modelName = selectedModel?.Name || "Model";
     const isLocal = selectedModel?.useLocal;
@@ -110,10 +112,6 @@ const Chat = (props) => {
         })
     }, [])
 
-    const [messages, setMessages] = useState<any>([]);
-
-    const [isOpen, setIsOpen] = useState(false);
-
     const toggleDrawer = () => {
         setIsOpen((prevState) => !prevState)
     }
@@ -134,13 +132,13 @@ const Chat = (props) => {
     const calculateAcceptableDuration = (pricePerSecond: number, balance: number, stakingInfo) => {
         const delta = 60; // 1 minute
 
-        if(balance > requiredStake.max) {
+        if (balance > requiredStake.max) {
             return 24 * 60 * 60; // 1 day in seconds
         }
 
         const targetDuration = Math.round((balance * Number(stakingInfo.budget)) / (Number(stakingInfo.supply) * pricePerSecond))
-        
-        if(targetDuration - delta < 5 * 60) {
+
+        if (targetDuration - delta < 5 * 60) {
             return 5 * 60;
         }
 
@@ -218,7 +216,7 @@ const Chat = (props) => {
 
             const closedSession = sessions.find(s => s.Id == sessionId);
             if (closedSession) {
-                await onSetActiveSession({ sessionId: closedSession.Id  })
+                await onSetActiveSession({ sessionId: closedSession.Id })
                 const selectedBid = findBid(closedSession.BidID);
                 setSelectedBid(selectedBid);
                 const selectedModel = chainData.models.find((m: any) => m.Id == closedSession.ModelAgentId);
@@ -228,7 +226,7 @@ const Chat = (props) => {
         }
         else {
             setIsReadonly(false)
-            await onSetActiveSession({ sessionId: openSession.Id, endDate: openSession.EndsAt  })
+            await onSetActiveSession({ sessionId: openSession.Id, endDate: openSession.EndsAt })
             const selectedBid = findBid(openSession.BidID);
             setSelectedBid(selectedBid);
             const selectedModel = chainData.models.find((m: any) => m.Id == openSession.ModelAgentId);
@@ -264,7 +262,7 @@ const Chat = (props) => {
 
     const call = async (message) => {
         scrollToBottom();
-        const chatHistory = messages.map(m => ({ role: m.role, content: m.text }))
+        const chatHistory = messages.map(m => ({ role: m.role, content: m.text, isImageContent: m.isImageContent }))
 
         let memoState = [...messages, { id: makeId(6), text: value, ...userMessage }];
         setMessages(memoState);
@@ -276,19 +274,18 @@ const Chat = (props) => {
             headers["session_id"] = activeSession.sessionId;
         }
 
+        const hasImageHistory = chatHistory.some(x => x.isImageContent);
+        const incommingMessage = { role: "user", content: message };
+        const payload = {
+            stream: true,
+            messages: hasImageHistory ? [incommingMessage] : [...chatHistory, incommingMessage]
+        };
+
+        // If image take only last message
         const response = await fetch(`${props.config.chain.localProxyRouterUrl}/v1/chat/completions`, {
             method: 'POST',
             headers,
-            body: JSON.stringify({
-                stream: true,
-                messages: [
-                    ...chatHistory,
-                    {
-                        role: "user",
-                        content: message
-                    }
-                ]
-            })
+            body: JSON.stringify(payload)
         }).catch((e) => {
             console.log("Failed to send request", e)
             return null;
@@ -314,6 +311,7 @@ const Chat = (props) => {
         const reader = response.body.getReader()
         registerScrollEvent(true);
 
+        const iconProps = { icon: modelName.toUpperCase()[0], color: getColor(modelName.toUpperCase()[0]) };
         try {
             while (true) {
                 if (abort) {
@@ -330,13 +328,26 @@ const Chat = (props) => {
                 const decodedString = textDecoder.decode(value, { stream: true });
                 const parts = parseDataChunk(decodedString);
                 parts.forEach(part => {
-                    if (!part?.id) {
+                    if (part.error) {
+                        console.warn(part.error);
                         return;
                     }
+                    const imageContent = part.imageUrl;
+
+                    if (!part?.id && !imageContent) {
+                        return;
+                    }
+
+                    let result: any[] = [];
                     const message = memoState.find(m => m.id == part.id);
                     const otherMessages = memoState.filter(m => m.id != part.id);
-                    const text = `${message?.text || ''}${part?.choices[0]?.delta?.content || ''}`.replace("<|im_start|>", "").replace("<|im_end|>", "");
-                    const result = [...otherMessages, { id: part.id, user: modelName, role: "assistant", text: text, icon: modelName.toUpperCase()[0], color: getColor(modelName.toUpperCase()[0]) }];
+                    if (imageContent) {
+                        result = [...otherMessages, { id: part.job, user: modelName, role: "assistant", text: imageContent, isImageContent: true, ...iconProps }];
+                    }
+                    else {
+                        const text = `${message?.text || ''}${part?.choices[0]?.delta?.content || ''}`.replace("<|im_start|>", "").replace("<|im_end|>", "");
+                        result = [...otherMessages, { id: part.id, user: modelName, role: "assistant", text: text, ...iconProps }];
+                    }
                     memoState = result;
                     setMessages(result);
                     scrollToBottom();
@@ -505,28 +516,28 @@ const Chat = (props) => {
                             messages?.length ? messages.map(x => (
                                 <Message key={makeId(6)} message={x}></Message>
                             ))
-                                : (!isLocal && !activeSession && 
-                                <div className='session-container' style={{ width: '400px' }}>
-                                    {
-                                        isEnoughFunds ?
-                                        <>
-                                            <div className='session-title'>Staked MOR funds will be reserved to start session</div>
-                                            <div className='session-title'>Session may last from 5 mins to 24 hours depending on staked funds (min: {(Number(requiredStake.min) / 10 ** 18).toFixed(2)}, max: {(Number(requiredStake.max) / 10 ** 18).toFixed(2)} MOR)</div>
-                                        </> :
-                                        <div className='session-title'>To start session required balance should be at least {(Number(requiredStake.min) / 10 ** 18).toFixed(2)} MOR</div>
-                                    }
-                                    <div>
-                                        <BtnAccent
-                                            data-modal="receive"
-                                            data-testid="receive-btn"
-                                            styles={{ marginLeft: '0' }}
-                                            block={requiredStake.min}
-                                            onClick={onOpenSession}
-                                            disabled={!isEnoughFunds}
-                                        >
-                                            Start
-                                        </BtnAccent></div>
-                                </div>)
+                                : (!isLocal && !activeSession &&
+                                    <div className='session-container' style={{ width: '400px' }}>
+                                        {
+                                            isEnoughFunds ?
+                                                <>
+                                                    <div className='session-title'>Staked MOR funds will be reserved to start session</div>
+                                                    <div className='session-title'>Session may last from 5 mins to 24 hours depending on staked funds (min: {(Number(requiredStake.min) / 10 ** 18).toFixed(2)}, max: {(Number(requiredStake.max) / 10 ** 18).toFixed(2)} MOR)</div>
+                                                </> :
+                                                <div className='session-title'>To start session required balance should be at least {(Number(requiredStake.min) / 10 ** 18).toFixed(2)} MOR</div>
+                                        }
+                                        <div>
+                                            <BtnAccent
+                                                data-modal="receive"
+                                                data-testid="receive-btn"
+                                                styles={{ marginLeft: '0' }}
+                                                block={requiredStake.min}
+                                                onClick={onOpenSession}
+                                                disabled={!isEnoughFunds}
+                                            >
+                                                Start
+                                            </BtnAccent></div>
+                                    </div>)
                         }
                     </ChatBlock>
                     <Control>
@@ -568,7 +579,11 @@ const Message = ({ message }) => {
             </Avatar>
             <div>
                 <AvatarHeader>{message.user}</AvatarHeader>
-                <MessageBody>{message.text}</MessageBody>
+                {
+                    message.isImageContent
+                        ? (<MessageBody>{<Image src={message.text} thumbnail fluid />}</MessageBody>)
+                        : (<MessageBody>{message.text}</MessageBody>)
+                }
             </div>
         </div>)
 }
