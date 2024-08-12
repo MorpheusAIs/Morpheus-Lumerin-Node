@@ -83,46 +83,18 @@ Please see /consumer.md for building from git source
 
 ### Provider (Local LLM to offer, Proxy-Router running as background/service): 
 This section is used for offering your hosted LLM model to the network for others to use.
-
-1. SETUP PROVIDER / MODEL / BID: 
-    1. WEB3/Arbiscan/Metamask: Authorize Diamond Contract to spend on the Provider's behalf 
-        1. https://sepolia.arbiscan.io/address/0xc1664f994fd3991f98ae944bc16b9aed673ef5fd#writeContract 
-        2. Connect to Web3 (connect Provider wallet) 
-        3. Click Approve 
-        4. Spender Address = Diamond Contract 
-        5. Authorized Amount = remember that this is in the form 1*10^18 so make sure there's enough MOR granted to cover the contract fees 
-        6. The Diamond Contract is now authorized to spend MOR on provider's behalf 
-    2. Create Provider in the Diamond contract via swagger api:
-        1. Start proxy-router 
-        1. http://localhost:8082/swagger/index.html#/providers/post_blockchain_providers
-        3. Enter required fields:   
-            2. addStake = Amount of stake for provider to risk - Stake can be 0 now 
-            3. Endpoint = Publicly accessible endpoint for provider (ip:port or fqdn:port no protocol) eg: `mycoolmornode.domain.com:3989`
-    3. Create Model in the contract:
-        1. Go to http://localhost:8082/swagger/index.html#/models/post_blockchain_models and enter
-            1. modelId: random 32byte/hex that will uniquely identify model (uuid)
-            2. ipfsCID: another random32byte/hex for future use (model library)
-            3. Fee: fee for the model usage - 0 for now
-            4. addStake: stake for model usage - 0 for now 
-            5. Owner: Provider Wallet Address 
-            6. name: Human Readable model like "Llama 2.0" or "Mistral 2.5" or "Collective Cognition 1.1" 
-            7. tags: array of tag strings for the model 
-            8. Capture the `modelID` from the JSON response
-    4. Offer Model Bid in the contract: 
-        1. Navigate to http://localhost:8082/swagger/index.html#/bids/post_blockchain_bids and enter
-            1. modelID: Model ID Created in last step: 
-            2. pricePerSecond: this is in 1*10^18 format so 100000000000 should make 5 minutes for the session around 37.5 saMOR 
-            3. Click Execute 
-2. LAUNCH LOCAL MODEL:
-    * On your server (that is accessible at the `provider endpoint` you provided in the contract), launch the local model server
+1. LAUNCH LOCAL MODEL:
+    * On your server launch the local model server
     * You can use the provided `llama.cpp` and `tinyllama` model to test locally
     * If your local model is listening on a different port locally, you will need to modify the `OPENAI_BASE_URL` in the .env file to match the correct port
-3. LAUNCH PROXY-ROUTER: 
+1. LAUNCH PROXY-ROUTER: 
+    * **Your proxy-router must have a publicly accessible endpoint for the provider (ip:port or fqdn:port no protocol) eg: `mycoolmornode.domain.com:3989` - this will be used when creating the provider on the blockchain** 
     * On your server, launch the proxy-router with the modified .env file shown in the common pre-requisites section
-        * Windows: Double click the `proxy-router.exe` (You will need to tell Windows Defender this is ok to run)  
-        * Linux & MacOS: Open a terminal and navigate to the folder and run `./proxy-router`from the morpheus/proxy-router folder
+    * Windows: Double click the `proxy-router.exe` (You will need to tell Windows Defender this is ok to run)  
+    * Linux & MacOS: Open a terminal and navigate to the folder and run `./proxy-router`from the morpheus/proxy-router folder
     * This will start the proxy-router in the background and begin monitoring the blockchain for events
-4. (OPTIONAL) - External Provider or Pass through 
+
+1. **(OPTIONAL)** - External Provider or Pass through 
     * In some cases you will want to leverage external or existing AI Providers in the network via their own, private API
     * Dependencies: 
         * `model-config.json` file in the proxy-router directory
@@ -131,6 +103,36 @@ This section is used for offering your hosted LLM model to the network for other
     * Edit the model-config.json to the following json format ... with 
     * The JSON ID will be the ModelID that you created above, modelName, apiTYpe, apiURL and apiKey are from the external provider and specific to their offered models 
     * Once the model-config.json file is updated, the morpheus node will need to be restarted to pick up the new configuration (not all models (eg: image generation can be utilized via the UI-Desktop, but API integration is possible)
+1. SETUP PROVIDER / MODEL / BID: 
+    1. WEB3/Arbiscan/Metamask: Authorize Diamond Contract to spend on the Provider's behalf 
+       1. https://sepolia.arbiscan.io/address/0xc1664f994fd3991f98ae944bc16b9aed673ef5fd#writeContract 
+       1. Connect to Web3 (connect Provider wallet) 
+       1. Click Approve 
+       1. Spender Address = Diamond Contract 
+       1. Authorized Amount = remember that this is in the form 1*10^18 so make sure there's enough MOR 1ranted to cover the contract fees 
+       1. The Diamond Contract is now authorized to spend MOR on provider's behalf 
+    1. Create Provider in the Diamond contract via swagger api:
+        1. Start proxy-router 
+        1. http://localhost:8082/swagger/index.html#/providers/post_blockchain_providers
+        1. Enter required fields:   
+            1. addStake = Amount of stake for provider to risk - Stake can be 0 now 
+            1. Endpoint = Your publicly accessible endpoint for the proxy-router provider (ip:port or fqdn:port no protocol) eg: `mycoolmornode.domain.com:3989`
+    1. Create Model in the contract:
+        1. Go to http://localhost:8082/swagger/index.html#/models/post_blockchain_models and enter
+            1. modelId: random 32byte/hex that will uniquely identify model (uuid)
+            1. ipfsCID: another random32byte/hex for future use (model library)
+            1. Fee: fee for the model usage - 0 for now
+            1. addStake: stake for model usage - 0 for now 
+            1. Owner: Provider Wallet Address 
+            1. name: Human Readable model like "Llama 2.0" or "Mistral 2.5" or "Collective Cognition 1.1" 
+            1. tags: array of tag strings for the model 
+            1. Capture the `modelID` from the JSON response
+    4. Offer Model Bid in the contract: 
+        1. Navigate to http://localhost:8082/swagger/index.html#/bids/post_blockchain_bids and enter
+            1. modelID: Model ID Created in last step: 
+            1. pricePerSecond: this is in 1*10^18 format so 100000000000 should make 5 minutes for the session 1round 37.5 saMOR 
+            1. Click Execute 
+
 
 ```
 #model-config.json 

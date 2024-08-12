@@ -98,15 +98,15 @@ tail -f nohup.out
 
 **3. Modify proxy-router environment variables**
 - You will need WalletPrivateKey, WSS Eth Address and router and api listening ports
-- Copy the `.env.example` to `.env` and edit to set the variables as needed (prompts are within the file)
+- Within the proxy-router directory, copy the `.env.example` to `.env` and edit to set the variables as needed (prompts are within the file)
 ```sh
 cp .env.example .env
-vi .env # or nano, or whatever editor you're comfortable with
+vi .env 
 ```
 **4. Build and Run the proxy-router**
 ```sh
 ./build.sh 
-go run cmd/main.go
+make run
 ```
 **- NOTE:** that when this launches, some anti-virus or network protection software may ask you to allow the ports to be open as well as MAC-OS firewall proteciton (watch for the pop-up windows and allow)
 
@@ -132,20 +132,19 @@ go run cmd/main.go
 `cd <your_path>/Morpheus-Lumerin-Node/ui-desktop`
 
 **2. Check Environment Variables**
-- Copy the `.env.example` to `.env` and check the variables as needed 
+- Within the ui-desktop directory, copy the `.env.example` to `.env` and check the variables as needed 
 - At the current time, the defaults in the .env file shold be sufficient to operate as long as none of the LLAMA.cpp or proxy-router variables for ports have changed. 
 - Double check that your PROXY_WEB_URL is set to `8082` or what you used for the ASwagger API interface on the proxy-router. 
 - This is what enables the UI to communicate to the proxy-router environment 
 
 ```sh
 cp .env.example .env
-vi .env # or nano, or whatever editor you're comfortable with
+vi .env 
 ```
 
 **3. Install dependicies, compile and Run the ui-desktop**
 ```sh
 yarn install
-yarn build
 yarn dev
 ```
 
@@ -158,9 +157,16 @@ yarn dev
   - On the Chat tab, your should see your `Provider: (local)` selected by default...use the "Ask me anything..." prompt to run inference - this verifies that all three layers have been setup correctly?
   - Click the Change Model, select a remote model, click Start and now you should be able to interact with the model through the UI. 
 
-**Cleaning**
-* Sometimes, due to development changes or dependency issues, you may need to clean and start fresh.  Make sure you know what your WalletPrivate key is and have it saved in a secure location. before cleaningup and restarting the ui or proxy-router.
-- `rm -rf  ./node_modules` from within ui-desktop 
-- `rm -rf '~/Library/Application Support/ui-desktop'` to clean old ui-desktop cache and start new wallet
-
-
+**Cleaning & Troubleshooting**
+- Sometimes, due to development changes or dependency issues, you may need to clean and start fresh.  
+- Make sure you know what your WalletPrivate key is and have it saved in a secure location. before cleaning up and restarting the ui or proxy-router
+  - `rm -rf  ./node_modules` from within ui-desktop 
+  - `rm -rf '~/Library/Application Support/ui-desktop'` to clean old ui-desktop cache and start new wallet
+- The proxy-router or ui-desktop may not start cleanly because of existing processes or open files from previous runs of the software  
+  - If you need to exit either proxy-router or ui-desktop, you can use `ctrl-c` from the terminal window you started them to kill the processes…
+  - **Locked Processes** Doing this may leave "dangling" processes or open files to find them: 
+    - Run `ps -ax | grep electron` or `ps -ax | grep proxy-router` which will show you the processes and particualrly the procexss id
+    - Run `kill -9 xxxxx` where `xxxxx` is the process ID of the un-cleaned process  
+  - **Locked Files** In certain cases the proxy-router will not let go of the `./data/` logging files… to clean them: 
+    - Run `lsof | grep /proxy-router/data/` to list the current open files in that directory, they should all have a common process ID (Second column on the screen)
+    - Run `kill -9 xxxxxx` the process id that matches to clean it all up
