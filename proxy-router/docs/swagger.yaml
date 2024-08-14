@@ -2,6 +2,8 @@ basePath: /
 definitions:
   aiengine.LocalModel:
     properties:
+      apiType:
+        type: string
       id:
         type: string
       model:
@@ -306,7 +308,7 @@ paths:
       summary: Creates bid in blockchain
       tags:
       - wallet
-  /blockchain/bids/:id/session:
+  /blockchain/bids/{id}/session:
     post:
       consumes:
       - application/json
@@ -381,7 +383,28 @@ paths:
       summary: Creates model in blockchain
       tags:
       - wallet
-  /blockchain/models/:id/session:
+  /blockchain/models/{id}/bids:
+    get:
+      description: Get bids from blockchain by model agent
+      parameters:
+      - description: ModelAgent ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: object
+            type: array
+      summary: Get Active Bids by Model
+      tags:
+      - wallet
+  /blockchain/models/{id}/session:
     post:
       consumes:
       - application/json
@@ -764,8 +787,14 @@ paths:
         schema:
           $ref: '#/definitions/proxyapi.OpenAiCompletitionRequest'
       - description: Session ID
+        format: hex32
         in: header
         name: session_id
+        type: string
+      - description: Model ID
+        format: hex32
+        in: header
+        name: model_id
         type: string
       produces:
       - application/json

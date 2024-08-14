@@ -65,7 +65,8 @@ func (s *ProxyController) InitiateSession(ctx *gin.Context) {
 //	 	@Tags			wallet
 //		@Produce		json
 //		@Param			prompt	body		proxyapi.OpenAiCompletitionRequest 	true	"Prompt"
-//		@Param 			session_id header string false "Session ID"
+//		@Param 			session_id header string false "Session ID" format(hex32) Set for remote prompt
+//		@Param 			model_id header string false "Model ID" format(hex32) Set for specific local model prompt
 //		@Success		200	{object}	interface{}
 //		@Router			/v1/chat/completions [post]
 func (c *ProxyController) Prompt(ctx *gin.Context) {
