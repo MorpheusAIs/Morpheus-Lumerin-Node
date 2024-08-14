@@ -57,7 +57,7 @@ func CreateHTTPServer(log lib.ILogger, controllers ...Registrable) *gin.Engine {
 
 	r.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"*"},
-		AllowHeaders: []string{"session_id"},
+		AllowHeaders: []string{"session_id", "model_id"},
 	}))
 
 	// r.Use(RequestLogger(log))

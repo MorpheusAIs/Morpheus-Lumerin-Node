@@ -27,7 +27,8 @@ type CompletionCallback func(completion interface{}) error
 type ProdiaImageGenerationCallback func(completion *ProdiaGenerationResult) error
 
 type LocalModel struct {
-	Id    string
-	Name  string
-	Model string
+	Id      string
+	Name    string
+	Model   string
+	ApiType string
 }

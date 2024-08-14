@@ -69,3 +69,14 @@ func (e *ModelConfigLoader) ModelConfigFromID(ID string) *ModelConfig {
 
 	return &modelConfig
 }
+
+func (e *ModelConfigLoader) GetAll() ([]string, []ModelConfig) {
+	var modelConfigs []ModelConfig
+	var modelIDs []string
+	for ID, v := range e.modelConfigs {
+		modelConfigs = append(modelConfigs, v)
+		modelIDs = append(modelIDs, ID)
+	}
+
+	return modelIDs, modelConfigs
+}
