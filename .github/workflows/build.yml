@@ -61,6 +61,7 @@ jobs:
           cd launcher
           make
           cd ../proxy-router
+          cp ./models-config.json.example models-config.json
           make build
           cd ../ui-desktop
           cp ./.env.example .env
@@ -128,6 +129,7 @@ jobs:
           cd launcher
           make
           cd ../proxy-router
+          cp ./models-config.json.example models-config.json
           make build
           cd ../ui-desktop
           cp ./.env.example .env
@@ -197,6 +199,7 @@ jobs:
           cd launcher
           make
           cd ../proxy-router
+          cp ./models-config.json.example models-config.json
           make build
           cd ../ui-desktop
           cp ./.env.example .env
@@ -270,6 +273,7 @@ jobs:
           cd launcher
           make
           cd ../proxy-router
+          cp ./models-config.json.example models-config.json
           make build
           cd ../ui-desktop
           cp ./.env.example .env

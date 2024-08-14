@@ -4,5 +4,9 @@
         "apiType": "prodia",
         "apiUrl": "https://api.prodia.com/v1/sd/generate",
         "apiKey": "API_KEY_HERE"
+    },
+    "0x6a4813e866a48da528c533e706344ea853a1d3f21e37b4c8e7ffd5ff25779018": {
+        "modelName": "llama2",
+        "apiType": "openai"
     }
 }
