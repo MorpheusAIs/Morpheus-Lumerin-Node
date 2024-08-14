@@ -15,7 +15,7 @@ const withChatState = WrappedComponent => {
     static displayName = `withChatState(${WrappedComponent.displayName ||
       WrappedComponent.name})`;
 
-    getBitsByModels = async (modelId) => {
+    getBidsByModels = async (modelId) => {
       try {
         const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/models/${modelId}/bids`
         const response = await fetch(path);
@@ -126,8 +126,8 @@ const withChatState = WrappedComponent => {
       const responses = (await Promise.all(
         models.map(async m => {
           const id = m.Id;
-          const bids = (await this.getBitsByModels(id))
-            .filter(b => !b.DeletedAt)
+          const bids = (await this.getBidsByModels(id))
+            .filter(b => +b.DeletedAt === 0)
             .map(b => ({ ...b, ProviderData: providersMap[b.Provider.toLowerCase()], Model: m }));
           return { id, bids }
         })
@@ -207,7 +207,7 @@ const withChatState = WrappedComponent => {
       return (
         <WrappedComponent
           getProviders={this.getProviders}
-          getBitsByModels={this.getBitsByModels}
+          getBidsByModels={this.getBidsByModels}
           getMetaInfo={this.getMetaInfo}
           getModelsData={this.getModelsData}
           getSessionsByUser={this.getSessionsByUser}
