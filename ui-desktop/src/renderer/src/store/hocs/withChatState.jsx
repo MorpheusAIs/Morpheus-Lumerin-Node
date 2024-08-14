@@ -127,7 +127,7 @@ const withChatState = WrappedComponent => {
         models.map(async m => {
           const id = m.Id;
           const bids = (await this.getBitsByModels(id))
-            .filter(b => !b.DeletedAt)
+            .filter(b => +b.DeletedAt === 0)
             .map(b => ({ ...b, ProviderData: providersMap[b.Provider.toLowerCase()], Model: m }));
           return { id, bids }
         })
