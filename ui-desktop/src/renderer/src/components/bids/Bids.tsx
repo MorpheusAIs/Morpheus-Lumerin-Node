@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { withRouter } from 'react-router-dom';
 import withBidsState from '../../store/hocs/withBidsState';
 

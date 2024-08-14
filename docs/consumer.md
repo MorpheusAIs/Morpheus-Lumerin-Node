@@ -1,4 +1,4 @@
-# Consumer Node Setup (Draft - 2024-07-23)
+# Consumer Node Setup from Source (Draft - 2024-08-05)
 This document provides a step-by-step guide to setting up a Consumer Node for the Morepheus Network so that you can setup session and interact with the remote providers.
 
 ## Pre-requisites:
@@ -61,6 +61,7 @@ Loaded config: {AIEngine:{OpenAIBaseURL: OpenAIKey:} Blockchain:{EthNodeAddress:
 ==================================
 ### B. Authorize the contract to spend on your behalf
 Either via the swagger interface http://localhost:8082/swagger/index.html#/wallet/post_blockchain_allowance or following CLI, you can authorize the contract to spend on your behalf. **This only needs to be done once per wallet, or when funds have been depleted.**
+
 `curl -X 'POST' 'http://localhost:8082/blockchain/approve?spender=0x8e19288d908b2d9F8D7C539c74C899808AC3dE45&amount=3' -H 'accept: application/json' -d ''` # Approve the contract to spend 3 saMOR tokens on your behalf
 
 ### C. Query the blockchain for various models / providers (Get ModelID)
@@ -143,6 +144,9 @@ curl -X 'POST' \
 
 
 ### Quick and Dirty Sample:
+`curl -X 'POST' 'http://localhost:8082/blockchain/approve?spender=0x8e19288d908b2d9F8D7C539c74C899808AC3dE45&amount=3' -H 'accept: application/json' -d ''`
+    # approves the smart contract `0x8e19...dE45` to spend 3 saMOR tokens on your behalf
+
 `curl -s -X 'GET' 'http://localhost:8082/wallet' -H 'accept: application/json' | jq .address` 
     # returns the wallet ID (confirm that it matches your wallet)
 
@@ -168,4 +172,26 @@ curl -X 'POST' \
   "stream": true
   }'
 ```
+#### Sample Output: 
+```
+data: {"id":"chatcmpl-8wtgv86nUWMJneEObprWKXcWKX81PAAo","object":"chat.completion.chunk","created":1721758293,"model":"llama2","choices":[{"index":0,"delta":{"content":"Why"},"finish_reason":null,"content_filter_results":{"hate":{"filtered":false},"self_harm":{"filtered":false},"sexual":{"filtered":false},"violence":{"filtered":false}}}]}
+data: {"id":"chatcmpl-8wtgv86nUWMJneEObprWKXcWKX81PAAo","object":"chat.completion.chunk","created":1721758293,"model":"llama2","choices":[{"index":0,"delta":{"content":" don"},"finish_reason":null,"content_filter_results":{"hate":{"filtered":false},"self_harm":{"filtered":false},"sexual":{"filtered":false},"violence":{"filtered":false}}}]}
+data: {"id":"chatcmpl-8wtgv86nUWMJneEObprWKXcWKX81PAAo","object":"chat.completion.chunk","created":1721758293,"model":"llama2","choices":[{"index":0,"delta":{"content":"'"},"finish_reason":null,"content_filter_results":{"hate":{"filtered":false},"self_harm":{"filtered":false},"sexual":{"filtered":false},"violence":{"filtered":false}}}]}
+data: {"id":"chatcmpl-8wtgv86nUWMJneEObprWKXcWKX81PAAo","object":"chat.completion.chunk","created":1721758293,"model":"llama2","choices":[{"index":0,"delta":{"content":"t"},"finish_reason":null,"content_filter_results":{"hate":{"filtered":false},"self_harm":{"filtered":false},"sexual":{"filtered":false},"violence":{"filtered":false}}}]}
+data: {"id":"chatcmpl-8wtgv86nUWMJneEObprWKXcWKX81PAAo","object":"chat.completion.chunk","created":1721758293,"model":"llama2","choices":[{"index":0,"delta":{"content":" scientists"},"finish_reason":null,"content_filter_results":{"hate":{"filtered":false},"self_harm":{"filtered":false},"sexual":{"filtered":false},"violence":{"filtered":false}}}]}
+data: {"id":"chatcmpl-8wtgv86nUWMJneEObprWKXcWKX81PAAo","object":"chat.completion.chunk","created":1721758293,"model":"llama2","choices":[{"index":0,"delta":{"content":" trust"},"finish_reason":null,"content_filter_results":{"hate":{"filtered":false},"self_harm":{"filtered":false},"sexual":{"filtered":false},"violence":{"filtered":false}}}]}
+data: {"id":"chatcmpl-8wtgv86nUWMJneEObprWKXcWKX81PAAo","object":"chat.completion.chunk","created":1721758293,"model":"llama2","choices":[{"index":0,"delta":{"content":" atoms"},"finish_reason":null,"content_filter_results":{"hate":{"filtered":false},"self_harm":{"filtered":false},"sexual":{"filtered":false},"violence":{"filtered":false}}}]}
+data: {"id":"chatcmpl-8wtgv86nUWMJneEObprWKXcWKX81PAAo","object":"chat.completion.chunk","created":1721758294,"model":"llama2","choices":[{"index":0,"delta":{"content":"?"},"finish_reason":null,"content_filter_results":{"hate":{"filtered":false},"self_harm":{"filtered":false},"sexual":{"filtered":false},"violence":{"filtered":false}}}]}
+data: {"id":"chatcmpl-8wtgv86nUWMJneEObprWKXcWKX81PAAo","object":"chat.completion.chunk","created":1721758294,"model":"llama2","choices":[{"index":0,"delta":{"content":"\n"},"finish_reason":null,"content_filter_results":{"hate":{"filtered":false},"self_harm":{"filtered":false},"sexual":{"filtered":false},"violence":{"filtered":false}}}]}
+data: {"id":"chatcmpl-8wtgv86nUWMJneEObprWKXcWKX81PAAo","object":"chat.completion.chunk","created":1721758294,"model":"llama2","choices":[{"index":0,"delta":{"content":"\n"},"finish_reason":null,"content_filter_results":{"hate":{"filtered":false},"self_harm":{"filtered":false},"sexual":{"filtered":false},"violence":{"filtered":false}}}]}
+data: {"id":"chatcmpl-8wtgv86nUWMJneEObprWKXcWKX81PAAo","object":"chat.completion.chunk","created":1721758294,"model":"llama2","choices":[{"index":0,"delta":{"content":"Because"},"finish_reason":null,"content_filter_results":{"hate":{"filtered":false},"self_harm":{"filtered":false},"sexual":{"filtered":false},"violence":{"filtered":false}}}]}
+data: {"id":"chatcmpl-8wtgv86nUWMJneEObprWKXcWKX81PAAo","object":"chat.completion.chunk","created":1721758294,"model":"llama2","choices":[{"index":0,"delta":{"content":" they"},"finish_reason":null,"content_filter_results":{"hate":{"filtered":false},"self_harm":{"filtered":false},"sexual":{"filtered":false},"violence":{"filtered":false}}}]}
+data: {"id":"chatcmpl-8wtgv86nUWMJneEObprWKXcWKX81PAAo","object":"chat.completion.chunk","created":1721758294,"model":"llama2","choices":[{"index":0,"delta":{"content":" make"},"finish_reason":null,"content_filter_results":{"hate":{"filtered":false},"self_harm":{"filtered":false},"sexual":{"filtered":false},"violence":{"filtered":false}}}]}
+data: {"id":"chatcmpl-8wtgv86nUWMJneEObprWKXcWKX81PAAo","object":"chat.completion.chunk","created":1721758294,"model":"llama2","choices":[{"index":0,"delta":{"content":" up"},"finish_reason":null,"content_filter_results":{"hate":{"filtered":false},"self_harm":{"filtered":false},"sexual":{"filtered":false},"violence":{"filtered":false}}}]}
+data: {"id":"chatcmpl-8wtgv86nUWMJneEObprWKXcWKX81PAAo","object":"chat.completion.chunk","created":1721758294,"model":"llama2","choices":[{"index":0,"delta":{"content":" everything"},"finish_reason":null,"content_filter_results":{"hate":{"filtered":false},"self_harm":{"filtered":false},"sexual":{"filtered":false},"violence":{"filtered":false}}}]}
+data: {"id":"chatcmpl-8wtgv86nUWMJneEObprWKXcWKX81PAAo","object":"chat.completion.chunk","created":1721758294,"model":"llama2","choices":[{"index":0,"delta":{"content":"!"},"finish_reason":null,"content_filter_results":{"hate":{"filtered":false},"self_harm":{"filtered":false},"sexual":{"filtered":false},"violence":{"filtered":false}}}]}
+data: {"id":"chatcmpl-8wtgv86nUWMJneEObprWKXcWKX81PAAo","object":"chat.completion.chunk","created":1721758294,"model":"llama2","choices":[{"index":0,"delta":{"content":"\u003c|im_end|\u003e"},"finish_reason":null,"content_filter_results":{"hate":{"filtered":false},"self_harm":{"filtered":false},"sexual":{"filtered":false},"violence":{"filtered":false}}}]}
+data: {"id":"chatcmpl-8wtgv86nUWMJneEObprWKXcWKX81PAAo","object":"chat.completion.chunk","created":1721758294,"model":"llama2","choices":[{"index":0,"delta":{},"finish_reason":"stop","content_filter_results":{"hate":{"filtered":false},"self_harm":{"filtered":false},"sexual":{"filtered":false},"violence":{"filtered":false}}}]}
+```
+
 

@@ -1,8 +1,6 @@
 package httphandlers
 
 import (
-	"net/http/pprof"
-
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
@@ -23,15 +21,15 @@ type Registrable interface {
 	RegisterRoutes(r interfaces.Router)
 }
 
-// @title           ApiBus Example API
-// @version         1.0
-// @description     This is a sample server celler server.
-// @termsOfService  http://swagger.io/terms/
+//	@title			Morpheus Lumerin Node API
+//	@version		1.0
+//	@description	API for Morpheus Lumerin Node
+//	@termsOfService	http://swagger.io/terms/
 
-// @BasePath  /
+//	@BasePath	/
 
-// @externalDocs.description  OpenAPI
-// @externalDocs.url          https://swagger.io/resources/open-api/
+// @externalDocs.description	OpenAPI
+// @externalDocs.url			https://swagger.io/resources/open-api/
 func CreateHTTPServer(log lib.ILogger, controllers ...Registrable) *gin.Engine {
 	ginValidatorInstance := binding.Validator.Engine().(*validator.Validate)
 	err := config.RegisterHex32(ginValidatorInstance)
@@ -63,7 +61,7 @@ func CreateHTTPServer(log lib.ILogger, controllers ...Registrable) *gin.Engine {
 	// r.Use(RequestLogger(log))
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-	r.Any("/debug/pprof/*action", gin.WrapF(pprof.Index))
+	// r.Any("/debug/pprof/*action", gin.WrapF(pprof.Index))
 
 	for _, c := range controllers {
 		c.RegisterRoutes(r)

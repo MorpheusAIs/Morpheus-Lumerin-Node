@@ -71,7 +71,7 @@ export const ChatHistory = (props: ChatHistoryProps) => {
                                 <HistoryEntryContainer onClick={() => props.onSelectSession(a.Id)}>
                                     {title ? <HistoryEntryTitle data-rh={title} data-rh-negative>{title}</HistoryEntryTitle> : null}
                                     <HistoryItem key={a.Id}>
-                                        <div data-rh={abbreviateAddress(a.Id, 3)} data-rh-negative>{model.Name}</div>
+                                        <div data-rh={abbreviateAddress(a.Id, 3)} data-rh-negative>{model?.Name}</div>
                                         <div>{(a.EndsAt - a.OpenedAt) / 60} min</div>
                                         {
                                             !isClosed(a) ? (<IconX onClick={() => props.onCloseSession(a.Id)}></IconX>) : <div>CLOSED</div>

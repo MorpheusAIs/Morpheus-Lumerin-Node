@@ -54,8 +54,12 @@ contract Marketplace {
     return (bidIds, _bids);
   }
 
-    /// @notice returns active bids by model or agent id
-  function getActiveBidsRatingByModelAgent(bytes32 modelAgentId, uint256 offset, uint8 limit) external view returns (bytes32[] memory, Bid[] memory, ProviderModelStats[] memory) {
+  /// @notice returns active bids by model or agent id
+  function getActiveBidsRatingByModelAgent(
+    bytes32 modelAgentId,
+    uint256 offset,
+    uint8 limit
+  ) external view returns (bytes32[] memory, Bid[] memory, ProviderModelStats[] memory) {
     KeySet.Set storage modelAgentBidsSet = s.modelAgentActiveBids[modelAgentId];
     uint256 length = modelAgentBidsSet.count();
 
@@ -80,7 +84,7 @@ contract Marketplace {
     return (bidIds, _bids, _stats);
   }
 
-  function getModelStats(bytes32 modelID) external view returns (ModelStats memory){
+  function getModelStats(bytes32 modelID) external view returns (ModelStats memory) {
     return s.modelStats[modelID];
   }
 
