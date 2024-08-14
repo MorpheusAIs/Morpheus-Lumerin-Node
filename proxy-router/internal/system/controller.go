@@ -58,12 +58,12 @@ func (s *SystemController) RegisterRoutes(r interfaces.Router) {
 
 // HealthCheck godoc
 //
-//		@Summary		Healthcheck example
-//		@Description	do ping
-//	 	@Tags			healthcheck
-//		@Produce		json
-//		@Success		200	{object}	HealthCheckResponse
-//		@Router			/healthcheck [get]
+//	@Summary		Healthcheck example
+//	@Description	do ping
+//	@Tags			healthcheck
+//	@Produce		json
+//	@Success		200	{object}	HealthCheckResponse
+//	@Router			/healthcheck [get]
 func (s *SystemController) HealthCheck(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, HealthCheckResponse{
 		Status:  "healthy",
@@ -74,12 +74,12 @@ func (s *SystemController) HealthCheck(ctx *gin.Context) {
 
 // GetConfig godoc
 //
-//		@Summary		Get Config
-//		@Description	Return the current config of proxy router
-//	 	@Tags				healthcheck
-//		@Produce		json
-//		@Success		200	{object}	ConfigResponse
-//		@Router			/config [get]
+//	@Summary		Get Config
+//	@Description	Return the current config of proxy router
+//	@Tags			healthcheck
+//	@Produce		json
+//	@Success		200	{object}	ConfigResponse
+//	@Router			/config [get]
 func (s *SystemController) GetConfig(ctx *gin.Context) {
 	prkey, err := s.wallet.GetPrivateKey()
 	if err != nil {
@@ -104,12 +104,12 @@ func (s *SystemController) GetConfig(ctx *gin.Context) {
 
 // GetFiles godoc
 //
-//		@Summary		Get files
-//		@Description	Returns opened files
-//	 	@Tags				healthcheck
-//		@Produce		json
-//		@Success		200	{object}	[]FD
-//		@Router			/files [get]
+//	@Summary		Get files
+//	@Description	Returns opened files
+//	@Tags			healthcheck
+//	@Produce		json
+//	@Success		200	{object}	[]FD
+//	@Router			/files [get]
 func (s *SystemController) GetFiles(ctx *gin.Context) {
 	files, err := s.sysConfig.GetFileDescriptors(ctx, os.Getpid())
 	if err != nil {

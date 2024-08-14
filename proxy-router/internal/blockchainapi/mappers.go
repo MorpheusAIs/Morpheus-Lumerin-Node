@@ -23,10 +23,10 @@ func mapBid(bidID common.Hash, bid marketplace.Bid) *structs.Bid {
 		Id:             bidID,
 		ModelAgentId:   bid.ModelAgentId,
 		Provider:       bid.Provider,
-		Nonce:          bid.Nonce,
-		CreatedAt:      bid.CreatedAt,
-		DeletedAt:      bid.DeletedAt,
-		PricePerSecond: bid.PricePerSecond,
+		Nonce:          &lib.BigInt{Int: *bid.Nonce},
+		CreatedAt:      &lib.BigInt{Int: *bid.CreatedAt},
+		DeletedAt:      &lib.BigInt{Int: *bid.DeletedAt},
+		PricePerSecond: &lib.BigInt{Int: *bid.PricePerSecond},
 	}
 }
 

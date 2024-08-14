@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/sessionrouter"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts"
@@ -13,21 +14,23 @@ import (
 )
 
 type EventsListener struct {
-	sessionRouter *registries.SessionRouter
-	store         *storages.SessionStorage
-	tsk           *lib.Task
-	log           *lib.Logger
-	client        *ethclient.Client
-	wallet        interfaces.Wallet
+	sessionRouter     *registries.SessionRouter
+	store             *storages.SessionStorage
+	tsk               *lib.Task
+	log               *lib.Logger
+	client            *ethclient.Client
+	wallet            interfaces.Wallet
+	modelConfigLoader *config.ModelConfigLoader
 }
 
-func NewEventsListener(client *ethclient.Client, store *storages.SessionStorage, sessionRouter *registries.SessionRouter, wallet interfaces.Wallet, log *lib.Logger) *EventsListener {
+func NewEventsListener(client *ethclient.Client, store *storages.SessionStorage, sessionRouter *registries.SessionRouter, wallet interfaces.Wallet, modelConfigLoader *config.ModelConfigLoader, log *lib.Logger) *EventsListener {
 	return &EventsListener{
-		store:         store,
-		log:           log,
-		sessionRouter: sessionRouter,
-		client:        client,
-		wallet:        wallet,
+		store:             store,
+		log:               log,
+		sessionRouter:     sessionRouter,
+		client:            client,
+		wallet:            wallet,
+		modelConfigLoader: modelConfigLoader,
 	}
 }
 
@@ -91,15 +94,22 @@ func (e *EventsListener) handleSessionOpened(event *sessionrouter.SessionRouterS
 		return err
 	}
 
-	if session.Provider.Hex() != address.Hex() {
-		e.log.Debugf("session provider is not me, skipping, sessionId %s", sessionId)
+	if session.Provider.Hex() != address.Hex() && event.UserAddress.Hex() != address.Hex() {
+		e.log.Debugf("session provider/user is not me, skipping, sessionId %s", sessionId)
 		return nil
 	}
 
+	modelID := lib.BytesToString(session.ModelAgentId[:])
+	modelConfig := e.modelConfigLoader.ModelConfigFromID(modelID)
+
 	err = e.store.AddSession(&storages.Session{
-		Id:       sessionId,
-		UserAddr: event.UserAddress.Hex(),
-		EndsAt:   session.EndsAt,
+		Id:           sessionId,
+		UserAddr:     event.UserAddress.Hex(),
+		ProviderAddr: session.Provider.Hex(),
+		EndsAt:       session.EndsAt,
+		ModelID:      modelID,
+		ModelName:    modelConfig.ModelName,
+		ModelApiType: modelConfig.ApiType,
 	})
 	if err != nil {
 		return err

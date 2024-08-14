@@ -11,6 +11,7 @@ import (
 	"net/url"
 
 	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	msgs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi/morrpcmessage"
@@ -311,17 +312,22 @@ func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter Res
 			return lib.WrapError(ErrDecrFailed, err)
 		}
 
-		var payload openai.ChatCompletionResponse
+		var payload ChatCompletionResponse
 		err = json.Unmarshal(aiResponse, &payload)
-		if err != nil {
-			return lib.WrapError(ErrInvalidResponse, err)
-		}
-
-		var stop = false
-		choices := payload.Choices
-		for _, choice := range choices {
-			if choice.FinishReason == openai.FinishReasonStop {
-				stop = true
+		var stop = true
+		if err == nil {
+			stop = false
+			choices := payload.Choices
+			for _, choice := range choices {
+				if choice.FinishReason == FinishReasonStop {
+					stop = true
+				}
+			}
+		} else {
+			var payload aiengine.ProdiaGenerationResult
+			err = json.Unmarshal(aiResponse, &payload)
+			if err != nil {
+				return lib.WrapError(ErrInvalidResponse, err)
 			}
 		}
 
