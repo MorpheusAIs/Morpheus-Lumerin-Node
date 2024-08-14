@@ -2,6 +2,8 @@ basePath: /
 definitions:
   aiengine.LocalModel:
     properties:
+      apiType:
+        type: string
       id:
         type: string
       model:
@@ -1257,8 +1259,14 @@ paths:
       description: Send prompt to a local or remote model based on session id in header
       parameters:
       - description: Session ID
+        format: hex32
         in: header
         name: session_id
+        type: string
+      - description: Model ID
+        format: hex32
+        in: header
+        name: model_id
         type: string
       - description: Prompt
         in: body

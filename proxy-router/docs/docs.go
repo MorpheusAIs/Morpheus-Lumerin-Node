@@ -941,8 +941,16 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
+                        "format": "hex32",
                         "description": "Session ID",
                         "name": "session_id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "hex32",
+                        "description": "Model ID",
+                        "name": "model_id",
                         "in": "header"
                     },
                     {
@@ -1041,6 +1049,9 @@ const docTemplate = `{
         "aiengine.LocalModel": {
             "type": "object",
             "properties": {
+                "apiType": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
