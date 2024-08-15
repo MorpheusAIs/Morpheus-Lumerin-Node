@@ -17,7 +17,9 @@ import {
     CustomTextArrea,
     Control,
     SendBtn,
-    LoadingCover
+    LoadingCover,
+    ImageContainer,
+    SubPriceLabel
 } from './Chat.styles';
 import { BtnAccent } from '../dashboard/BalanceBlock.styles';
 import { withRouter } from 'react-router-dom';
@@ -28,10 +30,11 @@ import 'react-modern-drawer/dist/index.css'
 import './Chat.css'
 import { ChatHistory } from './ChatHistory';
 import Spinner from 'react-bootstrap/Spinner';
-import Image from 'react-bootstrap/Image';
+import { formatSmallNumber } from './utils';
 import ModelSelectionModal from './modals/ModelSelectionModal';
 import { parseDataChunk, makeId, getColor, isClosed } from './utils';
 import { Cooldown } from './Cooldown';
+import ImageViewer from "react-simple-image-viewer";
 
 let abort = false;
 let cancelScroll = false;
@@ -49,6 +52,7 @@ const Chat = (props) => {
     const [isSpinning, setIsSpinning] = useState(false);
     const [meta, setMeta] = useState({ budget: 0, supply: 0 });
 
+    const [imagePreview, setImagePreview] = useState<string>();
     const [activeSession, setActiveSession] = useState<any>(undefined);
 
     const [chainData, setChainData] = useState<any>(null);
@@ -65,7 +69,7 @@ const Chat = (props) => {
     const modelName = selectedModel?.Name || "Model";
     const isLocal = selectedModel?.useLocal;
 
-    const providerAddress = isLocal ? "(local)" : selectedBid?.Provider ? abbreviateAddress(selectedBid?.Provider, 4) : null;
+    const providerAddress = isLocal ? "(local)" : selectedBid?.Provider ? abbreviateAddress(selectedBid?.Provider, 5) : null;
     const isDisabled = (!activeSession && !isLocal) || isReadonly;
     const isEnoughFunds = Number(balances.mor) > Number(requiredStake.min);
 
@@ -173,14 +177,13 @@ const Chat = (props) => {
         if (session) {
             try {
                 const history = await props.client.getChatHistory(session.sessionId);
-                if (history.length) {
-                    setMessages(history[0].messages || []);
-                }
+                setMessages(history.length ? (history[0].messages || []) : []);
             }
             catch (e) {
                 props.toasts.toast('error', 'Failed to load chat history');
             }
         }
+        scrollToBottom(); 
     }
 
     const refreshSessions = async () => {
@@ -210,7 +213,6 @@ const Chat = (props) => {
 
         const openSessions = sessions.filter(s => !isClosed(s));
         const openSession = openSessions.find(s => s.Id == sessionId);
-
         if (!openSession) {
             setIsReadonly(true)
 
@@ -232,6 +234,7 @@ const Chat = (props) => {
             const selectedModel = chainData.models.find((m: any) => m.Id == openSession.ModelAgentId);
             setSelectedModel(selectedModel);
         }
+        setTimeout(scrollToBottom, 400);
     }
 
     const registerScrollEvent = (register) => {
@@ -410,7 +413,6 @@ const Chat = (props) => {
         abort = true;
 
         if (isLocal) {
-            debugger;
             const localModel = (chainData?.models?.find((m: { Id: string }) => m.Id == modelId));
             if (localModel) {
                 setSelectedModel({ ...localModel, useLocal: true });
@@ -480,7 +482,7 @@ const Chat = (props) => {
                                             )
                                             : (
                                                 <>
-                                                    <span>{providerAddress}</span>
+                                                    <SubPriceLabel>{formatSmallNumber(selectedBid?.PricePerSecond / (10 ** 18))} MOR/s</SubPriceLabel>
                                                 </>
                                             )
                                     }
@@ -506,7 +508,7 @@ const Chat = (props) => {
                         </Avatar>
                         <div style={{ marginLeft: '10px' }}>{modelName}</div>
                     </ChatAvatar>
-                    <div>Provider: {isLocal ? "(local)" : providerAddress}</div>
+                    <div><span style={{ color: 'white' }}>Provider:</span> {isLocal ? "(local)" : providerAddress}</div>
                     <div>
                         <div onClick={toggleDrawer}>
                             <IconHistory size={"2.4rem"}></IconHistory>
@@ -514,11 +516,24 @@ const Chat = (props) => {
                     </div>
                 </ChatTitleContainer>
 
+                {imagePreview && (
+                    <ImageViewer
+                    src={[imagePreview]}
+                    onClose={() => setImagePreview("")}
+                    disableScroll={false}
+                    backgroundStyle={{
+                        backgroundColor: "rgba(0,0,0,0.9)",
+                        zIndex: 1000
+                    }}
+                    closeOnClickOutside={true}
+                    />
+                )}
+
                 <Container>
                     <ChatBlock ref={chatBlockRef} className={!messages?.length ? 'createSessionMode' : null}>
                         {
                             messages?.length ? messages.map(x => (
-                                <Message key={makeId(6)} message={x}></Message>
+                                <Message key={makeId(6)} message={x} onOpenImage={setImagePreview}></Message>
                             ))
                                 : (!isLocal && !activeSession &&
                                     <div className='session-container' style={{ width: '400px' }}>
@@ -575,7 +590,7 @@ const Chat = (props) => {
     )
 }
 
-const Message = ({ message }) => {
+const Message = ({ message, onOpenImage }) => {
     return (
         <div style={{ display: 'flex', margin: '12px 0 28px 0' }}>
             <Avatar color={message.color}>
@@ -585,7 +600,7 @@ const Message = ({ message }) => {
                 <AvatarHeader>{message.user}</AvatarHeader>
                 {
                     message.isImageContent
-                        ? (<MessageBody>{<Image src={message.text} thumbnail fluid />}</MessageBody>)
+                        ? (<MessageBody>{<ImageContainer src={message.text} onClick={() => onOpenImage(message.text)} />}</MessageBody>)
                         : (<MessageBody>{message.text}</MessageBody>)
                 }
             </div>

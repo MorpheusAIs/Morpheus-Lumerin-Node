@@ -172,7 +172,6 @@ const withChatState = WrappedComponent => {
 
     onOpenSession = async ({ modelId, duration }) => {
       this.context.toast('info', 'Processing...');
-
       try {
         const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/models/${modelId}/session`;
         const body = {
@@ -189,7 +188,7 @@ const withChatState = WrappedComponent => {
           return;
         }
         this.context.toast('success', 'Session successfully created');
-        return dataResponse.sessionId;
+        return dataResponse.sessionID;
       }
       catch (e) {
         console.error(e);
