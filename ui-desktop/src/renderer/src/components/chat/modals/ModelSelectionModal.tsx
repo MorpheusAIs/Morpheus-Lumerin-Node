@@ -47,7 +47,7 @@ const ModelSelectionModal = ({ isActive, handleClose, models, onChangeModel }) =
             <TitleWrapper>
                 <Title>Change Model</Title>
             </TitleWrapper>
-            <AutoSizer width={400}>
+            <AutoSizer width={400} height={600}>
                 {({ width, height }) => (
                     <RVContainer
                         rowRenderer={rowRenderer(models, changeModelHandler)}

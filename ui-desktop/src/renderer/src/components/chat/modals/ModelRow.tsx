@@ -9,9 +9,9 @@ import { formatSmallNumber } from '../utils';
 import { IconX } from '@tabler/icons-react';
 
 const RowContainer = styled.div`
-  padding: 1.2rem 0;
+  padding: 1.2rem;
   display: grid;
-  grid-template-columns: 2fr 4fr 160px;
+  grid-template-columns: 3fr 1fr 160px;
   text-align: center;
   border: ${p => p.theme.colors.morMain} solid 0.5px;
   color: ${p => p.theme.colors.morMain};
@@ -43,6 +43,14 @@ const PriceContainer = styled.div`
     display: flex;
     justify-content: ${p => p.hasLocal ? "space-evenly" : 'center'};
     align-items: center;
+    white-space: nowrap;
+`
+
+const ModelNameContainer = styled(FlexCenter)`
+    justify-content: start;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 `
 
 const selectorStyles = {
@@ -121,9 +129,9 @@ function ModelRow(props) {
 
     return (
         <RowContainer useSelect={useSelect}>
-            <FlexCenter>
+            <ModelNameContainer>
                 {props?.model?.Name}
-            </FlexCenter>
+            </ModelNameContainer>
             <PriceContainer hasLocal={hasLocal}>
                 {
                     useSelect
