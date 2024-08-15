@@ -273,7 +273,9 @@ const Chat = (props) => {
         const headers = {
             "Accept": "application/json"
         };
-        if (!isLocal) {
+        if (isLocal) {
+            headers["model_id"] = selectedModel.Id;
+        } else {
             headers["session_id"] = activeSession.sessionId;
         }
 
@@ -411,9 +413,11 @@ const Chat = (props) => {
         abort = true;
 
         if (isLocal) {
-            const localModel = (chainData?.models?.find((m: any) => m.hasLocal));
+            const localModel = (chainData?.models?.find((m: { Id: string }) => m.Id == modelId));
             if (localModel) {
                 setSelectedModel({ ...localModel, useLocal: true });
+            } else {
+                props.toasts.toast('error', 'Failed to select local model');
             }
             return;
         }
