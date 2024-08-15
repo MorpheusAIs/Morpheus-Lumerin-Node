@@ -411,7 +411,7 @@ const Chat = (props) => {
         abort = true;
 
         if (isLocal) {
-s            const localModel = (chainData?.models?.find((m: any) => m.hasLocal));
+            const localModel = (chainData?.models?.find((m: any) => m.hasLocal));
             if (localModel) {
                 setSelectedModel({ ...localModel, useLocal: true });
             }
