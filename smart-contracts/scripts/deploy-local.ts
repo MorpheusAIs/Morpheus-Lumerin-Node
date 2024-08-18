@@ -1,7 +1,7 @@
 import * as fixtures from "../test/fixtures";
 import * as fixturesStaking from "../test/Staking/fixtures";
 import { getStakeId } from "../test/Staking/utils";
-import { DAY, SECOND } from "../utils/time";
+import { DAY, MINUTE, SECOND } from "../utils/time";
 import hre from "hardhat";
 
 async function main() {
@@ -12,9 +12,9 @@ async function main() {
     data.tokenMOR.address,
   );
 
-  const startDate =
-    BigInt(new Date("2024-07-16T01:00:00.000Z").getTime()) / 1000n;
-  const duration = 400n * BigInt(DAY / SECOND);
+  const block = await data.publicClient.getBlock();
+  const startDate = block.timestamp;
+  const duration = 10n * BigInt(MINUTE / SECOND);
   const rewardPerSecond = (115n * 10n ** 18n) / 1_000_000n;
   const totalReward = rewardPerSecond * duration;
 
@@ -24,7 +24,7 @@ async function main() {
       durationSeconds: duration,
       startDate,
       totalReward: totalReward,
-      lockDurations: fixturesStaking.getDefaultDurations(precision),
+      lockDurations: fixturesStaking.getDefaultDurationsShort(precision),
     },
   ]);
 
@@ -36,6 +36,7 @@ async function main() {
   await lmr.write.transfer([alice.account.address, stakingAmount * 100n]);
   await lmr.write.transfer([bob.account.address, stakingAmount * 100n]);
 
+  /**
   for (let i = 0; i < 3; i++) {
     await lmr.write.approve([staking.address, stakingAmount], {
       account: alice.account,
@@ -53,6 +54,7 @@ async function main() {
       account: bob.account,
     });
   }
+  */
 
   // const stakeId = await getStakeId(depositTx);
 

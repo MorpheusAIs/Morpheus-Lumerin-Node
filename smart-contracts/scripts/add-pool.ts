@@ -47,6 +47,8 @@ async function main() {
   const defaultDurations = getDefaultDurations(precision);
 
   console.log("Adding pool ...");
+  console.log("Approving", totalReward, "MOR tokens ...");
+  await morToken.write.approve([stakingAddress, totalReward]);
   const tx = await staking.write.addPool([
     startDate,
     duration,
