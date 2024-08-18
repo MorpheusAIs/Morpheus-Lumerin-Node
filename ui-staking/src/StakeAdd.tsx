@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { usePublicClient, useReadContract, useWriteContract } from "wagmi";
 import { stakingMasterChefAbi, erc20Abi } from "./blockchain/abi.ts";
 import { parseUnits } from "viem";
+import { formatDuration } from "./lib/date.ts";
 
 interface StakeAddProps {
 	poolId: bigint;
@@ -56,7 +57,6 @@ export const StakeAdd = (props: StakeAddProps) => {
 			confirmations: 1,
 			timeout: 10000,
 		});
-		console.log(receipt);
 		await writeContractAsync({
 			abi: [...stakingMasterChefAbi, ...erc20Abi],
 			address: process.env.REACT_APP_STAKING_ADDR as `0x${string}`,
@@ -76,7 +76,7 @@ export const StakeAdd = (props: StakeAddProps) => {
 
 	return (
 		<div>
-			<h1>Stake Add</h1>
+			<h1>Add a new stake</h1>
 			{isPending && <p>Adding stake...</p>}
 			{isError && <p>Error: {error.message}</p>}
 			<input
@@ -88,14 +88,13 @@ export const StakeAdd = (props: StakeAddProps) => {
 				}
 			/>
 
-			<select>
+			<select
+				value={lockIndex}
+				onChange={(e) => setLockIndex(Number(e.target.value))}
+			>
 				{locks.data?.map((lock, index) => (
-					<option
-						key={lock.durationSeconds}
-						value={index}
-						onSelect={() => setLockIndex(index)}
-					>
-						Duration {(lock.durationSeconds / 3600n / 24n).toString()} days,
+					<option key={lock.durationSeconds} value={index}>
+						Duration {formatDuration(lock.durationSeconds).toString()},
 						multiplier {Number(lock.multiplierScaled) / Number(props.precision)}
 					</option>
 				))}

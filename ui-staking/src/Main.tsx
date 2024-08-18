@@ -10,9 +10,9 @@ import { StakeList } from "./StakeList.tsx";
 import { erc20Abi } from "viem";
 import { StakeAdd } from "./StakeAdd.tsx";
 import { stakingMasterChefAbi } from "./blockchain/abi.ts";
-import { formatLMR, formatMOR } from "./lib/units.ts";
 import { formatDate } from "./lib/date.ts";
 import { useQueryClient } from "@tanstack/react-query";
+import { BalanceLMR, BalanceMOR } from "./balance.tsx";
 
 export const Main = () => {
 	const { address, isConnected } = useAccount();
@@ -91,8 +91,6 @@ export const Connected = (props: { address: `0x${string}` }) => {
 		// },
 	});
 
-	console.log("block", block.data);
-
 	const [poolId, setPoolId] = React.useState(0n);
 
 	const poolData = useReadContract({
@@ -142,8 +140,6 @@ export const Connected = (props: { address: `0x${string}` }) => {
 		},
 	});
 
-	console.log("balanceMOR", balanceMor.data);
-
 	return (
 		<>
 			<h1>Staking contract</h1>
@@ -152,7 +148,9 @@ export const Connected = (props: { address: `0x${string}` }) => {
 			<p>{props.address}</p>
 			<p>
 				{balanceMor.isSuccess ? (
-					<>Balance: {formatMOR(balanceMor.data)}</>
+					<>
+						Balance: <BalanceMOR value={balanceMor.data} />
+					</>
 				) : (
 					<>Loading balance...</>
 				)}
@@ -160,7 +158,9 @@ export const Connected = (props: { address: `0x${string}` }) => {
 
 			<p>
 				{balanceLMR.isSuccess ? (
-					<>Balance: {formatLMR(balanceLMR.data)}</>
+					<>
+						Balance: <BalanceLMR value={balanceLMR.data} />
+					</>
 				) : (
 					<>Loading balance...</>
 				)}
@@ -175,12 +175,13 @@ export const Connected = (props: { address: `0x${string}` }) => {
 			{poolData.data && <p>Pool {poolId.toString()}</p>}
 			{poolDataObj && (
 				<p>
-					rewardPerSecondScaled {formatMOR(poolDataObj.accRewardPerShareScaled)}
+					rewardPerSecondScaled{" "}
+					<BalanceMOR value={poolDataObj.accRewardPerShareScaled} />
 					<br />
 					lastRewardTime {formatDate(poolDataObj.lastRewardTime)},
 					<br />
 					accRewardPerShareScaled{" "}
-					{formatMOR(poolDataObj.accRewardPerShareScaled)},
+					{<BalanceMOR value={poolDataObj.accRewardPerShareScaled} />},
 					<br />
 					totalShares {poolDataObj.totalShares.toString()},
 					<br />
@@ -189,18 +190,21 @@ export const Connected = (props: { address: `0x${string}` }) => {
 					endTime {formatDate(poolDataObj.endTime)},
 					<br />
 					balanceLMR{" "}
-					{poolDataObj.balanceLMR
-						? formatLMR(poolDataObj.balanceLMR)
-						: "Loading..."}
+					{poolDataObj.balanceLMR ? (
+						<BalanceLMR value={poolDataObj.balanceLMR} />
+					) : (
+						"Loading..."
+					)}
 					<br />
 					balanceMOR{" "}
-					{poolDataObj.balanceMOR
-						? formatMOR(poolDataObj.balanceMOR)
-						: "Loading..."}
+					{poolDataObj.balanceMOR ? (
+						<BalanceMOR value={poolDataObj.balanceMOR} />
+					) : (
+						"Loading..."
+					)}
 				</p>
 			)}
 
-			<h2>Stakes</h2>
 			{block.data && poolDataObj && stakes.data && precision.data && (
 				<StakeList
 					userAddr={props.address}
@@ -225,7 +229,6 @@ export const Connected = (props: { address: `0x${string}` }) => {
 				/>
 			)}
 
-			<h2>Add stake</h2>
 			{balanceMor.isSuccess && precision.data ? (
 				<StakeAdd
 					poolId={0n}

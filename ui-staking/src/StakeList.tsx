@@ -1,10 +1,10 @@
 import React from "react";
-import { usePublicClient, useReadContract, useWriteContract } from "wagmi";
+import { usePublicClient, useWriteContract } from "wagmi";
 import { stakingMasterChefAbi } from "./blockchain/abi.ts";
 import { getReward, type UserStake, type Pool } from "./reward.ts";
-import { formatLMR, formatMOR } from "./lib/units.ts";
-import { formatDate } from "./lib/date.ts";
+import { formatDuration } from "./lib/date.ts";
 import { useStopwatch } from "react-timer-hook";
+import { BalanceLMR, BalanceMOR } from "./balance.tsx";
 
 interface Props {
 	userAddr: `0x${string}`;
@@ -44,7 +44,6 @@ export const StakeList = (props: Props) => {
 				args: [props.poolId, stakeId],
 			});
 			const receipt = await pubClient?.waitForTransactionReceipt({ hash });
-			console.log(receipt);
 		} catch (e) {
 			console.error(e);
 		}
@@ -54,36 +53,53 @@ export const StakeList = (props: Props) => {
 
 	return (
 		<div>
-			<h1>Stake List</h1>
+			<h1>Your stakes</h1>
 
-			{props.stakes.map((stake, index) => (
-				<p key={stake.lockEndsAt}>
-					Stake {index}:<br />
-					amount staked {formatLMR(stake.stakeAmount)}
-					<br />
-					staking ends at {formatDate(stake.lockEndsAt)}
-					<br />
-					share amount {stake.shareAmount.toString()}
-					<br />
-					earned reward{" "}
-					{formatMOR(
-						getReward(stake, props.poolData, timestamp, props.precision),
-					)}
-					<br />
-					reward debt {formatMOR(stake.rewardDebt)}
-					<br />
-					<button
-						type="button"
-						onClick={() => onUnstake(BigInt(index))}
-						disabled={props.blockTimestamp < stake.lockEndsAt}
-					>
-						Unstake
-					</button>
-					<button type="button" onClick={() => onWithdraw(BigInt(index))}>
-						Withdraw Reward
-					</button>
-				</p>
-			))}
+			{props.stakes.map((stake, index) => {
+				if (stake.stakeAmount === 0n) {
+					return (
+						<p key={index}>
+							Stake {index}:<br />
+							Stake withdrawn
+						</p>
+					);
+				}
+				return (
+					<p key={index}>
+						Stake {index}:<br />
+						amount staked <BalanceLMR value={stake.stakeAmount} />
+						<br />
+						{stake.lockEndsAt > timestamp
+							? `funds locked for ${formatDuration(stake.lockEndsAt - timestamp)}`
+							: `funds unlocked ${formatDuration(timestamp - stake.lockEndsAt)} ago`}
+						<br />
+						share amount {stake.shareAmount.toString()}
+						<br />
+						earned reward{" "}
+						<BalanceMOR
+							value={getReward(
+								stake,
+								props.poolData,
+								timestamp,
+								props.precision,
+							)}
+						/>
+						<br />
+						{/* reward debt {formatMOR(stake.rewardDebt)}
+					<br /> */}
+						<button
+							type="button"
+							onClick={() => onUnstake(BigInt(index))}
+							disabled={props.blockTimestamp < stake.lockEndsAt}
+						>
+							Unstake
+						</button>
+						<button type="button" onClick={() => onWithdraw(BigInt(index))}>
+							Withdraw Reward
+						</button>
+					</p>
+				);
+			})}
 		</div>
 	);
 };
