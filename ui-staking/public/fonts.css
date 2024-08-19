@@ -1,0 +1,126 @@
+@font-face {
+    font-family: 'APK Protocol';
+    src: url('fonts/APK-Protocol-Bold-Italic-Trial.woff2') format('woff2'),
+        url('fonts/APK-Protocol-Bold-Italic-Trial.woff') format('woff');
+    font-weight: bold;
+    font-style: italic;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'APK Protocol';
+    src: url('fonts/APK-Protocol-Bold-Trial.woff2') format('woff2'),
+        url('fonts/APK-Protocol-Bold-Trial.woff') format('woff');
+    font-weight: bold;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'APK Protocol';
+    src: url('fonts/APK-Protocol-Medium-Italic-Trial.woff2') format('woff2'),
+        url('fonts/APK-Protocol-Medium-Italic-Trial.woff') format('woff');
+    font-weight: 500;
+    font-style: italic;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'APK Protocol';
+    src: url('fonts/APK-Protocol-Extra-Bold-Trial.woff2') format('woff2'),
+        url('fonts/APK-Protocol-Extra-Bold-Trial.woff') format('woff');
+    font-weight: bold;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'APK Protocol';
+    src: url('fonts/APK-Protocol-Extra-Bold-Italic-Trial.woff2') format('woff2'),
+        url('fonts/APK-Protocol-Extra-Bold-Italic-Trial.woff') format('woff');
+    font-weight: bold;
+    font-style: italic;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'APK Protocol';
+    src: url('fonts/APK-Protocol-Semi-Bold-Italic-Trial.woff2') format('woff2'),
+        url('fonts/APK-Protocol-Semi-Bold-Italic-Trial.woff') format('woff');
+    font-weight: 600;
+    font-style: italic;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'APK Protocol';
+    src: url('fonts/APK-Protocol-Thin-Italic-Trial.woff2') format('woff2'),
+        url('fonts/APK-Protocol-Thin-Italic-Trial.woff') format('woff');
+    font-weight: 100;
+    font-style: italic;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'APK Protocol';
+    src: url('fonts/APK-Protocol-Semi-Bold-Trial.woff2') format('woff2'),
+        url('fonts/APK-Protocol-Semi-Bold-Trial.woff') format('woff');
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'APK Protocol';
+    src: url('fonts/APK-Protocol-Thin-Trial.woff2') format('woff2'),
+        url('fonts/APK-Protocol-Thin-Trial.woff') format('woff');
+    font-weight: 100;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'APK Protocol';
+    src: url('fonts/APK-Protocol-Regular-Italic-Trial.woff2') format('woff2'),
+        url('fonts/APK-Protocol-Regular-Italic-Trial.woff') format('woff');
+    font-weight: normal;
+    font-style: italic;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'APK Protocol';
+    src: url('fonts/APK-Protocol-Light-Italic-Trial.woff2') format('woff2'),
+        url('fonts/APK-Protocol-Light-Italic-Trial.woff') format('woff');
+    font-weight: 300;
+    font-style: italic;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'APK Protocol';
+    src: url('fonts/APK-Protocol-Regular-Trial.woff2') format('woff2'),
+        url('fonts/APK-Protocol-Regular-Trial.woff') format('woff');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'APK Protocol';
+    src: url('fonts/APK-Protocol-Light-Trial.woff2') format('woff2'),
+        url('fonts/APK-Protocol-Light-Trial.woff') format('woff');
+    font-weight: 300;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'APK Protocol';
+    src: url('fonts/APK-Protocol-Medium-Trial.woff2') format('woff2'),
+        url('fonts/APK-Protocol-Medium-Trial.woff') format('woff');
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}
+

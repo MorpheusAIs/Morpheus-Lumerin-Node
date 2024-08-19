@@ -1,0 +1,298 @@
+/* Css reset */
+
+/*
+  1. Use a more-intuitive box-sizing model.
+*/
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+/*
+  2. Remove default margin
+*/
+* {
+  margin: 0;
+}
+/*
+  Typographic tweaks!
+  3. Add accessible line-height
+  4. Improve text rendering
+*/
+body {
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+/*
+  5. Improve media defaults
+*/
+img, picture, video, canvas, svg {
+  display: block;
+  max-width: 100%;
+}
+/*
+  6. Remove built-in form typography styles
+*/
+input, button, textarea, select {
+  font: inherit;
+}
+/*
+  7. Avoid text overflows
+*/
+p, h1, h2, h3, h4, h5, h6 {
+  overflow-wrap: break-word;
+}
+/*
+  8. Create a root stacking context
+*/
+#root, #__next {
+  isolation: isolate;
+}
+
+/* Global variables */
+:root {
+  --border-radius: 12px;
+}
+
+
+/* Styles */
+body {
+  background-color: #080810;
+  padding: 57px 40px;
+  font-family: "APK Protocol", sans-serif;
+  color: #fff;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 40px;
+}
+
+.header-logo {
+  width: 153px;
+}
+
+.header-wallet {
+  width: 168px;
+  height: 48px;
+  border-radius: var(--border-radius);
+  border-color: rgba(255, 255, 255, 0.1);
+  border-width: 1px;
+  color: #fff;
+  font-weight: 600;
+  font-size: 16px;
+  background: none;
+}
+
+.container {
+  max-width: 1174px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.home-element{
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  right: 0;
+  max-width: 60%;
+}
+
+.cta{
+  font-size: 80px;
+  color: #fff;
+  font-weight: 600;
+  margin: 60px 0 10px;
+}
+
+.sub-cta{
+  font-size: 32px;
+  font-weight: 400;
+}
+
+.cta-button {
+  margin-top: 40px;
+}
+
+.lens {
+  width: 1200px;
+  height: 1200px;
+  left: -200px;
+  top: -120px;
+  position: absolute;
+  background: radial-gradient(circle at 50% 50%, rgba(79, 126, 145, 0.15) 258px, transparent 550px);
+  border-radius: 100%;
+  z-index: -1;
+}
+
+.button {
+  background-color: rgba(76, 90, 95, 0.5);
+  border-radius: var(--border-radius);
+  padding: 10px;
+  font-size: 20px;
+  font-weight: 600;
+  height: 62px;
+  width: 220px;
+  color: #fff;
+  border: none;
+}
+
+.section{
+  background-color: rgba(79, 126, 145, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--border-radius);
+  padding: 18px 32px;
+}
+
+.section-heading {
+  font-size:16px;
+  font-weight: 600;
+}
+
+.separator {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 15px 0;
+  width: 100%;
+}
+
+.pool {
+  display: grid;
+  grid-template-rows: repeat(3, auto);
+  grid-template-columns: 2fr max-content;
+  grid-column-gap: 10px;
+  grid-row-gap: 10px;
+}
+  
+.pool-progress { 
+  grid-area: 1 / 1 / 4 / 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center; 
+}
+.pool-cta { 
+  grid-area: 1 / 2 / 2 / 3; 
+}
+.pool-stats { 
+  grid-area: 2 / 2 / 3 / 3; 
+}
+.stake-info { 
+  grid-area: 3 / 2 / 4 / 3; 
+}
+
+dl.info  {
+  display: grid;
+  grid-template-columns: max-content auto;
+  grid-column-gap: 10px;
+  grid-row-gap: 18px;
+}
+
+.info dt {
+  grid-column-start: 1;
+  font-size: 14px;
+  font-weight: 400;
+  align-self: end;
+}
+
+.info dd {
+  grid-column-start: 2;
+  text-align: right;
+  font-size: 16px;
+  font-weight: 600;
+  align-self: end;
+}
+
+.pool-nav{
+  margin-left: var(--border-radius);
+}
+
+.pool-nav ul {
+  display: flex;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.pool-nav ul li{
+  padding: 0;
+  margin: 0;
+}
+
+.pool-nav ul li a {
+  display: block;
+  font-weight:600;
+  font-size: 14px;
+  color: #fff;
+  padding: 15px 30px;
+  text-decoration: none;
+}
+
+.pool-nav ul li a.active{
+  color: #1976D2;
+  border-bottom: 2px solid #1976D2;
+}
+
+.chart {
+  max-width: 350px;
+  max-height: 350px;
+  position: relative;
+  flex-grow: 1;
+}
+
+.chart svg{
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+}
+
+.chart-text {
+  position: absolute;
+  top:0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+.chart-text dl {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.chart-text dt{
+  display: block;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.chart-text dd{
+  display: block;
+  font-weight: 600;
+  font-size: 32px;
+}
+
+dl.current-reward{
+  margin-top: 43px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.current-reward dt{
+  font-size: 16px;
+  font-weight: 600;
+  padding: 0 38px;
+}
+
+.current-reward dd{
+  font-size: 36px;
+  font-weight: 600;
+}
+
+.current-reward .currency{
+  font-size: 15px;
+}

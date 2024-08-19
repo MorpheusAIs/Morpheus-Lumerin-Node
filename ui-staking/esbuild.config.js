@@ -2,45 +2,12 @@
 //@ts-check
 
 import esbuild from "esbuild";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { livereloadPlugin } from "@jgoz/esbuild-plugin-livereload";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-function copyPublicFolder() {
-  const publicDir = path.resolve(__dirname, "public");
-  const distDir = path.resolve(__dirname, "dist");
-
-  fs.mkdirSync(distDir, { recursive: true });
-
-  const files = fs.readdirSync(publicDir);
-  for (const file of files) {
-    const srcPath = path.join(publicDir, file);
-    const destPath = path.join(distDir, file);
-
-    fs.copyFileSync(srcPath, destPath);
-  }
-}
-
-/**  @type {import('esbuild').BuildOptions} */
-const esbuildOptions = {
-  logLevel: "info",
-  entryPoints: ["src/index.tsx"],
-  bundle: true,
-  outfile: "dist/index.js",
-  define: {
-    "process.env.NODE_ENV": '"production"',
-  },
-  plugins: [livereloadPlugin()],
-};
+import { copy } from "esbuild-plugin-copy";
 
 async function main() {
-  const isWatch = process.argv.includes("-w");
-
   const ctx = await esbuild.context({
+    logLevel: "info",
     entryPoints: ["src/index.tsx"],
     bundle: true,
     outdir: "dist",
@@ -51,13 +18,28 @@ async function main() {
       "process.env.REACT_APP_MOR_ADDR": '"0x5fbdb2315678afecb367f032d93f642f64180aa3"',
       "process.env.REACT_APP_LMR_ADDR": '"0x0B306BF915C4d645ff596e518fAf3F9669b97016"',
     },
+    inject: ["./src/react-shim.ts"],
+    plugins: [
+      livereloadPlugin(),
+      copy({
+        resolveFrom: "out",
+        assets: {
+          from: "./public/**/*",
+          to: ".",
+        },
+        watch: true,
+      }),
+    ],
+    loader: {
+      ".png": "file",
+    },
   });
-  copyPublicFolder();
 
   await ctx.watch();
 
   const { host, port } = await ctx.serve({
     servedir: "dist",
+    fallback: "dist/index.html",
   });
 
   console.log(`Serving on http://${host}:${port}`);
