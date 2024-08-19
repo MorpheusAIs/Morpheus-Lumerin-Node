@@ -299,7 +299,7 @@ jobs:
           unzip -o -j $LLAMACPP llama-server.exe llama.dll ggml.dll
           echo '{"run":["./llama-server.exe -m ./'$MODEL'","./proxy-router.exe","./ui-desktop-1.0.0.exe"]}' > mor-launch.json
           cp ./proxy-router/.env.example .env
-          echo "PROXY_STORAGE_PATH=.\data\" >> .env
+          echo 'PROXY_STORAGE_PATH=.\data\' >> .env
           cp ./proxy-router/models-config.json.example models-config.json
           mv ./proxy-router/bin/proxy-router proxy-router.exe
           mv ./launcher/mor-launch mor-launch.exe
