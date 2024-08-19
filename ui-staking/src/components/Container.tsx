@@ -7,3 +7,11 @@ export const Container: FC<HTMLAttributes<HTMLDivElement>> = (props) => {
 		</div>
 	);
 };
+
+export const ContainerNarrow: FC<HTMLAttributes<HTMLDivElement>> = (props) => {
+	return (
+		<div {...props} className={["container-narrow", props.className].join(" ")}>
+			{props.children}
+		</div>
+	);
+};
