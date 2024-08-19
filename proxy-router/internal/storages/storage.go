@@ -13,7 +13,7 @@ type Storage struct {
 
 func NewStorage(log lib.ILogger, path string) *Storage {
 	if err := os.Mkdir(path, os.ModePerm); err != nil {
-		log.Fatal(err)
+		log.Warn(err)
 	}
 	opts := badger.DefaultOptions(path)
 	opts.Logger = NewBadgerLogger(log)

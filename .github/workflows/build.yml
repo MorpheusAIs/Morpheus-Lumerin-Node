@@ -84,6 +84,7 @@ jobs:
           unzip -o -j $LLAMACPP build/bin/llama-server
           echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./ui-desktop-1.0.0.AppImage"]}' > mor-launch.json
           cp ./proxy-router/.env.example .env
+          cp ./proxy-router/models-config.json.example models-config.json
           zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/bin/proxy-router .env $MODEL mor-launch.json ./ui-desktop/dist/ui-desktop-1.0.0.AppImage
 
       - name: Upload artifacts
@@ -152,6 +153,7 @@ jobs:
           unzip -o -j $LLAMACPP build/bin/llama-server
           echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./ui-desktop.app/Contents/MacOS/ui-desktop"]}' > mor-launch.json
           cp ./proxy-router/.env.example .env
+          cp ./proxy-router/models-config.json.example models-config.json
           unzip ./ui-desktop/dist/ui-desktop-1.0.0-mac.zip
           zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json
           zip -r $ARTIFACT ui-desktop.app
@@ -222,6 +224,7 @@ jobs:
           unzip -o -j $LLAMACPP build/bin/llama-server
           echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./ui-desktop.app/Contents/MacOS/ui-desktop"]}' > mor-launch.json
           cp ./proxy-router/.env.example .env
+          cp ./proxy-router/models-config.json.example models-config.json
           unzip ./ui-desktop/dist/ui-desktop-1.0.0-arm64-mac.zip
           zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json
           zip -r $ARTIFACT ui-desktop.app
@@ -296,6 +299,8 @@ jobs:
           unzip -o -j $LLAMACPP llama-server.exe llama.dll ggml.dll
           echo '{"run":["./llama-server.exe -m ./'$MODEL'","./proxy-router.exe","./ui-desktop-1.0.0.exe"]}' > mor-launch.json
           cp ./proxy-router/.env.example .env
+          echo "PROXY_STORAGE_PATH=.\data\" >> .env
+          cp ./proxy-router/models-config.json.example models-config.json
           mv ./proxy-router/bin/proxy-router proxy-router.exe
           mv ./launcher/mor-launch mor-launch.exe
           mv "./ui-desktop/dist/ui-desktop 1.0.0.exe" ui-desktop-1.0.0.exe
