@@ -5,7 +5,8 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "start": "node esbuild.config.js -w"
+    "start": "node watch.js",
+    "build": "node build.js"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.8.3",
