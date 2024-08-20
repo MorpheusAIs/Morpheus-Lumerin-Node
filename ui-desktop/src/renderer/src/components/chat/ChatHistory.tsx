@@ -45,9 +45,10 @@ const HistoryEntryTitle = styled.div`
 
 const ModelName = styled.div`
     text-overflow: ellipsis;
-    width: 181px;
+    width: 250px;
     height: 24px;
-    overflow: auto;
+    overflow: hidden;
+    text-wrap: nowrap;
 `
 
 const Duration = styled.div`

@@ -163,9 +163,12 @@ const Chat = (props) => {
             if (!openedSession) {
                 return;
             }
-
             setActiveSession({ sessionId: openedSession });
-            await refreshSessions();
+            var allSessions = await refreshSessions();
+            var targetSessionData = allSessions.find(x => x.Id == openedSession);
+            var targetModel = chainData.models.find(x => x.Id == targetSessionData.ModelAgentId)
+            var targetBid = targetModel.bids.find(x => x.Id == targetSessionData.BidID);
+            setSelectedBid(targetBid);
         }
         finally {
             setIsLoading(false);
@@ -189,6 +192,7 @@ const Chat = (props) => {
     const refreshSessions = async () => {
         const sessions = await props.getSessionsByUser(props.address);
         setSessions(sessions);
+        return sessions;
     }
 
     const closeSession = async (sessionId: string) => {
@@ -409,6 +413,7 @@ const Chat = (props) => {
         // TODO: Add support for custom Bid.
         setMessages([]);
         setActiveSession(undefined);
+        setSelectedBid(undefined);
         setIsReadonly(false);
         abort = true;
 
@@ -480,9 +485,9 @@ const Chat = (props) => {
                                                     <span>(local)</span>
                                                 </>
                                             )
-                                            : (
+                                            : ( 
                                                 <>
-                                                    <SubPriceLabel>{formatSmallNumber(selectedBid?.PricePerSecond / (10 ** 18))} MOR/s</SubPriceLabel>
+                                                    <SubPriceLabel>{selectedBid ? formatSmallNumber(selectedBid?.PricePerSecond / (10 ** 18)) : 0} MOR/s</SubPriceLabel>
                                                 </>
                                             )
                                     }
@@ -508,7 +513,11 @@ const Chat = (props) => {
                         </Avatar>
                         <div style={{ marginLeft: '10px' }}>{modelName}</div>
                     </ChatAvatar>
-                    <div><span style={{ color: 'white' }}>Provider:</span> {isLocal ? "(local)" : providerAddress}</div>
+                    { 
+                        (selectedBid || isLocal) && <div>
+                            <span style={{ color: 'white' }}>Provider:</span> {isLocal ? "(local)" : providerAddress}
+                        </div>
+                    }
                     <div>
                         <div onClick={toggleDrawer}>
                             <IconHistory size={"2.4rem"}></IconHistory>
