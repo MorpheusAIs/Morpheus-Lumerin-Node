@@ -1,5 +1,5 @@
 # Morpheus Lumerin Node
-![Simple-Overview](docs/images/simple.svg)
+![Simple-Overview](docs/images/simple.png)
 The purpose of this software is to enable interaction with distributed, decentralized LLMs on the Morpheus network through a desktop chat experience.
 
 The steps listed below are for both the Consumer and Provider to get started with the Morpheus Lumerin Node. As the software is developed, both onboarding & configuration of the provider and consumer roles will be simplified, automated and more transparent to the end user.

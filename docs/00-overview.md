@@ -1,6 +1,6 @@
 # Overview of the Morpheus-Lumerin Environment
 
-![Architecture-Overview](images/overview.svg)
+![Architecture-Overview](images/overview.png)
 
 This document is intended to provide a high level overview of the major architectural components between model compute-providers and consumers in the Morpheus-Lumerin environment.
 
