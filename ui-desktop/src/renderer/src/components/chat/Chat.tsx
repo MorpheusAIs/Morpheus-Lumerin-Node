@@ -164,10 +164,10 @@ const Chat = (props) => {
                 return;
             }
             setActiveSession({ sessionId: openedSession });
-            var allSessions = await refreshSessions();
-            var targetSessionData = allSessions.find(x => x.Id == openedSession);
-            var targetModel = chainData.models.find(x => x.Id == targetSessionData.ModelAgentId)
-            var targetBid = targetModel.bids.find(x => x.Id == targetSessionData.BidID);
+            const allSessions = await refreshSessions();
+            const targetSessionData = allSessions.find(x => x.Id == openedSession);
+            const targetModel = chainData.models.find(x => x.Id == targetSessionData.ModelAgentId)
+            const targetBid = targetModel.bids.find(x => x.Id == targetSessionData.BidID);
             setSelectedBid(targetBid);
         }
         finally {

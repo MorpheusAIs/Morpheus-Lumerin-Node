@@ -50,7 +50,6 @@ const withChatState = WrappedComponent => {
     }
 
     closeSession = async (sessionId) => {
-      debugger;
       this.context.toast('info', 'Closing...');
       try {
         const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions/${sessionId}/close`;

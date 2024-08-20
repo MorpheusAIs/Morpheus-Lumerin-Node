@@ -61,8 +61,8 @@ const withDashboardState = WrappedComponent => {
     }
 
     getBalances = async () => {
-      var balances = await this.props.client.getBalances();
-      var rate = await this.props.client.getRates();
+      const balances = await this.props.client.getBalances();
+      const rate = await this.props.client.getRates();
       return { balances, rate };
     }
 
