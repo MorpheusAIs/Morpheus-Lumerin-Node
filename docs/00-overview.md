@@ -42,7 +42,7 @@ Numbers below reference the circled elements in the diagram above.
 
 ## 4. Consumer Node Setup 
 - [04-consumer-setup.md](04-consumer-setup.md) - for more details
-- [04-consumer-setup-source.md](04-consumer-setup-source.md) - for more details on setting up from gtihub source
+- [04a-consumer-setup-source.md](04a-consumer-setup-source.md) - for more details on setting up from gtihub source
 - The consumer node is the "client" that will be purchasing bids from the blockchain, sending prompts via the proxy-router and receiving inference back from the provider's model'
 - The components are very similar to the Provider side of things with the exception that the consumer node will typically not be hosting a model, but will be sending prompts to the proxy-router and receiving inference back
 - In this case, the easiest way to install is to use the packaged releases for your platform on Github and follow the instructions in the README.md file
