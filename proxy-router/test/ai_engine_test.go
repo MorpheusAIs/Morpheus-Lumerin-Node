@@ -13,7 +13,7 @@ import (
 )
 
 func AiEngine_Prompt(t *testing.T) {
-	aiEngine := aiengine.NewAiEngine("http://localhost:11434/v1", "", lib.NewTestLogger())
+	aiEngine := aiengine.NewAiEngine("http://localhost:11434/v1", "", nil, lib.NewTestLogger())
 	req := &api.ChatCompletionRequest{
 		Model:     "llama2",
 		MaxTokens: 100,
@@ -31,7 +31,7 @@ func AiEngine_Prompt(t *testing.T) {
 }
 
 func TestAiEngine_PromptStream(t *testing.T) {
-	aiEngine := aiengine.NewAiEngine("http://localhost:11434/v1", "", lib.NewTestLogger())
+	aiEngine := aiengine.NewAiEngine("http://localhost:11434/v1", "", nil, lib.NewTestLogger())
 	req := &api.ChatCompletionRequest{
 		Model:     "llama2",
 		MaxTokens: 100,

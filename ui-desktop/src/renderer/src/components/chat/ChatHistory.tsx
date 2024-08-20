@@ -43,6 +43,18 @@ const HistoryEntryTitle = styled.div`
     white-space: nowrap;
 `
 
+const ModelName = styled.div`
+    text-overflow: ellipsis;
+    width: 250px;
+    height: 24px;
+    overflow: hidden;
+    text-wrap: nowrap;
+`
+
+const Duration = styled.div`
+    color: white;
+`
+
 interface ChatHistoryProps {
     onCloseSession: (string) => void;
     onSelectSession: (string) => void;
@@ -68,11 +80,11 @@ export const ChatHistory = (props: ChatHistoryProps) => {
                             const title = titleObj?.title || "";
                             const model = props.models.find(x => x.Id == a.ModelAgentId);
                             return (
-                                <HistoryEntryContainer onClick={() => props.onSelectSession(a.Id)}>
+                                <HistoryEntryContainer key={a.Id} onClick={() => props.onSelectSession(a.Id)}>
                                     {title ? <HistoryEntryTitle data-rh={title} data-rh-negative>{title}</HistoryEntryTitle> : null}
-                                    <HistoryItem key={a.Id}>
-                                        <div data-rh={abbreviateAddress(a.Id, 3)} data-rh-negative>{model.Name}</div>
-                                        <div>{(a.EndsAt - a.OpenedAt) / 60} min</div>
+                                    <HistoryItem>
+                                        <ModelName data-rh={abbreviateAddress(a.Id, 3)} data-rh-negative>{model?.Name}</ModelName>
+                                        <Duration>{((a.EndsAt - a.OpenedAt) / 60).toFixed(0)} min</Duration>
                                         {
                                             !isClosed(a) ? (<IconX onClick={() => props.onCloseSession(a.Id)}></IconX>) : <div>CLOSED</div>
                                         }

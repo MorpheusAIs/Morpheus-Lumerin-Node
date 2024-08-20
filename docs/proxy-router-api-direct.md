@@ -1,76 +1,42 @@
-# Consumer Node Setup (Draft - 2024-07-23)
-This document provides a step-by-step guide to setting up a Consumer Node for the Morepheus Network so that you can setup session and interact with the remote providers.
+# Direct Consumer interaction with the proxy-router (no ui-desktop)
+This document provides a step-by-step flow to query your local proxy router and interact with a remote model using only the API. This is useful for developers or users who want to interact with the model directly without using the UI-Desktop.
 
 ## Pre-requisites:
-* Create or use an existing ERC-20 wallet that has saMOR and saETH (Sepolia Arbitrum) tokens - you can use Metamask (new wallet..not derived) or any other ERC-20 wallet.  You will need to have access to the wallet's private key **NEVER SHARE THIS WITH ANYONE** for steps below to authorize the contract to spend on your behalf.
+* Create or use an existing ERC-20 wallet that has saMOR and saETH (Sepolia Arbitrum) tokens - you can use Metamask (new wallet..not derived) or any other ERC-20 wallet.  
+* You will need to have access to the wallet's private key **NEVER SHARE THIS WITH ANYONE** for steps below to authorize the contract to spend on your behalf.
+* Install and launch the local llama.cpp and proxy-router from source (see [/docs/mac-boot-strap.md](/docs/mac-boot-strap.md) for instructions)
 
 ## TL;DR
-* Install and Configure the proxy-router node (once)
 * Authorize the contract to spend on your behalf (once)  
 * Query the blockchain for various models / providers & get the ModelID `Id` (every session)
 * Create a session with the provider using the ModelID `Id` (every session)
 * Interact with the provider by sending the prompt (every session)
 
 ## Detail:
-==================================
-### A. Proxy-Router CLI Setup  
-#### 1. Install OS-Specific Dependencies
-* git (https://git-scm.com/)
-* go (https://golang.org/)
+### A. Start the proxy-router (per instructions)
 
-#### 2. Clone & Navigate to the Repository
-```bash
-git clone https://github.com/Lumerin-protocol/Morpheus-Lumerin-Node.git #this will get you the DEV branch (daily updates)
-cd Morpheus-Lumerin-Node/proxy-router
-```
-#### 3. Edit the .env configuration file
-```bash 
-cp .env.example .env
-vi .env 
-```
-Modify the following entries to match your configuration for wallet and ethereum node: 
-* `WALLET_PRIVATE_KEY=` # Private Key from your Wallet as Consumer or Provider (needed for the proxy-router to sign transactions)
-* `ETH_NODE_ADDRESS=wss://` # Recommend using your own private ETH Node Address for better performance (via Alchemy or Infura)
-Save the .env file and exit the editor 
-
-#### 4. Build and start the proxy-router 
-```bash 
-./build.sh
-go run cmd/main.go
-```
-After the iniial setup, you can execute `git pull` to get the latest updates and re-run the `./build.sh` and `go run cmd/main.go` to update the proxy-router with the latest changes.
-
-#### 5. Confirm that the build is successful and console should show similar to below after started (and listening on specified ports 8082 for Swagger API and 3333 for the proxy-router):
-
-You can also test http://localhost:8082/swagger/index.html to confirm the API is running and accessible.
-
-```
-Loaded config: {AIEngine:{OpenAIBaseURL: OpenAIKey:} Blockchain:{EthNodeAddress: EthLegacyTx:false ExplorerApiUrl:} Environment:development Marketplace:{DiamondContractAddress:0x8e19288d908b2d9F8D7C539c74C899808AC3dE45 MorTokenAddress:0xc1664f994Fd3991f98aE944bC16B9aED673eF5fD WalletPrivateKey:<nil>} Log:{Color:true FolderPath: IsProd:false JSON:false LevelApp:info LevelConnection:info LevelProxy:info LevelScheduler:info LevelContract:} Proxy:{Address:0.0.0.0:3333 MaxCachedDests:5 StoragePath:} System:{Enable:false LocalPortRange:1024 65535 NetdevMaxBacklog:100000 RlimitHard:524288 RlimitSoft:524288 Somaxconn:100000 TcpMaxSynBacklog:100000} Web:{Address:0.0.0.0:8082 PublicUrl:localhost:8082}}
-2024-07-23T12:58:04.560735	INFO	APP	proxy-router TO BE SET AT BUILD TIME
-2024-07-23T12:58:08.249559	INFO	APP	connected to ethereum node: wss://arb-sepolia.g.alchemy.com/v2/<masked>, chainID: 421614
-2024-07-23T12:58:08.278792	INFO	BADGER	All 0 tables opened in 0s
-2024-07-23T12:58:08.28444	INFO	BADGER	Discard stats nextEmptySlot: 0
-2024-07-23T12:58:08.284515	INFO	BADGER	Set nextTxnTs to 0
-2024-07-23T12:58:08.284769	WARN	Using env wallet. Private key persistance unavailable
-2024-07-23T12:58:08.290268	INFO	proxy state: running
-2024-07-23T12:58:08.290507	INFO	HTTP	http server is listening: 0.0.0.0:8082
-2024-07-23T12:58:08.290631	INFO	Wallet address: <masked>
-2024-07-23T12:58:08.290841	INFO	started watching events, address 0x8e19288d908b2d9F8D7C539c74C899808AC3dE45
-2024-07-23T12:58:08.290866	INFO	TCP	tcp server is listening: 0.0.0.0:3333
-```
-==================================
 ### B. Authorize the contract to spend on your behalf
 Either via the swagger interface http://localhost:8082/swagger/index.html#/wallet/post_blockchain_allowance or following CLI, you can authorize the contract to spend on your behalf. **This only needs to be done once per wallet, or when funds have been depleted.**
 
-`curl -X 'POST' 'http://localhost:8082/blockchain/approve?spender=0x8e19288d908b2d9F8D7C539c74C899808AC3dE45&amount=3' -H 'accept: application/json' -d ''` # Approve the contract to spend 3 saMOR tokens on your behalf
+Approve the contract to spend 3 saMOR tokens on your behalf
+
+```sh 
+curl -X 'POST' 'http://localhost:8082/blockchain/approve?spender=0x8e19288d908b2d9F8D7C539c74C899808AC3dE45&amount=3' -H 'accept: application/json' -d '' 
+``` 
 
 ### C. Query the blockchain for various models / providers (Get ModelID)
-You can query the blockchain for various models and providers to get the ModelID. This can be done via the swagger interface http://localhost:8082/swagger/index.html#/marketplace/get_marketplace_models or following CLI:
-* `curl -X 'GET' 'http://localhost:8082/wallet' -H 'accept: application/json'` # Returns the wallet ID (confirm that it matches your wallet)
-* `curl -X 'GET' 'http://localhost:8082/blockchain/models' -H 'accept: application/json'` # Returns the list of models and providers
-    * The first model in the list is the default model that you can use for testing purposes...see example below
-    * `Id` is the ID of the model that you will use to create a session with the provider.
-    * `Name` is the type of model offered 
+* You can query the blockchain for various models and providers to get the ModelID. 
+* This can be done via the swagger interface http://localhost:8082/swagger/index.html#/marketplace/get_marketplace_models or following CLI:
+```sh 
+# Returns the wallet ID (confirm that it matches your wallet): 
+curl -X 'GET' 'http://localhost:8082/wallet' -H 'accept: application/json'
+
+# Returns the list of models and providers: 
+curl -X 'GET' 'http://localhost:8082/blockchain/models' -H 'accept: application/json'
+``` 
+* The first model in the list is the default model that you can use for testing purposes...see example below
+* `Id` is the ID of the model that you will use to create a session with the provider.
+* `Name` is the type of model offered 
 
 ```
 {

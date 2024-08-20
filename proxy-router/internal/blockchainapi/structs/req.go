@@ -6,9 +6,13 @@ import (
 )
 
 type OpenSessionRequest struct {
-	Approval    lib.HexString `json:"approval" binding:"required" validate:"hexadecimal"`
-	ApprovalSig lib.HexString `json:"approvalSig" binding:"required" validate:"hexadecimal"`
-	Stake       *lib.BigInt   `json:"stake" binding:"required" validate:"number,gt=0"`
+	Approval    lib.HexString `json:"approval" binding:"required" validate:"hexadecimal" format:"hex" example:"0x1234"`
+	ApprovalSig lib.HexString `json:"approvalSig" binding:"required" validate:"hexadecimal" format:"hex" example:"0x1234"`
+	Stake       *lib.BigInt   `json:"stake" binding:"required" validate:"number,gt=0" example:"123000000000"`
+}
+
+type AmountReq struct {
+	Amount *lib.BigInt `json:"amount" binding:"required" validate:"number,gt=0"`
 }
 
 type SendRequest struct {
@@ -17,7 +21,7 @@ type SendRequest struct {
 }
 
 type PathHex32ID struct {
-	ID lib.Hash `uri:"id" binding:"required" validate:"hex32"`
+	ID lib.Hash `uri:"id" binding:"required" validate:"hex32" format:"hex" example:"0x1234"`
 }
 
 type PathEthAddrID struct {
@@ -58,15 +62,15 @@ type CreateBidRequest struct {
 }
 
 type CreateProviderRequest struct {
-	Stake    *lib.BigInt `json:"stake" binding:"required" validate:"number"`
-	Endpoint string      `json:"endpoint" binding:"required" validate:"string"`
+	Stake    *lib.BigInt `json:"stake" binding:"required" validate:"number" example:"123000000000"`
+	Endpoint string      `json:"endpoint" binding:"required" validate:"string" example:"mycoolmornode.domain.com:3989"`
 }
 
 type CreateModelRequest struct {
-	ID     string      `json:"id" binding:"omitempty" validate:"hex32"`
-	IpfsID string      `json:"ipfsID" binding:"required" validate:"hex32"`
-	Fee    *lib.BigInt `json:"fee" binding:"required" validate:"number"`
-	Stake  *lib.BigInt `json:"stake" binding:"required" validate:"number"`
-	Name   string      `json:"name" binding:"required" validate:"min=1,max=64"`
+	ID     string      `json:"id" binding:"omitempty" validate:"hex32" example:"0x1234"`
+	IpfsID string      `json:"ipfsID" binding:"required" validate:"hex32" example:"0x1234"`
+	Fee    *lib.BigInt `json:"fee" binding:"required" validate:"number" example:"123000000000"`
+	Stake  *lib.BigInt `json:"stake" binding:"required" validate:"number" example:"123000000000"`
+	Name   string      `json:"name" binding:"required" validate:"min=1,max=64" example:"Llama 2.0"`
 	Tags   []string    `json:"tags" binding:"required" validate:"min=1,max=64,dive,min=1,max=64"`
 }

@@ -15,11 +15,15 @@ const withChatState = WrappedComponent => {
     static displayName = `withChatState(${WrappedComponent.displayName ||
       WrappedComponent.name})`;
 
-    getBitsByModels = async (modelId) => {
+    getBidsByModels = async (modelId) => {
       try {
         const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/models/${modelId}/bids`
         const response = await fetch(path);
         const data = await response.json();
+        if (data.error) {
+          console.error(data.error);
+          return [];
+        }
         return data.bids;
       }
       catch (e) {
@@ -46,16 +50,24 @@ const withChatState = WrappedComponent => {
     }
 
     closeSession = async (sessionId) => {
+      this.context.toast('info', 'Closing...');
       try {
         const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions/${sessionId}/close`;
         const response = await fetch(path, {
           method: "POST"
         });
         const data = await response.json();
-        return data.success;
+        if (data.error) {
+          this.context.toast('error', 'Session not closed');
+          throw new Error(data.error);
+        }
+        if(data.tx) {
+          this.context.toast('success', 'Session successfully closed');
+        }
       }
       catch (e) {
         console.log("Error", e)
+        this.context.toast('error', 'Failed to close session');
         return [];
       }
     }
@@ -78,8 +90,20 @@ const withChatState = WrappedComponent => {
     }
 
     getAllModels = async () => {
-      const result = await this.props.client.getAllModels();
-      return result;
+      try {
+        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/models`;
+        const response = await fetch(path);
+        const data = await response.json();
+        if (data.error) {
+          console.error(data.error);
+          return [];
+        }
+        return data.models;
+      }
+      catch (e) {
+        console.log("Error", e)
+        return [];
+      }
     }
 
     getLocalModels = async () => {
@@ -98,19 +122,31 @@ const withChatState = WrappedComponent => {
     }
 
     getModelsData = async () => {
-      const localModels = await this.getLocalModels();
-      const models = (await this.getAllModels()).filter(m => !m.IsDeleted);
-      const providers = (await this.getProviders()).filter(m => !m.IsDeleted);
+      const [localModels, modelsResp, providersResp] = await Promise.all([
+        this.getLocalModels(),
+        this.getAllModels(),
+        this.getProviders()]);
+
+      const models = modelsResp.filter(m => !m.IsDeleted);
+      const providers = providersResp.filter(m => !m.IsDeleted);
       const providersMap = providers.reduce((a, b) => ({ ...a, [b.Address.toLowerCase()]: b }), {});
+
+      const responses = (await Promise.all(
+        models.map(async m => {
+          const id = m.Id;
+          const bids = (await this.getBidsByModels(id))
+            .filter(b => +b.DeletedAt === 0)
+            .map(b => ({ ...b, ProviderData: providersMap[b.Provider.toLowerCase()], Model: m }));
+          return { id, bids }
+        })
+      )).reduce((a,b) => ({...a, [b.id]: b.bids}), {});
+
       const result = [];
 
       for (const model of models) {
         const id = model.Id;
-
-        const bids = (await this.getBitsByModels(id))
-          .filter(b => !b.DeletedAt)
-          .map(b => ({ ...b, ProviderData: providersMap[b.Provider.toLowerCase()], Model: model }));
-
+        const bids = responses[id];
+        
         const localModel = localModels.find(lm => lm.Id == id);
 
         result.push({ ...model, bids, hasLocal: Boolean(localModel) })
@@ -120,8 +156,9 @@ const withChatState = WrappedComponent => {
     }
 
     getMetaInfo = async () => {
-      var budget = await this.props.client.getTodaysBudget();
-      var supply = await this.props.client.getTokenSupply();
+      const [budget, supply] = await Promise.all([
+        this.props.client.getTodaysBudget(),
+        this.props.client.getTokenSupply()]);
       return { budget, supply };
     }
 
@@ -143,7 +180,6 @@ const withChatState = WrappedComponent => {
 
     onOpenSession = async ({ modelId, duration }) => {
       this.context.toast('info', 'Processing...');
-
       try {
         const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/models/${modelId}/session`;
         const body = {
@@ -160,7 +196,7 @@ const withChatState = WrappedComponent => {
           return;
         }
         this.context.toast('success', 'Session successfully created');
-        return dataResponse.sessionId;
+        return dataResponse.sessionID;
       }
       catch (e) {
         console.error(e);
@@ -178,7 +214,7 @@ const withChatState = WrappedComponent => {
       return (
         <WrappedComponent
           getProviders={this.getProviders}
-          getBitsByModels={this.getBitsByModels}
+          getBidsByModels={this.getBidsByModels}
           getMetaInfo={this.getMetaInfo}
           getModelsData={this.getModelsData}
           getSessionsByUser={this.getSessionsByUser}
