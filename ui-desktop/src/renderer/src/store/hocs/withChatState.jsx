@@ -50,16 +50,24 @@ const withChatState = WrappedComponent => {
     }
 
     closeSession = async (sessionId) => {
+      this.context.toast('info', 'Closing...');
       try {
         const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions/${sessionId}/close`;
         const response = await fetch(path, {
           method: "POST"
         });
         const data = await response.json();
-        return data.success;
+        if (data.error) {
+          this.context.toast('error', 'Session not closed');
+          throw new Error(data.error);
+        }
+        if(data.tx) {
+          this.context.toast('success', 'Session successfully closed');
+        }
       }
       catch (e) {
         console.log("Error", e)
+        this.context.toast('error', 'Failed to close session');
         return [];
       }
     }
