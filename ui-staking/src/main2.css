@@ -141,6 +141,7 @@ body {
   height: 62px;
   width: 220px;
   color: #fff;
+  cursor: pointer;
 }
 
 .button-primary{
@@ -395,7 +396,10 @@ input::-webkit-inner-spin-button {
 .range-mark-label {
   position: absolute;
   top: 30px;
-  width: 40px;
+  width: 60px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
   transform: translateX(-50%);
 }
 

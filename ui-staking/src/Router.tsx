@@ -4,10 +4,10 @@ import {
 	Route,
 	RouterProvider,
 } from "react-router-dom";
-import { Landing } from "./pages/Landing.tsx";
-import { App } from "./pages/App.tsx";
+import { Landing } from "./pages/landing/Landing.tsx";
+import { App } from "./pages/pool/Pool.tsx";
 import React from "react";
-import { Stake } from "./pages/Stake.tsx";
+import { Stake } from "./pages/stake/Stake.tsx";
 
 const Root = (
 	<>

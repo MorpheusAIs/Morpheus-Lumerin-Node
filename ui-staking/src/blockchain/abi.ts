@@ -2184,6 +2184,13 @@ export const stakingMasterChefAbi = [
   },
   {
     type: 'function',
+    inputs: [],
+    name: 'getPoolsCount',
+    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     inputs: [
       { name: '_user', internalType: 'address', type: 'address' },
       { name: '_poolId', internalType: 'uint256', type: 'uint256' },

@@ -37,7 +37,6 @@ export const StakeAdd = (props: StakeAddProps) => {
 
 	const pubClient = usePublicClient();
 
-	const approve = useWriteContract();
 	const { writeContractAsync, data, isPending, isError, error } =
 		useWriteContract();
 

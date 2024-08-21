@@ -98,6 +98,10 @@ contract StakingMasterChef is Ownable {
     return pools[_poolId].locks;
   }
 
+  function getPoolsCount() external view returns (uint256) {
+    return pools.length;
+  }
+
   /// @notice Stops the pool, no more rewards will be distributed
   /// @param _poolId the id of the pool
   function stopPool(uint256 _poolId) external onlyOwner poolExists(_poolId) {

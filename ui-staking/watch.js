@@ -9,6 +9,8 @@ import config from "./esbuild.config.js";
 async function main() {
   const ctx = await esbuild.context({
     ...config,
+    metafile: true,
+    write: true,
     plugins: [
       ...(config.plugins ? config.plugins : []),
       livereloadPlugin(),
