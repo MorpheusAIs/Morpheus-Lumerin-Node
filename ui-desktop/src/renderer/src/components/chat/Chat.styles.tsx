@@ -192,3 +192,21 @@ export const LoadingCover = styled.div`
 
     z-index: 5;
 `
+
+export const ImageContainer = styled.img`
+    cursor: pointer;
+    padding: 0.25rem;
+    background-color: var(--bs-highlight-color);
+    border: var(--bs-border-width) solid var(--bs-highlight-color);
+    border-radius: var(--bs-border-radius);
+    max-width: 100%;
+    height: 256px;
+
+    @media (min-height: 700px) { 
+        height: 320px;
+    } 
+`
+
+export const SubPriceLabel = styled.span`
+  color: ${p => p.theme.colors.morMain};
+`

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { withRouter } from 'react-router-dom';
 import withModelsState from "../../store/hocs/withModelsState";
 import styled from 'styled-components';
@@ -58,11 +58,10 @@ function ModelCard({ onSelect, model }) {
 
 
 function ModelsTable({
-  getAllModels,
   history,
   setSelectedModel
 } : any) {
-  const [models, setModels] = useState<any[]>([{
+  const [models] = useState<any[]>([{
     "Id": "0x0557d796a4490cb847efa225c610e56921e1aee2cefcd6e3577c5d470b5bbf80",
     "IpfsCID": "0x0000000000000000000000000000697066733a2f2f6970667361646472657373",
     "Fee": 100,

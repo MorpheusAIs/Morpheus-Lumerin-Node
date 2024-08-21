@@ -35,4 +35,4 @@ test-integration:
 	go test -v ./test/...
 
 swagger:
-	swag init -g ./internal/handlers/httphandlers/http.go
+	swag fmt -g ./internal/handlers/httphandlers/http.go && swag init -g ./internal/handlers/httphandlers/http.go --parseInternal 

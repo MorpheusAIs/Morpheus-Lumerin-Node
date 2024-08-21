@@ -11,7 +11,8 @@ var approvalAbi = []lib.AbiParameter{
 
 var sessionReportAbi = []lib.AbiParameter{
 	{Type: "bytes32"}, // sessionID
-	{Type: "uint128"}, // chainID
+	{Type: "uint256"}, // chainID
+	{Type: "uint128"}, // timestamp
 	{Type: "uint32"},  // tpsScaled1000
 	{Type: "uint32"},  // ttftMs
 }
