@@ -112,6 +112,10 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 
 		err = s.aiEngine.PromptProdiaImage(ctx, prodiaReq, responseCb)
 	} else {
+		req.Model = session.ModelName
+		if req.Model == "" {
+			req.Model = "llama2"
+		}
 		_, err = s.aiEngine.PromptStream(ctx, req, responseCb)
 	}
 

@@ -1,0 +1,1 @@
+# TODO - Detailed setps once bid has been purchased to interact with the model (might be model dependent). Also include how to close model early, check on time remaining, etc.

@@ -15,6 +15,7 @@ import (
 
 	c "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
 	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/gin-gonic/gin"
 	"github.com/sashabaranov/go-openai"
@@ -22,10 +23,11 @@ import (
 )
 
 type AiEngine struct {
-	client  *api.Client
-	baseURL string
-	apiKey  string
-	log     lib.ILogger
+	client             *api.Client
+	baseURL            string
+	apiKey             string
+	modelsConfigLoader *config.ModelConfigLoader
+	log                lib.ILogger
 }
 
 var (
@@ -36,10 +38,11 @@ var (
 	ErrJobFailed                     = errors.New("job failed")
 )
 
-func NewAiEngine(apiBaseURL, apiKey string, log lib.ILogger) *AiEngine {
+func NewAiEngine(apiBaseURL, apiKey string, modelsConfigLoader *config.ModelConfigLoader, log lib.ILogger) *AiEngine {
 	return &AiEngine{
-		baseURL: apiBaseURL,
-		apiKey:  apiKey,
+		modelsConfigLoader: modelsConfigLoader,
+		baseURL:            apiBaseURL,
+		apiKey:             apiKey,
 		client: api.NewClientWithConfig(api.ClientConfig{
 			BaseURL:    apiBaseURL,
 			APIType:    api.APITypeOpenAI,
@@ -273,13 +276,22 @@ func (a *AiEngine) requestChatCompletionStream(ctx context.Context, request *api
 	return nil, err
 }
 
+func (a *AiEngine) GetModelsConfig() ([]string, []config.ModelConfig) {
+	return a.modelsConfigLoader.GetAll()
+}
+
 func (a *AiEngine) GetLocalModels() ([]LocalModel, error) {
-	models := []LocalModel{
-		{
-			Id:    "0x6a4813e866a48da528c533e706344ea853a1d3f21e37b4c8e7ffd5ff25779018",
-			Name:  "LLama2:7b",
-			Model: "llama2",
-		},
+	models := []LocalModel{}
+
+	IDs, modelsFromConfig := a.modelsConfigLoader.GetAll()
+	for i, model := range modelsFromConfig {
+		models = append(models, LocalModel{
+			Id:      IDs[i],
+			Name:    model.ModelName,
+			Model:   model.ModelName,
+			ApiType: model.ApiType,
+		})
 	}
+
 	return models, nil
 }

@@ -312,14 +312,14 @@ func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter Res
 			return lib.WrapError(ErrDecrFailed, err)
 		}
 
-		var payload openai.ChatCompletionResponse
+		var payload ChatCompletionResponse
 		err = json.Unmarshal(aiResponse, &payload)
 		var stop = true
 		if err == nil {
 			stop = false
 			choices := payload.Choices
 			for _, choice := range choices {
-				if choice.FinishReason == openai.FinishReasonStop {
+				if choice.FinishReason == FinishReasonStop {
 					stop = true
 				}
 			}

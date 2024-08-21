@@ -23,6 +23,7 @@ type PromptReq struct {
 
 type PromptHead struct {
 	SessionID lib.Hash `header:"session_id" validate:"hex32"`
+	ModelID   lib.Hash `header:"model_id" validate:"hex32"`
 }
 
 type InferenceRes struct {

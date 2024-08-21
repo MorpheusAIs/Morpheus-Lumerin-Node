@@ -1,44 +1,12 @@
-import { useState, useEffect } from 'react';
 import { withRouter } from 'react-router-dom';
 import withProvidersState from "../../store/hocs/withProvidersState";
 import styled from 'styled-components';
 import Accordion from 'react-bootstrap/Accordion';
 
-import Card from 'react-bootstrap/Card';
 import { abbreviateAddress } from '../../utils';
-import { Btn } from '../../components/common'
 import Table from 'react-bootstrap/Table';
 import Button from 'react-bootstrap/Button';
 import './Providers.css'
-
-const ClaimBtn = styled(Btn)`
-  background-color: ${p => p.theme.colors.morMain};
-  color: black;
-  font-weight: 600;
-  border-radius: 5px;
-`;
-
-const CustomCard = styled(Card)`
-  background: #244a47!important;
-  color: #21dc8f!important;
-  border: 0.5px solid!important;
-  cursor: pointer!important;
-
-  p {
-    color: white!important;
-  }
-
-  .gap-20 {
-    gap: 20px!important;
-  }
-`
-
-const Container = styled.div`
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 24px;
-`
 
 const BidTable = styled(Table)`
     text-align: center!important;

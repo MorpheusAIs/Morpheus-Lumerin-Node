@@ -9,13 +9,8 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 )
 
-type ScoredBid struct {
-	Bid   structs.Bid
-	Score float64
-}
-
-func rateBids(bidIds [][32]byte, bids []m.Bid, pmStats []m.ProviderModelStats, mStats m.ModelStats, log lib.ILogger) []ScoredBid {
-	scoredBids := make([]ScoredBid, len(bids))
+func rateBids(bidIds [][32]byte, bids []m.Bid, pmStats []m.ProviderModelStats, mStats m.ModelStats, log lib.ILogger) []structs.ScoredBid {
+	scoredBids := make([]structs.ScoredBid, len(bids))
 
 	for i := range bids {
 		score := getScore(bids[i], pmStats[i], mStats)
@@ -23,15 +18,15 @@ func rateBids(bidIds [][32]byte, bids []m.Bid, pmStats []m.ProviderModelStats, m
 			log.Errorf("provider score is not valid %d for bid %v, pmStats %v, mStats %v", score, bidIds[i], pmStats[i], mStats)
 			score = 0
 		}
-		scoredBid := ScoredBid{
+		scoredBid := structs.ScoredBid{
 			Bid: structs.Bid{
 				Id:             bidIds[i],
 				Provider:       bids[i].Provider,
-				PricePerSecond: bids[i].PricePerSecond,
 				ModelAgentId:   bids[i].ModelAgentId,
-				Nonce:          bids[i].Nonce,
-				CreatedAt:      bids[i].CreatedAt,
-				DeletedAt:      bids[i].DeletedAt,
+				PricePerSecond: &lib.BigInt{Int: *(bids[i].PricePerSecond)},
+				Nonce:          &lib.BigInt{Int: *(bids[i].Nonce)},
+				CreatedAt:      &lib.BigInt{Int: *(bids[i].CreatedAt)},
+				DeletedAt:      &lib.BigInt{Int: *(bids[i].DeletedAt)},
 			},
 			Score: score,
 		}
