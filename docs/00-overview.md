@@ -11,7 +11,7 @@ In other words, referring to the overview model...how do we get to conversation 
 Numbers below reference the circled elements in the diagram above.
 
 ## 0. Existing Foundation Elements 
-- [Readme](../README.md) - for more details
+- [Readme](../readme.md) - for more details
 - Arbitrum Ethereum Layer 2 blockchain
 - Morpheus Token (MOR) for staking and bidding
 - Lumerin Smart Contract for governance and routing
