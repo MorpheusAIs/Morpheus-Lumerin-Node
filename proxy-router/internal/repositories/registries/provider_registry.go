@@ -3,7 +3,6 @@ package registries
 import (
 	"context"
 	"fmt"
-	"math/big"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/providerregistry"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
@@ -59,10 +58,8 @@ func (g *ProviderRegistry) GetAllProviders(ctx context.Context) ([]common.Addres
 	return addresses, providers, nil
 }
 
-func (g *ProviderRegistry) CreateNewProvider(ctx *bind.TransactOpts, address string, addStake uint64, endpoint string) error {
-	bigAddStake := big.NewInt(int64(addStake))
-
-	providerTx, err := g.providerRegistry.ProviderRegister(ctx, common.HexToAddress(address), bigAddStake, endpoint)
+func (g *ProviderRegistry) CreateNewProvider(ctx *bind.TransactOpts, address common.Address, addStake *lib.BigInt, endpoint string) error {
+	providerTx, err := g.providerRegistry.ProviderRegister(ctx, address, &addStake.Int, endpoint)
 
 	if err != nil {
 		return lib.TryConvertGethError(err, providerregistry.ProviderRegistryMetaData)

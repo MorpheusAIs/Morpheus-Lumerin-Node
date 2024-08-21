@@ -4,16 +4,19 @@ import Modal from '../../contracts/modals/Modal';
 import styled from 'styled-components';
 import {
     TitleWrapper,
-    Title} from '../../contracts/modals/CreateContractModal.styles';
+    Title
+} from '../../contracts/modals/CreateContractModal.styles';
 
 import ModelRow from './ModelRow';
 
-const rowRenderer = (models, onChangeModel) => ({ key, index, style }) => (
-    <ModelRow
-        onChangeModel={onChangeModel}
-        key={models[index].Id}
-        model={models[index]}
-    />
+const rowRenderer = (models, onChangeModel) => ({ index, style }) => (
+    <div style={style}>
+        <ModelRow
+            onChangeModel={onChangeModel}
+            key={models[index].Id}
+            model={models[index]}
+        />
+    </div>
 );
 
 const bodyProps = {
@@ -33,21 +36,22 @@ const ModelSelectionModal = ({ isActive, handleClose, models, onChangeModel }) =
         return <></>;
     }
 
+    const changeModelHandler = (data) => {
+        onChangeModel(data);
+        handleClose();
+    }
+
     return (
         <Modal onClose={handleClose} bodyProps={bodyProps}
         >
             <TitleWrapper>
                 <Title>Change Model</Title>
             </TitleWrapper>
-            <AutoSizer width={400} height={500}>
+            <AutoSizer width={400} height={600}>
                 {({ width, height }) => (
                     <RVContainer
-                        rowRenderer={rowRenderer(models, (id) => {
-                            onChangeModel(id);
-                            handleClose();
-                        }
-                        )}
-                        rowHeight={100}
+                        rowRenderer={rowRenderer(models, changeModelHandler)}
+                        rowHeight={75}
                         rowCount={models.length}
                         height={height || 500} // defaults for tests
                         width={width || 500} // defaults for tests

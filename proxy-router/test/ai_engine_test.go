@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
@@ -14,7 +12,7 @@ import (
 )
 
 func AiEngine_Prompt(t *testing.T) {
-	aiEngine := aiengine.NewAiEngine("http://localhost:11434/v1", "", lib.NewTestLogger())
+	aiEngine := aiengine.NewAiEngine("http://localhost:11434/v1", "", nil, lib.NewTestLogger())
 	req := &api.ChatCompletionRequest{
 		Model:     "llama2",
 		MaxTokens: 100,
@@ -32,7 +30,7 @@ func AiEngine_Prompt(t *testing.T) {
 }
 
 func TestAiEngine_PromptStream(t *testing.T) {
-	aiEngine := aiengine.NewAiEngine("http://localhost:11434/v1", "", lib.NewTestLogger())
+	aiEngine := aiengine.NewAiEngine("http://localhost:11434/v1", "", nil, lib.NewTestLogger())
 	req := &api.ChatCompletionRequest{
 		Model: "llama2",
 		// MaxTokens: 100,
@@ -48,31 +46,18 @@ func TestAiEngine_PromptStream(t *testing.T) {
 	choicesChannel := make(chan api.ChatCompletionStreamChoice)
 	choices := []api.ChatCompletionStreamChoice{}
 
-	resp, err := aiEngine.PromptStream(context.Background(), req, func(response *api.ChatCompletionStreamResponse) error {
-		choices = append(choices, response.Choices...)
-
-			if response.Choices[0].Delta.Content == "" {
-				return errors.New("empty response")
-			}
-			// fmt.Printf("chunk - no error")
-			return nil
-		})
-	}()
-
-	timeout := time.After(60 * time.Second)
-outerLoop:
-	for {
-		select {
-		case choice := <-choicesChannel:
-			choices = append(choices, choice)
-
-			if len(choices) >= 1 {
-				break outerLoop
-			}
-		case <-timeout:
-			break outerLoop
+	resp, err := aiEngine.PromptStream(context.Background(), req, func(response interface{}) error {
+		r, ok := response.(*api.ChatCompletionStreamResponse)
+		if !ok {
+			return errors.New("invalid response")
 		}
-	}
+		choices = append(choices, r.Choices...)
+
+		if r.Choices[0].Delta.Content == "" {
+			return errors.New("empty response")
+		}
+		return nil
+	})
 
 	// if err != nil {
 	// 	t.Errorf("error: %v", err)

@@ -1,6 +1,8 @@
 package proxyapi
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 
 	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
@@ -28,16 +30,18 @@ func NewProxyController(service *ProxyServiceSender, aiEngine *aiengine.AiEngine
 func (s *ProxyController) RegisterRoutes(r interfaces.Router) {
 	r.POST("/proxy/sessions/initiate", s.InitiateSession)
 	r.POST("/v1/chat/completions", s.Prompt)
+	r.GET("/v1/models", s.Models)
 }
 
 // InitiateSession godoc
 //
-//		@Summary		Initiate Session with Provider
-//		@Description	sends a handshake to the provider
-//	 	@Tags			sessions
-//		@Produce		json
-//		@Success		200	{object}	interface{}
-//		@Router			/proxy/sessions/initiate [post]
+//	@Summary		Initiate Session with Provider
+//	@Description	sends a handshake to the provider
+//	@Tags			chat
+//	@Produce		json
+//	@Param			initiateSession	body		proxyapi.InitiateSessionReq	true	"Initiate Session"
+//	@Success		200				{object}	morrpcmesssage.SessionRes
+//	@Router			/proxy/sessions/initiate [post]
 func (s *ProxyController) InitiateSession(ctx *gin.Context) {
 	var req *InitiateSessionReq
 
@@ -57,14 +61,15 @@ func (s *ProxyController) InitiateSession(ctx *gin.Context) {
 
 // SendPrompt godoc
 //
-//		@Summary		Send Local Or Remote Prompt
-//		@Description	Send prompt to a local or remote model based on session id in header
-//	 	@Tags			wallet
-//		@Produce		json
-//		@Param			prompt	body		proxyapi.OpenAiCompletitionRequest 	true	"Prompt"
-//		@Param 			session_id header string false "Session ID"
-//		@Success		200	{object}	interface{}
-//		@Router			/v1/chat/completions [post]
+//	@Summary		Send Local Or Remote Prompt
+//	@Description	Send prompt to a local or remote model based on session id in header
+//	@Tags			chat
+//	@Produce		text/event-stream
+//	@Param			session_id	header		string								false	"Session ID" format(hex32)
+//	@Param 			model_id header string false "Model ID" format(hex32)
+//	@Param			prompt		body		proxyapi.OpenAiCompletitionRequest	true	"Prompt"
+//	@Success		200			{object}	proxyapi.ChatCompletionResponse
+//	@Router			/v1/chat/completions [post]
 func (c *ProxyController) Prompt(ctx *gin.Context) {
 	var (
 		body openai.ChatCompletionRequest
@@ -82,7 +87,29 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 
 	if (head.SessionID == lib.Hash{}) {
 		body.Stream = ctx.GetHeader(constants.HEADER_ACCEPT) == constants.CONTENT_TYPE_JSON
-		c.aiEngine.PromptCb(ctx, &body)
+		modelId := head.ModelID.Hex()
+
+		prompt, t := c.GetBodyForLocalPrompt(modelId, &body)
+		if t == "openai" {
+			c.aiEngine.PromptCb(ctx, &body)
+		}
+		if t == "prodia" {
+			c.aiEngine.PromptProdiaImage(ctx, prompt.(*aiengine.ProdiaGenerationRequest), func(completion interface{}) error {
+				ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_EVENT_STREAM)
+				marshalledResponse, err := json.Marshal(completion)
+				if err != nil {
+					return err
+				}
+				_, err = ctx.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", marshalledResponse)))
+				if err != nil {
+					return err
+				}
+
+				ctx.Writer.Flush()
+				return nil
+			})
+		}
+
 		return
 	}
 
@@ -93,4 +120,53 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 	}
 
 	return
+}
+
+// GetLocalModels godoc
+//
+//	@Summary	Get local models
+//	@Tags		chat
+//	@Produce	json
+//	@Success	200	{object}	[]aiengine.LocalModel
+//	@Router		/v1/models [get]
+func (c *ProxyController) Models(ctx *gin.Context) {
+	models, err := c.aiEngine.GetLocalModels()
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, models)
+}
+
+func (c *ProxyController) GetBodyForLocalPrompt(modelId string, req *openai.ChatCompletionRequest) (interface{}, string) {
+	if modelId == "" {
+		req.Model = "llama2"
+		return req, "openai"
+	}
+
+	ids, models := c.aiEngine.GetModelsConfig()
+
+	for i, model := range models {
+		if ids[i] == modelId {
+			if model.ApiType == "openai" {
+				req.Model = model.ModelName
+				return req, model.ApiType
+			}
+
+			if model.ApiType == "prodia" {
+				prompt := &aiengine.ProdiaGenerationRequest{
+					Model:  model.ModelName,
+					Prompt: req.Messages[0].Content,
+					ApiUrl: model.ApiURL,
+					ApiKey: model.ApiKey,
+				}
+				return prompt, model.ApiType
+			}
+
+			return req, "openai"
+		}
+	}
+
+	req.Model = "llama2"
+	return req, "openai"
 }

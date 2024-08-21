@@ -1,6 +1,57 @@
 basePath: /
 definitions:
-  lib.BigInt:
+  aiengine.LocalModel:
+    properties:
+      apiType:
+        type: string
+      id:
+        type: string
+      model:
+        type: string
+      name:
+        type: string
+    type: object
+  morrpcmesssage.SessionRes:
+    properties:
+      approval:
+        type: string
+      approvalSig:
+        type: string
+      message:
+        type: string
+      signature:
+        type: string
+      timestamp:
+        type: integer
+      user:
+        type: string
+    required:
+    - approval
+    - approvalSig
+    - message
+    - signature
+    - timestamp
+    - user
+    type: object
+  proxyapi.ChatCompletionChoice:
+    properties:
+      finish_reason:
+        allOf:
+        - $ref: '#/definitions/proxyapi.FinishReason'
+        description: |-
+          FinishReason
+          stop: API returned complete message,
+          or a message terminated by one of the stop sequences provided via the stop parameter
+          length: Incomplete model output due to max_tokens parameter or token limit
+          function_call: The model decided to call a function
+          content_filter: Omitted content due to a flag from our content filters
+          null: API response still in progress or incomplete
+      index:
+        type: integer
+      logprobs:
+        $ref: '#/definitions/proxyapi.LogProbs'
+      message:
+        $ref: '#/definitions/proxyapi.ChatCompletionMessage'
     type: object
   proxyapi.ChatCompletionMessage:
     properties:
@@ -23,6 +74,25 @@ definitions:
         description: For Role=tool prompts this should be set to the ID given in the
           assistant's prior request to call a tool.
         type: string
+    type: object
+  proxyapi.ChatCompletionResponse:
+    properties:
+      choices:
+        items:
+          $ref: '#/definitions/proxyapi.ChatCompletionChoice'
+        type: array
+      created:
+        type: integer
+      id:
+        type: string
+      model:
+        type: string
+      object:
+        type: string
+      system_fingerprint:
+        type: string
+      usage:
+        $ref: '#/definitions/proxyapi.Usage'
     type: object
   proxyapi.ChatCompletionResponseFormat:
     properties:
@@ -53,6 +123,12 @@ definitions:
     x-enum-varnames:
     - ChatMessagePartTypeText
     - ChatMessagePartTypeImageURL
+  proxyapi.FinishReason:
+    enum:
+    - stop
+    type: string
+    x-enum-varnames:
+    - FinishReasonStop
   proxyapi.ImageURLDetail:
     enum:
     - high
@@ -63,6 +139,53 @@ definitions:
     - ImageURLDetailHigh
     - ImageURLDetailLow
     - ImageURLDetailAuto
+  proxyapi.InitiateSessionReq:
+    properties:
+      bidId:
+        type: string
+      provider:
+        type: string
+      providerUrl:
+        type: string
+      spend:
+        type: string
+      user:
+        type: string
+    required:
+    - bidId
+    - provider
+    - providerUrl
+    - spend
+    - user
+    type: object
+  proxyapi.LogProb:
+    properties:
+      bytes:
+        description: Omitting the field if it is null
+        items:
+          type: integer
+        type: array
+      logprob:
+        type: number
+      token:
+        type: string
+      top_logprobs:
+        description: |-
+          TopLogProbs is a list of the most likely tokens and their log probability, at this token position.
+          In rare cases, there may be fewer than the number of requested top_logprobs returned.
+        items:
+          $ref: '#/definitions/proxyapi.TopLogProbs'
+        type: array
+    type: object
+  proxyapi.LogProbs:
+    properties:
+      content:
+        description: Content is a list of message content tokens with log probability
+          information.
+        items:
+          $ref: '#/definitions/proxyapi.LogProb'
+        type: array
+    type: object
   proxyapi.OpenAiCompletitionRequest:
     properties:
       frequency_penalty:
@@ -120,14 +243,367 @@ definitions:
       user:
         type: string
     type: object
+  proxyapi.TopLogProbs:
+    properties:
+      bytes:
+        items:
+          type: integer
+        type: array
+      logprob:
+        type: number
+      token:
+        type: string
+    type: object
+  proxyapi.Usage:
+    properties:
+      completion_tokens:
+        type: integer
+      prompt_tokens:
+        type: integer
+      total_tokens:
+        type: integer
+    type: object
+  structs.AllowanceRes:
+    properties:
+      allowance:
+        example: "100000000"
+        type: string
+    type: object
+  structs.AmountReq:
+    properties:
+      amount:
+        type: string
+    required:
+    - amount
+    type: object
+  structs.BalanceRes:
+    properties:
+      balance:
+        type: string
+    type: object
+  structs.Bid:
+    properties:
+      createdAt:
+        type: string
+      deletedAt:
+        type: string
+      id:
+        type: string
+      modelAgentId:
+        type: string
+      nonce:
+        type: string
+      pricePerSecond:
+        type: string
+      provider:
+        type: string
+    type: object
+  structs.BidRes:
+    properties:
+      bid:
+        $ref: '#/definitions/structs.Bid'
+    type: object
+  structs.BidsRes:
+    properties:
+      bids:
+        items:
+          $ref: '#/definitions/structs.Bid'
+        type: array
+    type: object
+  structs.BlockRes:
+    properties:
+      block:
+        example: 1234
+        type: integer
+    type: object
+  structs.BudgetRes:
+    properties:
+      budget:
+        example: "100000000"
+        type: string
+    type: object
+  structs.CreateBidRequest:
+    properties:
+      modelID:
+        type: string
+      pricePerSecond:
+        type: string
+    required:
+    - modelID
+    - pricePerSecond
+    type: object
+  structs.CreateModelRequest:
+    properties:
+      fee:
+        example: "123000000000"
+        type: string
+      id:
+        example: "0x1234"
+        type: string
+      ipfsID:
+        example: "0x1234"
+        type: string
+      name:
+        example: Llama 2.0
+        maxLength: 64
+        minLength: 1
+        type: string
+      stake:
+        example: "123000000000"
+        type: string
+      tags:
+        items:
+          type: string
+        maxItems: 64
+        minItems: 1
+        type: array
+    required:
+    - fee
+    - ipfsID
+    - name
+    - stake
+    - tags
+    type: object
+  structs.CreateProviderRequest:
+    properties:
+      endpoint:
+        example: mycoolmornode.domain.com:3989
+        type: string
+      stake:
+        example: "123000000000"
+        type: string
+    required:
+    - endpoint
+    - stake
+    type: object
+  structs.Model:
+    properties:
+      createdAt:
+        type: string
+      fee:
+        type: string
+      id:
+        type: string
+      ipfsCID:
+        type: string
+      isDeleted:
+        type: boolean
+      name:
+        type: string
+      owner:
+        type: string
+      stake:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+    type: object
+  structs.ModelRes:
+    properties:
+      model:
+        $ref: '#/definitions/structs.Model'
+    type: object
+  structs.ModelsRes:
+    properties:
+      models:
+        items:
+          $ref: '#/definitions/structs.Model'
+        type: array
+    type: object
   structs.OpenSessionRequest:
+    properties:
+      approval:
+        example: "0x1234"
+        format: hex
+        type: string
+      approvalSig:
+        example: "0x1234"
+        format: hex
+        type: string
+      stake:
+        example: "123000000000"
+        type: string
+    required:
+    - approval
+    - approvalSig
+    - stake
+    type: object
+  structs.OpenSessionRes:
+    properties:
+      sessionID:
+        example: "0x1234"
+        type: string
     type: object
   structs.OpenSessionWithDurationRequest:
     properties:
       sessionDuration:
-        $ref: '#/definitions/lib.BigInt'
+        type: string
+    type: object
+  structs.Provider:
+    properties:
+      address:
+        type: string
+      createdAt:
+        type: string
+      endpoint:
+        type: string
+      isDeleted:
+        type: boolean
+      stake:
+        type: string
+    type: object
+  structs.ProviderRes:
+    properties:
+      provider:
+        $ref: '#/definitions/structs.Provider'
+    type: object
+  structs.ProvidersRes:
+    properties:
+      providers:
+        items:
+          $ref: '#/definitions/structs.Provider'
+        type: array
+    type: object
+  structs.RawTransaction:
+    properties:
+      blockHash:
+        type: string
+      blockNumber:
+        type: string
+      confirmations:
+        type: string
+      contractAddress:
+        type: string
+      cumulativeGasUsed:
+        type: string
+      from:
+        type: string
+      functionName:
+        type: string
+      gas:
+        type: string
+      gasPrice:
+        type: string
+      gasPriceBid:
+        type: string
+      gasUsed:
+        type: string
+      hash:
+        type: string
+      input:
+        type: string
+      isError:
+        type: string
+      methodId:
+        type: string
+      nonce:
+        type: string
+      timeStamp:
+        type: string
+      to:
+        type: string
+      transactionIndex:
+        type: string
+      txreceipt_status:
+        type: string
+      value:
+        type: string
+    type: object
+  structs.ScoredBid:
+    properties:
+      bid:
+        $ref: '#/definitions/structs.Bid'
+      id:
+        type: string
+      score:
+        type: number
+    type: object
+  structs.ScoredBidsRes:
+    properties:
+      bids:
+        items:
+          $ref: '#/definitions/structs.ScoredBid'
+        type: array
     type: object
   structs.SendRequest:
+    properties:
+      amount:
+        type: string
+      to:
+        type: string
+    required:
+    - amount
+    - to
+    type: object
+  structs.Session:
+    properties:
+      bidID:
+        type: string
+      closedAt:
+        type: string
+      closeoutReceipt:
+        type: string
+      closeoutType:
+        type: string
+      endsAt:
+        type: string
+      id:
+        type: string
+      modelAgentId:
+        type: string
+      openedAt:
+        type: string
+      pricePerSecond:
+        type: string
+      provider:
+        type: string
+      providerWithdrawnAmount:
+        type: string
+      stake:
+        type: string
+      user:
+        type: string
+    type: object
+  structs.SessionRes:
+    properties:
+      session:
+        $ref: '#/definitions/structs.Session'
+    type: object
+  structs.SessionsRes:
+    properties:
+      sessions:
+        items:
+          $ref: '#/definitions/structs.Session'
+        type: array
+    type: object
+  structs.SupplyRes:
+    properties:
+      supply:
+        example: "100000000"
+        type: string
+    type: object
+  structs.TokenBalanceRes:
+    properties:
+      eth:
+        example: "100000000"
+        type: string
+      mor:
+        example: "100000000"
+        type: string
+    type: object
+  structs.TransactionsRes:
+    properties:
+      transactions:
+        items:
+          $ref: '#/definitions/structs.RawTransaction'
+        type: array
+    type: object
+  structs.TxRes:
+    properties:
+      tx:
+        example: "0x1234"
+        type: string
     type: object
   system.ConfigResponse:
     properties:
@@ -157,20 +633,30 @@ definitions:
   walletapi.SetupWalletReqBody:
     properties:
       privateKey:
-        items:
-          type: integer
-        type: array
+        type: string
     required:
     - privateKey
+    type: object
+  walletapi.WalletRes:
+    properties:
+      address:
+        example: "0x1234"
+        type: string
+    type: object
+  walletapi.statusRes:
+    properties:
+      status:
+        example: ok
+        type: string
     type: object
 externalDocs:
   description: OpenAPI
   url: https://swagger.io/resources/open-api/
 info:
   contact: {}
-  description: This is a sample server celler server.
+  description: API for Morpheus Lumerin Node
   termsOfService: http://swagger.io/terms/
-  title: ApiBus Example API
+  title: Morpheus Lumerin Node API
   version: "1.0"
 paths:
   /blockchain/allowance:
@@ -188,10 +674,11 @@ paths:
         "200":
           description: OK
           schema:
-            type: object
+            $ref: '#/definitions/structs.AllowanceRes'
       summary: Get Allowance for MOR
       tags:
-      - wallet
+      - transactions
+  /blockchain/approve:
     post:
       description: Approve MOR allowance for spender
       parameters:
@@ -211,10 +698,10 @@ paths:
         "200":
           description: OK
           schema:
-            type: object
+            $ref: '#/definitions/structs.TxRes'
       summary: Approve MOR allowance
       tags:
-      - wallet
+      - transactions
   /blockchain/balance:
     get:
       description: Get ETH and MOR balance of the user
@@ -224,11 +711,51 @@ paths:
         "200":
           description: OK
           schema:
-            type: object
+            $ref: '#/definitions/structs.TokenBalanceRes'
       summary: Get ETH and MOR balance
       tags:
-      - wallet
-  /blockchain/bids/:id/session:
+      - transactions
+  /blockchain/bids:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Bid
+        in: body
+        name: bid
+        required: true
+        schema:
+          $ref: '#/definitions/structs.CreateBidRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.BidRes'
+      summary: Creates bid in blockchain
+      tags:
+      - bids
+  /blockchain/bids/{id}:
+    get:
+      description: Get bid from blockchain by ID
+      parameters:
+      - description: Bid ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.BidRes'
+      summary: Get Bid by ID
+      tags:
+      - bids
+  /blockchain/bids/{id}/session:
     post:
       consumes:
       - application/json
@@ -251,7 +778,7 @@ paths:
         "200":
           description: OK
           schema:
-            type: object
+            $ref: '#/definitions/structs.OpenSessionRes'
       summary: Open Session by bidId in blockchain
       tags:
       - sessions
@@ -264,10 +791,10 @@ paths:
         "200":
           description: OK
           schema:
-            type: object
+            $ref: '#/definitions/structs.BlockRes'
       summary: Get Latest Block
       tags:
-      - wallet
+      - transactions
   /blockchain/models:
     get:
       description: Get models list from blokchain
@@ -277,13 +804,69 @@ paths:
         "200":
           description: OK
           schema:
-            items:
-              type: object
-            type: array
+            $ref: '#/definitions/structs.ModelsRes'
       summary: Get models list
       tags:
-      - wallet
-  /blockchain/models/:id/session:
+      - models
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Model
+        in: body
+        name: model
+        required: true
+        schema:
+          $ref: '#/definitions/structs.CreateModelRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.ModelRes'
+      summary: Creates model in blockchain
+      tags:
+      - models
+  /blockchain/models/{id}/bids:
+    get:
+      description: Get bids from blockchain by model agent
+      parameters:
+      - description: ModelAgent ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.BidsRes'
+      summary: Get Active Bids by Model
+      tags:
+      - bids
+  /blockchain/models/{id}/bids/rated:
+    get:
+      description: Get rated bids from blockchain by model
+      parameters:
+      - description: Model ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.ScoredBidsRes'
+      summary: Get Rated Bids
+      tags:
+      - bids
+  /blockchain/models/{id}/session:
     post:
       consumes:
       - application/json
@@ -306,31 +889,10 @@ paths:
         "200":
           description: OK
           schema:
-            type: object
+            $ref: '#/definitions/structs.OpenSessionRes'
       summary: Open Session by ModelID in blockchain
       tags:
       - sessions
-  /blockchain/models/{id}/bids:
-    get:
-      description: Get bids from blockchain by model agent
-      parameters:
-      - description: ModelAgent ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              type: object
-            type: array
-      summary: "Get Active Bids by\tModel Agent"
-      tags:
-      - wallet
   /blockchain/providers:
     get:
       description: Get providers list from blokchain
@@ -340,12 +902,30 @@ paths:
         "200":
           description: OK
           schema:
-            items:
-              type: object
-            type: array
+            $ref: '#/definitions/structs.ProvidersRes'
       summary: Get providers list
       tags:
-      - wallet
+      - providers
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Provider
+        in: body
+        name: provider
+        required: true
+        schema:
+          $ref: '#/definitions/structs.CreateProviderRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.ProviderRes'
+      summary: Creates or updates provider in blockchain
+      tags:
+      - providers
   /blockchain/providers/{id}/bids:
     get:
       description: Get bids from blockchain by provider
@@ -369,12 +949,10 @@ paths:
         "200":
           description: OK
           schema:
-            items:
-              type: object
-            type: array
+            $ref: '#/definitions/structs.BidsRes'
       summary: Get Bids by Provider
       tags:
-      - wallet
+      - bids
   /blockchain/providers/{id}/bids/active:
     get:
       description: Get bids from blockchain by provider
@@ -390,12 +968,10 @@ paths:
         "200":
           description: OK
           schema:
-            items:
-              type: object
-            type: array
+            $ref: '#/definitions/structs.BidsRes'
       summary: Get Bids by Provider
       tags:
-      - wallet
+      - bids
   /blockchain/send/eth:
     post:
       description: Send Eth to address
@@ -412,10 +988,10 @@ paths:
         "200":
           description: OK
           schema:
-            type: object
+            $ref: '#/definitions/structs.TxRes'
       summary: Send Eth
       tags:
-      - wallet
+      - transactions
   /blockchain/send/mor:
     post:
       description: Send Mor to address
@@ -432,10 +1008,10 @@ paths:
         "200":
           description: OK
           schema:
-            type: object
+            $ref: '#/definitions/structs.TxRes'
       summary: Send Mor
       tags:
-      - wallet
+      - transactions
   /blockchain/sessions:
     get:
       description: Get sessions from blockchain by user or provider
@@ -462,9 +1038,7 @@ paths:
         "200":
           description: OK
           schema:
-            items:
-              type: object
-            type: array
+            $ref: '#/definitions/structs.SessionsRes'
       summary: Get Sessions
       tags:
       - sessions
@@ -485,8 +1059,27 @@ paths:
         "200":
           description: OK
           schema:
-            type: object
+            $ref: '#/definitions/structs.OpenSessionRes'
       summary: Open Session with Provider in blockchain
+      tags:
+      - sessions
+  /blockchain/sessions/{id}:
+    get:
+      description: Returns session by ID
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.SessionRes'
+      summary: Get session
       tags:
       - sessions
   /blockchain/sessions/{id}/close:
@@ -504,7 +1097,7 @@ paths:
         "200":
           description: OK
           schema:
-            type: object
+            $ref: '#/definitions/structs.TxRes'
       summary: Close Session with Provider
       tags:
       - sessions
@@ -517,10 +1110,10 @@ paths:
         "200":
           description: OK
           schema:
-            type: object
+            $ref: '#/definitions/structs.BudgetRes'
       summary: Get Todays Budget
       tags:
-      - wallet
+      - sessions
   /blockchain/token/supply:
     get:
       description: Get MOR token supply from blockchain
@@ -530,10 +1123,10 @@ paths:
         "200":
           description: OK
           schema:
-            type: object
+            $ref: '#/definitions/structs.SupplyRes'
       summary: Get Token Supply
       tags:
-      - wallet
+      - sessions
   /blockchain/transactions:
     get:
       description: Get MOR and ETH transactions
@@ -552,12 +1145,10 @@ paths:
         "200":
           description: OK
           schema:
-            items:
-              type: object
-            type: array
+            $ref: '#/definitions/structs.TransactionsRes'
       summary: Get Transactions
       tags:
-      - wallet
+      - transactions
   /config:
     get:
       description: Return the current config of proxy router
@@ -599,7 +1190,7 @@ paths:
       summary: Healthcheck example
       tags:
       - healthcheck
-  /proxy/sessions/${id}/providerClaim:
+  /proxy/sessions/{id}/providerClaim:
     post:
       description: Claim provider balance from session
       parameters:
@@ -608,7 +1199,7 @@ paths:
         name: claim
         required: true
         schema:
-          $ref: '#/definitions/structs.SendRequest'
+          $ref: '#/definitions/structs.AmountReq'
       - description: Session ID
         in: path
         name: id
@@ -620,11 +1211,11 @@ paths:
         "200":
           description: OK
           schema:
-            type: object
+            $ref: '#/definitions/structs.TxRes'
       summary: Claim Provider Balance
       tags:
       - sessions
-  /proxy/sessions/${id}/providerClaimableBalance:
+  /proxy/sessions/{id}/providerClaimableBalance:
     get:
       description: Get provider claimable balance from session
       parameters:
@@ -639,47 +1230,74 @@ paths:
         "200":
           description: OK
           schema:
-            type: object
+            $ref: '#/definitions/structs.BalanceRes'
       summary: Get Provider Claimable Balance
       tags:
       - sessions
   /proxy/sessions/initiate:
     post:
       description: sends a handshake to the provider
+      parameters:
+      - description: Initiate Session
+        in: body
+        name: initiateSession
+        required: true
+        schema:
+          $ref: '#/definitions/proxyapi.InitiateSessionReq'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            type: object
+            $ref: '#/definitions/morrpcmesssage.SessionRes'
       summary: Initiate Session with Provider
       tags:
-      - sessions
+      - chat
   /v1/chat/completions:
     post:
       description: Send prompt to a local or remote model based on session id in header
       parameters:
+      - description: Session ID
+        format: hex32
+        in: header
+        name: session_id
+        type: string
+      - description: Model ID
+        format: hex32
+        in: header
+        name: model_id
+        type: string
       - description: Prompt
         in: body
         name: prompt
         required: true
         schema:
           $ref: '#/definitions/proxyapi.OpenAiCompletitionRequest'
-      - description: Session ID
-        in: header
-        name: session_id
-        type: string
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.ChatCompletionResponse'
+      summary: Send Local Or Remote Prompt
+      tags:
+      - chat
+  /v1/models:
+    get:
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            type: object
-      summary: Send Local Or Remote Prompt
+            items:
+              $ref: '#/definitions/aiengine.LocalModel'
+            type: array
+      summary: Get local models
       tags:
-      - wallet
+      - chat
   /wallet:
     get:
       description: Get wallet address
@@ -689,7 +1307,7 @@ paths:
         "200":
           description: OK
           schema:
-            type: object
+            $ref: '#/definitions/walletapi.WalletRes'
       summary: Get Wallet
       tags:
       - wallet
@@ -708,7 +1326,7 @@ paths:
         "200":
           description: OK
           schema:
-            type: object
+            $ref: '#/definitions/walletapi.statusRes'
       summary: Set Wallet
       tags:
       - wallet

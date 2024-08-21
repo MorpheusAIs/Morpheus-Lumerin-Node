@@ -9,3 +9,5 @@ dist
 bin 
 
 data
+
+models-config.json

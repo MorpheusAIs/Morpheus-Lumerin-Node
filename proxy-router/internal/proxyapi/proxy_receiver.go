@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	m "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi/morrpcmessage"
 	msg "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi/morrpcmessage"
@@ -17,22 +18,24 @@ import (
 )
 
 type ProxyReceiver struct {
-	privateKeyHex  lib.HexString
-	publicKeyHex   lib.HexString
-	chainID        *big.Int
-	morRpc         *m.MORRPCMessage
-	sessionStorage *storages.SessionStorage
-	aiEngine       *aiengine.AiEngine
+	privateKeyHex     lib.HexString
+	publicKeyHex      lib.HexString
+	chainID           *big.Int
+	morRpc            *m.MORRPCMessage
+	sessionStorage    *storages.SessionStorage
+	aiEngine          *aiengine.AiEngine
+	modelConfigLoader *config.ModelConfigLoader
 }
 
-func NewProxyReceiver(privateKeyHex, publicKeyHex lib.HexString, sessionStorage *storages.SessionStorage, aiEngine *aiengine.AiEngine, chainID *big.Int) *ProxyReceiver {
+func NewProxyReceiver(privateKeyHex, publicKeyHex lib.HexString, sessionStorage *storages.SessionStorage, aiEngine *aiengine.AiEngine, chainID *big.Int, modelConfigLoader *config.ModelConfigLoader) *ProxyReceiver {
 	return &ProxyReceiver{
-		privateKeyHex:  privateKeyHex,
-		publicKeyHex:   publicKeyHex,
-		morRpc:         m.NewMorRpc(),
-		sessionStorage: sessionStorage,
-		aiEngine:       aiEngine,
-		chainID:        chainID,
+		privateKeyHex:     privateKeyHex,
+		publicKeyHex:      publicKeyHex,
+		morRpc:            m.NewMorRpc(),
+		sessionStorage:    sessionStorage,
+		aiEngine:          aiEngine,
+		chainID:           chainID,
+		modelConfigLoader: modelConfigLoader,
 	}
 }
 
@@ -46,12 +49,29 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 		return 0, 0, err
 	}
 
+	session, ok := s.sessionStorage.GetSession(rq.SessionID.Hex())
+	if !ok {
+		err := lib.WrapError(fmt.Errorf("failed to get session"), err)
+		sourceLog.Error(err)
+		return 0, 0, err
+	}
+
 	ttftMs := 0
 	totalTokens := 0
 	now := time.Now().UnixMilli()
 
-	_, err = s.aiEngine.PromptStream(ctx, req, func(response *openai.ChatCompletionStreamResponse) error {
-		totalTokens += len(response.Choices)
+	responseCb := func(response interface{}) error {
+		openAiResponse, ok := response.(*openai.ChatCompletionStreamResponse)
+		if ok {
+			totalTokens += len(openAiResponse.Choices)
+		} else {
+			_, ok := response.(*aiengine.ProdiaGenerationResult)
+			if ok {
+				totalTokens += 1
+			} else {
+				return fmt.Errorf("unknown response type")
+			}
+		}
 
 		if ttftMs == 0 {
 			ttftMs = int(time.Now().UnixMilli() - now)
@@ -79,7 +99,25 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 			return err
 		}
 		return sendResponse(r)
-	})
+	}
+
+	if session.ModelApiType == "prodia" {
+		modelConfig := s.modelConfigLoader.ModelConfigFromID(session.ModelID)
+		prodiaReq := &aiengine.ProdiaGenerationRequest{
+			Prompt: req.Messages[0].Content,
+			Model:  session.ModelName,
+			ApiUrl: modelConfig.ApiURL,
+			ApiKey: modelConfig.ApiKey,
+		}
+
+		err = s.aiEngine.PromptProdiaImage(ctx, prodiaReq, responseCb)
+	} else {
+		req.Model = session.ModelName
+		if req.Model == "" {
+			req.Model = "llama2"
+		}
+		_, err = s.aiEngine.PromptStream(ctx, req, responseCb)
+	}
 
 	if err != nil {
 		err := lib.WrapError(fmt.Errorf("failed to prompt"), err)

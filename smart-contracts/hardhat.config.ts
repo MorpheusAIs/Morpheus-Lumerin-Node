@@ -19,7 +19,11 @@ const config: HardhatUserConfig = {
     settings: {
       optimizer: {
         enabled: true,
-        runs: 200,
+        runs: 1000,
+        details: {
+          yul: true,
+          constantOptimizer: true,
+        },
       },
       viaIR: true,
     },
@@ -32,10 +36,13 @@ const config: HardhatUserConfig = {
     outputJSON: true,
     outputJSONFile: "gas.json",
     coinmarketcap: process.env.COINMARKETCAP_API_KEY,
+    reportPureAndViewMethods: true,
     darkMode: true,
     currency: "USD",
-    L2Etherscan: process.env.ETHERSCAN_API_KEY,
-    L2: "arbitrum",
+    // offline: true,
+    // L2Etherscan: process.env.ETHERSCAN_API_KEY,
+    // L2: "arbitrum",
+    L1Etherscan: process.env.ETHERSCAN_API_KEY,
     L1: "ethereum",
   },
   gobind: {

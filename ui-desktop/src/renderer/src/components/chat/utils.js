@@ -55,3 +55,18 @@ export const formatSmallNumber = (number) => {
     const pow = strNum.substring(exponentionalIndex + 1);
     return number.toFixed(+pow);
 }
+
+export const getTimeRemaining = (endtime) => {
+    const total = endtime - Date.parse(new Date());
+    const seconds = Math.floor( (total/1000) % 60 );
+    const minutes = Math.floor( (total/1000/60) % 60 );
+    const hours = Math.floor( (total/(1000*60*60)) % 24 );
+    const days = Math.floor( total/(1000*60*60*24) );
+  
+    return {
+      days,
+      hours,
+      minutes,
+      seconds
+    };
+  }

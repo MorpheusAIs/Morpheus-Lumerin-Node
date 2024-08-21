@@ -6,14 +6,22 @@ import {
 } from '../../contracts/modals/CreateContractModal.styles';
 import { abbreviateAddress } from '../../../utils';
 import { formatSmallNumber } from '../utils';
+import { IconX } from '@tabler/icons-react';
 
 const RowContainer = styled.div`
-  padding: 1.2rem 0;
+  padding: 1.2rem;
   display: grid;
-  grid-template-columns: 2fr 4fr 2fr;
+  grid-template-columns: 3fr 1fr 160px;
   text-align: center;
-  box-shadow: 0 -1px 0 0 ${p => p.theme.colors.morMain} inset;
+  border: ${p => p.theme.colors.morMain} solid 0.5px;
   color: ${p => p.theme.colors.morMain};
+  background: rgba(0,0,0, 0.1);
+  border-radius: 5px;
+  margin-bottom: 5px;
+
+  &:last-child {
+    margin-bottom: 0
+  }
 `;
 
 const FlexCenter = styled.div`
@@ -22,8 +30,31 @@ const FlexCenter = styled.div`
   align-items: center;
 `;
 
+const Buttons = styled.div`
+display: flex;
+justify-content: end;
+min-width: 150px;
+width: 150px;
+align-items: center;
+gap: 10px;
+`
+
+const PriceContainer = styled.div`
+    display: flex;
+    justify-content: ${p => p.hasLocal ? "space-evenly" : 'center'};
+    align-items: center;
+    white-space: nowrap;
+`
+
+const ModelNameContainer = styled(FlexCenter)`
+    justify-content: start;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+`
+
 const selectorStyles = {
-    control: (base, state) => ({ ...base, borderColor: '#20dc8e', width: '100%', background: 'transparent' }),
+    control: (base) => ({ ...base, borderColor: '#20dc8e', width: '100%', background: 'transparent' }),
     option: (base, state) => ({
         ...base,
         backgroundColor: state.isSelected ? '#0e4353' : "#03160e",
@@ -40,59 +71,115 @@ const selectorStyles = {
         color: '#20dc8e',
         fontSize: '1.4rem',
         fontWeight: 700
-      }),
-      singleValue: base => ({
+    }),
+    singleValue: base => ({
         ...base,
         color: '#20dc8e',
         fontWeight: 600,
         fontSize: '1.4rem'
-      }),
-      indicatorsContainer: base => ({
+    }),
+    indicatorsContainer: base => ({
         ...base,
         color: '#20dc8e'
-      }),
+    }),
 };
 
 function ModelRow(props) {
-    
-    const options= props?.model?.bids.map(x => {
-        const isLocal = !x.Id;
-        if(isLocal) {
-            return { value: "Local", label: "(local) 0 MOR"};
-        }
+    const bids = props?.model?.bids || [];
+    const modelId = props?.model?.Id || '';
+    const hasLocal = props?.model?.hasLocal;
+    const hasBids = Boolean(bids.length);
+
+    const [selected, changeSelected] = useState<any>();
+    const [useSelect, setUseSelect] = useState<boolean>();
+    const [targetBid, setTargetBid] = useState<any>();
+
+    const options = bids.map(x => {
         return ({ value: x.Id, label: `${abbreviateAddress(x.Provider || "", 3)} ${formatSmallNumber(x.PricePerSecond / (10 ** 18))} MOR` })
     });
-    
-    const [selected, changeSelected] = useState<any>();
 
-    const handleSelect = (value) => {
-        if(value == "Local") {
-            props.onChangeModel({ modelId: props?.model?.Id })
+    const handleChangeModel = () => {
+        props.onChangeModel({ modelId, bidId: targetBid?.Id })
+    }
+
+    const selectLocal = () => {
+        props.onChangeModel({ modelId, isLocal: true })
+    }
+
+    const onChangeSelector = (data) => {
+        const bid = bids.find(x => x.Id == data.value);
+        setTargetBid({ ...bid, customSelection: true });
+    }
+
+    const formatPrice = () => {
+        if (targetBid) {
+            return `${formatSmallNumber(targetBid?.PricePerSecond / (10 ** 18))} MOR`;
         }
-        else {
-            props.onChangeModel({ bidId: value})
+
+        const prices = bids.filter(x => x.Id).map(x => x.PricePerSecond);
+        if (prices.length == 1) {
+            return `${formatSmallNumber(prices[0] / (10 ** 18))} MOR`;
         }
+
+        const minPrice = Math.min(prices);
+        const maxPrice = Math.max(prices);
+
+        return `${formatSmallNumber(minPrice / (10 ** 18))} - ${formatSmallNumber(maxPrice / (10 ** 18))} MOR`
     }
 
     return (
-        <RowContainer>
-            <FlexCenter>
+        <RowContainer useSelect={useSelect}>
+            <ModelNameContainer>
                 {props?.model?.Name}
-            </FlexCenter>
-            <FlexCenter>
-                <div style={{ width: '100%' }}>
-                    <Select
-                        menuPlacement="auto"
-                        onChange={changeSelected}
-                        styles={selectorStyles}
-                        value={selected}
-                        options={options}
-                    />
-                </div>
-            </FlexCenter>
-            <FlexCenter>
-                <RightBtn block onClick={() => handleSelect(selected?.value)}>Change</RightBtn>
-            </FlexCenter>
+            </ModelNameContainer>
+            <PriceContainer hasLocal={hasLocal}>
+                {
+                    useSelect
+                        ? <div style={{ width: '100%', display: 'flex', alignItems: 'center' }}>
+                            <div style={{ marginRight: '10px', width: '95%' }}>
+                                <Select
+                                    menuPlacement='auto'
+                                    onChange={onChangeSelector}
+                                    styles={selectorStyles}
+                                    value={selected}
+                                    options={options}></Select>
+                            </div>
+
+                            <IconX width={'1.5rem'} style={{ cursor: 'pointer' }} onClick={() => {
+                                setUseSelect(!useSelect);
+                                setTargetBid(undefined);
+                                changeSelected(undefined);
+                            }}></IconX>
+                        </div>
+                        : <div>
+                            {
+                                hasBids ? <FlexCenter>
+                                    <span
+                                        data-rh-negative
+                                        data-rh={`Bid ID: ${abbreviateAddress(targetBid?.Id || "", 5)}`}
+                                        style={{ marginRight: '10px' }}>
+                                        {formatPrice()}
+                                    </span>
+
+                                    {/* <IconEdit width={'1.5rem'} style={{ cursor: 'pointer' }} onClick={() => setUseSelect(!useSelect)}></IconEdit> */}
+                                </FlexCenter>
+                                    : <FlexCenter>-</FlexCenter>
+
+                            }
+
+                        </div>
+                }
+            </PriceContainer>
+            <Buttons>
+                {
+                    hasLocal &&
+                    <RightBtn block onClick={selectLocal}>Local</RightBtn>
+                }
+                {
+                    hasBids &&
+                    <RightBtn block onClick={handleChangeModel}>Select</RightBtn>
+                }
+            </Buttons>
         </RowContainer>
     );
 }
