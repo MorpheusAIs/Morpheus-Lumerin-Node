@@ -16,6 +16,7 @@ contract StakingMasterChef is Ownable {
     uint256 totalShares; // total shares of reward token
     uint256 startTime; // start time of the staking for this pool
     uint256 endTime; // end time of the staking for this pool - after this time, no more rewards will be distributed
+    uint256 undistributedReward; // reward that was not distributed
     Lock[] locks; // locks available for this pool: durations with corresponding multipliers
   }
 
@@ -79,7 +80,8 @@ contract StakingMasterChef is Ownable {
         rewardPerSecondScaled: (_totalReward * PRECISION) / _duration,
         locks: _lockDurations,
         accRewardPerShareScaled: 0,
-        totalShares: 0
+        totalShares: 0,
+        undistributedReward: 0
       })
     );
     emit PoolAdded(poolId, _startTime, endTime);
@@ -99,14 +101,28 @@ contract StakingMasterChef is Ownable {
   /// @notice Stops the pool, no more rewards will be distributed
   /// @param _poolId the id of the pool
   function stopPool(uint256 _poolId) external onlyOwner poolExists(_poolId) {
-    Pool storage pool = pools[_poolId]; // errors if poolId is invalid
+    Pool storage pool = pools[_poolId];
     _recalculatePoolReward(pool);
-    uint256 oldEndTime = pool.endTime;
-    pool.endTime = block.timestamp;
-    emit PoolStopped(_poolId);
 
-    uint256 undistributedReward = ((oldEndTime - block.timestamp) * pool.rewardPerSecondScaled) / PRECISION;
-    safeTransfer(_msgSender(), undistributedReward);
+    if (block.timestamp >= pool.endTime) {
+      revert StakingFinished();
+    }
+
+    uint256 futureUndistributedReward = ((pool.endTime - block.timestamp) * pool.rewardPerSecondScaled) / PRECISION;
+    pool.undistributedReward += futureUndistributedReward;
+    pool.endTime = block.timestamp;
+
+    emit PoolStopped(_poolId);
+  }
+
+  /// @notice Withdraw undistributed reward, can be called before the pool is stopped if there is a period without active stakes
+  /// @param _poolId the id of the pool
+  function withdrawUndistributedReward(uint256 _poolId) external onlyOwner poolExists(_poolId) {
+    Pool storage pool = pools[_poolId];
+    _recalculatePoolReward(pool);
+    uint256 reward = pool.undistributedReward;
+    pool.undistributedReward = 0;
+    safeTransfer(_msgSender(), reward);
   }
 
   /// @notice Manually update pool reward variables
@@ -123,7 +139,9 @@ contract StakingMasterChef is Ownable {
       return;
     }
 
-    if (_pool.totalShares != 0) {
+    if (_pool.totalShares == 0) {
+      _pool.undistributedReward += ((timestamp - _pool.lastRewardTime) * _pool.rewardPerSecondScaled) / PRECISION;
+    } else {
       _pool.accRewardPerShareScaled = getRewardPerShareScaled(_pool, timestamp);
     }
 
