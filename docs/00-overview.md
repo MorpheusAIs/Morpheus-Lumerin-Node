@@ -53,7 +53,7 @@ Numbers below reference the circled elements in the diagram above.
 - The consumer node will need to have the proxy-router running and the UI-Desktop running to interact with the models and bids on the blockchain
 
 ## 5. Purchase Bid 
-- [05-purchase-bid.md](05-purchase-bid.md) - for more details
+- [05-bid-purchase.md](05-bid-purchase.md) - for more details
 - Once the UI-Desktop is up and running, the consumer can browse the available bids on the blockchain
 - Select a bid and stake the intended MOR amount (minimum should be shown) 
 
