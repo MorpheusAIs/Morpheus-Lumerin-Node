@@ -15,6 +15,11 @@ import (
 type ChatCompletionMessage = openai.ChatCompletionMessage
 
 func NewApiGatewayClient(baseURL string, httpClient *http.Client) *ApiGatewayClient {
+	
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	
 	return &ApiGatewayClient{
 		BaseURL:    baseURL,
 		HttpClient: httpClient,
@@ -318,7 +323,7 @@ func (c *ApiGatewayClient) OpenStakeSession(ctx context.Context, req *SessionSta
 func (c *ApiGatewayClient) OpenSession(ctx context.Context, req *SessionRequest) (session *Session, err error) {
 
 	session = &Session{}
-	err = c.postRequest(ctx, "/blockchain/sessions/v2", req, session)
+	err = c.postRequest(ctx, fmt.Sprintf("/blockchain/models/%s/session", req.ModelId), req, session)
 
 	if err != nil {
 		return nil, fmt.Errorf("internal error: %v", err)

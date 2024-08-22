@@ -46,7 +46,7 @@ func TestAiEngine_PromptStream(t *testing.T) {
 	choicesChannel := make(chan api.ChatCompletionStreamChoice)
 	choices := []api.ChatCompletionStreamChoice{}
 
-	resp, err := aiEngine.PromptStream(context.Background(), req, func(response interface{}) error {
+	_, _ = aiEngine.PromptStream(context.Background(), req, func(response interface{}) error {
 		r, ok := response.(*api.ChatCompletionStreamResponse)
 		if !ok {
 			return errors.New("invalid response")

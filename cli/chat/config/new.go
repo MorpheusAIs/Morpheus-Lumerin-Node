@@ -9,7 +9,8 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/style"
 )
 
-func New(sessionId string, cfgs ...common.Config) model {
+func New(cfgs ...common.Config) model {
+	
 	var (
 		cfg common.Config
 		t   textinput.Model
@@ -24,7 +25,7 @@ func New(sessionId string, cfgs ...common.Config) model {
 
 	m := model{inputs: make([]textinput.Model, 7)}
 	m.configs = make([]configInput, len(m.inputs))
- 
+
 	for i := range m.configs {
 		switch i {
 		// case 0:
@@ -84,7 +85,13 @@ func New(sessionId string, cfgs ...common.Config) model {
 				case "wallet_address":
 					t.SetValue(cfg.WalletAddress)
 				case "model":
-					t.SetValue(cfg.Model)
+					t.SetValue(cfg.ModelName)
+				case "model_id":
+					t.SetValue(cfg.ModelId)
+				case "session_id":
+					t.SetValue(cfg.SessionId)
+				case "openai_base_url":
+					t.SetValue(cfg.OpenaiBaseUrl)
 				case "temperature":
 					t.SetValue(fmt.Sprintf("%f", cfg.Temperature))
 				case "max_length":
@@ -95,7 +102,7 @@ func New(sessionId string, cfgs ...common.Config) model {
 			}
 		}
 
-		m.sessionId = sessionId
+		m.sessionId = cfg.SessionId
 		m.inputs[i] = t
 	}
 
