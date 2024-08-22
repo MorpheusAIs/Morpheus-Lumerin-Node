@@ -38,7 +38,6 @@ Numbers below reference the circled elements in the diagram above.
     1. Register your provider (the proxy-router) on the blockchain (http://mycoolproxy.serverfarm.io:3333) 
     1. Register your model on the blockchain
     1. Create a bid for your model on the blockchain
-- Further details on how to do this are in the [Provider Offer Guide](provider-offer.md)
 
 ## 4. Consumer Node Setup 
 - [04-consumer-setup.md](04-consumer-setup.md) - for more details
