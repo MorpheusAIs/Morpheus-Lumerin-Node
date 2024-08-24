@@ -1,13 +1,17 @@
-#!/usr/bin/env node
-//@ts-check
+#!/usr/bin/env ts-node
 
 import esbuild from "esbuild";
 import { copy } from "esbuild-plugin-copy";
-import config from "./esbuild.config.js";
+import config from "./esbuild.config.ts";
+import fs from "node:fs";
 
 async function main() {
-  await esbuild.build({
+  const metafile = await esbuild.build({
     ...config,
+    define: {
+      ...config.define,
+      "process.env.NODE_ENV": "'production'",
+    },
     plugins: [
       ...(config.plugins ? config.plugins : []),
       copy({
@@ -20,7 +24,11 @@ async function main() {
     ],
     minify: true,
     treeShaking: true,
+    metafile: true,
+    // mainFields: ["module", "main"],
   });
+
+  fs.writeFileSync("dist/metafile", JSON.stringify(metafile.metafile));
 
   console.log("Build complete");
 }

@@ -1,5 +1,4 @@
-#!/usr/bin/env node
-//@ts-check
+#!/usr/bin/env ts-node
 
 import esbuild from "esbuild";
 import { livereloadPlugin } from "@jgoz/esbuild-plugin-livereload";
@@ -9,6 +8,10 @@ import config from "./esbuild.config.js";
 async function main() {
   const ctx = await esbuild.context({
     ...config,
+    define: {
+      ...config.define,
+      "process.env.NODE_ENV": "'development'",
+    },
     metafile: true,
     write: true,
     plugins: [

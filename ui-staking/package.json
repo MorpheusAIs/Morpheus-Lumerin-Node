@@ -5,8 +5,8 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "start": "node watch.js",
-    "build": "node build.js"
+    "start": "tsx watch.ts",
+    "build": "tsx build.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.8.3",
@@ -14,16 +14,20 @@
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
-    "@web3modal/wagmi": "^5.0.10",
     "esbuild": "^0.23.0",
     "esbuild-plugin-copy": "^2.1.1",
     "esbuild-serve": "^1.0.1",
     "eslint-plugin-react-refresh": "^0.4.9",
+    "tsx": "^4.17.0",
     "typescript": "^5.5.4"
   },
   "dependencies": {
+    "@dotenv-run/esbuild": "^1.4.0",
+    "@sinclair/typebox": "^0.33.7",
     "@tanstack/react-query": "^5.51.16",
-    "connectkit": "^1.8.2",
+    "@web3modal/wagmi": "^5.1.1",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
     "pretty-ms": "^9.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
