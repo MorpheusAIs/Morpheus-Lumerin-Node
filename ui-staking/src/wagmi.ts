@@ -1,7 +1,10 @@
 import { http, createConfig } from "wagmi";
-import { arbitrumSepolia, hardhat } from "wagmi/chains";
-import { injected, metaMask, safe, walletConnect } from "wagmi/connectors";
-import { getDefaultConfig } from "connectkit";
+import { hardhat } from "wagmi/chains";
+import { defaultWagmiConfig } from "@web3modal/wagmi/react/config";
+import { createWeb3Modal } from "@web3modal/wagmi/react";
+
+// import { injected, walletConnect } from "wagmi/connectors";
+// import { getDefaultConfig } from "connectkit";
 
 const projectId = "0b6c36d2ed2244ffc6aa04915320b907";
 
@@ -13,12 +16,20 @@ const projectId = "0b6c36d2ed2244ffc6aa04915320b907";
 //   icons: ["https://avatars.githubusercontent.com/u/37784886"],
 // };
 
-export const config = createConfig(
-  getDefaultConfig({
-    chains: [hardhat /*arbitrumSepolia*/],
-    connectors: [injected(), walletConnect({ projectId }), metaMask(), safe()],
-    transports: {
-      [hardhat.id]: http(process.env.REACT_APP_ETH_NODE_URL),
-    },
-  })
-);
+export const config = defaultWagmiConfig({
+  projectId,
+  chains: [hardhat /*arbitrumSepolia*/],
+  // connectors: [injected(), walletConnect({ projectId })],
+  transports: {
+    [hardhat.id]: http(process.env.REACT_APP_ETH_NODE_URL),
+  },
+  metadata: {
+    name: "WAGMI",
+    description: "WAGMI",
+    url: "https://wagmi.io",
+    icons: ["https://avatars.githubusercontent.com/u/37784886"],
+  },
+});
+
+//)
+// );

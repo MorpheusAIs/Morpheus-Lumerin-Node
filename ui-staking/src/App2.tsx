@@ -4,18 +4,27 @@ import { Router } from "./Router.tsx";
 import { WagmiProvider } from "wagmi";
 import { config } from "./wagmi.ts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ConnectKitProvider } from "connectkit";
+// import { ConnectKitProvider } from "connectkit";
+import { createWeb3Modal } from "@web3modal/wagmi/react";
 
 const queryClient = new QueryClient();
+const projectId = "0b6c36d2ed2244ffc6aa04915320b907";
+
+createWeb3Modal({
+	wagmiConfig: config,
+	projectId: process.env.REACT_APP_WALLET_CONNECT_PROJECT_ID,
+	enableAnalytics: true, // Optional - defaults to your Cloud configuration
+	enableOnramp: true, // Optional - false as default
+});
 
 export const App2 = () => {
 	return (
 		<>
 			<WagmiProvider config={config}>
 				<QueryClientProvider client={queryClient}>
-					<ConnectKitProvider>
-						<Router />
-					</ConnectKitProvider>
+					{/* <ConnectKitProvider> */}
+					<Router />
+					{/* </ConnectKitProvider> */}
 				</QueryClientProvider>
 			</WagmiProvider>
 		</>

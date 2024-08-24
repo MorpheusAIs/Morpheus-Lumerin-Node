@@ -1,4 +1,5 @@
-import { ConnectKitButton } from "connectkit";
+// import { ConnectKitButton } from "connectkit";
+import { Link } from "react-router-dom";
 import { LumerinLogo } from "../icons/Lumerin.tsx";
 import { shortAddress } from "../lib/address.ts";
 import { Container } from "./Container.tsx";
@@ -11,13 +12,10 @@ export const Header: React.FC<HeaderProps> = (props) => {
 	return (
 		<header>
 			<Container className="header">
-				<LumerinLogo className="header-logo" />
-				{/* {props.address && (
-					<button className="header-wallet" type="button">
-						{shortAddress(props.address)}
-					</button>
-				)} */}
-				<ConnectKitButton />
+				<Link to="/">
+					<LumerinLogo className="header-logo" />
+				</Link>
+				<w3m-account-button />
 			</Container>
 		</header>
 	);

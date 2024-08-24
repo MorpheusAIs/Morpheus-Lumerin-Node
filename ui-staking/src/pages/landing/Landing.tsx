@@ -1,10 +1,11 @@
 import { useAccount, useConnect, useDisconnect } from "wagmi";
-import { Button } from "../../components/Button.tsx";
 import { Container } from "../../components/Container.tsx";
 import { LumerinLogo } from "../../icons/Lumerin.tsx";
 import homeElement from "../../images/home-element.png";
 import { useNavigate } from "react-router-dom";
-import { ConnectKitButton } from "connectkit";
+import { useEffect } from "react";
+import { Button } from "../../components/Button.tsx";
+// import { ConnectKitButton } from "connectkit";
 
 export const Landing = () => {
 	const { address, isConnected } = useAccount();
@@ -12,9 +13,12 @@ export const Landing = () => {
 	const { connectors: connectedConnectors, disconnect } = useDisconnect();
 	const navigate = useNavigate();
 
-	if (isConnected) {
-		navigate("/pool/0");
-	}
+	//TODO: do not redirect to pool 0 if user was already connected
+	useEffect(() => {
+		if (address) {
+			navigate("/pool/0");
+		}
+	}, [address, navigate]);
 
 	return (
 		<>
@@ -29,7 +33,11 @@ export const Landing = () => {
 				</h1>
 				<h2 className="sub-cta">Your Pathway to Effortless Rewards</h2>
 				<div className="cta-button">
-					<ConnectKitButton />
+					{isConnected ? (
+						<Button onClick={() => navigate("/pool/0")}>Stake LMR</Button>
+					) : (
+						<w3m-connect-button />
+					)}
 				</div>
 			</Container>
 		</>
