@@ -43,7 +43,6 @@ contract StakingMasterChef is Ownable {
   event PoolStopped(uint256 indexed poolId);
 
   error PoolOrStakeNotExists();
-  error StakingNotStarted();
   error StakingFinished();
   error LockNotEnded();
   error LockReleaseTimePastPoolEndTime(); // lock duration exceeds staking range, choose a shorter lock duration
@@ -140,14 +139,11 @@ contract StakingMasterChef is Ownable {
   /// @return stakeId the id of the new stake
   function stake(uint256 _poolId, uint256 _amount, uint8 _lockId) external poolExists(_poolId) returns (uint256) {
     Pool storage pool = pools[_poolId];
-    if (block.timestamp < pool.startTime) {
-      revert StakingNotStarted();
-    }
     if (block.timestamp >= pool.endTime) {
       revert StakingFinished();
     }
     Lock storage lock = pool.locks[_lockId];
-    uint256 lockEndsAt = block.timestamp + lock.durationSeconds;
+    uint256 lockEndsAt = max(block.timestamp, pool.startTime) + lock.durationSeconds;
     if (lockEndsAt > pool.endTime) {
       revert LockReleaseTimePastPoolEndTime();
     }
@@ -187,7 +183,7 @@ contract StakingMasterChef is Ownable {
 
     // lockEndsAt cannot be larger than pool.endTime if stopPool is not called
     // if stopPool is called, lockEndsAt is not checked
-    if (block.timestamp < min(pool.endTime, userStake.lockEndsAt)) {
+    if ((block.timestamp > pool.startTime) && (block.timestamp < min(pool.endTime, userStake.lockEndsAt))) {
       revert LockNotEnded();
     }
 
@@ -253,6 +249,10 @@ contract StakingMasterChef is Ownable {
     }
 
     Pool storage pool = pools[_poolId];
+    if (block.timestamp < pool.startTime) {
+      return 0;
+    }
+
     uint256 timestamp = min(block.timestamp, pool.endTime);
     return (userStake.shareAmount * getRewardPerShareScaled(pool, timestamp)) / PRECISION - userStake.rewardDebt;
   }
@@ -284,6 +284,10 @@ contract StakingMasterChef is Ownable {
   function safeTransfer(address _to, uint256 _amount) private {
     uint256 rewardBalance = rewardToken.balanceOf(address(this));
     rewardToken.transfer(_to, min(rewardBalance, _amount));
+  }
+
+  function max(uint256 _a, uint256 _b) private pure returns (uint256) {
+    return _a > _b ? _a : _b;
   }
 
   function min(uint256 _a, uint256 _b) private pure returns (uint256) {

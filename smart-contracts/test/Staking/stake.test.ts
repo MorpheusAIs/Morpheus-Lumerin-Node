@@ -2,8 +2,8 @@ import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
 import { aliceStakes, setupStaking } from "./fixtures";
 import { expect } from "chai";
 import { getPoolId } from "./utils";
-import { DAY, SECOND } from "../../utils/time";
-import { catchError } from "../utils";
+import { DAY, HOUR, SECOND } from "../../utils/time";
+import { catchError, getTxDeltaBalance } from "../utils";
 
 describe("Staking contract - stake", () => {
   it("Should stake correctly and emit event", async () => {
@@ -40,11 +40,12 @@ describe("Staking contract - stake", () => {
     });
   });
 
-  it("should error if staking before start date", async () => {
+  it("should allow staking/withdrawing stake before start date", async () => {
     const {
       contracts: { staking, tokenLMR, tokenMOR },
       expPool,
       accounts: { alice },
+      pubClient,
     } = await loadFixture(setupStaking);
 
     const now = await time.latest();
@@ -73,19 +74,63 @@ describe("Staking contract - stake", () => {
       account: alice.account,
     });
 
-    await catchError(staking.abi, "StakingNotStarted", async () => {
-      await staking.write.stake([poolId, stakeAmount, 0], {
-        account: alice.account,
-      });
+    await staking.write.stake([poolId, stakeAmount, 0], {
+      account: alice.account,
     });
+  });
 
-    await time.increaseTo(startTime);
+  it("should start counting reward from start date", async () => {
+    const {
+      contracts: { staking, tokenLMR, tokenMOR },
+      expPool,
+      accounts: { alice },
+      pubClient,
+    } = await loadFixture(setupStaking);
 
-    await staking.write.stake([expPool.id, stakeAmount, 0], {
+    const now = await time.latest();
+    const startTime = BigInt(now + DAY / SECOND);
+    const duration = 10n * BigInt(DAY / SECOND);
+    const rewardPerSecond = 100n;
+    const totalReward = rewardPerSecond * BigInt(duration);
+
+    await tokenMOR.write.approve([staking.address, totalReward]);
+    const tx = await staking.write.addPool([
+      startTime,
+      duration,
+      totalReward,
+      [
+        {
+          durationSeconds: BigInt(DAY / SECOND),
+          multiplierScaled: 1n * expPool.precision,
+        },
+      ],
+    ]);
+
+    const poolId = await getPoolId(tx);
+
+    const stakeAmount = 1000n;
+    await tokenLMR.write.approve([staking.address, stakeAmount], {
       account: alice.account,
     });
 
-    // no error
+    await staking.write.stake([poolId, stakeAmount, 0], {
+      account: alice.account,
+    });
+
+    await time.increaseTo(startTime - 1n);
+    await time.increase(DAY / SECOND);
+    const tx2 = await staking.write.withdrawReward([poolId, 0n], {
+      account: alice.account,
+    });
+
+    const reward = await getTxDeltaBalance(
+      pubClient,
+      tx2,
+      alice.account.address,
+      tokenMOR,
+    );
+
+    expect(reward).to.equal(rewardPerSecond * BigInt(DAY / SECOND));
   });
 
   it("should error if staking after end date", async () => {
