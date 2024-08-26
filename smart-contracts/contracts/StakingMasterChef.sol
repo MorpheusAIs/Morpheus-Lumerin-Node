@@ -1,11 +1,14 @@
 import { IERC20 } from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
 // Refer to https://www.rareskills.io/post/staking-algorithm
 contract StakingMasterChef is Ownable {
+  using SafeERC20 for IERC20;
+
   struct Pool {
     uint256 rewardPerSecondScaled; // reward tokens per second, times `PRECISION`
     uint256 lastRewardTime; // last time rewards were distributed
@@ -13,6 +16,7 @@ contract StakingMasterChef is Ownable {
     uint256 totalShares; // total shares of reward token
     uint256 startTime; // start time of the staking for this pool
     uint256 endTime; // end time of the staking for this pool - after this time, no more rewards will be distributed
+    uint256 undistributedReward; // reward that was not distributed
     Lock[] locks; // locks available for this pool: durations with corresponding multipliers
   }
 
@@ -75,12 +79,13 @@ contract StakingMasterChef is Ownable {
         rewardPerSecondScaled: (_totalReward * PRECISION) / _duration,
         locks: _lockDurations,
         accRewardPerShareScaled: 0,
-        totalShares: 0
+        totalShares: 0,
+        undistributedReward: 0
       })
     );
     emit PoolAdded(poolId, _startTime, endTime);
 
-    rewardToken.transferFrom(_msgSender(), address(this), _totalReward);
+    rewardToken.safeTransferFrom(_msgSender(), address(this), _totalReward);
 
     return poolId;
   }
@@ -95,14 +100,28 @@ contract StakingMasterChef is Ownable {
   /// @notice Stops the pool, no more rewards will be distributed
   /// @param _poolId the id of the pool
   function stopPool(uint256 _poolId) external onlyOwner poolExists(_poolId) {
-    Pool storage pool = pools[_poolId]; // errors if poolId is invalid
+    Pool storage pool = pools[_poolId];
     _recalculatePoolReward(pool);
-    uint256 oldEndTime = pool.endTime;
-    pool.endTime = block.timestamp;
-    emit PoolStopped(_poolId);
 
-    uint256 undistributedReward = ((oldEndTime - block.timestamp) * pool.rewardPerSecondScaled) / PRECISION;
-    safeTransfer(_msgSender(), undistributedReward);
+    if (block.timestamp >= pool.endTime) {
+      revert StakingFinished();
+    }
+
+    uint256 futureUndistributedReward = ((pool.endTime - block.timestamp) * pool.rewardPerSecondScaled) / PRECISION;
+    pool.undistributedReward += futureUndistributedReward;
+    pool.endTime = block.timestamp;
+
+    emit PoolStopped(_poolId);
+  }
+
+  /// @notice Withdraw undistributed reward, can be called before the pool is stopped if there is a period without active stakes
+  /// @param _poolId the id of the pool
+  function withdrawUndistributedReward(uint256 _poolId) external onlyOwner poolExists(_poolId) {
+    Pool storage pool = pools[_poolId];
+    _recalculatePoolReward(pool);
+    uint256 reward = pool.undistributedReward;
+    pool.undistributedReward = 0;
+    safeTransfer(_msgSender(), reward);
   }
 
   /// @notice Manually update pool reward variables
@@ -119,7 +138,9 @@ contract StakingMasterChef is Ownable {
       return;
     }
 
-    if (_pool.totalShares != 0) {
+    if (_pool.totalShares == 0) {
+      _pool.undistributedReward += ((timestamp - _pool.lastRewardTime) * _pool.rewardPerSecondScaled) / PRECISION;
+    } else {
       _pool.accRewardPerShareScaled = getRewardPerShareScaled(_pool, timestamp);
     }
 
@@ -165,8 +186,7 @@ contract StakingMasterChef is Ownable {
     );
 
     emit Stake(_msgSender(), _poolId, stakeId, _amount);
-    stakingToken.transferFrom(address(_msgSender()), address(this), _amount);
-
+    stakingToken.safeTransferFrom(address(_msgSender()), address(this), _amount);
     return stakeId;
   }
 
@@ -202,7 +222,7 @@ contract StakingMasterChef is Ownable {
     emit Unstake(_msgSender(), _poolId, _stakeId, unstakeAmount);
 
     safeTransfer(_msgSender(), reward);
-    stakingToken.transfer(address(_msgSender()), unstakeAmount);
+    stakingToken.safeTransfer(address(_msgSender()), unstakeAmount);
   }
 
   /// @notice Get stake of a user in a pool
@@ -283,7 +303,7 @@ contract StakingMasterChef is Ownable {
   /// @dev Safe reward transfer function, just in case if rounding error causes pool to not have enough reward token.
   function safeTransfer(address _to, uint256 _amount) private {
     uint256 rewardBalance = rewardToken.balanceOf(address(this));
-    rewardToken.transfer(_to, min(rewardBalance, _amount));
+    rewardToken.safeTransfer(_to, min(rewardBalance, _amount));
   }
 
   function max(uint256 _a, uint256 _b) private pure returns (uint256) {

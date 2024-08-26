@@ -20,6 +20,7 @@ describe("Staking contract - Add pool", () => {
       0n,
       expPool.startDate,
       expPool.endDate,
+      0n,
     ]);
 
     const lockDurations = await staking.read.getLockDurations([expPool.id]);
@@ -116,10 +117,13 @@ describe("Staking contract - Stop pool", () => {
     await time.increase((1 * DAY) / SECOND);
     const stopTx = await staking.write.stopPool([expPool.id]);
     const stoppedAt = await getTxTimestamp(pubClient, stopTx);
+    const withdrawTx = await staking.write.withdrawUndistributedReward([
+      expPool.id,
+    ]);
 
     const ownerPayback = await getTxDeltaBalance(
       pubClient,
-      stopTx,
+      withdrawTx,
       owner.account.address,
       tokenMOR,
     );
@@ -139,8 +143,11 @@ describe("Staking contract - Stop pool", () => {
     const expPayback = (expPool.endDate - stoppedAt) * expPool.rewardPerSecond;
     const expAliceReward = (stoppedAt - stakedAt) * expPool.rewardPerSecond;
 
-    expect(ownerPayback).equal(expPayback);
+    expect(Number(ownerPayback)).greaterThanOrEqual(Number(expPayback));
     expect(aliceReward).equal(expAliceReward);
+
+    const poolBalance = await tokenMOR.read.balanceOf([staking.address]);
+    expect(poolBalance).equal(0n);
   });
 
   it("Should error stopping pool if not owner", async () => {
