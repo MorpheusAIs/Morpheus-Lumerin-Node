@@ -2,11 +2,7 @@ import { parseEventLogs } from "viem/utils";
 import { stakingMasterChefAbi } from "../../blockchain/abi.ts";
 import type { Log } from "viem";
 
-export function getStakeId(
-  logs: Log<bigint, number, false>[],
-  address: `0x${string}`,
-  poolId: bigint
-): bigint {
+export function getStakeId(logs: Log<bigint, number, false>[], address: `0x${string}`, poolId: bigint): bigint {
   const events = parseEventLogs({
     abi: stakingMasterChefAbi,
     logs,

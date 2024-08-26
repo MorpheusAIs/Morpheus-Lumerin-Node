@@ -7,11 +7,11 @@ import { Main } from "./Main.tsx";
 const queryClient = new QueryClient();
 
 export const App = () => {
-	return (
-		<WagmiProvider config={config}>
-			<QueryClientProvider client={queryClient}>
-				<Main />
-			</QueryClientProvider>
-		</WagmiProvider>
-	);
+  return (
+    <WagmiProvider config={config}>
+      <QueryClientProvider client={queryClient}>
+        <Main />
+      </QueryClientProvider>
+    </WagmiProvider>
+  );
 };

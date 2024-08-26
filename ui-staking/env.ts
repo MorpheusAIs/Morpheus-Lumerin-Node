@@ -35,7 +35,7 @@ export function getAndValidateEnv() {
       `Invalid environment variables: ${ajv.errorsText(validate.errors, {
         dataVar: "ENV",
         separator: ".",
-      })}`
+      })}`,
     );
   }
 

@@ -55,9 +55,7 @@ export function usePool(address: `0x${string}`, onUpdate: () => void) {
   console.log(new Date(Number(timestamp) * 1000));
 
   const poolElapsedDays = poolData ? Math.floor(Number(timestamp - poolData.startTime) / 86400) : 0;
-  const poolTotalDays = poolData
-    ? Math.floor(Number(poolData.endTime - poolData.startTime) / 86400)
-    : 0;
+  const poolTotalDays = poolData ? Math.floor(Number(poolData.endTime - poolData.startTime) / 86400) : 0;
 
   const stakes = useReadContract({
     abi: stakingMasterChefAbi,

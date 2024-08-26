@@ -8,7 +8,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createWeb3Modal } from "@web3modal/wagmi/react";
 
 const queryClient = new QueryClient();
-const projectId = "0b6c36d2ed2244ffc6aa04915320b907";
 
 createWeb3Modal({
 	wagmiConfig: config,
