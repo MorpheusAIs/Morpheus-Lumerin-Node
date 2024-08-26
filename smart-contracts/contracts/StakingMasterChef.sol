@@ -85,6 +85,12 @@ contract StakingMasterChef is Ownable {
     return poolId;
   }
 
+  /// @notice Get the number of pools
+  /// @return count the number of pools
+  function getPoolsCount() external view returns (uint256) {
+    return pools.length;
+  }
+
   /// @notice Get the available lock durations of a pool with the corresponding multipliers
   /// @param _poolId the id of the pool
   /// @return locks locks for this pool
