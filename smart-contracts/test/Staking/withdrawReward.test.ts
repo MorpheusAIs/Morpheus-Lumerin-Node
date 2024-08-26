@@ -1,9 +1,10 @@
 import hre from "hardhat";
 import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
-import { aliceStakes } from "./fixtures";
+import { aliceStakes, setupStaking } from "./fixtures";
 import { expect } from "chai";
-import { elapsedTxs } from "./utils";
+import { elapsedTxs, getPoolId, getStakeId } from "./utils";
 import { catchError, getTxDeltaBalance, mine, setAutomine } from "../utils";
+import { DAY, SECOND } from "../../utils/time";
 
 describe("Staking contract - withdrawReward", () => {
   it("should withdraw reward correctly", async () => {
@@ -101,6 +102,53 @@ describe("Staking contract - withdrawReward", () => {
 
     await pubClient.waitForTransactionReceipt({
       hash: rewardTx,
+    });
+  });
+
+  it("Should return 0 if pool hasn't started yet", async () => {
+    const {
+      contracts: { staking, tokenLMR, tokenMOR },
+      expPool,
+      accounts: { alice },
+      pubClient,
+    } = await loadFixture(setupStaking);
+
+    const now = await time.latest();
+    const startTime = BigInt(now + DAY / SECOND);
+    const duration = 10n * BigInt(DAY / SECOND);
+    const rewardPerSecond = 100n;
+    const totalReward = rewardPerSecond * BigInt(duration);
+
+    await tokenMOR.write.approve([staking.address, totalReward]);
+    const tx = await staking.write.addPool([
+      startTime,
+      duration,
+      totalReward,
+      [
+        {
+          durationSeconds: BigInt(DAY / SECOND),
+          multiplierScaled: 1n * expPool.precision,
+        },
+      ],
+    ]);
+
+    const poolId = await getPoolId(tx);
+
+    const stakeAmount = 1000n;
+    await tokenLMR.write.approve([staking.address, stakeAmount], {
+      account: alice.account,
+    });
+
+    const tx2 = await staking.write.stake([poolId, stakeAmount, 0], {
+      account: alice.account,
+    });
+
+    const stakeId = await getStakeId(tx2);
+
+    await catchError(staking.abi, "NoRewardAvailable", async () => {
+      await staking.write.withdrawReward([poolId, stakeId], {
+        account: alice.account,
+      });
     });
   });
 });

@@ -1,9 +1,9 @@
 import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
-import { aliceStakes } from "./fixtures";
+import { aliceStakes, setupStaking } from "./fixtures";
 import { expect } from "chai";
 import { catchError, getTxDeltaBalance } from "../utils";
 import { DAY, SECOND } from "../../utils/time";
-import { elapsedTxs } from "./utils";
+import { elapsedTxs, getPoolId } from "./utils";
 
 describe("Staking contract - getReward", () => {
   it("Should get reward correctly for user that staked", async () => {
@@ -115,6 +115,52 @@ describe("Staking contract - getReward", () => {
       alice.account.address,
       stakes.alice.poolId,
       stakes.alice.stakeId,
+    ]);
+    expect(reward).to.equal(0n);
+  });
+
+  it("Should return 0 if pool hasn't started yet", async () => {
+    const {
+      contracts: { staking, tokenLMR, tokenMOR },
+      expPool,
+      accounts: { alice },
+      pubClient,
+    } = await loadFixture(setupStaking);
+
+    const now = await time.latest();
+    const startTime = BigInt(now + DAY / SECOND);
+    const duration = 10n * BigInt(DAY / SECOND);
+    const rewardPerSecond = 100n;
+    const totalReward = rewardPerSecond * BigInt(duration);
+
+    await tokenMOR.write.approve([staking.address, totalReward]);
+    const tx = await staking.write.addPool([
+      startTime,
+      duration,
+      totalReward,
+      [
+        {
+          durationSeconds: BigInt(DAY / SECOND),
+          multiplierScaled: 1n * expPool.precision,
+        },
+      ],
+    ]);
+
+    const poolId = await getPoolId(tx);
+
+    const stakeAmount = 1000n;
+    await tokenLMR.write.approve([staking.address, stakeAmount], {
+      account: alice.account,
+    });
+
+    await staking.write.stake([poolId, stakeAmount, 0], {
+      account: alice.account,
+    });
+
+    const reward = await staking.read.getReward([
+      alice.account.address,
+      poolId,
+      0n,
     ]);
     expect(reward).to.equal(0n);
   });
