@@ -5,5 +5,5 @@ export function formatDate(num: bigint | number): string {
 }
 
 export function formatDuration(seconds: bigint): string {
-  return prettyMs(Number(seconds) * 1000);
+  return prettyMs(Number(seconds) * 1000, { compact: true });
 }

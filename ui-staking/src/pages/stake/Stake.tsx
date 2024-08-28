@@ -9,11 +9,12 @@ import { useStake } from "./useStake.ts";
 import { formatDate } from "../../lib/date.ts";
 
 interface Props {
-  onStakeCb: (id: bigint) => void;
+  onStakeCb?: (id: bigint) => void;
 }
 
 export const Stake = (props: Props) => {
-  const { locks, lockIndex, setLockIndex, navigate, poolId, onStake, multiplier } = useStake(props.onStakeCb);
+  const { locks, lockIndex, setLockIndex, navigate, poolId, onStake, multiplier, stakeAmount, setStakeAmount } =
+    useStake(props.onStakeCb);
 
   const lockTitles = locks.isSuccess ? locks.data.map((l) => formatSeconds(l.durationSeconds)) : ["0", "Loading..."];
 
@@ -38,7 +39,12 @@ export const Stake = (props: Props) => {
           <section className="section add-stake">
             <h1>New staking contract</h1>
             <div className="field stake-amount">
-              <input id="stake-amount" type="number" />
+              <input
+                id="stake-amount"
+                type="number"
+                value={stakeAmount}
+                onChange={(e) => setStakeAmount(e.target.value)}
+              />
               <label htmlFor="stake-amount">
                 <LumerinIcon /> LMR
               </label>

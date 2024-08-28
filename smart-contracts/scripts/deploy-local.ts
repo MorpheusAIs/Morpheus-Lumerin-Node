@@ -1,7 +1,7 @@
 import * as fixtures from "../test/fixtures";
 import * as fixturesStaking from "../test/Staking/fixtures";
 import { getStakeId } from "../test/Staking/utils";
-import { DAY, MINUTE, SECOND } from "../utils/time";
+import { DAY, HOUR, MINUTE, SECOND } from "../utils/time";
 import hre from "hardhat";
 
 async function main() {
@@ -14,7 +14,7 @@ async function main() {
 
   const block = await data.publicClient.getBlock();
   const startDate = block.timestamp;
-  const duration = 10n * BigInt(MINUTE / SECOND);
+  const duration = 48n * BigInt(HOUR / SECOND);
   const rewardPerSecond = (115n * 10n ** 18n) / 1_000_000n;
   const totalReward = rewardPerSecond * duration;
 
@@ -24,7 +24,7 @@ async function main() {
       durationSeconds: duration,
       startDate,
       totalReward: totalReward,
-      lockDurations: fixturesStaking.getDefaultDurationsShort(precision),
+      lockDurations: fixturesStaking.getDefaultDurationsMedium(precision),
     },
   ]);
 

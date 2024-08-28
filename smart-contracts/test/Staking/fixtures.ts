@@ -1,6 +1,6 @@
 import hre from "hardhat";
 import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
-import { DAY, MINUTE, SECOND } from "../../utils/time";
+import { DAY, HOUR, MINUTE, SECOND } from "../../utils/time";
 import { getStakeId } from "./utils";
 
 export async function setupStaking() {
@@ -153,6 +153,27 @@ export function getDefaultDurations(PRECISION: bigint) {
     },
     {
       durationSeconds: BigInt((365 * DAY) / SECOND),
+      multiplierScaled: (150n * PRECISION) / 100n,
+    },
+  ];
+}
+
+export function getDefaultDurationsMedium(PRECISION: bigint) {
+  return [
+    {
+      durationSeconds: BigInt((1 * MINUTE) / SECOND),
+      multiplierScaled: 1n * PRECISION,
+    },
+    {
+      durationSeconds: BigInt((5 * MINUTE) / SECOND),
+      multiplierScaled: (115n * PRECISION) / 100n,
+    },
+    {
+      durationSeconds: BigInt((1 * HOUR) / SECOND),
+      multiplierScaled: (135n * PRECISION) / 100n,
+    },
+    {
+      durationSeconds: BigInt((1 * DAY) / SECOND),
       multiplierScaled: (150n * PRECISION) / 100n,
     },
   ];

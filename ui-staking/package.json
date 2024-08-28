@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "tsx watch.ts",
-    "build": "tsx build.ts"
+    "build": "tsx build.ts",
+    "format": "biome format --write"
   },
   "dependencies": {
     "@biomejs/biome": "^1.8.3",

@@ -4,14 +4,14 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useState } from "react";
 import { getStakeId } from "./utils.ts";
 
-export function useStake(onStakeCb: (id: bigint) => void) {
+export function useStake(onStakeCb?: (id: bigint) => void) {
   const { poolId: poolIdString } = useParams();
   const { address } = useAccount();
   const poolId = Number(poolIdString);
   const navigate = useNavigate();
 
   const [lockIndex, setLockIndex] = useState(0);
-  const [stakeAmount, setStakeAmount] = useState(0n);
+  const [stakeAmount, setStakeAmount] = useState("");
 
   const locks = useReadContract({
     abi: stakingMasterChefAbi,
@@ -61,11 +61,13 @@ export function useStake(onStakeCb: (id: bigint) => void) {
       return;
     }
 
+    const stakeAmountDecimals = BigInt(stakeAmount) * BigInt(1e8);
+
     const tx = await writeContractAsync({
       abi: erc20Abi,
       address: process.env.REACT_APP_LMR_ADDR as `0x${string}`,
       functionName: "approve",
-      args: [process.env.REACT_APP_STAKING_ADDR as `0x${string}`, stakeAmount],
+      args: [process.env.REACT_APP_STAKING_ADDR as `0x${string}`, stakeAmountDecimals],
     });
 
     await pubClient?.waitForTransactionReceipt({
@@ -78,7 +80,7 @@ export function useStake(onStakeCb: (id: bigint) => void) {
       abi: [...stakingMasterChefAbi, ...erc20Abi],
       address: process.env.REACT_APP_STAKING_ADDR as `0x${string}`,
       functionName: "stake",
-      args: [BigInt(poolId), stakeAmount, lockIndex],
+      args: [BigInt(poolId), stakeAmountDecimals, lockIndex],
     });
     const receipt = await pubClient.waitForTransactionReceipt({
       hash: tx2,
@@ -86,7 +88,7 @@ export function useStake(onStakeCb: (id: bigint) => void) {
       timeout: 10000,
     });
     const stakeId = getStakeId(receipt.logs, address, BigInt(poolId));
-    onStakeCb(stakeId);
+    onStakeCb?.(stakeId);
   }
 
   return {

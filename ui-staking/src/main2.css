@@ -149,6 +149,16 @@ body {
   border: none;
 }
 
+.button-small {
+  padding: 5px;
+  font-size: 15px;
+  font-weight:600;
+  height: 42px;
+  text-transform: uppercase;
+  background-color: rgba(79, 126, 145, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
 .section{
   background-color: rgba(79, 126, 145, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -169,8 +179,8 @@ body {
 
 .pool {
   display: grid;
-  grid-template-rows: repeat(3, auto);
-  grid-template-columns: 2fr max-content;
+  grid-template-rows: repeat(2, auto);
+  grid-template-columns: repeat(3, 1fr);
   grid-column-gap: 10px;
   grid-row-gap: 10px;
 }
@@ -182,14 +192,18 @@ body {
   justify-content: center;
   align-items: center; 
 }
-.pool-cta { 
-  grid-area: 1 / 2 / 2 / 3; 
-}
+
 .pool-stats { 
-  grid-area: 2 / 2 / 3 / 3; 
+  grid-area: 1 / 1 / 1 / 2; 
 }
-.stake-info { 
-  grid-area: 3 / 2 / 4 / 3; 
+.rewards-balance{
+  grid-area: 1 / 2 / 1 / 3;
+}
+.wallet-balance{
+  grid-area: 1 / 3 / 1 / 4;
+}
+.stake-list { 
+  grid-area: 2 / 1 / 3 / 4; 
 }
 
 dl.info  {
@@ -197,6 +211,19 @@ dl.info  {
   grid-template-columns: max-content auto;
   grid-column-gap: 10px;
   grid-row-gap: 18px;
+}
+
+ul.info {
+  display: grid;
+  grid-column-gap: 10px;
+  grid-row-gap: 18px;
+  list-style: none;
+  padding: 0;
+}
+
+ul.info li {
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .info dt {
@@ -213,6 +240,8 @@ dl.info  {
   font-weight: 600;
   align-self: end;
 }
+
+
 
 .pool-nav{
   margin-left: var(--border-radius);
@@ -251,6 +280,11 @@ dl.info  {
   flex-grow: 1;
 }
 
+.chart-small{
+  max-width: 31px;
+  max-height: 31px;
+}
+
 .chart svg{
   width: 100%;
   height: 100%;
@@ -274,16 +308,18 @@ dl.info  {
   align-items: center;
 }
 
-.chart-text dt{
+.chart-text dt {
   display: block;
   font-weight: 600;
-  font-size: 16px;
+  font-size: 14px;
+  color: #737373;
 }
 
 .chart-text dd{
   display: block;
   font-weight: 600;
   font-size: 32px;
+  color:#fff;
 }
 
 dl.current-reward{
@@ -326,7 +362,7 @@ dl.current-reward{
   margin: 20px 0;
 }
 
-input {
+input[type="number"], input[type="text"] {
   background-color: transparent;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--border-radius);
@@ -340,7 +376,7 @@ input {
   -moz-appearance: textfield;
 }
 
-input:focus {
+input[type="number"]:focus, input[type="text"]:focus {
   outline: none;
   border: 1px solid rgba(255, 255, 255, 0.3);
 }
@@ -439,4 +475,117 @@ input::-webkit-inner-spin-button {
 
 .buttons .button{
   flex: 1;
+}
+
+.section.stake-list {
+  padding: 0;
+}
+
+.section.stake-list .section-heading {
+  padding: 18px 32px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.stake-list .stakes {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  padding: 0;
+}
+
+.stake-list .stake {
+  padding: 18px 32px;
+  display:flex;
+  width: 100%;
+}
+
+
+
+.stake-list .stake .checked, .stake-list .stake .unchecked {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  flex-grow: 1;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(3, auto);
+  column-gap: 2em;
+  row-gap: 1em;
+  grid-auto-flow: column;
+  align-self: center;
+}
+
+.stake-list .stake .unchecked{
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: auto;
+}
+
+.stake-list .stake .toogle:has(input:not(:checked)) ~ .checked{
+  display: none;
+} 
+
+.stake-list .stake .toogle:has(input:checked) ~ .unchecked {
+  display: none;
+}
+
+.stake .progress {
+  grid-row: span 3;
+  display: flex;
+}
+
+.stake .progress .chart{
+  max-width: 12em;
+}
+
+.stake .title {
+  font-size: 15px;
+  font-weight: 400;
+  margin-bottom: 5px;
+}
+
+.stake .value {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.stake .currency {
+  font-size: 15px;
+}
+
+.checked li {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.toogle {
+  width: 2em;
+  height: 2em;
+  display: flex;
+  align-self: center;
+  padding: 0.5em 0.5em;
+  margin-right: 2em;
+  cursor: pointer;
+}
+
+.toogle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toogle input + svg{
+  transform: rotate(90deg);
+}
+
+.toogle input:checked + svg{
+  transform: rotate(180deg);
+}
+
+.unchecked .chart {
+  margin-right: 1em;
+}
+
+.unchecked li{
+  display: flex;
+  align-items: center;
 }

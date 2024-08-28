@@ -2,14 +2,17 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useStopwatch } from "react-timer-hook";
 import { useAccount, useBlock, usePublicClient, useReadContract, useWriteContract } from "wagmi";
 import { stakingMasterChefAbi } from "../../blockchain/abi.ts";
+import { erc20Abi } from "viem";
 
-export function usePool(address: `0x${string}`, onUpdate: () => void) {
+export function usePool(onUpdate: () => void) {
   const pubClient = usePublicClient();
   const writeContract = useWriteContract();
 
   const { poolId: poolIdString } = useParams();
-  const poolId = Number(poolIdString);
+  const poolId = poolIdString !== "" ? Number(poolIdString) : undefined;
   const navigate = useNavigate();
+
+  const { address } = useAccount();
 
   const block = useBlock();
   const { totalSeconds, reset } = useStopwatch({ autoStart: true });
@@ -25,8 +28,48 @@ export function usePool(address: `0x${string}`, onUpdate: () => void) {
     abi: stakingMasterChefAbi,
     address: process.env.REACT_APP_STAKING_ADDR as `0x${string}`,
     functionName: "pools",
-    args: [BigInt(poolId)],
+    args: [BigInt(poolId as number)],
+    query: {
+      enabled: poolId !== undefined,
+    },
   });
+
+  const lmrBalance = useReadContract({
+    abi: erc20Abi,
+    address: process.env.REACT_APP_LMR_ADDR as `0x${string}`,
+    functionName: "balanceOf",
+    args: [address as `0x${string}`],
+    query: {
+      enabled: address !== undefined,
+    },
+  });
+
+  const morBalance = useReadContract({
+    abi: erc20Abi,
+    address: process.env.REACT_APP_MOR_ADDR as `0x${string}`,
+    functionName: "balanceOf",
+    args: [address as `0x${string}`],
+    query: {
+      enabled: address !== undefined,
+    },
+  });
+
+  const locks = useReadContract({
+    abi: stakingMasterChefAbi,
+    address: process.env.REACT_APP_STAKING_ADDR as `0x${string}`,
+    functionName: "getLockDurations",
+    args: [BigInt(poolId as number)],
+    query: {
+      enabled: poolId !== undefined,
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
+      refetchOnReconnect: false,
+    },
+  });
+
+  const locksMap = new Map<bigint, bigint>(
+    locks.data?.map(({ durationSeconds, multiplierScaled }) => [durationSeconds, multiplierScaled]),
+  );
 
   const poolData = poolDataArr.data
     ? {
@@ -52,17 +95,19 @@ export function usePool(address: `0x${string}`, onUpdate: () => void) {
     poolProgress = 1;
   }
 
-  console.log(new Date(Number(timestamp) * 1000));
+  // console.log(new Date(Number(timestamp) * 1000));
 
   const poolElapsedDays = poolData ? Math.floor(Number(timestamp - poolData.startTime) / 86400) : 0;
   const poolTotalDays = poolData ? Math.floor(Number(poolData.endTime - poolData.startTime) / 86400) : 0;
+  const poolRemainingSeconds = poolData ? Number(poolData.endTime - timestamp) : 0;
 
   const stakes = useReadContract({
     abi: stakingMasterChefAbi,
     address: process.env.REACT_APP_STAKING_ADDR as `0x${string}`,
     functionName: "getStakes",
-    args: [address, BigInt(poolId)],
+    args: [address as `0x${string}`, BigInt(poolId as number)],
     query: {
+      enabled: address !== undefined && poolId !== undefined,
       refetchOnWindowFocus: false,
       refetchOnMount: false,
       refetchOnReconnect: false,
@@ -71,6 +116,10 @@ export function usePool(address: `0x${string}`, onUpdate: () => void) {
   });
 
   async function unstake(stakeId: bigint) {
+    if (poolId === undefined) {
+      console.error("No poolId");
+      return;
+    }
     const hash = await writeContract.writeContractAsync({
       abi: stakingMasterChefAbi,
       address: process.env.REACT_APP_STAKING_ADDR as `0x${string}`,
@@ -83,6 +132,10 @@ export function usePool(address: `0x${string}`, onUpdate: () => void) {
   }
 
   async function withdraw(stakeId: bigint) {
+    if (poolId === undefined) {
+      console.error("No poolId");
+      return;
+    }
     try {
       const hash = await writeContract.writeContractAsync({
         abi: stakingMasterChefAbi,
@@ -109,6 +162,11 @@ export function usePool(address: `0x${string}`, onUpdate: () => void) {
     poolProgress,
     poolElapsedDays,
     poolTotalDays,
+    poolRemainingSeconds,
+    locks,
+    locksMap,
+    lmrBalance,
+    morBalance,
     navigate,
   };
 }
