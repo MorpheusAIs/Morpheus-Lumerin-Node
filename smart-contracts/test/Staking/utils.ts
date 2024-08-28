@@ -4,8 +4,9 @@ import { getTxTimestamp } from "../utils";
 
 export async function getPoolId(poolTx: `0x${string}`) {
   const publicClient = await hre.viem.getPublicClient();
-
-  const receipt = await publicClient.getTransactionReceipt({ hash: poolTx });
+  const receipt = await publicClient.waitForTransactionReceipt({
+    hash: poolTx,
+  });
   const artifact = await hre.artifacts.readArtifact("StakingMasterChef");
   const events = parseEventLogs({
     abi: artifact.abi,

@@ -20,7 +20,10 @@ async function main() {
     lmrAddress,
     morAddress,
   ]);
+
   console.log("Staking deployed to:", staking.address);
+
+  await new Promise((resolve) => setTimeout(resolve, 10000));
 
   console.log("Verifying staking contract ...");
   await hre.run("verify", {
