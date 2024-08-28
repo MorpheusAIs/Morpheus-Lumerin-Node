@@ -1,14 +1,11 @@
-import { http, createConfig } from "wagmi";
-import { hardhat, arbitrumSepolia, arbitrum, type Chain } from "wagmi/chains";
+import { http } from "wagmi";
+import { hardhat, mainnet, type Chain, sepolia } from "wagmi/chains";
 import { defaultWagmiConfig } from "@web3modal/wagmi/react/config";
-import { createWeb3Modal } from "@web3modal/wagmi/react";
 
-// import { injected, walletConnect } from "wagmi/connectors";
-// import { getDefaultConfig } from "connectkit";
 const supportedChains: Record<number, Chain> = {
   [hardhat.id]: hardhat,
-  [arbitrumSepolia.id]: arbitrumSepolia,
-  [arbitrum.id]: arbitrum,
+  [sepolia.id]: sepolia,
+  [mainnet.id]: mainnet,
 };
 
 const chain = supportedChains[process.env.REACT_APP_CHAIN_ID];
@@ -29,6 +26,3 @@ export const config = defaultWagmiConfig({
     icons: ["https://avatars.githubusercontent.com/u/37784886"],
   },
 });
-
-//)
-// );
