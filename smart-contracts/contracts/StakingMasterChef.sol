@@ -29,7 +29,7 @@ contract StakingMasterChef is Ownable {
     uint256 stakeAmount; // amount of staked tokens
     uint256 shareAmount; // shares received after staking
     uint256 rewardDebt; // reward debt
-    uint256 stakedAt; // time when stake was added
+    // uint256 stakedAt; // time when stake was added
     uint256 lockEndsAt; // when staking lock duration ends
   }
 
@@ -190,7 +190,7 @@ contract StakingMasterChef is Ownable {
         stakeAmount: _amount,
         shareAmount: userShares,
         rewardDebt: (userShares * pool.accRewardPerShareScaled) / PRECISION,
-        stakedAt: block.timestamp,
+        // stakedAt: block.timestamp,
         lockEndsAt: lockEndsAt
       })
     );
