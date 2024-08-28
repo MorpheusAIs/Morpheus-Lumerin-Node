@@ -204,4 +204,18 @@ describe("Staking contract - stake", () => {
       });
     });
   });
+
+  it("should error if stake is zero", async () => {
+    const {
+      contracts: { staking, tokenLMR },
+      accounts: { alice },
+    } = await loadFixture(setupStaking);
+    const amount = 0n;
+
+    await catchError(staking.abi, "ZeroStake", async () => {
+      await staking.write.stake([0n, amount, 0], {
+        account: alice.account,
+      });
+    });
+  });
 });

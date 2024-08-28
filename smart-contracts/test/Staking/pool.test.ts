@@ -231,6 +231,22 @@ describe("Staking contract - Stop pool", () => {
       "should return earned balance",
     );
   });
+
+  it("Stopping pool should not lock a portion of rewards", async () => {
+    const {
+      contracts: { staking, tokenMOR },
+      expPool,
+    } = await loadFixture(setupStaking);
+
+    const morBalanceBefore = await tokenMOR.read.balanceOf([staking.address]);
+    const [, , , , , endTime] = await staking.read.pools([expPool.id]);
+
+    await time.increaseTo(endTime - 10n);
+    await staking.write.stopPool([expPool.id]);
+    const morBalanceAfter = await tokenMOR.read.balanceOf([staking.address]);
+
+    expect(morBalanceBefore).to.eq(morBalanceAfter);
+  });
 });
 
 describe("Staking contract - updatePoolReward", () => {
