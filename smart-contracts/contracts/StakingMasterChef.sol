@@ -51,6 +51,7 @@ contract StakingMasterChef is Ownable {
   error LockNotEnded();
   error LockReleaseTimePastPoolEndTime(); // lock duration exceeds staking range, choose a shorter lock duration
   error NoRewardAvailable();
+  error ZeroStake(); // stake amount is zero
 
   constructor(IERC20 _stakingToken, IERC20 _rewardToken) Ownable(_msgSender()) {
     stakingToken = _stakingToken;
@@ -159,6 +160,9 @@ contract StakingMasterChef is Ownable {
   /// @param _lockId the id for the predefined lock duration of the pool, earlier withdrawal is not possible
   /// @return stakeId the id of the new stake
   function stake(uint256 _poolId, uint256 _amount, uint8 _lockId) external poolExists(_poolId) returns (uint256) {
+    if (_amount == 0) {
+      revert ZeroStake();
+    }
     Pool storage pool = pools[_poolId];
     if (block.timestamp >= pool.endTime) {
       revert StakingFinished();
