@@ -68,7 +68,7 @@ export function usePool(onUpdate: () => void) {
   });
 
   const locksMap = new Map<bigint, bigint>(
-    locks.data?.map(({ durationSeconds, multiplierScaled }) => [durationSeconds, multiplierScaled]),
+    locks.data?.map(({ durationSeconds, multiplierScaled }) => [durationSeconds, multiplierScaled])
   );
 
   const poolData = poolDataArr.data
@@ -88,6 +88,8 @@ export function usePool(onUpdate: () => void) {
     ? Number(timestamp - poolData.startTime) / Number(poolData.endTime - poolData.startTime)
     : 0;
 
+  poolProgress = 0.5;
+
   if (poolProgress < 0) {
     poolProgress = 0;
   }
@@ -95,10 +97,10 @@ export function usePool(onUpdate: () => void) {
     poolProgress = 1;
   }
 
-  // console.log(new Date(Number(timestamp) * 1000));
-
   const poolElapsedDays = poolData ? Math.floor(Number(timestamp - poolData.startTime) / 86400) : 0;
-  const poolTotalDays = poolData ? Math.floor(Number(poolData.endTime - poolData.startTime) / 86400) : 0;
+  const poolTotalDays = poolData
+    ? Math.floor(Number(poolData.endTime - poolData.startTime) / 86400)
+    : 0;
   const poolRemainingSeconds = poolData ? Number(poolData.endTime - timestamp) : 0;
 
   const stakes = useReadContract({
