@@ -11,6 +11,6 @@ const (
 
 const (
 	ChatPlaceholder    = "Send your prompt..."
-	ChatWelcomeMessage = `Welcome to the ChatGPTUI! 🤖
+	ChatWelcomeMessage = `Welcome to the Lumerin-Morpheus CLI! 🤖
 Type a message and press Enter to send.`
 )

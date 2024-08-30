@@ -5,7 +5,6 @@ go 1.22.0
 toolchain go1.22.3
 
 require (
-	github.com/MorpheusAIs/Morpheus-Lumerin-Node/api-gateway v0.0.3
 	github.com/dgraph-io/badger/v4 v4.2.0
 	github.com/ethereum/go-ethereum v1.12.0
 	github.com/gin-contrib/cors v1.7.2
@@ -104,7 +103,3 @@ require (
 	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/MorpheusAIs/Morpheus-Lumerin-Node/api-gateway v0.0.3 => ./api-gateway
-
-// replace github.com/MorpheusAIs/Morpheus-Lumerin-Node/api-gateway v0.0.3 => ../api-gateway

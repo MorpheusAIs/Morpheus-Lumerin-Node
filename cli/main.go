@@ -7,9 +7,11 @@ import (
 	"math/big"
 	"net/http"
 	"os"
+	"strings"
+	"time"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/api-gateway/client"
 	chat "github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/client"
 	chatCommon "github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/common"
 	"github.com/ethereum/go-ethereum/common"
 
@@ -18,8 +20,6 @@ import (
 )
 
 const httpErrorMessage string = "internal error: %v; http status: %v"
-
-var sessionId string
 
 func main() {
 	api_host := "http://localhost:8082"
@@ -42,8 +42,8 @@ func main() {
 			{
 				Name:    "wallet",
 				Aliases: []string{"w"},
-				Usage:   "morpheus wallet --privateKey <private-key>",
-				Action:  actions.setupWallet,
+				Usage:   "morpheus wallet",
+				Action:  actions.getWallet,
 				Subcommands: []*cli.Command{
 					{
 						Name:    "create",
@@ -59,12 +59,6 @@ func main() {
 						},
 					},
 					{
-						Name:    "details",
-						Aliases: []string{"l"},
-						Usage:   "morpheus wallet details",
-						Action:  actions.getWallet,
-					},
-					{
 						Name:    "balance",
 						Aliases: []string{"b"},
 						Usage:   "morpheus wallet balance",
@@ -72,61 +66,42 @@ func main() {
 					},
 				},
 			},
+
+			{
+				Name:    "chat-local",
+				Aliases: []string{"cl"},
+				Usage:   "Chat with local model",
+				Action:  actions.startChatLocal,
+				Flags: []cli.Flag{
+					cli.HelpFlag,
+				},
+			},
 			{
 				Name:    "chat",
-				Aliases: []string{},
-				Action:  actions.startChat,
+				Aliases: []string{"c"},
+				Usage:   "Chat with remote model through session",
+				Action:  actions.startRemoteChat,
 				Flags: []cli.Flag{
 					cli.HelpFlag,
 					&cli.StringFlag{
-						Name:     "sessionId",
-						Required: false,
-					},
-					&cli.StringFlag{
-						Name:     "privateKey",
-						Required: false,
-					},
-					&cli.StringFlag{
-						Name:     "model",
-						Required: false,
-					},
-					&cli.BoolFlag{
-						Name:     "edit",
-						Aliases:  []string{"e"},
-						Required: false,
-					},
-					&cli.BoolFlag{
-						Name:     "list",
-						Aliases:  []string{"l"},
-						Usage:    "morpheus chat -l\rnmorpheus chat --list",
-						Required: false,
-					},
-					&cli.BoolFlag{
-						Name:     "rm",
-						Required: false,
-					},
-					&cli.BoolFlag{
-						Name:     "version",
-						Aliases:  []string{"v"},
+						Name:     "session",
 						Required: false,
 					},
 				},
 			},
-			// {
-			// 	Name:    "openBlockchainSession",
-			// 	Usage:   "open a blockchain session",
-			// 	Aliases: []string{"obs"},
-			// 	Action:  actions.openBlockchainSession,
-			// },
 			{
 				Name:    "listBlockchainSession",
 				Aliases: []string{"lbs"},
-				Usage:   "list blockchain sessions for a user",
+				Usage:   "list blockchain sessions for a user or provider",
 				Action:  actions.listBlockchainSessions,
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:     "user",
-						Required: true,
+						Required: false,
+					},
+					&cli.StringFlag{
+						Name:     "provider",
+						Required: false,
 					},
 				},
 			},
@@ -142,12 +117,6 @@ func main() {
 					},
 				},
 			},
-			// {
-			// 	Name:    "initiateProxySession",
-			// 	Aliases: []string{"ips"},
-			// 	Usage:   "initiate a proxy session",
-			// 	Action:  actions.initiateProxySession,
-			// },
 			{
 				Name:    "blockchainModels",
 				Aliases: []string{"bm"},
@@ -189,12 +158,6 @@ func main() {
 				Action:  actions.proxyRouterConfig,
 			},
 			{
-				Name:    "proxyRouterFiles",
-				Aliases: []string{"prf"},
-				Usage:   "get the files associated with the proxy router pid",
-				Action:  actions.proxyRouterFiles,
-			},
-			{
 				Name:    "blockchainProviders",
 				Aliases: []string{"bp"},
 				Usage:   "list blockchain providers",
@@ -206,10 +169,6 @@ func main() {
 				Usage:   "create a blockchain provider",
 				Action:  actions.createBlockchainProvider,
 				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:     "address",
-						Required: true,
-					},
 					&cli.Uint64Flag{
 						Name:     "stake",
 						Required: true,
@@ -217,6 +176,37 @@ func main() {
 					&cli.StringFlag{
 						Name:     "endpoint",
 						Required: true,
+					},
+				},
+			},
+			{
+				Name:    "createBlockchainModel",
+				Aliases: []string{"bmc"},
+				Usage:   "create a blockchain model",
+				Action:  actions.createBlockchainModel,
+				Flags: []cli.Flag{
+					&cli.Uint64Flag{
+						Name:        "stake",
+						Required:    false,
+						DefaultText: "0",
+					},
+					&cli.Uint64Flag{
+						Name:        "fee",
+						Required:    false,
+						DefaultText: "0",
+					},
+					&cli.StringFlag{
+						Name:     "name",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:     "ipfsID",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:     "tags",
+						Required: false,
+						Usage:    "comma separated list of tags, ex. 'tag1,tag2'",
 					},
 				},
 			},
@@ -256,36 +246,6 @@ func main() {
 					},
 				},
 			},
-			{
-				Name:    "createChatCompletions",
-				Aliases: []string{"ccc"},
-				Usage:   "create chat completions by sending a prompt to the AI engine",
-				Action:  actions.createChatCompletions,
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:     "prompt",
-						Required: true,
-					},
-					&cli.StringFlag{
-						Name: "messages",
-					},
-				},
-			},
-			{
-				Name:    "streamChatCompletions",
-				Aliases: []string{"csc"},
-				Usage:   "create and stream chat completions",
-				Action:  actions.createAndStreamChatCompletions,
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:     "prompt",
-						Required: true,
-					},
-					&cli.StringFlag{
-						Name: "messages",
-					},
-				},
-			},
 		},
 	}
 
@@ -302,16 +262,14 @@ func NewActions(c *client.ApiGatewayClient) *actions {
 	return &actions{client: c}
 }
 
-var localProxyRouterUrl string
-var contractAddress string
-var userWalletAddress string
-var bidId string
-var provider string
-var providerEndpoint string
-var stake int
-
 func (a *actions) setupWallet(cCtx *cli.Context) error {
-	return a.client.CreateWallet(cCtx.Context, cCtx.String("privateKey"))
+	err := a.client.CreateWallet(cCtx.Context, cCtx.String("privateKey"))
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("Wallet setup successfully")
+	return nil
 }
 
 func (a *actions) getWallet(cCtx *cli.Context) error {
@@ -339,31 +297,77 @@ func (a *actions) getBalance(cCtx *cli.Context) error {
 	return nil
 }
 
-func (a *actions) startChat(cCtx *cli.Context) error {
+func (a *actions) startChatLocal(cCtx *cli.Context) error {
+	models, err := a.client.GetLocalModels(cCtx.Context)
 
-	modelId := cCtx.String("model")
-
-	sessionRequest := &client.SessionRequest{
-		ModelId: modelId,
+	if err != nil {
+		return err
 	}
-
-	fmt.Printf("Session request: %+v\n", sessionRequest)
-
-	session, err := a.client.OpenSession(cCtx.Context, sessionRequest)
 
 	options := &chatCommon.Options{
-		Edit:       cCtx.Bool("edit"),
-		List:       cCtx.Bool("list"),
-		Remove:     cCtx.Bool("rm"),
-		Version:    cCtx.Bool("version"),
+		LocalModels:   *models,
+		UseLocalModel: true,
+		Client:        a.client,
 	}
 
-	if err == nil {
-		options.Session = session.SessionId
-	}
+	chat.Run(options)
 
-	if options.Session == "" && modelId != "" {
-		options.Model = modelId
+	return nil
+}
+
+func (a *actions) startRemoteChat(cCtx *cli.Context) error {
+	sessionId := cCtx.String("session")
+
+	var options *chatCommon.Options
+
+	if sessionId == "" {
+		fmt.Println("Loading remote models...")
+		models, err := a.client.GetAllModels(cCtx.Context)
+
+		if err != nil {
+			return err
+		}
+
+		var resultModels []interface{}
+		for _, item := range models["models"].([]interface{}) {
+			model := item.(map[string]interface{})
+			if model["DeletedAt"] != nil {
+				continue
+			}
+
+			modelId := model["Id"].(string)
+			bids, err := a.client.GetBidsByModelAgent(cCtx.Context, modelId, "0", "100")
+			if err != nil {
+				return err
+			}
+
+			var resultBids []interface{}
+			for _, item := range bids["bids"].([]interface{}) {
+				bid := item.(map[string]interface{})
+				if bid["DeletedAt"] != "0" {
+					continue
+				}
+				resultBids = append(resultBids, bid)
+			}
+
+			if len(resultBids) == 0 {
+				continue
+			}
+			model["bids"] = resultBids
+			resultModels = append(resultModels, model)
+		}
+
+		options = &chatCommon.Options{
+			UseLocalModel: false,
+			RemoteModels:  resultModels,
+			Client:        a.client,
+		}
+	} else {
+		options = &chatCommon.Options{
+			UseLocalModel: false,
+			Client:        a.client,
+			Session:       sessionId,
+		}
 	}
 
 	chat.Run(options)
@@ -377,7 +381,8 @@ func (a *actions) getAllowance(cCtx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(res)
+
+	fmt.Println("Allowance =", res["allowance"], "MOR")
 	return nil
 }
 
@@ -388,7 +393,7 @@ func (a *actions) approveAllowance(cCtx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(res)
+	fmt.Println("Allowance approved, tx:", res["tx"])
 	return nil
 }
 
@@ -425,41 +430,6 @@ func (a *actions) proxyRouterFiles(cCtx *cli.Context) error {
 	return nil
 }
 
-func (a *actions) createChatCompletions(cCtx *cli.Context) error {
-	prompt := cCtx.String("prompt")
-	var messages []client.ChatCompletionMessage
-	json.Unmarshal([]byte(cCtx.String("messages")), &messages)
-
-	completion, err := a.client.Prompt(cCtx.Context, prompt, messages)
-	if err != nil {
-		return err
-	}
-
-	jsonData, err := json.Marshal(completion)
-	fmt.Println(string(jsonData))
-	return nil
-}
-
-// todo: retrieve session id
-func (a *actions) createAndStreamChatCompletions(cCtx *cli.Context) error {
-	prompt := cCtx.String("prompt")
-	var messages []*client.ChatCompletionMessage
-	json.Unmarshal([]byte(cCtx.String("messages")), &messages)
-
-	completion, err := a.client.PromptStream(cCtx.Context, prompt, "", func(msg *client.ChatCompletionStreamResponse) error {
-		fmt.Println(msg)
-		return nil
-	})
-
-	if err != nil {
-		return err
-	}
-
-	jsonData, err := json.Marshal(completion)
-	fmt.Println(string(jsonData))
-	return nil
-}
-
 func (a *actions) initiateProxySession(cCtx *cli.Context) error {
 	session, err := a.client.InitiateSession(cCtx.Context)
 	if err != nil {
@@ -479,16 +449,8 @@ func (a *actions) blockchainProviders(cCtx *cli.Context) error {
 
 	for _, item := range providers["providers"].([]interface{}) {
 		provider := item.(map[string]interface{})
-		// fmt.Println(provider)
-		// fmt.Println(reflect.TypeOf(provider))
 		fmt.Println(provider["Address"], " - ", provider["Endpoint"])
 	}
-
-	// jsonData, err := json.Marshal(providers)
-
-	// if err != nil {
-	// 	return err
-	// }
 
 	return nil
 }
@@ -512,13 +474,46 @@ func (a *actions) createBlockchainProviderBid(cCtx *cli.Context) error {
 	model := cCtx.String("model")
 	pricePerSecond := cCtx.Uint64("pricePerSecond")
 
-	_, err := a.client.CreateNewProviderBid(cCtx.Context, model, pricePerSecond)
-
+	result, err := a.client.CreateNewProviderBid(cCtx.Context, model, pricePerSecond)
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("bid created for model ", model)
+	var bid map[string]interface{}
+	bid = result["bid"].(map[string]interface{})
+
+	fmt.Println("Bid created for model ", model)
+	fmt.Println("Bid ID: ", bid["Id"])
+	return nil
+}
+
+func (a *actions) createBlockchainModel(cCtx *cli.Context) error {
+	name := cCtx.String("name")
+	ipfsID := cCtx.String("ipfsID")
+	stake := cCtx.Uint64("stake")
+	fee := cCtx.Uint64("fee")
+	tags := cCtx.String("tags")
+
+	tagsArr := []string{}
+	if tags != "" {
+		tagsArr = strings.Split(tags, ",")
+	}
+
+	result, err := a.client.CreateNewModel(cCtx.Context, name, ipfsID, stake, fee, tagsArr)
+	if err != nil {
+		return err
+	}
+
+	var model map[string]interface{}
+	model = result["model"].(map[string]interface{})
+
+	fmt.Println("Model created: ", model["Name"])
+	fmt.Println("Model ID: ", model["Id"])
+	fmt.Println("Model Stake: ", model["Stake"])
+	fmt.Println("Model Fee: ", model["Fee"])
+	fmt.Println("Model Tags: ", model["Tags"])
+	fmt.Println("Model IpfsCID: ", model["IpfsCID"])
+
 	return nil
 }
 
@@ -547,6 +542,11 @@ func (a *actions) blockchainProvidersBids(cCtx *cli.Context) error {
 
 	bids := bidsMap["bids"].([]interface{})
 
+	if len(bids) == 0 {
+		fmt.Println("No bids")
+		return nil
+	}
+
 	for _, item := range bids {
 		bid := item.(map[string]interface{})
 		fmt.Println("Bid: ", bid["Id"])
@@ -562,9 +562,8 @@ func (a *actions) blockchainModels(cCtx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	modelsMap := modelsResult.(map[string]interface{})
 
-	models := modelsMap["models"].([]interface{})
+	models := modelsResult["models"].([]interface{})
 
 	for _, item := range models {
 		model := item.(map[string]interface{})
@@ -594,19 +593,44 @@ func (a *actions) openBlockchainSession(cCtx *cli.Context) error {
 }
 
 func (a *actions) listBlockchainSessions(cCtx *cli.Context) error {
-
 	userAddress := cCtx.String("user")
+	providerAddress := cCtx.String("provider")
 
-	sessions, err := a.client.ListUserSessions(cCtx.Context, userAddress)
+	if userAddress == "" && providerAddress == "" {
+		return fmt.Errorf("please provide either a user or provider address")
+	}
+
+	var sessions []client.SessionListItem
+	var err error
+	if userAddress != "" {
+		sessions, err = a.client.ListUserSessions(cCtx.Context, userAddress)
+	} else {
+		sessions, err = a.client.ListProviderSessions(cCtx.Context, providerAddress)
+	}
 
 	if err != nil {
 		return err
 	}
 
+	if len(sessions) == 0 {
+		fmt.Println("No sessions")
+		return nil
+	}
+
 	for _, item := range sessions {
+		var isActive bool
+		if item.CloseoutReceipt != "" {
+			isActive = false
+		} else {
+			isActive = true
+		}
+
 		fmt.Println("\n", "Session: ", item.Sesssion)
 		fmt.Println("\t- provider: ", item.ModelORAgent)
 		fmt.Println("\t- price per second: ", item.PricePerSecond)
+		fmt.Println("\t- closed: ", !isActive)
+		fmt.Println("\t- expired: ", item.EndsAt < uint64(time.Now().Unix()))
+
 	}
 
 	return nil

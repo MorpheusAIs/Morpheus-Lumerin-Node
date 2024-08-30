@@ -6,6 +6,9 @@ all: $(PROG)
 $(PROG): main.go
 	go build -o $@ $^
 
+build:
+	go build -o mor-cli main.go
+
 clean:
 	rm -f $(PROG)
 

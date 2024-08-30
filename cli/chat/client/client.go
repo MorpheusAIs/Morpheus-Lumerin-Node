@@ -1,40 +1,33 @@
 package client
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"math/big"
 	"net/http"
-	"strconv"
+	"strings"
 
 	"github.com/sashabaranov/go-openai"
 )
 
-type ChatCompletionMessage = openai.ChatCompletionMessage
-
 func NewApiGatewayClient(baseURL string, httpClient *http.Client) *ApiGatewayClient {
-	
+
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
-	
+
 	return &ApiGatewayClient{
 		BaseURL:    baseURL,
 		HttpClient: httpClient,
-		OpenAiClient: openai.NewClientWithConfig(openai.ClientConfig{
-			BaseURL:    baseURL + "/v1",
-			APIType:    openai.APITypeOpenAI,
-			HTTPClient: httpClient,
-		}),
 	}
 }
 
 type ApiGatewayClient struct {
-	BaseURL      string
-	HttpClient   *http.Client
-	OpenAiClient *openai.Client
+	BaseURL    string
+	HttpClient *http.Client
 }
 
 // Helper function to make GET requests
@@ -57,15 +50,84 @@ func (c *ApiGatewayClient) getRequest(ctx context.Context, endpoint string, resu
 		fmt.Printf("unexpected status code: %d", resp.StatusCode)
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
-	// line, _, _ := bufio.NewReader(resp.Body).ReadLine()
-
-	// fmt.Println("response body line 1: ", string(line))
 	return json.NewDecoder(resp.Body).Decode(result)
+}
+
+func (c *ApiGatewayClient) requestChatCompletionStream(ctx context.Context, endpoint string, request *openai.ChatCompletionRequest, callback CompletionCallback, modelId string, sessionId string) (*openai.ChatCompletionStreamResponse, error) {
+	requestBody, err := json.Marshal(request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode request: %v", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", c.BaseURL+endpoint, bytes.NewReader(requestBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	if sessionId != "" {
+		req.Header.Set("session_id", sessionId)
+	} else if modelId != "" {
+		req.Header.Set("model_id", modelId)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Connection", "keep-alive")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		// Handle the completion of the stream
+		if line == "data: [DONE]" {
+			completion := &openai.ChatCompletionStreamResponse{
+				Choices: []openai.ChatCompletionStreamChoice{
+					{
+						Delta: openai.ChatCompletionStreamChoiceDelta{
+							Content: "[DONE]",
+						},
+					},
+				},
+			}
+
+			return completion, nil
+		}
+
+		if strings.HasPrefix(line, "data: ") {
+			data := line[6:] // Skip the "data: " prefix
+			var completion *openai.ChatCompletionStreamResponse
+			if err := json.Unmarshal([]byte(data), &completion); err != nil {
+				fmt.Printf("Error decoding response: %v\n", err)
+			}
+
+			if completion.ID != "" {
+				callback(completion)
+			} else {
+				var completion map[string]interface{}
+				if err := json.Unmarshal([]byte(data), &completion); err != nil {
+					fmt.Printf("Error decoding response: %v\n", err)
+				}
+				callback(completion)
+			}
+
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading stream: %v", err)
+	}
+
+	return nil, err
 }
 
 // Helper function to make POST requests
 func (c *ApiGatewayClient) postRequest(ctx context.Context, endpoint string, body interface{}, result interface{}) error {
-	// fmt.Printf("body: %+v", body)
 	reqBody, err := json.Marshal(body)
 	if err != nil {
 		return err
@@ -73,7 +135,6 @@ func (c *ApiGatewayClient) postRequest(ctx context.Context, endpoint string, bod
 
 	reader := bytes.NewReader(reqBody)
 
-	// fmt.Println("post path: ", c.BaseURL+endpoint)
 	req, err := http.NewRequestWithContext(ctx, "POST", c.BaseURL+endpoint, reader)
 	if err != nil {
 		return err
@@ -83,11 +144,15 @@ func (c *ApiGatewayClient) postRequest(ctx context.Context, endpoint string, bod
 		return err
 	}
 
-	// fmt.Printf("%+v", resp.Body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		var errResp map[string]interface{}
+		err = json.NewDecoder(resp.Body).Decode(&errResp)
+		if err != nil {
+			return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		}
+		return fmt.Errorf("unexpected status code: %d, response: %s", resp.StatusCode, errResp["error"])
 	}
 
 	if resp == nil {
@@ -97,8 +162,6 @@ func (c *ApiGatewayClient) postRequest(ctx context.Context, endpoint string, bod
 	if result != nil {
 		err = json.NewDecoder(resp.Body).Decode(result)
 	}
-
-	// fmt.Println("result: ", result)
 
 	return err
 }
@@ -136,50 +199,18 @@ func (c *ApiGatewayClient) InitiateSession(ctx context.Context) (interface{}, er
 	return result, nil
 }
 
-func (c *ApiGatewayClient) SessionPrompt(ctx context.Context, prompt string, sessionId string) (interface{}, error) {
-	var result map[string]interface{}
-	err := c.postRequest(ctx, fmt.Sprintf("/proxy/sessions/%s/prompt", sessionId), nil, &result)
-
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-
-	return result, nil
-}
-
-func (c *ApiGatewayClient) Prompt(ctx context.Context, message string, history []ChatCompletionMessage) (interface{}, error) {
+func (c *ApiGatewayClient) PromptStream(ctx context.Context, message string, messagesContext []openai.ChatCompletionMessage, modelId string, sessionId string, flush CompletionCallback) (interface{}, error) {
+	messagesContext = append(messagesContext, openai.ChatCompletionMessage{
+		Role:    "user",
+		Content: message,
+	})
 
 	request := &openai.ChatCompletionRequest{
-		// Messages: append(history, ChatCompletionMessage{
-		// 	Role:    "user",
-		// 	Content: message,
-		// }),
-		Messages: []ChatCompletionMessage{{
-			Role:    "user",
-			Content: message,
-		}},
-		Stream: false,
-		Model:  "llama2",
-		ResponseFormat: &openai.ChatCompletionResponseFormat{
-			Type: openai.ChatCompletionResponseFormatTypeText,
-		},
+		Messages: messagesContext,
+		Stream:   true,
 	}
 
-	return c.OpenAiClient.CreateChatCompletion(ctx, *request)
-}
-
-func (c *ApiGatewayClient) PromptStream(ctx context.Context, message string, sessionId string, flush CompletionCallback) (interface{}, error) {
-
-	request := &openai.ChatCompletionRequest{
-		Messages: []ChatCompletionMessage{{
-			Role:    "user",
-			Content: message,
-		},
-		},
-		Model: "llama2",
-	}
-
-	return RequestChatCompletionStream(ctx, request, flush, sessionId)
+	return c.requestChatCompletionStream(ctx, "/v1/chat/completions", request, flush, modelId, sessionId)
 }
 
 func (c *ApiGatewayClient) GetLatestBlock(ctx context.Context) (result uint64, err error) {
@@ -201,7 +232,7 @@ func (c *ApiGatewayClient) GetAllProviders(ctx context.Context) (result map[stri
 
 func (c *ApiGatewayClient) CreateNewProvider(ctx context.Context, addStake uint64, endpoint string) (result interface{}, err error) {
 	request := struct {
-		AddStake uint64 `json:"addStake"`
+		AddStake uint64 `json:"stake"`
 		Endpoint string `json:"endpoint"`
 	}{addStake, endpoint}
 
@@ -214,13 +245,16 @@ func (c *ApiGatewayClient) CreateNewProvider(ctx context.Context, addStake uint6
 	return result, nil
 }
 
-func (c *ApiGatewayClient) CreateNewProviderBid(ctx context.Context, model string, pricePerSecond uint64) (result interface{}, err error) {
+func (c *ApiGatewayClient) CreateNewModel(ctx context.Context, name string, ipfsID string, stake uint64, fee uint64, tags []string) (result map[string]interface{}, err error) {
 	request := struct {
-		Model          string `json:"model"`
-		PricePerSecond uint64 `json:"pricePerSecond"`
-	}{model, pricePerSecond}
+		Stake  uint64
+		IpfsID string
+		Name   string
+		Fee    uint64
+		Tags   []string
+	}{stake, ipfsID, name, fee, tags}
 
-	err = c.postRequest(ctx, "/blockchain/providers/bids", &request, &result)
+	err = c.postRequest(ctx, "/blockchain/models", &request, &result)
 
 	if err != nil {
 		return nil, fmt.Errorf("internal error: %v", err)
@@ -229,7 +263,22 @@ func (c *ApiGatewayClient) CreateNewProviderBid(ctx context.Context, model strin
 	return result, nil
 }
 
-func (c *ApiGatewayClient) GetAllModels(ctx context.Context) (result interface{}, err error) {
+func (c *ApiGatewayClient) CreateNewProviderBid(ctx context.Context, model string, pricePerSecond uint64) (result map[string]interface{}, err error) {
+	request := struct {
+		Model          string `json:"modelId"`
+		PricePerSecond uint64 `json:"pricePerSecond"`
+	}{model, pricePerSecond}
+
+	err = c.postRequest(ctx, "/blockchain/bids", &request, &result)
+
+	if err != nil {
+		return nil, fmt.Errorf("internal error: %v", err)
+	}
+
+	return result, nil
+}
+
+func (c *ApiGatewayClient) GetAllModels(ctx context.Context) (result map[string]interface{}, err error) {
 
 	err = c.getRequest(ctx, "/blockchain/models", &result)
 
@@ -249,9 +298,9 @@ func (c *ApiGatewayClient) GetBidsByProvider(ctx context.Context, providerAddr s
 	return bids, err
 }
 
-func (c *ApiGatewayClient) GetBidsByModelAgent(ctx context.Context, modelAgentId [32]byte, offset *big.Int, limit uint8) (result []string, err error) {
+func (c *ApiGatewayClient) GetBidsByModelAgent(ctx context.Context, modelAgentId string, offset string, limit string) (result map[string]interface{}, err error) {
 
-	endpoint := fmt.Sprintf("/blockchain/models/%x/bids?offset=%s&limit=%d", modelAgentId, offset.String(), limit)
+	endpoint := fmt.Sprintf("/blockchain/models/%s/bids?offset=%s&limit=%s", modelAgentId, offset, limit)
 	err = c.getRequest(ctx, endpoint, &result)
 
 	if err != nil {
@@ -261,47 +310,21 @@ func (c *ApiGatewayClient) GetBidsByModelAgent(ctx context.Context, modelAgentId
 	return result, err
 }
 
-type SessionRequest struct {
-	ModelId          string `json:"modelId" validate:"required"`
-}
-
-type SessionStakeRequest struct {
-	Approval    string `json:"approval" validate:"required"`
-	ApprovalSig string `json:"approvalSig" validate:"required"`
-	Stake       uint64 `json:"stake" validate:"required,number"`
-}
-
-type Session struct {
-	SessionId string `json:"sessionId"`
-}
-
-type CloseSessionRequest struct {
-	SessionId string `json:"id" validate:"required"`
-}
-
-type SessionListItem struct {
-	Bid             string `json:"BidId"`
-	Sesssion        string `json:"Id"`
-	ModelORAgent    string `json:"ModelAgentId"`
-	PricePerSecond  uint64 `json:"PricePerSecond"`
-	Provider        string `json:"Provider"`
-	User            string `json:"User"`
-	ClosedAt        uint64 `json:"ClosedAt"`
-	CloseoutReceipt string `json:"CloseoutReceipt"`
-	CloseoutType    uint   `json:"CloseoutType"`
-	EndsAt          uint64 `json:"EndsAt"`
-}
-
-type WalletRequest struct {
-	PrivateKey string `json:"privateKey" validate:"required"`
-}
-
 func (c *ApiGatewayClient) ListUserSessions(ctx context.Context, user string) (result []SessionListItem, err error) {
-
 	response := map[string][]SessionListItem{}
 
 	err = c.getRequest(ctx, fmt.Sprintf("/blockchain/sessions?user=%s", user), &response)
-	// fmt.Println("response: ", response)
+	if err != nil {
+		return nil, fmt.Errorf("internal error: %v", err)
+	}
+
+	return response["sessions"], nil
+}
+
+func (c *ApiGatewayClient) ListProviderSessions(ctx context.Context, provider string) (result []SessionListItem, err error) {
+	response := map[string][]SessionListItem{}
+
+	err = c.getRequest(ctx, fmt.Sprintf("/blockchain/sessions?provider=%s", provider), &response)
 	if err != nil {
 		return nil, fmt.Errorf("internal error: %v", err)
 	}
@@ -332,6 +355,16 @@ func (c *ApiGatewayClient) OpenSession(ctx context.Context, req *SessionRequest)
 	return session, nil
 }
 
+func (c *ApiGatewayClient) GetLocalModels(ctx context.Context) (models *[]interface{}, err error) {
+	err = c.getRequest(ctx, "/v1/models", &models)
+
+	if err != nil {
+		return nil, fmt.Errorf("internal error: %v", err)
+	}
+
+	return models, nil
+}
+
 func (c *ApiGatewayClient) CloseSession(ctx context.Context, sessionId string) error {
 
 	err := c.postRequest(ctx, fmt.Sprintf("/blockchain/sessions/%s/close", sessionId), nil, nil)
@@ -343,16 +376,16 @@ func (c *ApiGatewayClient) CloseSession(ctx context.Context, sessionId string) e
 	return nil
 }
 
-func (c *ApiGatewayClient) GetAllowance(ctx context.Context, spender string) (interface{}, error) {
+func (c *ApiGatewayClient) GetAllowance(ctx context.Context, spender string) (map[string]interface{}, error) {
 	var result map[string]interface{}
 	endpoint := fmt.Sprintf("/blockchain/allowance?spender=%s", spender)
 	err := c.getRequest(ctx, endpoint, &result)
 	return result, err
 }
 
-func (c *ApiGatewayClient) ApproveAllowance(ctx context.Context, spender string, amount uint64) (interface{}, error) {
+func (c *ApiGatewayClient) ApproveAllowance(ctx context.Context, spender string, amount uint64) (map[string]interface{}, error) {
 	var result map[string]interface{}
-	endpoint := fmt.Sprintf("/blockchain/allowance?spender=%s&amount=%d", spender, amount)
+	endpoint := fmt.Sprintf("/blockchain/approve?spender=%s&amount=%d", spender, amount)
 	err := c.postRequest(ctx, endpoint, nil, &result)
 	return result, err
 }
@@ -377,28 +410,13 @@ func (c *ApiGatewayClient) GetWallet(ctx context.Context) (*WalletResponse, erro
 	return response, nil
 }
 
-func (c *ApiGatewayClient) GetBalance(ctx context.Context) (eth uint64, mor uint64, err error) {
-	response := map[string]interface{}{}
+func (c *ApiGatewayClient) GetBalance(ctx context.Context) (eth string, mor string, err error) {
+	response := map[string]string{}
 
 	err = c.getRequest(ctx, "/blockchain/balance", &response)
-
 	if err != nil {
-		return 0, 0, fmt.Errorf("internal error: %v", err)
+		return "", "", fmt.Errorf("internal error: %v", err)
 	}
 
-	fmt.Println(len(response["eth"].(string)))
-
-	eth, err = strconv.ParseUint(response["eth"].(string), 10, 64)
-
-	if err != nil {
-		return 0, 0, fmt.Errorf("error converting eth balance from string to number: %v", err)
-	}
-
-	mor, err = strconv.ParseUint(response["mor"].(string), 10, 64)
-
-	if err != nil {
-		return 0, 0, fmt.Errorf("error converting mor balance from string to number: %v", err)
-	}
-
-	return eth, mor, nil
+	return response["eth"], response["mor"], nil
 }
