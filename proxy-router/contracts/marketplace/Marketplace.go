@@ -5,7 +5,6 @@ package marketplace
 
 import (
 	"errors"
-	"fmt"
 	"math/big"
 	"strings"
 

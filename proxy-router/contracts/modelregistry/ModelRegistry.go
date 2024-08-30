@@ -5,7 +5,6 @@ package modelregistry
 
 import (
 	"errors"
-	"fmt"
 	"math/big"
 	"strings"
 
