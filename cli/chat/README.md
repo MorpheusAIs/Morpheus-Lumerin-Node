@@ -3,24 +3,37 @@
 Here are all the options it supports.
 
 ```console
-$ chatgptui -h
+$ mor-cli -h
 
-  ChatGPTUI 🤖 v1.0.0
-  --
-  ChatGPT with Textual User Interface
-  made with 💖 by dw1
+NAME:
+   mor-cli - A client to call the Morpheus Lumerin API
 
-Usage: chatgptui [options]
+USAGE:
+   mor-cli [global options] command [command options] 
 
-Options:
-  -e, --edit         Edit configuration
-  -l, --list         List all supported OpenAI model
-      --rm           Remove configuration
-  -V, --version      Show current version
+COMMANDS:
+   healthcheck, he                    morpheus healthcheck
+   wallet, w                          morpheus wallet
+   chat-local, cl                     Chat with local model
+   chat, c                            Chat with remote model through session
+   listBlockchainSession, lbs         list blockchain sessions for a user or provider
+   closeBlockchainSession, cbs        close a blockchain session
+   blockchainModels, bm               list models
+   getAllowance, ga                   get allowance
+   approveAllowance, aa               approve allowance
+   proxyRouterConfig, prc             view proxy router config
+   blockchainProviders, bp            list blockchain providers
+   createBlockchainProvider, bpc      create a blockchain provider
+   createBlockchainModel, bmc         create a blockchain model
+   blockchainProviderBid, bpb         list provider bids
+   createBlockchainProviderBid, cbpb  createBlockchainProviderBid {{model}}
+   help, h                            Shows a list of commands or help for one command
+
+GLOBAL OPTIONS:
+   --help, -h  show help
 
 Examples:
-  chatgptui
-  chatgptui --edit
+  mor-cli healthcheck
 ```
 
 ### Interactive

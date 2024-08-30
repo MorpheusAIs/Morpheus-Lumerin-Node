@@ -443,9 +443,6 @@ func (_Marketplace *MarketplaceCallerSession) GetBidsByProvider(provider common.
 func (_Marketplace *MarketplaceCaller) GetModelStats(opts *bind.CallOpts, modelID [32]byte) (ModelStats, error) {
 	var out []interface{}
 	err := _Marketplace.contract.Call(opts, &out, "getModelStats", modelID)
-	fmt.Printf("get model stats error: %+v\n", err)
-	fmt.Printf("get model stats out: %+v\n", out)
-	fmt.Printf("model id: %+v\n", modelID)
 	
 	if err != nil {
 		return *new(ModelStats), err

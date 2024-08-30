@@ -620,7 +620,7 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrBudget, err)
 	}
-fmt.Println("modelID", modelID.String())
+
 	modelStats, err := s.marketplace.GetModelStats(ctx, modelID)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrModel, err)
