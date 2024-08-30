@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
@@ -32,21 +33,19 @@ func AiEngine_Prompt(t *testing.T) {
 func TestAiEngine_PromptStream(t *testing.T) {
 	aiEngine := aiengine.NewAiEngine("http://localhost:11434/v1", "", nil, lib.NewTestLogger())
 	req := &api.ChatCompletionRequest{
-		Model: "llama2",
-		// MaxTokens: 100,
-		Stream: true,
+		Model:     "llama2",
+		MaxTokens: 100,
+		Stream:    true,
 		Messages: []api.ChatCompletionMessage{
 			{
 				Role:    "user",
-				Content: "Hello, I am a test user",
-			},
+				Content: "Hello, I am a test user"},
 		}, // This is a test
 	}
 
-	choicesChannel := make(chan api.ChatCompletionStreamChoice)
-	choices := []api.ChatCompletionStreamChoice{}
+	choices := make([]api.ChatCompletionStreamChoice, 0)
 
-	_, _ = aiEngine.PromptStream(context.Background(), req, func(response interface{}) error {
+	resp, err := aiEngine.PromptStream(context.Background(), req, func(response interface{}) error {
 		r, ok := response.(*api.ChatCompletionStreamResponse)
 		if !ok {
 			return errors.New("invalid response")
@@ -56,35 +55,36 @@ func TestAiEngine_PromptStream(t *testing.T) {
 		if r.Choices[0].Delta.Content == "" {
 			return errors.New("empty response")
 		}
+
 		return nil
 	})
 
-	// if err != nil {
-	// 	t.Errorf("error: %v", err)
-	// 	// fmt.Println("error: ", err)
-	// }
-
-	if len(choices) == 0 {
-		t.Errorf("invalid response: %v", choices)
+	if err != nil {
+		t.Errorf("error: %v", err)
+		fmt.Println("error: ", err)
 	}
 
-	// if choices[len(choices)-1].Delta.Content != "[DONE]" {
-	// 	t.Errorf("invalid end of stream response: %s", choices[0].Delta.Content)
-	// }
+	if resp == nil || resp.Choices == nil {
+		t.Errorf("invalid nil response")
+	}
 
-	// content := concatenateDeltaContent(choices)
+	if resp.Choices[0].Delta.Content != "[DONE]" {
+		t.Errorf("invalid end of stream response: %s", resp.Choices[0].Delta.Content)
+	}
 
-	// if content == "" {
-	// 	t.Errorf("content is empty")
-	// }
+	content := concatenateDeltaContent(choices)
 
-	// if content == "" {
-	// 	t.Errorf("content is empty")
-	// }
+	if content == "" {
+		t.Errorf("content is empty")
+	}
 
-	// if strings.Contains(content, "Hello ") {
-	// 	t.Errorf("content is invalid: %v", content)
-	// }
+	if content == "" {
+		t.Errorf("content is empty")
+	}
+
+	if strings.Contains(content, "Hello there! ") {
+		t.Errorf("content is invalid")
+	}
 }
 
 func concatenateDeltaContent(choices []api.ChatCompletionStreamChoice) string {
