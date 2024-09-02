@@ -15,6 +15,7 @@ export const Pool = () => {
   const {
     poolId,
     unstake,
+    precision,
     withdraw,
     timestamp,
     poolsCount,
@@ -57,7 +58,7 @@ export const Pool = () => {
               </div>
             ))}
 
-          {poolData && (
+          {poolData && precision.isSuccess && (
             <div className="pool">
               <section className="section pool-stats">
                 <h2 className="section-heading">Pool stats</h2>
@@ -65,13 +66,13 @@ export const Pool = () => {
 
                 <dl className="info">
                   <dt>Reward per second</dt>
-                  <dd>{formatMOR(poolData.accRewardPerShareScaled)}</dd>
+                  <dd>{formatMOR(poolData.rewardPerSecondScaled / precision.data)}</dd>
 
                   <dt>Total shares</dt>
                   <dd>{poolData.totalShares.toString()}</dd>
 
                   <dt>Total staked</dt>
-                  <dd>{formatLMR(3000n)}</dd>
+                  <dd>unknown{/*formatLMR(3000n)*/}</dd>
 
                   <dt>Start date</dt>
                   <dd>{formatDate(poolData.startTime)}</dd>
@@ -140,20 +141,20 @@ export const Pool = () => {
                         <li key={index} className="stake">
                           <SpoilerToogle />
                           <ul className="unchecked">
-                            <li>{formatLMR(stake.stakeAmount)}</li>
-                            <li>
+                            <li className="amount">{formatLMR(stake.stakeAmount)}</li>
+                            <li className="chart-item">
                               <Chart
                                 progress={lockProgress}
                                 lineWidth={18}
                                 className="chart-small"
                               />
-                              {timeLeftString}
+                              <span className="chart-small-text">{timeLeftString}</span>
                             </li>
-                            <li>
+                            <li className="reward">
                               {formatMOR(getReward(stake, poolData, timestamp, BigInt(1e12)))}{" "}
                               earned
                             </li>
-                            <li>
+                            <li className="multiplier">
                               {lockMultiplier ? `${Number(lockMultiplier) / 1e12}x` : "unknown"}{" "}
                               multiplier
                             </li>
@@ -201,7 +202,7 @@ export const Pool = () => {
                               <p className="title">Unlock Date</p>
                               <p className="value">{formatDate(stake.lockEndsAt)}</p>
                             </li>
-                            <li>
+                            <li className="item-button">
                               <Button
                                 className="button-secondary button-small"
                                 onClick={() => withdraw(BigInt(index))}
@@ -209,7 +210,7 @@ export const Pool = () => {
                                 Withdraw rewards
                               </Button>
                             </li>
-                            <li>
+                            <li className="item-button">
                               <Button
                                 className="button-secondary button-small"
                                 onClick={() => unstake(BigInt(index))}

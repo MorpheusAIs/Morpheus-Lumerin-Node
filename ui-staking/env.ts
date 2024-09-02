@@ -13,6 +13,7 @@ const EnvSchema = Type.Object({
   REACT_APP_LMR_ADDR: TypeEthAddress,
   REACT_APP_MOR_ADDR: TypeEthAddress,
   REACT_APP_STAKING_ADDR: TypeEthAddress,
+  REACT_APP_URL: Type.String({ format: "uri" }),
   REACT_APP_WALLET_CONNECT_PROJECT_ID: Type.String({ minLength: 1 }),
 });
 
@@ -35,7 +36,7 @@ export function getAndValidateEnv() {
       `Invalid environment variables: ${ajv.errorsText(validate.errors, {
         dataVar: "ENV",
         separator: ".",
-      })}`,
+      })}`
     );
   }
 

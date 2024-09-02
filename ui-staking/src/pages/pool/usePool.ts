@@ -3,6 +3,7 @@ import { useStopwatch } from "react-timer-hook";
 import { useAccount, useBlock, usePublicClient, useReadContract, useWriteContract } from "wagmi";
 import { stakingMasterChefAbi } from "../../blockchain/abi.ts";
 import { erc20Abi } from "viem";
+import { getRewardPerShareScaled } from "../../helpers/reward.ts";
 
 export function usePool(onUpdate: () => void) {
   const pubClient = usePublicClient();
@@ -84,6 +85,17 @@ export function usePool(onUpdate: () => void) {
     },
   });
 
+  const precision = useReadContract({
+    abi: stakingMasterChefAbi,
+    address: process.env.REACT_APP_STAKING_ADDR as `0x${string}`,
+    functionName: "PRECISION",
+    query: {
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
+      refetchOnReconnect: false,
+    },
+  });
+
   const locksMap = new Map<bigint, bigint>(
     locks.data?.map(({ durationSeconds, multiplierScaled }) => [durationSeconds, multiplierScaled])
   );
@@ -158,6 +170,7 @@ export function usePool(onUpdate: () => void) {
 
   return {
     poolId,
+    precision,
     unstake,
     withdraw,
     timestamp,

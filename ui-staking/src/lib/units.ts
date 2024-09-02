@@ -6,7 +6,7 @@ export function formatLMR(num: bigint): string {
   return `${formatUnits(num, 8)} LMR`;
 }
 
-const hairSpace = ",";
+const thousandsSeparator = ",";
 
 export function formatUnits(value: bigint, decimals: number, significantDigits = 4) {
   let display = value.toString();
@@ -16,13 +16,16 @@ export function formatUnits(value: bigint, decimals: number, significantDigits =
 
   display = display.padStart(decimals, "0");
 
-  let [integer, fraction] = [display.slice(0, display.length - decimals), display.slice(display.length - decimals)];
+  let [integer, fraction] = [
+    display.slice(0, display.length - decimals),
+    display.slice(display.length - decimals),
+  ];
 
   const integerSignificantDigits = integer.length;
 
   // split the integer part into groups of 3 digits
   for (let i = integer.length - 3; i > 0; i -= 3) {
-    integer = `${integer.slice(0, i)}${hairSpace}${integer.slice(i)}`;
+    integer = `${integer.slice(0, i)}${thousandsSeparator}${integer.slice(i)}`;
   }
 
   const fractionSignificantDigits = significantDigits - integerSignificantDigits;
@@ -38,7 +41,6 @@ export function formatUnits(value: bigint, decimals: number, significantDigits =
     for (let i = 0; i < fraction.length; i++) {
       if (fraction[i] !== "0") {
         let digits = i + fractionSignificantDigits;
-        // console.log("digits bf", digits);
 
         // round number of digits to the nearest multiple of 3, thousands
         const remainder = digits % 3;
@@ -60,9 +62,21 @@ export function formatUnits(value: bigint, decimals: number, significantDigits =
   }
 
   // split the fraction part into groups of 3 digits
-  for (let i = 3; i < fraction.length; i += 4) {
-    fraction = `${fraction.slice(0, i)}${hairSpace}${fraction.slice(i)}`;
+  const groups: string[] = [];
+  for (let i = 0; i < fraction.length; i += 3) {
+    groups.push(fraction.slice(i, i + 3));
   }
+
+  // remove trailing zeros groups
+  for (let i = groups.length - 1; i > 0; i--) {
+    if (groups[i] === "000") {
+      groups.pop();
+    } else {
+      break;
+    }
+  }
+
+  fraction = groups.join(thousandsSeparator);
 
   return `${negative ? "-" : ""}${integer || "0"}${fraction ? `.${fraction}` : ""}`;
 }

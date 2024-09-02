@@ -20,9 +20,9 @@ export const config = defaultWagmiConfig({
     [process.env.REACT_APP_CHAIN_ID]: http(process.env.REACT_APP_ETH_NODE_URL),
   },
   metadata: {
-    name: "WAGMI",
-    description: "WAGMI",
-    url: "https://wagmi.io",
+    name: "Lumerin Morpheus Staking",
+    description: "Stake your LMR tokens to earn rewards in MOR",
+    url: process.env.REACT_APP_URL,
     icons: ["https://avatars.githubusercontent.com/u/37784886"],
   },
 });

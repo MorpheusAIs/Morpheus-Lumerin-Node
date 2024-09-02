@@ -1,8 +1,9 @@
-import { useAccount, usePublicClient, useReadContract, useWriteContract } from "wagmi";
+import { useAccount, useBlock, usePublicClient, useReadContract, useWriteContract } from "wagmi";
 import { erc20Abi, stakingMasterChefAbi } from "../../blockchain/abi.ts";
 import { useNavigate, useParams } from "react-router-dom";
 import { useState } from "react";
 import { getStakeId } from "./utils.ts";
+import { useStopwatch } from "react-timer-hook";
 
 export function useStake(onStakeCb?: (id: bigint) => void) {
   // set initial state
@@ -15,6 +16,12 @@ export function useStake(onStakeCb?: (id: bigint) => void) {
   const [stakeAmount, _setStakeAmount] = useState("0");
   const [stakeAmountValidEnabled, setStakeAmountValidEnabled] = useState(false);
   const [stakeTxHash, setStakeTxHash] = useState<`0x${string}` | null>(null);
+
+  const block = useBlock({
+    query: { refetchInterval: false, refetchOnMount: false, refetchOnReconnect: false },
+  });
+  const { totalSeconds, reset } = useStopwatch({ autoStart: true });
+  const timestamp = block.isSuccess ? block.data?.timestamp + BigInt(totalSeconds) : 0n;
 
   function setStakeAmount(value: string) {
     _setStakeAmount(value);
@@ -142,6 +149,7 @@ export function useStake(onStakeCb?: (id: bigint) => void) {
     decimal,
     pubClient,
     navigate,
+    timestamp,
     multiplier,
     lockIndex,
     setLockIndex,
