@@ -5,6 +5,7 @@ import homeElement from "../../images/home-element.png";
 import { useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { Button } from "../../components/Button.tsx";
+import { useWeb3Modal, useWeb3ModalEvents } from "@web3modal/wagmi/react";
 // import { ConnectKitButton } from "connectkit";
 
 export const Landing = () => {
@@ -12,13 +13,14 @@ export const Landing = () => {
   const { connectors, connect } = useConnect();
   const { connectors: connectedConnectors, disconnect } = useDisconnect();
   const navigate = useNavigate();
+  const { open } = useWeb3Modal();
+  const event = useWeb3ModalEvents();
 
-  //TODO: do not redirect to pool 0 if user was already connected
   useEffect(() => {
-    if (address) {
+    if (event.data.event === "CONNECT_SUCCESS") {
       navigate("/pool/0");
     }
-  }, [address, navigate]);
+  }, [event, navigate]);
 
   return (
     <>
@@ -32,8 +34,17 @@ export const Landing = () => {
           Earn MOR
         </h1>
         <h2 className="sub-cta">Your Pathway to Effortless Rewards</h2>
-        <div className="cta-button">
-          {isConnected ? <Button onClick={() => navigate("/pool/0")}>Stake LMR</Button> : <w3m-connect-button />}
+        <div className="cta-buttons">
+          {isConnected ? (
+            <>
+              <Button className="button-primary" onClick={() => navigate("/pool/0")}>
+                Stake LMR
+              </Button>
+              <Button onClick={() => disconnect()}>Disconnect</Button>
+            </>
+          ) : (
+            <Button onClick={() => open({ view: "Connect" })}>Connect Wallet</Button>
+          )}
         </div>
       </Container>
     </>

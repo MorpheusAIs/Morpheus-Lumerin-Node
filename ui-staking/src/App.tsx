@@ -1,17 +1,53 @@
 import React from "react";
+import "./App.css";
+import { Router } from "./Router.tsx";
 import { WagmiProvider } from "wagmi";
-import { config } from "./wagmi.ts";
+import { config } from "./config/wagmi.ts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Main } from "./Main.tsx";
+import { createWeb3Modal } from "@web3modal/wagmi/react";
 
 const queryClient = new QueryClient();
 
+createWeb3Modal({
+  wagmiConfig: config,
+  projectId: process.env.REACT_APP_WALLET_CONNECT_PROJECT_ID,
+  enableAnalytics: true, // Optional - defaults to your Cloud configuration
+  enableOnramp: false, // Optional - false as default
+  enableSwaps: false,
+  themeVariables: {
+    "--w3m-border-radius-master": "12px",
+    "--w3m-font-family": "APK Protocol, sans-serif",
+    "--w3m-accent": "#1976d2",
+    // "--w3m-color-mix": "#fff",
+    // "--w3m-color-mix-strength": 1,
+    // "--w3m-font-size-master": "14px",
+  },
+});
+
 export const App = () => {
   return (
-    <WagmiProvider config={config}>
-      <QueryClientProvider client={queryClient}>
-        <Main />
-      </QueryClientProvider>
-    </WagmiProvider>
+    <>
+      <WagmiProvider config={config}>
+        <QueryClientProvider client={queryClient}>
+          <Router />
+          <svg width="0" height="0">
+            <title>SVG gradients</title>
+            <defs>
+              <linearGradient
+                id="cl1"
+                gradientUnits="objectBoundingBox"
+                x1="0"
+                y1="0.5"
+                x2="1"
+                y2="0.5"
+              >
+                <stop stopColor="#A855F7" />
+                <stop offset="100%" stopColor="#3B82F6" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </QueryClientProvider>
+      </WagmiProvider>
+    </>
   );
 };

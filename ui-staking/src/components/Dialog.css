@@ -1,0 +1,21 @@
+[data-reach-dialog-overlay] {
+	background: hsla(0, 0%, 0%, 0.33);
+	position: fixed;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	overflow: auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+[data-reach-dialog-content] {
+	width: 500px;
+	margin: 10vh auto;
+	background:#000;
+	padding: 40px;
+	outline: none;
+  border-radius: var(--border-radius) ;
+}

@@ -9,7 +9,7 @@ export default {
   define: {
     ...getAndValidateEnv().full,
   },
-  inject: ["./src/react-shim.ts"],
+  inject: ["./src/config/react-shim.ts"],
   plugins: [],
   loader: {
     ".png": "file",

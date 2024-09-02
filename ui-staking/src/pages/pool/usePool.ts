@@ -24,13 +24,43 @@ export function usePool(onUpdate: () => void) {
     functionName: "getPoolsCount",
   });
 
+  const shouldQueryPool = poolId !== undefined && poolsCount.isSuccess && poolId < poolsCount.data;
+  const poolNotFound = poolId !== undefined && poolsCount.isSuccess && poolId >= poolsCount.data;
+
   const poolDataArr = useReadContract({
     abi: stakingMasterChefAbi,
     address: process.env.REACT_APP_STAKING_ADDR as `0x${string}`,
     functionName: "pools",
     args: [BigInt(poolId as number)],
     query: {
-      enabled: poolId !== undefined,
+      enabled: shouldQueryPool,
+    },
+  });
+
+  const locks = useReadContract({
+    abi: stakingMasterChefAbi,
+    address: process.env.REACT_APP_STAKING_ADDR as `0x${string}`,
+    functionName: "getLockDurations",
+    args: [BigInt(poolId as number)],
+    query: {
+      enabled: shouldQueryPool,
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
+      refetchOnReconnect: false,
+    },
+  });
+
+  const stakes = useReadContract({
+    abi: stakingMasterChefAbi,
+    address: process.env.REACT_APP_STAKING_ADDR as `0x${string}`,
+    functionName: "getStakes",
+    args: [address as `0x${string}`, BigInt(poolId as number)],
+    query: {
+      enabled: address && shouldQueryPool,
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
+      refetchOnReconnect: false,
+      retry: true,
     },
   });
 
@@ -51,19 +81,6 @@ export function usePool(onUpdate: () => void) {
     args: [address as `0x${string}`],
     query: {
       enabled: address !== undefined,
-    },
-  });
-
-  const locks = useReadContract({
-    abi: stakingMasterChefAbi,
-    address: process.env.REACT_APP_STAKING_ADDR as `0x${string}`,
-    functionName: "getLockDurations",
-    args: [BigInt(poolId as number)],
-    query: {
-      enabled: poolId !== undefined,
-      refetchOnWindowFocus: false,
-      refetchOnMount: false,
-      refetchOnReconnect: false,
     },
   });
 
@@ -102,20 +119,6 @@ export function usePool(onUpdate: () => void) {
     ? Math.floor(Number(poolData.endTime - poolData.startTime) / 86400)
     : 0;
   const poolRemainingSeconds = poolData ? Number(poolData.endTime - timestamp) : 0;
-
-  const stakes = useReadContract({
-    abi: stakingMasterChefAbi,
-    address: process.env.REACT_APP_STAKING_ADDR as `0x${string}`,
-    functionName: "getStakes",
-    args: [address as `0x${string}`, BigInt(poolId as number)],
-    query: {
-      enabled: address !== undefined && poolId !== undefined,
-      refetchOnWindowFocus: false,
-      refetchOnMount: false,
-      refetchOnReconnect: false,
-      retry: true,
-    },
-  });
 
   async function unstake(stakeId: bigint) {
     if (poolId === undefined) {
@@ -161,6 +164,9 @@ export function usePool(onUpdate: () => void) {
     poolsCount,
     stakes,
     poolData,
+    poolIsLoading: poolDataArr.isLoading,
+    poolError: poolDataArr.error,
+    poolNotFound,
     poolProgress,
     poolElapsedDays,
     poolTotalDays,
