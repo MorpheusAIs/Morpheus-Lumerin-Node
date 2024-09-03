@@ -4202,9 +4202,9 @@ mocha@^10.7.0:
     yargs-parser "^20.2.9"
     yargs-unparser "^2.0.0"
 
-"morpheus-smart-contracts@git+ssh://github.com/MorpheusAIs/SmartContracts.git#753accd":
+"morpheus-smart-contracts@https://github.com/MorpheusAIs/SmartContracts.git#753accd":
   version "1.0.0"
-  resolved "git+ssh://github.com/MorpheusAIs/SmartContracts.git#753accd340ee5cbfe688085899eeb807472cdfe4"
+  resolved "https://github.com/MorpheusAIs/SmartContracts.git#753accd340ee5cbfe688085899eeb807472cdfe4"
   dependencies:
     "@arbitrum/token-bridge-contracts" "^1.1.2"
     "@layerzerolabs/lz-evm-protocol-v2" "^2.1.23"

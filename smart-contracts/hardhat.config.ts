@@ -1,10 +1,10 @@
-import "dotenv/config";
-import "@nomicfoundation/hardhat-verify";
-import "@nomicfoundation/hardhat-toolbox-viem";
 import "@nomicfoundation/hardhat-ignition-viem";
+import "@nomicfoundation/hardhat-toolbox-viem";
+import "@nomicfoundation/hardhat-verify";
 import "@solarity/hardhat-gobind";
-import "./tasks/upgrade";
+import "dotenv/config";
 import { HardhatUserConfig } from "hardhat/config";
+import "./tasks/upgrade";
 
 const config: HardhatUserConfig = {
   networks: {

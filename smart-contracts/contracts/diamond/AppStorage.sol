@@ -16,7 +16,7 @@ struct Provider {
   bool isDeleted;
 }
 
-struct ProviderModelStats{
+struct ProviderModelStats {
   LibSD.SD tpsScaled1000; // tokens per second running average
   LibSD.SD ttftMs; // time to first token running average in milliseconds
   uint32 totalDuration; // total duration of sessions
