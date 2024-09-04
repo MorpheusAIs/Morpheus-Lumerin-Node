@@ -18,6 +18,7 @@ import {
   type Chain,
 } from "viem";
 import type { WriteContractErrorType } from "wagmi/actions";
+import { getTxURL } from "../../helpers/indexer.ts";
 
 interface Props {
   onStakeCb?: (id: bigint) => void;
@@ -27,7 +28,8 @@ export const Stake = (props: Props) => {
   const {
     timestamp,
     locks,
-    pool,
+    poolData,
+    apyValue,
     lockIndex,
     setLockIndex,
     navigate,
@@ -45,20 +47,19 @@ export const Stake = (props: Props) => {
 
   const isNoPoolError = isErr<typeof stakingMasterChefAbi>(locks.error, "PoolOrStakeNotExists");
   const isNoLockPeriods = locks.isSuccess && locks.data.length === 0;
-  const isPoolExpired = pool.isSuccess && timestamp > pool.data[5];
+  const isPoolExpired = poolData && timestamp > poolData.endTime;
 
   const rewardMultiplier =
     locks.isSuccess && multiplier.isSuccess
       ? Number(locks.data[lockIndex].multiplierScaled) / Number(multiplier.data)
       : 0;
 
-  const stakeTxURL = stakeTxHash && chain ? getTxURL(stakeTxHash, chain) : null;
+  const stakeTxURL = getTxURL(stakeTxHash, chain);
 
   return (
     <>
       <Header />
       <main>
-        <div className="lens" />
         <ContainerNarrow>
           <section className="section add-stake">
             <h1>New stake</h1>
@@ -98,16 +99,18 @@ export const Stake = (props: Props) => {
                 <Separator />
                 <div className="field lockup-period">
                   <label htmlFor="lockup-period">Lockup period</label>
-                  <RangeSelect
-                    label="Lockup period"
-                    value={lockIndex}
-                    titles={locks.data.map((l) => formatSeconds(l.durationSeconds))}
-                    onChange={setLockIndex}
-                  />
+                  <div className="range-wrap">
+                    <RangeSelect
+                      label="Lockup period"
+                      value={lockIndex}
+                      titles={locks.data.map((l) => formatSeconds(l.durationSeconds))}
+                      onChange={setLockIndex}
+                    />
+                  </div>
                 </div>
                 <dl className="field summary">
                   <dt>APY</dt>
-                  <dd>4.19%</dd>
+                  <dd>unknown</dd>
                   <dt>Lockup Period</dt>
                   <dd>{formatSeconds(locks.data[lockIndex].durationSeconds)}</dd>
                   <dt>Reward multiplier</dt>
@@ -127,7 +130,7 @@ export const Stake = (props: Props) => {
                     className="button button-primary"
                     type="submit"
                     onClick={onStake}
-                    // disabled={stakeAmount === "0" || stakeAmountValidErr !== ""}
+                    disabled={stakeAmount === "0" || stakeAmountValidErr !== ""}
                   >
                     Stake
                   </button>
@@ -150,7 +153,7 @@ export const Stake = (props: Props) => {
                   </a>
                 </p>
                 <button
-                  className="button button-primary"
+                  className="button-small button-primary"
                   type="button"
                   onClick={() => navigate("/pool/0")}
                 >
@@ -173,7 +176,7 @@ export const Stake = (props: Props) => {
                 </p>
               )}
               <button
-                className="button button-primary"
+                className="button-small button-primary"
                 type="button"
                 onClick={() => writeContract.reset()}
               >
@@ -195,13 +198,6 @@ function formatSeconds(seconds: number | bigint): string {
     ms = seconds * 1000;
   }
   return prettyMilliseconds(ms, { verbose: true });
-}
-
-function getTxURL(txhash: `0x${string}`, chain: Chain): string | null {
-  if (!chain.blockExplorers) {
-    return null;
-  }
-  return `${chain.blockExplorers?.default.url}/tx/${txhash}`;
 }
 
 function getErrorName(err: WriteContractErrorType | null): string {

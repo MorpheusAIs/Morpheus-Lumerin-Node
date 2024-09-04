@@ -3,7 +3,9 @@ import { useStopwatch } from "react-timer-hook";
 import { useAccount, useBlock, usePublicClient, useReadContract, useWriteContract } from "wagmi";
 import { stakingMasterChefAbi } from "../../blockchain/abi.ts";
 import { erc20Abi } from "viem";
-import { getRewardPerShareScaled } from "../../helpers/reward.ts";
+import { mapPoolDataAndDerive } from "../../helpers/pool.ts";
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 export function usePool(onUpdate: () => void) {
   const pubClient = usePublicClient();
@@ -13,11 +15,13 @@ export function usePool(onUpdate: () => void) {
   const poolId = poolIdString !== "" ? Number(poolIdString) : undefined;
   const navigate = useNavigate();
 
-  const { address } = useAccount();
+  const { address, chain } = useAccount();
 
   const block = useBlock();
   const { totalSeconds, reset } = useStopwatch({ autoStart: true });
   const timestamp = block.isSuccess ? block.data?.timestamp + BigInt(totalSeconds) : 0n;
+
+  const qc = useQueryClient();
 
   const poolsCount = useReadContract({
     abi: stakingMasterChefAbi,
@@ -96,56 +100,87 @@ export function usePool(onUpdate: () => void) {
     },
   });
 
+  const [dialog, setDialog] = useState({
+    content1: "",
+    content2: "" as string | Error,
+    dialogHeader: "",
+    show: false,
+    onDismiss: () => {},
+  });
+
   const locksMap = new Map<bigint, bigint>(
     locks.data?.map(({ durationSeconds, multiplierScaled }) => [durationSeconds, multiplierScaled])
   );
 
-  const poolData = poolDataArr.data
-    ? {
-        rewardPerSecondScaled: poolDataArr.data[0],
-        lastRewardTime: poolDataArr.data[1],
-        accRewardPerShareScaled: poolDataArr.data[2],
-        totalShares: poolDataArr.data[3],
-        startTime: poolDataArr.data[4],
-        endTime: poolDataArr.data[5],
-        // balanceMOR: poolBalanceMOR.data,
-        // balanceLMR: poolBalanceLMR.data,
-      }
-    : undefined;
-
-  let poolProgress = poolData
-    ? Number(timestamp - poolData.startTime) / Number(poolData.endTime - poolData.startTime)
-    : 0;
-
-  poolProgress = 0.5;
-
-  if (poolProgress < 0) {
-    poolProgress = 0;
-  }
-  if (poolProgress > 1) {
-    poolProgress = 1;
-  }
-
-  const poolElapsedDays = poolData ? Math.floor(Number(timestamp - poolData.startTime) / 86400) : 0;
-  const poolTotalDays = poolData
-    ? Math.floor(Number(poolData.endTime - poolData.startTime) / 86400)
-    : 0;
-  const poolRemainingSeconds = poolData ? Number(poolData.endTime - timestamp) : 0;
+  const poolData = mapPoolDataAndDerive(poolDataArr.data, timestamp, precision.data);
 
   async function unstake(stakeId: bigint) {
     if (poolId === undefined) {
       console.error("No poolId");
       return;
     }
-    const hash = await writeContract.writeContractAsync({
-      abi: stakingMasterChefAbi,
-      address: process.env.REACT_APP_STAKING_ADDR as `0x${string}`,
-      functionName: "unstake",
-      args: [BigInt(poolId), stakeId],
-    });
-    await pubClient?.waitForTransactionReceipt({ hash });
-    reset();
-    onUpdate();
+    try {
+      const hash = await writeContract.writeContractAsync({
+        abi: stakingMasterChefAbi,
+        address: process.env.REACT_APP_STAKING_ADDR as `0x${string}`,
+        functionName: "unstake",
+        args: [BigInt(poolId), stakeId],
+      });
+      await pubClient?.waitForTransactionReceipt({ hash });
+      setDialog({
+        dialogHeader: "Transaction successful",
+        content1: `You have successfully unstaked from pool ${poolId}`,
+        content2: hash,
+        show: true,
+        onDismiss: () => {
+          qc.invalidateQueries({
+            predicate: (q) => {
+              // invalidate all queries related to the pool
+              const params = q.queryKey?.[1];
+              if (!params) {
+                return false;
+              }
+              if (params?.functionName === "pools" && params?.args?.[0] === BigInt(poolId)) {
+                return true;
+              }
+              if (params?.functionName === "getStakes" && params?.args?.[1] === BigInt(poolId)) {
+                return true;
+              }
+              if (
+                params?.functionName === "balanceOf" &&
+                params?.address === process.env.REACT_APP_LMR_ADDR &&
+                params?.args?.[0] === address
+              ) {
+                return true;
+              }
+              if (
+                params?.functionName === "balanceOf" &&
+                params?.address === process.env.REACT_APP_MOR_ADDR &&
+                params?.args?.[0] === address
+              ) {
+                return true;
+              }
+              return false;
+            },
+          });
+          setDialog({ ...dialog, show: false });
+          reset();
+          onUpdate();
+        },
+      });
+    } catch (e) {
+      setDialog({
+        dialogHeader: "Transaction failed",
+        content1: `You have failed to unstake from pool ${poolId}`,
+        content2: e as Error,
+        show: true,
+        onDismiss: () => {
+          setDialog({ ...dialog, show: false });
+          reset();
+        },
+      });
+      console.error(e);
+    }
   }
 
   async function withdraw(stakeId: bigint) {
@@ -161,16 +196,36 @@ export function usePool(onUpdate: () => void) {
         args: [BigInt(poolId), stakeId],
       });
       const receipt = await pubClient?.waitForTransactionReceipt({ hash });
+      setDialog({
+        dialogHeader: "Transaction successful",
+        content1: `You have successfully withdrawn your rewards from pool ${poolId}`,
+        content2: hash,
+        show: true,
+        onDismiss: () => {
+          setDialog({ ...dialog, show: false });
+          reset();
+          onUpdate();
+        },
+      });
     } catch (e) {
+      setDialog({
+        dialogHeader: "Transaction failed",
+        content1: `You have failed to withdraw your rewards from pool ${poolId}`,
+        content2: e as Error,
+        show: true,
+        onDismiss: () => {
+          setDialog({ ...dialog, show: false });
+          reset();
+        },
+      });
       console.error(e);
     }
-    reset();
-    onUpdate();
   }
 
   return {
     poolId,
     precision,
+    chain,
     unstake,
     withdraw,
     timestamp,
@@ -180,14 +235,11 @@ export function usePool(onUpdate: () => void) {
     poolIsLoading: poolDataArr.isLoading,
     poolError: poolDataArr.error,
     poolNotFound,
-    poolProgress,
-    poolElapsedDays,
-    poolTotalDays,
-    poolRemainingSeconds,
     locks,
     locksMap,
     lmrBalance,
     morBalance,
     navigate,
+    dialog,
   };
 }

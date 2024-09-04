@@ -10,6 +10,9 @@ import { Button } from "../../components/Button.tsx";
 import { SpoilerToogle } from "../../components/SpoilerToogle.tsx";
 import { getReward } from "../../helpers/reward.ts";
 import { Spinner } from "../../icons/Spinner.tsx";
+import { Dialog } from "../../components/Dialog.tsx";
+import { getTxURL } from "../../helpers/indexer.ts";
+import { useAccount } from "wagmi";
 
 export const Pool = () => {
   const {
@@ -29,14 +32,17 @@ export const Pool = () => {
     morBalance,
     locksMap,
     navigate,
+    dialog,
+    chain,
   } = usePool(() => {});
+
+  const activeStakes = stakes.data?.filter((stake) => stake.stakeAmount > 0n);
 
   return (
     <>
       <Header />
       <main>
         <Container>
-          <div className="lens" />
           <nav className="pool-nav">
             <ul>
               {[...Array(poolsCount.data)].map((_, i) => (
@@ -72,7 +78,7 @@ export const Pool = () => {
                   <dd>{poolData.totalShares.toString()}</dd>
 
                   <dt>Total staked</dt>
-                  <dd>unknown{/*formatLMR(3000n)*/}</dd>
+                  <dd>{formatLMR(poolData.totalStaked)}</dd>
 
                   <dt>Start date</dt>
                   <dd>{formatDate(poolData.startTime)}</dd>
@@ -80,18 +86,23 @@ export const Pool = () => {
                   <dt>End date</dt>
                   <dd>{formatDate(poolData.endTime)}</dd>
 
+                  <dt>Duration</dt>
+                  <dd>{formatDuration(poolData.endTime - poolData.startTime)}</dd>
+
                   <dt>Lockup periods</dt>
                   <dd>{locks.data?.map((l) => formatDuration(l.durationSeconds)).join(", ")}</dd>
                 </dl>
               </section>
               <section className="section rewards-balance">
-                <h2 className="section-heading">Rewards balance</h2>
+                <h2 className="section-heading">Pool rewards balance</h2>
                 <Separator />
                 <dl className="info">
+                  <dt>Total Rewards</dt>
+                  <dd>{formatMOR(poolData.totalRewards)}</dd>
                   <dt>Locked Rewards</dt>
-                  <dd>{formatMOR(0n)}</dd>
+                  <dd>{formatMOR(poolData.lockedRewards)}</dd>
                   <dt>Unlocked Rewards</dt>
-                  <dd>{formatMOR(0n)}</dd>
+                  <dd>{formatMOR(poolData.unlockedRewards)}</dd>
                 </dl>
               </section>
               <section className="section wallet-balance">
@@ -117,20 +128,34 @@ export const Pool = () => {
                     <Spinner />
                   </div>
                 )}
-                {stakes.isSuccess && stakes.data.length === 0 && (
+                {activeStakes?.length === 0 && (
                   <div className="stake-list-no-stakes">No stakes found</div>
                 )}
                 <ul className="stakes">
                   {poolData &&
-                    stakes.isSuccess &&
-                    stakes.data.map((stake, index) => {
+                    activeStakes &&
+                    activeStakes.map((stake, index) => {
+                      if (stake.stakeAmount === 0n) {
+                        return null;
+                      }
                       const stakedAt = stake.stakedAt || 0n;
                       const lockRemainingSeconds = stake.lockEndsAt - timestamp;
-                      const lockTotalSeconds = stake.lockEndsAt - stakedAt;
-                      // const lockPassedSeconds = timestamp - stakedAt;
-                      // const lockProgress = Number(lockPassedSeconds) / Number(lockTotalSeconds);
-                      const lockProgress = 0.5;
-                      const lockMultiplier = locksMap.get(lockTotalSeconds);
+                      const stakeStartTime =
+                        stakedAt < poolData.startTime ? poolData.startTime : stakedAt;
+                      const lockTotalSeconds = stake.lockEndsAt - stakeStartTime;
+                      let lockPassedSeconds = timestamp - stakeStartTime;
+                      if (lockPassedSeconds < 0) {
+                        lockPassedSeconds = 0n;
+                      }
+                      let lockProgress = Number(lockPassedSeconds) / Number(lockTotalSeconds);
+                      lockProgress = lockProgress > 1 ? 1 : lockProgress;
+                      const rewardMultiplier = locksMap.get(lockTotalSeconds);
+
+                      const rewardMultiplierString =
+                        rewardMultiplier && precision.data
+                          ? `${Number(rewardMultiplier) / Number(precision.data)}x`
+                          : "";
+
                       const timeLeftString =
                         lockRemainingSeconds > 0
                           ? `${formatDuration(lockRemainingSeconds)} left`
@@ -151,13 +176,10 @@ export const Pool = () => {
                               <span className="chart-small-text">{timeLeftString}</span>
                             </li>
                             <li className="reward">
-                              {formatMOR(getReward(stake, poolData, timestamp, BigInt(1e12)))}{" "}
+                              {formatMOR(getReward(stake, poolData, timestamp, precision.data))}{" "}
                               earned
                             </li>
-                            <li className="multiplier">
-                              {lockMultiplier ? `${Number(lockMultiplier) / 1e12}x` : "unknown"}{" "}
-                              multiplier
-                            </li>
+                            <li className="multiplier">{rewardMultiplierString} multiplier</li>
                           </ul>
                           <ul className="checked">
                             <li>
@@ -166,10 +188,7 @@ export const Pool = () => {
                             </li>
                             <li>
                               <p className="title">Lockup Period</p>
-                              <p className="value">
-                                {/* {formatDuration(lockTotalSeconds)} */}
-                                unknown
-                              </p>
+                              <p className="value">{formatDuration(lockTotalSeconds)}</p>
                             </li>
                             <li>
                               <p className="title">Time Left</p>
@@ -179,14 +198,13 @@ export const Pool = () => {
                               <Chart progress={lockProgress} lineWidth={23}>
                                 <dl>
                                   <dt>Lockup Period</dt>
-                                  {/* <dd>{Math.trunc(lockProgress * 100)} %</dd> */}
-                                  <dd>unknown</dd>
+                                  <dd>{Math.trunc(lockProgress * 100)} %</dd>
                                 </dl>
                               </Chart>
                             </li>
                             <li>
                               <p className="title">Reward Multiplier</p>
-                              <p className="value">1.15x</p>
+                              <p className="value">{rewardMultiplierString}</p>
                             </li>
                             <li>
                               <p className="title">Current Rewards</p>
@@ -228,6 +246,36 @@ export const Pool = () => {
           )}
         </Container>
       </main>
+      {dialog.show && (
+        <Dialog onDismiss={dialog.onDismiss}>
+          <div className="dialog-content">
+            <h2>{dialog.dialogHeader}</h2>
+            <p>{dialog.content1}</p>
+            {typeof dialog.content2 === "string" ? (
+              <p>
+                Transaction id:{" "}
+                <a
+                  href={getTxURL(dialog.content2 as `0x${string}`, chain)}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {dialog.content2}
+                </a>
+                {}
+              </p>
+            ) : (
+              String(dialog.content2)
+            )}
+            <button
+              className="button-small button-primary"
+              type="button"
+              onClick={dialog.onDismiss}
+            >
+              OK
+            </button>
+          </div>
+        </Dialog>
+      )}
     </>
   );
 };

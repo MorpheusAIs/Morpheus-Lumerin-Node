@@ -69,18 +69,37 @@ h6 {
 }
 
 /* Styles */
+html {
+  height: 100%;
+}
 body {
+  height: 100%;
   background-color: #080810;
-  padding: 57px 0;
   font-family: "APK Protocol", sans-serif;
   color: #fff;
+}
+
+#root {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+.page-content {
+  height: 100%;
+  overflow: scroll;
+  padding-bottom: 30px;
+}
+
+header {
+  padding: 57px 0 40px;
 }
 
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 40px;
 }
 
 .header-logo {
@@ -165,6 +184,20 @@ body {
   cursor: pointer;
 }
 
+.button-small {
+  border-radius: var(--border-radius);
+  min-width: 100px;
+  padding: 5px;
+  font-size: 15px;
+  font-weight: 600;
+  height: 42px;
+  color: #fff;
+  text-transform: uppercase;
+  background-color: rgba(79, 126, 145, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+}
+
 .button-primary {
   background-color: rgba(76, 90, 95, 0.5);
   border: none;
@@ -173,16 +206,6 @@ body {
 .button-primary:disabled {
   color: rgba(255, 255, 255, 0.1);
   cursor: not-allowed;
-}
-
-.button-small {
-  padding: 5px;
-  font-size: 15px;
-  font-weight: 600;
-  height: 42px;
-  text-transform: uppercase;
-  background-color: rgba(79, 126, 145, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .section {
@@ -267,7 +290,6 @@ ul.info li {
   grid-column-start: 1;
   font-size: 14px;
   font-weight: 400;
-  align-self: end;
 }
 
 .info dd {
@@ -444,6 +466,8 @@ input::-webkit-inner-spin-button {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
+  position: relative;
 }
 
 .stake-amount input {
@@ -663,6 +687,22 @@ input::-webkit-inner-spin-button {
   display: flex;
   align-items: center;
 }
+.dialog-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.dialog-content h2 {
+  margin-bottom: 25px;
+}
+
+.dialog-content p {
+  margin-bottom: 10px;
+}
+
+.dialog-content .button-small {
+  margin-top: 15px;
+}
 
 @media (max-width: 1200px) {
 }
@@ -674,13 +714,23 @@ input::-webkit-inner-spin-button {
 }
 
 @media (max-width: 480px) {
+  .home-element {
+    max-width: 50%;
+  }
+  .cta {
+    margin-top: 80px;
+    font-size: 60px;
+  }
+  .cta-buttons {
+    margin-top: 80px;
+  }
   .lens {
-    display: none;
+    /* display: none; */
   }
   .container,
   .container-narrow {
     width: 100%;
-    padding: 0 15px;
+    padding: 0 20px;
     max-width: unset;
   }
   .button {
@@ -705,7 +755,12 @@ input::-webkit-inner-spin-button {
 
   .stake-list .stake .unchecked {
     grid-template-columns: 1fr auto 1fr;
-    gap: 5px;
+    gap: 10px;
+    height: 50px;
+  }
+
+  .stake-list .stake .unchecked .reward {
+    text-align: right;
   }
 
   .unchecked .chart-small {
@@ -730,10 +785,26 @@ input::-webkit-inner-spin-button {
     grid-column: span 2;
   }
 
+  .stake .value {
+    font-size: 15px;
+  }
+
+  .stake .progress {
+    grid-row-start: 5;
+    grid-column: span 2;
+    display: flex;
+    justify-content: center;
+    flex-direction: row;
+  }
+
   .toogle {
     margin-right: 10px;
-    width: 50px;
+    padding: 0;
+    width: 20px;
     height: 50px;
+    margin-right: 10px;
+    flex-shrink: 0;
+    align-self: flex-start;
   }
 
   .add-stake {
@@ -745,10 +816,34 @@ input::-webkit-inner-spin-button {
     grid-template-columns: 1fr 1fr;
     grid-template-rows: auto auto auto auto;
     grid-auto-flow: column;
+    padding: 0;
+    margin-left: -30px;
+    margin-right: -30px;
   }
 
   .summary dd {
     text-align: center;
-    margin-bottom: 20px;
+    margin-bottom: 30px;
+  }
+
+  .add-stake .buttons {
+    gap: 20px;
+  }
+  .add-stake .buttons .button {
+    flex-grow: 1;
+  }
+
+  .stake-amount input {
+    width: 100%;
+    padding-left: 15px;
+    padding-right: 130px;
+  }
+
+  .stake-amount label {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    margin: 0 15px 0 5px;
   }
 }

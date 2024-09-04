@@ -10,38 +10,47 @@ const Avatar: typeof AvatarImport = AvatarImport.default;
 
 type HeaderProps = {
   address?: `0x${string}`;
+  hideWallet?: boolean;
 };
 
 export const Header: React.FC<HeaderProps> = (props) => {
   const { open } = useWeb3Modal();
-  const aa = useWeb3ModalState();
   const { address } = useAccount();
+
   return (
     <header>
       <Container className="header">
         <Link to="/">
           <LumerinLogo className="header-logo" />
         </Link>
-        {address ? (
+        {!props.hideWallet && (
           <>
-            <button
-              type="button"
-              className="header-wallet"
-              onClick={() => open({ view: "Account" })}
-            >
-              <Avatar
-                size="24px"
-                name={address}
-                variant="marble"
-                colors={["#1876D1", "#9A5AF7", "#CF9893", "#849483", "#4E937A"]}
-              />
-              {shortAddress(address)}
-            </button>
+            {address ? (
+              <>
+                <button
+                  type="button"
+                  className="header-wallet"
+                  onClick={() => open({ view: "Account" })}
+                >
+                  <Avatar
+                    size="24px"
+                    name={address}
+                    variant="marble"
+                    colors={["#1876D1", "#9A5AF7", "#CF9893", "#849483", "#4E937A"]}
+                  />
+                  {shortAddress(address)}
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="header-wallet"
+                onClick={() => open({ view: "Connect" })}
+              >
+                Connect wallet
+              </button>
+            )}
           </>
-        ) : (
-          <button type="button" className="header-wallet" onClick={() => open({ view: "Connect" })}>
-            Connect wallet
-          </button>
         )}
       </Container>
     </header>

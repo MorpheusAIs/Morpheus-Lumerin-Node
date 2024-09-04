@@ -4,6 +4,9 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useState } from "react";
 import { getStakeId } from "./utils.ts";
 import { useStopwatch } from "react-timer-hook";
+import { mapPoolData } from "../../helpers/pool.ts";
+import { decimalsLMR, decimalsMOR } from "../../lib/units.ts";
+import { useQueryClient } from "@tanstack/react-query";
 
 export function useStake(onStakeCb?: (id: bigint) => void) {
   // set initial state
@@ -22,6 +25,8 @@ export function useStake(onStakeCb?: (id: bigint) => void) {
   });
   const { totalSeconds, reset } = useStopwatch({ autoStart: true });
   const timestamp = block.isSuccess ? block.data?.timestamp + BigInt(totalSeconds) : 0n;
+
+  const qc = useQueryClient();
 
   function setStakeAmount(value: string) {
     _setStakeAmount(value);
@@ -53,7 +58,7 @@ export function useStake(onStakeCb?: (id: bigint) => void) {
     },
   });
 
-  const multiplier = useReadContract({
+  const precision = useReadContract({
     abi: stakingMasterChefAbi,
     address: process.env.REACT_APP_STAKING_ADDR as `0x${string}`,
     functionName: "PRECISION",
@@ -89,8 +94,7 @@ export function useStake(onStakeCb?: (id: bigint) => void) {
     },
   });
 
-  const pubClient = usePublicClient();
-  const writeContract = useWriteContract();
+  const poolData = mapPoolData(pool.data);
 
   // perform input validations
   const { value: stakeAmountDecimals, error: stakeAmountValidErr } = validStakeAmount(
@@ -99,6 +103,11 @@ export function useStake(onStakeCb?: (id: bigint) => void) {
     decimal.data,
     stakeAmountValidEnabled
   );
+
+  const apyValue = apy(poolData, timestamp, stakeAmountDecimals, precision.data, precision.data);
+
+  const pubClient = usePublicClient();
+  const writeContract = useWriteContract();
 
   // define asynchronous calls
   async function onStake() {
@@ -122,7 +131,6 @@ export function useStake(onStakeCb?: (id: bigint) => void) {
     await pubClient?.waitForTransactionReceipt({
       hash: tx,
       confirmations: 1,
-      timeout: 10000,
     });
 
     const tx2 = await writeContract.writeContractAsync({
@@ -134,23 +142,47 @@ export function useStake(onStakeCb?: (id: bigint) => void) {
     const receipt = await pubClient.waitForTransactionReceipt({
       hash: tx2,
       confirmations: 1,
-      timeout: 10000,
     });
     setStakeTxHash(tx2);
     const stakeId = getStakeId(receipt.logs, address, BigInt(poolId));
-    onStakeCb?.(stakeId);
+
+    await qc.invalidateQueries({
+      predicate: (q) => {
+        // invalidate all queries related to the pool
+        const params = q.queryKey?.[1];
+        if (!params) {
+          return false;
+        }
+        if (params?.functionName === "pools" && params?.args?.[0] === BigInt(poolId)) {
+          return true;
+        }
+        if (params?.functionName === "getStakes" && params?.args?.[1] === BigInt(poolId)) {
+          console.log("invalidating getStakes", params);
+          return true;
+        }
+        if (
+          params?.functionName === "balanceOf" &&
+          params?.address === process.env.REACT_APP_LMR_ADDR &&
+          params?.args?.[0] === address
+        ) {
+          return true;
+        }
+        return false;
+      },
+    });
   }
 
   return {
     poolId,
-    pool,
+    poolData,
+    apyValue,
     chain,
     locks,
     decimal,
     pubClient,
     navigate,
     timestamp,
-    multiplier,
+    multiplier: precision,
     lockIndex,
     setLockIndex,
     onStake,
@@ -195,4 +227,36 @@ function validStakeAmount(
   }
 
   return { value, error: "" };
+}
+
+function apy(
+  poolData: ReturnType<typeof mapPoolData>,
+  timestamp: bigint,
+  stakeAmount: bigint,
+  precision: bigint | undefined,
+  yearMultiplierScaled: bigint | undefined
+) {
+  if (!poolData || !yearMultiplierScaled || !precision || !yearMultiplierScaled) {
+    return undefined;
+  }
+  if (stakeAmount === 0n) {
+    return 0;
+  }
+  const priceOfLumerinInMor = 0.02041 / 10 ** decimalsLMR / (21.8 / 10 ** decimalsMOR);
+
+  const shares = (stakeAmount * yearMultiplierScaled) / precision;
+  const rewardDebt = (shares * poolData.accRewardPerShareScaled) / precision;
+
+  const futureTimestamp = timestamp + BigInt(365 * 24 * 60 * 60);
+  const futureRewardScaled =
+    (futureTimestamp - poolData.lastRewardTime) * poolData.rewardPerSecondScaled;
+  const futureTotalShares = poolData.totalShares + shares;
+  const futureAccRewardPerShareScaled =
+    poolData.accRewardPerShareScaled + futureRewardScaled / futureTotalShares;
+
+  const reward1yearMor = (shares * futureAccRewardPerShareScaled) / precision - rewardDebt;
+  const reward1yearLmr = BigInt(Math.floor(Number(reward1yearMor) / priceOfLumerinInMor));
+
+  const apy = Number((reward1yearLmr * 100n * 100n) / stakeAmount) / 100; // trimmed at two decimal places
+  return apy;
 }

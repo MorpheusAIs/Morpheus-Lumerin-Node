@@ -3,6 +3,7 @@ export interface Pool {
   rewardPerSecondScaled: bigint;
   accRewardPerShareScaled: bigint;
   totalShares: bigint;
+  startTime: bigint;
   endTime: bigint;
 }
 
@@ -17,11 +18,19 @@ export const getRewardPerShareScaled = (pool: Pool, timestamp: bigint): bigint =
   if (pool.totalShares === 0n) {
     return 0n;
   }
+  if (pool.lastRewardTime >= timestamp) {
+    return 0n;
+  }
   const rewardScaled = (timestamp - pool.lastRewardTime) * pool.rewardPerSecondScaled;
   return pool.accRewardPerShareScaled + rewardScaled / pool.totalShares;
 };
 
-export const getReward = (userStake: UserStake, pool: Pool, timestamp: bigint, precision: bigint): bigint => {
+export const getReward = (
+  userStake: UserStake,
+  pool: Pool,
+  timestamp: bigint,
+  precision: bigint
+): bigint => {
   const endTime = pool.endTime > timestamp ? timestamp : pool.endTime;
   const rewardPerShareScaled = getRewardPerShareScaled(pool, endTime);
   return (userStake.shareAmount * rewardPerShareScaled) / precision - userStake.rewardDebt;

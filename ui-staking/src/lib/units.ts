@@ -1,9 +1,12 @@
+export const decimalsMOR = 18;
+export const decimalsLMR = 8;
+
 export function formatMOR(num: bigint): string {
-  return `${formatUnits(num, 18)} MOR`;
+  return `${formatUnits(num, decimalsMOR)} MOR`;
 }
 
 export function formatLMR(num: bigint): string {
-  return `${formatUnits(num, 8)} LMR`;
+  return `${formatUnits(num, decimalsLMR)} LMR`;
 }
 
 const thousandsSeparator = ",";
