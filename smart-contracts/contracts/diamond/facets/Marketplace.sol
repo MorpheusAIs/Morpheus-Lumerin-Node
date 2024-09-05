@@ -1,247 +1,137 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { AppStorage, Bid, ProviderModelStats, ModelStats } from "../AppStorage.sol";
-import { KeySet, AddressSet } from "../libraries/KeySet.sol";
-import { LibOwner } from "../libraries/LibOwner.sol";
+import { SafeERC20, IERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-contract Marketplace {
-  using KeySet for KeySet.Set;
-  using AddressSet for AddressSet.Set;
+import { DiamondOwnableStorage } from "../presets/DiamondOwnableStorage.sol";
 
-  AppStorage internal s;
+import { BidStorage } from "../storages/BidStorage.sol";
+import { ModelStorage } from "../storages/ModelStorage.sol";
+import { ProviderStorage } from "../storages/ProviderStorage.sol";
+import { MarketplaceStorage } from "../storages/MarketplaceStorage.sol";
 
-  event BidPosted(address indexed provider, bytes32 indexed modelAgentId, uint256 nonce);
-  event BidDeleted(address indexed provider, bytes32 indexed modelAgentId, uint256 nonce);
-  event FeeUpdated(uint256 bidFee);
+import { IMarketplace } from "../../interfaces/facets/IMarketplace.sol";
 
-  error ProviderNotFound();
-  error ModelOrAgentNotFound();
-  error ActiveBidNotFound();
-  error BidTaken();
-  error NotEnoughBalance();
+contract Marketplace is
+  IMarketplace,
+  DiamondOwnableStorage,
+  MarketplaceStorage,
+  ProviderStorage,
+  ModelStorage,
+  BidStorage
+{
+  using SafeERC20 for IERC20;
 
-  function bidMap(bytes32 bidId) external view returns (Bid memory) {
-    return s.bidMap[bidId];
+  function __Marketplace_init(
+    address token_
+  ) external initializer(MARKETPLACE_STORAGE_SLOT) initializer(BID_STORAGE_SLOT) {
+    _getBidStorage().token = IERC20(token_);
   }
 
-  function getActiveBidsByProvider(address provider) external view returns (bytes32[] memory, Bid[] memory) {
-    KeySet.Set storage providerBidsSet = s.providerActiveBids[provider];
-    uint256 length = providerBidsSet.count();
-
-    Bid[] memory _bids = new Bid[](length);
-    bytes32[] memory bidIds = new bytes32[](length);
-    for (uint i = 0; i < length; i++) {
-      bytes32 id = providerBidsSet.keyAtIndex(i);
-      bidIds[i] = id;
-      _bids[i] = s.bidMap[id];
-    }
-    return (bidIds, _bids);
-  }
-
-  /// @notice returns active bids by model or agent id
-  function getActiveBidsByModelAgent(bytes32 modelAgentId) external view returns (bytes32[] memory, Bid[] memory) {
-    KeySet.Set storage modelAgentBidsSet = s.modelAgentActiveBids[modelAgentId];
-    uint256 length = modelAgentBidsSet.count();
-
-    Bid[] memory _bids = new Bid[](length);
-    bytes32[] memory bidIds = new bytes32[](length);
-    for (uint i = 0; i < length; i++) {
-      bytes32 id = modelAgentBidsSet.keyAtIndex(i);
-      bidIds[i] = id;
-      _bids[i] = s.bidMap[id];
-    }
-    return (bidIds, _bids);
-  }
-
-  /// @notice returns active bids by model or agent id
-  function getActiveBidsRatingByModelAgent(
-    bytes32 modelAgentId,
-    uint256 offset,
-    uint8 limit
-  ) external view returns (bytes32[] memory, Bid[] memory, ProviderModelStats[] memory) {
-    KeySet.Set storage modelAgentBidsSet = s.modelAgentActiveBids[modelAgentId];
-    uint256 length = modelAgentBidsSet.count();
-
-    if (length < offset) {
-      return (new bytes32[](0), new Bid[](0), new ProviderModelStats[](0));
-    }
-    uint8 size = offset + limit > length ? uint8(length - offset) : limit;
-
-    Bid[] memory _bids = new Bid[](length);
-    bytes32[] memory bidIds = new bytes32[](length);
-    ProviderModelStats[] memory _stats = new ProviderModelStats[](length);
-
-    for (uint i = 0; i < size; i++) {
-      uint256 index = length - offset - i - 1;
-      bytes32 id = modelAgentBidsSet.keyAtIndex(index);
-      bidIds[i] = id;
-      Bid memory bid = s.bidMap[id];
-      _bids[i] = bid;
-      _stats[i] = s.stats[modelAgentId][bid.provider];
-    }
-
-    return (bidIds, _bids, _stats);
-  }
-
-  function getModelStats(bytes32 modelID) external view returns (ModelStats memory) {
-    return s.modelStats[modelID];
-  }
-
-  /// @notice returns all bids by provider sorted from newest to oldest
-  function getBidsByProvider(
-    address provider,
-    uint256 offset,
-    uint8 limit
-  ) external view returns (bytes32[] memory, Bid[] memory) {
-    uint256 length = s.providerBids[provider].length;
-    if (length < offset) {
-      return (new bytes32[](0), new Bid[](0));
-    }
-    uint8 size = offset + limit > length ? uint8(length - offset) : limit;
-    Bid[] memory _bids = new Bid[](size);
-    bytes32[] memory bidIds = new bytes32[](size);
-    for (uint i = 0; i < size; i++) {
-      uint256 index = length - offset - i - 1;
-      bytes32 id = s.providerBids[provider][index];
-      bidIds[i] = id;
-      _bids[i] = s.bidMap[id];
-    }
-    return (bidIds, _bids);
-  }
-
-  /// @notice returns all bids by model or agent Id sorted from newest to oldest
-  function getBidsByModelAgent(
-    bytes32 modelAgentId,
-    uint256 offset,
-    uint8 limit
-  ) external view returns (bytes32[] memory, Bid[] memory) {
-    uint256 length = s.modelAgentBids[modelAgentId].length;
-    if (length < offset) {
-      return (new bytes32[](0), new Bid[](0));
-    }
-    uint8 size = offset + limit > length ? uint8(length - offset) : limit;
-    Bid[] memory _bids = new Bid[](size);
-    bytes32[] memory bidIds = new bytes32[](size);
-    for (uint i = 0; i < size; i++) {
-      uint256 index = length - offset - i - 1;
-      bytes32 id = s.modelAgentBids[modelAgentId][index];
-      bidIds[i] = id;
-      _bids[i] = s.bidMap[id];
-    }
-    return (bidIds, _bids);
+  /// @notice sets a bid fee
+  function setBidFee(uint256 bidFee_) external onlyOwner {
+    _getMarketplaceStorage().bidFee = bidFee_;
+    emit FeeUpdated(bidFee_);
   }
 
   /// @notice posts a new bid for a model
-  function postModelBid(
-    address providerAddr,
-    bytes32 modelId,
-    uint256 pricePerSecond
-  ) external returns (bytes32 bidId) {
-    LibOwner._senderOrOwner(providerAddr);
-    if (!s.activeProviders.exists(providerAddr)) {
+  function postModelBid(address provider_, bytes32 modelId_, uint256 pricePerSecond_) external returns (bytes32 bidId) {
+    if (!_ownerOrProvider(provider_)) {
+      revert NotOwnerOrProvider();
+    }
+    if (!isProviderActive(provider_)) {
       revert ProviderNotFound();
     }
-    if (!s.activeModels.exists(modelId)) {
+    if (!isModelActive(modelId_)) {
       revert ModelOrAgentNotFound();
     }
 
-    return postModelAgentBid(providerAddr, modelId, pricePerSecond);
+    return _postModelBid(provider_, modelId_, pricePerSecond_);
   }
 
-  function postModelAgentBid(
-    address provider,
-    bytes32 modelAgentId,
-    uint256 pricePerSecond
-  ) internal returns (bytes32 bidId) {
-    // remove old bid
+  /// @notice deletes a bid
+  function deleteModelAgentBid(bytes32 bidId_) external {
+    if (!_isBidActive(bidId_)) {
+      revert ActiveBidNotFound();
+    }
+    if (!_ownerOrProvider(getBid(bidId_).provider)) {
+      revert NotOwnerOrProvider();
+    }
+
+    _deleteBid(bidId_);
+  }
+
+  /// @notice withdraws the fee balance
+  function withdraw(address recipient_, uint256 amount_) external onlyOwner {
+    if (amount_ > getFeeBalance()) {
+      revert NotEnoughBalance();
+    }
+
+    decreaseFeeBalance(amount_);
+    getToken().safeTransfer(recipient_, amount_);
+  }
+
+  function _incrementNonce(address provider_, bytes32 modelAgentId_) private returns (uint256) {
+    return incrementNonce(getProviderModelAgentId(provider_, modelAgentId_));
+  }
+
+  function _postModelBid(address provider_, bytes32 modelAgentId_, uint256 pricePerSecond_) private returns (bytes32) {
+    uint256 fee = getBidFee();
+    getToken().safeTransferFrom(_msgSender(), address(this), fee);
+    increaseFeeBalance(fee);
 
     // TEST IT if it increments nonce correctly
-    uint256 nonce = s.providerModelAgentNonce[keccak256(abi.encodePacked(provider, modelAgentId))]++;
-    if (nonce > 0) {
-      bytes32 oldBidId = keccak256(abi.encodePacked(provider, modelAgentId, nonce - 1));
-      Bid storage bid = s.bidMap[oldBidId];
-      if (isBidActive(bid)) {
-        deleteBid(oldBidId, bid);
+    uint256 nonce_ = _incrementNonce(provider_, modelAgentId_);
+    if (nonce_ != 0) {
+      bytes32 oldBidId_ = getBidId(provider_, modelAgentId_, nonce_ - 1);
+      if (_isBidActive(oldBidId_)) {
+        _deleteBid(oldBidId_);
       }
     }
 
-    bidId = keccak256(abi.encodePacked(provider, modelAgentId, nonce));
+    bytes32 bidId = getBidId(provider_, modelAgentId_, nonce_);
 
-    s.bidMap[bidId] = Bid({
-      provider: provider,
-      modelAgentId: modelAgentId,
-      pricePerSecond: pricePerSecond,
-      nonce: nonce,
-      createdAt: uint128(block.timestamp),
-      deletedAt: 0
-    });
+    addBid(bidId, Bid(provider_, modelAgentId_, pricePerSecond_, nonce_, uint128(block.timestamp), 0));
 
-    // active indexes
-    s.activeBids.insert(bidId);
-    s.providerActiveBids[provider].insert(bidId);
-    s.modelAgentActiveBids[modelAgentId].insert(bidId);
+    setBidActive(bidId, true);
+    addProviderActiveBids(provider_, bidId);
+    addModelAgentActiveBids(modelAgentId_, bidId);
 
-    // all indexes
-    s.providerBids[provider].push(bidId);
-    s.modelAgentBids[modelAgentId].push(bidId);
+    addProviderBid(provider_, bidId);
+    addModelAgentBid(modelAgentId_, bidId);
 
-    emit BidPosted(provider, modelAgentId, nonce);
-
-    s.token.transferFrom(msg.sender, address(this), s.bidFee);
-    s.feeBalance += s.bidFee;
+    emit BidPosted(provider_, modelAgentId_, nonce_);
 
     return bidId;
   }
 
-  /// @notice deletes a bid
-  function deleteModelAgentBid(bytes32 bidId) public {
-    Bid storage bid = s.bidMap[bidId];
-    if (!isBidActive(bid)) {
-      revert ActiveBidNotFound();
-    }
-
-    LibOwner._senderOrOwner(bid.provider);
-
-    deleteBid(bidId, bid);
-  }
-
-  ///
   /// @dev passing bidId and bid storage to avoid double storage access
-  function deleteBid(bytes32 bidId, Bid storage bid) private {
+  function _deleteBid(bytes32 bidId_) private {
+    Bid storage bid = getBid(bidId_);
     bid.deletedAt = uint128(block.timestamp);
-    // indexes update
-    s.activeBids.remove(bidId);
-    s.providerActiveBids[bid.provider].remove(bidId);
-    s.modelAgentActiveBids[bid.modelAgentId].remove(bidId);
+
+    setBidActive(bidId_, false);
+    removeProviderActiveBids(bid.provider, bidId_);
+    removeModelAgentActiveBids(bid.modelAgentId, bidId_);
 
     emit BidDeleted(bid.provider, bid.modelAgentId, bid.nonce);
   }
 
-  /// @notice sets a bid fee
-  function setBidFee(uint256 _bidFee) external {
-    LibOwner._onlyOwner();
-    s.bidFee = _bidFee;
-    emit FeeUpdated(_bidFee);
+  function getBidId(address provider_, bytes32 modelAgentId_, uint256 nonce_) public pure returns (bytes32) {
+    return keccak256(abi.encodePacked(provider_, modelAgentId_, nonce_));
   }
 
-  /// @notice returns the bid fee
-  function bidFee() external view returns (uint256) {
-    return s.bidFee;
+  function getProviderModelAgentId(address provider_, bytes32 modelAgentId_) public pure returns (bytes32) {
+    return keccak256(abi.encodePacked(provider_, modelAgentId_));
   }
 
-  /// @notice withdraws the fee balance (OWNER ONLY)
-  function withdraw(address addr, uint256 amount) external {
-    LibOwner._onlyOwner();
-    if (amount > s.feeBalance) {
-      revert NotEnoughBalance();
-    }
-    // emits ERC-20 transfer event
-    s.feeBalance -= amount;
-    s.token.transfer(addr, amount);
+  function _ownerOrProvider(address provider_) private view returns (bool) {
+    return _msgSender() == owner() || _msgSender() == provider_;
   }
 
-  function isBidActive(Bid memory bid) private pure returns (bool) {
-    return bid.createdAt != 0 && bid.deletedAt == 0;
+  function _isBidActive(bytes32 bidId_) private view returns (bool) {
+    Bid memory bid_ = getBid(bidId_);
+
+    return bid_.createdAt != 0 && bid_.deletedAt == 0;
   }
 }

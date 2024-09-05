@@ -1,164 +1,101 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { AppStorage, Model, ModelStats } from "../AppStorage.sol";
-import { KeySet } from "../libraries/KeySet.sol";
-import { LibOwner } from "../libraries/LibOwner.sol";
+import { SafeERC20, IERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-contract ModelRegistry {
-  using KeySet for KeySet.Set;
+import { DiamondOwnableStorage } from "../presets/DiamondOwnableStorage.sol";
 
-  AppStorage internal s;
+import { BidStorage } from "../storages/BidStorage.sol";
+import { ModelStorage } from "../storages/ModelStorage.sol";
 
-  event ModelRegisteredUpdated(address indexed owner, bytes32 indexed modelId);
-  event ModelDeregistered(address indexed owner, bytes32 indexed modelId);
-  event ModelMinStakeUpdated(uint256 newStake);
+import { IModelRegistry } from "../../interfaces/facets/IModelRegistry.sol";
 
-  error ModelNotFound();
-  error StakeTooLow();
-  error ModelHasActiveBids();
+contract ModelRegistry is IModelRegistry, DiamondOwnableStorage, ModelStorage, BidStorage {
+  using SafeERC20 for IERC20;
 
-  /// @notice Returns model struct by id
-  function modelMap(bytes32 id) external view returns (Model memory) {
-    return s.modelMap[id];
-  }
+  function __ModelRegistry_init() external initializer(MODEL_STORAGE_SLOT) {}
 
-  /// @notice Returns model id by index
-  function models(uint256 index) external view returns (bytes32) {
-    return s.models[index];
-  }
-
-  /// @notice Returns active (undeleted) model IDs
-  function modelGetIds() external view returns (bytes32[] memory) {
-    return s.activeModels.keys();
-  }
-
-  /// @notice Returns count of active models
-  function modelGetCount() external view returns (uint count) {
-    return s.activeModels.count();
-  }
-
-  /// @notice Returns all models
-  /// @return ids    array of model ids
-  /// @return models array of model structs
-  function modelGetAll() external view returns (bytes32[] memory, Model[] memory) {
-    uint256 len = s.activeModels.count();
-    Model[] memory _models = new Model[](len);
-    bytes32[] memory ids = new bytes32[](len);
-    for (uint i = 0; i < len; i++) {
-      bytes32 id = s.activeModels.keyAtIndex(i);
-      ids[i] = id;
-      _models[i] = s.modelMap[id];
-    }
-    return (ids, _models);
-  }
-
-  /// @notice Returns active model struct by index
-  function modelGetByIndex(uint index) external view returns (bytes32 modelId, Model memory model) {
-    modelId = s.activeModels.keyAtIndex(index);
-    return (modelId, s.modelMap[modelId]);
-  }
-
-  /// @notice Checks if model exists
-  function modelExists(bytes32 id) external view returns (bool) {
-    return s.activeModels.exists(id);
+  /// @notice Sets the minimum stake required for a model
+  function modelSetMinStake(uint256 modelMinimumStake_) external onlyOwner {
+    setModelMinimumStake(modelMinimumStake_);
+    emit ModelMinStakeUpdated(modelMinimumStake_);
   }
 
   /// @notice Registers or updates existing model
   function modelRegister(
-    bytes32 modelId,
-    bytes32 ipfsCID,
-    uint256 fee,
-    uint256 addStake,
-    address owner,
-    string memory name,
-    string[] memory tags
+    bytes32 modelId_,
+    bytes32 ipfsCID_,
+    uint256 fee_,
+    uint256 addStake_,
+    address owner_,
+    string calldata name_,
+    string[] calldata tags_
   ) external {
-    LibOwner._senderOrOwner(owner);
-    Model memory model = s.modelMap[modelId];
-    uint256 newStake = model.stake + addStake;
-    if (newStake < s.modelMinStake) {
+    if (!_ownerOrModelOwner(owner_)) {
+      revert NotOwnerOrModelOwner();
+    }
+
+    Model memory model_ = modelMap(modelId_);
+    uint256 newStake_ = model_.stake + addStake_;
+    if (newStake_ < modelMinimumStake()) {
       revert StakeTooLow();
     }
 
-    uint128 createdAt = model.createdAt;
-    if (createdAt == 0) {
+    getToken().safeTransferFrom(_msgSender(), address(this), addStake_);
+
+    uint128 createdAt_ = model_.createdAt;
+    if (createdAt_ == 0) {
       // model never existed
-      s.activeModels.insert(modelId);
-      s.models.push(modelId);
-      createdAt = uint128(block.timestamp);
+      setModelActive(modelId_, true);
+      addModel(modelId_);
+      createdAt_ = uint128(block.timestamp);
     } else {
-      LibOwner._senderOrOwner(s.modelMap[modelId].owner);
-      if (model.isDeleted) {
-        s.activeModels.insert(modelId);
+      if (!_ownerOrModelOwner(model_.owner)) {
+        revert NotOwnerOrModelOwner();
+      }
+      if (model_.isDeleted) {
+        setModelActive(modelId_, true);
       }
     }
 
-    s.modelMap[modelId] = Model({
-      fee: fee,
-      stake: newStake,
-      createdAt: createdAt,
-      ipfsCID: ipfsCID,
-      owner: owner,
-      name: name,
-      tags: tags,
-      isDeleted: false
-    });
+    setModel(modelId_, Model(ipfsCID_, fee_, newStake_, owner_, name_, tags_, createdAt_, false));
 
-    emit ModelRegisteredUpdated(owner, modelId);
-    s.token.transferFrom(msg.sender, address(this), addStake); // reverts with ERC20InsufficientAllowance()
+    emit ModelRegisteredUpdated(owner_, modelId_);
   }
 
   /// @notice Deregisters a model
-  function modelDeregister(bytes32 id) external {
-    Model storage model = s.modelMap[id];
-    LibOwner._senderOrOwner(model.owner);
+  function modelDeregister(bytes32 modelId_) external {
+    Model storage model = modelMap(modelId_);
 
-    if (s.modelAgentActiveBids[id].count() > 0) {
+    if (!isModelExists(modelId_)) {
+      revert ModelNotFound();
+    }
+
+    if (!_ownerOrModelOwner(model.owner)) {
+      revert NotOwnerOrModelOwner();
+    }
+
+    if (!isModelAgentActiveBidsEmpty(modelId_)) {
       revert ModelHasActiveBids();
     }
 
-    s.activeModels.remove(id); // reverts with KeyNotFound()
-    model.isDeleted = true;
-    uint256 stake = model.stake;
+    uint256 stake_ = model.stake;
+
     model.stake = 0;
+    model.isDeleted = true;
 
-    emit ModelDeregistered(model.owner, id);
-    s.token.transfer(model.owner, stake);
+    setModelActive(modelId_, false);
+
+    getToken().safeTransfer(model.owner, stake_);
+
+    emit ModelDeregistered(model.owner, modelId_);
   }
 
-  /// @notice Sets the minimum stake required for a model
-  function modelSetMinStake(uint256 _minStake) external {
-    LibOwner._onlyOwner();
-    s.modelMinStake = _minStake;
-    emit ModelMinStakeUpdated(s.modelMinStake);
+  function isModelExists(bytes32 modelId_) public view returns (bool) {
+    return modelMap(modelId_).createdAt != 0;
   }
 
-  /// @notice Returns the minimum stake required for a model
-  function modelMinStake() external view returns (uint256) {
-    return s.modelMinStake;
+  function _ownerOrModelOwner(address modelOwner_) internal view returns (bool) {
+    return _msgSender() == owner() || _msgSender() == modelOwner_;
   }
-
-  function modelStats(bytes32 id) external view returns (ModelStats memory) {
-    return s.modelStats[id];
-  }
-
-  function modelResetStats(bytes32 id) external {
-    LibOwner._onlyOwner();
-    delete s.modelStats[id];
-  }
-
-  // TODO: implement these functions
-  // function getModelsByOwner(address addr) external view returns (Model[] memory){
-  //   Model[] memory _models = new Model[](modelIds.length);
-  //   for (uint i = 0; i < modelIds.length; i++) {
-  //     if (models[modelIds[i]].owner == addr) {
-  //       _models[i] = models[modelIds[i]];
-  //     }
-  //   }
-  //   return _models;
-  // }
-
-  // function getModelTypes -- to be implemented when types are defined
-  // function getModelsByType
 }

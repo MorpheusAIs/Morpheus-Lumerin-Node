@@ -7,7 +7,10 @@ async function main() {
     initialReward: 100_000_000n,
     rewardDecrease: 1_000_000n,
   };
-  const linear = await hre.viem.deployContract("Linear", []);
+  const linear = await hre.viem.deployContract(
+    "LinearDistributionIntervalDecreaseMock",
+    [],
+  );
 
   for (let i = 0; i < 1000; i++) {
     const now = data.payoutStart + BigInt(i) * 24n * 3600n;

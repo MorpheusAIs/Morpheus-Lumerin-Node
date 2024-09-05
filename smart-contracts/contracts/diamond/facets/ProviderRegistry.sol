@@ -1,140 +1,112 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { AddressSet, KeySet } from "../libraries/KeySet.sol";
-import { AppStorage, Provider, PROVIDER_REWARD_LIMITER_PERIOD } from "../AppStorage.sol";
-import { LibOwner } from "../libraries/LibOwner.sol";
+import { SafeERC20, IERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-contract ProviderRegistry {
-  using AddressSet for AddressSet.Set;
-  using KeySet for KeySet.Set;
+import { DiamondOwnableStorage } from "../presets/DiamondOwnableStorage.sol";
 
-  AppStorage internal s;
+import { BidStorage } from "../storages/BidStorage.sol";
+import { ProviderStorage } from "../storages/ProviderStorage.sol";
 
-  event ProviderRegisteredUpdated(address indexed provider);
-  event ProviderDeregistered(address indexed provider);
-  event ProviderMinStakeUpdated(uint256 newStake);
+import { IProviderRegistry } from "../../interfaces/facets/IProviderRegistry.sol";
 
-  error StakeTooLow();
-  error ErrProviderNotDeleted();
-  error ErrNoStake();
-  error ErrNoWithdrawableStake();
-  error ProviderHasActiveBids();
+contract ProviderRegistry is IProviderRegistry, DiamondOwnableStorage, ProviderStorage, BidStorage {
+  using SafeERC20 for IERC20;
 
-  /// @notice Returns provider struct by address
-  function providerMap(address addr) external view returns (Provider memory) {
-    return s.providerMap[addr];
-  }
+  function __ProviderRegistry_init() external initializer(PROVIDER_STORAGE_SLOT) {}
 
-  /// @notice Returns provider address by index
-  function providers(uint256 index) external view returns (address) {
-    return s.providers[index];
-  }
-
-  /// @notice Returns active (undeleted) provider IDs
-  function providerGetIds() external view returns (address[] memory) {
-    return s.activeProviders.keys();
-  }
-
-  /// @notice Returns count of active providers
-  function providerGetCount() external view returns (uint count) {
-    return s.activeProviders.count();
-  }
-
-  /// @notice Returns provider by index
-  function providerGetByIndex(uint index) external view returns (address addr, Provider memory provider) {
-    addr = s.activeProviders.keyAtIndex(index);
-    return (addr, s.providerMap[addr]);
-  }
-
-  /// @notice Returns all providers
-  function providerGetAll() external view returns (address[] memory, Provider[] memory) {
-    uint256 count = s.activeProviders.count();
-    address[] memory _addrs = new address[](count);
-    Provider[] memory _providers = new Provider[](count);
-
-    for (uint i = 0; i < count; i++) {
-      address addr = s.activeProviders.keyAtIndex(i);
-      _addrs[i] = addr;
-      _providers[i] = s.providerMap[addr];
-    }
-
-    return (_addrs, _providers);
+  /// @notice Sets the minimum stake required for a provider
+  function providerSetMinStake(uint256 providerMinimumStake_) external onlyOwner {
+    setProviderMinimumStake(providerMinimumStake_);
+    emit ProviderMinStakeUpdated(providerMinimumStake_);
   }
 
   /// @notice Registers a provider
-  /// @param   addr      provider address
-  /// @param   addStake  amount of stake to add
-  /// @param   endpoint  provider endpoint (host.com:1234)
-  function providerRegister(address addr, uint256 addStake, string memory endpoint) external {
-    LibOwner._senderOrOwner(addr);
-    Provider memory provider = s.providerMap[addr];
-    uint256 newStake = provider.stake + addStake;
-    if (newStake < s.providerMinStake) {
+  /// @param   providerAddress_      provider address
+  /// @param   amount_  amount of stake to add
+  /// @param   endpoint_  provider endpoint (host.com:1234)
+  function providerRegister(address providerAddress_, uint256 amount_, string calldata endpoint_) external {
+    if (!_ownerOrProvider(providerAddress_)) {
+      revert NotOwnerOrProvider();
+    }
+
+    Provider memory provider_ = providerMap(providerAddress_);
+    uint256 newStake_ = provider_.stake + amount_;
+    if (newStake_ < providerMinimumStake()) {
       revert StakeTooLow();
     }
+
+    getToken().safeTransferFrom(_msgSender(), address(this), amount_);
+
     // if we add stake to an existing provider the limiter period is not reset
-    uint128 createdAt = provider.createdAt;
-    uint128 periodEnd = provider.limitPeriodEnd;
-    if (createdAt == 0) {
-      s.activeProviders.insert(addr);
-      s.providers.push(addr);
-      createdAt = uint128(block.timestamp);
-      periodEnd = createdAt + PROVIDER_REWARD_LIMITER_PERIOD;
-    } else if (provider.isDeleted) {
-      s.activeProviders.insert(addr);
+    uint128 createdAt_ = provider_.createdAt;
+    uint128 periodEnd_ = provider_.limitPeriodEnd;
+    if (createdAt_ == 0) {
+      setActiveProvider(providerAddress_, true);
+      addProvider(providerAddress_);
+      createdAt_ = uint128(block.timestamp);
+      periodEnd_ = createdAt_ + PROVIDER_REWARD_LIMITER_PERIOD;
+    } else if (provider_.isDeleted) {
+      setActiveProvider(providerAddress_, true);
     }
 
-    s.providerMap[addr] = Provider({
-      endpoint: endpoint,
-      stake: newStake,
-      createdAt: createdAt,
-      limitPeriodEnd: periodEnd,
-      limitPeriodEarned: provider.limitPeriodEarned,
-      isDeleted: false
-    });
+    setProvider(
+      providerAddress_,
+      Provider(endpoint_, newStake_, createdAt_, periodEnd_, provider_.limitPeriodEarned, false)
+    );
 
-    emit ProviderRegisteredUpdated(addr);
-
-    s.token.transferFrom(msg.sender, address(this), addStake); // reverts with ERC20InsufficientAllowance
+    emit ProviderRegisteredUpdated(providerAddress_);
   }
 
   /// @notice Deregisters a provider
-  function providerDeregister(address addr) external {
-    LibOwner._senderOrOwner(addr);
-    if (s.providerActiveBids[addr].count() > 0) {
+  function providerDeregister(address provider_) external {
+    if (!_ownerOrProvider(provider_)) {
+      revert NotOwnerOrProvider();
+    }
+    if (!isProviderExists(provider_)) {
+      revert ProviderNotFound();
+    }
+    if (isProviderActiveBidsEmpty(provider_)) {
       revert ProviderHasActiveBids();
     }
 
-    s.activeProviders.remove(addr);
-    emit ProviderDeregistered(addr);
+    setActiveProvider(provider_, false);
 
-    Provider storage p = s.providerMap[addr];
-    uint256 withdrawable = getWithdrawableStake(p);
-    p.stake -= withdrawable;
-    p.isDeleted = true;
-    s.token.transfer(addr, withdrawable);
+    Provider storage provider = providerMap(provider_);
+    uint256 withdrawable_ = _getWithdrawableStake(provider);
+    provider.stake -= withdrawable_;
+    provider.isDeleted = true;
+
+    getToken().safeTransfer(_msgSender(), withdrawable_);
+
+    emit ProviderDeregistered(provider_);
   }
 
   /// @notice Withdraws stake from a provider after it has been deregistered
   ///         Allows to withdraw the stake after provider reward period has ended
-  function providerWithdrawStake(address addr) external {
-    Provider storage p = s.providerMap[addr];
-    if (!p.isDeleted) {
+  function providerWithdrawStake(address provider_) external {
+    Provider storage provider = providerMap(provider_);
+    if (!provider.isDeleted) {
       revert ErrProviderNotDeleted();
     }
-
-    if (p.stake == 0) {
+    if (provider.stake == 0) {
       revert ErrNoStake();
     }
 
-    uint256 withdrawable = getWithdrawableStake(p);
-    if (withdrawable == 0) {
+    uint256 withdrawable_ = _getWithdrawableStake(provider);
+    if (withdrawable_ == 0) {
       revert ErrNoWithdrawableStake();
     }
 
-    p.stake -= withdrawable;
-    s.token.transfer(addr, withdrawable);
+    provider.stake -= withdrawable_;
+
+    getToken().safeTransfer(provider_, withdrawable_);
+
+    emit ProviderWithdrawnStake(provider_, withdrawable_);
+  }
+
+  function isProviderExists(address provider_) public view returns (bool) {
+    return providerMap(provider_).createdAt != 0;
   }
 
   /// @notice Returns the withdrawable stake for a provider
@@ -142,27 +114,15 @@ contract ProviderRegistry {
   ///         is limited by the amount earning that remains in the current period.
   ///         It is done to prevent the provider from withdrawing and then staking
   ///         again from a different address, which bypasses the limitation.
-  function getWithdrawableStake(Provider memory p) private view returns (uint256) {
-    if (uint128(block.timestamp) > p.limitPeriodEnd) {
-      return p.stake;
+  function _getWithdrawableStake(Provider memory provider_) private view returns (uint256) {
+    if (uint128(block.timestamp) > provider_.limitPeriodEnd) {
+      return provider_.stake;
     }
-    return p.stake - p.limitPeriodEarned;
+
+    return provider_.stake - provider_.limitPeriodEarned;
   }
 
-  /// @notice Sets the minimum stake required for a provider
-  function providerSetMinStake(uint256 _minStake) external {
-    LibOwner._onlyOwner();
-    s.providerMinStake = _minStake;
-    emit ProviderMinStakeUpdated(_minStake);
-  }
-
-  /// @notice Checks if a provider exists (is active / not deleted)
-  function providerExists(address addr) external view returns (bool) {
-    return s.activeProviders.exists(addr);
-  }
-
-  /// @notice Returns the minimum stake required for a provider
-  function providerMinStake() external view returns (uint256) {
-    return s.providerMinStake;
+  function _ownerOrProvider(address provider_) internal view returns (bool) {
+    return _msgSender() == owner() || _msgSender() == provider_;
   }
 }
