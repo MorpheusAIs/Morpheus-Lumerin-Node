@@ -33,5 +33,10 @@ export const getReward = (
 ): bigint => {
   const endTime = pool.endTime > timestamp ? timestamp : pool.endTime;
   const rewardPerShareScaled = getRewardPerShareScaled(pool, endTime);
-  return (userStake.shareAmount * rewardPerShareScaled) / precision - userStake.rewardDebt;
+  const reward = (userStake.shareAmount * rewardPerShareScaled) / precision - userStake.rewardDebt;
+  // rewardDebt that is not updated can cause negative reward
+  if (reward < 0n) {
+    return 0n;
+  }
+  return reward;
 };

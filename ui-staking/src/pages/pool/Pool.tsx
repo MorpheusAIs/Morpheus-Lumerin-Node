@@ -4,15 +4,15 @@ import { Separator } from "../../components/Separator.tsx";
 import { Container } from "../../components/Container.tsx";
 import { usePool } from "./usePool.ts";
 import { Chart } from "../../components/Chart.tsx";
-import { formatLMR, formatMOR } from "../../lib/units.ts";
+import { formatETH, formatLMR, formatMOR, formatUnits } from "../../lib/units.ts";
 import { formatDate, formatDuration } from "../../lib/date.ts";
 import { Button } from "../../components/Button.tsx";
 import { SpoilerToogle } from "../../components/SpoilerToogle.tsx";
 import { getReward } from "../../helpers/reward.ts";
 import { Spinner } from "../../icons/Spinner.tsx";
 import { Dialog } from "../../components/Dialog.tsx";
-import { getTxURL } from "../../helpers/indexer.ts";
-import { useAccount } from "wagmi";
+import { TxProgress } from "../../components/TxProgress.tsx";
+import { getDisplayErrorMessage } from "../../helpers/error.ts";
 
 export const Pool = () => {
   const {
@@ -32,11 +32,15 @@ export const Pool = () => {
     morBalance,
     locksMap,
     navigate,
-    dialog,
     chain,
+    withdrawModal,
+    unstakeModal,
+    ethBalance,
   } = usePool(() => {});
 
-  const activeStakes = stakes.data?.filter((stake) => stake.stakeAmount > 0n);
+  const activeStakes = stakes.data
+    ?.map((stake, id) => ({ id, ...stake }))
+    .filter((stake) => stake.stakeAmount > 0n);
 
   return (
     <>
@@ -80,11 +84,11 @@ export const Pool = () => {
                   <dt>Total staked</dt>
                   <dd>{formatLMR(poolData.totalStaked)}</dd>
 
-                  <dt>Start date</dt>
-                  <dd>{formatDate(poolData.startTime)}</dd>
+                  <dt>Start</dt>
+                  <dd className="shift-left">{formatDate(poolData.startTime)}</dd>
 
-                  <dt>End date</dt>
-                  <dd>{formatDate(poolData.endTime)}</dd>
+                  <dt>End</dt>
+                  <dd className="shift-left">{formatDate(poolData.endTime)}</dd>
 
                   <dt>Duration</dt>
                   <dd>{formatDuration(poolData.endTime - poolData.startTime)}</dd>
@@ -109,11 +113,18 @@ export const Pool = () => {
                 <h2 className="section-heading">Wallet balance</h2>
                 <Separator />
                 <ul className="info">
+                  <li>
+                    {formatUnits(
+                      ethBalance.data?.value || 0n,
+                      Number(ethBalance.data?.decimals || 0n)
+                    )}{" "}
+                    {ethBalance.data?.symbol}
+                  </li>
                   <li>{formatLMR(lmrBalance.data || 0n)}</li>
                   <li>{formatMOR(morBalance.data || 0n)}</li>
                   <li>
                     <Button
-                      className="button-secondary button-small"
+                      className="button button-small"
                       onClick={() => navigate(`/pool/${poolId}/stake`)}
                     >
                       Stake
@@ -134,7 +145,7 @@ export const Pool = () => {
                 <ul className="stakes">
                   {poolData &&
                     activeStakes &&
-                    activeStakes.map((stake, index) => {
+                    activeStakes.map((stake) => {
                       if (stake.stakeAmount === 0n) {
                         return null;
                       }
@@ -158,12 +169,11 @@ export const Pool = () => {
 
                       const timeLeftString =
                         lockRemainingSeconds > 0
-                          ? `${formatDuration(lockRemainingSeconds)} left`
+                          ? formatDuration(lockRemainingSeconds)
                           : "Stake unlocked";
 
                       return (
-                        // biome-ignore lint/suspicious/noArrayIndexKey: order of items is fixed
-                        <li key={index} className="stake">
+                        <li key={stake.id} className="stake">
                           <SpoilerToogle />
                           <ul className="unchecked">
                             <li className="amount">{formatLMR(stake.stakeAmount)}</li>
@@ -209,7 +219,7 @@ export const Pool = () => {
                             <li>
                               <p className="title">Current Rewards</p>
                               <p className="value">
-                                {formatMOR(getReward(stake, poolData, timestamp, BigInt(1e12)))}
+                                {formatMOR(getReward(stake, poolData, timestamp, precision.data))}
                               </p>
                             </li>
                             <li>
@@ -222,16 +232,22 @@ export const Pool = () => {
                             </li>
                             <li className="item-button">
                               <Button
-                                className="button-secondary button-small"
-                                onClick={() => withdraw(BigInt(index))}
+                                className="button button-small"
+                                onClick={() => withdraw(BigInt(stake.id))}
                               >
                                 Withdraw rewards
                               </Button>
                             </li>
                             <li className="item-button">
                               <Button
-                                className="button-secondary button-small"
-                                onClick={() => unstake(BigInt(index))}
+                                className="button button-small"
+                                disabled={lockRemainingSeconds > 0}
+                                title={
+                                  lockRemainingSeconds > 0
+                                    ? "Lockup period has not ended yet"
+                                    : "Unstake the stake and withdraw all rewards"
+                                }
+                                onClick={() => unstake(BigInt(stake.id))}
                               >
                                 Unstake
                               </Button>
@@ -246,30 +262,66 @@ export const Pool = () => {
           )}
         </Container>
       </main>
-      {dialog.show && (
-        <Dialog onDismiss={dialog.onDismiss}>
+
+      {withdrawModal.isVisible && (
+        <Dialog onDismiss={() => withdrawModal.reset()}>
           <div className="dialog-content">
-            <h2>{dialog.dialogHeader}</h2>
-            <p>{dialog.content1}</p>
-            {typeof dialog.content2 === "string" ? (
-              <p>
-                Transaction id:{" "}
-                <a
-                  href={getTxURL(dialog.content2 as `0x${string}`, chain)}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {dialog.content2}
-                </a>
-                {}
-              </p>
-            ) : (
-              String(dialog.content2)
-            )}
+            <h2>Withdrawing rewards</h2>
+            <p>Withdrawing all of your staking rewards</p>
+            <ul className="tx-stages">
+              <li>
+                <p className="stage-name">Withdraw transaction</p>
+                <p className="stage-progress">
+                  <TxProgress
+                    isTransacting={withdrawModal.isTransacting}
+                    txHash={withdrawModal.txHash}
+                    error={getDisplayErrorMessage(withdrawModal.txError)}
+                  />
+                </p>
+              </li>
+            </ul>
             <button
-              className="button-small button-primary"
+              className="button button-small button-primary"
               type="button"
-              onClick={dialog.onDismiss}
+              onClick={() => {
+                withdrawModal.reset();
+                if (withdrawModal.isTransactionSuccess) {
+                  navigate(`/pool/${poolId}`);
+                }
+              }}
+            >
+              OK
+            </button>
+          </div>
+        </Dialog>
+      )}
+
+      {unstakeModal.isVisible && (
+        <Dialog onDismiss={() => unstakeModal.reset()}>
+          <div className="dialog-content">
+            <h2>Unstake transaction</h2>
+            <p>Withdrawing your stake and all of the collected rewards</p>
+            <ul className="tx-stages">
+              <li>
+                <p className="stage-name">Unstaking</p>
+                <p className="stage-progress">
+                  <TxProgress
+                    isTransacting={unstakeModal.isTransacting}
+                    txHash={unstakeModal.txHash}
+                    error={getDisplayErrorMessage(unstakeModal.txError)}
+                  />
+                </p>
+              </li>
+            </ul>
+            <button
+              className="button button-small button-primary"
+              type="button"
+              onClick={() => {
+                unstakeModal.reset();
+                if (unstakeModal.isTransactionSuccess) {
+                  navigate(`/pool/${poolId}`);
+                }
+              }}
             >
               OK
             </button>

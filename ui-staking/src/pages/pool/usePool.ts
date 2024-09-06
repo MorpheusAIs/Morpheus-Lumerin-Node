@@ -1,11 +1,24 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { useStopwatch } from "react-timer-hook";
-import { useAccount, useBlock, usePublicClient, useReadContract, useWriteContract } from "wagmi";
+import {
+  useAccount,
+  useBalance,
+  useBlock,
+  usePublicClient,
+  useReadContract,
+  useWriteContract,
+} from "wagmi";
 import { stakingMasterChefAbi } from "../../blockchain/abi.ts";
 import { erc20Abi } from "viem";
 import { mapPoolDataAndDerive } from "../../helpers/pool.ts";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  filterPoolQuery,
+  filterStakeQuery,
+  filterUserBalanceQuery,
+} from "../../helpers/invalidators.ts";
+import { useTxModal } from "../../hooks/useTxModal.ts";
 
 export function usePool(onUpdate: () => void) {
   const pubClient = usePublicClient();
@@ -18,7 +31,7 @@ export function usePool(onUpdate: () => void) {
   const { address, chain } = useAccount();
 
   const block = useBlock();
-  const { totalSeconds, reset } = useStopwatch({ autoStart: true });
+  const { totalSeconds } = useStopwatch({ autoStart: true });
   const timestamp = block.isSuccess ? block.data?.timestamp + BigInt(totalSeconds) : 0n;
 
   const qc = useQueryClient();
@@ -69,6 +82,11 @@ export function usePool(onUpdate: () => void) {
     },
   });
 
+  const ethBalance = useBalance({
+    address,
+    query: { refetchOnMount: false, refetchOnReconnect: false, refetchOnWindowFocus: false },
+  });
+
   const lmrBalance = useReadContract({
     abi: erc20Abi,
     address: process.env.REACT_APP_LMR_ADDR as `0x${string}`,
@@ -100,13 +118,8 @@ export function usePool(onUpdate: () => void) {
     },
   });
 
-  const [dialog, setDialog] = useState({
-    content1: "",
-    content2: "" as string | Error,
-    dialogHeader: "",
-    show: false,
-    onDismiss: () => {},
-  });
+  const withdrawModal = useTxModal();
+  const unstakeModal = useTxModal();
 
   const locksMap = new Map<bigint, bigint>(
     locks.data?.map(({ durationSeconds, multiplierScaled }) => [durationSeconds, multiplierScaled])
@@ -119,68 +132,33 @@ export function usePool(onUpdate: () => void) {
       console.error("No poolId");
       return;
     }
-    try {
-      const hash = await writeContract.writeContractAsync({
-        abi: stakingMasterChefAbi,
-        address: process.env.REACT_APP_STAKING_ADDR as `0x${string}`,
-        functionName: "unstake",
-        args: [BigInt(poolId), stakeId],
-      });
-      await pubClient?.waitForTransactionReceipt({ hash });
-      setDialog({
-        dialogHeader: "Transaction successful",
-        content1: `You have successfully unstaked from pool ${poolId}`,
-        content2: hash,
-        show: true,
-        onDismiss: () => {
-          qc.invalidateQueries({
-            predicate: (q) => {
-              // invalidate all queries related to the pool
-              const params = q.queryKey?.[1];
-              if (!params) {
-                return false;
-              }
-              if (params?.functionName === "pools" && params?.args?.[0] === BigInt(poolId)) {
-                return true;
-              }
-              if (params?.functionName === "getStakes" && params?.args?.[1] === BigInt(poolId)) {
-                return true;
-              }
-              if (
-                params?.functionName === "balanceOf" &&
-                params?.address === process.env.REACT_APP_LMR_ADDR &&
-                params?.args?.[0] === address
-              ) {
-                return true;
-              }
-              if (
-                params?.functionName === "balanceOf" &&
-                params?.address === process.env.REACT_APP_MOR_ADDR &&
-                params?.args?.[0] === address
-              ) {
-                return true;
-              }
-              return false;
-            },
+
+    await unstakeModal.start({
+      txCall: async () =>
+        writeContract.writeContractAsync({
+          abi: stakingMasterChefAbi,
+          address: process.env.REACT_APP_STAKING_ADDR as `0x${string}`,
+          functionName: "unstake",
+          args: [BigInt(poolId), stakeId],
+        }),
+      onSuccess: async () => {
+        await qc.invalidateQueries({
+          predicate: filterPoolQuery(BigInt(poolId)),
+          refetchType: "all",
+        });
+        await qc.invalidateQueries({
+          predicate: filterStakeQuery(BigInt(poolId)),
+          refetchType: "all",
+        });
+        if (address) {
+          await qc.invalidateQueries({
+            predicate: filterUserBalanceQuery(address),
+            refetchType: "all",
           });
-          setDialog({ ...dialog, show: false });
-          reset();
-          onUpdate();
-        },
-      });
-    } catch (e) {
-      setDialog({
-        dialogHeader: "Transaction failed",
-        content1: `You have failed to unstake from pool ${poolId}`,
-        content2: e as Error,
-        show: true,
-        onDismiss: () => {
-          setDialog({ ...dialog, show: false });
-          reset();
-        },
-      });
-      console.error(e);
-    }
+        }
+        onUpdate();
+      },
+    });
   }
 
   async function withdraw(stakeId: bigint) {
@@ -188,38 +166,34 @@ export function usePool(onUpdate: () => void) {
       console.error("No poolId");
       return;
     }
-    try {
-      const hash = await writeContract.writeContractAsync({
-        abi: stakingMasterChefAbi,
-        address: process.env.REACT_APP_STAKING_ADDR as `0x${string}`,
-        functionName: "withdrawReward",
-        args: [BigInt(poolId), stakeId],
-      });
-      const receipt = await pubClient?.waitForTransactionReceipt({ hash });
-      setDialog({
-        dialogHeader: "Transaction successful",
-        content1: `You have successfully withdrawn your rewards from pool ${poolId}`,
-        content2: hash,
-        show: true,
-        onDismiss: () => {
-          setDialog({ ...dialog, show: false });
-          reset();
-          onUpdate();
-        },
-      });
-    } catch (e) {
-      setDialog({
-        dialogHeader: "Transaction failed",
-        content1: `You have failed to withdraw your rewards from pool ${poolId}`,
-        content2: e as Error,
-        show: true,
-        onDismiss: () => {
-          setDialog({ ...dialog, show: false });
-          reset();
-        },
-      });
-      console.error(e);
-    }
+
+    await withdrawModal.start({
+      txCall: async () =>
+        writeContract.writeContractAsync({
+          abi: stakingMasterChefAbi,
+          address: process.env.REACT_APP_STAKING_ADDR as `0x${string}`,
+          functionName: "withdrawReward",
+          args: [BigInt(poolId), stakeId],
+        }),
+      onSuccess: async () => {
+        await qc.invalidateQueries({
+          predicate: filterPoolQuery(BigInt(poolId)),
+          refetchType: "all",
+        });
+        await qc.invalidateQueries({
+          predicate: filterStakeQuery(BigInt(poolId)),
+          refetchType: "all",
+        });
+        if (address) {
+          await qc.invalidateQueries({
+            predicate: filterUserBalanceQuery(address),
+            refetchType: "all",
+          });
+        }
+        writeContract.reset();
+        onUpdate();
+      },
+    });
   }
 
   return {
@@ -237,9 +211,11 @@ export function usePool(onUpdate: () => void) {
     poolNotFound,
     locks,
     locksMap,
+    ethBalance,
     lmrBalance,
     morBalance,
     navigate,
-    dialog,
+    withdrawModal,
+    unstakeModal,
   };
 }

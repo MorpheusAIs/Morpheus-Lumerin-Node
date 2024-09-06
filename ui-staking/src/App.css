@@ -184,28 +184,24 @@ header {
   cursor: pointer;
 }
 
+.button:disabled {
+  color: rgba(255, 255, 255, 0.1);
+  cursor: not-allowed;
+}
+
 .button-small {
-  border-radius: var(--border-radius);
   min-width: 100px;
   padding: 5px;
   font-size: 15px;
-  font-weight: 600;
   height: 42px;
-  color: #fff;
   text-transform: uppercase;
   background-color: rgba(79, 126, 145, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  cursor: pointer;
 }
 
 .button-primary {
   background-color: rgba(76, 90, 95, 0.5);
   border: none;
-}
-
-.button-primary:disabled {
-  color: rgba(255, 255, 255, 0.1);
-  cursor: not-allowed;
 }
 
 .section {
@@ -659,7 +655,7 @@ input::-webkit-inner-spin-button {
   width: 2em;
   height: 2em;
   display: flex;
-  align-self: center;
+  align-self: flex-start;
   padding: 0.5em 0.5em;
   margin-right: 2em;
   cursor: pointer;
@@ -683,6 +679,11 @@ input::-webkit-inner-spin-button {
   margin-right: 1em;
 }
 
+.unchecked .reward,
+.unchecked .multiplier {
+  justify-content: end;
+}
+
 .unchecked li {
   display: flex;
   align-items: center;
@@ -702,6 +703,36 @@ input::-webkit-inner-spin-button {
 
 .dialog-content .button-small {
   margin-top: 15px;
+}
+
+.tx-stages {
+  list-style: none;
+  padding-left: 0;
+  margin-top: 15px;
+}
+
+.stage-name {
+  font-weight: 600;
+}
+
+.tx-stages .tx-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.stage-progress {
+  display: flex;
+  gap: 10px;
+  font-size: 13px;
+  align-items: center;
+}
+
+.stage-progress a {
+  color: #fff;
+}
+
+.shift-left {
+  margin-left: -30px;
 }
 
 @media (max-width: 1200px) {

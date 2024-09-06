@@ -5,10 +5,12 @@ import { WagmiProvider } from "wagmi";
 import { config } from "./config/wagmi.ts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createWeb3Modal } from "@web3modal/wagmi/react";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
 const queryClient = new QueryClient();
 
 createWeb3Modal({
+  tokens: {},
   wagmiConfig: config,
   projectId: process.env.REACT_APP_WALLET_CONNECT_PROJECT_ID,
   enableAnalytics: true, // Optional - defaults to your Cloud configuration
@@ -29,6 +31,7 @@ export const App = () => {
     <>
       <WagmiProvider config={config}>
         <QueryClientProvider client={queryClient}>
+          <ReactQueryDevtools position="right" />
           <Router />
           <svg width="0" height="0">
             <title>SVG gradients</title>

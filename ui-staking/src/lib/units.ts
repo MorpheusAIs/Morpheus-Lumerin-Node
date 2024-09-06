@@ -1,5 +1,10 @@
+export const decimalETH = 18;
 export const decimalsMOR = 18;
 export const decimalsLMR = 8;
+
+export function formatETH(num: bigint): string {
+  return `${formatUnits(num, decimalETH)} ETH`;
+}
 
 export function formatMOR(num: bigint): string {
   return `${formatUnits(num, decimalsMOR)} MOR`;
@@ -9,7 +14,7 @@ export function formatLMR(num: bigint): string {
   return `${formatUnits(num, decimalsLMR)} LMR`;
 }
 
-const thousandsSeparator = ",";
+const thousandsSeparator = " ";
 
 export function formatUnits(value: bigint, decimals: number, significantDigits = 4) {
   let display = value.toString();

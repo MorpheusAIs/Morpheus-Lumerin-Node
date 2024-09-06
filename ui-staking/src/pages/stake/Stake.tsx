@@ -19,12 +19,12 @@ import {
 } from "viem";
 import type { WriteContractErrorType } from "wagmi/actions";
 import { getTxURL } from "../../helpers/indexer.ts";
+import { Check } from "../../icons/Check.tsx";
+import { ErrorIcon } from "../../icons/Error.tsx";
+import { TxProgress } from "../../components/TxProgress.tsx";
+import { getDisplayErrorMessage } from "../../helpers/error.ts";
 
-interface Props {
-  onStakeCb?: (id: bigint) => void;
-}
-
-export const Stake = (props: Props) => {
+export const Stake = () => {
   const {
     timestamp,
     locks,
@@ -41,9 +41,9 @@ export const Stake = (props: Props) => {
     setStakeAmount,
     stakeAmountValidErr,
     chain,
-    stakeTxHash,
     writeContract,
-  } = useStake(props.onStakeCb);
+    txModal,
+  } = useStake();
 
   const isNoPoolError = isErr<typeof stakingMasterChefAbi>(locks.error, "PoolOrStakeNotExists");
   const isNoLockPeriods = locks.isSuccess && locks.data.length === 0;
@@ -54,7 +54,7 @@ export const Stake = (props: Props) => {
       ? Number(locks.data[lockIndex].multiplierScaled) / Number(multiplier.data)
       : 0;
 
-  const stakeTxURL = getTxURL(stakeTxHash, chain);
+  // const stakeTxURL = getTxURL(stakeTxHash, chain);
 
   return (
     <>
@@ -138,52 +138,51 @@ export const Stake = (props: Props) => {
               </>
             )}
           </section>
-          {stakeTxHash !== null && locks.isSuccess && (
-            <Dialog onDismiss={() => navigate("/pool/0")}>
+          {txModal.isVisible && (
+            <Dialog onDismiss={() => txModal.reset()}>
               <div className="dialog-content">
-                <h2>Stake successful</h2>
+                <h2>Staking transaction</h2>
                 <p>
-                  You have successfully staked {formatLMR(stakeAmountDecimals)} with lock period of{" "}
-                  {formatDuration(locks.data[lockIndex].durationSeconds)}.
+                  Staking {formatLMR(stakeAmountDecimals)} with lock period of{" "}
+                  {formatDuration(locks.data?.[lockIndex].durationSeconds || 0n)}.
                 </p>
-                <p>
-                  Transaction id:{" "}
-                  <a href={stakeTxURL || undefined} target="_blank" rel="noreferrer">
-                    {stakeTxHash}
-                  </a>
-                </p>
+                <ul className="tx-stages">
+                  <li>
+                    <p className="stage-name">Approving funds</p>
+                    <p className="stage-progress">
+                      <TxProgress
+                        isTransacting={txModal.isApproving}
+                        txHash={txModal.approveTxHash}
+                        error={getDisplayErrorMessage(txModal.approveError)}
+                      />
+                    </p>
+                  </li>
+                  <li>
+                    <p className="stage-name">Adding stake</p>
+                    <p className="stage-progress">
+                      <TxProgress
+                        isTransacting={txModal.isTransacting}
+                        txHash={txModal.txHash}
+                        error={getDisplayErrorMessage(txModal.txError)}
+                      />
+                    </p>
+                  </li>
+                </ul>
                 <button
-                  className="button-small button-primary"
+                  className="button button-small button-primary"
                   type="button"
-                  onClick={() => navigate("/pool/0")}
+                  onClick={() => {
+                    txModal.reset();
+                    if (txModal.isTransactionSuccess) {
+                      navigate(`/pool/${poolId}`);
+                    }
+                  }}
                 >
                   OK
                 </button>
               </div>
             </Dialog>
           )}
-          <Dialog isOpen={writeContract.isError} onDismiss={() => writeContract.reset()}>
-            <div className="dialog-content">
-              <h2>Stake error</h2>
-              <p>There was an error during staking {formatLMR(stakeAmountDecimals)}.</p>
-              <p>Error: {getErrorName(writeContract.error)}</p>
-              {stakeTxHash && (
-                <p>
-                  Transaction id:{" "}
-                  <a href={stakeTxURL || undefined} target="_blank" rel="noreferrer">
-                    {stakeTxHash}
-                  </a>
-                </p>
-              )}
-              <button
-                className="button-small button-primary"
-                type="button"
-                onClick={() => writeContract.reset()}
-              >
-                OK
-              </button>
-            </div>
-          </Dialog>
         </ContainerNarrow>
       </main>
     </>
@@ -198,26 +197,4 @@ function formatSeconds(seconds: number | bigint): string {
     ms = seconds * 1000;
   }
   return prettyMilliseconds(ms, { verbose: true });
-}
-
-function getErrorName(err: WriteContractErrorType | null): string {
-  if (err === null) {
-    return "no error";
-  }
-
-  console.error(errorToPOJO(err));
-
-  if (err.cause instanceof ContractFunctionRevertedError) {
-    if (err.cause.data) {
-      return err.cause.data.errorName;
-    }
-  }
-
-  if (err.cause instanceof TransactionExecutionError) {
-    if (err.cause.cause instanceof UserRejectedRequestError) {
-      return "Transaction was rejected";
-    }
-  }
-
-  return String(err.cause);
 }

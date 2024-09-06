@@ -2,13 +2,18 @@ import { useAccount, useBlock, usePublicClient, useReadContract, useWriteContrac
 import { erc20Abi, stakingMasterChefAbi } from "../../blockchain/abi.ts";
 import { useNavigate, useParams } from "react-router-dom";
 import { useState } from "react";
-import { getStakeId } from "./utils.ts";
 import { useStopwatch } from "react-timer-hook";
 import { mapPoolData } from "../../helpers/pool.ts";
 import { decimalsLMR, decimalsMOR } from "../../lib/units.ts";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  filterPoolQuery,
+  filterStakeQuery,
+  filterUserBalanceQuery,
+} from "../../helpers/invalidators.ts";
+import { useTxModal } from "../../hooks/useTxModal.ts";
 
-export function useStake(onStakeCb?: (id: bigint) => void) {
+export function useStake() {
   // set initial state
   const { poolId: poolIdString } = useParams();
   const { address, chain } = useAccount();
@@ -18,7 +23,7 @@ export function useStake(onStakeCb?: (id: bigint) => void) {
   const [lockIndex, setLockIndex] = useState(0);
   const [stakeAmount, _setStakeAmount] = useState("0");
   const [stakeAmountValidEnabled, setStakeAmountValidEnabled] = useState(false);
-  const [stakeTxHash, setStakeTxHash] = useState<`0x${string}` | null>(null);
+  const txModal = useTxModal();
 
   const block = useBlock({
     query: { refetchInterval: false, refetchOnMount: false, refetchOnReconnect: false },
@@ -121,58 +126,40 @@ export function useStake(onStakeCb?: (id: bigint) => void) {
       return;
     }
 
-    const tx = await writeContract.writeContractAsync({
-      abi: erc20Abi,
-      address: process.env.REACT_APP_LMR_ADDR as `0x${string}`,
-      functionName: "approve",
-      args: [process.env.REACT_APP_STAKING_ADDR as `0x${string}`, stakeAmountDecimals],
-    });
-
-    await pubClient?.waitForTransactionReceipt({
-      hash: tx,
-      confirmations: 1,
-    });
-
-    const tx2 = await writeContract.writeContractAsync({
-      abi: [...stakingMasterChefAbi, ...erc20Abi],
-      address: process.env.REACT_APP_STAKING_ADDR as `0x${string}`,
-      functionName: "stake",
-      args: [BigInt(poolId), stakeAmountDecimals, lockIndex],
-    });
-    const receipt = await pubClient.waitForTransactionReceipt({
-      hash: tx2,
-      confirmations: 1,
-    });
-    setStakeTxHash(tx2);
-    const stakeId = getStakeId(receipt.logs, address, BigInt(poolId));
-
-    await qc.invalidateQueries({
-      predicate: (q) => {
-        // invalidate all queries related to the pool
-        const params = q.queryKey?.[1];
-        if (!params) {
-          return false;
-        }
-        if (params?.functionName === "pools" && params?.args?.[0] === BigInt(poolId)) {
-          return true;
-        }
-        if (params?.functionName === "getStakes" && params?.args?.[1] === BigInt(poolId)) {
-          console.log("invalidating getStakes", params);
-          return true;
-        }
-        if (
-          params?.functionName === "balanceOf" &&
-          params?.address === process.env.REACT_APP_LMR_ADDR &&
-          params?.args?.[0] === address
-        ) {
-          return true;
-        }
-        return false;
+    await txModal.start({
+      approveCall: () =>
+        writeContract.writeContractAsync({
+          abi: erc20Abi,
+          address: process.env.REACT_APP_LMR_ADDR as `0x${string}`,
+          functionName: "approve",
+          args: [process.env.REACT_APP_STAKING_ADDR as `0x${string}`, stakeAmountDecimals],
+        }),
+      txCall: () =>
+        writeContract.writeContractAsync({
+          abi: [...stakingMasterChefAbi, ...erc20Abi],
+          address: process.env.REACT_APP_STAKING_ADDR as `0x${string}`,
+          functionName: "stake",
+          args: [BigInt(poolId), stakeAmountDecimals, lockIndex],
+        }),
+      onSuccess: async () => {
+        await qc.invalidateQueries({
+          predicate: filterPoolQuery(BigInt(poolId)),
+          refetchType: "all",
+        });
+        await qc.invalidateQueries({
+          predicate: filterStakeQuery(BigInt(poolId)),
+          refetchType: "all",
+        });
+        await qc.invalidateQueries({
+          predicate: filterUserBalanceQuery(address),
+          refetchType: "all",
+        });
       },
     });
   }
 
   return {
+    txModal,
     poolId,
     poolData,
     apyValue,
@@ -186,7 +173,6 @@ export function useStake(onStakeCb?: (id: bigint) => void) {
     lockIndex,
     setLockIndex,
     onStake,
-    stakeTxHash,
     lmrBalance,
     stakeAmount,
     setStakeAmount,
