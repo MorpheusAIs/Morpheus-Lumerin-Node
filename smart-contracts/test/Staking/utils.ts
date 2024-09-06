@@ -4,6 +4,7 @@ import { getTxTimestamp } from "../utils";
 
 export async function getPoolId(poolTx: `0x${string}`) {
   const publicClient = await hre.viem.getPublicClient();
+
   const receipt = await publicClient.waitForTransactionReceipt({
     hash: poolTx,
   });

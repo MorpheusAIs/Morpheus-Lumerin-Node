@@ -5,6 +5,47 @@ import { expect } from "chai";
 import { catchError, getTxDeltaBalance, getTxTimestamp } from "../utils";
 import { DAY, SECOND } from "../../utils/time";
 
+describe("Staking contract - pool array", () => {
+  it("Should update pool totalStake after stake", async () => {
+    const data = await loadFixture(aliceStakes);
+    const {
+      contracts: { staking },
+      stakes: {
+        alice: { poolId, stakingAmount },
+      },
+      accounts: { alice },
+    } = data;
+
+    const [, , , , totalStaked] = await staking.read.pools([poolId]);
+
+    expect(totalStaked).eq(stakingAmount);
+  });
+
+  it("Should unstake correctly", async () => {
+    const {
+      accounts: { alice },
+      contracts: { staking, tokenMOR },
+      stakes,
+      expPool,
+    } = await loadFixture(aliceStakes);
+
+    await time.increase(
+      expPool.lockDurations[stakes.alice.lockDurationId].durationSeconds,
+    );
+
+    const withdrawTx = await staking.write.unstake(
+      [stakes.alice.poolId, stakes.alice.stakeId],
+      { account: alice.account },
+    );
+
+    const [, , , , totalStaked] = await staking.read.pools([
+      stakes.alice.poolId,
+    ]);
+
+    expect(totalStaked).eq(0n);
+  });
+});
+
 describe("Staking contract - Add pool", () => {
   it("Should verify adding pool", async () => {
     const {
@@ -16,6 +57,7 @@ describe("Staking contract - Add pool", () => {
     expect(poolInfo).deep.equal([
       expPool.rewardPerSecond * expPool.precision,
       expPool.startDate,
+      0n,
       0n,
       0n,
       expPool.startDate,
@@ -99,7 +141,9 @@ describe("Staking contract - Stop pool", () => {
     const stopTx = await staking.write.stopPool([expPool.id]);
     const timestamp = await getTxTimestamp(pubClient, stopTx);
 
-    const [, , , , startTime, endTime] = await staking.read.pools([expPool.id]);
+    const [, , , , , startTime, endTime] = await staking.read.pools([
+      expPool.id,
+    ]);
 
     expect(startTime).equal(expPool.startDate);
     expect(endTime).equal(timestamp);
@@ -239,7 +283,7 @@ describe("Staking contract - Stop pool", () => {
     } = await loadFixture(setupStaking);
 
     const morBalanceBefore = await tokenMOR.read.balanceOf([staking.address]);
-    const [, , , , , endTime] = await staking.read.pools([expPool.id]);
+    const [, , , , , , endTime] = await staking.read.pools([expPool.id]);
 
     await time.increaseTo(endTime - 10n);
     await staking.write.stopPool([expPool.id]);

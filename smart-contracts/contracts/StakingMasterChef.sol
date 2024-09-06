@@ -14,6 +14,7 @@ contract StakingMasterChef is Ownable {
     uint256 lastRewardTime; // last time rewards were distributed
     uint256 accRewardPerShareScaled; // accumulated reward per share, times `PRECISION`
     uint256 totalShares; // total shares of reward token
+    uint256 totalStaked; // total staked tokens
     uint256 startTime; // start time of the staking for this pool
     uint256 endTime; // end time of the staking for this pool - after this time, no more rewards will be distributed
     uint256 undistributedReward; // reward that was not distributed
@@ -29,6 +30,7 @@ contract StakingMasterChef is Ownable {
     uint256 stakeAmount; // amount of staked tokens
     uint256 shareAmount; // shares received after staking
     uint256 rewardDebt; // reward debt
+    uint256 stakedAt; // time when stake was added
     uint256 lockEndsAt; // when staking lock duration ends
   }
 
@@ -81,6 +83,7 @@ contract StakingMasterChef is Ownable {
         locks: _lockDurations,
         accRewardPerShareScaled: 0,
         totalShares: 0,
+        totalStaked: 0,
         undistributedReward: 0
       })
     );
@@ -96,6 +99,10 @@ contract StakingMasterChef is Ownable {
   /// @return locks locks for this pool
   function getLockDurations(uint256 _poolId) external view poolExists(_poolId) returns (Lock[] memory) {
     return pools[_poolId].locks;
+  }
+
+  function getPoolsCount() external view returns (uint256) {
+    return pools.length;
   }
 
   /// @notice Stops the pool, no more rewards will be distributed
@@ -177,6 +184,7 @@ contract StakingMasterChef is Ownable {
 
     uint256 userShares = (_amount * lock.multiplierScaled) / PRECISION;
     pool.totalShares += userShares;
+    pool.totalStaked += _amount;
 
     UserStake[] storage userStakes = poolUserStakes[_poolId][_msgSender()];
     uint256 stakeId = userStakes.length;
@@ -185,6 +193,7 @@ contract StakingMasterChef is Ownable {
         stakeAmount: _amount,
         shareAmount: userShares,
         rewardDebt: (userShares * pool.accRewardPerShareScaled) / PRECISION,
+        stakedAt: block.timestamp,
         lockEndsAt: lockEndsAt
       })
     );
@@ -217,6 +226,7 @@ contract StakingMasterChef is Ownable {
     uint256 reward = (userStake.shareAmount * pool.accRewardPerShareScaled) / PRECISION - userStake.rewardDebt;
 
     pool.totalShares -= userStake.shareAmount;
+    pool.totalStaked -= unstakeAmount;
 
     userStake.rewardDebt = 0;
     userStake.stakeAmount = 0;

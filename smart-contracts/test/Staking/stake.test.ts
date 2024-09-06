@@ -207,7 +207,7 @@ describe("Staking contract - stake", () => {
 
   it("should error if stake is zero", async () => {
     const {
-      contracts: { staking, tokenLMR },
+      contracts: { staking },
       accounts: { alice },
     } = await loadFixture(setupStaking);
     const amount = 0n;
