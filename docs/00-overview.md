@@ -1,6 +1,6 @@
 # Overview of the Morpheus-Lumerin Environment
 
-[Architecture-Overview](images/overview.png)
+![Architecture-Overview](images/overview.png)
 
 This document is intended to provide a high level overview of the major architectural components between model compute-providers and consumers in the Morpheus-Lumerin environment.
 
@@ -59,3 +59,6 @@ Numbers below reference the circled elements in the diagram above.
 ## 6. Prompt & Inference 
 - [06-model-interaction.md](06-model-interaction.md) - for more details
 - Once the bid is purchased, the consumer can send prompts to the proxy-router via the UI-Desktop
+
+## Proxy-Router and Possible LLM Server Configurations - Reference Architecture 
+![Reference Architecture](images/system-architecture.png)
