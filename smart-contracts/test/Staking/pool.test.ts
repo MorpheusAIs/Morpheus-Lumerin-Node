@@ -5,6 +5,47 @@ import { expect } from "chai";
 import { catchError, getTxDeltaBalance, getTxTimestamp } from "../utils";
 import { DAY, SECOND } from "../../utils/time";
 
+describe("Staking contract - pool array", () => {
+  it("Should update pool totalStake after stake", async () => {
+    const data = await loadFixture(aliceStakes);
+    const {
+      contracts: { staking },
+      stakes: {
+        alice: { poolId, stakingAmount },
+      },
+      accounts: { alice },
+    } = data;
+
+    const [, , , , totalStaked] = await staking.read.pools([poolId]);
+
+    expect(totalStaked).eq(stakingAmount);
+  });
+
+  it("Should unstake correctly", async () => {
+    const {
+      accounts: { alice },
+      contracts: { staking, tokenMOR },
+      stakes,
+      expPool,
+    } = await loadFixture(aliceStakes);
+
+    await time.increase(
+      expPool.lockDurations[stakes.alice.lockDurationId].durationSeconds,
+    );
+
+    const withdrawTx = await staking.write.unstake(
+      [stakes.alice.poolId, stakes.alice.stakeId],
+      { account: alice.account },
+    );
+
+    const [, , , , totalStaked] = await staking.read.pools([
+      stakes.alice.poolId,
+    ]);
+
+    expect(totalStaked).eq(0n);
+  });
+});
+
 describe("Staking contract - Add pool", () => {
   it("Should verify adding pool", async () => {
     const {
@@ -18,8 +59,10 @@ describe("Staking contract - Add pool", () => {
       expPool.startDate,
       0n,
       0n,
+      0n,
       expPool.startDate,
       expPool.endDate,
+      0n,
     ]);
 
     const lockDurations = await staking.read.getLockDurations([expPool.id]);
@@ -98,7 +141,9 @@ describe("Staking contract - Stop pool", () => {
     const stopTx = await staking.write.stopPool([expPool.id]);
     const timestamp = await getTxTimestamp(pubClient, stopTx);
 
-    const [, , , , startTime, endTime] = await staking.read.pools([expPool.id]);
+    const [, , , , , startTime, endTime] = await staking.read.pools([
+      expPool.id,
+    ]);
 
     expect(startTime).equal(expPool.startDate);
     expect(endTime).equal(timestamp);
@@ -116,10 +161,13 @@ describe("Staking contract - Stop pool", () => {
     await time.increase((1 * DAY) / SECOND);
     const stopTx = await staking.write.stopPool([expPool.id]);
     const stoppedAt = await getTxTimestamp(pubClient, stopTx);
+    const withdrawTx = await staking.write.withdrawUndistributedReward([
+      expPool.id,
+    ]);
 
     const ownerPayback = await getTxDeltaBalance(
       pubClient,
-      stopTx,
+      withdrawTx,
       owner.account.address,
       tokenMOR,
     );
@@ -139,8 +187,11 @@ describe("Staking contract - Stop pool", () => {
     const expPayback = (expPool.endDate - stoppedAt) * expPool.rewardPerSecond;
     const expAliceReward = (stoppedAt - stakedAt) * expPool.rewardPerSecond;
 
-    expect(ownerPayback).equal(expPayback);
+    expect(Number(ownerPayback)).greaterThanOrEqual(Number(expPayback));
     expect(aliceReward).equal(expAliceReward);
+
+    const poolBalance = await tokenMOR.read.balanceOf([staking.address]);
+    expect(poolBalance).equal(0n);
   });
 
   it("Should error stopping pool if not owner", async () => {
@@ -223,6 +274,22 @@ describe("Staking contract - Stop pool", () => {
       (stopTime - startTime) * expPool.rewardPerSecond,
       "should return earned balance",
     );
+  });
+
+  it("Stopping pool should not lock a portion of rewards", async () => {
+    const {
+      contracts: { staking, tokenMOR },
+      expPool,
+    } = await loadFixture(setupStaking);
+
+    const morBalanceBefore = await tokenMOR.read.balanceOf([staking.address]);
+    const [, , , , , , endTime] = await staking.read.pools([expPool.id]);
+
+    await time.increaseTo(endTime - 10n);
+    await staking.write.stopPool([expPool.id]);
+    const morBalanceAfter = await tokenMOR.read.balanceOf([staking.address]);
+
+    expect(morBalanceBefore).to.eq(morBalanceAfter);
   });
 });
 

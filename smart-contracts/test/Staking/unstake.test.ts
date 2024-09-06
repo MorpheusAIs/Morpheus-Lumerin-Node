@@ -1,8 +1,9 @@
 import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
-import { aliceStakes } from "./fixtures";
+import { aliceStakes, setupStaking } from "./fixtures";
 import { expect } from "chai";
-import { elapsedTxs } from "./utils";
-import { catchError } from "../utils";
+import { elapsedTxs, getPoolId } from "./utils";
+import { catchError, getTxDeltaBalance } from "../utils";
+import { DAY, HOUR, SECOND } from "../../utils/time";
 
 describe("Staking contract - unstake", () => {
   it("Should unstake correctly", async () => {
@@ -87,5 +88,112 @@ describe("Staking contract - unstake", () => {
         account: alice.account,
       });
     });
+  });
+
+  it("should allow unstaking before start date", async () => {
+    const {
+      contracts: { staking, tokenLMR, tokenMOR },
+      expPool,
+      accounts: { alice },
+      pubClient,
+    } = await loadFixture(setupStaking);
+
+    const now = await time.latest();
+    const startTime = BigInt(now + DAY / SECOND);
+    const duration = 10n * BigInt(DAY / SECOND);
+    const rewardPerSecond = 100n;
+    const totalReward = rewardPerSecond * BigInt(duration);
+
+    await tokenMOR.write.approve([staking.address, totalReward]);
+    const tx = await staking.write.addPool([
+      startTime,
+      duration,
+      totalReward,
+      [
+        {
+          durationSeconds: BigInt(DAY / SECOND),
+          multiplierScaled: 1n * expPool.precision,
+        },
+      ],
+    ]);
+
+    const poolId = await getPoolId(tx);
+
+    const stakeAmount = 1000n;
+    await tokenLMR.write.approve([staking.address, stakeAmount], {
+      account: alice.account,
+    });
+
+    await staking.write.stake([poolId, stakeAmount, 0], {
+      account: alice.account,
+    });
+
+    await time.increaseTo(startTime - BigInt(HOUR / SECOND));
+    await staking.write.unstake([poolId, 0n], {
+      account: alice.account,
+    });
+  });
+
+  it("should not count prestaking period into rewards", async () => {
+    const {
+      contracts: { staking, tokenLMR, tokenMOR },
+      expPool,
+      accounts: { alice },
+      pubClient,
+    } = await loadFixture(setupStaking);
+
+    const now = await time.latest();
+    const startTime = BigInt(now + DAY / SECOND);
+    const duration = 10n * BigInt(DAY / SECOND);
+    const rewardPerSecond = 100n;
+    const totalReward = rewardPerSecond * BigInt(duration);
+
+    await tokenMOR.write.approve([staking.address, totalReward]);
+    const tx = await staking.write.addPool([
+      startTime,
+      duration,
+      totalReward,
+      [
+        {
+          durationSeconds: BigInt(DAY / SECOND),
+          multiplierScaled: 1n * expPool.precision,
+        },
+      ],
+    ]);
+
+    const poolId = await getPoolId(tx);
+    // TODO: add above part to fixture (setupStaking in future)
+
+    const stakeAmount = 1000n;
+    await tokenLMR.write.approve([staking.address, stakeAmount], {
+      account: alice.account,
+    });
+
+    await staking.write.stake([poolId, stakeAmount, 0], {
+      account: alice.account,
+    });
+
+    await time.increaseTo(startTime - BigInt(HOUR / SECOND));
+
+    const tx2 = await staking.write.unstake([poolId, 0n], {
+      account: alice.account,
+    });
+
+    const deltaMOR = await getTxDeltaBalance(
+      pubClient,
+      tx2,
+      alice.account.address,
+      tokenMOR,
+    );
+
+    const deltaLMR = await getTxDeltaBalance(
+      pubClient,
+      tx2,
+      alice.account.address,
+      tokenLMR,
+    );
+
+    expect(deltaMOR).to.equal(0n);
+    expect(deltaLMR).to.equal(stakeAmount);
   });
 });
