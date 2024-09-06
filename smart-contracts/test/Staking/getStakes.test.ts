@@ -43,6 +43,7 @@ describe("Staking contract - getStake", () => {
       shareAmount: stakes.alice.stakingAmount,
       rewardDebt: 0n,
       lockEndsAt: lockEndsAt,
+      stakedAt: await getTxTimestamp(pubClient, stakes.alice.depositTx),
     });
 
     const aliceStakes = await staking.read.getStakes([

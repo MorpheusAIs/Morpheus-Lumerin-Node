@@ -147,7 +147,7 @@ describe("Staking contract - Complex reward scenarios", () => {
     const balance = await tokenMOR.read.balanceOf([staking.address]);
     console.log("total reward", expPool.totalReward.toString());
 
-    const [, , , , , , undistributedReward] = await staking.read.pools([
+    const [, , , , , , , undistributedReward] = await staking.read.pools([
       stakes.alice.poolId,
     ]);
     console.log("unused", undistributedReward);
