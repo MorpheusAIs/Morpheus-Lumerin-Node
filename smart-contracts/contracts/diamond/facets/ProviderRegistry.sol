@@ -66,7 +66,7 @@ contract ProviderRegistry is IProviderRegistry, DiamondOwnableStorage, ProviderS
     if (!isProviderExists(provider_)) {
       revert ProviderNotFound();
     }
-    if (isProviderActiveBidsEmpty(provider_)) {
+    if (!isProviderActiveBidsEmpty(provider_)) {
       revert ProviderHasActiveBids();
     }
 

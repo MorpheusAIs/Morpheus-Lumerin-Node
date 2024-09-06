@@ -10,6 +10,7 @@ import { IBidStorage } from "../../interfaces/storage/IBidStorage.sol";
 
 contract BidStorage is IBidStorage {
   using Paginator for *;
+  using EnumerableSet for EnumerableSet.Bytes32Set;
 
   struct BDStorage {
     IERC20 token; // MOR token
@@ -21,8 +22,6 @@ contract BidStorage is IBidStorage {
     mapping(bytes32 => bytes32[]) modelAgentBids; // keccak256(provider, modelAgentId) => all bidIds
     mapping(address => bytes32[]) providerBids; // provider => all bidIds
   }
-
-  using EnumerableSet for EnumerableSet.Bytes32Set;
 
   bytes32 public constant BID_STORAGE_SLOT = keccak256("diamond.standard.bid.storage");
 
@@ -42,7 +41,7 @@ contract BidStorage is IBidStorage {
     bytes32 modelAgentId_,
     uint256 offset_,
     uint256 limit_
-  ) external view returns (bytes32[] memory) {
+  ) public view returns (bytes32[] memory) {
     return _getBidStorage().modelAgentActiveBids[modelAgentId_].part(offset_, limit_);
   }
 
@@ -80,6 +79,10 @@ contract BidStorage is IBidStorage {
 
   function removeProviderActiveBids(address provider, bytes32 bidId) internal {
     _getBidStorage().providerActiveBids[provider].remove(bidId);
+  }
+
+  function getModelAgentActiveBids(bytes32 modelAgentId) internal view returns (EnumerableSet.Bytes32Set storage) {
+    return _getBidStorage().modelAgentActiveBids[modelAgentId];
   }
 
   function removeModelAgentActiveBids(bytes32 modelAgentId, bytes32 bidId) internal {

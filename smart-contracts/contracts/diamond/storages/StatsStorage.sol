@@ -1,18 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import { IStatsStorage } from "../../interfaces/storage/IStatsStorage.sol";
+
 import { LibSD } from "../../libs/LibSD.sol";
 
-contract StatsStorage {
-  struct ProviderModelStats {
-    LibSD.SD tpsScaled1000; // tokens per second running average
-    LibSD.SD ttftMs; // time to first token running average in milliseconds
-    uint32 totalDuration; // total duration of sessions
-    uint32 successCount; // number of observations
-    uint32 totalCount;
-    // TODO: consider adding SD with weldford algorithm
-  }
-
+contract StatsStorage is IStatsStorage {
   struct ModelStats {
     LibSD.SD tpsScaled1000;
     LibSD.SD ttftMs;

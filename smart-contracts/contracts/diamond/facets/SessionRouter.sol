@@ -7,7 +7,7 @@ import { SafeERC20, IERC20 } from "@openzeppelin/contracts/token/ERC20/utils/Saf
 
 import { DiamondOwnableStorage } from "../presets/DiamondOwnableStorage.sol";
 
-import { BidStorage } from "../storages/BidStorage.sol";
+import { BidStorage, EnumerableSet } from "../storages/BidStorage.sol";
 import { StatsStorage } from "../storages/StatsStorage.sol";
 import { SessionStorage } from "../storages/SessionStorage.sol";
 import { ProviderStorage } from "../storages/ProviderStorage.sol";
@@ -29,6 +29,7 @@ contract SessionRouter is
   using Math for uint256;
   using LibSD for LibSD.SD;
   using SafeERC20 for IERC20;
+  using EnumerableSet for EnumerableSet.Bytes32Set;
 
   uint32 public constant MIN_SESSION_DURATION = 5 minutes;
   uint32 public constant MAX_SESSION_DURATION = 1 days;
@@ -102,7 +103,6 @@ contract SessionRouter is
 
     setActiveUserSession(_msgSender(), sessionIndex_, true);
     setActiveProviderSession(bid_.provider, sessionIndex_, true);
-    incrementActiveSessionsCount();
 
     // try to use locked stake first, but limit iterations to 20
     // if user has more than 20 onHold entries, they will have to use withdrawUserStake separately
@@ -134,7 +134,6 @@ contract SessionRouter is
     // update indexes
     setActiveUserSession(session.user, sessionIndex_, false);
     setActiveProviderSession(session.provider, sessionIndex_, false);
-    decrementActiveSessionsCount();
 
     // update session record
     session.closeoutReceipt = receiptEncoded_; //TODO: remove that field in favor of tps and ttftMs
@@ -212,7 +211,7 @@ contract SessionRouter is
 
   /// @notice allows provider to claim their funds
   function claimProviderBalance(bytes32 sessionId_, uint256 amountToWithdraw_) external {
-    Session storage session = getSession(sessionId_);
+    Session storage session = _getSession(sessionId_);
     if (!_ownerOrProvider(session.provider)) {
       revert NotOwnerOrProvider();
     }
@@ -230,7 +229,7 @@ contract SessionRouter is
 
   /// @notice deletes session from the history
   function deleteHistory(bytes32 sessionId_) external {
-    Session storage session = getSession(sessionId_);
+    Session storage session = _getSession(sessionId_);
     if (!_ownerOrUser(session.user)) {
       revert NotOwnerOrUser();
     }
@@ -300,10 +299,12 @@ contract SessionRouter is
   /// @dev parameters should be the same as in Ethereum L1 Distribution contract
   /// @dev at address 0x47176B2Af9885dC6C4575d4eFd63895f7Aaa4790
   /// @dev call 'Distribution.pools(3)' where '3' is a poolId
-  //   function setPoolConfig(uint256 index, Pool calldata pool) public {
-  //     LibOwner._onlyOwner();
-  //     s.pools[index] = pool;
-  //   }
+  function setPoolConfig(uint256 index, Pool calldata pool) public onlyOwner {
+    if (index >= getPools().length) {
+      revert PoolIndexOutOfBounds();
+    }
+    _getSessionStorage().pools[index] = pool;
+  }
 
   function _maybeResetProviderRewardLimiter(Provider storage provider) private {
     if (block.timestamp > provider.limitPeriodEnd) {
@@ -434,6 +435,29 @@ contract SessionRouter is
     return totalSupply_ + totalClaimed();
   }
 
+  function getActiveBidsRatingByModelAgent(
+    bytes32 modelAgentId_,
+    uint256 offset_,
+    uint8 limit_
+  ) external view returns (bytes32[] memory, Bid[] memory, ProviderModelStats[] memory) {
+    bytes32[] memory modelAgentBidsSet_ = modelAgentActiveBids(modelAgentId_, offset_, limit_);
+    uint256 length_ = modelAgentBidsSet_.length;
+
+    Bid[] memory bids_ = new Bid[](length_);
+    bytes32[] memory bidIds_ = new bytes32[](length_);
+    ProviderModelStats[] memory stats_ = new ProviderModelStats[](length_);
+
+    for (uint i = 0; i < length_; i++) {
+      bytes32 id_ = modelAgentBidsSet_[i];
+      bidIds_[i] = id_;
+      Bid memory bid_ = getBid(id_);
+      bids_[i] = bid_;
+      stats_[i] = _getProviderModelStats(modelAgentId_, bid_.provider);
+    }
+
+    return (bidIds_, bids_, stats_);
+  }
+
   function startOfTheDay(uint256 timestamp_) public pure returns (uint256) {
     return timestamp_ - (timestamp_ % 1 days);
   }
@@ -489,8 +513,8 @@ contract SessionRouter is
   }
 
   /// @notice returns total claimanble balance for the provider for particular session
-  function _getProviderClaimableBalance(bytes32 sessionId_) public view returns (uint256) {
-    Session memory session_ = getSession(sessionId_);
+  function getProviderClaimableBalance(bytes32 sessionId_) public view returns (uint256) {
+    Session memory session_ = _getSession(sessionId_);
     if (session_.openedAt == 0) {
       revert SessionNotFound();
     }
@@ -509,6 +533,7 @@ contract SessionRouter is
     }
 
     bytes32 receiptHash_ = ECDSA.toEthSignedMessageHash(keccak256(receipt_));
+
     return ECDSA.recover(receiptHash_, signature_) == signer_;
   }
 

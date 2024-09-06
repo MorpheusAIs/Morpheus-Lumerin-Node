@@ -3,7 +3,11 @@ pragma solidity ^0.8.24;
 
 import { ISessionStorage } from "../../interfaces/storage/ISessionStorage.sol";
 
+import { Paginator } from "@solarity/solidity-lib/libs/arrays/Paginator.sol";
+
 contract SessionStorage is ISessionStorage {
+  using Paginator for *;
+
   struct SNStorage {
     // all sessions
     Session[] sessions;
@@ -17,7 +21,6 @@ contract SessionStorage is ISessionStorage {
     mapping(address => mapping(uint256 => bool)) providerActiveSessions; // provider address => active session indexes
     mapping(address => OnHold[]) userOnHold; // user address => balance
     mapping(bytes => bool) approvalMap; // provider approval => true if approval was already used
-    uint64 activeSessionsCount;
     uint256 totalClaimed; // total amount of MOR claimed by providers
     // other
     address fundingAccount; // account which stores the MOR tokens with infinite allowance for this contract
@@ -28,6 +31,18 @@ contract SessionStorage is ISessionStorage {
 
   function sessionMap(bytes32 sessionId) external view returns (uint256) {
     return _getSessionStorage().sessionMap[sessionId];
+  }
+
+  function sessions(uint256 sessionIndex) external view returns (Session memory) {
+    return _getSessionStorage().sessions[sessionIndex];
+  }
+
+  function getSession(bytes32 sessionId) external view returns (Session memory) {
+    return _getSessionStorage().sessions[getSessionIndex(sessionId)];
+  }
+
+  function getSessionsByUser(address user, uint256 offset_, uint256 limit_) external view returns (uint256[] memory) {
+    return _getSessionStorage().userSessions[user].part(offset_, limit_);
   }
 
   function getPools() internal view returns (Pool[] storage) {
@@ -56,14 +71,6 @@ contract SessionStorage is ISessionStorage {
 
   function setActiveProviderSession(address provider, uint256 sessionIndex, bool active) internal {
     _getSessionStorage().providerActiveSessions[provider][sessionIndex] = active;
-  }
-
-  function incrementActiveSessionsCount() internal {
-    _getSessionStorage().activeSessionsCount++;
-  }
-
-  function decrementActiveSessionsCount() internal {
-    _getSessionStorage().activeSessionsCount--;
   }
 
   function setSession(bytes32 sessionId, uint256 sessionIndex) internal {
@@ -102,11 +109,7 @@ contract SessionStorage is ISessionStorage {
     return _getSessionStorage().userOnHold[user];
   }
 
-  function getActiveSessionsCount() internal view returns (uint256) {
-    return _getSessionStorage().activeSessionsCount;
-  }
-
-  function getSession(bytes32 sessionId) internal view returns (Session storage) {
+  function _getSession(bytes32 sessionId) internal view returns (Session storage) {
     return _getSessionStorage().sessions[getSessionIndex(sessionId)];
   }
 

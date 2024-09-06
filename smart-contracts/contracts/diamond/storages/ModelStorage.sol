@@ -22,6 +22,10 @@ contract ModelStorage is IModelStorage {
     return _getModelStorage().models[index];
   }
 
+  function modelMinimumStake() public view returns (uint256) {
+    return _getModelStorage().modelMinimumStake;
+  }
+
   function setModelActive(bytes32 modelId, bool isActive) internal {
     _getModelStorage().activeModels[modelId] = isActive;
   }
@@ -44,10 +48,6 @@ contract ModelStorage is IModelStorage {
 
   function isModelActive(bytes32 modelId) internal view returns (bool) {
     return _getModelStorage().activeModels[modelId];
-  }
-
-  function modelMinimumStake() internal view returns (uint256) {
-    return _getModelStorage().modelMinimumStake;
   }
 
   function _getModelStorage() internal pure returns (MDLStorage storage _ds) {

@@ -19,6 +19,14 @@ contract ProviderStorage is IProviderStorage {
     return _getProviderStorage().providerMap[provider];
   }
 
+  function providers(uint256 index) public view returns (address) {
+    return _getProviderStorage().providers[index];
+  }
+
+  function providerMinimumStake() public view returns (uint256) {
+    return _getProviderStorage().providerMinimumStake;
+  }
+
   function setActiveProvider(address provider, bool isActive) internal {
     _getProviderStorage().activeProviders[provider] = isActive;
   }
@@ -39,16 +47,8 @@ contract ProviderStorage is IProviderStorage {
     return _getProviderStorage().providerMap[addr];
   }
 
-  function providers(uint256 index) internal view returns (address) {
-    return _getProviderStorage().providers[index];
-  }
-
   function isProviderActive(address provider) internal view returns (bool) {
     return _getProviderStorage().activeProviders[provider];
-  }
-
-  function providerMinimumStake() internal view returns (uint256) {
-    return _getProviderStorage().providerMinimumStake;
   }
 
   function providerExists(address provider) internal view returns (bool) {

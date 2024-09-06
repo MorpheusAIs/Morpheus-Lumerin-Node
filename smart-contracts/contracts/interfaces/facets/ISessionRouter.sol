@@ -2,6 +2,8 @@
 pragma solidity ^0.8.24;
 
 import { ISessionStorage } from "../storage/ISessionStorage.sol";
+import { IBidStorage } from "../storage/IBidStorage.sol";
+import { IStatsStorage } from "../storage/IStatsStorage.sol";
 
 interface ISessionRouter is ISessionStorage {
   event SessionOpened(address indexed user, bytes32 indexed sessionId, address indexed providerId);
@@ -26,6 +28,7 @@ interface ISessionRouter is ISessionStorage {
   error AmountToWithdrawIsZero();
   error NotOwnerOrProvider();
   error NotOwnerOrUser();
+  error PoolIndexOutOfBounds();
 
   function __SessionRouter_init(address fundingAccount_, Pool[] memory pools_) external;
 
@@ -72,4 +75,16 @@ interface ISessionRouter is ISessionStorage {
   function totalMORSupply(uint256 timestamp_) external view returns (uint256);
 
   function startOfTheDay(uint256 timestamp_) external pure returns (uint256);
+
+  function getProviderClaimableBalance(bytes32 sessionId_) external view returns (uint256);
+
+  function setPoolConfig(uint256 index, Pool calldata pool) external;
+
+  function SIGNATURE_TTL() external view returns (uint32);
+
+  function getActiveBidsRatingByModelAgent(
+    bytes32 modelAgentId_,
+    uint256 offset_,
+    uint8 limit_
+  ) external view returns (bytes32[] memory, IBidStorage.Bid[] memory, IStatsStorage.ProviderModelStats[] memory);
 }

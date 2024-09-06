@@ -25,7 +25,7 @@ contract StakingMasterChef is IStakingMasterChef, OwnableUpgradeable, UUPSUpgrad
   mapping(uint256 poolId => Pool) public pools;
   mapping(uint256 poolId => PoolRateData) public poolRatesData;
   mapping(uint256 poolId => mapping(uint256 lockDuration => uint256 multiplierScaled)) public locks;
-  mapping(uint256 poolId => mapping(address user => UserStake[])) poolUserStakes;
+  mapping(uint256 poolId => mapping(address user => UserStake[])) public poolUserStakes;
 
   modifier poolExists(uint256 poolId_) {
     if (pools[poolId_].startTime == 0) {
@@ -35,6 +35,8 @@ contract StakingMasterChef is IStakingMasterChef, OwnableUpgradeable, UUPSUpgrad
   }
 
   function __StakingMasterChef_init(address stakingToken_, address rewardToken_) public initializer {
+    __Ownable_init();
+
     stakingToken = IERC20(stakingToken_);
     rewardToken = IERC20(rewardToken_);
   }

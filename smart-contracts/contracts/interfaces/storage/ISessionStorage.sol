@@ -32,4 +32,10 @@ interface ISessionStorage {
   }
 
   function sessionMap(bytes32 sessionId) external view returns (uint256);
+
+  function sessions(uint256 sessionIndex) external view returns (Session memory);
+
+  function getSession(bytes32 sessionId) external view returns (Session memory);
+
+  function getSessionsByUser(address user, uint256 offset_, uint256 limit_) external view returns (uint256[] memory);
 }

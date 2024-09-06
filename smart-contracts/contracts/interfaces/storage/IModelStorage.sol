@@ -16,4 +16,6 @@ interface IModelStorage {
   function getModel(bytes32 modelId) external view returns (Model memory);
 
   function models(uint256 index) external view returns (bytes32);
+
+  function modelMinimumStake() external view returns (uint256);
 }
