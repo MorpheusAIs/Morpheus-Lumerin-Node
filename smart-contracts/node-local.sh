@@ -16,7 +16,7 @@ stop_hardhat() {
 }
 
 # Start the hardhat process in the background
-$BIN_PATH/hardhat node &
+$BIN_PATH/hardhat node --show-stack-traces &
 HARDHAT_PID=$!
 echo "Started hardhat with PID $HARDHAT_PID"
 

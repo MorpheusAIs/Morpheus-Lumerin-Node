@@ -11,7 +11,7 @@ In other words, referring to the overview model...how do we get to conversation 
 Numbers below reference the circled elements in the diagram above.
 
 ## 0. Existing Foundation Elements 
-- [Readme](../README.md) - for more details
+- [Readme](../readme.md) - for more details
 - Arbitrum Ethereum Layer 2 blockchain
 - Morpheus Token (MOR) for staking and bidding
 - Lumerin Smart Contract for governance and routing
@@ -38,7 +38,6 @@ Numbers below reference the circled elements in the diagram above.
     1. Register your provider (the proxy-router) on the blockchain (http://mycoolproxy.serverfarm.io:3333) 
     1. Register your model on the blockchain
     1. Create a bid for your model on the blockchain
-- Further details on how to do this are in the [Provider Offer Guide](provider-offer.md)
 
 ## 4. Consumer Node Setup 
 - [04-consumer-setup.md](04-consumer-setup.md) - for more details
@@ -53,10 +52,13 @@ Numbers below reference the circled elements in the diagram above.
 - The consumer node will need to have the proxy-router running and the UI-Desktop running to interact with the models and bids on the blockchain
 
 ## 5. Purchase Bid 
-- [05-purchase-bid.md](05-purchase-bid.md) - for more details
+- [05-bid-purchase.md](05-bid-purchase.md) - for more details
 - Once the UI-Desktop is up and running, the consumer can browse the available bids on the blockchain
 - Select a bid and stake the intended MOR amount (minimum should be shown) 
 
 ## 6. Prompt & Inference 
 - [06-model-interaction.md](06-model-interaction.md) - for more details
 - Once the bid is purchased, the consumer can send prompts to the proxy-router via the UI-Desktop
+
+## Proxy-Router and Possible LLM Server Configurations - Reference Architecture 
+![Reference Architecture](images/system-architecture.png)
