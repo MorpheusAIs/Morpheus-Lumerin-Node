@@ -58,8 +58,7 @@ export function mapPoolDataAndDerive(
   }
 
   const totalRewards = (poolDuration * rewardPerSecondScaled) / precision;
-  const unlockedRewards =
-    timestamp > startTime ? ((timestamp - startTime) * rewardPerSecondScaled) / precision : 0n;
+  const unlockedRewards = BigInt(Math.trunc(Number(totalRewards) * poolProgress));
   const lockedRewards = totalRewards - unlockedRewards;
 
   return {

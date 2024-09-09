@@ -116,7 +116,7 @@ export const Pool = () => {
                   <li>
                     {formatUnits(
                       ethBalance.data?.value || 0n,
-                      Number(ethBalance.data?.decimals || 0n)
+                      BigInt(ethBalance.data?.decimals || 0)
                     )}{" "}
                     {ethBalance.data?.symbol}
                   </li>
