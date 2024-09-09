@@ -1,6 +1,9 @@
 import { getVar, isAddress, isBigInt } from "../libraries/getConfig";
 import hre from "hardhat";
-import { getDefaultDurations } from "../test/Staking/fixtures";
+import {
+  getDefaultDurations,
+  getDefaultDurationsMedium,
+} from "../test/Staking/fixtures";
 import { getPoolId } from "../test/Staking/utils";
 
 async function main() {
@@ -47,12 +50,16 @@ async function main() {
   const defaultDurations = getDefaultDurations(precision);
 
   console.log("Adding pool ...");
-  const tx = await staking.write.addPool([
-    startDate,
-    duration,
-    totalReward,
-    defaultDurations,
-  ]);
+  console.log("Approving", totalReward, "MOR tokens ...");
+  await morToken.write.approve([stakingAddress, totalReward]);
+
+  console.log("Adding pool", totalReward, "MOR tokens ...");
+  const tx = await staking.write
+    .addPool([startDate, duration, totalReward, defaultDurations])
+    .catch((err) => {
+      console.log("Error adding pool", err?.cause);
+      throw err;
+    });
 
   const poolId = await getPoolId(tx);
   console.log("Pool added with id:", poolId);

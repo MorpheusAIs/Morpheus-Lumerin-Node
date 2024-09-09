@@ -4,7 +4,7 @@ import "@nomicfoundation/hardhat-toolbox-viem";
 import "@nomicfoundation/hardhat-ignition-viem";
 import "@solarity/hardhat-gobind";
 import "./tasks/upgrade";
-import { HardhatUserConfig } from "hardhat/config";
+import type { HardhatUserConfig } from "hardhat/config";
 
 const config: HardhatUserConfig = {
   networks: {
@@ -12,6 +12,10 @@ const config: HardhatUserConfig = {
       initialDate: "2024-07-16T01:00:00.000Z",
       gas: "auto", // required for tests where two transactions should be mined in the same block
       // loggingEnabled: true,
+      mining: {
+        auto: true,
+        interval: 10_000,
+      },
     },
   },
   solidity: {
@@ -44,6 +48,7 @@ const config: HardhatUserConfig = {
     // L2: "arbitrum",
     L1Etherscan: process.env.ETHERSCAN_API_KEY,
     L1: "ethereum",
+    reportPureAndViewMethods: true,
   },
   gobind: {
     outdir: "./bindings/go",

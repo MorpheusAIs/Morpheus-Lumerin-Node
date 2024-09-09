@@ -1,8 +1,9 @@
 import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
 import { aliceAndBobStake, aliceStakes } from "./fixtures";
 import { expect } from "chai";
-import { elapsedTxs } from "./utils";
+import { elapsedTxs, getStakeId } from "./utils";
 import { DAY, SECOND } from "../../utils/time";
+import { getTxDeltaBalance } from "../utils";
 
 describe("Staking contract - Complex reward scenarios", () => {
   it("Should reward correctly two stakers", async () => {
@@ -68,7 +69,6 @@ describe("Staking contract - Complex reward scenarios", () => {
   it("should stop increasing reward after pool end date", async () => {
     const {
       contracts: { staking },
-
       stakes,
       expPool,
       accounts: { alice },
@@ -95,5 +95,74 @@ describe("Staking contract - Complex reward scenarios", () => {
 
     expect(reward1 < reward2).to.be.true;
     expect(reward2).to.equal(reward3);
+  });
+
+  it("should withdraw undistributed rewards if there is a period with no stakers", async () => {
+    const {
+      contracts: { staking, tokenMOR, tokenLMR },
+      stakes,
+      expPool,
+      accounts: { owner, alice },
+      pubClient,
+    } = await loadFixture(aliceStakes);
+
+    await time.increase(expPool.duration / 3n);
+    const tx = await staking.write.unstake(
+      [stakes.alice.poolId, stakes.alice.stakeId],
+      {
+        account: alice.account,
+      },
+    );
+    const earned1 = await getTxDeltaBalance(
+      pubClient,
+      tx,
+      alice.account.address,
+      tokenMOR,
+    );
+    console.log("Alice earned 1", earned1.toString());
+
+    await time.increase(expPool.duration / 3n);
+    await tokenLMR.write.approve(
+      [staking.address, stakes.alice.stakingAmount],
+      { account: alice.account },
+    );
+    const stakeTx2 = await staking.write.stake(
+      [stakes.alice.poolId, stakes.alice.stakingAmount, 0],
+      { account: alice.account },
+    );
+    const stakeId2 = await getStakeId(stakeTx2);
+
+    await time.increase(expPool.duration / 3n);
+    const tx2 = await staking.write.unstake([stakes.alice.poolId, stakeId2], {
+      account: alice.account,
+    });
+    const earned2 = await getTxDeltaBalance(
+      pubClient,
+      tx2,
+      alice.account.address,
+      tokenMOR,
+    );
+    console.log("Alice earned 2", earned2.toString());
+
+    const balance = await tokenMOR.read.balanceOf([staking.address]);
+    console.log("total reward", expPool.totalReward.toString());
+
+    const [, , , , , , , undistributedReward] = await staking.read.pools([
+      stakes.alice.poolId,
+    ]);
+    console.log("unused", undistributedReward);
+    expect(balance).to.equal(undistributedReward);
+
+    const tx3 = await staking.write.withdrawUndistributedReward([
+      stakes.alice.poolId,
+    ]);
+    const earned3 = await getTxDeltaBalance(
+      pubClient,
+      tx3,
+      owner.account.address,
+      tokenMOR,
+    );
+    console.log("Owner earned", earned3.toString());
+    expect(earned3).to.equal(undistributedReward);
   });
 });

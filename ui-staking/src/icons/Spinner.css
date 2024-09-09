@@ -1,0 +1,16 @@
+.spinner{
+  animation: spinzoom 2s linear infinite;
+  width: 3em;
+}
+
+@keyframes spinzoom {
+  0% {
+    transform: rotateZ(0deg) scale(1);
+  }
+  50% {
+    transform: rotateZ(-180deg) scale(0.7);
+  }
+  100% {
+    transform: rotateZ(-360deg) scale(1);
+  }
+}
