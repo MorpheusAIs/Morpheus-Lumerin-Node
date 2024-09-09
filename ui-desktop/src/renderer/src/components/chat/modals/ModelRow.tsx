@@ -9,7 +9,8 @@ import { formatSmallNumber } from '../utils';
 import { IconX } from '@tabler/icons-react';
 
 const RowContainer = styled.div`
-  padding: 1.2rem;
+  padding: 0 1.2rem;
+  height: 40px;
   display: grid;
   grid-template-columns: 3fr 1fr 160px;
   text-align: center;
@@ -31,12 +32,16 @@ const FlexCenter = styled.div`
 `;
 
 const Buttons = styled.div`
-display: flex;
-justify-content: end;
-min-width: 150px;
-width: 150px;
-align-items: center;
-gap: 10px;
+    display: flex;
+    justify-content: end;
+    min-width: 150px;
+    width: 150px;
+    align-items: center;
+    gap: 10px;
+
+    button {
+        height: auto;
+    }
 `
 
 const PriceContainer = styled.div`

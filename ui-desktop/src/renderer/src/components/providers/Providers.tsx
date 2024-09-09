@@ -21,7 +21,7 @@ const Providers = ({ fetchData, providerId }) => {
     return (    
     <View data-testid="models-container">
         <LayoutHeader title="Providers">
-            <BtnAccent style={{ padding: '1.5rem'}}>Add provider</BtnAccent>
+            <BtnAccent style={{ padding: '1.5rem'}} disabled>Add provider</BtnAccent>
         </LayoutHeader>
         <ProvidersList data={data} />
     </View>)

@@ -35,7 +35,8 @@ const listeners = {
   "get-chat-history": handlers.getChatHitory,
   "save-chat-history": handlers.saveChatHistory,
   "get-chat-titles": handlers.getTitles,
-  "save-chat-title": handlers.saveTitle
+  "save-chat-title": handlers.saveTitle,
+  "delete-chat-title": handlers.deleteTitle
 }
 
 // Subscribe to messages where no core has to react
