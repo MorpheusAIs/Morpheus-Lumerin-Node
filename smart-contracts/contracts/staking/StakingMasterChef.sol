@@ -57,7 +57,7 @@ contract StakingMasterChef is IStakingMasterChef, OwnableUpgradeable, UUPSUpgrad
     if (totalReward_ < duration_) {
       revert InvalidReward();
     }
-    if (totalReward_ > type(uint256).max / PRECISION) {
+    if (totalReward_ == 0) {
       revert InvalidReward();
     }
     if (lockDurations_.length == 0) {
