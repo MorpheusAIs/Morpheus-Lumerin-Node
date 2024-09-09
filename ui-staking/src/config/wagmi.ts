@@ -1,11 +1,12 @@
 import { http } from "wagmi";
-import { hardhat, mainnet, type Chain, sepolia } from "wagmi/chains";
+import { hardhat, type Chain, sepolia, arbitrumSepolia, arbitrum } from "wagmi/chains";
 import { defaultWagmiConfig } from "@web3modal/wagmi/react/config";
 
 const supportedChains: Record<number, Chain> = {
   [hardhat.id]: hardhat,
   [sepolia.id]: sepolia,
-  [mainnet.id]: mainnet,
+  [arbitrumSepolia.id]: arbitrumSepolia,
+  [arbitrum.id]: arbitrum,
 };
 
 const chain = supportedChains[process.env.REACT_APP_CHAIN_ID];
