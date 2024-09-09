@@ -1,67 +1,149 @@
-import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { aliceAndBobStake } from "./fixtures";
+import { getCurrentBlockTime, setTime } from "@/utils/block-helper";
+import { getDefaultDurations } from "@/utils/staking-helper";
+import { DAY } from "@/utils/time";
+import { LumerinToken, MorpheusToken, StakingMasterChef } from "@ethers-v6";
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
+import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
-import { getTxTimestamp } from "../utils";
-import { getStakeId } from "./utils";
+import { ethers } from "hardhat";
+import { Reverter } from "../helpers/reverter";
 
 describe("Staking contract - getStake", () => {
-  it("Should get user stake", async () => {
-    const {
-      accounts: { alice, bob },
-      contracts: { staking, tokenLMR },
-      stakes,
-      expPool,
-      pubClient,
-    } = await loadFixture(aliceAndBobStake);
+  const reverter = new Reverter();
 
-    const stakingAmount = 1000n;
-    const lockDurationId = 0;
-    const poolId = 0n;
+  const startDate =
+    BigInt(new Date("2024-07-16T01:00:00.000Z").getTime()) / 1000n;
+  const stakingAmount = 1000n;
+  const lockDuration = 7n * DAY;
+  const poolId = 0n;
 
-    await tokenLMR.write.approve([staking.address, stakingAmount], {
-      account: alice.account,
-    });
-    const depositTx = await staking.write.stake(
-      [poolId, stakingAmount, lockDurationId],
-      { account: alice.account },
+  let OWNER: SignerWithAddress;
+  let ALICE: SignerWithAddress;
+  let BOB: SignerWithAddress;
+  let CAROL: SignerWithAddress;
+
+  let staking: StakingMasterChef;
+  let MOR: MorpheusToken;
+  let LMR: LumerinToken;
+
+  let pool: any;
+
+  before("setup", async () => {
+    [OWNER, ALICE, BOB, CAROL] = await ethers.getSigners();
+
+    const [StakingMasterChef, ERC1967Proxy, MORFactory, LMRFactory] =
+      await Promise.all([
+        await ethers.getContractFactory("StakingMasterChef"),
+        await ethers.getContractFactory("ERC1967Proxy"),
+        await ethers.getContractFactory("MorpheusToken"),
+        await ethers.getContractFactory("LumerinToken"),
+      ]);
+
+    let stakingImpl;
+    [stakingImpl, MOR, LMR] = await Promise.all([
+      StakingMasterChef.deploy(),
+      MORFactory.deploy(),
+      LMRFactory.deploy("Lumerin dev", "LMR"),
+    ]);
+    const stakingProxy = await ERC1967Proxy.deploy(stakingImpl, "0x");
+
+    staking = StakingMasterChef.attach(
+      stakingProxy.target,
+    ) as StakingMasterChef;
+
+    await staking.__StakingMasterChef_init(LMR, MOR);
+
+    const startDate =
+      BigInt(new Date("2024-07-16T01:00:00.000Z").getTime()) / 1000n;
+    const duration = 400n * DAY;
+    const endDate = startDate + duration;
+    const rewardPerSecond = 100n;
+
+    pool = {
+      id: 0n,
+      rewardPerSecond,
+      stakingToken: LMR,
+      rewardToken: MOR,
+      totalReward: rewardPerSecond * duration,
+      lockDurations: getDefaultDurations().durationSeconds,
+      multipliersScaled_: getDefaultDurations().multiplierScaled,
+      precision: 0n,
+      startDate,
+      endDate,
+      duration,
+    };
+
+    await MOR.approve(staking, pool.totalReward);
+
+    await staking.addPool(
+      pool.startDate,
+      pool.duration,
+      pool.totalReward,
+      pool.lockDurations,
+      pool.multipliersScaled_,
     );
 
-    const stakeId = await getStakeId(depositTx);
+    await LMR.transfer(ALICE, 1_000_000n);
+    await LMR.transfer(BOB, 1_000_000n);
+    await LMR.transfer(CAROL, 1_000_000n);
 
-    const userStake = await staking.read.getStake([
-      alice.account.address,
-      poolId,
-      expPool.id,
-    ]);
+    await reverter.snapshot();
+  });
 
-    const lockEndsAt =
-      (await getTxTimestamp(pubClient, stakes.alice.depositTx)) +
-      expPool.lockDurations[stakes.alice.lockDurationId].durationSeconds;
+  afterEach(reverter.revert);
 
-    expect(userStake).to.deep.equal({
-      stakeAmount: stakes.alice.stakingAmount,
-      shareAmount: stakes.alice.stakingAmount,
-      rewardDebt: 0n,
-      lockEndsAt: lockEndsAt,
+  describe("Actions", () => {
+    beforeEach(async () => {
+      await setTime(Number(startDate));
     });
 
-    const aliceStakes = await staking.read.getStakes([
-      alice.account.address,
-      poolId,
-    ]);
+    it("Should get user stake", async () => {
+      //// aliceStakes
+      await LMR.connect(ALICE).approve(staking, stakingAmount);
+      const aliceStakeId = await staking
+        .connect(ALICE)
+        .stake.staticCall(poolId, stakingAmount, lockDuration);
+      await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
+      const aliceStakeTime = await getCurrentBlockTime();
 
-    expect(aliceStakes.length).to.equal(2);
-    expect(aliceStakes[0].stakeAmount).equal(stakes.alice.stakingAmount);
-    expect(aliceStakes[1].stakeAmount).equal(stakingAmount);
+      //// bobStakes
+      await time.increase(5n * DAY);
 
-    const bobStakes = await staking.read.getStakes([
-      bob.account.address,
-      stakes.bob.poolId,
-    ]);
+      await LMR.connect(BOB).approve(staking, stakingAmount);
+      const bobStakeId = await staking
+        .connect(BOB)
+        .stake.staticCall(poolId, stakingAmount, lockDuration);
+      await staking.connect(BOB).stake(poolId, stakingAmount, lockDuration);
+      const bobStakeTime = await getCurrentBlockTime();
 
-    expect(bobStakes.length).to.equal(1);
-    expect(bobStakes[Number(stakes.bob.stakeId)].stakeAmount).equal(
-      stakes.bob.stakingAmount,
-    );
+      ////
+
+      await LMR.connect(ALICE).approve(staking, stakingAmount);
+      const stakeId = await staking
+        .connect(ALICE)
+        .stake.staticCall(poolId, stakingAmount, lockDuration);
+      await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
+
+      const userStake = await staking.poolUserStakes(poolId, ALICE, pool.id);
+
+      const lockEndsAt = aliceStakeTime + lockDuration;
+
+      expect(userStake).to.deep.equal([
+        stakingAmount,
+        stakingAmount,
+        0n,
+        lockEndsAt,
+      ]);
+
+      const aliceStake0 = await staking.poolUserStakes(poolId, ALICE, 0);
+      const aliceStake1 = await staking.poolUserStakes(poolId, ALICE, 1);
+
+      expect(aliceStake0.stakeAmount).equal(stakingAmount);
+      expect(aliceStake1.stakeAmount).equal(stakingAmount);
+
+      const bobStake0 = await staking.poolUserStakes(poolId, BOB, 0);
+
+      expect(bobStake0.stakeAmount).equal(stakingAmount);
+    });
   });
 });

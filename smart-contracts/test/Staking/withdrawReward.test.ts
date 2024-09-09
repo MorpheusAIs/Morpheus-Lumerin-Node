@@ -1,106 +1,188 @@
-import hre from "hardhat";
-import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
-import { aliceStakes } from "./fixtures";
+import { getCurrentBlockTime, setTime } from "@/utils/block-helper";
+import { getDefaultDurations } from "@/utils/staking-helper";
+import { DAY } from "@/utils/time";
+import { LumerinToken, MorpheusToken, StakingMasterChef } from "@ethers-v6";
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { expect } from "chai";
-import { elapsedTxs } from "./utils";
-import { catchError, getTxDeltaBalance, mine, setAutomine } from "../utils";
+import { ethers } from "hardhat";
+import { Reverter } from "../helpers/reverter";
 
 describe("Staking contract - withdrawReward", () => {
-  it("should withdraw reward correctly", async () => {
-    const {
-      accounts: { alice },
-      contracts: { staking, tokenMOR },
-      stakes,
-      expPool,
-      pubClient,
-    } = await loadFixture(aliceStakes);
+  const reverter = new Reverter();
 
-    const duration =
-      expPool.lockDurations[stakes.alice.lockDurationId].durationSeconds;
+  const startDate =
+    BigInt(new Date("2024-07-16T01:00:00.000Z").getTime()) / 1000n;
+  const stakingAmount = 1000n;
+  const lockDuration = 7n * DAY;
+  const poolId = 0n;
 
-    await time.increase(duration);
+  let OWNER: SignerWithAddress;
+  let ALICE: SignerWithAddress;
+  let BOB: SignerWithAddress;
+  let CAROL: SignerWithAddress;
 
-    const rewardTx = await staking.write.withdrawReward(
-      [stakes.alice.poolId, stakes.alice.stakeId],
-      { account: alice.account },
+  let staking: StakingMasterChef;
+  let MOR: MorpheusToken;
+  let LMR: LumerinToken;
+
+  let pool: any;
+
+  before("setup", async () => {
+    [OWNER, ALICE, BOB, CAROL] = await ethers.getSigners();
+
+    const [StakingMasterChef, ERC1967Proxy, MORFactory, LMRFactory] =
+      await Promise.all([
+        await ethers.getContractFactory("StakingMasterChef"),
+        await ethers.getContractFactory("ERC1967Proxy"),
+        await ethers.getContractFactory("MorpheusToken"),
+        await ethers.getContractFactory("LumerinToken"),
+      ]);
+
+    let stakingImpl;
+    [stakingImpl, MOR, LMR] = await Promise.all([
+      StakingMasterChef.deploy(),
+      MORFactory.deploy(),
+      LMRFactory.deploy("Lumerin dev", "LMR"),
+    ]);
+    const stakingProxy = await ERC1967Proxy.deploy(stakingImpl, "0x");
+
+    staking = StakingMasterChef.attach(
+      stakingProxy.target,
+    ) as StakingMasterChef;
+
+    await staking.__StakingMasterChef_init(LMR, MOR);
+
+    const startDate =
+      BigInt(new Date("2024-07-16T01:00:00.000Z").getTime()) / 1000n;
+    const duration = 400n * DAY;
+    const endDate = startDate + duration;
+    const rewardPerSecond = 100n;
+
+    pool = {
+      id: 0n,
+      rewardPerSecond,
+      stakingToken: LMR,
+      rewardToken: MOR,
+      totalReward: rewardPerSecond * duration,
+      lockDurations: getDefaultDurations().durationSeconds,
+      multipliersScaled_: getDefaultDurations().multiplierScaled,
+      precision: 0n,
+      startDate,
+      endDate,
+      duration,
+    };
+
+    await MOR.approve(staking, pool.totalReward);
+
+    await staking.addPool(
+      pool.startDate,
+      pool.duration,
+      pool.totalReward,
+      pool.lockDurations,
+      pool.multipliersScaled_,
     );
 
-    const reward = await getTxDeltaBalance(
-      pubClient,
-      rewardTx,
-      alice.account.address,
-      tokenMOR,
-    );
-    const stakeDuration = await elapsedTxs(stakes.alice.depositTx, rewardTx);
+    await LMR.transfer(ALICE, 1_000_000n);
+    await LMR.transfer(BOB, 1_000_000n);
+    await LMR.transfer(CAROL, 1_000_000n);
 
-    expect(reward).to.equal(stakeDuration * expPool.rewardPerSecond);
-
-    const events = await staking.getEvents.RewardWithdrawal({
-      userAddress: alice.account.address,
-      poolId: stakes.alice.poolId,
-    });
-
-    expect(events.length).to.equal(1);
-    const [event] = events;
-    expect(event.args.stakeId).to.equal(stakes.alice.stakeId);
-    expect(event.args.amount).to.equal(reward);
+    await reverter.snapshot();
   });
 
-  it("should error if poolId is wrong", async () => {
-    const {
-      accounts: { alice },
-      contracts: { staking },
-      stakes,
-    } = await loadFixture(aliceStakes);
+  afterEach(reverter.revert);
 
-    await catchError(staking.abi, "PoolOrStakeNotExists", async () => {
-      await staking.write.withdrawReward(
-        [stakes.alice.poolId + 1n, stakes.alice.stakeId],
-        { account: alice.account },
-      );
+  describe("Actions", () => {
+    beforeEach(async () => {
+      await setTime(Number(startDate));
     });
-  });
 
-  it("should error if stakeId is wrong", async () => {
-    const {
-      accounts: { alice },
-      contracts: { staking },
-      stakes,
-    } = await loadFixture(aliceStakes);
+    it("should withdraw reward correctly", async () => {
+      //// aliceStakes
+      await LMR.connect(ALICE).approve(staking, stakingAmount);
+      const aliceStakeId = await staking
+        .connect(ALICE)
+        .stake.staticCall(poolId, stakingAmount, lockDuration);
+      await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
+      const aliceStakeTime = await getCurrentBlockTime();
 
-    await catchError(staking.abi, "PoolOrStakeNotExists", async () => {
-      await staking.write.withdrawReward(
-        [stakes.alice.poolId, stakes.alice.stakeId + 1n],
-        { account: alice.account },
-      );
+      ////
+
+      await setTime(Number((await getCurrentBlockTime()) + lockDuration));
+
+      const tx = await staking
+        .connect(ALICE)
+        .withdrawReward(poolId, aliceStakeId, ALICE);
+      const rewardTime = await getCurrentBlockTime();
+
+      const stakeDuration = rewardTime - aliceStakeTime;
+      const reward = stakeDuration * pool.rewardPerSecond;
+
+      await expect(tx).to.changeTokenBalance(MOR, ALICE, reward);
+
+      await expect(tx)
+        .to.emit(staking, "RewardWithdrawed")
+        .withArgs(ALICE, poolId, aliceStakeId, reward);
     });
-  });
 
-  it("should error if no reward yet", async () => {
-    const {
-      accounts: { alice },
-      contracts: { staking },
-      stakes,
-      pubClient,
-    } = await loadFixture(aliceStakes);
+    it("should error if poolId is wrong", async () => {
+      //// aliceStakes
+      await LMR.connect(ALICE).approve(staking, stakingAmount);
+      const aliceStakeId = await staking
+        .connect(ALICE)
+        .stake.staticCall(poolId, stakingAmount, lockDuration);
+      const tx = await staking
+        .connect(ALICE)
+        .stake(poolId, stakingAmount, lockDuration);
+      const aliceStakeTime = await getCurrentBlockTime();
 
-    await setAutomine(hre, false);
-    const rewardTx = await staking.write.withdrawReward(
-      [stakes.alice.poolId, stakes.alice.stakeId],
-      { account: alice.account },
-    );
+      ////
 
-    await catchError(staking.abi, "NoRewardAvailable", async () => {
-      await staking.write.withdrawReward(
-        [stakes.alice.poolId, stakes.alice.stakeId],
-        { account: alice.account },
-      );
+      await expect(
+        staking.connect(ALICE).withdrawReward(poolId + 1n, aliceStakeId, ALICE),
+      ).to.be.revertedWithCustomError(staking, "PoolNotExists");
     });
-    await mine(hre);
-    await setAutomine(hre, true);
 
-    await pubClient.waitForTransactionReceipt({
-      hash: rewardTx,
+    it("should error if stakeId is wrong", async () => {
+      //// aliceStakes
+      await LMR.connect(ALICE).approve(staking, stakingAmount);
+      const aliceStakeId = await staking
+        .connect(ALICE)
+        .stake.staticCall(poolId, stakingAmount, lockDuration);
+      const tx = await staking
+        .connect(ALICE)
+        .stake(poolId, stakingAmount, lockDuration);
+      const aliceStakeTime = await getCurrentBlockTime();
+
+      ////
+
+      await expect(
+        staking.connect(ALICE).withdrawReward(poolId, aliceStakeId + 1n, ALICE),
+      ).to.be.revertedWithCustomError(staking, "StakeNotExists");
+    });
+
+    it("should error if no reward yet", async () => {
+      //// aliceStakes
+      await LMR.connect(ALICE).approve(staking, stakingAmount);
+      const aliceStakeId = await staking
+        .connect(ALICE)
+        .stake.staticCall(poolId, stakingAmount, lockDuration);
+      const tx = await staking
+        .connect(ALICE)
+        .stake(poolId, stakingAmount, lockDuration);
+      const aliceStakeTime = await getCurrentBlockTime();
+
+      ////
+
+      await ethers.provider.send("evm_setAutomine", [false]);
+
+      await staking.connect(ALICE).withdrawReward(poolId, aliceStakeId, ALICE);
+
+      await expect(
+        staking.connect(ALICE).withdrawReward(poolId, aliceStakeId, ALICE),
+      ).to.be.revertedWithCustomError(staking, "NoRewardAvailable");
+
+      await ethers.provider.send("evm_mine", []);
+      await ethers.provider.send("evm_setAutomine", [true]);
     });
   });
 });

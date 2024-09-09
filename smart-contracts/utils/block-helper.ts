@@ -14,3 +14,7 @@ export async function setTime(time: number) {
   await setNextTime(time);
   await ethers.provider.send("evm_mine", []);
 }
+
+export async function getChainId() {
+  return (await ethers.provider.getNetwork()).chainId;
+}

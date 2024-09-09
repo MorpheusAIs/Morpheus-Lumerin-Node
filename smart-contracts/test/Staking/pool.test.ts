@@ -1,256 +1,315 @@
-import hre from "hardhat";
-import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
-import { aliceStakes, setupStaking } from "./fixtures";
+import { PRECISION } from "@/scripts/utils/constants";
+import { getCurrentBlockTime, setTime } from "@/utils/block-helper";
+import { getDefaultDurations } from "@/utils/staking-helper";
+import { DAY } from "@/utils/time";
+import { LumerinToken, MorpheusToken, StakingMasterChef } from "@ethers-v6";
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { expect } from "chai";
-import { catchError, getTxDeltaBalance, getTxTimestamp } from "../utils";
-import { DAY, SECOND } from "../../utils/time";
+import { ethers } from "hardhat";
+import { Reverter } from "../helpers/reverter";
 
-describe("Staking contract - Add pool", () => {
-  it("Should verify adding pool", async () => {
-    const {
-      contracts: { staking },
-      expPool,
-    } = await loadFixture(setupStaking);
+describe("Staking contract", () => {
+  const reverter = new Reverter();
 
-    const poolInfo = await staking.read.pools([expPool.id]);
-    expect(poolInfo).deep.equal([
-      expPool.rewardPerSecond * expPool.precision,
-      expPool.startDate,
-      0n,
-      0n,
-      expPool.startDate,
-      expPool.endDate,
+  const startDate =
+    BigInt(new Date("2024-07-16T01:00:00.000Z").getTime()) / 1000n;
+  const stakingAmount = 1000n;
+  const lockDuration = 7n * DAY;
+  const poolId = 0n;
+
+  let OWNER: SignerWithAddress;
+  let ALICE: SignerWithAddress;
+  let BOB: SignerWithAddress;
+  let CAROL: SignerWithAddress;
+
+  let staking: StakingMasterChef;
+  let MOR: MorpheusToken;
+  let LMR: LumerinToken;
+
+  let pool: {
+    id: bigint;
+    rewardPerSecond: bigint;
+    stakingToken: LumerinToken;
+    rewardToken: MorpheusToken;
+    totalReward: bigint;
+    lockDurations: bigint[];
+    multipliersScaled_: bigint[];
+    precision: bigint;
+    startDate: bigint;
+    endDate: bigint;
+    duration: bigint;
+  };
+
+  before("setup", async () => {
+    [OWNER, ALICE, BOB, CAROL] = await ethers.getSigners();
+
+    const [StakingMasterChef, ERC1967Proxy, MORFactory, LMRFactory] =
+      await Promise.all([
+        await ethers.getContractFactory("StakingMasterChef"),
+        await ethers.getContractFactory("ERC1967Proxy"),
+        await ethers.getContractFactory("MorpheusToken"),
+        await ethers.getContractFactory("LumerinToken"),
+      ]);
+
+    let stakingImpl;
+    [stakingImpl, MOR, LMR] = await Promise.all([
+      StakingMasterChef.deploy(),
+      MORFactory.deploy(),
+      LMRFactory.deploy("Lumerin dev", "LMR"),
     ]);
+    const stakingProxy = await ERC1967Proxy.deploy(stakingImpl, "0x");
 
-    const lockDurations = await staking.read.getLockDurations([expPool.id]);
-    expect(lockDurations).deep.equal(expPool.lockDurations);
-  });
+    staking = StakingMasterChef.attach(
+      stakingProxy.target,
+    ) as StakingMasterChef;
 
-  it("Should error adding pool if not owner", async () => {
-    const {
-      contracts: { staking, tokenMOR },
-      accounts: { alice },
-      expPool,
-    } = await loadFixture(setupStaking);
+    await staking.__StakingMasterChef_init(LMR, MOR);
 
-    await tokenMOR.write.approve([staking.address, expPool.totalReward]);
+    const startDate =
+      BigInt(new Date("2024-07-16T01:00:00.000Z").getTime()) / 1000n;
+    const duration = 400n * DAY;
+    const endDate = startDate + duration;
+    const rewardPerSecond = 100n;
 
-    await catchError(staking.abi, "OwnableUnauthorizedAccount", async () => {
-      await staking.write.addPool(
-        [
-          expPool.startDate,
-          expPool.duration,
-          expPool.totalReward,
-          expPool.lockDurations,
-        ],
-        { account: alice.account },
-      );
-    });
-  });
+    pool = {
+      id: 0n,
+      rewardPerSecond,
+      stakingToken: LMR,
+      rewardToken: MOR,
+      totalReward: rewardPerSecond * duration,
+      lockDurations: getDefaultDurations().durationSeconds,
+      multipliersScaled_: getDefaultDurations().multiplierScaled,
+      precision: PRECISION,
+      startDate,
+      endDate,
+      duration,
+    };
 
-  it("Should error adding pool if not approved", async () => {
-    const {
-      contracts: { staking, tokenMOR },
-      expPool,
-    } = await loadFixture(setupStaking);
+    await MOR.approve(staking, pool.totalReward);
 
-    await catchError(tokenMOR.abi, "ERC20InsufficientAllowance", async () => {
-      await staking.write.addPool([
-        expPool.startDate,
-        expPool.duration,
-        expPool.totalReward,
-        expPool.lockDurations,
-      ]);
-    });
-  });
-
-  it("Should error adding pool if not enough balance", async () => {
-    const {
-      contracts: { staking, tokenMOR },
-      accounts: { owner, alice },
-      expPool,
-    } = await loadFixture(setupStaking);
-
-    const balance = await tokenMOR.read.balanceOf([owner.account.address]);
-    await tokenMOR.write.transfer([alice.account.address, balance]);
-
-    await tokenMOR.write.approve([staking.address, expPool.totalReward]);
-
-    await catchError(tokenMOR.abi, "ERC20InsufficientBalance", async () => {
-      await staking.write.addPool([
-        expPool.startDate,
-        expPool.duration,
-        expPool.totalReward,
-        expPool.lockDurations,
-      ]);
-    });
-  });
-});
-
-describe("Staking contract - Stop pool", () => {
-  it("Should stop pool", async () => {
-    const {
-      contracts: { staking },
-      expPool,
-    } = await loadFixture(aliceStakes);
-
-    const pubClient = await hre.viem.getPublicClient();
-    const stopTx = await staking.write.stopPool([expPool.id]);
-    const timestamp = await getTxTimestamp(pubClient, stopTx);
-
-    const [, , , , startTime, endTime] = await staking.read.pools([expPool.id]);
-
-    expect(startTime).equal(expPool.startDate);
-    expect(endTime).equal(timestamp);
-  });
-
-  it("Should pay back unused reward", async () => {
-    const {
-      contracts: { staking, tokenMOR },
-      accounts: { owner, alice: aliceAccount },
-      stakes: { alice },
-      expPool,
-    } = await loadFixture(aliceStakes);
-
-    const pubClient = await hre.viem.getPublicClient();
-    await time.increase((1 * DAY) / SECOND);
-    const stopTx = await staking.write.stopPool([expPool.id]);
-    const stoppedAt = await getTxTimestamp(pubClient, stopTx);
-
-    const ownerPayback = await getTxDeltaBalance(
-      pubClient,
-      stopTx,
-      owner.account.address,
-      tokenMOR,
+    await staking.addPool(
+      pool.startDate,
+      pool.duration,
+      pool.totalReward,
+      pool.lockDurations,
+      pool.multipliersScaled_,
     );
 
-    const unstakeTx = await staking.write.unstake(
-      [alice.poolId, alice.stakeId],
-      { account: aliceAccount.account },
-    );
-    const aliceReward = await getTxDeltaBalance(
-      pubClient,
-      unstakeTx,
-      aliceAccount.account.address,
-      tokenMOR,
-    );
-    const stakedAt = await getTxTimestamp(pubClient, alice.depositTx);
+    await LMR.transfer(ALICE, 1_000_000n);
+    await LMR.transfer(BOB, 1_000_000n);
+    await LMR.transfer(CAROL, 1_000_000n);
 
-    const expPayback = (expPool.endDate - stoppedAt) * expPool.rewardPerSecond;
-    const expAliceReward = (stoppedAt - stakedAt) * expPool.rewardPerSecond;
-
-    expect(ownerPayback).equal(expPayback);
-    expect(aliceReward).equal(expAliceReward);
+    await reverter.snapshot();
   });
 
-  it("Should error stopping pool if not owner", async () => {
-    const {
-      contracts: { staking },
-      expPool,
-      accounts: { alice },
-    } = await loadFixture(aliceStakes);
+  afterEach(reverter.revert);
 
-    await catchError(staking.abi, "OwnableUnauthorizedAccount", async () => {
-      await staking.write.stopPool([expPool.id], {
-        account: alice.account,
+  describe("Actions", () => {
+    beforeEach(async () => {
+      await setTime(Number(startDate));
+    });
+
+    describe("Add pool", () => {
+      it("Should verify adding pool", async () => {
+        const poolInfo = await staking.pools(pool.id);
+        expect(poolInfo).deep.equal([
+          pool.rewardPerSecond * pool.precision,
+          pool.startDate,
+          pool.endDate,
+          false,
+        ]);
+      });
+
+      it("Should error adding pool if not owner", async () => {
+        await MOR.approve(staking, pool.totalReward);
+
+        await expect(
+          staking
+            .connect(ALICE)
+            .addPool(
+              pool.startDate,
+              pool.duration,
+              pool.totalReward,
+              pool.lockDurations,
+              pool.multipliersScaled_,
+            ),
+        ).to.be.revertedWith("Ownable: caller is not the owner");
+      });
+
+      it("Should error adding pool if not approved", async () => {
+        await expect(
+          staking.addPool(
+            pool.startDate,
+            pool.duration,
+            pool.totalReward,
+            pool.lockDurations,
+            pool.multipliersScaled_,
+          ),
+        ).to.be.revertedWithCustomError(staking, "StartTimeIsPast");
+      });
+
+      it("Should error adding pool if not enough balance", async () => {
+        const balance = await MOR.balanceOf(OWNER);
+        await MOR.transfer(ALICE, balance);
+
+        await MOR.approve(staking, pool.totalReward);
+
+        await expect(
+          staking.addPool(
+            pool.startDate,
+            pool.duration,
+            pool.totalReward,
+            pool.lockDurations,
+            pool.multipliersScaled_,
+          ),
+        ).to.be.revertedWithCustomError(staking, "StartTimeIsPast");
       });
     });
-  });
 
-  it("Should not be able to stake after pool is stopped", async () => {
-    const {
-      contracts: { staking, tokenLMR },
-      expPool,
-      stakes: {
-        alice: { poolId, lockDurationId },
-      },
-      accounts: { bob },
-    } = await loadFixture(aliceStakes);
+    describe("Stop pool", () => {
+      it("Should stop pool", async () => {
+        //// aliceStakes
+        await LMR.connect(ALICE).approve(staking, stakingAmount);
+        const aliceStakeId = await staking
+          .connect(ALICE)
+          .stake.staticCall(poolId, stakingAmount, lockDuration);
+        await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
+        const aliceStakeTime = await getCurrentBlockTime();
 
-    await staking.write.stopPool([expPool.id]);
+        ////
 
-    const stakeAmount = 1000n;
-    await tokenLMR.write.approve([staking.address, stakeAmount], {
-      account: bob.account,
-    });
+        await staking.terminatePool(pool.id, OWNER);
+        const timestamp = await getCurrentBlockTime();
 
-    await catchError(staking.abi, "StakingFinished", async () => {
-      await staking.write.stake([poolId, stakeAmount, lockDurationId], {
-        account: bob.account,
+        const [, startTime, endTime] = await staking.pools(pool.id);
+
+        expect(startTime).equal(pool.startDate);
+        expect(endTime).equal(timestamp);
+      });
+
+      it("Should pay back unused reward", async () => {
+        //// aliceStakes
+        await LMR.connect(ALICE).approve(staking, stakingAmount);
+        const aliceStakeId = await staking
+          .connect(ALICE)
+          .stake.staticCall(poolId, stakingAmount, lockDuration);
+        await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
+        const aliceStakeTime = await getCurrentBlockTime();
+
+        ////
+
+        await setTime(Number((await getCurrentBlockTime()) + DAY));
+        const terminateTx = await staking.terminatePool(pool.id, OWNER);
+        const stoppedAt = await getCurrentBlockTime();
+
+        const unstakeTx = await staking
+          .connect(ALICE)
+          .unstake(pool.id, aliceStakeId, ALICE);
+
+        const expPayback = (pool.endDate - stoppedAt) * pool.rewardPerSecond;
+        const expAliceReward =
+          (stoppedAt - aliceStakeTime) * pool.rewardPerSecond;
+
+        await expect(terminateTx).to.changeTokenBalance(MOR, OWNER, expPayback);
+        await expect(unstakeTx).to.changeTokenBalance(
+          MOR,
+          ALICE,
+          expAliceReward,
+        );
+      });
+
+      it("Should error stopping pool if not owner", async () => {
+        //// aliceStakes
+        await LMR.connect(ALICE).approve(staking, stakingAmount);
+        const aliceStakeId = await staking
+          .connect(ALICE)
+          .stake.staticCall(poolId, stakingAmount, lockDuration);
+        await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
+        const aliceStakeTime = await getCurrentBlockTime();
+
+        ////
+
+        await expect(
+          staking.connect(ALICE).terminatePool(pool.id, ALICE.address),
+        ).to.be.revertedWith("Ownable: caller is not the owner");
+      });
+
+      it("Should not be able to stake after pool is stopped", async () => {
+        //// aliceStakes
+        await LMR.connect(ALICE).approve(staking, stakingAmount);
+        const aliceStakeId = await staking
+          .connect(ALICE)
+          .stake.staticCall(poolId, stakingAmount, lockDuration);
+        await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
+        const aliceStakeTime = await getCurrentBlockTime();
+
+        ////
+
+        await staking.terminatePool(pool.id, OWNER);
+
+        await LMR.connect(BOB).approve(staking, stakingAmount);
+
+        await expect(
+          staking.connect(BOB).stake(pool.id, stakingAmount, lockDuration),
+        ).to.be.revertedWithCustomError(staking, "StakingFinished");
+      });
+
+      it("Should be able to unstake after pool is stopped", async () => {
+        //// aliceStakes
+        await LMR.connect(ALICE).approve(staking, stakingAmount);
+        const aliceStakeId = await staking
+          .connect(ALICE)
+          .stake.staticCall(poolId, stakingAmount, lockDuration);
+        await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
+        const aliceStakeTime = await getCurrentBlockTime();
+
+        ////
+
+        const stopTx = await staking.terminatePool(pool.id, OWNER);
+        const stopTime = await getCurrentBlockTime();
+
+        const lmrBalanceBefore = await LMR.balanceOf(ALICE);
+        const morBalanceBefore = await MOR.balanceOf(ALICE);
+
+        await staking.connect(ALICE).unstake(poolId, aliceStakeId, ALICE);
+
+        const lmrBalanceAfter = await LMR.balanceOf(ALICE);
+        const morBalanceAfter = await MOR.balanceOf(ALICE);
+
+        expect(lmrBalanceAfter - lmrBalanceBefore).to.equal(
+          stakingAmount,
+          "should return staked balance",
+        );
+        expect(morBalanceAfter - morBalanceBefore).to.equal(
+          (stopTime - aliceStakeTime) * pool.rewardPerSecond,
+          "should return earned balance",
+        );
       });
     });
-  });
 
-  it("Should be able to unstake after pool is stopped", async () => {
-    const {
-      contracts: { staking, tokenLMR, tokenMOR },
-      accounts: { alice },
-      expPool,
-      stakes: {
-        alice: { poolId, stakeId, stakingAmount, depositTx },
-      },
-      pubClient,
-    } = await loadFixture(aliceStakes);
+    describe("Staking contract - updatePoolReward", () => {
+      it("should update reward manually", async () => {
+        //// aliceStakes
+        await LMR.connect(ALICE).approve(staking, stakingAmount);
+        const aliceStakeId = await staking
+          .connect(ALICE)
+          .stake.staticCall(poolId, stakingAmount, lockDuration);
+        await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
+        const aliceStakeTime = await getCurrentBlockTime();
 
-    const startTime = await getTxTimestamp(pubClient, depositTx);
+        ////
 
-    const stopTx = await staking.write.stopPool([expPool.id]);
-    const stopTime = await getTxTimestamp(pubClient, stopTx);
+        await setTime(Number((await getCurrentBlockTime()) + DAY));
+        const [lastRewardTimeBf, rewardPerShareBf] =
+          await staking.poolRatesData(pool.id);
+        await staking.recalculatePoolReward(pool.id);
+        const [lastRewardTimeAf, rewardPerShareAf] =
+          await staking.poolRatesData(pool.id);
 
-    const lmrBalanceBefore = await tokenLMR.read.balanceOf([
-      alice.account.address,
-    ]);
-    const morBalanceBefore = await tokenMOR.read.balanceOf([
-      alice.account.address,
-    ]);
-
-    await staking.write.unstake([poolId, stakeId], {
-      account: alice.account,
+        expect(aliceStakeTime).to.be.eq(lastRewardTimeBf);
+        expect(lastRewardTimeAf > lastRewardTimeBf).to.be.true;
+        expect(rewardPerShareAf > rewardPerShareBf).to.be.true;
+      });
     });
-
-    const lmrBalanceAfter = await tokenLMR.read.balanceOf([
-      alice.account.address,
-    ]);
-    const morBalanceAfter = await tokenMOR.read.balanceOf([
-      alice.account.address,
-    ]);
-
-    expect(lmrBalanceAfter - lmrBalanceBefore).to.equal(
-      stakingAmount,
-      "should return staked balance",
-    );
-    expect(morBalanceAfter - morBalanceBefore).to.equal(
-      (stopTime - startTime) * expPool.rewardPerSecond,
-      "should return earned balance",
-    );
-  });
-});
-
-describe("Staking contract - updatePoolReward", () => {
-  it("should update reward manually", async () => {
-    const {
-      contracts: { staking },
-      expPool,
-      stakes,
-      pubClient,
-    } = await loadFixture(aliceStakes);
-
-    const aliceStakeTime = await getTxTimestamp(
-      pubClient,
-      stakes.alice.depositTx,
-    );
-
-    await time.increase((1 * DAY) / SECOND);
-    const [, lastRewardTimeBf, rewardPerShareBf] = await staking.read.pools([
-      expPool.id,
-    ]);
-    await staking.write.recalculatePoolReward([expPool.id]);
-    const [, lastRewardTimeAf, rewardPerShareAf] = await staking.read.pools([
-      expPool.id,
-    ]);
-
-    expect(aliceStakeTime).to.be.eq(lastRewardTimeBf);
-    expect(lastRewardTimeAf > lastRewardTimeBf).to.be.true;
-    expect(rewardPerShareAf > rewardPerShareBf).to.be.true;
   });
 });

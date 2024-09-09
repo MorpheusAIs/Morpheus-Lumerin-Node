@@ -1,7 +1,6 @@
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
-import { expect } from "chai";
-import { Addressable, Fragment, resolveAddress } from "ethers";
-import { ethers } from "hardhat";
+import { getHex, randomBytes32, wei } from "@/scripts/utils/utils";
+import { getCurrentBlockTime } from "@/utils/block-helper";
+import { HOUR, YEAR } from "@/utils/time";
 import {
   IBidStorage,
   IMarketplace__factory,
@@ -16,14 +15,14 @@ import {
   MorpheusToken,
   ProviderRegistry,
   SessionRouter,
-} from "../../../generated-types/ethers";
-import { wei } from "../../../scripts/utils/utils";
-import { getCurrentBlockTime } from "../../../utils/block-helper";
-import { DAY, HOUR, YEAR } from "../../../utils/time";
-import { FacetAction } from "../../helpers/enums";
-import { getDefaultPools } from "../../helpers/pool-helper";
-import { Reverter } from "../../helpers/reverter";
-import { getHex, randomBytes32 } from "../../utils";
+} from "@ethers-v6";
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
+import { expect } from "chai";
+import { Addressable, Fragment, resolveAddress } from "ethers";
+import { ethers } from "hardhat";
+import { FacetAction } from "../helpers/enums";
+import { getDefaultPools } from "../helpers/pool-helper";
+import { Reverter } from "../helpers/reverter";
 
 describe("Marketplace", () => {
   const reverter = new Reverter();
@@ -67,8 +66,7 @@ describe("Marketplace", () => {
         expectedProvider.endpoint,
       );
     expectedProvider.createdAt = await getCurrentBlockTime();
-    expectedProvider.limitPeriodEnd =
-      expectedProvider.createdAt + BigInt(YEAR * DAY);
+    expectedProvider.limitPeriodEnd = expectedProvider.createdAt + YEAR;
 
     return expectedProvider;
   }
@@ -160,7 +158,6 @@ describe("Marketplace", () => {
 
     return bid;
   }
-
   before("setup", async () => {
     [OWNER, SECOND, THIRD, PROVIDER] = await ethers.getSigners();
 
@@ -256,7 +253,7 @@ describe("Marketplace", () => {
 
   afterEach(reverter.revert);
 
-  describe("bid actions", async function () {
+  describe("bid actions", () => {
     let provider: IProviderStorage.ProviderStruct;
     let model: IModelStorage.ModelStruct & {
       modelId: string;
@@ -272,7 +269,7 @@ describe("Marketplace", () => {
       bid = await deployBid(model);
     });
 
-    it("Should create a bid and query by id", async function () {
+    it("Should create a bid and query by id", async () => {
       const data = await marketplace.bidMap(bid.id);
 
       expect(data).to.be.deep.equal([
@@ -285,7 +282,7 @@ describe("Marketplace", () => {
       ]);
     });
 
-    it("Should error if provider doesn't exist", async function () {
+    it("Should error if provider doesn't exist", async () => {
       await expect(
         marketplace
           .connect(SECOND)
@@ -293,7 +290,7 @@ describe("Marketplace", () => {
       ).to.be.revertedWithCustomError(marketplace, "ProviderNotFound");
     });
 
-    it("Should error if model doesn't exist", async function () {
+    it("Should error if model doesn't exist", async () => {
       const unknownModel = randomBytes32();
 
       await expect(
@@ -303,7 +300,7 @@ describe("Marketplace", () => {
       ).to.be.revertedWithCustomError(marketplace, "ModelOrAgentNotFound");
     });
 
-    it("Should create second bid", async function () {
+    it("Should create second bid", async () => {
       // create new bid with same provider and modelId
       await marketplace
         .connect(PROVIDER)
@@ -358,7 +355,7 @@ describe("Marketplace", () => {
       ]);
     });
 
-    it("Should query by provider", async function () {
+    it("Should query by provider", async () => {
       const activeBidIds = await marketplace.providerActiveBids(
         bid.provider,
         0,
@@ -377,8 +374,8 @@ describe("Marketplace", () => {
       ]);
     });
 
-    describe("delete bid", function () {
-      it("Should delete a bid", async function () {
+    describe("delete bid", () => {
+      it("Should delete a bid", async () => {
         // delete bid
         await marketplace.connect(PROVIDER).deleteModelAgentBid(bid.id);
 
@@ -409,7 +406,7 @@ describe("Marketplace", () => {
         ]);
       });
 
-      it("Should error if bid doesn't exist", async function () {
+      it("Should error if bid doesn't exist", async () => {
         const unknownBid = randomBytes32();
 
         await expect(
@@ -417,23 +414,23 @@ describe("Marketplace", () => {
         ).to.be.revertedWithCustomError(marketplace, "ActiveBidNotFound");
       });
 
-      it("Should error if not owner", async function () {
+      it("Should error if not owner", async () => {
         await expect(
           marketplace.connect(THIRD).deleteModelAgentBid(bid.id),
         ).to.be.revertedWithCustomError(marketplace, "NotOwnerOrProvider");
       });
 
-      it("Should allow bid owner to delete bid", async function () {
+      it("Should allow bid owner to delete bid", async () => {
         // delete bid
         await marketplace.connect(PROVIDER).deleteModelAgentBid(bid.id);
       });
 
-      it("Should allow contract owner to delete bid", async function () {
+      it("Should allow contract owner to delete bid", async () => {
         // delete bid
         await marketplace.deleteModelAgentBid(bid.id);
       });
 
-      it("Should allow to create bid after it was deleted [H-1]", async function () {
+      it("Should allow to create bid after it was deleted [H-1]", async () => {
         // delete bid
         await marketplace.connect(PROVIDER).deleteModelAgentBid(bid.id);
 
@@ -444,8 +441,8 @@ describe("Marketplace", () => {
       });
     });
 
-    describe("bid fee", function () {
-      it("should set bid fee", async function () {
+    describe("bid fee", () => {
+      it("should set bid fee", async () => {
         const newFee = 100;
         await marketplace.setBidFee(newFee);
 
@@ -453,7 +450,7 @@ describe("Marketplace", () => {
         expect(modelBidFee).to.be.equal(newFee);
       });
 
-      it("should collect bid fee", async function () {
+      it("should collect bid fee", async () => {
         const newFee = 100;
         await marketplace.setBidFee(newFee);
         await MOR.transfer(bid.provider, 100);
@@ -473,7 +470,7 @@ describe("Marketplace", () => {
         expect(balanceAfter - balanceBefore).to.be.equal(newFee);
       });
 
-      it("should allow withdrawal by owner", async function () {
+      it("should allow withdrawal by owner", async () => {
         const newFee = 100;
         await marketplace.setBidFee(newFee);
         await MOR.transfer(bid.provider, 100);
@@ -492,7 +489,7 @@ describe("Marketplace", () => {
         expect(balanceAfter - balanceBefore).to.be.equal(newFee);
       });
 
-      it("should not allow withdrawal by any other account except owner", async function () {
+      it("should not allow withdrawal by any other account except owner", async () => {
         const newFee = 100;
         await marketplace.setBidFee(newFee);
         await MOR.transfer(bid.provider, 100);
@@ -510,7 +507,7 @@ describe("Marketplace", () => {
         ).to.be.revertedWith("DiamondOwnable: not an owner");
       });
 
-      it("should not allow withdrawal if not enough balance", async function () {
+      it("should not allow withdrawal if not enough balance", async () => {
         await expect(
           marketplace.withdraw(OWNER, 100000000),
         ).to.be.revertedWithCustomError(marketplace, "NotEnoughBalance");

@@ -1,7 +1,6 @@
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
-import { expect } from "chai";
-import { Addressable, Fragment, resolveAddress } from "ethers";
-import { ethers } from "hardhat";
+import { getHex, randomBytes32, wei } from "@/scripts/utils/utils";
+import { getCurrentBlockTime } from "@/utils/block-helper";
+import { HOUR, YEAR } from "@/utils/time";
 import {
   IBidStorage,
   IMarketplace__factory,
@@ -16,16 +15,16 @@ import {
   MorpheusToken,
   ProviderRegistry,
   SessionRouter,
-} from "../../../generated-types/ethers";
-import { wei } from "../../../scripts/utils/utils";
-import { getCurrentBlockTime } from "../../../utils/block-helper";
-import { DAY, HOUR, YEAR } from "../../../utils/time";
-import { FacetAction } from "../../helpers/enums";
-import { getDefaultPools } from "../../helpers/pool-helper";
-import { Reverter } from "../../helpers/reverter";
-import { getHex, randomBytes32 } from "../../utils";
+} from "@ethers-v6";
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
+import { expect } from "chai";
+import { Addressable, Fragment, resolveAddress } from "ethers";
+import { ethers } from "hardhat";
+import { FacetAction } from "../helpers/enums";
+import { getDefaultPools } from "../helpers/pool-helper";
+import { Reverter } from "../helpers/reverter";
 
-describe.only("Model registry", function () {
+describe("Model registry", () => {
   const reverter = new Reverter();
 
   let OWNER: SignerWithAddress;
@@ -67,8 +66,7 @@ describe.only("Model registry", function () {
         expectedProvider.endpoint,
       );
     expectedProvider.createdAt = await getCurrentBlockTime();
-    expectedProvider.limitPeriodEnd =
-      expectedProvider.createdAt + BigInt(YEAR * DAY);
+    expectedProvider.limitPeriodEnd = expectedProvider.createdAt + YEAR;
 
     return expectedProvider;
   }
@@ -258,7 +256,7 @@ describe.only("Model registry", function () {
 
   afterEach(reverter.revert);
 
-  describe("Actions", function () {
+  describe("Actions", () => {
     let provider: IProviderStorage.ProviderStruct;
     let model: IModelStorage.ModelStruct & {
       modelId: string;
@@ -274,7 +272,7 @@ describe.only("Model registry", function () {
       bid = await deployBid(model);
     });
 
-    it("Should register", async function () {
+    it("Should register", async () => {
       const data = await modelRegistry.getModel(model.modelId);
 
       expect(await modelRegistry.models(0)).eq(model.modelId);
@@ -290,7 +288,7 @@ describe.only("Model registry", function () {
       ]);
     });
 
-    it("Should error when registering with insufficient stake", async function () {
+    it("Should error when registering with insufficient stake", async () => {
       const minStake = 100n;
       await modelRegistry.modelSetMinStake(minStake);
 
@@ -307,7 +305,7 @@ describe.only("Model registry", function () {
       ).revertedWithCustomError(modelRegistry, "StakeTooLow");
     });
 
-    it("Should error when registering with insufficient allowance", async function () {
+    it("Should error when registering with insufficient allowance", async () => {
       await expect(
         modelRegistry
           .connect(THIRD)
@@ -323,7 +321,7 @@ describe.only("Model registry", function () {
       ).to.rejectedWith("ERC20: insufficient allowance");
     });
 
-    it("Should error when register account doesnt match sender account", async function () {
+    it("Should error when register account doesnt match sender account", async () => {
       await MOR.approve(modelRegistry, 100n);
 
       await expect(
@@ -341,7 +339,7 @@ describe.only("Model registry", function () {
       ).to.revertedWithCustomError(modelRegistry, "NotOwnerOrModelOwner");
     });
 
-    it("Should deregister by owner", async function () {
+    it("Should deregister by owner", async () => {
       await marketplace.connect(PROVIDER).deleteModelAgentBid(bid.id);
 
       await modelRegistry.modelDeregister(model.modelId);
@@ -352,13 +350,13 @@ describe.only("Model registry", function () {
       expect(await modelRegistry.models(0n)).equals(model.modelId);
     });
 
-    it("Should error if model not known by admin", async function () {
+    it("Should error if model not known by admin", async () => {
       await expect(
         modelRegistry.modelDeregister(randomBytes32()),
       ).to.revertedWithCustomError(modelRegistry, "ModelNotFound");
     });
 
-    it("Should return stake on deregister", async function () {
+    it("Should return stake on deregister", async () => {
       await marketplace.connect(PROVIDER).deleteModelAgentBid(bid.id);
 
       const balanceBefore = await MOR.balanceOf(model.owner);
@@ -368,7 +366,7 @@ describe.only("Model registry", function () {
       expect(balanceAfter - balanceBefore).eq(model.stake);
     });
 
-    it("should error when deregistering a model that has bids", async function () {
+    it("should error when deregistering a model that has bids", async () => {
       // try deregistering model
       await expect(
         modelRegistry.modelDeregister(model.modelId),
@@ -381,7 +379,7 @@ describe.only("Model registry", function () {
       await modelRegistry.modelDeregister(model.modelId);
     });
 
-    it("Should update existing model", async function () {
+    it("Should update existing model", async () => {
       const updates = {
         ipfsCID: getHex(Buffer.from("ipfs://new-ipfsaddress")),
         fee: BigInt(model.fee) * 2n,
@@ -415,7 +413,7 @@ describe.only("Model registry", function () {
       ]);
     });
 
-    it("Should emit event on update", async function () {
+    it("Should emit event on update", async () => {
       const updates = {
         ipfsCID: getHex(Buffer.from("ipfs://new-ipfsaddress")),
         fee: BigInt(model.fee) * 2n,
@@ -440,142 +438,103 @@ describe.only("Model registry", function () {
       ).to.emit(modelRegistry, "ModelRegisteredUpdated");
     });
 
-    //   it("should reregister model", async function () {
-    //     const { modelRegistry, model, MOR, owner } =
-    //       await loadFixture(deploySingleModel);
+    it("should reregister model", async () => {
+      await marketplace.connect(PROVIDER).deleteModelAgentBid(bid.id);
 
-    //     // check indexes
-    //     expect(await modelRegistry.modelGetCount()).eq(1n);
-    //     expect(await modelRegistry.models([0n])).eq(model.modelId);
-    //     expect(await modelRegistry.modelGetIds()).deep.equal([
-    //       model.modelId,
-    //     ]);
+      // check indexes
+      expect(await modelRegistry.models(0)).eq(model.modelId);
 
-    //     // deregister
-    //     await modelRegistry.modelDeregister(model.modelId);
+      // deregister
+      await modelRegistry.modelDeregister(model.modelId);
 
-    //     // check indexes
-    //     expect(await modelRegistry.models([0n])).eq(model.modelId);
-    //     expect(await modelRegistry.modelGetCount()).eq(0n);
-    //     expect(await modelRegistry.modelGetIds()).deep.equal([]);
+      // check indexes
+      expect(await modelRegistry.models(0)).eq(model.modelId);
 
-    //     // reregister
-    //     const modelId = model.modelId;
-    //     const model2 = {
-    //       ipfsCID: randomBytes32(),
-    //       fee: 100n,
-    //       stake: 100n,
-    //       owner: getAddress(owner.account.address),
-    //       name: "model2",
-    //       tags: ["model", "2"],
-    //       createdAt: model.createdAt,
-    //     };
-    //     await MOR.transfer([owner.account.address, model2.stake]);
-    //     await MOR.approve([modelRegistry, model2.stake]);
-    //     await modelRegistry.modelRegister([
-    //       modelId,
-    //       model2.ipfsCID,
-    //       model2.fee,
-    //       model2.stake,
-    //       model2.owner,
-    //       model2.name,
-    //       model2.tags,
-    //     ]);
-    //     // check indexes
-    //     expect(await modelRegistry.modelGetCount()).eq(1n);
-    //     expect(await modelRegistry.models([0n])).eq(modelId);
-    //     expect(await modelRegistry.modelGetIds()).deep.equal([modelId]);
-    //     expect(await modelRegistry.modelMap([modelId])).deep.include(model2);
-    //   });
-    // });
+      // reregister
+      const modelId = model.modelId;
+      const model2 = {
+        ipfsCID: randomBytes32(),
+        fee: 100n,
+        stake: 100n,
+        owner: await resolveAddress(OWNER),
+        name: "model2",
+        tags: ["model", "2"],
+        createdAt: model.createdAt,
+      };
+      await MOR.transfer(OWNER, model2.stake);
+      await MOR.approve(modelRegistry, model2.stake);
+      await modelRegistry.modelRegister(
+        modelId,
+        model2.ipfsCID,
+        model2.fee,
+        model2.stake,
+        model2.owner,
+        model2.name,
+        model2.tags,
+      );
+      // check indexes
+      expect(await modelRegistry.models(0)).eq(modelId);
+      expect(await modelRegistry.getModel(modelId)).deep.equal([
+        model2.ipfsCID,
+        model2.fee,
+        model2.stake,
+        model2.owner,
+        model2.name,
+        model2.tags,
+        model2.createdAt,
+        false,
+      ]);
+    });
 
-    // describe("Getters", function () {
-    //   it("Should get by index", async function () {
-    //     const { modelRegistry, provider, model } =
-    //       await loadFixture(deploySingleModel);
-    //     const [modelId, providerData] = await modelRegistry.modelGetByIndex([
-    //       0n,
-    //     ]);
+    describe("Getters", () => {
+      it("Should get by address", async () => {
+        const providerData = await modelRegistry.getModel(model.modelId);
+        expect(providerData).deep.equal([
+          model.ipfsCID,
+          model.fee,
+          model.stake,
+          await resolveAddress(model.owner),
+          model.name,
+          model.tags,
+          model.createdAt,
+          model.isDeleted,
+        ]);
+      });
+    });
 
-    //     expect(modelId).eq(model.modelId);
-    //     expect(providerData).deep.equal({
-    //       ipfsCID: model.ipfsCID,
-    //       fee: model.fee,
-    //       stake: model.stake,
-    //       owner: getAddress(model.owner),
-    //       name: model.name,
-    //       tags: model.tags,
-    //       createdAt: model.createdAt,
-    //       isDeleted: model.isDeleted,
-    //     });
-    //   });
+    describe("Min stake", () => {
+      it("Should set min stake", async () => {
+        const minStake = 100n;
+        await expect(modelRegistry.modelSetMinStake(minStake))
+          .to.emit(modelRegistry, "ModelMinStakeUpdated")
+          .withArgs(minStake);
 
-    //   it("Should get by address", async function () {
-    //     const { modelRegistry, provider, model } =
-    //       await loadFixture(deploySingleModel);
+        expect(await modelRegistry.modelMinimumStake()).eq(minStake);
+      });
+      it("Should error when not owner is setting min stake", async () => {
+        await expect(
+          modelRegistry.connect(THIRD).modelSetMinStake(0),
+        ).to.revertedWith("DiamondOwnable: not an owner");
+      });
+      // it("Should get model stats", async () => {
+      //   const stats = await modelRegistry.modelStats([model.modelId]);
 
-    //     const providerData = await modelRegistry.modelMap([
-    //       model.modelId,
-    //     ]);
-    //     expect(providerData).deep.equal({
-    //       ipfsCID: model.ipfsCID,
-    //       fee: model.fee,
-    //       stake: model.stake,
-    //       owner: getAddress(model.owner),
-    //       name: model.name,
-    //       tags: model.tags,
-    //       createdAt: model.createdAt,
-    //       isDeleted: model.isDeleted,
-    //     });
-    //   });
-    // });
-
-    // describe("Min stake", function () {
-    //   it("Should set min stake", async function () {
-    //     const { modelRegistry, owner } = await loadFixture(deployDiamond);
-    //     const minStake = 100n;
-
-    //     await modelRegistry.modelSetMinStake([minStake], {
-    //
-    //     });
-    //     const events = await modelRegistry.getEvents.ModelMinStakeUpdated();
-    //     expect(await modelRegistry.modelMinStake()).eq(minStake);
-    //     expect(events.length).eq(1);
-    //     expect(events[0].args.newStake).eq(minStake);
-    //   });
-
-    //   it("Should error when not owner is setting min stake", async function () {
-    //     const { modelRegistry, provider } = await loadFixture(deploySingleModel);
-    //     await catchError(modelRegistry.abi, "NotContractOwner", async () => {
-    //       await modelRegistry.modelSetMinStake([100n], {
-    //         account: provider.account,
-    //       });
-    //     });
-    //   });
-
-    //   it("Should get model stats", async function () {
-    //     const { modelRegistry, model } =
-    //       await loadFixture(deploySingleModel);
-
-    //     const stats = await modelRegistry.modelStats([
-    //       model.modelId,
-    //     ]);
-
-    //     expect(stats).deep.equal({
-    //       count: 0,
-    //       totalDuration: {
-    //         mean: 0n,
-    //         sqSum: 0n,
-    //       },
-    //       tpsScaled1000: {
-    //         mean: 0n,
-    //         sqSum: 0n,
-    //       },
-    //       ttftMs: {
-    //         mean: 0n,
-    //         sqSum: 0n,
-    //       },
-    //     });
-    //   });
+      //   expect(stats).deep.equal({
+      //     count: 0,
+      //     totalDuration: {
+      //       mean: 0n,
+      //       sqSum: 0n,
+      //     },
+      //     tpsScaled1000: {
+      //       mean: 0n,
+      //       sqSum: 0n,
+      //     },
+      //     ttftMs: {
+      //       mean: 0n,
+      //       sqSum: 0n,
+      //     },
+      //   });
+      // });
+    });
   });
 });

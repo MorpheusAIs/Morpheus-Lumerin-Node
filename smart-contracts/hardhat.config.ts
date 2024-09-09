@@ -7,6 +7,7 @@ import "@solarity/hardhat-gobind";
 import "@typechain/hardhat";
 import "dotenv/config";
 import { HardhatUserConfig } from "hardhat/config";
+import "tsconfig-paths/register";
 import "./tasks/upgrade";
 
 function typechainTarget() {
@@ -22,7 +23,7 @@ function forceTypechain() {
 const config: HardhatUserConfig = {
   networks: {
     hardhat: {
-      initialDate: "2024-07-16T01:00:00.000Z",
+      initialDate: "2024-07-15T01:00:00.000Z",
       gas: "auto", // required for tests where two transactions should be mined in the same block
       // loggingEnabled: true,
     },
