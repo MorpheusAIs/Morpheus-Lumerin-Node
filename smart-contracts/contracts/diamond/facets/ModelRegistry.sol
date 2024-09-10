@@ -3,14 +3,14 @@ pragma solidity ^0.8.24;
 
 import { SafeERC20, IERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import { DiamondOwnableStorage } from "../presets/DiamondOwnableStorage.sol";
+import { OwnableDiamondStorage } from "../presets/OwnableDiamondStorage.sol";
 
 import { BidStorage } from "../storages/BidStorage.sol";
 import { ModelStorage } from "../storages/ModelStorage.sol";
 
 import { IModelRegistry } from "../../interfaces/facets/IModelRegistry.sol";
 
-contract ModelRegistry is IModelRegistry, DiamondOwnableStorage, ModelStorage, BidStorage {
+contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, BidStorage {
   using SafeERC20 for IERC20;
 
   function __ModelRegistry_init() external initializer(MODEL_STORAGE_SLOT) {}

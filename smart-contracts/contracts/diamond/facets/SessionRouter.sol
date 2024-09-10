@@ -5,7 +5,7 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import { SafeERC20, IERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import { DiamondOwnableStorage } from "../presets/DiamondOwnableStorage.sol";
+import { OwnableDiamondStorage } from "../presets/OwnableDiamondStorage.sol";
 
 import { BidStorage, EnumerableSet } from "../storages/BidStorage.sol";
 import { StatsStorage } from "../storages/StatsStorage.sol";
@@ -20,7 +20,7 @@ import { LinearDistributionIntervalDecrease } from "morpheus-smart-contracts/con
 
 contract SessionRouter is
   ISessionRouter,
-  DiamondOwnableStorage,
+  OwnableDiamondStorage,
   SessionStorage,
   ProviderStorage,
   BidStorage,
