@@ -49,18 +49,19 @@ export const Pool = () => {
         <Container>
           <nav className="pool-nav">
             <ul>
-              {[...Array(poolsCount.data)].map((_, i) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: order of items is fixed
-                <li key={i}>
-                  <Link className={poolId === i ? "active" : ""} to={`/pool/${i}`}>
-                    Pool {i}
-                  </Link>
-                </li>
-              ))}
+              {poolsCount.isSuccess &&
+                [...Array(Number(poolsCount.data))].map((_, i) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: order of items is fixed
+                  <li key={i}>
+                    <Link className={poolId === i ? "active" : ""} to={`/pool/${i}`}>
+                      Pool {i}
+                    </Link>
+                  </li>
+                ))}
             </ul>
           </nav>
           {poolIsLoading ||
-            (poolError && (
+            ((poolError || poolsCount.error) && (
               <div className="section loading">
                 {poolIsLoading && !poolNotFound && <Spinner />}
                 {poolNotFound && <p className="error">Pool not found</p>}
@@ -116,7 +117,7 @@ export const Pool = () => {
                   <li>
                     {formatUnits(
                       ethBalance.data?.value || 0n,
-                      Number(ethBalance.data?.decimals || 0n)
+                      BigInt(ethBalance.data?.decimals || 0)
                     )}{" "}
                     {ethBalance.data?.symbol}
                   </li>

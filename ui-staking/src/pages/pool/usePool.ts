@@ -21,7 +21,6 @@ import {
 import { useTxModal } from "../../hooks/useTxModal.ts";
 
 export function usePool(onUpdate: () => void) {
-  const pubClient = usePublicClient();
   const writeContract = useWriteContract();
 
   const { poolId: poolIdString } = useParams();
@@ -40,10 +39,13 @@ export function usePool(onUpdate: () => void) {
     abi: stakingMasterChefAbi,
     address: process.env.REACT_APP_STAKING_ADDR as `0x${string}`,
     functionName: "getPoolsCount",
+    args: [],
   });
 
   const shouldQueryPool = poolId !== undefined && poolsCount.isSuccess && poolId < poolsCount.data;
-  const poolNotFound = poolId !== undefined && poolsCount.isSuccess && poolId >= poolsCount.data;
+  const poolNotFound =
+    (poolId !== undefined && poolsCount.isSuccess && poolId >= poolsCount.data) ||
+    poolsCount.isError;
 
   const poolDataArr = useReadContract({
     abi: stakingMasterChefAbi,

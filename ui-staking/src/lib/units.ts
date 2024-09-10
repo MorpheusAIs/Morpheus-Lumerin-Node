@@ -1,6 +1,6 @@
-export const decimalETH = 18;
-export const decimalsMOR = 18;
-export const decimalsLMR = 8;
+export const decimalETH = 18n;
+export const decimalsMOR = 18n;
+export const decimalsLMR = 8n;
 
 export function formatETH(num: bigint): string {
   return `${formatUnits(num, decimalETH)} ETH`;
@@ -15,8 +15,15 @@ export function formatLMR(num: bigint): string {
 }
 
 const thousandsSeparator = " ";
+const significantDigits = 3;
 
-export function formatUnits(value: bigint, decimals: number, significantDigits = 4) {
+export function formatUnits(amount: bigint, decimals: bigint): string {
+  const decimal3 =
+    BigInt(Math.round((Number(amount) / Number(10n ** decimals)) * 1000)) * 10n ** decimals;
+  return formatUnitsV2(decimal3, Number(decimals + 3n));
+}
+
+export function formatUnitsV2(value: bigint, decimals: number) {
   let display = value.toString();
 
   const negative = display.startsWith("-");
@@ -28,63 +35,24 @@ export function formatUnits(value: bigint, decimals: number, significantDigits =
     display.slice(0, display.length - decimals),
     display.slice(display.length - decimals),
   ];
-
   const integerSignificantDigits = integer.length;
-
+  if (integerSignificantDigits < significantDigits) {
+    fraction = fraction.slice(0, significantDigits);
+  } else {
+    const rounded = BigInt(Math.round(Number(value) / 10 ** decimals)) * 10n ** BigInt(decimals);
+    if (rounded !== value) {
+      return formatUnits(rounded, BigInt(decimals));
+    }
+    fraction = "";
+  }
+  // hide fraction if it's all zeros
+  if (integer === "" && fraction === "000") {
+    fraction = "";
+  }
+  // fraction = fraction.replace(/(0+)$/, '')
   // split the integer part into groups of 3 digits
   for (let i = integer.length - 3; i > 0; i -= 3) {
     integer = `${integer.slice(0, i)}${thousandsSeparator}${integer.slice(i)}`;
   }
-
-  const fractionSignificantDigits = significantDigits - integerSignificantDigits;
-
-  // round the fraction part to thousands
-
-  if (fractionSignificantDigits <= 0) {
-    fraction = "";
-  } else {
-    // limit the number of significant digits in the fraction
-    let isZero = true;
-
-    for (let i = 0; i < fraction.length; i++) {
-      if (fraction[i] !== "0") {
-        let digits = i + fractionSignificantDigits;
-
-        // round number of digits to the nearest multiple of 3, thousands
-        const remainder = digits % 3;
-        if (remainder !== 0) {
-          digits = digits + 3 - remainder;
-        }
-
-        fraction = fraction.slice(0, digits);
-        isZero = false;
-        break;
-      }
-    }
-
-    if (isZero) {
-      fraction = "";
-    }
-    // remove trailing zeros
-    // fraction = fraction.replace(/(0+)$/, "");
-  }
-
-  // split the fraction part into groups of 3 digits
-  const groups: string[] = [];
-  for (let i = 0; i < fraction.length; i += 3) {
-    groups.push(fraction.slice(i, i + 3));
-  }
-
-  // remove trailing zeros groups
-  for (let i = groups.length - 1; i > 0; i--) {
-    if (groups[i] === "000") {
-      groups.pop();
-    } else {
-      break;
-    }
-  }
-
-  fraction = groups.join(thousandsSeparator);
-
   return `${negative ? "-" : ""}${integer || "0"}${fraction ? `.${fraction}` : ""}`;
 }
