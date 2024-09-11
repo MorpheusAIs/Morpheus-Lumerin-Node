@@ -145,6 +145,7 @@ const createClient = function (createStore) {
     getTitles: utils.forwardToMainProcess('get-chat-titles', 750000),
     saveTitle: utils.forwardToMainProcess('save-chat-title', 750000),
     deleteTitle: utils.forwardToMainProcess('delete-chat-title', 750000),
+    updateChatTitle: utils.forwardToMainProcess("update-chat-title", 750000),
   }
 
   const api = {

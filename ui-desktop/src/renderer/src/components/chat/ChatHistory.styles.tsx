@@ -65,14 +65,14 @@ export const HistoryEntryTitle = styled(FlexSpaceBetween)`
     white-space: nowrap;
     color: ${p => p.theme.colors.morMain}
     margin: 0.5rem 0;
-    padding: 1rem;
+    padding: 1rem 1.5rem;
     opacity: 0.8
 
-    &:hover {
+    &:hover, &[data-active] {
         cursor: pointer;
         opacity: 1;
-        border-radius: 5px;
-        background: rgba(0, 0, 0, 0.15);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.05);
     }
 `
 
@@ -91,4 +91,23 @@ export const CloseBtn = styled(Btn)`
 
 export const Duration = styled.div`
     color: white;
+`
+
+export const IconsContainer = styled.div`
+    svg:hover {
+        opacity: 0.8
+    }
+`
+export const ChangeTitleContainer = styled(IconsContainer)`
+    display: flex;
+    align-items: center;
+    width: 100%;
+
+    input {
+        background: transparent;
+        color: white;
+        border: none;
+        border-bottom: 1px solid ${p => p.theme.colors.morMain};
+    }
+
 `

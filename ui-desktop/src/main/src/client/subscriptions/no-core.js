@@ -36,6 +36,7 @@ const listeners = {
   "save-chat-history": handlers.saveChatHistory,
   "get-chat-titles": handlers.getTitles,
   "save-chat-title": handlers.saveTitle,
+  "update-chat-title": handlers.updateChatTitle,
   "delete-chat-title": handlers.deleteTitle
 }
 

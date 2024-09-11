@@ -25,7 +25,7 @@ const getTitles = async () => {
 const saveTitle = async (data) => {
     const db = dbManager.getDb();
     const collection = db.collection('chat-title');
-    await collection.insert({ _id: data.sessionId, data });
+    await collection.insert({ _id: data.sessionId, ...data });
 }
 
 const deleteTitle = async (id) => {
@@ -34,4 +34,10 @@ const deleteTitle = async (id) => {
     await db.collection('chat').remove({ sessionId: id })
 }
 
-export default { getChatHitory, saveChatHistory, getTitles, saveTitle, deleteTitle };
+const updateChatTitle = async ({ id, title }) => {
+    const db = dbManager.getDb();
+    const collection = db.collection('chat-title');
+    await collection.update({ _id:  id }, { title }, { upsert: true });
+}
+
+export default { getChatHitory, saveChatHistory, getTitles, saveTitle, deleteTitle, updateChatTitle };

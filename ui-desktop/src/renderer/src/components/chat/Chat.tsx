@@ -76,7 +76,6 @@ const Chat = (props) => {
     const isEnoughFunds = Number(balances.mor) > Number(requiredStake.min);
     const stakedFunds = activeSession ? (((activeSession.EndsAt - activeSession.OpenedAt) * activeSession.PricePerSecond) / 10 ** 18).toFixed(2) : 0;
 
-
     useEffect(() => {
         (async () => {
             const [meta, chainData, titles, userBalances] = await Promise.all([
@@ -88,7 +87,7 @@ const Chat = (props) => {
             setBalances(userBalances)
             setMeta(meta);
             setChainData(chainData)
-            setSessionTitles(titles.map(t => ({ title: t.title, ...t.data, sessionId: t._id })));
+            setSessionTitles(titles.map(t => ({ ...t, title: t.title, sessionId: t._id })));
 
             const sessions = await props.getSessionsByUser(props.address);
             const openSessions = sessions.filter(s => !isClosed(s));
@@ -210,11 +209,12 @@ const Chat = (props) => {
         if(!sessionData.modelId) {
             return;
         }
-        toggleDrawer();
+        // toggleDrawer();
+
+        setChat({ ...sessionData})
 
         if(sessionData.isLocal) {
             await loadHistory(sessionData.id);
-            setChat({ ...sessionData})
             return
         }
 
@@ -453,6 +453,10 @@ const Chat = (props) => {
         setRequiredStake({ min: calculateStake(maxPrice, 5), max: calculateStake(maxPrice, 24 * 60) })
     }
 
+    const wrapChangeTitle = async (data: { id, title }) => {
+        await props.client.updateChatTitle(data);
+    }
+
     return (
         <>
             {
@@ -468,6 +472,7 @@ const Chat = (props) => {
                 className='history-drawer'
             >
                 <ChatHistory
+                    activeChat={chat}
                     open={isOpen}
                     sessionTitles={sessionTitles}
                     sessions={sessions}
@@ -475,6 +480,7 @@ const Chat = (props) => {
                     models={chainData?.models || []}
                     onSelectSession={selectSession}
                     refreshSessions={refreshSessions}
+                    onChangeTitle={wrapChangeTitle}
                     onCloseSession={closeSession} />
             </Drawer>
             <View>

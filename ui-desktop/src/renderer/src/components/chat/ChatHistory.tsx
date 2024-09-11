@@ -1,4 +1,4 @@
-import { IconPencil, IconTrash, IconSearch } from "@tabler/icons-react";
+import { IconPencil, IconTrash, IconSearch, IconCheck, IconX } from "@tabler/icons-react";
 import { abbreviateAddress } from '../../utils';
 import { isClosed } from './utils';
 import Tab from 'react-bootstrap/Tab';
@@ -16,19 +16,74 @@ interface ChatHistoryProps {
     onSelectSession: (session) => void;
     refreshSessions: () => void;
     deleteHistory: (string) => void
+    onChangeTitle: (data: { id, title }) => Promise<void>;
     sessions: any[];
     models: any[];
+    activeChat: any,
     sessionTitles: { sessionId: string, title: string, createdAt: any }[]
+}
+
+const HisotryEntry = ({ entry, deleteHistory, onSelectSession, isActive, onChangeTitle }) => {
+    const [isEdit, setIsEdit] = useState<boolean>(false);
+    const [title, setTitle] = useState<string>(entry?.title || "");
+
+    const wrapDelete = (e, id) => {
+        e.stopPropagation();
+        deleteHistory(id);
+    }
+
+    const changetTitle = (e, id) => {
+        setIsEdit(!isEdit);
+        e.stopPropagation();
+        onChangeTitle({ id, title });
+    }
+
+    return (
+        <components.HistoryEntryTitle data-active={isActive ? true : undefined} onClick={() => onSelectSession(entry)}>
+            {
+                !isEdit ?
+                    (
+
+                        <>
+                            <span>{title}</span>
+                            {
+                                isActive && (
+                                    <components.IconsContainer>
+                                        <IconPencil onClick={(e) => {
+                                            e.stopPropagation();
+                                            setIsEdit(!isEdit);
+                                        }} style={{ marginRight: '1.5rem' }} size={22} />
+                                        <IconTrash size={22} onClick={(e) => wrapDelete(e, entry.sessionId)} />
+                                    </components.IconsContainer>
+                                )
+                            }
+
+                        </>
+                    ) :
+                    (
+                        <components.ChangeTitleContainer>
+                            <InputGroup onClick={(e) => e.stopPropagation()}>
+                                <Form.Control
+                                    type="text"
+                                    value={title}
+                                    onChange={(e) => setTitle(e.target.value)}
+                                />
+                            </InputGroup>
+                            <components.IconsContainer>
+                                <IconCheck onClick={(e) => {
+                                    changetTitle(e, entry.sessionId)
+                                }} style={{ margin: '0 1.5rem' }} size={22} />
+                                <IconX size={22} onClick={(e) => wrapDelete(e, entry.sessionId)} />
+                            </components.IconsContainer>
+                        </components.ChangeTitleContainer>
+                    )
+            }
+        </components.HistoryEntryTitle>)
 }
 
 export const ChatHistory = (props: ChatHistoryProps) => {
     const sessions = props.sessions;
     const [search, setSearch] = useState<string | undefined>();
-
-    const wrapDelete = (e, id) => {
-        e.stopPropagation();
-        props.deleteHistory(id);
-    }
 
     useEffect(() => {
         setSearch("");
@@ -36,13 +91,13 @@ export const ChatHistory = (props: ChatHistoryProps) => {
 
     const renderTitlesGroup = (items) => {
         return items.map(t => {
-            return (<components.HistoryEntryTitle onClick={() => props.onSelectSession(t)}>
-                <span>{t?.title || ""}</span>
-                <div>
-                    <IconPencil style={{ marginRight: '1rem' }} size={18}></IconPencil>
-                    <IconTrash size={18} onClick={(e) => wrapDelete(e, t.sessionId)}></IconTrash>
-                </div>
-            </components.HistoryEntryTitle>)
+            return (<HisotryEntry
+                onChangeTitle={props.onChangeTitle}
+                isActive={props.activeChat?.id == t.sessionId}
+                key={t.sessionId}
+                entry={t}
+                deleteHistory={props.deleteHistory}
+                onSelectSession={props.onSelectSession} />)
         })
     }
 
@@ -53,7 +108,6 @@ export const ChatHistory = (props: ChatHistoryProps) => {
             return d;
         }
         const source = (items || []).filter(i => i.createdAt).sort((a, b) => b.createdAt - a.createdAt);
-        console.log("🚀 ~ getGroupHistory ~ source:", source)
         const result: any = {
             today: [],
             last7: [],
