@@ -9,7 +9,6 @@ export default defineConfig({
       include: [
         "facets/**/*.json",
         "MorpheusToken.sol/*.json",
-        "StakingMasterChef.sol/*.json",
         "ERC20.sol/*.json",
       ],
     }),
