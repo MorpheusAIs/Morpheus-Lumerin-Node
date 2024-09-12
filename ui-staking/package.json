@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "tsx watch.ts",
+    "check": "tsc -noEmit",
     "build": "tsx build.ts",
     "format": "biome format --write"
   },
@@ -40,16 +41,12 @@
     "react-router-dom": "^6.26.1",
     "react-timer-hook": "^3.0.7",
     "tsx": "^4.17.0",
-    "typescript": "^5.5.4",
+    "typescript": "^5.6.2",
     "viem": "2.x",
     "wagmi": "^2.12.2"
   },
   "mocha": {
-    "require": [
-      "chai/register-expect.js"
-    ],
-    "node-option": [
-      "import=tsx"
-    ]
+    "require": ["chai/register-expect.js"],
+    "node-option": ["import=tsx"]
   }
 }

@@ -1,23 +1,12 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { useStopwatch } from "react-timer-hook";
-import {
-  useAccount,
-  useBalance,
-  useBlock,
-  usePublicClient,
-  useReadContract,
-  useWriteContract,
-} from "wagmi";
+import { useAccount, useBalance, useBlock, usePublicClient, useReadContract, useWriteContract } from "wagmi";
 import { stakingMasterChefAbi } from "../../blockchain/abi.ts";
 import { erc20Abi } from "viem";
 import { mapPoolDataAndDerive } from "../../helpers/pool.ts";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  filterPoolQuery,
-  filterStakeQuery,
-  filterUserBalanceQuery,
-} from "../../helpers/invalidators.ts";
+import { filterPoolQuery, filterStakeQuery, filterUserBalanceQuery } from "../../helpers/invalidators.ts";
 import { useTxModal } from "../../hooks/useTxModal.ts";
 
 export function usePool(onUpdate: () => void) {
@@ -44,8 +33,7 @@ export function usePool(onUpdate: () => void) {
 
   const shouldQueryPool = poolId !== undefined && poolsCount.isSuccess && poolId < poolsCount.data;
   const poolNotFound =
-    (poolId !== undefined && poolsCount.isSuccess && poolId >= poolsCount.data) ||
-    poolsCount.isError;
+    (poolId !== undefined && poolsCount.isSuccess && poolId >= poolsCount.data) || poolsCount.isError;
 
   const poolDataArr = useReadContract({
     abi: stakingMasterChefAbi,
@@ -124,7 +112,7 @@ export function usePool(onUpdate: () => void) {
   const unstakeModal = useTxModal();
 
   const locksMap = new Map<bigint, bigint>(
-    locks.data?.map(({ durationSeconds, multiplierScaled }) => [durationSeconds, multiplierScaled])
+    locks.data?.map(({ durationSeconds, multiplierScaled }) => [durationSeconds, multiplierScaled]),
   );
 
   const poolData = mapPoolDataAndDerive(poolDataArr.data, timestamp, precision.data);

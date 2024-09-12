@@ -5,7 +5,7 @@ export function useInterval(
   delay: number,
   immediate = false,
   deps: React.DependencyList | undefined = [],
-): React.MutableRefObject<number> {
+): React.MutableRefObject<number | null> {
   const intervalRef = useRef<number | null>(null);
   const savedCallback = useRef(callback);
   useEffect(() => {

@@ -1,14 +1,18 @@
 import type { Query, QueryKey } from "@tanstack/react-query";
 
+interface WagmiQueryKey {
+  functionName?: string;
+  address?: `0x${string}`;
+  args?: unknown[];
+}
+
 export function filterPoolQuery(poolId: bigint) {
   return (q: Query<unknown, Error, unknown, QueryKey>) => {
-    const params = q.queryKey?.[1];
+    const params = q.queryKey?.[1] as WagmiQueryKey;
     if (!params) {
       return false;
     }
     if (params?.functionName === "pools" && params?.args?.[0] === BigInt(poolId)) {
-      console.log("invalidating pools", params);
-
       return true;
     }
     return false;
@@ -17,7 +21,7 @@ export function filterPoolQuery(poolId: bigint) {
 
 export function filterStakeQuery(poolId: bigint) {
   return (q: Query<unknown, Error, unknown, QueryKey>) => {
-    const params = q.queryKey?.[1];
+    const params = q.queryKey?.[1] as WagmiQueryKey;
     if (!params) {
       return false;
     }
@@ -31,7 +35,7 @@ export function filterStakeQuery(poolId: bigint) {
 
 export function filterUserBalanceQuery(address: `0x${string}`) {
   return (q: Query<unknown, Error, unknown, QueryKey>) => {
-    const params = q.queryKey?.[1];
+    const params = q.queryKey?.[1] as WagmiQueryKey;
     if (!params) {
       return false;
     }

@@ -25,12 +25,7 @@ export const getRewardPerShareScaled = (pool: Pool, timestamp: bigint): bigint =
   return pool.accRewardPerShareScaled + rewardScaled / pool.totalShares;
 };
 
-export const getReward = (
-  userStake: UserStake,
-  pool: Pool,
-  timestamp: bigint,
-  precision: bigint
-): bigint => {
+export const getReward = (userStake: UserStake, pool: Pool, timestamp: bigint, precision: bigint): bigint => {
   const endTime = pool.endTime > timestamp ? timestamp : pool.endTime;
   const rewardPerShareScaled = getRewardPerShareScaled(pool, endTime);
   const reward = (userStake.shareAmount * rewardPerShareScaled) / precision - userStake.rewardDebt;

@@ -2,11 +2,11 @@ import { Link } from "react-router-dom";
 import { LumerinLogo } from "../icons/Lumerin.tsx";
 import { shortAddress } from "../lib/address.ts";
 import { Container } from "./Container.tsx";
-import { useWeb3Modal, useWeb3ModalState, useWeb3ModalTheme } from "@web3modal/wagmi/react";
+import { useWeb3Modal } from "@web3modal/wagmi/react";
 import { useAccount } from "wagmi";
 import AvatarImport from "boring-avatars";
 
-const Avatar: typeof AvatarImport = AvatarImport.default;
+const { default: Avatar } = AvatarImport as unknown as { default: typeof AvatarImport };
 
 type HeaderProps = {
   address?: `0x${string}`;
@@ -27,11 +27,7 @@ export const Header: React.FC<HeaderProps> = (props) => {
           <>
             {address ? (
               <>
-                <button
-                  type="button"
-                  className="header-wallet"
-                  onClick={() => open({ view: "Account" })}
-                >
+                <button type="button" className="header-wallet" onClick={() => open({ view: "Account" })}>
                   <Avatar
                     size="24px"
                     name={address}
@@ -42,11 +38,7 @@ export const Header: React.FC<HeaderProps> = (props) => {
                 </button>
               </>
             ) : (
-              <button
-                type="button"
-                className="header-wallet"
-                onClick={() => open({ view: "Connect" })}
-              >
+              <button type="button" className="header-wallet" onClick={() => open({ view: "Connect" })}>
                 Connect wallet
               </button>
             )}

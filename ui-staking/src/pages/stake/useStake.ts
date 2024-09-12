@@ -109,6 +109,11 @@ export function useStake() {
     stakeAmountValidEnabled
   );
 
+  const lockDurationSeconds = locks.data?.[lockIndex].durationSeconds || 0n;
+  const effectiveStakeStartTime =
+    poolData && timestamp > poolData?.startTime ? timestamp : poolData?.startTime;
+  const lockEndsAt = effectiveStakeStartTime && effectiveStakeStartTime + lockDurationSeconds;
+
   const apyValue = apy(poolData, timestamp, stakeAmountDecimals, precision.data, precision.data);
 
   const pubClient = usePublicClient();
@@ -179,6 +184,9 @@ export function useStake() {
     writeContract,
     stakeAmountDecimals,
     stakeAmountValidErr,
+    lockDurationSeconds,
+    effectiveStakeStartTime,
+    lockEndsAt,
   };
 }
 
@@ -228,7 +236,8 @@ function apy(
   if (stakeAmount === 0n) {
     return 0;
   }
-  const priceOfLumerinInMor = 0.02041 / 10 ** decimalsLMR / (21.8 / 10 ** decimalsMOR);
+  const priceOfLumerinInMor =
+    0.02041 / 10 ** Number(decimalsLMR) / (21.8 / 10 ** Number(decimalsMOR));
 
   const shares = (stakeAmount * yearMultiplierScaled) / precision;
   const rewardDebt = (shares * poolData.accRewardPerShareScaled) / precision;
