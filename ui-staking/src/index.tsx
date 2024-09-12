@@ -4,7 +4,7 @@ import { App } from "./App.tsx";
 
 const rootElem = document.getElementById("root");
 if (!rootElem) {
-	throw new Error("Root element not found");
+  throw new Error("Root element not found");
 }
 
 ReactDOM.createRoot(rootElem).render(<App />);

@@ -9,7 +9,7 @@ import {
 export function isErr<const TAbi extends Abi | readonly unknown[]>(
   err: unknown,
   // abi: TAbi,
-  errName: DecodeErrorResultReturnType<TAbi>["errorName"]
+  errName: DecodeErrorResultReturnType<TAbi>["errorName"],
 ): boolean {
   if (err instanceof BaseError) {
     const revertError = err.walk((err) => {
@@ -29,11 +29,11 @@ export function isErr<const TAbi extends Abi | readonly unknown[]>(
 
 export function getErr<
   const TAbi extends Abi | readonly unknown[],
-  allErrorNames extends ContractErrorName<TAbi> = ContractErrorName<TAbi>
+  allErrorNames extends ContractErrorName<TAbi> = ContractErrorName<TAbi>,
 >(
   err: unknown,
   // abi: TAbi,
-  errName: allErrorNames
+  errName: allErrorNames,
 ): DecodeErrorResultReturnType<TAbi, typeof errName> | undefined {
   if (err instanceof BaseError) {
     const revertError = err.walk((err) => {

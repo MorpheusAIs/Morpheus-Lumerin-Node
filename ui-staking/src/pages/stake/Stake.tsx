@@ -6,21 +6,11 @@ import prettyMilliseconds from "pretty-ms";
 import { RangeSelect } from "../../components/RangeSelect.tsx";
 import { useStake } from "./useStake.ts";
 import { formatDate, formatDuration } from "../../lib/date.ts";
-import { errorToPOJO, isErr } from "../../lib/error.ts";
+import { isErr } from "../../lib/error.ts";
 import type { stakingMasterChefAbi } from "../../blockchain/abi.ts";
 import { Spinner } from "../../icons/Spinner.tsx";
 import { Dialog } from "../../components/Dialog.tsx";
 import { formatLMR } from "../../lib/units.ts";
-import {
-  ContractFunctionRevertedError,
-  TransactionExecutionError,
-  UserRejectedRequestError,
-  type Chain,
-} from "viem";
-import type { WriteContractErrorType } from "wagmi/actions";
-import { getTxURL } from "../../helpers/indexer.ts";
-import { Check } from "../../icons/Check.tsx";
-import { ErrorIcon } from "../../icons/Error.tsx";
 import { TxProgress } from "../../components/TxProgress.tsx";
 import { getDisplayErrorMessage } from "../../helpers/error.ts";
 
@@ -40,9 +30,9 @@ export const Stake = () => {
     stakeAmountDecimals,
     setStakeAmount,
     stakeAmountValidErr,
-    chain,
-    writeContract,
     txModal,
+    lockDurationSeconds,
+    lockEndsAt,
   } = useStake();
 
   const isNoPoolError = isErr<typeof stakingMasterChefAbi>(locks.error, "PoolOrStakeNotExists");
@@ -112,11 +102,11 @@ export const Stake = () => {
                   <dt>APY</dt>
                   <dd>unknown</dd>
                   <dt>Lockup Period</dt>
-                  <dd>{formatSeconds(locks.data[lockIndex].durationSeconds)}</dd>
+                  <dd>{formatSeconds(lockDurationSeconds)}</dd>
                   <dt>Reward multiplier</dt>
                   <dd>{rewardMultiplier}x</dd>
                   <dt>Lockup ends at</dt>
-                  <dd>{formatDate(timestamp + locks.data[lockIndex].durationSeconds)}</dd>
+                  <dd>{lockEndsAt ? formatDate(lockEndsAt) : "unknown"}</dd>
                 </dl>
                 <div className="field buttons">
                   <button
@@ -144,7 +134,7 @@ export const Stake = () => {
                 <h2>Staking transaction</h2>
                 <p>
                   Staking {formatLMR(stakeAmountDecimals)} with lock period of{" "}
-                  {formatDuration(locks.data?.[lockIndex].durationSeconds || 0n)}.
+                  {formatDuration(lockDurationSeconds)}.
                 </p>
                 <ul className="tx-stages">
                   <li>
