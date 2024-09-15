@@ -37,7 +37,9 @@ const deleteTitle = async (id) => {
 const updateChatTitle = async ({ id, title }) => {
     const db = dbManager.getDb();
     const collection = db.collection('chat-title');
-    await collection.update({ _id:  id }, { title }, { upsert: true });
+    const { _id, ...stored } = await collection.findAsync({ _id:  id })
+    const data = { ...stored[0], title };
+    await collection.update({ _id: id }, data);
 }
 
 export default { getChatHitory, saveChatHistory, getTitles, saveTitle, deleteTitle, updateChatTitle };

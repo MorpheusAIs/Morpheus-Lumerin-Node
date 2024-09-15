@@ -107,7 +107,14 @@ export const ChangeTitleContainer = styled(IconsContainer)`
         background: transparent;
         color: white;
         border: none;
-        border-bottom: 1px solid ${p => p.theme.colors.morMain};
+        border-bottom: 1px solid ${p => p.theme.colors.morMain}40;
     }
 
+    input:focus {
+        background: transparent;
+        outline: none;
+        box-shadow: none;
+        color: white;
+        border-bottom: 1px solid ${p => p.theme.colors.morMain};
+    }
 `

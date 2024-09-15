@@ -72,6 +72,7 @@ export const SendBtn = styled.div`
     text-align: center;
     bottom: 12px;
     background: ${p => p.theme.colors.morMain};
+    cursor: pointer;
 
     &[disabled] {
         opacity: 0.5;

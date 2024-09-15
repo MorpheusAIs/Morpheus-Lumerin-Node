@@ -73,7 +73,11 @@ const HisotryEntry = ({ entry, deleteHistory, onSelectSession, isActive, onChang
                                 <IconCheck onClick={(e) => {
                                     changetTitle(e, entry.sessionId)
                                 }} style={{ margin: '0 1.5rem' }} size={22} />
-                                <IconX size={22} onClick={(e) => wrapDelete(e, entry.sessionId)} />
+                                <IconX size={22} onClick={(e) => {
+                                    e.stopPropagation();
+                                    setTitle(entry?.title || "");
+                                    setIsEdit(false);
+                                }} />
                             </components.IconsContainer>
                         </components.ChangeTitleContainer>
                     )

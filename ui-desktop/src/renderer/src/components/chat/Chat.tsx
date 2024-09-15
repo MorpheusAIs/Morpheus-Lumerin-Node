@@ -145,9 +145,11 @@ const Chat = (props) => {
         return (targetDuration - (targetDuration % 60)) - delta;
     }
 
-    const onOpenSession = async () => {
+    const onOpenSession = async (isReopen) => {
         setIsLoading(true);
-        setChat({ id: makeId(16), createdAt: new Date(), modelId: selectedModel.Id });
+        if(!isReopen) {
+            setChat({ id: makeId(16), createdAt: new Date(), modelId: selectedModel.Id });
+        }
 
         const prices = selectedModel.bids.map(x => x.PricePerSecond);
         const maxPrice = Math.max(prices);
@@ -160,9 +162,9 @@ const Chat = (props) => {
             if (!openedSession) {
                 return;
             }
-            setActiveSession({ sessionId: openedSession });
             const allSessions = await refreshSessions();
             const targetSessionData = allSessions.find(x => x.Id == openedSession);
+            setActiveSession({ ...targetSessionData, sessionId: openedSession });
             const targetModel = chainData.models.find(x => x.Id == targetSessionData.ModelAgentId)
             const targetBid = targetModel.bids.find(x => x.Id == targetSessionData.BidID);
             setSelectedBid(targetBid);
@@ -242,7 +244,8 @@ const Chat = (props) => {
 
     const handleReopen = async () => {
         setIsLoading(true);
-        const newSessionId = await onOpenSession();
+        const newSessionId = await onOpenSession(true);
+        setIsReadonly(false);
         console.log("Reopened session id: ", newSessionId)
     }
 
@@ -432,6 +435,8 @@ const Chat = (props) => {
         setSelectedModel(selectedModel);
 
         if (isLocal) {
+            setActiveSession(undefined);
+            setSelectedBid(undefined);
             return;
         }
 
