@@ -108,6 +108,10 @@ export const MessageBody = styled.div`
     font-size: 18px;
     max-width: calc(100vw - 165px);
 
+    code {
+        color: ${p => p.theme.colors.morMain}
+    }
+
     @media (min-width: 800px) {
         max-width: calc(100vw - 310px);
     }

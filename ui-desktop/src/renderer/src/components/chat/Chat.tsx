@@ -123,9 +123,9 @@ const Chat = (props) => {
         setIsOpen((prevState) => !prevState)
     }
 
-    const scrollToBottom = () => {
+    const scrollToBottom = (behavior: ScrollBehavior = "instant") => {
         if (!cancelScroll) {
-            chatBlockRef.current?.scroll({ top: chatBlockRef.current.scrollHeight, behavior: 'smooth' })
+            chatBlockRef.current?.scroll({ top: chatBlockRef.current.scrollHeight, behavior: behavior })
         }
     }
 
@@ -239,7 +239,7 @@ const Chat = (props) => {
         }
 
         await loadHistory(sessionData.id);
-        setTimeout(scrollToBottom, 400);
+        setTimeout(() => scrollToBottom("smooth"), 400);
     }
 
     const handleReopen = async () => {
@@ -276,11 +276,11 @@ const Chat = (props) => {
     }
 
     const call = async (message) => {
-        scrollToBottom();
         const chatHistory = messages.map(m => ({ role: m.role, content: m.text, isImageContent: m.isImageContent }))
 
         let memoState = [...messages, { id: makeId(16), text: value, ...userMessage }];
         setMessages(memoState);
+        scrollToBottom();
 
         const headers = {
             "Accept": "application/json"
