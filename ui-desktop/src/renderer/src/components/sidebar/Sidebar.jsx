@@ -17,7 +17,7 @@ const Container = styled.div`
   flex-direction: column;
   transition: width 0.2s;
   position: absolute;
-  overflow-y: hidden;
+  overflow: hidden;
   top: 0;
   left: 0;
   bottom: 0;
@@ -87,14 +87,15 @@ const NavContainer = styled.div`
   justify-content: space-between;
   flex-direction: column;
   height: 100%;
-  @media (max-width: 800px) {
-    padding-left: 1rem;
-  }
 `
 
 const PrimaryNavContainer = styled.nav`
   flex-grow: 1;
   margin-top: 3rem;
+
+  @media (max-width: 800px) {
+    padding-left: 0.5rem;
+  }
 `
 
 function Sidebar(props) {
