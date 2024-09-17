@@ -1,18 +1,19 @@
-import { getCurrentBlockTime, setTime } from "@/utils/block-helper";
-import { getDefaultDurations } from "@/utils/staking-helper";
-import { DAY } from "@/utils/time";
-import { LumerinToken, MorpheusToken, StakingMasterChef } from "@ethers-v6";
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
-import { time } from "@nomicfoundation/hardhat-network-helpers";
-import { expect } from "chai";
-import { ethers } from "hardhat";
-import { Reverter } from "../helpers/reverter";
+import { LumerinToken, MorpheusToken, StakingMasterChef } from '@ethers-v6';
+import { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
+import { time } from '@nomicfoundation/hardhat-network-helpers';
+import { expect } from 'chai';
+import { ethers } from 'hardhat';
 
-describe("Staking contract - getReward", () => {
+import { Reverter } from '../helpers/reverter';
+
+import { getCurrentBlockTime, setTime } from '@/utils/block-helper';
+import { getDefaultDurations } from '@/utils/staking-helper';
+import { DAY } from '@/utils/time';
+
+describe('Staking contract - getReward', () => {
   const reverter = new Reverter();
 
-  const startDate =
-    BigInt(new Date("2024-07-16T01:00:00.000Z").getTime()) / 1000n;
+  const startDate = BigInt(new Date('2024-07-16T01:00:00.000Z').getTime()) / 1000n;
   const stakingAmount = 1000n;
   const lockDuration = 7n * DAY;
   const poolId = 0n;
@@ -28,33 +29,29 @@ describe("Staking contract - getReward", () => {
 
   let pool: any;
 
-  before("setup", async () => {
+  before('setup', async () => {
     [OWNER, ALICE, BOB, CAROL] = await ethers.getSigners();
 
-    const [StakingMasterChef, ERC1967Proxy, MORFactory, LMRFactory] =
-      await Promise.all([
-        await ethers.getContractFactory("StakingMasterChef"),
-        await ethers.getContractFactory("ERC1967Proxy"),
-        await ethers.getContractFactory("MorpheusToken"),
-        await ethers.getContractFactory("LumerinToken"),
-      ]);
+    const [StakingMasterChef, ERC1967Proxy, MORFactory, LMRFactory] = await Promise.all([
+      await ethers.getContractFactory('StakingMasterChef'),
+      await ethers.getContractFactory('ERC1967Proxy'),
+      await ethers.getContractFactory('MorpheusToken'),
+      await ethers.getContractFactory('LumerinToken'),
+    ]);
 
     let stakingImpl;
     [stakingImpl, MOR, LMR] = await Promise.all([
       StakingMasterChef.deploy(),
       MORFactory.deploy(),
-      LMRFactory.deploy("Lumerin dev", "LMR"),
+      LMRFactory.deploy('Lumerin dev', 'LMR'),
     ]);
-    const stakingProxy = await ERC1967Proxy.deploy(stakingImpl, "0x");
+    const stakingProxy = await ERC1967Proxy.deploy(stakingImpl, '0x');
 
-    staking = StakingMasterChef.attach(
-      stakingProxy.target,
-    ) as StakingMasterChef;
+    staking = StakingMasterChef.attach(stakingProxy.target) as StakingMasterChef;
 
     await staking.__StakingMasterChef_init(LMR, MOR);
 
-    const startDate =
-      BigInt(new Date("2024-07-16T01:00:00.000Z").getTime()) / 1000n;
+    const startDate = BigInt(new Date('2024-07-16T01:00:00.000Z').getTime()) / 1000n;
     const duration = 400n * DAY;
     const endDate = startDate + duration;
     const rewardPerSecond = 100n;
@@ -75,13 +72,7 @@ describe("Staking contract - getReward", () => {
 
     await MOR.approve(staking, pool.totalReward);
 
-    await staking.addPool(
-      pool.startDate,
-      pool.duration,
-      pool.totalReward,
-      pool.lockDurations,
-      pool.multipliersScaled_,
-    );
+    await staking.addPool(pool.startDate, pool.duration, pool.totalReward, pool.lockDurations, pool.multipliersScaled_);
 
     await LMR.transfer(ALICE, 1_000_000n);
     await LMR.transfer(BOB, 1_000_000n);
@@ -92,17 +83,15 @@ describe("Staking contract - getReward", () => {
 
   afterEach(reverter.revert);
 
-  describe("Actions", () => {
+  describe('Actions', () => {
     beforeEach(async () => {
       await setTime(Number(startDate));
     });
 
-    it("Should get reward correctly for user that staked", async () => {
+    it('Should get reward correctly for user that staked', async () => {
       //// aliceStakes
       await LMR.connect(ALICE).approve(staking, stakingAmount);
-      const aliceStakeId = await staking
-        .connect(ALICE)
-        .stake.staticCall(poolId, stakingAmount, lockDuration);
+      const aliceStakeId = await staking.connect(ALICE).stake.staticCall(poolId, stakingAmount, lockDuration);
       await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
       const aliceStakeTime = await getCurrentBlockTime();
 
@@ -114,12 +103,10 @@ describe("Staking contract - getReward", () => {
         ALICE,
         poolId,
         aliceStakeId,
-        { blockTag: "pending" }, // we need to check reward against the block that will be mined next
+        { blockTag: 'pending' }, // we need to check reward against the block that will be mined next
       );
 
-      const tx = await staking
-        .connect(ALICE)
-        .withdrawReward(poolId, aliceStakeId, ALICE);
+      const tx = await staking.connect(ALICE).withdrawReward(poolId, aliceStakeId, ALICE);
       const aliceWithdrawTime = await getCurrentBlockTime();
 
       const stakeDuration = aliceWithdrawTime - aliceStakeTime;
@@ -128,27 +115,21 @@ describe("Staking contract - getReward", () => {
       expect(reward).to.equal(stakeDuration * pool.rewardPerSecond);
     });
 
-    it("Should not error if stakeId is wrong", async () => {
+    it('Should not error if stakeId is wrong', async () => {
       //// aliceStakes
       await LMR.connect(ALICE).approve(staking, stakingAmount);
-      const aliceStakeId = await staking
-        .connect(ALICE)
-        .stake.staticCall(poolId, stakingAmount, lockDuration);
+      const aliceStakeId = await staking.connect(ALICE).stake.staticCall(poolId, stakingAmount, lockDuration);
       await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
 
       ////
 
-      expect(
-        await staking.getReward(ALICE, poolId, aliceStakeId + 1n),
-      ).to.equal(0n);
+      expect(await staking.getReward(ALICE, poolId, aliceStakeId + 1n)).to.equal(0n);
     });
 
-    it("Should not error if user has not staked", async () => {
+    it('Should not error if user has not staked', async () => {
       //// aliceStakes
       await LMR.connect(ALICE).approve(staking, stakingAmount);
-      const aliceStakeId = await staking
-        .connect(ALICE)
-        .stake.staticCall(poolId, stakingAmount, lockDuration);
+      const aliceStakeId = await staking.connect(ALICE).stake.staticCall(poolId, stakingAmount, lockDuration);
       await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
 
       ////
@@ -159,25 +140,19 @@ describe("Staking contract - getReward", () => {
     it("Should not error if pool doesn't exist", async () => {
       //// aliceStakes
       await LMR.connect(ALICE).approve(staking, stakingAmount);
-      const aliceStakeId = await staking
-        .connect(ALICE)
-        .stake.staticCall(poolId, stakingAmount, lockDuration);
+      const aliceStakeId = await staking.connect(ALICE).stake.staticCall(poolId, stakingAmount, lockDuration);
       await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
       const aliceStakeTime = await getCurrentBlockTime();
 
       ////
 
-      expect(
-        await staking.getReward(ALICE, poolId + 1n, aliceStakeId),
-      ).to.equal(0n);
+      expect(await staking.getReward(ALICE, poolId + 1n, aliceStakeId)).to.equal(0n);
     });
 
-    it("Should return 0 if user withdrawn all rewards", async () => {
+    it('Should return 0 if user withdrawn all rewards', async () => {
       //// aliceStakes
       await LMR.connect(ALICE).approve(staking, stakingAmount);
-      const aliceStakeId = await staking
-        .connect(ALICE)
-        .stake.staticCall(poolId, stakingAmount, lockDuration);
+      const aliceStakeId = await staking.connect(ALICE).stake.staticCall(poolId, stakingAmount, lockDuration);
       await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
       const aliceStakeTime = await getCurrentBlockTime();
 
@@ -185,20 +160,12 @@ describe("Staking contract - getReward", () => {
 
       await setTime(Number((await getCurrentBlockTime()) + 10n * DAY));
 
-      const rewardBefore = await staking.getReward(
-        ALICE.address,
-        poolId,
-        aliceStakeId,
-      );
+      const rewardBefore = await staking.getReward(ALICE.address, poolId, aliceStakeId);
       expect(rewardBefore > 0).to.be.true;
 
       await staking.connect(ALICE).withdrawReward(poolId, aliceStakeId, ALICE);
 
-      const reward = await staking.getReward(
-        ALICE.address,
-        poolId,
-        aliceStakeId,
-      );
+      const reward = await staking.getReward(ALICE.address, poolId, aliceStakeId);
       expect(reward).to.equal(0n);
     });
   });

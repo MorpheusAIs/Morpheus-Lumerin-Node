@@ -1,18 +1,19 @@
-import { getCurrentBlockTime, setTime } from "@/utils/block-helper";
-import { getDefaultDurations } from "@/utils/staking-helper";
-import { DAY } from "@/utils/time";
-import { LumerinToken, MorpheusToken, StakingMasterChef } from "@ethers-v6";
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
-import { time } from "@nomicfoundation/hardhat-network-helpers";
-import { expect } from "chai";
-import { ethers } from "hardhat";
-import { Reverter } from "../helpers/reverter";
+import { LumerinToken, MorpheusToken, StakingMasterChef } from '@ethers-v6';
+import { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
+import { time } from '@nomicfoundation/hardhat-network-helpers';
+import { expect } from 'chai';
+import { ethers } from 'hardhat';
 
-describe("Staking contract - getStake", () => {
+import { Reverter } from '../helpers/reverter';
+
+import { getCurrentBlockTime, setTime } from '@/utils/block-helper';
+import { getDefaultDurations } from '@/utils/staking-helper';
+import { DAY } from '@/utils/time';
+
+describe('Staking contract - getStake', () => {
   const reverter = new Reverter();
 
-  const startDate =
-    BigInt(new Date("2024-07-16T01:00:00.000Z").getTime()) / 1000n;
+  const startDate = BigInt(new Date('2024-07-16T01:00:00.000Z').getTime()) / 1000n;
   const stakingAmount = 1000n;
   const lockDuration = 7n * DAY;
   const poolId = 0n;
@@ -28,33 +29,29 @@ describe("Staking contract - getStake", () => {
 
   let pool: any;
 
-  before("setup", async () => {
+  before('setup', async () => {
     [OWNER, ALICE, BOB, CAROL] = await ethers.getSigners();
 
-    const [StakingMasterChef, ERC1967Proxy, MORFactory, LMRFactory] =
-      await Promise.all([
-        await ethers.getContractFactory("StakingMasterChef"),
-        await ethers.getContractFactory("ERC1967Proxy"),
-        await ethers.getContractFactory("MorpheusToken"),
-        await ethers.getContractFactory("LumerinToken"),
-      ]);
+    const [StakingMasterChef, ERC1967Proxy, MORFactory, LMRFactory] = await Promise.all([
+      await ethers.getContractFactory('StakingMasterChef'),
+      await ethers.getContractFactory('ERC1967Proxy'),
+      await ethers.getContractFactory('MorpheusToken'),
+      await ethers.getContractFactory('LumerinToken'),
+    ]);
 
     let stakingImpl;
     [stakingImpl, MOR, LMR] = await Promise.all([
       StakingMasterChef.deploy(),
       MORFactory.deploy(),
-      LMRFactory.deploy("Lumerin dev", "LMR"),
+      LMRFactory.deploy('Lumerin dev', 'LMR'),
     ]);
-    const stakingProxy = await ERC1967Proxy.deploy(stakingImpl, "0x");
+    const stakingProxy = await ERC1967Proxy.deploy(stakingImpl, '0x');
 
-    staking = StakingMasterChef.attach(
-      stakingProxy.target,
-    ) as StakingMasterChef;
+    staking = StakingMasterChef.attach(stakingProxy.target) as StakingMasterChef;
 
     await staking.__StakingMasterChef_init(LMR, MOR);
 
-    const startDate =
-      BigInt(new Date("2024-07-16T01:00:00.000Z").getTime()) / 1000n;
+    const startDate = BigInt(new Date('2024-07-16T01:00:00.000Z').getTime()) / 1000n;
     const duration = 400n * DAY;
     const endDate = startDate + duration;
     const rewardPerSecond = 100n;
@@ -75,13 +72,7 @@ describe("Staking contract - getStake", () => {
 
     await MOR.approve(staking, pool.totalReward);
 
-    await staking.addPool(
-      pool.startDate,
-      pool.duration,
-      pool.totalReward,
-      pool.lockDurations,
-      pool.multipliersScaled_,
-    );
+    await staking.addPool(pool.startDate, pool.duration, pool.totalReward, pool.lockDurations, pool.multipliersScaled_);
 
     await LMR.transfer(ALICE, 1_000_000n);
     await LMR.transfer(BOB, 1_000_000n);
@@ -92,17 +83,15 @@ describe("Staking contract - getStake", () => {
 
   afterEach(reverter.revert);
 
-  describe("Actions", () => {
+  describe('Actions', () => {
     beforeEach(async () => {
       await setTime(Number(startDate));
     });
 
-    it("Should get user stake", async () => {
+    it('Should get user stake', async () => {
       //// aliceStakes
       await LMR.connect(ALICE).approve(staking, stakingAmount);
-      const aliceStakeId = await staking
-        .connect(ALICE)
-        .stake.staticCall(poolId, stakingAmount, lockDuration);
+      const aliceStakeId = await staking.connect(ALICE).stake.staticCall(poolId, stakingAmount, lockDuration);
       await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
       const aliceStakeTime = await getCurrentBlockTime();
 
@@ -110,30 +99,21 @@ describe("Staking contract - getStake", () => {
       await time.increase(5n * DAY);
 
       await LMR.connect(BOB).approve(staking, stakingAmount);
-      const bobStakeId = await staking
-        .connect(BOB)
-        .stake.staticCall(poolId, stakingAmount, lockDuration);
+      const bobStakeId = await staking.connect(BOB).stake.staticCall(poolId, stakingAmount, lockDuration);
       await staking.connect(BOB).stake(poolId, stakingAmount, lockDuration);
       const bobStakeTime = await getCurrentBlockTime();
 
       ////
 
       await LMR.connect(ALICE).approve(staking, stakingAmount);
-      const stakeId = await staking
-        .connect(ALICE)
-        .stake.staticCall(poolId, stakingAmount, lockDuration);
+      const stakeId = await staking.connect(ALICE).stake.staticCall(poolId, stakingAmount, lockDuration);
       await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
 
       const userStake = await staking.poolUserStakes(poolId, ALICE, pool.id);
 
       const lockEndsAt = aliceStakeTime + lockDuration;
 
-      expect(userStake).to.deep.equal([
-        stakingAmount,
-        stakingAmount,
-        0n,
-        lockEndsAt,
-      ]);
+      expect(userStake).to.deep.equal([stakingAmount, stakingAmount, 0n, lockEndsAt]);
 
       const aliceStake0 = await staking.poolUserStakes(poolId, ALICE, 0);
       const aliceStake1 = await staking.poolUserStakes(poolId, ALICE, 1);

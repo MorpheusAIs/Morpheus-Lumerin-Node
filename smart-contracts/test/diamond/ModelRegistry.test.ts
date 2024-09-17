@@ -1,6 +1,3 @@
-import { getHex, randomBytes32, wei } from "@/scripts/utils/utils";
-import { getCurrentBlockTime } from "@/utils/block-helper";
-import { HOUR, YEAR } from "@/utils/time";
 import {
   IBidStorage,
   IMarketplace__factory,
@@ -15,16 +12,21 @@ import {
   MorpheusToken,
   ProviderRegistry,
   SessionRouter,
-} from "@ethers-v6";
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
-import { expect } from "chai";
-import { Addressable, Fragment, resolveAddress } from "ethers";
-import { ethers } from "hardhat";
-import { FacetAction } from "../helpers/enums";
-import { getDefaultPools } from "../helpers/pool-helper";
-import { Reverter } from "../helpers/reverter";
+} from '@ethers-v6';
+import { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
+import { expect } from 'chai';
+import { Addressable, Fragment, resolveAddress } from 'ethers';
+import { ethers } from 'hardhat';
 
-describe("Model registry", () => {
+import { FacetAction } from '../helpers/enums';
+import { getDefaultPools } from '../helpers/pool-helper';
+import { Reverter } from '../helpers/reverter';
+
+import { getHex, randomBytes32, wei } from '@/scripts/utils/utils';
+import { getCurrentBlockTime } from '@/utils/block-helper';
+import { HOUR, YEAR } from '@/utils/time';
+
+describe('Model registry', () => {
   const reverter = new Reverter();
 
   let OWNER: SignerWithAddress;
@@ -46,7 +48,7 @@ describe("Model registry", () => {
     }
   > {
     const expectedProvider = {
-      endpoint: "localhost:3334",
+      endpoint: 'localhost:3334',
       stake: wei(100),
       createdAt: 0n,
       limitPeriodEnd: 0n,
@@ -60,11 +62,7 @@ describe("Model registry", () => {
 
     await providerRegistry
       .connect(PROVIDER)
-      .providerRegister(
-        expectedProvider.address,
-        expectedProvider.stake,
-        expectedProvider.endpoint,
-      );
+      .providerRegister(expectedProvider.address, expectedProvider.stake, expectedProvider.endpoint);
     expectedProvider.createdAt = await getCurrentBlockTime();
     expectedProvider.limitPeriodEnd = expectedProvider.createdAt + YEAR;
 
@@ -78,12 +76,12 @@ describe("Model registry", () => {
   > {
     const model = {
       modelId: randomBytes32(),
-      ipfsCID: getHex(Buffer.from("ipfs://ipfsaddress")),
+      ipfsCID: getHex(Buffer.from('ipfs://ipfsaddress')),
       fee: 100,
       stake: 100,
       owner: OWNER,
-      name: "Llama 2.0",
-      tags: ["llama", "animal", "cute"],
+      name: 'Llama 2.0',
+      tags: ['llama', 'animal', 'cute'],
       createdAt: 0n,
       isDeleted: false,
     };
@@ -111,7 +109,7 @@ describe("Model registry", () => {
     }
   > {
     let bid = {
-      id: "",
+      id: '',
       modelId: model.modelId,
       pricePerSecond: wei(0.0001),
       nonce: 0,
@@ -123,24 +121,16 @@ describe("Model registry", () => {
 
     await MOR.approve(modelRegistry, 10000n * 10n ** 18n);
 
-    bid.id = await marketplace
-      .connect(PROVIDER)
-      .postModelBid.staticCall(bid.provider, bid.modelId, bid.pricePerSecond);
-    await marketplace
-      .connect(PROVIDER)
-      .postModelBid(bid.provider, bid.modelId, bid.pricePerSecond);
+    bid.id = await marketplace.connect(PROVIDER).postModelBid.staticCall(bid.provider, bid.modelId, bid.pricePerSecond);
+    await marketplace.connect(PROVIDER).postModelBid(bid.provider, bid.modelId, bid.pricePerSecond);
 
     bid.createdAt = await getCurrentBlockTime();
 
     // generating data for sample session
     const durationSeconds = HOUR;
     const totalCost = bid.pricePerSecond * durationSeconds;
-    const totalSupply = await sessionRouter.totalMORSupply(
-      await getCurrentBlockTime(),
-    );
-    const todaysBudget = await sessionRouter.getTodaysBudget(
-      await getCurrentBlockTime(),
-    );
+    const totalSupply = await sessionRouter.totalMORSupply(await getCurrentBlockTime());
+    const todaysBudget = await sessionRouter.getTodaysBudget(await getCurrentBlockTime());
 
     const expectedSession = {
       durationSeconds,
@@ -159,44 +149,27 @@ describe("Model registry", () => {
     return bid;
   }
 
-  before("setup", async () => {
+  before('setup', async () => {
     [OWNER, SECOND, THIRD, PROVIDER] = await ethers.getSigners();
 
-    const LinearDistributionIntervalDecrease = await ethers.getContractFactory(
-      "LinearDistributionIntervalDecrease",
-    );
-    const linearDistributionIntervalDecrease =
-      await LinearDistributionIntervalDecrease.deploy();
+    const LinearDistributionIntervalDecrease = await ethers.getContractFactory('LinearDistributionIntervalDecrease');
+    const linearDistributionIntervalDecrease = await LinearDistributionIntervalDecrease.deploy();
 
-    const [
-      LumerinDiamond,
-      Marketplace,
-      ModelRegistry,
-      ProviderRegistry,
-      SessionRouter,
-      MorpheusToken,
-    ] = await Promise.all([
-      ethers.getContractFactory("LumerinDiamond"),
-      ethers.getContractFactory("Marketplace"),
-      ethers.getContractFactory("ModelRegistry"),
-      ethers.getContractFactory("ProviderRegistry"),
-      ethers.getContractFactory("SessionRouter", {
-        libraries: {
-          LinearDistributionIntervalDecrease:
-            linearDistributionIntervalDecrease,
-        },
-      }),
-      ethers.getContractFactory("MorpheusToken"),
-    ]);
+    const [LumerinDiamond, Marketplace, ModelRegistry, ProviderRegistry, SessionRouter, MorpheusToken] =
+      await Promise.all([
+        ethers.getContractFactory('LumerinDiamond'),
+        ethers.getContractFactory('Marketplace'),
+        ethers.getContractFactory('ModelRegistry'),
+        ethers.getContractFactory('ProviderRegistry'),
+        ethers.getContractFactory('SessionRouter', {
+          libraries: {
+            LinearDistributionIntervalDecrease: linearDistributionIntervalDecrease,
+          },
+        }),
+        ethers.getContractFactory('MorpheusToken'),
+      ]);
 
-    [
-      diamond,
-      marketplace,
-      modelRegistry,
-      providerRegistry,
-      sessionRouter,
-      MOR,
-    ] = await Promise.all([
+    [diamond, marketplace, modelRegistry, providerRegistry, sessionRouter, MOR] = await Promise.all([
       LumerinDiamond.deploy(),
       Marketplace.deploy(),
       ModelRegistry.deploy(),
@@ -207,7 +180,7 @@ describe("Model registry", () => {
 
     await diamond.__LumerinDiamond_init();
 
-    await diamond["diamondCut((address,uint8,bytes4[])[])"]([
+    await diamond['diamondCut((address,uint8,bytes4[])[])']([
       {
         facetAddress: marketplace,
         action: FacetAction.Add,
@@ -239,9 +212,7 @@ describe("Model registry", () => {
     ]);
 
     marketplace = marketplace.attach(diamond.target) as Marketplace;
-    providerRegistry = providerRegistry.attach(
-      diamond.target,
-    ) as ProviderRegistry;
+    providerRegistry = providerRegistry.attach(diamond.target) as ProviderRegistry;
     modelRegistry = modelRegistry.attach(diamond.target) as ModelRegistry;
     sessionRouter = sessionRouter.attach(diamond.target) as SessionRouter;
 
@@ -256,7 +227,7 @@ describe("Model registry", () => {
 
   afterEach(reverter.revert);
 
-  describe("Actions", () => {
+  describe('Actions', () => {
     let provider: IProviderStorage.ProviderStruct;
     let model: IModelStorage.ModelStruct & {
       modelId: string;
@@ -272,7 +243,7 @@ describe("Model registry", () => {
       bid = await deployBid(model);
     });
 
-    it("Should register", async () => {
+    it('Should register', async () => {
       const data = await modelRegistry.getModel(model.modelId);
 
       expect(await modelRegistry.models(0)).eq(model.modelId);
@@ -288,75 +259,46 @@ describe("Model registry", () => {
       ]);
     });
 
-    it("Should error when registering with insufficient stake", async () => {
+    it('Should error when registering with insufficient stake', async () => {
       const minStake = 100n;
       await modelRegistry.modelSetMinStake(minStake);
 
       await expect(
-        modelRegistry.modelRegister(
-          randomBytes32(),
-          randomBytes32(),
-          0n,
-          0n,
-          OWNER,
-          "a",
-          [],
-        ),
-      ).revertedWithCustomError(modelRegistry, "StakeTooLow");
+        modelRegistry.modelRegister(randomBytes32(), randomBytes32(), 0n, 0n, OWNER, 'a', []),
+      ).revertedWithCustomError(modelRegistry, 'StakeTooLow');
     });
 
-    it("Should error when registering with insufficient allowance", async () => {
+    it('Should error when registering with insufficient allowance', async () => {
       await expect(
-        modelRegistry
-          .connect(THIRD)
-          .modelRegister(
-            randomBytes32(),
-            randomBytes32(),
-            0n,
-            100n,
-            THIRD,
-            "a",
-            [],
-          ),
-      ).to.rejectedWith("ERC20: insufficient allowance");
+        modelRegistry.connect(THIRD).modelRegister(randomBytes32(), randomBytes32(), 0n, 100n, THIRD, 'a', []),
+      ).to.rejectedWith('ERC20: insufficient allowance');
     });
 
-    it("Should error when register account doesnt match sender account", async () => {
+    it('Should error when register account doesnt match sender account', async () => {
       await MOR.approve(modelRegistry, 100n);
 
       await expect(
-        modelRegistry
-          .connect(THIRD)
-          .modelRegister(
-            randomBytes32(),
-            randomBytes32(),
-            0n,
-            100n,
-            SECOND,
-            "a",
-            [],
-          ),
-      ).to.revertedWithCustomError(modelRegistry, "NotOwnerOrModelOwner");
+        modelRegistry.connect(THIRD).modelRegister(randomBytes32(), randomBytes32(), 0n, 100n, SECOND, 'a', []),
+      ).to.revertedWithCustomError(modelRegistry, 'NotOwnerOrModelOwner');
     });
 
-    it("Should deregister by owner", async () => {
+    it('Should deregister by owner', async () => {
       await marketplace.connect(PROVIDER).deleteModelAgentBid(bid.id);
 
       await modelRegistry.modelDeregister(model.modelId);
 
-      expect((await modelRegistry.getModel(model.modelId)).isDeleted).to.equal(
-        true,
-      );
+      expect((await modelRegistry.getModel(model.modelId)).isDeleted).to.equal(true);
       expect(await modelRegistry.models(0n)).equals(model.modelId);
     });
 
-    it("Should error if model not known by admin", async () => {
-      await expect(
-        modelRegistry.modelDeregister(randomBytes32()),
-      ).to.revertedWithCustomError(modelRegistry, "ModelNotFound");
+    it('Should error if model not known by admin', async () => {
+      await expect(modelRegistry.modelDeregister(randomBytes32())).to.revertedWithCustomError(
+        modelRegistry,
+        'ModelNotFound',
+      );
     });
 
-    it("Should return stake on deregister", async () => {
+    it('Should return stake on deregister', async () => {
       await marketplace.connect(PROVIDER).deleteModelAgentBid(bid.id);
 
       const balanceBefore = await MOR.balanceOf(model.owner);
@@ -366,11 +308,12 @@ describe("Model registry", () => {
       expect(balanceAfter - balanceBefore).eq(model.stake);
     });
 
-    it("should error when deregistering a model that has bids", async () => {
+    it('should error when deregistering a model that has bids', async () => {
       // try deregistering model
-      await expect(
-        modelRegistry.modelDeregister(model.modelId),
-      ).to.revertedWithCustomError(modelRegistry, "ModelHasActiveBids");
+      await expect(modelRegistry.modelDeregister(model.modelId)).to.revertedWithCustomError(
+        modelRegistry,
+        'ModelHasActiveBids',
+      );
 
       // remove bid
       await marketplace.connect(PROVIDER).deleteModelAgentBid(bid.id);
@@ -379,14 +322,14 @@ describe("Model registry", () => {
       await modelRegistry.modelDeregister(model.modelId);
     });
 
-    it("Should update existing model", async () => {
+    it('Should update existing model', async () => {
       const updates = {
-        ipfsCID: getHex(Buffer.from("ipfs://new-ipfsaddress")),
+        ipfsCID: getHex(Buffer.from('ipfs://new-ipfsaddress')),
         fee: BigInt(model.fee) * 2n,
         addStake: BigInt(model.stake) * 2n,
         owner: PROVIDER,
-        name: "Llama 3.0",
-        tags: ["llama", "smart", "angry"],
+        name: 'Llama 3.0',
+        tags: ['llama', 'smart', 'angry'],
       };
       await MOR.approve(modelRegistry, updates.addStake);
 
@@ -413,14 +356,14 @@ describe("Model registry", () => {
       ]);
     });
 
-    it("Should emit event on update", async () => {
+    it('Should emit event on update', async () => {
       const updates = {
-        ipfsCID: getHex(Buffer.from("ipfs://new-ipfsaddress")),
+        ipfsCID: getHex(Buffer.from('ipfs://new-ipfsaddress')),
         fee: BigInt(model.fee) * 2n,
         addStake: BigInt(model.stake) * 2n,
         owner: PROVIDER,
-        name: "Llama 3.0",
-        tags: ["llama", "smart", "angry"],
+        name: 'Llama 3.0',
+        tags: ['llama', 'smart', 'angry'],
       };
 
       await MOR.approve(modelRegistry, updates.addStake);
@@ -435,10 +378,10 @@ describe("Model registry", () => {
           updates.name,
           updates.tags,
         ),
-      ).to.emit(modelRegistry, "ModelRegisteredUpdated");
+      ).to.emit(modelRegistry, 'ModelRegisteredUpdated');
     });
 
-    it("should reregister model", async () => {
+    it('should reregister model', async () => {
       await marketplace.connect(PROVIDER).deleteModelAgentBid(bid.id);
 
       // check indexes
@@ -457,8 +400,8 @@ describe("Model registry", () => {
         fee: 100n,
         stake: 100n,
         owner: await resolveAddress(OWNER),
-        name: "model2",
-        tags: ["model", "2"],
+        name: 'model2',
+        tags: ['model', '2'],
         createdAt: model.createdAt,
       };
       await MOR.transfer(OWNER, model2.stake);
@@ -486,8 +429,8 @@ describe("Model registry", () => {
       ]);
     });
 
-    describe("Getters", () => {
-      it("Should get by address", async () => {
+    describe('Getters', () => {
+      it('Should get by address', async () => {
         const providerData = await modelRegistry.getModel(model.modelId);
         expect(providerData).deep.equal([
           model.ipfsCID,
@@ -502,19 +445,19 @@ describe("Model registry", () => {
       });
     });
 
-    describe("Min stake", () => {
-      it("Should set min stake", async () => {
+    describe('Min stake', () => {
+      it('Should set min stake', async () => {
         const minStake = 100n;
         await expect(modelRegistry.modelSetMinStake(minStake))
-          .to.emit(modelRegistry, "ModelMinStakeUpdated")
+          .to.emit(modelRegistry, 'ModelMinStakeUpdated')
           .withArgs(minStake);
 
         expect(await modelRegistry.modelMinimumStake()).eq(minStake);
       });
-      it("Should error when not owner is setting min stake", async () => {
-        await expect(
-          modelRegistry.connect(THIRD).modelSetMinStake(0),
-        ).to.revertedWith("DiamondOwnable: not an owner");
+      it('Should error when not owner is setting min stake', async () => {
+        await expect(modelRegistry.connect(THIRD).modelSetMinStake(0)).to.revertedWith(
+          'OwnableDiamondStorage: not an owner',
+        );
       });
       // it("Should get model stats", async () => {
       //   const stats = await modelRegistry.modelStats([model.modelId]);

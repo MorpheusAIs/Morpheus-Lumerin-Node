@@ -1,11 +1,3 @@
-import { MAX_UINT8 } from "@/scripts/utils/constants";
-import { getHex, randomBytes32, wei } from "@/scripts/utils/utils";
-import { FacetAction } from "@/test/helpers/enums";
-import { getDefaultPools } from "@/test/helpers/pool-helper";
-import { Reverter } from "@/test/helpers/reverter";
-import { getCurrentBlockTime, setTime } from "@/utils/block-helper";
-import { getProviderApproval, getReport } from "@/utils/provider-helper";
-import { DAY, HOUR, YEAR } from "@/utils/time";
 import {
   IBidStorage,
   IMarketplace__factory,
@@ -20,13 +12,22 @@ import {
   MorpheusToken,
   ProviderRegistry,
   SessionRouter,
-} from "@ethers-v6";
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
-import { expect } from "chai";
-import { Addressable, Fragment } from "ethers";
-import { ethers } from "hardhat";
+} from '@ethers-v6';
+import { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
+import { expect } from 'chai';
+import { Addressable, Fragment } from 'ethers';
+import { ethers } from 'hardhat';
 
-describe("User on hold tests", () => {
+import { MAX_UINT8 } from '@/scripts/utils/constants';
+import { getHex, randomBytes32, wei } from '@/scripts/utils/utils';
+import { FacetAction } from '@/test/helpers/enums';
+import { getDefaultPools } from '@/test/helpers/pool-helper';
+import { Reverter } from '@/test/helpers/reverter';
+import { getCurrentBlockTime, setTime } from '@/utils/block-helper';
+import { getProviderApproval, getReport } from '@/utils/provider-helper';
+import { DAY, HOUR, YEAR } from '@/utils/time';
+
+describe('User on hold tests', () => {
   const reverter = new Reverter();
 
   let OWNER: SignerWithAddress;
@@ -48,7 +49,7 @@ describe("User on hold tests", () => {
     }
   > {
     const provider = {
-      endpoint: "localhost:3334",
+      endpoint: 'localhost:3334',
       stake: wei(100),
       createdAt: 0n,
       limitPeriodEnd: 0n,
@@ -60,9 +61,7 @@ describe("User on hold tests", () => {
     await MOR.transfer(PROVIDER, provider.stake * 100n);
     await MOR.connect(PROVIDER).approve(sessionRouter, provider.stake);
 
-    await providerRegistry
-      .connect(PROVIDER)
-      .providerRegister(provider.address, provider.stake, provider.endpoint);
+    await providerRegistry.connect(PROVIDER).providerRegister(provider.address, provider.stake, provider.endpoint);
     provider.createdAt = await getCurrentBlockTime();
     provider.limitPeriodEnd = provider.createdAt + YEAR;
 
@@ -76,12 +75,12 @@ describe("User on hold tests", () => {
   > {
     const model = {
       modelId: randomBytes32(),
-      ipfsCID: getHex(Buffer.from("ipfs://ipfsaddress")),
+      ipfsCID: getHex(Buffer.from('ipfs://ipfsaddress')),
       fee: 100,
       stake: 100,
       owner: OWNER,
-      name: "Llama 2.0",
-      tags: ["llama", "animal", "cute"],
+      name: 'Llama 2.0',
+      tags: ['llama', 'animal', 'cute'],
       createdAt: 0n,
       isDeleted: false,
     };
@@ -121,7 +120,7 @@ describe("User on hold tests", () => {
     ]
   > {
     let bid = {
-      id: "",
+      id: '',
       modelId: model.modelId,
       pricePerSecond: wei(0.0001),
       nonce: 0,
@@ -133,24 +132,16 @@ describe("User on hold tests", () => {
 
     await MOR.approve(modelRegistry, 10000n * 10n ** 18n);
 
-    bid.id = await marketplace
-      .connect(PROVIDER)
-      .postModelBid.staticCall(bid.provider, bid.modelId, bid.pricePerSecond);
-    await marketplace
-      .connect(PROVIDER)
-      .postModelBid(bid.provider, bid.modelId, bid.pricePerSecond);
+    bid.id = await marketplace.connect(PROVIDER).postModelBid.staticCall(bid.provider, bid.modelId, bid.pricePerSecond);
+    await marketplace.connect(PROVIDER).postModelBid(bid.provider, bid.modelId, bid.pricePerSecond);
 
     bid.createdAt = await getCurrentBlockTime();
 
     // generating data for sample session
     const durationSeconds = HOUR;
     const totalCost = bid.pricePerSecond * durationSeconds;
-    const totalSupply = await sessionRouter.totalMORSupply(
-      await getCurrentBlockTime(),
-    );
-    const todaysBudget = await sessionRouter.getTodaysBudget(
-      await getCurrentBlockTime(),
-    );
+    const totalSupply = await sessionRouter.totalMORSupply(await getCurrentBlockTime());
+    const todaysBudget = await sessionRouter.getTodaysBudget(await getCurrentBlockTime());
 
     const expectedSession = {
       durationSeconds,
@@ -171,25 +162,15 @@ describe("User on hold tests", () => {
 
   async function openSession(session: any) {
     // open session
-    const { msg, signature } = await getProviderApproval(
-      PROVIDER,
-      await SECOND.getAddress(),
-      session.bidID,
-    );
-    const sessionId = await sessionRouter
-      .connect(SECOND)
-      .openSession.staticCall(session.stake, msg, signature);
-    await sessionRouter
-      .connect(SECOND)
-      .openSession(session.stake, msg, signature);
+    const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+    const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(session.stake, msg, signature);
+    await sessionRouter.connect(SECOND).openSession(session.stake, msg, signature);
 
     return sessionId;
   }
 
   async function openEarlyCloseSession(session: any, sessionId: string) {
-    await setTime(
-      Number(await getCurrentBlockTime()) + Number(session.durationSeconds) / 2,
-    );
+    await setTime(Number(await getCurrentBlockTime()) + Number(session.durationSeconds) / 2);
 
     // close session
     const report = await getReport(PROVIDER, sessionId, 10, 10);
@@ -197,44 +178,27 @@ describe("User on hold tests", () => {
 
     return session.stake / 2n;
   }
-  before("setup", async () => {
+  before('setup', async () => {
     [OWNER, SECOND, THIRD, PROVIDER] = await ethers.getSigners();
 
-    const LinearDistributionIntervalDecrease = await ethers.getContractFactory(
-      "LinearDistributionIntervalDecrease",
-    );
-    const linearDistributionIntervalDecrease =
-      await LinearDistributionIntervalDecrease.deploy();
+    const LinearDistributionIntervalDecrease = await ethers.getContractFactory('LinearDistributionIntervalDecrease');
+    const linearDistributionIntervalDecrease = await LinearDistributionIntervalDecrease.deploy();
 
-    const [
-      LumerinDiamond,
-      Marketplace,
-      ModelRegistry,
-      ProviderRegistry,
-      SessionRouter,
-      MorpheusToken,
-    ] = await Promise.all([
-      ethers.getContractFactory("LumerinDiamond"),
-      ethers.getContractFactory("Marketplace"),
-      ethers.getContractFactory("ModelRegistry"),
-      ethers.getContractFactory("ProviderRegistry"),
-      ethers.getContractFactory("SessionRouter", {
-        libraries: {
-          LinearDistributionIntervalDecrease:
-            linearDistributionIntervalDecrease,
-        },
-      }),
-      ethers.getContractFactory("MorpheusToken"),
-    ]);
+    const [LumerinDiamond, Marketplace, ModelRegistry, ProviderRegistry, SessionRouter, MorpheusToken] =
+      await Promise.all([
+        ethers.getContractFactory('LumerinDiamond'),
+        ethers.getContractFactory('Marketplace'),
+        ethers.getContractFactory('ModelRegistry'),
+        ethers.getContractFactory('ProviderRegistry'),
+        ethers.getContractFactory('SessionRouter', {
+          libraries: {
+            LinearDistributionIntervalDecrease: linearDistributionIntervalDecrease,
+          },
+        }),
+        ethers.getContractFactory('MorpheusToken'),
+      ]);
 
-    [
-      diamond,
-      marketplace,
-      modelRegistry,
-      providerRegistry,
-      sessionRouter,
-      MOR,
-    ] = await Promise.all([
+    [diamond, marketplace, modelRegistry, providerRegistry, sessionRouter, MOR] = await Promise.all([
       LumerinDiamond.deploy(),
       Marketplace.deploy(),
       ModelRegistry.deploy(),
@@ -245,7 +209,7 @@ describe("User on hold tests", () => {
 
     await diamond.__LumerinDiamond_init();
 
-    await diamond["diamondCut((address,uint8,bytes4[])[])"]([
+    await diamond['diamondCut((address,uint8,bytes4[])[])']([
       {
         facetAddress: marketplace,
         action: FacetAction.Add,
@@ -277,9 +241,7 @@ describe("User on hold tests", () => {
     ]);
 
     marketplace = marketplace.attach(diamond.target) as Marketplace;
-    providerRegistry = providerRegistry.attach(
-      diamond.target,
-    ) as ProviderRegistry;
+    providerRegistry = providerRegistry.attach(diamond.target) as ProviderRegistry;
     modelRegistry = modelRegistry.attach(diamond.target) as ModelRegistry;
     sessionRouter = sessionRouter.attach(diamond.target) as SessionRouter;
 
@@ -294,7 +256,7 @@ describe("User on hold tests", () => {
 
   afterEach(reverter.revert);
 
-  describe("Actions", () => {
+  describe('Actions', () => {
     let provider: IProviderStorage.ProviderStruct;
     let model: IModelStorage.ModelStruct & {
       modelId: string;
@@ -324,74 +286,41 @@ describe("User on hold tests", () => {
       expectedOnHold = await openEarlyCloseSession(session, sessionId);
     });
 
-    it("user stake should be locked right after closeout", async () => {
+    it('user stake should be locked right after closeout', async () => {
       // right after closeout
-      const [available, onHold] = await sessionRouter.withdrawableUserStake(
-        SECOND,
-        MAX_UINT8,
-      );
+      const [available, onHold] = await sessionRouter.withdrawableUserStake(SECOND, MAX_UINT8);
       expect(available).to.equal(0n);
-      expect(onHold).to.closeTo(
-        expectedOnHold,
-        BigInt(0.01 * Number(expectedOnHold)),
-      );
+      expect(onHold).to.closeTo(expectedOnHold, BigInt(0.01 * Number(expectedOnHold)));
     });
 
-    it("user stake should be locked before the next day", async () => {
+    it('user stake should be locked before the next day', async () => {
       // before next day
-      await setTime(
-        startOfTomorrow(Number(await getCurrentBlockTime())) - Number(HOUR),
-      );
-      const [available3, onHold3] = await sessionRouter.withdrawableUserStake(
-        SECOND,
-        Number(MAX_UINT8),
-      );
+      await setTime(startOfTomorrow(Number(await getCurrentBlockTime())) - Number(HOUR));
+      const [available3, onHold3] = await sessionRouter.withdrawableUserStake(SECOND, Number(MAX_UINT8));
       expect(available3).to.equal(0n);
-      expect(onHold3).to.closeTo(
-        expectedOnHold,
-        BigInt(0.01 * Number(expectedOnHold)),
-      );
+      expect(onHold3).to.closeTo(expectedOnHold, BigInt(0.01 * Number(expectedOnHold)));
     });
 
-    it("user stake should be available on the next day and withdrawable", async () => {
+    it('user stake should be available on the next day and withdrawable', async () => {
       await setTime(startOfTomorrow(Number(await getCurrentBlockTime())));
-      const [available2, onHold2] = await sessionRouter.withdrawableUserStake(
-        SECOND,
-        Number(MAX_UINT8),
-      );
-      expect(available2).to.closeTo(
-        expectedOnHold,
-        BigInt(0.01 * Number(expectedOnHold)),
-      );
+      const [available2, onHold2] = await sessionRouter.withdrawableUserStake(SECOND, Number(MAX_UINT8));
+      expect(available2).to.closeTo(expectedOnHold, BigInt(0.01 * Number(expectedOnHold)));
       expect(onHold2).to.equal(0n);
 
       const balanceBefore = await MOR.balanceOf(SECOND);
-      await sessionRouter
-        .connect(SECOND)
-        .withdrawUserStake(available2, Number(MAX_UINT8));
+      await sessionRouter.connect(SECOND).withdrawUserStake(available2, Number(MAX_UINT8));
       const balanceAfter = await MOR.balanceOf(SECOND);
       const balanceDelta = balanceAfter - balanceBefore;
-      expect(balanceDelta).to.closeTo(
-        expectedOnHold,
-        BigInt(0.01 * Number(expectedOnHold)),
-      );
+      expect(balanceDelta).to.closeTo(expectedOnHold, BigInt(0.01 * Number(expectedOnHold)));
     });
 
     it("user shouldn't be able to withdraw more than there is available stake", async () => {
       await setTime(startOfTomorrow(Number(await getCurrentBlockTime())));
-      const [available2] = await sessionRouter.withdrawableUserStake(
-        SECOND,
-        Number(MAX_UINT8),
-      );
+      const [available2] = await sessionRouter.withdrawableUserStake(SECOND, Number(MAX_UINT8));
 
       await expect(
-        sessionRouter
-          .connect(SECOND)
-          .withdrawUserStake(available2 * 2n, Number(MAX_UINT8)),
-      ).to.be.revertedWithCustomError(
-        sessionRouter,
-        "NotEnoughWithdrawableBalance",
-      );
+        sessionRouter.connect(SECOND).withdrawUserStake(available2 * 2n, Number(MAX_UINT8)),
+      ).to.be.revertedWithCustomError(sessionRouter, 'NotEnoughWithdrawableBalance');
     });
   });
 });

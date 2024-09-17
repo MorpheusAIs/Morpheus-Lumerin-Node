@@ -1,6 +1,3 @@
-import { getHex, randomBytes32, wei } from "@/scripts/utils/utils";
-import { getCurrentBlockTime } from "@/utils/block-helper";
-import { HOUR, YEAR } from "@/utils/time";
 import {
   IBidStorage,
   IMarketplace__factory,
@@ -15,16 +12,21 @@ import {
   MorpheusToken,
   ProviderRegistry,
   SessionRouter,
-} from "@ethers-v6";
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
-import { expect } from "chai";
-import { Addressable, Fragment, resolveAddress } from "ethers";
-import { ethers } from "hardhat";
-import { FacetAction } from "../helpers/enums";
-import { getDefaultPools } from "../helpers/pool-helper";
-import { Reverter } from "../helpers/reverter";
+} from '@ethers-v6';
+import { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
+import { expect } from 'chai';
+import { Addressable, Fragment, resolveAddress } from 'ethers';
+import { ethers } from 'hardhat';
 
-describe("Marketplace", () => {
+import { FacetAction } from '../helpers/enums';
+import { getDefaultPools } from '../helpers/pool-helper';
+import { Reverter } from '../helpers/reverter';
+
+import { getHex, randomBytes32, wei } from '@/scripts/utils/utils';
+import { getCurrentBlockTime } from '@/utils/block-helper';
+import { HOUR, YEAR } from '@/utils/time';
+
+describe('Marketplace', () => {
   const reverter = new Reverter();
 
   let OWNER: SignerWithAddress;
@@ -46,7 +48,7 @@ describe("Marketplace", () => {
     }
   > {
     const expectedProvider = {
-      endpoint: "localhost:3334",
+      endpoint: 'localhost:3334',
       stake: wei(100),
       createdAt: 0n,
       limitPeriodEnd: 0n,
@@ -60,11 +62,7 @@ describe("Marketplace", () => {
 
     await providerRegistry
       .connect(PROVIDER)
-      .providerRegister(
-        expectedProvider.address,
-        expectedProvider.stake,
-        expectedProvider.endpoint,
-      );
+      .providerRegister(expectedProvider.address, expectedProvider.stake, expectedProvider.endpoint);
     expectedProvider.createdAt = await getCurrentBlockTime();
     expectedProvider.limitPeriodEnd = expectedProvider.createdAt + YEAR;
 
@@ -78,12 +76,12 @@ describe("Marketplace", () => {
   > {
     const expectedModel = {
       modelId: randomBytes32(),
-      ipfsCID: getHex(Buffer.from("ipfs://ipfsaddress")),
+      ipfsCID: getHex(Buffer.from('ipfs://ipfsaddress')),
       fee: 100,
       stake: 100,
       owner: OWNER,
-      name: "Llama 2.0",
-      tags: ["llama", "animal", "cute"],
+      name: 'Llama 2.0',
+      tags: ['llama', 'animal', 'cute'],
       createdAt: 0n,
       isDeleted: false,
     };
@@ -111,7 +109,7 @@ describe("Marketplace", () => {
     }
   > {
     let bid = {
-      id: "",
+      id: '',
       modelId: model.modelId,
       pricePerSecond: wei(0.0001),
       nonce: 0,
@@ -123,24 +121,16 @@ describe("Marketplace", () => {
 
     await MOR.approve(modelRegistry, 10000n * 10n ** 18n);
 
-    bid.id = await marketplace
-      .connect(PROVIDER)
-      .postModelBid.staticCall(bid.provider, bid.modelId, bid.pricePerSecond);
-    await marketplace
-      .connect(PROVIDER)
-      .postModelBid(bid.provider, bid.modelId, bid.pricePerSecond);
+    bid.id = await marketplace.connect(PROVIDER).postModelBid.staticCall(bid.provider, bid.modelId, bid.pricePerSecond);
+    await marketplace.connect(PROVIDER).postModelBid(bid.provider, bid.modelId, bid.pricePerSecond);
 
     bid.createdAt = await getCurrentBlockTime();
 
     // generating data for sample session
     const durationSeconds = HOUR;
     const totalCost = bid.pricePerSecond * durationSeconds;
-    const totalSupply = await sessionRouter.totalMORSupply(
-      await getCurrentBlockTime(),
-    );
-    const todaysBudget = await sessionRouter.getTodaysBudget(
-      await getCurrentBlockTime(),
-    );
+    const totalSupply = await sessionRouter.totalMORSupply(await getCurrentBlockTime());
+    const todaysBudget = await sessionRouter.getTodaysBudget(await getCurrentBlockTime());
 
     const expectedSession = {
       durationSeconds,
@@ -158,44 +148,27 @@ describe("Marketplace", () => {
 
     return bid;
   }
-  before("setup", async () => {
+  before('setup', async () => {
     [OWNER, SECOND, THIRD, PROVIDER] = await ethers.getSigners();
 
-    const LinearDistributionIntervalDecrease = await ethers.getContractFactory(
-      "LinearDistributionIntervalDecrease",
-    );
-    const linearDistributionIntervalDecrease =
-      await LinearDistributionIntervalDecrease.deploy();
+    const LinearDistributionIntervalDecrease = await ethers.getContractFactory('LinearDistributionIntervalDecrease');
+    const linearDistributionIntervalDecrease = await LinearDistributionIntervalDecrease.deploy();
 
-    const [
-      LumerinDiamond,
-      Marketplace,
-      ModelRegistry,
-      ProviderRegistry,
-      SessionRouter,
-      MorpheusToken,
-    ] = await Promise.all([
-      ethers.getContractFactory("LumerinDiamond"),
-      ethers.getContractFactory("Marketplace"),
-      ethers.getContractFactory("ModelRegistry"),
-      ethers.getContractFactory("ProviderRegistry"),
-      ethers.getContractFactory("SessionRouter", {
-        libraries: {
-          LinearDistributionIntervalDecrease:
-            linearDistributionIntervalDecrease,
-        },
-      }),
-      ethers.getContractFactory("MorpheusToken"),
-    ]);
+    const [LumerinDiamond, Marketplace, ModelRegistry, ProviderRegistry, SessionRouter, MorpheusToken] =
+      await Promise.all([
+        ethers.getContractFactory('LumerinDiamond'),
+        ethers.getContractFactory('Marketplace'),
+        ethers.getContractFactory('ModelRegistry'),
+        ethers.getContractFactory('ProviderRegistry'),
+        ethers.getContractFactory('SessionRouter', {
+          libraries: {
+            LinearDistributionIntervalDecrease: linearDistributionIntervalDecrease,
+          },
+        }),
+        ethers.getContractFactory('MorpheusToken'),
+      ]);
 
-    [
-      diamond,
-      marketplace,
-      modelRegistry,
-      providerRegistry,
-      sessionRouter,
-      MOR,
-    ] = await Promise.all([
+    [diamond, marketplace, modelRegistry, providerRegistry, sessionRouter, MOR] = await Promise.all([
       LumerinDiamond.deploy(),
       Marketplace.deploy(),
       ModelRegistry.deploy(),
@@ -206,7 +179,7 @@ describe("Marketplace", () => {
 
     await diamond.__LumerinDiamond_init();
 
-    await diamond["diamondCut((address,uint8,bytes4[])[])"]([
+    await diamond['diamondCut((address,uint8,bytes4[])[])']([
       {
         facetAddress: marketplace,
         action: FacetAction.Add,
@@ -253,7 +226,7 @@ describe("Marketplace", () => {
 
   afterEach(reverter.revert);
 
-  describe("bid actions", () => {
+  describe('bid actions', () => {
     let provider: IProviderStorage.ProviderStruct;
     let model: IModelStorage.ModelStruct & {
       modelId: string;
@@ -269,7 +242,7 @@ describe("Marketplace", () => {
       bid = await deployBid(model);
     });
 
-    it("Should create a bid and query by id", async () => {
+    it('Should create a bid and query by id', async () => {
       const data = await marketplace.bidMap(bid.id);
 
       expect(data).to.be.deep.equal([
@@ -284,40 +257,26 @@ describe("Marketplace", () => {
 
     it("Should error if provider doesn't exist", async () => {
       await expect(
-        marketplace
-          .connect(SECOND)
-          .postModelBid(SECOND, bid.modelId, bid.pricePerSecond),
-      ).to.be.revertedWithCustomError(marketplace, "ProviderNotFound");
+        marketplace.connect(SECOND).postModelBid(SECOND, bid.modelId, bid.pricePerSecond),
+      ).to.be.revertedWithCustomError(marketplace, 'ProviderNotFound');
     });
 
     it("Should error if model doesn't exist", async () => {
       const unknownModel = randomBytes32();
 
       await expect(
-        marketplace
-          .connect(PROVIDER)
-          .postModelBid(bid.provider, unknownModel, bid.pricePerSecond),
-      ).to.be.revertedWithCustomError(marketplace, "ModelOrAgentNotFound");
+        marketplace.connect(PROVIDER).postModelBid(bid.provider, unknownModel, bid.pricePerSecond),
+      ).to.be.revertedWithCustomError(marketplace, 'ModelOrAgentNotFound');
     });
 
-    it("Should create second bid", async () => {
+    it('Should create second bid', async () => {
       // create new bid with same provider and modelId
-      await marketplace
-        .connect(PROVIDER)
-        .postModelBid(bid.provider, bid.modelId, bid.pricePerSecond);
+      await marketplace.connect(PROVIDER).postModelBid(bid.provider, bid.modelId, bid.pricePerSecond);
       const timestamp = await getCurrentBlockTime();
 
       // check indexes are updated
-      const newBids1 = await marketplace.providerActiveBids(
-        bid.provider,
-        0,
-        10,
-      );
-      const newBids2 = await marketplace.modelAgentActiveBids(
-        bid.modelAgentId,
-        0,
-        10,
-      );
+      const newBids1 = await marketplace.providerActiveBids(bid.provider, 0, 10);
+      const newBids2 = await marketplace.modelAgentActiveBids(bid.modelAgentId, 0, 10);
 
       expect(newBids1).to.be.deep.equal(newBids2);
       expect(await marketplace.bidMap(newBids1[0])).to.be.deep.equal([
@@ -355,12 +314,8 @@ describe("Marketplace", () => {
       ]);
     });
 
-    it("Should query by provider", async () => {
-      const activeBidIds = await marketplace.providerActiveBids(
-        bid.provider,
-        0,
-        10,
-      );
+    it('Should query by provider', async () => {
+      const activeBidIds = await marketplace.providerActiveBids(bid.provider, 0, 10);
 
       expect(activeBidIds.length).to.equal(1);
       expect(activeBidIds[0]).to.equal(bid.id);
@@ -374,22 +329,14 @@ describe("Marketplace", () => {
       ]);
     });
 
-    describe("delete bid", () => {
-      it("Should delete a bid", async () => {
+    describe('delete bid', () => {
+      it('Should delete a bid', async () => {
         // delete bid
         await marketplace.connect(PROVIDER).deleteModelAgentBid(bid.id);
 
         // check indexes are updated
-        const activeBidIds1 = await marketplace.providerActiveBids(
-          bid.provider,
-          0,
-          10,
-        );
-        const activeBidIds2 = await marketplace.modelAgentActiveBids(
-          bid.modelId,
-          0,
-          10,
-        );
+        const activeBidIds1 = await marketplace.providerActiveBids(bid.provider, 0, 10);
+        const activeBidIds2 = await marketplace.modelAgentActiveBids(bid.modelId, 0, 10);
 
         expect(activeBidIds1.length).to.be.equal(0);
         expect(activeBidIds2.length).to.be.equal(0);
@@ -409,40 +356,40 @@ describe("Marketplace", () => {
       it("Should error if bid doesn't exist", async () => {
         const unknownBid = randomBytes32();
 
-        await expect(
-          marketplace.connect(PROVIDER).deleteModelAgentBid(unknownBid),
-        ).to.be.revertedWithCustomError(marketplace, "ActiveBidNotFound");
+        await expect(marketplace.connect(PROVIDER).deleteModelAgentBid(unknownBid)).to.be.revertedWithCustomError(
+          marketplace,
+          'ActiveBidNotFound',
+        );
       });
 
-      it("Should error if not owner", async () => {
-        await expect(
-          marketplace.connect(THIRD).deleteModelAgentBid(bid.id),
-        ).to.be.revertedWithCustomError(marketplace, "NotOwnerOrProvider");
+      it('Should error if not owner', async () => {
+        await expect(marketplace.connect(THIRD).deleteModelAgentBid(bid.id)).to.be.revertedWithCustomError(
+          marketplace,
+          'NotOwnerOrProvider',
+        );
       });
 
-      it("Should allow bid owner to delete bid", async () => {
+      it('Should allow bid owner to delete bid', async () => {
         // delete bid
         await marketplace.connect(PROVIDER).deleteModelAgentBid(bid.id);
       });
 
-      it("Should allow contract owner to delete bid", async () => {
+      it('Should allow contract owner to delete bid', async () => {
         // delete bid
         await marketplace.deleteModelAgentBid(bid.id);
       });
 
-      it("Should allow to create bid after it was deleted [H-1]", async () => {
+      it('Should allow to create bid after it was deleted [H-1]', async () => {
         // delete bid
         await marketplace.connect(PROVIDER).deleteModelAgentBid(bid.id);
 
         // create new bid with same provider and modelId
-        await marketplace
-          .connect(PROVIDER)
-          .postModelBid(bid.provider, bid.modelId, bid.pricePerSecond);
+        await marketplace.connect(PROVIDER).postModelBid(bid.provider, bid.modelId, bid.pricePerSecond);
       });
     });
 
-    describe("bid fee", () => {
-      it("should set bid fee", async () => {
+    describe('bid fee', () => {
+      it('should set bid fee', async () => {
         const newFee = 100;
         await marketplace.setBidFee(newFee);
 
@@ -450,7 +397,7 @@ describe("Marketplace", () => {
         expect(modelBidFee).to.be.equal(newFee);
       });
 
-      it("should collect bid fee", async () => {
+      it('should collect bid fee', async () => {
         const newFee = 100;
         await marketplace.setBidFee(newFee);
         await MOR.transfer(bid.provider, 100);
@@ -458,30 +405,20 @@ describe("Marketplace", () => {
         // check balance before
         const balanceBefore = await MOR.balanceOf(marketplace);
         // add bid
-        await MOR.connect(PROVIDER).approve(
-          marketplace,
-          Number(bid.pricePerSecond) + newFee,
-        );
-        await marketplace
-          .connect(PROVIDER)
-          .postModelBid(bid.provider, bid.modelId, bid.pricePerSecond);
+        await MOR.connect(PROVIDER).approve(marketplace, Number(bid.pricePerSecond) + newFee);
+        await marketplace.connect(PROVIDER).postModelBid(bid.provider, bid.modelId, bid.pricePerSecond);
         // check balance after
         const balanceAfter = await MOR.balanceOf(marketplace);
         expect(balanceAfter - balanceBefore).to.be.equal(newFee);
       });
 
-      it("should allow withdrawal by owner", async () => {
+      it('should allow withdrawal by owner', async () => {
         const newFee = 100;
         await marketplace.setBidFee(newFee);
         await MOR.transfer(bid.provider, 100);
         // add bid
-        await MOR.connect(PROVIDER).approve(
-          marketplace,
-          Number(bid.pricePerSecond) + newFee,
-        );
-        await marketplace
-          .connect(PROVIDER)
-          .postModelBid(bid.provider, bid.modelId, bid.pricePerSecond);
+        await MOR.connect(PROVIDER).approve(marketplace, Number(bid.pricePerSecond) + newFee);
+        await marketplace.connect(PROVIDER).postModelBid(bid.provider, bid.modelId, bid.pricePerSecond);
         // check balance after
         const balanceBefore = await MOR.balanceOf(OWNER);
         await marketplace.withdraw(OWNER, newFee);
@@ -489,28 +426,24 @@ describe("Marketplace", () => {
         expect(balanceAfter - balanceBefore).to.be.equal(newFee);
       });
 
-      it("should not allow withdrawal by any other account except owner", async () => {
+      it('should not allow withdrawal by any other account except owner', async () => {
         const newFee = 100;
         await marketplace.setBidFee(newFee);
         await MOR.transfer(bid.provider, 100);
         // add bid
-        await MOR.connect(PROVIDER).approve(
-          marketplace,
-          Number(bid.pricePerSecond) + newFee,
-        );
-        await marketplace
-          .connect(PROVIDER)
-          .postModelBid(bid.provider, bid.modelId, bid.pricePerSecond);
+        await MOR.connect(PROVIDER).approve(marketplace, Number(bid.pricePerSecond) + newFee);
+        await marketplace.connect(PROVIDER).postModelBid(bid.provider, bid.modelId, bid.pricePerSecond);
         // check balance after
-        await expect(
-          marketplace.connect(PROVIDER).withdraw(bid.provider, newFee),
-        ).to.be.revertedWith("DiamondOwnable: not an owner");
+        await expect(marketplace.connect(PROVIDER).withdraw(bid.provider, newFee)).to.be.revertedWith(
+          'OwnableDiamondStorage: not an owner',
+        );
       });
 
-      it("should not allow withdrawal if not enough balance", async () => {
-        await expect(
-          marketplace.withdraw(OWNER, 100000000),
-        ).to.be.revertedWithCustomError(marketplace, "NotEnoughBalance");
+      it('should not allow withdrawal if not enough balance', async () => {
+        await expect(marketplace.withdraw(OWNER, 100000000)).to.be.revertedWithCustomError(
+          marketplace,
+          'NotEnoughBalance',
+        );
       });
     });
   });

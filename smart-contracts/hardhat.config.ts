@@ -1,30 +1,29 @@
-import "@nomicfoundation/hardhat-chai-matchers";
-import "@nomicfoundation/hardhat-ethers";
-import "@nomicfoundation/hardhat-ignition-viem";
-import "@nomicfoundation/hardhat-toolbox-viem";
-import "@nomicfoundation/hardhat-verify";
-import "@solarity/hardhat-gobind";
-import "@typechain/hardhat";
-import "dotenv/config";
-import type { HardhatUserConfig } from "hardhat/config";
-import "tsconfig-paths/register";
-import "./tasks/upgrade";
+import '@nomicfoundation/hardhat-chai-matchers';
+import '@nomicfoundation/hardhat-ethers';
+import '@nomicfoundation/hardhat-ignition-viem';
+import '@nomicfoundation/hardhat-toolbox-viem';
+import '@nomicfoundation/hardhat-verify';
+import '@solarity/hardhat-gobind';
+import '@typechain/hardhat';
+import 'dotenv/config';
+import type { HardhatUserConfig } from 'hardhat/config';
+import 'tsconfig-paths/register';
 
 function typechainTarget() {
   const target = process.env.TYPECHAIN_TARGET;
 
-  return target === "" || target === undefined ? "ethers-v6" : target;
+  return target === '' || target === undefined ? 'ethers-v6' : target;
 }
 
 function forceTypechain() {
-  return process.env.TYPECHAIN_FORCE === "false";
+  return process.env.TYPECHAIN_FORCE === 'false';
 }
 
 const config: HardhatUserConfig = {
   networks: {
     hardhat: {
-      initialDate: "2024-07-15T01:00:00.000Z",
-      gas: "auto", // required for tests where two transactions should be mined in the same block
+      initialDate: '2024-07-15T01:00:00.000Z',
+      gas: 'auto', // required for tests where two transactions should be mined in the same block
       // loggingEnabled: true,
       // mining: {
       //   auto: true,
@@ -33,7 +32,7 @@ const config: HardhatUserConfig = {
     },
   },
   solidity: {
-    version: "0.8.24",
+    version: '0.8.24',
     settings: {
       optimizer: {
         enabled: true,
@@ -56,7 +55,7 @@ const config: HardhatUserConfig = {
     coinmarketcap: process.env.COINMARKETCAP_API_KEY,
     // reportPureAndViewMethods: true,
     // darkMode: true,
-    currency: "USD",
+    currency: 'USD',
     // offline: true,
     // L2Etherscan: process.env.ETHERSCAN_API_KEY,
     // L2: "arbitrum",
@@ -64,17 +63,17 @@ const config: HardhatUserConfig = {
     // L1: "ethereum",
   },
   gobind: {
-    outdir: "./bindings/go",
-    onlyFiles: ["./contracts"],
+    outdir: './bindings/go',
+    onlyFiles: ['./contracts'],
     skipFiles: [
-      "contracts/AppStorage.sol",
-      "contracts/libraries",
-      "contracts/diamond/libraries",
-      "contracts/diamond/interfaces",
+      'contracts/AppStorage.sol',
+      'contracts/libraries',
+      'contracts/diamond/libraries',
+      'contracts/diamond/interfaces',
     ],
   },
   typechain: {
-    outDir: `generated-types/${typechainTarget().split("-")[0]}`,
+    outDir: `generated-types/${typechainTarget().split('-')[0]}`,
     target: typechainTarget(),
     alwaysGenerateOverloads: true,
     discriminateTypes: true,

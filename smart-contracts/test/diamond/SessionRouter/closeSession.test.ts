@@ -1,11 +1,3 @@
-import { MAX_UINT8 } from "@/scripts/utils/constants";
-import { getHex, randomBytes32, wei } from "@/scripts/utils/utils";
-import { FacetAction } from "@/test/helpers/enums";
-import { getDefaultPools } from "@/test/helpers/pool-helper";
-import { Reverter } from "@/test/helpers/reverter";
-import { getCurrentBlockTime, setTime } from "@/utils/block-helper";
-import { getProviderApproval, getReport } from "@/utils/provider-helper";
-import { DAY, HOUR, YEAR } from "@/utils/time";
 import {
   IBidStorage,
   IMarketplace__factory,
@@ -20,13 +12,22 @@ import {
   MorpheusToken,
   ProviderRegistry,
   SessionRouter,
-} from "@ethers-v6";
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
-import { expect } from "chai";
-import { Addressable, Fragment } from "ethers";
-import { ethers } from "hardhat";
+} from '@ethers-v6';
+import { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
+import { expect } from 'chai';
+import { Addressable, Fragment } from 'ethers';
+import { ethers } from 'hardhat';
 
-describe("Session closeout", () => {
+import { MAX_UINT8 } from '@/scripts/utils/constants';
+import { getHex, randomBytes32, wei } from '@/scripts/utils/utils';
+import { FacetAction } from '@/test/helpers/enums';
+import { getDefaultPools } from '@/test/helpers/pool-helper';
+import { Reverter } from '@/test/helpers/reverter';
+import { getCurrentBlockTime, setTime } from '@/utils/block-helper';
+import { getProviderApproval, getReport } from '@/utils/provider-helper';
+import { DAY, HOUR, YEAR } from '@/utils/time';
+
+describe('Session closeout', () => {
   const reverter = new Reverter();
 
   let OWNER: SignerWithAddress;
@@ -48,7 +49,7 @@ describe("Session closeout", () => {
     }
   > {
     const provider = {
-      endpoint: "localhost:3334",
+      endpoint: 'localhost:3334',
       stake: wei(100),
       createdAt: 0n,
       limitPeriodEnd: 0n,
@@ -60,9 +61,7 @@ describe("Session closeout", () => {
     await MOR.transfer(PROVIDER, provider.stake * 100n);
     await MOR.connect(PROVIDER).approve(sessionRouter, provider.stake);
 
-    await providerRegistry
-      .connect(PROVIDER)
-      .providerRegister(provider.address, provider.stake, provider.endpoint);
+    await providerRegistry.connect(PROVIDER).providerRegister(provider.address, provider.stake, provider.endpoint);
     provider.createdAt = await getCurrentBlockTime();
     provider.limitPeriodEnd = provider.createdAt + YEAR;
 
@@ -76,12 +75,12 @@ describe("Session closeout", () => {
   > {
     const model = {
       modelId: randomBytes32(),
-      ipfsCID: getHex(Buffer.from("ipfs://ipfsaddress")),
+      ipfsCID: getHex(Buffer.from('ipfs://ipfsaddress')),
       fee: 100,
       stake: 100,
       owner: OWNER,
-      name: "Llama 2.0",
-      tags: ["llama", "animal", "cute"],
+      name: 'Llama 2.0',
+      tags: ['llama', 'animal', 'cute'],
       createdAt: 0n,
       isDeleted: false,
     };
@@ -121,7 +120,7 @@ describe("Session closeout", () => {
     ]
   > {
     let bid = {
-      id: "",
+      id: '',
       modelId: model.modelId,
       pricePerSecond: wei(0.0001),
       nonce: 0,
@@ -133,24 +132,16 @@ describe("Session closeout", () => {
 
     await MOR.approve(modelRegistry, 10000n * 10n ** 18n);
 
-    bid.id = await marketplace
-      .connect(PROVIDER)
-      .postModelBid.staticCall(bid.provider, bid.modelId, bid.pricePerSecond);
-    await marketplace
-      .connect(PROVIDER)
-      .postModelBid(bid.provider, bid.modelId, bid.pricePerSecond);
+    bid.id = await marketplace.connect(PROVIDER).postModelBid.staticCall(bid.provider, bid.modelId, bid.pricePerSecond);
+    await marketplace.connect(PROVIDER).postModelBid(bid.provider, bid.modelId, bid.pricePerSecond);
 
     bid.createdAt = await getCurrentBlockTime();
 
     // generating data for sample session
     const durationSeconds = HOUR;
     const totalCost = bid.pricePerSecond * durationSeconds;
-    const totalSupply = await sessionRouter.totalMORSupply(
-      await getCurrentBlockTime(),
-    );
-    const todaysBudget = await sessionRouter.getTodaysBudget(
-      await getCurrentBlockTime(),
-    );
+    const totalSupply = await sessionRouter.totalMORSupply(await getCurrentBlockTime());
+    const todaysBudget = await sessionRouter.getTodaysBudget(await getCurrentBlockTime());
 
     const expectedSession = {
       durationSeconds,
@@ -169,44 +160,27 @@ describe("Session closeout", () => {
     return [bid, expectedSession];
   }
 
-  before("setup", async () => {
+  before('setup', async () => {
     [OWNER, SECOND, THIRD, PROVIDER] = await ethers.getSigners();
 
-    const LinearDistributionIntervalDecrease = await ethers.getContractFactory(
-      "LinearDistributionIntervalDecrease",
-    );
-    const linearDistributionIntervalDecrease =
-      await LinearDistributionIntervalDecrease.deploy();
+    const LinearDistributionIntervalDecrease = await ethers.getContractFactory('LinearDistributionIntervalDecrease');
+    const linearDistributionIntervalDecrease = await LinearDistributionIntervalDecrease.deploy();
 
-    const [
-      LumerinDiamond,
-      Marketplace,
-      ModelRegistry,
-      ProviderRegistry,
-      SessionRouter,
-      MorpheusToken,
-    ] = await Promise.all([
-      ethers.getContractFactory("LumerinDiamond"),
-      ethers.getContractFactory("Marketplace"),
-      ethers.getContractFactory("ModelRegistry"),
-      ethers.getContractFactory("ProviderRegistry"),
-      ethers.getContractFactory("SessionRouter", {
-        libraries: {
-          LinearDistributionIntervalDecrease:
-            linearDistributionIntervalDecrease,
-        },
-      }),
-      ethers.getContractFactory("MorpheusToken"),
-    ]);
+    const [LumerinDiamond, Marketplace, ModelRegistry, ProviderRegistry, SessionRouter, MorpheusToken] =
+      await Promise.all([
+        ethers.getContractFactory('LumerinDiamond'),
+        ethers.getContractFactory('Marketplace'),
+        ethers.getContractFactory('ModelRegistry'),
+        ethers.getContractFactory('ProviderRegistry'),
+        ethers.getContractFactory('SessionRouter', {
+          libraries: {
+            LinearDistributionIntervalDecrease: linearDistributionIntervalDecrease,
+          },
+        }),
+        ethers.getContractFactory('MorpheusToken'),
+      ]);
 
-    [
-      diamond,
-      marketplace,
-      modelRegistry,
-      providerRegistry,
-      sessionRouter,
-      MOR,
-    ] = await Promise.all([
+    [diamond, marketplace, modelRegistry, providerRegistry, sessionRouter, MOR] = await Promise.all([
       LumerinDiamond.deploy(),
       Marketplace.deploy(),
       ModelRegistry.deploy(),
@@ -217,7 +191,7 @@ describe("Session closeout", () => {
 
     await diamond.__LumerinDiamond_init();
 
-    await diamond["diamondCut((address,uint8,bytes4[])[])"]([
+    await diamond['diamondCut((address,uint8,bytes4[])[])']([
       {
         facetAddress: marketplace,
         action: FacetAction.Add,
@@ -249,9 +223,7 @@ describe("Session closeout", () => {
     ]);
 
     marketplace = marketplace.attach(diamond.target) as Marketplace;
-    providerRegistry = providerRegistry.attach(
-      diamond.target,
-    ) as ProviderRegistry;
+    providerRegistry = providerRegistry.attach(diamond.target) as ProviderRegistry;
     modelRegistry = modelRegistry.attach(diamond.target) as ModelRegistry;
     sessionRouter = sessionRouter.attach(diamond.target) as SessionRouter;
 
@@ -266,7 +238,7 @@ describe("Session closeout", () => {
 
   afterEach(reverter.revert);
 
-  describe("Actions", () => {
+  describe('Actions', () => {
     let provider: IProviderStorage.ProviderStruct;
     let model: IModelStorage.ModelStruct & {
       modelId: string;
@@ -292,24 +264,14 @@ describe("Session closeout", () => {
       [bid, session] = await deployBid(model);
     });
 
-    it("should open short (<1D) session and close after expiration", async () => {
+    it('should open short (<1D) session and close after expiration', async () => {
       // open session
-      const { msg, signature } = await getProviderApproval(
-        PROVIDER,
-        await SECOND.getAddress(),
-        session.bidID,
-      );
+      const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
 
-      const sessionId = await sessionRouter
-        .connect(SECOND)
-        .openSession.staticCall(session.stake, msg, signature);
-      await sessionRouter
-        .connect(SECOND)
-        .openSession(session.stake, msg, signature);
+      const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(session.stake, msg, signature);
+      await sessionRouter.connect(SECOND).openSession(session.stake, msg, signature);
 
-      await setTime(
-        Number((await getCurrentBlockTime()) + session.durationSeconds * 2n),
-      );
+      await setTime(Number((await getCurrentBlockTime()) + session.durationSeconds * 2n));
 
       const userBalanceBefore = await MOR.balanceOf(SECOND);
       const providerBalanceBefore = await MOR.balanceOf(PROVIDER);
@@ -329,35 +291,19 @@ describe("Session closeout", () => {
       const userStakeReturned = userBalanceAfter - userBalanceBefore;
       const providerEarned = providerBalanceAfter - providerBalanceBefore;
 
-      const totalPrice =
-        (sessionData.endsAt - sessionData.openedAt) * session.pricePerSecond;
+      const totalPrice = (sessionData.endsAt - sessionData.openedAt) * session.pricePerSecond;
 
-      expect(userStakeReturned).to.closeTo(
-        0,
-        Number(session.pricePerSecond) * 5,
-      );
+      expect(userStakeReturned).to.closeTo(0, Number(session.pricePerSecond) * 5);
       expect(providerEarned).to.closeTo(totalPrice, 1);
     });
 
-    it("should open short (<1D) session and close early", async () => {
+    it('should open short (<1D) session and close early', async () => {
       // open session
-      const { msg, signature } = await getProviderApproval(
-        PROVIDER,
-        await SECOND.getAddress(),
-        session.bidID,
-      );
-      const sessionId = await sessionRouter
-        .connect(SECOND)
-        .openSession.staticCall(session.stake, msg, signature);
-      await sessionRouter
-        .connect(SECOND)
-        .openSession(session.stake, msg, signature);
+      const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+      const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(session.stake, msg, signature);
+      await sessionRouter.connect(SECOND).openSession(session.stake, msg, signature);
 
-      await setTime(
-        Number(
-          (await getCurrentBlockTime()) + session.durationSeconds / 2n - 1n,
-        ),
-      );
+      await setTime(Number((await getCurrentBlockTime()) + session.durationSeconds / 2n - 1n));
 
       const userBalanceBefore = await MOR.balanceOf(SECOND);
       const providerBalanceBefore = await MOR.balanceOf(PROVIDER);
@@ -377,33 +323,18 @@ describe("Session closeout", () => {
       const userStakeReturned = userBalanceAfter - userBalanceBefore;
       const providerEarned = providerBalanceAfter - providerBalanceBefore;
 
-      expect(userStakeReturned).to.closeTo(
-        session.stake / 2n,
-        Number(session.pricePerSecond) * 5,
-      );
+      expect(userStakeReturned).to.closeTo(session.stake / 2n, Number(session.pricePerSecond) * 5);
       expect(providerEarned).to.closeTo(session.totalCost / 2n, 1);
     });
 
-    it("should open and close early with user report - dispute", async () => {
+    it('should open and close early with user report - dispute', async () => {
       // open session
-      const { msg, signature } = await getProviderApproval(
-        PROVIDER,
-        await SECOND.getAddress(),
-        session.bidID,
-      );
-      const sessionId = await sessionRouter
-        .connect(SECOND)
-        .openSession.staticCall(session.stake, msg, signature);
-      await sessionRouter
-        .connect(SECOND)
-        .openSession(session.stake, msg, signature);
+      const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+      const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(session.stake, msg, signature);
+      await sessionRouter.connect(SECOND).openSession(session.stake, msg, signature);
 
       // wait half of the session
-      await setTime(
-        Number(
-          (await getCurrentBlockTime()) + session.durationSeconds / 2n - 1n,
-        ),
-      );
+      await setTime(Number((await getCurrentBlockTime()) + session.durationSeconds / 2n - 1n));
 
       const userBalanceBefore = await MOR.balanceOf(SECOND);
       const providerBalanceBefore = await MOR.balanceOf(PROVIDER);
@@ -414,37 +345,26 @@ describe("Session closeout", () => {
 
       // verify session is closed with dispute
       const sessionData = await sessionRouter.getSession(sessionId);
-      const totalCost =
-        sessionData.pricePerSecond *
-        (sessionData.closedAt - sessionData.openedAt);
+      const totalCost = sessionData.pricePerSecond * (sessionData.closedAt - sessionData.openedAt);
 
       // verify balances
       const userBalanceAfter = await MOR.balanceOf(SECOND);
       const providerBalanceAfter = await MOR.balanceOf(PROVIDER);
 
-      const claimableProvider = await sessionRouter.getProviderClaimableBalance(
-        sessionData.id,
-      );
+      const claimableProvider = await sessionRouter.getProviderClaimableBalance(sessionData.id);
 
-      const [userAvail, userHold] = await sessionRouter.withdrawableUserStake(
-        sessionData.user,
-        MAX_UINT8,
-      );
+      const [userAvail, userHold] = await sessionRouter.withdrawableUserStake(sessionData.user, MAX_UINT8);
 
       expect(sessionData.closeoutType).to.equal(1n);
       expect(providerBalanceAfter - providerBalanceBefore).to.equal(0n);
       expect(claimableProvider).to.equal(0n);
-      expect(session.stake / 2n).to.closeTo(
-        userBalanceAfter - userBalanceBefore,
-        1,
-      );
+      expect(session.stake / 2n).to.closeTo(userBalanceAfter - userBalanceBefore, 1);
       expect(userAvail).to.equal(0n);
       expect(userHold).to.closeTo(userBalanceAfter - userBalanceBefore, 1);
 
       // verify provider balance after dispute is released
       await setTime(Number((await getCurrentBlockTime()) + DAY));
-      const claimableProvider2 =
-        await sessionRouter.getProviderClaimableBalance(sessionId);
+      const claimableProvider2 = await sessionRouter.getProviderClaimableBalance(sessionId);
       expect(claimableProvider2).to.equal(totalCost);
 
       // claim provider balance
@@ -456,42 +376,31 @@ describe("Session closeout", () => {
       expect(providerClaimed).to.equal(totalCost);
     });
 
-    it("should error when not a user trying to close", async () => {
+    it('should error when not a user trying to close', async () => {
       // open session
-      const { msg, signature } = await getProviderApproval(
-        PROVIDER,
-        await SECOND.getAddress(),
-        session.bidID,
-      );
-      const sessionId = await sessionRouter
-        .connect(SECOND)
-        .openSession.staticCall(session.stake, msg, signature);
-      await sessionRouter
-        .connect(SECOND)
-        .openSession(session.stake, msg, signature);
+      const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+      const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(session.stake, msg, signature);
+      await sessionRouter.connect(SECOND).openSession(session.stake, msg, signature);
 
       // wait half of the session
-      await setTime(
-        Number(
-          (await getCurrentBlockTime()) + session.durationSeconds / 2n - 1n,
-        ),
-      );
+      await setTime(Number((await getCurrentBlockTime()) + session.durationSeconds / 2n - 1n));
 
       // close session with user signature
       const report = await getReport(SECOND, sessionId, 10, 10);
 
-      await expect(
-        sessionRouter.connect(THIRD).closeSession(report.msg, report.sig),
-      ).to.be.revertedWithCustomError(sessionRouter, "NotOwnerOrUser");
+      await expect(sessionRouter.connect(THIRD).closeSession(report.msg, report.sig)).to.be.revertedWithCustomError(
+        sessionRouter,
+        'NotOwnerOrUser',
+      );
     });
 
-    it("should limit reward by stake amount", async () => {
+    it('should limit reward by stake amount', async () => {
       // expected bid
       const expectedBid = {
-        id: "",
+        id: '',
         providerAddr: await PROVIDER.getAddress(),
         modelId: model.modelId,
-        pricePerSecond: wei("0.1"),
+        pricePerSecond: wei('0.1'),
         nonce: 0n,
         createdAt: 0n,
         deletedAt: 0n,
@@ -500,18 +409,10 @@ describe("Session closeout", () => {
       // add single bid
       const postBidId = await marketplace
         .connect(PROVIDER)
-        .postModelBid.staticCall(
-          expectedBid.providerAddr,
-          expectedBid.modelId,
-          expectedBid.pricePerSecond,
-        );
+        .postModelBid.staticCall(expectedBid.providerAddr, expectedBid.modelId, expectedBid.pricePerSecond);
       await marketplace
         .connect(PROVIDER)
-        .postModelBid(
-          expectedBid.providerAddr,
-          expectedBid.modelId,
-          expectedBid.pricePerSecond,
-        );
+        .postModelBid(expectedBid.providerAddr, expectedBid.modelId, expectedBid.pricePerSecond);
 
       expectedBid.id = postBidId;
       expectedBid.createdAt = await getCurrentBlockTime();
@@ -519,12 +420,8 @@ describe("Session closeout", () => {
       // calculate data for session opening
       const totalCost = BigInt(provider.stake) * 2n;
       const durationSeconds = totalCost / expectedBid.pricePerSecond;
-      const totalSupply = await sessionRouter.totalMORSupply(
-        await getCurrentBlockTime(),
-      );
-      const todaysBudget = await sessionRouter.getTodaysBudget(
-        await getCurrentBlockTime(),
-      );
+      const totalSupply = await sessionRouter.totalMORSupply(await getCurrentBlockTime());
+      const todaysBudget = await sessionRouter.getTodaysBudget(await getCurrentBlockTime());
 
       const expectedSession = {
         durationSeconds,
@@ -542,22 +439,14 @@ describe("Session closeout", () => {
       await MOR.connect(SECOND).approve(modelRegistry, expectedSession.stake);
 
       // open session
-      const { msg, signature } = await getProviderApproval(
-        PROVIDER,
-        await SECOND.getAddress(),
-        expectedSession.bidID,
-      );
+      const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), expectedSession.bidID);
       const sessionId = await sessionRouter
         .connect(SECOND)
         .openSession.staticCall(expectedSession.stake, msg, signature);
-      await sessionRouter
-        .connect(SECOND)
-        .openSession(expectedSession.stake, msg, signature);
+      await sessionRouter.connect(SECOND).openSession(expectedSession.stake, msg, signature);
 
       // wait till session ends
-      await setTime(
-        Number((await getCurrentBlockTime()) + expectedSession.durationSeconds),
-      );
+      await setTime(Number((await getCurrentBlockTime()) + expectedSession.durationSeconds));
 
       const providerBalanceBefore = await MOR.balanceOf(PROVIDER);
       // close session without dispute
@@ -575,8 +464,8 @@ describe("Session closeout", () => {
       expect(providerRecord.limitPeriodEarned).to.equal(provider.stake);
     });
 
-    it("should reset provider limitPeriodEarned after period", async () => {});
+    it('should reset provider limitPeriodEarned after period', async () => {});
 
-    it("should error with WithdrawableBalanceLimitByStakeReached() if claiming more that stake for a period", async () => {});
+    it('should error with WithdrawableBalanceLimitByStakeReached() if claiming more that stake for a period', async () => {});
   });
 });

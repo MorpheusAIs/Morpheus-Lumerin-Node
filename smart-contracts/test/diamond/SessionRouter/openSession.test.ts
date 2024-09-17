@@ -1,16 +1,4 @@
 import {
-  getHex,
-  randomBytes32,
-  startOfTheDay,
-  wei,
-} from "@/scripts/utils/utils";
-import { FacetAction } from "@/test/helpers/enums";
-import { getDefaultPools } from "@/test/helpers/pool-helper";
-import { Reverter } from "@/test/helpers/reverter";
-import { getCurrentBlockTime, setTime } from "@/utils/block-helper";
-import { getProviderApproval, getReport } from "@/utils/provider-helper";
-import { DAY, HOUR, YEAR } from "@/utils/time";
-import {
   IBidStorage,
   IMarketplace__factory,
   IModelRegistry__factory,
@@ -24,13 +12,21 @@ import {
   MorpheusToken,
   ProviderRegistry,
   SessionRouter,
-} from "@ethers-v6";
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
-import { expect } from "chai";
-import { Addressable, Fragment, randomBytes, resolveAddress } from "ethers";
-import { ethers } from "hardhat";
+} from '@ethers-v6';
+import { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
+import { expect } from 'chai';
+import { Addressable, Fragment, randomBytes, resolveAddress } from 'ethers';
+import { ethers } from 'hardhat';
 
-describe("session actions", () => {
+import { getHex, randomBytes32, startOfTheDay, wei } from '@/scripts/utils/utils';
+import { FacetAction } from '@/test/helpers/enums';
+import { getDefaultPools } from '@/test/helpers/pool-helper';
+import { Reverter } from '@/test/helpers/reverter';
+import { getCurrentBlockTime, setTime } from '@/utils/block-helper';
+import { getProviderApproval, getReport } from '@/utils/provider-helper';
+import { DAY, HOUR, YEAR } from '@/utils/time';
+
+describe('session actions', () => {
   const reverter = new Reverter();
 
   let OWNER: SignerWithAddress;
@@ -52,7 +48,7 @@ describe("session actions", () => {
     }
   > {
     const provider = {
-      endpoint: "localhost:3334",
+      endpoint: 'localhost:3334',
       stake: wei(100),
       createdAt: 0n,
       limitPeriodEnd: 0n,
@@ -64,9 +60,7 @@ describe("session actions", () => {
     await MOR.transfer(PROVIDER, provider.stake * 100n);
     await MOR.connect(PROVIDER).approve(sessionRouter, provider.stake);
 
-    await providerRegistry
-      .connect(PROVIDER)
-      .providerRegister(provider.address, provider.stake, provider.endpoint);
+    await providerRegistry.connect(PROVIDER).providerRegister(provider.address, provider.stake, provider.endpoint);
     provider.createdAt = await getCurrentBlockTime();
     provider.limitPeriodEnd = provider.createdAt + YEAR;
 
@@ -80,12 +74,12 @@ describe("session actions", () => {
   > {
     const model = {
       modelId: randomBytes32(),
-      ipfsCID: getHex(Buffer.from("ipfs://ipfsaddress")),
+      ipfsCID: getHex(Buffer.from('ipfs://ipfsaddress')),
       fee: 100,
       stake: 100,
       owner: OWNER,
-      name: "Llama 2.0",
-      tags: ["llama", "animal", "cute"],
+      name: 'Llama 2.0',
+      tags: ['llama', 'animal', 'cute'],
       createdAt: 0n,
       isDeleted: false,
     };
@@ -125,7 +119,7 @@ describe("session actions", () => {
     ]
   > {
     let bid = {
-      id: "",
+      id: '',
       modelId: model.modelId,
       pricePerSecond: wei(0.0001),
       nonce: 0,
@@ -137,24 +131,16 @@ describe("session actions", () => {
 
     await MOR.approve(modelRegistry, 10000n * 10n ** 18n);
 
-    bid.id = await marketplace
-      .connect(PROVIDER)
-      .postModelBid.staticCall(bid.provider, bid.modelId, bid.pricePerSecond);
-    await marketplace
-      .connect(PROVIDER)
-      .postModelBid(bid.provider, bid.modelId, bid.pricePerSecond);
+    bid.id = await marketplace.connect(PROVIDER).postModelBid.staticCall(bid.provider, bid.modelId, bid.pricePerSecond);
+    await marketplace.connect(PROVIDER).postModelBid(bid.provider, bid.modelId, bid.pricePerSecond);
 
     bid.createdAt = await getCurrentBlockTime();
 
     // generating data for sample session
     const durationSeconds = HOUR;
     const totalCost = bid.pricePerSecond * durationSeconds;
-    const totalSupply = await sessionRouter.totalMORSupply(
-      await getCurrentBlockTime(),
-    );
-    const todaysBudget = await sessionRouter.getTodaysBudget(
-      await getCurrentBlockTime(),
-    );
+    const totalSupply = await sessionRouter.totalMORSupply(await getCurrentBlockTime());
+    const todaysBudget = await sessionRouter.getTodaysBudget(await getCurrentBlockTime());
 
     const expectedSession = {
       durationSeconds,
@@ -175,59 +161,34 @@ describe("session actions", () => {
 
   async function openSession(session: any) {
     // open session
-    const { msg, signature } = await getProviderApproval(
-      PROVIDER,
-      await SECOND.getAddress(),
-      session.bidID,
-    );
-    const sessionId = await sessionRouter
-      .connect(SECOND)
-      .openSession.staticCall(session.stake, msg, signature);
-    await sessionRouter
-      .connect(SECOND)
-      .openSession(session.stake, msg, signature);
+    const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+    const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(session.stake, msg, signature);
+    await sessionRouter.connect(SECOND).openSession(session.stake, msg, signature);
 
     return sessionId;
   }
 
-  before("setup", async () => {
+  before('setup', async () => {
     [OWNER, SECOND, THIRD, PROVIDER] = await ethers.getSigners();
 
-    const LinearDistributionIntervalDecrease = await ethers.getContractFactory(
-      "LinearDistributionIntervalDecrease",
-    );
-    const linearDistributionIntervalDecrease =
-      await LinearDistributionIntervalDecrease.deploy();
+    const LinearDistributionIntervalDecrease = await ethers.getContractFactory('LinearDistributionIntervalDecrease');
+    const linearDistributionIntervalDecrease = await LinearDistributionIntervalDecrease.deploy();
 
-    const [
-      LumerinDiamond,
-      Marketplace,
-      ModelRegistry,
-      ProviderRegistry,
-      SessionRouter,
-      MorpheusToken,
-    ] = await Promise.all([
-      ethers.getContractFactory("LumerinDiamond"),
-      ethers.getContractFactory("Marketplace"),
-      ethers.getContractFactory("ModelRegistry"),
-      ethers.getContractFactory("ProviderRegistry"),
-      ethers.getContractFactory("SessionRouter", {
-        libraries: {
-          LinearDistributionIntervalDecrease:
-            linearDistributionIntervalDecrease,
-        },
-      }),
-      ethers.getContractFactory("MorpheusToken"),
-    ]);
+    const [LumerinDiamond, Marketplace, ModelRegistry, ProviderRegistry, SessionRouter, MorpheusToken] =
+      await Promise.all([
+        ethers.getContractFactory('LumerinDiamond'),
+        ethers.getContractFactory('Marketplace'),
+        ethers.getContractFactory('ModelRegistry'),
+        ethers.getContractFactory('ProviderRegistry'),
+        ethers.getContractFactory('SessionRouter', {
+          libraries: {
+            LinearDistributionIntervalDecrease: linearDistributionIntervalDecrease,
+          },
+        }),
+        ethers.getContractFactory('MorpheusToken'),
+      ]);
 
-    [
-      diamond,
-      marketplace,
-      modelRegistry,
-      providerRegistry,
-      sessionRouter,
-      MOR,
-    ] = await Promise.all([
+    [diamond, marketplace, modelRegistry, providerRegistry, sessionRouter, MOR] = await Promise.all([
       LumerinDiamond.deploy(),
       Marketplace.deploy(),
       ModelRegistry.deploy(),
@@ -238,7 +199,7 @@ describe("session actions", () => {
 
     await diamond.__LumerinDiamond_init();
 
-    await diamond["diamondCut((address,uint8,bytes4[])[])"]([
+    await diamond['diamondCut((address,uint8,bytes4[])[])']([
       {
         facetAddress: marketplace,
         action: FacetAction.Add,
@@ -270,9 +231,7 @@ describe("session actions", () => {
     ]);
 
     marketplace = marketplace.attach(diamond.target) as Marketplace;
-    providerRegistry = providerRegistry.attach(
-      diamond.target,
-    ) as ProviderRegistry;
+    providerRegistry = providerRegistry.attach(diamond.target) as ProviderRegistry;
     modelRegistry = modelRegistry.attach(diamond.target) as ModelRegistry;
     sessionRouter = sessionRouter.attach(diamond.target) as SessionRouter;
 
@@ -287,7 +246,7 @@ describe("session actions", () => {
 
   afterEach(reverter.revert);
 
-  describe("Actions", () => {
+  describe('Actions', () => {
     let provider: IProviderStorage.ProviderStruct;
     let model: IModelStorage.ModelStruct & {
       modelId: string;
@@ -313,54 +272,28 @@ describe("session actions", () => {
       [bid, session] = await deployBid(model);
     });
 
-    describe("positive cases", () => {
-      it("should open session without error", async () => {
-        const { msg, signature } = await getProviderApproval(
-          PROVIDER,
-          await SECOND.getAddress(),
-          session.bidID,
-        );
-        const sessionId = await sessionRouter
-          .connect(SECOND)
-          .openSession.staticCall(session.stake, msg, signature);
-        await sessionRouter
-          .connect(SECOND)
-          .openSession(session.stake, msg, signature);
+    describe('positive cases', () => {
+      it('should open session without error', async () => {
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(session.stake, msg, signature);
+        await sessionRouter.connect(SECOND).openSession(session.stake, msg, signature);
 
-        expect(sessionId).to.be.a("string");
+        expect(sessionId).to.be.a('string');
       });
 
-      it("should emit SessionOpened event", async () => {
-        const { msg, signature } = await getProviderApproval(
-          PROVIDER,
-          await SECOND.getAddress(),
-          session.bidID,
-        );
+      it('should emit SessionOpened event', async () => {
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
 
-        const sessionId = await sessionRouter
-          .connect(SECOND)
-          .openSession.staticCall(session.stake, msg, signature);
-        await expect(
-          sessionRouter
-            .connect(SECOND)
-            .openSession(session.stake, msg, signature),
-        )
-          .to.emit(sessionRouter, "SessionOpened")
+        const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(session.stake, msg, signature);
+        await expect(sessionRouter.connect(SECOND).openSession(session.stake, msg, signature))
+          .to.emit(sessionRouter, 'SessionOpened')
           .withArgs(session.user, sessionId, session.provider);
       });
 
-      it("should verify session fields after opening", async () => {
-        const { msg, signature } = await getProviderApproval(
-          PROVIDER,
-          await SECOND.getAddress(),
-          session.bidID,
-        );
-        const sessionId = await sessionRouter
-          .connect(SECOND)
-          .openSession.staticCall(session.stake, msg, signature);
-        await sessionRouter
-          .connect(SECOND)
-          .openSession(session.stake, msg, signature);
+      it('should verify session fields after opening', async () => {
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(session.stake, msg, signature);
+        await sessionRouter.connect(SECOND).openSession(session.stake, msg, signature);
 
         const sessionData = await sessionRouter.getSession(sessionId);
         const createdAt = await getCurrentBlockTime();
@@ -373,7 +306,7 @@ describe("session actions", () => {
           session.bidID,
           session.stake,
           session.pricePerSecond,
-          getHex(Buffer.from(""), 0),
+          getHex(Buffer.from(''), 0),
           0n,
           0n,
           createdAt,
@@ -382,18 +315,12 @@ describe("session actions", () => {
         ]);
       });
 
-      it("should verify balances after opening", async () => {
+      it('should verify balances after opening', async () => {
         const srBefore = await MOR.balanceOf(sessionRouter);
         const userBefore = await MOR.balanceOf(SECOND);
 
-        const { msg, signature } = await getProviderApproval(
-          PROVIDER,
-          await SECOND.getAddress(),
-          session.bidID,
-        );
-        await sessionRouter
-          .connect(SECOND)
-          .openSession(session.stake, msg, signature);
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        await sessionRouter.connect(SECOND).openSession(session.stake, msg, signature);
 
         const srAfter = await MOR.balanceOf(sessionRouter);
         const userAfter = await MOR.balanceOf(SECOND);
@@ -402,44 +329,27 @@ describe("session actions", () => {
         expect(userBefore - userAfter).to.equal(session.stake);
       });
 
-      it("should allow opening two sessions in the same block", async () => {
+      it('should allow opening two sessions in the same block', async () => {
         await MOR.transfer(SECOND, session.stake * 2n);
         await MOR.connect(SECOND).approve(sessionRouter, session.stake * 2n);
 
-        const apprv1 = await getProviderApproval(
-          PROVIDER,
-          await SECOND.getAddress(),
-          session.bidID,
-        );
+        const apprv1 = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
         await setTime(Number(await getCurrentBlockTime()) + 1);
-        const apprv2 = await getProviderApproval(
-          PROVIDER,
-          await SECOND.getAddress(),
-          session.bidID,
-        );
+        const apprv2 = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
 
-        await ethers.provider.send("evm_setAutomine", [false]);
+        await ethers.provider.send('evm_setAutomine', [false]);
 
         const sessionId1 = await sessionRouter
           .connect(SECOND)
           .openSession.staticCall(session.stake, apprv1.msg, apprv1.signature);
-        await sessionRouter
-          .connect(SECOND)
-          .openSession(session.stake, apprv1.msg, apprv1.signature);
+        await sessionRouter.connect(SECOND).openSession(session.stake, apprv1.msg, apprv1.signature);
 
-        await sessionRouter
-          .connect(SECOND)
-          .openSession(session.stake, apprv2.msg, apprv2.signature);
+        await sessionRouter.connect(SECOND).openSession(session.stake, apprv2.msg, apprv2.signature);
 
-        await ethers.provider.send("evm_mine", []);
-        await ethers.provider.send("evm_setAutomine", [true]);
+        await ethers.provider.send('evm_mine', []);
+        await ethers.provider.send('evm_setAutomine', [true]);
 
-        const sessionId2 = await sessionRouter.getSessionId(
-          SECOND,
-          PROVIDER,
-          session.stake,
-          1,
-        );
+        const sessionId2 = await sessionRouter.getSessionId(SECOND, PROVIDER, session.stake, 1);
 
         expect(sessionId1).not.to.equal(sessionId2);
 
@@ -450,17 +360,13 @@ describe("session actions", () => {
         expect(session2.stake).to.equal(session.stake);
       });
 
-      it("should partially use remaining staked tokens for the opening session", async () => {
+      it('should partially use remaining staked tokens for the opening session', async () => {
         const sessionId = await openSession(session);
-        await setTime(
-          Number((await getCurrentBlockTime()) + session.durationSeconds / 2n),
-        );
+        await setTime(Number((await getCurrentBlockTime()) + session.durationSeconds / 2n));
 
         // close session
         const report = await getReport(PROVIDER, sessionId, 10, 10);
-        await sessionRouter
-          .connect(SECOND)
-          .closeSession(report.msg, report.sig);
+        await sessionRouter.connect(SECOND).closeSession(report.msg, report.sig);
 
         await setTime(Number(startOfTheDay(await getCurrentBlockTime()) + DAY));
 
@@ -472,30 +378,20 @@ describe("session actions", () => {
 
         const stake = avail / 2n;
 
-        const approval = await getProviderApproval(
-          PROVIDER,
-          await SECOND.getAddress(),
-          session.bidID,
-        );
-        await sessionRouter
-          .connect(SECOND)
-          .openSession(stake, approval.msg, approval.signature);
+        const approval = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        await sessionRouter.connect(SECOND).openSession(stake, approval.msg, approval.signature);
 
         const [avail2] = await sessionRouter.withdrawableUserStake(SECOND, 255);
         expect(avail2).to.be.equal(stake);
       });
 
-      it("should use all remaining staked tokens for the opening session", async () => {
+      it('should use all remaining staked tokens for the opening session', async () => {
         const sessionId = await openSession(session);
-        await setTime(
-          Number((await getCurrentBlockTime()) + session.durationSeconds / 2n),
-        );
+        await setTime(Number((await getCurrentBlockTime()) + session.durationSeconds / 2n));
 
         // close session
         const report = await getReport(PROVIDER, sessionId, 10, 10);
-        await sessionRouter
-          .connect(SECOND)
-          .closeSession(report.msg, report.sig);
+        await sessionRouter.connect(SECOND).closeSession(report.msg, report.sig);
 
         await setTime(Number(startOfTheDay(await getCurrentBlockTime()) + DAY));
 
@@ -505,30 +401,20 @@ describe("session actions", () => {
         // reset allowance
         await MOR.connect(SECOND).approve(sessionRouter, 0n);
 
-        const approval = await getProviderApproval(
-          PROVIDER,
-          await SECOND.getAddress(),
-          session.bidID,
-        );
-        await sessionRouter
-          .connect(SECOND)
-          .openSession(avail, approval.msg, approval.signature);
+        const approval = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        await sessionRouter.connect(SECOND).openSession(avail, approval.msg, approval.signature);
 
         const [avail2] = await sessionRouter.withdrawableUserStake(SECOND, 255);
         expect(avail2).to.be.equal(0n);
       });
 
-      it("should use remaining staked tokens and allowance for opening session", async () => {
+      it('should use remaining staked tokens and allowance for opening session', async () => {
         const sessionId = await openSession(session);
-        await setTime(
-          Number((await getCurrentBlockTime()) + session.durationSeconds / 2n),
-        );
+        await setTime(Number((await getCurrentBlockTime()) + session.durationSeconds / 2n));
 
         // close session
         const report = await getReport(PROVIDER, sessionId, 10, 10);
-        await sessionRouter
-          .connect(SECOND)
-          .closeSession(report.msg, report.sig);
+        await sessionRouter.connect(SECOND).closeSession(report.msg, report.sig);
 
         await setTime(Number(startOfTheDay(await getCurrentBlockTime()) + DAY));
 
@@ -541,14 +427,8 @@ describe("session actions", () => {
         // reset allowance
         await MOR.connect(SECOND).approve(sessionRouter, allowancePart);
 
-        const approval = await getProviderApproval(
-          PROVIDER,
-          await SECOND.getAddress(),
-          session.bidID,
-        );
-        await sessionRouter
-          .connect(SECOND)
-          .openSession(avail + allowancePart, approval.msg, approval.signature);
+        const approval = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        await sessionRouter.connect(SECOND).openSession(avail + allowancePart, approval.msg, approval.signature);
 
         // check all onHold used
         const [avail2] = await sessionRouter.withdrawableUserStake(SECOND, 255);
@@ -560,187 +440,111 @@ describe("session actions", () => {
       });
     });
 
-    describe("negative cases", () => {
-      it("should error when approval generated for a different user", async () => {
-        const { msg, signature } = await getProviderApproval(
-          PROVIDER,
-          await THIRD.getAddress(),
-          session.bidID,
-        );
+    describe('negative cases', () => {
+      it('should error when approval generated for a different user', async () => {
+        const { msg, signature } = await getProviderApproval(PROVIDER, await THIRD.getAddress(), session.bidID);
 
         await expect(
-          sessionRouter
-            .connect(SECOND)
-            .openSession(session.stake, msg, signature),
-        ).to.be.revertedWithCustomError(
-          sessionRouter,
-          "ApprovedForAnotherUser",
-        );
+          sessionRouter.connect(SECOND).openSession(session.stake, msg, signature),
+        ).to.be.revertedWithCustomError(sessionRouter, 'ApprovedForAnotherUser');
       });
 
-      it("should error when approval expired", async () => {
-        const { msg, signature } = await getProviderApproval(
-          PROVIDER,
-          await SECOND.getAddress(),
-          session.bidID,
-        );
+      it('should error when approval expired', async () => {
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
         const ttl = await sessionRouter.SIGNATURE_TTL();
         await setTime(Number((await getCurrentBlockTime()) + ttl) + 1);
 
         await expect(
-          sessionRouter
-            .connect(SECOND)
-            .openSession(session.stake, msg, signature),
-        ).to.be.revertedWithCustomError(sessionRouter, "SignatureExpired");
+          sessionRouter.connect(SECOND).openSession(session.stake, msg, signature),
+        ).to.be.revertedWithCustomError(sessionRouter, 'SignatureExpired');
         sessionRouter.openSession(session.stake, msg, signature);
       });
 
-      it("should error when bid not exist", async () => {
-        const { msg, signature } = await getProviderApproval(
-          PROVIDER,
-          await SECOND.getAddress(),
-          randomBytes32(),
-        );
+      it('should error when bid not exist', async () => {
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), randomBytes32());
         await expect(
-          sessionRouter
-            .connect(SECOND)
-            .openSession(session.stake, msg, signature),
-        ).to.be.revertedWithCustomError(sessionRouter, "BidNotFound");
+          sessionRouter.connect(SECOND).openSession(session.stake, msg, signature),
+        ).to.be.revertedWithCustomError(sessionRouter, 'BidNotFound');
       });
 
-      it("should error when bid is deleted", async () => {
+      it('should error when bid is deleted', async () => {
         await marketplace.connect(PROVIDER).deleteModelAgentBid(session.bidID);
 
-        const { msg, signature } = await getProviderApproval(
-          PROVIDER,
-          await SECOND.getAddress(),
-          session.bidID,
-        );
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
         await expect(
-          sessionRouter
-            .connect(SECOND)
-            .openSession(session.stake, msg, signature),
-        ).to.be.revertedWithCustomError(sessionRouter, "BidNotFound");
+          sessionRouter.connect(SECOND).openSession(session.stake, msg, signature),
+        ).to.be.revertedWithCustomError(sessionRouter, 'BidNotFound');
       });
 
-      it("should error when signature has invalid length", async () => {
-        const { msg } = await getProviderApproval(
-          PROVIDER,
-          await SECOND.getAddress(),
-          session.bidID,
-        );
+      it('should error when signature has invalid length', async () => {
+        const { msg } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
 
-        await expect(
-          sessionRouter.connect(SECOND).openSession(session.stake, msg, "0x00"),
-        ).to.be.revertedWith("ECDSA: invalid signature length");
+        await expect(sessionRouter.connect(SECOND).openSession(session.stake, msg, '0x00')).to.be.revertedWith(
+          'ECDSA: invalid signature length',
+        );
       });
 
-      it("should error when signature is invalid", async () => {
-        const { msg } = await getProviderApproval(
-          PROVIDER,
-          await SECOND.getAddress(),
-          session.bidID,
-        );
+      it('should error when signature is invalid', async () => {
+        const { msg } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
         const sig = randomBytes(65);
 
-        await expect(
-          sessionRouter.connect(SECOND).openSession(session.stake, msg, sig),
-        ).to.be.reverted;
+        await expect(sessionRouter.connect(SECOND).openSession(session.stake, msg, sig)).to.be.reverted;
       });
 
-      it("should error when opening two bids with same signature", async () => {
-        const { msg, signature } = await getProviderApproval(
-          PROVIDER,
-          await SECOND.getAddress(),
-          session.bidID,
-        );
-        await sessionRouter
-          .connect(SECOND)
-          .openSession(session.stake, msg, signature);
+      it('should error when opening two bids with same signature', async () => {
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        await sessionRouter.connect(SECOND).openSession(session.stake, msg, signature);
 
         await approveUserFunds(session.stake);
 
         await expect(
-          sessionRouter
-            .connect(SECOND)
-            .openSession(session.stake, msg, signature),
-        ).to.be.revertedWithCustomError(sessionRouter, "DuplicateApproval");
+          sessionRouter.connect(SECOND).openSession(session.stake, msg, signature),
+        ).to.be.revertedWithCustomError(sessionRouter, 'DuplicateApproval');
       });
 
-      it("should not error when opening two bids same time", async () => {
-        const appr1 = await getProviderApproval(
-          PROVIDER,
-          await SECOND.getAddress(),
-          session.bidID,
-        );
-        await sessionRouter
-          .connect(SECOND)
-          .openSession(session.stake, appr1.msg, appr1.signature);
+      it('should not error when opening two bids same time', async () => {
+        const appr1 = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        await sessionRouter.connect(SECOND).openSession(session.stake, appr1.msg, appr1.signature);
 
         await approveUserFunds(session.stake);
-        const appr2 = await getProviderApproval(
-          PROVIDER,
-          await SECOND.getAddress(),
-          session.bidID,
-        );
-        await sessionRouter
-          .connect(SECOND)
-          .openSession(session.stake, appr2.msg, appr2.signature);
+        const appr2 = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        await sessionRouter.connect(SECOND).openSession(session.stake, appr2.msg, appr2.signature);
       });
 
-      it("should error with insufficient allowance", async () => {
-        const { msg, signature } = await getProviderApproval(
-          PROVIDER,
-          await SECOND.getAddress(),
-          session.bidID,
+      it('should error with insufficient allowance', async () => {
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        await expect(sessionRouter.connect(SECOND).openSession(session.stake * 2n, msg, signature)).to.be.revertedWith(
+          'ERC20: insufficient allowance',
         );
-        await expect(
-          sessionRouter
-            .connect(SECOND)
-            .openSession(session.stake * 2n, msg, signature),
-        ).to.be.revertedWith("ERC20: insufficient allowance");
       });
 
-      it("should error with insufficient allowance", async () => {
+      it('should error with insufficient allowance', async () => {
         const stake = (await MOR.balanceOf(SECOND)) + 1n;
         await MOR.connect(SECOND).approve(sessionRouter, stake);
 
-        const { msg, signature } = await getProviderApproval(
-          PROVIDER,
-          await SECOND.getAddress(),
-          session.bidID,
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        await expect(sessionRouter.connect(SECOND).openSession(stake, msg, signature)).to.be.revertedWith(
+          'ERC20: transfer amount exceeds balance',
         );
-        await expect(
-          sessionRouter.connect(SECOND).openSession(stake, msg, signature),
-        ).to.be.revertedWith("ERC20: transfer amount exceeds balance");
       });
     });
 
-    describe("verify session end time", () => {
+    describe('verify session end time', () => {
       it("session that doesn't span across midnight (1h)", async () => {
         const durationSeconds = HOUR;
         const stake = await getStake(durationSeconds, session.pricePerSecond);
 
-        const { msg, signature } = await getProviderApproval(
-          PROVIDER,
-          await SECOND.getAddress(),
-          session.bidID,
-        );
-        const sessionId = await sessionRouter
-          .connect(SECOND)
-          .openSession.staticCall(stake, msg, signature);
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(stake, msg, signature);
         await sessionRouter.connect(SECOND).openSession(stake, msg, signature);
 
         const sessionData = await sessionRouter.getSession(sessionId);
 
-        expect(sessionData.endsAt).to.equal(
-          (await getCurrentBlockTime()) + durationSeconds,
-        );
+        expect(sessionData.endsAt).to.equal((await getCurrentBlockTime()) + durationSeconds);
       });
 
-      it("session that spans across midnight (6h) should last 6h", async () => {
-        const tomorrow9pm =
-          startOfTheDay(await getCurrentBlockTime()) + DAY + 21n * HOUR;
+      it('session that spans across midnight (6h) should last 6h', async () => {
+        const tomorrow9pm = startOfTheDay(await getCurrentBlockTime()) + DAY + 21n * HOUR;
         await setTime(Number(tomorrow9pm));
 
         // the stake is enough to cover the first day (3h till midnight) and the next day (< 6h)
@@ -748,14 +552,8 @@ describe("session actions", () => {
         const stake = await getStake(durationSeconds, session.pricePerSecond);
         await approveUserFunds(stake);
 
-        const { msg, signature } = await getProviderApproval(
-          PROVIDER,
-          await SECOND.getAddress(),
-          session.bidID,
-        );
-        const sessionId = await sessionRouter
-          .connect(SECOND)
-          .openSession.staticCall(stake, msg, signature);
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(stake, msg, signature);
         await sessionRouter.connect(SECOND).openSession(stake, msg, signature);
 
         const expEndsAt = (await getCurrentBlockTime()) + durationSeconds;
@@ -764,7 +562,7 @@ describe("session actions", () => {
         expect(sessionData.endsAt).closeTo(expEndsAt, 10);
       });
 
-      it("session that lasts multiple days", async () => {
+      it('session that lasts multiple days', async () => {
         const midnight = startOfTheDay(await getCurrentBlockTime()) + DAY;
         await setTime(Number(midnight));
 
@@ -777,14 +575,8 @@ describe("session actions", () => {
 
         await approveUserFunds(stake);
 
-        const { msg, signature } = await getProviderApproval(
-          PROVIDER,
-          await SECOND.getAddress(),
-          session.bidID,
-        );
-        const sessionId = await sessionRouter
-          .connect(SECOND)
-          .openSession.staticCall(stake, msg, signature);
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(stake, msg, signature);
         await sessionRouter.connect(SECOND).openSession(stake, msg, signature);
 
         const sessionData = await sessionRouter.getSession(sessionId);
@@ -800,17 +592,10 @@ describe("session actions", () => {
     await MOR.connect(SECOND).approve(sessionRouter, amount);
   }
 
-  async function getStake(
-    durationSeconds: bigint,
-    pricePerSecond: bigint,
-  ): Promise<bigint> {
+  async function getStake(durationSeconds: bigint, pricePerSecond: bigint): Promise<bigint> {
     const totalCost = pricePerSecond * durationSeconds;
-    const totalSupply = await sessionRouter.totalMORSupply(
-      await getCurrentBlockTime(),
-    );
-    const todaysBudget = await sessionRouter.getTodaysBudget(
-      await getCurrentBlockTime(),
-    );
+    const totalSupply = await sessionRouter.totalMORSupply(await getCurrentBlockTime());
+    const todaysBudget = await sessionRouter.getTodaysBudget(await getCurrentBlockTime());
     return (totalCost * totalSupply) / todaysBudget;
   }
 });

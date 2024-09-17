@@ -1,4 +1,4 @@
-import { ISessionStorage } from "../../generated-types/ethers/contracts/interfaces/facets/ISessionRouter";
+import { ISessionStorage } from '../../generated-types/ethers/contracts/interfaces/facets/ISessionRouter';
 
 export function getDefaultPools(): ISessionStorage.PoolStruct[] {
   return [

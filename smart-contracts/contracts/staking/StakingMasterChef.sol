@@ -13,11 +13,7 @@ import {IStakingMasterChef} from "../interfaces/staking/IStakingMasterChef.sol";
 
 // Due to impossibility of staking before the start time, it may be impossible to distribute the entire reward
 // Refer to https://www.rareskills.io/post/staking-algorithm
-contract StakingMasterChef is
-    IStakingMasterChef,
-    OwnableUpgradeable,
-    UUPSUpgradeable
-{
+contract StakingMasterChef is IStakingMasterChef, OwnableUpgradeable, UUPSUpgradeable {
     using Math for uint256;
     using SafeERC20 for IERC20;
 
@@ -28,10 +24,8 @@ contract StakingMasterChef is
 
     mapping(uint256 poolId => Pool) public pools;
     mapping(uint256 poolId => PoolRateData) public poolRatesData;
-    mapping(uint256 poolId => mapping(uint256 lockDuration => uint256 multiplierScaled))
-        public locks;
-    mapping(uint256 poolId => mapping(address user => UserStake[]))
-        public poolUserStakes;
+    mapping(uint256 poolId => mapping(uint256 lockDuration => uint256 multiplierScaled)) public locks;
+    mapping(uint256 poolId => mapping(address user => UserStake[])) public poolUserStakes;
 
     modifier poolExists(uint256 poolId_) {
         if (pools[poolId_].startTime == 0) {
@@ -40,10 +34,7 @@ contract StakingMasterChef is
         _;
     }
 
-    function __StakingMasterChef_init(
-        address stakingToken_,
-        address rewardToken_
-    ) public initializer {
+    function __StakingMasterChef_init(address stakingToken_, address rewardToken_) public initializer {
         __Ownable_init();
 
         stakingToken = IERC20(stakingToken_);
@@ -99,10 +90,7 @@ contract StakingMasterChef is
         return poolId_;
     }
 
-    function terminatePool(
-        uint256 poolId_,
-        address recipient_
-    ) external onlyOwner poolExists(poolId_) {
+    function terminatePool(uint256 poolId_, address recipient_) external onlyOwner poolExists(poolId_) {
         Pool storage pool = pools[poolId_];
 
         if (block.timestamp >= pool.endTime) {
@@ -110,8 +98,7 @@ contract StakingMasterChef is
         }
 
         uint256 timeTillEnd_ = pool.endTime - block.timestamp;
-        uint256 undistributedReward_ = (timeTillEnd_ *
-            pool.rewardPerSecondScaled) / PRECISION;
+        uint256 undistributedReward_ = (timeTillEnd_ * pool.rewardPerSecondScaled) / PRECISION;
 
         _recalculatePoolReward(poolId_);
 
@@ -167,8 +154,7 @@ contract StakingMasterChef is
             UserStake({
                 stakeAmount: amount_,
                 shareAmount: userShares_,
-                rewardDebt: (userShares_ *
-                    poolRateData.accRewardPerShareScaled) / PRECISION,
+                rewardDebt: (userShares_ * poolRateData.accRewardPerShareScaled) / PRECISION,
                 lockEnd: lockEnd_
             })
         );
@@ -180,11 +166,7 @@ contract StakingMasterChef is
         return stakeId_;
     }
 
-    function unstake(
-        uint256 poolId_,
-        uint256 stakeId_,
-        address recipient_
-    ) external poolExists(poolId_) {
+    function unstake(uint256 poolId_, uint256 stakeId_, address recipient_) external poolExists(poolId_) {
         address user_ = _msgSender();
 
         UserStake[] storage userStakes = poolUserStakes[poolId_][user_];
@@ -208,8 +190,7 @@ contract StakingMasterChef is
         PoolRateData storage poolRateData = poolRatesData[poolId_];
 
         uint256 unstakedAmount_ = userStake.stakeAmount;
-        uint256 reward_ = (userStake.shareAmount *
-            poolRateData.accRewardPerShareScaled) /
+        uint256 reward_ = (userStake.shareAmount * poolRateData.accRewardPerShareScaled) /
             PRECISION -
             userStake.rewardDebt;
 
@@ -223,11 +204,7 @@ contract StakingMasterChef is
         emit Unstaked(user_, poolId_, stakeId_, unstakedAmount_);
     }
 
-    function withdrawReward(
-        uint256 poolId_,
-        uint256 stakeId_,
-        address recipient_
-    ) external poolExists(poolId_) {
+    function withdrawReward(uint256 poolId_, uint256 stakeId_, address recipient_) external poolExists(poolId_) {
         address user_ = _msgSender();
 
         UserStake[] storage userStakes = poolUserStakes[poolId_][user_];
@@ -244,8 +221,7 @@ contract StakingMasterChef is
 
         PoolRateData storage poolRateData = poolRatesData[poolId_];
 
-        uint256 rewardFromStart_ = (userStake.shareAmount *
-            poolRateData.accRewardPerShareScaled) / PRECISION;
+        uint256 rewardFromStart_ = (userStake.shareAmount * poolRateData.accRewardPerShareScaled) / PRECISION;
         uint256 reward_ = rewardFromStart_ - userStake.rewardDebt;
         if (reward_ == 0) {
             revert NoRewardAvailable();
@@ -258,9 +234,7 @@ contract StakingMasterChef is
         emit RewardWithdrawed(user_, poolId_, stakeId_, reward_);
     }
 
-    function recalculatePoolReward(
-        uint256 poolId_
-    ) external poolExists(poolId_) {
+    function recalculatePoolReward(uint256 poolId_) external poolExists(poolId_) {
         _recalculatePoolReward(poolId_);
     }
 
@@ -275,19 +249,11 @@ contract StakingMasterChef is
             return;
         }
 
-        poolRateData.accRewardPerShareScaled = _getRewardPerShareScaled(
-            poolId_
-        );
-        poolRateData.lastRewardTime = block.timestamp.min(
-            pools[poolId_].endTime
-        );
+        poolRateData.accRewardPerShareScaled = _getRewardPerShareScaled(poolId_);
+        poolRateData.lastRewardTime = block.timestamp.min(pools[poolId_].endTime);
     }
 
-    function getReward(
-        address user_,
-        uint256 poolId_,
-        uint256 stakeId_
-    ) external view returns (uint256) {
+    function getReward(address user_, uint256 poolId_, uint256 stakeId_) external view returns (uint256) {
         UserStake[] storage userStakes = poolUserStakes[poolId_][user_];
         if (stakeId_ >= userStakes.length) {
             return 0;
@@ -298,16 +264,13 @@ contract StakingMasterChef is
             return 0;
         }
 
-        uint256 totalUserReward_ = (userStake.shareAmount *
-            _getRewardPerShareScaled(poolId_)) / PRECISION;
+        uint256 totalUserReward_ = (userStake.shareAmount * _getRewardPerShareScaled(poolId_)) / PRECISION;
 
         return totalUserReward_ - userStake.rewardDebt;
     }
 
     /// @dev calculate reward per share scaled without updating the pool
-    function _getRewardPerShareScaled(
-        uint256 poolId_
-    ) private view returns (uint256) {
+    function _getRewardPerShareScaled(uint256 poolId_) private view returns (uint256) {
         PoolRateData storage poolRateData = poolRatesData[poolId_];
 
         if (poolRateData.totalShares == 0) {
@@ -320,14 +283,10 @@ contract StakingMasterChef is
         }
 
         uint256 timeSinceLastReward_ = timestamp_ - poolRateData.lastRewardTime;
-        uint256 rewardScaled_ = timeSinceLastReward_ *
-            pools[poolId_].rewardPerSecondScaled;
-        uint256 rewardPerShareSinceLastReward_ = rewardScaled_ /
-            poolRateData.totalShares;
+        uint256 rewardScaled_ = timeSinceLastReward_ * pools[poolId_].rewardPerSecondScaled;
+        uint256 rewardPerShareSinceLastReward_ = rewardScaled_ / poolRateData.totalShares;
 
-        return
-            poolRateData.accRewardPerShareScaled +
-            rewardPerShareSinceLastReward_;
+        return poolRateData.accRewardPerShareScaled + rewardPerShareSinceLastReward_;
     }
 
     function _authorizeUpgrade(address) internal view override onlyOwner {}

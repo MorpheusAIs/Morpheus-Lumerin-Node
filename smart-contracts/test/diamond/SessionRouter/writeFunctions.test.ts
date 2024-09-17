@@ -1,11 +1,3 @@
-import { ZERO_ADDR } from "@/scripts/utils/constants";
-import { getHex, randomBytes32, wei } from "@/scripts/utils/utils";
-import { FacetAction } from "@/test/helpers/enums";
-import { getDefaultPools } from "@/test/helpers/pool-helper";
-import { Reverter } from "@/test/helpers/reverter";
-import { getCurrentBlockTime, setTime } from "@/utils/block-helper";
-import { getProviderApproval, getReport } from "@/utils/provider-helper";
-import { HOUR, YEAR } from "@/utils/time";
 import {
   IBidStorage,
   IMarketplace__factory,
@@ -20,13 +12,22 @@ import {
   MorpheusToken,
   ProviderRegistry,
   SessionRouter,
-} from "@ethers-v6";
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
-import { expect } from "chai";
-import { Addressable, Fragment } from "ethers";
-import { ethers } from "hardhat";
+} from '@ethers-v6';
+import { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
+import { expect } from 'chai';
+import { Addressable, Fragment } from 'ethers';
+import { ethers } from 'hardhat';
 
-describe("Session router", () => {
+import { ZERO_ADDR } from '@/scripts/utils/constants';
+import { getHex, randomBytes32, wei } from '@/scripts/utils/utils';
+import { FacetAction } from '@/test/helpers/enums';
+import { getDefaultPools } from '@/test/helpers/pool-helper';
+import { Reverter } from '@/test/helpers/reverter';
+import { getCurrentBlockTime, setTime } from '@/utils/block-helper';
+import { getProviderApproval, getReport } from '@/utils/provider-helper';
+import { HOUR, YEAR } from '@/utils/time';
+
+describe('Session router', () => {
   const reverter = new Reverter();
 
   let OWNER: SignerWithAddress;
@@ -48,7 +49,7 @@ describe("Session router", () => {
     }
   > {
     const provider = {
-      endpoint: "localhost:3334",
+      endpoint: 'localhost:3334',
       stake: wei(100),
       createdAt: 0n,
       limitPeriodEnd: 0n,
@@ -60,9 +61,7 @@ describe("Session router", () => {
     await MOR.transfer(PROVIDER, provider.stake * 100n);
     await MOR.connect(PROVIDER).approve(sessionRouter, provider.stake);
 
-    await providerRegistry
-      .connect(PROVIDER)
-      .providerRegister(provider.address, provider.stake, provider.endpoint);
+    await providerRegistry.connect(PROVIDER).providerRegister(provider.address, provider.stake, provider.endpoint);
     provider.createdAt = await getCurrentBlockTime();
     provider.limitPeriodEnd = provider.createdAt + YEAR;
 
@@ -76,12 +75,12 @@ describe("Session router", () => {
   > {
     const model = {
       modelId: randomBytes32(),
-      ipfsCID: getHex(Buffer.from("ipfs://ipfsaddress")),
+      ipfsCID: getHex(Buffer.from('ipfs://ipfsaddress')),
       fee: 100,
       stake: 100,
       owner: OWNER,
-      name: "Llama 2.0",
-      tags: ["llama", "animal", "cute"],
+      name: 'Llama 2.0',
+      tags: ['llama', 'animal', 'cute'],
       createdAt: 0n,
       isDeleted: false,
     };
@@ -121,7 +120,7 @@ describe("Session router", () => {
     ]
   > {
     let bid = {
-      id: "",
+      id: '',
       modelId: model.modelId,
       pricePerSecond: wei(0.0001),
       nonce: 0,
@@ -133,24 +132,16 @@ describe("Session router", () => {
 
     await MOR.approve(modelRegistry, 10000n * 10n ** 18n);
 
-    bid.id = await marketplace
-      .connect(PROVIDER)
-      .postModelBid.staticCall(bid.provider, bid.modelId, bid.pricePerSecond);
-    await marketplace
-      .connect(PROVIDER)
-      .postModelBid(bid.provider, bid.modelId, bid.pricePerSecond);
+    bid.id = await marketplace.connect(PROVIDER).postModelBid.staticCall(bid.provider, bid.modelId, bid.pricePerSecond);
+    await marketplace.connect(PROVIDER).postModelBid(bid.provider, bid.modelId, bid.pricePerSecond);
 
     bid.createdAt = await getCurrentBlockTime();
 
     // generating data for sample session
     const durationSeconds = HOUR;
     const totalCost = bid.pricePerSecond * durationSeconds;
-    const totalSupply = await sessionRouter.totalMORSupply(
-      await getCurrentBlockTime(),
-    );
-    const todaysBudget = await sessionRouter.getTodaysBudget(
-      await getCurrentBlockTime(),
-    );
+    const totalSupply = await sessionRouter.totalMORSupply(await getCurrentBlockTime());
+    const todaysBudget = await sessionRouter.getTodaysBudget(await getCurrentBlockTime());
 
     const expectedSession = {
       durationSeconds,
@@ -171,59 +162,34 @@ describe("Session router", () => {
 
   async function openSession(session: any) {
     // open session
-    const { msg, signature } = await getProviderApproval(
-      PROVIDER,
-      await SECOND.getAddress(),
-      session.bidID,
-    );
-    const sessionId = await sessionRouter
-      .connect(SECOND)
-      .openSession.staticCall(session.stake, msg, signature);
-    await sessionRouter
-      .connect(SECOND)
-      .openSession(session.stake, msg, signature);
+    const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+    const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(session.stake, msg, signature);
+    await sessionRouter.connect(SECOND).openSession(session.stake, msg, signature);
 
     return sessionId;
   }
 
-  before("setup", async () => {
+  before('setup', async () => {
     [OWNER, SECOND, THIRD, PROVIDER] = await ethers.getSigners();
 
-    const LinearDistributionIntervalDecrease = await ethers.getContractFactory(
-      "LinearDistributionIntervalDecrease",
-    );
-    const linearDistributionIntervalDecrease =
-      await LinearDistributionIntervalDecrease.deploy();
+    const LinearDistributionIntervalDecrease = await ethers.getContractFactory('LinearDistributionIntervalDecrease');
+    const linearDistributionIntervalDecrease = await LinearDistributionIntervalDecrease.deploy();
 
-    const [
-      LumerinDiamond,
-      Marketplace,
-      ModelRegistry,
-      ProviderRegistry,
-      SessionRouter,
-      MorpheusToken,
-    ] = await Promise.all([
-      ethers.getContractFactory("LumerinDiamond"),
-      ethers.getContractFactory("Marketplace"),
-      ethers.getContractFactory("ModelRegistry"),
-      ethers.getContractFactory("ProviderRegistry"),
-      ethers.getContractFactory("SessionRouter", {
-        libraries: {
-          LinearDistributionIntervalDecrease:
-            linearDistributionIntervalDecrease,
-        },
-      }),
-      ethers.getContractFactory("MorpheusToken"),
-    ]);
+    const [LumerinDiamond, Marketplace, ModelRegistry, ProviderRegistry, SessionRouter, MorpheusToken] =
+      await Promise.all([
+        ethers.getContractFactory('LumerinDiamond'),
+        ethers.getContractFactory('Marketplace'),
+        ethers.getContractFactory('ModelRegistry'),
+        ethers.getContractFactory('ProviderRegistry'),
+        ethers.getContractFactory('SessionRouter', {
+          libraries: {
+            LinearDistributionIntervalDecrease: linearDistributionIntervalDecrease,
+          },
+        }),
+        ethers.getContractFactory('MorpheusToken'),
+      ]);
 
-    [
-      diamond,
-      marketplace,
-      modelRegistry,
-      providerRegistry,
-      sessionRouter,
-      MOR,
-    ] = await Promise.all([
+    [diamond, marketplace, modelRegistry, providerRegistry, sessionRouter, MOR] = await Promise.all([
       LumerinDiamond.deploy(),
       Marketplace.deploy(),
       ModelRegistry.deploy(),
@@ -234,7 +200,7 @@ describe("Session router", () => {
 
     await diamond.__LumerinDiamond_init();
 
-    await diamond["diamondCut((address,uint8,bytes4[])[])"]([
+    await diamond['diamondCut((address,uint8,bytes4[])[])']([
       {
         facetAddress: marketplace,
         action: FacetAction.Add,
@@ -266,9 +232,7 @@ describe("Session router", () => {
     ]);
 
     marketplace = marketplace.attach(diamond.target) as Marketplace;
-    providerRegistry = providerRegistry.attach(
-      diamond.target,
-    ) as ProviderRegistry;
+    providerRegistry = providerRegistry.attach(diamond.target) as ProviderRegistry;
     modelRegistry = modelRegistry.attach(diamond.target) as ModelRegistry;
     sessionRouter = sessionRouter.attach(diamond.target) as SessionRouter;
 
@@ -283,7 +247,7 @@ describe("Session router", () => {
 
   afterEach(reverter.revert);
 
-  describe("session write functions", () => {
+  describe('session write functions', () => {
     let provider: IProviderStorage.ProviderStruct;
     let model: IModelStorage.ModelStruct & {
       modelId: string;
@@ -311,25 +275,22 @@ describe("Session router", () => {
       sessionId = await openSession(session);
     });
 
-    it("should block erase if session not closed", async () => {
+    it('should block erase if session not closed', async () => {
       // check history
       const sessionIds = await sessionRouter.getSessionsByUser(SECOND, 0, 10);
       expect(sessionIds.length).to.equal(1);
-      expect((await sessionRouter.sessions(sessionIds[0])).id).to.equal(
-        sessionId,
-      );
+      expect((await sessionRouter.sessions(sessionIds[0])).id).to.equal(sessionId);
 
       // erase history fails
-      await expect(
-        sessionRouter.connect(SECOND).deleteHistory(sessionId),
-      ).to.be.revertedWithCustomError(sessionRouter, "SessionNotClosed");
+      await expect(sessionRouter.connect(SECOND).deleteHistory(sessionId)).to.be.revertedWithCustomError(
+        sessionRouter,
+        'SessionNotClosed',
+      );
     });
 
-    it("erase history", async () => {
+    it('erase history', async () => {
       // wait for half of the session
-      await setTime(
-        Number((await getCurrentBlockTime()) + session.durationSeconds / 2n),
-      );
+      await setTime(Number((await getCurrentBlockTime()) + session.durationSeconds / 2n));
 
       // close session
       const report = await getReport(PROVIDER, sessionId, 10, 10);
@@ -338,12 +299,8 @@ describe("Session router", () => {
       // check history
       const sessionIds = await sessionRouter.getSessionsByUser(SECOND, 0, 10);
       expect(sessionIds.length).to.equal(1);
-      expect((await sessionRouter.sessions(sessionIds[0])).id).to.equal(
-        sessionId,
-      );
-      expect((await sessionRouter.sessions(sessionIds[0])).user).to.equal(
-        await SECOND.getAddress(),
-      );
+      expect((await sessionRouter.sessions(sessionIds[0])).id).to.equal(sessionId);
+      expect((await sessionRouter.sessions(sessionIds[0])).user).to.equal(await SECOND.getAddress());
 
       // erase history
       await sessionRouter.connect(SECOND).deleteHistory(sessionId);

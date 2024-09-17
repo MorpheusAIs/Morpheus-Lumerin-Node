@@ -13,9 +13,16 @@
     "bindings-go": "hardhat gobind",
     "node-local": "./node-local.sh",
     "format": "prettier --write \"contracts/**/*.sol\"",
-    "lint": "solhint \"contracts/[!diamond]*/[!Test]*.sol\"",
     "copy-bindings": "cp -r bindings/go/contracts/facets/* ../proxy-router/contracts",
-    "generate-types": "TYPECHAIN_FORCE=true npx hardhat typechain"
+    "generate-types": "TYPECHAIN_FORCE=true npx hardhat typechain",
+    "generate-docs": "npx hardhat markup",
+    "lint-fix": "npm run lint-sol-fix && npm run lint-ts-fix && npm run lint-json-fix",
+    "lint-json-fix": "prettier --write \"./**/*.json\"",
+    "lint-ts-fix": "prettier --write \"./**/*.ts\"",
+    "lint-sol-fix": "prettier --write \"contracts/**/*.sol\"",
+    "lint": "npm run lint-ts && npm run lint-sol",
+    "lint-ts": "eslint \"./**/*.ts\"",
+    "lint-sol": "solhint \"contracts/**/*.sol\""
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-chai-matchers": "^2.0.7",
@@ -39,6 +46,7 @@
     "@types/mocha": ">=9.1.0",
     "@types/node": ">=18.0.0",
     "@types/yargs-parser": "^21.0.3",
+    "@trivago/prettier-plugin-sort-imports": "^4.3.0",
     "chai": "^4.5.0",
     "ethers": "^6.13.2",
     "hardhat": "^2.22.10",
