@@ -26,6 +26,10 @@ const config: HardhatUserConfig = {
       initialDate: "2024-07-15T01:00:00.000Z",
       gas: "auto", // required for tests where two transactions should be mined in the same block
       // loggingEnabled: true,
+      // mining: {
+      //   auto: true,
+      //   interval: 10_000,
+      // },
     },
   },
   solidity: {
