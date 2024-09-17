@@ -101,6 +101,11 @@ export const MessageBody = styled.div`
     font-weight: 400;
     padding: 0 8px;
     font-size: 18px;
+    max-width: calc(100vw - 150px);
+
+    @media (min-width: 800px) {
+        max-width: calc(100vw - 300px);
+    }
 `
 
 export const ChatTitleContainer = styled.div`

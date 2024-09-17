@@ -25,6 +25,7 @@ import { BtnAccent } from '../dashboard/BalanceBlock.styles';
 import { withRouter } from 'react-router-dom';
 import withChatState from '../../store/hocs/withChatState';
 import { abbreviateAddress } from '../../utils'
+import Markdown from 'react-markdown'
 
 import 'react-modern-drawer/dist/index.css'
 import './Chat.css'
@@ -35,7 +36,8 @@ import ModelSelectionModal from './modals/ModelSelectionModal';
 import { parseDataChunk, makeId, getColor, isClosed } from './utils';
 import { Cooldown } from './Cooldown';
 import ImageViewer from "react-simple-image-viewer";
-
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { coldarkDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 let abort = false;
 let cancelScroll = false;
 const userMessage = { user: 'Me', role: "user", icon: "M", color: "#20dc8e" };
@@ -186,7 +188,7 @@ const Chat = (props) => {
                 props.toasts.toast('error', 'Failed to load chat history');
             }
         }
-        scrollToBottom(); 
+        scrollToBottom();
     }
 
     const refreshSessions = async () => {
@@ -485,7 +487,7 @@ const Chat = (props) => {
                                                     <span>(local)</span>
                                                 </>
                                             )
-                                            : ( 
+                                            : (
                                                 <>
                                                     <SubPriceLabel>{selectedBid ? formatSmallNumber(selectedBid?.PricePerSecond / (10 ** 18)) : 0} MOR/s</SubPriceLabel>
                                                 </>
@@ -513,7 +515,7 @@ const Chat = (props) => {
                         </Avatar>
                         <div style={{ marginLeft: '10px' }}>{modelName}</div>
                     </ChatAvatar>
-                    { 
+                    {
                         (selectedBid || isLocal) && <div>
                             <span style={{ color: 'white' }}>Provider:</span> {isLocal ? "(local)" : providerAddress}
                         </div>
@@ -527,14 +529,14 @@ const Chat = (props) => {
 
                 {imagePreview && (
                     <ImageViewer
-                    src={[imagePreview]}
-                    onClose={() => setImagePreview("")}
-                    disableScroll={false}
-                    backgroundStyle={{
-                        backgroundColor: "rgba(0,0,0,0.9)",
-                        zIndex: 1000
-                    }}
-                    closeOnClickOutside={true}
+                        src={[imagePreview]}
+                        onClose={() => setImagePreview("")}
+                        disableScroll={false}
+                        backgroundStyle={{
+                            backgroundColor: "rgba(0,0,0,0.9)",
+                            zIndex: 1000
+                        }}
+                        closeOnClickOutside={true}
                     />
                 )}
 
@@ -610,7 +612,31 @@ const Message = ({ message, onOpenImage }) => {
                 {
                     message.isImageContent
                         ? (<MessageBody>{<ImageContainer src={message.text} onClick={() => onOpenImage(message.text)} />}</MessageBody>)
-                        : (<MessageBody>{message.text}</MessageBody>)
+                        : (
+                            <MessageBody>
+                                <Markdown
+                                    children={message.text}
+                                    components={{
+                                        code(props) {
+                                            const { children, className, node, ...rest } = props
+                                            const match = /language-(\w+)/.exec(className || '')
+                                            return match ? (
+                                                <SyntaxHighlighter
+                                                    {...rest}
+                                                    PreTag="div"
+                                                    children={String(children).replace(/\n$/, '')}
+                                                    language={match[1]}
+                                                    style={coldarkDark}
+                                                />
+                                            ) : (
+                                                <code {...rest} className={className}>
+                                                    {children}
+                                                </code>
+                                            )
+                                        }
+                                    }}
+                                />
+                            </MessageBody>)
                 }
             </div>
         </div>)

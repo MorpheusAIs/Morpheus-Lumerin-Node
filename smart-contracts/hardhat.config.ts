@@ -6,7 +6,7 @@ import "@nomicfoundation/hardhat-verify";
 import "@solarity/hardhat-gobind";
 import "@typechain/hardhat";
 import "dotenv/config";
-import { HardhatUserConfig } from "hardhat/config";
+import type { HardhatUserConfig } from "hardhat/config";
 import "tsconfig-paths/register";
 import "./tasks/upgrade";
 
