@@ -1,13 +1,15 @@
 import '@nomicfoundation/hardhat-chai-matchers';
 import '@nomicfoundation/hardhat-ethers';
-import '@nomicfoundation/hardhat-ignition-viem';
-import '@nomicfoundation/hardhat-toolbox-viem';
-import '@nomicfoundation/hardhat-verify';
 import '@solarity/hardhat-gobind';
+import '@solarity/hardhat-markup';
+import '@solarity/hardhat-migrate';
 import '@typechain/hardhat';
-import 'dotenv/config';
-import type { HardhatUserConfig } from 'hardhat/config';
+import * as dotenv from 'dotenv';
+import { HardhatUserConfig } from 'hardhat/types';
+import 'solidity-coverage';
 import 'tsconfig-paths/register';
+
+dotenv.config();
 
 function typechainTarget() {
   const target = process.env.TYPECHAIN_TARGET;
@@ -23,12 +25,18 @@ const config: HardhatUserConfig = {
   networks: {
     hardhat: {
       initialDate: '2024-07-15T01:00:00.000Z',
-      gas: 'auto', // required for tests where two transactions should be mined in the same block
+      // gas: 'auto', // required for tests where two transactions should be mined in the same block
       // loggingEnabled: true,
       // mining: {
       //   auto: true,
       //   interval: 10_000,
       // },
+    },
+    localhost: {
+      url: 'http://127.0.0.1:8545',
+      initialDate: '1970-01-01T00:00:00Z',
+      gasMultiplier: 1.2,
+      timeout: 1000000000000000,
     },
   },
   solidity: {
@@ -36,31 +44,10 @@ const config: HardhatUserConfig = {
     settings: {
       optimizer: {
         enabled: true,
-        runs: 1000,
-        details: {
-          yul: true,
-          constantOptimizer: true,
-        },
+        runs: 200,
       },
-      // viaIR: true,
+      evmVersion: 'paris',
     },
-  },
-  mocha: {
-    // reporter: "",
-  },
-  gasReporter: {
-    enabled: process.env.REPORT_GAS ? true : false,
-    // outputJSON: true,
-    // outputJSONFile: "gas.json",
-    coinmarketcap: process.env.COINMARKETCAP_API_KEY,
-    // reportPureAndViewMethods: true,
-    // darkMode: true,
-    currency: 'USD',
-    // offline: true,
-    // L2Etherscan: process.env.ETHERSCAN_API_KEY,
-    // L2: "arbitrum",
-    // L1Etherscan: process.env.ETHERSCAN_API_KEY,
-    // L1: "ethereum",
   },
   gobind: {
     outdir: './bindings/go',

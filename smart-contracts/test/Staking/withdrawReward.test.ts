@@ -127,10 +127,7 @@ describe('Staking contract - withdrawReward', () => {
       //// aliceStakes
       await LMR.connect(ALICE).approve(staking, stakingAmount);
       const aliceStakeId = await staking.connect(ALICE).stake.staticCall(poolId, stakingAmount, lockDuration);
-      const tx = await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
-      const aliceStakeTime = await getCurrentBlockTime();
-
-      ////
+      await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
 
       await expect(
         staking.connect(ALICE).withdrawReward(poolId, aliceStakeId + 1n, ALICE),
@@ -141,22 +138,15 @@ describe('Staking contract - withdrawReward', () => {
       //// aliceStakes
       await LMR.connect(ALICE).approve(staking, stakingAmount);
       const aliceStakeId = await staking.connect(ALICE).stake.staticCall(poolId, stakingAmount, lockDuration);
-      const tx = await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
-      const aliceStakeTime = await getCurrentBlockTime();
+      await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
 
-      ////
-
-      await ethers.provider.send('evm_setAutomine', [false]);
+      await setTime(pool.endDate + 1n);
 
       await staking.connect(ALICE).withdrawReward(poolId, aliceStakeId, ALICE);
-
       await expect(staking.connect(ALICE).withdrawReward(poolId, aliceStakeId, ALICE)).to.be.revertedWithCustomError(
         staking,
         'NoRewardAvailable',
       );
-
-      await ethers.provider.send('evm_mine', []);
-      await ethers.provider.send('evm_setAutomine', [true]);
     });
   });
 });
