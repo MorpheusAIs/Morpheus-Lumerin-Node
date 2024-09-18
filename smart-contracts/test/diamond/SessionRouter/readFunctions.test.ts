@@ -112,7 +112,7 @@ describe('Session router', () => {
         pricePerSecond: bigint;
         user: SignerWithAddress;
         provider: SignerWithAddress;
-        modelAgentId: any;
+        modelId: any;
         bidID: string;
         stake: bigint;
       },
@@ -126,7 +126,6 @@ describe('Session router', () => {
       createdAt: 0n,
       deletedAt: 0,
       provider: PROVIDER,
-      modelAgentId: model.modelId,
     };
 
     await MOR.approve(modelRegistry, 10000n * 10n ** 18n);
@@ -148,7 +147,7 @@ describe('Session router', () => {
       pricePerSecond: bid.pricePerSecond,
       user: SECOND,
       provider: bid.provider,
-      modelAgentId: bid.modelId,
+      modelId: bid.modelId,
       bidID: bid.id,
       stake: (totalCost * totalSupply) / todaysBudget,
     };
@@ -252,7 +251,7 @@ describe('Session router', () => {
       pricePerSecond: bigint;
       user: SignerWithAddress;
       provider: SignerWithAddress;
-      modelAgentId: any;
+      modelId: any;
       bidID: string;
       stake: bigint;
     };
@@ -301,7 +300,7 @@ describe('Session router', () => {
         await sessionRouter.connect(SECOND).closeSession(report.msg, report.sig);
 
         // verify session is closed with dispute
-        const sessionData = await sessionRouter.getSession(sessionId);
+        const sessionData = await sessionRouter.sessions(sessionId);
         expect(sessionData.closeoutType).to.equal(1n);
 
         const sessionCost = session.pricePerSecond * (sessionData.closedAt - sessionData.openedAt);

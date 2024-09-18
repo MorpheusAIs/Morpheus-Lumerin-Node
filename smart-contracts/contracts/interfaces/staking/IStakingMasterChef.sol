@@ -85,6 +85,7 @@ interface IStakingMasterChef {
 
     error PoolNotExists();
     error StakeNotExists();
+    error StakeUnstaked();
     error StakingNotStarted();
     error StakingFinished();
     error LockNotEnded();

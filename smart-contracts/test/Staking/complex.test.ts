@@ -13,7 +13,7 @@ import { DAY } from '@/utils/time';
 describe('Staking contract - Complex reward scenarios', () => {
   const reverter = new Reverter();
 
-  const startDate = BigInt(new Date('2024-07-16T01:00:00.000Z').getTime()) / 1000n;
+  let startDate: bigint;
   const stakingAmount = 1000n;
   const lockDuration = 7n * DAY;
   const poolId = 0n;
@@ -51,6 +51,7 @@ describe('Staking contract - Complex reward scenarios', () => {
 
     await staking.__StakingMasterChef_init(LMR, MOR);
 
+    startDate = (await getCurrentBlockTime()) + DAY;
     const duration = 400n * DAY;
     const endDate = startDate + duration;
     const rewardPerSecond = 100n;

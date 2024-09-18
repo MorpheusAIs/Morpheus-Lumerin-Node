@@ -114,7 +114,6 @@ describe('Provider registry', () => {
       createdAt: 0n,
       deletedAt: 0,
       provider: PROVIDER,
-      modelAgentId: model.modelId,
     };
 
     await MOR.approve(modelRegistry, 10000n * 10n ** 18n);
@@ -136,7 +135,7 @@ describe('Provider registry', () => {
       pricePerSecond: bid.pricePerSecond,
       user: SECOND,
       provider: bid.provider,
-      modelAgentId: bid.modelId,
+      modelId: bid.modelId,
       bidID: bid.id,
       stake: (totalCost * totalSupply) / todaysBudget,
     };
@@ -246,7 +245,6 @@ describe('Provider registry', () => {
 
       const data = await providerRegistry.getProvider(SECOND);
 
-      expect(await providerRegistry.providers(1)).eq(await resolveAddress(SECOND));
       expect(data).deep.equal([
         provider.endpoint,
         provider.stake,
@@ -284,18 +282,17 @@ describe('Provider registry', () => {
 
     describe('Deregister', () => {
       it('Should deregister by provider', async () => {
-        await marketplace.connect(PROVIDER).deleteModelAgentBid(bid.id);
+        await marketplace.connect(PROVIDER).deleteModelBid(bid.id);
 
         await expect(providerRegistry.connect(PROVIDER).providerDeregister(PROVIDER))
           .to.emit(providerRegistry, 'ProviderDeregistered')
           .withArgs(PROVIDER);
 
         expect((await providerRegistry.getProvider(PROVIDER)).isDeleted).to.equal(true);
-        expect(await providerRegistry.providers(0)).equals(PROVIDER);
       });
 
       it('Should deregister by admin', async () => {
-        await marketplace.connect(PROVIDER).deleteModelAgentBid(bid.id);
+        await marketplace.connect(PROVIDER).deleteModelBid(bid.id);
 
         await expect(providerRegistry.providerDeregister(PROVIDER))
           .to.emit(providerRegistry, 'ProviderDeregistered')
@@ -303,7 +300,7 @@ describe('Provider registry', () => {
       });
 
       it('Should return stake on deregister', async () => {
-        await marketplace.connect(PROVIDER).deleteModelAgentBid(bid.id);
+        await marketplace.connect(PROVIDER).deleteModelBid(bid.id);
 
         const balanceBefore = await MOR.balanceOf(PROVIDER);
         await providerRegistry.connect(PROVIDER).providerDeregister(PROVIDER);
@@ -319,7 +316,7 @@ describe('Provider registry', () => {
         );
 
         // remove bid
-        await marketplace.connect(PROVIDER).deleteModelAgentBid(bid.id);
+        await marketplace.connect(PROVIDER).deleteModelBid(bid.id);
         // deregister model
         await providerRegistry.connect(PROVIDER).providerDeregister(PROVIDER);
       });
@@ -329,15 +326,11 @@ describe('Provider registry', () => {
       it.skip('Should allow withdrawing remaining stake after limit period', async () => {});
 
       it('Should correctly reregister provider', async () => {
-        await marketplace.connect(PROVIDER).deleteModelAgentBid(bid.id);
-
-        // check indexes
-        expect(await providerRegistry.providers(0)).eq(await resolveAddress(PROVIDER));
+        await marketplace.connect(PROVIDER).deleteModelBid(bid.id);
 
         // deregister
         await providerRegistry.connect(PROVIDER).providerDeregister(PROVIDER);
         // check indexes
-        expect(await providerRegistry.providers(0)).eq(await resolveAddress(PROVIDER));
         const provider2 = {
           endpoint: 'new-endpoint-2',
           stake: 123n,
@@ -349,8 +342,6 @@ describe('Provider registry', () => {
         await MOR.transfer(PROVIDER, provider2.stake);
         await MOR.connect(PROVIDER).approve(providerRegistry, provider2.stake);
         await providerRegistry.connect(PROVIDER).providerRegister(PROVIDER, provider2.stake, provider2.endpoint);
-        // check indexes
-        expect(await providerRegistry.providers(0)).eq(await resolveAddress(PROVIDER));
         // check record
         expect(await providerRegistry.getProvider(PROVIDER)).deep.equal([
           provider2.endpoint,

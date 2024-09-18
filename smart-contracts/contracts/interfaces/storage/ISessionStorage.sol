@@ -6,7 +6,7 @@ interface ISessionStorage {
         bytes32 id;
         address user;
         address provider;
-        bytes32 modelAgentId;
+        bytes32 modelId;
         bytes32 bidID;
         uint256 stake;
         uint256 pricePerSecond;
@@ -31,11 +31,7 @@ interface ISessionStorage {
         uint128 decreaseInterval;
     }
 
-    function sessionMap(bytes32 sessionId) external view returns (uint256);
+    function sessions(bytes32 sessionId) external view returns (Session memory);
 
-    function sessions(uint256 sessionIndex) external view returns (Session memory);
-
-    function getSession(bytes32 sessionId) external view returns (Session memory);
-
-    function getSessionsByUser(address user, uint256 offset_, uint256 limit_) external view returns (uint256[] memory);
+    function getSessionsByUser(address user, uint256 offset_, uint256 limit_) external view returns (bytes32[] memory);
 }

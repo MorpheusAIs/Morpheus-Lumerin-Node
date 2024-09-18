@@ -112,7 +112,7 @@ describe('Session router - stats tests', () => {
         pricePerSecond: bigint;
         user: SignerWithAddress;
         provider: SignerWithAddress;
-        modelAgentId: any;
+        modelId: any;
         bidID: string;
         stake: bigint;
       },
@@ -126,7 +126,6 @@ describe('Session router - stats tests', () => {
       createdAt: 0n,
       deletedAt: 0,
       provider: PROVIDER,
-      modelAgentId: model.modelId,
     };
 
     await MOR.approve(modelRegistry, 10000n * 10n ** 18n);
@@ -148,7 +147,7 @@ describe('Session router - stats tests', () => {
       pricePerSecond: bid.pricePerSecond,
       user: SECOND,
       provider: bid.provider,
-      modelAgentId: bid.modelId,
+      modelId: bid.modelId,
       bidID: bid.id,
       stake: (totalCost * totalSupply) / todaysBudget,
     };
@@ -251,7 +250,7 @@ describe('Session router - stats tests', () => {
       pricePerSecond: bigint;
       user: SignerWithAddress;
       provider: SignerWithAddress;
-      modelAgentId: any;
+      modelId: any;
       bidID: string;
       stake: bigint;
     };
@@ -267,7 +266,7 @@ describe('Session router - stats tests', () => {
 
       await openCloseSession(session.bidID, HOUR, session.pricePerSecond, 150, 2000, true);
 
-      const [bidIds, bids, stats] = await sessionRouter.getActiveBidsRatingByModelAgent(session.modelAgentId, 0n, 100);
+      const [bidIds, bids, stats] = await sessionRouter.getActiveBidsRatingByModel(session.modelId, 0n, 100);
 
       expect(bidIds).to.deep.equal([session.bidID]);
       expect(bids[0]).to.deep.equal([

@@ -82,8 +82,8 @@ interface ISessionRouter is ISessionStorage {
 
     function SIGNATURE_TTL() external view returns (uint32);
 
-    function getActiveBidsRatingByModelAgent(
-        bytes32 modelAgentId_,
+    function getActiveBidsRatingByModel(
+        bytes32 modelId_,
         uint256 offset_,
         uint8 limit_
     ) external view returns (bytes32[] memory, IBidStorage.Bid[] memory, IStatsStorage.ProviderModelStats[] memory);

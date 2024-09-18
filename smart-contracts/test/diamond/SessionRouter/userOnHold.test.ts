@@ -113,7 +113,7 @@ describe('User on hold tests', () => {
         pricePerSecond: bigint;
         user: SignerWithAddress;
         provider: SignerWithAddress;
-        modelAgentId: any;
+        modelId: any;
         bidID: string;
         stake: bigint;
       },
@@ -127,7 +127,6 @@ describe('User on hold tests', () => {
       createdAt: 0n,
       deletedAt: 0,
       provider: PROVIDER,
-      modelAgentId: model.modelId,
     };
 
     await MOR.approve(modelRegistry, 10000n * 10n ** 18n);
@@ -149,7 +148,7 @@ describe('User on hold tests', () => {
       pricePerSecond: bid.pricePerSecond,
       user: SECOND,
       provider: bid.provider,
-      modelAgentId: bid.modelId,
+      modelId: bid.modelId,
       bidID: bid.id,
       stake: (totalCost * totalSupply) / todaysBudget,
     };
@@ -271,7 +270,7 @@ describe('User on hold tests', () => {
       pricePerSecond: bigint;
       user: SignerWithAddress;
       provider: SignerWithAddress;
-      modelAgentId: any;
+      modelId: any;
       bidID: string;
       stake: bigint;
     };

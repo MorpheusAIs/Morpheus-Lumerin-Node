@@ -13,7 +13,7 @@ import { DAY } from '@/utils/time';
 describe('Staking contract - getReward', () => {
   const reverter = new Reverter();
 
-  const startDate = BigInt(new Date('2024-07-16T01:00:00.000Z').getTime()) / 1000n;
+  let startDate: bigint;
   const stakingAmount = 1000n;
   const lockDuration = 7n * DAY;
   const poolId = 0n;
@@ -51,7 +51,7 @@ describe('Staking contract - getReward', () => {
 
     await staking.__StakingMasterChef_init(LMR, MOR);
 
-    const startDate = BigInt(new Date('2024-07-16T01:00:00.000Z').getTime()) / 1000n;
+    startDate = (await getCurrentBlockTime()) + DAY;
     const duration = 400n * DAY;
     const endDate = startDate + duration;
     const rewardPerSecond = 100n;
@@ -116,14 +116,7 @@ describe('Staking contract - getReward', () => {
     });
 
     it('Should not error if stakeId is wrong', async () => {
-      //// aliceStakes
-      await LMR.connect(ALICE).approve(staking, stakingAmount);
-      const aliceStakeId = await staking.connect(ALICE).stake.staticCall(poolId, stakingAmount, lockDuration);
-      await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
-
-      ////
-
-      expect(await staking.getReward(ALICE, poolId, aliceStakeId + 1n)).to.equal(0n);
+      expect(await staking.getReward(ALICE, poolId, 1)).to.equal(0n);
     });
 
     it('Should not error if user has not staked', async () => {
@@ -142,21 +135,16 @@ describe('Staking contract - getReward', () => {
       await LMR.connect(ALICE).approve(staking, stakingAmount);
       const aliceStakeId = await staking.connect(ALICE).stake.staticCall(poolId, stakingAmount, lockDuration);
       await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
-      const aliceStakeTime = await getCurrentBlockTime();
-
-      ////
 
       expect(await staking.getReward(ALICE, poolId + 1n, aliceStakeId)).to.equal(0n);
     });
 
     it('Should return 0 if user withdrawn all rewards', async () => {
       //// aliceStakes
-      await LMR.connect(ALICE).approve(staking, stakingAmount);
+      await LMR.connect(ALICE).approve(staking, 2n * stakingAmount);
       const aliceStakeId = await staking.connect(ALICE).stake.staticCall(poolId, stakingAmount, lockDuration);
       await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
-      const aliceStakeTime = await getCurrentBlockTime();
-
-      ////
+      await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
 
       await setTime(Number((await getCurrentBlockTime()) + 10n * DAY));
 

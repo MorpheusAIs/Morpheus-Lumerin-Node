@@ -20,15 +20,15 @@ contract StatsStorage is IStatsStorage {
 
     bytes32 public constant STATS_STORAGE_SLOT = keccak256("diamond.stats.storage");
 
-    function _getModelStats(bytes32 modelAgentId) internal view returns (ModelStats storage) {
-        return _getStatsStorage().modelStats[modelAgentId];
+    function _getModelStats(bytes32 modelId) internal view returns (ModelStats storage) {
+        return _getStatsStorage().modelStats[modelId];
     }
 
     function _getProviderModelStats(
-        bytes32 modelAgentId,
+        bytes32 modelId,
         address provider
     ) internal view returns (ProviderModelStats storage) {
-        return _getStatsStorage().stats[modelAgentId][provider];
+        return _getStatsStorage().stats[modelId][provider];
     }
 
     function _getStatsStorage() internal pure returns (STTSStorage storage _ds) {

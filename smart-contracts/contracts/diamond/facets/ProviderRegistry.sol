@@ -30,7 +30,7 @@ contract ProviderRegistry is IProviderRegistry, OwnableDiamondStorage, ProviderS
             revert NotOwnerOrProvider();
         }
 
-        Provider memory provider_ = providerMap(providerAddress_);
+        Provider memory provider_ = providers(providerAddress_);
         uint256 newStake_ = provider_.stake + amount_;
         if (newStake_ < providerMinimumStake()) {
             revert StakeTooLow();
@@ -42,12 +42,11 @@ contract ProviderRegistry is IProviderRegistry, OwnableDiamondStorage, ProviderS
         uint128 createdAt_ = provider_.createdAt;
         uint128 periodEnd_ = provider_.limitPeriodEnd;
         if (createdAt_ == 0) {
-            setActiveProvider(providerAddress_, true);
-            addProvider(providerAddress_);
+            setProviderActive(providerAddress_, true);
             createdAt_ = uint128(block.timestamp);
             periodEnd_ = createdAt_ + PROVIDER_REWARD_LIMITER_PERIOD;
         } else if (provider_.isDeleted) {
-            setActiveProvider(providerAddress_, true);
+            setProviderActive(providerAddress_, true);
         }
 
         setProvider(
@@ -70,9 +69,9 @@ contract ProviderRegistry is IProviderRegistry, OwnableDiamondStorage, ProviderS
             revert ProviderHasActiveBids();
         }
 
-        setActiveProvider(provider_, false);
+        setProviderActive(provider_, false);
 
-        Provider storage provider = providerMap(provider_);
+        Provider storage provider = providers(provider_);
         uint256 withdrawable_ = _getWithdrawableStake(provider);
         provider.stake -= withdrawable_;
         provider.isDeleted = true;
@@ -85,7 +84,7 @@ contract ProviderRegistry is IProviderRegistry, OwnableDiamondStorage, ProviderS
     /// @notice Withdraws stake from a provider after it has been deregistered
     ///         Allows to withdraw the stake after provider reward period has ended
     function providerWithdrawStake(address provider_) external {
-        Provider storage provider = providerMap(provider_);
+        Provider storage provider = providers(provider_);
         if (!provider.isDeleted) {
             revert ErrProviderNotDeleted();
         }
@@ -106,7 +105,7 @@ contract ProviderRegistry is IProviderRegistry, OwnableDiamondStorage, ProviderS
     }
 
     function isProviderExists(address provider_) public view returns (bool) {
-        return providerMap(provider_).createdAt != 0;
+        return providers(provider_).createdAt != 0;
     }
 
     /// @notice Returns the withdrawable stake for a provider

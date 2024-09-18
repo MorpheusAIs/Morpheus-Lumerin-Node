@@ -35,7 +35,7 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
             revert NotOwnerOrModelOwner();
         }
 
-        Model memory model_ = modelMap(modelId_);
+        Model memory model_ = models(modelId_);
         uint256 newStake_ = model_.stake + addStake_;
         if (newStake_ < modelMinimumStake()) {
             revert StakeTooLow();
@@ -65,7 +65,7 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
 
     /// @notice Deregisters a model
     function modelDeregister(bytes32 modelId_) external {
-        Model storage model = modelMap(modelId_);
+        Model storage model = models(modelId_);
 
         if (!isModelExists(modelId_)) {
             revert ModelNotFound();
@@ -75,7 +75,7 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
             revert NotOwnerOrModelOwner();
         }
 
-        if (!isModelAgentActiveBidsEmpty(modelId_)) {
+        if (!isModelActiveBidsEmpty(modelId_)) {
             revert ModelHasActiveBids();
         }
 
@@ -92,7 +92,7 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
     }
 
     function isModelExists(bytes32 modelId_) public view returns (bool) {
-        return modelMap(modelId_).createdAt != 0;
+        return models(modelId_).createdAt != 0;
     }
 
     function _ownerOrModelOwner(address modelOwner_) internal view returns (bool) {

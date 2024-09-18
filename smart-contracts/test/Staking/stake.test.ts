@@ -12,7 +12,7 @@ import { DAY } from '@/utils/time';
 describe('Staking contract - stake', () => {
   const reverter = new Reverter();
 
-  const startDate = BigInt(new Date('2024-07-16T01:00:00.000Z').getTime()) / 1000n;
+  let startDate: bigint;
   const stakingAmount = 1000n;
   const lockDuration = 7n * DAY;
   const poolId = 0n;
@@ -50,7 +50,7 @@ describe('Staking contract - stake', () => {
 
     await staking.__StakingMasterChef_init(LMR, MOR);
 
-    const startDate = BigInt(new Date('2024-07-16T01:00:00.000Z').getTime()) / 1000n;
+    startDate = (await getCurrentBlockTime()) + DAY;
     const duration = 400n * DAY;
     const endDate = startDate + duration;
     const rewardPerSecond = 100n;
@@ -92,22 +92,11 @@ describe('Staking contract - stake', () => {
       await LMR.connect(ALICE).approve(staking, stakingAmount);
       const aliceStakeId = await staking.connect(ALICE).stake.staticCall(poolId, stakingAmount, lockDuration);
       const tx = await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
-      const aliceStakeTime = await getCurrentBlockTime();
-
-      ////
 
       await expect(tx).to.emit(staking, 'Staked').withArgs(ALICE, poolId, aliceStakeId, stakingAmount);
     });
 
     it('should error if pool does not exist', async () => {
-      //// aliceStakes
-      await LMR.connect(ALICE).approve(staking, stakingAmount);
-      const aliceStakeId = await staking.connect(ALICE).stake.staticCall(poolId, stakingAmount, lockDuration);
-      await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
-      const aliceStakeTime = await getCurrentBlockTime();
-
-      ////
-
       await expect(staking.stake(100, 1000, 0)).to.be.revertedWithCustomError(staking, 'PoolNotExists');
     });
 
@@ -167,6 +156,20 @@ describe('Staking contract - stake', () => {
       await LMR.connect(ALICE).approve(staking, amount);
       await expect(staking.connect(ALICE).stake(poolId, amount, lockDuration)).to.be.revertedWith(
         'ERC20: transfer amount exceeds balance',
+      );
+    });
+
+    it('should error if `amount_ == 0`', async () => {
+      await expect(staking.connect(ALICE).stake(poolId, 0, lockDuration)).to.be.revertedWithCustomError(
+        staking,
+        'InvalidAmount',
+      );
+    });
+
+    it('should error if `lockDuration_` is invalid', async () => {
+      await expect(staking.connect(ALICE).stake(poolId, stakingAmount, 0)).to.be.revertedWithCustomError(
+        staking,
+        'InvalidLockDuration',
       );
     });
   });

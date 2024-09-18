@@ -113,7 +113,7 @@ describe('Session closeout', () => {
         pricePerSecond: bigint;
         user: SignerWithAddress;
         provider: SignerWithAddress;
-        modelAgentId: any;
+        modelId: any;
         bidID: string;
         stake: bigint;
       },
@@ -127,7 +127,6 @@ describe('Session closeout', () => {
       createdAt: 0n,
       deletedAt: 0,
       provider: PROVIDER,
-      modelAgentId: model.modelId,
     };
 
     await MOR.approve(modelRegistry, 10000n * 10n ** 18n);
@@ -149,7 +148,7 @@ describe('Session closeout', () => {
       pricePerSecond: bid.pricePerSecond,
       user: SECOND,
       provider: bid.provider,
-      modelAgentId: bid.modelId,
+      modelId: bid.modelId,
       bidID: bid.id,
       stake: (totalCost * totalSupply) / todaysBudget,
     };
@@ -253,7 +252,7 @@ describe('Session closeout', () => {
       pricePerSecond: bigint;
       user: SignerWithAddress;
       provider: SignerWithAddress;
-      modelAgentId: any;
+      modelId: any;
       bidID: string;
       stake: bigint;
     };
@@ -281,7 +280,7 @@ describe('Session closeout', () => {
       await sessionRouter.connect(SECOND).closeSession(report.msg, report.sig);
 
       // verify session is closed without dispute
-      const sessionData = await sessionRouter.getSession(sessionId);
+      const sessionData = await sessionRouter.sessions(sessionId);
       expect(sessionData.closeoutType).to.equal(0n);
 
       // verify balances
@@ -313,7 +312,7 @@ describe('Session closeout', () => {
       await sessionRouter.connect(SECOND).closeSession(report.msg, report.sig);
 
       // verify session is closed without dispute
-      const sessionData = await sessionRouter.getSession(sessionId);
+      const sessionData = await sessionRouter.sessions(sessionId);
       expect(sessionData.closeoutType).to.equal(0n);
 
       // verify balances
@@ -344,7 +343,7 @@ describe('Session closeout', () => {
       await sessionRouter.connect(SECOND).closeSession(report.msg, report.sig);
 
       // verify session is closed with dispute
-      const sessionData = await sessionRouter.getSession(sessionId);
+      const sessionData = await sessionRouter.sessions(sessionId);
       const totalCost = sessionData.pricePerSecond * (sessionData.closedAt - sessionData.openedAt);
 
       // verify balances
@@ -429,7 +428,7 @@ describe('Session closeout', () => {
         pricePerSecond: expectedBid.pricePerSecond,
         user: await SECOND.getAddress(),
         provider: expectedBid.providerAddr,
-        modelAgentId: expectedBid.modelId,
+        modelId: expectedBid.modelId,
         bidID: expectedBid.id,
         stake: (totalCost * totalSupply) / todaysBudget,
       };

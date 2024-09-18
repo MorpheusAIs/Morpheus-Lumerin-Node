@@ -1,22 +1,21 @@
-import { LumerinToken, MorpheusToken, StakingMasterChef } from '@ethers-v6';
 import { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
-import { time } from '@nomicfoundation/hardhat-network-helpers';
 import { expect } from 'chai';
 import { ethers } from 'hardhat';
 
 import { Reverter } from '../helpers/reverter';
 
-import { getCurrentBlockTime, setTime } from '@/utils/block-helper';
+import { LumerinToken, MorpheusToken, StakingMasterChefV2 } from '@/generated-types/ethers';
+import { StakingMasterChef } from '@/generated-types/ethers/contracts/staking/StakingMasterChef';
+import { ZERO_ADDR } from '@/scripts/utils/constants';
+import { wei } from '@/scripts/utils/utils';
+import { getCurrentBlockTime } from '@/utils/block-helper';
 import { getDefaultDurations } from '@/utils/staking-helper';
-import { DAY } from '@/utils/time';
+import { DAY, SECOND } from '@/utils/time';
 
-describe('Staking contract - getStake', () => {
+describe('Staking', () => {
   const reverter = new Reverter();
 
   let startDate: bigint;
-  const stakingAmount = 1000n;
-  const lockDuration = 7n * DAY;
-  const poolId = 0n;
 
   let OWNER: SignerWithAddress;
   let ALICE: SignerWithAddress;
@@ -29,7 +28,7 @@ describe('Staking contract - getStake', () => {
 
   let pool: any;
 
-  before('setup', async () => {
+  before(async () => {
     [OWNER, ALICE, BOB, CAROL] = await ethers.getSigners();
 
     const [StakingMasterChef, ERC1967Proxy, MORFactory, LMRFactory] = await Promise.all([
@@ -83,43 +82,45 @@ describe('Staking contract - getStake', () => {
 
   afterEach(reverter.revert);
 
-  describe('Actions', () => {
-    beforeEach(async () => {
-      await setTime(Number(startDate));
+  describe('UUPS proxy functionality', () => {
+    describe('#constructor', () => {
+      it('should disable initialize function', async () => {
+        const reason = 'Initializable: contract is already initialized';
+
+        const staking = await (await ethers.getContractFactory('StakingMasterChef')).deploy();
+
+        await expect(staking.__StakingMasterChef_init(LMR, MOR)).to.be.revertedWith(reason);
+      });
     });
 
-    it('Should get user stake', async () => {
-      //// aliceStakes
-      await LMR.connect(ALICE).approve(staking, stakingAmount);
-      await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
-      const aliceStakeTime = await getCurrentBlockTime();
+    describe('#Distribution_init', () => {
+      it('should set correct data after creation', async () => {
+        expect(await staking.stakingToken()).to.eq(await LMR.getAddress());
+        expect(await staking.rewardToken()).to.eq(await MOR.getAddress());
+      });
+      it('should revert if try to call init function twice', async () => {
+        const reason = 'Initializable: contract is already initialized';
 
-      //// bobStakes
-      await time.increase(5n * DAY);
+        await expect(staking.__StakingMasterChef_init(LMR, MOR)).to.be.rejectedWith(reason);
+      });
+    });
 
-      await LMR.connect(BOB).approve(staking, stakingAmount);
-      await staking.connect(BOB).stake(poolId, stakingAmount, lockDuration);
+    describe('#_authorizeUpgrade', () => {
+      it('should correctly upgrade', async () => {
+        const stakingV2Factory = await ethers.getContractFactory('StakingMasterChefV2');
+        const stakingV2Implementation = await stakingV2Factory.deploy();
 
-      ////
+        await staking.upgradeTo(await stakingV2Implementation.getAddress());
 
-      await LMR.connect(ALICE).approve(staking, stakingAmount);
-      await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
+        const stakingV2 = stakingV2Factory.attach(await staking.getAddress()) as StakingMasterChefV2;
 
-      const userStake = await staking.poolUserStakes(poolId, ALICE, pool.id);
-
-      const lockEndsAt = aliceStakeTime + lockDuration;
-
-      expect(userStake).to.deep.equal([stakingAmount, stakingAmount, 0n, lockEndsAt]);
-
-      const aliceStake0 = await staking.poolUserStakes(poolId, ALICE, 0);
-      const aliceStake1 = await staking.poolUserStakes(poolId, ALICE, 1);
-
-      expect(aliceStake0.stakeAmount).equal(stakingAmount);
-      expect(aliceStake1.stakeAmount).equal(stakingAmount);
-
-      const bobStake0 = await staking.poolUserStakes(poolId, BOB, 0);
-
-      expect(bobStake0.stakeAmount).equal(stakingAmount);
+        expect(await stakingV2.version()).to.eq(2);
+      });
+      it('should revert if caller is not the owner', async () => {
+        await expect(staking.connect(ALICE).upgradeTo(ZERO_ADDR)).to.be.revertedWith(
+          'Ownable: caller is not the owner',
+        );
+      });
     });
   });
 });

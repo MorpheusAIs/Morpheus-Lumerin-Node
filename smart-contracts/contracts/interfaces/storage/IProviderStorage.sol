@@ -13,7 +13,5 @@ interface IProviderStorage {
 
     function getProvider(address provider) external view returns (Provider memory);
 
-    function providers(uint256 index) external view returns (address);
-
     function providerMinimumStake() external view returns (uint256);
 }

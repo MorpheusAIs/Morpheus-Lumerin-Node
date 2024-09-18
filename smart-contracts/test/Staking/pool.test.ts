@@ -13,7 +13,7 @@ import { DAY } from '@/utils/time';
 describe('Staking contract', () => {
   const reverter = new Reverter();
 
-  const startDate = BigInt(new Date('2024-07-16T01:00:00.000Z').getTime()) / 1000n;
+  let startDate: bigint;
   const stakingAmount = 1000n;
   const lockDuration = 7n * DAY;
   const poolId = 0n;
@@ -63,7 +63,7 @@ describe('Staking contract', () => {
 
     await staking.__StakingMasterChef_init(LMR, MOR);
 
-    const startDate = BigInt(new Date('2024-07-16T01:00:00.000Z').getTime()) / 1000n;
+    startDate = (await getCurrentBlockTime()) + DAY;
     const duration = 400n * DAY;
     const endDate = startDate + duration;
     const rewardPerSecond = 100n;
@@ -132,18 +132,34 @@ describe('Staking contract', () => {
           staking.addPool(pool.startDate, pool.duration, pool.totalReward, pool.lockDurations, pool.multipliersScaled_),
         ).to.be.revertedWithCustomError(staking, 'StartTimeIsPast');
       });
+
+      it('Should error adding pool if `duration_ == 0`', async () => {
+        await expect(
+          staking.addPool(pool.startDate + DAY, 0, pool.totalReward, pool.lockDurations, pool.multipliersScaled_),
+        ).to.be.revertedWithCustomError(staking, 'InvalidDuration');
+      });
+
+      it('Should error adding pool if `totalReward_ == 0`', async () => {
+        await expect(
+          staking.addPool(pool.startDate + DAY, pool.duration, 0, pool.lockDurations, pool.multipliersScaled_),
+        ).to.be.revertedWithCustomError(staking, 'InvalidReward');
+      });
+
+      it('Should error adding pool if `lockDurations_.length == 0`', async () => {
+        await expect(
+          staking.addPool(pool.startDate + DAY, pool.duration, pool.totalReward, [], pool.multipliersScaled_),
+        ).to.be.revertedWithCustomError(staking, 'InvalidLocksCount');
+      });
+
+      it('Should error adding pool if `lockDurations_.length != multipliersScaled_.length`', async () => {
+        await expect(
+          staking.addPool(pool.startDate + DAY, pool.duration, pool.totalReward, pool.lockDurations, []),
+        ).to.be.revertedWithCustomError(staking, 'InvalidLocksCount');
+      });
     });
 
     describe('Stop pool', () => {
       it('Should stop pool', async () => {
-        //// aliceStakes
-        await LMR.connect(ALICE).approve(staking, stakingAmount);
-        const aliceStakeId = await staking.connect(ALICE).stake.staticCall(poolId, stakingAmount, lockDuration);
-        await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
-        const aliceStakeTime = await getCurrentBlockTime();
-
-        ////
-
         await staking.terminatePool(pool.id, OWNER);
         const timestamp = await getCurrentBlockTime();
 
@@ -176,14 +192,6 @@ describe('Staking contract', () => {
       });
 
       it('Should error stopping pool if not owner', async () => {
-        //// aliceStakes
-        await LMR.connect(ALICE).approve(staking, stakingAmount);
-        const aliceStakeId = await staking.connect(ALICE).stake.staticCall(poolId, stakingAmount, lockDuration);
-        await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
-        const aliceStakeTime = await getCurrentBlockTime();
-
-        ////
-
         await expect(staking.connect(ALICE).terminatePool(pool.id, ALICE.address)).to.be.revertedWith(
           'Ownable: caller is not the owner',
         );
@@ -192,11 +200,7 @@ describe('Staking contract', () => {
       it('Should not be able to stake after pool is stopped', async () => {
         //// aliceStakes
         await LMR.connect(ALICE).approve(staking, stakingAmount);
-        const aliceStakeId = await staking.connect(ALICE).stake.staticCall(poolId, stakingAmount, lockDuration);
         await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
-        const aliceStakeTime = await getCurrentBlockTime();
-
-        ////
 
         await staking.terminatePool(pool.id, OWNER);
 
@@ -217,7 +221,7 @@ describe('Staking contract', () => {
 
         ////
 
-        const stopTx = await staking.terminatePool(pool.id, OWNER);
+        await staking.terminatePool(pool.id, OWNER);
         const stopTime = await getCurrentBlockTime();
 
         const lmrBalanceBefore = await LMR.balanceOf(ALICE);
@@ -234,13 +238,34 @@ describe('Staking contract', () => {
           'should return earned balance',
         );
       });
+
+      it('Should error stopping pool if already stopped (1)', async () => {
+        await setTime(Number(pool.endDate + 1n));
+
+        await expect(staking.terminatePool(pool.id, OWNER)).to.be.revertedWithCustomError(
+          staking,
+          'PoolAlreadyTerminated',
+        );
+      });
+
+      it('Should error stopping pool if already stopped (2)', async () => {
+        await staking.terminatePool(pool.id, OWNER);
+
+        await expect(staking.terminatePool(pool.id, OWNER)).to.be.revertedWithCustomError(
+          staking,
+          'PoolAlreadyTerminated',
+        );
+      });
+
+      it('should error if poolId is wrong', async () => {
+        await expect(staking.terminatePool(poolId + 1n, OWNER)).to.be.revertedWithCustomError(staking, 'PoolNotExists');
+      });
     });
 
     describe('Staking contract - updatePoolReward', () => {
       it('should update reward manually', async () => {
         //// aliceStakes
         await LMR.connect(ALICE).approve(staking, stakingAmount);
-        const aliceStakeId = await staking.connect(ALICE).stake.staticCall(poolId, stakingAmount, lockDuration);
         await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
         const aliceStakeTime = await getCurrentBlockTime();
 
@@ -254,6 +279,13 @@ describe('Staking contract', () => {
         expect(aliceStakeTime).to.be.eq(lastRewardTimeBf);
         expect(lastRewardTimeAf > lastRewardTimeBf).to.be.true;
         expect(rewardPerShareAf > rewardPerShareBf).to.be.true;
+      });
+
+      it('should error if `poolId` is not exists', async () => {
+        await expect(staking.recalculatePoolReward(poolId + 1n)).to.be.revertedWithCustomError(
+          staking,
+          'PoolNotExists',
+        );
       });
     });
   });

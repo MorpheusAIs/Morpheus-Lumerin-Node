@@ -34,6 +34,10 @@ contract StakingMasterChef is IStakingMasterChef, OwnableUpgradeable, UUPSUpgrad
         _;
     }
 
+    constructor() {
+        _disableInitializers();
+    }
+
     function __StakingMasterChef_init(address stakingToken_, address rewardToken_) public initializer {
         __Ownable_init();
 
@@ -53,9 +57,6 @@ contract StakingMasterChef is IStakingMasterChef, OwnableUpgradeable, UUPSUpgrad
         }
         if (duration_ == 0) {
             revert InvalidDuration();
-        }
-        if (totalReward_ < duration_) {
-            revert InvalidReward();
         }
         if (totalReward_ == 0) {
             revert InvalidReward();
@@ -98,6 +99,7 @@ contract StakingMasterChef is IStakingMasterChef, OwnableUpgradeable, UUPSUpgrad
         }
 
         uint256 timeTillEnd_ = pool.endTime - block.timestamp;
+        // TODO: check if block.timestamp < startTime
         uint256 undistributedReward_ = (timeTillEnd_ * pool.rewardPerSecondScaled) / PRECISION;
 
         _recalculatePoolReward(poolId_);
@@ -176,7 +178,7 @@ contract StakingMasterChef is IStakingMasterChef, OwnableUpgradeable, UUPSUpgrad
 
         UserStake storage userStake = userStakes[stakeId_];
         if (userStake.shareAmount == 0) {
-            revert StakeNotExists();
+            revert StakeUnstaked();
         }
 
         Pool storage pool = pools[poolId_];
@@ -214,7 +216,7 @@ contract StakingMasterChef is IStakingMasterChef, OwnableUpgradeable, UUPSUpgrad
 
         UserStake storage userStake = userStakes[stakeId_];
         if (userStake.shareAmount == 0) {
-            revert StakeNotExists();
+            revert StakeUnstaked();
         }
 
         _recalculatePoolReward(poolId_);

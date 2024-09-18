@@ -12,7 +12,7 @@ import { DAY } from '@/utils/time';
 describe('Staking contract - withdrawReward', () => {
   const reverter = new Reverter();
 
-  const startDate = BigInt(new Date('2024-07-16T01:00:00.000Z').getTime()) / 1000n;
+  let startDate: bigint;
   const stakingAmount = 1000n;
   const lockDuration = 7n * DAY;
   const poolId = 0n;
@@ -50,7 +50,7 @@ describe('Staking contract - withdrawReward', () => {
 
     await staking.__StakingMasterChef_init(LMR, MOR);
 
-    const startDate = BigInt(new Date('2024-07-16T01:00:00.000Z').getTime()) / 1000n;
+    startDate = (await getCurrentBlockTime()) + DAY;
     const duration = 400n * DAY;
     const endDate = startDate + duration;
     const rewardPerSecond = 100n;
@@ -110,28 +110,17 @@ describe('Staking contract - withdrawReward', () => {
     });
 
     it('should error if poolId is wrong', async () => {
-      //// aliceStakes
-      await LMR.connect(ALICE).approve(staking, stakingAmount);
-      const aliceStakeId = await staking.connect(ALICE).stake.staticCall(poolId, stakingAmount, lockDuration);
-      const tx = await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
-      const aliceStakeTime = await getCurrentBlockTime();
-
-      ////
-
-      await expect(
-        staking.connect(ALICE).withdrawReward(poolId + 1n, aliceStakeId, ALICE),
-      ).to.be.revertedWithCustomError(staking, 'PoolNotExists');
+      await expect(staking.connect(ALICE).withdrawReward(poolId + 1n, 0, ALICE)).to.be.revertedWithCustomError(
+        staking,
+        'PoolNotExists',
+      );
     });
 
     it('should error if stakeId is wrong', async () => {
-      //// aliceStakes
-      await LMR.connect(ALICE).approve(staking, stakingAmount);
-      const aliceStakeId = await staking.connect(ALICE).stake.staticCall(poolId, stakingAmount, lockDuration);
-      await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
-
-      await expect(
-        staking.connect(ALICE).withdrawReward(poolId, aliceStakeId + 1n, ALICE),
-      ).to.be.revertedWithCustomError(staking, 'StakeNotExists');
+      await expect(staking.connect(ALICE).withdrawReward(poolId, 1, ALICE)).to.be.revertedWithCustomError(
+        staking,
+        'StakeNotExists',
+      );
     });
 
     it('should error if no reward yet', async () => {
@@ -146,6 +135,22 @@ describe('Staking contract - withdrawReward', () => {
       await expect(staking.connect(ALICE).withdrawReward(poolId, aliceStakeId, ALICE)).to.be.revertedWithCustomError(
         staking,
         'NoRewardAvailable',
+      );
+    });
+
+    it('should error if rewards already have been withdrawn', async () => {
+      //// aliceStakes
+      await LMR.connect(ALICE).approve(staking, 2n * stakingAmount);
+      const aliceStakeId = await staking.connect(ALICE).stake.staticCall(poolId, stakingAmount, lockDuration);
+      await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
+      await staking.connect(ALICE).stake(poolId, stakingAmount, lockDuration);
+
+      await setTime(pool.endDate);
+
+      await staking.connect(ALICE).withdrawReward(poolId, aliceStakeId, ALICE);
+      await expect(staking.connect(ALICE).withdrawReward(poolId, aliceStakeId, ALICE)).to.be.revertedWithCustomError(
+        staking,
+        'StakeUnstaked',
       );
     });
   });

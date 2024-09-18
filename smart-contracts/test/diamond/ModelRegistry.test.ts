@@ -116,7 +116,6 @@ describe('Model registry', () => {
       createdAt: 0n,
       deletedAt: 0,
       provider: PROVIDER,
-      modelAgentId: model.modelId,
     };
 
     await MOR.approve(modelRegistry, 10000n * 10n ** 18n);
@@ -138,7 +137,7 @@ describe('Model registry', () => {
       pricePerSecond: bid.pricePerSecond,
       user: SECOND,
       provider: bid.provider,
-      modelAgentId: bid.modelId,
+      modelId: bid.modelId,
       bidID: bid.id,
       stake: (totalCost * totalSupply) / todaysBudget,
     };
@@ -283,7 +282,7 @@ describe('Model registry', () => {
     });
 
     it('Should deregister by owner', async () => {
-      await marketplace.connect(PROVIDER).deleteModelAgentBid(bid.id);
+      await marketplace.connect(PROVIDER).deleteModelBid(bid.id);
 
       await modelRegistry.modelDeregister(model.modelId);
 
@@ -299,7 +298,7 @@ describe('Model registry', () => {
     });
 
     it('Should return stake on deregister', async () => {
-      await marketplace.connect(PROVIDER).deleteModelAgentBid(bid.id);
+      await marketplace.connect(PROVIDER).deleteModelBid(bid.id);
 
       const balanceBefore = await MOR.balanceOf(model.owner);
       await modelRegistry.modelDeregister(model.modelId);
@@ -316,7 +315,7 @@ describe('Model registry', () => {
       );
 
       // remove bid
-      await marketplace.connect(PROVIDER).deleteModelAgentBid(bid.id);
+      await marketplace.connect(PROVIDER).deleteModelBid(bid.id);
 
       // deregister model
       await modelRegistry.modelDeregister(model.modelId);
@@ -382,7 +381,7 @@ describe('Model registry', () => {
     });
 
     it('should reregister model', async () => {
-      await marketplace.connect(PROVIDER).deleteModelAgentBid(bid.id);
+      await marketplace.connect(PROVIDER).deleteModelBid(bid.id);
 
       // check indexes
       expect(await modelRegistry.models(0)).eq(model.modelId);

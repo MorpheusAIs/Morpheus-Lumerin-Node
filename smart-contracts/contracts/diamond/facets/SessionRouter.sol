@@ -43,8 +43,6 @@ contract SessionRouter is
         SNStorage storage s = _getSessionStorage();
 
         s.fundingAccount = fundingAccount_;
-        // we need to add a dummy session to avoid index 0
-        s.sessions.push();
 
         for (uint256 i = 0; i < pools_.length; i++) {
             s.pools.push(pools_[i]);
@@ -77,12 +75,13 @@ contract SessionRouter is
         }
 
         bytes32 sessionId_ = getSessionId(_msgSender(), bid_.provider, amount_, incrementSessionNonce());
-        addSession(
+        setSession(
+            sessionId_,
             Session({
                 id: sessionId_,
                 user: _msgSender(),
                 provider: bid_.provider,
-                modelAgentId: bid_.modelAgentId,
+                modelId: bid_.modelId,
                 bidID: bidId_,
                 stake: amount_,
                 pricePerSecond: bid_.pricePerSecond,
@@ -95,14 +94,12 @@ contract SessionRouter is
             })
         );
 
-        uint256 sessionIndex_ = getNextSessionIndex();
-        setSession(sessionId_, sessionIndex_);
-        addUserSession(_msgSender(), sessionIndex_);
-        addProviderSession(bid_.provider, sessionIndex_);
-        addModelSession(bid_.modelAgentId, sessionIndex_);
+        addUserSessionId(_msgSender(), sessionId_);
+        addProviderSessionId(bid_.provider, sessionId_);
+        addModelSessionId(bid_.modelId, sessionId_);
 
-        setActiveUserSession(_msgSender(), sessionIndex_, true);
-        setActiveProviderSession(bid_.provider, sessionIndex_, true);
+        setUserSessionActive(_msgSender(), sessionId_, true);
+        setProviderSessionActive(bid_.provider, sessionId_, true);
 
         // try to use locked stake first, but limit iterations to 20
         // if user has more than 20 onHold entries, they will have to use withdrawUserStake separately
@@ -118,8 +115,7 @@ contract SessionRouter is
     function closeSession(bytes calldata receiptEncoded_, bytes calldata signature_) external {
         (bytes32 sessionId_, uint32 tpsScaled1000_, uint32 ttftMs_) = _extractReceipt(receiptEncoded_);
 
-        uint256 sessionIndex_ = getSessionIndex(sessionId_);
-        Session storage session = getSession(sessionIndex_);
+        Session storage session = _getSession(sessionId_);
         if (session.openedAt == 0) {
             revert SessionNotFound();
         }
@@ -132,8 +128,8 @@ contract SessionRouter is
         }
 
         // update indexes
-        setActiveUserSession(session.user, sessionIndex_, false);
-        setActiveProviderSession(session.provider, sessionIndex_, false);
+        setUserSessionActive(session.user, sessionId_, false);
+        setProviderSessionActive(session.provider, sessionId_, false);
 
         // update session record
         session.closeoutReceipt = receiptEncoded_; //TODO: remove that field in favor of tps and ttftMs
@@ -159,8 +155,8 @@ contract SessionRouter is
         }
 
         // updating provider stats
-        ProviderModelStats storage prStats = _getProviderModelStats(session.modelAgentId, session.provider);
-        ModelStats storage modelStats = _getModelStats(session.modelAgentId);
+        ProviderModelStats storage prStats = _getProviderModelStats(session.modelId, session.provider);
+        ModelStats storage modelStats = _getModelStats(session.modelId);
 
         prStats.totalCount++;
 
@@ -318,7 +314,7 @@ contract SessionRouter is
     /// @param reward_ amount of reward to send
     /// @param revertOnReachingLimit_ if true function will revert if reward is more than stake, otherwise just limit the reward
     function _rewardProvider(Session storage session, uint256 reward_, bool revertOnReachingLimit_) private {
-        Provider storage provider = providerMap(session.provider);
+        Provider storage provider = providers(session.provider);
         _maybeResetProviderRewardLimiter(provider);
         uint256 limit_ = provider.stake - provider.limitPeriodEarned;
 
@@ -435,24 +431,24 @@ contract SessionRouter is
         return totalSupply_ + totalClaimed();
     }
 
-    function getActiveBidsRatingByModelAgent(
-        bytes32 modelAgentId_,
+    function getActiveBidsRatingByModel(
+        bytes32 modelId_,
         uint256 offset_,
         uint8 limit_
     ) external view returns (bytes32[] memory, Bid[] memory, ProviderModelStats[] memory) {
-        bytes32[] memory modelAgentBidsSet_ = modelAgentActiveBids(modelAgentId_, offset_, limit_);
-        uint256 length_ = modelAgentBidsSet_.length;
+        bytes32[] memory modelBidsSet_ = modelActiveBids(modelId_, offset_, limit_);
+        uint256 length_ = modelBidsSet_.length;
 
         Bid[] memory bids_ = new Bid[](length_);
         bytes32[] memory bidIds_ = new bytes32[](length_);
         ProviderModelStats[] memory stats_ = new ProviderModelStats[](length_);
 
         for (uint i = 0; i < length_; i++) {
-            bytes32 id_ = modelAgentBidsSet_[i];
+            bytes32 id_ = modelBidsSet_[i];
             bidIds_[i] = id_;
             Bid memory bid_ = getBid(id_);
             bids_[i] = bid_;
-            stats_[i] = _getProviderModelStats(modelAgentId_, bid_.provider);
+            stats_[i] = _getProviderModelStats(modelId_, bid_.provider);
         }
 
         return (bidIds_, bids_, stats_);

@@ -116,7 +116,6 @@ describe('Marketplace', () => {
       createdAt: 0n,
       deletedAt: 0,
       provider: PROVIDER,
-      modelAgentId: model.modelId,
     };
 
     await MOR.approve(modelRegistry, 10000n * 10n ** 18n);
@@ -138,7 +137,7 @@ describe('Marketplace', () => {
       pricePerSecond: bid.pricePerSecond,
       user: SECOND,
       provider: bid.provider,
-      modelAgentId: bid.modelId,
+      modelId: bid.modelId,
       bidID: bid.id,
       stake: (totalCost * totalSupply) / todaysBudget,
     };
@@ -243,7 +242,7 @@ describe('Marketplace', () => {
     });
 
     it('Should create a bid and query by id', async () => {
-      const data = await marketplace.bidMap(bid.id);
+      const data = await marketplace.bids(bid.id);
 
       expect(data).to.be.deep.equal([
         await resolveAddress(bid.provider),
@@ -266,7 +265,7 @@ describe('Marketplace', () => {
 
       await expect(
         marketplace.connect(PROVIDER).postModelBid(bid.provider, unknownModel, bid.pricePerSecond),
-      ).to.be.revertedWithCustomError(marketplace, 'ModelOrAgentNotFound');
+      ).to.be.revertedWithCustomError(marketplace, 'ModelNotFound');
     });
 
     it('Should create second bid', async () => {
@@ -276,10 +275,10 @@ describe('Marketplace', () => {
 
       // check indexes are updated
       const newBids1 = await marketplace.providerActiveBids(bid.provider, 0, 10);
-      const newBids2 = await marketplace.modelAgentActiveBids(bid.modelAgentId, 0, 10);
+      const newBids2 = await marketplace.modelActiveBids(bid.modelId, 0, 10);
 
       expect(newBids1).to.be.deep.equal(newBids2);
-      expect(await marketplace.bidMap(newBids1[0])).to.be.deep.equal([
+      expect(await marketplace.bids(newBids1[0])).to.be.deep.equal([
         await resolveAddress(bid.provider),
         bid.modelId,
         bid.pricePerSecond,
@@ -289,7 +288,7 @@ describe('Marketplace', () => {
       ]);
 
       // check old bid is deleted
-      const oldBid = await marketplace.bidMap(bid.id);
+      const oldBid = await marketplace.bids(bid.id);
       expect(oldBid).to.be.deep.equal([
         await resolveAddress(bid.provider),
         bid.modelId,
@@ -301,10 +300,10 @@ describe('Marketplace', () => {
 
       // check old bid is still queried
       const oldBids1 = await marketplace.providerBids(bid.provider, 0, 100);
-      const oldBids2 = await marketplace.modelAgentBids(bid.modelId, 0, 100);
+      const oldBids2 = await marketplace.modelBids(bid.modelId, 0, 100);
       expect(oldBids1).to.be.deep.equal(oldBids2);
       expect(oldBids1.length).to.be.equal(2);
-      expect(await marketplace.bidMap(oldBids1[0])).to.be.deep.equal([
+      expect(await marketplace.bids(oldBids1[0])).to.be.deep.equal([
         await resolveAddress(bid.provider),
         bid.modelId,
         bid.pricePerSecond,
@@ -319,7 +318,7 @@ describe('Marketplace', () => {
 
       expect(activeBidIds.length).to.equal(1);
       expect(activeBidIds[0]).to.equal(bid.id);
-      expect(await marketplace.bidMap(activeBidIds[0])).to.deep.equal([
+      expect(await marketplace.bids(activeBidIds[0])).to.deep.equal([
         await resolveAddress(bid.provider),
         bid.modelId,
         bid.pricePerSecond,
@@ -332,17 +331,17 @@ describe('Marketplace', () => {
     describe('delete bid', () => {
       it('Should delete a bid', async () => {
         // delete bid
-        await marketplace.connect(PROVIDER).deleteModelAgentBid(bid.id);
+        await marketplace.connect(PROVIDER).deleteModelBid(bid.id);
 
         // check indexes are updated
         const activeBidIds1 = await marketplace.providerActiveBids(bid.provider, 0, 10);
-        const activeBidIds2 = await marketplace.modelAgentActiveBids(bid.modelId, 0, 10);
+        const activeBidIds2 = await marketplace.modelActiveBids(bid.modelId, 0, 10);
 
         expect(activeBidIds1.length).to.be.equal(0);
         expect(activeBidIds2.length).to.be.equal(0);
 
         // check bid is deleted
-        const data = await marketplace.bidMap(bid.id);
+        const data = await marketplace.bids(bid.id);
         expect(data).to.be.deep.equal([
           await resolveAddress(bid.provider),
           bid.modelId,
@@ -356,14 +355,14 @@ describe('Marketplace', () => {
       it("Should error if bid doesn't exist", async () => {
         const unknownBid = randomBytes32();
 
-        await expect(marketplace.connect(PROVIDER).deleteModelAgentBid(unknownBid)).to.be.revertedWithCustomError(
+        await expect(marketplace.connect(PROVIDER).deleteModelBid(unknownBid)).to.be.revertedWithCustomError(
           marketplace,
           'ActiveBidNotFound',
         );
       });
 
       it('Should error if not owner', async () => {
-        await expect(marketplace.connect(THIRD).deleteModelAgentBid(bid.id)).to.be.revertedWithCustomError(
+        await expect(marketplace.connect(THIRD).deleteModelBid(bid.id)).to.be.revertedWithCustomError(
           marketplace,
           'NotOwnerOrProvider',
         );
@@ -371,17 +370,17 @@ describe('Marketplace', () => {
 
       it('Should allow bid owner to delete bid', async () => {
         // delete bid
-        await marketplace.connect(PROVIDER).deleteModelAgentBid(bid.id);
+        await marketplace.connect(PROVIDER).deleteModelBid(bid.id);
       });
 
       it('Should allow contract owner to delete bid', async () => {
         // delete bid
-        await marketplace.deleteModelAgentBid(bid.id);
+        await marketplace.deleteModelBid(bid.id);
       });
 
       it('Should allow to create bid after it was deleted [H-1]', async () => {
         // delete bid
-        await marketplace.connect(PROVIDER).deleteModelAgentBid(bid.id);
+        await marketplace.connect(PROVIDER).deleteModelBid(bid.id);
 
         // create new bid with same provider and modelId
         await marketplace.connect(PROVIDER).postModelBid(bid.provider, bid.modelId, bid.pricePerSecond);

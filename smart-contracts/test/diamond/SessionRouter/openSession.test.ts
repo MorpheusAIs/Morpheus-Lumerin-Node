@@ -112,7 +112,7 @@ describe('session actions', () => {
         pricePerSecond: bigint;
         user: SignerWithAddress;
         provider: SignerWithAddress;
-        modelAgentId: any;
+        modelId: any;
         bidID: string;
         stake: bigint;
       },
@@ -126,7 +126,6 @@ describe('session actions', () => {
       createdAt: 0n,
       deletedAt: 0,
       provider: PROVIDER,
-      modelAgentId: model.modelId,
     };
 
     await MOR.approve(modelRegistry, 10000n * 10n ** 18n);
@@ -148,7 +147,7 @@ describe('session actions', () => {
       pricePerSecond: bid.pricePerSecond,
       user: SECOND,
       provider: bid.provider,
-      modelAgentId: bid.modelId,
+      modelId: bid.modelId,
       bidID: bid.id,
       stake: (totalCost * totalSupply) / todaysBudget,
     };
@@ -261,7 +260,7 @@ describe('session actions', () => {
       pricePerSecond: bigint;
       user: SignerWithAddress;
       provider: SignerWithAddress;
-      modelAgentId: any;
+      modelId: any;
       bidID: string;
       stake: bigint;
     };
@@ -295,14 +294,14 @@ describe('session actions', () => {
         const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(session.stake, msg, signature);
         await sessionRouter.connect(SECOND).openSession(session.stake, msg, signature);
 
-        const sessionData = await sessionRouter.getSession(sessionId);
+        const sessionData = await sessionRouter.sessions(sessionId);
         const createdAt = await getCurrentBlockTime();
 
         expect(sessionData).to.deep.equal([
           sessionId,
           await resolveAddress(session.user),
           await resolveAddress(session.provider),
-          session.modelAgentId,
+          session.modelId,
           session.bidID,
           session.stake,
           session.pricePerSecond,
@@ -339,22 +338,19 @@ describe('session actions', () => {
 
         await ethers.provider.send('evm_setAutomine', [false]);
 
-        const sessionId1 = await sessionRouter
-          .connect(SECOND)
-          .openSession.staticCall(session.stake, apprv1.msg, apprv1.signature);
         await sessionRouter.connect(SECOND).openSession(session.stake, apprv1.msg, apprv1.signature);
-
         await sessionRouter.connect(SECOND).openSession(session.stake, apprv2.msg, apprv2.signature);
 
-        await ethers.provider.send('evm_mine', []);
         await ethers.provider.send('evm_setAutomine', [true]);
+        await ethers.provider.send('evm_mine', []);
 
+        const sessionId1 = await sessionRouter.getSessionId(SECOND, PROVIDER, session.stake, 0);
         const sessionId2 = await sessionRouter.getSessionId(SECOND, PROVIDER, session.stake, 1);
 
         expect(sessionId1).not.to.equal(sessionId2);
 
-        const session1 = await sessionRouter.getSession(sessionId1);
-        const session2 = await sessionRouter.getSession(sessionId2);
+        const session1 = await sessionRouter.sessions(sessionId1);
+        const session2 = await sessionRouter.sessions(sessionId2);
 
         expect(session1.stake).to.equal(session.stake);
         expect(session2.stake).to.equal(session.stake);
@@ -468,7 +464,7 @@ describe('session actions', () => {
       });
 
       it('should error when bid is deleted', async () => {
-        await marketplace.connect(PROVIDER).deleteModelAgentBid(session.bidID);
+        await marketplace.connect(PROVIDER).deleteModelBid(session.bidID);
 
         const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
         await expect(
@@ -538,7 +534,7 @@ describe('session actions', () => {
         const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(stake, msg, signature);
         await sessionRouter.connect(SECOND).openSession(stake, msg, signature);
 
-        const sessionData = await sessionRouter.getSession(sessionId);
+        const sessionData = await sessionRouter.sessions(sessionId);
 
         expect(sessionData.endsAt).to.equal((await getCurrentBlockTime()) + durationSeconds);
       });
@@ -557,7 +553,7 @@ describe('session actions', () => {
         await sessionRouter.connect(SECOND).openSession(stake, msg, signature);
 
         const expEndsAt = (await getCurrentBlockTime()) + durationSeconds;
-        const sessionData = await sessionRouter.getSession(sessionId);
+        const sessionData = await sessionRouter.sessions(sessionId);
 
         expect(sessionData.endsAt).closeTo(expEndsAt, 10);
       });
@@ -579,7 +575,7 @@ describe('session actions', () => {
         const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(stake, msg, signature);
         await sessionRouter.connect(SECOND).openSession(stake, msg, signature);
 
-        const sessionData = await sessionRouter.getSession(sessionId);
+        const sessionData = await sessionRouter.sessions(sessionId);
         const durSeconds = Number(sessionData.endsAt - sessionData.openedAt);
 
         expect(durSeconds).to.equal(DAY);

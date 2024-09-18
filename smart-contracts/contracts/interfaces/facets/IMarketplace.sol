@@ -5,12 +5,12 @@ import {IBidStorage} from "../storage/IBidStorage.sol";
 import {IMarketplaceStorage} from "../storage/IMarketplaceStorage.sol";
 
 interface IMarketplace is IBidStorage, IMarketplaceStorage {
-    event BidPosted(address indexed provider, bytes32 indexed modelAgentId, uint256 nonce);
-    event BidDeleted(address indexed provider, bytes32 indexed modelAgentId, uint256 nonce);
+    event BidPosted(address indexed provider, bytes32 indexed modelId, uint256 nonce);
+    event BidDeleted(address indexed provider, bytes32 indexed modelId, uint256 nonce);
     event FeeUpdated(uint256 bidFee);
 
     error ProviderNotFound();
-    error ModelOrAgentNotFound();
+    error ModelNotFound();
     error ActiveBidNotFound();
     error BidTaken();
     error NotEnoughBalance();
@@ -26,11 +26,11 @@ interface IMarketplace is IBidStorage, IMarketplaceStorage {
         uint256 pricePerSecond_
     ) external returns (bytes32 bidId);
 
-    function deleteModelAgentBid(bytes32 bidId_) external;
+    function deleteModelBid(bytes32 bidId_) external;
 
     function withdraw(address recipient_, uint256 amount_) external;
 
-    function getBidId(address provider_, bytes32 modelAgentId_, uint256 nonce_) external view returns (bytes32);
+    function getBidId(address provider_, bytes32 modelId_, uint256 nonce_) external view returns (bytes32);
 
-    function getProviderModelAgentId(address provider_, bytes32 modelAgentId_) external view returns (bytes32);
+    function getProviderModelId(address provider_, bytes32 modelId_) external view returns (bytes32);
 }

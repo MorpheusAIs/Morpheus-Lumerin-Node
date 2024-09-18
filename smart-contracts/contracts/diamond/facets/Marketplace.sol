@@ -47,14 +47,14 @@ contract Marketplace is
             revert ProviderNotFound();
         }
         if (!isModelActive(modelId_)) {
-            revert ModelOrAgentNotFound();
+            revert ModelNotFound();
         }
 
         return _postModelBid(provider_, modelId_, pricePerSecond_);
     }
 
     /// @notice deletes a bid
-    function deleteModelAgentBid(bytes32 bidId_) external {
+    function deleteModelBid(bytes32 bidId_) external {
         if (!_isBidActive(bidId_)) {
             revert ActiveBidNotFound();
         }
@@ -75,40 +75,35 @@ contract Marketplace is
         getToken().safeTransfer(recipient_, amount_);
     }
 
-    function _incrementNonce(address provider_, bytes32 modelAgentId_) private returns (uint256) {
-        return incrementNonce(getProviderModelAgentId(provider_, modelAgentId_));
+    function _incrementBidNonce(address provider_, bytes32 modelId_) private returns (uint256) {
+        return _incrementBidNonce(getProviderModelId(provider_, modelId_));
     }
 
-    function _postModelBid(
-        address provider_,
-        bytes32 modelAgentId_,
-        uint256 pricePerSecond_
-    ) private returns (bytes32) {
+    function _postModelBid(address provider_, bytes32 modelId_, uint256 pricePerSecond_) private returns (bytes32) {
         uint256 fee = getBidFee();
         getToken().safeTransferFrom(_msgSender(), address(this), fee);
         increaseFeeBalance(fee);
 
         // TEST IT if it increments nonce correctly
-        uint256 nonce_ = _incrementNonce(provider_, modelAgentId_);
+        uint256 nonce_ = _incrementBidNonce(provider_, modelId_);
         if (nonce_ != 0) {
-            bytes32 oldBidId_ = getBidId(provider_, modelAgentId_, nonce_ - 1);
+            bytes32 oldBidId_ = getBidId(provider_, modelId_, nonce_ - 1);
             if (_isBidActive(oldBidId_)) {
                 _deleteBid(oldBidId_);
             }
         }
 
-        bytes32 bidId = getBidId(provider_, modelAgentId_, nonce_);
+        bytes32 bidId = getBidId(provider_, modelId_, nonce_);
 
-        addBid(bidId, Bid(provider_, modelAgentId_, pricePerSecond_, nonce_, uint128(block.timestamp), 0));
+        addBid(bidId, Bid(provider_, modelId_, pricePerSecond_, nonce_, uint128(block.timestamp), 0));
 
-        setBidActive(bidId, true);
         addProviderActiveBids(provider_, bidId);
-        addModelAgentActiveBids(modelAgentId_, bidId);
+        addModelActiveBids(modelId_, bidId);
 
         addProviderBid(provider_, bidId);
-        addModelAgentBid(modelAgentId_, bidId);
+        addModelBid(modelId_, bidId);
 
-        emit BidPosted(provider_, modelAgentId_, nonce_);
+        emit BidPosted(provider_, modelId_, nonce_);
 
         return bidId;
     }
@@ -118,19 +113,18 @@ contract Marketplace is
         Bid storage bid = getBid(bidId_);
         bid.deletedAt = uint128(block.timestamp);
 
-        setBidActive(bidId_, false);
         removeProviderActiveBids(bid.provider, bidId_);
-        removeModelAgentActiveBids(bid.modelAgentId, bidId_);
+        removeModelActiveBids(bid.modelId, bidId_);
 
-        emit BidDeleted(bid.provider, bid.modelAgentId, bid.nonce);
+        emit BidDeleted(bid.provider, bid.modelId, bid.nonce);
     }
 
-    function getBidId(address provider_, bytes32 modelAgentId_, uint256 nonce_) public pure returns (bytes32) {
-        return keccak256(abi.encodePacked(provider_, modelAgentId_, nonce_));
+    function getBidId(address provider_, bytes32 modelId_, uint256 nonce_) public pure returns (bytes32) {
+        return keccak256(abi.encodePacked(provider_, modelId_, nonce_));
     }
 
-    function getProviderModelAgentId(address provider_, bytes32 modelAgentId_) public pure returns (bytes32) {
-        return keccak256(abi.encodePacked(provider_, modelAgentId_));
+    function getProviderModelId(address provider_, bytes32 modelId_) public pure returns (bytes32) {
+        return keccak256(abi.encodePacked(provider_, modelId_));
     }
 
     function _ownerOrProvider(address provider_) private view returns (bool) {
