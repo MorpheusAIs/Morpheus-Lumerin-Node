@@ -15,14 +15,14 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
 
     function __ModelRegistry_init() external initializer(MODEL_STORAGE_SLOT) {}
 
-    /// @notice Sets the minimum stake required for a model
-    function modelSetMinStake(uint256 modelMinimumStake_) external onlyOwner {
-        setModelMinimumStake(modelMinimumStake_);
-        emit ModelMinStakeUpdated(modelMinimumStake_);
+    function setModelMinimumStake(uint256 modelMinimumStake_) external onlyOwner {
+        _setModelMinimumStake(modelMinimumStake_);
+        emit ModelMinimumStakeSet(modelMinimumStake_);
     }
 
     /// @notice Registers or updates existing model
     function modelRegister(
+        // TODO: it is not secure (frontrunning) to take the modelId as key
         bytes32 modelId_,
         bytes32 ipfsCID_,
         uint256 fee_,
@@ -31,17 +31,22 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
         string calldata name_,
         string[] calldata tags_
     ) external {
-        if (!_ownerOrModelOwner(owner_)) {
+        if (!_isOwnerOrModelOwner(owner_)) {
+            // TODO: such that we cannon create a model with the owner as another address
+            // Do we need this check?
             revert NotOwnerOrModelOwner();
         }
 
         Model memory model_ = models(modelId_);
+        // TODO: there is no way to decrease the stake
         uint256 newStake_ = model_.stake + addStake_;
         if (newStake_ < modelMinimumStake()) {
             revert StakeTooLow();
         }
 
-        getToken().safeTransferFrom(_msgSender(), address(this), addStake_);
+        if (addStake_ > 0) {
+            getToken().safeTransferFrom(_msgSender(), address(this), addStake_);
+        }
 
         uint128 createdAt_ = model_.createdAt;
         if (createdAt_ == 0) {
@@ -50,7 +55,7 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
             setModelActive(modelId_, true);
             createdAt_ = uint128(block.timestamp);
         } else {
-            if (!_ownerOrModelOwner(model_.owner)) {
+            if (!_isOwnerOrModelOwner(model_.owner)) {
                 revert NotOwnerOrModelOwner();
             }
             if (model_.isDeleted) {
@@ -63,18 +68,15 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
         emit ModelRegisteredUpdated(owner_, modelId_);
     }
 
-    /// @notice Deregisters a model
     function modelDeregister(bytes32 modelId_) external {
         Model storage model = models(modelId_);
 
         if (!isModelExists(modelId_)) {
             revert ModelNotFound();
         }
-
-        if (!_ownerOrModelOwner(model.owner)) {
+        if (!_isOwnerOrModelOwner(model.owner)) {
             revert NotOwnerOrModelOwner();
         }
-
         if (!isModelActiveBidsEmpty(modelId_)) {
             revert ModelHasActiveBids();
         }
@@ -95,7 +97,7 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
         return models(modelId_).createdAt != 0;
     }
 
-    function _ownerOrModelOwner(address modelOwner_) internal view returns (bool) {
+    function _isOwnerOrModelOwner(address modelOwner_) internal view returns (bool) {
         return _msgSender() == owner() || _msgSender() == modelOwner_;
     }
 }

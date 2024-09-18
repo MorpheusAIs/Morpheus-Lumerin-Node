@@ -113,7 +113,7 @@ describe('session actions', () => {
         user: SignerWithAddress;
         provider: SignerWithAddress;
         modelId: any;
-        bidID: string;
+        bidId: string;
         stake: bigint;
       },
     ]
@@ -148,7 +148,7 @@ describe('session actions', () => {
       user: SECOND,
       provider: bid.provider,
       modelId: bid.modelId,
-      bidID: bid.id,
+      bidId: bid.id,
       stake: (totalCost * totalSupply) / todaysBudget,
     };
 
@@ -160,7 +160,7 @@ describe('session actions', () => {
 
   async function openSession(session: any) {
     // open session
-    const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+    const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
     const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(session.stake, msg, signature);
     await sessionRouter.connect(SECOND).openSession(session.stake, msg, signature);
 
@@ -261,7 +261,7 @@ describe('session actions', () => {
       user: SignerWithAddress;
       provider: SignerWithAddress;
       modelId: any;
-      bidID: string;
+      bidId: string;
       stake: bigint;
     };
 
@@ -273,7 +273,7 @@ describe('session actions', () => {
 
     describe('positive cases', () => {
       it('should open session without error', async () => {
-        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
         const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(session.stake, msg, signature);
         await sessionRouter.connect(SECOND).openSession(session.stake, msg, signature);
 
@@ -281,7 +281,7 @@ describe('session actions', () => {
       });
 
       it('should emit SessionOpened event', async () => {
-        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
 
         const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(session.stake, msg, signature);
         await expect(sessionRouter.connect(SECOND).openSession(session.stake, msg, signature))
@@ -290,7 +290,7 @@ describe('session actions', () => {
       });
 
       it('should verify session fields after opening', async () => {
-        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
         const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(session.stake, msg, signature);
         await sessionRouter.connect(SECOND).openSession(session.stake, msg, signature);
 
@@ -302,7 +302,7 @@ describe('session actions', () => {
           await resolveAddress(session.user),
           await resolveAddress(session.provider),
           session.modelId,
-          session.bidID,
+          session.bidId,
           session.stake,
           session.pricePerSecond,
           getHex(Buffer.from(''), 0),
@@ -318,7 +318,7 @@ describe('session actions', () => {
         const srBefore = await MOR.balanceOf(sessionRouter);
         const userBefore = await MOR.balanceOf(SECOND);
 
-        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
         await sessionRouter.connect(SECOND).openSession(session.stake, msg, signature);
 
         const srAfter = await MOR.balanceOf(sessionRouter);
@@ -332,9 +332,9 @@ describe('session actions', () => {
         await MOR.transfer(SECOND, session.stake * 2n);
         await MOR.connect(SECOND).approve(sessionRouter, session.stake * 2n);
 
-        const apprv1 = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const apprv1 = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
         await setTime(Number(await getCurrentBlockTime()) + 1);
-        const apprv2 = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const apprv2 = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
 
         await ethers.provider.send('evm_setAutomine', [false]);
 
@@ -374,7 +374,7 @@ describe('session actions', () => {
 
         const stake = avail / 2n;
 
-        const approval = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const approval = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
         await sessionRouter.connect(SECOND).openSession(stake, approval.msg, approval.signature);
 
         const [avail2] = await sessionRouter.withdrawableUserStake(SECOND, 255);
@@ -397,7 +397,7 @@ describe('session actions', () => {
         // reset allowance
         await MOR.connect(SECOND).approve(sessionRouter, 0n);
 
-        const approval = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const approval = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
         await sessionRouter.connect(SECOND).openSession(avail, approval.msg, approval.signature);
 
         const [avail2] = await sessionRouter.withdrawableUserStake(SECOND, 255);
@@ -423,7 +423,7 @@ describe('session actions', () => {
         // reset allowance
         await MOR.connect(SECOND).approve(sessionRouter, allowancePart);
 
-        const approval = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const approval = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
         await sessionRouter.connect(SECOND).openSession(avail + allowancePart, approval.msg, approval.signature);
 
         // check all onHold used
@@ -438,7 +438,7 @@ describe('session actions', () => {
 
     describe('negative cases', () => {
       it('should error when approval generated for a different user', async () => {
-        const { msg, signature } = await getProviderApproval(PROVIDER, await THIRD.getAddress(), session.bidID);
+        const { msg, signature } = await getProviderApproval(PROVIDER, await THIRD.getAddress(), session.bidId);
 
         await expect(
           sessionRouter.connect(SECOND).openSession(session.stake, msg, signature),
@@ -446,7 +446,7 @@ describe('session actions', () => {
       });
 
       it('should error when approval expired', async () => {
-        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
         const ttl = await sessionRouter.SIGNATURE_TTL();
         await setTime(Number((await getCurrentBlockTime()) + ttl) + 1);
 
@@ -463,16 +463,16 @@ describe('session actions', () => {
       });
 
       it('should error when bid is deleted', async () => {
-        await marketplace.connect(PROVIDER).deleteModelBid(session.bidID);
+        await marketplace.connect(PROVIDER).deleteModelBid(session.bidId);
 
-        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
         await expect(
           sessionRouter.connect(SECOND).openSession(session.stake, msg, signature),
         ).to.be.revertedWithCustomError(sessionRouter, 'BidNotFound');
       });
 
       it('should error when signature has invalid length', async () => {
-        const { msg } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const { msg } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
 
         await expect(sessionRouter.connect(SECOND).openSession(session.stake, msg, '0x00')).to.be.revertedWith(
           'ECDSA: invalid signature length',
@@ -480,7 +480,7 @@ describe('session actions', () => {
       });
 
       it('should error when signature is invalid', async () => {
-        const { msg } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const { msg } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
         const sig = randomBytes(65);
 
         await expect(sessionRouter.connect(SECOND).openSession(session.stake, msg, sig)).to.be.revertedWith(
@@ -489,7 +489,7 @@ describe('session actions', () => {
       });
 
       it('should error when opening two bids with same signature', async () => {
-        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
         await sessionRouter.connect(SECOND).openSession(session.stake, msg, signature);
 
         await approveUserFunds(session.stake);
@@ -500,16 +500,16 @@ describe('session actions', () => {
       });
 
       it('should not error when opening two bids same time', async () => {
-        const appr1 = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const appr1 = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
         await sessionRouter.connect(SECOND).openSession(session.stake, appr1.msg, appr1.signature);
 
         await approveUserFunds(session.stake);
-        const appr2 = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const appr2 = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
         await sessionRouter.connect(SECOND).openSession(session.stake, appr2.msg, appr2.signature);
       });
 
       it('should error with insufficient allowance', async () => {
-        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
         await expect(sessionRouter.connect(SECOND).openSession(session.stake * 2n, msg, signature)).to.be.revertedWith(
           'ERC20: insufficient allowance',
         );
@@ -519,14 +519,14 @@ describe('session actions', () => {
         const stake = (await MOR.balanceOf(SECOND)) + 1n;
         await MOR.connect(SECOND).approve(sessionRouter, stake);
 
-        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
         await expect(sessionRouter.connect(SECOND).openSession(stake, msg, signature)).to.be.revertedWith(
           'ERC20: transfer amount exceeds balance',
         );
       });
 
       it('should error if session time too short', async () => {
-        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
         await expect(sessionRouter.connect(SECOND).openSession(0, msg, signature)).to.be.revertedWithCustomError(
           sessionRouter,
           'SessionTooShort',
@@ -534,7 +534,7 @@ describe('session actions', () => {
       });
 
       it('should error if chainId is invalid', async () => {
-        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID, 1n);
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId, 1n);
         await expect(sessionRouter.connect(SECOND).openSession(0, msg, signature)).to.be.revertedWithCustomError(
           sessionRouter,
           'WrongChainId',
@@ -547,7 +547,7 @@ describe('session actions', () => {
         const durationSeconds = HOUR;
         const stake = await getStake(durationSeconds, session.pricePerSecond);
 
-        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
         const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(stake, msg, signature);
         await sessionRouter.connect(SECOND).openSession(stake, msg, signature);
 
@@ -565,7 +565,7 @@ describe('session actions', () => {
         const stake = await getStake(durationSeconds, session.pricePerSecond);
         await approveUserFunds(stake);
 
-        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
         const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(stake, msg, signature);
         await sessionRouter.connect(SECOND).openSession(stake, msg, signature);
 
@@ -588,7 +588,7 @@ describe('session actions', () => {
 
         await approveUserFunds(stake);
 
-        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
         const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(stake, msg, signature);
         await sessionRouter.connect(SECOND).openSession(stake, msg, signature);
 

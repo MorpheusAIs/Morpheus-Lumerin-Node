@@ -136,7 +136,7 @@ describe('Provider registry', () => {
       user: SECOND,
       provider: bid.provider,
       modelId: bid.modelId,
-      bidID: bid.id,
+      bidId: bid.id,
       stake: (totalCost * totalSupply) / todaysBudget,
     };
 

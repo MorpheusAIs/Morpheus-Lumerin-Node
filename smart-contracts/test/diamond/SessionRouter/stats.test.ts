@@ -113,7 +113,7 @@ describe('Session router - stats tests', () => {
         user: SignerWithAddress;
         provider: SignerWithAddress;
         modelId: any;
-        bidID: string;
+        bidId: string;
         stake: bigint;
       },
     ]
@@ -148,7 +148,7 @@ describe('Session router - stats tests', () => {
       user: SECOND,
       provider: bid.provider,
       modelId: bid.modelId,
-      bidID: bid.id,
+      bidId: bid.id,
       stake: (totalCost * totalSupply) / todaysBudget,
     };
 
@@ -251,7 +251,7 @@ describe('Session router - stats tests', () => {
       user: SignerWithAddress;
       provider: SignerWithAddress;
       modelId: any;
-      bidID: string;
+      bidId: string;
       stake: bigint;
     };
 
@@ -262,13 +262,13 @@ describe('Session router - stats tests', () => {
     });
 
     it('should update provider-model stats', async () => {
-      await openCloseSession(session.bidID, HOUR, session.pricePerSecond, 100, 1000, true);
+      await openCloseSession(session.bidId, HOUR, session.pricePerSecond, 100, 1000, true);
 
-      await openCloseSession(session.bidID, HOUR, session.pricePerSecond, 150, 2000, true);
+      await openCloseSession(session.bidId, HOUR, session.pricePerSecond, 150, 2000, true);
 
       const [bidIds, bids, stats] = await sessionRouter.getActiveBidsRatingByModel(session.modelId, 0n, 100);
 
-      expect(bidIds).to.deep.equal([session.bidID]);
+      expect(bidIds).to.deep.equal([session.bidId]);
       expect(bids[0]).to.deep.equal([
         await resolveAddress(bid.provider),
         bid.modelId,
@@ -285,7 +285,7 @@ describe('Session router - stats tests', () => {
   });
 
   async function openCloseSession(
-    bidID: string,
+    bidId: string,
     durationSeconds: bigint,
     pricePerSecond: bigint,
     tps: number,
@@ -293,7 +293,7 @@ describe('Session router - stats tests', () => {
     success = true,
   ) {
     // open session
-    const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), bidID);
+    const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), bidId);
     const stake = await getStake(durationSeconds, pricePerSecond);
 
     await MOR.transfer(SECOND, stake);

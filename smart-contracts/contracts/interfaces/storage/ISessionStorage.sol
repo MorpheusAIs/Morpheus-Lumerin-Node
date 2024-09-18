@@ -7,11 +7,11 @@ interface ISessionStorage {
         address user;
         address provider;
         bytes32 modelId;
-        bytes32 bidID;
+        bytes32 bidId;
         uint256 stake;
         uint256 pricePerSecond;
         bytes closeoutReceipt;
-        uint256 closeoutType;
+        uint256 closeoutType; // use enum ??
         // amount of funds that was already withdrawn by provider (we allow to withdraw for the previous day)
         uint256 providerWithdrawnAmount;
         uint256 openedAt;

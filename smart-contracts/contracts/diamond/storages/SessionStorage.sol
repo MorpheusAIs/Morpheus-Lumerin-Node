@@ -104,11 +104,11 @@ contract SessionStorage is ISessionStorage {
         return _getSessionStorage().sessionNonce++;
     }
 
-    function isApproved(bytes memory approval) internal view returns (bool) {
+    function isApprovalUsed(bytes memory approval) internal view returns (bool) {
         return _getSessionStorage().isApprovalUsed[approval];
     }
 
-    function approve(bytes memory approval) internal {
+    function setApprovalUsed(bytes memory approval) internal {
         _getSessionStorage().isApprovalUsed[approval] = true;
     }
 

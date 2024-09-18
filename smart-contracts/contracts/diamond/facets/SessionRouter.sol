@@ -54,6 +54,7 @@ contract SessionRouter is
         bytes calldata providerApproval_,
         bytes calldata signature_
     ) external returns (bytes32) {
+        // should a user pass the bidId to compare with a providerApproval?
         bytes32 bidId_ = _extractProviderApproval(providerApproval_);
 
         Bid memory bid_ = getBid(bidId_);
@@ -64,16 +65,17 @@ contract SessionRouter is
         if (!_isValidReceipt(bid_.provider, providerApproval_, signature_)) {
             revert ProviderSignatureMismatch();
         }
-        if (isApproved(providerApproval_)) {
+        if (isApprovalUsed(providerApproval_)) {
             revert DuplicateApproval();
         }
-        approve(providerApproval_);
+        setApprovalUsed(providerApproval_);
 
         uint256 endsAt_ = whenSessionEnds(amount_, bid_.pricePerSecond, block.timestamp);
         if (endsAt_ - block.timestamp < MIN_SESSION_DURATION) {
             revert SessionTooShort();
         }
 
+        // do we need to specify the amount in id?
         bytes32 sessionId_ = getSessionId(_msgSender(), bid_.provider, amount_, incrementSessionNonce());
         setSession(
             sessionId_,
@@ -82,13 +84,13 @@ contract SessionRouter is
                 user: _msgSender(),
                 provider: bid_.provider,
                 modelId: bid_.modelId,
-                bidID: bidId_,
+                bidId: bidId_,
                 stake: amount_,
                 pricePerSecond: bid_.pricePerSecond,
                 closeoutReceipt: "",
                 closeoutType: 0,
                 providerWithdrawnAmount: 0,
-                openedAt: uint128(block.timestamp),
+                openedAt: block.timestamp,
                 endsAt: endsAt_,
                 closedAt: 0
             })
@@ -132,7 +134,7 @@ contract SessionRouter is
 
         // update session record
         session.closeoutReceipt = receiptEncoded_; //TODO: remove that field in favor of tps and ttftMs
-        session.closedAt = uint128(block.timestamp);
+        session.closedAt = block.timestamp;
 
         // calculate provider withdraw
         uint256 providerWithdraw_;
@@ -200,18 +202,17 @@ contract SessionRouter is
         // withdraw provider
         _rewardProvider(session, providerWithdraw_, false);
 
-        // withdraw user
         getToken().safeTransfer(session.user, userWithdraw_);
     }
 
     /// @notice allows provider to claim their funds
     function claimProviderBalance(bytes32 sessionId_, uint256 amountToWithdraw_) external {
         Session storage session = _getSession(sessionId_);
-        if (!_ownerOrProvider(session.provider)) {
-            revert NotOwnerOrProvider();
-        }
         if (session.openedAt == 0) {
             revert SessionNotFound();
+        }
+        if (!_ownerOrProvider(session.provider)) {
+            revert NotOwnerOrProvider();
         }
 
         uint256 withdrawableAmount = _getProviderClaimableBalance(session);
@@ -224,6 +225,7 @@ contract SessionRouter is
 
     /// @notice deletes session from the history
     function deleteHistory(bytes32 sessionId_) external {
+        // Why do we need this function?
         Session storage session = _getSession(sessionId_);
         if (!_ownerOrUser(session.user)) {
             revert NotOwnerOrUser();
@@ -294,7 +296,7 @@ contract SessionRouter is
     /// @dev parameters should be the same as in Ethereum L1 Distribution contract
     /// @dev at address 0x47176B2Af9885dC6C4575d4eFd63895f7Aaa4790
     /// @dev call 'Distribution.pools(3)' where '3' is a poolId
-    function setPoolConfig(uint256 index, Pool calldata pool) public onlyOwner {
+    function setPoolConfig(uint256 index, Pool calldata pool) external onlyOwner {
         if (index >= getPools().length) {
             revert PoolIndexOutOfBounds();
         }

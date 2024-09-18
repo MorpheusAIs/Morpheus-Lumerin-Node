@@ -27,6 +27,8 @@ contract ProviderRegistry is IProviderRegistry, OwnableDiamondStorage, ProviderS
     /// @param   endpoint_  provider endpoint (host.com:1234)
     function providerRegister(address providerAddress_, uint256 amount_, string calldata endpoint_) external {
         if (!_ownerOrProvider(providerAddress_)) {
+            // TODO: such that we cannon create a provider with the owner as another address
+            // Do we need this check?
             revert NotOwnerOrProvider();
         }
 
@@ -36,7 +38,9 @@ contract ProviderRegistry is IProviderRegistry, OwnableDiamondStorage, ProviderS
             revert StakeTooLow();
         }
 
-        getToken().safeTransferFrom(_msgSender(), address(this), amount_);
+        if (amount_ > 0) {
+            getToken().safeTransferFrom(_msgSender(), address(this), amount_);
+        }
 
         // if we add stake to an existing provider the limiter period is not reset
         uint128 createdAt_ = provider_.createdAt;
@@ -73,11 +77,13 @@ contract ProviderRegistry is IProviderRegistry, OwnableDiamondStorage, ProviderS
 
         Provider storage provider = providers(provider_);
         uint256 withdrawable_ = _getWithdrawableStake(provider);
-        
+
         provider.stake -= withdrawable_;
         provider.isDeleted = true;
 
-        getToken().safeTransfer(_msgSender(), withdrawable_);
+        if (withdrawable_ > 0) {
+            getToken().safeTransfer(_msgSender(), withdrawable_);
+        }
 
         emit ProviderDeregistered(provider_);
     }

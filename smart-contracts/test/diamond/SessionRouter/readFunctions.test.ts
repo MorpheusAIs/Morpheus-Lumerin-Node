@@ -113,7 +113,7 @@ describe('Session router', () => {
         user: SignerWithAddress;
         provider: SignerWithAddress;
         modelId: any;
-        bidID: string;
+        bidId: string;
         stake: bigint;
       },
     ]
@@ -148,7 +148,7 @@ describe('Session router', () => {
       user: SECOND,
       provider: bid.provider,
       modelId: bid.modelId,
-      bidID: bid.id,
+      bidId: bid.id,
       stake: (totalCost * totalSupply) / todaysBudget,
     };
 
@@ -252,7 +252,7 @@ describe('Session router', () => {
       user: SignerWithAddress;
       provider: SignerWithAddress;
       modelId: any;
-      bidID: string;
+      bidId: string;
       stake: bigint;
     };
 
@@ -311,7 +311,7 @@ describe('Session router', () => {
     describe('getProviderClaimableBalance', () => {
       it('should be correct for contract that closed early due to dispute [H-6]', async () => {
         // open session
-        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
         const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(session.stake, msg, signature);
         await sessionRouter.connect(SECOND).openSession(session.stake, msg, signature);
 

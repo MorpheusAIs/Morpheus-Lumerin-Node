@@ -114,7 +114,7 @@ describe('Session closeout', () => {
         user: SignerWithAddress;
         provider: SignerWithAddress;
         modelId: any;
-        bidID: string;
+        bidId: string;
         stake: bigint;
       },
     ]
@@ -149,7 +149,7 @@ describe('Session closeout', () => {
       user: SECOND,
       provider: bid.provider,
       modelId: bid.modelId,
-      bidID: bid.id,
+      bidId: bid.id,
       stake: (totalCost * totalSupply) / todaysBudget,
     };
 
@@ -253,7 +253,7 @@ describe('Session closeout', () => {
       user: SignerWithAddress;
       provider: SignerWithAddress;
       modelId: any;
-      bidID: string;
+      bidId: string;
       stake: bigint;
     };
 
@@ -265,7 +265,7 @@ describe('Session closeout', () => {
 
     it('should open short (<1D) session and close after expiration', async () => {
       // open session
-      const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+      const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
 
       const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(session.stake, msg, signature);
       await sessionRouter.connect(SECOND).openSession(session.stake, msg, signature);
@@ -298,7 +298,7 @@ describe('Session closeout', () => {
 
     it('should open short (<1D) session and close early', async () => {
       // open session
-      const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+      const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
       const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(session.stake, msg, signature);
       await sessionRouter.connect(SECOND).openSession(session.stake, msg, signature);
 
@@ -328,7 +328,7 @@ describe('Session closeout', () => {
 
     it('should open and close early with user report - dispute', async () => {
       // open session
-      const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+      const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
       const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(session.stake, msg, signature);
       await sessionRouter.connect(SECOND).openSession(session.stake, msg, signature);
 
@@ -377,7 +377,7 @@ describe('Session closeout', () => {
 
     it('should error when not a user trying to close', async () => {
       // open session
-      const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+      const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
       const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(session.stake, msg, signature);
       await sessionRouter.connect(SECOND).openSession(session.stake, msg, signature);
 
@@ -429,7 +429,7 @@ describe('Session closeout', () => {
         user: await SECOND.getAddress(),
         provider: expectedBid.providerAddr,
         modelId: expectedBid.modelId,
-        bidID: expectedBid.id,
+        bidId: expectedBid.id,
         stake: (totalCost * totalSupply) / todaysBudget,
       };
 
@@ -438,7 +438,7 @@ describe('Session closeout', () => {
       await MOR.connect(SECOND).approve(modelRegistry, expectedSession.stake);
 
       // open session
-      const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), expectedSession.bidID);
+      const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), expectedSession.bidId);
       const sessionId = await sessionRouter
         .connect(SECOND)
         .openSession.staticCall(expectedSession.stake, msg, signature);
@@ -476,7 +476,7 @@ describe('Session closeout', () => {
 
     it('should error if session is already closed', async () => {
       // open session
-      const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+      const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
 
       const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(session.stake, msg, signature);
       await sessionRouter.connect(SECOND).openSession(session.stake, msg, signature);
@@ -494,7 +494,7 @@ describe('Session closeout', () => {
     });
 
     it('should error when approval expired', async () => {
-      const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+      const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
       const ttl = await sessionRouter.SIGNATURE_TTL();
       await setTime(Number((await getCurrentBlockTime()) + ttl) + 1);
 

@@ -92,7 +92,7 @@ contract BidStorage is IBidStorage {
         _getBidStorage().modelBids[modelId].push(bidId);
     }
 
-    function addBid(bytes32 bidId, Bid memory bid) internal {
+    function setBid(bytes32 bidId, Bid memory bid) internal {
         _getBidStorage().bids[bidId] = bid;
     }
 

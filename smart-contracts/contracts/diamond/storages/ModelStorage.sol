@@ -37,8 +37,8 @@ contract ModelStorage is IModelStorage {
         _getModelStorage().models[modelId] = model;
     }
 
-    function setModelMinimumStake(uint256 _modelMinimumStake) internal {
-        _getModelStorage().modelMinimumStake = _modelMinimumStake;
+    function _setModelMinimumStake(uint256 modelMinimumStake_) internal {
+        _getModelStorage().modelMinimumStake = modelMinimumStake_;
     }
 
     function models(bytes32 id) internal view returns (Model storage) {

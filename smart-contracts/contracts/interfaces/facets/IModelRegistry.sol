@@ -6,7 +6,7 @@ import {IModelStorage} from "../storage/IModelStorage.sol";
 interface IModelRegistry is IModelStorage {
     event ModelRegisteredUpdated(address indexed owner, bytes32 indexed modelId);
     event ModelDeregistered(address indexed owner, bytes32 indexed modelId);
-    event ModelMinStakeUpdated(uint256 newStake);
+    event ModelMinimumStakeSet(uint256 newStake);
 
     error ModelNotFound();
     error StakeTooLow();
@@ -15,7 +15,7 @@ interface IModelRegistry is IModelStorage {
 
     function __ModelRegistry_init() external;
 
-    function modelSetMinStake(uint256 modelMinimumStake_) external;
+    function setModelMinimumStake(uint256 modelMinimumStake_) external;
 
     function modelRegister(
         bytes32 modelId_,

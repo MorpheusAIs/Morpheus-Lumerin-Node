@@ -138,7 +138,7 @@ describe('Model registry', () => {
       user: SECOND,
       provider: bid.provider,
       modelId: bid.modelId,
-      bidID: bid.id,
+      bidId: bid.id,
       stake: (totalCost * totalSupply) / todaysBudget,
     };
 
@@ -270,7 +270,7 @@ describe('Model registry', () => {
 
     it('Should error when registering with insufficient stake', async () => {
       const minStake = 100n;
-      await modelRegistry.modelSetMinStake(minStake);
+      await modelRegistry.setModelMinimumStake(minStake);
 
       await expect(
         modelRegistry.modelRegister(randomBytes32(), randomBytes32(), 0n, 0n, OWNER, 'a', []),
@@ -472,14 +472,14 @@ describe('Model registry', () => {
     describe('Min stake', () => {
       it('Should set min stake', async () => {
         const minStake = 100n;
-        await expect(modelRegistry.modelSetMinStake(minStake))
-          .to.emit(modelRegistry, 'ModelMinStakeUpdated')
+        await expect(modelRegistry.setModelMinimumStake(minStake))
+          .to.emit(modelRegistry, 'ModelMinimumStakeSet')
           .withArgs(minStake);
 
         expect(await modelRegistry.modelMinimumStake()).eq(minStake);
       });
       it('Should error when not owner is setting min stake', async () => {
-        await expect(modelRegistry.connect(THIRD).modelSetMinStake(0)).to.revertedWith(
+        await expect(modelRegistry.connect(THIRD).setModelMinimumStake(0)).to.revertedWith(
           'OwnableDiamondStorage: not an owner',
         );
       });

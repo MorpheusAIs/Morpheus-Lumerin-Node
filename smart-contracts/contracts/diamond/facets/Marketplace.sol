@@ -95,7 +95,7 @@ contract Marketplace is
 
         bytes32 bidId_ = getBidId(provider_, modelId_, nonce_);
 
-        addBid(bidId_, Bid(provider_, modelId_, pricePerSecond_, nonce_, uint128(block.timestamp), 0));
+        setBid(bidId_, Bid(provider_, modelId_, pricePerSecond_, nonce_, uint128(block.timestamp), 0));
 
         addProviderBid(provider_, bidId_);
         addModelBid(modelId_, bidId_);
@@ -108,9 +108,9 @@ contract Marketplace is
         return bidId_;
     }
 
-    /// @dev passing bidId and bid storage to avoid double storage access
     function _deleteBid(bytes32 bidId_) private {
         Bid storage bid = getBid(bidId_);
+
         bid.deletedAt = uint128(block.timestamp);
 
         removeProviderActiveBids(bid.provider, bidId_);
