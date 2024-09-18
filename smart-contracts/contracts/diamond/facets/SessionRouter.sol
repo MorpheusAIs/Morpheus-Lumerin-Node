@@ -122,7 +122,6 @@ contract SessionRouter is
         if (!_ownerOrUser(session.user)) {
             revert NotOwnerOrUser();
         }
-
         if (session.closedAt != 0) {
             revert SessionAlreadyClosed();
         }
@@ -468,7 +467,7 @@ contract SessionRouter is
             revert ApprovedForAnotherUser();
         }
         if (chainId_ != block.chainid) {
-            revert WrongChaidId();
+            revert WrongChainId();
         }
         if (timestamp_ < block.timestamp - SIGNATURE_TTL) {
             revert SignatureExpired();
@@ -484,7 +483,7 @@ contract SessionRouter is
         );
 
         if (chainId_ != block.chainid) {
-            revert WrongChaidId();
+            revert WrongChainId();
         }
         if (timestamp_ < block.timestamp - SIGNATURE_TTL) {
             revert SignatureExpired();

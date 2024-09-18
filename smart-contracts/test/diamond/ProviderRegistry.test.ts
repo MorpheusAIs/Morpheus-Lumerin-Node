@@ -224,6 +224,16 @@ describe('Provider registry', () => {
 
   afterEach(reverter.revert);
 
+  describe('Diamond functionality', () => {
+    describe('#__ProviderRegistry_init', () => {
+      it('should revert if try to call init function twice', async () => {
+        const reason = 'Initializable: contract is already initialized';
+
+        await expect(providerRegistry.__ProviderRegistry_init()).to.be.rejectedWith(reason);
+      });
+    });
+  });
+
   describe('Actions', () => {
     let provider: IProviderStorage.ProviderStruct;
     let model: IModelStorage.ModelStruct & {
@@ -321,10 +331,6 @@ describe('Provider registry', () => {
         await providerRegistry.connect(PROVIDER).providerDeregister(PROVIDER);
       });
 
-      it.skip('Should block withdrawing whole stake if provider already earned', async () => {});
-
-      it.skip('Should allow withdrawing remaining stake after limit period', async () => {});
-
       it('Should correctly reregister provider', async () => {
         await marketplace.connect(PROVIDER).deleteModelBid(bid.id);
 
@@ -351,6 +357,24 @@ describe('Provider registry', () => {
           provider2.limitPeriodEarned,
           false,
         ]);
+      });
+
+      it('should error if caller is not an owner or provider', async () => {
+        await marketplace.connect(PROVIDER).deleteModelBid(bid.id);
+
+        await expect(providerRegistry.connect(SECOND).providerDeregister(PROVIDER)).to.revertedWithCustomError(
+          providerRegistry,
+          'NotOwnerOrProvider',
+        );
+      });
+
+      it('should error if provider is not exists', async () => {
+        await marketplace.connect(PROVIDER).deleteModelBid(bid.id);
+
+        await expect(providerRegistry.connect(SECOND).providerDeregister(SECOND)).to.revertedWithCustomError(
+          providerRegistry,
+          'ProviderNotFound',
+        );
       });
     });
 

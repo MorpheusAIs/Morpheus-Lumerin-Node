@@ -80,9 +80,9 @@ contract Marketplace is
     }
 
     function _postModelBid(address provider_, bytes32 modelId_, uint256 pricePerSecond_) private returns (bytes32) {
-        uint256 fee = getBidFee();
-        getToken().safeTransferFrom(_msgSender(), address(this), fee);
-        increaseFeeBalance(fee);
+        uint256 fee_ = getBidFee();
+        getToken().safeTransferFrom(_msgSender(), address(this), fee_);
+        increaseFeeBalance(fee_);
 
         // TEST IT if it increments nonce correctly
         uint256 nonce_ = _incrementBidNonce(provider_, modelId_);
@@ -93,19 +93,19 @@ contract Marketplace is
             }
         }
 
-        bytes32 bidId = getBidId(provider_, modelId_, nonce_);
+        bytes32 bidId_ = getBidId(provider_, modelId_, nonce_);
 
-        addBid(bidId, Bid(provider_, modelId_, pricePerSecond_, nonce_, uint128(block.timestamp), 0));
+        addBid(bidId_, Bid(provider_, modelId_, pricePerSecond_, nonce_, uint128(block.timestamp), 0));
 
-        addProviderActiveBids(provider_, bidId);
-        addModelActiveBids(modelId_, bidId);
+        addProviderBid(provider_, bidId_);
+        addModelBid(modelId_, bidId_);
 
-        addProviderBid(provider_, bidId);
-        addModelBid(modelId_, bidId);
+        addProviderActiveBids(provider_, bidId_);
+        addModelActiveBids(modelId_, bidId_);
 
         emit BidPosted(provider_, modelId_, nonce_);
 
-        return bidId;
+        return bidId_;
     }
 
     /// @dev passing bidId and bid storage to avoid double storage access

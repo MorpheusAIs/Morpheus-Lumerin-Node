@@ -225,6 +225,19 @@ describe('Marketplace', () => {
 
   afterEach(reverter.revert);
 
+  describe('Diamond functionality', () => {
+    describe('#__Marketplace_init', () => {
+      it('should set correct data after creation', async () => {
+        expect(await marketplace.getToken()).to.eq(await MOR.getAddress());
+      });
+      it('should revert if try to call init function twice', async () => {
+        const reason = 'Initializable: contract is already initialized';
+
+        await expect(marketplace.__Marketplace_init(MOR)).to.be.rejectedWith(reason);
+      });
+    });
+  });
+
   describe('bid actions', () => {
     let provider: IProviderStorage.ProviderStruct;
     let model: IModelStorage.ModelStruct & {
@@ -266,6 +279,12 @@ describe('Marketplace', () => {
       await expect(
         marketplace.connect(PROVIDER).postModelBid(bid.provider, unknownModel, bid.pricePerSecond),
       ).to.be.revertedWithCustomError(marketplace, 'ModelNotFound');
+    });
+
+    it('should error if caller is not an owner or provider', async () => {
+      await expect(
+        marketplace.connect(SECOND).postModelBid(bid.provider, bid.modelId, bid.pricePerSecond),
+      ).to.be.revertedWithCustomError(marketplace, 'NotOwnerOrProvider');
     });
 
     it('Should create second bid', async () => {
@@ -442,6 +461,12 @@ describe('Marketplace', () => {
         await expect(marketplace.withdraw(OWNER, 100000000)).to.be.revertedWithCustomError(
           marketplace,
           'NotEnoughBalance',
+        );
+      });
+
+      it('should revert if caller is not an owner', async () => {
+        await expect(marketplace.connect(SECOND).setBidFee(1)).to.be.revertedWith(
+          'OwnableDiamondStorage: not an owner',
         );
       });
     });

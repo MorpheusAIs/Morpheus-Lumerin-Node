@@ -73,6 +73,7 @@ contract ProviderRegistry is IProviderRegistry, OwnableDiamondStorage, ProviderS
 
         Provider storage provider = providers(provider_);
         uint256 withdrawable_ = _getWithdrawableStake(provider);
+        
         provider.stake -= withdrawable_;
         provider.isDeleted = true;
 

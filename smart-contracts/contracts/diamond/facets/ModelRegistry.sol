@@ -46,8 +46,8 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
         uint128 createdAt_ = model_.createdAt;
         if (createdAt_ == 0) {
             // model never existed
-            setModelActive(modelId_, true);
             addModel(modelId_);
+            setModelActive(modelId_, true);
             createdAt_ = uint128(block.timestamp);
         } else {
             if (!_ownerOrModelOwner(model_.owner)) {

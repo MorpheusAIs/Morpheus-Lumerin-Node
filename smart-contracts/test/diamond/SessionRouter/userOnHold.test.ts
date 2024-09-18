@@ -321,6 +321,13 @@ describe('User on hold tests', () => {
         sessionRouter.connect(SECOND).withdrawUserStake(available2 * 2n, Number(MAX_UINT8)),
       ).to.be.revertedWithCustomError(sessionRouter, 'NotEnoughWithdrawableBalance');
     });
+
+    it('should revert if amount to withdraw is 0', async () => {
+      await expect(sessionRouter.connect(SECOND).withdrawUserStake(0, Number(MAX_UINT8))).to.be.revertedWithCustomError(
+        sessionRouter,
+        'AmountToWithdrawIsZero',
+      );
+    });
   });
 });
 

@@ -226,6 +226,16 @@ describe('Model registry', () => {
 
   afterEach(reverter.revert);
 
+  describe('Diamond functionality', () => {
+    describe('#__ModelRegistry_init', () => {
+      it('should revert if try to call init function twice', async () => {
+        const reason = 'Initializable: contract is already initialized';
+
+        await expect(modelRegistry.__ModelRegistry_init()).to.be.rejectedWith(reason);
+      });
+    });
+  });
+
   describe('Actions', () => {
     let provider: IProviderStorage.ProviderStruct;
     let model: IModelStorage.ModelStruct & {
@@ -294,6 +304,13 @@ describe('Model registry', () => {
       await expect(modelRegistry.modelDeregister(randomBytes32())).to.revertedWithCustomError(
         modelRegistry,
         'ModelNotFound',
+      );
+    });
+
+    it('Should error if caller is not owner or model owner', async () => {
+      await expect(modelRegistry.connect(SECOND).modelDeregister(model.modelId)).to.revertedWithCustomError(
+        modelRegistry,
+        'NotOwnerOrModelOwner',
       );
     });
 
@@ -426,6 +443,14 @@ describe('Model registry', () => {
         model2.createdAt,
         false,
       ]);
+    });
+
+    it('Should error if reregister model by caller is not owner or model owner', async () => {
+      await expect(
+        modelRegistry
+          .connect(SECOND)
+          .modelRegister(model.modelId, model.ipfsCID, model.fee, model.stake, model.owner, model.name, model.tags),
+      ).to.revertedWithCustomError(modelRegistry, 'NotOwnerOrModelOwner');
     });
 
     describe('Getters', () => {

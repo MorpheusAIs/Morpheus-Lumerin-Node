@@ -48,7 +48,7 @@ contract BidStorage is IBidStorage {
         return _getBidStorage().modelBids[modelId_].part(offset_, limit_);
     }
 
-    function getToken() internal view returns (IERC20) {
+    function getToken() public view returns (IERC20) {
         return _getBidStorage().token;
     }
 

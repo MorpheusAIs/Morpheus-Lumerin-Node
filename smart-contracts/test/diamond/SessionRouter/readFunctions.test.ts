@@ -263,16 +263,16 @@ describe('Session router', () => {
     });
 
     describe('session read functions', () => {
-      it('should get compute balance equal to one on L1', async () => {
-        const exp = {
-          initialReward: 3456000000000000000000n,
-          rewardDecrease: 592558728240000000n,
-          payoutStart: 1707393600n,
-          decreaseInterval: 86400n,
-          blockTimeEpochSeconds: BigInt(new Date('2024-05-02T09:19:57Z').getTime()) / 1000n,
-          balance: 286534931460577320000000n,
-        };
+      const exp = {
+        initialReward: 3456000000000000000000n,
+        rewardDecrease: 592558728240000000n,
+        payoutStart: 1707393600n,
+        decreaseInterval: 86400n,
+        blockTimeEpochSeconds: BigInt(new Date('2024-05-02T09:19:57Z').getTime()) / 1000n,
+        balance: 286534931460577320000000n,
+      };
 
+      it('should get compute balance equal to one on L1', async () => {
         await sessionRouter.setPoolConfig(3n, {
           initialReward: exp.initialReward,
           rewardDecrease: exp.rewardDecrease,
@@ -283,6 +283,28 @@ describe('Session router', () => {
         const balance = await sessionRouter.getComputeBalance(exp.blockTimeEpochSeconds);
 
         expect(balance).to.equal(exp.balance);
+      });
+
+      it('should revert if caller is not an owner', async () => {
+        await expect(
+          sessionRouter.connect(SECOND).setPoolConfig(3, {
+            initialReward: exp.initialReward,
+            rewardDecrease: exp.rewardDecrease,
+            payoutStart: exp.payoutStart,
+            decreaseInterval: exp.decreaseInterval,
+          }),
+        ).to.revertedWith('OwnableDiamondStorage: not an owner');
+      });
+
+      it('should revert if pool is not exists', async () => {
+        await expect(
+          sessionRouter.setPoolConfig(9999, {
+            initialReward: exp.initialReward,
+            rewardDecrease: exp.rewardDecrease,
+            payoutStart: exp.payoutStart,
+            decreaseInterval: exp.decreaseInterval,
+          }),
+        ).to.revertedWithCustomError(sessionRouter, 'PoolIndexOutOfBounds');
       });
     });
 

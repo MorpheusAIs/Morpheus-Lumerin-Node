@@ -463,6 +463,47 @@ describe('Session closeout', () => {
       expect(providerRecord.limitPeriodEarned).to.equal(provider.stake);
     });
 
+    it('should error if session is not exists', async () => {
+      // close session
+      const report = await getReport(PROVIDER, randomBytes32(), 10, 1000);
+      await sessionRouter.connect(SECOND).closeSession(report.msg, report.sig);
+
+      await expect(sessionRouter.connect(SECOND).closeSession(report.msg, report.sig)).to.revertedWithCustomError(
+        sessionRouter,
+        'SessionNotFound',
+      );
+    });
+
+    it('should error if session is already closed', async () => {
+      // open session
+      const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+
+      const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(session.stake, msg, signature);
+      await sessionRouter.connect(SECOND).openSession(session.stake, msg, signature);
+
+      await setTime(Number((await getCurrentBlockTime()) + session.durationSeconds * 2n));
+
+      // close session
+      const report = await getReport(PROVIDER, sessionId, 10, 1000);
+      await sessionRouter.connect(SECOND).closeSession(report.msg, report.sig);
+
+      await expect(sessionRouter.connect(SECOND).closeSession(report.msg, report.sig)).to.revertedWithCustomError(
+        sessionRouter,
+        'SessionAlreadyClosed',
+      );
+    });
+
+    it('should error when approval expired', async () => {
+      const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+      const ttl = await sessionRouter.SIGNATURE_TTL();
+      await setTime(Number((await getCurrentBlockTime()) + ttl) + 1);
+
+      await expect(sessionRouter.connect(SECOND).closeSession(msg, signature)).to.be.revertedWithCustomError(
+        sessionRouter,
+        'SignatureExpired',
+      );
+    });
+
     it('should reset provider limitPeriodEarned after period', async () => {});
 
     it('should error with WithdrawableBalanceLimitByStakeReached() if claiming more that stake for a period', async () => {});

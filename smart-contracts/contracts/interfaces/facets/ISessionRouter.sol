@@ -13,7 +13,7 @@ interface ISessionRouter is ISessionStorage {
     error WithdrawableBalanceLimitByStakeReached(); // means that user can't withdraw more funds because of the limit which equals to the stake
     error ProviderSignatureMismatch();
     error SignatureExpired();
-    error WrongChaidId();
+    error WrongChainId();
     error DuplicateApproval();
     error ApprovedForAnotherUser(); // means that approval generated for another user address, protection from front-running
 

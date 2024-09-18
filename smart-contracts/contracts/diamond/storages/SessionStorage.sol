@@ -36,6 +36,10 @@ contract SessionStorage is ISessionStorage {
         return _getSessionStorage().userSessionIds[user].part(offset_, limit_);
     }
 
+    function pools() external view returns (Pool[] memory) {
+        return _getSessionStorage().pools;
+    }
+
     function getPools() internal view returns (Pool[] storage) {
         return _getSessionStorage().pools;
     }
@@ -44,7 +48,7 @@ contract SessionStorage is ISessionStorage {
         return _getSessionStorage().pools[poolIndex];
     }
 
-    function getFundingAccount() internal view returns (address) {
+    function getFundingAccount() public view returns (address) {
         return _getSessionStorage().fundingAccount;
     }
 

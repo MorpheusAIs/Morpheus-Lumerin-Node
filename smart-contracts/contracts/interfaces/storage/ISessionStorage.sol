@@ -34,4 +34,8 @@ interface ISessionStorage {
     function sessions(bytes32 sessionId) external view returns (Session memory);
 
     function getSessionsByUser(address user, uint256 offset_, uint256 limit_) external view returns (bytes32[] memory);
+
+    function getFundingAccount() external view returns (address);
+
+    function pools() external view returns (Pool[] memory);
 }

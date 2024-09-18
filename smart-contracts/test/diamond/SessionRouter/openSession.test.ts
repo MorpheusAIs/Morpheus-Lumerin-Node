@@ -453,7 +453,6 @@ describe('session actions', () => {
         await expect(
           sessionRouter.connect(SECOND).openSession(session.stake, msg, signature),
         ).to.be.revertedWithCustomError(sessionRouter, 'SignatureExpired');
-        sessionRouter.openSession(session.stake, msg, signature);
       });
 
       it('should error when bid not exist', async () => {
@@ -484,7 +483,9 @@ describe('session actions', () => {
         const { msg } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
         const sig = randomBytes(65);
 
-        await expect(sessionRouter.connect(SECOND).openSession(session.stake, msg, sig)).to.be.reverted;
+        await expect(sessionRouter.connect(SECOND).openSession(session.stake, msg, sig)).to.be.revertedWith(
+          'ECDSA: invalid signature',
+        );
       });
 
       it('should error when opening two bids with same signature', async () => {
@@ -521,6 +522,22 @@ describe('session actions', () => {
         const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
         await expect(sessionRouter.connect(SECOND).openSession(stake, msg, signature)).to.be.revertedWith(
           'ERC20: transfer amount exceeds balance',
+        );
+      });
+
+      it('should error if session time too short', async () => {
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID);
+        await expect(sessionRouter.connect(SECOND).openSession(0, msg, signature)).to.be.revertedWithCustomError(
+          sessionRouter,
+          'SessionTooShort',
+        );
+      });
+
+      it('should error if chainId is invalid', async () => {
+        const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidID, 1n);
+        await expect(sessionRouter.connect(SECOND).openSession(0, msg, signature)).to.be.revertedWithCustomError(
+          sessionRouter,
+          'WrongChainId',
         );
       });
     });

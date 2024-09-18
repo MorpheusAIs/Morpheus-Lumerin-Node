@@ -246,6 +246,28 @@ describe('Session router', () => {
 
   afterEach(reverter.revert);
 
+  describe('Diamond functionality', () => {
+    describe('#__SessionRouter_init', () => {
+      it('should set correct data after creation', async () => {
+        expect(await sessionRouter.getFundingAccount()).to.eq(await OWNER.getAddress());
+
+        const pools = await sessionRouter.pools();
+        for (let i = 0; i < pools.length; i++) {
+          const pool = getDefaultPools()[i];
+          expect(pools[i].payoutStart).to.eq(pool.payoutStart);
+          expect(pools[i].decreaseInterval).to.eq(pool.decreaseInterval);
+          expect(pools[i].initialReward).to.eq(pool.initialReward);
+          expect(pools[i].rewardDecrease).to.eq(pool.rewardDecrease);
+        }
+      });
+      it('should revert if try to call init function twice', async () => {
+        const reason = 'Initializable: contract is already initialized';
+
+        await expect(sessionRouter.__SessionRouter_init(OWNER, getDefaultPools())).to.be.rejectedWith(reason);
+      });
+    });
+  });
+
   describe('session write functions', () => {
     let provider: IProviderStorage.ProviderStruct;
     let model: IModelStorage.ModelStruct & {
@@ -284,6 +306,13 @@ describe('Session router', () => {
       await expect(sessionRouter.connect(SECOND).deleteHistory(sessionId)).to.be.revertedWithCustomError(
         sessionRouter,
         'SessionNotClosed',
+      );
+    });
+
+    it('should block erase if caller is not an owner', async () => {
+      await expect(sessionRouter.connect(THIRD).deleteHistory(sessionId)).to.be.revertedWithCustomError(
+        sessionRouter,
+        'NotOwnerOrUser',
       );
     });
 
