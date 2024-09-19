@@ -210,7 +210,7 @@ export const LoadingCover = styled.div`
 export const ImageContainer = styled.img`
     cursor: pointer;
     padding: 0.25rem;
-    background-color: var(--bs-highlight-color);
+    background-color: ${p => p.theme.colors.morMain}B3;
     border: var(--bs-border-width) solid var(--bs-highlight-color);
     border-radius: var(--bs-border-radius);
     max-width: 100%;
