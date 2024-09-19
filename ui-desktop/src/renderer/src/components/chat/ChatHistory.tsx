@@ -43,9 +43,8 @@ const HisotryEntry = ({ entry, deleteHistory, onSelectSession, isActive, onChang
             {
                 !isEdit ?
                     (
-
                         <>
-                            <span>{title}</span>
+                            <span className="title" style={{ width: isActive ? "75%" : undefined }}>{title}</span>
                             {
                                 isActive && (
                                     <components.IconsContainer>
