@@ -94,26 +94,37 @@ const Chat = (props) => {
 
             setSessions(sessions);
 
-            if (openSessions.length) {
-                const latestSession = openSessions[0];
-                const latestSessionModel = (chainData.models.find((m: any) => m.Id == latestSession.ModelAgentId));
-                
-                setSelectedModel(latestSessionModel);
-                setChat({ id: makeId(16), createdAt: new Date(), modelId: latestSessionModel.ModelAgentId });
-
-                const openBid = latestSessionModel?.bids?.find(b => b.Id == latestSession.BidID);
-                if (openBid) {
-                    setSelectedBid(openBid);
-                }
-                setActiveSession(latestSession);
-            }
-            else {
+            const useLocalModelChat = () => {
                 const localModel = (chainData?.models?.find((m: any) => m.hasLocal));
                 if (localModel) {
                     setSelectedModel(localModel);
                     setChat({ id: makeId(16), createdAt: new Date(), modelId: localModel.Id, isLocal: true });
                 }
             }
+
+            if(!openSessions.length) {
+                useLocalModelChat();
+                return;
+            }
+
+            const latestSession = openSessions[0];
+            const latestSessionModel = (chainData.models.find((m: any) => m.Id == latestSession.ModelAgentId));
+
+            if(!latestSessionModel) {
+                useLocalModelChat();
+                return;
+            }
+
+            const openBid = latestSessionModel?.bids?.find(b => b.Id == latestSession.BidID);
+
+            if(!openBid) {
+                useLocalModelChat();
+            }
+
+            setSelectedModel(latestSessionModel);
+            setSelectedBid(openBid);
+            setActiveSession(latestSession);
+            setChat({ id: makeId(16), createdAt: new Date(), modelId: latestSessionModel.ModelAgentId });
         })().then(() => {
             setIsLoading(false);
         })
