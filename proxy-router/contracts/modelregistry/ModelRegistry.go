@@ -243,7 +243,6 @@ func (_ModelRegistry *ModelRegistryCallerSession) ModelExists(id [32]byte) (bool
 func (_ModelRegistry *ModelRegistryCaller) ModelGetAll(opts *bind.CallOpts) ([][32]byte, []Model, error) {
 	var out []interface{}
 	err := _ModelRegistry.contract.Call(opts, &out, "modelGetAll")
-
 	if err != nil {
 		return *new([][32]byte), *new([]Model), err
 	}

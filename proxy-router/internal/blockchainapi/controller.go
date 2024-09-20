@@ -557,7 +557,8 @@ func (s *BlockchainController) openSessionByModelId(ctx *gin.Context) {
 	var params structs.PathHex32ID
 	err := ctx.ShouldBindUri(&params)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err})
+		s.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 

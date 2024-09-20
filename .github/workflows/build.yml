@@ -63,6 +63,8 @@ jobs:
           cd ../proxy-router
           cp ./models-config.json.example ../ui-desktop/models-config.json
           make build
+          cd ../cli
+          make build
           cd ../ui-desktop
           cp ./.env.example .env
           yarn build:linux
@@ -85,7 +87,8 @@ jobs:
           echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./ui-desktop-1.0.0.AppImage"]}' > mor-launch.json
           cp ./proxy-router/.env.example .env
           cp ./proxy-router/models-config.json.example models-config.json
-          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/bin/proxy-router .env $MODEL mor-launch.json ./ui-desktop/dist/ui-desktop-1.0.0.AppImage models-config.json
+          mv ./cli/mor-cli mor-cli
+          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/bin/proxy-router .env $MODEL mor-launch.json ./ui-desktop/dist/ui-desktop-1.0.0.AppImage models-config.json mor-cli
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -132,6 +135,8 @@ jobs:
           cd ../proxy-router
           cp ./models-config.json.example ../ui-desktop/models-config.json
           make build
+          cd ../cli
+          make build
           cd ../ui-desktop
           cp ./.env.example .env
           yarn build:mac
@@ -154,8 +159,9 @@ jobs:
           echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./ui-desktop.app/Contents/MacOS/ui-desktop"]}' > mor-launch.json
           cp ./proxy-router/.env.example .env
           cp ./proxy-router/models-config.json.example models-config.json
+          mv ./cli/mor-cli mor-cli
           unzip ./ui-desktop/dist/ui-desktop-1.0.0-mac.zip
-          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json models-config.json
+          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json models-config.json mor-cli
           zip -r $ARTIFACT ui-desktop.app
 
       - name: Upload artifacts
@@ -203,6 +209,8 @@ jobs:
           cd ../proxy-router
           cp ./models-config.json.example ../ui-desktop/models-config.json
           make build
+          cd ../cli
+          make build
           cd ../ui-desktop
           cp ./.env.example .env
           yarn build:mac
@@ -225,8 +233,9 @@ jobs:
           echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./ui-desktop.app/Contents/MacOS/ui-desktop"]}' > mor-launch.json
           cp ./proxy-router/.env.example .env
           cp ./proxy-router/models-config.json.example models-config.json
+          mv ./cli/mor-cli mor-cli
           unzip ./ui-desktop/dist/ui-desktop-1.0.0-arm64-mac.zip
-          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json models-config.json
+          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json models-config.json mor-cli
           zip -r $ARTIFACT ui-desktop.app
 
       - name: Upload artifacts
@@ -278,6 +287,8 @@ jobs:
           cd ../proxy-router
           cp ./models-config.json.example ../ui-desktop/models-config.json
           make build
+          cd ../cli
+          make build
           cd ../ui-desktop
           cp ./.env.example .env
           yarn build:win
@@ -301,9 +312,10 @@ jobs:
           cp ./proxy-router/.env.example.win .env
           cp ./proxy-router/models-config.json.example models-config.json
           mv ./proxy-router/bin/proxy-router proxy-router.exe
+          mv ./cli/mor-cli mor-cli.exe
           mv ./launcher/mor-launch mor-launch.exe
           mv "./ui-desktop/dist/ui-desktop 1.0.0.exe" ui-desktop-1.0.0.exe
-          7z a $ARTIFACT LICENSE mor-launch.exe proxy-router.exe .env llama-server.exe llama.dll ggml.dll $MODEL mor-launch.json ui-desktop-1.0.0.exe models-config.json
+          7z a $ARTIFACT LICENSE mor-launch.exe proxy-router.exe .env llama-server.exe llama.dll ggml.dll $MODEL mor-launch.json ui-desktop-1.0.0.exe models-config.json mor-cli.exe
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
