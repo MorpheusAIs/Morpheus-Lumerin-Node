@@ -175,32 +175,32 @@ func (p *ProxyServiceSender) GetSessionReport(ctx context.Context, sessionID com
 	return typedMsg, nil
 }
 
-func (p *ProxyServiceSender) SendPrompt(ctx context.Context, resWriter ResponderFlusher, prompt *openai.ChatCompletionRequest, sessionID common.Hash) error {
+func (p *ProxyServiceSender) SendPrompt(ctx context.Context, resWriter ResponderFlusher, prompt *openai.ChatCompletionRequest, sessionID common.Hash) (interface{}, error) {
 	session, ok := p.sessionStorage.GetSession(sessionID.Hex())
 	if !ok {
-		return ErrSessionNotFound
+		return nil, ErrSessionNotFound
 	}
 
 	// TODO: add check for session expiration
 
 	provider, ok := p.sessionStorage.GetUser(session.ProviderAddr)
 	if !ok {
-		return ErrProviderNotFound
+		return nil, ErrProviderNotFound
 	}
 
 	prKey, err := p.privateKey.GetPrivateKey()
 	if err != nil {
-		return ErrMissingPrKey
+		return nil, ErrMissingPrKey
 	}
 
 	requestID := "1"
 	pubKey, err := lib.StringToHexString(provider.PubKey)
 	if err != nil {
-		return lib.WrapError(ErrCreateReq, err)
+		return nil, lib.WrapError(ErrCreateReq, err)
 	}
 	promptRequest, err := p.morRPC.SessionPromptRequest(sessionID, prompt, pubKey, prKey, requestID)
 	if err != nil {
-		return lib.WrapError(ErrCreateReq, err)
+		return nil, lib.WrapError(ErrCreateReq, err)
 	}
 
 	return p.rpcRequestStream(ctx, resWriter, provider.Url, promptRequest, pubKey)
@@ -242,27 +242,27 @@ func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage)
 	return msg, 0, nil
 }
 
-func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter ResponderFlusher, url string, rpcMessage *msgs.RPCMessage, providerPublicKey lib.HexString) error {
+func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter ResponderFlusher, url string, rpcMessage *msgs.RPCMessage, providerPublicKey lib.HexString) (interface{}, error) {
 	prKey, err := p.privateKey.GetPrivateKey()
 	if err != nil {
-		return ErrMissingPrKey
+		return nil, ErrMissingPrKey
 	}
 
 	conn, err := net.Dial("tcp", url)
 	if err != nil {
 		err = lib.WrapError(fmt.Errorf("failed to connect to provider"), err)
 		p.log.Errorf("%s", err)
-		return err
+		return nil, err
 	}
 	defer conn.Close()
 
 	msgJSON, err := json.Marshal(rpcMessage)
 	if err != nil {
-		return lib.WrapError(ErrMasrshalFailed, err)
+		return nil, lib.WrapError(ErrMasrshalFailed, err)
 	}
 	_, err = conn.Write(msgJSON)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// read response
@@ -270,52 +270,57 @@ func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter Res
 	d := json.NewDecoder(reader)
 	resWriter.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_EVENT_STREAM)
 
+	responses := make([]interface{}, 0)
+
 	for {
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return nil, ctx.Err()
 		}
 		var msg *msgs.RpcResponse
 		err = d.Decode(&msg)
 		p.log.Debugf("Received stream msg:", msg)
 		if err != nil {
-			return lib.WrapError(ErrDecode, err)
+			p.log.Warnf("Failed to decode response: %v", err)
+			return responses, nil
 		}
 
 		if msg.Error != nil {
-			return lib.WrapError(ErrResponseErr, fmt.Errorf("error: %v, data: %v", msg.Error.Message, msg.Error.Data))
+			return nil, lib.WrapError(ErrResponseErr, fmt.Errorf("error: %v, data: %v", msg.Error.Message, msg.Error.Data))
 		}
 
 		if msg.Result == nil {
-			return lib.WrapError(ErrInvalidResponse, fmt.Errorf("empty result and no error"))
+			return nil, lib.WrapError(ErrInvalidResponse, fmt.Errorf("empty result and no error"))
 		}
 
 		var inferenceRes InferenceRes
 		err := json.Unmarshal(*msg.Result, &inferenceRes)
 		if err != nil {
-			return lib.WrapError(ErrInvalidResponse, err)
+			return nil, lib.WrapError(ErrInvalidResponse, err)
 		}
 		sig := inferenceRes.Signature
 		inferenceRes.Signature = []byte{}
 
 		if !p.validateMsgSignature(inferenceRes, sig, providerPublicKey) {
-			return ErrInvalidSig
+			return nil, ErrInvalidSig
 		}
 
 		var message lib.HexString
 		err = json.Unmarshal(inferenceRes.Message, &message)
 		if err != nil {
-			return lib.WrapError(ErrInvalidResponse, err)
+			return nil, lib.WrapError(ErrInvalidResponse, err)
 		}
 
 		aiResponse, err := lib.DecryptBytes(message, prKey)
 		if err != nil {
-			return lib.WrapError(ErrDecrFailed, err)
+			return nil, lib.WrapError(ErrDecrFailed, err)
 		}
 
 		var payload ChatCompletionResponse
 		err = json.Unmarshal(aiResponse, &payload)
 		var stop = true
-		if err == nil {
+		if err == nil && len(payload.Choices) > 0 {
+			// The JSON corresponds to a ChatCompletionResponse
+			fmt.Println("AI RESPONSE (ChatCompletionResponse):", aiResponse)
 			stop = false
 			choices := payload.Choices
 			for _, choice := range choices {
@@ -323,20 +328,24 @@ func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter Res
 					stop = true
 				}
 			}
+			responses = append(responses, payload)
 		} else {
-			var payload aiengine.ProdiaGenerationResult
-			err = json.Unmarshal(aiResponse, &payload)
+			var prodiaPayload aiengine.ProdiaGenerationResult
+			err = json.Unmarshal(aiResponse, &prodiaPayload)
 			if err != nil {
-				return lib.WrapError(ErrInvalidResponse, err)
+				fmt.Println("Error unmarshalling ai response:", err)
+				return nil, lib.WrapError(ErrInvalidResponse, err)
 			}
+			fmt.Println("Response (ProdiaGenerationResult):", prodiaPayload)
+			responses = append(responses, prodiaPayload)
 		}
 
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return nil, ctx.Err()
 		}
 		_, err = resWriter.Write([]byte(fmt.Sprintf("data: %s\n\n", aiResponse)))
 		if err != nil {
-			return err
+			return nil, err
 		}
 		resWriter.Flush()
 		if stop {
@@ -344,7 +353,7 @@ func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter Res
 		}
 	}
 
-	return nil
+	return responses, nil
 }
 
 func (p *ProxyServiceSender) validateMsgSignature(result any, signature lib.HexString, providerPubicKey lib.HexString) bool {

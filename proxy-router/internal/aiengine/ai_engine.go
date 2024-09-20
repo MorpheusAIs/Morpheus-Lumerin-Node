@@ -184,7 +184,8 @@ func (a *AiEngine) PromptStream(ctx context.Context, request *api.ChatCompletion
 	return resp, nil
 }
 
-func (a *AiEngine) PromptCb(ctx *gin.Context, body *openai.ChatCompletionRequest) {
+func (a *AiEngine) PromptCb(ctx *gin.Context, body *openai.ChatCompletionRequest) (interface{}, error) {
+	resp := []interface{}{}
 	if body.Stream {
 		response, err := a.PromptStream(ctx, body, func(response interface{}) error {
 			marshalledResponse, err := json.Marshal(response)
@@ -195,6 +196,7 @@ func (a *AiEngine) PromptCb(ctx *gin.Context, body *openai.ChatCompletionRequest
 			ctx.Writer.Header().Set(c.HEADER_CONTENT_TYPE, c.CONTENT_TYPE_EVENT_STREAM)
 
 			_, err = ctx.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", marshalledResponse)))
+			resp = append(resp, response)
 			if err != nil {
 				return err
 			}
@@ -205,19 +207,19 @@ func (a *AiEngine) PromptCb(ctx *gin.Context, body *openai.ChatCompletionRequest
 
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
+			return "", err
 		}
 
 		ctx.JSON(http.StatusOK, response)
-		return
+		return resp, nil
 	} else {
 		response, err := a.Prompt(ctx, body)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
+			return "", err
 		}
 		ctx.JSON(http.StatusOK, response)
-		return
+		return response, nil
 	}
 }
 
