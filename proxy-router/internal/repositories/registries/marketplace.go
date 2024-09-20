@@ -63,6 +63,34 @@ func (g *Marketplace) PostModelBid(ctx *bind.TransactOpts, provider common.Addre
 	return fmt.Errorf("PostModelBid event not found in transaction logs")
 }
 
+func (g *Marketplace) DeleteBid(ctx *bind.TransactOpts, bidId common.Hash) (common.Hash, error) {
+	tx, err := g.marketplace.DeleteModelAgentBid(ctx, bidId)
+	if err != nil {
+		return common.Hash{}, lib.TryConvertGethError(err, marketplace.MarketplaceMetaData)
+	}
+
+	// Wait for the transaction receipt
+	receipt, err := bind.WaitMined(context.Background(), g.client, tx)
+
+	if err != nil {
+		return common.Hash{}, lib.TryConvertGethError(err, marketplace.MarketplaceMetaData)
+	}
+
+	// Find the event log
+	for _, log := range receipt.Logs {
+		// Check if the log belongs to the OpenSession event
+		_, err := g.marketplace.ParseBidDeleted(*log)
+
+		if err != nil {
+			continue // not our event, skip it
+		}
+
+		return tx.Hash(), nil
+	}
+
+	return common.Hash{}, fmt.Errorf("BidDeleted event not found in transaction logs")
+}
+
 func (g *Marketplace) GetBidById(ctx context.Context, bidId [32]byte) (*marketplace.Bid, error) {
 	bid, err := g.marketplace.BidMap(&bind.CallOpts{Context: ctx}, bidId)
 	if err != nil {

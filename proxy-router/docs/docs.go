@@ -161,6 +161,32 @@ const docTemplate = `{
                         }
                     }
                 }
+            },
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bids"
+                ],
+                "summary": "Delete Bid",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bid ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.TxRes"
+                        }
+                    }
+                }
             }
         },
         "/blockchain/bids/{id}/session": {
@@ -270,6 +296,34 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/structs.ModelRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/models/{id}": {
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "models"
+                ],
+                "summary": "Deregister Model",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Model ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.TxRes"
                         }
                     }
                 }
@@ -420,6 +474,34 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/structs.ProviderRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/providers/{id}": {
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "providers"
+                ],
+                "summary": "Deregister Provider",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Provider Address",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.TxRes"
                         }
                     }
                 }

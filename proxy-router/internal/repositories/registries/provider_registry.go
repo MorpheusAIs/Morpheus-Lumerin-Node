@@ -86,6 +86,33 @@ func (g *ProviderRegistry) CreateNewProvider(ctx *bind.TransactOpts, address com
 	return fmt.Errorf("OpenSession event not found in transaction logs")
 }
 
+func (g *ProviderRegistry) DeregisterProvider(ctx *bind.TransactOpts, address common.Address) (common.Hash, error) {
+	providerTx, err := g.providerRegistry.ProviderDeregister(ctx, address)
+
+	if err != nil {
+		return common.Hash{}, lib.TryConvertGethError(err, providerregistry.ProviderRegistryMetaData)
+	}
+
+	// Wait for the transaction receipt
+	receipt, err := bind.WaitMined(context.Background(), g.client, providerTx)
+	if err != nil {
+		return common.Hash{}, lib.TryConvertGethError(err, providerregistry.ProviderRegistryMetaData)
+	}
+
+	// Find the event log
+	for _, log := range receipt.Logs {
+		_, err := g.providerRegistry.ParseProviderDeregistered(*log)
+
+		if err != nil {
+			continue // not our event, skip it
+		}
+
+		return providerTx.Hash(), nil
+	}
+
+	return common.Hash{}, fmt.Errorf("ProviderDeregistered event not found in transaction logs")
+}
+
 func (g *ProviderRegistry) GetProviderById(ctx context.Context, id common.Address) (*providerregistry.Provider, error) {
 	provider, err := g.providerRegistry.ProviderMap(&bind.CallOpts{Context: ctx}, id)
 	if err != nil {

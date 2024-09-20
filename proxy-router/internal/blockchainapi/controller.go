@@ -40,14 +40,17 @@ func (c *BlockchainController) RegisterRoutes(r interfaces.Router) {
 	// providers
 	r.GET("/blockchain/providers", c.getAllProviders)
 	r.POST("/blockchain/providers", c.createProvider)
+	r.DELETE("/blockchain/providers/:id", c.deregisterProvider)
 
 	// models
 	r.GET("/blockchain/models", c.getAllModels)
 	r.POST("/blockchain/models", c.createNewModel)
+	r.DELETE("/blockchain/models/:id", c.deregisterModel)
 
 	// bids
 	r.POST("/blockchain/bids", c.createNewBid)
 	r.GET("/blockchain/bids/:id", c.getBidByID)
+	r.DELETE("/blockchain/bids/:id", c.deleteBid)
 	r.GET("/blockchain/models/:id/bids", c.getBidsByModelAgent)
 	r.GET("/blockchain/models/:id/bids/rated", c.getRatedBids)
 	r.GET("/blockchain/models/:id/bids/active", c.getActiveBidsByModel)
@@ -829,6 +832,34 @@ func (c *BlockchainController) createProvider(ctx *gin.Context) {
 	return
 }
 
+// DeregisterProvider godoc
+//
+//	@Summary	Deregister Provider
+//	@Tags		providers
+//	@Produce	json
+//	@Param		id	path		string	true	"Provider Address"
+//	@Success	200	{object}	structs.TxRes
+//	@Router		/blockchain/providers/{id} [delete]
+func (c *BlockchainController) deregisterProvider(ctx *gin.Context) {
+	var params structs.PathEthAddrID
+	err := ctx.ShouldBindUri(&params)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err})
+		return
+	}
+
+	txHash, err := c.service.DeregisterProdiver(ctx, params.ID.Address)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, structs.TxRes{Tx: txHash})
+	return
+}
+
 // CreateNewModel godoc
 //
 //	@Summary	Creates model in blockchain
@@ -873,6 +904,34 @@ func (c *BlockchainController) createNewModel(ctx *gin.Context) {
 
 }
 
+// DeregisterModel godoc
+//
+//	@Summary	Deregister Model
+//	@Tags		models
+//	@Produce	json
+//	@Param		id	path		string	true	"Model ID"
+//	@Success	200	{object}	structs.TxRes
+//	@Router		/blockchain/models/{id} [delete]
+func (c *BlockchainController) deregisterModel(ctx *gin.Context) {
+	var params structs.PathHex32ID
+	err := ctx.ShouldBindUri(&params)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err})
+		return
+	}
+
+	txHash, err := c.service.DeregisterModel(ctx, params.ID.Hash)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, structs.TxRes{Tx: txHash})
+	return
+}
+
 // CreateBidRequest godoc
 //
 //	@Summary	Creates bid in blockchain
@@ -899,6 +958,34 @@ func (c *BlockchainController) createNewBid(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, structs.BidRes{Bid: result})
+	return
+}
+
+// DeleteBid godoc
+//
+//	@Summary	Delete Bid
+//	@Tags		bids
+//	@Produce	json
+//	@Param		id	path		string	true	"Bid ID"
+//	@Success	200	{object}	structs.TxRes
+//	@Router		/blockchain/bids/{id} [delete]
+func (c *BlockchainController) deleteBid(ctx *gin.Context) {
+	var params structs.PathHex32ID
+	err := ctx.ShouldBindUri(&params)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err})
+		return
+	}
+
+	txHash, err := c.service.DeleteBid(ctx, params.ID.Hash)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, structs.TxRes{Tx: txHash})
 	return
 }
 
