@@ -1002,28 +1002,55 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/walletapi.WalletRes"
+                            "type": "WalletRes"
                         }
                     }
                 }
             },
-            "post": {
-                "description": "Set wallet private key",
+            "delete": {
+                "description": "Remove wallet from proxy storage",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "wallet"
                 ],
-                "summary": "Set Wallet",
+                "summary": "Remove wallet from proxy",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "statusRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/wallet/mnemonic": {
+            "post": {
+                "description": "Setup wallet using mnemonic",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "wallet"
+                ],
+                "summary": "Setup wallet using mnemonic",
                 "parameters": [
                     {
-                        "description": "Private key",
-                        "name": "privatekey",
+                        "description": "Mnemonic",
+                        "name": "mnemonic",
                         "in": "body",
-                        "required": true,
                         "schema": {
-                            "$ref": "#/definitions/walletapi.SetupWalletReqBody"
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "Derivation path",
+                        "name": "derivationPath",
+                        "in": "body",
+                        "schema": {
+                            "type": "string"
                         }
                     }
                 ],
@@ -1031,7 +1058,38 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/walletapi.statusRes"
+                            "type": "WalletRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/wallet/privateKey": {
+            "post": {
+                "description": "Setup wallet with private key",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "wallet"
+                ],
+                "summary": "Setup wallet with private key",
+                "parameters": [
+                    {
+                        "description": "Private key",
+                        "name": "privatekey",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "WalletRes"
                         }
                     }
                 }
@@ -1942,35 +2000,6 @@
                 },
                 "version": {
                     "type": "string"
-                }
-            }
-        },
-        "walletapi.SetupWalletReqBody": {
-            "type": "object",
-            "required": [
-                "privateKey"
-            ],
-            "properties": {
-                "privateKey": {
-                    "type": "string"
-                }
-            }
-        },
-        "walletapi.WalletRes": {
-            "type": "object",
-            "properties": {
-                "address": {
-                    "type": "string",
-                    "example": "0x1234"
-                }
-            }
-        },
-        "walletapi.statusRes": {
-            "type": "object",
-            "properties": {
-                "status": {
-                    "type": "string",
-                    "example": "ok"
                 }
             }
         }
