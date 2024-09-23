@@ -319,8 +319,6 @@ func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter Res
 		err = json.Unmarshal(aiResponse, &payload)
 		var stop = true
 		if err == nil && len(payload.Choices) > 0 {
-			// The JSON corresponds to a ChatCompletionResponse
-			fmt.Println("AI RESPONSE (ChatCompletionResponse):", aiResponse)
 			stop = false
 			choices := payload.Choices
 			for _, choice := range choices {
@@ -333,10 +331,8 @@ func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter Res
 			var prodiaPayload aiengine.ProdiaGenerationResult
 			err = json.Unmarshal(aiResponse, &prodiaPayload)
 			if err != nil {
-				fmt.Println("Error unmarshalling ai response:", err)
 				return nil, lib.WrapError(ErrInvalidResponse, err)
 			}
-			fmt.Println("Response (ProdiaGenerationResult):", prodiaPayload)
 			responses = append(responses, prodiaPayload)
 		}
 

@@ -196,10 +196,11 @@ func (a *AiEngine) PromptCb(ctx *gin.Context, body *openai.ChatCompletionRequest
 			ctx.Writer.Header().Set(c.HEADER_CONTENT_TYPE, c.CONTENT_TYPE_EVENT_STREAM)
 
 			_, err = ctx.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", marshalledResponse)))
-			resp = append(resp, response)
 			if err != nil {
 				return err
 			}
+
+			resp = append(resp, response)
 
 			ctx.Writer.Flush()
 			return nil
@@ -218,8 +219,9 @@ func (a *AiEngine) PromptCb(ctx *gin.Context, body *openai.ChatCompletionRequest
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return "", err
 		}
+		resp = append(resp, response)
 		ctx.JSON(http.StatusOK, response)
-		return response, nil
+		return resp, nil
 	}
 }
 

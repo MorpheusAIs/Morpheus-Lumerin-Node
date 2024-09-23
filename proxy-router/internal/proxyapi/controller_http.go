@@ -4,9 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
-	"sync"
 	"time"
 
 	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
@@ -20,14 +17,14 @@ import (
 type ProxyController struct {
 	service     *ProxyServiceSender
 	aiEngine    *aiengine.AiEngine
-	fileMutexes map[string]*sync.Mutex // Map to store mutexes for each file
+	chatStorage *ChatStorage
 }
 
-func NewProxyController(service *ProxyServiceSender, aiEngine *aiengine.AiEngine) *ProxyController {
+func NewProxyController(service *ProxyServiceSender, aiEngine *aiengine.AiEngine, chatStorage *ChatStorage) *ProxyController {
 	c := &ProxyController{
 		service:     service,
 		aiEngine:    aiEngine,
-		fileMutexes: make(map[string]*sync.Mutex),
+		chatStorage: chatStorage,
 	}
 
 	return c
@@ -100,19 +97,12 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 		modelId := head.ModelID.Hex()
 
 		prompt, t := c.GetBodyForLocalPrompt(modelId, &body)
-
-		promptJson, _ := json.Marshal(&prompt)
-		fmt.Println("Prompt: ", string(promptJson))
 		responseAt := time.Now()
 
 		if t == "openai" {
 			res, _ := c.aiEngine.PromptCb(ctx, &body)
 			responses = res.([]interface{})
-			// for _, response := range responses {
-			// 	str := fmt.Sprintf("%v", response)
-			// 	fmt.Println("Response: ", str)
-			// }
-			if err := c.storePromptResponseToFile(modelId, false, prompt, responses, promptAt, responseAt); err != nil {
+			if err := c.chatStorage.StorePromptResponseToFile(modelId, false, prompt, responses, promptAt, responseAt); err != nil {
 				fmt.Println("Error storing prompt and responses:", err)
 			}
 		}
@@ -129,11 +119,10 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 					fmt.Println("Error writing response:", err)
 					return err
 				}
-				fmt.Println("Response: ", string(marshalledResponse))
 				ctx.Writer.Flush()
-				// Collect the response
+
 				prodiaResponses = append(prodiaResponses, completion)
-				if err := c.storePromptResponseToFile(modelId, false, prompt, prodiaResponses, promptAt, responseAt); err != nil {
+				if err := c.chatStorage.StorePromptResponseToFile(modelId, false, prompt, prodiaResponses, promptAt, responseAt); err != nil {
 					fmt.Println("Error storing prompt and responses:", err)
 				}
 				return nil
@@ -144,21 +133,14 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 
 	res, err := c.service.SendPrompt(ctx, ctx.Writer, &body, head.SessionID.Hash)
 	if err != nil {
-		fmt.Println("Error sending prompt:", err)
-		fmt.Printf("Error: %v\n", err)
-		fmt.Println(err.Error())
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	responses = res.([]interface{})
-	for _, response := range responses {
-		str := fmt.Sprintf("%v", response)
-		fmt.Println("Response: ", str)
-	}
 
+	responses = res.([]interface{})
 	responseAt := time.Now()
 	sessionIdStr := head.SessionID.Hex()
-	if err := c.storePromptResponseToFile(sessionIdStr, true, body, responses, promptAt, responseAt); err != nil {
+	if err := c.chatStorage.StorePromptResponseToFile(sessionIdStr, true, body, responses, promptAt, responseAt); err != nil {
 		fmt.Println("Error storing prompt and responses:", err)
 	}
 	return
@@ -211,89 +193,4 @@ func (c *ProxyController) GetBodyForLocalPrompt(modelId string, req *openai.Chat
 
 	req.Model = "llama2"
 	return req, "openai"
-}
-
-func (c *ProxyController) storePromptResponseToFile(identifier string, isSession bool, prompt interface{}, responses []interface{}, promptAt, responseAt time.Time) error {
-	var dir string
-	if isSession {
-		dir = "sessions"
-	} else {
-		dir = "models"
-	}
-
-	// Ensure the directory exists
-	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
-		return err
-	}
-
-	// Create the file path
-	filePath := filepath.Join(dir, identifier+".json")
-
-	// Initialize a mutex for the file if not already present
-	c.initFileMutex(filePath)
-
-	// Lock the file mutex
-	c.fileMutexes[filePath].Lock()
-	defer c.fileMutexes[filePath].Unlock()
-
-	// Read existing data from the file
-	var data []map[string]interface{}
-	if _, err := os.Stat(filePath); err == nil {
-		// File exists, read the content
-		fileContent, err := os.ReadFile(filePath)
-		if err != nil {
-			return err
-		}
-		if err := json.Unmarshal(fileContent, &data); err != nil {
-			return err
-		}
-	}
-
-	response := ""
-	for _, r := range responses {
-		fmt.Println("Response: ", r)
-		llmResponse, ok := r.(openai.ChatCompletionStreamResponse)
-		if ok {
-			response += fmt.Sprintf("%v", llmResponse.Choices[0].Delta.Content)
-		} else {
-			imageResponse, ok := r.(aiengine.ProdiaGenerationResult)
-			if ok {
-				response += fmt.Sprintf("%v", imageResponse.ImageUrl)
-			} else {
-				return fmt.Errorf("unknown response type")
-			}
-		}
-	}
-
-	// Create the new entry
-	newEntry := map[string]interface{}{
-		"prompt":   prompt,
-		"response": response,
-		// "chunks":     responses,
-		"promptAt":   promptAt.UnixMilli(),
-		"responseAt": responseAt.UnixMilli(),
-	}
-
-	// Append the new entry to the data
-	data = append(data, newEntry)
-
-	// Marshal the updated data
-	updatedContent, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	// Write back to the file
-	if err := os.WriteFile(filePath, updatedContent, 0644); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// Initialize a mutex for the file if not already present
-func (c *ProxyController) initFileMutex(filePath string) {
-	if _, exists := c.fileMutexes[filePath]; !exists {
-		c.fileMutexes[filePath] = &sync.Mutex{}
-	}
 }

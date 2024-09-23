@@ -224,7 +224,10 @@ func start() error {
 	eventListener := blockchainapi.NewEventsListener(ethClient, sessionStorage, sessionRouter, wallet, modelConfigLoader, log)
 
 	blockchainController := blockchainapi.NewBlockchainController(blockchainApi, log)
-	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine)
+
+	chatStoragePath := filepath.Join(cfg.Proxy.StoragePath, "chat")
+	chatStorage := proxyapi.NewChatStorage(chatStoragePath)
+	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine, chatStorage)
 	walletController := walletapi.NewWalletController(wallet)
 	systemController := system.NewSystemController(&cfg, wallet, sysConfig, appStartTime, chainID, log)
 
