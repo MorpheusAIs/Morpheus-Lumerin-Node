@@ -336,7 +336,7 @@ func (s *BlockchainService) CloseSession(ctx context.Context, sessionID common.H
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
 	}
-	fmt.Println(report.Message, "!!!!", report.SignedReport)
+
 	tx, err := s.sessionRouter.CloseSession(transactOpt, sessionID, report.Message, report.SignedReport, prKey)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrSendTx, err)

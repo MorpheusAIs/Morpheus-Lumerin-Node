@@ -1,8 +1,6 @@
 package lib
 
 import (
-	"fmt"
-
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -34,13 +32,11 @@ func TryConvertGethError(err error, contractMeta *bind.MetaData) error {
 // ConvertGethError converts a geth error to an EVMError with exposed error signature and arguments
 func ConvertGethError(err error, contractMeta *bind.MetaData) (*EVMError, bool) {
 	errData, ok := ExtractGETHErrorData(err)
-	fmt.Println(errData, ok)
 	if !ok {
 		return nil, false
 	}
 
 	abiError, args, ok := CastErrorData(errData, contractMeta)
-	fmt.Println(abiError, args, ok)
 	if !ok {
 		return nil, false
 	}

@@ -35,26 +35,20 @@ func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isSession bo
 		dir = "models"
 	}
 
-	// Ensure the directory exists
 	path := filepath.Join(cs.dirPath, dir)
 	if err := os.MkdirAll(path, os.ModePerm); err != nil {
 		return err
 	}
 
-	// Create the file path
 	filePath := filepath.Join(path, identifier+".json")
-
-	// Initialize a mutex for the file if not already present
 	cs.initFileMutex(filePath)
 
 	// Lock the file mutex
 	cs.fileMutexes[filePath].Lock()
 	defer cs.fileMutexes[filePath].Unlock()
 
-	// Read existing data from the file
 	var data []map[string]interface{}
 	if _, err := os.Stat(filePath); err == nil {
-		// File exists, read the content
 		fileContent, err := os.ReadFile(filePath)
 		if err != nil {
 			return err
@@ -80,7 +74,6 @@ func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isSession bo
 		}
 	}
 
-	// Create the new entry
 	newEntry := map[string]interface{}{
 		"prompt":     prompt,
 		"response":   response,
@@ -88,16 +81,12 @@ func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isSession bo
 		"responseAt": responseAt.UnixMilli(),
 	}
 
-	// Append the new entry to the data
 	data = append(data, newEntry)
-
-	// Marshal the updated data
 	updatedContent, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return err
 	}
 
-	// Write back to the file
 	if err := os.WriteFile(filePath, updatedContent, 0644); err != nil {
 		return err
 	}

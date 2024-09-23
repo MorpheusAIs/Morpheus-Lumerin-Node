@@ -102,13 +102,8 @@ func (g *SessionRouter) GetSessionsByUser(ctx context.Context, userAddr common.A
 }
 
 func (g *SessionRouter) CloseSession(ctx *bind.TransactOpts, sessionID common.Hash, report []byte, signedReport []byte, privateKeyHex lib.HexString) (common.Hash, error) {
-
-	fmt.Println("closing session", sessionID.Hex())
-	fmt.Println("report", report)
-	fmt.Println("signedReport", signedReport)
 	sessionTx, err := g.sessionRouter.CloseSession(ctx, report, signedReport)
 	if err != nil {
-		fmt.Println("error closing session", err)
 		return common.Hash{}, lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
 	}
 

@@ -185,7 +185,7 @@ func (a *AiEngine) PromptStream(ctx context.Context, request *api.ChatCompletion
 }
 
 func (a *AiEngine) PromptCb(ctx *gin.Context, body *openai.ChatCompletionRequest) (interface{}, error) {
-	resp := []interface{}{}
+	chunks := []interface{}{}
 	if body.Stream {
 		response, err := a.PromptStream(ctx, body, func(response interface{}) error {
 			marshalledResponse, err := json.Marshal(response)
@@ -200,7 +200,7 @@ func (a *AiEngine) PromptCb(ctx *gin.Context, body *openai.ChatCompletionRequest
 				return err
 			}
 
-			resp = append(resp, response)
+			chunks = append(chunks, response)
 
 			ctx.Writer.Flush()
 			return nil
@@ -212,16 +212,16 @@ func (a *AiEngine) PromptCb(ctx *gin.Context, body *openai.ChatCompletionRequest
 		}
 
 		ctx.JSON(http.StatusOK, response)
-		return resp, nil
+		return chunks, nil
 	} else {
 		response, err := a.Prompt(ctx, body)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return "", err
 		}
-		resp = append(resp, response)
+		chunks = append(chunks, response)
 		ctx.JSON(http.StatusOK, response)
-		return resp, nil
+		return chunks, nil
 	}
 }
 
