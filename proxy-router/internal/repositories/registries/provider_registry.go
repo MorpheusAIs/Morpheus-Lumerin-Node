@@ -6,7 +6,6 @@ import (
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/providerregistry"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -18,7 +17,6 @@ type ProviderRegistry struct {
 
 	// state
 	nonce uint64
-	prABI *abi.ABI
 
 	// deps
 	providerRegistry *providerregistry.ProviderRegistry
@@ -31,15 +29,10 @@ func NewProviderRegistry(providerRegistryAddr common.Address, client *ethclient.
 	if err != nil {
 		panic("invalid provider registry ABI")
 	}
-	prABI, err := providerregistry.ProviderRegistryMetaData.GetAbi()
-	if err != nil {
-		panic("invalid provider registry ABI: " + err.Error())
-	}
 	return &ProviderRegistry{
 		providerRegistry:     pr,
 		providerRegistryAddr: providerRegistryAddr,
 		client:               client,
-		prABI:                prABI,
 		log:                  log,
 	}
 }
@@ -62,13 +55,13 @@ func (g *ProviderRegistry) CreateNewProvider(ctx *bind.TransactOpts, address com
 	providerTx, err := g.providerRegistry.ProviderRegister(ctx, address, &addStake.Int, endpoint)
 
 	if err != nil {
-		return lib.TryConvertGethError(err, providerregistry.ProviderRegistryMetaData)
+		return lib.TryConvertGethError(err)
 	}
 
 	// Wait for the transaction receipt
 	receipt, err := bind.WaitMined(context.Background(), g.client, providerTx)
 	if err != nil {
-		return lib.TryConvertGethError(err, providerregistry.ProviderRegistryMetaData)
+		return lib.TryConvertGethError(err)
 	}
 
 	// Find the event log
@@ -90,13 +83,13 @@ func (g *ProviderRegistry) DeregisterProvider(ctx *bind.TransactOpts, address co
 	providerTx, err := g.providerRegistry.ProviderDeregister(ctx, address)
 
 	if err != nil {
-		return common.Hash{}, lib.TryConvertGethError(err, providerregistry.ProviderRegistryMetaData)
+		return common.Hash{}, lib.TryConvertGethError(err)
 	}
 
 	// Wait for the transaction receipt
 	receipt, err := bind.WaitMined(context.Background(), g.client, providerTx)
 	if err != nil {
-		return common.Hash{}, lib.TryConvertGethError(err, providerregistry.ProviderRegistryMetaData)
+		return common.Hash{}, lib.TryConvertGethError(err)
 	}
 
 	// Find the event log
