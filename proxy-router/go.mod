@@ -1,6 +1,8 @@
 module github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router
 
-go 1.21
+go 1.22.0
+
+toolchain go1.22.3
 
 require (
 	github.com/dgraph-io/badger/v4 v4.2.0
@@ -11,7 +13,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/miguelmota/go-ethereum-hdwallet v0.1.2
 	github.com/omeid/uconfig v0.7.0
-	github.com/sashabaranov/go-openai v1.21.0
+	github.com/sashabaranov/go-openai v1.24.1
 	github.com/shirou/gopsutil/v3 v3.23.11
 	github.com/stretchr/testify v1.9.0
 	github.com/swaggo/files v1.0.1

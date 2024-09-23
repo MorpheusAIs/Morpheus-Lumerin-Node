@@ -60,9 +60,6 @@ export const FlexSpaceBetween = styled.div`
 
 export const HistoryEntryTitle = styled(FlexSpaceBetween)`
     text-align: justify;
-    text-overflow: ellipsis;
-    overflow: hidden;
-    white-space: nowrap;
     color: ${p => p.theme.colors.morMain}
     margin: 0.5rem 0;
     padding: 1rem 1.5rem;
@@ -73,6 +70,12 @@ export const HistoryEntryTitle = styled(FlexSpaceBetween)`
         opacity: 1;
         border-radius: 10px;
         background: rgba(255, 255, 255, 0.05);
+    }
+
+    .title {
+        text-overflow: ellipsis;
+        overflow: hidden;
+        white-space: nowrap;
     }
 `
 

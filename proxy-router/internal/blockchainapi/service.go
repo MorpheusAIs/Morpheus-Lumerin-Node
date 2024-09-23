@@ -293,6 +293,25 @@ func (s *BlockchainService) CreateNewModel(ctx context.Context, modelID common.H
 	}, nil
 }
 
+func (s *BlockchainService) DeregisterModel(ctx context.Context, modelId common.Hash) (common.Hash, error) {
+	prKey, err := s.privateKey.GetPrivateKey()
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrPrKey, err)
+	}
+
+	transactOpt, err := s.getTransactOpts(ctx, prKey)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
+	}
+
+	tx, err := s.modelRegistry.DeregisterModel(transactOpt, modelId)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrSendTx, err)
+	}
+
+	return tx, nil
+}
+
 func (s *BlockchainService) CreateNewBid(ctx context.Context, modelID common.Hash, pricePerSecond *lib.BigInt) (*structs.Bid, error) {
 	prKey, err := s.privateKey.GetPrivateKey()
 	if err != nil {
@@ -319,6 +338,44 @@ func (s *BlockchainService) CreateNewBid(ctx context.Context, modelID common.Has
 	}
 
 	return mapBid(ids[0], bids[0]), nil
+}
+
+func (s *BlockchainService) DeleteBid(ctx context.Context, bidId common.Hash) (common.Hash, error) {
+	prKey, err := s.privateKey.GetPrivateKey()
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrPrKey, err)
+	}
+
+	transactOpt, err := s.getTransactOpts(ctx, prKey)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
+	}
+
+	tx, err := s.marketplace.DeleteBid(transactOpt, bidId)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrSendTx, err)
+	}
+
+	return tx, nil
+}
+
+func (s *BlockchainService) DeregisterProdiver(ctx context.Context, provider common.Address) (common.Hash, error) {
+	prKey, err := s.privateKey.GetPrivateKey()
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrPrKey, err)
+	}
+
+	transactOpt, err := s.getTransactOpts(ctx, prKey)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
+	}
+
+	tx, err := s.providerRegistry.DeregisterProvider(transactOpt, provider)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrSendTx, err)
+	}
+
+	return tx, nil
 }
 
 func (s *BlockchainService) CloseSession(ctx context.Context, sessionID common.Hash) (common.Hash, error) {
