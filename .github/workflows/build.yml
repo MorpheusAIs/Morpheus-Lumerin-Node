@@ -14,6 +14,7 @@ on:
       - test
       - concom
       - dev
+      - ci-ipfs
     paths: ['.github/workflows/**', '**/Makefile', '**/*.go', '**/*.json', '**/*.yml', '**/*.ts', '**/*.js']
 
   pull_request:
@@ -158,14 +159,21 @@ jobs:
           echo "Artifact: $ARTIFACT"
           LLAMACPP=llama-b3256-bin-ubuntu-x64.zip
           MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
+          KUBO=kubo_v0.30.0_linux-amd64.tar.gz
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
+          wget -nv https://github.com/ipfs/kubo/releases/download/v0.30.0/$KUBO
           unzip -o -j $LLAMACPP build/bin/llama-server
-          echo '{"run":["./llama-server -m ./'"$MODEL"'","./proxy-router","./morpheus-ui-'"$VFULL"'-x86_64-linux.AppImage"]}' > mor-launch.json
+          echo '{"run":["./llama-server -m ./'"$MODEL"'","./proxy-router","./morpheus-ui-'"$VFULL"'-x86_64-linux.AppImage","./ipfs daemon --init"]}' > mor-launch.json
           echo "Contents of mor-launch.json: "
           cat mor-launch.json
+          echo === >> LICENSE
+          unzip -p $LLAMACPP build/bin/LICENSE >> LICENSE
+          tar xzf $KUBO --strip-components=1 kubo/ipfs
+          echo === >> LICENSE
+          tar xzOf $KUBO kubo/LICENSE >> LICENSE
           mv ./cli/mor-cli mor-cli
-          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/bin/proxy-router .env $MODEL mor-launch.json ./ui-desktop/dist/morpheus-ui-$VFULL-x86_64-linux.AppImage models-config.json rating-config.json mor-cli
+          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/bin/proxy-router .env $MODEL mor-launch.json ./ui-desktop/dist/morpheus-ui-$VFULL-x86_64-linux.AppImage models-config.json rating-config.json mor-cli ipfs
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -237,15 +245,20 @@ jobs:
           echo "Artifact: $ARTIFACT"
           LLAMACPP=llama-b3256-bin-macos-x64.zip
           MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
+          KUBO=kubo_v0.30.0_darwin-amd64.tar.gz
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
+          wget -nv https://github.com/ipfs/kubo/releases/download/v0.30.0/$KUBO
           unzip -o -j $LLAMACPP build/bin/llama-server
-          echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./MorpheusUI.app/Contents/MacOS/MorpheusUI"]}' > mor-launch.json
+          echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./MorpheusUI.app/Contents/MacOS/MorpheusUI","./ipfs daemon --init"]}' > mor-launch.json
           echo "Contents of mor-launch.json: "
           cat mor-launch.json
+          echo === >> LICENSE
+          unzip -p $LLAMACPP build/bin/LICENSE >> LICENSE
+          tar xzf $KUBO --strip-components=1 kubo/ipfs
           mv ./cli/mor-cli mor-cli
           unzip ./ui-desktop/dist/morpheus-ui-${VFULL}-x64-mac.zip
-          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json models-config.json rating-config.json mor-cli
+          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json models-config.json rating-config.json mor-cli ipfs
           zip -r $ARTIFACT 'MorpheusUI.app'
 
       - name: Upload artifacts
@@ -318,15 +331,20 @@ jobs:
           echo "Artifact: $ARTIFACT"
           LLAMACPP=llama-b3256-bin-macos-arm64.zip
           MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
+          KUBO=kubo_v0.30.0_darwin-arm64.tar.gz
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
+          wget -nv https://github.com/ipfs/kubo/releases/download/v0.30.0/$KUBO
           unzip -o -j $LLAMACPP build/bin/llama-server
-          echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./MorpheusUI.app/Contents/MacOS/MorpheusUI"]}' > mor-launch.json
+          echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./MorpheusUI.app/Contents/MacOS/MorpheusUI","./ipfs daemon --init"]}' > mor-launch.json
           echo "Contents of mor-launch.json: "
           cat mor-launch.json
+          echo === >> LICENSE
+          unzip -p $LLAMACPP build/bin/LICENSE >> LICENSE
+          tar xzf $KUBO --strip-components=1 kubo/ipfs
           mv ./cli/mor-cli mor-cli
           unzip ./ui-desktop/dist/morpheus-ui-${VFULL}-arm64-mac.zip
-          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json models-config.json rating-config.json mor-cli
+          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json models-config.json rating-config.json mor-cli ipfs
           zip -r $ARTIFACT 'MorpheusUI.app'
 
       - name: Upload artifacts
@@ -405,19 +423,24 @@ jobs:
           echo "Artifact: $ARTIFACT"
           LLAMACPP=llama-b3256-bin-win-avx2-x64.zip
           MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
+          KUBO=kubo_v0.30.0_windows-amd64.zip
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
+          wget -nv https://github.com/ipfs/kubo/releases/download/v0.30.0/$KUBO
           unzip -o -j $LLAMACPP llama-server.exe llama.dll ggml.dll
-          echo '{"run":["./llama-server.exe -m ./'"$MODEL"'","./proxy-router.exe","./morpheus-ui-'"$VFULL"'-x64-win.exe"]}' > mor-launch.json
+          echo '{"run":["./llama-server.exe -m ./'"$MODEL"'","./proxy-router.exe","./morpheus-ui-'"$VFULL"'-x64-win.exe","./ipfs.exe daemon --init"]}' > mor-launch.json
           echo "Contents of mor-launch.json: "
           cat mor-launch.json
           mv .env .env.tmp
           sed 's|\./data/|.\\data\\|g' .env.tmp > .env
+          unzip -o -j $KUBO kubo/ipfs.exe
+          echo === >> LICENSE
+          unzip -p $KUBO kubo/LICENSE >> LICENSE
           mv ./proxy-router/bin/proxy-router proxy-router.exe
           mv ./cli/mor-cli mor-cli.exe
           mv ./launcher/mor-launch mor-launch.exe
           mv "./ui-desktop/dist/morpheus-ui-$VFULL-x64-win" morpheus-ui-$VFULL-x64-win.exe
-          7z a $ARTIFACT LICENSE mor-launch.exe proxy-router.exe .env llama-server.exe llama.dll ggml.dll $MODEL mor-launch.json morpheus-ui-$VFULL-x64-win.exe models-config.json rating-config.json mor-cli.exe
+          7z a $ARTIFACT LICENSE mor-launch.exe proxy-router.exe .env llama-server.exe llama.dll ggml.dll $MODEL mor-launch.json morpheus-ui-$VFULL-x64-win.exe models-config.json rating-config.json mor-cli.exe ipfs.exe
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
