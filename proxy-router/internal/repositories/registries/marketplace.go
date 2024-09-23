@@ -35,17 +35,17 @@ func NewMarketplace(marketplaceAddr common.Address, client *ethclient.Client, lo
 	}
 }
 
-func (g *Marketplace) PostModelBid(ctx *bind.TransactOpts, provider common.Address, model common.Hash, pricePerSecond *big.Int) error {
-	tx, err := g.marketplace.PostModelBid(ctx, provider, model, pricePerSecond)
+func (g *Marketplace) PostModelBid(opts *bind.TransactOpts, provider common.Address, model common.Hash, pricePerSecond *big.Int) error {
+	tx, err := g.marketplace.PostModelBid(opts, provider, model, pricePerSecond)
 	if err != nil {
-		return lib.TryConvertGethError(err, marketplace.MarketplaceMetaData)
+		return lib.TryConvertGethError(err)
 	}
 
 	// Wait for the transaction receipt
-	receipt, err := bind.WaitMined(context.Background(), g.client, tx)
+	receipt, err := bind.WaitMined(opts.Context, g.client, tx)
 
 	if err != nil {
-		return lib.TryConvertGethError(err, marketplace.MarketplaceMetaData)
+		return lib.TryConvertGethError(err)
 	}
 
 	// Find the event log
@@ -63,17 +63,17 @@ func (g *Marketplace) PostModelBid(ctx *bind.TransactOpts, provider common.Addre
 	return fmt.Errorf("PostModelBid event not found in transaction logs")
 }
 
-func (g *Marketplace) DeleteBid(ctx *bind.TransactOpts, bidId common.Hash) (common.Hash, error) {
-	tx, err := g.marketplace.DeleteModelAgentBid(ctx, bidId)
+func (g *Marketplace) DeleteBid(opts *bind.TransactOpts, bidId common.Hash) (common.Hash, error) {
+	tx, err := g.marketplace.DeleteModelAgentBid(opts, bidId)
 	if err != nil {
-		return common.Hash{}, lib.TryConvertGethError(err, marketplace.MarketplaceMetaData)
+		return common.Hash{}, lib.TryConvertGethError(err)
 	}
 
 	// Wait for the transaction receipt
-	receipt, err := bind.WaitMined(context.Background(), g.client, tx)
+	receipt, err := bind.WaitMined(opts.Context, g.client, tx)
 
 	if err != nil {
-		return common.Hash{}, lib.TryConvertGethError(err, marketplace.MarketplaceMetaData)
+		return common.Hash{}, lib.TryConvertGethError(err)
 	}
 
 	// Find the event log
