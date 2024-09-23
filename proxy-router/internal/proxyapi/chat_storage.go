@@ -74,6 +74,11 @@ func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isSession bo
 		}
 	}
 
+	switch p := prompt.(type) {
+	case *aiengine.ProdiaGenerationRequest:
+		p.ApiKey = "REDACTED"
+	}
+
 	newEntry := map[string]interface{}{
 		"prompt":     prompt,
 		"response":   response,
