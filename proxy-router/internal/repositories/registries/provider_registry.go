@@ -51,15 +51,15 @@ func (g *ProviderRegistry) GetAllProviders(ctx context.Context) ([]common.Addres
 	return addresses, providers, nil
 }
 
-func (g *ProviderRegistry) CreateNewProvider(ctx *bind.TransactOpts, address common.Address, addStake *lib.BigInt, endpoint string) error {
-	providerTx, err := g.providerRegistry.ProviderRegister(ctx, address, &addStake.Int, endpoint)
+func (g *ProviderRegistry) CreateNewProvider(opts *bind.TransactOpts, address common.Address, addStake *lib.BigInt, endpoint string) error {
+	providerTx, err := g.providerRegistry.ProviderRegister(opts, address, &addStake.Int, endpoint)
 
 	if err != nil {
 		return lib.TryConvertGethError(err)
 	}
 
 	// Wait for the transaction receipt
-	receipt, err := bind.WaitMined(context.Background(), g.client, providerTx)
+	receipt, err := bind.WaitMined(opts.Context, g.client, providerTx)
 	if err != nil {
 		return lib.TryConvertGethError(err)
 	}
@@ -79,15 +79,15 @@ func (g *ProviderRegistry) CreateNewProvider(ctx *bind.TransactOpts, address com
 	return fmt.Errorf("OpenSession event not found in transaction logs")
 }
 
-func (g *ProviderRegistry) DeregisterProvider(ctx *bind.TransactOpts, address common.Address) (common.Hash, error) {
-	providerTx, err := g.providerRegistry.ProviderDeregister(ctx, address)
+func (g *ProviderRegistry) DeregisterProvider(opts *bind.TransactOpts, address common.Address) (common.Hash, error) {
+	providerTx, err := g.providerRegistry.ProviderDeregister(opts, address)
 
 	if err != nil {
 		return common.Hash{}, lib.TryConvertGethError(err)
 	}
 
 	// Wait for the transaction receipt
-	receipt, err := bind.WaitMined(context.Background(), g.client, providerTx)
+	receipt, err := bind.WaitMined(opts.Context, g.client, providerTx)
 	if err != nil {
 		return common.Hash{}, lib.TryConvertGethError(err)
 	}

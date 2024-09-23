@@ -46,14 +46,14 @@ func (g *ModelRegistry) GetAllModels(ctx context.Context) ([][32]byte, []modelre
 	return adresses, models, nil
 }
 
-func (g *ModelRegistry) CreateNewModel(ctx *bind.TransactOpts, modelId common.Hash, ipfsID common.Hash, fee *lib.BigInt, stake *lib.BigInt, owner common.Address, name string, tags []string) error {
-	tx, err := g.modelRegistry.ModelRegister(ctx, modelId, ipfsID, &fee.Int, &stake.Int, owner, name, tags)
+func (g *ModelRegistry) CreateNewModel(opts *bind.TransactOpts, modelId common.Hash, ipfsID common.Hash, fee *lib.BigInt, stake *lib.BigInt, owner common.Address, name string, tags []string) error {
+	tx, err := g.modelRegistry.ModelRegister(opts, modelId, ipfsID, &fee.Int, &stake.Int, owner, name, tags)
 	if err != nil {
 		return lib.TryConvertGethError(err)
 	}
 
 	// Wait for the transaction receipt
-	receipt, err := bind.WaitMined(context.Background(), g.client, tx)
+	receipt, err := bind.WaitMined(opts.Context, g.client, tx)
 	if err != nil {
 		return lib.TryConvertGethError(err)
 	}
@@ -72,15 +72,15 @@ func (g *ModelRegistry) CreateNewModel(ctx *bind.TransactOpts, modelId common.Ha
 	return fmt.Errorf("ModelRegistered event not found in transaction logs")
 }
 
-func (g *ModelRegistry) DeregisterModel(ctx *bind.TransactOpts, modelId common.Hash) (common.Hash, error) {
-	tx, err := g.modelRegistry.ModelDeregister(ctx, modelId)
+func (g *ModelRegistry) DeregisterModel(opts *bind.TransactOpts, modelId common.Hash) (common.Hash, error) {
+	tx, err := g.modelRegistry.ModelDeregister(opts, modelId)
 
 	if err != nil {
 		return common.Hash{}, lib.TryConvertGethError(err)
 	}
 
 	// Wait for the transaction receipt
-	receipt, err := bind.WaitMined(context.Background(), g.client, tx)
+	receipt, err := bind.WaitMined(opts.Context, g.client, tx)
 	if err != nil {
 		return common.Hash{}, lib.TryConvertGethError(err)
 	}
