@@ -630,25 +630,6 @@ definitions:
       version:
         type: string
     type: object
-  walletapi.SetupWalletReqBody:
-    properties:
-      privateKey:
-        type: string
-    required:
-    - privateKey
-    type: object
-  walletapi.WalletRes:
-    properties:
-      address:
-        example: "0x1234"
-        type: string
-    type: object
-  walletapi.statusRes:
-    properties:
-      status:
-        example: ok
-        type: string
-    type: object
 externalDocs:
   description: OpenAPI
   url: https://swagger.io/resources/open-api/
@@ -1352,6 +1333,18 @@ paths:
       tags:
       - chat
   /wallet:
+    delete:
+      description: Remove wallet from proxy storage
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: statusRes
+      summary: Remove wallet from proxy
+      tags:
+      - wallet
     get:
       description: Get wallet address
       produces:
@@ -1360,27 +1353,52 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/walletapi.WalletRes'
+            type: WalletRes
       summary: Get Wallet
       tags:
       - wallet
+  /wallet/mnemonic:
     post:
-      description: Set wallet private key
+      description: Setup wallet using mnemonic
       parameters:
-      - description: Private key
+      - description: Mnemonic
         in: body
-        name: privatekey
-        required: true
+        name: mnemonic
         schema:
-          $ref: '#/definitions/walletapi.SetupWalletReqBody'
+          type: string
+      - description: Derivation path
+        in: body
+        name: derivationPath
+        schema:
+          type: string
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/walletapi.statusRes'
-      summary: Set Wallet
+            type: WalletRes
+      summary: Setup wallet using mnemonic
+      tags:
+      - wallet
+  /wallet/privateKey:
+    post:
+      description: Setup wallet with private key
+      parameters:
+      - description: Private key
+        in: body
+        name: privatekey
+        required: true
+        schema:
+          type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: WalletRes
+      summary: Setup wallet with private key
       tags:
       - wallet
 swagger: "2.0"
