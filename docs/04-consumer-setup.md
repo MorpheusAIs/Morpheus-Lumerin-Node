@@ -26,6 +26,9 @@ It will run 3 different pieces of software on your local machine:
     1. **OPTIONAL to use existing Wallet** 
         - Instead of creating an new wallet and if you have the existing wallet's mnemonic, when prompted, select **`Recover your wallet Saved Mnemonic`** instead.
 
+5. Startup CLI Interface (Optional): 
+    * Linux & MacOS: Open a terminal and navigate to the folder and run `./mor-cli`
+
 ## Validation Steps:
 1. Local Test: Once the UI is up and running,
     1. You should see tokens for saETH and saMOR that you sent to this wallet earlier. 

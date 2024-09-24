@@ -1,4 +1,4 @@
-## "Simple Run From Mac" - 3 terminal windows
+## "Simple Run From Mac" - 4 terminal windows
 
 ### Overview
 - This is a simple guide to get the Llama.cpp model, Lumerin proxy-router and ui-desktop from source running on a Mac
@@ -16,6 +16,7 @@
     2. Clone the Morpheus-Lumerin-Node repo from Github 
     3. Configure, Build and run the proxy-router
     4. Configure, Build and run the ui-desktop
+    5. Configure, Build and run the cli
 
 ## **A. LLAMA.CPP**
 * Open first terminal / cli window 
@@ -170,3 +171,40 @@ yarn dev
   - **Locked Files** In certain cases the proxy-router will not let go of the `./data/` logging files… to clean them: 
     - Run `lsof | grep /proxy-router/data/` to list the current open files in that directory, they should all have a common process ID (Second column on the screen)
     - Run `kill -9 xxxxxx` the process id that matches to clean it all up
+
+## **D. CLI**
+* Open 4th terminal / cli window 
+* You will need to know 
+  * TCP port that your proxy-router API interface is listening on (8082 in this example)
+
+**1. Navigate to ui-desktop**
+`cd <your_path>/Morpheus-Lumerin-Node/cli`
+
+**2. Check Environment Variables**
+- Within the cli directory, copy the `.env.example` to `.env` and check the variables as needed 
+- At the current time, the defaults in the .env file shold be sufficient to operate as long as proxy-router variables for ports have changed. 
+- Double check that your API_HOST is set to `http://localhost:8082` or what you used for the proxy-router. 
+- This is what enables the CLI to communicate to the proxy-router environment 
+
+```sh
+cp .env.example .env
+vi .env 
+```
+
+**3. Build CLI**
+```sh
+make build
+```
+
+**4. Validate that the cli is working:**
+```sh
+./mor-cli -h
+```
+
+**5. Validate that the cli is connected to proxy-router:**
+```sh
+./mor-cli healthcheck
+```
+```sh
+{"Status":"healthy","Uptime":"18s","Version":"TO BE SET AT BUILD TIME"}
+```
