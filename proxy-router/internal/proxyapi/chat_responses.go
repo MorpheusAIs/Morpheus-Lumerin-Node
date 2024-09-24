@@ -9,6 +9,7 @@ import (
 type ChatCompletionChoice struct {
 	Index   int                   `json:"index"`
 	Message ChatCompletionMessage `json:"message"`
+	Delta   ChatCompletionDelta   `json:"delta"`
 	// FinishReason
 	// stop: API returned complete message,
 	// or a message terminated by one of the stop sequences provided via the stop parameter

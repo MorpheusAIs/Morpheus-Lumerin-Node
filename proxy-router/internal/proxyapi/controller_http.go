@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
@@ -14,14 +15,16 @@ import (
 )
 
 type ProxyController struct {
-	service  *ProxyServiceSender
-	aiEngine *aiengine.AiEngine
+	service     *ProxyServiceSender
+	aiEngine    *aiengine.AiEngine
+	chatStorage *ChatStorage
 }
 
-func NewProxyController(service *ProxyServiceSender, aiEngine *aiengine.AiEngine) *ProxyController {
+func NewProxyController(service *ProxyServiceSender, aiEngine *aiengine.AiEngine, chatStorage *ChatStorage) *ProxyController {
 	c := &ProxyController{
-		service:  service,
-		aiEngine: aiEngine,
+		service:     service,
+		aiEngine:    aiEngine,
+		chatStorage: chatStorage,
 	}
 
 	return c
@@ -75,6 +78,7 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 		body openai.ChatCompletionRequest
 		head PromptHead
 	)
+	var responses []interface{}
 
 	if err := ctx.ShouldBindHeader(&head); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -85,15 +89,25 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 		return
 	}
 
+	// Record the prompt time
+	promptAt := time.Now()
+
 	if (head.SessionID == lib.Hash{}) {
 		body.Stream = ctx.GetHeader(constants.HEADER_ACCEPT) == constants.CONTENT_TYPE_JSON
 		modelId := head.ModelID.Hex()
 
 		prompt, t := c.GetBodyForLocalPrompt(modelId, &body)
+		responseAt := time.Now()
+
 		if t == "openai" {
-			c.aiEngine.PromptCb(ctx, &body)
+			res, _ := c.aiEngine.PromptCb(ctx, &body)
+			responses = res.([]interface{})
+			if err := c.chatStorage.StorePromptResponseToFile(modelId, false, prompt, responses, promptAt, responseAt); err != nil {
+				fmt.Println("Error storing prompt and responses:", err)
+			}
 		}
 		if t == "prodia" {
+			var prodiaResponses []interface{}
 			c.aiEngine.PromptProdiaImage(ctx, prompt.(*aiengine.ProdiaGenerationRequest), func(completion interface{}) error {
 				ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_EVENT_STREAM)
 				marshalledResponse, err := json.Marshal(completion)
@@ -104,21 +118,30 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 				if err != nil {
 					return err
 				}
-
 				ctx.Writer.Flush()
+
+				prodiaResponses = append(prodiaResponses, completion)
+				if err := c.chatStorage.StorePromptResponseToFile(modelId, false, prompt, prodiaResponses, promptAt, responseAt); err != nil {
+					fmt.Println("Error storing prompt and responses:", err)
+				}
 				return nil
 			})
 		}
-
 		return
 	}
 
-	err := c.service.SendPrompt(ctx, ctx.Writer, &body, head.SessionID.Hash)
+	res, err := c.service.SendPrompt(ctx, ctx.Writer, &body, head.SessionID.Hash)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
+	responses = res.([]interface{})
+	responseAt := time.Now()
+	sessionIdStr := head.SessionID.Hex()
+	if err := c.chatStorage.StorePromptResponseToFile(sessionIdStr, true, body, responses, promptAt, responseAt); err != nil {
+		fmt.Println("Error storing prompt and responses:", err)
+	}
 	return
 }
 

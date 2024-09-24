@@ -41,6 +41,11 @@ type ChatCompletionMessage struct {
 	ToolCallID string `json:"tool_call_id,omitempty"`
 }
 
+type ChatCompletionDelta struct {
+	Content string `json:"content"`
+	Role    string `json:"role"`
+}
+
 type ChatCompletionResponseFormat struct {
 	Type ChatCompletionResponseFormatType `json:"type,omitempty"`
 }
