@@ -6,7 +6,14 @@ import {DiamondOwnableStorage} from "@solarity/solidity-lib/diamond/access/ownab
 import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 
 abstract contract OwnableDiamondStorage is DiamondOwnableStorage, Context {
+    /**
+     * @dev The caller account is not authorized to perform an operation.
+     */
+    error OwnableUnauthorizedAccount(address account_);
+
     function _onlyOwner() internal view virtual override {
-        require(owner() == _msgSender(), "OwnableDiamondStorage: not an owner");
+        if (owner() != _msgSender()) {
+            revert OwnableUnauthorizedAccount(_msgSender());
+        }
     }
 }

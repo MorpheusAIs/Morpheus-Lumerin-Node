@@ -32,8 +32,6 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
         string[] calldata tags_
     ) external {
         if (!_isOwnerOrModelOwner(owner_)) {
-            // TODO: such that we cannon create a model with the owner as another address
-            // Do we need this check?
             revert NotOwnerOrModelOwner();
         }
 

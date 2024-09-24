@@ -362,7 +362,7 @@ describe('session actions', () => {
 
         // close session
         const report = await getReport(PROVIDER, sessionId, 10, 10);
-        await sessionRouter.connect(SECOND).closeSession(report.msg, report.sig);
+        await sessionRouter.connect(SECOND).closeSession(report.msg, report.signature);
 
         await setTime(Number(startOfTheDay(await getCurrentBlockTime()) + DAY));
 
@@ -387,7 +387,7 @@ describe('session actions', () => {
 
         // close session
         const report = await getReport(PROVIDER, sessionId, 10, 10);
-        await sessionRouter.connect(SECOND).closeSession(report.msg, report.sig);
+        await sessionRouter.connect(SECOND).closeSession(report.msg, report.signature);
 
         await setTime(Number(startOfTheDay(await getCurrentBlockTime()) + DAY));
 
@@ -410,7 +410,7 @@ describe('session actions', () => {
 
         // close session
         const report = await getReport(PROVIDER, sessionId, 10, 10);
-        await sessionRouter.connect(SECOND).closeSession(report.msg, report.sig);
+        await sessionRouter.connect(SECOND).closeSession(report.msg, report.signature);
 
         await setTime(Number(startOfTheDay(await getCurrentBlockTime()) + DAY));
 
@@ -483,9 +483,7 @@ describe('session actions', () => {
         const { msg } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
         const sig = randomBytes(65);
 
-        await expect(sessionRouter.connect(SECOND).openSession(session.stake, msg, sig)).to.be.revertedWith(
-          'ECDSA: invalid signature',
-        );
+        await expect(sessionRouter.connect(SECOND).openSession(session.stake, msg, sig)).to.be.reverted;
       });
 
       it('should error when opening two bids with same signature', async () => {

@@ -479,8 +479,9 @@ describe('Model registry', () => {
         expect(await modelRegistry.modelMinimumStake()).eq(minStake);
       });
       it('Should error when not owner is setting min stake', async () => {
-        await expect(modelRegistry.connect(THIRD).setModelMinimumStake(0)).to.revertedWith(
-          'OwnableDiamondStorage: not an owner',
+        await expect(modelRegistry.connect(THIRD).setModelMinimumStake(0)).to.revertedWithCustomError(
+          diamond,
+          'OwnableUnauthorizedAccount',
         );
       });
       // it("Should get model stats", async () => {

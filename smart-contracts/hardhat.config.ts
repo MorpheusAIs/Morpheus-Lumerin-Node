@@ -5,6 +5,7 @@ import '@solarity/hardhat-markup';
 import '@solarity/hardhat-migrate';
 import '@typechain/hardhat';
 import * as dotenv from 'dotenv';
+import 'hardhat-gas-reporter';
 import { HardhatUserConfig } from 'hardhat/types';
 import 'solidity-coverage';
 import 'tsconfig-paths/register';
@@ -58,6 +59,17 @@ const config: HardhatUserConfig = {
       'contracts/diamond/libraries',
       'contracts/diamond/interfaces',
     ],
+  },
+  gasReporter: {
+    enabled: process.env.REPORT_GAS ? true : false,
+    outputJSON: true,
+    outputJSONFile: 'gas.json',
+    coinmarketcap: process.env.COINMARKETCAP_API_KEY,
+    reportPureAndViewMethods: true,
+    darkMode: true,
+    currency: 'USD',
+    L1Etherscan: process.env.ETHERSCAN_API_KEY,
+    L1: 'ethereum',
   },
   typechain: {
     outDir: `generated-types/${typechainTarget().split('-')[0]}`,

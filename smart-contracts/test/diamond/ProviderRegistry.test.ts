@@ -434,8 +434,9 @@ describe('Provider registry', () => {
       });
 
       it('Should error when not owner is setting min stake', async () => {
-        await expect(providerRegistry.connect(SECOND).providerSetMinStake(100)).to.be.revertedWith(
-          'OwnableDiamondStorage: not an owner',
+        await expect(providerRegistry.connect(SECOND).providerSetMinStake(100)).to.be.revertedWithCustomError(
+          diamond,
+          'OwnableUnauthorizedAccount',
         );
       });
     });

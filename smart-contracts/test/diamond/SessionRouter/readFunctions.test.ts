@@ -293,7 +293,7 @@ describe('Session router', () => {
             payoutStart: exp.payoutStart,
             decreaseInterval: exp.decreaseInterval,
           }),
-        ).to.revertedWith('OwnableDiamondStorage: not an owner');
+        ).to.revertedWithCustomError(diamond, 'OwnableUnauthorizedAccount');
       });
 
       it('should revert if pool is not exists', async () => {
@@ -319,7 +319,7 @@ describe('Session router', () => {
 
         // close session with dispute / user report
         const report = await getReport(SECOND, sessionId, 10, 10);
-        await sessionRouter.connect(SECOND).closeSession(report.msg, report.sig);
+        await sessionRouter.connect(SECOND).closeSession(report.msg, report.signature);
 
         // verify session is closed with dispute
         const sessionData = await sessionRouter.sessions(sessionId);

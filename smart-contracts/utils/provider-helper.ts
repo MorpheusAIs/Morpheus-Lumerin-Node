@@ -24,10 +24,10 @@ export const getReport = async (reporter: SignerWithAddress, sessionId: string, 
     ['bytes32', 'uint256', 'uint128', 'uint32', 'uint32'],
     [sessionId, await getChainId(), timestamp, tps * 1000, ttftMs],
   );
-  const sig = await reporter.signMessage(getBytes(keccak256(msg)));
+  const signature = await reporter.signMessage(getBytes(keccak256(msg)));
 
   return {
     msg,
-    sig,
+    signature,
   };
 };

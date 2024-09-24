@@ -452,8 +452,9 @@ describe('Marketplace', () => {
         await MOR.connect(PROVIDER).approve(marketplace, Number(bid.pricePerSecond) + newFee);
         await marketplace.connect(PROVIDER).postModelBid(bid.provider, bid.modelId, bid.pricePerSecond);
         // check balance after
-        await expect(marketplace.connect(PROVIDER).withdraw(bid.provider, newFee)).to.be.revertedWith(
-          'OwnableDiamondStorage: not an owner',
+        await expect(marketplace.connect(PROVIDER).withdraw(bid.provider, newFee)).to.be.revertedWithCustomError(
+          diamond,
+          'OwnableUnauthorizedAccount',
         );
       });
 
@@ -465,8 +466,9 @@ describe('Marketplace', () => {
       });
 
       it('should revert if caller is not an owner', async () => {
-        await expect(marketplace.connect(SECOND).setBidFee(1)).to.be.revertedWith(
-          'OwnableDiamondStorage: not an owner',
+        await expect(marketplace.connect(SECOND).setBidFee(1)).to.be.revertedWithCustomError(
+          diamond,
+          'OwnableUnauthorizedAccount',
         );
       });
     });

@@ -277,7 +277,7 @@ describe('Session closeout', () => {
 
       // close session
       const report = await getReport(PROVIDER, sessionId, 10, 1000);
-      await sessionRouter.connect(SECOND).closeSession(report.msg, report.sig);
+      await sessionRouter.connect(SECOND).closeSession(report.msg, report.signature);
 
       // verify session is closed without dispute
       const sessionData = await sessionRouter.sessions(sessionId);
@@ -309,7 +309,7 @@ describe('Session closeout', () => {
 
       // close session
       const report = await getReport(PROVIDER, sessionId, 10, 1000);
-      await sessionRouter.connect(SECOND).closeSession(report.msg, report.sig);
+      await sessionRouter.connect(SECOND).closeSession(report.msg, report.signature);
 
       // verify session is closed without dispute
       const sessionData = await sessionRouter.sessions(sessionId);
@@ -340,7 +340,7 @@ describe('Session closeout', () => {
 
       // close session with user signature
       const report = await getReport(SECOND, sessionId, 10, 1000);
-      await sessionRouter.connect(SECOND).closeSession(report.msg, report.sig);
+      await sessionRouter.connect(SECOND).closeSession(report.msg, report.signature);
 
       // verify session is closed with dispute
       const sessionData = await sessionRouter.sessions(sessionId);
@@ -387,10 +387,9 @@ describe('Session closeout', () => {
       // close session with user signature
       const report = await getReport(SECOND, sessionId, 10, 10);
 
-      await expect(sessionRouter.connect(THIRD).closeSession(report.msg, report.sig)).to.be.revertedWithCustomError(
-        sessionRouter,
-        'NotOwnerOrUser',
-      );
+      await expect(
+        sessionRouter.connect(THIRD).closeSession(report.msg, report.signature),
+      ).to.be.revertedWithCustomError(sessionRouter, 'NotOwnerOrUser');
     });
 
     it('should limit reward by stake amount', async () => {
@@ -450,7 +449,7 @@ describe('Session closeout', () => {
       const providerBalanceBefore = await MOR.balanceOf(PROVIDER);
       // close session without dispute
       const report = await getReport(PROVIDER, sessionId, 10, 1000);
-      await sessionRouter.connect(SECOND).closeSession(report.msg, report.sig);
+      await sessionRouter.connect(SECOND).closeSession(report.msg, report.signature);
 
       const providerBalanceAfter = await MOR.balanceOf(PROVIDER);
 
@@ -466,9 +465,8 @@ describe('Session closeout', () => {
     it('should error if session is not exists', async () => {
       // close session
       const report = await getReport(PROVIDER, randomBytes32(), 10, 1000);
-      await sessionRouter.connect(SECOND).closeSession(report.msg, report.sig);
 
-      await expect(sessionRouter.connect(SECOND).closeSession(report.msg, report.sig)).to.revertedWithCustomError(
+      await expect(sessionRouter.connect(SECOND).closeSession(report.msg, report.signature)).to.revertedWithCustomError(
         sessionRouter,
         'SessionNotFound',
       );
@@ -485,9 +483,9 @@ describe('Session closeout', () => {
 
       // close session
       const report = await getReport(PROVIDER, sessionId, 10, 1000);
-      await sessionRouter.connect(SECOND).closeSession(report.msg, report.sig);
+      await sessionRouter.connect(SECOND).closeSession(report.msg, report.signature);
 
-      await expect(sessionRouter.connect(SECOND).closeSession(report.msg, report.sig)).to.revertedWithCustomError(
+      await expect(sessionRouter.connect(SECOND).closeSession(report.msg, report.signature)).to.revertedWithCustomError(
         sessionRouter,
         'SessionAlreadyClosed',
       );
@@ -495,13 +493,16 @@ describe('Session closeout', () => {
 
     it('should error when approval expired', async () => {
       const { msg, signature } = await getProviderApproval(PROVIDER, await SECOND.getAddress(), session.bidId);
+      // open session
+      const sessionId = await sessionRouter.connect(SECOND).openSession.staticCall(session.stake, msg, signature);
+      await sessionRouter.connect(SECOND).openSession(session.stake, msg, signature);
+      // close session
+      const report = await getReport(PROVIDER, sessionId, 10, 1000);
       const ttl = await sessionRouter.SIGNATURE_TTL();
-      await setTime(Number((await getCurrentBlockTime()) + ttl) + 1);
-
-      await expect(sessionRouter.connect(SECOND).closeSession(msg, signature)).to.be.revertedWithCustomError(
-        sessionRouter,
-        'SignatureExpired',
-      );
+      await setTime(Number((await getCurrentBlockTime()) + ttl + 1n));
+      await expect(
+        sessionRouter.connect(SECOND).closeSession(report.msg, report.signature),
+      ).to.be.revertedWithCustomError(sessionRouter, 'SignatureExpired');
     });
 
     it('should reset provider limitPeriodEarned after period', async () => {});

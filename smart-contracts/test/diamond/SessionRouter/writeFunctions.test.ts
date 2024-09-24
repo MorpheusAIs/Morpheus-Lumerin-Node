@@ -322,7 +322,7 @@ describe('Session router', () => {
 
       // close session
       const report = await getReport(PROVIDER, sessionId, 10, 10);
-      await sessionRouter.connect(SECOND).closeSession(report.msg, report.sig);
+      await sessionRouter.connect(SECOND).closeSession(report.msg, report.signature);
 
       // check history
       const sessionIds = await sessionRouter.getSessionsByUser(SECOND, 0, 10);

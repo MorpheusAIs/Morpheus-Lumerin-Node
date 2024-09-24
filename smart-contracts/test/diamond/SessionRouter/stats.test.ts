@@ -308,7 +308,7 @@ describe('Session router - stats tests', () => {
     const signer = success ? PROVIDER : SECOND;
     const report = await getReport(signer, sessionId, tps, ttft);
 
-    await sessionRouter.connect(SECOND).closeSession(report.msg, report.sig);
+    await sessionRouter.connect(SECOND).closeSession(report.msg, report.signature);
   }
 
   async function getStake(durationSeconds: bigint, pricePerSecond: bigint): Promise<bigint> {
