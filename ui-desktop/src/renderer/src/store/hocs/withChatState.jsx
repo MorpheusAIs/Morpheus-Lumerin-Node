@@ -167,7 +167,7 @@ const withChatState = WrappedComponent => {
         return;
       }
       try {
-        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions?user=${user}`;
+        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions/user?user=${user}`;
         const response = await fetch(path);
         const data = await response.json();
         return data.sessions;

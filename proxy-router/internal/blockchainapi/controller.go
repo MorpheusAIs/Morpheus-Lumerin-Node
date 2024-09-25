@@ -2,7 +2,6 @@ package blockchainapi
 
 import (
 	"crypto/rand"
-	"fmt"
 	"math/big"
 	"net/http"
 
@@ -60,7 +59,8 @@ func (c *BlockchainController) RegisterRoutes(r interfaces.Router) {
 	// sessions
 	r.GET("/proxy/sessions/:id/providerClaimableBalance", c.getProviderClaimableBalance)
 	r.POST("/proxy/sessions/:id/providerClaim", c.claimProviderBalance)
-	r.GET("/blockchain/sessions", c.getSessions)
+	r.GET("/blockchain/sessions/user", c.getSessionsForUser)
+	r.GET("/blockchain/sessions/provider", c.getSessionsForProvider)
 	r.GET("/blockchain/sessions/:id", c.getSession)
 	r.POST("/blockchain/sessions", c.openSession)
 	r.POST("/blockchain/bids/:id/session", c.openSessionByBid)
@@ -636,17 +636,16 @@ func (c *BlockchainController) getSession(ctx *gin.Context) {
 
 // GetSessions godoc
 //
-//	@Summary		Get Sessions
-//	@Description	Get sessions from blockchain by user or provider
+//	@Summary		Get Sessions for User
+//	@Description	Get sessions from blockchain by user
 //	@Tags			sessions
 //	@Produce		json
-//	@Param			offset		query		string	false	"Offset"
-//	@Param			limit		query		string	false	"Limit"
-//	@Param			provider	query		string	false	"Provider address"
-//	@Param			user		query		string	false	"User address"
-//	@Success		200			{object}	structs.SessionsRes
-//	@Router			/blockchain/sessions [get]
-func (c *BlockchainController) getSessions(ctx *gin.Context) {
+//	@Param			offset	query		string	false	"Offset"
+//	@Param			limit	query		string	false	"Limit"
+//	@Param			user	query		string	true	"User address"
+//	@Success		200		{object}	structs.SessionsRes
+//	@Router			/blockchain/sessions/user [get]
+func (c *BlockchainController) getSessionsForUser(ctx *gin.Context) {
 	offset, limit, err := getOffsetLimit(ctx)
 	if err != nil {
 		c.log.Error(err)
@@ -654,7 +653,7 @@ func (c *BlockchainController) getSessions(ctx *gin.Context) {
 		return
 	}
 
-	var req structs.QueryUserOrProvider
+	var req structs.QueryUser
 	err = ctx.ShouldBindQuery(&req)
 	if err != nil {
 		c.log.Error(err)
@@ -662,23 +661,45 @@ func (c *BlockchainController) getSessions(ctx *gin.Context) {
 		return
 	}
 
-	hasUser := req.User != lib.Address{}
-	hasProvider := req.Provider != lib.Address{}
+	sessions, err := c.service.GetSessions(ctx, req.User.Address, common.Address{}, offset, limit)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
+		return
+	}
 
-	if !hasUser && !hasProvider {
-		err := fmt.Errorf("user or provider is required")
+	ctx.JSON(http.StatusOK, structs.SessionsRes{Sessions: sessions})
+	return
+}
+
+// GetSessions godoc
+//
+//	@Summary		Get Sessions for Provider
+//	@Description	Get sessions from blockchain by provider
+//	@Tags			sessions
+//	@Produce		json
+//	@Param			offset		query		string	false	"Offset"
+//	@Param			limit		query		string	false	"Limit"
+//	@Param			provider	query		string	true	"Provider address"
+//	@Success		200			{object}	structs.SessionsRes
+//	@Router			/blockchain/sessions/provider [get]
+func (c *BlockchainController) getSessionsForProvider(ctx *gin.Context) {
+	offset, limit, err := getOffsetLimit(ctx)
+	if err != nil {
 		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
 		return
 	}
-	if hasUser && hasProvider {
-		err := fmt.Errorf("only one of user or provider is allowed")
+
+	var req structs.QueryProvider
+	err = ctx.ShouldBindQuery(&req)
+	if err != nil {
 		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
 		return
 	}
 
-	sessions, err := c.service.GetSessions(ctx, req.User.Address, req.Provider.Address, offset, limit)
+	sessions, err := c.service.GetSessions(ctx, common.Address{}, req.Provider.Address, offset, limit)
 	if err != nil {
 		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
