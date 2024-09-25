@@ -16,7 +16,7 @@ This document provides a step-by-step guide to setting up a Consumer Node for th
 ### A. Proxy-Router CLI Setup  
 #### 1. Install OS-Specific Dependencies
 * git (https://git-scm.com/)
-* go (https://golang.org/)
+* go (https://golang.org/) Version >= 1.22
 
 #### 2. Clone & Navigate to the Repository
 ```bash

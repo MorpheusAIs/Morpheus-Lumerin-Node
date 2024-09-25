@@ -6,8 +6,8 @@
 - Wallet: if you’re going to start with an existing wallet from something like MetaMask (recommended)…make sure it’s a tier 1, not a derived or secondary address. Desktop-ui recover from mnemonic won’t work properly if you try to recover a secondary address with the primary mnemonic.  
 - Install & Configure OS-Specific Dependencies
   * git (https://git-scm.com/)
-  * go (https://golang.org/)
-  * node (https://nodejs.org/)
+  * go (https://golang.org/) Version >= 1.22
+  * node (https://nodejs.org/) Version >= 20
   * make (https://www.gnu.org/software/make/)
   * yarn (https://yarnpkg.com/)
 
