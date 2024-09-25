@@ -14,7 +14,7 @@ type TxRes struct {
 }
 
 type ErrRes struct {
-	Error error `json:"error" example:"error message"`
+	Error string `json:"error" example:"error message"`
 }
 
 type OpenSessionRes struct {
