@@ -18,6 +18,7 @@ contract Marketplace {
   error ProviderNotFound();
   error ModelOrAgentNotFound();
   error ActiveBidNotFound();
+  error PricePerSecondIsZero();
   error BidTaken();
   error NotEnoughBalance();
 
@@ -144,6 +145,9 @@ contract Marketplace {
     }
     if (!s.activeModels.exists(modelId)) {
       revert ModelOrAgentNotFound();
+    }
+    if (pricePerSecond == 0) {
+      revert PricePerSecondIsZero();
     }
 
     return postModelAgentBid(providerAddr, modelId, pricePerSecond);

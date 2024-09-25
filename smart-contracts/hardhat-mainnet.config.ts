@@ -31,7 +31,7 @@ const config: HardhatUserConfig = {
     apiKey: {
       sepolia: process.env.ETHERSCAN_API_KEY,
       arbitrumSepolia: process.env.ETHERSCAN_API_KEY,
-      sepolia: process.env.ETHERSCAN_API_KEY,
+      arbitrumOne: process.env.ETHERSCAN_API_KEY,
     },
   },
   sourcify: {

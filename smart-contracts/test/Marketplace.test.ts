@@ -50,6 +50,17 @@ describe("Marketplace", function () {
       });
     });
 
+    it("Should error if pricePerSecond is 0", async function () {
+      const { marketplace, expectedBid } = await loadFixture(deploySingleBid);
+
+      await catchError(marketplace.abi, "PricePerSecondIsZero", async () => {
+        await marketplace.simulate.postModelBid(
+          [expectedBid.providerAddr, expectedBid.modelId, 0n],
+          { account: expectedBid.providerAddr },
+        );
+      });
+    });
+
     it("Should create second bid", async function () {
       const {
         marketplace,

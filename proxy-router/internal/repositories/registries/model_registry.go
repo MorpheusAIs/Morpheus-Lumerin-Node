@@ -6,7 +6,6 @@ import (
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/modelregistry"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -18,7 +17,6 @@ type ModelRegistry struct {
 
 	// state
 	nonce uint64
-	mrABI *abi.ABI
 
 	// deps
 	modelRegistry *modelregistry.ModelRegistry
@@ -31,15 +29,10 @@ func NewModelRegistry(modelRegistryAddr common.Address, client *ethclient.Client
 	if err != nil {
 		panic("invalid model registry ABI")
 	}
-	mrABI, err := modelregistry.ModelRegistryMetaData.GetAbi()
-	if err != nil {
-		panic("invalid model registry ABI: " + err.Error())
-	}
 	return &ModelRegistry{
 		modelRegistry:     mr,
 		modelRegistryAddr: modelRegistryAddr,
 		client:            client,
-		mrABI:             mrABI,
 		log:               log,
 	}
 }
@@ -53,17 +46,16 @@ func (g *ModelRegistry) GetAllModels(ctx context.Context) ([][32]byte, []modelre
 	return adresses, models, nil
 }
 
-func (g *ModelRegistry) CreateNewModel(ctx *bind.TransactOpts, modelId common.Hash, ipfsID common.Hash, fee *lib.BigInt, stake *lib.BigInt, owner common.Address, name string, tags []string) error {
-	tx, err := g.modelRegistry.ModelRegister(ctx, modelId, ipfsID, &fee.Int, &stake.Int, owner, name, tags)
-
+func (g *ModelRegistry) CreateNewModel(opts *bind.TransactOpts, modelId common.Hash, ipfsID common.Hash, fee *lib.BigInt, stake *lib.BigInt, owner common.Address, name string, tags []string) error {
+	tx, err := g.modelRegistry.ModelRegister(opts, modelId, ipfsID, &fee.Int, &stake.Int, owner, name, tags)
 	if err != nil {
-		return lib.TryConvertGethError(err, modelregistry.ModelRegistryMetaData)
+		return lib.TryConvertGethError(err)
 	}
 
 	// Wait for the transaction receipt
-	receipt, err := bind.WaitMined(context.Background(), g.client, tx)
+	receipt, err := bind.WaitMined(opts.Context, g.client, tx)
 	if err != nil {
-		return lib.TryConvertGethError(err, modelregistry.ModelRegistryMetaData)
+		return lib.TryConvertGethError(err)
 	}
 
 	// Find the event log
@@ -78,6 +70,33 @@ func (g *ModelRegistry) CreateNewModel(ctx *bind.TransactOpts, modelId common.Ha
 	}
 
 	return fmt.Errorf("ModelRegistered event not found in transaction logs")
+}
+
+func (g *ModelRegistry) DeregisterModel(opts *bind.TransactOpts, modelId common.Hash) (common.Hash, error) {
+	tx, err := g.modelRegistry.ModelDeregister(opts, modelId)
+
+	if err != nil {
+		return common.Hash{}, lib.TryConvertGethError(err)
+	}
+
+	// Wait for the transaction receipt
+	receipt, err := bind.WaitMined(opts.Context, g.client, tx)
+	if err != nil {
+		return common.Hash{}, lib.TryConvertGethError(err)
+	}
+
+	// Find the event log
+	for _, log := range receipt.Logs {
+		_, err := g.modelRegistry.ParseModelDeregistered(*log)
+
+		if err != nil {
+			continue // not our event, skip it
+		}
+
+		return tx.Hash(), nil
+	}
+
+	return common.Hash{}, fmt.Errorf("ModelDeregistered event not found in transaction logs")
 }
 
 func (g *ModelRegistry) GetModelById(ctx context.Context, modelId common.Hash) (*modelregistry.Model, error) {
