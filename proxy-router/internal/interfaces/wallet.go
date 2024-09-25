@@ -6,5 +6,6 @@ type Wallet interface {
 	GetPrivateKey() (lib.HexString, error)
 	SetPrivateKey(privateKey lib.HexString) error
 	SetMnemonic(mnemonic string, derivationPath string) error
+	DeleteWallet() error
 	PrivateKeyUpdated() <-chan struct{}
 }

@@ -30,6 +30,10 @@ const StartBtn = styled(Button)`
     border: 1px solid #21dc8f!important;
 `
 
+const Container = styled.div`
+  height: 75vh;
+  overflow-y: auto;
+`
 
 function renderTable({ onClaim, sessions }) {
   return (
@@ -64,7 +68,7 @@ function renderTable({ onClaim, sessions }) {
 
 function ProvidersList({ data, claimFunds }) {
   
-  return (<div>
+  return (<Container>
       {data?.modelsNames && Object.keys(data?.modelsNames).map(model => {
         const modelSessions = data.results.filter(r => r.ModelAgentId.toLowerCase() == model.toLowerCase());
         
@@ -79,7 +83,7 @@ function ProvidersList({ data, claimFunds }) {
         </Accordion>
         )
       })}
-    </div>)
+    </Container>)
 }
 
 export default withRouter(withProvidersState(ProvidersList));
