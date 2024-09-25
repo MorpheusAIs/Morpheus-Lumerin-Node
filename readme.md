@@ -2,15 +2,22 @@
 ![Simple-Overview](docs/images/simple.png)
 The purpose of this software is to enable interaction with distributed, decentralized LLMs on the Morpheus network through a desktop chat experience.
 
-The steps listed below are for both the Consumer and Provider to get started with the Morpheus Lumerin Node. As the software is developed, both onboarding & configuration of the provider and consumer roles will be simplified, automated and more transparent to the end user.
+0. PreRequisites: Arbitrum Layer 2 Blockchain, Arbitrum MOR and Arbitrum ETH for staking and bidding
+1. Existing, Hosted AI model that is available for inference via the Morpheus network
+2. The proxy-router talks to and listens to the blockchain, routes prompts and inference between the providers’ models and the consumers that purchase and use the models
+3. Providers register their models via bids on the blockchain
+4. The consumer node is the “client” that will be purchasing bids from the blockchain, sending prompts via the proxy-router and receiving inference back from the provider’s models
+5. Consumers purchase the bid and stake MOR for their session time
+6. Once the bid has been purchased, prompt and inference (ChatGPT-like) can start
 
-# **NOTE: ARBITRUM SEPOLIA TESTNET ONLY at this time - DEVELOPER PREVIEW ONLY**
+# **NOTE: ARBITRUM SEPOLIA TESTNET ONLY at this time**
 
 **Components that are included in this repository are:**
 * Local `Llama.cpp` and tinyllama model to run locally for demonstration purposes only
 * Lumerin `proxy-router` is a background process that monitors sepcific blockchain contract events, 
 manages secure sessions between consumers and providers and routes prompts and responses between them
 * Lumerin `ui-desktop` is the front end UI to interact with LLMs and the Morpheus network via the proxy-router as a consumer
+* Lumerin `cli` is the cli client to interact with LLMs and the Morpheus network via the proxy-router as a consumer
 
 ## Tokens and Contract Information 
 * Morpheus saMOR Token: `0xc1664f994fd3991f98ae944bc16b9aed673ef5fd` 

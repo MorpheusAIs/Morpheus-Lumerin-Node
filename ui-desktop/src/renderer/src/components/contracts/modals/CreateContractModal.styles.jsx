@@ -245,3 +245,24 @@ export const ProfitMessageLabel = styled.div`
   border-bottom: ${p => (p.show ? '1px solid rgba(0,0,0,.125)' : '')};
   padding-bottom: ${p => (p.show ? '1rem' : '')};
 `;
+
+export const SearchContainer = styled.div`
+    input {
+      background-color: transparent;
+      border: 1px solid ${p => p.theme.colors.morMain};
+      color: white;
+    }
+    input::placeholder {
+      color: white;
+    }
+    .form-control:focus {
+      color: white;
+      background-color: transparent;
+      border-color: ${p => p.theme.colors.morMain};
+    }
+    .input-group-text {
+      background-color: transparent;
+      border: 1px solid ${p => p.theme.colors.morMain};
+      color: white;
+    }
+`

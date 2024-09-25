@@ -52,16 +52,16 @@ func NewSessionRouter(sessionRouterAddr common.Address, client *ethclient.Client
 	}
 }
 
-func (g *SessionRouter) OpenSession(ctx *bind.TransactOpts, approval []byte, approvalSig []byte, stake *big.Int, privateKeyHex lib.HexString) (sessionID common.Hash, providerID common.Address, userID common.Address, err error) {
-	sessionTx, err := g.sessionRouter.OpenSession(ctx, stake, approval, approvalSig)
+func (g *SessionRouter) OpenSession(opts *bind.TransactOpts, approval []byte, approvalSig []byte, stake *big.Int, privateKeyHex lib.HexString) (sessionID common.Hash, providerID common.Address, userID common.Address, err error) {
+	sessionTx, err := g.sessionRouter.OpenSession(opts, stake, approval, approvalSig)
 	if err != nil {
-		return common.Hash{}, common.Address{}, common.Address{}, lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
+		return common.Hash{}, common.Address{}, common.Address{}, lib.TryConvertGethError(err)
 	}
 
 	// Wait for the transaction receipt
-	receipt, err := bind.WaitMined(context.Background(), g.client, sessionTx)
+	receipt, err := bind.WaitMined(opts.Context, g.client, sessionTx)
 	if err != nil {
-		return common.Hash{}, common.Address{}, common.Address{}, lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
+		return common.Hash{}, common.Address{}, common.Address{}, lib.TryConvertGethError(err)
 	}
 
 	// Find the event log
@@ -88,7 +88,7 @@ func (g *SessionRouter) GetSession(ctx context.Context, sessionID common.Hash) (
 func (g *SessionRouter) GetSessionsByProvider(ctx context.Context, providerAddr common.Address, offset *big.Int, limit uint8) ([]sessionrouter.Session, error) {
 	sessions, err := g.sessionRouter.GetSessionsByProvider(&bind.CallOpts{Context: ctx}, providerAddr, offset, limit)
 	if err != nil {
-		return nil, lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
+		return nil, lib.TryConvertGethError(err)
 	}
 	return sessions, nil
 }
@@ -96,19 +96,19 @@ func (g *SessionRouter) GetSessionsByProvider(ctx context.Context, providerAddr 
 func (g *SessionRouter) GetSessionsByUser(ctx context.Context, userAddr common.Address, offset *big.Int, limit uint8) ([]sessionrouter.Session, error) {
 	sessions, err := g.sessionRouter.GetSessionsByUser(&bind.CallOpts{Context: ctx}, userAddr, offset, limit)
 	if err != nil {
-		return nil, lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
+		return nil, lib.TryConvertGethError(err)
 	}
 	return sessions, nil
 }
 
-func (g *SessionRouter) CloseSession(ctx *bind.TransactOpts, sessionID common.Hash, report []byte, signedReport []byte, privateKeyHex lib.HexString) (common.Hash, error) {
-	sessionTx, err := g.sessionRouter.CloseSession(ctx, report, signedReport)
+func (g *SessionRouter) CloseSession(opts *bind.TransactOpts, sessionID common.Hash, report []byte, signedReport []byte, privateKeyHex lib.HexString) (common.Hash, error) {
+	sessionTx, err := g.sessionRouter.CloseSession(opts, report, signedReport)
 	if err != nil {
-		return common.Hash{}, lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
+		return common.Hash{}, lib.TryConvertGethError(err)
 	}
 
 	// Wait for the transaction receipt
-	_, err = bind.WaitMined(context.Background(), g.client, sessionTx)
+	_, err = bind.WaitMined(opts.Context, g.client, sessionTx)
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -119,19 +119,19 @@ func (g *SessionRouter) CloseSession(ctx *bind.TransactOpts, sessionID common.Ha
 func (g *SessionRouter) GetProviderClaimableBalance(ctx context.Context, sessionId [32]byte) (*big.Int, error) {
 	balance, err := g.sessionRouter.GetProviderClaimableBalance(&bind.CallOpts{Context: ctx}, sessionId)
 	if err != nil {
-		return nil, lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
+		return nil, lib.TryConvertGethError(err)
 	}
 	return balance, nil
 }
 
-func (g *SessionRouter) ClaimProviderBalance(ctx *bind.TransactOpts, sessionId [32]byte, amount *big.Int) (common.Hash, error) {
-	tx, err := g.sessionRouter.ClaimProviderBalance(ctx, sessionId, amount)
+func (g *SessionRouter) ClaimProviderBalance(opts *bind.TransactOpts, sessionId [32]byte, amount *big.Int) (common.Hash, error) {
+	tx, err := g.sessionRouter.ClaimProviderBalance(opts, sessionId, amount)
 	if err != nil {
-		return common.Hash{}, lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
+		return common.Hash{}, lib.TryConvertGethError(err)
 	}
 
 	// Wait for the transaction receipt
-	_, err = bind.WaitMined(context.Background(), g.client, tx)
+	_, err = bind.WaitMined(opts.Context, g.client, tx)
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -143,7 +143,7 @@ func (g *SessionRouter) GetTodaysBudget(ctx context.Context) (*big.Int, error) {
 	timestamp := big.NewInt(time.Now().Unix())
 	budget, err := g.sessionRouter.GetTodaysBudget(&bind.CallOpts{Context: ctx}, timestamp)
 	if err != nil {
-		return nil, lib.TryConvertGethError(err, sessionrouter.SessionRouterMetaData)
+		return nil, lib.TryConvertGethError(err)
 	}
 	return budget, nil
 }
