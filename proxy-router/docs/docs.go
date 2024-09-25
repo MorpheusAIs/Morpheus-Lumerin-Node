@@ -640,50 +640,6 @@ const docTemplate = `{
             }
         },
         "/blockchain/sessions": {
-            "get": {
-                "description": "Get sessions from blockchain by user or provider",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "sessions"
-                ],
-                "summary": "Get Sessions",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Offset",
-                        "name": "offset",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Limit",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Provider address",
-                        "name": "provider",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "User address",
-                        "name": "user",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/structs.SessionsRes"
-                        }
-                    }
-                }
-            },
             "post": {
                 "description": "Sends transaction in blockchain to open a session",
                 "consumes": [
@@ -732,6 +688,88 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/structs.BudgetRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/sessions/provider": {
+            "get": {
+                "description": "Get sessions from blockchain by provider",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "Get Sessions for Provider",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Offset",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Limit",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Provider address",
+                        "name": "provider",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.SessionsRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/sessions/user": {
+            "get": {
+                "description": "Get sessions from blockchain by user",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "Get Sessions for User",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Offset",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Limit",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "User address",
+                        "name": "user",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.SessionsRes"
                         }
                     }
                 }
@@ -1237,6 +1275,9 @@ const docTemplate = `{
         "proxyapi.ChatCompletionChoice": {
             "type": "object",
             "properties": {
+                "delta": {
+                    "$ref": "#/definitions/proxyapi.ChatCompletionDelta"
+                },
                 "finish_reason": {
                     "description": "FinishReason\nstop: API returned complete message,\nor a message terminated by one of the stop sequences provided via the stop parameter\nlength: Incomplete model output due to max_tokens parameter or token limit\nfunction_call: The model decided to call a function\ncontent_filter: Omitted content due to a flag from our content filters\nnull: API response still in progress or incomplete",
                     "allOf": [
@@ -1253,6 +1294,17 @@ const docTemplate = `{
                 },
                 "message": {
                     "$ref": "#/definitions/proxyapi.ChatCompletionMessage"
+                }
+            }
+        },
+        "proxyapi.ChatCompletionDelta": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
                 }
             }
         },
