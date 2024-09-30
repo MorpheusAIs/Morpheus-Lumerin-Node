@@ -63,7 +63,7 @@ func (e *ModelConfigLoader) ModelConfigFromID(ID string) *ModelConfig {
 
 	modelConfig := e.modelConfigs[ID]
 	if modelConfig == (ModelConfig{}) {
-		e.log.Errorf("model config not found for ID: %s", ID)
+		e.log.Warnf("model config not found for ID: %s", ID)
 		return &ModelConfig{}
 	}
 
