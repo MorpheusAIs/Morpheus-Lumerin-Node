@@ -100,7 +100,13 @@ func (e *EventsListener) handleSessionOpened(event *sessionrouter.SessionRouterS
 	}
 
 	modelID := lib.BytesToString(session.ModelAgentId[:])
-	modelConfig := e.modelConfigLoader.ModelConfigFromID(modelID)
+
+	var modelConfig *config.ModelConfig
+	if session.Provider.Hex() == address.Hex() {
+		modelConfig = e.modelConfigLoader.ModelConfigFromID(modelID)
+	} else {
+		modelConfig = &config.ModelConfig{}
+	}
 
 	err = e.store.AddSession(&storages.Session{
 		Id:           sessionId,
