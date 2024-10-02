@@ -162,8 +162,8 @@ const Chat = (props) => {
             setChat({ id: makeId(16), createdAt: new Date(), modelId: selectedModel.Id });
         }
 
-        const prices = selectedModel.bids.map(x => x.PricePerSecond);
-        const maxPrice = Math.max(prices);
+        const prices = selectedModel.bids.map(x => Number(x.PricePerSecond));
+        const maxPrice = Math.max(...prices);
         const duration = calculateAcceptableDuration(maxPrice, Number(balances.mor), meta);
 
         console.log("open-session", duration);
@@ -463,8 +463,8 @@ const Chat = (props) => {
             return;
         }
 
-        const prices = selectedModel.bids.map(x => x.PricePerSecond);
-        const maxPrice = Math.max(prices);
+        const prices = selectedModel.bids.map(x => Number(x.PricePerSecond));
+        const maxPrice = Math.max(...prices);
 
         setRequiredStake({ min: calculateStake(maxPrice, 5), max: calculateStake(maxPrice, 24 * 60) })
     }
