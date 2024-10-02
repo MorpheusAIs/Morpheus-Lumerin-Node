@@ -121,13 +121,13 @@ function ModelRow(props) {
             return `${formatSmallNumber(targetBid?.PricePerSecond / (10 ** 18))} MOR`;
         }
 
-        const prices = bids.filter(x => x.Id).map(x => x.PricePerSecond);
+        const prices = bids.filter(x => x.Id).map(x => Number(x.PricePerSecond));
         if (prices.length == 1) {
             return `${formatSmallNumber(prices[0] / (10 ** 18))} MOR`;
         }
 
-        const minPrice = Math.min(prices);
-        const maxPrice = Math.max(prices);
+        const minPrice = Math.min(...prices);
+        const maxPrice = Math.max(...prices);
 
         return `${formatSmallNumber(minPrice / (10 ** 18))} - ${formatSmallNumber(maxPrice / (10 ** 18))} MOR`
     }
