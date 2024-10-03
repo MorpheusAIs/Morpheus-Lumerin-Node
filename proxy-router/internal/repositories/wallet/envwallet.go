@@ -32,6 +32,10 @@ func (w *EnvWallet) SetMnemonic(mnemonic string, derivationPath string) error {
 	return ErrEnvWalletSet
 }
 
+func (w *EnvWallet) DeleteWallet() error {
+	return ErrEnvWalletSet
+}
+
 func (w *EnvWallet) PrivateKeyUpdated() <-chan struct{} {
 	return w.updatedCh
 }

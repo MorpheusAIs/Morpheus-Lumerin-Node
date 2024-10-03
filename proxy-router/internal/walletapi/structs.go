@@ -5,8 +5,13 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-type SetupWalletReqBody struct {
-	PrivateKey lib.HexString `json:"privateKey" binding:"required" validate:"required,eth_addr"`
+type SetupWalletPrKeyReqBody struct {
+	PrivateKey lib.HexString `json:"privateKey" binding:"required" validate:"required"`
+}
+
+type SetupWalletMnemonicReqBody struct {
+	Mnemonic       string `json:"mnemonic" binding:"required" validate:"required"`
+	DerivationPath string `json:"derivationPath" binding:"required" validate:"required"`
 }
 
 type WalletRes struct {

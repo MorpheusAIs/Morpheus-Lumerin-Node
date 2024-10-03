@@ -4,10 +4,15 @@ import Modal from '../../contracts/modals/Modal';
 import styled from 'styled-components';
 import {
     TitleWrapper,
-    Title
+    Title,
+    SearchContainer
 } from '../../contracts/modals/CreateContractModal.styles';
+import Form from 'react-bootstrap/Form';
+import InputGroup from 'react-bootstrap/InputGroup';
+import { IconSearch } from '@tabler/icons-react';
 
 import ModelRow from './ModelRow';
+import { useState } from 'react';
 
 const rowRenderer = (models, onChangeModel) => ({ index, style }) => (
     <div style={style}>
@@ -20,7 +25,7 @@ const rowRenderer = (models, onChangeModel) => ({ index, style }) => (
 );
 
 const bodyProps = {
-    height: '500px',
+    height: '550px',
     width: '70%',
     maxWidth: '100%',
     onClick: e => e.stopPropagation()
@@ -31,6 +36,7 @@ const RVContainer = styled(RVList)`
   }`
 
 const ModelSelectionModal = ({ isActive, handleClose, models, onChangeModel }) => {
+    const [search, setSearch] = useState<string | undefined>();
 
     if (!isActive) {
         return <></>;
@@ -41,19 +47,40 @@ const ModelSelectionModal = ({ isActive, handleClose, models, onChangeModel }) =
         handleClose();
     }
 
+    const filterdModels = search ? models.filter(m => m.Name.includes(search)) : models;
+
     return (
-        <Modal onClose={handleClose} bodyProps={bodyProps}
+        <Modal 
+            onClose={() => {
+                setSearch(undefined);
+                handleClose();
+            }}
+            bodyProps={bodyProps}
         >
             <TitleWrapper>
-                <Title>Change Model</Title>
+                <Title>Select Model</Title>
             </TitleWrapper>
-            <AutoSizer width={400} height={600}>
+            <SearchContainer>
+                <InputGroup style={{ marginBottom: '15px' }}>
+                    <InputGroup.Text>
+                        <IconSearch />
+                    </InputGroup.Text>
+                    <Form.Control
+                        type="text"
+                        placeholder="Search..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                    />
+                </InputGroup>
+            </SearchContainer>
+            { filterdModels.length == 0 && <div>No models found</div> }
+            <AutoSizer width={400} height={385}>
                 {({ width, height }) => (
                     <RVContainer
-                        rowRenderer={rowRenderer(models, changeModelHandler)}
-                        rowHeight={75}
-                        rowCount={models.length}
-                        height={height || 500} // defaults for tests
+                        rowRenderer={rowRenderer(filterdModels, changeModelHandler)}
+                        rowHeight={45}
+                        rowCount={filterdModels.length}
+                        height={385} // defaults for tests
                         width={width || 500} // defaults for tests
                     />
                 )}

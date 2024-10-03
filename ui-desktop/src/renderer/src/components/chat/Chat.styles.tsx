@@ -31,7 +31,10 @@ export const ChatBlock = styled.div`
     }
 
     &.createSessionMode .session-container {
-        width: 400px;
+        width: 450px;
+        padding: 1rem;
+        background-color: rgba(138, 43, 226, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.16);
     }
 
     &.createSessionMode .session-title {
@@ -60,7 +63,8 @@ export const SendBtn = styled.div`
     position: absolute;
     right: 16px;
     border-radius: 5px;
-    width: 32px;
+    width: fit-content;
+    padding: 2px 5px;
     height: 32px;
     display: flex;
     align-items: center;
@@ -68,6 +72,7 @@ export const SendBtn = styled.div`
     text-align: center;
     bottom: 12px;
     background: ${p => p.theme.colors.morMain};
+    cursor: pointer;
 
     &[disabled] {
         opacity: 0.5;
@@ -101,10 +106,14 @@ export const MessageBody = styled.div`
     font-weight: 400;
     padding: 0 8px;
     font-size: 18px;
-    max-width: calc(100vw - 150px);
+    max-width: calc(100vw - 165px);
+
+    code {
+        color: ${p => p.theme.colors.morMain}
+    }
 
     @media (min-width: 800px) {
-        max-width: calc(100vw - 300px);
+        max-width: calc(100vw - 310px);
     }
 `
 
@@ -201,7 +210,7 @@ export const LoadingCover = styled.div`
 export const ImageContainer = styled.img`
     cursor: pointer;
     padding: 0.25rem;
-    background-color: var(--bs-highlight-color);
+    background-color: ${p => p.theme.colors.morMain}B3;
     border: var(--bs-border-width) solid var(--bs-highlight-color);
     border-radius: var(--bs-border-radius);
     max-width: 100%;
