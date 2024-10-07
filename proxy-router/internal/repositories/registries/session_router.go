@@ -69,15 +69,15 @@ func (g *SessionRouter) OpenSession(opts *bind.TransactOpts, approval []byte, ap
 		// Check if the log belongs to the OpenSession event
 		event, err := g.sessionRouter.ParseSessionOpened(*log)
 		if err == nil {
-			return event.SessionId, event.ProviderId, event.UserAddress, nil
+			return event.SessionId, event.ProviderId, event.User, nil
 		}
 	}
 
 	return common.Hash{}, common.Address{}, common.Address{}, fmt.Errorf("OpenSession event not found in transaction logs")
 }
 
-func (g *SessionRouter) GetSession(ctx context.Context, sessionID common.Hash) (*sessionrouter.Session, error) {
-	session, err := g.sessionRouter.GetSession(&bind.CallOpts{Context: ctx}, sessionID)
+func (g *SessionRouter) GetSession(ctx context.Context, sessionID common.Hash) (*sessionrouter.ISessionStorageSession, error) {
+	session, err := g.sessionRouter.Sessions(&bind.CallOpts{Context: ctx}, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -85,20 +85,21 @@ func (g *SessionRouter) GetSession(ctx context.Context, sessionID common.Hash) (
 	return &session, nil
 }
 
-func (g *SessionRouter) GetSessionsByProvider(ctx context.Context, providerAddr common.Address, offset *big.Int, limit uint8) ([]sessionrouter.Session, error) {
-	sessions, err := g.sessionRouter.GetSessionsByProvider(&bind.CallOpts{Context: ctx}, providerAddr, offset, limit)
-	if err != nil {
-		return nil, lib.TryConvertGethError(err)
-	}
-	return sessions, nil
+func (g *SessionRouter) GetSessionsByProvider(ctx context.Context, providerAddr common.Address, offset *big.Int, limit uint8) ([]sessionrouter.ISessionStorageSession, error) {
+	// sessions, err := g.sessionRouter.GetSessionsByProvider(&bind.CallOpts{Context: ctx}, providerAddr, offset, limit)
+	// if err != nil {
+	// 	return nil, lib.TryConvertGethError(err)
+	// }
+	// return sessions, nil
+	return nil, fmt.Errorf("Not implemented")
 }
 
-func (g *SessionRouter) GetSessionsByUser(ctx context.Context, userAddr common.Address, offset *big.Int, limit uint8) ([]sessionrouter.Session, error) {
-	sessions, err := g.sessionRouter.GetSessionsByUser(&bind.CallOpts{Context: ctx}, userAddr, offset, limit)
+func (g *SessionRouter) GetSessionsByUser(ctx context.Context, userAddr common.Address, offset *big.Int, limit uint8) ([]sessionrouter.ISessionStorageSession, error) {
+	IDs, err := g.sessionRouter.GetSessionsByUser(&bind.CallOpts{Context: ctx}, userAddr, offset, big.NewInt(int64(limit)))
 	if err != nil {
 		return nil, lib.TryConvertGethError(err)
 	}
-	return sessions, nil
+	return g.getMultipleSessions(ctx, IDs)
 }
 
 func (g *SessionRouter) CloseSession(opts *bind.TransactOpts, sessionID common.Hash, report []byte, signedReport []byte, privateKeyHex lib.HexString) (common.Hash, error) {
@@ -148,10 +149,69 @@ func (g *SessionRouter) GetTodaysBudget(ctx context.Context) (*big.Int, error) {
 	return budget, nil
 }
 
+func (g *SessionRouter) GetBidsWithRating(ctx context.Context, modelAgentID [32]byte, offset *big.Int, limit uint8) ([][32]byte, []sessionrouter.IBidStorageBid, []sessionrouter.IStatsStorageProviderModelStats, error) {
+	return g.sessionRouter.GetActiveBidsRatingByModel(&bind.CallOpts{Context: ctx}, modelAgentID, offset, limit)
+}
+
+func (g *SessionRouter) GetAllBidsWithRating(ctx context.Context, modelAgentID [32]byte) ([][32]byte, []sessionrouter.IBidStorageBid, []sessionrouter.IStatsStorageProviderModelStats, error) {
+	batchSize := uint8(255)
+	return collectBids(ctx, modelAgentID, g.GetBidsWithRating, batchSize)
+}
+
+func (g *SessionRouter) GetModelStats(ctx context.Context, modelID [32]byte) (interface{}, error) {
+	// return g.sessionRouter.GetModelStats(&bind.CallOpts{Context: ctx}, modelID)
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (g *SessionRouter) getMultipleSessions(ctx context.Context, IDs [][32]byte) ([]sessionrouter.ISessionStorageSession, error) {
+	// todo: replace with multicall
+	sessions := make([]sessionrouter.ISessionStorageSession, len(IDs))
+	for i, id := range IDs {
+		session, err := g.sessionRouter.Sessions(&bind.CallOpts{Context: ctx}, id)
+		if err != nil {
+			return nil, err
+		}
+		sessions[i] = session
+	}
+	return sessions, nil
+}
+
 func (g *SessionRouter) GetContractAddress() common.Address {
 	return g.sessionRouterAddr
 }
 
 func (g *SessionRouter) GetABI() *abi.ABI {
 	return g.srABI
+}
+
+type BidsGetter = func(ctx context.Context, modelAgentID [32]byte, offset *big.Int, limit uint8) ([][32]byte, []sessionrouter.IBidStorageBid, []sessionrouter.IStatsStorageProviderModelStats, error)
+
+func collectBids(ctx context.Context, modelAgentID [32]byte, bidsGetter BidsGetter, batchSize uint8) ([][32]byte, []sessionrouter.IBidStorageBid, []sessionrouter.IStatsStorageProviderModelStats, error) {
+	offset := big.NewInt(0)
+	bids := make([]sessionrouter.IBidStorageBid, 0)
+	ids := make([][32]byte, 0)
+	providerModelStats := make([]sessionrouter.IStatsStorageProviderModelStats, 0)
+
+	for {
+		if ctx.Err() != nil {
+			return nil, nil, nil, ctx.Err()
+		}
+
+		idsBatch, bidsBatch, providerModelStatsBatch, err := bidsGetter(ctx, modelAgentID, offset, batchSize)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		ids = append(ids, idsBatch...)
+		bids = append(bids, bidsBatch...)
+		providerModelStats = append(providerModelStats, providerModelStatsBatch...)
+
+		if len(bidsBatch) < int(batchSize) {
+			break
+		}
+
+		offset.Add(offset, big.NewInt(int64(batchSize)))
+	}
+
+	return ids, bids, providerModelStats, nil
 }

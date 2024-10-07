@@ -166,8 +166,8 @@ func (s *BlockchainService) GetBidsByModelAgent(ctx context.Context, modelId [32
 	return mapBids(ids, bids), nil
 }
 
-func (s *BlockchainService) GetActiveBidsByModel(ctx context.Context, modelId common.Hash) ([]*structs.Bid, error) {
-	ids, bids, err := s.marketplace.GetActiveBidsByModel(ctx, modelId)
+func (s *BlockchainService) GetActiveBidsByModel(ctx context.Context, modelId common.Hash, offset *big.Int, limit uint8) ([]*structs.Bid, error) {
+	ids, bids, err := s.marketplace.GetActiveBidsByModel(ctx, modelId, offset, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -175,8 +175,8 @@ func (s *BlockchainService) GetActiveBidsByModel(ctx context.Context, modelId co
 	return mapBids(ids, bids), nil
 }
 
-func (s *BlockchainService) GetActiveBidsByProvider(ctx context.Context, provider common.Address) ([]*structs.Bid, error) {
-	ids, bids, err := s.marketplace.GetActiveBidsByProvider(ctx, provider)
+func (s *BlockchainService) GetActiveBidsByProvider(ctx context.Context, provider common.Address, offset *big.Int, limit uint8) ([]*structs.Bid, error) {
+	ids, bids, err := s.marketplace.GetActiveBidsByProvider(ctx, provider, offset, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -194,17 +194,17 @@ func (s *BlockchainService) GetBidByID(ctx context.Context, ID common.Hash) (*st
 }
 
 func (s *BlockchainService) GetRatedBids(ctx context.Context, modelID common.Hash) ([]structs.ScoredBid, error) {
-	modelStats, err := s.marketplace.GetModelStats(ctx, modelID)
+	modelStats, err := s.sessionRouter.GetModelStats(ctx, modelID)
 	if err != nil {
 		return nil, err
 	}
 
-	bidIDs, bids, providerModelStats, err := s.marketplace.GetAllBidsWithRating(ctx, modelID)
+	bidIDs, bids, providerModelStats, err := s.sessionRouter.GetAllBidsWithRating(ctx, modelID)
 	if err != nil {
 		return nil, err
 	}
 
-	ratedBids := rateBids(bidIDs, bids, providerModelStats, modelStats, s.log)
+	ratedBids := rateBids(bidIDs, bids, providerModelStats, modelStats.(ModelStats), s.log)
 
 	return ratedBids, nil
 }
@@ -570,7 +570,7 @@ func (s *BlockchainService) GetTokenSupply(ctx context.Context) (*big.Int, error
 
 func (s *BlockchainService) GetSessions(ctx *gin.Context, user, provider common.Address, offset *big.Int, limit uint8) ([]*structs.Session, error) {
 	var (
-		sessions []sessionrouter.Session
+		sessions []sessionrouter.ISessionStorageSession
 		err      error
 	)
 	if (user != common.Address{}) {
@@ -677,12 +677,12 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 		return common.Hash{}, lib.WrapError(ErrBudget, err)
 	}
 
-	modelStats, err := s.marketplace.GetModelStats(ctx, modelID)
+	modelStats, err := s.sessionRouter.GetModelStats(ctx, modelID)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrModel, err)
 	}
 
-	bidIDs, bids, providerStats, err := s.marketplace.GetAllBidsWithRating(ctx, modelID)
+	bidIDs, bids, providerStats, err := s.sessionRouter.GetAllBidsWithRating(ctx, modelID)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrBid, err)
 	}
@@ -696,7 +696,7 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 		return common.Hash{}, lib.WrapError(ErrMyAddress, err)
 	}
 
-	scoredBids := rateBids(bidIDs, bids, providerStats, modelStats, s.log)
+	scoredBids := rateBids(bidIDs, bids, providerStats, modelStats.(ModelStats), s.log)
 	for i, bid := range scoredBids {
 		s.log.Infof("trying to open session with provider #%d %s", i, bid.Bid.Provider.String())
 		durationCopy := new(big.Int).Set(duration)

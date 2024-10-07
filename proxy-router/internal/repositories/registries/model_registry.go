@@ -37,13 +37,13 @@ func NewModelRegistry(modelRegistryAddr common.Address, client i.ContractBackend
 	}
 }
 
-func (g *ModelRegistry) GetAllModels(ctx context.Context) ([][32]byte, []modelregistry.Model, error) {
-	adresses, models, err := g.modelRegistry.ModelGetAll(&bind.CallOpts{Context: ctx})
-	if err != nil {
-		return nil, nil, err
-	}
+func (g *ModelRegistry) GetAllModels(ctx context.Context) ([][32]byte, []modelregistry.IModelStorageModel, error) {
+	// adresses, models, err := g.modelRegistry.Models(&bind.CallOpts{Context: ctx},)
+	// if err != nil {
+	// 	return nil, nil, err
+	// }
 
-	return adresses, models, nil
+	return nil, nil, fmt.Errorf("Not implemented")
 }
 
 func (g *ModelRegistry) CreateNewModel(opts *bind.TransactOpts, modelId common.Hash, ipfsID common.Hash, fee *lib.BigInt, stake *lib.BigInt, owner common.Address, name string, tags []string) error {
@@ -99,8 +99,8 @@ func (g *ModelRegistry) DeregisterModel(opts *bind.TransactOpts, modelId common.
 	return common.Hash{}, fmt.Errorf("ModelDeregistered event not found in transaction logs")
 }
 
-func (g *ModelRegistry) GetModelById(ctx context.Context, modelId common.Hash) (*modelregistry.Model, error) {
-	model, err := g.modelRegistry.ModelMap(&bind.CallOpts{Context: ctx}, modelId)
+func (g *ModelRegistry) GetModelById(ctx context.Context, modelId common.Hash) (*modelregistry.IModelStorageModel, error) {
+	model, err := g.modelRegistry.GetModel(&bind.CallOpts{Context: ctx}, modelId)
 	if err != nil {
 		return nil, err
 	}

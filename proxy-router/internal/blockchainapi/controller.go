@@ -266,7 +266,14 @@ func (c *BlockchainController) getActiveBidsByProvider(ctx *gin.Context) {
 		return
 	}
 
-	bids, err := c.service.GetActiveBidsByProvider(ctx, params.ID.Address)
+	offset, limit, err := getOffsetLimit(ctx)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	bids, err := c.service.GetActiveBidsByProvider(ctx, params.ID.Address, offset, limit)
 	if err != nil {
 		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
@@ -353,7 +360,14 @@ func (c *BlockchainController) getActiveBidsByModel(ctx *gin.Context) {
 		return
 	}
 
-	bids, err := c.service.GetActiveBidsByModel(ctx, params.ID.Hash)
+	offset, limit, err := getOffsetLimit(ctx)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	bids, err := c.service.GetActiveBidsByModel(ctx, params.ID.Hash, offset, limit)
 	if err != nil {
 		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
