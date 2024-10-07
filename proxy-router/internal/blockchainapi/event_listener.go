@@ -94,12 +94,12 @@ func (e *EventsListener) handleSessionOpened(event *sessionrouter.SessionRouterS
 		return err
 	}
 
-	if session.Provider.Hex() != address.Hex() && event.UserAddress.Hex() != address.Hex() {
+	if session.Provider.Hex() != address.Hex() && event.User.Hex() != address.Hex() {
 		e.log.Debugf("session provider/user is not me, skipping, sessionId %s", sessionId)
 		return nil
 	}
 
-	modelID := lib.BytesToString(session.ModelAgentId[:])
+	modelID := lib.BytesToString(session.ModelId[:])
 
 	var modelConfig *config.ModelConfig
 	if session.Provider.Hex() == address.Hex() {
@@ -110,7 +110,7 @@ func (e *EventsListener) handleSessionOpened(event *sessionrouter.SessionRouterS
 
 	err = e.store.AddSession(&storages.Session{
 		Id:           sessionId,
-		UserAddr:     event.UserAddress.Hex(),
+		UserAddr:     event.User.Hex(),
 		ProviderAddr: session.Provider.Hex(),
 		EndsAt:       session.EndsAt,
 		ModelID:      modelID,

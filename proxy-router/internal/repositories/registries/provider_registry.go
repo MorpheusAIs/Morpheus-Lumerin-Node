@@ -37,18 +37,19 @@ func NewProviderRegistry(providerRegistryAddr common.Address, client *ethclient.
 	}
 }
 
-func (g *ProviderRegistry) GetAllProviders(ctx context.Context) ([]common.Address, []providerregistry.Provider, error) {
-	providerAddrs, providers, err := g.providerRegistry.ProviderGetAll(&bind.CallOpts{Context: ctx})
-	if err != nil {
-		return nil, nil, err
-	}
+func (g *ProviderRegistry) GetAllProviders(ctx context.Context) ([]common.Address, []providerregistry.IProviderStorageProvider, error) {
+	// providerAddrs, providers, err := g.providerRegistry.ProviderGetAll(&bind.CallOpts{Context: ctx})
+	// if err != nil {
+	// 	return nil, nil, err
+	// }
 
-	addresses := make([]common.Address, len(providerAddrs))
-	for i, address := range providerAddrs {
-		addresses[i] = address
-	}
+	// addresses := make([]common.Address, len(providerAddrs))
+	// for i, address := range providerAddrs {
+	// 	addresses[i] = address
+	// }
 
-	return addresses, providers, nil
+	// return addresses, providers, nil
+	return nil, nil, fmt.Errorf("Not implemented")
 }
 
 func (g *ProviderRegistry) CreateNewProvider(opts *bind.TransactOpts, address common.Address, addStake *lib.BigInt, endpoint string) error {
@@ -106,8 +107,8 @@ func (g *ProviderRegistry) DeregisterProvider(opts *bind.TransactOpts, address c
 	return common.Hash{}, fmt.Errorf("ProviderDeregistered event not found in transaction logs")
 }
 
-func (g *ProviderRegistry) GetProviderById(ctx context.Context, id common.Address) (*providerregistry.Provider, error) {
-	provider, err := g.providerRegistry.ProviderMap(&bind.CallOpts{Context: ctx}, id)
+func (g *ProviderRegistry) GetProviderById(ctx context.Context, id common.Address) (*providerregistry.IProviderStorageProvider, error) {
+	provider, err := g.providerRegistry.GetProvider(&bind.CallOpts{Context: ctx}, id)
 	if err != nil {
 		return nil, err
 	}
