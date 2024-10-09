@@ -1345,6 +1345,11 @@ paths:
         in: header
         name: model_id
         type: string
+      - description: Chat ID
+        format: hex32
+        in: header
+        name: chat_id
+        type: string
       - description: Prompt
         in: body
         name: prompt
