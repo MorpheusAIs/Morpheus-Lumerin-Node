@@ -8,6 +8,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/sessionrouter"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 )
@@ -28,7 +29,7 @@ func BlockchainEventFactory(name string) interface{} {
 }
 
 // WatchContractEvents watches for all events from the contract and converts them to the concrete type, using mapper
-func WatchContractEvents(ctx context.Context, client EthereumClient, contractAddr common.Address, mapper EventMapper, log lib.ILogger) (*lib.Subscription, error) {
+func WatchContractEvents(ctx context.Context, client bind.ContractFilterer, contractAddr common.Address, mapper EventMapper, log lib.ILogger) (*lib.Subscription, error) {
 	sink := make(chan interface{})
 
 	return lib.NewSubscription(func(quit <-chan struct{}) error {

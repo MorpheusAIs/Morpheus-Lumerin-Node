@@ -6,10 +6,10 @@ import (
 	"math/big"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/marketplace"
+	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
 )
 
 type Marketplace struct {
@@ -18,11 +18,11 @@ type Marketplace struct {
 
 	// deps
 	marketplace *marketplace.Marketplace
-	client      *ethclient.Client
+	client      i.ContractBackend
 	log         lib.ILogger
 }
 
-func NewMarketplace(marketplaceAddr common.Address, client *ethclient.Client, log lib.ILogger) *Marketplace {
+func NewMarketplace(marketplaceAddr common.Address, client i.ContractBackend, log lib.ILogger) *Marketplace {
 	mp, err := marketplace.NewMarketplace(marketplaceAddr, client)
 	if err != nil {
 		panic("invalid marketplace ABI")
