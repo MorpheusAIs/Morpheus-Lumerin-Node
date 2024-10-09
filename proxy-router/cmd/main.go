@@ -19,13 +19,13 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyctl"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/ethclient"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/transport"
 	wlt "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/wallet"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/walletapi"
-	"github.com/ethereum/go-ethereum/ethclient"
 
 	docs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/docs"
 )
@@ -182,13 +182,29 @@ func start() error {
 		os.Exit(1)
 	}()
 
-	ethClient, err := ethclient.DialContext(ctx, cfg.Blockchain.EthNodeAddress)
+	var rpcURLs []string
+	if cfg.Blockchain.EthNodeAddress != "" {
+		rpcURLs = []string{cfg.Blockchain.EthNodeAddress}
+	} else {
+		var err error
+		rpcURLs, err = ethclient.GetPublicRPCURLs(cfg.Blockchain.ChainID)
+		if err != nil {
+			return err
+		}
+	}
+
+	rpcClient, err := ethclient.NewRPCClientMultiple(rpcURLs, log.Named("RPC"))
 	if err != nil {
 		return lib.WrapError(ErrConnectToEthNode, err)
 	}
+
+	ethClient := ethclient.NewClient(rpcClient)
 	chainID, err := ethClient.ChainID(ctx)
 	if err != nil {
 		return lib.WrapError(ErrConnectToEthNode, err)
+	}
+	if int(chainID.Uint64()) != cfg.Blockchain.ChainID {
+		return lib.WrapError(ErrConnectToEthNode, fmt.Errorf("configured chainID (%d) does not match eth node chain ID (%s)", cfg.Blockchain.ChainID, chainID))
 	}
 	appLog.Infof("connected to ethereum node: %s, chainID: %d", cfg.Blockchain.EthNodeAddress, chainID)
 

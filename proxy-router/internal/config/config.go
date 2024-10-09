@@ -21,7 +21,8 @@ type Config struct {
 		OpenAIKey     string `env:"OPENAI_API_KEY"      flag:"open-ai-api-key"`
 	}
 	Blockchain struct {
-		EthNodeAddress string `env:"ETH_NODE_ADDRESS"   flag:"eth-node-address"   validate:"required,url"`
+		ChainID        int    `env:"ETH_NODE_CHAIN_ID"  flag:"eth-node-chain-id"  validate:"required,number"`
+		EthNodeAddress string `env:"ETH_NODE_ADDRESS"   flag:"eth-node-address"   validate:"omitempty,url"`
 		EthLegacyTx    bool   `env:"ETH_NODE_LEGACY_TX" flag:"eth-node-legacy-tx" desc:"use it to disable EIP-1559 transactions"`
 		ExplorerApiUrl string `env:"EXPLORER_API_URL"   flag:"explorer-api-url"   validate:"required,url"`
 	}
