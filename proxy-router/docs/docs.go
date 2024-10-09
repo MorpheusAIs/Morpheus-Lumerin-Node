@@ -1093,6 +1093,56 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/chats": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Get all chats stored in the system",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/proxyapi.Chat"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/chats/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Get chat by id",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Chat ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.ChatHistory"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/models": {
             "get": {
                 "produces": [
@@ -1272,6 +1322,23 @@ const docTemplate = `{
                 }
             }
         },
+        "proxyapi.Chat": {
+            "type": "object",
+            "properties": {
+                "chatId": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "integer"
+                },
+                "modelId": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
         "proxyapi.ChatCompletionChoice": {
             "type": "object",
             "properties": {
@@ -1367,6 +1434,43 @@ const docTemplate = `{
             "properties": {
                 "type": {
                     "type": "string"
+                }
+            }
+        },
+        "proxyapi.ChatHistory": {
+            "type": "object",
+            "properties": {
+                "messages": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/proxyapi.ChatMessage"
+                    }
+                },
+                "modelId": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "proxyapi.ChatMessage": {
+            "type": "object",
+            "properties": {
+                "isImageContent": {
+                    "type": "boolean"
+                },
+                "prompt": {
+                    "$ref": "#/definitions/proxyapi.OpenAiCompletitionRequest"
+                },
+                "promptAt": {
+                    "type": "integer"
+                },
+                "response": {
+                    "type": "string"
+                },
+                "responseAt": {
+                    "type": "integer"
                 }
             }
         },
