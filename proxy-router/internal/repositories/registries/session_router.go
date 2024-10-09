@@ -7,11 +7,11 @@ import (
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/sessionrouter"
+	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
 )
 
 type SessionRouter struct {
@@ -24,7 +24,7 @@ type SessionRouter struct {
 
 	// deps
 	sessionRouter *sessionrouter.SessionRouter
-	client        *ethclient.Client
+	client        i.ContractBackend
 	log           lib.ILogger
 }
 
@@ -34,7 +34,7 @@ var closeReportAbi = []lib.AbiParameter{
 	{Type: "uint32"},
 }
 
-func NewSessionRouter(sessionRouterAddr common.Address, client *ethclient.Client, log lib.ILogger) *SessionRouter {
+func NewSessionRouter(sessionRouterAddr common.Address, client i.ContractBackend, log lib.ILogger) *SessionRouter {
 	sr, err := sessionrouter.NewSessionRouter(sessionRouterAddr, client)
 	if err != nil {
 		panic("invalid marketplace ABI")

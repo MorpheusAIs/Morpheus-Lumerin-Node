@@ -10,7 +10,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
-	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 )
 
 type EventsListener struct {
@@ -18,12 +18,12 @@ type EventsListener struct {
 	store             *storages.SessionStorage
 	tsk               *lib.Task
 	log               *lib.Logger
-	client            *ethclient.Client
+	client            bind.ContractFilterer
 	wallet            interfaces.Wallet
 	modelConfigLoader *config.ModelConfigLoader
 }
 
-func NewEventsListener(client *ethclient.Client, store *storages.SessionStorage, sessionRouter *registries.SessionRouter, wallet interfaces.Wallet, modelConfigLoader *config.ModelConfigLoader, log *lib.Logger) *EventsListener {
+func NewEventsListener(client bind.ContractFilterer, store *storages.SessionStorage, sessionRouter *registries.SessionRouter, wallet interfaces.Wallet, modelConfigLoader *config.ModelConfigLoader, log *lib.Logger) *EventsListener {
 	return &EventsListener{
 		store:             store,
 		log:               log,
