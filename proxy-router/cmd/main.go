@@ -19,6 +19,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyctl"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/ethclient"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/transport"
@@ -185,12 +186,14 @@ func start() error {
 	var rpcURLs []string
 	if cfg.Blockchain.EthNodeAddress != "" {
 		rpcURLs = []string{cfg.Blockchain.EthNodeAddress}
+		appLog.Info("using configured eth node address")
 	} else {
 		var err error
 		rpcURLs, err = ethclient.GetPublicRPCURLs(cfg.Blockchain.ChainID)
 		if err != nil {
 			return err
 		}
+		appLog.Infof("using public eth node addresses: %v", rpcURLs)
 	}
 
 	rpcClient, err := ethclient.NewRPCClientMultiple(rpcURLs, log.Named("RPC"))
@@ -225,6 +228,15 @@ func start() error {
 		log.Infof("Using keychain wallet")
 	}
 
+	var logWatcher contracts.LogWatcher
+	if cfg.Blockchain.UseSubscriptions {
+		logWatcher = contracts.NewLogWatcherSubscription(ethClient, cfg.Blockchain.MaxReconnects, log)
+		appLog.Infof("using websocket log subscription for blockchain events")
+	} else {
+		logWatcher = contracts.NewLogWatcherPolling(ethClient, cfg.Blockchain.PollingInterval, cfg.Blockchain.MaxReconnects, log)
+		appLog.Infof("using polling for blockchain events")
+	}
+
 	modelConfigLoader := config.NewModelConfigLoader(cfg.Proxy.ModelsConfigPath, log)
 	err = modelConfigLoader.Init()
 	if err != nil {
@@ -237,7 +249,7 @@ func start() error {
 
 	sessionRouter := registries.NewSessionRouter(*cfg.Marketplace.DiamondContractAddress, ethClient, log)
 
-	eventListener := blockchainapi.NewEventsListener(ethClient, sessionStorage, sessionRouter, wallet, modelConfigLoader, log)
+	eventListener := blockchainapi.NewEventsListener(ethClient, sessionStorage, sessionRouter, wallet, modelConfigLoader, logWatcher, log)
 
 	blockchainController := blockchainapi.NewBlockchainController(blockchainApi, log)
 
@@ -245,7 +257,7 @@ func start() error {
 	chatStorage := proxyapi.NewChatStorage(chatStoragePath)
 	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine, chatStorage)
 	walletController := walletapi.NewWalletController(wallet)
-	systemController := system.NewSystemController(&cfg, wallet, sysConfig, appStartTime, chainID, log)
+	systemController := system.NewSystemController(&cfg, wallet, rpcClient, sysConfig, appStartTime, chainID, log)
 
 	apiBus := apibus.NewApiBus(blockchainController, proxyController, walletController, systemController)
 	httpHandler := httphandlers.CreateHTTPServer(log, apiBus)
