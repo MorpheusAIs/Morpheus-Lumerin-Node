@@ -10,7 +10,7 @@ import (
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/sessionrouter"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi/structs"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
+	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
@@ -22,11 +22,10 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethclient"
 )
 
 type BlockchainService struct {
-	ethClient          *ethclient.Client
+	ethClient          i.EthClient
 	providerRegistry   *registries.ProviderRegistry
 	modelRegistry      *registries.ModelRegistry
 	marketplace        *registries.Marketplace
@@ -38,7 +37,7 @@ type BlockchainService struct {
 	diamonContractAddr common.Address
 
 	legacyTx   bool
-	privateKey interfaces.PrKeyProvider
+	privateKey i.PrKeyProvider
 	log        lib.ILogger
 }
 
@@ -67,11 +66,11 @@ var (
 )
 
 func NewBlockchainService(
-	ethClient *ethclient.Client,
+	ethClient i.EthClient,
 	diamonContractAddr common.Address,
 	morTokenAddr common.Address,
 	explorerApiUrl string,
-	privateKey interfaces.PrKeyProvider,
+	privateKey i.PrKeyProvider,
 	sessionStorage *storages.SessionStorage,
 	proxyService *proxyapi.ProxyServiceSender,
 	log lib.ILogger,
