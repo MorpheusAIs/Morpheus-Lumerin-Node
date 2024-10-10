@@ -17,6 +17,14 @@ type RPCClientStoreKeychain struct {
 	log       lib.ILogger
 }
 
+func NewRPCClientStoreKeychain(storage interfaces.KeyValueStorage, rpcClient RPCClientModifiable, log lib.ILogger) *RPCClientStoreKeychain {
+	return &RPCClientStoreKeychain{
+		storage:   storage,
+		rpcClient: rpcClient,
+		log:       log,
+	}
+}
+
 func (p *RPCClientStoreKeychain) GetURLs() []string {
 	return p.rpcClient.GetURLs()
 }

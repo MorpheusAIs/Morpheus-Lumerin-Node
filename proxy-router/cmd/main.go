@@ -186,6 +186,25 @@ func start() error {
 
 	keychainStorage := keychain.NewKeychain()
 
+	if cfg.App.ResetKeychain {
+		appLog.Warnf("Resetting keychain...")
+		wallet := wlt.NewKeychainWallet(keychainStorage)
+		err = wallet.DeleteWallet()
+		if err != nil {
+			appLog.Warnf("Failed to delete wallet\n%s", err)
+		} else {
+			appLog.Info("Wallet deleted")
+		}
+
+		ethNodeStorage := ethclient.NewRPCClientStoreKeychain(keychainStorage, nil, log)
+		err = ethNodeStorage.RemoveURLs()
+		if err != nil {
+			appLog.Warnf("Failed to remove eth node urls\n%s", err)
+		} else {
+			appLog.Info("Eth node urls removed")
+		}
+	}
+
 	var ethNodeAddresses []string
 	if cfg.Blockchain.EthNodeAddress != "" {
 		ethNodeAddresses = []string{cfg.Blockchain.EthNodeAddress}
@@ -200,7 +219,7 @@ func start() error {
 	if err != nil {
 		return lib.WrapError(ErrConnectToEthNode, err)
 	}
-	if int(chainID.Uint64()) != cfg.Blockchain.ChainID {
+	if cfg.Blockchain.ChainID != 0 && int(chainID.Uint64()) != cfg.Blockchain.ChainID {
 		return lib.WrapError(ErrConnectToEthNode, fmt.Errorf("configured chainID (%d) does not match eth node chain ID (%s)", cfg.Blockchain.ChainID, chainID))
 	}
 	appLog.Infof("connected to ethereum node: %s, chainID: %d", cfg.Blockchain.EthNodeAddress, chainID)

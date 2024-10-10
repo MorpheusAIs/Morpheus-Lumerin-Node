@@ -26,7 +26,7 @@ func TestLogWatcherPolling(t *testing.T) {
 	_ = ethClientMock.EXPECT().FilterLogs(mock.Anything, mock.Anything).Return([]types.Log{}, nil).Times(1).NotBefore(call1)
 	logWatcherPolling := NewLogWatcherPolling(ethClientMock, 0, 10, lib.NewTestLogger())
 
-	_, err := logWatcherPolling.filterLogsRetry(context.Background(), ethereum.FilterQuery{})
+	_, err := logWatcherPolling.filterLogsRetry(context.Background(), ethereum.FilterQuery{}, make(<-chan struct{}))
 	require.NoError(t, err)
 	ethClientMock.AssertNumberOfCalls(t, "FilterLogs", failTimes+1)
 }

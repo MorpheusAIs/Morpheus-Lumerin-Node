@@ -158,6 +158,24 @@ func (s *SystemController) SetEthNode(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
+// DeleteEthNode godoc
+//
+//	@Summary		Delete Eth Node URLs
+//	@Description	Delete the Eth Node URLs
+//	@Tags			system
+//	@Produce		json
+//	@Success		200	{object}	ConfigResponse
+//	@Router			/config/ethNode [delete]
+func (c *SystemController) RemoveEthNode(ctx *gin.Context) {
+	err := c.ethRPC.RemoveURLs()
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
 func writeFiles(writer io.Writer, files []FD) error {
 	text := fmt.Sprintf("Total: %d\n", len(files))
 	text += "\n"
