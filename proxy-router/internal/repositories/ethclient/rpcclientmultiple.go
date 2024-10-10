@@ -2,7 +2,7 @@ package ethclient
 
 import (
 	"context"
-	"fmt"
+	"sync"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -10,6 +10,7 @@ import (
 
 // Wrapper around multiple RPC clients, used to retry calls on multiple endpoints
 type RPCClientMultiple struct {
+	lock    sync.RWMutex
 	clients []*rpcClient
 	log     lib.ILogger
 }
@@ -44,20 +45,61 @@ func (c *RPCClientMultiple) BatchCallContext(ctx context.Context, b []rpc.BatchE
 }
 
 func (c *RPCClientMultiple) Close() {
-	for _, rpcClient := range c.clients {
+	for _, rpcClient := range c.getClients() {
 		rpcClient.client.Close()
 	}
 }
 
 func (c *RPCClientMultiple) EthSubscribe(ctx context.Context, channel interface{}, args ...interface{}) (*rpc.ClientSubscription, error) {
-	return nil, fmt.Errorf("not implemented")
+	client := c.getClients()[0]
+	return client.client.EthSubscribe(ctx, channel, args...)
+}
+
+func (c *RPCClientMultiple) GetURLs() []string {
+	clients := c.getClients()
+	urls := make([]string, len(clients))
+	for i, rpcClient := range clients {
+		urls[i] = rpcClient.url
+	}
+	return urls
+}
+
+func (c *RPCClientMultiple) SetURLs(urls []string) error {
+	clients := make([]*rpcClient, len(urls))
+
+	for i, url := range urls {
+		client, err := rpc.DialOptions(context.Background(), url)
+		if err != nil {
+			return err
+		}
+		clients[i] = &rpcClient{
+			url:    url,
+			client: client,
+		}
+	}
+
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	for _, rpcClient := range c.clients {
+		rpcClient.client.Close()
+	}
+
+	c.clients = clients
+
+	return nil
+}
+
+func (c *RPCClientMultiple) getClients() []*rpcClient {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	return c.clients
 }
 
 // retriableCall is a helper function that retries the call on different endpoints
 func (c *RPCClientMultiple) retriableCall(ctx context.Context, fn func(client *rpcClient) error) error {
 	var lastErr error
 
-	for _, rpcClient := range c.clients {
+	for _, rpcClient := range c.getClients() {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}

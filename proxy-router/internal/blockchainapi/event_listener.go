@@ -59,7 +59,7 @@ func (e *EventsListener) Run(ctx context.Context) error {
 			}
 		case err := <-sub.Err():
 			e.log.Errorf("error in event listener: %s", err)
-			// return err
+			return err
 		}
 	}
 }

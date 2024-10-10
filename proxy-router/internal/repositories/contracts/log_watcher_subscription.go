@@ -43,8 +43,10 @@ func (w *LogWatcherSubscription) Watch(ctx context.Context, contractAddr common.
 		defer close(in)
 
 		for {
+
 			sub, err := w.subscribeFilterLogsRetry(ctx, query, in)
 			if err != nil {
+				w.log.Errorf("failed to subscribe to logs: %s", err)
 				return err
 			}
 
@@ -56,6 +58,7 @@ func (w *LogWatcherSubscription) Watch(ctx context.Context, contractAddr common.
 				case log := <-in:
 					event, err := mapper(log)
 					if err != nil {
+						w.log.Errorf("failed to map event: %s", err)
 						// mapper error, retry won't help
 						return err
 					}
