@@ -186,12 +186,14 @@ func start() error {
 	var rpcURLs []string
 	if cfg.Blockchain.EthNodeAddress != "" {
 		rpcURLs = []string{cfg.Blockchain.EthNodeAddress}
+		appLog.Info("using configured eth node address")
 	} else {
 		var err error
 		rpcURLs, err = ethclient.GetPublicRPCURLs(cfg.Blockchain.ChainID)
 		if err != nil {
 			return err
 		}
+		appLog.Infof("using public eth node addresses: %v", rpcURLs)
 	}
 
 	rpcClient, err := ethclient.NewRPCClientMultiple(rpcURLs, log.Named("RPC"))
@@ -229,8 +231,10 @@ func start() error {
 	var logWatcher contracts.LogWatcher
 	if cfg.Blockchain.UseSubscriptions {
 		logWatcher = contracts.NewLogWatcherSubscription(ethClient, cfg.Blockchain.MaxReconnects, log)
+		appLog.Infof("using websocket log subscription for blockchain events")
 	} else {
 		logWatcher = contracts.NewLogWatcherPolling(ethClient, cfg.Blockchain.PollingInterval, cfg.Blockchain.MaxReconnects, log)
+		appLog.Infof("using polling for blockchain events")
 	}
 
 	modelConfigLoader := config.NewModelConfigLoader(cfg.Proxy.ModelsConfigPath, log)
@@ -260,7 +264,7 @@ func start() error {
 
 	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine, chatStorage)
 	walletController := walletapi.NewWalletController(wallet)
-	systemController := system.NewSystemController(&cfg, wallet, sysConfig, appStartTime, chainID, log)
+	systemController := system.NewSystemController(&cfg, wallet, rpcClient, sysConfig, appStartTime, chainID, log)
 
 	apiBus := apibus.NewApiBus(blockchainController, proxyController, walletController, systemController)
 	httpHandler := httphandlers.CreateHTTPServer(log, apiBus)

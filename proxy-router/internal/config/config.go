@@ -13,6 +13,7 @@ import (
 type DerivedConfig struct {
 	WalletAddress common.Address
 	ChainID       *big.Int
+	EthNodeURLs   []string
 }
 
 // Validation tags described here: https://pkg.go.dev/github.com/go-playground/validator/v10
