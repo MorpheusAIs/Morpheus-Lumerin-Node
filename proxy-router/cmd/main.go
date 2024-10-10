@@ -21,6 +21,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyctl"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/ethclient"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/keychain"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/transport"
 	wlt "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/wallet"
@@ -183,25 +184,18 @@ func start() error {
 		os.Exit(1)
 	}()
 
-	var rpcURLs []string
-	if cfg.Blockchain.EthNodeAddress != "" {
-		rpcURLs = []string{cfg.Blockchain.EthNodeAddress}
-		appLog.Info("using configured eth node address")
-	} else {
-		var err error
-		rpcURLs, err = ethclient.GetPublicRPCURLs(cfg.Blockchain.ChainID)
-		if err != nil {
-			return err
-		}
-		appLog.Infof("using public eth node addresses: %v", rpcURLs)
-	}
+	keychainStorage := keychain.NewKeychain()
 
-	rpcClient, err := ethclient.NewRPCClientMultiple(rpcURLs, log.Named("RPC"))
+	var ethNodeAddresses []string
+	if cfg.Blockchain.EthNodeAddress != "" {
+		ethNodeAddresses = []string{cfg.Blockchain.EthNodeAddress}
+	}
+	rpcClientStore, err := ethclient.ConfigureRPCClientStore(keychainStorage, ethNodeAddresses, cfg.Blockchain.ChainID, log.Named("RPC"))
 	if err != nil {
 		return lib.WrapError(ErrConnectToEthNode, err)
 	}
 
-	ethClient := ethclient.NewClient(rpcClient)
+	ethClient := ethclient.NewClient(rpcClientStore.GetClient())
 	chainID, err := ethClient.ChainID(ctx)
 	if err != nil {
 		return lib.WrapError(ErrConnectToEthNode, err)
@@ -224,7 +218,7 @@ func start() error {
 		wallet = wlt.NewEnvWallet(*cfg.Marketplace.WalletPrivateKey)
 		log.Warnf("Using env wallet. Private key persistance unavailable")
 	} else {
-		wallet = wlt.NewKeychainWallet()
+		wallet = wlt.NewKeychainWallet(keychainStorage)
 		log.Infof("Using keychain wallet")
 	}
 
@@ -264,7 +258,7 @@ func start() error {
 
 	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine, chatStorage)
 	walletController := walletapi.NewWalletController(wallet)
-	systemController := system.NewSystemController(&cfg, wallet, rpcClient, sysConfig, appStartTime, chainID, log)
+	systemController := system.NewSystemController(&cfg, wallet, rpcClientStore, sysConfig, appStartTime, chainID, log)
 
 	apiBus := apibus.NewApiBus(blockchainController, proxyController, walletController, systemController)
 	httpHandler := httphandlers.CreateHTTPServer(log, apiBus)
