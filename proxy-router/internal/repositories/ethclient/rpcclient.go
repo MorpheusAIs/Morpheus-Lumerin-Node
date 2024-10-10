@@ -3,7 +3,6 @@ package ethclient
 import (
 	"context"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
@@ -16,5 +15,6 @@ type RPCClient interface {
 
 type RPCClientModifiable interface {
 	RPCClient
-	interfaces.RPCEndpoints
+	GetURLs() []string
+	SetURLs(urls []string) error
 }

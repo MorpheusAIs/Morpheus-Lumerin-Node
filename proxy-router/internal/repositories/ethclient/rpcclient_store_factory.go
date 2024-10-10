@@ -58,6 +58,10 @@ func ConfigureRPCClientStore(storage interfaces.KeyValueStorage, envURLs []strin
 		p.log.Warn("Error during loading keychain eth client URLs, using fallback URLs", err)
 	}
 
+	if chainID == 0 {
+		return nil, errors.New("Missing chainID. You need to set CHAIN_ID env variable to use public eth node addresses")
+	}
+
 	publicURLs, err := GetPublicRPCURLs(chainID)
 	if err != nil {
 		return nil, err

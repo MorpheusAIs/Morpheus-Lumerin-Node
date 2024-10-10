@@ -39,3 +39,6 @@ swagger:
 
 mocks:
 	mockery
+
+reset-keychain:
+	go run cmd/main.go --reset-keychain

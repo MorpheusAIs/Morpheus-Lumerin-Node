@@ -1240,6 +1240,18 @@ paths:
       tags:
       - system
   /config/ethNode:
+    delete:
+      description: Delete the Eth Node URLs
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/system.ConfigResponse'
+      summary: Delete Eth Node URLs
+      tags:
+      - system
     post:
       consumes:
       - application/json
