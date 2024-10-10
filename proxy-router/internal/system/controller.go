@@ -139,8 +139,8 @@ func (s *SystemController) GetFiles(ctx *gin.Context) {
 //	@Tags			system
 //	@Accept			json
 //	@Produce		json
-//	@Param			urls	body	SetEthNodeURLReq	true	"URLs"
-//	@Success		200	{object}	ConfigResponse
+//	@Param			urls	body		SetEthNodeURLReq	true	"URLs"
+//	@Success		200		{object}	ConfigResponse
 //	@Router			/config/ethNode [post]
 func (s *SystemController) SetEthNode(ctx *gin.Context) {
 	var req SetEthNodeURLReq

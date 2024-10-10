@@ -894,9 +894,43 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "healthcheck"
+                    "system"
                 ],
                 "summary": "Get Config",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/system.ConfigResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/config/ethNode": {
+            "post": {
+                "description": "Set the Eth Node URLs",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Set Eth Node URLs",
+                "parameters": [
+                    {
+                        "description": "URLs",
+                        "name": "urls",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/system.SetEthNodeURLReq"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -914,7 +948,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "healthcheck"
+                    "system"
                 ],
                 "summary": "Get files",
                 "responses": {
@@ -937,7 +971,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "healthcheck"
+                    "system"
                 ],
                 "summary": "Healthcheck example",
                 "responses": {
@@ -2277,6 +2311,20 @@ const docTemplate = `{
                 },
                 "version": {
                     "type": "string"
+                }
+            }
+        },
+        "system.SetEthNodeURLReq": {
+            "type": "object",
+            "required": [
+                "urls"
+            ],
+            "properties": {
+                "urls": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         }
