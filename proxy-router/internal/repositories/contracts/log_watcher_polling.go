@@ -2,6 +2,7 @@ package contracts
 
 import (
 	"context"
+	"errors"
 	"math/big"
 	"time"
 
@@ -10,6 +11,10 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+)
+
+var (
+	SubClosedError = errors.New("subscription closed")
 )
 
 type LogWatcherPolling struct {
@@ -51,7 +56,7 @@ func (w *LogWatcherPolling) Watch(ctx context.Context, contractAddr common.Addre
 				FromBlock: lastQueriedBlock,
 				ToBlock:   nil,
 			}
-			sub, err := w.filterLogsRetry(ctx, query)
+			sub, err := w.filterLogsRetry(ctx, query, quit)
 			if err != nil {
 				return err
 			}
@@ -67,7 +72,7 @@ func (w *LogWatcherPolling) Watch(ctx context.Context, contractAddr common.Addre
 
 				select {
 				case <-quit:
-					return nil
+					return SubClosedError
 				case <-ctx.Done():
 					return ctx.Err()
 				case sink <- event:
@@ -89,20 +94,29 @@ func (w *LogWatcherPolling) Watch(ctx context.Context, contractAddr common.Addre
 	}, sink), nil
 }
 
-func (w *LogWatcherPolling) filterLogsRetry(ctx context.Context, query ethereum.FilterQuery) ([]types.Log, error) {
+func (w *LogWatcherPolling) filterLogsRetry(ctx context.Context, query ethereum.FilterQuery, quit <-chan struct{}) ([]types.Log, error) {
 	var lastErr error
 
 	for attempts := 0; attempts < w.maxReconnects; attempts++ {
 		logs, err := w.client.FilterLogs(ctx, query)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		if attempts > 0 {
-			w.log.Warnf("subscription reconnected due to error: %s", lastErr)
+		if err == nil {
+			if attempts > 0 {
+				w.log.Warnf("subscription successfully reconnected after error: %s", lastErr)
+			}
+
+			return logs, nil
 		}
 
-		return logs, nil
+		w.log.Debugf("subscription error: %s, retrying in %s", err, w.pollInterval.String())
+		lastErr = err
+
+		select {
+		case <-quit:
+			return nil, SubClosedError
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(w.pollInterval):
+		}
 	}
 
 	return nil, lastErr

@@ -96,7 +96,7 @@ func (w *LogWatcherSubscription) subscribeFilterLogsRetry(ctx context.Context, q
 			continue
 		}
 		if attempts > 0 {
-			w.log.Warnf("subscription reconnected due to error: %s", lastErr)
+			w.log.Warnf("subscription successfully reconnected after error: %s", lastErr)
 		}
 
 		return sub, nil
