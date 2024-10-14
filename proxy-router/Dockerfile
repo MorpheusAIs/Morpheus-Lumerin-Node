@@ -13,7 +13,7 @@ FROM scratch
 WORKDIR /app
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /app/bin/proxy-router /usr/bin/
-COPY --from=builder /usr/bin/dbus-launch /usr/bin/
+# COPY --from=builder /usr/bin/dbus-launch /usr/bin/
 COPY --from=builder /app/.env /app/.env
 # COPY --from=busybox /bin /bin
 # COPY --from=busybox /lib /lib
