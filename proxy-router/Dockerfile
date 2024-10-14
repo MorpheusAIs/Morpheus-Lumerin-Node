@@ -1,7 +1,5 @@
-FROM golang:1.22.3-alpine as base
-RUN apt-get update && apt-get install -y procps curl gnupg2 dbus-x11
+FROM golang:1.22.3-alpine as builder
 
-FROM base as builder
 ARG COMMIT
 ENV COMMIT=$COMMIT
 
