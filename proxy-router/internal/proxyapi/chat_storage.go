@@ -14,7 +14,7 @@ import (
 
 type ChatStorageInterface interface {
 	LoadChatFromFile(chatID string) (*ChatHistory, error)
-	StorePromptResponseToFile(chatID string, sessionID string, modelID string, prompt openai.ChatCompletionRequest, responses []interface{}, promptAt time.Time, responseAt time.Time) error
+	StorePromptResponseToFile(chatID string, isLocal bool, modelID string, prompt openai.ChatCompletionRequest, responses []interface{}, promptAt time.Time, responseAt time.Time) error
 	GetChats() []Chat
 	DeleteChat(chatID string) error
 	UpdateChatTitle(chatID string, title string) error
@@ -23,6 +23,7 @@ type ChatStorageInterface interface {
 type ChatHistory struct {
 	Title    string        `json:"title"`
 	ModelId  string        `json:"modelId"`
+	IsLocal  bool          `json:"isLocal"`
 	Messages []ChatMessage `json:"messages"`
 }
 
@@ -37,6 +38,7 @@ type Chat struct {
 	ChatID    string `json:"chatId"`
 	ModelID   string `json:"modelId"`
 	Title     string `json:"title"`
+	IsLocal   bool   `json:"isLocal"`
 	CreatedAt int64  `json:"createdAt"`
 }
 
@@ -55,7 +57,7 @@ func NewChatStorage(dirPath string) *ChatStorage {
 }
 
 // StorePromptResponseToFile stores the prompt and response to a file.
-func (cs *ChatStorage) StorePromptResponseToFile(identifier string, sessionId string, modelId string, prompt openai.ChatCompletionRequest, responses []interface{}, promptAt, responseAt time.Time) error {
+func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool, modelId string, prompt openai.ChatCompletionRequest, responses []interface{}, promptAt time.Time, responseAt time.Time) error {
 	if err := os.MkdirAll(cs.dirPath, os.ModePerm); err != nil {
 		return err
 	}
@@ -127,6 +129,7 @@ func (cs *ChatStorage) StorePromptResponseToFile(identifier string, sessionId st
 	if data.Messages == nil && len(data.Messages) == 0 {
 		data.ModelId = modelId
 		data.Title = prompt.Messages[0].Content
+		data.IsLocal = isLocal
 	}
 
 	newMessages := append(data.Messages, newEntry)
@@ -168,6 +171,7 @@ func (cs *ChatStorage) GetChats() []Chat {
 			Title:     fileContent.Title,
 			CreatedAt: fileContent.Messages[0].PromptAt,
 			ModelID:   fileContent.ModelId,
+			IsLocal:   fileContent.IsLocal,
 		})
 	}
 
@@ -250,7 +254,7 @@ func (cs *NoOpChatStorage) LoadChatFromFile(chatID string) (*ChatHistory, error)
 	return nil, nil
 }
 
-func (cs *NoOpChatStorage) StorePromptResponseToFile(chatID string, sessionID string, modelID string, prompt openai.ChatCompletionRequest, responses []interface{}, promptAt time.Time, responseAt time.Time) error {
+func (cs *NoOpChatStorage) StorePromptResponseToFile(chatID string, isLocal bool, modelID string, prompt openai.ChatCompletionRequest, responses []interface{}, promptAt time.Time, responseAt time.Time) error {
 	return nil
 }
 
