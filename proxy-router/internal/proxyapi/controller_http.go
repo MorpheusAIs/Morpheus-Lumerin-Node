@@ -136,7 +136,7 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 
 			res, _ := c.aiEngine.PromptCb(ctx, &newBody)
 			responses = res.([]interface{})
-			if err := c.chatStorage.StorePromptResponseToFile(chatID.Hex(), "", modelId, prompt, responses, promptAt, responseAt); err != nil {
+			if err := c.chatStorage.StorePromptResponseToFile(chatID.Hex(), true, modelId, prompt, responses, promptAt, responseAt); err != nil {
 				fmt.Println("Error storing prompt and responses:", err)
 			}
 		}
@@ -159,7 +159,7 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 				prodiaResponses = append(prodiaResponses, completion)
 
 				body.Model = prompt.Model
-				if err := c.chatStorage.StorePromptResponseToFile(chatID.Hex(), "", modelId, body, prodiaResponses, promptAt, responseAt); err != nil {
+				if err := c.chatStorage.StorePromptResponseToFile(chatID.Hex(), true, modelId, body, prodiaResponses, promptAt, responseAt); err != nil {
 					fmt.Println("Error storing prompt and responses:", err)
 				}
 				return nil
@@ -190,7 +190,7 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 		modelId = session.ModelID
 	}
 
-	if err := c.chatStorage.StorePromptResponseToFile(chatID.Hex(), sessionID, modelId, body, responses, promptAt, responseAt); err != nil {
+	if err := c.chatStorage.StorePromptResponseToFile(chatID.Hex(), false, modelId, body, responses, promptAt, responseAt); err != nil {
 		fmt.Println("Error storing prompt and responses:", err)
 	}
 	return

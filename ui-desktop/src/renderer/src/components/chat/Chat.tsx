@@ -40,7 +40,7 @@ import { ChatData, ChatHistoryInterface, ChatTitle, HistoryMessage } from './int
 
 let abort = false;
 let cancelScroll = false;
-const userMessage = { user: 'Me', role: "user", icon: "M", color: getColor("M") };
+const userMessage = { user: 'Me', role: "user", icon: "M", color: "#20dc8e" };
 
 const Chat = (props) => {
     const chatBlockRef = useRef<null | HTMLDivElement>(null);
@@ -94,7 +94,7 @@ const Chat = (props) => {
                 title: t.title,
                 createdAt: new Date(t.createdAt * 1000),
                 modelId: t.modelId,
-                isLocal: chainData?.models?.find((m: any) => m.Id === t.modelId && m.hasLocal)
+                isLocal: t.isLocal,
             })));
 
             const sessions = await props.getSessionsByUser(props.address);

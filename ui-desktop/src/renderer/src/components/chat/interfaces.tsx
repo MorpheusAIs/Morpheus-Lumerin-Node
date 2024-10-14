@@ -3,6 +3,7 @@ export interface ChatTitle {
     title: string;
     createdAt: number; // timestamp in seconds
     modelId: string;
+    isLocal?: boolean;
 }
 
 export interface ChatData {
