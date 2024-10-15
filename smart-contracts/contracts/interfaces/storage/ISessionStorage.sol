@@ -3,25 +3,25 @@ pragma solidity ^0.8.24;
 
 interface ISessionStorage {
     struct Session {
-        bytes32 id;
         address user;
-        address provider;
-        bytes32 modelId;
         bytes32 bidId;
         uint256 stake;
-        uint256 pricePerSecond;
         bytes closeoutReceipt;
-        uint256 closeoutType; // use enum ??
-        // amount of funds that was already withdrawn by provider (we allow to withdraw for the previous day)
+        // TODO: Use enum?
+        uint256 closeoutType;
+        // Amount of funds that was already withdrawn by provider (we allow to withdraw for the previous day)
         uint256 providerWithdrawnAmount;
-        uint256 openedAt;
-        uint256 endsAt; // expected end time considering the stake provided
-        uint256 closedAt;
+        uint128 openedAt;
+        // Expected end time considering the stake provided
+        uint128 endsAt;
+        uint128 closedAt;
+        bool isActive;
     }
 
     struct OnHold {
         uint256 amount;
-        uint128 releaseAt; // in epoch seconds TODO: consider using hours to reduce storage cost
+        // In epoch seconds. TODO: consider using hours to reduce storage cost
+        uint128 releaseAt;
     }
 
     struct Pool {
@@ -31,11 +31,31 @@ interface ISessionStorage {
         uint128 decreaseInterval;
     }
 
-    function sessions(bytes32 sessionId) external view returns (Session memory);
+    function getSession(bytes32 sessionId_) external view returns (Session memory);
 
-    function getSessionsByUser(address user, uint256 offset_, uint256 limit_) external view returns (bytes32[] memory);
+    function getUserSessions(address user, uint256 offset_, uint256 limit_) external view returns (bytes32[] memory);
+
+    function getProviderSessions(
+        address provider_,
+        uint256 offset_,
+        uint256 limit_
+    ) external view returns (bytes32[] memory);
+
+    function getModelSessions(
+        bytes32 modelId_,
+        uint256 offset_,
+        uint256 limit_
+    ) external view returns (bytes32[] memory);
+
+    function getPools() external view returns (Pool[] memory);
+
+    function getPool(uint256 index_) external view returns (Pool memory);
 
     function getFundingAccount() external view returns (address);
 
-    function pools() external view returns (Pool[] memory);
+    function getTotalSessions(address providerAddr_) external view returns (uint256);
+
+    function getProvidersTotalClaimed() external view returns (uint256);
+
+    function getIsProviderApprovalUsed(bytes memory approval_) external view returns (bool);
 }

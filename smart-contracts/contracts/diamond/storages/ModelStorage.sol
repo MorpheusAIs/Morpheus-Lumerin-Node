@@ -1,59 +1,58 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {Paginator} from "@solarity/solidity-lib/libs/arrays/Paginator.sol";
+
 import {IModelStorage} from "../../interfaces/storage/IModelStorage.sol";
 
 contract ModelStorage is IModelStorage {
+    using Paginator for *;
+
     struct MDLStorage {
         uint256 modelMinimumStake;
-        bytes32[] modelIds; // all model ids
+        bytes32[] modelIds;
         mapping(bytes32 modelId => Model) models;
-        mapping(bytes32 modelId => bool) isModelActive;
     }
 
     bytes32 public constant MODEL_STORAGE_SLOT = keccak256("diamond.standard.model.storage");
 
-    function getModel(bytes32 modelId) external view returns (Model memory) {
-        return _getModelStorage().models[modelId];
+    /** PUBLIC, GETTERS */
+    function getModel(bytes32 modelId_) external view returns (Model memory) {
+        return _getModelStorage().models[modelId_];
     }
 
-    function models(uint256 index) external view returns (bytes32) {
-        return _getModelStorage().modelIds[index];
+    function getModelIds(uint256 offset_, uint256 limit_) external view returns (bytes32[] memory) {
+        return _getModelStorage().modelIds.part(offset_, limit_);
     }
 
-    function modelMinimumStake() public view returns (uint256) {
+    function getModelMinimumStake() public view returns (uint256) {
         return _getModelStorage().modelMinimumStake;
     }
 
-    function setModelActive(bytes32 modelId, bool isActive) internal {
-        _getModelStorage().isModelActive[modelId] = isActive;
+    function getIsModelActive(bytes32 modelId_) public view returns (bool) {
+        return !_getModelStorage().models[modelId_].isDeleted;
     }
 
-    function addModel(bytes32 modelId) internal {
-        _getModelStorage().modelIds.push(modelId);
+    /** INTERNAL, GETTERS */
+    function models(bytes32 modelId_) internal view returns (Model storage) {
+        return _getModelStorage().models[modelId_];
     }
 
-    function setModel(bytes32 modelId, Model memory model) internal {
-        _getModelStorage().models[modelId] = model;
+    /** INTERNAL, SETTERS */
+    function addModelId(bytes32 modelId_) internal {
+        _getModelStorage().modelIds.push(modelId_);
     }
 
-    function _setModelMinimumStake(uint256 modelMinimumStake_) internal {
+    function setModelMinimumStake(uint256 modelMinimumStake_) internal {
         _getModelStorage().modelMinimumStake = modelMinimumStake_;
     }
 
-    function models(bytes32 id) internal view returns (Model storage) {
-        return _getModelStorage().models[id];
-    }
-
-    function isModelActive(bytes32 modelId) internal view returns (bool) {
-        return _getModelStorage().isModelActive[modelId];
-    }
-
-    function _getModelStorage() internal pure returns (MDLStorage storage _ds) {
+    /** PRIVATE */
+    function _getModelStorage() private pure returns (MDLStorage storage ds) {
         bytes32 slot_ = MODEL_STORAGE_SLOT;
 
         assembly {
-            _ds.slot := slot_
+            ds.slot := slot_
         }
     }
 }

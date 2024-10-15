@@ -3,15 +3,17 @@ pragma solidity ^0.8.24;
 
 interface IProviderStorage {
     struct Provider {
-        string endpoint; // example 'domain.com:1234'
-        uint256 stake; // stake amount, which also server as a reward limiter
-        uint128 createdAt; // timestamp of the registration
-        uint128 limitPeriodEnd; // timestamp of the limiter period end
-        uint256 limitPeriodEarned; // total earned during the last limiter period
+        string endpoint; // Example 'domain.com:1234'
+        uint256 stake; // Stake amount, which also server as a reward limiter
+        uint128 createdAt; // Timestamp of the registration
+        uint128 limitPeriodEnd; // Timestamp of the limiter period end
+        uint256 limitPeriodEarned; // Total earned during the last limiter period
         bool isDeleted;
     }
 
-    function getProvider(address provider) external view returns (Provider memory);
+    function getProvider(address provider_) external view returns (Provider memory);
 
-    function providerMinimumStake() external view returns (uint256);
+    function getProviderMinimumStake() external view returns (uint256);
+
+    function getIsProviderActive(address provider_) external view returns (bool);
 }

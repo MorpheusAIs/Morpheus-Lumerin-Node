@@ -25,7 +25,7 @@ function forceTypechain() {
 const config: HardhatUserConfig = {
   networks: {
     hardhat: {
-      initialDate: '2024-07-15T01:00:00.000Z',
+      initialDate: '1970-01-01T00:00:00Z',
       gas: 'auto', // required for tests where two transactions should be mined in the same block
       // loggingEnabled: true,
       // mining: {

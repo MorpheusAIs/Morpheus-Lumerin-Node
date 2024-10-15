@@ -7,46 +7,42 @@ contract ProviderStorage is IProviderStorage {
     struct PRVDRStorage {
         uint256 providerMinimumStake;
         mapping(address => Provider) providers;
-        mapping(address => bool) isProviderActive;
     }
 
-    uint128 constant PROVIDER_REWARD_LIMITER_PERIOD = 365 days; // reward for this period will be limited by the stake
+    // Reward for this period will be limited by the stake
+    uint128 constant PROVIDER_REWARD_LIMITER_PERIOD = 365 days;
 
     bytes32 public constant PROVIDER_STORAGE_SLOT = keccak256("diamond.standard.provider.storage");
 
-    function getProvider(address provider) external view returns (Provider memory) {
-        return _getProviderStorage().providers[provider];
+    /** PUBLIC, GETTERS */
+    function getProvider(address provider_) external view returns (Provider memory) {
+        return providers(provider_);
     }
 
-    function providerMinimumStake() public view returns (uint256) {
+    function getProviderMinimumStake() public view returns (uint256) {
         return _getProviderStorage().providerMinimumStake;
     }
 
-    function setProviderActive(address provider, bool isActive) internal {
-        _getProviderStorage().isProviderActive[provider] = isActive;
+    function getIsProviderActive(address provider_) public view returns (bool) {
+        return !providers(provider_).isDeleted;
     }
 
-    function setProvider(address provider, Provider memory provider_) internal {
-        _getProviderStorage().providers[provider] = provider_;
+    /** INTERNAL, GETTERS */
+    function providers(address provider_) internal view returns (Provider storage) {
+        return _getProviderStorage().providers[provider_];
     }
 
-    function setProviderMinimumStake(uint256 _providerMinimumStake) internal {
-        _getProviderStorage().providerMinimumStake = _providerMinimumStake;
+    /** INTERNAL, SETTERS */
+    function setProviderMinimumStake(uint256 providerMinimumStake_) internal {
+        _getProviderStorage().providerMinimumStake = providerMinimumStake_;
     }
 
-    function providers(address addr) internal view returns (Provider storage) {
-        return _getProviderStorage().providers[addr];
-    }
-
-    function isProviderActive(address provider) internal view returns (bool) {
-        return _getProviderStorage().isProviderActive[provider];
-    }
-
-    function _getProviderStorage() internal pure returns (PRVDRStorage storage _ds) {
+    /** PRIVATE */
+    function _getProviderStorage() private pure returns (PRVDRStorage storage ds) {
         bytes32 slot_ = PROVIDER_STORAGE_SLOT;
 
         assembly {
-            _ds.slot := slot_
+            ds.slot := slot_
         }
     }
 }

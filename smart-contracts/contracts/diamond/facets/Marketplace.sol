@@ -22,80 +22,48 @@ contract Marketplace is
 {
     using SafeERC20 for IERC20;
 
-    function __Marketplace_init(
-        address token_
-    ) external initializer(MARKETPLACE_STORAGE_SLOT) initializer(BID_STORAGE_SLOT) {
-        _getBidStorage().token = IERC20(token_);
+    function __Marketplace_init(address token_) external initializer(MARKETPLACE_STORAGE_SLOT) {
+        setToken(IERC20(token_));
     }
 
-    /// @notice sets a bid fee
-    function setBidFee(uint256 bidFee_) external onlyOwner {
-        _getMarketplaceStorage().bidFee = bidFee_;
-        emit FeeUpdated(bidFee_);
+    function setMarketplaceBidFee(uint256 bidFee_) external onlyOwner {
+        setBidFee(bidFee_);
+
+        emit MaretplaceFeeUpdated(bidFee_);
     }
 
-    /// @notice posts a new bid for a model
-    function postModelBid(
-        address provider_,
-        bytes32 modelId_,
-        uint256 pricePerSecond_
-    ) external returns (bytes32 bidId) {
-        if (!_ownerOrProvider(provider_)) {
-            revert NotOwnerOrProvider();
+    function postModelBid(bytes32 modelId_, uint256 pricePerSecond_) external returns (bytes32 bidId) {
+        address provider_ = _msgSender();
+
+        if (!getIsProviderActive(provider_)) {
+            revert MarketplaceProviderNotFound();
         }
-        if (!isProviderActive(provider_)) {
-            revert ProviderNotFound();
-        }
-        if (!isModelActive(modelId_)) {
-            revert ModelNotFound();
+        if (!getIsModelActive(modelId_)) {
+            revert MarketplaceModelNotFound();
         }
 
-        return _postModelBid(provider_, modelId_, pricePerSecond_);
-    }
-
-    /// @notice deletes a bid
-    function deleteModelBid(bytes32 bidId_) external {
-        if (!_isBidActive(bidId_)) {
-            revert ActiveBidNotFound();
-        }
-        if (!_ownerOrProvider(getBid(bidId_).provider)) {
-            revert NotOwnerOrProvider();
-        }
-
-        _deleteBid(bidId_);
-    }
-
-    /// @notice withdraws the fee balance
-    function withdraw(address recipient_, uint256 amount_) external onlyOwner {
-        if (amount_ > getFeeBalance()) {
-            revert NotEnoughBalance();
-        }
-
-        decreaseFeeBalance(amount_);
-        getToken().safeTransfer(recipient_, amount_);
-    }
-
-    function _incrementBidNonce(address provider_, bytes32 modelId_) private returns (uint256) {
-        return _incrementBidNonce(getProviderModelId(provider_, modelId_));
-    }
-
-    function _postModelBid(address provider_, bytes32 modelId_, uint256 pricePerSecond_) private returns (bytes32) {
         uint256 fee_ = getBidFee();
         getToken().safeTransferFrom(_msgSender(), address(this), fee_);
-        increaseFeeBalance(fee_);
 
-        // TEST IT if it increments nonce correctly
-        uint256 nonce_ = _incrementBidNonce(provider_, modelId_);
-        if (nonce_ != 0) {
-            bytes32 oldBidId_ = getBidId(provider_, modelId_, nonce_ - 1);
-            if (_isBidActive(oldBidId_)) {
+        setFeeBalance(getFeeBalance() + fee_);
+
+        bytes32 providerModelId_ = getProviderModelId(provider_, modelId_);
+        uint256 providerModelNonce_ = incrementBidNonce(providerModelId_);
+        bytes32 bidId_ = getBidId(provider_, modelId_, providerModelNonce_);
+
+        if (providerModelNonce_ != 0) {
+            bytes32 oldBidId_ = getBidId(provider_, modelId_, providerModelNonce_ - 1);
+            if (isBidActive(oldBidId_)) {
                 _deleteBid(oldBidId_);
             }
         }
 
-        bytes32 bidId_ = getBidId(provider_, modelId_, nonce_);
-
-        setBid(bidId_, Bid(provider_, modelId_, pricePerSecond_, nonce_, uint128(block.timestamp), 0));
+        Bid storage bid = bids(bidId_);
+        bid.provider = provider_;
+        bid.modelId = modelId_;
+        bid.pricePerSecond = pricePerSecond_;
+        bid.nonce = providerModelNonce_;
+        bid.createdAt = uint128(block.timestamp);
 
         addProviderBid(provider_, bidId_);
         addModelBid(modelId_, bidId_);
@@ -103,20 +71,39 @@ contract Marketplace is
         addProviderActiveBids(provider_, bidId_);
         addModelActiveBids(modelId_, bidId_);
 
-        emit BidPosted(provider_, modelId_, nonce_);
+        emit MarketplaceBidPosted(provider_, modelId_, providerModelNonce_);
 
         return bidId_;
     }
 
+    function deleteModelBid(bytes32 bidId_) external {
+        _onlyAccount(bids(bidId_).provider);
+
+        if (!isBidActive(bidId_)) {
+            revert MarketplaceActiveBidNotFound();
+        }
+
+        _deleteBid(bidId_);
+    }
+
+    function withdraw(address recipient_, uint256 amount_) external onlyOwner {
+        uint256 feeBalance_ = getFeeBalance();
+        amount_ = amount_ > feeBalance_ ? feeBalance_ : amount_;
+
+        setFeeBalance(getFeeBalance() - amount_);
+
+        getToken().safeTransfer(recipient_, amount_);
+    }
+
     function _deleteBid(bytes32 bidId_) private {
-        Bid storage bid = getBid(bidId_);
+        Bid storage bid = bids(bidId_);
 
         bid.deletedAt = uint128(block.timestamp);
 
         removeProviderActiveBids(bid.provider, bidId_);
         removeModelActiveBids(bid.modelId, bidId_);
 
-        emit BidDeleted(bid.provider, bid.modelId, bid.nonce);
+        emit MarketplaceBidDeleted(bid.provider, bid.modelId, bid.nonce);
     }
 
     function getBidId(address provider_, bytes32 modelId_, uint256 nonce_) public pure returns (bytes32) {
@@ -125,15 +112,5 @@ contract Marketplace is
 
     function getProviderModelId(address provider_, bytes32 modelId_) public pure returns (bytes32) {
         return keccak256(abi.encodePacked(provider_, modelId_));
-    }
-
-    function _ownerOrProvider(address provider_) private view returns (bool) {
-        return _msgSender() == owner() || _msgSender() == provider_;
-    }
-
-    function _isBidActive(bytes32 bidId_) private view returns (bool) {
-        Bid memory bid_ = getBid(bidId_);
-
-        return bid_.createdAt != 0 && bid_.deletedAt == 0;
     }
 }
