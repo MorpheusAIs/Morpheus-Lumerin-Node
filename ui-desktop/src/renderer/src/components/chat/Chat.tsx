@@ -89,15 +89,31 @@ const Chat = (props) => {
             setBalances(userBalances)
             setMeta(meta);
             setChainData(chainData)
-            setChatsData(chats.map(t => ({
-                id: t.chatId,
-                title: t.title,
-                createdAt: new Date(t.createdAt * 1000),
-                modelId: t.modelId,
-                isLocal: t.isLocal,
-            })));
 
-            const sessions = await props.getSessionsByUser(props.address);
+            const mappedChatData = chats.reduce((res, item) => {
+                const chatModel = chainData.models.find(x => x.Id == item.modelId); 
+                if(chatModel) {
+                    res.push({
+                        id: item.chatId,
+                        title: item.title,
+                        createdAt: new Date(item.createdAt * 1000),
+                        modelId: item.modelId,
+                        isLocal: item.isLocal,
+                    })
+                }
+                return res;
+            }, [] as ChatData[])
+            setChatsData(mappedChatData);
+
+            const sessions = (await props.getSessionsByUser(props.address)).reduce((res, item) =>  {
+                const sessionModel = chainData.models.find(x => x.Id == item.ModelAgentId);
+                if(sessionModel) {
+                    item.ModelName = sessionModel.Name;
+                    res.push(item);
+                }
+                return res;
+            }, []);
+
             const openSessions = sessions.filter(s => !isClosed(s));
 
             setSessions(sessions);

@@ -221,6 +221,12 @@ func (c *ProxyController) Models(ctx *gin.Context) {
 //	@Router		/v1/chats [get]
 func (c *ProxyController) GetChats(ctx *gin.Context) {
 	chats := c.chatStorage.GetChats()
+
+	if chats == nil {
+		ctx.JSON(http.StatusOK, make([]Chat, 0))
+		return
+	}
+
 	ctx.JSON(http.StatusOK, chats)
 }
 

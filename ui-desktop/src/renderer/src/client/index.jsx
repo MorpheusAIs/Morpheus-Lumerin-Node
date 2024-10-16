@@ -93,7 +93,6 @@ const createClient = function (createStore) {
     refreshAllTransactions: utils.forwardToMainProcess('refresh-all-transactions', 120000),
     refreshAllContracts: utils.forwardToMainProcess('refresh-all-contracts', 120000),
     onOnboardingCompleted: utils.forwardToMainProcess('onboarding-completed'),
-    recoverFromMnemonic: utils.forwardToMainProcess('recover-from-mnemonic'),
     getTokenGasLimit: utils.forwardToMainProcess('get-token-gas-limit'),
     validatePassword: utils.forwardToMainProcess('validate-password'),
     changePassword: utils.forwardToMainProcess('change-password'),

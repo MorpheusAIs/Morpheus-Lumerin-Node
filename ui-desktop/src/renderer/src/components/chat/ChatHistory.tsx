@@ -207,21 +207,19 @@ export const ChatHistory = (props: ChatHistoryProps) => {
                     <Tab eventKey="sessions" title="Sessions">
                         {
                             sessions?.length ? (
-                                sessions.map(a => {
-                                    const model = props.models.find(x => x.Id == a.ModelAgentId);
-
+                                sessions.map(s => {
                                     return (
-                                        <components.HistoryEntryContainer key={a.Id}>
+                                        <components.HistoryEntryContainer key={s.Id}>
                                             <div>
-                                                {!isClosed(a) ?
+                                                {!isClosed(s) ?
                                                     <components.FlexSpaceBetween>
                                                         <Badge bg="success">Active</Badge>
-                                                        <components.CloseBtn onClick={() => props.onCloseSession(a.Id)}>Close</components.CloseBtn>
+                                                        <components.CloseBtn onClick={() => props.onCloseSession(s.Id)}>Close</components.CloseBtn>
                                                     </components.FlexSpaceBetween> : null}
                                             </div>
                                             <components.HistoryItem>
-                                                <components.ModelName data-rh={abbreviateAddress(a.Id, 3)} data-rh-negative>{model?.Name}</components.ModelName>
-                                                <components.Duration>{((a.EndsAt - a.OpenedAt) / 60).toFixed(0)} min</components.Duration>
+                                                <components.ModelName data-rh={abbreviateAddress(s.Id, 3)} data-rh-negative>{s.ModelName}</components.ModelName>
+                                                <components.Duration>{((s.EndsAt - s.OpenedAt) / 60).toFixed(0)} min</components.Duration>
                                             </components.HistoryItem>
                                         </components.HistoryEntryContainer>
                                     )
