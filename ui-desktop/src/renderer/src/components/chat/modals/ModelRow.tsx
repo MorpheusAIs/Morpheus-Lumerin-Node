@@ -6,7 +6,7 @@ import {
 } from '../../contracts/modals/CreateContractModal.styles';
 import { abbreviateAddress } from '../../../utils';
 import { formatSmallNumber } from '../utils';
-import { IconX } from '@tabler/icons-react';
+import { IconX, IconPlugConnectedX } from '@tabler/icons-react';
 
 const RowContainer = styled.div`
   padding: 0 1.2rem;
@@ -58,6 +58,12 @@ const ModelNameContainer = styled(FlexCenter)`
     text-overflow: ellipsis;
 `
 
+const DisconnectedIcon = styled(IconPlugConnectedX)`
+    width: 16px;
+    color: white;
+    margin-left: 10px;
+`
+
 const selectorStyles = {
     control: (base) => ({ ...base, borderColor: '#20dc8e', width: '100%', background: 'transparent' }),
     option: (base, state) => ({
@@ -94,6 +100,7 @@ function ModelRow(props) {
     const modelId = props?.model?.Id || '';
     const hasLocal = props?.model?.hasLocal;
     const hasBids = Boolean(bids.length);
+    const lastAvailabilityCheck: Date | null = bids.map(b => new Date(b.ProviderData.availabilityUpdatedAt))[0] ?? null;
 
     const [selected, changeSelected] = useState<any>();
     const [useSelect, setUseSelect] = useState<boolean>();
@@ -135,7 +142,8 @@ function ModelRow(props) {
     return (
         <RowContainer useSelect={useSelect}>
             <ModelNameContainer>
-                {props?.model?.Name}
+                { props?.model?.Name } 
+                { !props?.model?.isOnline && <DisconnectedIcon data-rh-negative data-rh={`Last seen offline at ${lastAvailabilityCheck?.toLocaleTimeString()}`} /> }
             </ModelNameContainer>
             <PriceContainer hasLocal={hasLocal}>
                 {
@@ -182,7 +190,7 @@ function ModelRow(props) {
                 }
                 {
                     hasBids &&
-                    <RightBtn block onClick={handleChangeModel}>Select</RightBtn>
+                    <RightBtn block disabled={!props?.model?.isOnline} onClick={handleChangeModel}>Select</RightBtn>
                 }
             </Buttons>
         </RowContainer>
