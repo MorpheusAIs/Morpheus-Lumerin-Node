@@ -174,7 +174,7 @@ export const onboardingCompleted = (data, core) => {
     })
     .then((privateKey) => {
       const { proxyUrl } = data
-      return fetch(`${proxyUrl}/wallet`, {
+      return fetch(`${proxyUrl}/wallet/privateKey`, {
         method: 'POST',
         body: JSON.stringify({
           privateKey
@@ -183,25 +183,6 @@ export const onboardingCompleted = (data, core) => {
     })
     .then(() => true)
     .catch((err) => ({ error: new WalletError('Onboarding unable to be completed: ', err) }))
-}
-
-export const recoverFromMnemonic = function (data, core) {
-  if (!auth.isValidPassword(data.password)) {
-    return null
-  }
-
-  wallet.clearWallet()
-
-  return createWallet(
-    {
-      mnemonic: data.mnemonic,
-      password: data.password
-    },
-    core,
-    false
-  )
-    .then(noCore.clearCache)
-    .then((_) => auth.setSessionPassword(data.password))
 }
 
 function onLoginSubmit({ password }, core) {
@@ -346,7 +327,6 @@ export default {
   createContract,
   cancelContract,
   onboardingCompleted,
-  recoverFromMnemonic,
   onLoginSubmit,
   refreshAllTransactions,
   createWallet,

@@ -1,11 +1,15 @@
-import * as validators from '../validators';
 import { withClient } from './clientContext';
-import * as utils from '../utils';
 import { connect } from 'react-redux';
-import PropTypes from 'prop-types';
 import React from 'react';
 import { ToastsContext } from '../../components/toasts';
 import selectors from '../selectors';
+import axios from 'axios';
+
+const AvailabilityStatus = {
+  available: "available",
+  unknown: "unknown",
+  disconnected: "disconnected"
+}
 
 const withChatState = WrappedComponent => {
   class Container extends React.Component {
@@ -129,6 +133,17 @@ const withChatState = WrappedComponent => {
 
       const models = modelsResp.filter(m => !m.IsDeleted);
       const providers = providersResp.filter(m => !m.IsDeleted);
+
+      const availabilityResults = await this.getProvidersAvailability(providers);
+      availabilityResults.forEach(ar => {
+        const provider = providers.find(p => p.Address == ar.id);
+        if(!provider)
+          return;
+
+        provider.availabilityStatus = ar.status;
+        provider.availabilityUpdatedAt = ar.time;
+      });
+
       const providersMap = providers.reduce((a, b) => ({ ...a, [b.Address.toLowerCase()]: b }), {});
 
       const responses = (await Promise.all(
@@ -153,6 +168,38 @@ const withChatState = WrappedComponent => {
       }
 
       return { models: result.filter(r => r.bids.length || r.hasLocal), providers }
+    }
+
+    getProvidersAvailability = async (providers) => {
+      const availabilityResults = await Promise.all(providers.map(async p => {
+        try {
+          const storedRecord = JSON.parse(localStorage.getItem(p.Address));
+          if(storedRecord && storedRecord.status != AvailabilityStatus.unknown) {
+            const lastUpdatedAt = new Date(storedRecord.time);
+            const oneHourBefore = new Date(new Date().getTime() - (60 * 60 * 1000));
+
+            if(lastUpdatedAt > oneHourBefore) {
+              return ({...storedRecord, id: p.Address});
+            }
+          }
+
+          const endpoint = p.Endpoint;
+          const [domain, port] = endpoint.split(":");
+          const { data } = await axios.post("https://portchecker.io/api/v1/query", {
+            host: domain,
+            ports: [port],
+          })
+    
+          const isValid = !!data.check?.find((c) => c.port == port && c.status == true);
+          const record = ({id: p.Address, status: isValid ? AvailabilityStatus.available : AvailabilityStatus.disconnected, time: new Date() });
+          localStorage.setItem(record.id, JSON.stringify({ status: record.status, time: record.time }));
+          return record;
+        }
+        catch(e) {
+          return ({id: p.Address, status: AvailabilityStatus.unknown })
+        }
+      }));
+      return availabilityResults;
     }
 
     getMetaInfo = async () => {

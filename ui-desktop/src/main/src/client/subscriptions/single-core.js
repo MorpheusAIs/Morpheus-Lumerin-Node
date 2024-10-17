@@ -4,7 +4,6 @@ import utils from './utils'
 export const withCore = (core) => (fn) => (data) => fn(data, core)
 
 export const listeners = {
-  'recover-from-mnemonic': handlers.recoverFromMnemonic,
   'onboarding-completed': handlers.onboardingCompleted,
   'login-submit': handlers.onLoginSubmit,
   // 'refresh-all-sockets': handlers.refreshAllSockets,
