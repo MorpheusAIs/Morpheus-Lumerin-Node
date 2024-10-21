@@ -19,5 +19,7 @@ interface IModelStorage {
 
     function getModelMinimumStake() external view returns (uint256);
 
+    function getActiveModels(uint256 offset_, uint256 limit_) external view returns (bytes32[] memory);
+
     function getIsModelActive(bytes32 modelId_) external view returns (bool);
 }

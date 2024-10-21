@@ -66,7 +66,7 @@ describe('ProviderRegistry', () => {
       const minStake = wei(100);
 
       await expect(providerRegistry.providerSetMinStake(minStake))
-        .to.emit(providerRegistry, 'ProviderMinStakeUpdated')
+        .to.emit(providerRegistry, 'ProviderMinimumStakeUpdated')
         .withArgs(minStake);
 
       expect(await providerRegistry.getProviderMinimumStake()).eq(minStake);
@@ -97,6 +97,8 @@ describe('ProviderRegistry', () => {
 
       expect(await token.balanceOf(providerRegistry)).to.eq(wei(100));
       expect(await token.balanceOf(PROVIDER)).to.eq(wei(900));
+
+      expect(await providerRegistry.getActiveProviders(0, 10)).to.deep.eq([PROVIDER.address]);
 
       await providerRegistry.connect(PROVIDER).providerRegister(wei(0), 'test');
     });
@@ -159,6 +161,8 @@ describe('ProviderRegistry', () => {
       expect(await providerRegistry.getIsProviderActive(PROVIDER)).to.eq(false);
       expect(await token.balanceOf(providerRegistry)).to.eq(0);
       expect(await token.balanceOf(PROVIDER)).to.eq(wei(1000));
+
+      expect(await providerRegistry.getActiveProviders(0, 10)).to.deep.eq([]);
     });
     it('should deregister the provider without transfer', async () => {
       await providerRegistry.providerSetMinStake(0);

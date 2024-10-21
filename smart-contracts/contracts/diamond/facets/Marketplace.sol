@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import {OwnableDiamondStorage} from "../presets/OwnableDiamondStorage.sol";
@@ -21,13 +22,16 @@ contract Marketplace is
     BidStorage
 {
     using SafeERC20 for IERC20;
+    using EnumerableSet for EnumerableSet.Bytes32Set;
 
-    function __Marketplace_init(address token_) external initializer(MARKETPLACE_STORAGE_SLOT) {
-        setToken(IERC20(token_));
+    function __Marketplace_init(address token_) external initializer(BIDS_STORAGE_SLOT) {
+        BidsStorage storage bidsStorage = getBidsStorage();
+        bidsStorage.token = token_;
     }
 
     function setMarketplaceBidFee(uint256 bidFee_) external onlyOwner {
-        setBidFee(bidFee_);
+        MarketStorage storage marketStorage = getMarketStorage();
+        marketStorage.bidFee = bidFee_;
 
         emit MaretplaceFeeUpdated(bidFee_);
     }
@@ -42,13 +46,15 @@ contract Marketplace is
             revert MarketplaceModelNotFound();
         }
 
-        uint256 fee_ = getBidFee();
-        getToken().safeTransferFrom(_msgSender(), address(this), fee_);
+        BidsStorage storage bidsStorage = getBidsStorage();
+        MarketStorage storage marketStorage = getMarketStorage();
 
-        setFeeBalance(getFeeBalance() + fee_);
+        // TODO: check it
+        IERC20(bidsStorage.token).safeTransferFrom(_msgSender(), address(this), marketStorage.bidFee);
+        marketStorage.feeBalance +=  marketStorage.bidFee;
 
         bytes32 providerModelId_ = getProviderModelId(provider_, modelId_);
-        uint256 providerModelNonce_ = incrementBidNonce(providerModelId_);
+        uint256 providerModelNonce_ = bidsStorage.providerModelNonce[providerModelId_]++;
         bytes32 bidId_ = getBidId(provider_, modelId_, providerModelNonce_);
 
         if (providerModelNonce_ != 0) {
@@ -58,18 +64,17 @@ contract Marketplace is
             }
         }
 
-        Bid storage bid = bids(bidId_);
+        Bid storage bid = bidsStorage.bids[bidId_];
         bid.provider = provider_;
         bid.modelId = modelId_;
         bid.pricePerSecond = pricePerSecond_;
         bid.nonce = providerModelNonce_;
         bid.createdAt = uint128(block.timestamp);
 
-        addProviderBid(provider_, bidId_);
-        addModelBid(modelId_, bidId_);
-
-        addProviderActiveBids(provider_, bidId_);
-        addModelActiveBids(modelId_, bidId_);
+        bidsStorage.providerBids[provider_].add(bidId_);
+        bidsStorage.providerActiveBids[provider_].add(bidId_);
+        bidsStorage.modelBids[modelId_].add(bidId_);
+        bidsStorage.modelActiveBids[modelId_].add(bidId_);
 
         emit MarketplaceBidPosted(provider_, modelId_, providerModelNonce_);
 
@@ -77,7 +82,8 @@ contract Marketplace is
     }
 
     function deleteModelBid(bytes32 bidId_) external {
-        _onlyAccount(bids(bidId_).provider);
+        BidsStorage storage bidsStorage = getBidsStorage();
+        _onlyAccount(bidsStorage.bids[bidId_].provider);
 
         if (!isBidActive(bidId_)) {
             revert MarketplaceActiveBidNotFound();
@@ -87,21 +93,24 @@ contract Marketplace is
     }
 
     function withdraw(address recipient_, uint256 amount_) external onlyOwner {
-        uint256 feeBalance_ = getFeeBalance();
-        amount_ = amount_ > feeBalance_ ? feeBalance_ : amount_;
+        BidsStorage storage bidsStorage = getBidsStorage();
+        MarketStorage storage marketStorage = getMarketStorage();
 
-        setFeeBalance(getFeeBalance() - amount_);
+        amount_ = amount_ > marketStorage.feeBalance ? marketStorage.feeBalance : amount_;
 
-        getToken().safeTransfer(recipient_, amount_);
+        marketStorage.feeBalance -= amount_;
+
+        IERC20(bidsStorage.token).safeTransfer(recipient_, amount_);
     }
 
     function _deleteBid(bytes32 bidId_) private {
-        Bid storage bid = bids(bidId_);
+        BidsStorage storage bidsStorage = getBidsStorage();
+        Bid storage bid = bidsStorage.bids[bidId_];
 
         bid.deletedAt = uint128(block.timestamp);
 
-        removeProviderActiveBids(bid.provider, bidId_);
-        removeModelActiveBids(bid.modelId, bidId_);
+        bidsStorage.providerActiveBids[bid.provider].remove(bidId_);
+        bidsStorage.modelActiveBids[bid.modelId].remove(bidId_);
 
         emit MarketplaceBidDeleted(bid.provider, bid.modelId, bid.nonce);
     }

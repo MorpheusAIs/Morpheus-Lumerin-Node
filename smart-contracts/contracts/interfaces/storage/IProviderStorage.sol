@@ -15,5 +15,7 @@ interface IProviderStorage {
 
     function getProviderMinimumStake() external view returns (uint256);
 
+    function getActiveProviders(uint256 offset_, uint256 limit_) external view returns (address[] memory);
+
     function getIsProviderActive(address provider_) external view returns (bool);
 }

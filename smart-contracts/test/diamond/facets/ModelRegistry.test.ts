@@ -69,7 +69,7 @@ describe('ModelRegistry', () => {
       const minStake = wei(100);
 
       await expect(modelRegistry.modelSetMinStake(minStake))
-        .to.emit(modelRegistry, 'ModelMinStakeUpdated')
+        .to.emit(modelRegistry, 'ModelMinimumStakeUpdated')
         .withArgs(minStake);
 
       expect(await modelRegistry.getModelMinimumStake()).eq(minStake);
@@ -123,6 +123,8 @@ describe('ModelRegistry', () => {
 
       expect(await token.balanceOf(modelRegistry)).to.eq(wei(100));
       expect(await token.balanceOf(SECOND)).to.eq(wei(900));
+
+      expect(await modelRegistry.getActiveModels(0, 10)).to.deep.eq([modelId]);
 
       await modelRegistry.connect(SECOND).modelRegister(modelId, ipfsCID, 0, wei(0), 'name', ['tag_1']);
     });
@@ -193,6 +195,8 @@ describe('ModelRegistry', () => {
       expect(await modelRegistry.getIsModelActive(modelId)).to.eq(false);
       expect(await token.balanceOf(modelRegistry)).to.eq(0);
       expect(await token.balanceOf(SECOND)).to.eq(wei(1000));
+
+      expect(await modelRegistry.getActiveModels(0, 10)).to.deep.eq([]);
     });
     it('should throw error when the caller is not an owner or specified address', async () => {
       await expect(modelRegistry.connect(SECOND).modelDeregister(modelId)).to.be.revertedWithCustomError(

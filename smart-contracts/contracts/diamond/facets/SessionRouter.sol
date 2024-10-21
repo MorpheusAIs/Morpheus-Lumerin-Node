@@ -29,13 +29,18 @@ contract SessionRouter is
     using Math for *;
     using LibSD for LibSD.SD;
     using SafeERC20 for IERC20;
+    using EnumerableSet for EnumerableSet.Bytes32Set;
 
     function __SessionRouter_init(
         address fundingAccount_,
         Pool[] calldata pools_
-    ) external initializer(SESSION_STORAGE_SLOT) {
-        setFundingAccount(fundingAccount_);
-        setPools(pools_);
+    ) external initializer(SESSIONS_STORAGE_SLOT) {
+        SessionsStorage storage sessionsStorage = getSessionsStorage();
+
+        sessionsStorage.fundingAccount = fundingAccount_;
+        for (uint256 i = 0; i < pools_.length; i++) {
+            sessionsStorage.pools.push(pools_[i]);
+        }
     }
 
     ////////////////////////////
@@ -48,11 +53,11 @@ contract SessionRouter is
      * @dev call 'Distribution.pools(3)' where '3' is a poolId
      */
     function setPoolConfig(uint256 index_, Pool calldata pool_) external onlyOwner {
-        if (index_ >= pools().length) {
+        if (index_ >= getSessionsStorage().pools.length) {
             revert SessionPoolIndexOutOfBounds();
         }
 
-        setPool(index_, pool_);
+        getSessionsStorage().pools[index_] = pool_;
     }
 
     ////////////////////////
@@ -68,22 +73,25 @@ contract SessionRouter is
             revert SessionBidNotFound();
         }
 
-        Bid storage bid = bids(bidId_);
+        BidsStorage storage bidsStorage = getBidsStorage();
+        SessionsStorage storage sessionsStorage = getSessionsStorage();
+
+        Bid storage bid = bidsStorage.bids[bidId_];
         if (!_isValidProviderReceipt(bid.provider, approvalEncoded_, signature_)) {
             revert SessionProviderSignatureMismatch();
         }
-        if (getIsProviderApprovalUsed(approvalEncoded_)) {
+        if (sessionsStorage.isProviderApprovalUsed[approvalEncoded_]) {
             revert SessionDuplicateApproval();
         }
 
         uint128 endsAt_ = getSessionEnd(amount_, bid.pricePerSecond, uint128(block.timestamp));
-        bytes32 sessionId_ = getSessionId(_msgSender(), bid.provider, bidId_, incrementSessionNonce());
+        bytes32 sessionId_ = getSessionId(_msgSender(), bid.provider, bidId_, sessionsStorage.sessionNonce++);
 
         if (endsAt_ - block.timestamp < MIN_SESSION_DURATION) {
             revert SessionTooShort();
         }
 
-        Session storage session = sessions(sessionId_);
+        Session storage session = sessionsStorage.sessions[sessionId_];
 
         session.user = _msgSender();
         session.stake = amount_;
@@ -92,12 +100,13 @@ contract SessionRouter is
         session.endsAt = endsAt_;
         session.isActive = true;
 
-        addUserSessionId(_msgSender(), sessionId_);
-        addProviderSessionId(bid.provider, sessionId_);
-        addModelSessionId(bid.modelId, sessionId_);
-        setIsProviderApprovalUsed(approvalEncoded_, true);
+        sessionsStorage.userSessions[_msgSender()].add(sessionId_);
+        sessionsStorage.providerSessions[bid.provider].add(sessionId_);
+        sessionsStorage.modelSessions[bid.modelId].add(sessionId_);
 
-        getToken().safeTransferFrom(_msgSender(), address(this), amount_);
+        sessionsStorage.isProviderApprovalUsed[approvalEncoded_] = true;
+
+        IERC20(bidsStorage.token).safeTransferFrom(_msgSender(), address(this), amount_);
 
         emit SessionOpened(_msgSender(), sessionId_, bid.provider);
 
@@ -161,8 +170,8 @@ contract SessionRouter is
     function closeSession(bytes calldata receiptEncoded_, bytes calldata signature_) external {
         (bytes32 sessionId_, uint32 tpsScaled1000_, uint32 ttftMs_) = _extractProviderReceipt(receiptEncoded_);
 
-        Session storage session = sessions(sessionId_);
-        Bid storage bid = bids(session.bidId);
+        Session storage session = getSessionsStorage().sessions[sessionId_];
+        Bid storage bid = getBidsStorage().bids[session.bidId];
 
         _onlyAccount(session.user);
         if (session.closedAt != 0) {
@@ -201,10 +210,10 @@ contract SessionRouter is
             uint256 userInitialLock_ = userDuration_ * bid.pricePerSecond;
             userStakeToLock_ = session.stake.min(stipendToStake(userInitialLock_, startOfToday_));
 
-            addUserStakeOnHold(session.user, OnHold(userStakeToLock_, uint128(startOfToday_ + 1 days)));
+            getSessionsStorage().userStakesOnHold[session.user].push(OnHold(userStakeToLock_, uint128(startOfToday_ + 1 days)));
         }
         uint256 userAmountToWithdraw_ = session.stake - userStakeToLock_;
-        getToken().safeTransfer(session.user, userAmountToWithdraw_);
+        IERC20(getBidsStorage().token).safeTransfer(session.user, userAmountToWithdraw_);
         //// END
 
         //// STATS
@@ -261,8 +270,8 @@ contract SessionRouter is
      * @dev Allows providers to receive their funds after the end or closure of the session
      */
     function claimForProvider(bytes32 sessionId_) external {
-        Session storage session = sessions(sessionId_);
-        Bid storage bid = bids(session.bidId);
+        Session storage session = getSessionsStorage().sessions[sessionId_];
+        Bid storage bid = getBidsStorage().bids[session.bidId];
 
         _onlyAccount(bid.provider);
 
@@ -282,8 +291,12 @@ contract SessionRouter is
      * @param amount_ Amount of reward to send
      */
     function _claimForProvider(Session storage session, uint256 amount_) private {
-        Bid storage bid = bids(session.bidId);
-        Provider storage provider = providers(bid.provider);
+        SessionsStorage storage sessionsStorage = getSessionsStorage();
+        BidsStorage storage bidsStorage = getBidsStorage();
+        PovidersStorage storage providersStorage = getProvidersStorage();
+
+        Bid storage bid = bidsStorage.bids[session.bidId];
+        Provider storage provider = providersStorage.providers[bid.provider];
 
         if (block.timestamp > provider.limitPeriodEnd) {
             provider.limitPeriodEnd = uint128(block.timestamp) + PROVIDER_REWARD_LIMITER_PERIOD;
@@ -300,9 +313,9 @@ contract SessionRouter is
 
         session.providerWithdrawnAmount += amount_;
         provider.limitPeriodEarned += amount_;
-        increaseProvidersTotalClaimed(amount_);
+        sessionsStorage.providersTotalClaimed += amount_;
 
-        getToken().safeTransferFrom(getFundingAccount(), bid.provider, amount_);
+        IERC20(bidsStorage.token).safeTransferFrom(sessionsStorage.fundingAccount, bid.provider, amount_);
     }
 
     /**
@@ -316,7 +329,7 @@ contract SessionRouter is
         address user_,
         uint8 iterations_
     ) external view returns (uint256 available_, uint256 hold_) {
-        OnHold[] memory onHold = userStakesOnHold(user_);
+        OnHold[] memory onHold = getSessionsStorage().userStakesOnHold[user_];
         iterations_ = iterations_ > onHold.length ? uint8(onHold.length) : iterations_;
 
         for (uint256 i = 0; i < onHold.length; i++) {
@@ -333,7 +346,7 @@ contract SessionRouter is
     function withdrawUserStakes(uint8 iterations_) external {
         uint256 amount_ = 0;
 
-        OnHold[] storage onHoldEntries = userStakesOnHold(_msgSender());
+        OnHold[] storage onHoldEntries = getSessionsStorage().userStakesOnHold[_msgSender()];
         uint8 i = iterations_ >= onHoldEntries.length ? uint8(onHoldEntries.length) : iterations_;
         i--;
 
@@ -356,7 +369,7 @@ contract SessionRouter is
             revert SessionUserAmountToWithdrawIsZero();
         }
 
-        getToken().safeTransfer(_msgSender(), amount_);
+        IERC20(getBidsStorage().token).safeTransfer(_msgSender(), amount_);
 
         emit UserWithdrawn(_msgSender(), amount_);
     }
@@ -376,7 +389,8 @@ contract SessionRouter is
      * @dev Returns today's compute balance in MOR without claimed amount
      */
     function getComputeBalance(uint128 timestamp_) public view returns (uint256) {
-        Pool storage pool = pool(COMPUTE_POOL_INDEX);
+        SessionsStorage storage sessionsStorage = getSessionsStorage();
+        Pool storage pool = sessionsStorage.pools[COMPUTE_POOL_INDEX];
 
         uint256 periodReward = LinearDistributionIntervalDecrease.getPeriodReward(
             pool.initialReward,
@@ -387,7 +401,7 @@ contract SessionRouter is
             uint128(startOfTheDay(timestamp_))
         );
 
-        return periodReward - getProvidersTotalClaimed();
+        return periodReward - sessionsStorage.providersTotalClaimed;
     }
 
     /**
@@ -398,7 +412,9 @@ contract SessionRouter is
         uint256 startOfTheDay_ = startOfTheDay(timestamp_);
         uint256 totalSupply_ = 0;
 
-        Pool[] storage pools = pools();
+        SessionsStorage storage sessionsStorage = getSessionsStorage();
+        Pool[] storage pools = sessionsStorage.pools;
+
         for (uint256 i = 0; i < pools.length; i++) {
             if (i == COMPUTE_POOL_INDEX) continue;
 
@@ -412,7 +428,7 @@ contract SessionRouter is
             );
         }
 
-        return totalSupply_ + getProvidersTotalClaimed();
+        return totalSupply_ + sessionsStorage.providersTotalClaimed;
     }
 
     function startOfTheDay(uint128 timestamp_) public pure returns (uint128) {

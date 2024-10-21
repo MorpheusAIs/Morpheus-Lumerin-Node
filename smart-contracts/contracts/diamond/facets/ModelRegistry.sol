@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import {OwnableDiamondStorage} from "../presets/OwnableDiamondStorage.sol";
@@ -11,14 +12,16 @@ import {ModelStorage} from "../storages/ModelStorage.sol";
 import {IModelRegistry} from "../../interfaces/facets/IModelRegistry.sol";
 
 contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, BidStorage {
+    using EnumerableSet for EnumerableSet.Bytes32Set;
     using SafeERC20 for IERC20;
 
-    function __ModelRegistry_init() external initializer(MODEL_STORAGE_SLOT) {}
+    function __ModelRegistry_init() external initializer(MODELS_STORAGE_SLOT) {}
 
     function modelSetMinStake(uint256 modelMinimumStake_) external onlyOwner {
-        setModelMinimumStake(modelMinimumStake_);
+        ModelsStorage storage modelsStorage = getModelsStorage();
+        modelsStorage.modelMinimumStake = modelMinimumStake_;
 
-        emit ModelMinStakeUpdated(modelMinimumStake_);
+        emit ModelMinimumStakeUpdated(modelMinimumStake_);
     }
 
     function modelRegister(
@@ -29,20 +32,22 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
         string calldata name_,
         string[] memory tags_
     ) external {
-        Model storage model = models(modelId_);
+        ModelsStorage storage modelsStorage = getModelsStorage();
+        Model storage model = modelsStorage.models[modelId_];
 
         uint256 newStake_ = model.stake + amount_;
-        uint256 minStake_ = getModelMinimumStake();
+        uint256 minStake_ = modelsStorage.modelMinimumStake;
         if (newStake_ < minStake_) {
             revert ModelStakeTooLow(newStake_, minStake_);
         }
 
         if (amount_ > 0) {
-            getToken().safeTransferFrom(_msgSender(), address(this), amount_);
+            BidsStorage storage bidsStorage = getBidsStorage();
+            IERC20(bidsStorage.token).safeTransferFrom(_msgSender(), address(this), amount_);
         }
 
         if (model.createdAt == 0) {
-            addModelId(modelId_);
+            modelsStorage.modelIds.add(modelId_);
 
             model.createdAt = uint128(block.timestamp);
             model.owner = _msgSender();
@@ -57,11 +62,14 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
         model.tags = tags_;
         model.isDeleted = false;
 
+        modelsStorage.activeModels.add(modelId_);
+
         emit ModelRegisteredUpdated(_msgSender(), modelId_);
     }
 
     function modelDeregister(bytes32 modelId_) external {
-        Model storage model = models(modelId_);
+        ModelsStorage storage modelsStorage = getModelsStorage();
+        Model storage model = modelsStorage.models[modelId_];
 
         _onlyAccount(model.owner);
         if (!isModelActiveBidsEmpty(modelId_)) {
@@ -76,7 +84,10 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
         model.stake = 0;
         model.isDeleted = true;
 
-        getToken().safeTransfer(model.owner, withdrawAmount_);
+        modelsStorage.activeModels.remove(modelId_);
+
+        BidsStorage storage bidsStorage = getBidsStorage();
+        IERC20(bidsStorage.token).safeTransfer(model.owner, withdrawAmount_);
 
         emit ModelDeregistered(model.owner, modelId_);
     }

@@ -6,7 +6,7 @@ import {IModelStorage} from "../storage/IModelStorage.sol";
 interface IModelRegistry is IModelStorage {
     event ModelRegisteredUpdated(address indexed owner, bytes32 indexed modelId);
     event ModelDeregistered(address indexed owner, bytes32 indexed modelId);
-    event ModelMinStakeUpdated(uint256 newStake);
+    event ModelMinimumStakeUpdated(uint256 modelMinimumStake);
     error ModelStakeTooLow(uint256 amount, uint256 minAmount);
     error ModelHasAlreadyDeregistered();
     error ModelNotFound();

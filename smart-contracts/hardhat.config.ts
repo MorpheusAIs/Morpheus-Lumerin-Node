@@ -12,6 +12,10 @@ import 'tsconfig-paths/register';
 
 dotenv.config();
 
+function privateKey() {
+  return process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [];
+}
+
 function typechainTarget() {
   const target = process.env.TYPECHAIN_TARGET;
 
@@ -32,12 +36,20 @@ const config: HardhatUserConfig = {
       //   auto: true,
       //   interval: 10_000,
       // },
+      // forking: {
+      //   url: `https://arbitrum-sepolia.infura.io/v3/${process.env.INFURA_KEY}`,
+      // },
     },
     localhost: {
       url: 'http://127.0.0.1:8545',
       initialDate: '1970-01-01T00:00:00Z',
       gasMultiplier: 1.2,
       timeout: 1000000000000000,
+    },
+    arbitrum_sepolia: {
+      url: `https://arbitrum-sepolia.infura.io/v3/${process.env.INFURA_KEY}`,
+      accounts: privateKey(),
+      gasMultiplier: 1.1,
     },
   },
   solidity: {
@@ -77,6 +89,12 @@ const config: HardhatUserConfig = {
     alwaysGenerateOverloads: true,
     discriminateTypes: true,
     dontOverrideCompile: forceTypechain(),
+  },
+  etherscan: {
+    apiKey: {
+      mainnet: `${process.env.ETHERSCAN_KEY}`,
+      arbitrumSepolia: `${process.env.ARBITRUM_KEY}`,
+    },
   },
 };
 

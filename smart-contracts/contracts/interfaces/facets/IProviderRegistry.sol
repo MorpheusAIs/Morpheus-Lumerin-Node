@@ -6,7 +6,7 @@ import {IProviderStorage} from "../storage/IProviderStorage.sol";
 interface IProviderRegistry is IProviderStorage {
     event ProviderRegistered(address indexed provider);
     event ProviderDeregistered(address indexed provider);
-    event ProviderMinStakeUpdated(uint256 newStake);
+    event ProviderMinimumStakeUpdated(uint256 providerMinimumStake);
     event ProviderWithdrawn(address indexed provider, uint256 amount);
     error ProviderStakeTooLow(uint256 amount, uint256 minAmount);
     error ProviderNotDeregistered();
