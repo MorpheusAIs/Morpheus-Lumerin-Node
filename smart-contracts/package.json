@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "compile": "hardhat compile",
-    "test": "hardhat test",
+    "test": "npm run generate-types && hardhat test",
     "test:gas": "REPORT_GAS=true hardhat test",
     "coverage": "hardhat coverage --solcoverjs ./.solcover.ts",
     "report": "open ./coverage/index.html",

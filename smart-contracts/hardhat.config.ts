@@ -12,6 +12,10 @@ import 'tsconfig-paths/register';
 
 dotenv.config();
 
+function privateKey() {
+  return process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [];
+}
+
 function typechainTarget() {
   const target = process.env.TYPECHAIN_TARGET;
 
@@ -25,12 +29,15 @@ function forceTypechain() {
 const config: HardhatUserConfig = {
   networks: {
     hardhat: {
-      initialDate: '2024-07-15T01:00:00.000Z',
+      initialDate: '1970-01-01T00:00:00Z',
       gas: 'auto', // required for tests where two transactions should be mined in the same block
       // loggingEnabled: true,
       // mining: {
       //   auto: true,
       //   interval: 10_000,
+      // },
+      // forking: {
+      //   url: `https://arbitrum-sepolia.infura.io/v3/${process.env.INFURA_KEY}`,
       // },
     },
     localhost: {
@@ -38,6 +45,11 @@ const config: HardhatUserConfig = {
       initialDate: '1970-01-01T00:00:00Z',
       gasMultiplier: 1.2,
       timeout: 1000000000000000,
+    },
+    arbitrum_sepolia: {
+      url: `https://arbitrum-sepolia.infura.io/v3/${process.env.INFURA_KEY}`,
+      accounts: privateKey(),
+      gasMultiplier: 1.1,
     },
   },
   solidity: {
@@ -77,6 +89,12 @@ const config: HardhatUserConfig = {
     alwaysGenerateOverloads: true,
     discriminateTypes: true,
     dontOverrideCompile: forceTypechain(),
+  },
+  etherscan: {
+    apiKey: {
+      mainnet: `${process.env.ETHERSCAN_API_KEY}`,
+      arbitrumSepolia: `${process.env.ARBITRUM_API_KEY}`,
+    },
   },
 };
 
