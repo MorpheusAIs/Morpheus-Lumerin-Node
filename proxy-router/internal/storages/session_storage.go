@@ -110,3 +110,138 @@ func (s *SessionStorage) RemoveSession(id string) error {
 	}
 	return nil
 }
+
+type PromptActivity struct {
+	SessionID string
+	StartTime int64
+	EndTime   int64
+}
+
+func (s *SessionStorage) AddSessionToModel(modelID string, sessionID string) error {
+	modelID = strings.ToLower(modelID)
+	key := fmt.Sprintf("model:%s", modelID)
+
+	var sessions []string
+	sessionsJson, err := s.db.Get([]byte(key))
+	if err == nil {
+		err = json.Unmarshal(sessionsJson, &sessions)
+		if err != nil {
+			return err
+		}
+	} else {
+		sessions = []string{}
+	}
+
+	sessions = append(sessions, sessionID)
+	sessionsJson, err = json.Marshal(sessions)
+	if err != nil {
+		return err
+	}
+
+	err = s.db.Set([]byte(key), sessionsJson)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *SessionStorage) GetSessionsForModel(modelID string) ([]string, error) {
+	modelID = strings.ToLower(modelID)
+	key := fmt.Sprintf("model:%s", modelID)
+
+	sessionsJson, err := s.db.Get([]byte(key))
+	if err != nil {
+		return []string{}, nil
+	}
+
+	var sessions []string
+	err = json.Unmarshal(sessionsJson, &sessions)
+	if err != nil {
+		return nil, err
+	}
+
+	return sessions, nil
+}
+
+func (s *SessionStorage) AddActivity(modelID string, activity *PromptActivity) error {
+	modelID = strings.ToLower(modelID)
+	key := fmt.Sprintf("activity:%s", modelID)
+
+	var activities []*PromptActivity
+	activitiesJson, err := s.db.Get([]byte(key))
+	if err == nil {
+		err = json.Unmarshal(activitiesJson, &activities)
+		if err != nil {
+			return err
+		}
+	} else {
+		activities = []*PromptActivity{}
+	}
+
+	activities = append(activities, activity)
+	activitiesJson, err = json.Marshal(activities)
+	if err != nil {
+		return err
+	}
+
+	err = s.db.Set([]byte(key), activitiesJson)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *SessionStorage) GetActivities(modelID string) ([]*PromptActivity, error) {
+	modelID = strings.ToLower(modelID)
+	key := fmt.Sprintf("activity:%s", modelID)
+
+	activitiesJson, err := s.db.Get([]byte(key))
+	if err != nil {
+		return []*PromptActivity{}, nil
+	}
+
+	var activities []*PromptActivity
+	err = json.Unmarshal(activitiesJson, &activities)
+	if err != nil {
+		return nil, err
+	}
+
+	return activities, nil
+}
+
+// // New method to remove activities older than a certain time
+func (s *SessionStorage) RemoveOldActivities(modelID string, beforeTime int64) error {
+	modelID = strings.ToLower(modelID)
+	key := fmt.Sprintf("activity:%s", modelID)
+
+	activitiesJson, err := s.db.Get([]byte(key))
+	if err != nil {
+		return nil
+	}
+
+	var activities []*PromptActivity
+	err = json.Unmarshal(activitiesJson, &activities)
+	if err != nil {
+		return err
+	}
+
+	// Filter activities, keep only those after beforeTime
+	var updatedActivities []*PromptActivity
+	for _, activity := range activities {
+		if activity.EndTime > beforeTime {
+			updatedActivities = append(updatedActivities, activity)
+		}
+	}
+
+	activitiesJson, err = json.Marshal(updatedActivities)
+	if err != nil {
+		return err
+	}
+
+	err = s.db.Set([]byte(key), activitiesJson)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}

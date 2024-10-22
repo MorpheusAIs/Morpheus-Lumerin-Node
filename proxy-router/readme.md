@@ -33,3 +33,26 @@
 ---
 
 Ensure the proxy-router is restarted after changing the environment variable to apply the new configuration.
+
+## CapacityPolicy strategies (models-config.json):
+
+#### `simple`
+
+Assign a slot to each session upon initiation, blocking new sessions when all slots are occupied, regardless of activity level.
+
+- Each new session consumes one slot from the total available slots N (`concurrentSlots`).
+
+- Do not allow new sessions when slots_in_use >= N.
+
+- Slots remain occupied until the user explicitly closes the session or times out.
+
+
+#### `idle_timeout`
+
+Free up slots occupied by inactive sessions by setting an idle timeout period.
+
+Timeout is 15 minutes.
+
+- If no prompt is received within the idle timeout period, mark the session as idle.
+
+- Release the slot associated with the idle session, making it available for new users.
