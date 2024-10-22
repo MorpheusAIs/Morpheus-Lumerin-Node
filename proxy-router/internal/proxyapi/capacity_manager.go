@@ -12,9 +12,6 @@ type CapacityManagerInterface interface {
 	HasCapacity(modelID string) bool
 }
 
-type CapacityManager struct {
-}
-
 type SimpleCapacityManager struct {
 	storage     *storages.SessionStorage
 	modelConfig *config.ModelConfig
