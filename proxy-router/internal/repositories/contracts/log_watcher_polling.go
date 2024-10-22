@@ -67,7 +67,8 @@ func (w *LogWatcherPolling) Watch(ctx context.Context, contractAddr common.Addre
 				}
 				event, err := mapper(log)
 				if err != nil {
-					return err // mapper error, retry won't help
+					w.log.Debugf("error mapping event: %s", err)
+					continue // mapper error, retry won't help, but we can continue
 				}
 
 				select {
@@ -80,7 +81,7 @@ func (w *LogWatcherPolling) Watch(ctx context.Context, contractAddr common.Addre
 			}
 
 			if len(sub) > 0 {
-				lastQueriedBlock = new(big.Int).SetUint64(sub[len(sub)-1].BlockNumber)
+				lastQueriedBlock = new(big.Int).SetUint64(sub[len(sub)-1].BlockNumber + 1)
 			}
 
 			select {

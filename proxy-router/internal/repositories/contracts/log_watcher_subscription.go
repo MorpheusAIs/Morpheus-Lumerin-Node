@@ -58,9 +58,9 @@ func (w *LogWatcherSubscription) Watch(ctx context.Context, contractAddr common.
 				case log := <-in:
 					event, err := mapper(log)
 					if err != nil {
-						w.log.Errorf("failed to map event: %s", err)
-						// mapper error, retry won't help
-						return err
+						w.log.Debugf("failed to map event: %s", err)
+						// mapper error, retry won't help, continue to next event
+						continue
 					}
 
 					select {
