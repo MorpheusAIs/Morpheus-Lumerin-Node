@@ -699,7 +699,8 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 	scoredBids := rateBids(bidIDs, bids, providerStats, modelStats, s.log)
 	for i, bid := range scoredBids {
 		s.log.Infof("trying to open session with provider #%d %s", i, bid.Bid.Provider.String())
-		hash, err := s.tryOpenSession(ctx, bid, duration, supply, budget, userAddr)
+		durationCopy := new(big.Int).Set(duration)
+		hash, err := s.tryOpenSession(ctx, bid, durationCopy, supply, budget, userAddr)
 		if err == nil {
 			return hash, nil
 		}
@@ -717,7 +718,6 @@ func (s *BlockchainService) tryOpenSession(ctx context.Context, bid structs.Scor
 
 	totalCost := duration.Mul(&bid.Bid.PricePerSecond.Int, duration)
 	stake := totalCost.Div(totalCost.Mul(supply, totalCost), budget)
-
 	initRes, err := s.proxyService.InitiateSession(ctx, userAddr, bid.Bid.Provider, stake, bid.Bid.Id, provider.Endpoint)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrInitSession, err)
