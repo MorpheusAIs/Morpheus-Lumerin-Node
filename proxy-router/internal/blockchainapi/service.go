@@ -9,7 +9,7 @@ import (
 	"strconv"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi/structs"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
+	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/marketplace"
@@ -23,11 +23,10 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethclient"
 )
 
 type BlockchainService struct {
-	ethClient          *ethclient.Client
+	ethClient          i.EthClient
 	providerRegistry   *registries.ProviderRegistry
 	modelRegistry      *registries.ModelRegistry
 	marketplace        *registries.Marketplace
@@ -39,7 +38,7 @@ type BlockchainService struct {
 	diamonContractAddr common.Address
 
 	legacyTx   bool
-	privateKey interfaces.PrKeyProvider
+	privateKey i.PrKeyProvider
 	log        lib.ILogger
 }
 
@@ -68,11 +67,11 @@ var (
 )
 
 func NewBlockchainService(
-	ethClient *ethclient.Client,
+	ethClient i.EthClient,
 	diamonContractAddr common.Address,
 	morTokenAddr common.Address,
 	explorerApiUrl string,
-	privateKey interfaces.PrKeyProvider,
+	privateKey i.PrKeyProvider,
 	sessionStorage *storages.SessionStorage,
 	proxyService *proxyapi.ProxyServiceSender,
 	log lib.ILogger,
@@ -716,7 +715,8 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 	scoredBids := rateBids(bidIDs, bids, providerStats, modelStats.(ModelStats), s.log)
 	for i, bid := range scoredBids {
 		s.log.Infof("trying to open session with provider #%d %s", i, bid.Bid.Provider.String())
-		hash, err := s.tryOpenSession(ctx, bid, duration, supply, budget, userAddr)
+		durationCopy := new(big.Int).Set(duration)
+		hash, err := s.tryOpenSession(ctx, bid, durationCopy, supply, budget, userAddr)
 		if err == nil {
 			return hash, nil
 		}
@@ -773,7 +773,6 @@ func (s *BlockchainService) tryOpenSession(ctx context.Context, bid structs.Scor
 
 	totalCost := duration.Mul(&bid.Bid.PricePerSecond.Int, duration)
 	stake := totalCost.Div(totalCost.Mul(supply, totalCost), budget)
-
 	initRes, err := s.proxyService.InitiateSession(ctx, userAddr, bid.Bid.Provider, stake, bid.Bid.Id, provider.Endpoint)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrInitSession, err)

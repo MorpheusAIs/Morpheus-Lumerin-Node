@@ -10,7 +10,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/sessionrouter"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
-	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 )
 
 type EventsListener struct {
@@ -19,12 +19,13 @@ type EventsListener struct {
 	store             *storages.SessionStorage
 	tsk               *lib.Task
 	log               *lib.Logger
-	client            *ethclient.Client
+	client            bind.ContractFilterer
 	wallet            interfaces.Wallet
 	modelConfigLoader *config.ModelConfigLoader
+	logWatcher        contracts.LogWatcher
 }
 
-func NewEventsListener(client *ethclient.Client, store *storages.SessionStorage, sessionRouter *registries.SessionRouter, marketplace *registries.Marketplace, wallet interfaces.Wallet, modelConfigLoader *config.ModelConfigLoader, log *lib.Logger) *EventsListener {
+func NewEventsListener(client bind.ContractFilterer, store *storages.SessionStorage, sessionRouter *registries.SessionRouter, marketplace *registries.Marketplace, wallet interfaces.Wallet, modelConfigLoader *config.ModelConfigLoader, logWatcher contracts.LogWatcher, log *lib.Logger) *EventsListener {
 	return &EventsListener{
 		store:             store,
 		log:               log,
@@ -33,6 +34,7 @@ func NewEventsListener(client *ethclient.Client, store *storages.SessionStorage,
 		client:            client,
 		wallet:            wallet,
 		modelConfigLoader: modelConfigLoader,
+		logWatcher:        logWatcher,
 	}
 }
 
@@ -41,7 +43,7 @@ func (e *EventsListener) Run(ctx context.Context) error {
 		_ = e.log.Close()
 	}()
 
-	sub, err := contracts.WatchContractEvents(ctx, e.client, e.sessionRouter.GetContractAddress(), contracts.CreateEventMapper(contracts.BlockchainEventFactory, e.sessionRouter.GetABI()), e.log)
+	sub, err := e.logWatcher.Watch(ctx, e.sessionRouter.GetContractAddress(), contracts.CreateEventMapper(contracts.SessionRouterEventFactory, e.sessionRouter.GetABI()), nil)
 	if err != nil {
 		return err
 	}
@@ -59,7 +61,7 @@ func (e *EventsListener) Run(ctx context.Context) error {
 			}
 		case err := <-sub.Err():
 			e.log.Errorf("error in event listener: %s", err)
-			// return err
+			return err
 		}
 	}
 }
@@ -114,6 +116,10 @@ func (e *EventsListener) handleSessionOpened(event *sessionrouter.SessionRouterS
 	var modelConfig *config.ModelConfig
 	if bid.Provider.Hex() == address.Hex() {
 		modelConfig = e.modelConfigLoader.ModelConfigFromID(modelID)
+		err = e.store.AddSessionToModel(modelID, sessionId)
+		if err != nil {
+			return err
+		}
 	} else {
 		modelConfig = &config.ModelConfig{}
 	}

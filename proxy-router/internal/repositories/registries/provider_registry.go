@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 
+	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/providerregistry"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
 )
 
 type ProviderRegistry struct {
@@ -20,11 +20,11 @@ type ProviderRegistry struct {
 
 	// deps
 	providerRegistry *providerregistry.ProviderRegistry
-	client           *ethclient.Client
+	client           i.ContractBackend
 	log              lib.ILogger
 }
 
-func NewProviderRegistry(providerRegistryAddr common.Address, client *ethclient.Client, log lib.ILogger) *ProviderRegistry {
+func NewProviderRegistry(providerRegistryAddr common.Address, client i.ContractBackend, log lib.ILogger) *ProviderRegistry {
 	pr, err := providerregistry.NewProviderRegistry(providerRegistryAddr, client)
 	if err != nil {
 		panic("invalid provider registry ABI")

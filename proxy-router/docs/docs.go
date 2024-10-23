@@ -894,9 +894,61 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "healthcheck"
+                    "system"
                 ],
                 "summary": "Get Config",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/system.ConfigResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/config/ethNode": {
+            "post": {
+                "description": "Set the Eth Node URLs",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Set Eth Node URLs",
+                "parameters": [
+                    {
+                        "description": "URLs",
+                        "name": "urls",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/system.SetEthNodeURLReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/system.ConfigResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete the Eth Node URLs",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Delete Eth Node URLs",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -914,7 +966,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "healthcheck"
+                    "system"
                 ],
                 "summary": "Get files",
                 "responses": {
@@ -937,7 +989,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "healthcheck"
+                    "system"
                 ],
                 "summary": "Healthcheck example",
                 "responses": {
@@ -1074,6 +1126,13 @@ const docTemplate = `{
                         "in": "header"
                     },
                     {
+                        "type": "string",
+                        "format": "hex32",
+                        "description": "Chat ID",
+                        "name": "chat_id",
+                        "in": "header"
+                    },
+                    {
                         "description": "Prompt",
                         "name": "prompt",
                         "in": "body",
@@ -1088,6 +1147,117 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/proxyapi.ChatCompletionResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/chats": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Get all chats stored in the system",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/proxyapi.Chat"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/chats/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Get chat by id",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Chat ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.ChatHistory"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Update chat title by id",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Chat ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Chat Title",
+                        "name": "title",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.UpdateChatTitleReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.ResultResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Delete chat by id from storage",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Chat ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.ResultResponse"
                         }
                     }
                 }
@@ -1272,6 +1442,23 @@ const docTemplate = `{
                 }
             }
         },
+        "proxyapi.Chat": {
+            "type": "object",
+            "properties": {
+                "chatId": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "integer"
+                },
+                "modelId": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
         "proxyapi.ChatCompletionChoice": {
             "type": "object",
             "properties": {
@@ -1313,12 +1500,6 @@ const docTemplate = `{
             "properties": {
                 "content": {
                     "type": "string"
-                },
-                "multiContent": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/proxyapi.ChatMessagePart"
-                    }
                 },
                 "name": {
                     "description": "This property isn't in the official documentation, but it's in\nthe documentation for the official library for python:\n- https://github.com/openai/openai-python/blob/main/chatml.md\n- https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb",
@@ -1370,41 +1551,42 @@ const docTemplate = `{
                 }
             }
         },
-        "proxyapi.ChatMessageImageURL": {
+        "proxyapi.ChatHistory": {
             "type": "object",
             "properties": {
-                "detail": {
-                    "$ref": "#/definitions/proxyapi.ImageURLDetail"
+                "messages": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/proxyapi.ChatMessage"
+                    }
                 },
-                "url": {
+                "modelId": {
+                    "type": "string"
+                },
+                "title": {
                     "type": "string"
                 }
             }
         },
-        "proxyapi.ChatMessagePart": {
+        "proxyapi.ChatMessage": {
             "type": "object",
             "properties": {
-                "image_url": {
-                    "$ref": "#/definitions/proxyapi.ChatMessageImageURL"
+                "isImageContent": {
+                    "type": "boolean"
                 },
-                "text": {
+                "prompt": {
+                    "$ref": "#/definitions/proxyapi.OpenAiCompletitionRequest"
+                },
+                "promptAt": {
+                    "type": "integer"
+                },
+                "response": {
                     "type": "string"
                 },
-                "type": {
-                    "$ref": "#/definitions/proxyapi.ChatMessagePartType"
+                "responseAt": {
+                    "type": "integer"
                 }
             }
-        },
-        "proxyapi.ChatMessagePartType": {
-            "type": "string",
-            "enum": [
-                "text",
-                "image_url"
-            ],
-            "x-enum-varnames": [
-                "ChatMessagePartTypeText",
-                "ChatMessagePartTypeImageURL"
-            ]
         },
         "proxyapi.FinishReason": {
             "type": "string",
@@ -1413,19 +1595,6 @@ const docTemplate = `{
             ],
             "x-enum-varnames": [
                 "FinishReasonStop"
-            ]
-        },
-        "proxyapi.ImageURLDetail": {
-            "type": "string",
-            "enum": [
-                "high",
-                "low",
-                "auto"
-            ],
-            "x-enum-varnames": [
-                "ImageURLDetailHigh",
-                "ImageURLDetailLow",
-                "ImageURLDetailAuto"
             ]
         },
         "proxyapi.InitiateSessionReq": {
@@ -1563,6 +1732,14 @@ const docTemplate = `{
                 }
             }
         },
+        "proxyapi.ResultResponse": {
+            "type": "object",
+            "properties": {
+                "result": {
+                    "type": "boolean"
+                }
+            }
+        },
         "proxyapi.TopLogProbs": {
             "type": "object",
             "properties": {
@@ -1576,6 +1753,17 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "proxyapi.UpdateChatTitleReq": {
+            "type": "object",
+            "required": [
+                "title"
+            ],
+            "properties": {
+                "title": {
                     "type": "string"
                 }
             }
@@ -2141,6 +2329,20 @@ const docTemplate = `{
                 },
                 "version": {
                     "type": "string"
+                }
+            }
+        },
+        "system.SetEthNodeURLReq": {
+            "type": "object",
+            "required": [
+                "urls"
+            ],
+            "properties": {
+                "urls": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         }

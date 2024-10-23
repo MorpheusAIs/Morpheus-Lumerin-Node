@@ -93,7 +93,6 @@ const createClient = function (createStore) {
     refreshAllTransactions: utils.forwardToMainProcess('refresh-all-transactions', 120000),
     refreshAllContracts: utils.forwardToMainProcess('refresh-all-contracts', 120000),
     onOnboardingCompleted: utils.forwardToMainProcess('onboarding-completed'),
-    recoverFromMnemonic: utils.forwardToMainProcess('recover-from-mnemonic'),
     getTokenGasLimit: utils.forwardToMainProcess('get-token-gas-limit'),
     validatePassword: utils.forwardToMainProcess('validate-password'),
     changePassword: utils.forwardToMainProcess('change-password'),
@@ -140,12 +139,10 @@ const createClient = function (createStore) {
     getTodaysBudget: utils.forwardToMainProcess('get-todays-budget'),
     getTokenSupply: utils.forwardToMainProcess('get-supply'),
     // Chat History
+    getChatHistoryTitles: utils.forwardToMainProcess('get-chat-history-titles'),
     getChatHistory: utils.forwardToMainProcess('get-chat-history', 750000),
-    saveChatHistory: utils.forwardToMainProcess('save-chat-history', 750000),
-    getTitles: utils.forwardToMainProcess('get-chat-titles', 750000),
-    saveTitle: utils.forwardToMainProcess('save-chat-title', 750000),
-    deleteTitle: utils.forwardToMainProcess('delete-chat-title', 750000),
-    updateChatTitle: utils.forwardToMainProcess("update-chat-title", 750000),
+    deleteChatHistory: utils.forwardToMainProcess('delete-chat-history', 750000),
+    updateChatHistoryTitle: utils.forwardToMainProcess('update-chat-history-title', 750000),
   }
 
   const api = {

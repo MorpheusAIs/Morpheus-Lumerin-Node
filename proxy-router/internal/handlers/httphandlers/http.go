@@ -49,13 +49,13 @@ func CreateHTTPServer(log lib.ILogger, controllers ...Registrable) *gin.Engine {
 		panic(err)
 	}
 
-	// gin.SetMode(gin.ReleaseMode)
+	gin.SetMode(gin.ReleaseMode)
 
 	r := gin.New()
 
 	r.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"*"},
-		AllowHeaders: []string{"session_id", "model_id"},
+		AllowHeaders: []string{"session_id", "model_id", "chat_id"},
 	}))
 
 	// r.Use(RequestLogger(log))

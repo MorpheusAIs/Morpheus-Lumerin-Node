@@ -13,10 +13,12 @@ type ModelConfigLoader struct {
 }
 
 type ModelConfig struct {
-	ModelName string `json:"modelName"`
-	ApiType   string `json:"apiType"`
-	ApiURL    string `json:"apiUrl"`
-	ApiKey    string `json:"apiKey"`
+	ModelName       string `json:"modelName"`
+	ApiType         string `json:"apiType"`
+	ApiURL          string `json:"apiUrl"`
+	ApiKey          string `json:"apiKey"`
+	ConcurrentSlots int    `json:"concurrentSlots"`
+	CapacityPolicy  string `json:"capacityPolicy"`
 }
 
 type ModelConfigs map[string]ModelConfig
