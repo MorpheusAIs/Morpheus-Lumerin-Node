@@ -53,7 +53,7 @@ type IModelStorageModel struct {
 
 // ModelRegistryMetaData contains all meta data concerning the ModelRegistry contract.
 var ModelRegistryMetaData = &bind.MetaData{
-	ABI: "[{\"inputs\":[],\"name\":\"ModelHasActiveBids\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ModelNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotOwnerOrModelOwner\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account_\",\"type\":\"address\"}],\"name\":\"OwnableUnauthorizedAccount\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"StakeTooLow\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"storageSlot\",\"type\":\"bytes32\"}],\"name\":\"Initialized\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"}],\"name\":\"ModelDeregistered\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newStake\",\"type\":\"uint256\"}],\"name\":\"ModelMinimumStakeSet\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"}],\"name\":\"ModelRegisteredUpdated\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"BID_STORAGE_SLOT\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"DIAMOND_OWNABLE_STORAGE_SLOT\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"MODEL_STORAGE_SLOT\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"__ModelRegistry_init\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"bidId\",\"type\":\"bytes32\"}],\"name\":\"bids\",\"outputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"nonce\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"uint128\",\"name\":\"deletedAt\",\"type\":\"uint128\"}],\"internalType\":\"structIBidStorage.Bid\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"}],\"name\":\"getModel\",\"outputs\":[{\"components\":[{\"internalType\":\"bytes32\",\"name\":\"ipfsCID\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"stake\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string[]\",\"name\":\"tags\",\"type\":\"string[]\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"bool\",\"name\":\"isDeleted\",\"type\":\"bool\"}],\"internalType\":\"structIModelStorage.Model\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getToken\",\"outputs\":[{\"internalType\":\"contractIERC20\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"}],\"name\":\"isModelExists\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"modelActiveBids\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"modelBids\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"}],\"name\":\"modelDeregister\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"modelMinimumStake\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"ipfsCID_\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"fee_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"addStake_\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"owner_\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name_\",\"type\":\"string\"},{\"internalType\":\"string[]\",\"name\":\"tags_\",\"type\":\"string[]\"}],\"name\":\"modelRegister\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"index\",\"type\":\"uint256\"}],\"name\":\"models\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"provider_\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"providerActiveBids\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"provider_\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"providerBids\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"modelMinimumStake_\",\"type\":\"uint256\"}],\"name\":\"setModelMinimumStake\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
+	ABI: "[{\"inputs\":[],\"name\":\"ModelHasActiveBids\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ModelHasAlreadyDeregistered\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ModelNotFound\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minAmount\",\"type\":\"uint256\"}],\"name\":\"ModelStakeTooLow\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account_\",\"type\":\"address\"}],\"name\":\"OwnableUnauthorizedAccount\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"storageSlot\",\"type\":\"bytes32\"}],\"name\":\"Initialized\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"}],\"name\":\"ModelDeregistered\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"modelMinimumStake\",\"type\":\"uint256\"}],\"name\":\"ModelMinimumStakeUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"}],\"name\":\"ModelRegisteredUpdated\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"BIDS_STORAGE_SLOT\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"DIAMOND_OWNABLE_STORAGE_SLOT\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"MODELS_STORAGE_SLOT\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"__ModelRegistry_init\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getActiveModels\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"bidId_\",\"type\":\"bytes32\"}],\"name\":\"getBid\",\"outputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"nonce\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"uint128\",\"name\":\"deletedAt\",\"type\":\"uint128\"}],\"internalType\":\"structIBidStorage.Bid\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"}],\"name\":\"getIsModelActive\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"}],\"name\":\"getModel\",\"outputs\":[{\"components\":[{\"internalType\":\"bytes32\",\"name\":\"ipfsCID\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"stake\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string[]\",\"name\":\"tags\",\"type\":\"string[]\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"bool\",\"name\":\"isDeleted\",\"type\":\"bool\"}],\"internalType\":\"structIModelStorage.Model\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getModelActiveBids\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getModelBids\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getModelIds\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getModelMinimumStake\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"provider_\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getProviderActiveBids\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"provider_\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getProviderBids\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getToken\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"bidId_\",\"type\":\"bytes32\"}],\"name\":\"isBidActive\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"}],\"name\":\"modelDeregister\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"ipfsCID_\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"fee_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"amount_\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"name_\",\"type\":\"string\"},{\"internalType\":\"string[]\",\"name\":\"tags_\",\"type\":\"string[]\"}],\"name\":\"modelRegister\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"modelMinimumStake_\",\"type\":\"uint256\"}],\"name\":\"modelSetMinStake\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"}]",
 }
 
 // ModelRegistryABI is the input ABI used to generate the binding from.
@@ -202,12 +202,12 @@ func (_ModelRegistry *ModelRegistryTransactorRaw) Transact(opts *bind.TransactOp
 	return _ModelRegistry.Contract.contract.Transact(opts, method, params...)
 }
 
-// BIDSTORAGESLOT is a free data retrieval call binding the contract method 0x4fa816f2.
+// BIDSSTORAGESLOT is a free data retrieval call binding the contract method 0x266ccff0.
 //
-// Solidity: function BID_STORAGE_SLOT() view returns(bytes32)
-func (_ModelRegistry *ModelRegistryCaller) BIDSTORAGESLOT(opts *bind.CallOpts) ([32]byte, error) {
+// Solidity: function BIDS_STORAGE_SLOT() view returns(bytes32)
+func (_ModelRegistry *ModelRegistryCaller) BIDSSTORAGESLOT(opts *bind.CallOpts) ([32]byte, error) {
 	var out []interface{}
-	err := _ModelRegistry.contract.Call(opts, &out, "BID_STORAGE_SLOT")
+	err := _ModelRegistry.contract.Call(opts, &out, "BIDS_STORAGE_SLOT")
 
 	if err != nil {
 		return *new([32]byte), err
@@ -219,18 +219,18 @@ func (_ModelRegistry *ModelRegistryCaller) BIDSTORAGESLOT(opts *bind.CallOpts) (
 
 }
 
-// BIDSTORAGESLOT is a free data retrieval call binding the contract method 0x4fa816f2.
+// BIDSSTORAGESLOT is a free data retrieval call binding the contract method 0x266ccff0.
 //
-// Solidity: function BID_STORAGE_SLOT() view returns(bytes32)
-func (_ModelRegistry *ModelRegistrySession) BIDSTORAGESLOT() ([32]byte, error) {
-	return _ModelRegistry.Contract.BIDSTORAGESLOT(&_ModelRegistry.CallOpts)
+// Solidity: function BIDS_STORAGE_SLOT() view returns(bytes32)
+func (_ModelRegistry *ModelRegistrySession) BIDSSTORAGESLOT() ([32]byte, error) {
+	return _ModelRegistry.Contract.BIDSSTORAGESLOT(&_ModelRegistry.CallOpts)
 }
 
-// BIDSTORAGESLOT is a free data retrieval call binding the contract method 0x4fa816f2.
+// BIDSSTORAGESLOT is a free data retrieval call binding the contract method 0x266ccff0.
 //
-// Solidity: function BID_STORAGE_SLOT() view returns(bytes32)
-func (_ModelRegistry *ModelRegistryCallerSession) BIDSTORAGESLOT() ([32]byte, error) {
-	return _ModelRegistry.Contract.BIDSTORAGESLOT(&_ModelRegistry.CallOpts)
+// Solidity: function BIDS_STORAGE_SLOT() view returns(bytes32)
+func (_ModelRegistry *ModelRegistryCallerSession) BIDSSTORAGESLOT() ([32]byte, error) {
+	return _ModelRegistry.Contract.BIDSSTORAGESLOT(&_ModelRegistry.CallOpts)
 }
 
 // DIAMONDOWNABLESTORAGESLOT is a free data retrieval call binding the contract method 0x4ac3371e.
@@ -264,12 +264,12 @@ func (_ModelRegistry *ModelRegistryCallerSession) DIAMONDOWNABLESTORAGESLOT() ([
 	return _ModelRegistry.Contract.DIAMONDOWNABLESTORAGESLOT(&_ModelRegistry.CallOpts)
 }
 
-// MODELSTORAGESLOT is a free data retrieval call binding the contract method 0xeda926f2.
+// MODELSSTORAGESLOT is a free data retrieval call binding the contract method 0x6f276c1e.
 //
-// Solidity: function MODEL_STORAGE_SLOT() view returns(bytes32)
-func (_ModelRegistry *ModelRegistryCaller) MODELSTORAGESLOT(opts *bind.CallOpts) ([32]byte, error) {
+// Solidity: function MODELS_STORAGE_SLOT() view returns(bytes32)
+func (_ModelRegistry *ModelRegistryCaller) MODELSSTORAGESLOT(opts *bind.CallOpts) ([32]byte, error) {
 	var out []interface{}
-	err := _ModelRegistry.contract.Call(opts, &out, "MODEL_STORAGE_SLOT")
+	err := _ModelRegistry.contract.Call(opts, &out, "MODELS_STORAGE_SLOT")
 
 	if err != nil {
 		return *new([32]byte), err
@@ -281,26 +281,57 @@ func (_ModelRegistry *ModelRegistryCaller) MODELSTORAGESLOT(opts *bind.CallOpts)
 
 }
 
-// MODELSTORAGESLOT is a free data retrieval call binding the contract method 0xeda926f2.
+// MODELSSTORAGESLOT is a free data retrieval call binding the contract method 0x6f276c1e.
 //
-// Solidity: function MODEL_STORAGE_SLOT() view returns(bytes32)
-func (_ModelRegistry *ModelRegistrySession) MODELSTORAGESLOT() ([32]byte, error) {
-	return _ModelRegistry.Contract.MODELSTORAGESLOT(&_ModelRegistry.CallOpts)
+// Solidity: function MODELS_STORAGE_SLOT() view returns(bytes32)
+func (_ModelRegistry *ModelRegistrySession) MODELSSTORAGESLOT() ([32]byte, error) {
+	return _ModelRegistry.Contract.MODELSSTORAGESLOT(&_ModelRegistry.CallOpts)
 }
 
-// MODELSTORAGESLOT is a free data retrieval call binding the contract method 0xeda926f2.
+// MODELSSTORAGESLOT is a free data retrieval call binding the contract method 0x6f276c1e.
 //
-// Solidity: function MODEL_STORAGE_SLOT() view returns(bytes32)
-func (_ModelRegistry *ModelRegistryCallerSession) MODELSTORAGESLOT() ([32]byte, error) {
-	return _ModelRegistry.Contract.MODELSTORAGESLOT(&_ModelRegistry.CallOpts)
+// Solidity: function MODELS_STORAGE_SLOT() view returns(bytes32)
+func (_ModelRegistry *ModelRegistryCallerSession) MODELSSTORAGESLOT() ([32]byte, error) {
+	return _ModelRegistry.Contract.MODELSSTORAGESLOT(&_ModelRegistry.CallOpts)
 }
 
-// Bids is a free data retrieval call binding the contract method 0x8f98eeda.
+// GetActiveModels is a free data retrieval call binding the contract method 0xac59585c.
 //
-// Solidity: function bids(bytes32 bidId) view returns((address,bytes32,uint256,uint256,uint128,uint128))
-func (_ModelRegistry *ModelRegistryCaller) Bids(opts *bind.CallOpts, bidId [32]byte) (IBidStorageBid, error) {
+// Solidity: function getActiveModels(uint256 offset_, uint256 limit_) view returns(bytes32[])
+func (_ModelRegistry *ModelRegistryCaller) GetActiveModels(opts *bind.CallOpts, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
 	var out []interface{}
-	err := _ModelRegistry.contract.Call(opts, &out, "bids", bidId)
+	err := _ModelRegistry.contract.Call(opts, &out, "getActiveModels", offset_, limit_)
+
+	if err != nil {
+		return *new([][32]byte), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new([][32]byte)).(*[][32]byte)
+
+	return out0, err
+
+}
+
+// GetActiveModels is a free data retrieval call binding the contract method 0xac59585c.
+//
+// Solidity: function getActiveModels(uint256 offset_, uint256 limit_) view returns(bytes32[])
+func (_ModelRegistry *ModelRegistrySession) GetActiveModels(offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
+	return _ModelRegistry.Contract.GetActiveModels(&_ModelRegistry.CallOpts, offset_, limit_)
+}
+
+// GetActiveModels is a free data retrieval call binding the contract method 0xac59585c.
+//
+// Solidity: function getActiveModels(uint256 offset_, uint256 limit_) view returns(bytes32[])
+func (_ModelRegistry *ModelRegistryCallerSession) GetActiveModels(offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
+	return _ModelRegistry.Contract.GetActiveModels(&_ModelRegistry.CallOpts, offset_, limit_)
+}
+
+// GetBid is a free data retrieval call binding the contract method 0x91704e1e.
+//
+// Solidity: function getBid(bytes32 bidId_) view returns((address,bytes32,uint256,uint256,uint128,uint128))
+func (_ModelRegistry *ModelRegistryCaller) GetBid(opts *bind.CallOpts, bidId_ [32]byte) (IBidStorageBid, error) {
+	var out []interface{}
+	err := _ModelRegistry.contract.Call(opts, &out, "getBid", bidId_)
 
 	if err != nil {
 		return *new(IBidStorageBid), err
@@ -312,26 +343,57 @@ func (_ModelRegistry *ModelRegistryCaller) Bids(opts *bind.CallOpts, bidId [32]b
 
 }
 
-// Bids is a free data retrieval call binding the contract method 0x8f98eeda.
+// GetBid is a free data retrieval call binding the contract method 0x91704e1e.
 //
-// Solidity: function bids(bytes32 bidId) view returns((address,bytes32,uint256,uint256,uint128,uint128))
-func (_ModelRegistry *ModelRegistrySession) Bids(bidId [32]byte) (IBidStorageBid, error) {
-	return _ModelRegistry.Contract.Bids(&_ModelRegistry.CallOpts, bidId)
+// Solidity: function getBid(bytes32 bidId_) view returns((address,bytes32,uint256,uint256,uint128,uint128))
+func (_ModelRegistry *ModelRegistrySession) GetBid(bidId_ [32]byte) (IBidStorageBid, error) {
+	return _ModelRegistry.Contract.GetBid(&_ModelRegistry.CallOpts, bidId_)
 }
 
-// Bids is a free data retrieval call binding the contract method 0x8f98eeda.
+// GetBid is a free data retrieval call binding the contract method 0x91704e1e.
 //
-// Solidity: function bids(bytes32 bidId) view returns((address,bytes32,uint256,uint256,uint128,uint128))
-func (_ModelRegistry *ModelRegistryCallerSession) Bids(bidId [32]byte) (IBidStorageBid, error) {
-	return _ModelRegistry.Contract.Bids(&_ModelRegistry.CallOpts, bidId)
+// Solidity: function getBid(bytes32 bidId_) view returns((address,bytes32,uint256,uint256,uint128,uint128))
+func (_ModelRegistry *ModelRegistryCallerSession) GetBid(bidId_ [32]byte) (IBidStorageBid, error) {
+	return _ModelRegistry.Contract.GetBid(&_ModelRegistry.CallOpts, bidId_)
+}
+
+// GetIsModelActive is a free data retrieval call binding the contract method 0xca74b5f3.
+//
+// Solidity: function getIsModelActive(bytes32 modelId_) view returns(bool)
+func (_ModelRegistry *ModelRegistryCaller) GetIsModelActive(opts *bind.CallOpts, modelId_ [32]byte) (bool, error) {
+	var out []interface{}
+	err := _ModelRegistry.contract.Call(opts, &out, "getIsModelActive", modelId_)
+
+	if err != nil {
+		return *new(bool), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(bool)).(*bool)
+
+	return out0, err
+
+}
+
+// GetIsModelActive is a free data retrieval call binding the contract method 0xca74b5f3.
+//
+// Solidity: function getIsModelActive(bytes32 modelId_) view returns(bool)
+func (_ModelRegistry *ModelRegistrySession) GetIsModelActive(modelId_ [32]byte) (bool, error) {
+	return _ModelRegistry.Contract.GetIsModelActive(&_ModelRegistry.CallOpts, modelId_)
+}
+
+// GetIsModelActive is a free data retrieval call binding the contract method 0xca74b5f3.
+//
+// Solidity: function getIsModelActive(bytes32 modelId_) view returns(bool)
+func (_ModelRegistry *ModelRegistryCallerSession) GetIsModelActive(modelId_ [32]byte) (bool, error) {
+	return _ModelRegistry.Contract.GetIsModelActive(&_ModelRegistry.CallOpts, modelId_)
 }
 
 // GetModel is a free data retrieval call binding the contract method 0x21e7c498.
 //
-// Solidity: function getModel(bytes32 modelId) view returns((bytes32,uint256,uint256,address,string,string[],uint128,bool))
-func (_ModelRegistry *ModelRegistryCaller) GetModel(opts *bind.CallOpts, modelId [32]byte) (IModelStorageModel, error) {
+// Solidity: function getModel(bytes32 modelId_) view returns((bytes32,uint256,uint256,address,string,string[],uint128,bool))
+func (_ModelRegistry *ModelRegistryCaller) GetModel(opts *bind.CallOpts, modelId_ [32]byte) (IModelStorageModel, error) {
 	var out []interface{}
-	err := _ModelRegistry.contract.Call(opts, &out, "getModel", modelId)
+	err := _ModelRegistry.contract.Call(opts, &out, "getModel", modelId_)
 
 	if err != nil {
 		return *new(IModelStorageModel), err
@@ -345,16 +407,202 @@ func (_ModelRegistry *ModelRegistryCaller) GetModel(opts *bind.CallOpts, modelId
 
 // GetModel is a free data retrieval call binding the contract method 0x21e7c498.
 //
-// Solidity: function getModel(bytes32 modelId) view returns((bytes32,uint256,uint256,address,string,string[],uint128,bool))
-func (_ModelRegistry *ModelRegistrySession) GetModel(modelId [32]byte) (IModelStorageModel, error) {
-	return _ModelRegistry.Contract.GetModel(&_ModelRegistry.CallOpts, modelId)
+// Solidity: function getModel(bytes32 modelId_) view returns((bytes32,uint256,uint256,address,string,string[],uint128,bool))
+func (_ModelRegistry *ModelRegistrySession) GetModel(modelId_ [32]byte) (IModelStorageModel, error) {
+	return _ModelRegistry.Contract.GetModel(&_ModelRegistry.CallOpts, modelId_)
 }
 
 // GetModel is a free data retrieval call binding the contract method 0x21e7c498.
 //
-// Solidity: function getModel(bytes32 modelId) view returns((bytes32,uint256,uint256,address,string,string[],uint128,bool))
-func (_ModelRegistry *ModelRegistryCallerSession) GetModel(modelId [32]byte) (IModelStorageModel, error) {
-	return _ModelRegistry.Contract.GetModel(&_ModelRegistry.CallOpts, modelId)
+// Solidity: function getModel(bytes32 modelId_) view returns((bytes32,uint256,uint256,address,string,string[],uint128,bool))
+func (_ModelRegistry *ModelRegistryCallerSession) GetModel(modelId_ [32]byte) (IModelStorageModel, error) {
+	return _ModelRegistry.Contract.GetModel(&_ModelRegistry.CallOpts, modelId_)
+}
+
+// GetModelActiveBids is a free data retrieval call binding the contract method 0x8a683b6e.
+//
+// Solidity: function getModelActiveBids(bytes32 modelId_, uint256 offset_, uint256 limit_) view returns(bytes32[])
+func (_ModelRegistry *ModelRegistryCaller) GetModelActiveBids(opts *bind.CallOpts, modelId_ [32]byte, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
+	var out []interface{}
+	err := _ModelRegistry.contract.Call(opts, &out, "getModelActiveBids", modelId_, offset_, limit_)
+
+	if err != nil {
+		return *new([][32]byte), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new([][32]byte)).(*[][32]byte)
+
+	return out0, err
+
+}
+
+// GetModelActiveBids is a free data retrieval call binding the contract method 0x8a683b6e.
+//
+// Solidity: function getModelActiveBids(bytes32 modelId_, uint256 offset_, uint256 limit_) view returns(bytes32[])
+func (_ModelRegistry *ModelRegistrySession) GetModelActiveBids(modelId_ [32]byte, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
+	return _ModelRegistry.Contract.GetModelActiveBids(&_ModelRegistry.CallOpts, modelId_, offset_, limit_)
+}
+
+// GetModelActiveBids is a free data retrieval call binding the contract method 0x8a683b6e.
+//
+// Solidity: function getModelActiveBids(bytes32 modelId_, uint256 offset_, uint256 limit_) view returns(bytes32[])
+func (_ModelRegistry *ModelRegistryCallerSession) GetModelActiveBids(modelId_ [32]byte, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
+	return _ModelRegistry.Contract.GetModelActiveBids(&_ModelRegistry.CallOpts, modelId_, offset_, limit_)
+}
+
+// GetModelBids is a free data retrieval call binding the contract method 0xfade17b1.
+//
+// Solidity: function getModelBids(bytes32 modelId_, uint256 offset_, uint256 limit_) view returns(bytes32[])
+func (_ModelRegistry *ModelRegistryCaller) GetModelBids(opts *bind.CallOpts, modelId_ [32]byte, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
+	var out []interface{}
+	err := _ModelRegistry.contract.Call(opts, &out, "getModelBids", modelId_, offset_, limit_)
+
+	if err != nil {
+		return *new([][32]byte), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new([][32]byte)).(*[][32]byte)
+
+	return out0, err
+
+}
+
+// GetModelBids is a free data retrieval call binding the contract method 0xfade17b1.
+//
+// Solidity: function getModelBids(bytes32 modelId_, uint256 offset_, uint256 limit_) view returns(bytes32[])
+func (_ModelRegistry *ModelRegistrySession) GetModelBids(modelId_ [32]byte, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
+	return _ModelRegistry.Contract.GetModelBids(&_ModelRegistry.CallOpts, modelId_, offset_, limit_)
+}
+
+// GetModelBids is a free data retrieval call binding the contract method 0xfade17b1.
+//
+// Solidity: function getModelBids(bytes32 modelId_, uint256 offset_, uint256 limit_) view returns(bytes32[])
+func (_ModelRegistry *ModelRegistryCallerSession) GetModelBids(modelId_ [32]byte, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
+	return _ModelRegistry.Contract.GetModelBids(&_ModelRegistry.CallOpts, modelId_, offset_, limit_)
+}
+
+// GetModelIds is a free data retrieval call binding the contract method 0x08d0aab4.
+//
+// Solidity: function getModelIds(uint256 offset_, uint256 limit_) view returns(bytes32[])
+func (_ModelRegistry *ModelRegistryCaller) GetModelIds(opts *bind.CallOpts, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
+	var out []interface{}
+	err := _ModelRegistry.contract.Call(opts, &out, "getModelIds", offset_, limit_)
+
+	if err != nil {
+		return *new([][32]byte), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new([][32]byte)).(*[][32]byte)
+
+	return out0, err
+
+}
+
+// GetModelIds is a free data retrieval call binding the contract method 0x08d0aab4.
+//
+// Solidity: function getModelIds(uint256 offset_, uint256 limit_) view returns(bytes32[])
+func (_ModelRegistry *ModelRegistrySession) GetModelIds(offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
+	return _ModelRegistry.Contract.GetModelIds(&_ModelRegistry.CallOpts, offset_, limit_)
+}
+
+// GetModelIds is a free data retrieval call binding the contract method 0x08d0aab4.
+//
+// Solidity: function getModelIds(uint256 offset_, uint256 limit_) view returns(bytes32[])
+func (_ModelRegistry *ModelRegistryCallerSession) GetModelIds(offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
+	return _ModelRegistry.Contract.GetModelIds(&_ModelRegistry.CallOpts, offset_, limit_)
+}
+
+// GetModelMinimumStake is a free data retrieval call binding the contract method 0xf647ba3d.
+//
+// Solidity: function getModelMinimumStake() view returns(uint256)
+func (_ModelRegistry *ModelRegistryCaller) GetModelMinimumStake(opts *bind.CallOpts) (*big.Int, error) {
+	var out []interface{}
+	err := _ModelRegistry.contract.Call(opts, &out, "getModelMinimumStake")
+
+	if err != nil {
+		return *new(*big.Int), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(*big.Int)).(**big.Int)
+
+	return out0, err
+
+}
+
+// GetModelMinimumStake is a free data retrieval call binding the contract method 0xf647ba3d.
+//
+// Solidity: function getModelMinimumStake() view returns(uint256)
+func (_ModelRegistry *ModelRegistrySession) GetModelMinimumStake() (*big.Int, error) {
+	return _ModelRegistry.Contract.GetModelMinimumStake(&_ModelRegistry.CallOpts)
+}
+
+// GetModelMinimumStake is a free data retrieval call binding the contract method 0xf647ba3d.
+//
+// Solidity: function getModelMinimumStake() view returns(uint256)
+func (_ModelRegistry *ModelRegistryCallerSession) GetModelMinimumStake() (*big.Int, error) {
+	return _ModelRegistry.Contract.GetModelMinimumStake(&_ModelRegistry.CallOpts)
+}
+
+// GetProviderActiveBids is a free data retrieval call binding the contract method 0xaf5b77ca.
+//
+// Solidity: function getProviderActiveBids(address provider_, uint256 offset_, uint256 limit_) view returns(bytes32[])
+func (_ModelRegistry *ModelRegistryCaller) GetProviderActiveBids(opts *bind.CallOpts, provider_ common.Address, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
+	var out []interface{}
+	err := _ModelRegistry.contract.Call(opts, &out, "getProviderActiveBids", provider_, offset_, limit_)
+
+	if err != nil {
+		return *new([][32]byte), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new([][32]byte)).(*[][32]byte)
+
+	return out0, err
+
+}
+
+// GetProviderActiveBids is a free data retrieval call binding the contract method 0xaf5b77ca.
+//
+// Solidity: function getProviderActiveBids(address provider_, uint256 offset_, uint256 limit_) view returns(bytes32[])
+func (_ModelRegistry *ModelRegistrySession) GetProviderActiveBids(provider_ common.Address, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
+	return _ModelRegistry.Contract.GetProviderActiveBids(&_ModelRegistry.CallOpts, provider_, offset_, limit_)
+}
+
+// GetProviderActiveBids is a free data retrieval call binding the contract method 0xaf5b77ca.
+//
+// Solidity: function getProviderActiveBids(address provider_, uint256 offset_, uint256 limit_) view returns(bytes32[])
+func (_ModelRegistry *ModelRegistryCallerSession) GetProviderActiveBids(provider_ common.Address, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
+	return _ModelRegistry.Contract.GetProviderActiveBids(&_ModelRegistry.CallOpts, provider_, offset_, limit_)
+}
+
+// GetProviderBids is a free data retrieval call binding the contract method 0x59d435c4.
+//
+// Solidity: function getProviderBids(address provider_, uint256 offset_, uint256 limit_) view returns(bytes32[])
+func (_ModelRegistry *ModelRegistryCaller) GetProviderBids(opts *bind.CallOpts, provider_ common.Address, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
+	var out []interface{}
+	err := _ModelRegistry.contract.Call(opts, &out, "getProviderBids", provider_, offset_, limit_)
+
+	if err != nil {
+		return *new([][32]byte), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new([][32]byte)).(*[][32]byte)
+
+	return out0, err
+
+}
+
+// GetProviderBids is a free data retrieval call binding the contract method 0x59d435c4.
+//
+// Solidity: function getProviderBids(address provider_, uint256 offset_, uint256 limit_) view returns(bytes32[])
+func (_ModelRegistry *ModelRegistrySession) GetProviderBids(provider_ common.Address, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
+	return _ModelRegistry.Contract.GetProviderBids(&_ModelRegistry.CallOpts, provider_, offset_, limit_)
+}
+
+// GetProviderBids is a free data retrieval call binding the contract method 0x59d435c4.
+//
+// Solidity: function getProviderBids(address provider_, uint256 offset_, uint256 limit_) view returns(bytes32[])
+func (_ModelRegistry *ModelRegistryCallerSession) GetProviderBids(provider_ common.Address, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
+	return _ModelRegistry.Contract.GetProviderBids(&_ModelRegistry.CallOpts, provider_, offset_, limit_)
 }
 
 // GetToken is a free data retrieval call binding the contract method 0x21df0da7.
@@ -388,12 +636,12 @@ func (_ModelRegistry *ModelRegistryCallerSession) GetToken() (common.Address, er
 	return _ModelRegistry.Contract.GetToken(&_ModelRegistry.CallOpts)
 }
 
-// IsModelExists is a free data retrieval call binding the contract method 0x045147aa.
+// IsBidActive is a free data retrieval call binding the contract method 0x1345df58.
 //
-// Solidity: function isModelExists(bytes32 modelId_) view returns(bool)
-func (_ModelRegistry *ModelRegistryCaller) IsModelExists(opts *bind.CallOpts, modelId_ [32]byte) (bool, error) {
+// Solidity: function isBidActive(bytes32 bidId_) view returns(bool)
+func (_ModelRegistry *ModelRegistryCaller) IsBidActive(opts *bind.CallOpts, bidId_ [32]byte) (bool, error) {
 	var out []interface{}
-	err := _ModelRegistry.contract.Call(opts, &out, "isModelExists", modelId_)
+	err := _ModelRegistry.contract.Call(opts, &out, "isBidActive", bidId_)
 
 	if err != nil {
 		return *new(bool), err
@@ -405,142 +653,18 @@ func (_ModelRegistry *ModelRegistryCaller) IsModelExists(opts *bind.CallOpts, mo
 
 }
 
-// IsModelExists is a free data retrieval call binding the contract method 0x045147aa.
+// IsBidActive is a free data retrieval call binding the contract method 0x1345df58.
 //
-// Solidity: function isModelExists(bytes32 modelId_) view returns(bool)
-func (_ModelRegistry *ModelRegistrySession) IsModelExists(modelId_ [32]byte) (bool, error) {
-	return _ModelRegistry.Contract.IsModelExists(&_ModelRegistry.CallOpts, modelId_)
+// Solidity: function isBidActive(bytes32 bidId_) view returns(bool)
+func (_ModelRegistry *ModelRegistrySession) IsBidActive(bidId_ [32]byte) (bool, error) {
+	return _ModelRegistry.Contract.IsBidActive(&_ModelRegistry.CallOpts, bidId_)
 }
 
-// IsModelExists is a free data retrieval call binding the contract method 0x045147aa.
+// IsBidActive is a free data retrieval call binding the contract method 0x1345df58.
 //
-// Solidity: function isModelExists(bytes32 modelId_) view returns(bool)
-func (_ModelRegistry *ModelRegistryCallerSession) IsModelExists(modelId_ [32]byte) (bool, error) {
-	return _ModelRegistry.Contract.IsModelExists(&_ModelRegistry.CallOpts, modelId_)
-}
-
-// ModelActiveBids is a free data retrieval call binding the contract method 0x3fd8e5e3.
-//
-// Solidity: function modelActiveBids(bytes32 modelId_, uint256 offset_, uint256 limit_) view returns(bytes32[])
-func (_ModelRegistry *ModelRegistryCaller) ModelActiveBids(opts *bind.CallOpts, modelId_ [32]byte, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
-	var out []interface{}
-	err := _ModelRegistry.contract.Call(opts, &out, "modelActiveBids", modelId_, offset_, limit_)
-
-	if err != nil {
-		return *new([][32]byte), err
-	}
-
-	out0 := *abi.ConvertType(out[0], new([][32]byte)).(*[][32]byte)
-
-	return out0, err
-
-}
-
-// ModelActiveBids is a free data retrieval call binding the contract method 0x3fd8e5e3.
-//
-// Solidity: function modelActiveBids(bytes32 modelId_, uint256 offset_, uint256 limit_) view returns(bytes32[])
-func (_ModelRegistry *ModelRegistrySession) ModelActiveBids(modelId_ [32]byte, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
-	return _ModelRegistry.Contract.ModelActiveBids(&_ModelRegistry.CallOpts, modelId_, offset_, limit_)
-}
-
-// ModelActiveBids is a free data retrieval call binding the contract method 0x3fd8e5e3.
-//
-// Solidity: function modelActiveBids(bytes32 modelId_, uint256 offset_, uint256 limit_) view returns(bytes32[])
-func (_ModelRegistry *ModelRegistryCallerSession) ModelActiveBids(modelId_ [32]byte, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
-	return _ModelRegistry.Contract.ModelActiveBids(&_ModelRegistry.CallOpts, modelId_, offset_, limit_)
-}
-
-// ModelBids is a free data retrieval call binding the contract method 0x5954d1b3.
-//
-// Solidity: function modelBids(bytes32 modelId_, uint256 offset_, uint256 limit_) view returns(bytes32[])
-func (_ModelRegistry *ModelRegistryCaller) ModelBids(opts *bind.CallOpts, modelId_ [32]byte, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
-	var out []interface{}
-	err := _ModelRegistry.contract.Call(opts, &out, "modelBids", modelId_, offset_, limit_)
-
-	if err != nil {
-		return *new([][32]byte), err
-	}
-
-	out0 := *abi.ConvertType(out[0], new([][32]byte)).(*[][32]byte)
-
-	return out0, err
-
-}
-
-// ModelBids is a free data retrieval call binding the contract method 0x5954d1b3.
-//
-// Solidity: function modelBids(bytes32 modelId_, uint256 offset_, uint256 limit_) view returns(bytes32[])
-func (_ModelRegistry *ModelRegistrySession) ModelBids(modelId_ [32]byte, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
-	return _ModelRegistry.Contract.ModelBids(&_ModelRegistry.CallOpts, modelId_, offset_, limit_)
-}
-
-// ModelBids is a free data retrieval call binding the contract method 0x5954d1b3.
-//
-// Solidity: function modelBids(bytes32 modelId_, uint256 offset_, uint256 limit_) view returns(bytes32[])
-func (_ModelRegistry *ModelRegistryCallerSession) ModelBids(modelId_ [32]byte, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
-	return _ModelRegistry.Contract.ModelBids(&_ModelRegistry.CallOpts, modelId_, offset_, limit_)
-}
-
-// ModelMinimumStake is a free data retrieval call binding the contract method 0xc4288ed4.
-//
-// Solidity: function modelMinimumStake() view returns(uint256)
-func (_ModelRegistry *ModelRegistryCaller) ModelMinimumStake(opts *bind.CallOpts) (*big.Int, error) {
-	var out []interface{}
-	err := _ModelRegistry.contract.Call(opts, &out, "modelMinimumStake")
-
-	if err != nil {
-		return *new(*big.Int), err
-	}
-
-	out0 := *abi.ConvertType(out[0], new(*big.Int)).(**big.Int)
-
-	return out0, err
-
-}
-
-// ModelMinimumStake is a free data retrieval call binding the contract method 0xc4288ed4.
-//
-// Solidity: function modelMinimumStake() view returns(uint256)
-func (_ModelRegistry *ModelRegistrySession) ModelMinimumStake() (*big.Int, error) {
-	return _ModelRegistry.Contract.ModelMinimumStake(&_ModelRegistry.CallOpts)
-}
-
-// ModelMinimumStake is a free data retrieval call binding the contract method 0xc4288ed4.
-//
-// Solidity: function modelMinimumStake() view returns(uint256)
-func (_ModelRegistry *ModelRegistryCallerSession) ModelMinimumStake() (*big.Int, error) {
-	return _ModelRegistry.Contract.ModelMinimumStake(&_ModelRegistry.CallOpts)
-}
-
-// Models is a free data retrieval call binding the contract method 0x6a030ca9.
-//
-// Solidity: function models(uint256 index) view returns(bytes32)
-func (_ModelRegistry *ModelRegistryCaller) Models(opts *bind.CallOpts, index *big.Int) ([32]byte, error) {
-	var out []interface{}
-	err := _ModelRegistry.contract.Call(opts, &out, "models", index)
-
-	if err != nil {
-		return *new([32]byte), err
-	}
-
-	out0 := *abi.ConvertType(out[0], new([32]byte)).(*[32]byte)
-
-	return out0, err
-
-}
-
-// Models is a free data retrieval call binding the contract method 0x6a030ca9.
-//
-// Solidity: function models(uint256 index) view returns(bytes32)
-func (_ModelRegistry *ModelRegistrySession) Models(index *big.Int) ([32]byte, error) {
-	return _ModelRegistry.Contract.Models(&_ModelRegistry.CallOpts, index)
-}
-
-// Models is a free data retrieval call binding the contract method 0x6a030ca9.
-//
-// Solidity: function models(uint256 index) view returns(bytes32)
-func (_ModelRegistry *ModelRegistryCallerSession) Models(index *big.Int) ([32]byte, error) {
-	return _ModelRegistry.Contract.Models(&_ModelRegistry.CallOpts, index)
+// Solidity: function isBidActive(bytes32 bidId_) view returns(bool)
+func (_ModelRegistry *ModelRegistryCallerSession) IsBidActive(bidId_ [32]byte) (bool, error) {
+	return _ModelRegistry.Contract.IsBidActive(&_ModelRegistry.CallOpts, bidId_)
 }
 
 // Owner is a free data retrieval call binding the contract method 0x8da5cb5b.
@@ -572,68 +696,6 @@ func (_ModelRegistry *ModelRegistrySession) Owner() (common.Address, error) {
 // Solidity: function owner() view returns(address)
 func (_ModelRegistry *ModelRegistryCallerSession) Owner() (common.Address, error) {
 	return _ModelRegistry.Contract.Owner(&_ModelRegistry.CallOpts)
-}
-
-// ProviderActiveBids is a free data retrieval call binding the contract method 0x6dd7d31c.
-//
-// Solidity: function providerActiveBids(address provider_, uint256 offset_, uint256 limit_) view returns(bytes32[])
-func (_ModelRegistry *ModelRegistryCaller) ProviderActiveBids(opts *bind.CallOpts, provider_ common.Address, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
-	var out []interface{}
-	err := _ModelRegistry.contract.Call(opts, &out, "providerActiveBids", provider_, offset_, limit_)
-
-	if err != nil {
-		return *new([][32]byte), err
-	}
-
-	out0 := *abi.ConvertType(out[0], new([][32]byte)).(*[][32]byte)
-
-	return out0, err
-
-}
-
-// ProviderActiveBids is a free data retrieval call binding the contract method 0x6dd7d31c.
-//
-// Solidity: function providerActiveBids(address provider_, uint256 offset_, uint256 limit_) view returns(bytes32[])
-func (_ModelRegistry *ModelRegistrySession) ProviderActiveBids(provider_ common.Address, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
-	return _ModelRegistry.Contract.ProviderActiveBids(&_ModelRegistry.CallOpts, provider_, offset_, limit_)
-}
-
-// ProviderActiveBids is a free data retrieval call binding the contract method 0x6dd7d31c.
-//
-// Solidity: function providerActiveBids(address provider_, uint256 offset_, uint256 limit_) view returns(bytes32[])
-func (_ModelRegistry *ModelRegistryCallerSession) ProviderActiveBids(provider_ common.Address, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
-	return _ModelRegistry.Contract.ProviderActiveBids(&_ModelRegistry.CallOpts, provider_, offset_, limit_)
-}
-
-// ProviderBids is a free data retrieval call binding the contract method 0x22fbda9a.
-//
-// Solidity: function providerBids(address provider_, uint256 offset_, uint256 limit_) view returns(bytes32[])
-func (_ModelRegistry *ModelRegistryCaller) ProviderBids(opts *bind.CallOpts, provider_ common.Address, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
-	var out []interface{}
-	err := _ModelRegistry.contract.Call(opts, &out, "providerBids", provider_, offset_, limit_)
-
-	if err != nil {
-		return *new([][32]byte), err
-	}
-
-	out0 := *abi.ConvertType(out[0], new([][32]byte)).(*[][32]byte)
-
-	return out0, err
-
-}
-
-// ProviderBids is a free data retrieval call binding the contract method 0x22fbda9a.
-//
-// Solidity: function providerBids(address provider_, uint256 offset_, uint256 limit_) view returns(bytes32[])
-func (_ModelRegistry *ModelRegistrySession) ProviderBids(provider_ common.Address, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
-	return _ModelRegistry.Contract.ProviderBids(&_ModelRegistry.CallOpts, provider_, offset_, limit_)
-}
-
-// ProviderBids is a free data retrieval call binding the contract method 0x22fbda9a.
-//
-// Solidity: function providerBids(address provider_, uint256 offset_, uint256 limit_) view returns(bytes32[])
-func (_ModelRegistry *ModelRegistryCallerSession) ProviderBids(provider_ common.Address, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
-	return _ModelRegistry.Contract.ProviderBids(&_ModelRegistry.CallOpts, provider_, offset_, limit_)
 }
 
 // ModelRegistryInit is a paid mutator transaction binding the contract method 0xd69bdf30.
@@ -678,46 +740,46 @@ func (_ModelRegistry *ModelRegistryTransactorSession) ModelDeregister(modelId_ [
 	return _ModelRegistry.Contract.ModelDeregister(&_ModelRegistry.TransactOpts, modelId_)
 }
 
-// ModelRegister is a paid mutator transaction binding the contract method 0x82806227.
+// ModelRegister is a paid mutator transaction binding the contract method 0xec2581a1.
 //
-// Solidity: function modelRegister(bytes32 modelId_, bytes32 ipfsCID_, uint256 fee_, uint256 addStake_, address owner_, string name_, string[] tags_) returns()
-func (_ModelRegistry *ModelRegistryTransactor) ModelRegister(opts *bind.TransactOpts, modelId_ [32]byte, ipfsCID_ [32]byte, fee_ *big.Int, addStake_ *big.Int, owner_ common.Address, name_ string, tags_ []string) (*types.Transaction, error) {
-	return _ModelRegistry.contract.Transact(opts, "modelRegister", modelId_, ipfsCID_, fee_, addStake_, owner_, name_, tags_)
+// Solidity: function modelRegister(bytes32 modelId_, bytes32 ipfsCID_, uint256 fee_, uint256 amount_, string name_, string[] tags_) returns()
+func (_ModelRegistry *ModelRegistryTransactor) ModelRegister(opts *bind.TransactOpts, modelId_ [32]byte, ipfsCID_ [32]byte, fee_ *big.Int, amount_ *big.Int, name_ string, tags_ []string) (*types.Transaction, error) {
+	return _ModelRegistry.contract.Transact(opts, "modelRegister", modelId_, ipfsCID_, fee_, amount_, name_, tags_)
 }
 
-// ModelRegister is a paid mutator transaction binding the contract method 0x82806227.
+// ModelRegister is a paid mutator transaction binding the contract method 0xec2581a1.
 //
-// Solidity: function modelRegister(bytes32 modelId_, bytes32 ipfsCID_, uint256 fee_, uint256 addStake_, address owner_, string name_, string[] tags_) returns()
-func (_ModelRegistry *ModelRegistrySession) ModelRegister(modelId_ [32]byte, ipfsCID_ [32]byte, fee_ *big.Int, addStake_ *big.Int, owner_ common.Address, name_ string, tags_ []string) (*types.Transaction, error) {
-	return _ModelRegistry.Contract.ModelRegister(&_ModelRegistry.TransactOpts, modelId_, ipfsCID_, fee_, addStake_, owner_, name_, tags_)
+// Solidity: function modelRegister(bytes32 modelId_, bytes32 ipfsCID_, uint256 fee_, uint256 amount_, string name_, string[] tags_) returns()
+func (_ModelRegistry *ModelRegistrySession) ModelRegister(modelId_ [32]byte, ipfsCID_ [32]byte, fee_ *big.Int, amount_ *big.Int, name_ string, tags_ []string) (*types.Transaction, error) {
+	return _ModelRegistry.Contract.ModelRegister(&_ModelRegistry.TransactOpts, modelId_, ipfsCID_, fee_, amount_, name_, tags_)
 }
 
-// ModelRegister is a paid mutator transaction binding the contract method 0x82806227.
+// ModelRegister is a paid mutator transaction binding the contract method 0xec2581a1.
 //
-// Solidity: function modelRegister(bytes32 modelId_, bytes32 ipfsCID_, uint256 fee_, uint256 addStake_, address owner_, string name_, string[] tags_) returns()
-func (_ModelRegistry *ModelRegistryTransactorSession) ModelRegister(modelId_ [32]byte, ipfsCID_ [32]byte, fee_ *big.Int, addStake_ *big.Int, owner_ common.Address, name_ string, tags_ []string) (*types.Transaction, error) {
-	return _ModelRegistry.Contract.ModelRegister(&_ModelRegistry.TransactOpts, modelId_, ipfsCID_, fee_, addStake_, owner_, name_, tags_)
+// Solidity: function modelRegister(bytes32 modelId_, bytes32 ipfsCID_, uint256 fee_, uint256 amount_, string name_, string[] tags_) returns()
+func (_ModelRegistry *ModelRegistryTransactorSession) ModelRegister(modelId_ [32]byte, ipfsCID_ [32]byte, fee_ *big.Int, amount_ *big.Int, name_ string, tags_ []string) (*types.Transaction, error) {
+	return _ModelRegistry.Contract.ModelRegister(&_ModelRegistry.TransactOpts, modelId_, ipfsCID_, fee_, amount_, name_, tags_)
 }
 
-// SetModelMinimumStake is a paid mutator transaction binding the contract method 0x57fb5355.
+// ModelSetMinStake is a paid mutator transaction binding the contract method 0x78998329.
 //
-// Solidity: function setModelMinimumStake(uint256 modelMinimumStake_) returns()
-func (_ModelRegistry *ModelRegistryTransactor) SetModelMinimumStake(opts *bind.TransactOpts, modelMinimumStake_ *big.Int) (*types.Transaction, error) {
-	return _ModelRegistry.contract.Transact(opts, "setModelMinimumStake", modelMinimumStake_)
+// Solidity: function modelSetMinStake(uint256 modelMinimumStake_) returns()
+func (_ModelRegistry *ModelRegistryTransactor) ModelSetMinStake(opts *bind.TransactOpts, modelMinimumStake_ *big.Int) (*types.Transaction, error) {
+	return _ModelRegistry.contract.Transact(opts, "modelSetMinStake", modelMinimumStake_)
 }
 
-// SetModelMinimumStake is a paid mutator transaction binding the contract method 0x57fb5355.
+// ModelSetMinStake is a paid mutator transaction binding the contract method 0x78998329.
 //
-// Solidity: function setModelMinimumStake(uint256 modelMinimumStake_) returns()
-func (_ModelRegistry *ModelRegistrySession) SetModelMinimumStake(modelMinimumStake_ *big.Int) (*types.Transaction, error) {
-	return _ModelRegistry.Contract.SetModelMinimumStake(&_ModelRegistry.TransactOpts, modelMinimumStake_)
+// Solidity: function modelSetMinStake(uint256 modelMinimumStake_) returns()
+func (_ModelRegistry *ModelRegistrySession) ModelSetMinStake(modelMinimumStake_ *big.Int) (*types.Transaction, error) {
+	return _ModelRegistry.Contract.ModelSetMinStake(&_ModelRegistry.TransactOpts, modelMinimumStake_)
 }
 
-// SetModelMinimumStake is a paid mutator transaction binding the contract method 0x57fb5355.
+// ModelSetMinStake is a paid mutator transaction binding the contract method 0x78998329.
 //
-// Solidity: function setModelMinimumStake(uint256 modelMinimumStake_) returns()
-func (_ModelRegistry *ModelRegistryTransactorSession) SetModelMinimumStake(modelMinimumStake_ *big.Int) (*types.Transaction, error) {
-	return _ModelRegistry.Contract.SetModelMinimumStake(&_ModelRegistry.TransactOpts, modelMinimumStake_)
+// Solidity: function modelSetMinStake(uint256 modelMinimumStake_) returns()
+func (_ModelRegistry *ModelRegistryTransactorSession) ModelSetMinStake(modelMinimumStake_ *big.Int) (*types.Transaction, error) {
+	return _ModelRegistry.Contract.ModelSetMinStake(&_ModelRegistry.TransactOpts, modelMinimumStake_)
 }
 
 // ModelRegistryInitializedIterator is returned from FilterInitialized and is used to iterate over the raw logs and unpacked data for Initialized events raised by the ModelRegistry contract.
@@ -1007,9 +1069,9 @@ func (_ModelRegistry *ModelRegistryFilterer) ParseModelDeregistered(log types.Lo
 	return event, nil
 }
 
-// ModelRegistryModelMinimumStakeSetIterator is returned from FilterModelMinimumStakeSet and is used to iterate over the raw logs and unpacked data for ModelMinimumStakeSet events raised by the ModelRegistry contract.
-type ModelRegistryModelMinimumStakeSetIterator struct {
-	Event *ModelRegistryModelMinimumStakeSet // Event containing the contract specifics and raw log
+// ModelRegistryModelMinimumStakeUpdatedIterator is returned from FilterModelMinimumStakeUpdated and is used to iterate over the raw logs and unpacked data for ModelMinimumStakeUpdated events raised by the ModelRegistry contract.
+type ModelRegistryModelMinimumStakeUpdatedIterator struct {
+	Event *ModelRegistryModelMinimumStakeUpdated // Event containing the contract specifics and raw log
 
 	contract *bind.BoundContract // Generic contract to use for unpacking event data
 	event    string              // Event name to use for unpacking event data
@@ -1023,7 +1085,7 @@ type ModelRegistryModelMinimumStakeSetIterator struct {
 // Next advances the iterator to the subsequent event, returning whether there
 // are any more events found. In case of a retrieval or parsing error, false is
 // returned and Error() can be queried for the exact failure.
-func (it *ModelRegistryModelMinimumStakeSetIterator) Next() bool {
+func (it *ModelRegistryModelMinimumStakeUpdatedIterator) Next() bool {
 	// If the iterator failed, stop iterating
 	if it.fail != nil {
 		return false
@@ -1032,7 +1094,7 @@ func (it *ModelRegistryModelMinimumStakeSetIterator) Next() bool {
 	if it.done {
 		select {
 		case log := <-it.logs:
-			it.Event = new(ModelRegistryModelMinimumStakeSet)
+			it.Event = new(ModelRegistryModelMinimumStakeUpdated)
 			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
 				it.fail = err
 				return false
@@ -1047,7 +1109,7 @@ func (it *ModelRegistryModelMinimumStakeSetIterator) Next() bool {
 	// Iterator still in progress, wait for either a data or an error event
 	select {
 	case log := <-it.logs:
-		it.Event = new(ModelRegistryModelMinimumStakeSet)
+		it.Event = new(ModelRegistryModelMinimumStakeUpdated)
 		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
 			it.fail = err
 			return false
@@ -1063,41 +1125,41 @@ func (it *ModelRegistryModelMinimumStakeSetIterator) Next() bool {
 }
 
 // Error returns any retrieval or parsing error occurred during filtering.
-func (it *ModelRegistryModelMinimumStakeSetIterator) Error() error {
+func (it *ModelRegistryModelMinimumStakeUpdatedIterator) Error() error {
 	return it.fail
 }
 
 // Close terminates the iteration process, releasing any pending underlying
 // resources.
-func (it *ModelRegistryModelMinimumStakeSetIterator) Close() error {
+func (it *ModelRegistryModelMinimumStakeUpdatedIterator) Close() error {
 	it.sub.Unsubscribe()
 	return nil
 }
 
-// ModelRegistryModelMinimumStakeSet represents a ModelMinimumStakeSet event raised by the ModelRegistry contract.
-type ModelRegistryModelMinimumStakeSet struct {
-	NewStake *big.Int
-	Raw      types.Log // Blockchain specific contextual infos
+// ModelRegistryModelMinimumStakeUpdated represents a ModelMinimumStakeUpdated event raised by the ModelRegistry contract.
+type ModelRegistryModelMinimumStakeUpdated struct {
+	ModelMinimumStake *big.Int
+	Raw               types.Log // Blockchain specific contextual infos
 }
 
-// FilterModelMinimumStakeSet is a free log retrieval operation binding the contract event 0xc6a3fed0c85cd0fe428852d641b4474e85fe04352a84d9c83774e5180eed9bea.
+// FilterModelMinimumStakeUpdated is a free log retrieval operation binding the contract event 0x136e2b2828baa18257e8eef3c26df62481c7b16303ca0ebe4202865df5e97d7e.
 //
-// Solidity: event ModelMinimumStakeSet(uint256 newStake)
-func (_ModelRegistry *ModelRegistryFilterer) FilterModelMinimumStakeSet(opts *bind.FilterOpts) (*ModelRegistryModelMinimumStakeSetIterator, error) {
+// Solidity: event ModelMinimumStakeUpdated(uint256 modelMinimumStake)
+func (_ModelRegistry *ModelRegistryFilterer) FilterModelMinimumStakeUpdated(opts *bind.FilterOpts) (*ModelRegistryModelMinimumStakeUpdatedIterator, error) {
 
-	logs, sub, err := _ModelRegistry.contract.FilterLogs(opts, "ModelMinimumStakeSet")
+	logs, sub, err := _ModelRegistry.contract.FilterLogs(opts, "ModelMinimumStakeUpdated")
 	if err != nil {
 		return nil, err
 	}
-	return &ModelRegistryModelMinimumStakeSetIterator{contract: _ModelRegistry.contract, event: "ModelMinimumStakeSet", logs: logs, sub: sub}, nil
+	return &ModelRegistryModelMinimumStakeUpdatedIterator{contract: _ModelRegistry.contract, event: "ModelMinimumStakeUpdated", logs: logs, sub: sub}, nil
 }
 
-// WatchModelMinimumStakeSet is a free log subscription operation binding the contract event 0xc6a3fed0c85cd0fe428852d641b4474e85fe04352a84d9c83774e5180eed9bea.
+// WatchModelMinimumStakeUpdated is a free log subscription operation binding the contract event 0x136e2b2828baa18257e8eef3c26df62481c7b16303ca0ebe4202865df5e97d7e.
 //
-// Solidity: event ModelMinimumStakeSet(uint256 newStake)
-func (_ModelRegistry *ModelRegistryFilterer) WatchModelMinimumStakeSet(opts *bind.WatchOpts, sink chan<- *ModelRegistryModelMinimumStakeSet) (event.Subscription, error) {
+// Solidity: event ModelMinimumStakeUpdated(uint256 modelMinimumStake)
+func (_ModelRegistry *ModelRegistryFilterer) WatchModelMinimumStakeUpdated(opts *bind.WatchOpts, sink chan<- *ModelRegistryModelMinimumStakeUpdated) (event.Subscription, error) {
 
-	logs, sub, err := _ModelRegistry.contract.WatchLogs(opts, "ModelMinimumStakeSet")
+	logs, sub, err := _ModelRegistry.contract.WatchLogs(opts, "ModelMinimumStakeUpdated")
 	if err != nil {
 		return nil, err
 	}
@@ -1107,8 +1169,8 @@ func (_ModelRegistry *ModelRegistryFilterer) WatchModelMinimumStakeSet(opts *bin
 			select {
 			case log := <-logs:
 				// New log arrived, parse the event and forward to the user
-				event := new(ModelRegistryModelMinimumStakeSet)
-				if err := _ModelRegistry.contract.UnpackLog(event, "ModelMinimumStakeSet", log); err != nil {
+				event := new(ModelRegistryModelMinimumStakeUpdated)
+				if err := _ModelRegistry.contract.UnpackLog(event, "ModelMinimumStakeUpdated", log); err != nil {
 					return err
 				}
 				event.Raw = log
@@ -1129,12 +1191,12 @@ func (_ModelRegistry *ModelRegistryFilterer) WatchModelMinimumStakeSet(opts *bin
 	}), nil
 }
 
-// ParseModelMinimumStakeSet is a log parse operation binding the contract event 0xc6a3fed0c85cd0fe428852d641b4474e85fe04352a84d9c83774e5180eed9bea.
+// ParseModelMinimumStakeUpdated is a log parse operation binding the contract event 0x136e2b2828baa18257e8eef3c26df62481c7b16303ca0ebe4202865df5e97d7e.
 //
-// Solidity: event ModelMinimumStakeSet(uint256 newStake)
-func (_ModelRegistry *ModelRegistryFilterer) ParseModelMinimumStakeSet(log types.Log) (*ModelRegistryModelMinimumStakeSet, error) {
-	event := new(ModelRegistryModelMinimumStakeSet)
-	if err := _ModelRegistry.contract.UnpackLog(event, "ModelMinimumStakeSet", log); err != nil {
+// Solidity: event ModelMinimumStakeUpdated(uint256 modelMinimumStake)
+func (_ModelRegistry *ModelRegistryFilterer) ParseModelMinimumStakeUpdated(log types.Log) (*ModelRegistryModelMinimumStakeUpdated, error) {
+	event := new(ModelRegistryModelMinimumStakeUpdated)
+	if err := _ModelRegistry.contract.UnpackLog(event, "ModelMinimumStakeUpdated", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log

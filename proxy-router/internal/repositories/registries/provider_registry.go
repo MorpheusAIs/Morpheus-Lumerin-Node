@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/providerregistry"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/providerregistry"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -52,8 +52,8 @@ func (g *ProviderRegistry) GetAllProviders(ctx context.Context) ([]common.Addres
 	return nil, nil, fmt.Errorf("Not implemented")
 }
 
-func (g *ProviderRegistry) CreateNewProvider(opts *bind.TransactOpts, address common.Address, addStake *lib.BigInt, endpoint string) error {
-	providerTx, err := g.providerRegistry.ProviderRegister(opts, address, &addStake.Int, endpoint)
+func (g *ProviderRegistry) CreateNewProvider(opts *bind.TransactOpts, addStake *lib.BigInt, endpoint string) error {
+	providerTx, err := g.providerRegistry.ProviderRegister(opts, &addStake.Int, endpoint)
 
 	if err != nil {
 		return lib.TryConvertGethError(err)
@@ -65,23 +65,15 @@ func (g *ProviderRegistry) CreateNewProvider(opts *bind.TransactOpts, address co
 		return lib.TryConvertGethError(err)
 	}
 
-	// Find the event log
-	for _, log := range receipt.Logs {
-		// Check if the log belongs to the OpenSession event
-		_, err := g.providerRegistry.ParseProviderRegisteredUpdated(*log)
-
-		if err != nil {
-			continue // not our event, skip it
-		}
-
-		return nil
+	if receipt.Status != 1 {
+		return fmt.Errorf("Transaction failed with status %d", receipt.Status)
 	}
 
-	return fmt.Errorf("OpenSession event not found in transaction logs")
+	return nil
 }
 
-func (g *ProviderRegistry) DeregisterProvider(opts *bind.TransactOpts, address common.Address) (common.Hash, error) {
-	providerTx, err := g.providerRegistry.ProviderDeregister(opts, address)
+func (g *ProviderRegistry) DeregisterProvider(opts *bind.TransactOpts) (common.Hash, error) {
+	providerTx, err := g.providerRegistry.ProviderDeregister(opts)
 
 	if err != nil {
 		return common.Hash{}, lib.TryConvertGethError(err)
@@ -93,18 +85,11 @@ func (g *ProviderRegistry) DeregisterProvider(opts *bind.TransactOpts, address c
 		return common.Hash{}, lib.TryConvertGethError(err)
 	}
 
-	// Find the event log
-	for _, log := range receipt.Logs {
-		_, err := g.providerRegistry.ParseProviderDeregistered(*log)
-
-		if err != nil {
-			continue // not our event, skip it
-		}
-
-		return providerTx.Hash(), nil
+	if receipt.Status != 1 {
+		return receipt.TxHash, fmt.Errorf("Transaction failed with status %d", receipt.Status)
 	}
 
-	return common.Hash{}, fmt.Errorf("ProviderDeregistered event not found in transaction logs")
+	return receipt.TxHash, nil
 }
 
 func (g *ProviderRegistry) GetProviderById(ctx context.Context, id common.Address) (*providerregistry.IProviderStorageProvider, error) {

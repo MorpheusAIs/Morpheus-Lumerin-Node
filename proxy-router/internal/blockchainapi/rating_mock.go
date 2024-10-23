@@ -4,7 +4,8 @@ import (
 	"math"
 	"math/big"
 
-	s "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/sessionrouter"
+	m "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/marketplace"
+	s "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/sessionrouter"
 	"github.com/ethereum/go-ethereum/common"
 )
 
@@ -15,7 +16,7 @@ type ModelStats struct {
 	Count         int
 }
 
-func sampleDataTPS() ([][32]byte, []s.IBidStorageBid, []s.IStatsStorageProviderModelStats, ModelStats) {
+func sampleDataTPS() ([][32]byte, []m.IBidStorageBid, []s.IStatsStorageProviderModelStats, ModelStats) {
 	modelID := common.HexToHash("0x01")
 	bidIds := [][32]byte{
 		{0x01},
@@ -23,7 +24,7 @@ func sampleDataTPS() ([][32]byte, []s.IBidStorageBid, []s.IStatsStorageProviderM
 		{0x03},
 	}
 
-	bids := []s.IBidStorageBid{
+	bids := []m.IBidStorageBid{
 		{
 			PricePerSecond: ToDecimal(10, DecimalsMOR),
 			Provider:       common.HexToAddress("0x01"),
