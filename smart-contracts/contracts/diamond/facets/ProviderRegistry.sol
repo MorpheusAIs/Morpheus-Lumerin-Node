@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 import {OwnableDiamondStorage} from "../presets/OwnableDiamondStorage.sol";
 
@@ -11,124 +12,117 @@ import {ProviderStorage} from "../storages/ProviderStorage.sol";
 import {IProviderRegistry} from "../../interfaces/facets/IProviderRegistry.sol";
 
 contract ProviderRegistry is IProviderRegistry, OwnableDiamondStorage, ProviderStorage, BidStorage {
+    using EnumerableSet for EnumerableSet.AddressSet;
     using SafeERC20 for IERC20;
 
-    function __ProviderRegistry_init() external initializer(PROVIDER_STORAGE_SLOT) {}
+    function __ProviderRegistry_init() external initializer(PROVIDERS_STORAGE_SLOT) {}
 
-    /// @notice Sets the minimum stake required for a provider
     function providerSetMinStake(uint256 providerMinimumStake_) external onlyOwner {
-        setProviderMinimumStake(providerMinimumStake_);
-        emit ProviderMinStakeUpdated(providerMinimumStake_);
+        PovidersStorage storage providersStorage = getProvidersStorage();
+        providersStorage.providerMinimumStake = providerMinimumStake_;
+
+        emit ProviderMinimumStakeUpdated(providerMinimumStake_);
     }
 
-    /// @notice Registers a provider
-    /// @param   providerAddress_      provider address
-    /// @param   amount_  amount of stake to add
-    /// @param   endpoint_  provider endpoint (host.com:1234)
-    function providerRegister(address providerAddress_, uint256 amount_, string calldata endpoint_) external {
-        if (!_ownerOrProvider(providerAddress_)) {
-            // TODO: such that we cannon create a provider with the owner as another address
-            // Do we need this check?
-            revert NotOwnerOrProvider();
-        }
-
-        Provider memory provider_ = providers(providerAddress_);
-        uint256 newStake_ = provider_.stake + amount_;
-        if (newStake_ < providerMinimumStake()) {
-            revert StakeTooLow();
-        }
+    function providerRegister(uint256 amount_, string calldata endpoint_) external {
+        BidsStorage storage bidsStorage = getBidsStorage();
 
         if (amount_ > 0) {
-            getToken().safeTransferFrom(_msgSender(), address(this), amount_);
+           IERC20(bidsStorage.token).safeTransferFrom(_msgSender(), address(this), amount_);
         }
 
-        // if we add stake to an existing provider the limiter period is not reset
-        uint128 createdAt_ = provider_.createdAt;
-        uint128 periodEnd_ = provider_.limitPeriodEnd;
-        if (createdAt_ == 0) {
-            setProviderActive(providerAddress_, true);
-            createdAt_ = uint128(block.timestamp);
-            periodEnd_ = createdAt_ + PROVIDER_REWARD_LIMITER_PERIOD;
-        } else if (provider_.isDeleted) {
-            setProviderActive(providerAddress_, true);
+        PovidersStorage storage providersStorage = getProvidersStorage();
+        Provider storage provider = providersStorage.providers[_msgSender()];
+
+        uint256 newStake_ = provider.stake + amount_;
+        uint256 minStake_ = providersStorage.providerMinimumStake;
+        if (newStake_ < minStake_) {
+            revert ProviderStakeTooLow(newStake_, minStake_);
         }
 
-        setProvider(
-            providerAddress_,
-            Provider(endpoint_, newStake_, createdAt_, periodEnd_, provider_.limitPeriodEarned, false)
-        );
+        if (provider.createdAt == 0) {
+            provider.endpoint = endpoint_;
+            provider.createdAt = uint128(block.timestamp);
+            provider.limitPeriodEnd = uint128(block.timestamp) + PROVIDER_REWARD_LIMITER_PERIOD;
+        } else if (provider.isDeleted) {
+            provider.isDeleted = false;
+        }
 
-        emit ProviderRegisteredUpdated(providerAddress_);
+        provider.endpoint = endpoint_;
+        provider.stake = newStake_;
+
+        providersStorage.activeProviders.add(_msgSender());
+
+        emit ProviderRegistered(_msgSender());
     }
 
-    /// @notice Deregisters a provider
-    function providerDeregister(address provider_) external {
-        if (!_ownerOrProvider(provider_)) {
-            revert NotOwnerOrProvider();
-        }
-        if (!isProviderExists(provider_)) {
+    function providerDeregister() external {
+        PovidersStorage storage providersStorage = getProvidersStorage();
+        Provider storage provider = providersStorage.providers[_msgSender()];
+
+        if (provider.createdAt == 0) {
             revert ProviderNotFound();
         }
-        if (!isProviderActiveBidsEmpty(provider_)) {
+        if (!isProviderActiveBidsEmpty(_msgSender())) {
             revert ProviderHasActiveBids();
         }
+        if (provider.isDeleted) {
+            revert ProviderHasAlreadyDeregistered();
+        }
 
-        setProviderActive(provider_, false);
+        uint256 withdrawAmount_ = _getWithdrawAmount(provider);
 
-        Provider storage provider = providers(provider_);
-        uint256 withdrawable_ = _getWithdrawableStake(provider);
-
-        provider.stake -= withdrawable_;
+        provider.stake -= withdrawAmount_;
         provider.isDeleted = true;
 
-        if (withdrawable_ > 0) {
-            getToken().safeTransfer(_msgSender(), withdrawable_);
+        providersStorage.activeProviders.remove(_msgSender());
+
+        if (withdrawAmount_ > 0) {
+            BidsStorage storage bidsStorage = getBidsStorage();
+            IERC20(bidsStorage.token).safeTransfer(_msgSender(), withdrawAmount_);
         }
 
-        emit ProviderDeregistered(provider_);
+        emit ProviderDeregistered(_msgSender());
     }
 
-    /// @notice Withdraws stake from a provider after it has been deregistered
-    ///         Allows to withdraw the stake after provider reward period has ended
-    function providerWithdrawStake(address provider_) external {
-        Provider storage provider = providers(provider_);
-        if (!provider.isDeleted) {
-            revert ErrProviderNotDeleted();
+    // /**
+    //  *
+    //  * @notice Withdraws stake from a provider after it has been deregistered
+    //  * Allows to withdraw the stake after provider reward period has ended
+    //  */
+    // function providerWithdrawStake() external {
+    //     Provider storage provider = providers(_msgSender());
+
+    //     if (!provider.isDeleted) {
+    //         revert ProviderNotDeregistered();
+    //     }
+    //     if (provider.stake == 0) {
+    //         revert ProviderNoStake();
+    //     }
+
+    //     uint256 withdrawAmount_ = _getWithdrawAmount(provider);
+    //     if (withdrawAmount_ == 0) {
+    //         revert ProviderNothingToWithdraw();
+    //     }
+
+    //     provider.stake -= withdrawAmount_;
+    //     getToken().safeTransfer(_msgSender(), withdrawAmount_);
+
+    //     emit ProviderWithdrawn(_msgSender(), withdrawAmount_);
+    // }
+
+    /**
+     * @notice Returns the withdrawable stake for a provider
+     * @dev If the provider already earned this period then withdrawable stake
+     * is limited by the amount earning that remains in the current period.
+     * It is done to prevent the provider from withdrawing and then staking
+     * again from a different address, which bypasses the limitation.
+     */
+    function _getWithdrawAmount(Provider storage provider) private view returns (uint256) {
+        if (block.timestamp > provider.limitPeriodEnd) {
+            return provider.stake;
         }
-        if (provider.stake == 0) {
-            revert ErrNoStake();
-        }
 
-        uint256 withdrawable_ = _getWithdrawableStake(provider);
-        if (withdrawable_ == 0) {
-            revert ErrNoWithdrawableStake();
-        }
-
-        provider.stake -= withdrawable_;
-
-        getToken().safeTransfer(provider_, withdrawable_);
-
-        emit ProviderWithdrawnStake(provider_, withdrawable_);
-    }
-
-    function isProviderExists(address provider_) public view returns (bool) {
-        return providers(provider_).createdAt != 0;
-    }
-
-    /// @notice Returns the withdrawable stake for a provider
-    /// @dev    If the provider already earned this period then withdrawable stake
-    ///         is limited by the amount earning that remains in the current period.
-    ///         It is done to prevent the provider from withdrawing and then staking
-    ///         again from a different address, which bypasses the limitation.
-    function _getWithdrawableStake(Provider memory provider_) private view returns (uint256) {
-        if (uint128(block.timestamp) > provider_.limitPeriodEnd) {
-            return provider_.stake;
-        }
-
-        return provider_.stake - provider_.limitPeriodEarned;
-    }
-
-    function _ownerOrProvider(address provider_) internal view returns (bool) {
-        return _msgSender() == owner() || _msgSender() == provider_;
+        return provider.stake - provider.limitPeriodEarned;
     }
 }

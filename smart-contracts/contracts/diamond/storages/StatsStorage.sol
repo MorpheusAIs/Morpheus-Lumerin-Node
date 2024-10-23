@@ -3,39 +3,41 @@ pragma solidity ^0.8.24;
 
 import {IStatsStorage} from "../../interfaces/storage/IStatsStorage.sol";
 
-import {LibSD} from "../../libs/LibSD.sol";
-
 contract StatsStorage is IStatsStorage {
-    struct ModelStats {
-        LibSD.SD tpsScaled1000;
-        LibSD.SD ttftMs;
-        LibSD.SD totalDuration;
-        uint32 count;
-    }
-
     struct STTSStorage {
-        mapping(bytes32 => mapping(address => ProviderModelStats)) stats; // modelId => provider => stats
+        mapping(bytes32 => mapping(address => ProviderModelStats)) providerModelStats; // modelId => provider => stats
         mapping(bytes32 => ModelStats) modelStats;
     }
 
     bytes32 public constant STATS_STORAGE_SLOT = keccak256("diamond.stats.storage");
 
-    function _getModelStats(bytes32 modelId) internal view returns (ModelStats storage) {
+    /** PUBLIC, GETTERS */
+    function getProviderModelStats(
+        bytes32 modelId_,
+        address provider_
+    ) external view returns (ProviderModelStats memory) {
+        return _getStatsStorage().providerModelStats[modelId_][provider_];
+    }
+
+    function getModelStats(bytes32 modelId_) external view returns (ModelStats memory) {
+        return _getStatsStorage().modelStats[modelId_];
+    }
+
+    /** INTERNAL, GETTERS */
+    function modelStats(bytes32 modelId) internal view returns (ModelStats storage) {
         return _getStatsStorage().modelStats[modelId];
     }
 
-    function _getProviderModelStats(
-        bytes32 modelId,
-        address provider
-    ) internal view returns (ProviderModelStats storage) {
-        return _getStatsStorage().stats[modelId][provider];
+    function providerModelStats(bytes32 modelId, address provider) internal view returns (ProviderModelStats storage) {
+        return _getStatsStorage().providerModelStats[modelId][provider];
     }
 
-    function _getStatsStorage() internal pure returns (STTSStorage storage _ds) {
+    /** PRIVATE */
+    function _getStatsStorage() private pure returns (STTSStorage storage ds) {
         bytes32 slot_ = STATS_STORAGE_SLOT;
 
         assembly {
-            _ds.slot := slot_
+            ds.slot := slot_
         }
     }
 }
