@@ -4,12 +4,13 @@ import (
 	"math"
 	"sort"
 
-	s "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/sessionrouter"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi/structs"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	m "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/marketplace"
+	s "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/sessionrouter"
 )
 
-func rateBids(bidIds [][32]byte, bids []s.IBidStorageBid, pmStats []s.IStatsStorageProviderModelStats, mStats ModelStats, log lib.ILogger) []structs.ScoredBid {
+func rateBids(bidIds [][32]byte, bids []m.IBidStorageBid, pmStats []s.IStatsStorageProviderModelStats, mStats ModelStats, log lib.ILogger) []structs.ScoredBid {
 	scoredBids := make([]structs.ScoredBid, len(bids))
 
 	for i := range bids {
@@ -40,7 +41,7 @@ func rateBids(bidIds [][32]byte, bids []s.IBidStorageBid, pmStats []s.IStatsStor
 	return scoredBids
 }
 
-func getScore(bid s.IBidStorageBid, pmStats s.IStatsStorageProviderModelStats, mStats ModelStats) float64 {
+func getScore(bid m.IBidStorageBid, pmStats s.IStatsStorageProviderModelStats, mStats ModelStats) float64 {
 	tpsWeight, ttftWeight, durationWeight, successWeight := 0.27, 0.11, 0.27, 0.35
 	count := int64(mStats.Count)
 

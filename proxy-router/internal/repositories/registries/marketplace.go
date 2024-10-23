@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/marketplace"
 	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/marketplace"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -35,75 +35,57 @@ func NewMarketplace(marketplaceAddr common.Address, client i.ContractBackend, lo
 	}
 }
 
-func (g *Marketplace) PostModelBid(opts *bind.TransactOpts, provider common.Address, model common.Hash, pricePerSecond *big.Int) error {
-	tx, err := g.marketplace.PostModelBid(opts, provider, model, pricePerSecond)
-	if err != nil {
-		return lib.TryConvertGethError(err)
-	}
-
-	// Wait for the transaction receipt
-	receipt, err := bind.WaitMined(opts.Context, g.client, tx)
-
-	if err != nil {
-		return lib.TryConvertGethError(err)
-	}
-
-	// Find the event log
-	for _, log := range receipt.Logs {
-		// Check if the log belongs to the OpenSession event
-		_, err := g.marketplace.ParseBidPosted(*log)
-
-		if err != nil {
-			continue // not our event, skip it
-		}
-
-		return nil
-	}
-
-	return fmt.Errorf("PostModelBid event not found in transaction logs")
-}
-
-func (g *Marketplace) DeleteBid(opts *bind.TransactOpts, bidId common.Hash) (common.Hash, error) {
-	tx, err := g.marketplace.DeleteModelBid(opts, bidId)
+func (g *Marketplace) PostModelBid(opts *bind.TransactOpts, model common.Hash, pricePerSecond *big.Int) (common.Hash, error) {
+	tx, err := g.marketplace.PostModelBid(opts, model, pricePerSecond)
 	if err != nil {
 		return common.Hash{}, lib.TryConvertGethError(err)
 	}
 
 	// Wait for the transaction receipt
 	receipt, err := bind.WaitMined(opts.Context, g.client, tx)
-
 	if err != nil {
 		return common.Hash{}, lib.TryConvertGethError(err)
 	}
 
-	// Find the event log
-	for _, log := range receipt.Logs {
-		// Check if the log belongs to the OpenSession event
-		_, err := g.marketplace.ParseBidDeleted(*log)
-
-		if err != nil {
-			continue // not our event, skip it
-		}
-
-		return tx.Hash(), nil
+	if receipt.Status != 1 {
+		return receipt.TxHash, fmt.Errorf("Transaction failed")
 	}
 
-	return common.Hash{}, fmt.Errorf("BidDeleted event not found in transaction logs")
+	return receipt.TxHash, nil
 }
 
-func (g *Marketplace) GetBidById(ctx context.Context, bidId [32]byte) (*marketplace.IBidStorageBid, error) {
-	bid, err := g.marketplace.Bids(&bind.CallOpts{Context: ctx}, bidId)
+func (g *Marketplace) DeleteBid(opts *bind.TransactOpts, bidID common.Hash) (common.Hash, error) {
+	tx, err := g.marketplace.DeleteModelBid(opts, bidID)
+	if err != nil {
+		return common.Hash{}, lib.TryConvertGethError(err)
+	}
+
+	// Wait for the transaction receipt
+	receipt, err := bind.WaitMined(opts.Context, g.client, tx)
+	if err != nil {
+		return common.Hash{}, lib.TryConvertGethError(err)
+	}
+
+	if receipt.Status != 1 {
+		return receipt.TxHash, fmt.Errorf("Transaction failed")
+	}
+
+	return receipt.TxHash, nil
+}
+
+func (g *Marketplace) GetBidById(ctx context.Context, bidID common.Hash) (*marketplace.IBidStorageBid, error) {
+	bid, err := g.marketplace.GetBid(&bind.CallOpts{Context: ctx}, bidID)
 	if err != nil {
 		return nil, err
 	}
 	return &bid, nil
 }
 
-func (g *Marketplace) GetBestBidByModelId(ctx context.Context, modelId common.Hash) (common.Hash, *marketplace.IBidStorageBid, error) {
+func (g *Marketplace) GetBestBidByModelId(ctx context.Context, modelID common.Hash) (common.Hash, *marketplace.IBidStorageBid, error) {
 	limit := big.NewInt(100)
 	offset := big.NewInt(0)
 
-	bidIDs, err := g.marketplace.ModelActiveBids(&bind.CallOpts{Context: ctx}, modelId, offset, limit)
+	bidIDs, err := g.marketplace.GetModelActiveBids(&bind.CallOpts{Context: ctx}, modelID, offset, limit)
 	if err != nil {
 		return common.Hash{}, nil, err
 	}
@@ -112,7 +94,7 @@ func (g *Marketplace) GetBestBidByModelId(ctx context.Context, modelId common.Ha
 	var cheapestBid *marketplace.IBidStorageBid
 
 	for _, bidID := range bidIDs {
-		bid, err := g.marketplace.Bids(&bind.CallOpts{Context: ctx}, bidID)
+		bid, err := g.marketplace.GetBid(&bind.CallOpts{Context: ctx}, bidID)
 		if err != nil {
 			return common.Hash{}, nil, err
 		}
@@ -130,43 +112,43 @@ func (g *Marketplace) GetBestBidByModelId(ctx context.Context, modelId common.Ha
 }
 
 func (g *Marketplace) GetBidsByProvider(ctx context.Context, provider common.Address, offset *big.Int, limit uint8) ([][32]byte, []marketplace.IBidStorageBid, error) {
-	bidIDs, err := g.marketplace.ProviderBids(&bind.CallOpts{Context: ctx}, provider, offset, big.NewInt(int64(limit)))
+	bidIDs, err := g.marketplace.GetProviderBids(&bind.CallOpts{Context: ctx}, provider, offset, big.NewInt(int64(limit)))
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return g.getMultipleBids(ctx, bidIDs)
+	return g.GetMultipleBids(ctx, bidIDs)
 }
 
 func (g *Marketplace) GetBidsByModelAgent(ctx context.Context, modelAgentId common.Hash, offset *big.Int, limit uint8) ([][32]byte, []marketplace.IBidStorageBid, error) {
-	bidIDs, err := g.marketplace.ModelBids(&bind.CallOpts{Context: ctx}, modelAgentId, offset, big.NewInt(int64(limit)))
+	bidIDs, err := g.marketplace.GetModelBids(&bind.CallOpts{Context: ctx}, modelAgentId, offset, big.NewInt(int64(limit)))
 	if err != nil {
 		return nil, nil, err
 	}
-	return g.getMultipleBids(ctx, bidIDs)
+	return g.GetMultipleBids(ctx, bidIDs)
 }
 
 func (g *Marketplace) GetActiveBidsByProvider(ctx context.Context, provider common.Address, offset *big.Int, limit uint8) ([][32]byte, []marketplace.IBidStorageBid, error) {
-	bidIDs, err := g.marketplace.ProviderActiveBids(&bind.CallOpts{Context: ctx}, provider, offset, big.NewInt(int64(limit)))
+	bidIDs, err := g.marketplace.GetProviderActiveBids(&bind.CallOpts{Context: ctx}, provider, offset, big.NewInt(int64(limit)))
 	if err != nil {
 		return nil, nil, err
 	}
-	return g.getMultipleBids(ctx, bidIDs)
+	return g.GetMultipleBids(ctx, bidIDs)
 }
 
 func (g *Marketplace) GetActiveBidsByModel(ctx context.Context, modelAgentId common.Hash, offset *big.Int, limit uint8) ([][32]byte, []marketplace.IBidStorageBid, error) {
-	bidIDs, err := g.marketplace.ModelActiveBids(&bind.CallOpts{Context: ctx}, modelAgentId, offset, big.NewInt(int64(limit)))
+	bidIDs, err := g.marketplace.GetModelActiveBids(&bind.CallOpts{Context: ctx}, modelAgentId, offset, big.NewInt(int64(limit)))
 	if err != nil {
 		return nil, nil, err
 	}
-	return g.getMultipleBids(ctx, bidIDs)
+	return g.GetMultipleBids(ctx, bidIDs)
 }
 
-func (g *Marketplace) getMultipleBids(ctx context.Context, IDs [][32]byte) ([][32]byte, []marketplace.IBidStorageBid, error) {
+func (g *Marketplace) GetMultipleBids(ctx context.Context, IDs [][32]byte) ([][32]byte, []marketplace.IBidStorageBid, error) {
 	// todo: replace with multicall
 	bids := make([]marketplace.IBidStorageBid, len(IDs))
-	for i, id := range IDs {
-		bid, err := g.marketplace.Bids(&bind.CallOpts{Context: ctx}, id)
+	for i, ID := range IDs {
+		bid, err := g.marketplace.GetBid(&bind.CallOpts{Context: ctx}, ID)
 		if err != nil {
 			return nil, nil, err
 		}
