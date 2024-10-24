@@ -22,6 +22,7 @@ import {
   SessionRouter__factory,
 } from '@/generated-types/ethers';
 import { FacetAction } from '@/test/helpers/deployers';
+import { DAY } from '@/utils/time';
 
 module.exports = async function (deployer: Deployer) {
   const config = parseConfig();
@@ -92,7 +93,7 @@ module.exports = async function (deployer: Deployer) {
   marketplaceFacet = marketplaceFacet.attach(lumerinDiamond.target) as Marketplace;
   await marketplaceFacet.__Marketplace_init(config.MOR);
   sessionRouterFacet = sessionRouterFacet.attach(lumerinDiamond.target) as SessionRouter;
-  await sessionRouterFacet.__SessionRouter_init(config.fundingAccount, config.pools);
+  await sessionRouterFacet.__SessionRouter_init(config.fundingAccount, 7 * DAY, config.pools);
 
   await providerRegistryFacet.providerSetMinStake(config.providerMinStake);
   await modelRegistryFacet.modelSetMinStake(config.modelMinStake);

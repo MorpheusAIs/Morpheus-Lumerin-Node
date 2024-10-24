@@ -49,9 +49,8 @@ contract Marketplace is
         BidsStorage storage bidsStorage = getBidsStorage();
         MarketStorage storage marketStorage = getMarketStorage();
 
-        // TODO: check it
         IERC20(bidsStorage.token).safeTransferFrom(_msgSender(), address(this), marketStorage.bidFee);
-        marketStorage.feeBalance +=  marketStorage.bidFee;
+        marketStorage.feeBalance += marketStorage.bidFee;
 
         bytes32 providerModelId_ = getProviderModelId(provider_, modelId_);
         uint256 providerModelNonce_ = bidsStorage.providerModelNonce[providerModelId_]++;

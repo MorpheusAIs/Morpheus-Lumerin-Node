@@ -16,23 +16,26 @@ interface IProviderRegistry is IProviderStorage {
     error ProviderNotFound();
     error ProviderHasAlreadyDeregistered();
 
+    /**
+     * The function to initialize the facet.
+     */
     function __ProviderRegistry_init() external;
 
     /**
-     * @notice Sets the minimum stake required for a provider
+     * @notice The function to the minimum stake required for a provider
      * @param providerMinimumStake_ The minimal stake
      */
     function providerSetMinStake(uint256 providerMinimumStake_) external;
 
     /**
-     * @notice Register a provider
+     * @notice The function to register the provider
      * @param amount_ The amount of stake to add
      * @param endpoint_ The provider endpoint (host.com:1234)
      */
     function providerRegister(uint256 amount_, string calldata endpoint_) external;
 
     /**
-     * @notice Deregister a provider
+     * @notice The function to deregister the provider
      */
     function providerDeregister() external;
 }

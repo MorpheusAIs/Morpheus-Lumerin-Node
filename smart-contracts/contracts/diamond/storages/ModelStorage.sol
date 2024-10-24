@@ -33,7 +33,7 @@ contract ModelStorage is IModelStorage {
         return getModelsStorage().modelMinimumStake;
     }
 
-    function getActiveModels(uint256 offset_, uint256 limit_) external view returns (bytes32[] memory) {
+    function getActiveModelIds(uint256 offset_, uint256 limit_) external view returns (bytes32[] memory) {
          return getModelsStorage().activeModels.part(offset_, limit_);
     }
 

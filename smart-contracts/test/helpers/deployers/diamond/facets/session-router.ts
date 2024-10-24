@@ -10,6 +10,7 @@ import {
 } from '@/generated-types/ethers';
 import { FacetAction } from '@/test/helpers/deployers/diamond/lumerin-diamond';
 import { getDefaultPools } from '@/test/helpers/pool-helper';
+import { DAY } from '@/utils/time';
 
 export const deployFacetSessionRouter = async (
   diamond: LumerinDiamond,
@@ -45,7 +46,7 @@ export const deployFacetSessionRouter = async (
   ]);
 
   facet = facet.attach(diamond.target) as SessionRouter;
-  await facet.__SessionRouter_init(fundingAccount, getDefaultPools());
+  await facet.__SessionRouter_init(fundingAccount, DAY, getDefaultPools());
 
   return facet;
 };

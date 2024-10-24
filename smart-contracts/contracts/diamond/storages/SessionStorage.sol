@@ -20,6 +20,8 @@ contract SessionStorage is ISessionStorage {
         // Used to generate unique session ID
         uint256 sessionNonce;
         mapping(bytes32 sessionId => Session) sessions;
+        // Max ession duration
+        uint128 maxSessionDuration;
         // Session registry for providers, users and models
         mapping(address user => EnumerableSet.Bytes32Set) userSessions;
         mapping(address provider => EnumerableSet.Bytes32Set) providerSessions;
@@ -30,7 +32,6 @@ contract SessionStorage is ISessionStorage {
 
     bytes32 public constant SESSIONS_STORAGE_SLOT = keccak256("diamond.standard.sessions.storage");
     uint32 public constant MIN_SESSION_DURATION = 5 minutes;
-    uint32 public constant MAX_SESSION_DURATION = 1 days;
     uint32 public constant SIGNATURE_TTL = 10 minutes;
     uint256 public constant COMPUTE_POOL_INDEX = 3;
 
@@ -71,8 +72,8 @@ contract SessionStorage is ISessionStorage {
         return getSessionsStorage().fundingAccount;
     }
 
-    function getTotalSessions(address providerAddr_) public view returns (uint256) {
-        return getSessionsStorage().providerSessions[providerAddr_].length();
+    function getTotalSessions(address provider_) public view returns (uint256) {
+        return getSessionsStorage().providerSessions[provider_].length();
     }
 
     function getProvidersTotalClaimed() external view returns (uint256) {
@@ -82,68 +83,10 @@ contract SessionStorage is ISessionStorage {
     function getIsProviderApprovalUsed(bytes memory approval_) external view returns (bool) {
         return getSessionsStorage().isProviderApprovalUsed[approval_];
     }
-
-    // /** INTERNAL, GETTERS */
-    // function pools() internal view returns (Pool[] storage) {
-    //     return _getSessionStorage().pools;
-    // }
-
-    // function pool(uint256 poolIndex_) internal view returns (Pool storage) {
-    //     return _getSessionStorage().pools[poolIndex_];
-    // }
-
-    // function userStakesOnHold(address user_) internal view returns (OnHold[] storage) {
-    //     return _getSessionStorage().userStakesOnHold[user_];
-    // }
-
-    // function sessions(bytes32 sessionId_) internal view returns (Session storage) {
-    //     return _getSessionStorage().sessions[sessionId_];
-    // }
-
-    /** INTERNAL, SETTERS */
-    // function setFundingAccount(address fundingAccount_) internal {
-    //     _getSessionStorage().fundingAccount = fundingAccount_;
-    // }
-
-    // function setPools(Pool[] calldata pools_) internal {
-    //     SNStorage storage s = _getSessionStorage();
-
-    //     for (uint256 i = 0; i < pools_.length; i++) {
-    //         s.pools.push(pools_[i]);
-    //     }
-    // }
-
-    // function setPool(uint256 index_, Pool calldata pool_) internal {
-    //     _getSessionStorage().pools[index_] = pool_;
-    // }
-
-    // function addUserSessionId(address user_, bytes32 sessionId_) internal {
-    //     _getSessionStorage().userSessions[user_].add(sessionId_);
-    // }
-
-    // function addProviderSessionId(address provider_, bytes32 sessionId_) internal {
-    //     _getSessionStorage().providerSessions[provider_].add(sessionId_);
-    // }
-
-    // function addModelSessionId(bytes32 modelId, bytes32 sessionId) internal {
-    //     _getSessionStorage().modelSessions[modelId].add(sessionId);
-    // }
-
-    // function addUserStakeOnHold(address user, OnHold memory onHold) internal {
-    //     _getSessionStorage().userStakesOnHold[user].push(onHold);
-    // }
-
-    // function increaseProvidersTotalClaimed(uint256 amount) internal {
-    //     _getSessionStorage().providersTotalClaimed += amount;
-    // }
-
-    // function incrementSessionNonce() internal returns (uint256) {
-    //     return _getSessionStorage().sessionNonce++;
-    // }
-
-    // function setIsProviderApprovalUsed(bytes memory approval_, bool isUsed_) internal {
-    //     _getSessionStorage().isProviderApprovalUsed[approval_] = isUsed_;
-    // }
+    
+    function getMaxSessionDuration() external view returns (uint128) {
+        return getSessionsStorage().maxSessionDuration;
+    }
 
     /** INTERNAL */
     function getSessionsStorage() internal pure returns (SessionsStorage storage ds) {
