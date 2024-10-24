@@ -109,7 +109,7 @@ contract SessionRouter is
 
         return sessionId_;
     }
-    
+
     function _validateSession(
         bytes32 bidId_,
         uint256 amount_,
@@ -239,29 +239,31 @@ contract SessionRouter is
         return (sessionId_, tpsScaled1000_, ttftMs_);
     }
 
-    function _getProviderRewards(Session storage session, Bid storage bid, bool isIncludeWithdrawnAmount_) private view returns (uint256) {
+    function _getProviderRewards(
+        Session storage session,
+        Bid storage bid,
+        bool isIncludeWithdrawnAmount_
+    ) private view returns (uint256) {
         uint256 sessionEnd_ = session.closedAt == 0 ? session.endsAt : session.closedAt.min(session.endsAt);
         if (block.timestamp < sessionEnd_) {
             return 0;
         }
 
-        uint256 withdrawnAmount = isIncludeWithdrawnAmount_ ?  session.providerWithdrawnAmount : 0;
+        uint256 withdrawnAmount = isIncludeWithdrawnAmount_ ? session.providerWithdrawnAmount : 0;
 
         return (sessionEnd_ - session.openedAt) * bid.pricePerSecond - withdrawnAmount;
     }
 
-    function _rewardProviderAfterClose(
-        bool noDispute_,
-        Session storage session, 
-        Bid storage bid
-    ) internal {
+    function _rewardProviderAfterClose(bool noDispute_, Session storage session, Bid storage bid) internal {
         uint128 startOfToday_ = startOfTheDay(uint128(block.timestamp));
         bool isClosingLate_ = uint128(block.timestamp) > session.endsAt;
 
         uint256 providerAmountToWithdraw_ = _getProviderRewards(session, bid, true);
         uint256 providerOnHoldAmount = 0;
         if (!noDispute_ && !isClosingLate_) {
-            providerOnHoldAmount = (session.endsAt.min(session.closedAt) - startOfToday_.max(session.openedAt)) * bid.pricePerSecond;
+            providerOnHoldAmount =
+                (session.endsAt.min(session.closedAt) - startOfToday_.max(session.openedAt)) *
+                bid.pricePerSecond;
         }
         providerAmountToWithdraw_ -= providerOnHoldAmount;
 
@@ -281,17 +283,19 @@ contract SessionRouter is
             uint256 userInitialLock_ = userDuration_ * bid.pricePerSecond;
             userStakeToLock_ = userStake.min(stipendToStake(userInitialLock_, startOfToday_));
 
-            getSessionsStorage().userStakesOnHold[session.user].push(OnHold(userStakeToLock_, uint128(startOfToday_ + 1 days)));
+            getSessionsStorage().userStakesOnHold[session.user].push(
+                OnHold(userStakeToLock_, uint128(startOfToday_ + 1 days))
+            );
         }
         uint256 userAmountToWithdraw_ = userStake - userStakeToLock_;
         IERC20(getBidsStorage().token).safeTransfer(session.user, userAmountToWithdraw_);
     }
 
     function _setStats(
-        bool noDispute_, 
-        uint32 ttftMs_, 
-        uint32 tpsScaled1000_, 
-        Session storage session, 
+        bool noDispute_,
+        uint32 ttftMs_,
+        uint32 tpsScaled1000_,
+        Session storage session,
         Bid storage bid
     ) internal {
         ProviderModelStats storage prStats = providerModelStats(bid.modelId, bid.provider);
@@ -398,7 +402,7 @@ contract SessionRouter is
         OnHold[] storage onHoldEntries = getSessionsStorage().userStakesOnHold[_msgSender()];
         uint8 i_ = iterations_ >= onHoldEntries.length ? uint8(onHoldEntries.length) : iterations_;
         if (i_ == 0) {
-         revert SessionUserAmountToWithdrawIsZero();
+            revert SessionUserAmountToWithdrawIsZero();
         }
         i_--;
 

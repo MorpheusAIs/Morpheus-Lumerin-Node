@@ -32,7 +32,7 @@ contract ProviderStorage is IProviderStorage {
     }
 
     function getActiveProviders(uint256 offset_, uint256 limit_) external view returns (address[] memory) {
-         return getProvidersStorage().activeProviders.part(offset_, limit_);
+        return getProvidersStorage().activeProviders.part(offset_, limit_);
     }
 
     function getIsProviderActive(address provider_) public view returns (bool) {

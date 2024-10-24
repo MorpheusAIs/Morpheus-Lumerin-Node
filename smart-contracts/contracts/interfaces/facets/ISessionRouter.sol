@@ -32,7 +32,11 @@ interface ISessionRouter is ISessionStorage {
      * @param maxSessionDuration_ The max session duration
      * @param pools_ The pools data
      */
-    function __SessionRouter_init(address fundingAccount_, uint128 maxSessionDuration_, Pool[] calldata pools_) external;
+    function __SessionRouter_init(
+        address fundingAccount_,
+        uint128 maxSessionDuration_,
+        Pool[] calldata pools_
+    ) external;
 
     /**
      * @notice Sets distibution pool configuration

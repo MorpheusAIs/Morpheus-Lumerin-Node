@@ -19,7 +19,7 @@ interface IBidStorage {
         uint128 createdAt;
         uint128 deletedAt;
     }
-    
+
     /**
      * The function returns the bid structure.
      * @param bidId_ Bid ID.

@@ -28,7 +28,7 @@ contract ProviderRegistry is IProviderRegistry, OwnableDiamondStorage, ProviderS
         BidsStorage storage bidsStorage = getBidsStorage();
 
         if (amount_ > 0) {
-           IERC20(bidsStorage.token).safeTransferFrom(_msgSender(), address(this), amount_);
+            IERC20(bidsStorage.token).safeTransferFrom(_msgSender(), address(this), amount_);
         }
 
         PovidersStorage storage providersStorage = getProvidersStorage();

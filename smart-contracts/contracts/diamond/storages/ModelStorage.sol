@@ -14,7 +14,7 @@ contract ModelStorage is IModelStorage {
         uint256 modelMinimumStake;
         EnumerableSet.Bytes32Set modelIds;
         mapping(bytes32 modelId => Model) models;
-         // TODO: move vars below to the graph in the future
+        // TODO: move vars below to the graph in the future
         EnumerableSet.Bytes32Set activeModels;
     }
 
@@ -34,7 +34,7 @@ contract ModelStorage is IModelStorage {
     }
 
     function getActiveModelIds(uint256 offset_, uint256 limit_) external view returns (bytes32[] memory) {
-         return getModelsStorage().activeModels.part(offset_, limit_);
+        return getModelsStorage().activeModels.part(offset_, limit_);
     }
 
     function getIsModelActive(bytes32 modelId_) public view returns (bool) {

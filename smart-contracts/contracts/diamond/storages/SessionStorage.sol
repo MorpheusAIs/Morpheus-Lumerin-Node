@@ -83,7 +83,7 @@ contract SessionStorage is ISessionStorage {
     function getIsProviderApprovalUsed(bytes memory approval_) external view returns (bool) {
         return getSessionsStorage().isProviderApprovalUsed[approval_];
     }
-    
+
     function getMaxSessionDuration() external view returns (uint128) {
         return getSessionsStorage().maxSessionDuration;
     }
