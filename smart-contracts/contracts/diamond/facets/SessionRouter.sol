@@ -18,8 +18,6 @@ import {LibSD} from "../../libs/LibSD.sol";
 
 import {ISessionRouter} from "../../interfaces/facets/ISessionRouter.sol";
 
-import "hardhat/console.sol";
-
 contract SessionRouter is
     ISessionRouter,
     OwnableDiamondStorage,
