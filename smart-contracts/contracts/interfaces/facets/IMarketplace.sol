@@ -7,21 +7,38 @@ interface IMarketplace is IMarketplaceStorage {
     event MaretplaceFeeUpdated(uint256 bidFee);
     event MarketplaceBidPosted(address indexed provider, bytes32 indexed modelId, uint256 nonce);
     event MarketplaceBidDeleted(address indexed provider, bytes32 indexed modelId, uint256 nonce);
+    event MarketplaceBidMinMaxPriceUpdated(uint256 bidMinPricePerSecond, uint256 bidMaxPricePerSecond);
+
     error MarketplaceProviderNotFound();
     error MarketplaceModelNotFound();
     error MarketplaceActiveBidNotFound();
+    error MarketplaceBidMinPricePerSecondIsZero();
+    error MarketplaceBidMinPricePerSecondIsInvalid();
+    error MarketplaceBidPricePerSecondInvalid();
 
     /**
      * The function to initialize the facet.
      * @param token_ Stake token (MOR)
+     * @param bidMinPricePerSecond_ Min price per second for bid
+     * @param bidMaxPricePerSecond_ Max price per second for bid
      */
-    function __Marketplace_init(address token_) external;
+    function __Marketplace_init(address token_, uint256 bidMinPricePerSecond_, uint256 bidMaxPricePerSecond_) external;
 
     /**
      * The function to set the bidFee.
      * @param bidFee_ Amount of tokens
      */
     function setMarketplaceBidFee(uint256 bidFee_) external;
+
+    /**
+     * The function to set the min and max price per second for bid.
+     * @param bidMinPricePerSecond_ Min price per second for bid
+     * @param bidMaxPricePerSecond_ Max price per second for bid
+     */
+    function setMinMaxBidPricePerSecond(
+        uint256 bidMinPricePerSecond_,
+        uint256 bidMaxPricePerSecond_
+    ) external;
 
     /**
      * The function to create the bid.

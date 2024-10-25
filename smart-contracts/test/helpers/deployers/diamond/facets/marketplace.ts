@@ -10,7 +10,12 @@ import {
 } from '@/generated-types/ethers';
 import { FacetAction } from '@/test/helpers/deployers/diamond/lumerin-diamond';
 
-export const deployFacetMarketplace = async (diamond: LumerinDiamond, token: MorpheusToken): Promise<Marketplace> => {
+export const deployFacetMarketplace = async (
+  diamond: LumerinDiamond,
+  token: MorpheusToken,
+  bidMinPrice: bigint,
+  bidMaxPrice: bigint,
+): Promise<Marketplace> => {
   let facet: Marketplace;
 
   const factory = await ethers.getContractFactory('Marketplace');
@@ -34,7 +39,7 @@ export const deployFacetMarketplace = async (diamond: LumerinDiamond, token: Mor
   ]);
 
   facet = facet.attach(diamond.target) as Marketplace;
-  await facet.__Marketplace_init(token);
+  await facet.__Marketplace_init(token, bidMinPrice, bidMaxPrice);
 
   return facet;
 };

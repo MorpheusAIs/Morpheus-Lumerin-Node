@@ -11,4 +11,11 @@ interface IMarketplaceStorage {
      * The function returns fee balance.
      */
     function getFeeBalance() external view returns (uint256);
+
+    /**
+     * The function returns min and max price per second for bid.
+     * @return Min bid price per second
+     * @return Max bid price per second
+     */
+    function getMinMaxBidPricePerSecond() external view returns (uint256, uint256);
 }

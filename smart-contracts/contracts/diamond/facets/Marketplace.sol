@@ -24,9 +24,15 @@ contract Marketplace is
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.Bytes32Set;
 
-    function __Marketplace_init(address token_) external initializer(BIDS_STORAGE_SLOT) {
+    function __Marketplace_init(
+        address token_,
+        uint256 bidMinPricePerSecond_,
+        uint256 bidMaxPricePerSecond_
+    ) external initializer(BIDS_STORAGE_SLOT) {
         BidsStorage storage bidsStorage = getBidsStorage();
         bidsStorage.token = token_;
+
+        setMinMaxBidPricePerSecond(bidMinPricePerSecond_, bidMaxPricePerSecond_);
     }
 
     function setMarketplaceBidFee(uint256 bidFee_) external onlyOwner {
@@ -34,6 +40,25 @@ contract Marketplace is
         marketStorage.bidFee = bidFee_;
 
         emit MaretplaceFeeUpdated(bidFee_);
+    }
+
+    function setMinMaxBidPricePerSecond(
+        uint256 bidMinPricePerSecond_,
+        uint256 bidMaxPricePerSecond_
+    ) public onlyOwner {
+        if (bidMinPricePerSecond_ == 0) {
+            revert MarketplaceBidMinPricePerSecondIsZero();
+        }
+        
+        if (bidMinPricePerSecond_ > bidMaxPricePerSecond_) {
+            revert MarketplaceBidMinPricePerSecondIsInvalid();
+        }
+
+        MarketStorage storage marketStorage = getMarketStorage();
+        marketStorage.bidMinPricePerSecond = bidMinPricePerSecond_;
+        marketStorage.bidMaxPricePerSecond = bidMaxPricePerSecond_;
+
+        emit MarketplaceBidMinMaxPriceUpdated(bidMinPricePerSecond_, bidMaxPricePerSecond_);
     }
 
     function postModelBid(bytes32 modelId_, uint256 pricePerSecond_) external returns (bytes32 bidId) {
@@ -48,6 +73,10 @@ contract Marketplace is
 
         BidsStorage storage bidsStorage = getBidsStorage();
         MarketStorage storage marketStorage = getMarketStorage();
+
+        if (pricePerSecond_ < marketStorage.bidMinPricePerSecond || pricePerSecond_ > marketStorage.bidMaxPricePerSecond) {
+            revert MarketplaceBidPricePerSecondInvalid();
+        }
 
         IERC20(bidsStorage.token).safeTransferFrom(_msgSender(), address(this), marketStorage.bidFee);
         marketStorage.feeBalance += marketStorage.bidFee;

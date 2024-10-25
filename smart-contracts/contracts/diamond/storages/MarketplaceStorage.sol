@@ -7,6 +7,8 @@ contract MarketplaceStorage is IMarketplaceStorage {
     struct MarketStorage {
         uint256 feeBalance; // Total fees balance of the contract
         uint256 bidFee;
+        uint256 bidMinPricePerSecond;
+        uint256 bidMaxPricePerSecond;
     }
 
     bytes32 public constant MARKET_STORAGE_SLOT = keccak256("diamond.standard.market.storage");
@@ -18,6 +20,10 @@ contract MarketplaceStorage is IMarketplaceStorage {
 
     function getFeeBalance() external view returns (uint256) {
         return getMarketStorage().feeBalance;
+    }
+
+    function getMinMaxBidPricePerSecond() external view returns (uint256, uint256) {
+        return (getMarketStorage().bidMinPricePerSecond, getMarketStorage().bidMaxPricePerSecond);
     }
 
     /** INTERNAL */

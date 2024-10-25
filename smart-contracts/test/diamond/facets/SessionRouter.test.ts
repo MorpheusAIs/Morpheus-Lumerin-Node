@@ -47,7 +47,7 @@ describe('SessionRouter', () => {
       deployFacetProviderRegistry(diamond),
       deployFacetModelRegistry(diamond),
       deployFacetSessionRouter(diamond, FUNDING),
-      deployFacetMarketplace(diamond, token),
+      deployFacetMarketplace(diamond, token, wei(0.0001), wei(900)),
     ]);
 
     await token.transfer(SECOND, wei(10000));

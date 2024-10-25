@@ -41,7 +41,7 @@ describe('Marketplace', () => {
       deployFacetProviderRegistry(diamond),
       deployFacetModelRegistry(diamond),
       deployFacetSessionRouter(diamond, OWNER),
-      deployFacetMarketplace(diamond, token),
+      deployFacetMarketplace(diamond, token, wei(0.0001), wei(900)),
     ]);
 
     await token.transfer(SECOND, wei(1000));
@@ -67,7 +67,7 @@ describe('Marketplace', () => {
       expect(await marketplace.getToken()).to.eq(await token.getAddress());
     });
     it('should revert if try to call init function twice', async () => {
-      await expect(marketplace.__Marketplace_init(token)).to.be.rejectedWith(
+      await expect(marketplace.__Marketplace_init(token, wei(0.001), wei(0.002))).to.be.rejectedWith(
         'Initializable: contract is already initialized',
       );
     });
@@ -85,6 +85,33 @@ describe('Marketplace', () => {
       await expect(marketplace.connect(SECOND).setMarketplaceBidFee(100)).to.be.revertedWithCustomError(
         diamond,
         'OwnableUnauthorizedAccount',
+      );
+    });
+  });
+
+  describe('#setMinMaxBidPricePerSecond', async () => {
+    it('should set min and max price per second', async () => {
+      await expect(marketplace.setMinMaxBidPricePerSecond(wei(1), wei(2)))
+        .to.emit(marketplace, 'MarketplaceBidMinMaxPriceUpdated')
+        .withArgs(wei(1), wei(2));
+
+      expect(await marketplace.getMinMaxBidPricePerSecond()).deep.eq([wei(1), wei(2)]);
+    });
+    it('should throw error when caller is not an owner', async () => {
+      await expect(
+        marketplace.connect(SECOND).setMinMaxBidPricePerSecond(wei(1), wei(2)),
+      ).to.be.revertedWithCustomError(diamond, 'OwnableUnauthorizedAccount');
+    });
+    it('should throw error when min price is zero', async () => {
+      await expect(marketplace.setMinMaxBidPricePerSecond(wei(0), wei(2))).to.be.revertedWithCustomError(
+        marketplace,
+        'MarketplaceBidMinPricePerSecondIsZero',
+      );
+    });
+    it('should throw error when min price greater then max price', async () => {
+      await expect(marketplace.setMinMaxBidPricePerSecond(wei(3), wei(2))).to.be.revertedWithCustomError(
+        marketplace,
+        'MarketplaceBidMinPricePerSecondIsInvalid',
       );
     });
   });
