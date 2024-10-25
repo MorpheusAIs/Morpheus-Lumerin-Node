@@ -73,7 +73,7 @@ const Dashboard = ({
     }
   });
   const [transactions, setTransactions] = useState([]);
-  const [pagging, setPagging] = useState({ page: 1, pageSize: 15, hasNextPage: true })
+  const [pagging, setPagging] = useState({ page: 1, pageSize: 50, hasNextPage: true })
   const [staked, setStaked] = useState(0);
 
   const loadBalances = async () => {
@@ -194,7 +194,7 @@ const Dashboard = ({
       <TxList
         {...pagging}
         hasNextPage={pagging.hasNextPage}
-        loadNextTransactions={getTransactions}
+        loadNextTransactions={() => {}}
         hasTransactions={!!transactions.length}
         syncStatus={syncStatus}
         transactions={transactions}
