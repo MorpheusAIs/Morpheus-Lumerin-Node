@@ -45,9 +45,9 @@ const withDashboardState = WrappedComponent => {
         });
     };
 
-    loadTransactions =  async (page = 0, pageSize = 15) => {
+    loadTransactions = async (page = 1, pageSize = 15) => {
       this.setState({ refreshStatus: 'pending', refreshError: null });
-      const transactions = await this.props.client.getTransactions(page, pageSize);
+      const transactions = await this.props.client.getTransactions({ page, pageSize });
       this.setState({ refreshStatus: 'success' })
   
       // if (page && pageSize) {

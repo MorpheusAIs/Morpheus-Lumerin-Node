@@ -135,7 +135,12 @@ export const setContractDeleteStatus = async function (data, { api }) {
 }
 
 export async function openWallet({ emitter }, password) {
-  const { address } = wallet.getAddress()
+  const storedAddress = wallet.getAddress()
+  if(!storedAddress) {
+    return;
+  }
+
+  const { address } = storedAddress;
 
   emitter.emit('open-wallet', { address, isActive: true })
   emitter.emit('open-proxy-router', { password })

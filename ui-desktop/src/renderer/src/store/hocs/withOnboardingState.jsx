@@ -192,9 +192,9 @@ const withOnboardingState = WrappedComponent => {
     }
 
     onMnemonicSet = async (e, path) => {
-      this.setState({...this.state, derivationPath: path})
       if (e && e.preventDefault) e.preventDefault();
-      this.setState({...this.state, useEthStep: true })
+
+      this.setState({...this.state, useUserMnemonic: true, derivationPath: path, useEthStep: true })
     }
 
     onEthNodeSet = async (e) => {
