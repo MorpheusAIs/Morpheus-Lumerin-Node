@@ -49,15 +49,15 @@ export default class CopyMnemonicStep extends React.Component {
               I’ve copied it
             </Btn>
           </Sp>
-          <Sp mt={2}>
+          {/* <Sp mt={2}>
             <SecondaryBtn
               data-testid="recover-btn"
               onClick={this.props.onUseUserMnemonicToggled}
               block
             >
-              Or recover a wallet from a saved mnemonic
+              DELETE
             </SecondaryBtn>
-          </Sp>
+          </Sp> */}
         </AltLayoutNarrow>
       </AltLayout>
     );

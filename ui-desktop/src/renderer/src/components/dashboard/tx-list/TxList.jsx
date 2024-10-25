@@ -86,7 +86,7 @@ export const TxList = ({
   return (
     <Container data-testid="tx-list">
       <Flex.Row grow="1">
-        <Title>Transactions</Title>
+        <Title>Last Transactions</Title>
       </Flex.Row>
       <Transactions>
         <ItemFilter

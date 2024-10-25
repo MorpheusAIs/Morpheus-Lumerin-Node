@@ -23,9 +23,10 @@ type SystemController struct {
 	appStartTime time.Time
 	chainID      *big.Int
 	log          lib.ILogger
+	validator    i.Validation
 }
 
-func NewSystemController(config *config.Config, wallet i.Wallet, ethRPC i.RPCEndpoints, sysConfig *SystemConfigurator, appStartTime time.Time, chainID *big.Int, log lib.ILogger) *SystemController {
+func NewSystemController(config *config.Config, wallet i.Wallet, ethRPC i.RPCEndpoints, sysConfig *SystemConfigurator, appStartTime time.Time, chainID *big.Int, log lib.ILogger, validator i.Validation) *SystemController {
 	c := &SystemController{
 		config:       config,
 		wallet:       wallet,
@@ -34,6 +35,7 @@ func NewSystemController(config *config.Config, wallet i.Wallet, ethRPC i.RPCEnd
 		appStartTime: appStartTime,
 		chainID:      chainID,
 		log:          log,
+		validator:    validator,
 	}
 
 	return c
@@ -147,6 +149,14 @@ func (s *SystemController) SetEthNode(ctx *gin.Context) {
 	if err := ctx.BindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	for _, url := range req.URLs {
+		validationErr := s.validator.ValidateEthResourse(ctx, url, big.NewInt(int64(s.config.Blockchain.ChainID)), time.Second*2)
+		if validationErr != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Resource %s is not available", url)})
+			return
+		}
 	}
 
 	err := s.ethRPC.SetURLs(req.URLs)
