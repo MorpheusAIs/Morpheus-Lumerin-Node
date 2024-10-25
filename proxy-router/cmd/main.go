@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"net/url"
 	"os"
 	"os/signal"
@@ -274,11 +275,11 @@ func start() error {
 		log.Warnf("chat context storage is disabled")
 		chatStorage = proxyapi.NewNoOpChatStorage()
 	}
-	validator := system.NewValidator()
 
+	ethConnectionValidator := system.NewValidator(*big.NewInt(int64(cfg.Blockchain.ChainID)))
 	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine, chatStorage)
 	walletController := walletapi.NewWalletController(wallet)
-	systemController := system.NewSystemController(&cfg, wallet, rpcClientStore, sysConfig, appStartTime, chainID, log, validator)
+	systemController := system.NewSystemController(&cfg, wallet, rpcClientStore, sysConfig, appStartTime, chainID, log, ethConnectionValidator)
 
 	apiBus := apibus.NewApiBus(blockchainController, proxyController, walletController, systemController)
 	httpHandler := httphandlers.CreateHTTPServer(log, apiBus)

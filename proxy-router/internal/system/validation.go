@@ -10,13 +10,16 @@ import (
 )
 
 type Validator struct {
+	chainId big.Int
 }
 
-func NewValidator() *Validator {
-	return &Validator{}
+func NewValidator(chainId big.Int) *Validator {
+	return &Validator{
+		chainId: chainId,
+	}
 }
 
-func (v *Validator) ValidateEthResourse(ctx context.Context, url string, chainId *big.Int, timeout time.Duration) error {
+func (v *Validator) ValidateEthResourse(ctx context.Context, url string, timeout time.Duration) error {
 	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -30,8 +33,8 @@ func (v *Validator) ValidateEthResourse(ctx context.Context, url string, chainId
 		return chainIdError
 	}
 
-	if chainId.Cmp(urlChainId) != 0 {
-		return fmt.Errorf("invalid chain id %s, expected: %s", urlChainId, chainId)
+	if v.chainId.Cmp(urlChainId) != 0 {
+		return fmt.Errorf("invalid chain id %s, expected: %s", urlChainId, &v.chainId)
 	}
 
 	return nil
