@@ -276,7 +276,7 @@ func start() error {
 		chatStorage = proxyapi.NewNoOpChatStorage()
 	}
 
-	ethConnectionValidator := system.NewValidator(*big.NewInt(int64(cfg.Blockchain.ChainID)))
+	ethConnectionValidator := system.NewEthConnectionValidator(*big.NewInt(int64(cfg.Blockchain.ChainID)))
 	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine, chatStorage)
 	walletController := walletapi.NewWalletController(wallet)
 	systemController := system.NewSystemController(&cfg, wallet, rpcClientStore, sysConfig, appStartTime, chainID, log, ethConnectionValidator)

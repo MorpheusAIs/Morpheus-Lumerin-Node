@@ -23,10 +23,10 @@ type SystemController struct {
 	appStartTime           time.Time
 	chainID                *big.Int
 	log                    lib.ILogger
-	ethConnectionValidator EthConnectionValidator
+	ethConnectionValidator IEthConnectionValidator
 }
 
-func NewSystemController(config *config.Config, wallet i.Wallet, ethRPC i.RPCEndpoints, sysConfig *SystemConfigurator, appStartTime time.Time, chainID *big.Int, log lib.ILogger, ethConnectionValidator EthConnectionValidator) *SystemController {
+func NewSystemController(config *config.Config, wallet i.Wallet, ethRPC i.RPCEndpoints, sysConfig *SystemConfigurator, appStartTime time.Time, chainID *big.Int, log lib.ILogger, ethConnectionValidator IEthConnectionValidator) *SystemController {
 	c := &SystemController{
 		config:                 config,
 		wallet:                 wallet,
