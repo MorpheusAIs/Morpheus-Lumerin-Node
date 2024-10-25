@@ -4,6 +4,9 @@
   "providerMinStake": "200000000000000000",
   "modelMinStake": "100000000000000000",
   "marketplaceBidFee": "300000000000000000",
+  "marketplaceMinBidPricePerSecond": "5000000000000000",
+  "marketplaceMaxBidPricePerSecond": "20000000000000000000",
+
   "pools": [
     {
       "payoutStart": 1707393600,

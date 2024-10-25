@@ -91,13 +91,19 @@ module.exports = async function (deployer: Deployer) {
   modelRegistryFacet = modelRegistryFacet.attach(lumerinDiamond.target) as ModelRegistry;
   await modelRegistryFacet.__ModelRegistry_init();
   marketplaceFacet = marketplaceFacet.attach(lumerinDiamond.target) as Marketplace;
-  await marketplaceFacet.__Marketplace_init(config.MOR);
+  await marketplaceFacet.__Marketplace_init(
+    config.MOR,
+    config.marketplaceMinBidPricePerSecond,
+    config.marketplaceMaxBidPricePerSecond,
+  );
   sessionRouterFacet = sessionRouterFacet.attach(lumerinDiamond.target) as SessionRouter;
   await sessionRouterFacet.__SessionRouter_init(config.fundingAccount, 7 * DAY, config.pools);
 
   await providerRegistryFacet.providerSetMinStake(config.providerMinStake);
   await modelRegistryFacet.modelSetMinStake(config.modelMinStake);
   await marketplaceFacet.setMarketplaceBidFee(config.marketplaceBidFee);
+
+  // TODO: add allowance from the treasury
 
   Reporter.reportContracts(
     ['Lumerin Diamond', await lumerinDiamond.getAddress()],

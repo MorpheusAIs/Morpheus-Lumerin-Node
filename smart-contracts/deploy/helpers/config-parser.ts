@@ -9,6 +9,8 @@ export type Config = {
   providerMinStake: string;
   modelMinStake: string;
   marketplaceBidFee: string;
+  marketplaceMinBidPricePerSecond: string;
+  marketplaceMaxBidPricePerSecond: string;
 };
 
 export function parseConfig(): Config {
