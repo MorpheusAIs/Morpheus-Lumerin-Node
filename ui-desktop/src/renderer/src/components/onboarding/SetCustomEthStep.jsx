@@ -77,6 +77,7 @@ export const SetCustomEthStep = props => {
             <SecondaryBtn
               data-testid="skip-btn"
               onClick={(e) => {
+                e.preventDefault();
                 props.onInputChange({ value: "", id: 'customEthNode' });
                 props.onEthNodeSet(e)
               }}
