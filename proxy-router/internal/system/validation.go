@@ -9,17 +9,17 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-type Validator struct {
+type EthConnectionValidator struct {
 	chainId big.Int
 }
 
-func NewValidator(chainId big.Int) *Validator {
-	return &Validator{
+func NewEthConnectionValidator(chainId big.Int) *EthConnectionValidator {
+	return &EthConnectionValidator{
 		chainId: chainId,
 	}
 }
 
-func (v *Validator) ValidateEthResourse(ctx context.Context, url string, timeout time.Duration) error {
+func (v *EthConnectionValidator) ValidateEthResourse(ctx context.Context, url string, timeout time.Duration) error {
 	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 

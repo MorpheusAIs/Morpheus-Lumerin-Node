@@ -11,6 +11,6 @@ type osConfigurator interface {
 	GetFileDescriptors(ctx context.Context, pid int) ([]FD, error)
 }
 
-type EthConnectionValidator interface {
+type IEthConnectionValidator interface {
 	ValidateEthResourse(ctx context.Context, url string, timeout time.Duration) error
 }
