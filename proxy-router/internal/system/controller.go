@@ -16,26 +16,26 @@ import (
 )
 
 type SystemController struct {
-	config       *config.Config
-	wallet       i.Wallet
-	ethRPC       i.RPCEndpoints
-	sysConfig    *SystemConfigurator
-	appStartTime time.Time
-	chainID      *big.Int
-	log          lib.ILogger
-	validator    i.Validation
+	config                 *config.Config
+	wallet                 i.Wallet
+	ethRPC                 i.RPCEndpoints
+	sysConfig              *SystemConfigurator
+	appStartTime           time.Time
+	chainID                *big.Int
+	log                    lib.ILogger
+	ethConnectionValidator EthConnectionValidator
 }
 
-func NewSystemController(config *config.Config, wallet i.Wallet, ethRPC i.RPCEndpoints, sysConfig *SystemConfigurator, appStartTime time.Time, chainID *big.Int, log lib.ILogger, validator i.Validation) *SystemController {
+func NewSystemController(config *config.Config, wallet i.Wallet, ethRPC i.RPCEndpoints, sysConfig *SystemConfigurator, appStartTime time.Time, chainID *big.Int, log lib.ILogger, ethConnectionValidator EthConnectionValidator) *SystemController {
 	c := &SystemController{
-		config:       config,
-		wallet:       wallet,
-		ethRPC:       ethRPC,
-		sysConfig:    sysConfig,
-		appStartTime: appStartTime,
-		chainID:      chainID,
-		log:          log,
-		validator:    validator,
+		config:                 config,
+		wallet:                 wallet,
+		ethRPC:                 ethRPC,
+		sysConfig:              sysConfig,
+		appStartTime:           appStartTime,
+		chainID:                chainID,
+		log:                    log,
+		ethConnectionValidator: ethConnectionValidator,
 	}
 
 	return c
@@ -152,7 +152,7 @@ func (s *SystemController) SetEthNode(ctx *gin.Context) {
 	}
 
 	for _, url := range req.URLs {
-		validationErr := s.validator.ValidateEthResourse(ctx, url, big.NewInt(int64(s.config.Blockchain.ChainID)), time.Second*2)
+		validationErr := s.ethConnectionValidator.ValidateEthResourse(ctx, url, time.Second*2)
 		if validationErr != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Resource %s is not available", url)})
 			return
