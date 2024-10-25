@@ -10,21 +10,21 @@ import { setProxyRouterConfig, cleanupDb, getProxyRouterConfig } from '../settin
 
 export const withAuth =
   (fn) =>
-  (data, { api }) => {
-    if (typeof data.walletId !== 'string') {
-      throw new WalletError('walletId is not defined')
-    }
+    (data, { api }) => {
+      if (typeof data.walletId !== 'string') {
+        throw new WalletError('walletId is not defined')
+      }
 
-    return auth
-      .isValidPassword(data.password)
-      .then(() => {
-        return wallet.getSeed(data.password)
-      })
-      .then((seed, index) => {
-        return wallet.createPrivateKey(seed, index)
-      })
-      .then((privateKey) => fn(privateKey, data))
-  }
+      return auth
+        .isValidPassword(data.password)
+        .then(() => {
+          return wallet.getSeed(data.password)
+        })
+        .then((seed, index) => {
+          return wallet.createPrivateKey(seed, index)
+        })
+        .then((privateKey) => fn(privateKey, data))
+    }
 
 export const createContract = async function (data, { api }) {
   data.walletId = wallet.getAddress().address
@@ -134,20 +134,6 @@ export const setContractDeleteStatus = async function (data, { api }) {
   )(data, { api })
 }
 
-export function createWallet(data, core, isOpen = true) {
-  const seed = keys.mnemonicToSeedHex(data.mnemonic)
-  const entropy = keys.mnemonicToEntropy(data.mnemonic)
-  const walletAddress = wallet.createAddress(seed)
-
-  return Promise.all([
-    wallet.setSeed(seed, data.password),
-    wallet.setEntropy(entropy, data.password),
-    wallet.setAddress(walletAddress)
-  ])
-    .then(() => core.emitter.emit('create-wallet', { address: walletAddress }))
-    .then(() => isOpen && openWallet(core, data.password))
-}
-
 export async function openWallet({ emitter }, password) {
   const { address } = wallet.getAddress()
 
@@ -155,34 +141,66 @@ export async function openWallet({ emitter }, password) {
   emitter.emit('open-proxy-router', { password })
 }
 
-export const onboardingCompleted = (data, core) => {
-  setProxyRouterConfig(data.proxyRouterConfig)
-  return auth
-    .setPassword(data.password)
-    .then(() =>
-      createWallet(
-        {
-          mnemonic: data.mnemonic,
-          password: data.password
-        },
-        core,
-        true
-      )
-    )
-    .then(() => {
-      return wallet.createPrivateKey(wallet.getSeed(data.password))
-    })
-    .then((privateKey) => {
-      const { proxyUrl } = data
-      return fetch(`${proxyUrl}/wallet/privateKey`, {
+export const suggestAddresses = async (mnemonic) => {
+  const seed = keys.mnemonicToSeedHex(mnemonic);
+  let results = [];
+  for (let i = 0; i < 10; i++) {
+    const walletAddress = wallet.createAddress(seed, i);
+    results.push(walletAddress);
+  }
+  return results;
+}
+
+export const onboardingCompleted = async (data, core) => {
+  try {
+    const { proxyUrl } = data;
+
+    if (data.ethNode) {
+      const ethNodeResult = await fetch(`${proxyUrl}/config/ethNode`, {
+        method: 'POST',
+        body: JSON.stringify({ urls: [data.ethNode] })
+      })
+
+      const dataResponse = await ethNodeResult.json();
+      if (dataResponse.error) {
+        return (dataResponse.error)
+      }
+    }
+
+    await auth.setPassword(data.password);
+
+    if (data.mnemonic) {
+      const mnemonicRes = await fetch(`${proxyUrl}/wallet/mnemonic`, {
         method: 'POST',
         body: JSON.stringify({
-          privateKey
+          mnemonic: data.mnemonic,
+          derivationPath: String(data.derivationPath || 0)
         })
       })
-    })
-    .then(() => true)
-    .catch((err) => ({ error: new WalletError('Onboarding unable to be completed: ', err) }))
+
+      console.log("Set Mnemonic To Wallet", await mnemonicRes.json());
+    }
+    else {
+      const pKeyResp = await fetch(`${proxyUrl}/wallet/privateKey`, {
+        method: 'POST',
+        body: JSON.stringify({ "PrivateKey": String(data.privateKey) })
+      })
+      console.log("Set Private Key To Wallet", await pKeyResp.json());
+    }
+
+    const walletResp = await fetch(`${proxyUrl}/wallet`);
+    const walletAddress = (await walletResp.json()).address;
+
+    console.log("Address Wallet Is", walletAddress);
+
+    await wallet.setSeed(walletAddress, data.password),
+    await wallet.setAddress(walletAddress)
+    await core.emitter.emit('create-wallet', { address: walletAddress })
+    openWallet(core, data.password)
+  }
+  catch (err) {
+    return ({ error: new WalletError('Onboarding unable to be completed: ', err) });
+  }
 }
 
 function onLoginSubmit({ password }, core) {
@@ -245,7 +263,7 @@ export const getMarketplaceFee = async function (data, { api }) {
   return api.contracts.getMarketplaceFee(data)
 }
 
-export function refreshAllContracts({}, { api }) {
+export function refreshAllContracts({ }, { api }) {
   const walletId = wallet.getAddress().address
   return api.contracts.refreshContracts(null, walletId)
 }
@@ -291,7 +309,7 @@ export const getAddressAndPrivateKey = async (data, { api }) => {
 export const refreshProxyRouterConnection = async (data, { api }) =>
   api['proxy-router'].refreshConnectionsStream(data)
 
-export const getLocalIp = async ({}, { api }) => api['proxy-router'].getLocalIp()
+export const getLocalIp = async ({ }, { api }) => api['proxy-router'].getLocalIp()
 
 export const logout = async (data) => {
   return cleanupDb()
@@ -300,21 +318,6 @@ export const logout = async (data) => {
 export const getPoolAddress = async (data) => {
   const config = getProxyRouterConfig()
   return config.buyerDefaultPool || config.defaultPool
-}
-
-export const hasStoredSecretPhrase = async (data) => {
-  return wallet.hasEntropy()
-}
-
-export const revealSecretPhrase = async (password) => {
-  const isValid = await auth.isValidPassword(password)
-  if (!isValid) {
-    return { error: new WalletError('Invalid password') }
-  }
-
-  const entropy = wallet.getEntropy(password)
-  const mnemonic = keys.entropyToMnemonic(entropy)
-  return mnemonic
 }
 
 export function getPastTransactions({ address, page, pageSize }, { api }) {
@@ -327,9 +330,9 @@ export default {
   createContract,
   cancelContract,
   onboardingCompleted,
+  suggestAddresses,
   onLoginSubmit,
   refreshAllTransactions,
-  createWallet,
   openWallet,
   sendLmr,
   sendEth,
@@ -343,8 +346,6 @@ export default {
   getLocalIp,
   getPoolAddress,
   claimFaucet,
-  revealSecretPhrase,
-  hasStoredSecretPhrase,
   getPastTransactions,
   setContractDeleteStatus,
   editContract,

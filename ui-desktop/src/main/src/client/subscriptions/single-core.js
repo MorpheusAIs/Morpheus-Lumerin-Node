@@ -5,6 +5,7 @@ export const withCore = (core) => (fn) => (data) => fn(data, core)
 
 export const listeners = {
   'onboarding-completed': handlers.onboardingCompleted,
+  'suggest-addresses': handlers.suggestAddresses,
   'login-submit': handlers.onLoginSubmit,
   // 'refresh-all-sockets': handlers.refreshAllSockets,
   'refresh-all-contracts': handlers.refreshAllContracts,

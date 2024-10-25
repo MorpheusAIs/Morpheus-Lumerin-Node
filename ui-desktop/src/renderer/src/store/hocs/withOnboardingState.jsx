@@ -7,6 +7,7 @@ import * as utils from '../utils';
 import { toRfc2396, generatePoolUrl } from '../../utils';
 
 const EMAIL_REGEX = /^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
+const UrlRegex = /\b(?:http|ws)s?:\/\/\S*[^\s."]/g;
 
 const withOnboardingState = WrappedComponent => {
   class Container extends React.Component {
@@ -36,11 +37,13 @@ const withOnboardingState = WrappedComponent => {
       passwordAgain: null,
       mnemonicAgain: null,
       userMnemonic: null,
+      userPrivateKey: null,
+      derivationPath: null,
+      customEthNode: null,
       password: null,
       mnemonic: null,
-      proxyDefaultPool: null,
-      lightningAddress: null,
-      isTitanLightning: true,
+      useImportFlow: false,
+      useEthStep: false,
       errors: {}
     };
 
@@ -58,7 +61,7 @@ const withOnboardingState = WrappedComponent => {
       }
     };
 
-    onPasswordSubmit = ({ clearOnError = false }) => {
+    onPasswordSubmit = ({ clearOnError = false, useImportFlow = false }) => {
       const { password, passwordAgain } = this.state;
 
       const errors = validators.validatePasswordCreation(
@@ -82,7 +85,7 @@ const withOnboardingState = WrappedComponent => {
         });
         return;
       }
-      this.setState({ isPasswordDefined: true });
+      this.setState({ isPasswordDefined: true, useImportFlow });
     };
 
     onUseUserMnemonicToggled = () => {
@@ -130,6 +133,13 @@ const withOnboardingState = WrappedComponent => {
       this.onFinishOnboarding();
     };
 
+    onPrivateKeyAccepted = e => {
+      if (e && e.preventDefault) e.preventDefault();
+
+      this.setState({ isMnemonicVerified: true, useEthStep: true });
+    }
+
+
     validateDefaultPoolAddress() {
       const errors = validators.validatePoolAddress(
         this.state.proxyDefaultPool
@@ -142,16 +152,26 @@ const withOnboardingState = WrappedComponent => {
       return true;
     }
 
-    // HERE
-    onFinishOnboarding = e => {
+    onFinishOnboarding = async (e, path) => {
       if (e && e.preventDefault) e.preventDefault();
 
-      return this.props.onOnboardingCompleted({
+      const payload = {
         password: this.state.password,
-        mnemonic: this.state.useUserMnemonic
-          ? utils.sanitizeMnemonic(this.state.userMnemonic)
-          : this.state.mnemonic
-      });
+        ethNode: this.state.customEthNode || '',
+        derivationPath: path || 0,
+        privateKey: ''
+      };
+
+      if(this.state.userPrivateKey) {
+        payload.privateKey = this.state.userPrivateKey;
+      }
+      else {
+        payload.mnemonic = this.state.useUserMnemonic
+        ? utils.sanitizeMnemonic(this.state.userMnemonic)
+        : this.state.mnemonic;
+      }
+
+      await this.props.onOnboardingCompleted(payload);
     };
 
     onRunWithoutProxyRouter = e => {
@@ -165,6 +185,28 @@ const withOnboardingState = WrappedComponent => {
           : this.state.mnemonic
       });
     };
+
+    onSuggestAddress = async () => {
+      const addrs = await this.props.client.suggestAddresses(this.state.userMnemonic);
+      return addrs;
+    }
+
+    onMnemonicSet = async (e, path) => {
+      this.setState({...this.state, derivationPath: path})
+      if (e && e.preventDefault) e.preventDefault();
+      this.setState({...this.state, useEthStep: true })
+    }
+
+    onEthNodeSet = async (e) => {
+      if(this.state.customEthNode && !UrlRegex.test(this.state.customEthNode)) {
+        const errors = this.state.errors;
+        errors.customEthNode = "Url format is not valid"
+        this.setState({ errors });
+      }
+      else {
+        await this.onFinishOnboarding(e);
+      }
+    }
 
     onInputChange = ({ id, value }) => {
       this.setState(state => ({
@@ -180,9 +222,11 @@ const withOnboardingState = WrappedComponent => {
     getCurrentStep() {
       if (!this.state.areTermsAccepted) return 'ask-for-terms';
       if (!this.state.isPasswordDefined) return 'define-password';
+      if (this.state.useEthStep) return 'set-custom-eth';
       if (this.state.isMnemonicVerified) return 'config-proxy-router';
       if (this.state.useUserMnemonic) return 'recover-from-mnemonic';
       if (this.state.isMnemonicCopied) return 'verify-mnemonic';
+      if (this.state.useImportFlow) return 'import-flow';
 
       return 'copy-mnemonic';
     }
@@ -210,7 +254,11 @@ const withOnboardingState = WrappedComponent => {
           shouldSubmit={shouldSubmit}
           currentStep={this.getCurrentStep()}
           getTooltip={getTooltip}
+          onSuggestAddress={this.onSuggestAddress}
           onRunWithoutProxyRouter={this.onRunWithoutProxyRouter}
+          onPrivateKeyAccepted={this.onPrivateKeyAccepted}
+          onMnemonicSet={this.onMnemonicSet}
+          onEthNodeSet={this.onEthNodeSet}
           {...this.state}
         />
       );

@@ -2,7 +2,7 @@ import { LayoutHeader } from '../common/LayoutHeader'
 import { View } from '../common/View'
 import { Sp } from '../common';
 import withSettingsState from '../../store/hocs/withSettingsState';
-import { StyledBtn, Subtitle, StyledParagraph } from '../tools/common';
+import { StyledBtn, Subtitle, StyledParagraph, Input } from '../tools/common';
 
 const Settings = (props) => {
     return (
@@ -15,6 +15,16 @@ const Settings = (props) => {
                 </StyledParagraph>
                 <StyledBtn onClick={() => props.logout()}>
                     Reset
+                </StyledBtn>
+            </Sp>
+            <Sp mt={1}>
+                <Subtitle>Set Custom ETH Node</Subtitle>
+                <StyledParagraph>
+                    <Input />
+                </StyledParagraph>
+                
+                <StyledBtn onClick={() => props.logout()}>
+                    Set
                 </StyledBtn>
             </Sp>
         </View>)
