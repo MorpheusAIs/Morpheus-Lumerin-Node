@@ -6,6 +6,8 @@ import CopyMnemonicStep from './CopyMnemonicStep'
 import UserMnemonicStep from './UserMnemonicStep'
 import PasswordStep from './PasswordStep'
 import TermsStep from './TermsStep'
+import { ImportFlow } from './ImportFlow'
+import { SetCustomEthStep } from './SetCustomEthStep'
 
 const Onboarding = (props) => {
   const page = () => {
@@ -20,6 +22,10 @@ const Onboarding = (props) => {
         return <VerifyMnemonicStep {...props} />
       case 'recover-from-mnemonic':
         return <UserMnemonicStep {...props} />
+      case 'import-flow':
+        return <ImportFlow {...props} />
+      case 'set-custom-eth':
+        return <SetCustomEthStep {...props} />
       default:
         return null
     }

@@ -11,13 +11,14 @@ const DisclaimerWarning = styled.div`
   color: ${p => p.theme.colors.dark};
   font-size: 16px;
   margin-top: 16px;
+  text-align: justify;
 `;
 
 const DisclaimerMessage = styled.div`
   width: 100%;
   height: 130px;
   border-radius: 2px;
-  background-color: rgba(0, 0, 0, 0.1);
+  background-color: rgba(0, 0, 0, 0.5);
   color: ${p => p.theme.colors.dark};
   overflow: auto;
   font-size: 12px;
@@ -31,6 +32,7 @@ const P = styled.p`
 
 const Subtext = styled.span`
   color: ${p => p.theme.colors.dark};
+  margin-left: 5px;
 `;
 
 const TermsStep = props => {
@@ -72,7 +74,6 @@ const TermsStep = props => {
             <a onClick={props.onTermsLinkClick} style={{ marginLeft: '5px' }}>
               software license
             </a>
-            .
           </div>
         </Message>
 
