@@ -16,8 +16,8 @@ const (
 )
 
 var (
-	ErrPkey            = errors.New("cannot retrieve mnemonic or private key")
-	ErrPkeyAndMnemonic = errors.New("both mnemonic and private key are stored")
+	ErrWalletNotSet = errors.New("wallet not set")
+	ErrWallet       = errors.New("cannot retrieve mnemonic or private key")
 )
 
 type KeychainWallet struct {
@@ -36,78 +36,57 @@ func NewKeychainWallet() *KeychainWallet {
 // GetPrivateKey use this function to get the private key regardless of whether it was stored as a mnemonic or private key
 //
 // errors with ErrPkeyAndMnemonic if both mnemonic and private key are stored
-func (w *KeychainWallet) GetPrivateKey() (string, error) {
+func (w *KeychainWallet) GetPrivateKey() (lib.HexString, error) {
 	prKey, prKeyErr := w.getStoredPrivateKey()
 	mnem, derivation, mnemErr := w.getStoredMnemonic()
 
-	if prKey != "" && mnem != "" {
-		return "", errors.New("both mnemonic and private key are stored")
+	if errors.Is(prKeyErr, keychain.ErrKeyNotFound) && errors.Is(mnemErr, keychain.ErrKeyNotFound) {
+		return nil, ErrWalletNotSet
 	}
 
-	if prKey != "" {
-		return lib.RemoveHexPrefix(prKey), prKeyErr
+	if prKey != nil && mnem != "" {
+		return nil, errors.New("both mnemonic and private key are stored")
+	}
+
+	if prKey != nil {
+		return prKey, nil
 	}
 
 	if mnem != "" && derivation != "" {
-		wallet, err := hdwallet.NewFromMnemonic(mnem)
-		if err != nil {
-			return "", err
-		}
-		path, err := hdwallet.ParseDerivationPath(derivation)
-		if err != nil {
-			return "", err
-		}
-		account, err := wallet.Derive(path, true)
-		if err != nil {
-			return "", err
-		}
-		privateKey, err := wallet.PrivateKeyHex(account)
-		if err != nil {
-			return "", err
-		}
-		return lib.RemoveHexPrefix(privateKey), nil
+		return w.mnemonicToPrivateKey(mnem, derivation)
 	}
 
-	var err error
+	var err = ErrWallet
 
-	if mnemErr != nil {
-		err = lib.WrapError(ErrPkey, mnemErr)
+	if mnemErr != nil && !errors.Is(mnemErr, keychain.ErrKeyNotFound) {
+		err = lib.WrapError(err, mnemErr)
 	}
-	if prKeyErr != nil {
+	if prKeyErr != nil && !errors.Is(mnemErr, keychain.ErrKeyNotFound) {
 		err = lib.WrapError(err, prKeyErr)
 	}
 
-	return "", err
+	return nil, err
 }
 
 // SetPrivateKey stores the private key of the wallet
-func (w *KeychainWallet) SetPrivateKey(privateKeyOxHex string) error {
-	err := w.storage.Upsert(PRIVATE_KEY_KEY, privateKeyOxHex)
+func (w *KeychainWallet) SetPrivateKey(privateKey lib.HexString) error {
+	err := w.storage.Upsert(PRIVATE_KEY_KEY, privateKey.Hex())
 	if err != nil {
 		return err
 	}
 	// either mnemonic or private key can be stored at a time
-	_, err = w.storage.Get(MNEMONIC_KEY)
+	err = w.storage.DeleteIfExists(MNEMONIC_KEY)
 	if err == nil {
-		err = w.storage.Delete(MNEMONIC_KEY)
-		if err != nil {
-			return err
-		}
+		return err
 	}
 
-	_, err = w.storage.Get(DERIVATION_PATH_KEY)
-	if err == nil {
-		err = w.storage.Delete(DERIVATION_PATH_KEY)
-		if err != nil {
-			return err
-		}
+	err = w.storage.DeleteIfExists(DERIVATION_PATH_KEY)
+	if err != nil {
+		return err
 	}
 
 	// notify the listeners that the private key has been updated
-	close(w.updatedCh)
-	w.mutex.Lock()
-	defer w.mutex.Unlock()
-	w.updatedCh = make(chan struct{})
+	w.notifyUpdated()
 
 	return nil
 }
@@ -122,13 +101,46 @@ func (w *KeychainWallet) SetMnemonic(mnemonic string, derivationPath string) err
 	if err != nil {
 		return err
 	}
+
 	// either mnemonic or private key can be stored at a time
-	return w.storage.Delete(PRIVATE_KEY_KEY)
+	err = w.storage.DeleteIfExists(PRIVATE_KEY_KEY)
+	if err == nil {
+		return err
+	}
+
+	w.notifyUpdated()
+
+	return nil
+}
+
+func (w *KeychainWallet) DeleteWallet() error {
+	err := w.storage.DeleteIfExists(PRIVATE_KEY_KEY)
+	if err != nil {
+		return err
+	}
+
+	err = w.storage.DeleteIfExists(MNEMONIC_KEY)
+	if err != nil {
+		return err
+	}
+
+	err = w.storage.DeleteIfExists(DERIVATION_PATH_KEY)
+	if err != nil {
+		return err
+	}
+
+	w.notifyUpdated()
+
+	return nil
 }
 
 // getStoredPrivateKey retrieves the private key of the wallet
-func (w *KeychainWallet) getStoredPrivateKey() (string, error) {
-	return w.storage.Get(PRIVATE_KEY_KEY)
+func (w *KeychainWallet) getStoredPrivateKey() (lib.HexString, error) {
+	prKey, err := w.storage.Get(PRIVATE_KEY_KEY)
+	if err != nil {
+		return nil, err
+	}
+	return lib.StringToHexString(prKey)
 }
 
 // getStoredMnemonic retrieves the mnemonic of the wallet
@@ -146,9 +158,32 @@ func (w *KeychainWallet) getStoredMnemonic() (string, string, error) {
 	return mnemonic, derivationPath, nil
 }
 
+func (w *KeychainWallet) mnemonicToPrivateKey(mnemonic, derivationPath string) (lib.HexString, error) {
+	wallet, err := hdwallet.NewFromMnemonic(mnemonic)
+	if err != nil {
+		return nil, err
+	}
+	path, err := hdwallet.ParseDerivationPath(derivationPath)
+	if err != nil {
+		return nil, err
+	}
+	account, err := wallet.Derive(path, true)
+	if err != nil {
+		return nil, err
+	}
+	return wallet.PrivateKeyBytes(account)
+}
+
 func (w *KeychainWallet) PrivateKeyUpdated() <-chan struct{} {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 
 	return w.updatedCh
+}
+
+func (w *KeychainWallet) notifyUpdated() {
+	close(w.updatedCh)
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+	w.updatedCh = make(chan struct{})
 }

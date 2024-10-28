@@ -1,6 +1,3 @@
-import React from 'react'
-import Modal from 'react-modal'
-import ReactDOM from 'react-dom'
 import { ThemeProvider } from 'styled-components'
 
 import theme from './ui/theme'
@@ -25,8 +22,6 @@ const client = createClient(createStore)
 subscribeToMainProcessMessages(client.store)
 
 function App(): JSX.Element {
-  const ipcHandle = (): void => window.electron.ipcRenderer.send('ping')
-
   return (
     <>
       <ClientProvider value={client}>

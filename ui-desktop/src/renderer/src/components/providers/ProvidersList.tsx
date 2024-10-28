@@ -1,44 +1,12 @@
-import { useState, useEffect } from 'react';
 import { withRouter } from 'react-router-dom';
 import withProvidersState from "../../store/hocs/withProvidersState";
 import styled from 'styled-components';
 import Accordion from 'react-bootstrap/Accordion';
 
-import Card from 'react-bootstrap/Card';
 import { abbreviateAddress } from '../../utils';
-import { Btn } from '../../components/common'
 import Table from 'react-bootstrap/Table';
 import Button from 'react-bootstrap/Button';
 import './Providers.css'
-
-const ClaimBtn = styled(Btn)`
-  background-color: ${p => p.theme.colors.morMain};
-  color: black;
-  font-weight: 600;
-  border-radius: 5px;
-`;
-
-const CustomCard = styled(Card)`
-  background: #244a47!important;
-  color: #21dc8f!important;
-  border: 0.5px solid!important;
-  cursor: pointer!important;
-
-  p {
-    color: white!important;
-  }
-
-  .gap-20 {
-    gap: 20px!important;
-  }
-`
-
-const Container = styled.div`
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 24px;
-`
 
 const BidTable = styled(Table)`
     text-align: center!important;
@@ -62,6 +30,10 @@ const StartBtn = styled(Button)`
     border: 1px solid #21dc8f!important;
 `
 
+const Container = styled.div`
+  height: 75vh;
+  overflow-y: auto;
+`
 
 function renderTable({ onClaim, sessions }) {
   return (
@@ -96,7 +68,7 @@ function renderTable({ onClaim, sessions }) {
 
 function ProvidersList({ data, claimFunds }) {
   
-  return (<div>
+  return (<Container>
       {data?.modelsNames && Object.keys(data?.modelsNames).map(model => {
         const modelSessions = data.results.filter(r => r.ModelAgentId.toLowerCase() == model.toLowerCase());
         
@@ -111,7 +83,7 @@ function ProvidersList({ data, claimFunds }) {
         </Accordion>
         )
       })}
-    </div>)
+    </Container>)
 }
 
 export default withRouter(withProvidersState(ProvidersList));

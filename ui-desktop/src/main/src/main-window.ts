@@ -1,13 +1,11 @@
 import isDev from 'electron-is-dev'
-import * as path from 'path'
-import { app, BrowserWindow, dialog, shell } from 'electron'
+// import { app, BrowserWindow, dialog, shell } from 'electron'
 import { autoUpdater } from 'electron-updater'
-import * as windowStateKeeper from 'electron-window-state'
+// import * as windowStateKeeper from 'electron-window-state'
 
 import logger from '../logger'
-import analytics from '../analytics'
-import restart from './client/electron-restart'
-
+import '../analytics'
+// import restart from './client/electron-restart'
 
 // Disable electron security warnings since local content is served via http
 
@@ -52,7 +50,7 @@ export function initAutoUpdate() {
     })
 }
 
-// TODO: reintegrate what's required to index.ts createWindow function 
+// TODO: reintegrate what's required to index.ts createWindow function
 //
 // export function loadWindow(config) {
 //   // Ensure the app is ready before creating the main window

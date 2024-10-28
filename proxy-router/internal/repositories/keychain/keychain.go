@@ -1,10 +1,14 @@
 package keychain
 
 import (
+	"errors"
+
 	"github.com/zalando/go-keyring"
 )
 
 const SERVICE_NAME = "morpheus-proxy-router"
+
+var ErrKeyNotFound = keyring.ErrNotFound
 
 type Keychain struct {
 	service string
@@ -28,4 +32,12 @@ func (k *Keychain) Upsert(key string, value string) error {
 
 func (k *Keychain) Delete(key string) error {
 	return keyring.Delete(SERVICE_NAME, key)
+}
+
+func (k *Keychain) DeleteIfExists(key string) error {
+	err := k.Delete(key)
+	if errors.Is(err, keyring.ErrNotFound) {
+		return nil
+	}
+	return err
 }

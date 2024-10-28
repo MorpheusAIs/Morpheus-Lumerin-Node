@@ -11,7 +11,6 @@ import { lmrDecimals, ethDecimals } from '../../utils/coinValue';
 const withTransactionModalState = WrappedComponent => {
   class Container extends React.Component {
     // static propTypes = {
-    //   coinDefaultGasLimit: PropTypes.string.isRequired,
     //   chainGasPrice: PropTypes.string.isRequired,
     //   availableCoin: PropTypes.string.isRequired,
     //   coinSymbol: PropTypes.string.isRequired,
@@ -20,7 +19,6 @@ const withTransactionModalState = WrappedComponent => {
     //     .isRequired,
     //   client: PropTypes.shape({
     //     copyToClipboard: PropTypes.func.isRequired,
-    //     getGasLimit: PropTypes.func.isRequired,
     //     isAddress: PropTypes.func.isRequired,
     //     sendCoin: PropTypes.func.isRequired,
     //     fromWei: PropTypes.func.isRequired,
@@ -52,8 +50,6 @@ const withTransactionModalState = WrappedComponent => {
       coinAmount: 0,
       usdAmount: 0,
       toAddress: '',
-      gasPrice: this.props.client.fromWei(this.props.chainGasPrice, 'gwei'),
-      gasLimit: this.props.coinDefaultGasLimit,
       estimatedFee: null,
       selectedCurrency: this.rangeSelectOptions[0],
       errors: {
@@ -98,52 +94,6 @@ const withTransactionModalState = WrappedComponent => {
         this.getGasEstimate();
       }
     };
-
-    getGasEstimate = debounce(async () => {
-      const { coinAmount, toAddress } = this.state;
-      if (
-        !this.props.client.isAddress(toAddress) ||
-        !utils.isWeiable(this.props.client, coinAmount)
-      ) {
-        return;
-      }
-
-      let gasLimit = 0;
-      try {
-        if (this.state.selectedCurrency.value === 'LMR') {
-          const {
-            gasLimit: gas
-          } = await this.props.client.getLmrTransferGasLimit({
-            value: parseFloat(utils.sanitize(coinAmount)) * lmrDecimals,
-            chain: this.props.chain,
-            from: this.props.from,
-            to: this.state.toAddress
-          });
-          gasLimit = gas;
-        } else {
-          const { gasLimit: gas } = await this.props.client.getGasLimit({
-            value: parseFloat(utils.sanitize(coinAmount)) * ethDecimals,
-            from: this.props.from,
-            to: this.state.toAddress
-          });
-          gasLimit = gas;
-        }
-
-        const { gasPrice } = await this.props.client.getGasPrice({});
-        this.setState({
-          gasEstimateError: false,
-          gasLimit: gasLimit.toString(),
-          gasPrice: gasPrice.toString(),
-          estimatedFee: utils.calculateEthFee(
-            gasLimit,
-            gasPrice,
-            this.props.client
-          )
-        });
-      } catch (err) {
-        this.setState({ gasEstimateError: true });
-      }
-    }, 500);
 
     onSubmit = type => {
       const payload = {
@@ -229,8 +179,6 @@ const withTransactionModalState = WrappedComponent => {
 
   const mapStateToProps = state => ({
     address: selectors.getWalletAddress(state),
-    coinDefaultGasLimit: selectors.getChainConfig(state).coinDefaultGasLimit,
-    chainGasPrice: selectors.getChainGasPrice(state),
     explorerUrl: selectors.getContractExplorerUrl(state, {
       hash: selectors.getWalletAddress(state)
     }),

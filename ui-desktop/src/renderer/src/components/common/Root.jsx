@@ -67,7 +67,7 @@ class Root extends React.Component {
   onOnboardingCompleted = ({ password, mnemonic, proxyRouterConfig }) => {
     return (
       this.props.client
-        .onOnboardingCompleted({ password, mnemonic, proxyRouterConfig })
+        .onOnboardingCompleted({ password, mnemonic, proxyRouterConfig, proxyUrl: this.props.config.chain.localProxyRouterUrl })
         .then(() => {
           this.setState({ onboardingComplete: true })
           this.props.dispatch({ type: 'session-started' })
@@ -120,7 +120,8 @@ const mapStateToProps = (state) => ({
   isSessionActive: selectors.isSessionActive(state),
   hasEnoughData: selectors.hasEnoughData(state),
   isAuthBypassed: selectors.getIsAuthBypassed(state),
-  sellerDefaultCurrency: selectors.getSellerDefaultCurrency(state)
+  sellerDefaultCurrency: selectors.getSellerDefaultCurrency(state),
+  config: state.config,
 })
 
 export default connect(mapStateToProps)(withClient(Root))

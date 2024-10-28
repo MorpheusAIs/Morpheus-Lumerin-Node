@@ -17,6 +17,7 @@ export function startCore({ chain, core, config: coreConfig }, webContent) {
 
   events.push(
     'create-wallet',
+    'open-wallet',
     'transactions-scan-started',
     'transactions-scan-finished',
     'contracts-scan-started',
@@ -42,57 +43,9 @@ export function startCore({ chain, core, config: coreConfig }, webContent) {
     })
   )
 
-  function syncTransactions({ address }, page = 1, pageSize = 15) {
-    return storage
-      .getSyncBlock(chain)
-      .then(function (from) {
-        send('transactions-scan-started', {})
-
-        return api.explorer
-          .syncTransactions(
-            0,
-            address,
-            (number) => storage.setSyncBlock(number, chain),
-            page,
-            pageSize
-          )
-          .then(function () {
-            send('transactions-scan-finished', { success: true })
-
-            emitter.on('coin-block', function ({ number }) {
-              storage.setSyncBlock(number, chain).catch(function (err) {
-                logger.warn('Could not save new synced block', err)
-              })
-            })
-          })
-      })
-      .catch(function (err) {
-        logger.warn('Could not sync transactions/events', err.stack)
-        send('transactions-scan-finished', {
-          error: err.message,
-          success: false
-        })
-
-        emitter.once('coin-block', () => syncTransactions({ address }, page, pageSize))
-      })
-  }
-
-  emitter.on('open-wallet', syncTransactions)
-
   emitter.on('wallet-error', function (err) {
     logger.warn(err.inner ? `${err.message} - ${err.inner.message}` : err.message)
   })
-
-  const shouldRestartProxyRouterAfterWalletUpdate = () => {
-    const prevAppVersion = settings.getAppVersion()
-    const isAppVersionChanged = prevAppVersion !== app.getVersion()
-
-    if (isAppVersionChanged) {
-      settings.setAppVersion(app.getVersion())
-      return true
-    }
-    return false
-  }
 
   return {
     emitter,

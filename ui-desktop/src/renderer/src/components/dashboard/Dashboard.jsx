@@ -8,6 +8,7 @@ import BalanceBlock from './BalanceBlock'
 import TransactionModal from './tx-modal'
 import TxList from './tx-list/TxList'
 import { View } from '../common/View'
+import { toUSD } from '../../store/utils/syncAmounts';
 
 const Container = styled.div`
   background-color: ${(p) => p.theme.colors.light};
@@ -25,18 +26,102 @@ const Dashboard = ({
   hasTransactions,
   copyToClipboard,
   onWalletRefresh,
-  onInit
+  getBalances,
+  ethCoinPrice,
+  loadTransactions,
+  ...props
 }) => {
   const [activeModal, setActiveModal] = useState(null)
 
   const onCloseModal = () => setActiveModal(null)
   const onTabSwitch = (modal) => setActiveModal(modal)
 
-  const [balanceData, setBalanceData] = useState(null);
+  const [balanceData, setBalanceData] = useState({
+    eth: {
+      value: 0, rate: 0, usd: 0, symbol: "ETH"
+    },
+    mor: {
+      value: 0, rate: 0, usd: 0, symbol: "MOR"
+    }
+  });
+  const [transactions, setTransactions] = useState([]);
+  const [pagging, setPagging] = useState({ page: 1, pageSize: 15, hasNextPage: true })
+
+  const loadBalances = async () => {
+    const data = await getBalances();
+    const eth = data.balances.eth / 10 ** 18;
+    const mor = data.balances.mor / 10 ** 18;
+    const ethUsd = toUSD(eth, ethCoinPrice);
+    const morUsd = toUSD(mor, +data.rate);
+
+    const balances = {
+      eth: {
+        value: eth, rate: ethCoinPrice, usd: ethUsd, symbol: props.symbolEth
+      },
+      mor: {
+        value: mor, rate: +data.rate, usd: morUsd, symbol: props.symbol
+      }
+    }
+    setBalanceData(balances);
+  }
+
+  const getTransactions = async () => {
+    console.log("LOAD NEXT PAGE", pagging, transactions.length);
+    let pageTransactions = await loadTransactions(pagging.page, pagging.pageSize);
+    const hasNextPage = !!pageTransactions.length;
+    const trx = pageTransactions.filter(t => +t.value > 0).map(mapTransaction);
+    setPagging({ ...pagging, page: pagging.page + 1, hasNextPage });
+    setTransactions([...transactions, ...trx]);
+  }
+
+  const mapTransaction = (transaction) => {
+    function isSendTransaction(transaction, myAddress) {
+      return transaction.from.toLowerCase() === myAddress.toLowerCase();
+    }
+
+    function isReceiveTransaction(transaction, myAddress) {
+      return transaction.to.toLowerCase() === myAddress.toLowerCase();
+    }
+
+    function getTxType(transaction, myAddress) {
+      if (isSendTransaction(transaction, myAddress)) {
+        return 'sent';
+      }
+      if (isReceiveTransaction(transaction, myAddress)) {
+        return 'received';
+      }
+      return 'unknown';
+    }
+
+    const isMor = !!transaction.contractAddress;
+
+    return {
+      hash: transaction.hash,
+      from: transaction.from,
+      to: transaction.to,
+      txType: getTxType(transaction, address),
+      isMor: isMor,
+      symbol: isMor ? props.symbol : props.symbolEth,
+      value: transaction.value / 10 ** 18
+    }
+  }
 
   useEffect(() => {
-    onInit().then(setBalanceData);
-  }, [])
+    loadBalances();
+    getTransactions();
+
+    const interval = setInterval(() => {
+      console.log("Update balances...")
+      loadBalances()
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+
+  useEffect(() => {
+    loadBalances();
+  }, [ethCoinPrice]);
 
   return (
     <View data-testid="dashboard-container">
@@ -50,12 +135,16 @@ const Dashboard = ({
       />
 
       <TxList
-        hasTransactions={hasTransactions}
-        onWalletRefresh={onWalletRefresh}
+        {...pagging}
+        hasNextPage={pagging.hasNextPage}
+        loadNextTransactions={getTransactions}
+        hasTransactions={!!transactions.length}
         syncStatus={syncStatus}
+        transactions={transactions}
       />
 
       <TransactionModal
+        {...balanceData}
         onRequestClose={onCloseModal}
         onTabSwitch={onTabSwitch}
         activeTab={activeModal}

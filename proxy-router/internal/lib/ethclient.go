@@ -1,10 +1,28 @@
 package lib
 
 import (
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/lumerintoken"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/marketplace"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/modelregistry"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/morpheustoken"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/providerregistry"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/sessionrouter"
 	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 )
+
+type Meta interface {
+	GetAbi() (*abi.ABI, error)
+}
+
+var allContractsMeta = []Meta{
+	marketplace.MarketplaceMetaData,
+	modelregistry.ModelRegistryMetaData,
+	providerregistry.ProviderRegistryMetaData,
+	sessionrouter.SessionRouterMetaData,
+	morpheustoken.MorpheusTokenMetaData,
+	lumerintoken.LumerinTokenMetaData,
+}
 
 type EVMError struct {
 	Abi   abi.Error
@@ -21,8 +39,8 @@ func (e EVMError) Error() string {
 }
 
 // TryConvertGethError attempts to convert geth error to an EVMError, otherwise just returns original error
-func TryConvertGethError(err error, contractMeta *bind.MetaData) error {
-	evmErr, ok := ConvertGethError(err, contractMeta)
+func TryConvertGethError(err error) error {
+	evmErr, ok := ConvertGethError(err, allContractsMeta)
 	if !ok {
 		return err
 	}
@@ -30,13 +48,22 @@ func TryConvertGethError(err error, contractMeta *bind.MetaData) error {
 }
 
 // ConvertGethError converts a geth error to an EVMError with exposed error signature and arguments
-func ConvertGethError(err error, contractMeta *bind.MetaData) (*EVMError, bool) {
-	errData, ok := ExtractGETHErrorData(err)
+func ConvertGethError(gethErr error, contractMeta []Meta) (*EVMError, bool) {
+	errData, ok := ExtractGETHErrorData(gethErr)
 	if !ok {
 		return nil, false
 	}
 
-	abiError, args, ok := CastErrorData(errData, contractMeta)
+	abis := make([]*abi.ABI, len(contractMeta))
+	for i, meta := range contractMeta {
+		abi, err := meta.GetAbi()
+		if err != nil {
+			return nil, false
+		}
+		abis[i] = abi
+	}
+
+	abiError, args, ok := CastErrorData(errData, abis)
 	if !ok {
 		return nil, false
 	}
@@ -44,7 +71,7 @@ func ConvertGethError(err error, contractMeta *bind.MetaData) (*EVMError, bool) 
 	return &EVMError{
 		Abi:   abiError,
 		Args:  args,
-		Cause: err,
+		Cause: gethErr,
 	}, true
 }
 
@@ -66,8 +93,8 @@ func ExtractGETHErrorData(err error) ([]byte, bool) {
 }
 
 // CastErrorData casts the error data to the appropriate error type
-func CastErrorData(errData []byte, contractMetadata *bind.MetaData) (abi.Error, interface{}, bool) {
-	if abiData, err := contractMetadata.GetAbi(); err == nil {
+func CastErrorData(errData []byte, abis []*abi.ABI) (abi.Error, interface{}, bool) {
+	for _, abiData := range abis {
 		for _, abiError := range abiData.Errors {
 			args, err := abiError.Unpack(errData)
 			if err == nil {

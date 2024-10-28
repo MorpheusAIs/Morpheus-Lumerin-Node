@@ -1,6 +1,6 @@
 import BigNumber from 'bignumber.js';
 import PropTypes from 'prop-types';
-import { fromWei, toBN, toWei, toHex } from 'web3-utils';
+import { fromWei, toWei, toHex } from 'web3-utils';
 
 export const errorPropTypes = (...fields) => {
   const shape = fields.reduce((acc, fieldName) => {
@@ -65,7 +65,7 @@ export function toLMR(amount, rate, errorValue = 'Invalid amount', remaining) {
     : errorValue;
 
   const excedes = isValidAmount
-    ? toBN(expectedLMRamount).gte(toBN(remaining))
+    ? BigNumber(expectedLMRamount).gte(BigNumber(remaining))
     : null;
 
   const usedCoinAmount =

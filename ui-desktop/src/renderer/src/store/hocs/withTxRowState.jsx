@@ -27,8 +27,6 @@ const withTxRowState = WrappedComponent => {
     explorerUrl: selectors.getTransactionExplorerUrl(state, {
       hash: props.tx.hash
     }),
-    symbol: selectors.getCoinSymbol(state),
-    symbolEth: selectors.getSymbolEth(state),
     morAddress: state.config.chain.diamondAddress
   });
 

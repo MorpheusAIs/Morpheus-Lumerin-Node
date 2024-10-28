@@ -1,6 +1,6 @@
 import { sanitizeInput, sanitize } from './sanitizers';
 import BigNumber from 'bignumber.js';
-import web3Utils from 'web3-utils';
+import * as web3Utils from 'web3-utils';
 
 const ERROR_VALUE_PLACEHOLDER = 'Invalid amount';
 

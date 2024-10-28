@@ -16,11 +16,6 @@ export const getIsLocalProxyRouter = createSelector(
   proxyRouterData => proxyRouterData.isLocal
 );
 
-export const getProxyRouterUrl = createSelector(
-  getConfig,
-  configData => configData.chain.proxyRouterUrl
-);
-
 export const getLocalProxyRouterUrl = createSelector(
   getConfig,
   configData => configData.chain.localProxyRouterUrl

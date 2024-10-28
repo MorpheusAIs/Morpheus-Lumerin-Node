@@ -61,8 +61,12 @@ jobs:
           cd launcher
           make
           cd ../proxy-router
+          cp ./models-config.json.example ../ui-desktop/models-config.json
+          make build
+          cd ../cli
           make build
           cd ../ui-desktop
+          cp ./.env.example .env
           yarn build:linux
 
       - name: Determine tag name
@@ -75,14 +79,16 @@ jobs:
         id: pack_artifacts
         run: |
           ARTIFACT=mor-launch-${{ steps.tag.outputs.name }}-ubuntu-x64.zip
-          LLAMACPP=llama-b2699-bin-ubuntu-x64.zip
+          LLAMACPP=llama-b3256-bin-ubuntu-x64.zip
           MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
-          wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b2699/$LLAMACPP
+          wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
-          unzip -o -j $LLAMACPP build/bin/server
-          echo '{"run":["./server -m ./'$MODEL'","./proxy-router","./ui-desktop-1.0.0.AppImage"]}' > mor-launch.json
+          unzip -o -j $LLAMACPP build/bin/llama-server
+          echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./ui-desktop-1.0.0.AppImage"]}' > mor-launch.json
           cp ./proxy-router/.env.example .env
-          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch server ./proxy-router/bin/proxy-router .env $MODEL mor-launch.json ./ui-desktop/dist/ui-desktop-1.0.0.AppImage
+          cp ./proxy-router/models-config.json.example models-config.json
+          mv ./cli/mor-cli mor-cli
+          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/bin/proxy-router .env $MODEL mor-launch.json ./ui-desktop/dist/ui-desktop-1.0.0.AppImage models-config.json mor-cli
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -127,8 +133,12 @@ jobs:
           cd launcher
           make
           cd ../proxy-router
+          cp ./models-config.json.example ../ui-desktop/models-config.json
+          make build
+          cd ../cli
           make build
           cd ../ui-desktop
+          cp ./.env.example .env
           yarn build:mac
 
       - name: Determine tag name
@@ -141,15 +151,17 @@ jobs:
         id: pack_artifacts
         run: |
           ARTIFACT=mor-launch-${{ steps.tag.outputs.name }}-macos-x64.zip
-          LLAMACPP=llama-b2699-bin-macos-x64.zip
+          LLAMACPP=llama-b3256-bin-macos-x64.zip
           MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
-          wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b2699/$LLAMACPP
+          wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
-          unzip -o -j $LLAMACPP build/bin/server
-          echo '{"run":["./server -m ./'$MODEL'","./proxy-router","./ui-desktop.app/Contents/MacOS/ui-desktop"]}' > mor-launch.json
+          unzip -o -j $LLAMACPP build/bin/llama-server
+          echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./ui-desktop.app/Contents/MacOS/ui-desktop"]}' > mor-launch.json
           cp ./proxy-router/.env.example .env
+          cp ./proxy-router/models-config.json.example models-config.json
+          mv ./cli/mor-cli mor-cli
           unzip ./ui-desktop/dist/ui-desktop-1.0.0-mac.zip
-          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env server $MODEL mor-launch.json
+          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json models-config.json mor-cli
           zip -r $ARTIFACT ui-desktop.app
 
       - name: Upload artifacts
@@ -195,8 +207,12 @@ jobs:
           cd launcher
           make
           cd ../proxy-router
+          cp ./models-config.json.example ../ui-desktop/models-config.json
+          make build
+          cd ../cli
           make build
           cd ../ui-desktop
+          cp ./.env.example .env
           yarn build:mac
 
       - name: Determine tag name
@@ -209,15 +225,17 @@ jobs:
         id: pack_artifacts
         run: |
           ARTIFACT=mor-launch-${{ steps.tag.outputs.name }}-macos-arm64.zip
-          LLAMACPP=llama-b2699-bin-macos-arm64.zip
+          LLAMACPP=llama-b3256-bin-macos-arm64.zip
           MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
-          wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b2699/$LLAMACPP
+          wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
-          unzip -o -j $LLAMACPP build/bin/server
-          echo '{"run":["./server -m ./'$MODEL'","./proxy-router","./ui-desktop.app/Contents/MacOS/ui-desktop"]}' > mor-launch.json
+          unzip -o -j $LLAMACPP build/bin/llama-server
+          echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./ui-desktop.app/Contents/MacOS/ui-desktop"]}' > mor-launch.json
           cp ./proxy-router/.env.example .env
+          cp ./proxy-router/models-config.json.example models-config.json
+          mv ./cli/mor-cli mor-cli
           unzip ./ui-desktop/dist/ui-desktop-1.0.0-arm64-mac.zip
-          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env server $MODEL mor-launch.json
+          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json models-config.json mor-cli
           zip -r $ARTIFACT ui-desktop.app
 
       - name: Upload artifacts
@@ -267,8 +285,12 @@ jobs:
           cd launcher
           make
           cd ../proxy-router
+          cp ./models-config.json.example ../ui-desktop/models-config.json
+          make build
+          cd ../cli
           make build
           cd ../ui-desktop
+          cp ./.env.example .env
           yarn build:win
 
       - name: Determine tag name
@@ -281,17 +303,19 @@ jobs:
         id: pack_artifacts
         run: |
           ARTIFACT=mor-launch-${{ steps.tag.outputs.name }}-win-x64.zip
-          LLAMACPP=llama-b2699-bin-win-avx2-x64.zip
+          LLAMACPP=llama-b3256-bin-win-avx2-x64.zip
           MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
-          wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b2699/$LLAMACPP
+          wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
-          unzip -o -j $LLAMACPP server.exe llama.dll
-          echo '{"run":["./server.exe -m ./'$MODEL'","./proxy-router.exe","./ui-desktop-1.0.0.exe"]}' > mor-launch.json
-          cp ./proxy-router/.env.example .env
+          unzip -o -j $LLAMACPP llama-server.exe llama.dll ggml.dll
+          echo '{"run":["./llama-server.exe -m ./'$MODEL'","./proxy-router.exe","./ui-desktop-1.0.0.exe"]}' > mor-launch.json
+          cp ./proxy-router/.env.example.win .env
+          cp ./proxy-router/models-config.json.example models-config.json
           mv ./proxy-router/bin/proxy-router proxy-router.exe
+          mv ./cli/mor-cli mor-cli.exe
           mv ./launcher/mor-launch mor-launch.exe
           mv "./ui-desktop/dist/ui-desktop 1.0.0.exe" ui-desktop-1.0.0.exe
-          7z a $ARTIFACT LICENSE mor-launch.exe proxy-router.exe .env server.exe llama.dll $MODEL mor-launch.json ui-desktop-1.0.0.exe
+          7z a $ARTIFACT LICENSE mor-launch.exe proxy-router.exe .env llama-server.exe llama.dll ggml.dll $MODEL mor-launch.json ui-desktop-1.0.0.exe models-config.json mor-cli.exe
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

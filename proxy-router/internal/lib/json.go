@@ -1,6 +1,11 @@
 package lib
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+)
 
 // NormalizeJson returns normalized json message, without spaces and newlines
 func NormalizeJson(msg []byte) ([]byte, error) {
@@ -19,4 +24,27 @@ func MustUnmarshallString(value json.RawMessage) string {
 		panic(err)
 	}
 	return res
+}
+
+func ReadJSONFile(filePath string) (string, error) {
+	// Open the file
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", fmt.Errorf("error opening file: %v", err)
+	}
+	defer file.Close()
+
+	// Read the file contents
+	fileContents, err := io.ReadAll(file)
+	if err != nil {
+		return "", fmt.Errorf("error reading file: %v", err)
+	}
+
+	// Validate if the content is valid JSON
+	var js json.RawMessage
+	if err := json.Unmarshal(fileContents, &js); err != nil {
+		return "", fmt.Errorf("invalid JSON: %v", err)
+	}
+
+	return string(fileContents), nil
 }

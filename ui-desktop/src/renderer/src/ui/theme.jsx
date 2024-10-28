@@ -27,6 +27,7 @@ export default {
     darkDanger: 'rgba(212, 96, 69, 0.12)',
     weak: '#888',
     morMain: '#20dc8e',
+    morLight: '#173629',
     // BACKGROUNDS
     medium: '#f4f4f4',
     lightBlue: '#EAF7FC',

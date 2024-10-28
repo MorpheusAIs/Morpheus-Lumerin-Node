@@ -2,11 +2,10 @@ package registries
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/providerregistry"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -18,44 +17,100 @@ type ProviderRegistry struct {
 
 	// state
 	nonce uint64
-	mutex lib.Mutex
-	prABI *abi.ABI
 
 	// deps
 	providerRegistry *providerregistry.ProviderRegistry
 	client           *ethclient.Client
-	log              interfaces.ILogger
+	log              lib.ILogger
 }
 
-func NewProviderRegistry(providerRegistryAddr common.Address, client *ethclient.Client, log interfaces.ILogger) *ProviderRegistry {
+func NewProviderRegistry(providerRegistryAddr common.Address, client *ethclient.Client, log lib.ILogger) *ProviderRegistry {
 	pr, err := providerregistry.NewProviderRegistry(providerRegistryAddr, client)
 	if err != nil {
 		panic("invalid provider registry ABI")
-	}
-	prABI, err := providerregistry.ProviderRegistryMetaData.GetAbi()
-	if err != nil {
-		panic("invalid provider registry ABI: " + err.Error())
 	}
 	return &ProviderRegistry{
 		providerRegistry:     pr,
 		providerRegistryAddr: providerRegistryAddr,
 		client:               client,
-		prABI:                prABI,
-		mutex:                lib.NewMutex(),
 		log:                  log,
 	}
 }
 
-func (g *ProviderRegistry) GetAllProviders(ctx context.Context) ([]string, []providerregistry.Provider, error) {
+func (g *ProviderRegistry) GetAllProviders(ctx context.Context) ([]common.Address, []providerregistry.Provider, error) {
 	providerAddrs, providers, err := g.providerRegistry.ProviderGetAll(&bind.CallOpts{Context: ctx})
 	if err != nil {
 		return nil, nil, err
 	}
 
-	addresses := make([]string, len(providerAddrs))
+	addresses := make([]common.Address, len(providerAddrs))
 	for i, address := range providerAddrs {
-		addresses[i] = address.Hex()
+		addresses[i] = address
 	}
 
 	return addresses, providers, nil
+}
+
+func (g *ProviderRegistry) CreateNewProvider(opts *bind.TransactOpts, address common.Address, addStake *lib.BigInt, endpoint string) error {
+	providerTx, err := g.providerRegistry.ProviderRegister(opts, address, &addStake.Int, endpoint)
+
+	if err != nil {
+		return lib.TryConvertGethError(err)
+	}
+
+	// Wait for the transaction receipt
+	receipt, err := bind.WaitMined(opts.Context, g.client, providerTx)
+	if err != nil {
+		return lib.TryConvertGethError(err)
+	}
+
+	// Find the event log
+	for _, log := range receipt.Logs {
+		// Check if the log belongs to the OpenSession event
+		_, err := g.providerRegistry.ParseProviderRegisteredUpdated(*log)
+
+		if err != nil {
+			continue // not our event, skip it
+		}
+
+		return nil
+	}
+
+	return fmt.Errorf("OpenSession event not found in transaction logs")
+}
+
+func (g *ProviderRegistry) DeregisterProvider(opts *bind.TransactOpts, address common.Address) (common.Hash, error) {
+	providerTx, err := g.providerRegistry.ProviderDeregister(opts, address)
+
+	if err != nil {
+		return common.Hash{}, lib.TryConvertGethError(err)
+	}
+
+	// Wait for the transaction receipt
+	receipt, err := bind.WaitMined(opts.Context, g.client, providerTx)
+	if err != nil {
+		return common.Hash{}, lib.TryConvertGethError(err)
+	}
+
+	// Find the event log
+	for _, log := range receipt.Logs {
+		_, err := g.providerRegistry.ParseProviderDeregistered(*log)
+
+		if err != nil {
+			continue // not our event, skip it
+		}
+
+		return providerTx.Hash(), nil
+	}
+
+	return common.Hash{}, fmt.Errorf("ProviderDeregistered event not found in transaction logs")
+}
+
+func (g *ProviderRegistry) GetProviderById(ctx context.Context, id common.Address) (*providerregistry.Provider, error) {
+	provider, err := g.providerRegistry.ProviderMap(&bind.CallOpts{Context: ctx}, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return &provider, nil
 }

@@ -1,6 +1,5 @@
 import * as utils from '../../store/utils';
 import PropTypes from 'prop-types';
-import React from 'react';
 
 import { TextInput, AltLayout, Btn, Sp } from '../common';
 import SecondaryBtn from './SecondaryBtn';
