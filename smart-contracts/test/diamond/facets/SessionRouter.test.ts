@@ -728,6 +728,94 @@ describe('SessionRouter', () => {
       const contractBalAfter = await token.balanceOf(sessionRouter);
       expect(contractBalBefore - contractBalAfter).to.eq(stakesOnHold[0]);
     });
+    it('should withdraw the user stake on hold, few entities, with on hold, partial withdraw', async () => {
+      const openedAt = payoutStart + (payoutStart % DAY) + 10 * DAY - 201;
+
+      // Open and close session #1
+      await setTime(openedAt + 1 * DAY);
+      const { msg: msg1, signature: sig1 } = await getProviderApproval(PROVIDER, SECOND, bidId);
+      await sessionRouter.connect(SECOND).openSession(wei(50), false, msg1, sig1);
+      const sessionId1 = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 0);
+
+      await setTime(openedAt + 1 * DAY + 500);
+      const { msg: receiptMsg1, signature: receiptSig1 } = await getReceipt(PROVIDER, sessionId1, 0, 0);
+      await sessionRouter.connect(SECOND).closeSession(receiptMsg1, receiptSig1);
+
+      let stakesOnHold = await sessionRouter.getUserStakesOnHold(SECOND, 10);
+      const onHoldAfterSession1 = stakesOnHold[1];
+
+      // Open and close session #2
+      await setTime(openedAt + 3 * DAY);
+      const { msg: msg2, signature: sig2 } = await getProviderApproval(PROVIDER, SECOND, bidId);
+      await sessionRouter.connect(SECOND).openSession(wei(50), false, msg2, sig2);
+      const sessionId2 = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 1);
+
+      await setTime(openedAt + 3 * DAY + 500);
+      const { msg: receiptMsg2, signature: receiptSig2 } = await getReceipt(PROVIDER, sessionId2, 0, 0);
+      await sessionRouter.connect(SECOND).closeSession(receiptMsg2, receiptSig2);
+
+      stakesOnHold = await sessionRouter.getUserStakesOnHold(SECOND, 10);
+      const onHoldAfterSession2 = stakesOnHold[1];
+
+      // Open and close session #3
+      await setTime(openedAt + 5 * DAY);
+      const { msg: msg3, signature: sig3 } = await getProviderApproval(PROVIDER, SECOND, bidId);
+      await sessionRouter.connect(SECOND).openSession(wei(50), false, msg3, sig3);
+      const sessionId3 = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 2);
+
+      await setTime(openedAt + 5 * DAY + 500);
+      const { msg: receiptMsg3, signature: receiptSig3 } = await getReceipt(PROVIDER, sessionId3, 0, 0);
+      await sessionRouter.connect(SECOND).closeSession(receiptMsg3, receiptSig3);
+
+      stakesOnHold = await sessionRouter.getUserStakesOnHold(SECOND, 10);
+      const onHoldAfterSession3 = stakesOnHold[1];
+
+      // First withdraw
+      await setTime(openedAt + 99 * DAY);
+      stakesOnHold = await sessionRouter.getUserStakesOnHold(SECOND, 10);
+      expect(stakesOnHold[0]).to.greaterThan(0);
+      expect(stakesOnHold[1]).to.eq(0);
+
+      let userBalBefore = await token.balanceOf(SECOND);
+      let contractBalBefore = await token.balanceOf(sessionRouter);
+
+      await sessionRouter.connect(SECOND).withdrawUserStakes(1);
+
+      let userBalAfter = await token.balanceOf(SECOND);
+      expect(userBalAfter - userBalBefore).to.eq(onHoldAfterSession3);
+      let contractBalAfter = await token.balanceOf(sessionRouter);
+      expect(contractBalBefore - contractBalAfter).to.eq(onHoldAfterSession3);
+
+      // Second withdraw
+      stakesOnHold = await sessionRouter.getUserStakesOnHold(SECOND, 1);
+      expect(stakesOnHold[0]).to.greaterThan(0);
+      expect(stakesOnHold[1]).to.eq(0);
+
+      userBalBefore = await token.balanceOf(SECOND);
+      contractBalBefore = await token.balanceOf(sessionRouter);
+
+      await sessionRouter.connect(SECOND).withdrawUserStakes(1);
+
+      userBalAfter = await token.balanceOf(SECOND);
+      expect(userBalAfter - userBalBefore).to.eq(onHoldAfterSession2);
+      contractBalAfter = await token.balanceOf(sessionRouter);
+      expect(contractBalBefore - contractBalAfter).to.eq(onHoldAfterSession2);
+
+      // Third withdraw
+      stakesOnHold = await sessionRouter.getUserStakesOnHold(SECOND, 1);
+      expect(stakesOnHold[0]).to.greaterThan(0);
+      expect(stakesOnHold[1]).to.eq(0);
+
+      userBalBefore = await token.balanceOf(SECOND);
+      contractBalBefore = await token.balanceOf(sessionRouter);
+
+      await sessionRouter.connect(SECOND).withdrawUserStakes(1);
+
+      userBalAfter = await token.balanceOf(SECOND);
+      expect(userBalAfter - userBalBefore).to.eq(onHoldAfterSession1);
+      contractBalAfter = await token.balanceOf(sessionRouter);
+      expect(contractBalBefore - contractBalAfter).to.eq(onHoldAfterSession1);
+    });
     it('should withdraw the user stake on hold, few entities, without on hold', async () => {
       const openedAt = payoutStart + (payoutStart % DAY) + 10 * DAY - 201;
 
@@ -764,58 +852,6 @@ describe('SessionRouter', () => {
       const contractBalAfter = await token.balanceOf(sessionRouter);
       expect(contractBalBefore - contractBalAfter).to.eq(stakesOnHold[0]);
     });
-    it('should withdraw the user stake on hold, few entities, without on hold, partial withdraw', async () => {
-      const openedAt = payoutStart + (payoutStart % DAY) + 10 * DAY - 201;
-
-      await setTime(openedAt + 1 * DAY);
-      const { msg: msg1, signature: sig1 } = await getProviderApproval(PROVIDER, SECOND, bidId);
-      await sessionRouter.connect(SECOND).openSession(wei(50), false, msg1, sig1);
-      const sessionId1 = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 0);
-
-      await setTime(openedAt + 1 * DAY + 500);
-      const { msg: receiptMsg1, signature: receiptSig1 } = await getReceipt(PROVIDER, sessionId1, 0, 0);
-      await sessionRouter.connect(SECOND).closeSession(receiptMsg1, receiptSig1);
-
-      await setTime(openedAt + 3 * DAY);
-      const { msg: msg2, signature: sig2 } = await getProviderApproval(PROVIDER, SECOND, bidId);
-      await sessionRouter.connect(SECOND).openSession(wei(50), false, msg2, sig2);
-      const sessionId2 = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 1);
-
-      await setTime(openedAt + 3 * DAY + 500);
-      const { msg: receiptMsg2, signature: receiptSig2 } = await getReceipt(PROVIDER, sessionId2, 0, 0);
-      await sessionRouter.connect(SECOND).closeSession(receiptMsg2, receiptSig2);
-
-      await setTime(openedAt + 10 * DAY);
-      // First withdraw
-      let stakesOnHold = await sessionRouter.getUserStakesOnHold(SECOND, 1);
-      expect(stakesOnHold[0]).to.greaterThan(0);
-      expect(stakesOnHold[1]).to.eq(0);
-
-      let userBalBefore = await token.balanceOf(SECOND);
-      let contractBalBefore = await token.balanceOf(sessionRouter);
-
-      await sessionRouter.connect(SECOND).withdrawUserStakes(1);
-
-      let userBalAfter = await token.balanceOf(SECOND);
-      expect(userBalAfter - userBalBefore).to.lessThan(stakesOnHold[0]);
-      let contractBalAfter = await token.balanceOf(sessionRouter);
-      expect(contractBalBefore - contractBalAfter).to.lessThan(stakesOnHold[0]);
-
-      // Second withdraw
-      stakesOnHold = await sessionRouter.getUserStakesOnHold(SECOND, 1);
-      expect(stakesOnHold[0]).to.greaterThan(0);
-      expect(stakesOnHold[1]).to.eq(0);
-
-      userBalBefore = await token.balanceOf(SECOND);
-      contractBalBefore = await token.balanceOf(sessionRouter);
-
-      await sessionRouter.connect(SECOND).withdrawUserStakes(1);
-
-      userBalAfter = await token.balanceOf(SECOND);
-      expect(userBalAfter - userBalBefore).to.eq(stakesOnHold[0]);
-      contractBalAfter = await token.balanceOf(sessionRouter);
-      expect(contractBalBefore - contractBalAfter).to.eq(stakesOnHold[0]);
-    });
     it('should throw error when withdraw amount is zero', async () => {
       const openedAt = payoutStart + (payoutStart % DAY) + 10 * DAY - 201;
 
@@ -846,6 +882,12 @@ describe('SessionRouter', () => {
         sessionRouter,
         'SessionUserAmountToWithdrawIsZero',
       );
+    });
+  });
+
+  describe('#stipendToStake', () => {
+    it('should return zero if compute balance is zero', async () => {
+      expect(await sessionRouter.connect(SECOND).stipendToStake(0, 0)).to.eq(0);
     });
   });
 

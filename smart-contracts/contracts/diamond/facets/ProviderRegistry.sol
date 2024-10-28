@@ -18,20 +18,20 @@ contract ProviderRegistry is IProviderRegistry, OwnableDiamondStorage, ProviderS
     function __ProviderRegistry_init() external initializer(PROVIDERS_STORAGE_SLOT) {}
 
     function providerSetMinStake(uint256 providerMinimumStake_) external onlyOwner {
-        PovidersStorage storage providersStorage = getProvidersStorage();
+        PovidersStorage storage providersStorage = _getProvidersStorage();
         providersStorage.providerMinimumStake = providerMinimumStake_;
 
         emit ProviderMinimumStakeUpdated(providerMinimumStake_);
     }
 
     function providerRegister(uint256 amount_, string calldata endpoint_) external {
-        BidsStorage storage bidsStorage = getBidsStorage();
+        BidsStorage storage bidsStorage = _getBidsStorage();
 
         if (amount_ > 0) {
             IERC20(bidsStorage.token).safeTransferFrom(_msgSender(), address(this), amount_);
         }
 
-        PovidersStorage storage providersStorage = getProvidersStorage();
+        PovidersStorage storage providersStorage = _getProvidersStorage();
         Provider storage provider = providersStorage.providers[_msgSender()];
 
         uint256 newStake_ = provider.stake + amount_;
@@ -41,7 +41,6 @@ contract ProviderRegistry is IProviderRegistry, OwnableDiamondStorage, ProviderS
         }
 
         if (provider.createdAt == 0) {
-            provider.endpoint = endpoint_;
             provider.createdAt = uint128(block.timestamp);
             provider.limitPeriodEnd = uint128(block.timestamp) + PROVIDER_REWARD_LIMITER_PERIOD;
         } else if (provider.isDeleted) {
@@ -57,13 +56,15 @@ contract ProviderRegistry is IProviderRegistry, OwnableDiamondStorage, ProviderS
     }
 
     function providerDeregister() external {
-        PovidersStorage storage providersStorage = getProvidersStorage();
-        Provider storage provider = providersStorage.providers[_msgSender()];
+        address provider_ = _msgSender();
+
+        PovidersStorage storage providersStorage = _getProvidersStorage();
+        Provider storage provider = providersStorage.providers[provider_];
 
         if (provider.createdAt == 0) {
             revert ProviderNotFound();
         }
-        if (!isProviderActiveBidsEmpty(_msgSender())) {
+        if (!_isProviderActiveBidsEmpty(provider_)) {
             revert ProviderHasActiveBids();
         }
         if (provider.isDeleted) {
@@ -75,14 +76,14 @@ contract ProviderRegistry is IProviderRegistry, OwnableDiamondStorage, ProviderS
         provider.stake -= withdrawAmount_;
         provider.isDeleted = true;
 
-        providersStorage.activeProviders.remove(_msgSender());
+        providersStorage.activeProviders.remove(provider_);
 
         if (withdrawAmount_ > 0) {
-            BidsStorage storage bidsStorage = getBidsStorage();
-            IERC20(bidsStorage.token).safeTransfer(_msgSender(), withdrawAmount_);
+            BidsStorage storage bidsStorage = _getBidsStorage();
+            IERC20(bidsStorage.token).safeTransfer(provider_, withdrawAmount_);
         }
 
-        emit ProviderDeregistered(_msgSender());
+        emit ProviderDeregistered(provider_);
     }
 
     // /**

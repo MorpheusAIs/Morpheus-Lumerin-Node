@@ -15,19 +15,19 @@ contract MarketplaceStorage is IMarketplaceStorage {
 
     /** PUBLIC, GETTERS */
     function getBidFee() external view returns (uint256) {
-        return getMarketStorage().bidFee;
+        return _getMarketStorage().bidFee;
     }
 
     function getFeeBalance() external view returns (uint256) {
-        return getMarketStorage().feeBalance;
+        return _getMarketStorage().feeBalance;
     }
 
     function getMinMaxBidPricePerSecond() external view returns (uint256, uint256) {
-        return (getMarketStorage().bidMinPricePerSecond, getMarketStorage().bidMaxPricePerSecond);
+        return (_getMarketStorage().bidMinPricePerSecond, _getMarketStorage().bidMaxPricePerSecond);
     }
 
     /** INTERNAL */
-    function getMarketStorage() internal pure returns (MarketStorage storage ds) {
+    function _getMarketStorage() internal pure returns (MarketStorage storage ds) {
         bytes32 slot_ = MARKET_STORAGE_SLOT;
 
         assembly {

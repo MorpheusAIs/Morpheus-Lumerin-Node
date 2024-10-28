@@ -223,6 +223,12 @@ describe('Marketplace', () => {
         'MarketplaceModelNotFound',
       );
     });
+    it('should throw error when the bid price is invalid', async () => {
+      await expect(marketplace.connect(SECOND).postModelBid(modelId1, wei(99999))).to.be.revertedWithCustomError(
+        marketplace,
+        'MarketplaceBidPricePerSecondInvalid',
+      );
+    });
   });
 
   describe('#deleteModelBid', async () => {
@@ -267,7 +273,7 @@ describe('Marketplace', () => {
       await marketplace.connect(SECOND).postModelBid(modelId1, wei(10));
       expect(await marketplace.getFeeBalance()).to.eq(wei(1));
 
-      await marketplace.withdraw(PROVIDER, wei(999));
+      await marketplace.withdrawFee(PROVIDER, wei(999));
 
       expect(await marketplace.getFeeBalance()).to.eq(wei(0));
       expect(await token.balanceOf(marketplace)).to.eq(wei(300));
@@ -277,16 +283,22 @@ describe('Marketplace', () => {
       await marketplace.connect(SECOND).postModelBid(modelId1, wei(10));
       expect(await marketplace.getFeeBalance()).to.eq(wei(1));
 
-      await marketplace.withdraw(PROVIDER, wei(0.1));
+      await marketplace.withdrawFee(PROVIDER, wei(0.1));
 
       expect(await marketplace.getFeeBalance()).to.eq(wei(0.9));
       expect(await token.balanceOf(marketplace)).to.eq(wei(300.9));
       expect(await token.balanceOf(PROVIDER)).to.eq(wei(0.1));
     });
     it('should throw error when caller is not an owner', async () => {
-      await expect(marketplace.connect(SECOND).withdraw(PROVIDER, wei(1))).to.be.revertedWithCustomError(
+      await expect(marketplace.connect(SECOND).withdrawFee(PROVIDER, wei(1))).to.be.revertedWithCustomError(
         diamond,
         'OwnableUnauthorizedAccount',
+      );
+    });
+    it('should throw error when withdraw amount is zero', async () => {
+      await expect(marketplace.withdrawFee(PROVIDER, wei(1))).to.be.revertedWithCustomError(
+        marketplace,
+        'MarketplaceFeeAmountIsZero',
       );
     });
   });

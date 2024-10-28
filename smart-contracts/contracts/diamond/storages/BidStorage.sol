@@ -25,7 +25,7 @@ contract BidStorage is IBidStorage {
 
     /** PUBLIC, GETTERS */
     function getBid(bytes32 bidId_) external view returns (Bid memory) {
-        return getBidsStorage().bids[bidId_];
+        return _getBidsStorage().bids[bidId_];
     }
 
     function getProviderActiveBids(
@@ -33,7 +33,7 @@ contract BidStorage is IBidStorage {
         uint256 offset_,
         uint256 limit_
     ) external view returns (bytes32[] memory) {
-        return getBidsStorage().providerActiveBids[provider_].part(offset_, limit_);
+        return _getBidsStorage().providerActiveBids[provider_].part(offset_, limit_);
     }
 
     function getModelActiveBids(
@@ -41,7 +41,7 @@ contract BidStorage is IBidStorage {
         uint256 offset_,
         uint256 limit_
     ) external view returns (bytes32[] memory) {
-        return getBidsStorage().modelActiveBids[modelId_].part(offset_, limit_);
+        return _getBidsStorage().modelActiveBids[modelId_].part(offset_, limit_);
     }
 
     function getProviderBids(
@@ -49,33 +49,33 @@ contract BidStorage is IBidStorage {
         uint256 offset_,
         uint256 limit_
     ) external view returns (bytes32[] memory) {
-        return getBidsStorage().providerBids[provider_].part(offset_, limit_);
+        return _getBidsStorage().providerBids[provider_].part(offset_, limit_);
     }
 
     function getModelBids(bytes32 modelId_, uint256 offset_, uint256 limit_) external view returns (bytes32[] memory) {
-        return getBidsStorage().modelBids[modelId_].part(offset_, limit_);
+        return _getBidsStorage().modelBids[modelId_].part(offset_, limit_);
     }
 
     function getToken() external view returns (address) {
-        return getBidsStorage().token;
+        return _getBidsStorage().token;
     }
 
     function isBidActive(bytes32 bidId_) public view returns (bool) {
-        Bid storage bid = getBidsStorage().bids[bidId_];
+        Bid storage bid = _getBidsStorage().bids[bidId_];
 
         return bid.createdAt != 0 && bid.deletedAt == 0;
     }
 
     /** INTERNAL */
-    function isModelActiveBidsEmpty(bytes32 modelId) internal view returns (bool) {
-        return getBidsStorage().modelActiveBids[modelId].length() == 0;
+    function _isModelActiveBidsEmpty(bytes32 modelId) internal view returns (bool) {
+        return _getBidsStorage().modelActiveBids[modelId].length() == 0;
     }
 
-    function isProviderActiveBidsEmpty(address provider) internal view returns (bool) {
-        return getBidsStorage().providerActiveBids[provider].length() == 0;
+    function _isProviderActiveBidsEmpty(address provider) internal view returns (bool) {
+        return _getBidsStorage().providerActiveBids[provider].length() == 0;
     }
 
-    function getBidsStorage() internal pure returns (BidsStorage storage ds) {
+    function _getBidsStorage() internal pure returns (BidsStorage storage ds) {
         bytes32 slot_ = BIDS_STORAGE_SLOT;
 
         assembly {

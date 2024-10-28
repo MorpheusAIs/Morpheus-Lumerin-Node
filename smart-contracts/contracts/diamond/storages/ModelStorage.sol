@@ -22,27 +22,27 @@ contract ModelStorage is IModelStorage {
 
     /** PUBLIC, GETTERS */
     function getModel(bytes32 modelId_) external view returns (Model memory) {
-        return getModelsStorage().models[modelId_];
+        return _getModelsStorage().models[modelId_];
     }
 
     function getModelIds(uint256 offset_, uint256 limit_) external view returns (bytes32[] memory) {
-        return getModelsStorage().modelIds.part(offset_, limit_);
+        return _getModelsStorage().modelIds.part(offset_, limit_);
     }
 
     function getModelMinimumStake() external view returns (uint256) {
-        return getModelsStorage().modelMinimumStake;
+        return _getModelsStorage().modelMinimumStake;
     }
 
     function getActiveModelIds(uint256 offset_, uint256 limit_) external view returns (bytes32[] memory) {
-        return getModelsStorage().activeModels.part(offset_, limit_);
+        return _getModelsStorage().activeModels.part(offset_, limit_);
     }
 
     function getIsModelActive(bytes32 modelId_) public view returns (bool) {
-        return !getModelsStorage().models[modelId_].isDeleted;
+        return !_getModelsStorage().models[modelId_].isDeleted;
     }
 
     /** INTERNAL */
-    function getModelsStorage() internal pure returns (ModelsStorage storage ds) {
+    function _getModelsStorage() internal pure returns (ModelsStorage storage ds) {
         bytes32 slot_ = MODELS_STORAGE_SLOT;
 
         assembly {

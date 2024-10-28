@@ -24,11 +24,11 @@ contract StatsStorage is IStatsStorage {
     }
 
     /** INTERNAL, GETTERS */
-    function modelStats(bytes32 modelId) internal view returns (ModelStats storage) {
+    function _modelStats(bytes32 modelId) internal view returns (ModelStats storage) {
         return _getStatsStorage().modelStats[modelId];
     }
 
-    function providerModelStats(bytes32 modelId, address provider) internal view returns (ProviderModelStats storage) {
+    function _providerModelStats(bytes32 modelId, address provider) internal view returns (ProviderModelStats storage) {
         return _getStatsStorage().providerModelStats[modelId][provider];
     }
 

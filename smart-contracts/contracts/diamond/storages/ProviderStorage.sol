@@ -24,23 +24,23 @@ contract ProviderStorage is IProviderStorage {
 
     /** PUBLIC, GETTERS */
     function getProvider(address provider_) external view returns (Provider memory) {
-        return getProvidersStorage().providers[provider_];
+        return _getProvidersStorage().providers[provider_];
     }
 
     function getProviderMinimumStake() external view returns (uint256) {
-        return getProvidersStorage().providerMinimumStake;
+        return _getProvidersStorage().providerMinimumStake;
     }
 
     function getActiveProviders(uint256 offset_, uint256 limit_) external view returns (address[] memory) {
-        return getProvidersStorage().activeProviders.part(offset_, limit_);
+        return _getProvidersStorage().activeProviders.part(offset_, limit_);
     }
 
     function getIsProviderActive(address provider_) public view returns (bool) {
-        return !getProvidersStorage().providers[provider_].isDeleted;
+        return !_getProvidersStorage().providers[provider_].isDeleted;
     }
 
     /** INTERNAL */
-    function getProvidersStorage() internal pure returns (PovidersStorage storage ds) {
+    function _getProvidersStorage() internal pure returns (PovidersStorage storage ds) {
         bytes32 slot_ = PROVIDERS_STORAGE_SLOT;
 
         assembly {

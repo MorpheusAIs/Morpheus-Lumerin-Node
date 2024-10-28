@@ -18,7 +18,7 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
     function __ModelRegistry_init() external initializer(MODELS_STORAGE_SLOT) {}
 
     function modelSetMinStake(uint256 modelMinimumStake_) external onlyOwner {
-        ModelsStorage storage modelsStorage = getModelsStorage();
+        ModelsStorage storage modelsStorage = _getModelsStorage();
         modelsStorage.modelMinimumStake = modelMinimumStake_;
 
         emit ModelMinimumStakeUpdated(modelMinimumStake_);
@@ -32,7 +32,7 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
         string calldata name_,
         string[] memory tags_
     ) external {
-        ModelsStorage storage modelsStorage = getModelsStorage();
+        ModelsStorage storage modelsStorage = _getModelsStorage();
         Model storage model = modelsStorage.models[modelId_];
 
         uint256 newStake_ = model.stake + amount_;
@@ -42,7 +42,7 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
         }
 
         if (amount_ > 0) {
-            BidsStorage storage bidsStorage = getBidsStorage();
+            BidsStorage storage bidsStorage = _getBidsStorage();
             IERC20(bidsStorage.token).safeTransferFrom(_msgSender(), address(this), amount_);
         }
 
@@ -68,11 +68,11 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
     }
 
     function modelDeregister(bytes32 modelId_) external {
-        ModelsStorage storage modelsStorage = getModelsStorage();
+        ModelsStorage storage modelsStorage = _getModelsStorage();
         Model storage model = modelsStorage.models[modelId_];
 
         _onlyAccount(model.owner);
-        if (!isModelActiveBidsEmpty(modelId_)) {
+        if (!_isModelActiveBidsEmpty(modelId_)) {
             revert ModelHasActiveBids();
         }
         if (model.isDeleted) {
@@ -86,7 +86,7 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
 
         modelsStorage.activeModels.remove(modelId_);
 
-        BidsStorage storage bidsStorage = getBidsStorage();
+        BidsStorage storage bidsStorage = _getBidsStorage();
         IERC20(bidsStorage.token).safeTransfer(model.owner, withdrawAmount_);
 
         emit ModelDeregistered(model.owner, modelId_);

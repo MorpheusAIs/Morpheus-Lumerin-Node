@@ -37,11 +37,11 @@ contract SessionStorage is ISessionStorage {
 
     /** PUBLIC, GETTERS */
     function getSession(bytes32 sessionId_) external view returns (Session memory) {
-        return getSessionsStorage().sessions[sessionId_];
+        return _getSessionsStorage().sessions[sessionId_];
     }
 
     function getUserSessions(address user_, uint256 offset_, uint256 limit_) external view returns (bytes32[] memory) {
-        return getSessionsStorage().userSessions[user_].part(offset_, limit_);
+        return _getSessionsStorage().userSessions[user_].part(offset_, limit_);
     }
 
     function getProviderSessions(
@@ -49,7 +49,7 @@ contract SessionStorage is ISessionStorage {
         uint256 offset_,
         uint256 limit_
     ) external view returns (bytes32[] memory) {
-        return getSessionsStorage().providerSessions[provider_].part(offset_, limit_);
+        return _getSessionsStorage().providerSessions[provider_].part(offset_, limit_);
     }
 
     function getModelSessions(
@@ -57,39 +57,39 @@ contract SessionStorage is ISessionStorage {
         uint256 offset_,
         uint256 limit_
     ) external view returns (bytes32[] memory) {
-        return getSessionsStorage().modelSessions[modelId_].part(offset_, limit_);
+        return _getSessionsStorage().modelSessions[modelId_].part(offset_, limit_);
     }
 
     function getPools() external view returns (Pool[] memory) {
-        return getSessionsStorage().pools;
+        return _getSessionsStorage().pools;
     }
 
     function getPool(uint256 index_) external view returns (Pool memory) {
-        return getSessionsStorage().pools[index_];
+        return _getSessionsStorage().pools[index_];
     }
 
     function getFundingAccount() external view returns (address) {
-        return getSessionsStorage().fundingAccount;
+        return _getSessionsStorage().fundingAccount;
     }
 
     function getTotalSessions(address provider_) public view returns (uint256) {
-        return getSessionsStorage().providerSessions[provider_].length();
+        return _getSessionsStorage().providerSessions[provider_].length();
     }
 
     function getProvidersTotalClaimed() external view returns (uint256) {
-        return getSessionsStorage().providersTotalClaimed;
+        return _getSessionsStorage().providersTotalClaimed;
     }
 
     function getIsProviderApprovalUsed(bytes memory approval_) external view returns (bool) {
-        return getSessionsStorage().isProviderApprovalUsed[approval_];
+        return _getSessionsStorage().isProviderApprovalUsed[approval_];
     }
 
     function getMaxSessionDuration() external view returns (uint128) {
-        return getSessionsStorage().maxSessionDuration;
+        return _getSessionsStorage().maxSessionDuration;
     }
 
     /** INTERNAL */
-    function getSessionsStorage() internal pure returns (SessionsStorage storage ds) {
+    function _getSessionsStorage() internal pure returns (SessionsStorage storage ds) {
         bytes32 slot_ = SESSIONS_STORAGE_SLOT;
 
         assembly {

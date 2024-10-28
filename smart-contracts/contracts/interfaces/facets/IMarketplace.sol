@@ -15,6 +15,7 @@ interface IMarketplace is IMarketplaceStorage {
     error MarketplaceBidMinPricePerSecondIsZero();
     error MarketplaceBidMinPricePerSecondIsInvalid();
     error MarketplaceBidPricePerSecondInvalid();
+    error MarketplaceFeeAmountIsZero();
 
     /**
      * The function to initialize the facet.
@@ -58,7 +59,7 @@ interface IMarketplace is IMarketplaceStorage {
      * @param recipient_ The recipient address.
      * @param amount_ The amount.
      */
-    function withdraw(address recipient_, uint256 amount_) external;
+    function withdrawFee(address recipient_, uint256 amount_) external;
 
     /**
      * The function to get bid ID.

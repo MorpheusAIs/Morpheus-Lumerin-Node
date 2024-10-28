@@ -29,14 +29,14 @@ contract Marketplace is
         uint256 bidMinPricePerSecond_,
         uint256 bidMaxPricePerSecond_
     ) external initializer(BIDS_STORAGE_SLOT) {
-        BidsStorage storage bidsStorage = getBidsStorage();
+        BidsStorage storage bidsStorage = _getBidsStorage();
         bidsStorage.token = token_;
 
         setMinMaxBidPricePerSecond(bidMinPricePerSecond_, bidMaxPricePerSecond_);
     }
 
     function setMarketplaceBidFee(uint256 bidFee_) external onlyOwner {
-        MarketStorage storage marketStorage = getMarketStorage();
+        MarketStorage storage marketStorage = _getMarketStorage();
         marketStorage.bidFee = bidFee_;
 
         emit MaretplaceFeeUpdated(bidFee_);
@@ -54,7 +54,7 @@ contract Marketplace is
             revert MarketplaceBidMinPricePerSecondIsInvalid();
         }
 
-        MarketStorage storage marketStorage = getMarketStorage();
+        MarketStorage storage marketStorage = _getMarketStorage();
         marketStorage.bidMinPricePerSecond = bidMinPricePerSecond_;
         marketStorage.bidMaxPricePerSecond = bidMaxPricePerSecond_;
 
@@ -71,14 +71,14 @@ contract Marketplace is
             revert MarketplaceModelNotFound();
         }
 
-        BidsStorage storage bidsStorage = getBidsStorage();
-        MarketStorage storage marketStorage = getMarketStorage();
+        BidsStorage storage bidsStorage = _getBidsStorage();
+        MarketStorage storage marketStorage = _getMarketStorage();
 
         if (pricePerSecond_ < marketStorage.bidMinPricePerSecond || pricePerSecond_ > marketStorage.bidMaxPricePerSecond) {
             revert MarketplaceBidPricePerSecondInvalid();
         }
 
-        IERC20(bidsStorage.token).safeTransferFrom(_msgSender(), address(this), marketStorage.bidFee);
+        IERC20(bidsStorage.token).safeTransferFrom(provider_, address(this), marketStorage.bidFee);
         marketStorage.feeBalance += marketStorage.bidFee;
 
         bytes32 providerModelId_ = getProviderModelId(provider_, modelId_);
@@ -110,7 +110,7 @@ contract Marketplace is
     }
 
     function deleteModelBid(bytes32 bidId_) external {
-        BidsStorage storage bidsStorage = getBidsStorage();
+        BidsStorage storage bidsStorage = _getBidsStorage();
         _onlyAccount(bidsStorage.bids[bidId_].provider);
 
         if (!isBidActive(bidId_)) {
@@ -120,11 +120,14 @@ contract Marketplace is
         _deleteBid(bidId_);
     }
 
-    function withdraw(address recipient_, uint256 amount_) external onlyOwner {
-        BidsStorage storage bidsStorage = getBidsStorage();
-        MarketStorage storage marketStorage = getMarketStorage();
+    function withdrawFee(address recipient_, uint256 amount_) external onlyOwner {
+        BidsStorage storage bidsStorage = _getBidsStorage();
+        MarketStorage storage marketStorage = _getMarketStorage();
 
         amount_ = amount_ > marketStorage.feeBalance ? marketStorage.feeBalance : amount_;
+        if (amount_ == 0) {
+            revert MarketplaceFeeAmountIsZero();
+        }
 
         marketStorage.feeBalance -= amount_;
 
@@ -132,7 +135,7 @@ contract Marketplace is
     }
 
     function _deleteBid(bytes32 bidId_) private {
-        BidsStorage storage bidsStorage = getBidsStorage();
+        BidsStorage storage bidsStorage = _getBidsStorage();
         Bid storage bid = bidsStorage.bids[bidId_];
 
         bid.deletedAt = uint128(block.timestamp);
