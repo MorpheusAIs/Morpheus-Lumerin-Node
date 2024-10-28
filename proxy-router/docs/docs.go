@@ -407,7 +407,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/structs.OpenSessionWithDurationRequest"
+                            "$ref": "#/definitions/structs.OpenSessionWithFailover"
                         }
                     },
                     {
@@ -1451,6 +1451,9 @@ const docTemplate = `{
                 "createdAt": {
                     "type": "integer"
                 },
+                "isLocal": {
+                    "type": "boolean"
+                },
                 "modelId": {
                     "type": "string"
                 },
@@ -1554,6 +1557,9 @@ const docTemplate = `{
         "proxyapi.ChatHistory": {
             "type": "object",
             "properties": {
+                "isLocal": {
+                    "type": "boolean"
+                },
                 "messages": {
                     "type": "array",
                     "items": {
@@ -2037,6 +2043,17 @@ const docTemplate = `{
         "structs.OpenSessionWithDurationRequest": {
             "type": "object",
             "properties": {
+                "sessionDuration": {
+                    "type": "string"
+                }
+            }
+        },
+        "structs.OpenSessionWithFailover": {
+            "type": "object",
+            "properties": {
+                "failover": {
+                    "type": "boolean"
+                },
                 "sessionDuration": {
                     "type": "string"
                 }

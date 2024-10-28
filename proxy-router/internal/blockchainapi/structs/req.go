@@ -59,6 +59,11 @@ type OpenSessionWithDurationRequest struct {
 	SessionDuration *lib.BigInt `json:"sessionDuration"`
 }
 
+type OpenSessionWithFailover struct {
+	SessionDuration *lib.BigInt `json:"sessionDuration"`
+	Failover        bool        `json:"failover" binding:"omitempty"`
+}
+
 type CreateBidRequest struct {
 	ModelID        string      `json:"modelID" binding:"required" validate:"hex32"`
 	PricePerSecond *lib.BigInt `json:"pricePerSecond" binding:"required" validate:"number,gt=0"`

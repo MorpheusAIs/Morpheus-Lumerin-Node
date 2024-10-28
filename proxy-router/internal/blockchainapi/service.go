@@ -666,7 +666,7 @@ func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.H
 	return s.OpenSession(ctx, initRes.Approval, initRes.ApprovalSig, stake)
 }
 
-func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID common.Hash, duration *big.Int) (common.Hash, error) {
+func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID common.Hash, duration *big.Int, isFailoverEnabled bool, omitProvider common.Address) (common.Hash, error) {
 	supply, err := s.GetTokenSupply(ctx)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrTokenSupply, err)
@@ -698,10 +698,31 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 
 	scoredBids := rateBids(bidIDs, bids, providerStats, modelStats, s.log)
 	for i, bid := range scoredBids {
+		providerAddr := bid.Bid.Provider
+		if providerAddr == omitProvider {
+			s.log.Infof("skipping provider #%d %s", i, providerAddr.String())
+			continue
+		}
 		s.log.Infof("trying to open session with provider #%d %s", i, bid.Bid.Provider.String())
 		durationCopy := new(big.Int).Set(duration)
 		hash, err := s.tryOpenSession(ctx, bid, durationCopy, supply, budget, userAddr)
 		if err == nil {
+			session, ok := s.sessionStorage.GetSession(hash.String())
+			if ok {
+				session.FailoverEnabled = isFailoverEnabled
+				err := s.sessionStorage.AddSession(session)
+				if err != nil {
+					s.log.Warnf("failed to update session: %s", err.Error())
+				}
+			} else {
+				err := s.sessionStorage.AddSession(&storages.Session{
+					Id:              hash.String(),
+					FailoverEnabled: isFailoverEnabled,
+				})
+				if err != nil {
+					s.log.Warnf("failed to store session: %s", err.Error())
+				}
+			}
 			return hash, nil
 		}
 		s.log.Errorf("failed to open session with provider %s: %s", bid.Bid.Provider.String(), err.Error())

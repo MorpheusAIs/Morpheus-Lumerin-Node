@@ -114,15 +114,26 @@ func (e *EventsListener) handleSessionOpened(event *sessionrouter.SessionRouterS
 		modelConfig = &config.ModelConfig{}
 	}
 
-	err = e.store.AddSession(&storages.Session{
-		Id:           sessionId,
-		UserAddr:     event.UserAddress.Hex(),
-		ProviderAddr: session.Provider.Hex(),
-		EndsAt:       session.EndsAt,
-		ModelID:      modelID,
-		ModelName:    modelConfig.ModelName,
-		ModelApiType: modelConfig.ApiType,
-	})
+	storedSession, ok := e.store.GetSession(sessionId)
+	if !ok {
+		err = e.store.AddSession(&storages.Session{
+			Id:           sessionId,
+			UserAddr:     event.UserAddress.Hex(),
+			ProviderAddr: session.Provider.Hex(),
+			EndsAt:       session.EndsAt,
+			ModelID:      modelID,
+			ModelName:    modelConfig.ModelName,
+			ModelApiType: modelConfig.ApiType,
+		})
+	} else {
+		storedSession.EndsAt = session.EndsAt
+		storedSession.ModelID = modelID
+		storedSession.ModelName = modelConfig.ModelName
+		storedSession.ModelApiType = modelConfig.ApiType
+		storedSession.ProviderAddr = session.Provider.Hex()
+		storedSession.UserAddr = event.UserAddress.Hex()
+		err = e.store.AddSession(storedSession)
+	}
 	if err != nil {
 		return err
 	}
