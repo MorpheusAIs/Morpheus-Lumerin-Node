@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"net/url"
 	"os"
 	"os/signal"
@@ -276,9 +277,10 @@ func start() error {
 		chatStorage = proxyapi.NewNoOpChatStorage()
 	}
 
+	ethConnectionValidator := system.NewEthConnectionValidator(*big.NewInt(int64(cfg.Blockchain.ChainID)))
 	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine, chatStorage)
 	walletController := walletapi.NewWalletController(wallet)
-	systemController := system.NewSystemController(&cfg, wallet, rpcClientStore, sysConfig, appStartTime, chainID, log)
+	systemController := system.NewSystemController(&cfg, wallet, rpcClientStore, sysConfig, appStartTime, chainID, log, ethConnectionValidator)
 
 	apiBus := apibus.NewApiBus(blockchainController, proxyController, walletController, systemController)
 	httpHandler := httphandlers.CreateHTTPServer(log, apiBus)

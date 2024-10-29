@@ -1,4 +1,4 @@
-# Lumerin Terms of Use
+# Morpheus Terms of Use
 
 Last Updated Date: March 16, 2023
 

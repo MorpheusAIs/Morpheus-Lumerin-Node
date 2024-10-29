@@ -10,8 +10,6 @@ const listeners = {
   'clear-cache': handlers.clearCache,
   'handle-client-error': handlers.handleClientSideError,
   'get-pool-address': handlers.getPoolAddress,
-  'reveal-secret-phrase': handlers.revealSecretPhrase,
-  'has-stored-secret-phrase': handlers.hasStoredSecretPhrase,
   logout: handlers.logout,
   'save-proxy-router-settings': handlers.saveProxyRouterSettings,
   'get-proxy-router-settings': handlers.getProxyRouterSettings,

@@ -49,9 +49,9 @@ export const StyledParagraph = styled.p`
 
 export const Input = styled(TextInput)`
   outline: 0;
-  border: 0px;
-  background: #eaf7fc;
-  border-radius: 15px;
+  border: 1px solid ${p => p.theme.colors.morMain};
+  background: transparent;
+  border-radius: 5px;
   padding: 1.2rem 1.2rem;
   margin-top: 0.25rem;
 `;

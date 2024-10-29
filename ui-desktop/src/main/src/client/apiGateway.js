@@ -62,9 +62,9 @@ const sendMor = async (to, amount) => {
     }
 }
 
-const getTransactions = async (page = 1, size = 15) => {
+const getTransactions = async (payload) => {
     try {
-        const path = `${config.chain.localProxyRouterUrl}/blockchain/transactions?page=${page}&limit=${size}`
+        const path = `${config.chain.localProxyRouterUrl}/blockchain/transactions?page=${payload.page}&limit=${payload.pageSize}`
         const response = await fetch(path);
         const data = await response.json();
         return data.transactions;

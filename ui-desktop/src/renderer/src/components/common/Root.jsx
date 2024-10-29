@@ -64,11 +64,15 @@ class Root extends React.Component {
       })
   }
 
-  onOnboardingCompleted = ({ password, mnemonic, proxyRouterConfig }) => {
+  onOnboardingCompleted = (data) => {
     return (
       this.props.client
-        .onOnboardingCompleted({ password, mnemonic, proxyRouterConfig, proxyUrl: this.props.config.chain.localProxyRouterUrl })
-        .then(() => {
+        .onOnboardingCompleted({ proxyUrl: this.props.config.chain.localProxyRouterUrl, ...data })
+        .then((error) => {
+          if(error) {
+            this.context.toast('error', error);
+            return;
+          }
           this.setState({ onboardingComplete: true })
           this.props.dispatch({ type: 'session-started' })
         })
