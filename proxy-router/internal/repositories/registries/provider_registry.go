@@ -3,6 +3,7 @@ package registries
 import (
 	"context"
 	"fmt"
+	"math/big"
 
 	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
@@ -38,18 +39,21 @@ func NewProviderRegistry(providerRegistryAddr common.Address, client i.ContractB
 }
 
 func (g *ProviderRegistry) GetAllProviders(ctx context.Context) ([]common.Address, []providerregistry.IProviderStorageProvider, error) {
-	// providerAddrs, providers, err := g.providerRegistry.ProviderGetAll(&bind.CallOpts{Context: ctx})
-	// if err != nil {
-	// 	return nil, nil, err
-	// }
+	ids, err := g.providerRegistry.GetActiveProviders(&bind.CallOpts{Context: ctx}, big.NewInt(0), big.NewInt(100))
+	if err != nil {
+		return nil, nil, err
+	}
 
-	// addresses := make([]common.Address, len(providerAddrs))
-	// for i, address := range providerAddrs {
-	// 	addresses[i] = address
-	// }
+	providers := make([]providerregistry.IProviderStorageProvider, 0, len(ids))
+	for _, id := range ids {
+		provider, err := g.providerRegistry.GetProvider(&bind.CallOpts{Context: ctx}, id)
+		if err != nil {
+			return nil, nil, err
+		}
+		providers = append(providers, provider)
+	}
 
-	// return addresses, providers, nil
-	return nil, nil, fmt.Errorf("Not implemented")
+	return ids, providers, nil
 }
 
 func (g *ProviderRegistry) CreateNewProvider(opts *bind.TransactOpts, addStake *lib.BigInt, endpoint string) error {

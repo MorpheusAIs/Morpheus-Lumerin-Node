@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi/structs"
 	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
@@ -205,7 +206,7 @@ func (s *BlockchainService) GetRatedBids(ctx context.Context, modelID common.Has
 		return nil, err
 	}
 
-	ratedBids := rateBids(bidIDs, bids, providerModelStats, modelStats.(ModelStats), s.log)
+	ratedBids := rateBids(bidIDs, bids, providerModelStats, modelStats, s.log)
 
 	return ratedBids, nil
 }
@@ -546,10 +547,6 @@ func (s *BlockchainService) Approve(ctx context.Context, spender common.Address,
 	return tx.Hash(), nil
 }
 
-func (s *BlockchainService) GetTodaysBudget(ctx context.Context) (*big.Int, error) {
-	return s.sessionRouter.GetTodaysBudget(ctx)
-}
-
 func (s *BlockchainService) ClaimProviderBalance(ctx context.Context, sessionID [32]byte) (common.Hash, error) {
 	prKey, err := s.privateKey.GetPrivateKey()
 	if err != nil {
@@ -570,7 +567,11 @@ func (s *BlockchainService) ClaimProviderBalance(ctx context.Context, sessionID 
 }
 
 func (s *BlockchainService) GetTokenSupply(ctx context.Context) (*big.Int, error) {
-	return s.morToken.GetTotalSupply(ctx)
+	return s.sessionRouter.GetTotalMORSupply(ctx, big.NewInt(time.Now().Unix()))
+}
+
+func (s *BlockchainService) GetTodaysBudget(ctx context.Context) (*big.Int, error) {
+	return s.sessionRouter.GetTodaysBudget(ctx, big.NewInt(time.Now().Unix()))
 }
 
 func (s *BlockchainService) GetSessions(ctx *gin.Context, user, provider common.Address, offset *big.Int, limit uint8) ([]*structs.Session, error) {
@@ -712,7 +713,7 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 		return common.Hash{}, lib.WrapError(ErrMyAddress, err)
 	}
 
-	scoredBids := rateBids(bidIDs, bids, providerStats, modelStats.(ModelStats), s.log)
+	scoredBids := rateBids(bidIDs, bids, providerStats, modelStats, s.log)
 	for i, bid := range scoredBids {
 		s.log.Infof("trying to open session with provider #%d %s", i, bid.Bid.Provider.String())
 		durationCopy := new(big.Int).Set(duration)
@@ -771,8 +772,14 @@ func (s *BlockchainService) tryOpenSession(ctx context.Context, bid structs.Scor
 		return common.Hash{}, lib.WrapError(ErrProvider, err)
 	}
 
-	totalCost := duration.Mul(&bid.Bid.PricePerSecond.Int, duration)
-	stake := totalCost.Div(totalCost.Mul(supply, totalCost), budget)
+	totalCost := (&big.Int{}).Mul(&bid.Bid.PricePerSecond.Int, duration)
+	stake := (&big.Int{}).Div((&big.Int{}).Mul(supply, totalCost), budget)
+
+	s.log.Infof("attempting to initiate session with provider %s", bid.Bid.Provider.String())
+	s.log.Infof("stake %s", stake.String())
+	s.log.Infof("duration %s", time.Duration(duration.Int64())*time.Second)
+	s.log.Infof("total cost %s", totalCost.String())
+
 	initRes, err := s.proxyService.InitiateSession(ctx, userAddr, bid.Bid.Provider, stake, bid.Bid.Id, provider.Endpoint)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrInitSession, err)

@@ -10,7 +10,7 @@ import (
 	s "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/sessionrouter"
 )
 
-func rateBids(bidIds [][32]byte, bids []m.IBidStorageBid, pmStats []s.IStatsStorageProviderModelStats, mStats ModelStats, log lib.ILogger) []structs.ScoredBid {
+func rateBids(bidIds [][32]byte, bids []m.IBidStorageBid, pmStats []s.IStatsStorageProviderModelStats, mStats *s.IStatsStorageModelStats, log lib.ILogger) []structs.ScoredBid {
 	scoredBids := make([]structs.ScoredBid, len(bids))
 
 	for i := range bids {
@@ -41,7 +41,7 @@ func rateBids(bidIds [][32]byte, bids []m.IBidStorageBid, pmStats []s.IStatsStor
 	return scoredBids
 }
 
-func getScore(bid m.IBidStorageBid, pmStats s.IStatsStorageProviderModelStats, mStats ModelStats) float64 {
+func getScore(bid m.IBidStorageBid, pmStats s.IStatsStorageProviderModelStats, mStats *s.IStatsStorageModelStats) float64 {
 	tpsWeight, ttftWeight, durationWeight, successWeight := 0.27, 0.11, 0.27, 0.35
 	count := int64(mStats.Count)
 

@@ -5,8 +5,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/modelregistry"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/modelregistry"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
 )
