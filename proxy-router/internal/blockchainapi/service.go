@@ -13,8 +13,9 @@ import (
 	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/marketplace"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/sessionrouter"
+	m "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/marketplace"
+	pr "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/providerregistry"
+	sr "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/sessionrouter"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/gin-gonic/gin"
@@ -201,12 +202,12 @@ func (s *BlockchainService) GetRatedBids(ctx context.Context, modelID common.Has
 		return nil, err
 	}
 
-	bidIDs, bids, providerModelStats, err := s.GetAllBidsWithRating(ctx, modelID)
+	bidIDs, bids, providerModelStats, provider, err := s.GetAllBidsWithRating(ctx, modelID)
 	if err != nil {
 		return nil, err
 	}
 
-	ratedBids := rateBids(bidIDs, bids, providerModelStats, modelStats, s.log)
+	ratedBids := rateBids(bidIDs, bids, providerModelStats, provider, modelStats, s.log)
 
 	return ratedBids, nil
 }
@@ -577,7 +578,7 @@ func (s *BlockchainService) GetTodaysBudget(ctx context.Context) (*big.Int, erro
 func (s *BlockchainService) GetSessions(ctx *gin.Context, user, provider common.Address, offset *big.Int, limit uint8) ([]*structs.Session, error) {
 	var (
 		ids      [][32]byte
-		sessions []sessionrouter.ISessionStorageSession
+		sessions []sr.ISessionStorageSession
 		err      error
 	)
 	if (user != common.Address{}) {
@@ -699,7 +700,7 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 		return common.Hash{}, lib.WrapError(ErrModel, err)
 	}
 
-	bidIDs, bids, providerStats, err := s.GetAllBidsWithRating(ctx, modelID)
+	bidIDs, bids, providerStats, providers, err := s.GetAllBidsWithRating(ctx, modelID)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrBid, err)
 	}
@@ -713,7 +714,7 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 		return common.Hash{}, lib.WrapError(ErrMyAddress, err)
 	}
 
-	scoredBids := rateBids(bidIDs, bids, providerStats, modelStats, s.log)
+	scoredBids := rateBids(bidIDs, bids, providerStats, providers, modelStats, s.log)
 	for i, bid := range scoredBids {
 		s.log.Infof("trying to open session with provider #%d %s", i, bid.Bid.Provider.String())
 		durationCopy := new(big.Int).Set(duration)
@@ -727,21 +728,22 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 	return common.Hash{}, fmt.Errorf("no provider accepting session")
 }
 
-func (s *BlockchainService) GetAllBidsWithRating(ctx context.Context, modelAgentID [32]byte) ([][32]byte, []marketplace.IBidStorageBid, []sessionrouter.IStatsStorageProviderModelStats, error) {
+func (s *BlockchainService) GetAllBidsWithRating(ctx context.Context, modelAgentID [32]byte) ([][32]byte, []m.IBidStorageBid, []sr.IStatsStorageProviderModelStats, []pr.IProviderStorageProvider, error) {
 	batchSize := uint8(255)
 	offset := big.NewInt(0)
-	bids := make([]marketplace.IBidStorageBid, 0)
+	bids := make([]m.IBidStorageBid, 0)
 	ids := make([][32]byte, 0)
-	providerModelStats := make([]sessionrouter.IStatsStorageProviderModelStats, 0)
+	providerModelStats := make([]sr.IStatsStorageProviderModelStats, 0)
+	providers := make([]pr.IProviderStorageProvider, 0)
 
 	for {
 		if ctx.Err() != nil {
-			return nil, nil, nil, ctx.Err()
+			return nil, nil, nil, nil, ctx.Err()
 		}
 
 		idsBatch, bidsBatch, err := s.marketplace.GetActiveBidsByModel(ctx, modelAgentID, offset, batchSize)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 
 		ids = append(ids, idsBatch...)
@@ -751,9 +753,14 @@ func (s *BlockchainService) GetAllBidsWithRating(ctx context.Context, modelAgent
 			//TODO: replace with multicall
 			providerModelStat, err := s.sessionRouter.GetProviderModelStats(ctx, modelAgentID, bid.Provider)
 			if err != nil {
-				return nil, nil, nil, err
+				return nil, nil, nil, nil, err
+			}
+			provider, err := s.providerRegistry.GetProviderById(ctx, bid.Provider)
+			if err != nil {
+				return nil, nil, nil, nil, err
 			}
 			providerModelStats = append(providerModelStats, *providerModelStat)
+			providers = append(providers, *provider)
 		}
 
 		if len(bidsBatch) < int(batchSize) {
@@ -763,7 +770,7 @@ func (s *BlockchainService) GetAllBidsWithRating(ctx context.Context, modelAgent
 		offset.Add(offset, big.NewInt(int64(batchSize)))
 	}
 
-	return ids, bids, providerModelStats, nil
+	return ids, bids, providerModelStats, providers, nil
 }
 
 func (s *BlockchainService) tryOpenSession(ctx context.Context, bid structs.ScoredBid, duration *big.Int, supply *big.Int, budget *big.Int, userAddr common.Address) (common.Hash, error) {
