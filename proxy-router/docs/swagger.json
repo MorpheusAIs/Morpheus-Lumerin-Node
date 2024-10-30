@@ -5,7 +5,7 @@
         "title": "Morpheus Lumerin Node API",
         "termsOfService": "http://swagger.io/terms/",
         "contact": {},
-        "version": "1.0"
+        "version": "2.0"
     },
     "basePath": "/",
     "paths": {
