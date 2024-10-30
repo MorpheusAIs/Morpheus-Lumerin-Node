@@ -118,6 +118,15 @@ func start() error {
 
 	contractLogStorage := lib.NewCollection[*interfaces.LogStorage]()
 
+	rpcLog, err := lib.NewLogger(cfg.Log.LevelRPC, cfg.Log.Color, cfg.Log.IsProd, cfg.Log.JSON, mainLogFilePath)
+	if err != nil {
+		return err
+	}
+
+	badgerLog, err := lib.NewLogger(cfg.Log.LevelBadger, cfg.Log.Color, cfg.Log.IsProd, cfg.Log.JSON, mainLogFilePath)
+	if err != nil {
+		return err
+	}
 	// contractLogFactory := func(contractID string) (lib.ILogger, error) {
 	// 	logStorage := interfaces.NewLogStorage(contractID)
 	// 	contractLogStorage.Store(logStorage)
@@ -209,7 +218,7 @@ func start() error {
 	if cfg.Blockchain.EthNodeAddress != "" {
 		ethNodeAddresses = []string{cfg.Blockchain.EthNodeAddress}
 	}
-	rpcClientStore, err := ethclient.ConfigureRPCClientStore(keychainStorage, ethNodeAddresses, cfg.Blockchain.ChainID, log.Named("RPC"))
+	rpcClientStore, err := ethclient.ConfigureRPCClientStore(keychainStorage, ethNodeAddresses, cfg.Blockchain.ChainID, rpcLog.Named("RPC"))
 	if err != nil {
 		return lib.WrapError(ErrConnectToEthNode, err)
 	}
@@ -229,7 +238,7 @@ func start() error {
 		return err
 	}
 
-	storage := storages.NewStorage(log, cfg.Proxy.StoragePath)
+	storage := storages.NewStorage(badgerLog, cfg.Proxy.StoragePath)
 	sessionStorage := storages.NewSessionStorage(storage)
 
 	var wallet interfaces.Wallet

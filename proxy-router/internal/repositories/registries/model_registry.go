@@ -3,6 +3,7 @@ package registries
 import (
 	"context"
 	"fmt"
+	"math/big"
 
 	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
@@ -38,12 +39,21 @@ func NewModelRegistry(modelRegistryAddr common.Address, client i.ContractBackend
 }
 
 func (g *ModelRegistry) GetAllModels(ctx context.Context) ([][32]byte, []modelregistry.IModelStorageModel, error) {
-	// adresses, models, err := g.modelRegistry.Models(&bind.CallOpts{Context: ctx},)
-	// if err != nil {
-	// 	return nil, nil, err
-	// }
+	ids, err := g.modelRegistry.GetModelIds(&bind.CallOpts{Context: ctx}, big.NewInt(0), big.NewInt(100))
+	if err != nil {
+		return nil, nil, err
+	}
 
-	return nil, nil, fmt.Errorf("Not implemented")
+	models := make([]modelregistry.IModelStorageModel, 0, len(ids))
+	for _, id := range ids {
+		model, err := g.modelRegistry.GetModel(&bind.CallOpts{Context: ctx}, id)
+		if err != nil {
+			return nil, nil, err
+		}
+		models = append(models, model)
+	}
+
+	return ids, models, nil
 }
 
 func (g *ModelRegistry) CreateNewModel(opts *bind.TransactOpts, modelId common.Hash, ipfsID common.Hash, fee *lib.BigInt, stake *lib.BigInt, name string, tags []string) error {

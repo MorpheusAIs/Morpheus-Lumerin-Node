@@ -165,8 +165,7 @@ func (g *SessionRouter) ClaimProviderBalance(opts *bind.TransactOpts, sessionId 
 	return tx.Hash(), nil
 }
 
-func (g *SessionRouter) GetTodaysBudget(ctx context.Context) (*big.Int, error) {
-	timestamp := big.NewInt(time.Now().Unix())
+func (g *SessionRouter) GetTodaysBudget(ctx context.Context, timestamp *big.Int) (*big.Int, error) {
 	budget, err := g.sessionRouter.GetTodaysBudget(&bind.CallOpts{Context: ctx}, timestamp)
 	if err != nil {
 		return nil, lib.TryConvertGethError(err)
@@ -174,12 +173,12 @@ func (g *SessionRouter) GetTodaysBudget(ctx context.Context) (*big.Int, error) {
 	return budget, nil
 }
 
-func (g *SessionRouter) GetModelStats(ctx context.Context, modelID [32]byte) (interface{}, error) {
+func (g *SessionRouter) GetModelStats(ctx context.Context, modelID [32]byte) (*src.IStatsStorageModelStats, error) {
 	res, err := g.sessionRouter.GetModelStats(&bind.CallOpts{Context: ctx}, modelID)
 	if err != nil {
 		return nil, lib.TryConvertGethError(err)
 	}
-	return res, nil
+	return &res, nil
 }
 
 func (g *SessionRouter) GetProviderModelStats(ctx context.Context, modelID [32]byte, provider common.Address) (*src.IStatsStorageProviderModelStats, error) {
@@ -188,6 +187,14 @@ func (g *SessionRouter) GetProviderModelStats(ctx context.Context, modelID [32]b
 		return nil, lib.TryConvertGethError(err)
 	}
 	return &res, nil
+}
+
+func (g *SessionRouter) GetContractAddress() common.Address {
+	return g.sessionRouterAddr
+}
+
+func (g *SessionRouter) GetABI() *abi.ABI {
+	return g.srABI
 }
 
 func (g *SessionRouter) getMultipleSessions(ctx context.Context, IDs [][32]byte) ([][32]byte, []src.ISessionStorageSession, error) {
@@ -203,10 +210,6 @@ func (g *SessionRouter) getMultipleSessions(ctx context.Context, IDs [][32]byte)
 	return IDs, sessions, nil
 }
 
-func (g *SessionRouter) GetContractAddress() common.Address {
-	return g.sessionRouterAddr
-}
-
-func (g *SessionRouter) GetABI() *abi.ABI {
-	return g.srABI
+func (g *SessionRouter) GetTotalMORSupply(ctx context.Context, timestamp *big.Int) (*big.Int, error) {
+	return g.sessionRouter.TotalMORSupply(&bind.CallOpts{Context: ctx}, timestamp)
 }
