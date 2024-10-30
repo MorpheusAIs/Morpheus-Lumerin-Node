@@ -7,14 +7,15 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi/structs"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	m "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/marketplace"
+	pr "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/providerregistry"
 	s "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/sessionrouter"
 )
 
-func rateBids(bidIds [][32]byte, bids []m.IBidStorageBid, pmStats []s.IStatsStorageProviderModelStats, mStats *s.IStatsStorageModelStats, log lib.ILogger) []structs.ScoredBid {
+func rateBids(bidIds [][32]byte, bids []m.IBidStorageBid, pmStats []s.IStatsStorageProviderModelStats, provider []pr.IProviderStorageProvider, mStats *s.IStatsStorageModelStats, log lib.ILogger) []structs.ScoredBid {
 	scoredBids := make([]structs.ScoredBid, len(bids))
 
 	for i := range bids {
-		score := getScore(bids[i], pmStats[i], mStats)
+		score := getScore(bids[i], pmStats[i], provider[i], mStats)
 		if math.IsNaN(score) || math.IsInf(score, 0) {
 			log.Errorf("provider score is not valid %d for bid %v, pmStats %v, mStats %v", score, bidIds[i], pmStats[i], mStats)
 			score = 0
@@ -41,20 +42,22 @@ func rateBids(bidIds [][32]byte, bids []m.IBidStorageBid, pmStats []s.IStatsStor
 	return scoredBids
 }
 
-func getScore(bid m.IBidStorageBid, pmStats s.IStatsStorageProviderModelStats, mStats *s.IStatsStorageModelStats) float64 {
-	tpsWeight, ttftWeight, durationWeight, successWeight := 0.27, 0.11, 0.27, 0.35
+func getScore(bid m.IBidStorageBid, pmStats s.IStatsStorageProviderModelStats, pr pr.IProviderStorageProvider, mStats *s.IStatsStorageModelStats) float64 {
+	tpsWeight, ttftWeight, durationWeight, successWeight, stakeWeight := 0.24, 0.08, 0.24, 0.32, 0.12
 	count := int64(mStats.Count)
+	minStake := int64(0.2 * math.Pow10(18)) // 0.2 MOR
 
 	tpsScore := tpsWeight * normRange(normZIndex(pmStats.TpsScaled1000.Mean, mStats.TpsScaled1000, count), 3.0)
 	// ttft impact is negative
 	ttftScore := ttftWeight * normRange(-1*normZIndex(pmStats.TtftMs.Mean, mStats.TtftMs, count), 3.0)
 	durationScore := durationWeight * normRange(normZIndex(int64(pmStats.TotalDuration), mStats.TotalDuration, count), 3.0)
 	successScore := successWeight * math.Pow(ratioScore(pmStats.SuccessCount, pmStats.TotalCount), 2)
+	stakeScore := stakeWeight * normMinMax(pr.Stake.Int64(), minStake, 10*minStake)
 
 	priceFloatDecimal, _ := bid.PricePerSecond.Float64()
 	priceFloat := priceFloatDecimal / math.Pow10(18)
 
-	result := (tpsScore + ttftScore + durationScore + successScore) / priceFloat
+	result := (tpsScore + ttftScore + durationScore + successScore + stakeScore) / priceFloat
 
 	return result
 }
@@ -101,4 +104,11 @@ func cutRange01(val float64) float64 {
 		return 0
 	}
 	return val
+}
+
+func normMinMax(val, min, max int64) float64 {
+	if max == min {
+		return 0
+	}
+	return float64(val-min) / float64(max-min)
 }
