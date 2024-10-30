@@ -551,12 +551,12 @@ func (s *BlockchainController) openSessionByBid(ctx *gin.Context) {
 //	@Tags			sessions
 //	@Produce		json
 //	@Accept			json
-//	@Param			opensession	body		structs.OpenSessionWithDurationRequest	true	"Open session"
-//	@Param			id			path		string									true	"Model ID"
+//	@Param			opensession	body		structs.OpenSessionWithFailover	true	"Open session"
+//	@Param			id			path		string							true	"Model ID"
 //	@Success		200			{object}	structs.OpenSessionRes
 //	@Router			/blockchain/models/{id}/session [post]
 func (s *BlockchainController) openSessionByModelId(ctx *gin.Context) {
-	var reqPayload structs.OpenSessionWithDurationRequest
+	var reqPayload structs.OpenSessionWithFailover
 	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
 		s.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
@@ -571,7 +571,8 @@ func (s *BlockchainController) openSessionByModelId(ctx *gin.Context) {
 		return
 	}
 
-	sessionId, err := s.service.OpenSessionByModelId(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack())
+	isFailoverEnabled := reqPayload.Failover
+	sessionId, err := s.service.OpenSessionByModelId(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), isFailoverEnabled, common.Address{})
 	if err != nil {
 		s.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})

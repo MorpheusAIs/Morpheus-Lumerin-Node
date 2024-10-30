@@ -39,6 +39,8 @@ type BlockchainService struct {
 	proxyService       *proxyapi.ProxyServiceSender
 	diamonContractAddr common.Address
 
+	providerAllowList []common.Address
+
 	legacyTx   bool
 	privateKey i.PrKeyProvider
 	log        lib.ILogger
@@ -76,6 +78,7 @@ func NewBlockchainService(
 	privateKey i.PrKeyProvider,
 	sessionStorage *storages.SessionStorage,
 	proxyService *proxyapi.ProxyServiceSender,
+	providerAllowList []common.Address,
 	log lib.ILogger,
 	legacyTx bool,
 ) *BlockchainService {
@@ -99,6 +102,7 @@ func NewBlockchainService(
 		proxyService:       proxyService,
 		sessionStorage:     sessionStorage,
 		diamonContractAddr: diamonContractAddr,
+		providerAllowList:  providerAllowList,
 		log:                log,
 	}
 }
@@ -684,7 +688,7 @@ func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.H
 	return s.OpenSession(ctx, initRes.Approval, initRes.ApprovalSig, stake)
 }
 
-func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID common.Hash, duration *big.Int) (common.Hash, error) {
+func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID common.Hash, duration *big.Int, isFailoverEnabled bool, omitProvider common.Address) (common.Hash, error) {
 	supply, err := s.GetTokenSupply(ctx)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrTokenSupply, err)
@@ -716,10 +720,35 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 
 	scoredBids := rateBids(bidIDs, bids, providerStats, providers, modelStats, s.log)
 	for i, bid := range scoredBids {
+		providerAddr := bid.Bid.Provider
+		if providerAddr == omitProvider {
+			s.log.Infof("skipping provider #%d %s", i, providerAddr.String())
+			continue
+		}
+		if !s.isProviderAllowed(providerAddr) {
+			s.log.Infof("skipping not allowed provider #%d %s", i, providerAddr.String())
+			continue
+		}
 		s.log.Infof("trying to open session with provider #%d %s", i, bid.Bid.Provider.String())
 		durationCopy := new(big.Int).Set(duration)
 		hash, err := s.tryOpenSession(ctx, bid, durationCopy, supply, budget, userAddr)
 		if err == nil {
+			session, ok := s.sessionStorage.GetSession(hash.String())
+			if ok {
+				session.FailoverEnabled = isFailoverEnabled
+				err := s.sessionStorage.AddSession(session)
+				if err != nil {
+					s.log.Warnf("failed to update session: %s", err.Error())
+				}
+			} else {
+				err := s.sessionStorage.AddSession(&storages.Session{
+					Id:              hash.String(),
+					FailoverEnabled: isFailoverEnabled,
+				})
+				if err != nil {
+					s.log.Warnf("failed to store session: %s", err.Error())
+				}
+			}
 			return hash, nil
 		}
 		s.log.Errorf("failed to open session with provider %s: %s", bid.Bid.Provider.String(), err.Error())
@@ -807,6 +836,19 @@ func (s *BlockchainService) GetMyAddress(ctx context.Context) (common.Address, e
 	}
 
 	return lib.PrivKeyBytesToAddr(prKey)
+}
+
+func (s *BlockchainService) isProviderAllowed(providerAddr common.Address) bool {
+	if len(s.providerAllowList) == 0 {
+		return true
+	}
+
+	for _, addr := range s.providerAllowList {
+		if addr.Hex() == providerAddr.Hex() {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *BlockchainService) getTransactOpts(ctx context.Context, privKey lib.HexString) (*bind.TransactOpts, error) {

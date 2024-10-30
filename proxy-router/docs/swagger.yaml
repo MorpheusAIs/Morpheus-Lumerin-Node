@@ -39,6 +39,8 @@ definitions:
         type: string
       createdAt:
         type: integer
+      isLocal:
+        type: boolean
       modelId:
         type: string
       title:
@@ -117,6 +119,8 @@ definitions:
     type: object
   proxyapi.ChatHistory:
     properties:
+      isLocal:
+        type: boolean
       messages:
         items:
           $ref: '#/definitions/proxyapi.ChatMessage'
@@ -455,6 +459,13 @@ definitions:
     type: object
   structs.OpenSessionWithDurationRequest:
     properties:
+      sessionDuration:
+        type: string
+    type: object
+  structs.OpenSessionWithFailover:
+    properties:
+      failover:
+        type: boolean
       sessionDuration:
         type: string
     type: object
@@ -920,7 +931,7 @@ paths:
         name: opensession
         required: true
         schema:
-          $ref: '#/definitions/structs.OpenSessionWithDurationRequest'
+          $ref: '#/definitions/structs.OpenSessionWithFailover'
       - description: Model ID
         in: path
         name: id

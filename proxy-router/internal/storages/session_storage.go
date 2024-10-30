@@ -18,6 +18,8 @@ type Session struct {
 	ModelID      string
 	ModelName    string
 	ModelApiType string
+
+	FailoverEnabled bool
 }
 
 type User struct {

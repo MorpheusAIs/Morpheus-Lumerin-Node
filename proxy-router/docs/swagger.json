@@ -400,7 +400,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/structs.OpenSessionWithDurationRequest"
+                            "$ref": "#/definitions/structs.OpenSessionWithFailover"
                         }
                     },
                     {
@@ -1444,6 +1444,9 @@
                 "createdAt": {
                     "type": "integer"
                 },
+                "isLocal": {
+                    "type": "boolean"
+                },
                 "modelId": {
                     "type": "string"
                 },
@@ -1547,6 +1550,9 @@
         "proxyapi.ChatHistory": {
             "type": "object",
             "properties": {
+                "isLocal": {
+                    "type": "boolean"
+                },
                 "messages": {
                     "type": "array",
                     "items": {
@@ -2030,6 +2036,17 @@
         "structs.OpenSessionWithDurationRequest": {
             "type": "object",
             "properties": {
+                "sessionDuration": {
+                    "type": "string"
+                }
+            }
+        },
+        "structs.OpenSessionWithFailover": {
+            "type": "object",
+            "properties": {
+                "failover": {
+                    "type": "boolean"
+                },
                 "sessionDuration": {
                     "type": "string"
                 }
