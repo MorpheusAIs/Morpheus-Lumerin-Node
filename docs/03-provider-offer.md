@@ -1,6 +1,6 @@
 
 # Creating Provider, Model and Bid on the Blockchain:
-**Diamond contract:** `0x208eaeD75A12C35625708140c99A614FC45bf780`
+**Diamond contract:** `0x10777866547c53cbd69b02c5c76369d7e24e7b10`
 
 **Needed information:**
 * Provider/Owner:   `0x9E26Fea97F7d644BAf62d0e20e4d4b8F836C166c` # Your ERC-20 Wallet with saMOR & saETH

@@ -69,7 +69,7 @@ Key Values in the .env file are (there are others, but these are primarly respon
     - Ethereum Node Address for the Arbitrum blockchain (via Alchemy or Infura)
     - This websocket (wss) address is key for the proxy-router to listen and post to the blockchain
     - We recommend using your own private ETH Node Address for better performance (free account setup via Alchemy or Infura)
-- `DIAMOND_CONTRACT_ADDRESS=0x208eaeD75A12C35625708140c99A614FC45bf780`
+- `DIAMOND_CONTRACT_ADDRESS=0x10777866547c53cbd69b02c5c76369d7e24e7b10`
     - This is the key Lumerin Smart Contract (currently Sepolia Arbitrum testnet)
     - This is the address of the smart contract that the proxy-router will interact with to post providers, models & bids 
     - This address will change as the smart-contract is updated and for mainnet contract interaction 
