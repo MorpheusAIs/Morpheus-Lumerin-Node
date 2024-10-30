@@ -50,6 +50,8 @@ type Config struct {
 		LevelProxy      string `env:"LOG_LEVEL_PROXY"      flag:"log-level-proxy"      validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
 		LevelScheduler  string `env:"LOG_LEVEL_SCHEDULER"  flag:"log-level-scheduler"  validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
 		LevelContract   string `env:"LOG_LEVEL_CONTRACT"   flag:"log-level-contract"   validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
+		LevelRPC        string `env:"LOG_LEVEL_RPC"        flag:"log-level-rpc"        validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
+		LevelBadger     string `env:"LOG_LEVEL_BADGER"     flag:"log-level-badger"     validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
 	}
 	Proxy struct {
 		Address          string `env:"PROXY_ADDRESS" flag:"proxy-address" validate:"required,hostname_port"`
@@ -102,6 +104,12 @@ func (cfg *Config) SetDefaults() {
 	}
 	if cfg.Log.LevelApp == "" {
 		cfg.Log.LevelApp = "debug"
+	}
+	if cfg.Log.LevelRPC == "" {
+		cfg.Log.LevelRPC = "info"
+	}
+	if cfg.Log.LevelBadger == "" {
+		cfg.Log.LevelBadger = "info"
 	}
 
 	// Proxy
@@ -174,6 +182,7 @@ func (cfg *Config) GetSanitized() interface{} {
 	publicCfg.Log.LevelConnection = cfg.Log.LevelConnection
 	publicCfg.Log.LevelProxy = cfg.Log.LevelProxy
 	publicCfg.Log.LevelScheduler = cfg.Log.LevelScheduler
+	publicCfg.Log.LevelRPC = cfg.Log.LevelRPC
 
 	publicCfg.Proxy.Address = cfg.Proxy.Address
 	publicCfg.Proxy.MaxCachedDests = cfg.Proxy.MaxCachedDests
