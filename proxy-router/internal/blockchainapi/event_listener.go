@@ -3,34 +3,38 @@ package blockchainapi
 import (
 	"context"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/sessionrouter"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/sessionrouter"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
-	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 )
 
 type EventsListener struct {
 	sessionRouter     *registries.SessionRouter
+	marketplace       *registries.Marketplace
 	store             *storages.SessionStorage
 	tsk               *lib.Task
 	log               *lib.Logger
-	client            *ethclient.Client
+	client            bind.ContractFilterer
 	wallet            interfaces.Wallet
 	modelConfigLoader *config.ModelConfigLoader
+	logWatcher        contracts.LogWatcher
 }
 
-func NewEventsListener(client *ethclient.Client, store *storages.SessionStorage, sessionRouter *registries.SessionRouter, wallet interfaces.Wallet, modelConfigLoader *config.ModelConfigLoader, log *lib.Logger) *EventsListener {
+func NewEventsListener(client bind.ContractFilterer, store *storages.SessionStorage, sessionRouter *registries.SessionRouter, marketplace *registries.Marketplace, wallet interfaces.Wallet, modelConfigLoader *config.ModelConfigLoader, logWatcher contracts.LogWatcher, log *lib.Logger) *EventsListener {
 	return &EventsListener{
 		store:             store,
 		log:               log,
 		sessionRouter:     sessionRouter,
+		marketplace:       marketplace,
 		client:            client,
 		wallet:            wallet,
 		modelConfigLoader: modelConfigLoader,
+		logWatcher:        logWatcher,
 	}
 }
 
@@ -39,7 +43,7 @@ func (e *EventsListener) Run(ctx context.Context) error {
 		_ = e.log.Close()
 	}()
 
-	sub, err := contracts.WatchContractEvents(ctx, e.client, e.sessionRouter.GetContractAddress(), contracts.CreateEventMapper(contracts.BlockchainEventFactory, e.sessionRouter.GetABI()), e.log)
+	sub, err := e.logWatcher.Watch(ctx, e.sessionRouter.GetContractAddress(), contracts.CreateEventMapper(contracts.SessionRouterEventFactory, e.sessionRouter.GetABI()), nil)
 	if err != nil {
 		return err
 	}
@@ -57,7 +61,7 @@ func (e *EventsListener) Run(ctx context.Context) error {
 			}
 		case err := <-sub.Err():
 			e.log.Errorf("error in event listener: %s", err)
-			// return err
+			return err
 		}
 	}
 }
@@ -73,12 +77,20 @@ func (e *EventsListener) controller(event interface{}) error {
 }
 
 func (e *EventsListener) handleSessionOpened(event *sessionrouter.SessionRouterSessionOpened) error {
+	ctx := context.Background()
+
 	sessionId := lib.BytesToString(event.SessionId[:])
 	e.log.Debugf("received open session router event, sessionId %s", sessionId)
 
-	session, err := e.sessionRouter.GetSession(context.Background(), event.SessionId)
+	session, err := e.sessionRouter.GetSession(ctx, event.SessionId)
 	if err != nil {
 		e.log.Errorf("failed to get session from blockchain: %s, sessionId %s", err, sessionId)
+		return err
+	}
+
+	bid, err := e.marketplace.GetBidById(ctx, session.BidId)
+	if err != nil {
+		e.log.Errorf("failed to get bid from blockchain: %s, sessionId %s", err, sessionId)
 		return err
 	}
 
@@ -94,29 +106,45 @@ func (e *EventsListener) handleSessionOpened(event *sessionrouter.SessionRouterS
 		return err
 	}
 
-	if session.Provider.Hex() != address.Hex() && event.UserAddress.Hex() != address.Hex() {
+	if bid.Provider.Hex() != address.Hex() && event.User.Hex() != address.Hex() {
 		e.log.Debugf("session provider/user is not me, skipping, sessionId %s", sessionId)
 		return nil
 	}
 
-	modelID := lib.BytesToString(session.ModelAgentId[:])
+	modelID := lib.BytesToString(bid.ModelId[:])
 
 	var modelConfig *config.ModelConfig
-	if session.Provider.Hex() == address.Hex() {
+	if bid.Provider.Hex() == address.Hex() {
 		modelConfig = e.modelConfigLoader.ModelConfigFromID(modelID)
+		err = e.store.AddSessionToModel(modelID, sessionId)
+		if err != nil {
+			return err
+		}
 	} else {
 		modelConfig = &config.ModelConfig{}
 	}
 
-	err = e.store.AddSession(&storages.Session{
-		Id:           sessionId,
-		UserAddr:     event.UserAddress.Hex(),
-		ProviderAddr: session.Provider.Hex(),
-		EndsAt:       session.EndsAt,
-		ModelID:      modelID,
-		ModelName:    modelConfig.ModelName,
-		ModelApiType: modelConfig.ApiType,
-	})
+	storedSession, ok := e.store.GetSession(sessionId)
+	if !ok {
+		err = e.store.AddSession(&storages.Session{
+			Id:           sessionId,
+			UserAddr:     event.User.Hex(),
+			ProviderAddr: bid.Provider.Hex(),
+			EndsAt:       session.EndsAt,
+			ModelID:      modelID,
+			ModelName:    modelConfig.ModelName,
+			ModelApiType: modelConfig.ApiType,
+		})
+	} else {
+		storedSession.EndsAt = session.EndsAt
+		storedSession.ModelID = modelID
+		storedSession.ModelName = modelConfig.ModelName
+		storedSession.ModelApiType = modelConfig.ApiType
+		storedSession.ProviderAddr = bid.Provider.Hex()
+		storedSession.UserAddr = event.User.Hex()
+		err = e.store.AddSession(storedSession)
+	}
+
 	if err != nil {
 		return err
 	}

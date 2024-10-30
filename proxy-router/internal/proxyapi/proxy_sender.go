@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"time"
 
 	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
@@ -34,8 +35,14 @@ var (
 	ErrMasrshalFailed   = fmt.Errorf("failed to marshal response")
 	ErrDecode           = fmt.Errorf("failed to decode response")
 	ErrSessionNotFound  = fmt.Errorf("session not found")
+	ErrSessionExpired   = fmt.Errorf("session expired")
 	ErrProviderNotFound = fmt.Errorf("provider not found")
 )
+
+type SessionService interface {
+	OpenSessionByModelId(ctx context.Context, modelID common.Hash, duration *big.Int, isFailoverEnabled bool, omitProvider common.Address) (common.Hash, error)
+	CloseSession(ctx context.Context, sessionID common.Hash) (common.Hash, error)
+}
 
 type ProxyServiceSender struct {
 	publicUrl      *url.URL
@@ -43,6 +50,7 @@ type ProxyServiceSender struct {
 	logStorage     *lib.Collection[*interfaces.LogStorage]
 	sessionStorage *storages.SessionStorage
 	morRPC         *msgs.MORRPCMessage
+	sessionService SessionService
 	log            lib.ILogger
 }
 
@@ -55,6 +63,10 @@ func NewProxySender(publicUrl *url.URL, privateKey interfaces.PrKeyProvider, log
 		morRPC:         msgs.NewMorRpc(),
 		log:            log,
 	}
+}
+
+func (p *ProxyServiceSender) SetSessionService(service SessionService) {
+	p.sessionService = service
 }
 
 func (p *ProxyServiceSender) InitiateSession(ctx context.Context, user common.Address, provider common.Address, spend *big.Int, bidID common.Hash, providerURL string) (*msgs.SessionRes, error) {
@@ -181,7 +193,10 @@ func (p *ProxyServiceSender) SendPrompt(ctx context.Context, resWriter Responder
 		return nil, ErrSessionNotFound
 	}
 
-	// TODO: add check for session expiration
+	isExpired := session.EndsAt.Int64()-time.Now().Unix() < 0
+	if isExpired {
+		return nil, ErrSessionExpired
+	}
 
 	provider, ok := p.sessionStorage.GetUser(session.ProviderAddr)
 	if !ok {
@@ -203,7 +218,45 @@ func (p *ProxyServiceSender) SendPrompt(ctx context.Context, resWriter Responder
 		return nil, lib.WrapError(ErrCreateReq, err)
 	}
 
-	return p.rpcRequestStream(ctx, resWriter, provider.Url, promptRequest, pubKey)
+	result, err := p.rpcRequestStream(ctx, resWriter, provider.Url, promptRequest, pubKey)
+	if err != nil {
+		if !session.FailoverEnabled {
+			return nil, lib.WrapError(ErrProvider, err)
+		}
+
+		// _, err := p.sessionService.CloseSession(ctx, sessionID)
+		// if err != nil {
+		// 	return nil, err
+		// }
+
+		resWriter.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_EVENT_STREAM)
+		_, err = resWriter.Write([]byte(fmt.Sprintf("data: %s\n\n", "{\"message\": \"provider failed, failover enabled\"}")))
+		if err != nil {
+			return nil, err
+		}
+		resWriter.Flush()
+
+		modelID := common.HexToHash(session.ModelID)
+		provider := common.HexToAddress(session.ProviderAddr)
+		duration := session.EndsAt.Int64() - time.Now().Unix()
+		durationBigInt := big.NewInt(duration)
+		newSessionID, err := p.sessionService.OpenSessionByModelId(ctx, modelID, durationBigInt, session.FailoverEnabled, provider)
+
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = resWriter.Write([]byte(fmt.Sprintf("data: %s\n\n", "{\"message\": \"new session opened\"}")))
+		if err != nil {
+			return nil, err
+		}
+		resWriter.Flush()
+
+		time.Sleep(1 * time.Second) //  sleep for a bit to allow the new session to be created
+		return p.SendPrompt(ctx, resWriter, prompt, newSessionID)
+	}
+
+	return result, nil
 }
 
 func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage) (*msgs.RpcResponse, int, gin.H) {

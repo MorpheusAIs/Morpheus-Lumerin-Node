@@ -144,6 +144,9 @@ func (s *MORRPCController) sessionPrompt(ctx context.Context, msg m.RPCMessage, 
 	}
 
 	requestDuration := int(time.Now().Unix() - now)
+	if requestDuration == 0 {
+		requestDuration = 1
+	}
 	session.TTFTMsArr = append(session.TTFTMsArr, ttftMs)
 	session.TPSScaled1000Arr = append(session.TPSScaled1000Arr, totalTokens*1000/requestDuration)
 	err = s.sessionStorage.AddSession(session)

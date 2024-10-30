@@ -3,12 +3,13 @@ package registries
 import (
 	"context"
 	"fmt"
+	"math/big"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/contracts/modelregistry"
+	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/modelregistry"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
 )
 
 type ModelRegistry struct {
@@ -20,11 +21,11 @@ type ModelRegistry struct {
 
 	// deps
 	modelRegistry *modelregistry.ModelRegistry
-	client        *ethclient.Client
+	client        i.ContractBackend
 	log           lib.ILogger
 }
 
-func NewModelRegistry(modelRegistryAddr common.Address, client *ethclient.Client, log lib.ILogger) *ModelRegistry {
+func NewModelRegistry(modelRegistryAddr common.Address, client i.ContractBackend, log lib.ILogger) *ModelRegistry {
 	mr, err := modelregistry.NewModelRegistry(modelRegistryAddr, client)
 	if err != nil {
 		panic("invalid model registry ABI")
@@ -37,17 +38,26 @@ func NewModelRegistry(modelRegistryAddr common.Address, client *ethclient.Client
 	}
 }
 
-func (g *ModelRegistry) GetAllModels(ctx context.Context) ([][32]byte, []modelregistry.Model, error) {
-	adresses, models, err := g.modelRegistry.ModelGetAll(&bind.CallOpts{Context: ctx})
+func (g *ModelRegistry) GetAllModels(ctx context.Context) ([][32]byte, []modelregistry.IModelStorageModel, error) {
+	ids, err := g.modelRegistry.GetModelIds(&bind.CallOpts{Context: ctx}, big.NewInt(0), big.NewInt(100))
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return adresses, models, nil
+	models := make([]modelregistry.IModelStorageModel, 0, len(ids))
+	for _, id := range ids {
+		model, err := g.modelRegistry.GetModel(&bind.CallOpts{Context: ctx}, id)
+		if err != nil {
+			return nil, nil, err
+		}
+		models = append(models, model)
+	}
+
+	return ids, models, nil
 }
 
-func (g *ModelRegistry) CreateNewModel(opts *bind.TransactOpts, modelId common.Hash, ipfsID common.Hash, fee *lib.BigInt, stake *lib.BigInt, owner common.Address, name string, tags []string) error {
-	tx, err := g.modelRegistry.ModelRegister(opts, modelId, ipfsID, &fee.Int, &stake.Int, owner, name, tags)
+func (g *ModelRegistry) CreateNewModel(opts *bind.TransactOpts, modelId common.Hash, ipfsID common.Hash, fee *lib.BigInt, stake *lib.BigInt, name string, tags []string) error {
+	tx, err := g.modelRegistry.ModelRegister(opts, modelId, ipfsID, &fee.Int, &stake.Int, name, tags)
 	if err != nil {
 		return lib.TryConvertGethError(err)
 	}
@@ -99,8 +109,8 @@ func (g *ModelRegistry) DeregisterModel(opts *bind.TransactOpts, modelId common.
 	return common.Hash{}, fmt.Errorf("ModelDeregistered event not found in transaction logs")
 }
 
-func (g *ModelRegistry) GetModelById(ctx context.Context, modelId common.Hash) (*modelregistry.Model, error) {
-	model, err := g.modelRegistry.ModelMap(&bind.CallOpts{Context: ctx}, modelId)
+func (g *ModelRegistry) GetModelById(ctx context.Context, modelId common.Hash) (*modelregistry.IModelStorageModel, error) {
+	model, err := g.modelRegistry.GetModel(&bind.CallOpts{Context: ctx}, modelId)
 	if err != nil {
 		return nil, err
 	}

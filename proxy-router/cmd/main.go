@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -19,13 +21,16 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyctl"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/ethclient"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/keychain"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/transport"
 	wlt "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/wallet"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/walletapi"
-	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/common"
 
 	docs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/docs"
 )
@@ -116,6 +121,15 @@ func start() error {
 
 	contractLogStorage := lib.NewCollection[*interfaces.LogStorage]()
 
+	rpcLog, err := lib.NewLogger(cfg.Log.LevelRPC, cfg.Log.Color, cfg.Log.IsProd, cfg.Log.JSON, mainLogFilePath)
+	if err != nil {
+		return err
+	}
+
+	badgerLog, err := lib.NewLogger(cfg.Log.LevelBadger, cfg.Log.Color, cfg.Log.IsProd, cfg.Log.JSON, mainLogFilePath)
+	if err != nil {
+		return err
+	}
 	// contractLogFactory := func(contractID string) (lib.ILogger, error) {
 	// 	logStorage := interfaces.NewLogStorage(contractID)
 	// 	contractLogStorage.Store(logStorage)
@@ -182,13 +196,43 @@ func start() error {
 		os.Exit(1)
 	}()
 
-	ethClient, err := ethclient.DialContext(ctx, cfg.Blockchain.EthNodeAddress)
+	keychainStorage := keychain.NewKeychain()
+
+	if cfg.App.ResetKeychain {
+		appLog.Warnf("Resetting keychain...")
+		wallet := wlt.NewKeychainWallet(keychainStorage)
+		err = wallet.DeleteWallet()
+		if err != nil {
+			appLog.Warnf("Failed to delete wallet\n%s", err)
+		} else {
+			appLog.Info("Wallet deleted")
+		}
+
+		ethNodeStorage := ethclient.NewRPCClientStoreKeychain(keychainStorage, nil, log)
+		err = ethNodeStorage.RemoveURLs()
+		if err != nil {
+			appLog.Warnf("Failed to remove eth node urls\n%s", err)
+		} else {
+			appLog.Info("Eth node urls removed")
+		}
+	}
+
+	var ethNodeAddresses []string
+	if cfg.Blockchain.EthNodeAddress != "" {
+		ethNodeAddresses = []string{cfg.Blockchain.EthNodeAddress}
+	}
+	rpcClientStore, err := ethclient.ConfigureRPCClientStore(keychainStorage, ethNodeAddresses, cfg.Blockchain.ChainID, rpcLog.Named("RPC"))
 	if err != nil {
 		return lib.WrapError(ErrConnectToEthNode, err)
 	}
+
+	ethClient := ethclient.NewClient(rpcClientStore.GetClient())
 	chainID, err := ethClient.ChainID(ctx)
 	if err != nil {
 		return lib.WrapError(ErrConnectToEthNode, err)
+	}
+	if cfg.Blockchain.ChainID != 0 && int(chainID.Uint64()) != cfg.Blockchain.ChainID {
+		return lib.WrapError(ErrConnectToEthNode, fmt.Errorf("configured chainID (%d) does not match eth node chain ID (%s)", cfg.Blockchain.ChainID, chainID))
 	}
 	appLog.Infof("connected to ethereum node: %s, chainID: %d", cfg.Blockchain.EthNodeAddress, chainID)
 
@@ -197,7 +241,7 @@ func start() error {
 		return err
 	}
 
-	storage := storages.NewStorage(log, cfg.Proxy.StoragePath)
+	storage := storages.NewStorage(badgerLog, cfg.Proxy.StoragePath)
 	sessionStorage := storages.NewSessionStorage(storage)
 
 	var wallet interfaces.Wallet
@@ -205,8 +249,17 @@ func start() error {
 		wallet = wlt.NewEnvWallet(*cfg.Marketplace.WalletPrivateKey)
 		log.Warnf("Using env wallet. Private key persistance unavailable")
 	} else {
-		wallet = wlt.NewKeychainWallet()
+		wallet = wlt.NewKeychainWallet(keychainStorage)
 		log.Infof("Using keychain wallet")
+	}
+
+	var logWatcher contracts.LogWatcher
+	if cfg.Blockchain.UseSubscriptions {
+		logWatcher = contracts.NewLogWatcherSubscription(ethClient, cfg.Blockchain.MaxReconnects, log)
+		appLog.Infof("using websocket log subscription for blockchain events")
+	} else {
+		logWatcher = contracts.NewLogWatcherPolling(ethClient, cfg.Blockchain.PollingInterval, cfg.Blockchain.MaxReconnects, log)
+		appLog.Infof("using polling for blockchain events")
 	}
 
 	modelConfigLoader := config.NewModelConfigLoader(cfg.Proxy.ModelsConfigPath, log)
@@ -215,21 +268,40 @@ func start() error {
 		log.Warnf("failed to load model config: %s, run with empty", err)
 	}
 
+	providerAllowList := []common.Address{}
+	if cfg.Proxy.ProviderAllowList != "" {
+		addresses := strings.Split(cfg.Proxy.ProviderAllowList, ",")
+		for _, address := range addresses {
+			addr := strings.TrimSpace(address)
+			providerAllowList = append(providerAllowList, common.HexToAddress(addr))
+		}
+	}
+
 	proxyRouterApi := proxyapi.NewProxySender(publicUrl, wallet, contractLogStorage, sessionStorage, log)
-	blockchainApi := blockchainapi.NewBlockchainService(ethClient, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, cfg.Blockchain.ExplorerApiUrl, wallet, sessionStorage, proxyRouterApi, proxyLog, cfg.Blockchain.EthLegacyTx)
+	blockchainApi := blockchainapi.NewBlockchainService(ethClient, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, cfg.Blockchain.ExplorerApiUrl, wallet, sessionStorage, proxyRouterApi, providerAllowList, proxyLog, cfg.Blockchain.EthLegacyTx)
+	proxyRouterApi.SetSessionService(blockchainApi)
 	aiEngine := aiengine.NewAiEngine(cfg.AIEngine.OpenAIBaseURL, cfg.AIEngine.OpenAIKey, modelConfigLoader, log)
 
+	marketplace := registries.NewMarketplace(*cfg.Marketplace.DiamondContractAddress, ethClient, log)
 	sessionRouter := registries.NewSessionRouter(*cfg.Marketplace.DiamondContractAddress, ethClient, log)
 
-	eventListener := blockchainapi.NewEventsListener(ethClient, sessionStorage, sessionRouter, wallet, modelConfigLoader, log)
+	eventListener := blockchainapi.NewEventsListener(ethClient, sessionStorage, sessionRouter, marketplace, wallet, modelConfigLoader, logWatcher, log)
 
 	blockchainController := blockchainapi.NewBlockchainController(blockchainApi, log)
 
-	chatStoragePath := filepath.Join(cfg.Proxy.StoragePath, "chat")
-	chatStorage := proxyapi.NewChatStorage(chatStoragePath)
+	var chatStorage proxyapi.ChatStorageInterface
+	if cfg.Proxy.StoreChatContext {
+		chatStoragePath := filepath.Join(cfg.Proxy.StoragePath, "chats")
+		chatStorage = proxyapi.NewChatStorage(chatStoragePath)
+	} else {
+		log.Warnf("chat context storage is disabled")
+		chatStorage = proxyapi.NewNoOpChatStorage()
+	}
+
+	ethConnectionValidator := system.NewEthConnectionValidator(*big.NewInt(int64(cfg.Blockchain.ChainID)))
 	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine, chatStorage)
 	walletController := walletapi.NewWalletController(wallet)
-	systemController := system.NewSystemController(&cfg, wallet, sysConfig, appStartTime, chainID, log)
+	systemController := system.NewSystemController(&cfg, wallet, rpcClientStore, sysConfig, appStartTime, chainID, log, ethConnectionValidator)
 
 	apiBus := apibus.NewApiBus(blockchainController, proxyController, walletController, systemController)
 	httpHandler := httphandlers.CreateHTTPServer(log, apiBus)
@@ -243,7 +315,7 @@ func start() error {
 		cancel()
 	}()
 
-	proxy := proxyctl.NewProxyCtl(eventListener, wallet, chainID, log, connLog, cfg.Proxy.Address, schedulerLogFactory, sessionStorage, modelConfigLoader, valid, aiEngine)
+	proxy := proxyctl.NewProxyCtl(eventListener, wallet, chainID, log, connLog, cfg.Proxy.Address, schedulerLogFactory, sessionStorage, modelConfigLoader, valid, aiEngine, blockchainApi)
 	err = proxy.Run(ctx)
 
 	cancelServer()

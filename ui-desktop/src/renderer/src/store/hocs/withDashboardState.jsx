@@ -45,9 +45,9 @@ const withDashboardState = WrappedComponent => {
         });
     };
 
-    loadTransactions =  async (page = 0, pageSize = 15) => {
+    loadTransactions = async (page = 1, pageSize = 15) => {
       this.setState({ refreshStatus: 'pending', refreshError: null });
-      const transactions = await this.props.client.getTransactions(page, pageSize);
+      const transactions = await this.props.client.getTransactions({ page, pageSize });
       this.setState({ refreshStatus: 'success' })
   
       // if (page && pageSize) {
@@ -58,6 +58,26 @@ const withDashboardState = WrappedComponent => {
       //   })
       // }
       return transactions;
+    }
+
+    getStakedFunds = async (user) => {
+      const isClosed = (item) => item.ClosedAt || (new Date().getTime() > item.EndsAt * 1000);
+
+      if(!user) {
+        return;
+      }
+      try {
+        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions/user?user=${user}`;
+        const response = await fetch(path);
+        const data = await response.json();
+        const openSessions = data.sessions.filter(s => !isClosed(s));
+        const sum = openSessions.reduce((curr, next) => curr + next.Stake, 0);
+        return (sum / 10 ** 18).toFixed(2);
+      }
+      catch (e) {
+        console.log("Error", e)
+        return 0;
+      }
     }
 
     getBalances = async () => {
@@ -84,6 +104,7 @@ const withDashboardState = WrappedComponent => {
           getBalances={this.getBalances}
           sendDisabled={sendLmrFeatureStatus !== 'ok'}
           loadTransactions={this.loadTransactions}
+          getStakedFunds={this.getStakedFunds}
           {...this.props}
           {...this.state}
         />
@@ -92,6 +113,7 @@ const withDashboardState = WrappedComponent => {
   }
 
   const mapStateToProps = state => ({
+    config: state.config,
     syncStatus: selectors.getTxSyncStatus(state),
     sendLmrFeatureStatus: selectors.sendLmrFeatureStatus(state),
     hasTransactions: selectors.hasTransactions(state),
