@@ -63,7 +63,7 @@ type IProviderStorageProvider struct {
 
 // MarketplaceMetaData contains all meta data concerning the Marketplace contract.
 var MarketplaceMetaData = &bind.MetaData{
-	ABI: "[{\"inputs\":[],\"name\":\"MarketplaceActiveBidNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"MarketplaceModelNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"MarketplaceProviderNotFound\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account_\",\"type\":\"address\"}],\"name\":\"OwnableUnauthorizedAccount\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"storageSlot\",\"type\":\"bytes32\"}],\"name\":\"Initialized\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"bidFee\",\"type\":\"uint256\"}],\"name\":\"MaretplaceFeeUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"nonce\",\"type\":\"uint256\"}],\"name\":\"MarketplaceBidDeleted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"nonce\",\"type\":\"uint256\"}],\"name\":\"MarketplaceBidPosted\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"BIDS_STORAGE_SLOT\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"DIAMOND_OWNABLE_STORAGE_SLOT\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"MARKET_STORAGE_SLOT\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"MODELS_STORAGE_SLOT\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"PROVIDERS_STORAGE_SLOT\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"token_\",\"type\":\"address\"}],\"name\":\"__Marketplace_init\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"bidId_\",\"type\":\"bytes32\"}],\"name\":\"deleteModelBid\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getActiveModels\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getActiveProviders\",\"outputs\":[{\"internalType\":\"address[]\",\"name\":\"\",\"type\":\"address[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"bidId_\",\"type\":\"bytes32\"}],\"name\":\"getBid\",\"outputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"nonce\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"uint128\",\"name\":\"deletedAt\",\"type\":\"uint128\"}],\"internalType\":\"structIBidStorage.Bid\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getBidFee\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"provider_\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"nonce_\",\"type\":\"uint256\"}],\"name\":\"getBidId\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"pure\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getFeeBalance\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"}],\"name\":\"getIsModelActive\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"provider_\",\"type\":\"address\"}],\"name\":\"getIsProviderActive\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"}],\"name\":\"getModel\",\"outputs\":[{\"components\":[{\"internalType\":\"bytes32\",\"name\":\"ipfsCID\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"stake\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string[]\",\"name\":\"tags\",\"type\":\"string[]\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"bool\",\"name\":\"isDeleted\",\"type\":\"bool\"}],\"internalType\":\"structIModelStorage.Model\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getModelActiveBids\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getModelBids\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getModelIds\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getModelMinimumStake\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"provider_\",\"type\":\"address\"}],\"name\":\"getProvider\",\"outputs\":[{\"components\":[{\"internalType\":\"string\",\"name\":\"endpoint\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"stake\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"uint128\",\"name\":\"limitPeriodEnd\",\"type\":\"uint128\"},{\"internalType\":\"uint256\",\"name\":\"limitPeriodEarned\",\"type\":\"uint256\"},{\"internalType\":\"bool\",\"name\":\"isDeleted\",\"type\":\"bool\"}],\"internalType\":\"structIProviderStorage.Provider\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"provider_\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getProviderActiveBids\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"provider_\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getProviderBids\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getProviderMinimumStake\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"provider_\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"}],\"name\":\"getProviderModelId\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"pure\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getToken\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"bidId_\",\"type\":\"bytes32\"}],\"name\":\"isBidActive\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond_\",\"type\":\"uint256\"}],\"name\":\"postModelBid\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"bidId\",\"type\":\"bytes32\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"bidFee_\",\"type\":\"uint256\"}],\"name\":\"setMarketplaceBidFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"recipient_\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount_\",\"type\":\"uint256\"}],\"name\":\"withdraw\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
+	ABI: "[{\"inputs\":[],\"name\":\"MarketplaceActiveBidNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"MarketplaceBidMinPricePerSecondIsInvalid\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"MarketplaceBidMinPricePerSecondIsZero\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"MarketplaceBidPricePerSecondInvalid\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"MarketplaceFeeAmountIsZero\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"MarketplaceModelNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"MarketplaceProviderNotFound\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account_\",\"type\":\"address\"}],\"name\":\"OwnableUnauthorizedAccount\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"storageSlot\",\"type\":\"bytes32\"}],\"name\":\"Initialized\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"bidFee\",\"type\":\"uint256\"}],\"name\":\"MaretplaceFeeUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"nonce\",\"type\":\"uint256\"}],\"name\":\"MarketplaceBidDeleted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"bidMinPricePerSecond\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"bidMaxPricePerSecond\",\"type\":\"uint256\"}],\"name\":\"MarketplaceBidMinMaxPriceUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"nonce\",\"type\":\"uint256\"}],\"name\":\"MarketplaceBidPosted\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"BIDS_STORAGE_SLOT\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"DIAMOND_OWNABLE_STORAGE_SLOT\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"MARKET_STORAGE_SLOT\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"MODELS_STORAGE_SLOT\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"PROVIDERS_STORAGE_SLOT\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"token_\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"bidMinPricePerSecond_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"bidMaxPricePerSecond_\",\"type\":\"uint256\"}],\"name\":\"__Marketplace_init\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"bidId_\",\"type\":\"bytes32\"}],\"name\":\"deleteModelBid\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getActiveModelIds\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getActiveProviders\",\"outputs\":[{\"internalType\":\"address[]\",\"name\":\"\",\"type\":\"address[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"bidId_\",\"type\":\"bytes32\"}],\"name\":\"getBid\",\"outputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"nonce\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"uint128\",\"name\":\"deletedAt\",\"type\":\"uint128\"}],\"internalType\":\"structIBidStorage.Bid\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getBidFee\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"provider_\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"nonce_\",\"type\":\"uint256\"}],\"name\":\"getBidId\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"pure\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getFeeBalance\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"}],\"name\":\"getIsModelActive\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"provider_\",\"type\":\"address\"}],\"name\":\"getIsProviderActive\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getMinMaxBidPricePerSecond\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"}],\"name\":\"getModel\",\"outputs\":[{\"components\":[{\"internalType\":\"bytes32\",\"name\":\"ipfsCID\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"stake\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string[]\",\"name\":\"tags\",\"type\":\"string[]\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"bool\",\"name\":\"isDeleted\",\"type\":\"bool\"}],\"internalType\":\"structIModelStorage.Model\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getModelActiveBids\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getModelBids\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getModelIds\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getModelMinimumStake\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"provider_\",\"type\":\"address\"}],\"name\":\"getProvider\",\"outputs\":[{\"components\":[{\"internalType\":\"string\",\"name\":\"endpoint\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"stake\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"uint128\",\"name\":\"limitPeriodEnd\",\"type\":\"uint128\"},{\"internalType\":\"uint256\",\"name\":\"limitPeriodEarned\",\"type\":\"uint256\"},{\"internalType\":\"bool\",\"name\":\"isDeleted\",\"type\":\"bool\"}],\"internalType\":\"structIProviderStorage.Provider\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"provider_\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getProviderActiveBids\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"provider_\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getProviderBids\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getProviderMinimumStake\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"provider_\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"}],\"name\":\"getProviderModelId\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"pure\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getToken\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"bidId_\",\"type\":\"bytes32\"}],\"name\":\"isBidActive\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond_\",\"type\":\"uint256\"}],\"name\":\"postModelBid\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"bidId\",\"type\":\"bytes32\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"bidFee_\",\"type\":\"uint256\"}],\"name\":\"setMarketplaceBidFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"bidMinPricePerSecond_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"bidMaxPricePerSecond_\",\"type\":\"uint256\"}],\"name\":\"setMinMaxBidPricePerSecond\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"recipient_\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount_\",\"type\":\"uint256\"}],\"name\":\"withdrawFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
 }
 
 // MarketplaceABI is the input ABI used to generate the binding from.
@@ -367,12 +367,12 @@ func (_Marketplace *MarketplaceCallerSession) PROVIDERSSTORAGESLOT() ([32]byte, 
 	return _Marketplace.Contract.PROVIDERSSTORAGESLOT(&_Marketplace.CallOpts)
 }
 
-// GetActiveModels is a free data retrieval call binding the contract method 0xac59585c.
+// GetActiveModelIds is a free data retrieval call binding the contract method 0x3839d3dc.
 //
-// Solidity: function getActiveModels(uint256 offset_, uint256 limit_) view returns(bytes32[])
-func (_Marketplace *MarketplaceCaller) GetActiveModels(opts *bind.CallOpts, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
+// Solidity: function getActiveModelIds(uint256 offset_, uint256 limit_) view returns(bytes32[])
+func (_Marketplace *MarketplaceCaller) GetActiveModelIds(opts *bind.CallOpts, offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
 	var out []interface{}
-	err := _Marketplace.contract.Call(opts, &out, "getActiveModels", offset_, limit_)
+	err := _Marketplace.contract.Call(opts, &out, "getActiveModelIds", offset_, limit_)
 
 	if err != nil {
 		return *new([][32]byte), err
@@ -384,18 +384,18 @@ func (_Marketplace *MarketplaceCaller) GetActiveModels(opts *bind.CallOpts, offs
 
 }
 
-// GetActiveModels is a free data retrieval call binding the contract method 0xac59585c.
+// GetActiveModelIds is a free data retrieval call binding the contract method 0x3839d3dc.
 //
-// Solidity: function getActiveModels(uint256 offset_, uint256 limit_) view returns(bytes32[])
-func (_Marketplace *MarketplaceSession) GetActiveModels(offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
-	return _Marketplace.Contract.GetActiveModels(&_Marketplace.CallOpts, offset_, limit_)
+// Solidity: function getActiveModelIds(uint256 offset_, uint256 limit_) view returns(bytes32[])
+func (_Marketplace *MarketplaceSession) GetActiveModelIds(offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
+	return _Marketplace.Contract.GetActiveModelIds(&_Marketplace.CallOpts, offset_, limit_)
 }
 
-// GetActiveModels is a free data retrieval call binding the contract method 0xac59585c.
+// GetActiveModelIds is a free data retrieval call binding the contract method 0x3839d3dc.
 //
-// Solidity: function getActiveModels(uint256 offset_, uint256 limit_) view returns(bytes32[])
-func (_Marketplace *MarketplaceCallerSession) GetActiveModels(offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
-	return _Marketplace.Contract.GetActiveModels(&_Marketplace.CallOpts, offset_, limit_)
+// Solidity: function getActiveModelIds(uint256 offset_, uint256 limit_) view returns(bytes32[])
+func (_Marketplace *MarketplaceCallerSession) GetActiveModelIds(offset_ *big.Int, limit_ *big.Int) ([][32]byte, error) {
+	return _Marketplace.Contract.GetActiveModelIds(&_Marketplace.CallOpts, offset_, limit_)
 }
 
 // GetActiveProviders is a free data retrieval call binding the contract method 0xd5472642.
@@ -613,6 +613,38 @@ func (_Marketplace *MarketplaceSession) GetIsProviderActive(provider_ common.Add
 // Solidity: function getIsProviderActive(address provider_) view returns(bool)
 func (_Marketplace *MarketplaceCallerSession) GetIsProviderActive(provider_ common.Address) (bool, error) {
 	return _Marketplace.Contract.GetIsProviderActive(&_Marketplace.CallOpts, provider_)
+}
+
+// GetMinMaxBidPricePerSecond is a free data retrieval call binding the contract method 0x38c8ac62.
+//
+// Solidity: function getMinMaxBidPricePerSecond() view returns(uint256, uint256)
+func (_Marketplace *MarketplaceCaller) GetMinMaxBidPricePerSecond(opts *bind.CallOpts) (*big.Int, *big.Int, error) {
+	var out []interface{}
+	err := _Marketplace.contract.Call(opts, &out, "getMinMaxBidPricePerSecond")
+
+	if err != nil {
+		return *new(*big.Int), *new(*big.Int), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(*big.Int)).(**big.Int)
+	out1 := *abi.ConvertType(out[1], new(*big.Int)).(**big.Int)
+
+	return out0, out1, err
+
+}
+
+// GetMinMaxBidPricePerSecond is a free data retrieval call binding the contract method 0x38c8ac62.
+//
+// Solidity: function getMinMaxBidPricePerSecond() view returns(uint256, uint256)
+func (_Marketplace *MarketplaceSession) GetMinMaxBidPricePerSecond() (*big.Int, *big.Int, error) {
+	return _Marketplace.Contract.GetMinMaxBidPricePerSecond(&_Marketplace.CallOpts)
+}
+
+// GetMinMaxBidPricePerSecond is a free data retrieval call binding the contract method 0x38c8ac62.
+//
+// Solidity: function getMinMaxBidPricePerSecond() view returns(uint256, uint256)
+func (_Marketplace *MarketplaceCallerSession) GetMinMaxBidPricePerSecond() (*big.Int, *big.Int, error) {
+	return _Marketplace.Contract.GetMinMaxBidPricePerSecond(&_Marketplace.CallOpts)
 }
 
 // GetModel is a free data retrieval call binding the contract method 0x21e7c498.
@@ -1018,25 +1050,25 @@ func (_Marketplace *MarketplaceCallerSession) Owner() (common.Address, error) {
 	return _Marketplace.Contract.Owner(&_Marketplace.CallOpts)
 }
 
-// MarketplaceInit is a paid mutator transaction binding the contract method 0xf6ec33fe.
+// MarketplaceInit is a paid mutator transaction binding the contract method 0xf9804d0b.
 //
-// Solidity: function __Marketplace_init(address token_) returns()
-func (_Marketplace *MarketplaceTransactor) MarketplaceInit(opts *bind.TransactOpts, token_ common.Address) (*types.Transaction, error) {
-	return _Marketplace.contract.Transact(opts, "__Marketplace_init", token_)
+// Solidity: function __Marketplace_init(address token_, uint256 bidMinPricePerSecond_, uint256 bidMaxPricePerSecond_) returns()
+func (_Marketplace *MarketplaceTransactor) MarketplaceInit(opts *bind.TransactOpts, token_ common.Address, bidMinPricePerSecond_ *big.Int, bidMaxPricePerSecond_ *big.Int) (*types.Transaction, error) {
+	return _Marketplace.contract.Transact(opts, "__Marketplace_init", token_, bidMinPricePerSecond_, bidMaxPricePerSecond_)
 }
 
-// MarketplaceInit is a paid mutator transaction binding the contract method 0xf6ec33fe.
+// MarketplaceInit is a paid mutator transaction binding the contract method 0xf9804d0b.
 //
-// Solidity: function __Marketplace_init(address token_) returns()
-func (_Marketplace *MarketplaceSession) MarketplaceInit(token_ common.Address) (*types.Transaction, error) {
-	return _Marketplace.Contract.MarketplaceInit(&_Marketplace.TransactOpts, token_)
+// Solidity: function __Marketplace_init(address token_, uint256 bidMinPricePerSecond_, uint256 bidMaxPricePerSecond_) returns()
+func (_Marketplace *MarketplaceSession) MarketplaceInit(token_ common.Address, bidMinPricePerSecond_ *big.Int, bidMaxPricePerSecond_ *big.Int) (*types.Transaction, error) {
+	return _Marketplace.Contract.MarketplaceInit(&_Marketplace.TransactOpts, token_, bidMinPricePerSecond_, bidMaxPricePerSecond_)
 }
 
-// MarketplaceInit is a paid mutator transaction binding the contract method 0xf6ec33fe.
+// MarketplaceInit is a paid mutator transaction binding the contract method 0xf9804d0b.
 //
-// Solidity: function __Marketplace_init(address token_) returns()
-func (_Marketplace *MarketplaceTransactorSession) MarketplaceInit(token_ common.Address) (*types.Transaction, error) {
-	return _Marketplace.Contract.MarketplaceInit(&_Marketplace.TransactOpts, token_)
+// Solidity: function __Marketplace_init(address token_, uint256 bidMinPricePerSecond_, uint256 bidMaxPricePerSecond_) returns()
+func (_Marketplace *MarketplaceTransactorSession) MarketplaceInit(token_ common.Address, bidMinPricePerSecond_ *big.Int, bidMaxPricePerSecond_ *big.Int) (*types.Transaction, error) {
+	return _Marketplace.Contract.MarketplaceInit(&_Marketplace.TransactOpts, token_, bidMinPricePerSecond_, bidMaxPricePerSecond_)
 }
 
 // DeleteModelBid is a paid mutator transaction binding the contract method 0x8913dcaa.
@@ -1102,25 +1134,46 @@ func (_Marketplace *MarketplaceTransactorSession) SetMarketplaceBidFee(bidFee_ *
 	return _Marketplace.Contract.SetMarketplaceBidFee(&_Marketplace.TransactOpts, bidFee_)
 }
 
-// Withdraw is a paid mutator transaction binding the contract method 0xf3fef3a3.
+// SetMinMaxBidPricePerSecond is a paid mutator transaction binding the contract method 0xf748de1c.
 //
-// Solidity: function withdraw(address recipient_, uint256 amount_) returns()
-func (_Marketplace *MarketplaceTransactor) Withdraw(opts *bind.TransactOpts, recipient_ common.Address, amount_ *big.Int) (*types.Transaction, error) {
-	return _Marketplace.contract.Transact(opts, "withdraw", recipient_, amount_)
+// Solidity: function setMinMaxBidPricePerSecond(uint256 bidMinPricePerSecond_, uint256 bidMaxPricePerSecond_) returns()
+func (_Marketplace *MarketplaceTransactor) SetMinMaxBidPricePerSecond(opts *bind.TransactOpts, bidMinPricePerSecond_ *big.Int, bidMaxPricePerSecond_ *big.Int) (*types.Transaction, error) {
+	return _Marketplace.contract.Transact(opts, "setMinMaxBidPricePerSecond", bidMinPricePerSecond_, bidMaxPricePerSecond_)
 }
 
-// Withdraw is a paid mutator transaction binding the contract method 0xf3fef3a3.
+// SetMinMaxBidPricePerSecond is a paid mutator transaction binding the contract method 0xf748de1c.
 //
-// Solidity: function withdraw(address recipient_, uint256 amount_) returns()
-func (_Marketplace *MarketplaceSession) Withdraw(recipient_ common.Address, amount_ *big.Int) (*types.Transaction, error) {
-	return _Marketplace.Contract.Withdraw(&_Marketplace.TransactOpts, recipient_, amount_)
+// Solidity: function setMinMaxBidPricePerSecond(uint256 bidMinPricePerSecond_, uint256 bidMaxPricePerSecond_) returns()
+func (_Marketplace *MarketplaceSession) SetMinMaxBidPricePerSecond(bidMinPricePerSecond_ *big.Int, bidMaxPricePerSecond_ *big.Int) (*types.Transaction, error) {
+	return _Marketplace.Contract.SetMinMaxBidPricePerSecond(&_Marketplace.TransactOpts, bidMinPricePerSecond_, bidMaxPricePerSecond_)
 }
 
-// Withdraw is a paid mutator transaction binding the contract method 0xf3fef3a3.
+// SetMinMaxBidPricePerSecond is a paid mutator transaction binding the contract method 0xf748de1c.
 //
-// Solidity: function withdraw(address recipient_, uint256 amount_) returns()
-func (_Marketplace *MarketplaceTransactorSession) Withdraw(recipient_ common.Address, amount_ *big.Int) (*types.Transaction, error) {
-	return _Marketplace.Contract.Withdraw(&_Marketplace.TransactOpts, recipient_, amount_)
+// Solidity: function setMinMaxBidPricePerSecond(uint256 bidMinPricePerSecond_, uint256 bidMaxPricePerSecond_) returns()
+func (_Marketplace *MarketplaceTransactorSession) SetMinMaxBidPricePerSecond(bidMinPricePerSecond_ *big.Int, bidMaxPricePerSecond_ *big.Int) (*types.Transaction, error) {
+	return _Marketplace.Contract.SetMinMaxBidPricePerSecond(&_Marketplace.TransactOpts, bidMinPricePerSecond_, bidMaxPricePerSecond_)
+}
+
+// WithdrawFee is a paid mutator transaction binding the contract method 0xfd9be522.
+//
+// Solidity: function withdrawFee(address recipient_, uint256 amount_) returns()
+func (_Marketplace *MarketplaceTransactor) WithdrawFee(opts *bind.TransactOpts, recipient_ common.Address, amount_ *big.Int) (*types.Transaction, error) {
+	return _Marketplace.contract.Transact(opts, "withdrawFee", recipient_, amount_)
+}
+
+// WithdrawFee is a paid mutator transaction binding the contract method 0xfd9be522.
+//
+// Solidity: function withdrawFee(address recipient_, uint256 amount_) returns()
+func (_Marketplace *MarketplaceSession) WithdrawFee(recipient_ common.Address, amount_ *big.Int) (*types.Transaction, error) {
+	return _Marketplace.Contract.WithdrawFee(&_Marketplace.TransactOpts, recipient_, amount_)
+}
+
+// WithdrawFee is a paid mutator transaction binding the contract method 0xfd9be522.
+//
+// Solidity: function withdrawFee(address recipient_, uint256 amount_) returns()
+func (_Marketplace *MarketplaceTransactorSession) WithdrawFee(recipient_ common.Address, amount_ *big.Int) (*types.Transaction, error) {
+	return _Marketplace.Contract.WithdrawFee(&_Marketplace.TransactOpts, recipient_, amount_)
 }
 
 // MarketplaceInitializedIterator is returned from FilterInitialized and is used to iterate over the raw logs and unpacked data for Initialized events raised by the Marketplace contract.
@@ -1539,6 +1592,141 @@ func (_Marketplace *MarketplaceFilterer) WatchMarketplaceBidDeleted(opts *bind.W
 func (_Marketplace *MarketplaceFilterer) ParseMarketplaceBidDeleted(log types.Log) (*MarketplaceMarketplaceBidDeleted, error) {
 	event := new(MarketplaceMarketplaceBidDeleted)
 	if err := _Marketplace.contract.UnpackLog(event, "MarketplaceBidDeleted", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// MarketplaceMarketplaceBidMinMaxPriceUpdatedIterator is returned from FilterMarketplaceBidMinMaxPriceUpdated and is used to iterate over the raw logs and unpacked data for MarketplaceBidMinMaxPriceUpdated events raised by the Marketplace contract.
+type MarketplaceMarketplaceBidMinMaxPriceUpdatedIterator struct {
+	Event *MarketplaceMarketplaceBidMinMaxPriceUpdated // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *MarketplaceMarketplaceBidMinMaxPriceUpdatedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(MarketplaceMarketplaceBidMinMaxPriceUpdated)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(MarketplaceMarketplaceBidMinMaxPriceUpdated)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *MarketplaceMarketplaceBidMinMaxPriceUpdatedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *MarketplaceMarketplaceBidMinMaxPriceUpdatedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// MarketplaceMarketplaceBidMinMaxPriceUpdated represents a MarketplaceBidMinMaxPriceUpdated event raised by the Marketplace contract.
+type MarketplaceMarketplaceBidMinMaxPriceUpdated struct {
+	BidMinPricePerSecond *big.Int
+	BidMaxPricePerSecond *big.Int
+	Raw                  types.Log // Blockchain specific contextual infos
+}
+
+// FilterMarketplaceBidMinMaxPriceUpdated is a free log retrieval operation binding the contract event 0x522f4bcd10bb097a0de10e63abe81fdef5ff505c11cded69df4bb84b1f87a563.
+//
+// Solidity: event MarketplaceBidMinMaxPriceUpdated(uint256 bidMinPricePerSecond, uint256 bidMaxPricePerSecond)
+func (_Marketplace *MarketplaceFilterer) FilterMarketplaceBidMinMaxPriceUpdated(opts *bind.FilterOpts) (*MarketplaceMarketplaceBidMinMaxPriceUpdatedIterator, error) {
+
+	logs, sub, err := _Marketplace.contract.FilterLogs(opts, "MarketplaceBidMinMaxPriceUpdated")
+	if err != nil {
+		return nil, err
+	}
+	return &MarketplaceMarketplaceBidMinMaxPriceUpdatedIterator{contract: _Marketplace.contract, event: "MarketplaceBidMinMaxPriceUpdated", logs: logs, sub: sub}, nil
+}
+
+// WatchMarketplaceBidMinMaxPriceUpdated is a free log subscription operation binding the contract event 0x522f4bcd10bb097a0de10e63abe81fdef5ff505c11cded69df4bb84b1f87a563.
+//
+// Solidity: event MarketplaceBidMinMaxPriceUpdated(uint256 bidMinPricePerSecond, uint256 bidMaxPricePerSecond)
+func (_Marketplace *MarketplaceFilterer) WatchMarketplaceBidMinMaxPriceUpdated(opts *bind.WatchOpts, sink chan<- *MarketplaceMarketplaceBidMinMaxPriceUpdated) (event.Subscription, error) {
+
+	logs, sub, err := _Marketplace.contract.WatchLogs(opts, "MarketplaceBidMinMaxPriceUpdated")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(MarketplaceMarketplaceBidMinMaxPriceUpdated)
+				if err := _Marketplace.contract.UnpackLog(event, "MarketplaceBidMinMaxPriceUpdated", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseMarketplaceBidMinMaxPriceUpdated is a log parse operation binding the contract event 0x522f4bcd10bb097a0de10e63abe81fdef5ff505c11cded69df4bb84b1f87a563.
+//
+// Solidity: event MarketplaceBidMinMaxPriceUpdated(uint256 bidMinPricePerSecond, uint256 bidMaxPricePerSecond)
+func (_Marketplace *MarketplaceFilterer) ParseMarketplaceBidMinMaxPriceUpdated(log types.Log) (*MarketplaceMarketplaceBidMinMaxPriceUpdated, error) {
+	event := new(MarketplaceMarketplaceBidMinMaxPriceUpdated)
+	if err := _Marketplace.contract.UnpackLog(event, "MarketplaceBidMinMaxPriceUpdated", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log
