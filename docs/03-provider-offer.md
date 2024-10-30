@@ -1,6 +1,6 @@
 
 # Creating Provider, Model and Bid on the Blockchain:
-**Diamond contract:** `0x8e19288d908b2d9F8D7C539c74C899808AC3dE45`
+**Diamond contract:** `0x208eaeD75A12C35625708140c99A614FC45bf780`
 
 **Needed information:**
 * Provider/Owner:   `0x9E26Fea97F7d644BAf62d0e20e4d4b8F836C166c` # Your ERC-20 Wallet with saMOR & saETH
@@ -12,7 +12,7 @@
 
 ## Steps
  1. WEB3/Arbiscan/Metamask: Authorize Diamond Contract to spend on the Provider's behalf 
-       1. https://sepolia.arbiscan.io/address/0xc1664f994fd3991f98ae944bc16b9aed673ef5fd#writeContract 
+       1. https://sepolia.arbiscan.io/address/0x34a285a1b1c166420df5b6630132542923b5b27e#writeContract 
        1. Connect to Web3 (connect Provider wallet) 
        1. Click Approve 
        1. Spender Address = Diamond Contract 

@@ -31,7 +31,7 @@ import (
 var WALLET_PRIVATE_KEY = lib.MustStringToHexString("") // Set this to a valid private key to run the test.
 
 var DIAMOND_CONTRACT_ADDR = lib.MustStringToAddress("0x70768f0ff919e194e11abfc3a2edf43213359dc1")
-var MOR_CONTRACT_ADDR = lib.MustStringToAddress("0xc1664f994fd3991f98ae944bc16b9aed673ef5fd")
+var MOR_CONTRACT_ADDR = lib.MustStringToAddress("0x34a285a1b1c166420df5b6630132542923b5b27e")
 var EXPLORER_API_URL = "https://api-sepolia.arbiscan.io/api"
 var ETH_LEGACY_TX = false
 var ETH_NODE_ADDRESS = "wss://arb-sepolia.g.alchemy.com/v2/Ken3T8xkvWUxtpKvb3yDedzF-sNsQDlZ"

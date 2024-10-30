@@ -21,7 +21,7 @@ Either via the swagger interface http://localhost:8082/swagger/index.html#/walle
 Approve the contract to spend 3 saMOR tokens on your behalf
 
 ```sh 
-curl -X 'POST' 'http://localhost:8082/blockchain/approve?spender=0x8e19288d908b2d9F8D7C539c74C899808AC3dE45&amount=3' -H 'accept: application/json' -d '' 
+curl -X 'POST' 'http://localhost:8082/blockchain/approve?spender=0x208eaeD75A12C35625708140c99A614FC45bf780&amount=3' -H 'accept: application/json' -d '' 
 ``` 
 
 ### C. Query the blockchain for various models / providers (Get ModelID)
@@ -110,7 +110,7 @@ curl -X 'POST' \
 
 
 ### Quick and Dirty Sample:
-`curl -X 'POST' 'http://localhost:8082/blockchain/approve?spender=0x8e19288d908b2d9F8D7C539c74C899808AC3dE45&amount=3' -H 'accept: application/json' -d ''`
+`curl -X 'POST' 'http://localhost:8082/blockchain/approve?spender=0x208eaeD75A12C35625708140c99A614FC45bf780&amount=3' -H 'accept: application/json' -d ''`
     # approves the smart contract `0x8e19...dE45` to spend 3 saMOR tokens on your behalf
 
 `curl -s -X 'GET' 'http://localhost:8082/wallet' -H 'accept: application/json' | jq .address` 
