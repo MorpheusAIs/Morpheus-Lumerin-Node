@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/walletapi"
+	"github.com/ethereum/go-ethereum/common"
 
 	docs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/docs"
 )
@@ -266,8 +268,17 @@ func start() error {
 		log.Warnf("failed to load model config: %s, run with empty", err)
 	}
 
+	providerAllowList := []common.Address{}
+	if cfg.Proxy.ProviderAllowList != "" {
+		addresses := strings.Split(cfg.Proxy.ProviderAllowList, ",")
+		for _, address := range addresses {
+			addr := strings.TrimSpace(address)
+			providerAllowList = append(providerAllowList, common.HexToAddress(addr))
+		}
+	}
+
 	proxyRouterApi := proxyapi.NewProxySender(publicUrl, wallet, contractLogStorage, sessionStorage, log)
-	blockchainApi := blockchainapi.NewBlockchainService(ethClient, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, cfg.Blockchain.ExplorerApiUrl, wallet, sessionStorage, proxyRouterApi, proxyLog, cfg.Blockchain.EthLegacyTx)
+	blockchainApi := blockchainapi.NewBlockchainService(ethClient, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, cfg.Blockchain.ExplorerApiUrl, wallet, sessionStorage, proxyRouterApi, providerAllowList, proxyLog, cfg.Blockchain.EthLegacyTx)
 	proxyRouterApi.SetSessionService(blockchainApi)
 	aiEngine := aiengine.NewAiEngine(cfg.AIEngine.OpenAIBaseURL, cfg.AIEngine.OpenAIKey, modelConfigLoader, log)
 
