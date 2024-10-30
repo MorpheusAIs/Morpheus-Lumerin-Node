@@ -12,7 +12,7 @@
 
 ## Steps
  1. WEB3/Arbiscan/Metamask: Authorize Diamond Contract to spend on the Provider's behalf 
-       1. https://sepolia.arbiscan.io/address/0xc1664f994fd3991f98ae944bc16b9aed673ef5fd#writeContract 
+       1. https://sepolia.arbiscan.io/address/0x34a285a1b1c166420df5b6630132542923b5b27e#writeContract 
        1. Connect to Web3 (connect Provider wallet) 
        1. Click Approve 
        1. Spender Address = Diamond Contract 

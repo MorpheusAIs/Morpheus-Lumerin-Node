@@ -73,7 +73,7 @@ Key Values in the .env file are (there are others, but these are primarly respon
     - This is the key Lumerin Smart Contract (currently Sepolia Arbitrum testnet)
     - This is the address of the smart contract that the proxy-router will interact with to post providers, models & bids 
     - This address will change as the smart-contract is updated and for mainnet contract interaction 
-- `MOR_TOKEN_ADDRESS=0xc1664f994fd3991f98ae944bc16b9aed673ef5fd`
+- `MOR_TOKEN_ADDRESS=0x34a285a1b1c166420df5b6630132542923b5b27e`
     - This is the Morpheus Token (saMOR) address for Sepolia Arbitrum testnet
     - This address will be different for mainnet token
 - `WEB_ADDRESS=0.0.0.0:8082` 
