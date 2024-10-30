@@ -128,8 +128,8 @@ func (e *EventsListener) handleSessionOpened(event *sessionrouter.SessionRouterS
 	if !ok {
 		err = e.store.AddSession(&storages.Session{
 			Id:           sessionId,
-		  UserAddr:     event.User.Hex(),
-		  ProviderAddr: bid.Provider.Hex(),
+			UserAddr:     event.User.Hex(),
+			ProviderAddr: bid.Provider.Hex(),
 			EndsAt:       session.EndsAt,
 			ModelID:      modelID,
 			ModelName:    modelConfig.ModelName,
