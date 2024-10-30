@@ -36,6 +36,8 @@ type BlockchainService struct {
 	proxyService       *proxyapi.ProxyServiceSender
 	diamonContractAddr common.Address
 
+	providerAllowList []common.Address
+
 	legacyTx   bool
 	privateKey i.PrKeyProvider
 	log        lib.ILogger
@@ -73,6 +75,7 @@ func NewBlockchainService(
 	privateKey i.PrKeyProvider,
 	sessionStorage *storages.SessionStorage,
 	proxyService *proxyapi.ProxyServiceSender,
+	providerAllowList []common.Address,
 	log lib.ILogger,
 	legacyTx bool,
 ) *BlockchainService {
@@ -96,6 +99,7 @@ func NewBlockchainService(
 		proxyService:       proxyService,
 		sessionStorage:     sessionStorage,
 		diamonContractAddr: diamonContractAddr,
+		providerAllowList:  providerAllowList,
 		log:                log,
 	}
 }
@@ -703,6 +707,10 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 			s.log.Infof("skipping provider #%d %s", i, providerAddr.String())
 			continue
 		}
+		if !s.isProviderAllowed(providerAddr) {
+			s.log.Infof("skipping not allowed provider #%d %s", i, providerAddr.String())
+			continue
+		}
 		s.log.Infof("trying to open session with provider #%d %s", i, bid.Bid.Provider.String())
 		durationCopy := new(big.Int).Set(duration)
 		hash, err := s.tryOpenSession(ctx, bid, durationCopy, supply, budget, userAddr)
@@ -759,6 +767,19 @@ func (s *BlockchainService) GetMyAddress(ctx context.Context) (common.Address, e
 	}
 
 	return lib.PrivKeyBytesToAddr(prKey)
+}
+
+func (s *BlockchainService) isProviderAllowed(providerAddr common.Address) bool {
+	if len(s.providerAllowList) == 0 {
+		return true
+	}
+
+	for _, addr := range s.providerAllowList {
+		if addr.Hex() == providerAddr.Hex() {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *BlockchainService) getTransactOpts(ctx context.Context, privKey lib.HexString) (*bind.TransactOpts, error) {
