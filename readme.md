@@ -21,7 +21,7 @@ manages secure sessions between consumers and providers and routes prompts and r
 
 ## Tokens and Contract Information 
 * Morpheus saMOR Token: `0xc1664f994fd3991f98ae944bc16b9aed673ef5fd` 
-* Lumerin Morpheus Smart Contract : `0x208eaeD75A12C35625708140c99A614FC45bf780`
+* Lumerin Morpheus Smart Contract (as of 10/30/2024) : `0x208eaeD75A12C35625708140c99A614FC45bf780`
     * Interact with the Morpheus Contract: https://louper.dev/diamond/0x208eaeD75A12C35625708140c99A614FC45bf780?network=arbitrumSepolia#write
 * Blockchain Explorer: `https://sepolia.arbiscan.io/`
 * Swagger API: `http://localhost:8082/swagger/index.html`
