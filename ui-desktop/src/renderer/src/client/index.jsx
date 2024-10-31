@@ -93,7 +93,7 @@ const createClient = function (createStore) {
     refreshAllTransactions: utils.forwardToMainProcess('refresh-all-transactions', 120000),
     refreshAllContracts: utils.forwardToMainProcess('refresh-all-contracts', 120000),
     onOnboardingCompleted: utils.forwardToMainProcess('onboarding-completed'),
-    recoverFromMnemonic: utils.forwardToMainProcess('recover-from-mnemonic'),
+    suggestAddresses: utils.forwardToMainProcess('suggest-addresses'),
     getTokenGasLimit: utils.forwardToMainProcess('get-token-gas-limit'),
     validatePassword: utils.forwardToMainProcess('validate-password'),
     changePassword: utils.forwardToMainProcess('change-password'),
@@ -115,9 +115,7 @@ const createClient = function (createStore) {
     logout: utils.forwardToMainProcess('logout'),
     getLocalIp: utils.forwardToMainProcess('get-local-ip'),
     getPoolAddress: utils.forwardToMainProcess('get-pool-address'),
-    revealSecretPhrase: utils.forwardToMainProcess('reveal-secret-phrase'),
     getPrivateKey: utils.forwardToMainProcess('get-private-key'),
-    hasStoredSecretPhrase: utils.forwardToMainProcess('has-stored-secret-phrase'),
     getProxyRouterSettings: utils.forwardToMainProcess('get-proxy-router-settings'),
     getDefaultCurrencySetting: utils.forwardToMainProcess('get-default-currency-settings'),
     setDefaultCurrencySetting: utils.forwardToMainProcess('set-default-currency-settings'),
@@ -140,12 +138,10 @@ const createClient = function (createStore) {
     getTodaysBudget: utils.forwardToMainProcess('get-todays-budget'),
     getTokenSupply: utils.forwardToMainProcess('get-supply'),
     // Chat History
+    getChatHistoryTitles: utils.forwardToMainProcess('get-chat-history-titles'),
     getChatHistory: utils.forwardToMainProcess('get-chat-history', 750000),
-    saveChatHistory: utils.forwardToMainProcess('save-chat-history', 750000),
-    getTitles: utils.forwardToMainProcess('get-chat-titles', 750000),
-    saveTitle: utils.forwardToMainProcess('save-chat-title', 750000),
-    deleteTitle: utils.forwardToMainProcess('delete-chat-title', 750000),
-    updateChatTitle: utils.forwardToMainProcess("update-chat-title", 750000),
+    deleteChatHistory: utils.forwardToMainProcess('delete-chat-history', 750000),
+    updateChatHistoryTitle: utils.forwardToMainProcess('update-chat-history-title', 750000),
   }
 
   const api = {

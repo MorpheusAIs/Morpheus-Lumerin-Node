@@ -20,9 +20,9 @@ manages secure sessions between consumers and providers and routes prompts and r
 * Lumerin `cli` is the cli client to interact with LLMs and the Morpheus network via the proxy-router as a consumer
 
 ## Tokens and Contract Information 
-* Morpheus saMOR Token: `0xc1664f994fd3991f98ae944bc16b9aed673ef5fd` 
-* Lumerin Morpheus Smart Contract : `0x8e19288d908b2d9F8D7C539c74C899808AC3dE45`
-    * Interact with the Morpheus Contract: https://louper.dev/diamond/0x8e19288d908b2d9F8D7C539c74C899808AC3dE45?network=arbitrumSepolia#write
+* Morpheus saMOR Token (as of 10/30/2024): `0x34a285a1b1c166420df5b6630132542923b5b27e` 
+* Lumerin Morpheus Smart Contract (as of 10/30/2024) : `0x10777866547c53cbd69b02c5c76369d7e24e7b10`
+    * Interact with the Morpheus Contract: https://louper.dev/diamond/0x10777866547c53cbd69b02c5c76369d7e24e7b10?network=arbitrumSepolia#write
 * Blockchain Explorer: `https://sepolia.arbiscan.io/`
 * Swagger API: `http://localhost:8082/swagger/index.html`
 

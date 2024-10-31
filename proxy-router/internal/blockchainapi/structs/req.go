@@ -47,13 +47,21 @@ type QueryApprove struct {
 	Amount *lib.BigInt `form:"amount" binding:"required" validate:"number,gt=0"`
 }
 
-type QueryUserOrProvider struct {
-	User     lib.Address `form:"user" binding:"omitempty" validate:"eth_addr"`
-	Provider lib.Address `form:"provider" binding:"omitempty" validate:"eth_addr"`
+type QueryUser struct {
+	User lib.Address `form:"user" binding:"required" validate:"eth_addr"`
+}
+
+type QueryProvider struct {
+	Provider lib.Address `form:"provider" binding:"required" validate:"eth_addr"`
 }
 
 type OpenSessionWithDurationRequest struct {
 	SessionDuration *lib.BigInt `json:"sessionDuration"`
+}
+
+type OpenSessionWithFailover struct {
+	SessionDuration *lib.BigInt `json:"sessionDuration"`
+	Failover        bool        `json:"failover" binding:"omitempty"`
 }
 
 type CreateBidRequest struct {

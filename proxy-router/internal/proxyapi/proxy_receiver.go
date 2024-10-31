@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi/structs"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	m "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi/morrpcmessage"
@@ -25,9 +26,14 @@ type ProxyReceiver struct {
 	sessionStorage    *storages.SessionStorage
 	aiEngine          *aiengine.AiEngine
 	modelConfigLoader *config.ModelConfigLoader
+	blockchainService GetBidService
 }
 
-func NewProxyReceiver(privateKeyHex, publicKeyHex lib.HexString, sessionStorage *storages.SessionStorage, aiEngine *aiengine.AiEngine, chainID *big.Int, modelConfigLoader *config.ModelConfigLoader) *ProxyReceiver {
+type GetBidService interface {
+	GetBidByID(ctx context.Context, ID common.Hash) (*structs.Bid, error)
+}
+
+func NewProxyReceiver(privateKeyHex, publicKeyHex lib.HexString, sessionStorage *storages.SessionStorage, aiEngine *aiengine.AiEngine, chainID *big.Int, modelConfigLoader *config.ModelConfigLoader, blockchainService GetBidService) *ProxyReceiver {
 	return &ProxyReceiver{
 		privateKeyHex:     privateKeyHex,
 		publicKeyHex:      publicKeyHex,
@@ -36,6 +42,7 @@ func NewProxyReceiver(privateKeyHex, publicKeyHex lib.HexString, sessionStorage 
 		aiEngine:          aiEngine,
 		chainID:           chainID,
 		modelConfigLoader: modelConfigLoader,
+		blockchainService: blockchainService,
 	}
 }
 
@@ -103,8 +110,9 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 
 	if session.ModelApiType == "prodia" {
 		modelConfig := s.modelConfigLoader.ModelConfigFromID(session.ModelID)
+		lastMessage := req.Messages[len(req.Messages)-1]
 		prodiaReq := &aiengine.ProdiaGenerationRequest{
-			Prompt: req.Messages[0].Content,
+			Prompt: lastMessage.Content,
 			Model:  session.ModelName,
 			ApiUrl: modelConfig.ApiURL,
 			ApiKey: modelConfig.ApiKey,
@@ -124,13 +132,35 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 		sourceLog.Error(err)
 		return 0, 0, err
 	}
+
+	activity := storages.PromptActivity{
+		SessionID: session.Id,
+		StartTime: now,
+		EndTime:   time.Now().Unix(),
+	}
+	err = s.sessionStorage.AddActivity(session.ModelID, &activity)
+	if err != nil {
+		sourceLog.Warnf("failed to store activity: %s", err)
+	}
+
 	return ttftMs, totalTokens, nil
 }
 
 func (s *ProxyReceiver) SessionRequest(ctx context.Context, msgID string, reqID string, req *m.SessionReq, sourceLog lib.ILogger) (*msg.RpcResponse, error) {
 	sourceLog.Debugf("Received session request from %s, timestamp: %s", req.User, req.Timestamp)
 
-	hasCapacity := true // check if there is capacity
+	bid, err := s.blockchainService.GetBidByID(ctx, req.BidID)
+	if err != nil {
+		err := lib.WrapError(fmt.Errorf("failed to get bid"), err)
+		sourceLog.Error(err)
+		return nil, err
+	}
+
+	modelID := bid.ModelAgentId.String()
+	modelConfig := s.modelConfigLoader.ModelConfigFromID(modelID)
+	capacityManager := CreateCapacityManager(modelConfig, s.sessionStorage, sourceLog)
+
+	hasCapacity := capacityManager.HasCapacity(modelID)
 	if !hasCapacity {
 		err := fmt.Errorf("no capacity")
 		sourceLog.Error(err)

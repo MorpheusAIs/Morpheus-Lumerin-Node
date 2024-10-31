@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/big"
 	"runtime"
+	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/ethereum/go-ethereum/common"
@@ -12,18 +13,26 @@ import (
 type DerivedConfig struct {
 	WalletAddress common.Address
 	ChainID       *big.Int
+	EthNodeURLs   []string
 }
 
 // Validation tags described here: https://pkg.go.dev/github.com/go-playground/validator/v10
 type Config struct {
+	App struct {
+		ResetKeychain bool `env:"APP_RESET_KEYCHAIN" flag:"app-reset-keychain" desc:"reset keychain on start"`
+	}
 	AIEngine struct {
 		OpenAIBaseURL string `env:"OPENAI_BASE_URL"     flag:"open-ai-base-url"   validate:"required,url"`
 		OpenAIKey     string `env:"OPENAI_API_KEY"      flag:"open-ai-api-key"`
 	}
 	Blockchain struct {
-		EthNodeAddress string `env:"ETH_NODE_ADDRESS"   flag:"eth-node-address"   validate:"required,url"`
-		EthLegacyTx    bool   `env:"ETH_NODE_LEGACY_TX" flag:"eth-node-legacy-tx" desc:"use it to disable EIP-1559 transactions"`
-		ExplorerApiUrl string `env:"EXPLORER_API_URL"   flag:"explorer-api-url"   validate:"required,url"`
+		ChainID          int           `env:"ETH_NODE_CHAIN_ID"  flag:"eth-node-chain-id"  validate:"number"`
+		EthNodeAddress   string        `env:"ETH_NODE_ADDRESS"   flag:"eth-node-address"   validate:"omitempty,url"`
+		EthLegacyTx      bool          `env:"ETH_NODE_LEGACY_TX" flag:"eth-node-legacy-tx" desc:"use it to disable EIP-1559 transactions"`
+		ExplorerApiUrl   string        `env:"EXPLORER_API_URL"   flag:"explorer-api-url"   validate:"required,url"`
+		UseSubscriptions bool          `env:"ETH_NODE_USE_SUBSCRIPTIONS"  flag:"eth-node-use-subscriptions"  desc:"set it to true to enable subscriptions for blockchain events, otherwise default polling will be used"`
+		PollingInterval  time.Duration `env:"ETH_NODE_POLLING_INTERVAL" flag:"eth-node-polling-interval" validate:"omitempty,duration" desc:"interval for polling eth node for new events"`
+		MaxReconnects    int           `env:"ETH_NODE_MAX_RECONNECTS" flag:"eth-node-max-reconnects" validate:"omitempty,gte=0" desc:"max reconnects to eth node"`
 	}
 	Environment string `env:"ENVIRONMENT" flag:"environment"`
 	Marketplace struct {
@@ -41,12 +50,16 @@ type Config struct {
 		LevelProxy      string `env:"LOG_LEVEL_PROXY"      flag:"log-level-proxy"      validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
 		LevelScheduler  string `env:"LOG_LEVEL_SCHEDULER"  flag:"log-level-scheduler"  validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
 		LevelContract   string `env:"LOG_LEVEL_CONTRACT"   flag:"log-level-contract"   validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
+		LevelRPC        string `env:"LOG_LEVEL_RPC"        flag:"log-level-rpc"        validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
+		LevelBadger     string `env:"LOG_LEVEL_BADGER"     flag:"log-level-badger"     validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
 	}
 	Proxy struct {
-		Address          string `env:"PROXY_ADDRESS" flag:"proxy-address" validate:"required,hostname_port"`
-		MaxCachedDests   int    `env:"PROXY_MAX_CACHED_DESTS" flag:"proxy-max-cached-dests" validate:"required,number" desc:"maximum number of cached destinations per proxy"`
-		StoragePath      string `env:"PROXY_STORAGE_PATH"    flag:"proxy-storage-path"    validate:"omitempty,dirpath" desc:"enables file storage and sets the folder path"`
-		ModelsConfigPath string `env:"MODELS_CONFIG_PATH" flag:"models-config-path" validate:"omitempty"`
+		Address           string `env:"PROXY_ADDRESS" flag:"proxy-address" validate:"required,hostname_port"`
+		MaxCachedDests    int    `env:"PROXY_MAX_CACHED_DESTS" flag:"proxy-max-cached-dests" validate:"required,number" desc:"maximum number of cached destinations per proxy"`
+		StoragePath       string `env:"PROXY_STORAGE_PATH"    flag:"proxy-storage-path"    validate:"omitempty,dirpath" desc:"enables file storage and sets the folder path"`
+		StoreChatContext  bool   `env:"PROXY_STORE_CHAT_CONTEXT" flag:"proxy-store-chat-context" desc:"store chat context in the proxy storage"`
+		ModelsConfigPath  string `env:"MODELS_CONFIG_PATH" flag:"models-config-path" validate:"omitempty"`
+		ProviderAllowList string `env:"PROVIDER_ALLOW_LIST" flag:"provider-allow-list" validate:"omitempty" desc:"comma separated list of provider addresses allowed to open session with"`
 	}
 	System struct {
 		Enable           bool   `env:"SYS_ENABLE"              flag:"sys-enable" desc:"enable system level configuration adjustments"`
@@ -68,6 +81,14 @@ func (cfg *Config) SetDefaults() {
 		cfg.Environment = "development"
 	}
 
+	// Blockchain
+	if cfg.Blockchain.MaxReconnects == 0 {
+		cfg.Blockchain.MaxReconnects = 30
+	}
+	if cfg.Blockchain.PollingInterval == 0 {
+		cfg.Blockchain.PollingInterval = 10 * time.Second
+	}
+
 	// Log
 
 	if cfg.Log.LevelConnection == "" {
@@ -84,6 +105,12 @@ func (cfg *Config) SetDefaults() {
 	}
 	if cfg.Log.LevelApp == "" {
 		cfg.Log.LevelApp = "debug"
+	}
+	if cfg.Log.LevelRPC == "" {
+		cfg.Log.LevelRPC = "info"
+	}
+	if cfg.Log.LevelBadger == "" {
+		cfg.Log.LevelBadger = "info"
 	}
 
 	// Proxy
@@ -156,6 +183,7 @@ func (cfg *Config) GetSanitized() interface{} {
 	publicCfg.Log.LevelConnection = cfg.Log.LevelConnection
 	publicCfg.Log.LevelProxy = cfg.Log.LevelProxy
 	publicCfg.Log.LevelScheduler = cfg.Log.LevelScheduler
+	publicCfg.Log.LevelRPC = cfg.Log.LevelRPC
 
 	publicCfg.Proxy.Address = cfg.Proxy.Address
 	publicCfg.Proxy.MaxCachedDests = cfg.Proxy.MaxCachedDests

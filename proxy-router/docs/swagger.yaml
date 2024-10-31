@@ -33,8 +33,23 @@ definitions:
     - timestamp
     - user
     type: object
+  proxyapi.Chat:
+    properties:
+      chatId:
+        type: string
+      createdAt:
+        type: integer
+      isLocal:
+        type: boolean
+      modelId:
+        type: string
+      title:
+        type: string
+    type: object
   proxyapi.ChatCompletionChoice:
     properties:
+      delta:
+        $ref: '#/definitions/proxyapi.ChatCompletionDelta'
       finish_reason:
         allOf:
         - $ref: '#/definitions/proxyapi.FinishReason'
@@ -53,14 +68,17 @@ definitions:
       message:
         $ref: '#/definitions/proxyapi.ChatCompletionMessage'
     type: object
+  proxyapi.ChatCompletionDelta:
+    properties:
+      content:
+        type: string
+      role:
+        type: string
+    type: object
   proxyapi.ChatCompletionMessage:
     properties:
       content:
         type: string
-      multiContent:
-        items:
-          $ref: '#/definitions/proxyapi.ChatMessagePart'
-        type: array
       name:
         description: |-
           This property isn't in the official documentation, but it's in
@@ -99,46 +117,38 @@ definitions:
       type:
         type: string
     type: object
-  proxyapi.ChatMessageImageURL:
+  proxyapi.ChatHistory:
     properties:
-      detail:
-        $ref: '#/definitions/proxyapi.ImageURLDetail'
-      url:
+      isLocal:
+        type: boolean
+      messages:
+        items:
+          $ref: '#/definitions/proxyapi.ChatMessage'
+        type: array
+      modelId:
+        type: string
+      title:
         type: string
     type: object
-  proxyapi.ChatMessagePart:
+  proxyapi.ChatMessage:
     properties:
-      image_url:
-        $ref: '#/definitions/proxyapi.ChatMessageImageURL'
-      text:
+      isImageContent:
+        type: boolean
+      prompt:
+        $ref: '#/definitions/proxyapi.OpenAiCompletitionRequest'
+      promptAt:
+        type: integer
+      response:
         type: string
-      type:
-        $ref: '#/definitions/proxyapi.ChatMessagePartType'
+      responseAt:
+        type: integer
     type: object
-  proxyapi.ChatMessagePartType:
-    enum:
-    - text
-    - image_url
-    type: string
-    x-enum-varnames:
-    - ChatMessagePartTypeText
-    - ChatMessagePartTypeImageURL
   proxyapi.FinishReason:
     enum:
     - stop
     type: string
     x-enum-varnames:
     - FinishReasonStop
-  proxyapi.ImageURLDetail:
-    enum:
-    - high
-    - low
-    - auto
-    type: string
-    x-enum-varnames:
-    - ImageURLDetailHigh
-    - ImageURLDetailLow
-    - ImageURLDetailAuto
   proxyapi.InitiateSessionReq:
     properties:
       bidId:
@@ -243,6 +253,11 @@ definitions:
       user:
         type: string
     type: object
+  proxyapi.ResultResponse:
+    properties:
+      result:
+        type: boolean
+    type: object
   proxyapi.TopLogProbs:
     properties:
       bytes:
@@ -253,6 +268,13 @@ definitions:
         type: number
       token:
         type: string
+    type: object
+  proxyapi.UpdateChatTitleReq:
+    properties:
+      title:
+        type: string
+    required:
+    - title
     type: object
   proxyapi.Usage:
     properties:
@@ -437,6 +459,13 @@ definitions:
     type: object
   structs.OpenSessionWithDurationRequest:
     properties:
+      sessionDuration:
+        type: string
+    type: object
+  structs.OpenSessionWithFailover:
+    properties:
+      failover:
+        type: boolean
       sessionDuration:
         type: string
     type: object
@@ -629,6 +658,15 @@ definitions:
         type: string
       version:
         type: string
+    type: object
+  system.SetEthNodeURLReq:
+    properties:
+      urls:
+        items:
+          type: string
+        type: array
+    required:
+    - urls
     type: object
 externalDocs:
   description: OpenAPI
@@ -893,7 +931,7 @@ paths:
         name: opensession
         required: true
         schema:
-          $ref: '#/definitions/structs.OpenSessionWithDurationRequest'
+          $ref: '#/definitions/structs.OpenSessionWithFailover'
       - description: Model ID
         in: path
         name: id
@@ -1047,35 +1085,6 @@ paths:
       tags:
       - transactions
   /blockchain/sessions:
-    get:
-      description: Get sessions from blockchain by user or provider
-      parameters:
-      - description: Offset
-        in: query
-        name: offset
-        type: string
-      - description: Limit
-        in: query
-        name: limit
-        type: string
-      - description: Provider address
-        in: query
-        name: provider
-        type: string
-      - description: User address
-        in: query
-        name: user
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/structs.SessionsRes'
-      summary: Get Sessions
-      tags:
-      - sessions
     post:
       consumes:
       - application/json
@@ -1148,6 +1157,60 @@ paths:
       summary: Get Todays Budget
       tags:
       - sessions
+  /blockchain/sessions/provider:
+    get:
+      description: Get sessions from blockchain by provider
+      parameters:
+      - description: Offset
+        in: query
+        name: offset
+        type: string
+      - description: Limit
+        in: query
+        name: limit
+        type: string
+      - description: Provider address
+        in: query
+        name: provider
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.SessionsRes'
+      summary: Get Sessions for Provider
+      tags:
+      - sessions
+  /blockchain/sessions/user:
+    get:
+      description: Get sessions from blockchain by user
+      parameters:
+      - description: Offset
+        in: query
+        name: offset
+        type: string
+      - description: Limit
+        in: query
+        name: limit
+        type: string
+      - description: User address
+        in: query
+        name: user
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.SessionsRes'
+      summary: Get Sessions for User
+      tags:
+      - sessions
   /blockchain/token/supply:
     get:
       description: Get MOR token supply from blockchain
@@ -1195,7 +1258,41 @@ paths:
             $ref: '#/definitions/system.ConfigResponse'
       summary: Get Config
       tags:
-      - healthcheck
+      - system
+  /config/ethNode:
+    delete:
+      description: Delete the Eth Node URLs
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/system.ConfigResponse'
+      summary: Delete Eth Node URLs
+      tags:
+      - system
+    post:
+      consumes:
+      - application/json
+      description: Set the Eth Node URLs
+      parameters:
+      - description: URLs
+        in: body
+        name: urls
+        required: true
+        schema:
+          $ref: '#/definitions/system.SetEthNodeURLReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/system.ConfigResponse'
+      summary: Set Eth Node URLs
+      tags:
+      - system
   /files:
     get:
       description: Returns opened files
@@ -1210,7 +1307,7 @@ paths:
             type: array
       summary: Get files
       tags:
-      - healthcheck
+      - system
   /healthcheck:
     get:
       description: do ping
@@ -1223,7 +1320,7 @@ paths:
             $ref: '#/definitions/system.HealthCheckResponse'
       summary: Healthcheck example
       tags:
-      - healthcheck
+      - system
   /proxy/sessions/{id}/providerClaim:
     post:
       description: Claim provider balance from session
@@ -1302,6 +1399,11 @@ paths:
         in: header
         name: model_id
         type: string
+      - description: Chat ID
+        format: hex32
+        in: header
+        name: chat_id
+        type: string
       - description: Prompt
         in: body
         name: prompt
@@ -1316,6 +1418,78 @@ paths:
           schema:
             $ref: '#/definitions/proxyapi.ChatCompletionResponse'
       summary: Send Local Or Remote Prompt
+      tags:
+      - chat
+  /v1/chats:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/proxyapi.Chat'
+            type: array
+      summary: Get all chats stored in the system
+      tags:
+      - chat
+  /v1/chats/{id}:
+    delete:
+      parameters:
+      - description: Chat ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.ResultResponse'
+      summary: Delete chat by id from storage
+      tags:
+      - chat
+    get:
+      parameters:
+      - description: Chat ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.ChatHistory'
+      summary: Get chat by id
+      tags:
+      - chat
+    post:
+      parameters:
+      - description: Chat ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Chat Title
+        in: body
+        name: title
+        required: true
+        schema:
+          $ref: '#/definitions/proxyapi.UpdateChatTitleReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.ResultResponse'
+      summary: Update chat title by id
       tags:
       - chat
   /v1/models:

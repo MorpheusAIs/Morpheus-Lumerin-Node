@@ -35,7 +35,7 @@ const withProvidersState = WrappedComponent => {
 
     getSessionsByProvider = async (provider) => {
       try {
-        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions?provider=${provider}`;
+        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions/provider?provider=${provider}`;
         const response = await fetch(path);
         const data = await response.json();
         return data.sessions;
