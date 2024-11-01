@@ -37,24 +37,42 @@ func NewLogWatcherPolling(client i.EthClient, pollInterval time.Duration, maxRec
 }
 
 func (w *LogWatcherPolling) Watch(ctx context.Context, contractAddr common.Address, mapper EventMapper, fromBlock *big.Int) (*lib.Subscription, error) {
-	if fromBlock == nil {
-		block, err := w.client.HeaderByNumber(ctx, nil)
-		if err != nil {
-			return nil, err
-		}
-		fromBlock = block.Number
+	var nextFromBlock *big.Int
+
+	if fromBlock != nil {
+		nextFromBlock = new(big.Int).Set(fromBlock)
 	}
-	lastQueriedBlock := fromBlock
 
 	sink := make(chan interface{})
 	return lib.NewSubscription(func(quit <-chan struct{}) error {
 		defer close(sink)
 
 		for {
+			currentBlock, err := w.client.HeaderByNumber(ctx, nil)
+			if err != nil {
+				return err
+			}
+
+			if nextFromBlock == nil {
+				nextFromBlock = new(big.Int).Set(currentBlock.Number)
+			}
+
+			// if we poll too often, we might be behind the chain, so we wait for the next block
+			if currentBlock.Number.Cmp(nextFromBlock) < 0 {
+				select {
+				case <-quit:
+					return SubClosedError
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(w.pollInterval):
+				}
+				continue
+			}
+
 			query := ethereum.FilterQuery{
 				Addresses: []common.Address{contractAddr},
-				FromBlock: lastQueriedBlock,
-				ToBlock:   nil,
+				FromBlock: nextFromBlock,
+				ToBlock:   currentBlock.Number,
 			}
 			sub, err := w.filterLogsRetry(ctx, query, quit)
 			if err != nil {
@@ -80,13 +98,11 @@ func (w *LogWatcherPolling) Watch(ctx context.Context, contractAddr common.Addre
 				}
 			}
 
-			if len(sub) > 0 {
-				lastQueriedBlock = new(big.Int).SetUint64(sub[len(sub)-1].BlockNumber + 1)
-			}
+			nextFromBlock.Add(currentBlock.Number, big.NewInt(1))
 
 			select {
 			case <-quit:
-				return nil
+				return SubClosedError
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-time.After(w.pollInterval):

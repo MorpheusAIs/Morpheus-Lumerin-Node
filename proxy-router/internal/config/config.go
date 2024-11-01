@@ -85,7 +85,7 @@ func (cfg *Config) SetDefaults() {
 		cfg.Blockchain.MaxReconnects = 30
 	}
 	if cfg.Blockchain.PollingInterval == 0 {
-		cfg.Blockchain.PollingInterval = 2 * time.Second
+		cfg.Blockchain.PollingInterval = 1 * time.Second
 	}
 
 	// Log

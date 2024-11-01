@@ -203,6 +203,7 @@ func start() error {
 		} else {
 			appLog.Info("Eth node urls removed")
 		}
+		return nil
 	}
 
 	var ethNodeAddresses []string

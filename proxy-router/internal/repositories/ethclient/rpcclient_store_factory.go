@@ -59,7 +59,7 @@ func ConfigureRPCClientStore(storage interfaces.KeyValueStorage, envURLs []strin
 	}
 
 	if chainID == 0 {
-		return nil, errors.New("Missing chainID. You need to set CHAIN_ID env variable to use public eth node addresses")
+		return nil, errors.New("Missing chain ID. You need to configure chain ID to use public eth node addresses")
 	}
 
 	publicURLs, err := GetPublicRPCURLs(chainID)
