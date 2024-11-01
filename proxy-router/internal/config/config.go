@@ -153,7 +153,7 @@ func (cfg *Config) SetDefaults() {
 		cfg.Proxy.Address = "0.0.0.0:3333"
 	}
 	if cfg.Web.Address == "" {
-		cfg.Web.Address = "0.0.0.0:8080"
+		cfg.Web.Address = "0.0.0.0:8082"
 	}
 	if cfg.Web.PublicUrl == "" {
 		cfg.Web.PublicUrl = fmt.Sprintf("http://%s", cfg.Web.Address)
