@@ -106,7 +106,9 @@ func LoadConfig(cfg ConfigInterface, osArgs *[]string, validator Validator) erro
 		if !isErrFlagNotDefined(err) {
 			return lib.WrapError(ErrFlagParse, err)
 		}
-
+		if len(flagset.Args()) == 0 {
+			break
+		}
 		args = flagset.Args()[1:]
 	}
 
