@@ -130,6 +130,8 @@ func start() error {
 		_ = connLog.Close()
 		_ = proxyLog.Close()
 		_ = log.Close()
+		_ = rpcLog.Close()
+		_ = badgerLog.Close()
 	}()
 
 	appLog.Infof("proxy-router %s", config.BuildVersion)
