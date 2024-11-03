@@ -105,18 +105,9 @@ const Chat = (props) => {
             }, [] as ChatData[])
             setChatsData(mappedChatData);
 
-            const sessions = (await props.getSessionsByUser(props.address)).reduce((res, item) =>  {
-                const sessionModel = chainData.models.find(x => x.Id == item.ModelAgentId);
-                if(sessionModel) {
-                    item.ModelName = sessionModel.Name;
-                    res.push(item);
-                }
-                return res;
-            }, []);
+            const sessions = await refreshSessions(chainData?.models);
 
             const openSessions = sessions.filter(s => !isClosed(s));
-
-            setSessions(sessions);
 
             const useLocalModelChat = () => {
                 const localModel = (chainData?.models?.find((m: any) => m.hasLocal));
@@ -154,7 +145,10 @@ const Chat = (props) => {
         })
     }, [])
 
-    const toggleDrawer = () => {
+    const toggleDrawer = async () => {
+        if (!isOpen) {
+            await refreshSessions()
+        }
         setIsOpen((prevState) => !prevState)
     }
 
@@ -232,9 +226,18 @@ const Chat = (props) => {
         }
     }
 
-    const refreshSessions = async () => {
-        const sessions = await props.getSessionsByUser(props.address);
+    const refreshSessions = async (models = null) => {
+        const sessions = (await props.getSessionsByUser(props.address)).reduce((res, item) =>  {
+            const sessionModel = (models || chainData.models).find(x => x.Id == item.ModelAgentId);
+            if(sessionModel) {
+                item.ModelName = sessionModel.Name;
+                res.push(item);
+            }
+            return res;
+        }, []);
+        
         setSessions(sessions);
+
         return sessions;
     }
 
@@ -397,6 +400,12 @@ const Chat = (props) => {
                         console.warn(part.error);
                         return;
                     }
+
+                    if(part.message) {
+                        handleSystemMessage(part.message);
+                        return;
+                    }
+
                     const imageContent = part.imageUrl;
 
                     if (!part?.id && !imageContent) {
@@ -420,11 +429,36 @@ const Chat = (props) => {
             }
         }
         catch (e) {
+            props.toasts.toast('error', 'Something goes wrong. Try later.');
             console.error(e);
         }
 
         registerScrollEvent(false);
         return memoState;
+    }
+
+    const handleSystemMessage = (message) => {
+        const openSessionEventMessage = "new session opened";
+        const failoverTurnOnMessage = "provider failed, failover enabled"
+
+        const renderMessage = (value) => {
+            props.toasts.toast('info', value, {
+                autoClose: 1500
+            });
+        }
+        switch(message) {
+            case openSessionEventMessage:  {
+                renderMessage("Opening session with available provider...");
+                return;
+            }
+            case failoverTurnOnMessage:  {
+                renderMessage("Target provider unavailable. Applying failover policy...");
+                return;
+            }
+            default:
+                renderMessage(message);
+                return;
+        }
     }
 
     const handleSubmit = () => {

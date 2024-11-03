@@ -8,6 +8,9 @@ import logger from '../../../logger'
 import restart from '../electron-restart'
 import { getDb } from '../database'
 import defaultSettings from './defaultSettings'
+
+const FAILOVER_KEY = "user.failover";
+
 //TODO: make sure default settings works as a static import.  it was getting imported every time 
 //      it was accessed.  if that's necessary, we have to use the async method
 //      import() instead of require() with the new version of node
@@ -100,6 +103,10 @@ export const getAppVersion = () => getKey('app.version')
 
 export const setAppVersion = (value) => setKey('app.version', value)
 
+export const getFailoverSetting = async() => getKey(FAILOVER_KEY)
+
+export const setFailoverSetting = async (isEnabled) => setKey(FAILOVER_KEY, { isEnabled })
+
 export default {
   getPasswordHash,
   setPasswordHash,
@@ -112,5 +119,7 @@ export default {
   getKey,
   setKey,
   getAppVersion,
-  setAppVersion
+  setAppVersion,
+  getFailoverSetting,
+  setFailoverSetting
 }
