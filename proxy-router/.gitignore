@@ -8,6 +8,6 @@ logs
 dist
 bin 
 
-data
+data*
 
 models-config.json

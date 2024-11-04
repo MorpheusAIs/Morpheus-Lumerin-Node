@@ -174,11 +174,12 @@ const withChatState = WrappedComponent => {
       const availabilityResults = await Promise.all(providers.map(async p => {
         try {
           const storedRecord = JSON.parse(localStorage.getItem(p.Address));
-          if(storedRecord && storedRecord.status != AvailabilityStatus.unknown) {
+          if(storedRecord && storedRecord.status == AvailabilityStatus.available) {
             const lastUpdatedAt = new Date(storedRecord.time);
-            const oneHourBefore = new Date(new Date().getTime() - (60 * 60 * 1000));
+            const cacheMinutes = 15;
+            const timestampBefore = new Date(new Date().getTime() - (cacheMinutes * 60 * 1000));
 
-            if(lastUpdatedAt > oneHourBefore) {
+            if(lastUpdatedAt > timestampBefore) {
               return ({...storedRecord, id: p.Address});
             }
           }
@@ -188,7 +189,7 @@ const withChatState = WrappedComponent => {
           const { data } = await axios.post("https://portchecker.io/api/v1/query", {
             host: domain,
             ports: [port],
-          })
+          });
     
           const isValid = !!data.check?.find((c) => c.port == port && c.status == true);
           const record = ({id: p.Address, status: isValid ? AvailabilityStatus.available : AvailabilityStatus.disconnected, time: new Date() });
@@ -196,7 +197,7 @@ const withChatState = WrappedComponent => {
           return record;
         }
         catch(e) {
-          return ({id: p.Address, status: AvailabilityStatus.unknown })
+          return ({id: p.Address, status: AvailabilityStatus.unknown, time: new Date() })
         }
       }));
       return availabilityResults;
@@ -228,8 +229,11 @@ const withChatState = WrappedComponent => {
     onOpenSession = async ({ modelId, duration }) => {
       this.context.toast('info', 'Processing...');
       try {
+        const failoverSettings = await this.props.client.getFailoverSetting();
+        
         const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/models/${modelId}/session`;
         const body = {
+          failover: failoverSettings?.isEnabled || false,
           sessionDuration: +duration // convert to seconds
         };
         const response = await fetch(path, {
