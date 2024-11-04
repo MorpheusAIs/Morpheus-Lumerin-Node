@@ -142,6 +142,9 @@ const createClient = function (createStore) {
     getChatHistory: utils.forwardToMainProcess('get-chat-history', 750000),
     deleteChatHistory: utils.forwardToMainProcess('delete-chat-history', 750000),
     updateChatHistoryTitle: utils.forwardToMainProcess('update-chat-history-title', 750000),
+    // Failover
+    getFailoverSetting: utils.forwardToMainProcess('get-failover-setting', 750000),
+    setFailoverSetting: utils.forwardToMainProcess('set-failover-setting', 750000),
   }
 
   const api = {

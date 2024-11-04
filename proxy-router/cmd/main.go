@@ -35,11 +35,6 @@ import (
 	docs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/docs"
 )
 
-const (
-	IDLE_READ_CLOSE_TIMEOUT  = 10 * time.Minute
-	IDLE_WRITE_CLOSE_TIMEOUT = 10 * time.Minute
-)
-
 var (
 	ErrConnectToEthNode = fmt.Errorf("cannot connect to ethereum node")
 )
@@ -130,20 +125,13 @@ func start() error {
 	if err != nil {
 		return err
 	}
-	// contractLogFactory := func(contractID string) (lib.ILogger, error) {
-	// 	logStorage := interfaces.NewLogStorage(contractID)
-	// 	contractLogStorage.Store(logStorage)
-	// 	fp := ""
-	// 	if logFolderPath != "" {
-	// 		fp = filepath.Join(logFolderPath, fmt.Sprintf("contract-%s.log", lib.SanitizeFilename(lib.StrShort(contractID))))
-	// 	}
-	// 	return lib.NewLoggerMemory(cfg.Log.LevelContract, cfg.Log.Color, cfg.Log.IsProd, cfg.Log.JSON, fp, logStorage.Buffer)
-	// }
 
 	defer func() {
 		_ = connLog.Close()
 		_ = proxyLog.Close()
 		_ = log.Close()
+		_ = rpcLog.Close()
+		_ = badgerLog.Close()
 	}()
 
 	appLog.Infof("proxy-router %s", config.BuildVersion)
@@ -215,6 +203,7 @@ func start() error {
 		} else {
 			appLog.Info("Eth node urls removed")
 		}
+		return nil
 	}
 
 	var ethNodeAddresses []string

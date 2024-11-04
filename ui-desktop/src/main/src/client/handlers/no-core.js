@@ -12,7 +12,9 @@ import {
   getDefaultCurrencySetting,
   setDefaultCurrencySetting,
   getKey,
-  setKey
+  setKey,
+  getFailoverSetting,
+  setFailoverSetting
 } from '../settings'
 import apiGateway from '../apiGateway';
 
@@ -114,5 +116,7 @@ export default {
   setProfitSettings,
   getAutoAdjustPriceData,
   setAutoAdjustPriceData,
+  getFailoverSetting,
+  setFailoverSetting,
   ...apiGateway,
 }
