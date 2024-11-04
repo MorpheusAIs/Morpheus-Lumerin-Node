@@ -55,7 +55,6 @@ type Config struct {
 	}
 	Proxy struct {
 		Address           string `env:"PROXY_ADDRESS" flag:"proxy-address" validate:"required,hostname_port"`
-		MaxCachedDests    int    `env:"PROXY_MAX_CACHED_DESTS" flag:"proxy-max-cached-dests" validate:"required,number" desc:"maximum number of cached destinations per proxy"`
 		StoragePath       string `env:"PROXY_STORAGE_PATH"    flag:"proxy-storage-path"    validate:"omitempty,dirpath" desc:"enables file storage and sets the folder path"`
 		StoreChatContext  bool   `env:"PROXY_STORE_CHAT_CONTEXT" flag:"proxy-store-chat-context" desc:"store chat context in the proxy storage"`
 		ModelsConfigPath  string `env:"MODELS_CONFIG_PATH" flag:"models-config-path" validate:"omitempty"`
@@ -86,7 +85,7 @@ func (cfg *Config) SetDefaults() {
 		cfg.Blockchain.MaxReconnects = 30
 	}
 	if cfg.Blockchain.PollingInterval == 0 {
-		cfg.Blockchain.PollingInterval = 10 * time.Second
+		cfg.Blockchain.PollingInterval = 1 * time.Second
 	}
 
 	// Log
@@ -113,14 +112,7 @@ func (cfg *Config) SetDefaults() {
 		cfg.Log.LevelBadger = "info"
 	}
 
-	// Proxy
-	if cfg.Proxy.MaxCachedDests == 0 {
-		cfg.Proxy.MaxCachedDests = 5
-	}
-
 	// System
-
-	// cfg.System.Enable = true // TODO: Temporary override, remove this line
 
 	if cfg.System.LocalPortRange == "" {
 		cfg.System.LocalPortRange = "1024 65535"
@@ -153,7 +145,7 @@ func (cfg *Config) SetDefaults() {
 		cfg.Proxy.Address = "0.0.0.0:3333"
 	}
 	if cfg.Web.Address == "" {
-		cfg.Web.Address = "0.0.0.0:8080"
+		cfg.Web.Address = "0.0.0.0:8082"
 	}
 	if cfg.Web.PublicUrl == "" {
 		cfg.Web.PublicUrl = fmt.Sprintf("http://%s", cfg.Web.Address)
@@ -186,7 +178,6 @@ func (cfg *Config) GetSanitized() interface{} {
 	publicCfg.Log.LevelRPC = cfg.Log.LevelRPC
 
 	publicCfg.Proxy.Address = cfg.Proxy.Address
-	publicCfg.Proxy.MaxCachedDests = cfg.Proxy.MaxCachedDests
 
 	publicCfg.System.Enable = cfg.System.Enable
 	publicCfg.System.LocalPortRange = cfg.System.LocalPortRange
