@@ -1,14 +1,6 @@
 {
-    "0x2d4b79107cc0b262f29628d97e6a4905a37e7fc9cd820dbdaf359e9ff5f5d9cf": {
-        "modelName": "v1-5-pruned-emaonly.safetensors [d7049739]",
-        "apiType": "prodia",
-        "apiUrl": "https://api.prodia.com/v1/sd/generate",
-        "apiKey": "API_KEY_HERE"
-    },
     "0x6a4813e866a48da528c533e706344ea853a1d3f21e37b4c8e7ffd5ff25779018": {
         "modelName": "llama2",
-        "apiType": "openai",
-        "concurrentSlots": 10,
-        "capacityPolicy": "idle_timeout"
+        "apiType": "openai"
     }
 }
