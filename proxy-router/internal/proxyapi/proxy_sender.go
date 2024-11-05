@@ -260,7 +260,10 @@ func (p *ProxyServiceSender) SendPrompt(ctx context.Context, resWriter Responder
 }
 
 func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage) (*msgs.RpcResponse, int, gin.H) {
-	conn, err := net.Dial("tcp", url)
+	TIMEOUT_TO_ESTABLISH_CONNECTION := time.Second * 3
+	dialer := net.Dialer{Timeout: TIMEOUT_TO_ESTABLISH_CONNECTION}
+
+	conn, err := dialer.Dial("tcp", url)
 	if err != nil {
 		err = lib.WrapError(fmt.Errorf("failed to connect to provider"), err)
 		p.log.Errorf("%s", err)
