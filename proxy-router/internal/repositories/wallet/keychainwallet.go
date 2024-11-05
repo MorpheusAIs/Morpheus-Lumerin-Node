@@ -77,7 +77,7 @@ func (w *KeychainWallet) SetPrivateKey(privateKey lib.HexString) error {
 	}
 	// either mnemonic or private key can be stored at a time
 	err = w.storage.DeleteIfExists(MNEMONIC_KEY)
-	if err == nil {
+	if err != nil {
 		return err
 	}
 
@@ -105,7 +105,7 @@ func (w *KeychainWallet) SetMnemonic(mnemonic string, derivationPath string) err
 
 	// either mnemonic or private key can be stored at a time
 	err = w.storage.DeleteIfExists(PRIVATE_KEY_KEY)
-	if err == nil {
+	if err != nil {
 		return err
 	}
 
