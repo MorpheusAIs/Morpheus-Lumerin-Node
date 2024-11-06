@@ -8,12 +8,14 @@ runs:
       shell: bash
       run: |
         SHORT_HASH="$(git rev-parse --short=7 HEAD)"
+        echo $SHORT_HASH
         if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
           PREFIX="main-"
         elif [[ "${GITHUB_REF}" == "refs/heads/stg" ]]; then
           PREFIX="test-"
         else
-          PREFIX=""
+          PREFIX="dev-"
         fi
         TAG_NAME="${PREFIX}${SHORT_HASH}"
-        echo "name=${TAG_NAME}" >> $GITHUB_OUTPUT
+        echo $TAG_NAME
+        echo "TAG_NAME=${TAG_NAME}" >> $GITHUB_ENV

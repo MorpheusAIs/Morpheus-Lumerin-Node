@@ -77,7 +77,7 @@ jobs:
       - name: Pack artifacts
         id: pack_artifacts
         run: |
-          ARTIFACT=mor-launch-${{ steps.tag.outputs.name }}-ubuntu-x64.zip
+          ARTIFACT=mor-launch-${TAG_NAME}-ubuntu-x64.zip
           LLAMACPP=llama-b3256-bin-ubuntu-x64.zip
           MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
@@ -90,7 +90,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          path: mor-launch-${{ steps.tag.outputs.name }}-ubuntu-x64.zip
+          path: mor-launch-${TAG_NAME}-ubuntu-x64.zip
           name: mor-launch-ubuntu-x64.zip
 
   macOS-13-x64:
@@ -145,7 +145,7 @@ jobs:
       - name: Pack artifacts
         id: pack_artifacts
         run: |
-          ARTIFACT=mor-launch-${{ steps.tag.outputs.name }}-macos-x64.zip
+          ARTIFACT=mor-launch-${TAG_NAME}-macos-x64.zip
           LLAMACPP=llama-b3256-bin-macos-x64.zip
           MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
@@ -160,7 +160,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          path: mor-launch-${{ steps.tag.outputs.name }}-macos-x64.zip
+          path: mor-launch-${TAG_NAME}-macos-x64.zip
           name: mor-launch-macos-x64.zip
 
   macOS-14-arm64:
@@ -215,7 +215,7 @@ jobs:
       - name: Pack artifacts
         id: pack_artifacts
         run: |
-          ARTIFACT=mor-launch-${{ steps.tag.outputs.name }}-macos-arm64.zip
+          ARTIFACT=mor-launch-${TAG_NAME}-macos-arm64.zip
           LLAMACPP=llama-b3256-bin-macos-arm64.zip
           MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
@@ -230,7 +230,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          path: mor-launch-${{ steps.tag.outputs.name }}-macos-arm64.zip
+          path: mor-launch-${TAG_NAME}-macos-arm64.zip
           name: mor-launch-macos-arm64.zip
 
   Windows-avx2-x64:
@@ -290,7 +290,7 @@ jobs:
       - name: Pack artifacts
         id: pack_artifacts
         run: |
-          ARTIFACT=mor-launch-${{ steps.tag.outputs.name }}-win-x64.zip
+          ARTIFACT=mor-launch-${TAG_NAME}-win-x64.zip
           LLAMACPP=llama-b3256-bin-win-avx2-x64.zip
           MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
@@ -308,7 +308,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          path: mor-launch-${{ steps.tag.outputs.name }}-win-x64.zip
+          path: mor-launch-${TAG_NAME}-win-x64.zip
           name: mor-launch-win-x64.zip
 
   release:
@@ -345,7 +345,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ steps.tag.outputs.name }}
+          tag_name: ${TAG_NAME}
 
       - name: Upload release
         id: upload_release
