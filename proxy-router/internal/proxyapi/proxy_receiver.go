@@ -216,7 +216,6 @@ func (s *ProxyReceiver) SessionReport(ctx context.Context, msgID string, reqID s
 	}
 
 	response, err := s.morRpc.SessionReportResponse(
-		s.publicKeyHex,
 		uint32(tps),
 		uint32(ttft),
 		common.HexToHash(session.Id),
