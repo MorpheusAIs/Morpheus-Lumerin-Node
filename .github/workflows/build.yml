@@ -28,6 +28,7 @@ copy_env_files: &copy_env_files
   - name: Copy Environment Files
     run: | 
       cp ./proxy-router/models-config.json.example ./proxy-router/models-config.json
+      cp ./proxy-router/models-config.json.example models-config.json
       if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
         cp ./.github/workflows/proxy-router.main.env ./proxy-router/.env
         cp ./.github/workflows/proxy-router.main.env .env
