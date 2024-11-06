@@ -10,6 +10,7 @@ on:
   push:
     branches:
       - main
+      - stg
     paths: ['.github/workflows/**', '**/Makefile', '**/*.go', '**/*.json', '**/*.yml', '**/*.ts', '**/*.js']
   pull_request:
     types: [opened, reopened, synchronize]
@@ -22,6 +23,40 @@ concurrency:
 defaults:
   run:
     shell: bash
+
+copy_env_files: &copy_env_files
+  - name: Copy Environment Files
+    run: | 
+      cp ./proxy-router/models-config.json.example ./proxy-router/models-config.json
+      cp ./proxy-router/models-config.json.example models-config.json
+      if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+        cp ./.github/workflows/proxy-router.main.env ./proxy-router/.env
+        cp ./.github/workflows/proxy-router.main.env .env
+        cp ./.github/workflows/ui-desktop.main.env ./ui-desktop/.env
+      elif [[ "${GITHUB_REF}" == "refs/heads/stg" ]]; then
+        cp ./.github/workflows/proxy-router.test.env ./proxy-router/.env
+        cp ./.github/workflows/proxy-router.test.env .env
+        cp ./.github/workflows/ui-desktop.test.env ./ui-desktop/.env
+      else
+        cp ./proxy-router/.env.example ./proxy-router/.env
+        cp ./proxy-router/.env.example .env
+        cp ./ui-desktop/.env.example ./ui-desktop/.env
+      fi
+    
+gen_tag_name: &gen_tag_name
+  - name: Determine tag name
+    id: tag
+    run: |
+      SHORT_HASH="$(git rev-parse --short=7 HEAD)"
+      if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+        PREFIX="main-"
+      elif [[ "${GITHUB_REF}" == "refs/heads/stg" ]]; then
+        PREFIX="test-"
+      else
+        PREFIX=""
+      fi
+      TAG_NAME="${PREFIX}${SHORT_HASH}"
+      echo "name=${TAG_NAME}" >> $GITHUB_OUTPUT
 
 jobs:
   Ubuntu-22-x64:
@@ -55,25 +90,21 @@ jobs:
           cd ../ui-desktop
           yarn install --network-timeout 600000
 
+      - <<: *copy_env_files
+      
+      - <<: *gen_tag_name
+
       - name: Build
         id: build
         run: |
           cd launcher
           make
           cd ../proxy-router
-          cp ./models-config.json.example ../ui-desktop/models-config.json
           make build
           cd ../cli
           make build
           cd ../ui-desktop
-          cp ./.env.example .env
           yarn build:linux
-
-      - name: Determine tag name
-        id: tag
-        run: |
-          SHORT_HASH="$(git rev-parse --short=7 HEAD)"
-          echo "name=${SHORT_HASH}" >> $GITHUB_OUTPUT
 
       - name: Pack artifacts
         id: pack_artifacts
@@ -85,8 +116,6 @@ jobs:
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
           unzip -o -j $LLAMACPP build/bin/llama-server
           echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./ui-desktop-1.0.0.AppImage"]}' > mor-launch.json
-          cp ./proxy-router/.env.example .env
-          cp ./proxy-router/models-config.json.example models-config.json
           mv ./cli/mor-cli mor-cli
           zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/bin/proxy-router .env $MODEL mor-launch.json ./ui-desktop/dist/ui-desktop-1.0.0.AppImage models-config.json mor-cli
 
@@ -127,25 +156,21 @@ jobs:
           cd ../ui-desktop
           yarn install --network-timeout 600000
 
+      - <<: *copy_env_files
+
+      - <<: *gen_tag_name
+      
       - name: Build
         id: build
         run: |
           cd launcher
           make
           cd ../proxy-router
-          cp ./models-config.json.example ../ui-desktop/models-config.json
           make build
           cd ../cli
           make build
           cd ../ui-desktop
-          cp ./.env.example .env
           yarn build:mac
-
-      - name: Determine tag name
-        id: tag
-        run: |
-          SHORT_HASH="$(git rev-parse --short=7 HEAD)"
-          echo "name=${SHORT_HASH}" >> $GITHUB_OUTPUT
 
       - name: Pack artifacts
         id: pack_artifacts
@@ -157,8 +182,6 @@ jobs:
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
           unzip -o -j $LLAMACPP build/bin/llama-server
           echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./ui-desktop.app/Contents/MacOS/ui-desktop"]}' > mor-launch.json
-          cp ./proxy-router/.env.example .env
-          cp ./proxy-router/models-config.json.example models-config.json
           mv ./cli/mor-cli mor-cli
           unzip ./ui-desktop/dist/ui-desktop-1.0.0-mac.zip
           zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json models-config.json mor-cli
@@ -201,25 +224,21 @@ jobs:
           cd ../ui-desktop
           yarn install --network-timeout 600000
 
+      - <<: *copy_env_files
+
+      - <<: *gen_tag_name
+      
       - name: Build
         id: build
         run: |
           cd launcher
           make
           cd ../proxy-router
-          cp ./models-config.json.example ../ui-desktop/models-config.json
           make build
           cd ../cli
           make build
           cd ../ui-desktop
-          cp ./.env.example .env
           yarn build:mac
-
-      - name: Determine tag name
-        id: tag
-        run: |
-          SHORT_HASH="$(git rev-parse --short=7 HEAD)"
-          echo "name=${SHORT_HASH}" >> $GITHUB_OUTPUT
 
       - name: Pack artifacts
         id: pack_artifacts
@@ -231,8 +250,6 @@ jobs:
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
           unzip -o -j $LLAMACPP build/bin/llama-server
           echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./ui-desktop.app/Contents/MacOS/ui-desktop"]}' > mor-launch.json
-          cp ./proxy-router/.env.example .env
-          cp ./proxy-router/models-config.json.example models-config.json
           mv ./cli/mor-cli mor-cli
           unzip ./ui-desktop/dist/ui-desktop-1.0.0-arm64-mac.zip
           zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json models-config.json mor-cli
@@ -266,9 +283,10 @@ jobs:
           cache: 'yarn'
           cache-dependency-path: ui-desktop/yarn.lock
 
-      - name: Install wget
+      - name: Install wget and sed
         run: |
           choco install wget --no-progress
+          choco install sed --no-progress
 
       - name: Install dependencies
         run: |
@@ -279,25 +297,21 @@ jobs:
           cd ../ui-desktop
           yarn install --network-timeout 600000
 
+      - <<: *copy_env_files
+
+      - <<: *gen_tag_name
+      
       - name: Build
         id: build
         run: |
           cd launcher
           make
           cd ../proxy-router
-          cp ./models-config.json.example ../ui-desktop/models-config.json
           make build
           cd ../cli
           make build
           cd ../ui-desktop
-          cp ./.env.example .env
           yarn build:win
-
-      - name: Determine tag name
-        id: tag
-        run: |
-          SHORT_HASH="$(git rev-parse --short=7 HEAD)"
-          echo "name=${SHORT_HASH}" >> $GITHUB_OUTPUT
 
       - name: Pack artifacts
         id: pack_artifacts
@@ -309,8 +323,8 @@ jobs:
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
           unzip -o -j $LLAMACPP llama-server.exe llama.dll ggml.dll
           echo '{"run":["./llama-server.exe -m ./'$MODEL'","./proxy-router.exe","./ui-desktop-1.0.0.exe"]}' > mor-launch.json
-          cp ./proxy-router/.env.example.win .env
-          cp ./proxy-router/models-config.json.example models-config.json
+          mv .env .env.tmp
+          sed 's|\./data/|.\\data\\|g' .env.tmp > .env
           mv ./proxy-router/bin/proxy-router proxy-router.exe
           mv ./cli/mor-cli mor-cli.exe
           mv ./launcher/mor-launch mor-launch.exe
@@ -324,7 +338,7 @@ jobs:
           name: mor-launch-win-x64.zip
 
   release:
-    if: ${{ ( github.event_name == 'push' && github.ref == 'refs/heads/main' ) || github.event.inputs.create_release == 'true' }}
+    if: ${{ (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/stg')) || github.event.inputs.create_release == 'true' }}
     runs-on: ubuntu-latest
     needs:
       - Ubuntu-22-x64
@@ -336,11 +350,7 @@ jobs:
         id: checkout
         uses: actions/checkout@v4
 
-      - name: Determine tag name
-        id: tag
-        run: |
-          SHORT_HASH="$(git rev-parse --short=7 HEAD)"
-          echo "name=${SHORT_HASH}" >> $GITHUB_OUTPUT
+      - <<: *gen_tag_name
 
       - name: Download artifacts
         id: download-artifact
