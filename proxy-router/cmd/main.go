@@ -266,7 +266,7 @@ func start() error {
 		}
 	}
 
-	proxyRouterApi := proxyapi.NewProxySender(publicUrl, wallet, contractLogStorage, sessionStorage, log)
+	proxyRouterApi := proxyapi.NewProxySender(chainID, publicUrl, wallet, contractLogStorage, sessionStorage, log)
 	blockchainApi := blockchainapi.NewBlockchainService(ethClient, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, cfg.Blockchain.ExplorerApiUrl, wallet, sessionStorage, proxyRouterApi, providerAllowList, proxyLog, cfg.Blockchain.EthLegacyTx)
 	proxyRouterApi.SetSessionService(blockchainApi)
 	aiEngine := aiengine.NewAiEngine(cfg.AIEngine.OpenAIBaseURL, cfg.AIEngine.OpenAIKey, modelConfigLoader, log)
