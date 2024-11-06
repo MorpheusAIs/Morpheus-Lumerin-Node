@@ -45,6 +45,7 @@ type SessionService interface {
 }
 
 type ProxyServiceSender struct {
+	chainID        *big.Int
 	publicUrl      *url.URL
 	privateKey     interfaces.PrKeyProvider
 	logStorage     *lib.Collection[*interfaces.LogStorage]
@@ -54,8 +55,9 @@ type ProxyServiceSender struct {
 	log            lib.ILogger
 }
 
-func NewProxySender(publicUrl *url.URL, privateKey interfaces.PrKeyProvider, logStorage *lib.Collection[*interfaces.LogStorage], sessionStorage *storages.SessionStorage, log lib.ILogger) *ProxyServiceSender {
+func NewProxySender(chainID *big.Int, publicUrl *url.URL, privateKey interfaces.PrKeyProvider, logStorage *lib.Collection[*interfaces.LogStorage], sessionStorage *storages.SessionStorage, log lib.ILogger) *ProxyServiceSender {
 	return &ProxyServiceSender{
+		chainID:        chainID,
 		publicUrl:      publicUrl,
 		privateKey:     privateKey,
 		logStorage:     logStorage,
@@ -126,7 +128,7 @@ func (p *ProxyServiceSender) InitiateSession(ctx context.Context, user common.Ad
 	return typedMsg, nil
 }
 
-func (p *ProxyServiceSender) GetSessionReport(ctx context.Context, sessionID common.Hash) (*msgs.SessionReportRes, error) {
+func (p *ProxyServiceSender) GetSessionReportFromProvider(ctx context.Context, sessionID common.Hash) (*msgs.SessionReportRes, error) {
 	requestID := "1"
 
 	prKey, err := p.privateKey.GetPrivateKey()
@@ -187,6 +189,55 @@ func (p *ProxyServiceSender) GetSessionReport(ctx context.Context, sessionID com
 	return typedMsg, nil
 }
 
+func (p *ProxyServiceSender) GetSessionReportFromUser(ctx context.Context, sessionID common.Hash) (lib.HexString, lib.HexString, error) {
+	session, ok := p.sessionStorage.GetSession(sessionID.Hex())
+	if !ok {
+		return nil, nil, ErrSessionNotFound
+	}
+
+	tps := 0
+	ttft := 0
+	for _, tpsVal := range session.TPSScaled1000Arr {
+		tps += tpsVal
+	}
+	for _, ttftVal := range session.TTFTMsArr {
+		ttft += ttftVal
+	}
+
+	if len(session.TPSScaled1000Arr) != 0 {
+		tps /= len(session.TPSScaled1000Arr)
+	}
+	if len(session.TTFTMsArr) != 0 {
+		ttft /= len(session.TTFTMsArr)
+	}
+
+	prKey, err := p.privateKey.GetPrivateKey()
+	if err != nil {
+		return nil, nil, ErrMissingPrKey
+	}
+
+	response, err := p.morRPC.SessionReportResponse(
+		uint32(tps),
+		uint32(ttft),
+		sessionID,
+		prKey,
+		"1",
+		p.chainID,
+	)
+
+	if err != nil {
+		return nil, nil, lib.WrapError(ErrGenerateReport, err)
+	}
+
+	var typedMsg *msgs.SessionReportRes
+	err = json.Unmarshal(*response.Result, &typedMsg)
+	if err != nil {
+		return nil, nil, lib.WrapError(ErrInvalidResponse, fmt.Errorf("expected SessionReportRespose, got %s", response.Result))
+	}
+
+	return typedMsg.Message, typedMsg.SignedReport, nil
+}
+
 func (p *ProxyServiceSender) SendPrompt(ctx context.Context, resWriter ResponderFlusher, prompt *openai.ChatCompletionRequest, sessionID common.Hash) (interface{}, error) {
 	session, ok := p.sessionStorage.GetSession(sessionID.Hex())
 	if !ok {
@@ -218,7 +269,8 @@ func (p *ProxyServiceSender) SendPrompt(ctx context.Context, resWriter Responder
 		return nil, lib.WrapError(ErrCreateReq, err)
 	}
 
-	result, err := p.rpcRequestStream(ctx, resWriter, provider.Url, promptRequest, pubKey)
+	now := time.Now().Unix()
+	result, ttftMs, totalTokens, err := p.rpcRequestStream(ctx, resWriter, provider.Url, promptRequest, pubKey)
 	if err != nil {
 		if !session.FailoverEnabled {
 			return nil, lib.WrapError(ErrProvider, err)
@@ -254,6 +306,17 @@ func (p *ProxyServiceSender) SendPrompt(ctx context.Context, resWriter Responder
 
 		time.Sleep(1 * time.Second) //  sleep for a bit to allow the new session to be created
 		return p.SendPrompt(ctx, resWriter, prompt, newSessionID)
+	}
+
+	requestDuration := int(time.Now().Unix() - now)
+	if requestDuration == 0 {
+		requestDuration = 1
+	}
+	session.TTFTMsArr = append(session.TTFTMsArr, ttftMs)
+	session.TPSScaled1000Arr = append(session.TPSScaled1000Arr, totalTokens*1000/requestDuration)
+	err = p.sessionStorage.AddSession(session)
+	if err != nil {
+		p.log.Error(`failed to update session report stats`, err)
 	}
 
 	return result, nil
@@ -298,27 +361,32 @@ func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage)
 	return msg, 0, nil
 }
 
-func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter ResponderFlusher, url string, rpcMessage *msgs.RPCMessage, providerPublicKey lib.HexString) (interface{}, error) {
+func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter ResponderFlusher, url string, rpcMessage *msgs.RPCMessage, providerPublicKey lib.HexString) (interface{}, int, int, error) {
 	prKey, err := p.privateKey.GetPrivateKey()
 	if err != nil {
-		return nil, ErrMissingPrKey
+		return nil, 0, 0, ErrMissingPrKey
 	}
 
 	conn, err := net.Dial("tcp", url)
 	if err != nil {
 		err = lib.WrapError(fmt.Errorf("failed to connect to provider"), err)
 		p.log.Errorf("%s", err)
-		return nil, err
+		return nil, 0, 0, err
 	}
 	defer conn.Close()
 
 	msgJSON, err := json.Marshal(rpcMessage)
 	if err != nil {
-		return nil, lib.WrapError(ErrMasrshalFailed, err)
+		return nil, 0, 0, lib.WrapError(ErrMasrshalFailed, err)
 	}
+
+	ttftMs := 0
+	totalTokens := 0
+	now := time.Now().UnixMilli()
+
 	_, err = conn.Write(msgJSON)
 	if err != nil {
-		return nil, err
+		return nil, ttftMs, totalTokens, err
 	}
 
 	// read response
@@ -330,45 +398,49 @@ func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter Res
 
 	for {
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return nil, ttftMs, totalTokens, ctx.Err()
 		}
 		var msg *msgs.RpcResponse
 		err = d.Decode(&msg)
 		p.log.Debugf("Received stream msg:", msg)
 		if err != nil {
 			p.log.Warnf("Failed to decode response: %v", err)
-			return responses, nil
+			return responses, ttftMs, totalTokens, nil
 		}
 
 		if msg.Error != nil {
-			return nil, lib.WrapError(ErrResponseErr, fmt.Errorf("error: %v, data: %v", msg.Error.Message, msg.Error.Data))
+			return nil, ttftMs, totalTokens, lib.WrapError(ErrResponseErr, fmt.Errorf("error: %v, data: %v", msg.Error.Message, msg.Error.Data))
 		}
 
 		if msg.Result == nil {
-			return nil, lib.WrapError(ErrInvalidResponse, fmt.Errorf("empty result and no error"))
+			return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, fmt.Errorf("empty result and no error"))
+		}
+
+		if ttftMs == 0 {
+			ttftMs = int(time.Now().UnixMilli() - now)
 		}
 
 		var inferenceRes InferenceRes
 		err := json.Unmarshal(*msg.Result, &inferenceRes)
 		if err != nil {
-			return nil, lib.WrapError(ErrInvalidResponse, err)
+			return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
 		}
 		sig := inferenceRes.Signature
 		inferenceRes.Signature = []byte{}
 
 		if !p.validateMsgSignature(inferenceRes, sig, providerPublicKey) {
-			return nil, ErrInvalidSig
+			return nil, ttftMs, totalTokens, ErrInvalidSig
 		}
 
 		var message lib.HexString
 		err = json.Unmarshal(inferenceRes.Message, &message)
 		if err != nil {
-			return nil, lib.WrapError(ErrInvalidResponse, err)
+			return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
 		}
 
 		aiResponse, err := lib.DecryptBytes(message, prKey)
 		if err != nil {
-			return nil, lib.WrapError(ErrDecrFailed, err)
+			return nil, ttftMs, totalTokens, lib.WrapError(ErrDecrFailed, err)
 		}
 
 		var payload ChatCompletionResponse
@@ -382,22 +454,24 @@ func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter Res
 					stop = true
 				}
 			}
+			totalTokens += len(choices)
 			responses = append(responses, payload)
 		} else {
 			var prodiaPayload aiengine.ProdiaGenerationResult
 			err = json.Unmarshal(aiResponse, &prodiaPayload)
 			if err != nil {
-				return nil, lib.WrapError(ErrInvalidResponse, err)
+				return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
 			}
+			totalTokens += 1
 			responses = append(responses, prodiaPayload)
 		}
 
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return nil, ttftMs, totalTokens, ctx.Err()
 		}
 		_, err = resWriter.Write([]byte(fmt.Sprintf("data: %s\n\n", aiResponse)))
 		if err != nil {
-			return nil, err
+			return nil, ttftMs, totalTokens, err
 		}
 		resWriter.Flush()
 		if stop {
@@ -405,7 +479,7 @@ func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter Res
 		}
 	}
 
-	return responses, nil
+	return responses, ttftMs, totalTokens, nil
 }
 
 func (p *ProxyServiceSender) validateMsgSignature(result any, signature lib.HexString, providerPubicKey lib.HexString) bool {

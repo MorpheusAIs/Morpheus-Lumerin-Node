@@ -47,15 +47,16 @@ type BlockchainService struct {
 }
 
 var (
-	ErrPrKey         = errors.New("cannot get private key")
-	ErrTxOpts        = errors.New("failed to get transactOpts")
-	ErrNonce         = errors.New("failed to get nonce")
-	ErrEstimateGas   = errors.New("failed to estimate gas")
-	ErrSignTx        = errors.New("failed to sign transaction")
-	ErrSendTx        = errors.New("failed to send transaction")
-	ErrWaitMined     = errors.New("failed to wait for transaction to be mined")
-	ErrSessionStore  = errors.New("failed to store session")
-	ErrSessionReport = errors.New("failed to get session report from provider")
+	ErrPrKey             = errors.New("cannot get private key")
+	ErrTxOpts            = errors.New("failed to get transactOpts")
+	ErrNonce             = errors.New("failed to get nonce")
+	ErrEstimateGas       = errors.New("failed to estimate gas")
+	ErrSignTx            = errors.New("failed to sign transaction")
+	ErrSendTx            = errors.New("failed to send transaction")
+	ErrWaitMined         = errors.New("failed to wait for transaction to be mined")
+	ErrSessionStore      = errors.New("failed to store session")
+	ErrSessionReport     = errors.New("failed to get session report from provider")
+	ErrSessionUserReport = errors.New("failed to get session report from user")
 
 	ErrBid         = errors.New("failed to get bid")
 	ErrProvider    = errors.New("failed to get provider")
@@ -390,9 +391,21 @@ func (s *BlockchainService) CloseSession(ctx context.Context, sessionID common.H
 		return common.Hash{}, lib.WrapError(ErrPrKey, err)
 	}
 
-	report, err := s.proxyService.GetSessionReport(ctx, sessionID)
+	var reportMessage []byte
+	var signedReport []byte
+
+	report, err := s.proxyService.GetSessionReportFromProvider(ctx, sessionID)
 	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrSessionReport, err)
+		s.log.Errorf("Failed to get session report from provider", err)
+
+		s.log.Info("Trying to get session report from user")
+		reportMessage, signedReport, err = s.proxyService.GetSessionReportFromUser(ctx, sessionID)
+		if err != nil {
+			return common.Hash{}, lib.WrapError(ErrSessionUserReport, err)
+		}
+	} else {
+		reportMessage = report.Message
+		signedReport = report.SignedReport
 	}
 
 	transactOpt, err := s.getTransactOpts(ctx, prKey)
@@ -400,7 +413,7 @@ func (s *BlockchainService) CloseSession(ctx context.Context, sessionID common.H
 		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
 	}
 
-	tx, err := s.sessionRouter.CloseSession(transactOpt, sessionID, report.Message, report.SignedReport, prKey)
+	tx, err := s.sessionRouter.CloseSession(transactOpt, sessionID, reportMessage, signedReport, prKey)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrSendTx, err)
 	}
