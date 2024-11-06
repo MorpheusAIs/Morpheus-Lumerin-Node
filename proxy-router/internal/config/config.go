@@ -162,6 +162,11 @@ func (cfg *Config) GetSanitized() interface{} {
 	publicCfg := Config{}
 
 	publicCfg.Blockchain.EthLegacyTx = cfg.Blockchain.EthLegacyTx
+	publicCfg.Blockchain.ChainID = cfg.Blockchain.ChainID
+	publicCfg.Blockchain.MaxReconnects = cfg.Blockchain.MaxReconnects
+	publicCfg.Blockchain.PollingInterval = cfg.Blockchain.PollingInterval
+	publicCfg.Blockchain.UseSubscriptions = cfg.Blockchain.UseSubscriptions
+
 	publicCfg.Environment = cfg.Environment
 
 	publicCfg.Marketplace.DiamondContractAddress = cfg.Marketplace.DiamondContractAddress

@@ -3,38 +3,34 @@ package blockchainapi
 import (
 	"context"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/sessionrouter"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	sessionrepo "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/session"
+	"github.com/ethereum/go-ethereum/common"
 )
 
 type EventsListener struct {
-	sessionRouter     *registries.SessionRouter
-	marketplace       *registries.Marketplace
-	store             *storages.SessionStorage
-	tsk               *lib.Task
-	log               *lib.Logger
-	client            bind.ContractFilterer
-	wallet            interfaces.Wallet
-	modelConfigLoader *config.ModelConfigLoader
-	logWatcher        contracts.LogWatcher
+	sessionRouter *registries.SessionRouter
+	sessionRepo   *sessionrepo.SessionRepositoryCached
+	tsk           *lib.Task
+	log           *lib.Logger
+	wallet        interfaces.Wallet
+	logWatcher    contracts.LogWatcher
+
+	//internal state
+	addr common.Address
 }
 
-func NewEventsListener(client bind.ContractFilterer, store *storages.SessionStorage, sessionRouter *registries.SessionRouter, marketplace *registries.Marketplace, wallet interfaces.Wallet, modelConfigLoader *config.ModelConfigLoader, logWatcher contracts.LogWatcher, log *lib.Logger) *EventsListener {
+func NewEventsListener(sessionRepo *sessionrepo.SessionRepositoryCached, sessionRouter *registries.SessionRouter, wallet interfaces.Wallet, logWatcher contracts.LogWatcher, log *lib.Logger) *EventsListener {
 	return &EventsListener{
-		store:             store,
-		log:               log,
-		sessionRouter:     sessionRouter,
-		marketplace:       marketplace,
-		client:            client,
-		wallet:            wallet,
-		modelConfigLoader: modelConfigLoader,
-		logWatcher:        logWatcher,
+		log:           log,
+		sessionRouter: sessionRouter,
+		sessionRepo:   sessionRepo,
+		wallet:        wallet,
+		logWatcher:    logWatcher,
 	}
 }
 
@@ -43,7 +39,19 @@ func (e *EventsListener) Run(ctx context.Context) error {
 		_ = e.log.Close()
 	}()
 
-	sub, err := e.logWatcher.Watch(ctx, e.sessionRouter.GetContractAddress(), contracts.CreateEventMapper(contracts.SessionRouterEventFactory, e.sessionRouter.GetABI()), nil)
+	addr, err := e.getWalletAddress()
+	if err != nil {
+		return err
+	}
+	e.addr = addr
+
+	//TODO: filter events by user/provider address
+	sub, err := e.logWatcher.Watch(
+		ctx,
+		e.sessionRouter.GetContractAddress(),
+		contracts.CreateEventMapper(contracts.SessionRouterEventFactory,
+			e.sessionRouter.GetABI(),
+		), nil)
 	if err != nil {
 		return err
 	}
@@ -57,7 +65,7 @@ func (e *EventsListener) Run(ctx context.Context) error {
 		case event := <-sub.Events():
 			err := e.controller(event)
 			if err != nil {
-				e.log.Errorf("error loading data: %s", err)
+				e.log.Errorf("error handling event: %s", err)
 			}
 		case err := <-sub.Err():
 			e.log.Errorf("error in event listener: %s", err)
@@ -77,96 +85,35 @@ func (e *EventsListener) controller(event interface{}) error {
 }
 
 func (e *EventsListener) handleSessionOpened(event *sessionrouter.SessionRouterSessionOpened) error {
-	ctx := context.Background()
-
-	sessionId := lib.BytesToString(event.SessionId[:])
-	e.log.Debugf("received open session router event, sessionId %s", sessionId)
-
-	session, err := e.sessionRouter.GetSession(ctx, event.SessionId)
-	if err != nil {
-		e.log.Errorf("failed to get session from blockchain: %s, sessionId %s", err, sessionId)
-		return err
-	}
-
-	bid, err := e.marketplace.GetBidById(ctx, session.BidId)
-	if err != nil {
-		e.log.Errorf("failed to get bid from blockchain: %s, sessionId %s", err, sessionId)
-		return err
-	}
-
-	privateKey, err := e.wallet.GetPrivateKey()
-	if err != nil {
-		e.log.Errorf("failed to get private key: %s", err)
-		return err
-	}
-
-	address, err := lib.PrivKeyBytesToAddr(privateKey)
-	if err != nil {
-		e.log.Errorf("failed to get address from private key: %s", err)
-		return err
-	}
-
-	if bid.Provider.Hex() != address.Hex() && event.User.Hex() != address.Hex() {
-		e.log.Debugf("session provider/user is not me, skipping, sessionId %s", sessionId)
+	if !e.filter(event.ProviderId, event.User) {
 		return nil
 	}
-
-	modelID := lib.BytesToString(bid.ModelId[:])
-
-	var modelConfig *config.ModelConfig
-	if bid.Provider.Hex() == address.Hex() {
-		modelConfig = e.modelConfigLoader.ModelConfigFromID(modelID)
-		err = e.store.AddSessionToModel(modelID, sessionId)
-		if err != nil {
-			return err
-		}
-	} else {
-		modelConfig = &config.ModelConfig{}
-	}
-
-	storedSession, ok := e.store.GetSession(sessionId)
-	if !ok {
-		err = e.store.AddSession(&storages.Session{
-			Id:           sessionId,
-			UserAddr:     event.User.Hex(),
-			ProviderAddr: bid.Provider.Hex(),
-			EndsAt:       session.EndsAt,
-			ModelID:      modelID,
-			ModelName:    modelConfig.ModelName,
-			ModelApiType: modelConfig.ApiType,
-		})
-	} else {
-		storedSession.EndsAt = session.EndsAt
-		storedSession.ModelID = modelID
-		storedSession.ModelName = modelConfig.ModelName
-		storedSession.ModelApiType = modelConfig.ApiType
-		storedSession.ProviderAddr = bid.Provider.Hex()
-		storedSession.UserAddr = event.User.Hex()
-		err = e.store.AddSession(storedSession)
-	}
-
-	if err != nil {
-		return err
-	}
-
-	return nil
+	e.log.Debugf("received open session event, sessionId %s", lib.BytesToString(event.SessionId[:]))
+	return e.sessionRepo.RefreshSession(context.Background(), event.SessionId)
 }
 
 func (e *EventsListener) handleSessionClosed(event *sessionrouter.SessionRouterSessionClosed) error {
-	sessionId := lib.BytesToString(event.SessionId[:])
-	e.log.Debugf("received close session router event, sessionId %s", sessionId)
-
-	_, ok := e.store.GetSession(sessionId)
-	if !ok {
-		e.log.Debugf("session not found in storage, sessionId %s", sessionId)
+	if !e.filter(event.ProviderId, event.User) {
 		return nil
 	}
+	e.log.Debugf("received close session event, sessionId %s", lib.BytesToString(event.SessionId[:]))
+	return e.sessionRepo.RemoveSession(context.Background(), event.SessionId)
+}
 
-	err := e.store.RemoveSession(sessionId)
+// getWalletAddress returns the wallet address from the wallet
+func (e *EventsListener) getWalletAddress() (common.Address, error) {
+	prkey, err := e.wallet.GetPrivateKey()
 	if err != nil {
-		e.log.Errorf("failed to remove session from storage: %s, sessionId %s", err, sessionId)
-		return err
+		return common.Address{}, err
 	}
+	return lib.PrivKeyStringToAddr(prkey.Hex())
+}
 
-	return nil
+// filter returns true if the event is for the user or provider
+func (e *EventsListener) filter(provider, user common.Address) bool {
+	ret := provider.Hex() == e.addr.Hex() || user.Hex() == e.addr.Hex()
+	if !ret {
+		e.log.Debugf("received event for another user/provider, skipping")
+	}
+	return ret
 }

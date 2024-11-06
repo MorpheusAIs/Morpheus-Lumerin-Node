@@ -3,30 +3,8 @@ package storages
 import (
 	"encoding/json"
 	"fmt"
-	"math/big"
 	"strings"
 )
-
-type Session struct {
-	Id               string
-	UserAddr         string
-	ProviderAddr     string
-	EndsAt           *big.Int
-	TPSScaled1000Arr []int
-	TTFTMsArr        []int
-
-	ModelID      string
-	ModelName    string
-	ModelApiType string
-
-	FailoverEnabled bool
-}
-
-type User struct {
-	Addr   string
-	PubKey string
-	Url    string
-}
 
 type SessionStorage struct {
 	db *Storage
@@ -111,12 +89,6 @@ func (s *SessionStorage) RemoveSession(id string) error {
 		return err
 	}
 	return nil
-}
-
-type PromptActivity struct {
-	SessionID string
-	StartTime int64
-	EndTime   int64
 }
 
 func (s *SessionStorage) AddSessionToModel(modelID string, sessionID string) error {
