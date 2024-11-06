@@ -1,0 +1,18 @@
+name: Generate Tag Name
+description: "Generates a tag name based on branch"
+runs:
+  using: "composite"
+  steps:
+    - name: Determine tag name
+      id: tag
+      run: |
+        SHORT_HASH="$(git rev-parse --short=7 HEAD)"
+        if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+          PREFIX="main-"
+        elif [[ "${GITHUB_REF}" == "refs/heads/stg" ]]; then
+          PREFIX="test-"
+        else
+          PREFIX=""
+        fi
+        TAG_NAME="${PREFIX}${SHORT_HASH}"
+        echo "name=${TAG_NAME}" >> $GITHUB_OUTPUT
