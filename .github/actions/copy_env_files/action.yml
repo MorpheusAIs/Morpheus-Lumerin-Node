@@ -4,6 +4,7 @@ runs:
   using: "composite"
   steps:
     - name: Copy Environment Files
+      shell: bash
       run: | 
         cp ./proxy-router/models-config.json.example ./proxy-router/models-config.json
         cp ./proxy-router/models-config.json.example models-config.json

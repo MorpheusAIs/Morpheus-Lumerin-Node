@@ -5,6 +5,7 @@ runs:
   steps:
     - name: Determine tag name
       id: tag
+      shell: bash
       run: |
         SHORT_HASH="$(git rev-parse --short=7 HEAD)"
         if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
