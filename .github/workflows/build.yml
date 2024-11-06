@@ -23,41 +23,7 @@ concurrency:
 defaults:
   run:
     shell: bash
-
-copy_env_files: &copy_env_files
-  - name: Copy Environment Files
-    run: | 
-      cp ./proxy-router/models-config.json.example ./proxy-router/models-config.json
-      cp ./proxy-router/models-config.json.example models-config.json
-      if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
-        cp ./.github/workflows/proxy-router.main.env ./proxy-router/.env
-        cp ./.github/workflows/proxy-router.main.env .env
-        cp ./.github/workflows/ui-desktop.main.env ./ui-desktop/.env
-      elif [[ "${GITHUB_REF}" == "refs/heads/stg" ]]; then
-        cp ./.github/workflows/proxy-router.test.env ./proxy-router/.env
-        cp ./.github/workflows/proxy-router.test.env .env
-        cp ./.github/workflows/ui-desktop.test.env ./ui-desktop/.env
-      else
-        cp ./proxy-router/.env.example ./proxy-router/.env
-        cp ./proxy-router/.env.example .env
-        cp ./ui-desktop/.env.example ./ui-desktop/.env
-      fi
     
-gen_tag_name: &gen_tag_name
-  - name: Determine tag name
-    id: tag
-    run: |
-      SHORT_HASH="$(git rev-parse --short=7 HEAD)"
-      if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
-        PREFIX="main-"
-      elif [[ "${GITHUB_REF}" == "refs/heads/stg" ]]; then
-        PREFIX="test-"
-      else
-        PREFIX=""
-      fi
-      TAG_NAME="${PREFIX}${SHORT_HASH}"
-      echo "name=${TAG_NAME}" >> $GITHUB_OUTPUT
-
 jobs:
   Ubuntu-22-x64:
     runs-on: ubuntu-22.04
@@ -69,7 +35,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21.x'
+          go-version: '1.22.x'
           cache-dependency-path: |
             launcher/go.sum
             proxy-router/go.sum
@@ -90,9 +56,11 @@ jobs:
           cd ../ui-desktop
           yarn install --network-timeout 600000
 
-      - <<: *copy_env_files
+      - name: Copy Environment Files
+        uses: ./.github/actions/copy_env_files
       
-      - <<: *gen_tag_name
+      - name: Generate Tag Name
+        uses: ./.github/actions/gen_tag_name
 
       - name: Build
         id: build
@@ -109,7 +77,7 @@ jobs:
       - name: Pack artifacts
         id: pack_artifacts
         run: |
-          ARTIFACT=mor-launch-${{ steps.tag.outputs.name }}-ubuntu-x64.zip
+          ARTIFACT="mor-launch-$TAG_NAME-ubuntu-x64.zip"
           LLAMACPP=llama-b3256-bin-ubuntu-x64.zip
           MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
@@ -122,7 +90,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          path: mor-launch-${{ steps.tag.outputs.name }}-ubuntu-x64.zip
+          path: mor-launch-${{ env.TAG_NAME }}-ubuntu-x64.zip
           name: mor-launch-ubuntu-x64.zip
 
   macOS-13-x64:
@@ -135,7 +103,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21.x'
+          go-version: '1.22.x'
           cache-dependency-path: |
             launcher/go.sum
             proxy-router/go.sum
@@ -156,9 +124,11 @@ jobs:
           cd ../ui-desktop
           yarn install --network-timeout 600000
 
-      - <<: *copy_env_files
+      - name: Copy Environment Files
+        uses: ./.github/actions/copy_env_files
 
-      - <<: *gen_tag_name
+      - name: Generate Tag Name
+        uses: ./.github/actions/gen_tag_name
       
       - name: Build
         id: build
@@ -175,7 +145,7 @@ jobs:
       - name: Pack artifacts
         id: pack_artifacts
         run: |
-          ARTIFACT=mor-launch-${{ steps.tag.outputs.name }}-macos-x64.zip
+          ARTIFACT="mor-launch-$TAG_NAME-macos-x64.zip"
           LLAMACPP=llama-b3256-bin-macos-x64.zip
           MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
@@ -190,7 +160,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          path: mor-launch-${{ steps.tag.outputs.name }}-macos-x64.zip
+          path: mor-launch-${{ env.TAG_NAME }}-macos-x64.zip
           name: mor-launch-macos-x64.zip
 
   macOS-14-arm64:
@@ -203,7 +173,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21.x'
+          go-version: '1.22.x'
           cache-dependency-path: |
             launcher/go.sum
             proxy-router/go.sum
@@ -224,9 +194,11 @@ jobs:
           cd ../ui-desktop
           yarn install --network-timeout 600000
 
-      - <<: *copy_env_files
+      - name: Copy Environment Files
+        uses: ./.github/actions/copy_env_files
 
-      - <<: *gen_tag_name
+      - name: Generate Tag Name
+        uses: ./.github/actions/gen_tag_name
       
       - name: Build
         id: build
@@ -243,7 +215,7 @@ jobs:
       - name: Pack artifacts
         id: pack_artifacts
         run: |
-          ARTIFACT=mor-launch-${{ steps.tag.outputs.name }}-macos-arm64.zip
+          ARTIFACT="mor-launch-$TAG_NAME-macos-arm64.zip"
           LLAMACPP=llama-b3256-bin-macos-arm64.zip
           MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
@@ -258,7 +230,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          path: mor-launch-${{ steps.tag.outputs.name }}-macos-arm64.zip
+          path: mor-launch-${{ env.TAG_NAME }}-macos-arm64.zip
           name: mor-launch-macos-arm64.zip
 
   Windows-avx2-x64:
@@ -271,7 +243,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21.x'
+          go-version: '1.22.x'
           cache-dependency-path: |
             launcher/go.sum
             proxy-router/go.sum
@@ -297,9 +269,11 @@ jobs:
           cd ../ui-desktop
           yarn install --network-timeout 600000
 
-      - <<: *copy_env_files
+      - name: Copy Environment Files
+        uses: ./.github/actions/copy_env_files
 
-      - <<: *gen_tag_name
+      - name: Generate Tag Name
+        uses: ./.github/actions/gen_tag_name
       
       - name: Build
         id: build
@@ -316,7 +290,7 @@ jobs:
       - name: Pack artifacts
         id: pack_artifacts
         run: |
-          ARTIFACT=mor-launch-${{ steps.tag.outputs.name }}-win-x64.zip
+          ARTIFACT="mor-launch-$TAG_NAME-win-x64.zip"
           LLAMACPP=llama-b3256-bin-win-avx2-x64.zip
           MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
@@ -334,7 +308,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          path: mor-launch-${{ steps.tag.outputs.name }}-win-x64.zip
+          path: mor-launch-${{ env.TAG_NAME }}-win-x64.zip
           name: mor-launch-win-x64.zip
 
   release:
@@ -350,7 +324,8 @@ jobs:
         id: checkout
         uses: actions/checkout@v4
 
-      - <<: *gen_tag_name
+      - name: Generate Tag Name
+        uses: ./.github/actions/gen_tag_name
 
       - name: Download artifacts
         id: download-artifact
@@ -370,7 +345,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ steps.tag.outputs.name }}
+          tag_name: ${{ env.TAG_NAME }}
 
       - name: Upload release
         id: upload_release
