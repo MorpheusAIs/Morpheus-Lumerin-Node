@@ -274,10 +274,10 @@ func (p *ProxyServiceSender) SendPrompt(ctx context.Context, resWriter Responder
 			return nil, lib.WrapError(ErrProvider, err)
 		}
 
-		// _, err := p.sessionService.CloseSession(ctx, sessionID)
-		// if err != nil {
-		// 	return nil, err
-		// }
+		_, err := p.sessionService.CloseSession(ctx, sessionID)
+		if err != nil {
+			return nil, err
+		}
 
 		resWriter.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_EVENT_STREAM)
 		_, err = resWriter.Write([]byte(fmt.Sprintf("data: %s\n\n", "{\"message\": \"provider failed, failover enabled\"}")))
