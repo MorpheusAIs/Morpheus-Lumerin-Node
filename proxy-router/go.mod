@@ -5,13 +5,14 @@ go 1.22.0
 toolchain go1.22.3
 
 require (
+	github.com/btcsuite/btcd v0.22.1
+	github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce
 	github.com/dgraph-io/badger/v4 v4.2.0
 	github.com/ethereum/go-ethereum v1.13.15
 	github.com/gin-contrib/cors v1.7.2
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-playground/validator/v10 v10.20.0
 	github.com/joho/godotenv v1.5.1
-	github.com/miguelmota/go-ethereum-hdwallet v0.1.2
 	github.com/omeid/uconfig v0.7.0
 	github.com/sashabaranov/go-openai v1.24.1
 	github.com/shirou/gopsutil/v3 v3.23.11
@@ -19,6 +20,7 @@ require (
 	github.com/swaggo/files v1.0.1
 	github.com/swaggo/gin-swagger v1.6.0
 	github.com/swaggo/swag v1.16.3
+	github.com/tyler-smith/go-bip39 v1.1.0
 	github.com/zalando/go-keyring v0.2.4
 	go.uber.org/multierr v1.6.0
 	go.uber.org/zap v1.24.0
@@ -32,10 +34,8 @@ require (
 	github.com/StackExchange/wmi v1.2.1 // indirect
 	github.com/alessio/shellescape v1.4.1 // indirect
 	github.com/bits-and-blooms/bitset v1.10.0 // indirect
-	github.com/btcsuite/btcd v0.22.1 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.2.0 // indirect
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.0.1 // indirect
-	github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce // indirect
 	github.com/bytedance/sonic v1.11.6 // indirect
 	github.com/bytedance/sonic/loader v0.1.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
@@ -96,7 +96,6 @@ require (
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
-	github.com/tyler-smith/go-bip39 v1.1.0 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
 	github.com/yusufpapurcu/wmi v1.2.3 // indirect
 	go.opencensus.io v0.22.5 // indirect

@@ -7,7 +7,8 @@ import (
 	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/keychain"
-	hdwallet "github.com/miguelmota/go-ethereum-hdwallet"
+	"github.com/ethereum/go-ethereum/accounts"
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 const (
@@ -160,19 +161,19 @@ func (w *KeychainWallet) getStoredMnemonic() (string, string, error) {
 }
 
 func (w *KeychainWallet) mnemonicToPrivateKey(mnemonic, derivationPath string) (lib.HexString, error) {
-	wallet, err := hdwallet.NewFromMnemonic(mnemonic)
+	wallet, err := NewFromMnemonic(mnemonic)
 	if err != nil {
 		return nil, err
 	}
-	path, err := hdwallet.ParseDerivationPath(derivationPath)
+	path, err := accounts.ParseDerivationPath(derivationPath)
 	if err != nil {
 		return nil, err
 	}
-	account, err := wallet.Derive(path, true)
+	prKey, err := wallet.DerivePrivateKey(path)
 	if err != nil {
 		return nil, err
 	}
-	return wallet.PrivateKeyBytes(account)
+	return crypto.FromECDSA(prKey), nil
 }
 
 func (w *KeychainWallet) PrivateKeyUpdated() <-chan struct{} {

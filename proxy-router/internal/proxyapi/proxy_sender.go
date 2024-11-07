@@ -16,6 +16,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	msgs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi/morrpcmessage"
+	sessionrepo "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/session"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
@@ -39,29 +40,26 @@ var (
 	ErrProviderNotFound = fmt.Errorf("provider not found")
 )
 
-type SessionService interface {
-	OpenSessionByModelId(ctx context.Context, modelID common.Hash, duration *big.Int, isFailoverEnabled bool, omitProvider common.Address) (common.Hash, error)
-	CloseSession(ctx context.Context, sessionID common.Hash) (common.Hash, error)
-}
-
 type ProxyServiceSender struct {
 	chainID        *big.Int
 	publicUrl      *url.URL
 	privateKey     interfaces.PrKeyProvider
 	logStorage     *lib.Collection[*interfaces.LogStorage]
 	sessionStorage *storages.SessionStorage
+	sessionRepo    *sessionrepo.SessionRepositoryCached
 	morRPC         *msgs.MORRPCMessage
 	sessionService SessionService
 	log            lib.ILogger
 }
 
-func NewProxySender(chainID *big.Int, publicUrl *url.URL, privateKey interfaces.PrKeyProvider, logStorage *lib.Collection[*interfaces.LogStorage], sessionStorage *storages.SessionStorage, log lib.ILogger) *ProxyServiceSender {
+func NewProxySender(chainID *big.Int, publicUrl *url.URL, privateKey interfaces.PrKeyProvider, logStorage *lib.Collection[*interfaces.LogStorage], sessionStorage *storages.SessionStorage, sessionRepo *sessionrepo.SessionRepositoryCached, log lib.ILogger) *ProxyServiceSender {
 	return &ProxyServiceSender{
 		chainID:        chainID,
 		publicUrl:      publicUrl,
 		privateKey:     privateKey,
 		logStorage:     logStorage,
 		sessionStorage: sessionStorage,
+		sessionRepo:    sessionRepo,
 		morRPC:         msgs.NewMorRpc(),
 		log:            log,
 	}
@@ -239,17 +237,17 @@ func (p *ProxyServiceSender) GetSessionReportFromUser(ctx context.Context, sessi
 }
 
 func (p *ProxyServiceSender) SendPrompt(ctx context.Context, resWriter ResponderFlusher, prompt *openai.ChatCompletionRequest, sessionID common.Hash) (interface{}, error) {
-	session, ok := p.sessionStorage.GetSession(sessionID.Hex())
-	if !ok {
+	session, err := p.sessionRepo.GetSession(ctx, sessionID)
+	if err != nil {
 		return nil, ErrSessionNotFound
 	}
 
-	isExpired := session.EndsAt.Int64()-time.Now().Unix() < 0
+	isExpired := session.EndsAt().Int64()-time.Now().Unix() < 0
 	if isExpired {
 		return nil, ErrSessionExpired
 	}
 
-	provider, ok := p.sessionStorage.GetUser(session.ProviderAddr)
+	provider, ok := p.sessionStorage.GetUser(session.ProviderAddr().Hex())
 	if !ok {
 		return nil, ErrProviderNotFound
 	}
@@ -272,14 +270,14 @@ func (p *ProxyServiceSender) SendPrompt(ctx context.Context, resWriter Responder
 	now := time.Now().Unix()
 	result, ttftMs, totalTokens, err := p.rpcRequestStream(ctx, resWriter, provider.Url, promptRequest, pubKey)
 	if err != nil {
-		if !session.FailoverEnabled {
+		if !session.FailoverEnabled() {
 			return nil, lib.WrapError(ErrProvider, err)
 		}
 
-		// _, err := p.sessionService.CloseSession(ctx, sessionID)
-		// if err != nil {
-		// 	return nil, err
-		// }
+		_, err := p.sessionService.CloseSession(ctx, sessionID)
+		if err != nil {
+			return nil, err
+		}
 
 		resWriter.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_EVENT_STREAM)
 		_, err = resWriter.Write([]byte(fmt.Sprintf("data: %s\n\n", "{\"message\": \"provider failed, failover enabled\"}")))
@@ -288,12 +286,15 @@ func (p *ProxyServiceSender) SendPrompt(ctx context.Context, resWriter Responder
 		}
 		resWriter.Flush()
 
-		modelID := common.HexToHash(session.ModelID)
-		provider := common.HexToAddress(session.ProviderAddr)
-		duration := session.EndsAt.Int64() - time.Now().Unix()
-		durationBigInt := big.NewInt(duration)
-		newSessionID, err := p.sessionService.OpenSessionByModelId(ctx, modelID, durationBigInt, session.FailoverEnabled, provider)
+		duration := session.EndsAt().Int64() - time.Now().Unix()
 
+		newSessionID, err := p.sessionService.OpenSessionByModelId(
+			ctx,
+			session.ModelID(),
+			big.NewInt(duration),
+			session.FailoverEnabled(),
+			session.ProviderAddr(),
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -312,9 +313,9 @@ func (p *ProxyServiceSender) SendPrompt(ctx context.Context, resWriter Responder
 	if requestDuration == 0 {
 		requestDuration = 1
 	}
-	session.TTFTMsArr = append(session.TTFTMsArr, ttftMs)
-	session.TPSScaled1000Arr = append(session.TPSScaled1000Arr, totalTokens*1000/requestDuration)
-	err = p.sessionStorage.AddSession(session)
+	session.AddStats(totalTokens*1000/requestDuration, ttftMs)
+
+	err = p.sessionRepo.SaveSession(ctx, session)
 	if err != nil {
 		p.log.Error(`failed to update session report stats`, err)
 	}

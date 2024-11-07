@@ -11,6 +11,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi"
+	sessionrepo "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/session"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/transport"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/go-playground/validator/v10"
@@ -49,6 +50,7 @@ type Proxy struct {
 	proxyAddr           string
 	chainID             *big.Int
 	sessionStorage      *storages.SessionStorage
+	sessionRepo         *sessionrepo.SessionRepositoryCached
 	log                 *lib.Logger
 	connLog             *lib.Logger
 	schedulerLogFactory SchedulerLogFactory
@@ -62,7 +64,7 @@ type Proxy struct {
 }
 
 // NewProxyCtl creates a new Proxy controller instance
-func NewProxyCtl(eventListerer *blockchainapi.EventsListener, wallet interfaces.PrKeyProvider, chainID *big.Int, log *lib.Logger, connLog *lib.Logger, proxyAddr string, scl SchedulerLogFactory, sessionStorage *storages.SessionStorage, modelConfigLoader *config.ModelConfigLoader, valid *validator.Validate, aiEngine *aiengine.AiEngine, blockchainService *blockchainapi.BlockchainService) *Proxy {
+func NewProxyCtl(eventListerer *blockchainapi.EventsListener, wallet interfaces.PrKeyProvider, chainID *big.Int, log *lib.Logger, connLog *lib.Logger, proxyAddr string, scl SchedulerLogFactory, sessionStorage *storages.SessionStorage, modelConfigLoader *config.ModelConfigLoader, valid *validator.Validate, aiEngine *aiengine.AiEngine, blockchainService *blockchainapi.BlockchainService, sessionRepo *sessionrepo.SessionRepositoryCached) *Proxy {
 	return &Proxy{
 		eventListener:       eventListerer,
 		chainID:             chainID,
@@ -76,6 +78,7 @@ func NewProxyCtl(eventListerer *blockchainapi.EventsListener, wallet interfaces.
 		validator:           valid,
 		modelConfigLoader:   modelConfigLoader,
 		blockchainService:   blockchainService,
+		sessionRepo:         sessionRepo,
 	}
 }
 
@@ -138,9 +141,9 @@ func (p *Proxy) run(ctx context.Context, prKey lib.HexString) error {
 		return err
 	}
 
-	proxyReceiver := proxyapi.NewProxyReceiver(prKey, pubKey, p.sessionStorage, p.aiEngine, p.chainID, p.modelConfigLoader, p.blockchainService)
+	proxyReceiver := proxyapi.NewProxyReceiver(prKey, pubKey, p.sessionStorage, p.aiEngine, p.chainID, p.modelConfigLoader, p.blockchainService, p.sessionRepo)
 
-	morTcpHandler := proxyapi.NewMORRPCController(proxyReceiver, p.validator, p.sessionStorage)
+	morTcpHandler := proxyapi.NewMORRPCController(proxyReceiver, p.validator, p.sessionRepo, p.sessionStorage)
 	tcpHandler := tcphandlers.NewTCPHandler(
 		p.log, p.connLog, p.schedulerLogFactory, morTcpHandler,
 	)

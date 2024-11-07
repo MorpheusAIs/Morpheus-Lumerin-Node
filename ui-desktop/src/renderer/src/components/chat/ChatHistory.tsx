@@ -152,7 +152,7 @@ export const ChatHistory = (props: ChatHistoryProps) => {
 
                 <Tabs
                     defaultActiveKey="history"
-                    id="uncontrolled-tab-example"
+                    id="history-tabs"
                     className="mb-3"
                 >
                     <Tab eventKey="history" title="History">
@@ -205,6 +205,7 @@ export const ChatHistory = (props: ChatHistoryProps) => {
                         </div>
                     </Tab>
                     <Tab eventKey="sessions" title="Sessions">
+                        <div className="list-container">
                         {
                             sessions?.length ? (
                                 sessions.map(s => {
@@ -227,6 +228,7 @@ export const ChatHistory = (props: ChatHistoryProps) => {
                                 ))
                                 : <div>You have not any sessions</div>
                         }
+                        </div>
                     </Tab>
                 </Tabs>
             </div>
