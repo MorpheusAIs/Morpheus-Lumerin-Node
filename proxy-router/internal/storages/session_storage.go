@@ -3,30 +3,8 @@ package storages
 import (
 	"encoding/json"
 	"fmt"
-	"math/big"
 	"strings"
 )
-
-type Session struct {
-	Id               string
-	UserAddr         string
-	ProviderAddr     string
-	EndsAt           *big.Int
-	TPSScaled1000Arr []int
-	TTFTMsArr        []int
-
-	ModelID      string
-	ModelName    string
-	ModelApiType string
-
-	FailoverEnabled bool
-}
-
-type User struct {
-	Addr   string
-	PubKey string
-	Url    string
-}
 
 type SessionStorage struct {
 	db *Storage
@@ -36,24 +14,6 @@ func NewSessionStorage(storage *Storage) *SessionStorage {
 	return &SessionStorage{
 		db: storage,
 	}
-}
-
-func (s *SessionStorage) GetSession(id string) (*Session, bool) {
-	id = strings.ToLower(id)
-	key := fmt.Sprintf("session:%s", id)
-
-	sessionJson, err := s.db.Get([]byte(key))
-	if err != nil {
-		return nil, false
-	}
-
-	session := &Session{}
-	err = json.Unmarshal(sessionJson, session)
-	if err != nil {
-		return nil, false
-	}
-
-	return session, true
 }
 
 func (s *SessionStorage) GetUser(addr string) (*User, bool) {
@@ -73,21 +33,6 @@ func (s *SessionStorage) GetUser(addr string) (*User, bool) {
 	return user, true
 }
 
-func (s *SessionStorage) AddSession(session *Session) error {
-	sessionId := strings.ToLower(session.Id)
-	key := fmt.Sprintf("session:%s", sessionId)
-	sessionJson, err := json.Marshal(session)
-	if err != nil {
-		return err
-	}
-
-	err = s.db.Set([]byte(key), sessionJson)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func (s *SessionStorage) AddUser(user *User) error {
 	addr := strings.ToLower(user.Addr)
 	key := fmt.Sprintf("user:%s", addr)
@@ -103,66 +48,84 @@ func (s *SessionStorage) AddUser(user *User) error {
 	return nil
 }
 
-func (s *SessionStorage) RemoveSession(id string) error {
-	sessionId := strings.ToLower(id)
-	key := fmt.Sprintf("session:%s", sessionId)
-	err := s.db.Delete([]byte(key))
+func (s *SessionStorage) GetSession(id string) (*Session, bool) {
+	sessionJson, err := s.db.Get(formatSessionKey(id))
+	if err != nil {
+		return nil, false
+	}
+
+	session := &Session{}
+	err = json.Unmarshal(sessionJson, session)
+	if err != nil {
+		return nil, false
+	}
+
+	return session, true
+}
+
+func (s *SessionStorage) AddSession(session *Session) error {
+	sessionJson, err := json.Marshal(session)
+	if err != nil {
+		return err
+	}
+
+	// TODO: do in a single transaction
+	err = s.db.Set(formatSessionKey(session.Id), sessionJson)
+	if err != nil {
+		return err
+	}
+	err = s.addSessionToModel(session.ModelID, session.Id)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-type PromptActivity struct {
-	SessionID string
-	StartTime int64
-	EndTime   int64
+func (s *SessionStorage) RemoveSession(id string) error {
+	ses, ok := s.GetSession(id)
+	if !ok {
+		return nil
+	}
+	sessionId := strings.ToLower(id)
+	key := fmt.Sprintf("session:%s", sessionId)
+
+	err := s.db.Delete([]byte(key))
+	if err != nil {
+		return err
+	}
+
+	return s.removeSessionFromModel(ses.ModelID, sessionId)
 }
 
-func (s *SessionStorage) AddSessionToModel(modelID string, sessionID string) error {
-	modelID = strings.ToLower(modelID)
-	key := fmt.Sprintf("model:%s", modelID)
-
-	var sessions []string
-	sessionsJson, err := s.db.Get([]byte(key))
-	if err == nil {
-		err = json.Unmarshal(sessionsJson, &sessions)
-		if err != nil {
-			return err
-		}
-	} else {
-		sessions = []string{}
-	}
-
-	sessions = append(sessions, sessionID)
-	sessionsJson, err = json.Marshal(sessions)
+func (s *SessionStorage) addSessionToModel(modelID string, sessionID string) error {
+	err := s.db.Set(formatModelSessionKey(modelID, sessionID), []byte{})
 	if err != nil {
-		return err
+		return fmt.Errorf("error adding session to model: %s", err)
 	}
+	return nil
+}
 
-	err = s.db.Set([]byte(key), sessionsJson)
+func (s *SessionStorage) removeSessionFromModel(modelID string, sessionID string) error {
+	err := s.db.Delete(formatModelSessionKey(modelID, sessionID))
 	if err != nil {
-		return err
+		return fmt.Errorf("error removing session from model: %s", err)
 	}
 	return nil
 }
 
 func (s *SessionStorage) GetSessionsForModel(modelID string) ([]string, error) {
-	modelID = strings.ToLower(modelID)
-	key := fmt.Sprintf("model:%s", modelID)
-
-	sessionsJson, err := s.db.Get([]byte(key))
+	keys, err := s.db.GetPrefix(formatModelSessionKey(modelID, ""))
 	if err != nil {
-		return []string{}, nil
+		return []string{}, err
 	}
 
-	var sessions []string
-	err = json.Unmarshal(sessionsJson, &sessions)
-	if err != nil {
-		return nil, err
+	sessionIDs := make([]string, len(keys))
+	for i, key := range keys {
+		_, sessionID := parseModelSessionKey(key)
+		sessionIDs[i] = sessionID
 	}
 
-	return sessions, nil
+	return sessionIDs, nil
 }
 
 func (s *SessionStorage) AddActivity(modelID string, activity *PromptActivity) error {
@@ -246,4 +209,17 @@ func (s *SessionStorage) RemoveOldActivities(modelID string, beforeTime int64) e
 	}
 
 	return nil
+}
+
+func formatModelSessionKey(modelID string, sessionID string) []byte {
+	return []byte(fmt.Sprintf("model:%s:session:%s", strings.ToLower(modelID), strings.ToLower(sessionID)))
+}
+
+func formatSessionKey(sessionID string) []byte {
+	return []byte(fmt.Sprintf("session:%s", strings.ToLower(sessionID)))
+}
+
+func parseModelSessionKey(key []byte) (string, string) {
+	parts := strings.Split(string(key), ":")
+	return parts[1], parts[3]
 }

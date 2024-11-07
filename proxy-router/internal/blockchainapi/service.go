@@ -17,7 +17,7 @@ import (
 	pr "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/providerregistry"
 	sr "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/sessionrouter"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
+	sessionrepo "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/session"
 	"github.com/gin-gonic/gin"
 
 	"github.com/ethereum/go-ethereum"
@@ -35,7 +35,7 @@ type BlockchainService struct {
 	sessionRouter      *registries.SessionRouter
 	morToken           *registries.MorToken
 	explorerClient     *ExplorerClient
-	sessionStorage     *storages.SessionStorage
+	sessionRepo        *sessionrepo.SessionRepositoryCached
 	proxyService       *proxyapi.ProxyServiceSender
 	diamonContractAddr common.Address
 
@@ -77,8 +77,8 @@ func NewBlockchainService(
 	morTokenAddr common.Address,
 	explorerApiUrl string,
 	privateKey i.PrKeyProvider,
-	sessionStorage *storages.SessionStorage,
 	proxyService *proxyapi.ProxyServiceSender,
+	sessionRepo *sessionrepo.SessionRepositoryCached,
 	providerAllowList []common.Address,
 	log lib.ILogger,
 	legacyTx bool,
@@ -101,9 +101,9 @@ func NewBlockchainService(
 		morToken:           morToken,
 		explorerClient:     explorerClient,
 		proxyService:       proxyService,
-		sessionStorage:     sessionStorage,
 		diamonContractAddr: diamonContractAddr,
 		providerAllowList:  providerAllowList,
+		sessionRepo:        sessionRepo,
 		log:                log,
 	}
 }
@@ -738,33 +738,22 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 			s.log.Infof("skipping provider #%d %s", i, providerAddr.String())
 			continue
 		}
+
 		if !s.isProviderAllowed(providerAddr) {
 			s.log.Infof("skipping not allowed provider #%d %s", i, providerAddr.String())
 			continue
 		}
+
 		s.log.Infof("trying to open session with provider #%d %s", i, bid.Bid.Provider.String())
 		durationCopy := new(big.Int).Set(duration)
-		hash, err := s.tryOpenSession(ctx, bid, durationCopy, supply, budget, userAddr)
-		if err == nil {
-			session, ok := s.sessionStorage.GetSession(hash.String())
-			if ok {
-				session.FailoverEnabled = isFailoverEnabled
-				err := s.sessionStorage.AddSession(session)
-				if err != nil {
-					s.log.Warnf("failed to update session: %s", err.Error())
-				}
-			} else {
-				err := s.sessionStorage.AddSession(&storages.Session{
-					Id:              hash.String(),
-					FailoverEnabled: isFailoverEnabled,
-				})
-				if err != nil {
-					s.log.Warnf("failed to store session: %s", err.Error())
-				}
-			}
-			return hash, nil
+
+		hash, err := s.tryOpenSession(ctx, bid, durationCopy, supply, budget, userAddr, isFailoverEnabled)
+		if err != nil {
+			s.log.Errorf("failed to open session with provider %s: %s", bid.Bid.Provider.String(), err.Error())
+			continue
 		}
-		s.log.Errorf("failed to open session with provider %s: %s", bid.Bid.Provider.String(), err.Error())
+
+		return hash, nil
 	}
 
 	return common.Hash{}, fmt.Errorf("no provider accepting session")
@@ -815,7 +804,7 @@ func (s *BlockchainService) GetAllBidsWithRating(ctx context.Context, modelAgent
 	return ids, bids, providerModelStats, providers, nil
 }
 
-func (s *BlockchainService) tryOpenSession(ctx context.Context, bid structs.ScoredBid, duration *big.Int, supply *big.Int, budget *big.Int, userAddr common.Address) (common.Hash, error) {
+func (s *BlockchainService) tryOpenSession(ctx context.Context, bid structs.ScoredBid, duration, supply, budget *big.Int, userAddr common.Address, failoverEnabled bool) (common.Hash, error) {
 	provider, err := s.providerRegistry.GetProviderById(ctx, bid.Bid.Provider)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrProvider, err)
@@ -839,7 +828,24 @@ func (s *BlockchainService) tryOpenSession(ctx context.Context, bid structs.Scor
 		return common.Hash{}, lib.WrapError(ErrApprove, err)
 	}
 
-	return s.OpenSession(ctx, initRes.Approval, initRes.ApprovalSig, stake)
+	hash, err := s.OpenSession(ctx, initRes.Approval, initRes.ApprovalSig, stake)
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	session, err := s.sessionRepo.GetSession(ctx, hash)
+	if err != nil {
+		return hash, fmt.Errorf("failed to get session: %s", err.Error())
+	}
+
+	session.SetFailoverEnabled(failoverEnabled)
+
+	err = s.sessionRepo.SaveSession(ctx, session)
+	if err != nil {
+		return hash, fmt.Errorf("failed to store session: %s", err.Error())
+	}
+
+	return hash, nil
 }
 
 func (s *BlockchainService) GetMyAddress(ctx context.Context) (common.Address, error) {
