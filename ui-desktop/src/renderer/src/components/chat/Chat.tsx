@@ -396,6 +396,10 @@ const Chat = (props) => {
                 const decodedString = textDecoder.decode(value, { stream: true });
                 const parts = parseDataChunk(decodedString);
                 parts.forEach(part => {
+                    if(!part) {
+                        return;
+                    }
+                    
                     if (part.error) {
                         console.warn(part.error);
                         return;
