@@ -149,7 +149,12 @@ func (cfg *Config) SetDefaults() {
 		cfg.Web.Address = "0.0.0.0:8082"
 	}
 	if cfg.Web.PublicUrl == "" {
-		cfg.Web.PublicUrl = fmt.Sprintf("http://%s", strings.Replace(cfg.Web.Address, "0.0.0.0", "localhost", -1))
+		// handle cases without domain (ex: :8082)
+		if string(cfg.Web.Address[0]) == ":" {
+			cfg.Web.PublicUrl = fmt.Sprintf("http://localhost%s", cfg.Web.Address)
+		} else {
+			cfg.Web.PublicUrl = fmt.Sprintf("http://%s", strings.Replace(cfg.Web.Address, "0.0.0.0", "localhost", -1))
+		}
 	}
 
 	if cfg.Proxy.StoragePath == "" {
