@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/big"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
@@ -148,7 +149,7 @@ func (cfg *Config) SetDefaults() {
 		cfg.Web.Address = "0.0.0.0:8082"
 	}
 	if cfg.Web.PublicUrl == "" {
-		cfg.Web.PublicUrl = fmt.Sprintf("http://%s", cfg.Web.Address)
+		cfg.Web.PublicUrl = fmt.Sprintf("http://%s", strings.Replace(cfg.Web.Address, "0.0.0.0", "localhost", -1))
 	}
 
 	if cfg.Proxy.StoragePath == "" {
