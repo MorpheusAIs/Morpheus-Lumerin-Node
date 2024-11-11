@@ -36,10 +36,7 @@ interface IMarketplace is IMarketplaceStorage {
      * @param bidMinPricePerSecond_ Min price per second for bid
      * @param bidMaxPricePerSecond_ Max price per second for bid
      */
-    function setMinMaxBidPricePerSecond(
-        uint256 bidMinPricePerSecond_,
-        uint256 bidMaxPricePerSecond_
-    ) external;
+    function setMinMaxBidPricePerSecond(uint256 bidMinPricePerSecond_, uint256 bidMaxPricePerSecond_) external;
 
     /**
      * The function to create the bid.

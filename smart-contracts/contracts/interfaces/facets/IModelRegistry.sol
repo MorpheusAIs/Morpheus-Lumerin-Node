@@ -46,4 +46,11 @@ interface IModelRegistry is IModelStorage {
      * @param modelId_ The model ID.
      */
     function modelDeregister(bytes32 modelId_) external;
+
+    /**
+     * Form model ID for the user models.
+     * @param account_ The address.
+     * @param baseModelId_ The base model ID.
+     */
+    function getModelId(address account_, bytes32 baseModelId_) external pure returns (bytes32);
 }

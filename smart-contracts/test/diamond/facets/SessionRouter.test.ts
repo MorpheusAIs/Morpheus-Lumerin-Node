@@ -35,7 +35,8 @@ describe('SessionRouter', () => {
   let token: MorpheusToken;
 
   let bidId = '';
-  const modelId = getHex(Buffer.from('1'));
+  const baseModelId = getHex(Buffer.from('1'));
+  let modelId = getHex(Buffer.from(''));
   const bidPricePerSecond = wei(0.0001);
 
   before(async () => {
@@ -61,7 +62,9 @@ describe('SessionRouter', () => {
 
     const ipfsCID = getHex(Buffer.from('ipfs://ipfsaddress'));
     await providerRegistry.connect(PROVIDER).providerRegister(wei(0.2), 'test');
-    await modelRegistry.connect(PROVIDER).modelRegister(modelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
+    await modelRegistry.connect(PROVIDER).modelRegister(baseModelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
+
+    modelId = await modelRegistry.getModelId(PROVIDER, baseModelId);
 
     await marketplace.connect(PROVIDER).postModelBid(modelId, bidPricePerSecond);
     bidId = await marketplace.getBidId(PROVIDER, modelId, 0);
@@ -347,7 +350,7 @@ describe('SessionRouter', () => {
       const fundingBalAfter = await token.balanceOf(FUNDING);
       expect(fundingBalBefore - fundingBalAfter).to.eq(bidPricePerSecond * duration);
     });
-    it('should close session and send rewards for the provider, late closure before end', async () => {
+    it('should close session and send rewards for the provider, with dispute, early closure on the next day', async () => {
       const { sessionId, secondsToDayEnd, openedAt } = await _createSession();
 
       const providerBalBefore = await token.balanceOf(PROVIDER);
@@ -373,7 +376,7 @@ describe('SessionRouter', () => {
       const fundingBalAfter = await token.balanceOf(FUNDING);
       expect(fundingBalBefore - fundingBalAfter).to.eq(bidPricePerSecond * duration);
     });
-    it('should close session and do not send rewards for the provider, with dispute, same day closure', async () => {
+    it('should close session and do not send rewards for the provider, with dispute, early closure on the same day', async () => {
       const { sessionId, secondsToDayEnd, openedAt } = await _createSession();
 
       const providerBalBefore = await token.balanceOf(PROVIDER);
@@ -563,7 +566,7 @@ describe('SessionRouter', () => {
   });
 
   describe('#claimForProvider', () => {
-    it('should claim provider rewards, remainder, session closed with dispute', async () => {
+    it('should claim provider rewards, remainder, with dispute, early closure on the next day', async () => {
       const { sessionId, secondsToDayEnd, openedAt } = await _createSession();
 
       await setTime(openedAt + secondsToDayEnd + 1);
@@ -578,6 +581,7 @@ describe('SessionRouter', () => {
       const providerBalBefore = await token.balanceOf(PROVIDER);
       const fundingBalBefore = await token.balanceOf(FUNDING);
 
+      await setTime(openedAt + secondsToDayEnd + 1 + 1 * DAY);
       await sessionRouter.connect(PROVIDER).claimForProvider(sessionId);
       session = await sessionRouter.getSession(sessionId);
 
@@ -589,6 +593,33 @@ describe('SessionRouter', () => {
       expect(providerBalAfter - providerBalBefore).to.eq(bidPricePerSecond * duration);
       const fundingBalAfter = await token.balanceOf(FUNDING);
       expect(fundingBalBefore - fundingBalAfter).to.eq(bidPricePerSecond * duration);
+    });
+    it('should not claim provider rewards, when provider funds on lock', async () => {
+      const { sessionId, secondsToDayEnd, openedAt } = await _createSession();
+
+      await setTime(openedAt + secondsToDayEnd + 1);
+      const { msg: receiptMsg } = await getReceipt(PROVIDER, sessionId, 0, 0);
+      const { signature: receiptSig } = await getReceipt(OWNER, sessionId, 0, 0);
+      await sessionRouter.connect(SECOND).closeSession(receiptMsg, receiptSig);
+
+      let session = await sessionRouter.getSession(sessionId);
+      const duration = BigInt(secondsToDayEnd);
+
+      const providerBalBefore = await token.balanceOf(PROVIDER);
+      const fundingBalBefore = await token.balanceOf(FUNDING);
+
+      await setTime(openedAt + secondsToDayEnd + 100);
+      await sessionRouter.connect(PROVIDER).claimForProvider(sessionId);
+      session = await sessionRouter.getSession(sessionId);
+
+      expect(session.providerWithdrawnAmount).to.eq(bidPricePerSecond * duration);
+      expect(await sessionRouter.getProvidersTotalClaimed()).to.eq(bidPricePerSecond * duration);
+      expect((await sessionRouter.getProvider(PROVIDER)).limitPeriodEarned).to.eq(bidPricePerSecond * duration);
+
+      const providerBalAfter = await token.balanceOf(PROVIDER);
+      expect(providerBalAfter - providerBalBefore).to.eq(0);
+      const fundingBalAfter = await token.balanceOf(FUNDING);
+      expect(fundingBalBefore - fundingBalAfter).to.eq(0);
     });
     it('should claim provider rewards, full', async () => {
       const { sessionId, openedAt } = await _createSession();
