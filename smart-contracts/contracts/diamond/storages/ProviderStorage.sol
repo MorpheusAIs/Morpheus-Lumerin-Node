@@ -36,7 +36,8 @@ contract ProviderStorage is IProviderStorage {
     }
 
     function getIsProviderActive(address provider_) public view returns (bool) {
-        return !_getProvidersStorage().providers[provider_].isDeleted;
+        return (!_getProvidersStorage().providers[provider_].isDeleted &&
+            _getProvidersStorage().providers[provider_].createdAt != 0);
     }
 
     /** INTERNAL */

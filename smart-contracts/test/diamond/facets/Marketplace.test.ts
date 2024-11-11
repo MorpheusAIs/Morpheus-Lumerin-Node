@@ -240,6 +240,16 @@ describe('Marketplace', () => {
         'MarketplaceBidPricePerSecondInvalid',
       );
     });
+    it('should throw error when model not found', async () => {
+      await expect(
+        marketplace.connect(SECOND).postModelBid(getHex(Buffer.from('123')), wei(1)),
+      ).to.be.revertedWithCustomError(marketplace, 'MarketplaceModelNotFound');
+    });
+    it('should throw error when provider not found', async () => {
+      await expect(
+        marketplace.connect(OWNER).postModelBid(getHex(Buffer.from('123')), wei(1)),
+      ).to.be.revertedWithCustomError(marketplace, 'MarketplaceProviderNotFound');
+    });
   });
 
   describe('#deleteModelBid', async () => {
