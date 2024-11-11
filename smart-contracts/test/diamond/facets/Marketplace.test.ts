@@ -29,8 +29,10 @@ describe('Marketplace', () => {
 
   let token: MorpheusToken;
 
-  const modelId1 = getHex(Buffer.from('1'));
-  const modelId2 = getHex(Buffer.from('2'));
+  const baseModelId1 = getHex(Buffer.from('1'));
+  const baseModelId2 = getHex(Buffer.from('2'));
+  let modelId1 = getHex(Buffer.from(''));
+  let modelId2 = getHex(Buffer.from(''));
 
   before(async () => {
     [OWNER, SECOND, PROVIDER] = await ethers.getSigners();
@@ -54,8 +56,11 @@ describe('Marketplace', () => {
 
     const ipfsCID = getHex(Buffer.from('ipfs://ipfsaddress'));
     await providerRegistry.connect(SECOND).providerRegister(wei(100), 'test');
-    await modelRegistry.connect(SECOND).modelRegister(modelId1, ipfsCID, 0, wei(100), 'name', ['tag_1']);
-    await modelRegistry.connect(SECOND).modelRegister(modelId2, ipfsCID, 0, wei(100), 'name', ['tag_1']);
+    await modelRegistry.connect(SECOND).modelRegister(baseModelId1, ipfsCID, 0, wei(100), 'name', ['tag_1']);
+    await modelRegistry.connect(SECOND).modelRegister(baseModelId2, ipfsCID, 0, wei(100), 'name', ['tag_1']);
+
+    modelId1 = await modelRegistry.getModelId(SECOND, baseModelId1);
+    modelId2 = await modelRegistry.getModelId(SECOND, baseModelId2);
 
     await reverter.snapshot();
   });
@@ -217,14 +222,20 @@ describe('Marketplace', () => {
       );
     });
     it('should throw error when the model is deregistered', async () => {
-      await modelRegistry.connect(SECOND).modelDeregister(modelId1);
+      await modelRegistry.connect(SECOND).modelDeregister(baseModelId1);
       await expect(marketplace.connect(SECOND).postModelBid(modelId1, wei(10))).to.be.revertedWithCustomError(
         marketplace,
         'MarketplaceModelNotFound',
       );
     });
-    it('should throw error when the bid price is invalid', async () => {
+    it('should throw error when the bid price is invalid #1', async () => {
       await expect(marketplace.connect(SECOND).postModelBid(modelId1, wei(99999))).to.be.revertedWithCustomError(
+        marketplace,
+        'MarketplaceBidPricePerSecondInvalid',
+      );
+    });
+    it('should throw error when the bid price is invalid #2', async () => {
+      await expect(marketplace.connect(SECOND).postModelBid(modelId1, wei(0))).to.be.revertedWithCustomError(
         marketplace,
         'MarketplaceBidPricePerSecondInvalid',
       );

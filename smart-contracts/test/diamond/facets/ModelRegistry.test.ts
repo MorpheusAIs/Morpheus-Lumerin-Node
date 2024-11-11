@@ -28,7 +28,8 @@ describe('ModelRegistry', () => {
 
   let token: MorpheusToken;
 
-  const modelId = getHex(Buffer.from('1'));
+  const baseModelId = getHex(Buffer.from('1'));
+  let modelId = getHex(Buffer.from(''));
   const ipfsCID = getHex(Buffer.from('ipfs://ipfsaddress'));
 
   before(async () => {
@@ -50,6 +51,8 @@ describe('ModelRegistry', () => {
     await token.approve(modelRegistry, wei(1000));
     await token.connect(SECOND).approve(marketplace, wei(1000));
     await token.approve(marketplace, wei(1000));
+
+    modelId = await modelRegistry.getModelId(SECOND, baseModelId);
 
     await reverter.snapshot();
   });
@@ -108,7 +111,7 @@ describe('ModelRegistry', () => {
   describe('#modelRegister', async () => {
     it('should register a new model', async () => {
       await setNextTime(300);
-      await modelRegistry.connect(SECOND).modelRegister(modelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
+      await modelRegistry.connect(SECOND).modelRegister(baseModelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
 
       const data = await modelRegistry.getModel(modelId);
       expect(data.ipfsCID).to.eq(ipfsCID);
@@ -126,14 +129,16 @@ describe('ModelRegistry', () => {
 
       expect(await modelRegistry.getActiveModelIds(0, 10)).to.deep.eq([modelId]);
 
-      await modelRegistry.connect(SECOND).modelRegister(modelId, ipfsCID, 0, wei(0), 'name', ['tag_1']);
+      await modelRegistry.connect(SECOND).modelRegister(baseModelId, ipfsCID, 0, wei(0), 'name', ['tag_1']);
     });
     it('should add stake to existed model', async () => {
       const ipfsCID2 = getHex(Buffer.from('ipfs://ipfsaddress/2'));
 
       await setNextTime(300);
-      await modelRegistry.connect(SECOND).modelRegister(modelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
-      await modelRegistry.connect(SECOND).modelRegister(modelId, ipfsCID2, 1, wei(300), 'name2', ['tag_1', 'tag_2']);
+      await modelRegistry.connect(SECOND).modelRegister(baseModelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
+      await modelRegistry
+        .connect(SECOND)
+        .modelRegister(baseModelId, ipfsCID2, 1, wei(300), 'name2', ['tag_1', 'tag_2']);
 
       const data = await modelRegistry.getModel(modelId);
       expect(data.ipfsCID).to.eq(ipfsCID2);
@@ -151,14 +156,14 @@ describe('ModelRegistry', () => {
     });
     it('should activate deregistered model', async () => {
       await setNextTime(300);
-      await modelRegistry.connect(SECOND).modelRegister(modelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
-      await modelRegistry.connect(SECOND).modelDeregister(modelId);
+      await modelRegistry.connect(SECOND).modelRegister(baseModelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
+      await modelRegistry.connect(SECOND).modelDeregister(baseModelId);
 
       let data = await modelRegistry.getModel(modelId);
       expect(data.isDeleted).to.eq(true);
       expect(await modelRegistry.getIsModelActive(modelId)).to.eq(false);
 
-      await modelRegistry.connect(SECOND).modelRegister(modelId, ipfsCID, 4, wei(200), 'name3', ['tag_3']);
+      await modelRegistry.connect(SECOND).modelRegister(baseModelId, ipfsCID, 4, wei(200), 'name3', ['tag_3']);
 
       data = await modelRegistry.getModel(modelId);
       expect(data.ipfsCID).to.eq(ipfsCID);
@@ -171,16 +176,10 @@ describe('ModelRegistry', () => {
       expect(data.isDeleted).to.eq(false);
       expect(await modelRegistry.getIsModelActive(modelId)).to.eq(true);
     });
-    it('should throw error when the caller is not a model owner', async () => {
-      await modelRegistry.connect(SECOND).modelRegister(modelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
-      await expect(
-        modelRegistry.connect(OWNER).modelRegister(modelId, ipfsCID, 0, wei(100), 'name', ['tag_1']),
-      ).to.be.revertedWithCustomError(modelRegistry, 'OwnableUnauthorizedAccount');
-    });
     it('should throw error when the stake is too low', async () => {
       await modelRegistry.modelSetMinStake(wei(2));
       await expect(
-        modelRegistry.connect(SECOND).modelRegister(modelId, ipfsCID, 0, wei(1), 'name', ['tag_1']),
+        modelRegistry.connect(SECOND).modelRegister(baseModelId, ipfsCID, 0, wei(1), 'name', ['tag_1']),
       ).to.be.revertedWithCustomError(modelRegistry, 'ModelStakeTooLow');
     });
   });
@@ -188,8 +187,8 @@ describe('ModelRegistry', () => {
   describe('#modelDeregister', async () => {
     it('should deregister the model', async () => {
       await setNextTime(300);
-      await modelRegistry.connect(SECOND).modelRegister(modelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
-      await modelRegistry.connect(SECOND).modelDeregister(modelId);
+      await modelRegistry.connect(SECOND).modelRegister(baseModelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
+      await modelRegistry.connect(SECOND).modelDeregister(baseModelId);
 
       expect((await modelRegistry.getModel(modelId)).isDeleted).to.equal(true);
       expect(await modelRegistry.getIsModelActive(modelId)).to.eq(false);
@@ -199,24 +198,24 @@ describe('ModelRegistry', () => {
       expect(await modelRegistry.getActiveModelIds(0, 10)).to.deep.eq([]);
     });
     it('should throw error when the caller is not an owner or specified address', async () => {
-      await expect(modelRegistry.connect(SECOND).modelDeregister(modelId)).to.be.revertedWithCustomError(
+      await expect(modelRegistry.connect(SECOND).modelDeregister(baseModelId)).to.be.revertedWithCustomError(
         modelRegistry,
         'OwnableUnauthorizedAccount',
       );
     });
     it('should throw error when model has active bids', async () => {
       await providerRegistry.connect(SECOND).providerRegister(wei(100), 'test');
-      await modelRegistry.connect(SECOND).modelRegister(modelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
+      await modelRegistry.connect(SECOND).modelRegister(baseModelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
       await marketplace.connect(SECOND).postModelBid(modelId, wei(10));
-      await expect(modelRegistry.connect(SECOND).modelDeregister(modelId)).to.be.revertedWithCustomError(
+      await expect(modelRegistry.connect(SECOND).modelDeregister(baseModelId)).to.be.revertedWithCustomError(
         modelRegistry,
         'ModelHasActiveBids',
       );
     });
     it('should throw error when delete model few times', async () => {
-      await modelRegistry.connect(SECOND).modelRegister(modelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
-      await modelRegistry.connect(SECOND).modelDeregister(modelId);
-      await expect(modelRegistry.connect(SECOND).modelDeregister(modelId)).to.be.revertedWithCustomError(
+      await modelRegistry.connect(SECOND).modelRegister(baseModelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
+      await modelRegistry.connect(SECOND).modelDeregister(baseModelId);
+      await expect(modelRegistry.connect(SECOND).modelDeregister(baseModelId)).to.be.revertedWithCustomError(
         modelRegistry,
         'ModelHasAlreadyDeregistered',
       );

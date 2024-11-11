@@ -25,7 +25,7 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
     }
 
     function modelRegister(
-        bytes32 modelId_,
+        bytes32 baseModelId_,
         bytes32 ipfsCID_,
         uint256 fee_,
         uint256 amount_,
@@ -33,6 +33,8 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
         string[] memory tags_
     ) external {
         ModelsStorage storage modelsStorage = _getModelsStorage();
+
+        bytes32 modelId_ = getModelId(_msgSender(), baseModelId_);
         Model storage model = modelsStorage.models[modelId_];
 
         uint256 newStake_ = model.stake + amount_;
@@ -51,8 +53,6 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
 
             model.createdAt = uint128(block.timestamp);
             model.owner = _msgSender();
-        } else {
-            _onlyAccount(model.owner);
         }
 
         model.stake = newStake_;
@@ -67,8 +67,10 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
         emit ModelRegisteredUpdated(_msgSender(), modelId_);
     }
 
-    function modelDeregister(bytes32 modelId_) external {
+    function modelDeregister(bytes32 baseModelId_) external {
         ModelsStorage storage modelsStorage = _getModelsStorage();
+
+        bytes32 modelId_ = getModelId(_msgSender(), baseModelId_);
         Model storage model = modelsStorage.models[modelId_];
 
         _onlyAccount(model.owner);
@@ -90,5 +92,9 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
         IERC20(bidsStorage.token).safeTransfer(model.owner, withdrawAmount_);
 
         emit ModelDeregistered(model.owner, modelId_);
+    }
+
+    function getModelId(address account_, bytes32 baseModelId_) public pure returns (bytes32) {
+        return keccak256(abi.encodePacked(account_, baseModelId_));
     }
 }

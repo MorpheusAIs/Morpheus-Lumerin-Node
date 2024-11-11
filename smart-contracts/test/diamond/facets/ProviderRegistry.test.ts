@@ -29,7 +29,8 @@ describe('ProviderRegistry', () => {
 
   let token: MorpheusToken;
 
-  const modelId = getHex(Buffer.from('1'));
+  const baseModelId = getHex(Buffer.from('1'));
+  let modelId = getHex(Buffer.from(''));
   const ipfsCID = getHex(Buffer.from('ipfs://ipfsaddress'));
 
   before(async () => {
@@ -47,6 +48,8 @@ describe('ProviderRegistry', () => {
     await token.transfer(PROVIDER, wei(1000));
     await token.connect(PROVIDER).approve(providerRegistry, wei(1000));
     await token.approve(providerRegistry, wei(1000));
+
+    modelId = await modelRegistry.getModelId(PROVIDER, baseModelId);
 
     await reverter.snapshot();
   });
@@ -184,7 +187,7 @@ describe('ProviderRegistry', () => {
     });
     it('should throw error when provider has active bids', async () => {
       await providerRegistry.connect(PROVIDER).providerRegister(wei(100), 'test');
-      await modelRegistry.connect(PROVIDER).modelRegister(modelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
+      await modelRegistry.connect(PROVIDER).modelRegister(baseModelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
       await marketplace.connect(PROVIDER).postModelBid(modelId, wei(10));
       await expect(providerRegistry.connect(PROVIDER).providerDeregister()).to.be.revertedWithCustomError(
         providerRegistry,

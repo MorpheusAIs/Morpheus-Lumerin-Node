@@ -35,7 +35,8 @@ describe('SessionRouter', () => {
   let token: MorpheusToken;
 
   let bidId = '';
-  const modelId = getHex(Buffer.from('1'));
+  const baseModelId = getHex(Buffer.from('1'));
+  let modelId = getHex(Buffer.from(''));
   const bidPricePerSecond = wei(0.0001);
 
   before(async () => {
@@ -61,7 +62,9 @@ describe('SessionRouter', () => {
 
     const ipfsCID = getHex(Buffer.from('ipfs://ipfsaddress'));
     await providerRegistry.connect(PROVIDER).providerRegister(wei(0.2), 'test');
-    await modelRegistry.connect(PROVIDER).modelRegister(modelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
+    await modelRegistry.connect(PROVIDER).modelRegister(baseModelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
+
+    modelId = await modelRegistry.getModelId(PROVIDER, baseModelId);
 
     await marketplace.connect(PROVIDER).postModelBid(modelId, bidPricePerSecond);
     bidId = await marketplace.getBidId(PROVIDER, modelId, 0);
