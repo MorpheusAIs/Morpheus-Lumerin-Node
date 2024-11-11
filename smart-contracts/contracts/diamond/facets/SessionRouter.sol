@@ -18,8 +18,6 @@ import {LibSD} from "../../libs/LibSD.sol";
 
 import {ISessionRouter} from "../../interfaces/facets/ISessionRouter.sol";
 
-import "hardhat/console.sol";
-
 contract SessionRouter is
     ISessionRouter,
     OwnableDiamondStorage,
@@ -258,16 +256,26 @@ contract SessionRouter is
         return (sessionEnd_ - session.openedAt) * bid.pricePerSecond - withdrawnAmount;
     }
 
+    function _getProviderOnHoldAmount(Session storage session, Bid storage bid) private view returns (uint256) {
+        uint128 startOfClosedAt = startOfTheDay(session.closedAt);
+        if (block.timestamp >= startOfClosedAt + 1 days) {
+            return 0;
+        }
+
+        // `closedAt` - latest timestamp, cause `endsAt` bigger then `closedAt`
+        // Lock the provider's tokens for the current day.
+        // Withdrawal is allowed after a day after `startOfTheDay(session.closedAt)`.
+        return (session.closedAt - startOfClosedAt.max(session.openedAt)) * bid.pricePerSecond;
+    }
+
     function _rewardProviderAfterClose(bool noDispute_, Session storage session, Bid storage bid) internal {
-        uint128 startOfToday_ = startOfTheDay(uint128(block.timestamp));
-        bool isClosingLate_ = uint128(block.timestamp) > session.endsAt;
+        bool isClosingLate_ = session.closedAt >= session.endsAt;
 
         uint256 providerAmountToWithdraw_ = _getProviderRewards(session, bid, true);
         uint256 providerOnHoldAmount = 0;
+        // Enter when the user has a dispute AND closing early
         if (!noDispute_ && !isClosingLate_) {
-            providerOnHoldAmount =
-                (session.endsAt.min(session.closedAt) - startOfToday_.max(session.openedAt)) *
-                bid.pricePerSecond;
+            providerOnHoldAmount = _getProviderOnHoldAmount(session, bid);
         }
         providerAmountToWithdraw_ -= providerOnHoldAmount;
 
@@ -275,19 +283,19 @@ contract SessionRouter is
     }
 
     function _rewardUserAfterClose(Session storage session, Bid storage bid) private {
-        uint128 startOfToday_ = startOfTheDay(uint128(block.timestamp));
-        bool isClosingLate_ = uint128(block.timestamp) > session.endsAt;
+        uint128 startOfClosedAt_ = startOfTheDay(session.closedAt);
+        bool isClosingLate_ = session.closedAt >= session.endsAt;
 
         uint256 userStakeToProvider = session.isDirectPaymentFromUser ? _getProviderRewards(session, bid, false) : 0;
         uint256 userStake = session.stake - userStakeToProvider;
         uint256 userStakeToLock_ = 0;
         if (!isClosingLate_) {
-            uint256 userDuration_ = session.endsAt.min(session.closedAt) - session.openedAt.max(startOfToday_);
+            uint256 userDuration_ = session.endsAt.min(session.closedAt) - session.openedAt.max(startOfClosedAt_);
             uint256 userInitialLock_ = userDuration_ * bid.pricePerSecond;
-            userStakeToLock_ = userStake.min(stipendToStake(userInitialLock_, startOfToday_));
+            userStakeToLock_ = userStake.min(stipendToStake(userInitialLock_, startOfClosedAt_));
 
             _getSessionsStorage().userStakesOnHold[session.user].push(
-                OnHold(userStakeToLock_, uint128(startOfToday_ + 1 days))
+                OnHold(userStakeToLock_, uint128(startOfClosedAt_ + 1 days))
             );
         }
         uint256 userAmountToWithdraw_ = userStake - userStakeToLock_;
@@ -339,7 +347,10 @@ contract SessionRouter is
         Bid storage bid = _getBidsStorage().bids[session.bidId];
 
         _onlyAccount(bid.provider);
-        _claimForProvider(session, _getProviderRewards(session, bid, true));
+
+        uint256 amount_ = _getProviderRewards(session, bid, true) - _getProviderOnHoldAmount(session, bid);
+
+        _claimForProvider(session, amount_);
     }
 
     /**
@@ -370,7 +381,11 @@ contract SessionRouter is
         if (session.isDirectPaymentFromUser) {
             IERC20(_getBidsStorage().token).safeTransfer(bid.provider, amount_);
         } else {
-            IERC20(_getBidsStorage().token).safeTransferFrom(_getSessionsStorage().fundingAccount, bid.provider, amount_);
+            IERC20(_getBidsStorage().token).safeTransferFrom(
+                _getSessionsStorage().fundingAccount,
+                bid.provider,
+                amount_
+            );
         }
     }
 

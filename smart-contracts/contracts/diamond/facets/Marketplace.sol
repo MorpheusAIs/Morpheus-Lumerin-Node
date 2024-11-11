@@ -42,14 +42,11 @@ contract Marketplace is
         emit MaretplaceFeeUpdated(bidFee_);
     }
 
-    function setMinMaxBidPricePerSecond(
-        uint256 bidMinPricePerSecond_,
-        uint256 bidMaxPricePerSecond_
-    ) public onlyOwner {
+    function setMinMaxBidPricePerSecond(uint256 bidMinPricePerSecond_, uint256 bidMaxPricePerSecond_) public onlyOwner {
         if (bidMinPricePerSecond_ == 0) {
             revert MarketplaceBidMinPricePerSecondIsZero();
         }
-        
+
         if (bidMinPricePerSecond_ > bidMaxPricePerSecond_) {
             revert MarketplaceBidMinPricePerSecondIsInvalid();
         }
@@ -74,7 +71,9 @@ contract Marketplace is
         BidsStorage storage bidsStorage = _getBidsStorage();
         MarketStorage storage marketStorage = _getMarketStorage();
 
-        if (pricePerSecond_ < marketStorage.bidMinPricePerSecond || pricePerSecond_ > marketStorage.bidMaxPricePerSecond) {
+        if (
+            pricePerSecond_ < marketStorage.bidMinPricePerSecond || pricePerSecond_ > marketStorage.bidMaxPricePerSecond
+        ) {
             revert MarketplaceBidPricePerSecondInvalid();
         }
 
