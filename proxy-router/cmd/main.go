@@ -278,12 +278,6 @@ func start() error {
 	eventListener := blockchainapi.NewEventsListener(sessionRepo, sessionRouter, wallet, logWatcher, log)
 
 	sessionExpiryHandler := blockchainapi.NewSessionExpiryHandler(blockchainApi, sessionStorage, log)
-	go func() {
-		if err := sessionExpiryHandler.Run(ctx); err != nil {
-			log.Errorf("failed to run session autoclose: %s", err)
-		}
-	}()
-
 	blockchainController := blockchainapi.NewBlockchainController(blockchainApi, log)
 
 	var chatStorage proxyapi.ChatStorageInterface
@@ -312,7 +306,7 @@ func start() error {
 		cancel()
 	}()
 
-	proxy := proxyctl.NewProxyCtl(eventListener, wallet, chainID, log, connLog, cfg.Proxy.Address, schedulerLogFactory, sessionStorage, modelConfigLoader, valid, aiEngine, blockchainApi, sessionRepo)
+	proxy := proxyctl.NewProxyCtl(eventListener, wallet, chainID, log, connLog, cfg.Proxy.Address, schedulerLogFactory, sessionStorage, modelConfigLoader, valid, aiEngine, blockchainApi, sessionRepo, sessionExpiryHandler)
 	err = proxy.Run(ctx)
 
 	cancelServer()
