@@ -113,6 +113,25 @@ func (s *SessionStorage) removeSessionFromModel(modelID string, sessionID string
 	return nil
 }
 
+func (s *SessionStorage) GetSessions() ([]Session, error) {
+	keys, err := s.db.GetPrefix(formatSessionKey(""))
+	if err != nil {
+		return []Session{}, err
+	}
+
+	sessions := make([]Session, len(keys))
+	for i, key := range keys {
+		_, sessionID := parseSessionKey(key)
+		session, ok := s.GetSession(sessionID)
+		if !ok {
+			return nil, fmt.Errorf("error getting session: %s", sessionID)
+		}
+		sessions[i] = *session
+	}
+
+	return sessions, nil
+}
+
 func (s *SessionStorage) GetSessionsForModel(modelID string) ([]string, error) {
 	keys, err := s.db.GetPrefix(formatModelSessionKey(modelID, ""))
 	if err != nil {
@@ -222,4 +241,9 @@ func formatSessionKey(sessionID string) []byte {
 func parseModelSessionKey(key []byte) (string, string) {
 	parts := strings.Split(string(key), ":")
 	return parts[1], parts[3]
+}
+
+func parseSessionKey(key []byte) (string, string) {
+	parts := strings.Split(string(key), ":")
+	return parts[0], parts[1]
 }

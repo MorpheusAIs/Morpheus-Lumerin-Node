@@ -134,11 +134,11 @@ func (p *ProxyServiceSender) GetSessionReportFromProvider(ctx context.Context, s
 		return nil, ErrMissingPrKey
 	}
 
-	session, ok := p.sessionStorage.GetSession(sessionID.Hex())
-	if !ok {
+	session, err := p.sessionRepo.GetSession(ctx, sessionID)
+	if err != nil {
 		return nil, ErrSessionNotFound
 	}
-	provider, ok := p.sessionStorage.GetUser(session.ProviderAddr)
+	provider, ok := p.sessionStorage.GetUser(session.ProviderAddr().Hex())
 	if !ok {
 		return nil, ErrProviderNotFound
 	}
@@ -188,25 +188,27 @@ func (p *ProxyServiceSender) GetSessionReportFromProvider(ctx context.Context, s
 }
 
 func (p *ProxyServiceSender) GetSessionReportFromUser(ctx context.Context, sessionID common.Hash) (lib.HexString, lib.HexString, error) {
-	session, ok := p.sessionStorage.GetSession(sessionID.Hex())
-	if !ok {
+	session, err := p.sessionRepo.GetSession(ctx, sessionID)
+	if err != nil {
 		return nil, nil, ErrSessionNotFound
 	}
 
+	TPSScaled1000Arr, TTFTMsArr := session.GetStats()
+
 	tps := 0
 	ttft := 0
-	for _, tpsVal := range session.TPSScaled1000Arr {
+	for _, tpsVal := range TPSScaled1000Arr {
 		tps += tpsVal
 	}
-	for _, ttftVal := range session.TTFTMsArr {
+	for _, ttftVal := range TTFTMsArr {
 		ttft += ttftVal
 	}
 
-	if len(session.TPSScaled1000Arr) != 0 {
-		tps /= len(session.TPSScaled1000Arr)
+	if len(TPSScaled1000Arr) != 0 {
+		tps /= len(TPSScaled1000Arr)
 	}
-	if len(session.TTFTMsArr) != 0 {
-		ttft /= len(session.TTFTMsArr)
+	if len(TTFTMsArr) != 0 {
+		ttft /= len(TTFTMsArr)
 	}
 
 	prKey, err := p.privateKey.GetPrivateKey()

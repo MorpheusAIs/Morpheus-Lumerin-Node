@@ -45,40 +45,42 @@ type SchedulerLogFactory = func(remoteAddr string) (lib.ILogger, error)
 
 // Proxy is a struct that represents a proxy-router part of the system
 type Proxy struct {
-	eventListener       *blockchainapi.EventsListener
-	wallet              interfaces.PrKeyProvider
-	proxyAddr           string
-	chainID             *big.Int
-	sessionStorage      *storages.SessionStorage
-	sessionRepo         *sessionrepo.SessionRepositoryCached
-	log                 *lib.Logger
-	connLog             *lib.Logger
-	schedulerLogFactory SchedulerLogFactory
-	aiEngine            *aiengine.AiEngine
-	validator           *validator.Validate
-	modelConfigLoader   *config.ModelConfigLoader
-	blockchainService   *blockchainapi.BlockchainService
+	eventListener        *blockchainapi.EventsListener
+	wallet               interfaces.PrKeyProvider
+	proxyAddr            string
+	chainID              *big.Int
+	sessionStorage       *storages.SessionStorage
+	sessionRepo          *sessionrepo.SessionRepositoryCached
+	log                  *lib.Logger
+	connLog              *lib.Logger
+	schedulerLogFactory  SchedulerLogFactory
+	aiEngine             *aiengine.AiEngine
+	validator            *validator.Validate
+	modelConfigLoader    *config.ModelConfigLoader
+	blockchainService    *blockchainapi.BlockchainService
+	sessionExpiryHandler *blockchainapi.SessionExpiryHandler
 
 	state lib.AtomicValue[ProxyState]
 	tsk   *lib.Task
 }
 
 // NewProxyCtl creates a new Proxy controller instance
-func NewProxyCtl(eventListerer *blockchainapi.EventsListener, wallet interfaces.PrKeyProvider, chainID *big.Int, log *lib.Logger, connLog *lib.Logger, proxyAddr string, scl SchedulerLogFactory, sessionStorage *storages.SessionStorage, modelConfigLoader *config.ModelConfigLoader, valid *validator.Validate, aiEngine *aiengine.AiEngine, blockchainService *blockchainapi.BlockchainService, sessionRepo *sessionrepo.SessionRepositoryCached) *Proxy {
+func NewProxyCtl(eventListerer *blockchainapi.EventsListener, wallet interfaces.PrKeyProvider, chainID *big.Int, log *lib.Logger, connLog *lib.Logger, proxyAddr string, scl SchedulerLogFactory, sessionStorage *storages.SessionStorage, modelConfigLoader *config.ModelConfigLoader, valid *validator.Validate, aiEngine *aiengine.AiEngine, blockchainService *blockchainapi.BlockchainService, sessionRepo *sessionrepo.SessionRepositoryCached, sessionExpiryHandler *blockchainapi.SessionExpiryHandler) *Proxy {
 	return &Proxy{
-		eventListener:       eventListerer,
-		chainID:             chainID,
-		wallet:              wallet,
-		log:                 log,
-		connLog:             connLog,
-		proxyAddr:           proxyAddr,
-		schedulerLogFactory: scl,
-		sessionStorage:      sessionStorage,
-		aiEngine:            aiEngine,
-		validator:           valid,
-		modelConfigLoader:   modelConfigLoader,
-		blockchainService:   blockchainService,
-		sessionRepo:         sessionRepo,
+		eventListener:        eventListerer,
+		chainID:              chainID,
+		wallet:               wallet,
+		log:                  log,
+		connLog:              connLog,
+		proxyAddr:            proxyAddr,
+		schedulerLogFactory:  scl,
+		sessionStorage:       sessionStorage,
+		aiEngine:             aiEngine,
+		validator:            valid,
+		modelConfigLoader:    modelConfigLoader,
+		blockchainService:    blockchainService,
+		sessionRepo:          sessionRepo,
+		sessionExpiryHandler: sessionExpiryHandler,
 	}
 }
 
@@ -156,6 +158,10 @@ func (p *Proxy) run(ctx context.Context, prKey lib.HexString) error {
 
 	g.Go(func() error {
 		return p.eventListener.Run(errCtx)
+	})
+
+	g.Go(func() error {
+		return p.sessionExpiryHandler.Run(errCtx)
 	})
 
 	return g.Wait()
