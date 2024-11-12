@@ -1,4 +1,4 @@
-package proxyapi
+package chatstorage
 
 import (
 	"encoding/json"
@@ -8,44 +8,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
+	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/completion"
 	"github.com/sashabaranov/go-openai"
 )
-
-type ChatStorageInterface interface {
-	LoadChatFromFile(chatID string) (*ChatHistory, error)
-	StorePromptResponseToFile(chatID string, isLocal bool, modelID string, prompt openai.ChatCompletionRequest, responses []interface{}, promptAt time.Time, responseAt time.Time) error
-	GetChats() []Chat
-	DeleteChat(chatID string) error
-	UpdateChatTitle(chatID string, title string) error
-}
-
-type ChatHistory struct {
-	Title    string        `json:"title"`
-	ModelId  string        `json:"modelId"`
-	IsLocal  bool          `json:"isLocal"`
-	Messages []ChatMessage `json:"messages"`
-}
-
-type ChatMessage struct {
-	Prompt         OpenAiCompletitionRequest `json:"prompt"`
-	Response       string                    `json:"response"`
-	PromptAt       int64                     `json:"promptAt"`
-	ResponseAt     int64                     `json:"responseAt"`
-	IsImageContent bool                      `json:"isImageContent"`
-}
-type Chat struct {
-	ChatID    string `json:"chatId"`
-	ModelID   string `json:"modelId"`
-	Title     string `json:"title"`
-	IsLocal   bool   `json:"isLocal"`
-	CreatedAt int64  `json:"createdAt"`
-}
 
 // ChatStorage handles storing conversations to files.
 type ChatStorage struct {
 	dirPath     string                 // Directory path to store the files
 	fileMutexes map[string]*sync.Mutex // Map to store mutexes for each file
+}
+
+type Response interface {
 }
 
 // NewChatStorage creates a new instance of ChatStorage.
@@ -57,7 +31,7 @@ func NewChatStorage(dirPath string) *ChatStorage {
 }
 
 // StorePromptResponseToFile stores the prompt and response to a file.
-func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool, modelId string, prompt openai.ChatCompletionRequest, responses []interface{}, promptAt time.Time, responseAt time.Time) error {
+func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool, modelId string, prompt *openai.ChatCompletionRequest, responses []*completion.ChunkImpl, promptAt time.Time, responseAt time.Time) error {
 	if err := os.MkdirAll(cs.dirPath, os.ModePerm); err != nil {
 		return err
 	}
@@ -69,7 +43,7 @@ func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool
 	cs.fileMutexes[filePath].Lock()
 	defer cs.fileMutexes[filePath].Unlock()
 
-	var data ChatHistory
+	var data gcs.ChatHistory
 	if _, err := os.Stat(filePath); err == nil {
 		fileContent, err := os.ReadFile(filePath)
 		if err != nil {
@@ -80,34 +54,15 @@ func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool
 		}
 	}
 
-	response := ""
-	var isImageContent bool = false
-	for _, r := range responses {
-		switch v := r.(type) {
-		case ChatCompletionResponse:
-			response += fmt.Sprintf("%v", v.Choices[0].Delta.Content)
-		case *openai.ChatCompletionStreamResponse:
-			response += fmt.Sprintf("%v", v.Choices[0].Delta.Content)
-		case aiengine.ProdiaGenerationResult:
-			response += fmt.Sprintf("%v", v.ImageUrl)
-			isImageContent = true
-		case *aiengine.ProdiaGenerationResult:
-			response += fmt.Sprintf("%v", v.ImageUrl)
-			isImageContent = true
-		default:
-			return fmt.Errorf("unknown response type")
-		}
-	}
-
-	messages := make([]ChatCompletionMessage, 0)
+	messages := make([]gcs.ChatCompletionMessage, 0)
 	for _, r := range prompt.Messages {
-		messages = append(messages, ChatCompletionMessage{
+		messages = append(messages, gcs.ChatCompletionMessage{
 			Content: r.Content,
 			Role:    r.Role,
 		})
 	}
 
-	p := OpenAiCompletitionRequest{
+	p := gcs.OpenAiCompletitionRequest{
 		Messages:         messages,
 		Model:            prompt.Model,
 		MaxTokens:        prompt.MaxTokens,
@@ -118,12 +73,12 @@ func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool
 		Stop:             prompt.Stop,
 	}
 
-	newEntry := ChatMessage{
+	newEntry := gcs.ChatMessage{
 		Prompt:         p,
-		Response:       response,
+		Response:       responses,
 		PromptAt:       promptAt.Unix(),
 		ResponseAt:     responseAt.Unix(),
-		IsImageContent: isImageContent,
+		IsImageContent: responses[0].Type == completion.ChunkTypeImage,
 	}
 
 	if data.Messages == nil && len(data.Messages) == 0 {
@@ -147,8 +102,8 @@ func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool
 	return nil
 }
 
-func (cs *ChatStorage) GetChats() []Chat {
-	var chats []Chat
+func (cs *ChatStorage) GetChats() []gcs.Chat {
+	var chats []gcs.Chat
 	files, err := os.ReadDir(cs.dirPath)
 	if err != nil {
 		return chats
@@ -166,7 +121,7 @@ func (cs *ChatStorage) GetChats() []Chat {
 		if err != nil {
 			continue
 		}
-		chats = append(chats, Chat{
+		chats = append(chats, gcs.Chat{
 			ChatID:    chatID,
 			Title:     fileContent.Title,
 			CreatedAt: fileContent.Messages[0].PromptAt,
@@ -216,14 +171,14 @@ func (cs *ChatStorage) UpdateChatTitle(identifier string, title string) error {
 	return nil
 }
 
-func (cs *ChatStorage) LoadChatFromFile(identifier string) (*ChatHistory, error) {
+func (cs *ChatStorage) LoadChatFromFile(identifier string) (*gcs.ChatHistory, error) {
 	filePath := filepath.Join(cs.dirPath, identifier+".json")
 	cs.initFileMutex(filePath)
 
 	cs.fileMutexes[filePath].Lock()
 	defer cs.fileMutexes[filePath].Unlock()
 
-	var data ChatHistory
+	var data gcs.ChatHistory
 	fileContent, err := os.ReadFile(filePath)
 	if err != nil {
 		return &data, err
@@ -250,7 +205,7 @@ func NewNoOpChatStorage() *NoOpChatStorage {
 	return &NoOpChatStorage{}
 }
 
-func (cs *NoOpChatStorage) LoadChatFromFile(chatID string) (*ChatHistory, error) {
+func (cs *NoOpChatStorage) LoadChatFromFile(chatID string) (*gcs.ChatHistory, error) {
 	return nil, nil
 }
 
@@ -258,8 +213,8 @@ func (cs *NoOpChatStorage) StorePromptResponseToFile(chatID string, isLocal bool
 	return nil
 }
 
-func (cs *NoOpChatStorage) GetChats() []Chat {
-	return []Chat{}
+func (cs *NoOpChatStorage) GetChats() []gcs.Chat {
+	return []gcs.Chat{}
 }
 
 func (cs *NoOpChatStorage) DeleteChat(chatID string) error {

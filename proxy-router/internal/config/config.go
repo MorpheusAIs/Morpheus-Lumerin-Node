@@ -21,10 +21,6 @@ type Config struct {
 	App struct {
 		ResetKeychain bool `env:"APP_RESET_KEYCHAIN" flag:"app-reset-keychain" desc:"reset keychain on start"`
 	}
-	AIEngine struct {
-		OpenAIBaseURL string `env:"OPENAI_BASE_URL"     flag:"open-ai-base-url"   validate:"required,url"`
-		OpenAIKey     string `env:"OPENAI_API_KEY"      flag:"open-ai-api-key"`
-	}
 	Blockchain struct {
 		ChainID          int           `env:"ETH_NODE_CHAIN_ID"  flag:"eth-node-chain-id"  validate:"number"`
 		EthNodeAddress   string        `env:"ETH_NODE_ADDRESS"   flag:"eth-node-address"   validate:"omitempty,url"`

@@ -15,6 +15,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apibus"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/handlers/httphandlers"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
@@ -267,26 +268,20 @@ func start() error {
 		}
 	}
 
+	chatStoragePath := filepath.Join(cfg.Proxy.StoragePath, "chats")
+	chatStorage := chatstorage.NewChatStorage(chatStoragePath)
+
 	sessionRouter := registries.NewSessionRouter(*cfg.Marketplace.DiamondContractAddress, ethClient, log)
 	marketplace := registries.NewMarketplace(*cfg.Marketplace.DiamondContractAddress, ethClient, log)
 	sessionRepo := sessionrepo.NewSessionRepositoryCached(sessionStorage, sessionRouter, marketplace)
 	proxyRouterApi := proxyapi.NewProxySender(chainID, publicUrl, wallet, contractLogStorage, sessionStorage, sessionRepo, log)
 	blockchainApi := blockchainapi.NewBlockchainService(ethClient, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, cfg.Blockchain.ExplorerApiUrl, wallet, proxyRouterApi, sessionRepo, providerAllowList, proxyLog, cfg.Blockchain.EthLegacyTx)
 	proxyRouterApi.SetSessionService(blockchainApi)
-	aiEngine := aiengine.NewAiEngine(cfg.AIEngine.OpenAIBaseURL, cfg.AIEngine.OpenAIKey, modelConfigLoader, log)
+	aiEngine := aiengine.NewAiEngine(proxyRouterApi, chatStorage, modelConfigLoader, log)
 
 	eventListener := blockchainapi.NewEventsListener(sessionRepo, sessionRouter, wallet, logWatcher, log)
 
 	blockchainController := blockchainapi.NewBlockchainController(blockchainApi, log)
-
-	var chatStorage proxyapi.ChatStorageInterface
-	if cfg.Proxy.StoreChatContext {
-		chatStoragePath := filepath.Join(cfg.Proxy.StoragePath, "chats")
-		chatStorage = proxyapi.NewChatStorage(chatStoragePath)
-	} else {
-		log.Warnf("chat context storage is disabled")
-		chatStorage = proxyapi.NewNoOpChatStorage()
-	}
 
 	ethConnectionValidator := system.NewEthConnectionValidator(*big.NewInt(int64(cfg.Blockchain.ChainID)))
 	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine, chatStorage)

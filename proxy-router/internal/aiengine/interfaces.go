@@ -1,14 +1,5 @@
 package aiengine
 
-import (
-	"net/http"
-)
-
-type ResponderFlusher interface {
-	http.ResponseWriter
-	http.Flusher
-}
-
 type ProdiaGenerationResult struct {
 	Job      string `json:"job"`
 	Status   string `json:"status"`
@@ -21,8 +12,6 @@ type ProdiaGenerationRequest struct {
 	ApiUrl string `json:"apiUrl"`
 	ApiKey string `json:"apiKey"`
 }
-
-type CompletionCallback func(completion interface{}) error
 
 type ProdiaImageGenerationCallback func(completion *ProdiaGenerationResult) error
 

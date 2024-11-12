@@ -11,8 +11,9 @@ import (
 	"net/url"
 	"time"
 
-	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
+	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/completion"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	msgs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi/morrpcmessage"
@@ -236,93 +237,6 @@ func (p *ProxyServiceSender) GetSessionReportFromUser(ctx context.Context, sessi
 	return typedMsg.Message, typedMsg.SignedReport, nil
 }
 
-func (p *ProxyServiceSender) SendPrompt(ctx context.Context, resWriter ResponderFlusher, prompt *openai.ChatCompletionRequest, sessionID common.Hash) (interface{}, error) {
-	session, err := p.sessionRepo.GetSession(ctx, sessionID)
-	if err != nil {
-		return nil, ErrSessionNotFound
-	}
-
-	isExpired := session.EndsAt().Int64()-time.Now().Unix() < 0
-	if isExpired {
-		return nil, ErrSessionExpired
-	}
-
-	provider, ok := p.sessionStorage.GetUser(session.ProviderAddr().Hex())
-	if !ok {
-		return nil, ErrProviderNotFound
-	}
-
-	prKey, err := p.privateKey.GetPrivateKey()
-	if err != nil {
-		return nil, ErrMissingPrKey
-	}
-
-	requestID := "1"
-	pubKey, err := lib.StringToHexString(provider.PubKey)
-	if err != nil {
-		return nil, lib.WrapError(ErrCreateReq, err)
-	}
-	promptRequest, err := p.morRPC.SessionPromptRequest(sessionID, prompt, pubKey, prKey, requestID)
-	if err != nil {
-		return nil, lib.WrapError(ErrCreateReq, err)
-	}
-
-	now := time.Now().Unix()
-	result, ttftMs, totalTokens, err := p.rpcRequestStream(ctx, resWriter, provider.Url, promptRequest, pubKey)
-	if err != nil {
-		if !session.FailoverEnabled() {
-			return nil, lib.WrapError(ErrProvider, err)
-		}
-
-		_, err := p.sessionService.CloseSession(ctx, sessionID)
-		if err != nil {
-			return nil, err
-		}
-
-		resWriter.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_EVENT_STREAM)
-		_, err = resWriter.Write([]byte(fmt.Sprintf("data: %s\n\n", "{\"message\": \"provider failed, failover enabled\"}")))
-		if err != nil {
-			return nil, err
-		}
-		resWriter.Flush()
-
-		duration := session.EndsAt().Int64() - time.Now().Unix()
-
-		newSessionID, err := p.sessionService.OpenSessionByModelId(
-			ctx,
-			session.ModelID(),
-			big.NewInt(duration),
-			session.FailoverEnabled(),
-			session.ProviderAddr(),
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		_, err = resWriter.Write([]byte(fmt.Sprintf("data: %s\n\n", "{\"message\": \"new session opened\"}")))
-		if err != nil {
-			return nil, err
-		}
-		resWriter.Flush()
-
-		time.Sleep(1 * time.Second) //  sleep for a bit to allow the new session to be created
-		return p.SendPrompt(ctx, resWriter, prompt, newSessionID)
-	}
-
-	requestDuration := int(time.Now().Unix() - now)
-	if requestDuration == 0 {
-		requestDuration = 1
-	}
-	session.AddStats(totalTokens*1000/requestDuration, ttftMs)
-
-	err = p.sessionRepo.SaveSession(ctx, session)
-	if err != nil {
-		p.log.Error(`failed to update session report stats`, err)
-	}
-
-	return result, nil
-}
-
 func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage) (*msgs.RpcResponse, int, gin.H) {
 	TIMEOUT_TO_ESTABLISH_CONNECTION := time.Second * 3
 	dialer := net.Dialer{Timeout: TIMEOUT_TO_ESTABLISH_CONNECTION}
@@ -362,7 +276,103 @@ func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage)
 	return msg, 0, nil
 }
 
-func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter ResponderFlusher, url string, rpcMessage *msgs.RPCMessage, providerPublicKey lib.HexString) (interface{}, int, int, error) {
+func (p *ProxyServiceSender) validateMsgSignature(result any, signature lib.HexString, providerPubicKey lib.HexString) bool {
+	return p.morRPC.VerifySignature(result, signature, providerPubicKey, p.log)
+}
+
+func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.Hash, prompt *openai.ChatCompletionRequest, cb completion.CompletionCallback) (interface{}, error) {
+	session, err := p.sessionRepo.GetSession(ctx, sessionID)
+	if err != nil {
+		return nil, ErrSessionNotFound
+	}
+
+	isExpired := session.EndsAt().Int64()-time.Now().Unix() < 0
+	if isExpired {
+		return nil, ErrSessionExpired
+	}
+
+	provider, ok := p.sessionStorage.GetUser(session.ProviderAddr().Hex())
+	if !ok {
+		return nil, ErrProviderNotFound
+	}
+
+	prKey, err := p.privateKey.GetPrivateKey()
+	if err != nil {
+		return nil, ErrMissingPrKey
+	}
+
+	requestID := "1"
+	pubKey, err := lib.StringToHexString(provider.PubKey)
+	if err != nil {
+		return nil, lib.WrapError(ErrCreateReq, err)
+	}
+	promptRequest, err := p.morRPC.SessionPromptRequest(sessionID, prompt, pubKey, prKey, requestID)
+	if err != nil {
+		return nil, lib.WrapError(ErrCreateReq, err)
+	}
+
+	now := time.Now().Unix()
+	result, ttftMs, totalTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, promptRequest, pubKey)
+	if err != nil {
+		if !session.FailoverEnabled() {
+			return nil, lib.WrapError(ErrProvider, err)
+		}
+
+		_, err := p.sessionService.CloseSession(ctx, sessionID)
+		if err != nil {
+			return nil, err
+		}
+
+		msg := struct {
+			Message string `json:"message"`
+		}{Message: "provider failed, failover enabled"}
+
+		err = cb(ctx, &completion.ChunkImpl{
+			Data:        msg,
+			IsStreaming: true,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		duration := session.EndsAt().Int64() - time.Now().Unix()
+
+		newSessionID, err := p.sessionService.OpenSessionByModelId(
+			ctx,
+			session.ModelID(),
+			big.NewInt(duration),
+			session.FailoverEnabled(),
+			session.ProviderAddr(),
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		msg = struct {
+			Message string `json:"message"`
+		}{Message: "new session opened"}
+
+		err = cb(ctx, &completion.ChunkImpl{
+			Data:        msg,
+			IsStreaming: true,
+		})
+		return p.SendPromptV2(ctx, newSessionID, prompt, cb)
+	}
+
+	requestDuration := int(time.Now().Unix() - now)
+	if requestDuration == 0 {
+		requestDuration = 1
+	}
+	session.AddStats(totalTokens*1000/requestDuration, ttftMs)
+
+	err = p.sessionRepo.SaveSession(ctx, session)
+	if err != nil {
+		p.log.Error(`failed to update session report stats`, err)
+	}
+
+	return result, nil
+}
+func (p *ProxyServiceSender) rpcRequestStreamV2(ctx context.Context, cb completion.CompletionCallback, url string, rpcMessage *msgs.RPCMessage, providerPublicKey lib.HexString) (interface{}, int, int, error) {
 	prKey, err := p.privateKey.GetPrivateKey()
 	if err != nil {
 		return nil, 0, 0, ErrMissingPrKey
@@ -393,7 +403,6 @@ func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter Res
 	// read response
 	reader := bufio.NewReader(conn)
 	d := json.NewDecoder(reader)
-	resWriter.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_EVENT_STREAM)
 
 	responses := make([]interface{}, 0)
 
@@ -444,14 +453,14 @@ func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter Res
 			return nil, ttftMs, totalTokens, lib.WrapError(ErrDecrFailed, err)
 		}
 
-		var payload ChatCompletionResponse
+		var payload gcs.ChatCompletionResponse
 		err = json.Unmarshal(aiResponse, &payload)
 		var stop = true
 		if err == nil && len(payload.Choices) > 0 {
 			stop = false
 			choices := payload.Choices
 			for _, choice := range choices {
-				if choice.FinishReason == FinishReasonStop {
+				if choice.FinishReason == gcs.FinishReasonStop {
 					stop = true
 				}
 			}
@@ -470,19 +479,18 @@ func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter Res
 		if ctx.Err() != nil {
 			return nil, ttftMs, totalTokens, ctx.Err()
 		}
-		_, err = resWriter.Write([]byte(fmt.Sprintf("data: %s\n\n", aiResponse)))
-		if err != nil {
-			return nil, ttftMs, totalTokens, err
+		chunk := &completion.ChunkImpl{
+			Data:        aiResponse,
+			IsStreaming: true,
 		}
-		resWriter.Flush()
+		err = cb(ctx, chunk)
+		if err != nil {
+			return nil, ttftMs, totalTokens, lib.WrapError(ErrResponseErr, err)
+		}
 		if stop {
 			break
 		}
 	}
 
 	return responses, ttftMs, totalTokens, nil
-}
-
-func (p *ProxyServiceSender) validateMsgSignature(result any, signature lib.HexString, providerPubicKey lib.HexString) bool {
-	return p.morRPC.VerifySignature(result, signature, providerPubicKey, p.log)
 }

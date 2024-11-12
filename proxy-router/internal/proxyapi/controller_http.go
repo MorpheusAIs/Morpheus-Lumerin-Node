@@ -1,28 +1,35 @@
 package proxyapi
 
 import (
-	"crypto/rand"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi/structs"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/completion"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
 	"github.com/sashabaranov/go-openai"
 )
 
-type ProxyController struct {
-	service     *ProxyServiceSender
-	aiEngine    *aiengine.AiEngine
-	chatStorage ChatStorageInterface
+type AIEngine interface {
+	GetLocalModels() ([]aiengine.LocalModel, error)
+	GetAdapter(ctx context.Context, chatID, modelID, sessionID common.Hash, storeContext bool) (aiengine.AIEngineStream, error)
 }
 
-func NewProxyController(service *ProxyServiceSender, aiEngine *aiengine.AiEngine, chatStorage ChatStorageInterface) *ProxyController {
+type ProxyController struct {
+	service     *ProxyServiceSender
+	aiEngine    AIEngine
+	chatStorage genericchatstorage.ChatStorageInterface
+}
+
+func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStorage genericchatstorage.ChatStorageInterface) *ProxyController {
 	c := &ProxyController{
 		service:     service,
 		aiEngine:    aiEngine,
@@ -85,7 +92,6 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 		body openai.ChatCompletionRequest
 		head PromptHead
 	)
-	var responses []interface{}
 
 	if err := ctx.ShouldBindHeader(&head); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -96,104 +102,45 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 		return
 	}
 
-	var chatID lib.Hash
-	if (head.ChatID != lib.Hash{}) {
-		chatID = head.ChatID
-	} else {
-		bytes := make([]byte, 32)
-		_, err := rand.Read(bytes[:])
+	chatID := head.ChatID
+	if chatID == (lib.Hash{}) {
+		var err error
+		chatID, err = lib.GetRandomHash()
 		if err != nil {
-			err = fmt.Errorf("error generating chat id: %w", err)
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
 		}
-
-		chatID = lib.Hash{}
-		chatID.SetBytes(bytes)
 	}
 
-	promptAt := time.Now()
-	chatHistory, errHistory := c.chatStorage.LoadChatFromFile(chatID.Hex())
-	if errHistory != nil {
-		c.service.log.Warn("No chat history found for chat id", chatID.Hex())
-	}
+	// promptAt := time.Now()
+	// isStream := ctx.GetHeader(constants.HEADER_ACCEPT) == constants.CONTENT_TYPE_EVENT_STREAM
 
-	if (head.SessionID == lib.Hash{}) {
-		body.Stream = ctx.GetHeader(constants.HEADER_ACCEPT) == constants.CONTENT_TYPE_JSON
-		modelId := head.ModelID.Hex()
-
-		apiType := c.GetLocalPromptApiType(modelId)
-
-		responseAt := time.Now()
-
-		if apiType == "openai" {
-			prompt := c.GetLocalOpenAiPrompt(modelId, body)
-			var newBody openai.ChatCompletionRequest
-			if chatHistory != nil {
-				newBody = c.AppendChatHistory(chatHistory, prompt)
-			} else {
-				newBody = prompt
-			}
-
-			res, _ := c.aiEngine.PromptCb(ctx, &newBody)
-			responses = res.([]interface{})
-			if err := c.chatStorage.StorePromptResponseToFile(chatID.Hex(), true, modelId, prompt, responses, promptAt, responseAt); err != nil {
-				fmt.Println("Error storing prompt and responses:", err)
-			}
-		}
-		if apiType == "prodia" {
-			prompt := c.GetLocalProdiaPrompt(modelId, body)
-
-			var prodiaResponses []interface{}
-			c.aiEngine.PromptProdiaImage(ctx, &prompt, func(completion interface{}) error {
-				ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_EVENT_STREAM)
-				marshalledResponse, err := json.Marshal(completion)
-				if err != nil {
-					return err
-				}
-				_, err = ctx.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", marshalledResponse)))
-				if err != nil {
-					return err
-				}
-				ctx.Writer.Flush()
-
-				prodiaResponses = append(prodiaResponses, completion)
-
-				body.Model = prompt.Model
-				if err := c.chatStorage.StorePromptResponseToFile(chatID.Hex(), true, modelId, body, prodiaResponses, promptAt, responseAt); err != nil {
-					fmt.Println("Error storing prompt and responses:", err)
-				}
-				return nil
-			})
-		}
-		return
-	}
-
-	var newBody openai.ChatCompletionRequest
-	if chatHistory != nil {
-		newBody = c.AppendChatHistory(chatHistory, body)
-	} else {
-		newBody = body
-	}
-	res, err := c.service.SendPrompt(ctx, ctx.Writer, &newBody, head.SessionID.Hash)
+	adapter, err := c.aiEngine.GetAdapter(ctx, chatID.Hash, head.ModelID.Hash, head.SessionID.Hash, true)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	responses = res.([]interface{})
-	responseAt := time.Now()
-	sessionID := head.SessionID.Hex()
+	err = adapter.Prompt(ctx, &body, func(cbctx context.Context, completion *completion.ChunkImpl) error {
+		marshalledResponse, err := json.Marshal(completion.Data)
+		if err != nil {
+			return err
+		}
 
-	modelId := ""
-	session, ok := c.service.sessionStorage.GetSession(sessionID)
-	if ok {
-		modelId = session.ModelID
-	}
+		ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_EVENT_STREAM)
+		_, err = ctx.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", marshalledResponse)))
+		if err != nil {
+			return err
+		}
 
-	if err := c.chatStorage.StorePromptResponseToFile(chatID.Hex(), false, modelId, body, responses, promptAt, responseAt); err != nil {
-		fmt.Println("Error storing prompt and responses:", err)
+		ctx.Writer.Flush()
+		return nil
+	})
+
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
-	return
 }
 
 // GetLocalModels godoc
@@ -223,7 +170,7 @@ func (c *ProxyController) GetChats(ctx *gin.Context) {
 	chats := c.chatStorage.GetChats()
 
 	if chats == nil {
-		ctx.JSON(http.StatusOK, make([]Chat, 0))
+		ctx.JSON(http.StatusOK, make([]struct{}, 0))
 		return
 	}
 
@@ -309,74 +256,4 @@ func (c *ProxyController) UpdateChatTitle(ctx *gin.Context) {
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"result": true})
-}
-
-func (c *ProxyController) GetLocalOpenAiPrompt(modelId string, req openai.ChatCompletionRequest) openai.ChatCompletionRequest {
-	if modelId == "" {
-		return req
-	}
-
-	ids, models := c.aiEngine.GetModelsConfig()
-
-	for i, model := range models {
-		if ids[i] == modelId {
-			req.Model = model.ModelName
-			return req
-		}
-	}
-
-	req.Model = "llama2"
-	return req
-}
-
-func (c *ProxyController) GetLocalProdiaPrompt(modelId string, req openai.ChatCompletionRequest) aiengine.ProdiaGenerationRequest {
-	ids, models := c.aiEngine.GetModelsConfig()
-
-	for i, model := range models {
-		if ids[i] == modelId {
-			prompt := aiengine.ProdiaGenerationRequest{
-				Model:  model.ModelName,
-				Prompt: req.Messages[0].Content,
-				ApiUrl: model.ApiURL,
-				ApiKey: model.ApiKey,
-			}
-			return prompt
-		}
-	}
-	return aiengine.ProdiaGenerationRequest{}
-}
-
-func (c *ProxyController) GetLocalPromptApiType(modelId string) string {
-	if modelId == "" {
-		return "openai"
-	}
-
-	ids, models := c.aiEngine.GetModelsConfig()
-
-	for i, model := range models {
-		if ids[i] == modelId {
-			return model.ApiType
-		}
-	}
-
-	return "openai"
-}
-
-func (c *ProxyController) AppendChatHistory(chatHistory *ChatHistory, req openai.ChatCompletionRequest) openai.ChatCompletionRequest {
-	messagesWithHistory := make([]openai.ChatCompletionMessage, 0)
-	for _, chat := range chatHistory.Messages {
-		message := openai.ChatCompletionMessage{
-			Role:    chat.Prompt.Messages[0].Role,
-			Content: chat.Prompt.Messages[0].Content,
-		}
-		messagesWithHistory = append(messagesWithHistory, message)
-		messagesWithHistory = append(messagesWithHistory, openai.ChatCompletionMessage{
-			Role:    "assistant",
-			Content: chat.Response,
-		})
-	}
-
-	messagesWithHistory = append(messagesWithHistory, req.Messages...)
-	req.Messages = messagesWithHistory
-	return req
 }

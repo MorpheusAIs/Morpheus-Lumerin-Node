@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/completion"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	m "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi/morrpcmessage"
@@ -65,24 +66,21 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 	totalTokens := 0
 	now := time.Now().UnixMilli()
 
-	responseCb := func(response interface{}) error {
-		openAiResponse, ok := response.(*openai.ChatCompletionStreamResponse)
-		if ok {
-			totalTokens += len(openAiResponse.Choices)
-		} else {
-			_, ok := response.(*aiengine.ProdiaGenerationResult)
-			if ok {
-				totalTokens += 1
-			} else {
-				return fmt.Errorf("unknown response type")
-			}
-		}
+	adapter, err := s.aiEngine.GetAdapter(ctx, common.Hash{}, session.ModelID(), common.Hash{}, false)
+	if err != nil {
+		err := lib.WrapError(fmt.Errorf("failed to get adapter"), err)
+		sourceLog.Error(err)
+		return 0, 0, err
+	}
+
+	err = adapter.Prompt(ctx, req, func(ctx context.Context, completion *completion.ChunkImpl) error {
+		totalTokens += completion.Tokens
 
 		if ttftMs == 0 {
 			ttftMs = int(time.Now().UnixMilli() - now)
 		}
 
-		marshalledResponse, err := json.Marshal(response)
+		marshalledResponse, err := json.Marshal(completion.Data)
 		if err != nil {
 			return err
 		}
@@ -104,31 +102,7 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 			return err
 		}
 		return sendResponse(r)
-	}
-
-	modelConfig := s.modelConfigLoader.ModelConfigFromID(session.ModelID().Hex())
-	if modelConfig == nil {
-		return 0, 0, fmt.Errorf("model config not found for model id %s", session.ModelID())
-	}
-
-	if modelConfig.ApiType == "prodia" {
-		lastMessage := req.Messages[len(req.Messages)-1]
-		prodiaReq := &aiengine.ProdiaGenerationRequest{
-			Prompt: lastMessage.Content,
-			Model:  modelConfig.ModelName,
-			ApiUrl: modelConfig.ApiURL,
-			ApiKey: modelConfig.ApiKey,
-		}
-
-		err = s.aiEngine.PromptProdiaImage(ctx, prodiaReq, responseCb)
-	} else {
-		req.Model = modelConfig.ModelName
-		if req.Model == "" {
-			req.Model = "llama2"
-		}
-		_, err = s.aiEngine.PromptStream(ctx, req, responseCb)
-	}
-
+	})
 	if err != nil {
 		err := lib.WrapError(fmt.Errorf("failed to prompt"), err)
 		sourceLog.Error(err)

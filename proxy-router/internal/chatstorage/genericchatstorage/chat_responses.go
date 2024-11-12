@@ -1,4 +1,4 @@
-package proxyapi
+package genericchatstorage
 
 import (
 	"net/http"
