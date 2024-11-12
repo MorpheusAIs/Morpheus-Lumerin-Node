@@ -28,14 +28,16 @@ interface IProviderRegistry is IProviderStorage {
     function providerSetMinStake(uint256 providerMinimumStake_) external;
 
     /**
-     * @notice The function to register the provider
-     * @param amount_ The amount of stake to add
-     * @param endpoint_ The provider endpoint (host.com:1234)
+     * @notice The function to register the provider.
+     * @param provider_ The provider address.
+     * @param amount_ The amount of stake to add.
+     * @param endpoint_ The provider endpoint (host.com:1234).
      */
-    function providerRegister(uint256 amount_, string calldata endpoint_) external;
+    function providerRegister(address provider_, uint256 amount_, string calldata endpoint_) external;
 
     /**
-     * @notice The function to deregister the provider
+     * @notice The function to deregister the provider.
+     * @param provider_ The provider address.
      */
-    function providerDeregister() external;
+    function providerDeregister(address provider_) external;
 }

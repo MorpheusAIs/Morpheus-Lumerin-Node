@@ -1,10 +1,20 @@
-import { LumerinDiamond, Marketplace, ModelRegistry, MorpheusToken, ProviderRegistry, SessionRouter } from '@ethers-v6';
+import {
+  DelegateRegistry,
+  LumerinDiamond,
+  Marketplace,
+  ModelRegistry,
+  MorpheusToken,
+  ProviderRegistry,
+  SessionRouter,
+} from '@ethers-v6';
 import { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
 import { expect } from 'chai';
 import { ethers } from 'hardhat';
 
 import { getHex, wei } from '@/scripts/utils/utils';
 import {
+  deployDelegateRegistry,
+  deployFacetDelegation,
   deployFacetMarketplace,
   deployFacetModelRegistry,
   deployFacetProviderRegistry,
@@ -33,6 +43,7 @@ describe('SessionRouter', () => {
   let sessionRouter: SessionRouter;
 
   let token: MorpheusToken;
+  let delegateRegistry: DelegateRegistry;
 
   let bidId = '';
   const baseModelId = getHex(Buffer.from('1'));
@@ -42,13 +53,18 @@ describe('SessionRouter', () => {
   before(async () => {
     [OWNER, SECOND, FUNDING, PROVIDER] = await ethers.getSigners();
 
-    [diamond, token] = await Promise.all([deployLumerinDiamond(), deployMORToken()]);
+    [diamond, token, delegateRegistry] = await Promise.all([
+      deployLumerinDiamond(),
+      deployMORToken(),
+      deployDelegateRegistry(),
+    ]);
 
     [providerRegistry, modelRegistry, sessionRouter, marketplace] = await Promise.all([
       deployFacetProviderRegistry(diamond),
       deployFacetModelRegistry(diamond),
       deployFacetSessionRouter(diamond, FUNDING),
       deployFacetMarketplace(diamond, token, wei(0.0001), wei(900)),
+      deployFacetDelegation(diamond, delegateRegistry),
     ]);
 
     await token.transfer(SECOND, wei(10000));
@@ -61,12 +77,12 @@ describe('SessionRouter', () => {
     await token.connect(FUNDING).approve(sessionRouter, wei(10000));
 
     const ipfsCID = getHex(Buffer.from('ipfs://ipfsaddress'));
-    await providerRegistry.connect(PROVIDER).providerRegister(wei(0.2), 'test');
-    await modelRegistry.connect(PROVIDER).modelRegister(baseModelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
+    await providerRegistry.connect(PROVIDER).providerRegister(PROVIDER, wei(0.2), 'test');
+    await modelRegistry.connect(PROVIDER).modelRegister(PROVIDER, baseModelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
 
     modelId = await modelRegistry.getModelId(PROVIDER, baseModelId);
 
-    await marketplace.connect(PROVIDER).postModelBid(modelId, bidPricePerSecond);
+    await marketplace.connect(PROVIDER).postModelBid(PROVIDER, modelId, bidPricePerSecond);
     bidId = await marketplace.getBidId(PROVIDER, modelId, 0);
 
     await reverter.snapshot();
@@ -160,10 +176,10 @@ describe('SessionRouter', () => {
       tokenBalBefore = await token.balanceOf(sessionRouter);
       secondBalBefore = await token.balanceOf(SECOND);
     });
-    it('should open session', async () => {
+    it('should open a session', async () => {
       await setTime(payoutStart + 10 * DAY);
       const { msg, signature } = await getProviderApproval(PROVIDER, SECOND, bidId);
-      await sessionRouter.connect(SECOND).openSession(wei(50), false, msg, signature);
+      await sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg, signature);
 
       const sessionId = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 0);
       const data = await sessionRouter.getSession(sessionId);
@@ -189,13 +205,46 @@ describe('SessionRouter', () => {
       expect(await sessionRouter.getProviderSessions(PROVIDER, 0, 10)).to.deep.eq([sessionId]);
       expect(await sessionRouter.getModelSessions(modelId, 0, 10)).to.deep.eq([sessionId]);
     });
-    it('should open two different session wit the same input params', async () => {
+    it('should open a session from the delegatee address', async () => {
+      await delegateRegistry
+        .connect(SECOND)
+        .delegateContract(OWNER, providerRegistry, await providerRegistry.DELEGATION_RULES_SESSION(), true);
+
+      await setTime(payoutStart + 10 * DAY);
+      const { msg, signature } = await getProviderApproval(PROVIDER, OWNER, bidId);
+      await sessionRouter.connect(OWNER).openSession(SECOND, wei(50), false, msg, signature);
+
+      const sessionId = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 0);
+      const data = await sessionRouter.getSession(sessionId);
+      expect(data.user).to.eq(SECOND);
+      expect(data.bidId).to.eq(bidId);
+      expect(data.stake).to.eq(wei(50));
+      expect(data.closeoutReceipt).to.eq('0x');
+      expect(data.closeoutType).to.eq(0);
+      expect(data.providerWithdrawnAmount).to.eq(0);
+      expect(data.openedAt).to.eq(payoutStart + 10 * DAY + 1);
+      expect(data.endsAt).to.greaterThan(data.openedAt);
+      expect(data.closedAt).to.eq(0);
+      expect(data.isActive).to.eq(true);
+      expect(data.isDirectPaymentFromUser).to.eq(false);
+
+      const tokenBalAfter = await token.balanceOf(sessionRouter);
+      expect(tokenBalAfter - tokenBalBefore).to.eq(wei(50));
+      const secondBalAfter = await token.balanceOf(SECOND);
+      expect(secondBalBefore - secondBalAfter).to.eq(wei(50));
+
+      expect(await sessionRouter.getIsProviderApprovalUsed(msg)).to.eq(true);
+      expect(await sessionRouter.getUserSessions(SECOND, 0, 10)).to.deep.eq([sessionId]);
+      expect(await sessionRouter.getProviderSessions(PROVIDER, 0, 10)).to.deep.eq([sessionId]);
+      expect(await sessionRouter.getModelSessions(modelId, 0, 10)).to.deep.eq([sessionId]);
+    });
+    it('should open two different sessions wit the same input params', async () => {
       await setTime(payoutStart + 10 * DAY);
       const { msg: msg1, signature: signature1 } = await getProviderApproval(PROVIDER, SECOND, bidId);
       await setTime(payoutStart + 10 * DAY + 1);
       const { msg: msg2, signature: signature2 } = await getProviderApproval(PROVIDER, SECOND, bidId);
-      await sessionRouter.connect(SECOND).openSession(wei(50), false, msg1, signature1);
-      await sessionRouter.connect(SECOND).openSession(wei(50), false, msg2, signature2);
+      await sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg1, signature1);
+      await sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg2, signature2);
 
       const sessionId1 = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 0);
       const sessionId2 = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 1);
@@ -213,19 +262,19 @@ describe('SessionRouter', () => {
 
       expect(await sessionRouter.getTotalSessions(PROVIDER)).to.eq(2);
     });
-    it('should open session with max duration', async () => {
+    it('should open a session with max duration', async () => {
       await setTime(payoutStart + 10 * DAY);
       const { msg, signature } = await getProviderApproval(PROVIDER, SECOND, bidId);
-      await sessionRouter.connect(SECOND).openSession(wei(10000), false, msg, signature);
+      await sessionRouter.connect(SECOND).openSession(SECOND, wei(10000), false, msg, signature);
 
       const sessionId = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 0);
       const data = await sessionRouter.getSession(sessionId);
       expect(data.endsAt).to.eq(Number(data.openedAt.toString()) + DAY);
     });
-    it('should open session with valid amount for direct user payment', async () => {
+    it('should open a session with valid amount for direct user payment', async () => {
       await setTime(payoutStart + 10 * DAY);
       const { msg, signature } = await getProviderApproval(PROVIDER, SECOND, bidId);
-      await sessionRouter.connect(SECOND).openSession(wei(50), true, msg, signature);
+      await sessionRouter.connect(SECOND).openSession(SECOND, wei(50), true, msg, signature);
 
       const sessionId = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 0);
       const data = await sessionRouter.getSession(sessionId);
@@ -254,13 +303,13 @@ describe('SessionRouter', () => {
     it('should throw error when the approval is for an another user', async () => {
       const { msg, signature } = await getProviderApproval(PROVIDER, OWNER, bidId);
       await expect(
-        sessionRouter.connect(SECOND).openSession(wei(50), false, msg, signature),
+        sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg, signature),
       ).to.be.revertedWithCustomError(sessionRouter, 'SessionApprovedForAnotherUser');
     });
     it('should throw error when the approval is for an another chain', async () => {
       const { msg, signature } = await getProviderApproval(PROVIDER, SECOND, bidId, 1n);
       await expect(
-        sessionRouter.connect(SECOND).openSession(wei(50), false, msg, signature),
+        sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg, signature),
       ).to.be.revertedWithCustomError(sessionRouter, 'SesssionApprovedForAnotherChainId');
     });
     it('should throw error when an aprrove expired', async () => {
@@ -268,34 +317,49 @@ describe('SessionRouter', () => {
       const { msg, signature } = await getProviderApproval(PROVIDER, SECOND, bidId);
       await setTime(payoutStart + 600);
       await expect(
-        sessionRouter.connect(SECOND).openSession(wei(50), false, msg, signature),
+        sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg, signature),
       ).to.be.revertedWithCustomError(sessionRouter, 'SesssionApproveExpired');
     });
     it('should throw error when the bid is not found', async () => {
       const { msg, signature } = await getProviderApproval(PROVIDER, SECOND, getHex(Buffer.from('1')));
       await expect(
-        sessionRouter.connect(SECOND).openSession(wei(50), false, msg, signature),
+        sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg, signature),
       ).to.be.revertedWithCustomError(sessionRouter, 'SessionBidNotFound');
     });
     it('should throw error when the signature mismatch', async () => {
       const { msg, signature } = await getProviderApproval(OWNER, SECOND, bidId);
       await expect(
-        sessionRouter.connect(SECOND).openSession(wei(50), false, msg, signature),
+        sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg, signature),
       ).to.be.revertedWithCustomError(sessionRouter, 'SessionProviderSignatureMismatch');
     });
     it('should throw error when an approval duplicated', async () => {
       await setTime(payoutStart + 10 * DAY);
       const { msg, signature } = await getProviderApproval(PROVIDER, SECOND, bidId);
-      await sessionRouter.connect(SECOND).openSession(wei(50), false, msg, signature);
+      await sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg, signature);
       await expect(
-        sessionRouter.connect(SECOND).openSession(wei(50), false, msg, signature),
+        sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg, signature),
       ).to.be.revertedWithCustomError(sessionRouter, 'SessionDuplicateApproval');
     });
     it('should throw error when session duration too short', async () => {
       const { msg, signature } = await getProviderApproval(PROVIDER, SECOND, bidId);
       await expect(
-        sessionRouter.connect(SECOND).openSession(wei(50), false, msg, signature),
+        sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg, signature),
       ).to.be.revertedWithCustomError(sessionRouter, 'SessionTooShort');
+    });
+    it('should throw error when open a session without delegation or with incorrect rules', async () => {
+      await setTime(payoutStart + 10 * DAY);
+      const { msg, signature } = await getProviderApproval(PROVIDER, OWNER, bidId);
+
+      await expect(
+        sessionRouter.connect(OWNER).openSession(SECOND, wei(50), false, msg, signature),
+      ).to.be.revertedWithCustomError(providerRegistry, 'InsufficientRightsForOperation');
+
+      await delegateRegistry
+        .connect(SECOND)
+        .delegateContract(OWNER, providerRegistry, getHex(Buffer.from('123')), true);
+      await expect(
+        sessionRouter.connect(OWNER).openSession(SECOND, wei(50), false, msg, signature),
+      ).to.be.revertedWithCustomError(providerRegistry, 'InsufficientRightsForOperation');
     });
   });
 
@@ -310,6 +374,36 @@ describe('SessionRouter', () => {
       const { msg: receiptMsg } = await getReceipt(PROVIDER, sessionId, 0, 0);
       const { signature: receiptSig } = await getReceipt(OWNER, sessionId, 0, 0);
       await sessionRouter.connect(SECOND).closeSession(receiptMsg, receiptSig);
+
+      const session = await sessionRouter.getSession(sessionId);
+      const duration = session.endsAt - session.openedAt;
+
+      expect(session.closedAt).to.eq(openedAt + 5 * DAY + 1);
+      expect(session.isActive).to.eq(false);
+      expect(session.closeoutReceipt).to.eq(receiptMsg);
+      expect(session.providerWithdrawnAmount).to.eq(bidPricePerSecond * duration);
+
+      expect((await sessionRouter.getProvider(PROVIDER)).limitPeriodEarned).to.eq(bidPricePerSecond * duration);
+
+      const providerBalAfter = await token.balanceOf(PROVIDER);
+      expect(providerBalAfter - providerBalBefore).to.eq(bidPricePerSecond * duration);
+      const fundingBalAfter = await token.balanceOf(FUNDING);
+      expect(fundingBalBefore - fundingBalAfter).to.eq(bidPricePerSecond * duration);
+    });
+    it('should close session and send rewards for the provider from the delegatee address, late closure', async () => {
+      const { sessionId, openedAt } = await _createSession();
+
+      const providerBalBefore = await token.balanceOf(PROVIDER);
+      const fundingBalBefore = await token.balanceOf(FUNDING);
+
+      await delegateRegistry
+        .connect(SECOND)
+        .delegateContract(OWNER, providerRegistry, await providerRegistry.DELEGATION_RULES_SESSION(), true);
+
+      await setTime(openedAt + 5 * DAY);
+      const { msg: receiptMsg } = await getReceipt(PROVIDER, sessionId, 0, 0);
+      const { signature: receiptSig } = await getReceipt(OWNER, sessionId, 0, 0);
+      await sessionRouter.connect(OWNER).closeSession(receiptMsg, receiptSig);
 
       const session = await sessionRouter.getSession(sessionId);
       const duration = session.endsAt - session.openedAt;
@@ -360,6 +454,36 @@ describe('SessionRouter', () => {
       const { msg: receiptMsg } = await getReceipt(PROVIDER, sessionId, 0, 0);
       const { signature: receiptSig } = await getReceipt(OWNER, sessionId, 0, 0);
       await sessionRouter.connect(SECOND).closeSession(receiptMsg, receiptSig);
+
+      const session = await sessionRouter.getSession(sessionId);
+      const duration = BigInt(secondsToDayEnd);
+
+      expect(session.closedAt).to.eq(openedAt + secondsToDayEnd + 2);
+      expect(session.isActive).to.eq(false);
+      expect(session.closeoutReceipt).to.eq(receiptMsg);
+      expect(session.providerWithdrawnAmount).to.eq(bidPricePerSecond * duration);
+
+      expect((await sessionRouter.getProvider(PROVIDER)).limitPeriodEarned).to.eq(bidPricePerSecond * duration);
+
+      const providerBalAfter = await token.balanceOf(PROVIDER);
+      expect(providerBalAfter - providerBalBefore).to.eq(bidPricePerSecond * duration);
+      const fundingBalAfter = await token.balanceOf(FUNDING);
+      expect(fundingBalBefore - fundingBalAfter).to.eq(bidPricePerSecond * duration);
+    });
+    it('should close session and send rewards for the provider from the delegatee address, with dispute, early closure on the next day', async () => {
+      const { sessionId, secondsToDayEnd, openedAt } = await _createSession();
+
+      const providerBalBefore = await token.balanceOf(PROVIDER);
+      const fundingBalBefore = await token.balanceOf(FUNDING);
+
+      await delegateRegistry
+        .connect(SECOND)
+        .delegateContract(OWNER, providerRegistry, await providerRegistry.DELEGATION_RULES_SESSION(), true);
+
+      await setTime(openedAt + secondsToDayEnd + 1);
+      const { msg: receiptMsg } = await getReceipt(PROVIDER, sessionId, 0, 0);
+      const { signature: receiptSig } = await getReceipt(OWNER, sessionId, 0, 0);
+      await sessionRouter.connect(OWNER).closeSession(receiptMsg, receiptSig);
 
       const session = await sessionRouter.getSession(sessionId);
       const duration = BigInt(secondsToDayEnd);
@@ -527,7 +651,7 @@ describe('SessionRouter', () => {
       const { msg: receiptMsg, signature: receiptSig } = await getReceipt(PROVIDER, getHex(Buffer.from('1')), 0, 0);
       await expect(sessionRouter.connect(SECOND).closeSession(receiptMsg, receiptSig)).to.be.revertedWithCustomError(
         sessionRouter,
-        'OwnableUnauthorizedAccount',
+        'InsufficientRightsForOperation',
       );
     });
     it('should throw error when the session already closed', async () => {
@@ -594,6 +718,38 @@ describe('SessionRouter', () => {
       const fundingBalAfter = await token.balanceOf(FUNDING);
       expect(fundingBalBefore - fundingBalAfter).to.eq(bidPricePerSecond * duration);
     });
+    it('should claim provider rewards from the delegatee address, remainder, with dispute, early closure on the next day', async () => {
+      const { sessionId, secondsToDayEnd, openedAt } = await _createSession();
+
+      await setTime(openedAt + secondsToDayEnd + 1);
+      const { msg: receiptMsg } = await getReceipt(PROVIDER, sessionId, 0, 0);
+      const { signature: receiptSig } = await getReceipt(OWNER, sessionId, 0, 0);
+      await sessionRouter.connect(SECOND).closeSession(receiptMsg, receiptSig);
+
+      let session = await sessionRouter.getSession(sessionId);
+      const fullDuration = BigInt(secondsToDayEnd + 1);
+      const duration = 1n;
+
+      const providerBalBefore = await token.balanceOf(PROVIDER);
+      const fundingBalBefore = await token.balanceOf(FUNDING);
+
+      await delegateRegistry
+        .connect(PROVIDER)
+        .delegateContract(OWNER, providerRegistry, await providerRegistry.DELEGATION_RULES_SESSION(), true);
+
+      await setTime(openedAt + secondsToDayEnd + 1 + 1 * DAY);
+      await sessionRouter.connect(OWNER).claimForProvider(sessionId);
+      session = await sessionRouter.getSession(sessionId);
+
+      expect(session.providerWithdrawnAmount).to.eq(bidPricePerSecond * fullDuration);
+      expect(await sessionRouter.getProvidersTotalClaimed()).to.eq(bidPricePerSecond * fullDuration);
+      expect((await sessionRouter.getProvider(PROVIDER)).limitPeriodEarned).to.eq(bidPricePerSecond * fullDuration);
+
+      const providerBalAfter = await token.balanceOf(PROVIDER);
+      expect(providerBalAfter - providerBalBefore).to.eq(bidPricePerSecond * duration);
+      const fundingBalAfter = await token.balanceOf(FUNDING);
+      expect(fundingBalBefore - fundingBalAfter).to.eq(bidPricePerSecond * duration);
+    });
     it('should not claim provider rewards, when provider funds on lock', async () => {
       const { sessionId, secondsToDayEnd, openedAt } = await _createSession();
 
@@ -649,7 +805,7 @@ describe('SessionRouter', () => {
 
       await setTime(payoutStart + 10 * DAY);
       const { msg: msg1, signature: sig1 } = await getProviderApproval(PROVIDER, SECOND, bidId);
-      await sessionRouter.connect(SECOND).openSession(wei(50), false, msg1, sig1);
+      await sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg1, sig1);
 
       const sessionId1 = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 0);
       await setTime(payoutStart + 20 * DAY);
@@ -657,7 +813,7 @@ describe('SessionRouter', () => {
 
       await setTime(payoutStart + 30 * DAY);
       const { msg: msg2, signature: sig2 } = await getProviderApproval(PROVIDER, SECOND, bidId);
-      await sessionRouter.connect(SECOND).openSession(wei(50), false, msg2, sig2);
+      await sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg2, sig2);
 
       const sessionId2 = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 1);
       await setTime(payoutStart + 40 * DAY);
@@ -690,7 +846,7 @@ describe('SessionRouter', () => {
 
       await expect(sessionRouter.connect(SECOND).claimForProvider(sessionId)).to.be.revertedWithCustomError(
         sessionRouter,
-        'OwnableUnauthorizedAccount',
+        'InsufficientRightsForOperation',
       );
     });
   });
@@ -701,7 +857,7 @@ describe('SessionRouter', () => {
 
       await setTime(openedAt + 1 * DAY);
       const { msg, signature } = await getProviderApproval(PROVIDER, SECOND, bidId);
-      await sessionRouter.connect(SECOND).openSession(wei(50), false, msg, signature);
+      await sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg, signature);
       const sessionId1 = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 0);
 
       await setTime(openedAt + 1 * DAY + 100);
@@ -712,7 +868,38 @@ describe('SessionRouter', () => {
       const contractBalBefore = await token.balanceOf(sessionRouter);
 
       await setTime(openedAt + 3 * DAY + 2);
-      await sessionRouter.connect(SECOND).withdrawUserStakes(1);
+      await sessionRouter.connect(SECOND).withdrawUserStakes(SECOND, 1);
+
+      const stakesOnHold = await sessionRouter.getUserStakesOnHold(SECOND, 1);
+      expect(stakesOnHold[0]).to.eq(0);
+      expect(stakesOnHold[1]).to.eq(0);
+
+      const userBalAfter = await token.balanceOf(SECOND);
+      expect(userBalAfter - userBalBefore).to.greaterThan(0);
+      const contractBalAfter = await token.balanceOf(sessionRouter);
+      expect(contractBalBefore - contractBalAfter).to.greaterThan(0);
+    });
+    it('should withdraw the user stake on hold from the delegatee address, one entity', async () => {
+      const openedAt = payoutStart + (payoutStart % DAY) + 10 * DAY - 201;
+
+      await setTime(openedAt + 1 * DAY);
+      const { msg, signature } = await getProviderApproval(PROVIDER, SECOND, bidId);
+      await sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg, signature);
+      const sessionId1 = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 0);
+
+      await setTime(openedAt + 1 * DAY + 100);
+      const { msg: receiptMsg, signature: receiptSig } = await getReceipt(PROVIDER, sessionId1, 0, 0);
+      await sessionRouter.connect(SECOND).closeSession(receiptMsg, receiptSig);
+
+      const userBalBefore = await token.balanceOf(SECOND);
+      const contractBalBefore = await token.balanceOf(sessionRouter);
+
+      await delegateRegistry
+        .connect(SECOND)
+        .delegateContract(OWNER, providerRegistry, await providerRegistry.DELEGATION_RULES_SESSION(), true);
+
+      await setTime(openedAt + 3 * DAY + 2);
+      await sessionRouter.connect(OWNER).withdrawUserStakes(SECOND, 1);
 
       const stakesOnHold = await sessionRouter.getUserStakesOnHold(SECOND, 1);
       expect(stakesOnHold[0]).to.eq(0);
@@ -728,7 +915,7 @@ describe('SessionRouter', () => {
 
       await setTime(openedAt + 1 * DAY);
       const { msg: msg1, signature: sig1 } = await getProviderApproval(PROVIDER, SECOND, bidId);
-      await sessionRouter.connect(SECOND).openSession(wei(50), false, msg1, sig1);
+      await sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg1, sig1);
       const sessionId1 = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 0);
 
       await setTime(openedAt + 1 * DAY + 500);
@@ -737,7 +924,7 @@ describe('SessionRouter', () => {
 
       await setTime(openedAt + 3 * DAY);
       const { msg: msg2, signature: sig2 } = await getProviderApproval(PROVIDER, SECOND, bidId);
-      await sessionRouter.connect(SECOND).openSession(wei(50), false, msg2, sig2);
+      await sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg2, sig2);
       const sessionId2 = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 1);
 
       await setTime(openedAt + 3 * DAY + 500);
@@ -752,7 +939,7 @@ describe('SessionRouter', () => {
       const contractBalBefore = await token.balanceOf(sessionRouter);
 
       await setTime(openedAt + 4 * DAY);
-      await sessionRouter.connect(SECOND).withdrawUserStakes(20);
+      await sessionRouter.connect(SECOND).withdrawUserStakes(SECOND, 20);
 
       const userBalAfter = await token.balanceOf(SECOND);
       expect(userBalAfter - userBalBefore).to.eq(stakesOnHold[0]);
@@ -765,7 +952,7 @@ describe('SessionRouter', () => {
       // Open and close session #1
       await setTime(openedAt + 1 * DAY);
       const { msg: msg1, signature: sig1 } = await getProviderApproval(PROVIDER, SECOND, bidId);
-      await sessionRouter.connect(SECOND).openSession(wei(50), false, msg1, sig1);
+      await sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg1, sig1);
       const sessionId1 = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 0);
 
       await setTime(openedAt + 1 * DAY + 500);
@@ -778,7 +965,7 @@ describe('SessionRouter', () => {
       // Open and close session #2
       await setTime(openedAt + 3 * DAY);
       const { msg: msg2, signature: sig2 } = await getProviderApproval(PROVIDER, SECOND, bidId);
-      await sessionRouter.connect(SECOND).openSession(wei(50), false, msg2, sig2);
+      await sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg2, sig2);
       const sessionId2 = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 1);
 
       await setTime(openedAt + 3 * DAY + 500);
@@ -791,7 +978,7 @@ describe('SessionRouter', () => {
       // Open and close session #3
       await setTime(openedAt + 5 * DAY);
       const { msg: msg3, signature: sig3 } = await getProviderApproval(PROVIDER, SECOND, bidId);
-      await sessionRouter.connect(SECOND).openSession(wei(50), false, msg3, sig3);
+      await sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg3, sig3);
       const sessionId3 = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 2);
 
       await setTime(openedAt + 5 * DAY + 500);
@@ -810,7 +997,7 @@ describe('SessionRouter', () => {
       let userBalBefore = await token.balanceOf(SECOND);
       let contractBalBefore = await token.balanceOf(sessionRouter);
 
-      await sessionRouter.connect(SECOND).withdrawUserStakes(1);
+      await sessionRouter.connect(SECOND).withdrawUserStakes(SECOND, 1);
 
       let userBalAfter = await token.balanceOf(SECOND);
       expect(userBalAfter - userBalBefore).to.eq(onHoldAfterSession3);
@@ -825,7 +1012,7 @@ describe('SessionRouter', () => {
       userBalBefore = await token.balanceOf(SECOND);
       contractBalBefore = await token.balanceOf(sessionRouter);
 
-      await sessionRouter.connect(SECOND).withdrawUserStakes(1);
+      await sessionRouter.connect(SECOND).withdrawUserStakes(SECOND, 1);
 
       userBalAfter = await token.balanceOf(SECOND);
       expect(userBalAfter - userBalBefore).to.eq(onHoldAfterSession2);
@@ -840,7 +1027,7 @@ describe('SessionRouter', () => {
       userBalBefore = await token.balanceOf(SECOND);
       contractBalBefore = await token.balanceOf(sessionRouter);
 
-      await sessionRouter.connect(SECOND).withdrawUserStakes(1);
+      await sessionRouter.connect(SECOND).withdrawUserStakes(SECOND, 1);
 
       userBalAfter = await token.balanceOf(SECOND);
       expect(userBalAfter - userBalBefore).to.eq(onHoldAfterSession1);
@@ -852,7 +1039,7 @@ describe('SessionRouter', () => {
 
       await setTime(openedAt + 1 * DAY);
       const { msg: msg1, signature: sig1 } = await getProviderApproval(PROVIDER, SECOND, bidId);
-      await sessionRouter.connect(SECOND).openSession(wei(50), false, msg1, sig1);
+      await sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg1, sig1);
       const sessionId1 = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 0);
 
       await setTime(openedAt + 1 * DAY + 500);
@@ -861,7 +1048,7 @@ describe('SessionRouter', () => {
 
       await setTime(openedAt + 3 * DAY);
       const { msg: msg2, signature: sig2 } = await getProviderApproval(PROVIDER, SECOND, bidId);
-      await sessionRouter.connect(SECOND).openSession(wei(50), false, msg2, sig2);
+      await sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg2, sig2);
       const sessionId2 = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 1);
 
       await setTime(openedAt + 3 * DAY + 500);
@@ -876,7 +1063,7 @@ describe('SessionRouter', () => {
       const userBalBefore = await token.balanceOf(SECOND);
       const contractBalBefore = await token.balanceOf(sessionRouter);
 
-      await sessionRouter.connect(SECOND).withdrawUserStakes(20);
+      await sessionRouter.connect(SECOND).withdrawUserStakes(SECOND, 20);
 
       const userBalAfter = await token.balanceOf(SECOND);
       expect(userBalAfter - userBalBefore).to.eq(stakesOnHold[0]);
@@ -888,11 +1075,11 @@ describe('SessionRouter', () => {
 
       await setTime(openedAt + 1 * DAY);
       const { msg: msg1, signature: sig1 } = await getProviderApproval(PROVIDER, SECOND, bidId);
-      await sessionRouter.connect(SECOND).openSession(wei(50), false, msg1, sig1);
+      await sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg1, sig1);
       const sessionId1 = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 0);
 
       const { msg: msg2, signature: sig2 } = await getProviderApproval(PROVIDER, SECOND, bidId);
-      await sessionRouter.connect(SECOND).openSession(wei(50), false, msg2, sig2);
+      await sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg2, sig2);
       const sessionId2 = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 1);
 
       await setTime(openedAt + 1 * DAY + 500);
@@ -903,13 +1090,13 @@ describe('SessionRouter', () => {
       const { msg: receiptMsg2, signature: receiptSig2 } = await getReceipt(PROVIDER, sessionId2, 0, 0);
       await sessionRouter.connect(SECOND).closeSession(receiptMsg2, receiptSig2);
 
-      await expect(sessionRouter.connect(SECOND).withdrawUserStakes(20)).to.be.revertedWithCustomError(
+      await expect(sessionRouter.connect(SECOND).withdrawUserStakes(SECOND, 20)).to.be.revertedWithCustomError(
         sessionRouter,
         'SessionUserAmountToWithdrawIsZero',
       );
     });
     it('should throw error when amount of itterations are zero', async () => {
-      await expect(sessionRouter.connect(SECOND).withdrawUserStakes(0)).to.be.revertedWithCustomError(
+      await expect(sessionRouter.connect(SECOND).withdrawUserStakes(SECOND, 0)).to.be.revertedWithCustomError(
         sessionRouter,
         'SessionUserAmountToWithdrawIsZero',
       );
@@ -928,7 +1115,7 @@ describe('SessionRouter', () => {
 
     await setTime(openedAt);
     const { msg, signature } = await getProviderApproval(PROVIDER, SECOND, bidId);
-    await sessionRouter.connect(SECOND).openSession(wei(50), isDirectPaymentFromUser, msg, signature);
+    await sessionRouter.connect(SECOND).openSession(SECOND, wei(50), isDirectPaymentFromUser, msg, signature);
 
     return {
       sessionId: await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 0),
