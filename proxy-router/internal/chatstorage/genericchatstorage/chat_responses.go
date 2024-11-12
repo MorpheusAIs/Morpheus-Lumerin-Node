@@ -131,3 +131,11 @@ func newRateLimitHeaders(h http.Header) RateLimitHeaders {
 }
 
 const FinishReasonStop FinishReason = "stop"
+
+type ImageGenerationResult struct {
+	Job      string `json:"job"`
+	Status   string `json:"status"`
+	ImageUrl string `json:"imageUrl" binding:"omitempty"`
+}
+
+type ImageGenerationCallback func(completion *ImageGenerationResult) error

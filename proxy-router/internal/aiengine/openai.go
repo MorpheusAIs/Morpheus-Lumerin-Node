@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	c "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/completion"
+	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/sashabaranov/go-openai"
 )
@@ -34,7 +34,7 @@ func NewOpenAIEngine(modelName, baseURL, apiKey string, log lib.ILogger) *OpenAI
 	}
 }
 
-func (a *OpenAI) Prompt(ctx context.Context, compl *openai.ChatCompletionRequest, cb completion.CompletionCallback) error {
+func (a *OpenAI) Prompt(ctx context.Context, compl *openai.ChatCompletionRequest, cb gcs.CompletionCallback) error {
 	compl.Model = a.modelName
 	requestBody, err := json.Marshal(compl)
 	if err != nil {
@@ -68,17 +68,18 @@ func (a *OpenAI) Prompt(ctx context.Context, compl *openai.ChatCompletionRequest
 	return a.readResponse(ctx, resp.Body, cb)
 }
 
-func (a *OpenAI) readResponse(ctx context.Context, body io.Reader, cb completion.CompletionCallback) error {
+func (a *OpenAI) readResponse(ctx context.Context, body io.Reader, cb gcs.CompletionCallback) error {
 	var compl openai.ChatCompletionResponse
 	if err := json.NewDecoder(body).Decode(&compl); err != nil {
 		return fmt.Errorf("failed to decode response: %v", err)
 	}
 
-	chunk := &completion.ChunkImpl{
-		Data:        compl,
-		IsStreaming: false,
-		Tokens:      len(compl.Choices),
+	text := make([]string, len(compl.Choices))
+	for i, choice := range compl.Choices {
+		text[i] = choice.Message.Content
 	}
+
+	chunk := gcs.NewChunkText(&compl)
 	err := cb(ctx, chunk)
 	if err != nil {
 		return fmt.Errorf("callback failed: %v", err)
@@ -87,7 +88,7 @@ func (a *OpenAI) readResponse(ctx context.Context, body io.Reader, cb completion
 	return nil
 }
 
-func (a *OpenAI) readStream(ctx context.Context, body io.Reader, cb completion.CompletionCallback) error {
+func (a *OpenAI) readStream(ctx context.Context, body io.Reader, cb gcs.CompletionCallback) error {
 	scanner := bufio.NewScanner(body)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -104,11 +105,7 @@ func (a *OpenAI) readStream(ctx context.Context, body io.Reader, cb completion.C
 				}
 			}
 			// Call the callback function with the unmarshalled completion
-			chunk := &completion.ChunkImpl{
-				Data:        compl,
-				IsStreaming: true,
-				Tokens:      len(compl.Choices),
-			}
+			chunk := gcs.NewChunkStreaming(&compl)
 			err := cb(ctx, chunk)
 			if err != nil {
 				return fmt.Errorf("callback failed: %v", err)

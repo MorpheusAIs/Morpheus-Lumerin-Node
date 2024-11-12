@@ -11,9 +11,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
 	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/completion"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	msgs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi/morrpcmessage"
@@ -280,7 +278,7 @@ func (p *ProxyServiceSender) validateMsgSignature(result any, signature lib.HexS
 	return p.morRPC.VerifySignature(result, signature, providerPubicKey, p.log)
 }
 
-func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.Hash, prompt *openai.ChatCompletionRequest, cb completion.CompletionCallback) (interface{}, error) {
+func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.Hash, prompt *openai.ChatCompletionRequest, cb gcs.CompletionCallback) (interface{}, error) {
 	session, err := p.sessionRepo.GetSession(ctx, sessionID)
 	if err != nil {
 		return nil, ErrSessionNotFound
@@ -323,14 +321,7 @@ func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.
 			return nil, err
 		}
 
-		msg := struct {
-			Message string `json:"message"`
-		}{Message: "provider failed, failover enabled"}
-
-		err = cb(ctx, &completion.ChunkImpl{
-			Data:        msg,
-			IsStreaming: true,
-		})
+		err = cb(ctx, gcs.NewChunkControl("provider failed, failover enabled"))
 		if err != nil {
 			return nil, err
 		}
@@ -348,14 +339,11 @@ func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.
 			return nil, err
 		}
 
-		msg = struct {
-			Message string `json:"message"`
-		}{Message: "new session opened"}
+		err = cb(ctx, gcs.NewChunkControl("new session opened"))
+		if err != nil {
+			return nil, err
+		}
 
-		err = cb(ctx, &completion.ChunkImpl{
-			Data:        msg,
-			IsStreaming: true,
-		})
 		return p.SendPromptV2(ctx, newSessionID, prompt, cb)
 	}
 
@@ -372,7 +360,7 @@ func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.
 
 	return result, nil
 }
-func (p *ProxyServiceSender) rpcRequestStreamV2(ctx context.Context, cb completion.CompletionCallback, url string, rpcMessage *msgs.RPCMessage, providerPublicKey lib.HexString) (interface{}, int, int, error) {
+func (p *ProxyServiceSender) rpcRequestStreamV2(ctx context.Context, cb gcs.CompletionCallback, url string, rpcMessage *msgs.RPCMessage, providerPublicKey lib.HexString) (interface{}, int, int, error) {
 	prKey, err := p.privateKey.GetPrivateKey()
 	if err != nil {
 		return nil, 0, 0, ErrMissingPrKey
@@ -453,35 +441,34 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(ctx context.Context, cb completi
 			return nil, ttftMs, totalTokens, lib.WrapError(ErrDecrFailed, err)
 		}
 
-		var payload gcs.ChatCompletionResponse
+		var payload openai.ChatCompletionStreamResponse
 		err = json.Unmarshal(aiResponse, &payload)
 		var stop = true
+		var chunk gcs.Chunk
 		if err == nil && len(payload.Choices) > 0 {
 			stop = false
 			choices := payload.Choices
 			for _, choice := range choices {
-				if choice.FinishReason == gcs.FinishReasonStop {
+				if choice.FinishReason == openai.FinishReasonStop {
 					stop = true
 				}
 			}
 			totalTokens += len(choices)
 			responses = append(responses, payload)
+			chunk = gcs.NewChunkStreaming(&payload)
 		} else {
-			var prodiaPayload aiengine.ProdiaGenerationResult
-			err = json.Unmarshal(aiResponse, &prodiaPayload)
+			var imageGenerationResult gcs.ImageGenerationResult
+			err = json.Unmarshal(aiResponse, &imageGenerationResult)
 			if err != nil {
 				return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
 			}
 			totalTokens += 1
-			responses = append(responses, prodiaPayload)
+			responses = append(responses, imageGenerationResult)
+			chunk = gcs.NewChunkImage(&imageGenerationResult)
 		}
 
 		if ctx.Err() != nil {
 			return nil, ttftMs, totalTokens, ctx.Err()
-		}
-		chunk := &completion.ChunkImpl{
-			Data:        aiResponse,
-			IsStreaming: true,
 		}
 		err = cb(ctx, chunk)
 		if err != nil {

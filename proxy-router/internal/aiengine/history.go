@@ -5,7 +5,6 @@ import (
 	"time"
 
 	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/completion"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/sashabaranov/go-openai"
@@ -29,9 +28,9 @@ func NewHistory(engine AIEngineStream, storage gcs.ChatStorageInterface, chatID,
 	}
 }
 
-func (h *History) Prompt(ctx context.Context, prompt *openai.ChatCompletionRequest, cb completion.CompletionCallback) error {
+func (h *History) Prompt(ctx context.Context, prompt *openai.ChatCompletionRequest, cb gcs.CompletionCallback) error {
 	isLocal := h.engine.ApiType() != "remote"
-	completions := make([]*completion.ChunkImpl, 0)
+	completions := make([]gcs.Chunk, 0)
 	startTime := time.Now()
 
 	history, err := h.storage.LoadChatFromFile(h.chatID.Hex())
@@ -41,7 +40,7 @@ func (h *History) Prompt(ctx context.Context, prompt *openai.ChatCompletionReque
 
 	promptWithHistory := history.AppendChatHistory(prompt)
 
-	err = h.engine.Prompt(ctx, promptWithHistory, func(ctx context.Context, completion *completion.ChunkImpl) error {
+	err = h.engine.Prompt(ctx, promptWithHistory, func(ctx context.Context, completion gcs.Chunk) error {
 		completions = append(completions, completion)
 		return cb(ctx, completion)
 	})

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/completion"
+	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/sashabaranov/go-openai"
 )
@@ -35,11 +35,12 @@ func NewProdiaEngine(modelName, apiURL, apiKey string, log lib.ILogger) *Prodia 
 	}
 }
 
-func (s *Prodia) Prompt(ctx context.Context, prompt *openai.ChatCompletionRequest, cb completion.CompletionCallback) error {
+func (s *Prodia) Prompt(ctx context.Context, prompt *openai.ChatCompletionRequest, cb gcs.CompletionCallback) error {
 	body := map[string]string{
 		"model":  s.modelName,
 		"prompt": prompt.Messages[0].Content,
 	}
+
 	payload, err := json.Marshal(body)
 	if err != nil {
 		err = lib.WrapError(ErrImageGenerationInvalidRequest, err)
@@ -47,7 +48,9 @@ func (s *Prodia) Prompt(ctx context.Context, prompt *openai.ChatCompletionReques
 		return err
 	}
 
-	req, err := http.NewRequest("POST", s.apiURL, bytes.NewReader(payload))
+	s.log.Debugf("payload: %s", payload)
+
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/sd/generate", s.apiURL), bytes.NewReader(payload))
 	if err != nil {
 		err = lib.WrapError(ErrImageGenerationRequest, err)
 		s.log.Error(err)
@@ -72,9 +75,11 @@ func (s *Prodia) Prompt(ctx context.Context, prompt *openai.ChatCompletionReques
 		return err
 	}
 
+	s.log.Debugf("response: %s", response)
+
 	bodyStr := string(response)
 	if strings.Contains(bodyStr, "Invalid Generation Parameters") {
-		return ErrImageGenerationInvalidRequest
+		return lib.WrapError(ErrImageGenerationRequest, fmt.Errorf(bodyStr))
 	}
 
 	result := ProdiaGenerationResult{}
@@ -92,18 +97,19 @@ func (s *Prodia) Prompt(ctx context.Context, prompt *openai.ChatCompletionReques
 		return err
 	}
 
-	chunk := &completion.ChunkImpl{
-		Data:        job,
-		IsStreaming: false,
-		Type:        completion.ChunkTypeImage,
-		Tokens:      1,
-	}
+	chunk := gcs.NewChunkImage(&gcs.ImageGenerationResult{
+		Job:      job.Job,
+		ImageUrl: job.ImageUrl,
+		Status:   job.Status,
+	})
 
 	return cb(ctx, chunk)
 }
 
 func (s *Prodia) waitJobResult(ctx context.Context, jobID string) (*ProdiaGenerationResult, error) {
-	url := fmt.Sprintf("https://api.prodia.com/v1/job/%s", jobID)
+	url := fmt.Sprintf("%s/job/%s", s.apiURL, jobID)
+
+	s.log.Debugf("waiting for job result: %s", url)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -138,6 +144,8 @@ func (s *Prodia) waitJobResult(ctx context.Context, jobID string) (*ProdiaGenera
 		return nil, err
 	}
 
+	s.log.Debugf("job result: %v", result)
+
 	if result.Status == "succeeded" {
 		return &result, nil
 	}
@@ -160,3 +168,9 @@ func (s *Prodia) ApiType() string {
 }
 
 var _ AIEngineStream = &Prodia{}
+
+type ProdiaGenerationResult struct {
+	Job      string `json:"job"`
+	Status   string `json:"status"`
+	ImageUrl string `json:"imageUrl" binding:"omitempty"`
+}

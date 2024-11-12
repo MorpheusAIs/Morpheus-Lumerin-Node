@@ -15,17 +15,6 @@ const (
 	ImageURLDetailAuto ImageURLDetail = "auto"
 )
 
-type ChatMessageImageURL struct {
-	URL    string         `json:"url,omitempty"`
-	Detail ImageURLDetail `json:"detail,omitempty"`
-}
-
-type ChatMessagePart struct {
-	Type     ChatMessagePartType  `json:"type,omitempty"`
-	Text     string               `json:"text,omitempty"`
-	ImageURL *ChatMessageImageURL `json:"image_url,omitempty"`
-}
-
 type ChatCompletionMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`

@@ -3,13 +3,12 @@ package genericchatstorage
 import (
 	"time"
 
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/completion"
 	"github.com/sashabaranov/go-openai"
 )
 
 type ChatStorageInterface interface {
 	LoadChatFromFile(chatID string) (*ChatHistory, error)
-	StorePromptResponseToFile(chatID string, isLocal bool, modelID string, prompt *openai.ChatCompletionRequest, responses []*completion.ChunkImpl, promptAt time.Time, responseAt time.Time) error
+	StorePromptResponseToFile(chatID string, isLocal bool, modelID string, prompt *openai.ChatCompletionRequest, responses []Chunk, promptAt time.Time, responseAt time.Time) error
 	GetChats() []Chat
 	DeleteChat(chatID string) error
 	UpdateChatTitle(chatID string, title string) error
@@ -31,32 +30,29 @@ func (h *ChatHistory) AppendChatHistory(req *openai.ChatCompletionRequest) *open
 		return req
 	}
 
-	//TODO:
+	messagesWithHistory := make([]openai.ChatCompletionMessage, 0)
+	for _, chat := range h.Messages {
+		messagesWithHistory = append(messagesWithHistory, openai.ChatCompletionMessage{
+			Role:    chat.Prompt.Messages[0].Role,
+			Content: chat.Prompt.Messages[0].Content,
+		})
+		messagesWithHistory = append(messagesWithHistory, openai.ChatCompletionMessage{
+			Role:    "assistant",
+			Content: chat.Response,
+		})
+	}
 
-	// messagesWithHistory := make([]openai.ChatCompletionMessage, 0)
-	// for _, chat := range h.Messages {
-	// 	message := openai.ChatCompletionMessage{
-	// 		Role:    chat.Prompt.Messages[0].Role,
-	// 		Content: chat.Prompt.Messages[0].Content,
-	// 	}
-	// 	messagesWithHistory = append(messagesWithHistory, message)
-	// 	messagesWithHistory = append(messagesWithHistory, openai.ChatCompletionMessage{
-	// 		Role:    "assistant",
-	// 		Content: chat.Response,
-	// 	})
-	// }
-
-	// messagesWithHistory = append(messagesWithHistory, req.Messages...)
-	// req.Messages = messagesWithHistory
+	messagesWithHistory = append(messagesWithHistory, req.Messages...)
+	req.Messages = messagesWithHistory
 	return req
 }
 
 type ChatMessage struct {
-	Prompt         OpenAiCompletitionRequest `json:"prompt"`
-	Response       []*completion.ChunkImpl   `json:"response"`
-	PromptAt       int64                     `json:"promptAt"`
-	ResponseAt     int64                     `json:"responseAt"`
-	IsImageContent bool                      `json:"isImageContent"`
+	Prompt         OpenAiCompletionRequest `json:"prompt"`
+	Response       string                  `json:"response"`
+	PromptAt       int64                   `json:"promptAt"`
+	ResponseAt     int64                   `json:"responseAt"`
+	IsImageContent bool                    `json:"isImageContent"`
 }
 type Chat struct {
 	ChatID    string `json:"chatId"`
@@ -66,7 +62,7 @@ type Chat struct {
 	CreatedAt int64  `json:"createdAt"`
 }
 
-type OpenAiCompletitionRequest struct {
+type OpenAiCompletionRequest struct {
 	Model            string                        `json:"model"`
 	Messages         []ChatCompletionMessage       `json:"messages"`
 	MaxTokens        int                           `json:"max_tokens,omitempty"`

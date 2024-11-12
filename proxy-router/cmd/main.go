@@ -284,7 +284,7 @@ func start() error {
 	blockchainController := blockchainapi.NewBlockchainController(blockchainApi, log)
 
 	ethConnectionValidator := system.NewEthConnectionValidator(*big.NewInt(int64(cfg.Blockchain.ChainID)))
-	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine, chatStorage)
+	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine, chatStorage, log)
 	walletController := walletapi.NewWalletController(wallet)
 	systemController := system.NewSystemController(&cfg, wallet, rpcClientStore, sysConfig, appStartTime, chainID, log, ethConnectionValidator)
 

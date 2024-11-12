@@ -6,11 +6,9 @@ import (
 	"fmt"
 	"net/http"
 
-	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi/structs"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/completion"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/ethereum/go-ethereum/common"
@@ -27,13 +25,15 @@ type ProxyController struct {
 	service     *ProxyServiceSender
 	aiEngine    AIEngine
 	chatStorage genericchatstorage.ChatStorageInterface
+	log         lib.ILogger
 }
 
-func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStorage genericchatstorage.ChatStorageInterface) *ProxyController {
+func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStorage genericchatstorage.ChatStorageInterface, log lib.ILogger) *ProxyController {
 	c := &ProxyController{
 		service:     service,
 		aiEngine:    aiEngine,
 		chatStorage: chatStorage,
+		log:         log,
 	}
 
 	return c
@@ -113,7 +113,6 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 	}
 
 	// promptAt := time.Now()
-	// isStream := ctx.GetHeader(constants.HEADER_ACCEPT) == constants.CONTENT_TYPE_EVENT_STREAM
 
 	adapter, err := c.aiEngine.GetAdapter(ctx, chatID.Hash, head.ModelID.Hash, head.SessionID.Hash, true)
 	if err != nil {
@@ -121,13 +120,12 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 		return
 	}
 
-	err = adapter.Prompt(ctx, &body, func(cbctx context.Context, completion *completion.ChunkImpl) error {
-		marshalledResponse, err := json.Marshal(completion.Data)
+	err = adapter.Prompt(ctx, &body, func(cbctx context.Context, completion genericchatstorage.Chunk) error {
+		marshalledResponse, err := json.Marshal(completion.Data())
 		if err != nil {
 			return err
 		}
 
-		ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_EVENT_STREAM)
 		_, err = ctx.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", marshalledResponse)))
 		if err != nil {
 			return err
@@ -138,6 +136,7 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 	})
 
 	if err != nil {
+		c.log.Errorf("error sending prompt: %s", err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

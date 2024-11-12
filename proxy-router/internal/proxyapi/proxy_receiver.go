@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/completion"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	m "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi/morrpcmessage"
@@ -73,14 +73,14 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 		return 0, 0, err
 	}
 
-	err = adapter.Prompt(ctx, req, func(ctx context.Context, completion *completion.ChunkImpl) error {
-		totalTokens += completion.Tokens
+	err = adapter.Prompt(ctx, req, func(ctx context.Context, completion genericchatstorage.Chunk) error {
+		totalTokens += completion.Tokens()
 
 		if ttftMs == 0 {
 			ttftMs = int(time.Now().UnixMilli() - now)
 		}
 
-		marshalledResponse, err := json.Marshal(completion.Data)
+		marshalledResponse, err := json.Marshal(completion.Data())
 		if err != nil {
 			return err
 		}

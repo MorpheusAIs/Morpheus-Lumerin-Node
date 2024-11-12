@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/completion"
 	"github.com/sashabaranov/go-openai"
 )
 
@@ -31,7 +31,7 @@ func NewChatStorage(dirPath string) *ChatStorage {
 }
 
 // StorePromptResponseToFile stores the prompt and response to a file.
-func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool, modelId string, prompt *openai.ChatCompletionRequest, responses []*completion.ChunkImpl, promptAt time.Time, responseAt time.Time) error {
+func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool, modelId string, prompt *openai.ChatCompletionRequest, responses []gcs.Chunk, promptAt time.Time, responseAt time.Time) error {
 	if err := os.MkdirAll(cs.dirPath, os.ModePerm); err != nil {
 		return err
 	}
@@ -62,7 +62,7 @@ func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool
 		})
 	}
 
-	p := gcs.OpenAiCompletitionRequest{
+	p := gcs.OpenAiCompletionRequest{
 		Messages:         messages,
 		Model:            prompt.Model,
 		MaxTokens:        prompt.MaxTokens,
@@ -73,12 +73,22 @@ func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool
 		Stop:             prompt.Stop,
 	}
 
+	resps := make([]string, len(responses))
+	for i, r := range responses {
+		resps[i] = r.String()
+	}
+
+	isImageContent := false
+	if len(responses) > 0 {
+		isImageContent = responses[0].Type() == gcs.ChunkTypeImage
+	}
+
 	newEntry := gcs.ChatMessage{
 		Prompt:         p,
-		Response:       responses,
+		Response:       strings.Join(resps, ""),
 		PromptAt:       promptAt.Unix(),
 		ResponseAt:     responseAt.Unix(),
-		IsImageContent: responses[0].Type == completion.ChunkTypeImage,
+		IsImageContent: isImageContent,
 	}
 
 	if data.Messages == nil && len(data.Messages) == 0 {
@@ -197,30 +207,4 @@ func (cs *ChatStorage) initFileMutex(filePath string) {
 	if _, exists := cs.fileMutexes[filePath]; !exists {
 		cs.fileMutexes[filePath] = &sync.Mutex{}
 	}
-}
-
-type NoOpChatStorage struct{}
-
-func NewNoOpChatStorage() *NoOpChatStorage {
-	return &NoOpChatStorage{}
-}
-
-func (cs *NoOpChatStorage) LoadChatFromFile(chatID string) (*gcs.ChatHistory, error) {
-	return nil, nil
-}
-
-func (cs *NoOpChatStorage) StorePromptResponseToFile(chatID string, isLocal bool, modelID string, prompt openai.ChatCompletionRequest, responses []interface{}, promptAt time.Time, responseAt time.Time) error {
-	return nil
-}
-
-func (cs *NoOpChatStorage) GetChats() []gcs.Chat {
-	return []gcs.Chat{}
-}
-
-func (cs *NoOpChatStorage) DeleteChat(chatID string) error {
-	return nil
-}
-
-func (cs *NoOpChatStorage) UpdateChatTitle(chatID string, title string) error {
-	return nil
 }
