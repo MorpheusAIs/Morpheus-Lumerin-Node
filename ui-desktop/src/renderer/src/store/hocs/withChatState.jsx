@@ -151,7 +151,8 @@ const withChatState = WrappedComponent => {
           const id = m.Id;
           const bids = (await this.getBidsByModels(id))
             .filter(b => +b.DeletedAt === 0)
-            .map(b => ({ ...b, ProviderData: providersMap[b.Provider.toLowerCase()], Model: m }));
+            .map(b => ({ ...b, ProviderData: providersMap[b.Provider.toLowerCase()], Model: m }))
+            .filter(b => b.ProviderData);
           return { id, bids }
         })
       )).reduce((a,b) => ({...a, [b.id]: b.bids}), {});
