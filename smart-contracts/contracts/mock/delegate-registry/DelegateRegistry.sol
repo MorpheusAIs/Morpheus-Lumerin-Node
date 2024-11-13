@@ -6,8 +6,6 @@ import {RegistryHashes as Hashes} from "./libraries/RegistryHashes.sol";
 import {RegistryStorage as Storage} from "./libraries/RegistryStorage.sol";
 import {RegistryOps as Ops} from "./libraries/RegistryOps.sol";
 
-import "hardhat/console.sol";
-
 /**
  * @title DelegateRegistry
  * @custom:version 2.0
