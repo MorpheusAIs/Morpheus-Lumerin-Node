@@ -40,7 +40,7 @@ func NewProdiaSDEngine(modelName, apiURL, apiKey string, log lib.ILogger) *Prodi
 func (s *ProdiaSD) Prompt(ctx context.Context, prompt *openai.ChatCompletionRequest, cb gcs.CompletionCallback) error {
 	body := map[string]string{
 		"model":  s.modelName,
-		"prompt": prompt.Messages[0].Content,
+		"prompt": prompt.Messages[len(prompt.Messages)-1].Content,
 	}
 
 	payload, err := json.Marshal(body)
