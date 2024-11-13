@@ -21,11 +21,12 @@ type History struct {
 
 func NewHistory(engine AIEngineStream, storage gcs.ChatStorageInterface, chatID, modelID common.Hash, forwardChatContext bool, log lib.ILogger) *History {
 	return &History{
-		engine:  engine,
-		storage: storage,
-		chatID:  chatID,
-		modelID: modelID,
-		log:     log,
+		engine:             engine,
+		storage:            storage,
+		chatID:             chatID,
+		modelID:            modelID,
+		forwardChatContext: forwardChatContext,
+		log:                log,
 	}
 }
 
