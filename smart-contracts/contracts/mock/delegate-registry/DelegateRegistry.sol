@@ -119,7 +119,6 @@ contract DelegateRegistry is IDelegateRegistry {
         uint256 amount
     ) external payable override returns (bytes32 hash) {
         hash = Hashes.erc20Hash(msg.sender, rights, to, contract_);
-        console.log("msg.sender", msg.sender);
         bytes32 location = Hashes.location(hash);
         address loadedFrom = _loadFrom(location);
         if (amount != 0) {
