@@ -50,12 +50,12 @@ type Config struct {
 		LevelBadger     string `env:"LOG_LEVEL_BADGER"     flag:"log-level-badger"     validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
 	}
 	Proxy struct {
-		Address            string `env:"PROXY_ADDRESS" flag:"proxy-address" validate:"required,hostname_port"`
-		StoragePath        string `env:"PROXY_STORAGE_PATH"    flag:"proxy-storage-path"    validate:"omitempty,dirpath" desc:"enables file storage and sets the folder path"`
-		StoreChatContext   *bool  `env:"PROXY_STORE_CHAT_CONTEXT" flag:"proxy-store-chat-context" desc:"store chat context in the proxy storage"`
-		ForwardChatContext *bool  `env:"PROXY_FORWARD_CHAT_CONTEXT" flag:"proxy-forward-chat-context" desc:"prepend whole stored message history to the prompt"`
-		ModelsConfigPath   string `env:"MODELS_CONFIG_PATH" flag:"models-config-path" validate:"omitempty"`
-		ProviderAllowList  string `env:"PROVIDER_ALLOW_LIST" flag:"provider-allow-list" validate:"omitempty" desc:"comma separated list of provider addresses allowed to open session with"`
+		Address            string    `env:"PROXY_ADDRESS" flag:"proxy-address" validate:"required,hostname_port"`
+		StoragePath        string    `env:"PROXY_STORAGE_PATH"    flag:"proxy-storage-path"    validate:"omitempty,dirpath" desc:"enables file storage and sets the folder path"`
+		StoreChatContext   *lib.Bool `env:"PROXY_STORE_CHAT_CONTEXT" flag:"proxy-store-chat-context" desc:"store chat context in the proxy storage"`
+		ForwardChatContext *lib.Bool `env:"PROXY_FORWARD_CHAT_CONTEXT" flag:"proxy-forward-chat-context" desc:"prepend whole stored message history to the prompt"`
+		ModelsConfigPath   string    `env:"MODELS_CONFIG_PATH" flag:"models-config-path" validate:"omitempty"`
+		ProviderAllowList  string    `env:"PROVIDER_ALLOW_LIST" flag:"provider-allow-list" validate:"omitempty" desc:"comma separated list of provider addresses allowed to open session with"`
 	}
 	System struct {
 		Enable           bool   `env:"SYS_ENABLE"              flag:"sys-enable" desc:"enable system level configuration adjustments"`
@@ -150,13 +150,13 @@ func (cfg *Config) SetDefaults() {
 	if cfg.Proxy.StoragePath == "" {
 		cfg.Proxy.StoragePath = "./data/badger/"
 	}
-	if cfg.Proxy.StoreChatContext == nil {
-		cfg.Proxy.StoreChatContext = new(bool)
-		*cfg.Proxy.StoreChatContext = true
+	if cfg.Proxy.StoreChatContext.Bool == nil {
+		val := true
+		cfg.Proxy.StoreChatContext = &lib.Bool{Bool: &val}
 	}
-	if cfg.Proxy.ForwardChatContext == nil {
-		cfg.Proxy.ForwardChatContext = new(bool)
-		*cfg.Proxy.ForwardChatContext = true
+	if cfg.Proxy.ForwardChatContext.Bool == nil {
+		val := true
+		cfg.Proxy.ForwardChatContext = &lib.Bool{Bool: &val}
 	}
 }
 
