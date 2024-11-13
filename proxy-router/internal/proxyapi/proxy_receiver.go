@@ -66,7 +66,7 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 	totalTokens := 0
 	now := time.Now().UnixMilli()
 
-	adapter, err := s.aiEngine.GetAdapter(ctx, common.Hash{}, session.ModelID(), common.Hash{}, false)
+	adapter, err := s.aiEngine.GetAdapter(ctx, common.Hash{}, session.ModelID(), common.Hash{}, false, false)
 	if err != nil {
 		err := lib.WrapError(fmt.Errorf("failed to get adapter"), err)
 		sourceLog.Error(err)

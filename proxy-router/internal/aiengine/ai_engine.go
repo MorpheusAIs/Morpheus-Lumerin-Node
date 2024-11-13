@@ -36,7 +36,7 @@ func NewAiEngine(service ProxyService, storage gcs.ChatStorageInterface, modelsC
 	}
 }
 
-func (a *AiEngine) GetAdapter(ctx context.Context, chatID, modelID, sessionID common.Hash, persistHistory bool) (AIEngineStream, error) {
+func (a *AiEngine) GetAdapter(ctx context.Context, chatID, modelID, sessionID common.Hash, storeChatContext, forwardChatContext bool) (AIEngineStream, error) {
 	var engine AIEngineStream
 	if sessionID == (common.Hash{}) {
 		// local model
@@ -54,8 +54,8 @@ func (a *AiEngine) GetAdapter(ctx context.Context, chatID, modelID, sessionID co
 		engine = &RemoteModel{sessionID: sessionID, service: a.service}
 	}
 
-	if persistHistory {
-		engine = NewHistory(engine, a.storage, chatID, modelID, a.log)
+	if storeChatContext {
+		engine = NewHistory(engine, a.storage, chatID, modelID, forwardChatContext, a.log)
 	}
 
 	return engine, nil

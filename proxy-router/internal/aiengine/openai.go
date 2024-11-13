@@ -16,6 +16,8 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
+const API_TYPE_OPENAI = "openai"
+
 type OpenAI struct {
 	baseURL   string
 	apiKey    string
@@ -121,7 +123,7 @@ func (a *OpenAI) readStream(ctx context.Context, body io.Reader, cb gcs.Completi
 }
 
 func (a *OpenAI) ApiType() string {
-	return "openai"
+	return API_TYPE_OPENAI
 }
 
 func isStreamFinished(data string) bool {

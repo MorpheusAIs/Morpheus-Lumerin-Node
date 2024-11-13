@@ -15,11 +15,9 @@ import (
 
 // ChatStorage handles storing conversations to files.
 type ChatStorage struct {
-	dirPath     string                 // Directory path to store the files
-	fileMutexes map[string]*sync.Mutex // Map to store mutexes for each file
-}
-
-type Response interface {
+	dirPath            string                 // Directory path to store the files
+	fileMutexes        map[string]*sync.Mutex // Map to store mutexes for each file
+	forwardChatContext bool
 }
 
 // NewChatStorage creates a new instance of ChatStorage.
@@ -43,13 +41,13 @@ func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool
 	cs.fileMutexes[filePath].Lock()
 	defer cs.fileMutexes[filePath].Unlock()
 
-	var data gcs.ChatHistory
+	var chatHistory gcs.ChatHistory
 	if _, err := os.Stat(filePath); err == nil {
 		fileContent, err := os.ReadFile(filePath)
 		if err != nil {
 			return err
 		}
-		if err := json.Unmarshal(fileContent, &data); err != nil {
+		if err := json.Unmarshal(fileContent, &chatHistory); err != nil {
 			return err
 		}
 	}
@@ -91,16 +89,16 @@ func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool
 		IsImageContent: isImageContent,
 	}
 
-	if data.Messages == nil && len(data.Messages) == 0 {
-		data.ModelId = modelId
-		data.Title = prompt.Messages[0].Content
-		data.IsLocal = isLocal
+	if chatHistory.Messages == nil && len(chatHistory.Messages) == 0 {
+		chatHistory.ModelId = modelId
+		chatHistory.Title = prompt.Messages[0].Content
+		chatHistory.IsLocal = isLocal
 	}
 
-	newMessages := append(data.Messages, newEntry)
-	data.Messages = newMessages
+	newMessages := append(chatHistory.Messages, newEntry)
+	chatHistory.Messages = newMessages
 
-	updatedContent, err := json.MarshalIndent(data, "", "  ")
+	updatedContent, err := json.MarshalIndent(chatHistory, "", "  ")
 	if err != nil {
 		return err
 	}

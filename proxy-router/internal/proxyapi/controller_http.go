@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
+	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi/structs"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
@@ -18,22 +19,26 @@ import (
 
 type AIEngine interface {
 	GetLocalModels() ([]aiengine.LocalModel, error)
-	GetAdapter(ctx context.Context, chatID, modelID, sessionID common.Hash, storeContext bool) (aiengine.AIEngineStream, error)
+	GetAdapter(ctx context.Context, chatID, modelID, sessionID common.Hash, storeContext, forwardContext bool) (aiengine.AIEngineStream, error)
 }
 
 type ProxyController struct {
-	service     *ProxyServiceSender
-	aiEngine    AIEngine
-	chatStorage genericchatstorage.ChatStorageInterface
-	log         lib.ILogger
+	service            *ProxyServiceSender
+	aiEngine           AIEngine
+	chatStorage        genericchatstorage.ChatStorageInterface
+	storeChatContext   bool
+	forwardChatContext bool
+	log                lib.ILogger
 }
 
-func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStorage genericchatstorage.ChatStorageInterface, log lib.ILogger) *ProxyController {
+func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStorage genericchatstorage.ChatStorageInterface, storeChatContext, forwardChatContext bool, log lib.ILogger) *ProxyController {
 	c := &ProxyController{
-		service:     service,
-		aiEngine:    aiEngine,
-		chatStorage: chatStorage,
-		log:         log,
+		service:            service,
+		aiEngine:           aiEngine,
+		chatStorage:        chatStorage,
+		storeChatContext:   storeChatContext,
+		forwardChatContext: forwardChatContext,
+		log:                log,
 	}
 
 	return c
@@ -112,13 +117,20 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 		}
 	}
 
-	// promptAt := time.Now()
-
-	adapter, err := c.aiEngine.GetAdapter(ctx, chatID.Hash, head.ModelID.Hash, head.SessionID.Hash, true)
+	adapter, err := c.aiEngine.GetAdapter(ctx, chatID.Hash, head.ModelID.Hash, head.SessionID.Hash, c.storeChatContext, c.forwardChatContext)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	var contentType string
+	if body.Stream {
+		contentType = constants.CONTENT_TYPE_EVENT_STREAM
+	} else {
+		contentType = constants.CONTENT_TYPE_JSON
+	}
+
+	ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, contentType)
 
 	err = adapter.Prompt(ctx, &body, func(cbctx context.Context, completion genericchatstorage.Chunk) error {
 		marshalledResponse, err := json.Marshal(completion.Data())

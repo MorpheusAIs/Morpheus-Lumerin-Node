@@ -15,18 +15,14 @@ type ChatStorageInterface interface {
 }
 
 type ChatHistory struct {
-	Title          string        `json:"title"`
-	ModelId        string        `json:"modelId"`
-	IsLocal        bool          `json:"isLocal"`
-	Messages       []ChatMessage `json:"messages"`
-	ForwardContext bool          `json:"forwardContext"`
+	Title    string        `json:"title"`
+	ModelId  string        `json:"modelId"`
+	IsLocal  bool          `json:"isLocal"`
+	Messages []ChatMessage `json:"messages"`
 }
 
 func (h *ChatHistory) AppendChatHistory(req *openai.ChatCompletionRequest) *openai.ChatCompletionRequest {
 	if h == nil {
-		return req
-	}
-	if !h.ForwardContext {
 		return req
 	}
 

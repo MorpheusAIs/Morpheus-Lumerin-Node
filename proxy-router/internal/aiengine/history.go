@@ -11,14 +11,15 @@ import (
 )
 
 type History struct {
-	engine  AIEngineStream
-	storage gcs.ChatStorageInterface
-	chatID  common.Hash
-	modelID common.Hash
-	log     lib.ILogger
+	engine             AIEngineStream
+	storage            gcs.ChatStorageInterface
+	chatID             common.Hash
+	modelID            common.Hash
+	forwardChatContext bool
+	log                lib.ILogger
 }
 
-func NewHistory(engine AIEngineStream, storage gcs.ChatStorageInterface, chatID, modelID common.Hash, log lib.ILogger) *History {
+func NewHistory(engine AIEngineStream, storage gcs.ChatStorageInterface, chatID, modelID common.Hash, forwardChatContext bool, log lib.ILogger) *History {
 	return &History{
 		engine:  engine,
 		storage: storage,
@@ -38,9 +39,12 @@ func (h *History) Prompt(ctx context.Context, prompt *openai.ChatCompletionReque
 		h.log.Warnf("failed to load chat history: %v", err)
 	}
 
-	promptWithHistory := history.AppendChatHistory(prompt)
+	adjustedPrompt := prompt
+	if h.forwardChatContext {
+		adjustedPrompt = history.AppendChatHistory(prompt)
+	}
 
-	err = h.engine.Prompt(ctx, promptWithHistory, func(ctx context.Context, completion gcs.Chunk) error {
+	err = h.engine.Prompt(ctx, adjustedPrompt, func(ctx context.Context, completion gcs.Chunk) error {
 		completions = append(completions, completion)
 		return cb(ctx, completion)
 	})
@@ -49,7 +53,7 @@ func (h *History) Prompt(ctx context.Context, prompt *openai.ChatCompletionReque
 	}
 	endTime := time.Now()
 
-	err = h.storage.StorePromptResponseToFile(h.chatID.Hex(), isLocal, h.modelID.Hex(), promptWithHistory, completions, startTime, endTime)
+	err = h.storage.StorePromptResponseToFile(h.chatID.Hex(), isLocal, h.modelID.Hex(), prompt, completions, startTime, endTime)
 	if err != nil {
 		h.log.Errorf("failed to store prompt response: %v", err)
 	}
