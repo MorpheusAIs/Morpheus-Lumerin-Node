@@ -40,24 +40,34 @@ contract SessionStorage is ISessionStorage {
         return _getSessionsStorage().sessions[sessionId_];
     }
 
-    function getUserSessions(address user_, uint256 offset_, uint256 limit_) external view returns (bytes32[] memory) {
-        return _getSessionsStorage().userSessions[user_].part(offset_, limit_);
+    function getUserSessions(
+        address user_,
+        uint256 offset_,
+        uint256 limit_
+    ) external view returns (bytes32[] memory, uint256) {
+        EnumerableSet.Bytes32Set storage userSessions = _getSessionsStorage().userSessions[user_];
+
+        return (userSessions.part(offset_, limit_), userSessions.length());
     }
 
     function getProviderSessions(
         address provider_,
         uint256 offset_,
         uint256 limit_
-    ) external view returns (bytes32[] memory) {
-        return _getSessionsStorage().providerSessions[provider_].part(offset_, limit_);
+    ) external view returns (bytes32[] memory, uint256) {
+        EnumerableSet.Bytes32Set storage providerSessions = _getSessionsStorage().providerSessions[provider_];
+
+        return (providerSessions.part(offset_, limit_), providerSessions.length());
     }
 
     function getModelSessions(
         bytes32 modelId_,
         uint256 offset_,
         uint256 limit_
-    ) external view returns (bytes32[] memory) {
-        return _getSessionsStorage().modelSessions[modelId_].part(offset_, limit_);
+    ) external view returns (bytes32[] memory, uint256) {
+        EnumerableSet.Bytes32Set storage modelSessions = _getSessionsStorage().modelSessions[modelId_];
+
+        return (modelSessions.part(offset_, limit_), modelSessions.length());
     }
 
     function getPools() external view returns (Pool[] memory) {

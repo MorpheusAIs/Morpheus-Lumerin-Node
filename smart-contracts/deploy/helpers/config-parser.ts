@@ -11,6 +11,7 @@ export type Config = {
   marketplaceBidFee: string;
   marketplaceMinBidPricePerSecond: string;
   marketplaceMaxBidPricePerSecond: string;
+  delegateRegistry: string;
 };
 
 export function parseConfig(): Config {

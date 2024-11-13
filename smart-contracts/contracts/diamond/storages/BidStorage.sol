@@ -32,28 +32,40 @@ contract BidStorage is IBidStorage {
         address provider_,
         uint256 offset_,
         uint256 limit_
-    ) external view returns (bytes32[] memory) {
-        return _getBidsStorage().providerActiveBids[provider_].part(offset_, limit_);
+    ) external view returns (bytes32[] memory, uint256) {
+        EnumerableSet.Bytes32Set storage providerActiveBids = _getBidsStorage().providerActiveBids[provider_];
+
+        return (providerActiveBids.part(offset_, limit_), providerActiveBids.length());
     }
 
     function getModelActiveBids(
         bytes32 modelId_,
         uint256 offset_,
         uint256 limit_
-    ) external view returns (bytes32[] memory) {
-        return _getBidsStorage().modelActiveBids[modelId_].part(offset_, limit_);
+    ) external view returns (bytes32[] memory, uint256) {
+        EnumerableSet.Bytes32Set storage modelActiveBids = _getBidsStorage().modelActiveBids[modelId_];
+
+        return (modelActiveBids.part(offset_, limit_), modelActiveBids.length());
     }
 
     function getProviderBids(
         address provider_,
         uint256 offset_,
         uint256 limit_
-    ) external view returns (bytes32[] memory) {
-        return _getBidsStorage().providerBids[provider_].part(offset_, limit_);
+    ) external view returns (bytes32[] memory, uint256) {
+        EnumerableSet.Bytes32Set storage providerBids = _getBidsStorage().providerBids[provider_];
+
+        return (providerBids.part(offset_, limit_), providerBids.length());
     }
 
-    function getModelBids(bytes32 modelId_, uint256 offset_, uint256 limit_) external view returns (bytes32[] memory) {
-        return _getBidsStorage().modelBids[modelId_].part(offset_, limit_);
+    function getModelBids(
+        bytes32 modelId_,
+        uint256 offset_,
+        uint256 limit_
+    ) external view returns (bytes32[] memory, uint256) {
+        EnumerableSet.Bytes32Set storage modelBids = _getBidsStorage().modelBids[modelId_];
+
+        return (modelBids.part(offset_, limit_), modelBids.length());
     }
 
     function getToken() external view returns (address) {

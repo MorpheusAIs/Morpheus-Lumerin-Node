@@ -8,10 +8,12 @@ import {OwnableDiamondStorage} from "../presets/OwnableDiamondStorage.sol";
 
 import {BidStorage} from "../storages/BidStorage.sol";
 import {ProviderStorage} from "../storages/ProviderStorage.sol";
+import {DelegationStorage} from "../storages/DelegationStorage.sol";
 
 import {IProviderRegistry} from "../../interfaces/facets/IProviderRegistry.sol";
+import {IDelegateRegistry} from "../../interfaces/deps/IDelegateRegistry.sol";
 
-contract ProviderRegistry is IProviderRegistry, OwnableDiamondStorage, ProviderStorage, BidStorage {
+contract ProviderRegistry is IProviderRegistry, OwnableDiamondStorage, ProviderStorage, BidStorage, DelegationStorage {
     using EnumerableSet for EnumerableSet.AddressSet;
     using SafeERC20 for IERC20;
 
@@ -24,15 +26,16 @@ contract ProviderRegistry is IProviderRegistry, OwnableDiamondStorage, ProviderS
         emit ProviderMinimumStakeUpdated(providerMinimumStake_);
     }
 
-    function providerRegister(uint256 amount_, string calldata endpoint_) external {
-        BidsStorage storage bidsStorage = _getBidsStorage();
+    function providerRegister(address provider_, uint256 amount_, string calldata endpoint_) external {
+        _validateDelegatee(_msgSender(), provider_, DELEGATION_RULES_PROVIDER);
 
+        BidsStorage storage bidsStorage = _getBidsStorage();
         if (amount_ > 0) {
-            IERC20(bidsStorage.token).safeTransferFrom(_msgSender(), address(this), amount_);
+            IERC20(bidsStorage.token).safeTransferFrom(provider_, address(this), amount_);
         }
 
         PovidersStorage storage providersStorage = _getProvidersStorage();
-        Provider storage provider = providersStorage.providers[_msgSender()];
+        Provider storage provider = providersStorage.providers[provider_];
 
         uint256 newStake_ = provider.stake + amount_;
         uint256 minStake_ = providersStorage.providerMinimumStake;
@@ -50,13 +53,13 @@ contract ProviderRegistry is IProviderRegistry, OwnableDiamondStorage, ProviderS
         provider.endpoint = endpoint_;
         provider.stake = newStake_;
 
-        providersStorage.activeProviders.add(_msgSender());
+        providersStorage.activeProviders.add(provider_);
 
-        emit ProviderRegistered(_msgSender());
+        emit ProviderRegistered(provider_);
     }
 
-    function providerDeregister() external {
-        address provider_ = _msgSender();
+    function providerDeregister(address provider_) external {
+        _validateDelegatee(_msgSender(), provider_, DELEGATION_RULES_PROVIDER);
 
         PovidersStorage storage providersStorage = _getProvidersStorage();
         Provider storage provider = providersStorage.providers[provider_];
@@ -85,32 +88,6 @@ contract ProviderRegistry is IProviderRegistry, OwnableDiamondStorage, ProviderS
 
         emit ProviderDeregistered(provider_);
     }
-
-    // /**
-    //  *
-    //  * @notice Withdraws stake from a provider after it has been deregistered
-    //  * Allows to withdraw the stake after provider reward period has ended
-    //  */
-    // function providerWithdrawStake() external {
-    //     Provider storage provider = providers(_msgSender());
-
-    //     if (!provider.isDeleted) {
-    //         revert ProviderNotDeregistered();
-    //     }
-    //     if (provider.stake == 0) {
-    //         revert ProviderNoStake();
-    //     }
-
-    //     uint256 withdrawAmount_ = _getWithdrawAmount(provider);
-    //     if (withdrawAmount_ == 0) {
-    //         revert ProviderNothingToWithdraw();
-    //     }
-
-    //     provider.stake -= withdrawAmount_;
-    //     getToken().safeTransfer(_msgSender(), withdrawAmount_);
-
-    //     emit ProviderWithdrawn(_msgSender(), withdrawAmount_);
-    // }
 
     /**
      * @notice Returns the withdrawable stake for a provider

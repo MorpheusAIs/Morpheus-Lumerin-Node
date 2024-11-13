@@ -36,7 +36,7 @@ interface IProviderStorage {
      * @param offset_ Offset for the pagination.
      * @param limit_ Number of entities to return.
      */
-    function getActiveProviders(uint256 offset_, uint256 limit_) external view returns (address[] memory);
+    function getActiveProviders(uint256 offset_, uint256 limit_) external view returns (address[] memory, uint256);
 
     /**
      * The function returns provider status, active or not.

@@ -4,7 +4,10 @@ import { Fragment } from 'ethers';
 import { parseConfig } from './helpers/config-parser';
 
 import {
+  Delegation,
+  Delegation__factory,
   IBidStorage__factory,
+  IDelegation__factory,
   IMarketplace__factory,
   IModelRegistry__factory,
   IProviderRegistry__factory,
@@ -40,6 +43,7 @@ module.exports = async function (deployer: Deployer) {
       LinearDistributionIntervalDecrease: ldid,
     },
   });
+  let delegationFacet = await deployer.deploy(Delegation__factory);
 
   await lumerinDiamond['diamondCut((address,uint8,bytes4[])[])']([
     {
@@ -84,6 +88,13 @@ module.exports = async function (deployer: Deployer) {
         .fragments.filter(Fragment.isFunction)
         .map((f) => f.selector),
     },
+    {
+      facetAddress: delegationFacet,
+      action: FacetAction.Add,
+      functionSelectors: IDelegation__factory.createInterface()
+        .fragments.filter(Fragment.isFunction)
+        .map((f) => f.selector),
+    },
   ]);
 
   providerRegistryFacet = providerRegistryFacet.attach(lumerinDiamond.target) as ProviderRegistry;
@@ -98,6 +109,8 @@ module.exports = async function (deployer: Deployer) {
   );
   sessionRouterFacet = sessionRouterFacet.attach(lumerinDiamond.target) as SessionRouter;
   await sessionRouterFacet.__SessionRouter_init(config.fundingAccount, 7 * DAY, config.pools);
+  delegationFacet = delegationFacet.attach(lumerinDiamond.target) as Delegation;
+  await delegationFacet.__Delegation_init(config.delegateRegistry);
 
   await providerRegistryFacet.providerSetMinStake(config.providerMinStake);
   await modelRegistryFacet.modelSetMinStake(config.modelMinStake);
