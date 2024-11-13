@@ -47,11 +47,17 @@ func (g *Marketplace) PostModelBid(opts *bind.TransactOpts, model common.Hash, p
 		return common.Hash{}, lib.TryConvertGethError(err)
 	}
 
-	if receipt.Status != 1 {
-		return receipt.TxHash, fmt.Errorf("Transaction failed")
+	for _, log := range receipt.Logs {
+		event, err := g.marketplace.ParseMarketplaceBidPosted(*log)
+		if err == nil {
+			bidId, errBid := g.marketplace.GetBidId(&bind.CallOpts{Context: opts.Context}, event.Provider, event.ModelId, event.Nonce)
+			if errBid == nil {
+				return bidId, nil
+			}
+		}
 	}
 
-	return receipt.TxHash, nil
+	return common.Hash{}, nil
 }
 
 func (g *Marketplace) DeleteBid(opts *bind.TransactOpts, bidID common.Hash) (common.Hash, error) {
