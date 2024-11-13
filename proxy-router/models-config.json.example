@@ -2,7 +2,7 @@
   "0x0000000000000000000000000000000000000000000000000000000000000000": {
     "modelName": "llama2",
     "apiType": "openai",
-    "apiUrl": "http://localhost:11434/v1"
+    "apiUrl": "http://localhost:8080/v1"
   },
   "0x0000000000000000000000000000000000000000000000000000000000000001": {
     "modelName": "v1-5-pruned-emaonly.safetensors [d7049739]",
