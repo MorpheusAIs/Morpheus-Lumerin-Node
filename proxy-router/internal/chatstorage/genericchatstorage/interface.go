@@ -39,8 +39,11 @@ func (h *ChatHistory) AppendChatHistory(req *openai.ChatCompletionRequest) *open
 	}
 
 	messagesWithHistory = append(messagesWithHistory, req.Messages...)
-	req.Messages = messagesWithHistory
-	return req
+
+	// superficial copy to avoid modifying the original request
+	newReq := *req
+	newReq.Messages = messagesWithHistory
+	return &newReq
 }
 
 type ChatMessage struct {
