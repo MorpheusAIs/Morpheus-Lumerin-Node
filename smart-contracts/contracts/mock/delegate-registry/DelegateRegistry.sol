@@ -62,7 +62,12 @@ contract DelegateRegistry is IDelegateRegistry {
     }
 
     /// @inheritdoc IDelegateRegistry
-    function delegateContract(address to, address contract_, bytes32 rights, bool enable) external payable override returns (bytes32 hash) {
+    function delegateContract(
+        address to,
+        address contract_,
+        bytes32 rights,
+        bool enable
+    ) external payable override returns (bytes32 hash) {
         hash = Hashes.contractHash(msg.sender, rights, to, contract_);
         bytes32 location = Hashes.location(hash);
         address loadedFrom = _loadFrom(location);
@@ -81,7 +86,13 @@ contract DelegateRegistry is IDelegateRegistry {
     }
 
     /// @inheritdoc IDelegateRegistry
-    function delegateERC721(address to, address contract_, uint256 tokenId, bytes32 rights, bool enable) external payable override returns (bytes32 hash) {
+    function delegateERC721(
+        address to,
+        address contract_,
+        uint256 tokenId,
+        bytes32 rights,
+        bool enable
+    ) external payable override returns (bytes32 hash) {
         hash = Hashes.erc721Hash(msg.sender, rights, to, tokenId, contract_);
         bytes32 location = Hashes.location(hash);
         address loadedFrom = _loadFrom(location);
@@ -101,7 +112,12 @@ contract DelegateRegistry is IDelegateRegistry {
     }
 
     // @inheritdoc IDelegateRegistry
-    function delegateERC20(address to, address contract_, bytes32 rights, uint256 amount) external payable override returns (bytes32 hash) {
+    function delegateERC20(
+        address to,
+        address contract_,
+        bytes32 rights,
+        uint256 amount
+    ) external payable override returns (bytes32 hash) {
         hash = Hashes.erc20Hash(msg.sender, rights, to, contract_);
         console.log("msg.sender", msg.sender);
         bytes32 location = Hashes.location(hash);
@@ -126,7 +142,13 @@ contract DelegateRegistry is IDelegateRegistry {
     }
 
     /// @inheritdoc IDelegateRegistry
-    function delegateERC1155(address to, address contract_, uint256 tokenId, bytes32 rights, uint256 amount) external payable override returns (bytes32 hash) {
+    function delegateERC1155(
+        address to,
+        address contract_,
+        uint256 tokenId,
+        bytes32 rights,
+        uint256 amount
+    ) external payable override returns (bytes32 hash) {
         hash = Hashes.erc1155Hash(msg.sender, rights, to, tokenId, contract_);
         bytes32 location = Hashes.location(hash);
         address loadedFrom = _loadFrom(location);
@@ -176,11 +198,20 @@ contract DelegateRegistry is IDelegateRegistry {
     }
 
     /// @inheritdoc IDelegateRegistry
-    function checkDelegateForContract(address to, address from, address contract_, bytes32 rights) external view override returns (bool valid) {
+    function checkDelegateForContract(
+        address to,
+        address from,
+        address contract_,
+        bytes32 rights
+    ) external view override returns (bool valid) {
         if (!_invalidFrom(from)) {
-            valid = _validateFrom(Hashes.allLocation(from, "", to), from) || _validateFrom(Hashes.contractLocation(from, "", to, contract_), from);
+            valid =
+                _validateFrom(Hashes.allLocation(from, "", to), from) ||
+                _validateFrom(Hashes.contractLocation(from, "", to, contract_), from);
             if (!Ops.or(rights == "", valid)) {
-                valid = _validateFrom(Hashes.allLocation(from, rights, to), from) || _validateFrom(Hashes.contractLocation(from, rights, to, contract_), from);
+                valid =
+                    _validateFrom(Hashes.allLocation(from, rights, to), from) ||
+                    _validateFrom(Hashes.contractLocation(from, rights, to, contract_), from);
             }
         }
         assembly ("memory-safe") {
@@ -191,13 +222,23 @@ contract DelegateRegistry is IDelegateRegistry {
     }
 
     /// @inheritdoc IDelegateRegistry
-    function checkDelegateForERC721(address to, address from, address contract_, uint256 tokenId, bytes32 rights) external view override returns (bool valid) {
+    function checkDelegateForERC721(
+        address to,
+        address from,
+        address contract_,
+        uint256 tokenId,
+        bytes32 rights
+    ) external view override returns (bool valid) {
         if (!_invalidFrom(from)) {
-            valid = _validateFrom(Hashes.allLocation(from, "", to), from) || _validateFrom(Hashes.contractLocation(from, "", to, contract_), from)
-                || _validateFrom(Hashes.erc721Location(from, "", to, tokenId, contract_), from);
+            valid =
+                _validateFrom(Hashes.allLocation(from, "", to), from) ||
+                _validateFrom(Hashes.contractLocation(from, "", to, contract_), from) ||
+                _validateFrom(Hashes.erc721Location(from, "", to, tokenId, contract_), from);
             if (!Ops.or(rights == "", valid)) {
-                valid = _validateFrom(Hashes.allLocation(from, rights, to), from) || _validateFrom(Hashes.contractLocation(from, rights, to, contract_), from)
-                    || _validateFrom(Hashes.erc721Location(from, rights, to, tokenId, contract_), from);
+                valid =
+                    _validateFrom(Hashes.allLocation(from, rights, to), from) ||
+                    _validateFrom(Hashes.contractLocation(from, rights, to, contract_), from) ||
+                    _validateFrom(Hashes.erc721Location(from, rights, to, tokenId, contract_), from);
             }
         }
         assembly ("memory-safe") {
@@ -208,13 +249,20 @@ contract DelegateRegistry is IDelegateRegistry {
     }
 
     /// @inheritdoc IDelegateRegistry
-    function checkDelegateForERC20(address to, address from, address contract_, bytes32 rights) external view override returns (uint256 amount) {
+    function checkDelegateForERC20(
+        address to,
+        address from,
+        address contract_,
+        bytes32 rights
+    ) external view override returns (uint256 amount) {
         if (!_invalidFrom(from)) {
-            amount = (_validateFrom(Hashes.allLocation(from, "", to), from) || _validateFrom(Hashes.contractLocation(from, "", to, contract_), from))
+            amount = (_validateFrom(Hashes.allLocation(from, "", to), from) ||
+                _validateFrom(Hashes.contractLocation(from, "", to, contract_), from))
                 ? type(uint256).max
                 : _loadDelegationUint(Hashes.erc20Location(from, "", to, contract_), Storage.POSITIONS_AMOUNT);
             if (!Ops.or(rights == "", amount == type(uint256).max)) {
-                uint256 rightsBalance = (_validateFrom(Hashes.allLocation(from, rights, to), from) || _validateFrom(Hashes.contractLocation(from, rights, to, contract_), from))
+                uint256 rightsBalance = (_validateFrom(Hashes.allLocation(from, rights, to), from) ||
+                    _validateFrom(Hashes.contractLocation(from, rights, to, contract_), from))
                     ? type(uint256).max
                     : _loadDelegationUint(Hashes.erc20Location(from, rights, to, contract_), Storage.POSITIONS_AMOUNT);
                 amount = Ops.max(rightsBalance, amount);
@@ -227,15 +275,29 @@ contract DelegateRegistry is IDelegateRegistry {
     }
 
     /// @inheritdoc IDelegateRegistry
-    function checkDelegateForERC1155(address to, address from, address contract_, uint256 tokenId, bytes32 rights) external view override returns (uint256 amount) {
+    function checkDelegateForERC1155(
+        address to,
+        address from,
+        address contract_,
+        uint256 tokenId,
+        bytes32 rights
+    ) external view override returns (uint256 amount) {
         if (!_invalidFrom(from)) {
-            amount = (_validateFrom(Hashes.allLocation(from, "", to), from) || _validateFrom(Hashes.contractLocation(from, "", to, contract_), from))
+            amount = (_validateFrom(Hashes.allLocation(from, "", to), from) ||
+                _validateFrom(Hashes.contractLocation(from, "", to, contract_), from))
                 ? type(uint256).max
-                : _loadDelegationUint(Hashes.erc1155Location(from, "", to, tokenId, contract_), Storage.POSITIONS_AMOUNT);
+                : _loadDelegationUint(
+                    Hashes.erc1155Location(from, "", to, tokenId, contract_),
+                    Storage.POSITIONS_AMOUNT
+                );
             if (!Ops.or(rights == "", amount == type(uint256).max)) {
-                uint256 rightsBalance = (_validateFrom(Hashes.allLocation(from, rights, to), from) || _validateFrom(Hashes.contractLocation(from, rights, to, contract_), from))
+                uint256 rightsBalance = (_validateFrom(Hashes.allLocation(from, rights, to), from) ||
+                    _validateFrom(Hashes.contractLocation(from, rights, to, contract_), from))
                     ? type(uint256).max
-                    : _loadDelegationUint(Hashes.erc1155Location(from, rights, to, tokenId, contract_), Storage.POSITIONS_AMOUNT);
+                    : _loadDelegationUint(
+                        Hashes.erc1155Location(from, rights, to, tokenId, contract_),
+                        Storage.POSITIONS_AMOUNT
+                    );
                 amount = Ops.max(rightsBalance, amount);
             }
         }
@@ -270,14 +332,24 @@ contract DelegateRegistry is IDelegateRegistry {
     }
 
     /// @inheritdoc IDelegateRegistry
-    function getDelegationsFromHashes(bytes32[] calldata hashes) external view returns (Delegation[] memory delegations_) {
+    function getDelegationsFromHashes(
+        bytes32[] calldata hashes
+    ) external view returns (Delegation[] memory delegations_) {
         delegations_ = new Delegation[](hashes.length);
         unchecked {
             for (uint256 i = 0; i < hashes.length; ++i) {
                 bytes32 location = Hashes.location(hashes[i]);
                 address from = _loadFrom(location);
                 if (_invalidFrom(from)) {
-                    delegations_[i] = Delegation({type_: DelegationType.NONE, to: address(0), from: address(0), rights: "", amount: 0, contract_: address(0), tokenId: 0});
+                    delegations_[i] = Delegation({
+                        type_: DelegationType.NONE,
+                        to: address(0),
+                        from: address(0),
+                        rights: "",
+                        amount: 0,
+                        contract_: address(0),
+                        tokenId: 0
+                    });
                 } else {
                     (, address to, address contract_) = _loadDelegationAddresses(location);
                     delegations_[i] = Delegation({
@@ -377,7 +449,9 @@ contract DelegateRegistry is IDelegateRegistry {
     }
 
     /// @dev Helper function that takes an array of delegation hashes and returns an array of Delegation structs with their onchain information
-    function _getValidDelegationsFromHashes(bytes32[] storage hashes) internal view returns (Delegation[] memory delegations_) {
+    function _getValidDelegationsFromHashes(
+        bytes32[] storage hashes
+    ) internal view returns (Delegation[] memory delegations_) {
         uint256 count = 0;
         uint256 hashesLength = hashes.length;
         bytes32 hash;
@@ -408,7 +482,9 @@ contract DelegateRegistry is IDelegateRegistry {
     }
 
     /// @dev Helper function that takes an array of delegation hashes and returns an array of valid delegation hashes
-    function _getValidDelegationHashesFromHashes(bytes32[] storage hashes) internal view returns (bytes32[] memory validHashes) {
+    function _getValidDelegationHashesFromHashes(
+        bytes32[] storage hashes
+    ) internal view returns (bytes32[] memory validHashes) {
         uint256 count = 0;
         uint256 hashesLength = hashes.length;
         bytes32 hash;
@@ -456,7 +532,9 @@ contract DelegateRegistry is IDelegateRegistry {
     }
 
     /// @dev Helper function that loads the address for the delegation according to the packing rule for delegation storage
-    function _loadDelegationAddresses(bytes32 location) internal view returns (address from, address to, address contract_) {
+    function _loadDelegationAddresses(
+        bytes32 location
+    ) internal view returns (address from, address to, address contract_) {
         bytes32 firstSlot;
         bytes32 secondSlot;
         uint256 firstPacked = Storage.POSITIONS_FIRST_PACKED;

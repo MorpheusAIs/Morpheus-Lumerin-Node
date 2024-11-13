@@ -156,10 +156,10 @@ describe('Marketplace', () => {
       expect(await token.balanceOf(marketplace)).to.eq(wei(301));
       expect(await token.balanceOf(SECOND)).to.eq(wei(699));
 
-      expect(await marketplace.getProviderBids(SECOND, 0, 10)).deep.eq([bidId]);
-      expect(await marketplace.getModelBids(modelId1, 0, 10)).deep.eq([bidId]);
-      expect(await marketplace.getProviderActiveBids(SECOND, 0, 10)).deep.eq([bidId]);
-      expect(await marketplace.getModelActiveBids(modelId1, 0, 10)).deep.eq([bidId]);
+      expect(await marketplace.getProviderBids(SECOND, 0, 10)).deep.eq([[bidId], 1n]);
+      expect(await marketplace.getModelBids(modelId1, 0, 10)).deep.eq([[bidId], 1n]);
+      expect(await marketplace.getProviderActiveBids(SECOND, 0, 10)).deep.eq([[bidId], 1n]);
+      expect(await marketplace.getModelActiveBids(modelId1, 0, 10)).deep.eq([[bidId], 1n]);
     });
     it('should post a model bid from the delegatee address', async () => {
       await delegateRegistry
@@ -181,10 +181,10 @@ describe('Marketplace', () => {
       expect(await token.balanceOf(marketplace)).to.eq(wei(301));
       expect(await token.balanceOf(SECOND)).to.eq(wei(699));
 
-      expect(await marketplace.getProviderBids(SECOND, 0, 10)).deep.eq([bidId]);
-      expect(await marketplace.getModelBids(modelId1, 0, 10)).deep.eq([bidId]);
-      expect(await marketplace.getProviderActiveBids(SECOND, 0, 10)).deep.eq([bidId]);
-      expect(await marketplace.getModelActiveBids(modelId1, 0, 10)).deep.eq([bidId]);
+      expect(await marketplace.getProviderBids(SECOND, 0, 10)).deep.eq([[bidId], 1n]);
+      expect(await marketplace.getModelBids(modelId1, 0, 10)).deep.eq([[bidId], 1n]);
+      expect(await marketplace.getProviderActiveBids(SECOND, 0, 10)).deep.eq([[bidId], 1n]);
+      expect(await marketplace.getModelActiveBids(modelId1, 0, 10)).deep.eq([[bidId], 1n]);
     });
     it('should post few model bids', async () => {
       await setNextTime(300);
@@ -212,12 +212,12 @@ describe('Marketplace', () => {
       expect(await token.balanceOf(marketplace)).to.eq(wei(302));
       expect(await token.balanceOf(SECOND)).to.eq(wei(698));
 
-      expect(await marketplace.getProviderBids(SECOND, 0, 10)).deep.eq([bidId1, bidId2]);
-      expect(await marketplace.getModelBids(modelId1, 0, 10)).deep.eq([bidId1]);
-      expect(await marketplace.getModelBids(modelId2, 0, 10)).deep.eq([bidId2]);
-      expect(await marketplace.getProviderActiveBids(SECOND, 0, 10)).deep.eq([bidId1, bidId2]);
-      expect(await marketplace.getModelActiveBids(modelId1, 0, 10)).deep.eq([bidId1]);
-      expect(await marketplace.getModelActiveBids(modelId2, 0, 10)).deep.eq([bidId2]);
+      expect(await marketplace.getProviderBids(SECOND, 0, 10)).deep.eq([[bidId1, bidId2], 2n]);
+      expect(await marketplace.getModelBids(modelId1, 0, 10)).deep.eq([[bidId1], 1n]);
+      expect(await marketplace.getModelBids(modelId2, 0, 10)).deep.eq([[bidId2], 1n]);
+      expect(await marketplace.getProviderActiveBids(SECOND, 0, 10)).deep.eq([[bidId1, bidId2], 2n]);
+      expect(await marketplace.getModelActiveBids(modelId1, 0, 10)).deep.eq([[bidId1], 1n]);
+      expect(await marketplace.getModelActiveBids(modelId2, 0, 10)).deep.eq([[bidId2], 1n]);
     });
     it('should post a new model bid and delete an old bid when an old bid is active', async () => {
       await setNextTime(300);
@@ -240,10 +240,10 @@ describe('Marketplace', () => {
       expect(await token.balanceOf(marketplace)).to.eq(wei(302));
       expect(await token.balanceOf(SECOND)).to.eq(wei(698));
 
-      expect(await marketplace.getProviderBids(SECOND, 0, 10)).deep.eq([bidId1, bidId2]);
-      expect(await marketplace.getModelBids(modelId1, 0, 10)).deep.eq([bidId1, bidId2]);
-      expect(await marketplace.getProviderActiveBids(SECOND, 0, 10)).deep.eq([bidId2]);
-      expect(await marketplace.getModelActiveBids(modelId1, 0, 10)).deep.eq([bidId2]);
+      expect(await marketplace.getProviderBids(SECOND, 0, 10)).deep.eq([[bidId1, bidId2], 2]);
+      expect(await marketplace.getModelBids(modelId1, 0, 10)).deep.eq([[bidId1, bidId2], 2]);
+      expect(await marketplace.getProviderActiveBids(SECOND, 0, 10)).deep.eq([[bidId2], 1]);
+      expect(await marketplace.getModelActiveBids(modelId1, 0, 10)).deep.eq([[bidId2], 1]);
     });
     it('should post a new model bid and skip the old bid delete', async () => {
       await setNextTime(300);

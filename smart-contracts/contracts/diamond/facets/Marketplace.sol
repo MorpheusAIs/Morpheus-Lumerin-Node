@@ -60,8 +60,12 @@ contract Marketplace is
         emit MarketplaceBidMinMaxPriceUpdated(bidMinPricePerSecond_, bidMaxPricePerSecond_);
     }
 
-    function postModelBid(address provider_, bytes32 modelId_, uint256 pricePerSecond_) external returns (bytes32 bidId) {
-        _validateDelegatee(_msgSender(), provider_, DELEGATION_RULES_MARKETPLACE);        
+    function postModelBid(
+        address provider_,
+        bytes32 modelId_,
+        uint256 pricePerSecond_
+    ) external returns (bytes32 bidId) {
+        _validateDelegatee(_msgSender(), provider_, DELEGATION_RULES_MARKETPLACE);
 
         if (!getIsProviderActive(provider_)) {
             revert MarketplaceProviderNotFound();
@@ -112,7 +116,7 @@ contract Marketplace is
 
     function deleteModelBid(bytes32 bidId_) external {
         BidsStorage storage bidsStorage = _getBidsStorage();
-        _validateDelegatee(_msgSender(), bidsStorage.bids[bidId_].provider, DELEGATION_RULES_MARKETPLACE);        
+        _validateDelegatee(_msgSender(), bidsStorage.bids[bidId_].provider, DELEGATION_RULES_MARKETPLACE);
 
         if (!isBidActive(bidId_)) {
             revert MarketplaceActiveBidNotFound();
