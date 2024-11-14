@@ -47,7 +47,11 @@ const ModelSelectionModal = ({ isActive, handleClose, models, onChangeModel }) =
         handleClose();
     }
 
-    const filterdModels = search ? models.filter(m => m.Name.includes(search)) : models;
+    const sortedModels = models
+        .map(m => ({ ...m, isOnline: m.bids.some(b => b.ProviderData?.availabilityStatus != "disconnected") }))
+        .sort((a, b) => b.isOnline - a.isOnline);
+
+    const filterdModels = search ? sortedModels.filter(m => m.Name.toLowerCase().includes(search.toLowerCase())) : sortedModels;
 
     return (
         <Modal 
@@ -58,7 +62,7 @@ const ModelSelectionModal = ({ isActive, handleClose, models, onChangeModel }) =
             bodyProps={bodyProps}
         >
             <TitleWrapper>
-                <Title>Select Model</Title>
+                <Title>Select Model To Create Chat</Title>
             </TitleWrapper>
             <SearchContainer>
                 <InputGroup style={{ marginBottom: '15px' }}>

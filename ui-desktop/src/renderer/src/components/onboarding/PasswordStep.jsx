@@ -17,6 +17,7 @@ import Message from './Message';
 const PasswordMessage = styled(Message)`
   text-align: left;
   color: ${p => p.theme.colors.dark};
+  text-align: justify;
 `;
 
 const Green = styled.div`
@@ -28,19 +29,25 @@ const PasswordInputWrap = styled.div`
   position: relative;
 `;
 
+const SecondaryBtn = styled(Btn)`
+    border: 1px solid #20dc8e;
+    color: #20dc8e;
+    background: transparent;
+`
+
 const PasswordStep = props => {
   const [typed, setTyped] = useState(false);
   const [suggestion, setSuggestion] = useState('');
-  const onPasswordSubmit = e => {
+  const onPasswordSubmit = (e, useImportFlow) => {
     e.preventDefault();
-    props.onPasswordSubmit({ clearOnError: false });
+    props.onPasswordSubmit({ clearOnError: false, useImportFlow });
   };
   let tooltipTimeout;
 
   return (
-    <AltLayout title="Create a Password" data-testid="onboarding-container">
+    <AltLayout title="Let`s get started" data-testid="onboarding-container">
       <AltLayoutNarrow>
-        <form onSubmit={onPasswordSubmit} data-testid="pass-form">
+        <form data-testid="pass-form">
           <PasswordMessage>
             Enter a strong password until the meter turns <Green>green</Green>.
           </PasswordMessage>
@@ -90,9 +97,14 @@ const PasswordStep = props => {
             />
           </Sp>
           <Sp mt={6}>
-            <Btn block submit>
-              Continue
+            <Btn block onClick={(e) => onPasswordSubmit(e, false)}>
+              Create a new wallet
             </Btn>
+          </Sp>
+          <Sp style={{ marginTop: '10px'}}>
+            <SecondaryBtn block onClick={(e) => onPasswordSubmit(e, true)}>
+              Import an existing wallet
+            </SecondaryBtn>
           </Sp>
         </form>
       </AltLayoutNarrow>

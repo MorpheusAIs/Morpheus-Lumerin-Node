@@ -116,7 +116,7 @@ make run
 ```sh
 2024-08-07T11:35:49.116184	INFO	proxy state: running
 2024-08-07T11:35:49.116534	INFO	Wallet address: <your wallet address 0x.....>
-2024-08-07T11:35:49.116652	INFO	started watching events, address 0x8e19288d908b2d9F8D7C539c74C899808AC3dE45
+2024-08-07T11:35:49.116652	INFO	started watching events, address 0x10777866547c53cbd69b02c5c76369d7e24e7b10
 2024-08-07T11:35:49.116924	INFO	HTTP	http server is listening: 0.0.0.0:8082
 2024-08-07T11:35:49.116962	INFO	TCP	tcp server is listening: 0.0.0.0:3333
 ```

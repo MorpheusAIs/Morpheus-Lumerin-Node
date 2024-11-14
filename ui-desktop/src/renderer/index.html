@@ -27,7 +27,22 @@
       html {
         font-size: 10px;
       }
-  
+
+      ::-webkit-scrollbar {
+          background-color: #03160d;
+          width: 16px /* 20px / 16px */;
+      }
+
+      ::-webkit-scrollbar-thumb {
+          background-color: #20dc8e80;
+          border: 0.25em /* 4px / 16px */ solid #03160d;
+          border-radius: 16px /* 20px / 16px  #2c2c2c */;
+      }
+
+      ::-webkit-scrollbar-corner {
+        background-color: #03160d;
+      }
+      
       body {
         margin: 0;
         padding: 0;

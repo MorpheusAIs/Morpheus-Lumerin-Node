@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"crypto/rand"
 	"encoding/hex"
 	"errors"
 
@@ -63,4 +64,11 @@ func HexToHash(s string) (common.Hash, error) {
 
 func has0xPrefix(str string) bool {
 	return len(str) >= 2 && str[0] == '0' && (str[1] == 'x' || str[1] == 'X')
+}
+
+func GetRandomHash() (Hash, error) {
+	// generate random bytes
+	bytes := make([]byte, common.HashLength)
+	_, err := rand.Read(bytes)
+	return Hash{common.BytesToHash(bytes)}, err
 }

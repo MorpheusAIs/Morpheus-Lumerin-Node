@@ -36,3 +36,12 @@ test-integration:
 
 swagger:
 	swag fmt -g ./internal/handlers/httphandlers/http.go && swag init -g ./internal/handlers/httphandlers/http.go --parseInternal 
+
+mocks:
+	mockery
+
+reset-keychain:
+	go run cmd/main.go -app-reset-keychain
+
+update-bindings:
+	cd ../smart-contracts && yarn bindings-go && cp -r bindings/go/contracts/{diamond/facets/*,tokens/*,mock/tokens/*} ../proxy-router/internal/repositories/contracts/bindings

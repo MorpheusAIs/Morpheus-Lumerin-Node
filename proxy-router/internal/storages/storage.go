@@ -26,6 +26,16 @@ func NewStorage(log lib.ILogger, path string) *Storage {
 	return &Storage{db}
 }
 
+func NewTestStorage() *Storage {
+	opts := badger.DefaultOptions("")
+	opts.InMemory = true
+	db, err := badger.Open(opts)
+	if err != nil {
+		panic(err)
+	}
+	return &Storage{db}
+}
+
 func (s *Storage) Close() {
 	s.db.Close()
 }
@@ -48,6 +58,22 @@ func (s *Storage) Get(key []byte) ([]byte, error) {
 		return nil
 	})
 	return valCopy, err
+}
+
+func (s *Storage) GetPrefix(prefix []byte) ([][]byte, error) {
+	keys := make([][]byte, 0)
+	err := s.db.View(func(txn *badger.Txn) error {
+		it := txn.NewIterator(badger.IteratorOptions{PrefetchValues: false, Prefix: prefix})
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
+			k := item.KeyCopy(nil)
+			keys = append(keys, k)
+		}
+		return nil
+	})
+	return keys, err
 }
 
 func (s *Storage) Set(key, val []byte) error {

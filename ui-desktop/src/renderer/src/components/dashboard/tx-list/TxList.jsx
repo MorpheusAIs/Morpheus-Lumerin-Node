@@ -32,7 +32,7 @@ const Transactions = styled.div`
 `;
 
 const ListContainer = styled.div`
-  height: calc(100vh - 370px);
+  height: calc(100vh - 490px);
   border-radius: 0.375rem;
 
   background: rgba(255,255,255, 0.04);
@@ -86,7 +86,7 @@ export const TxList = ({
   return (
     <Container data-testid="tx-list">
       <Flex.Row grow="1">
-        <Title>Transactions</Title>
+        <Title>Last Transactions</Title>
       </Flex.Row>
       <Transactions>
         <ItemFilter
@@ -94,16 +94,17 @@ export const TxList = ({
           items={transactions.filter(({ txType }) => txType)}
         >
           {({ filteredItems, onFilterChange, activeFilter }) => {
-            const rowCount = hasNextPage
-              ? filteredItems.length + 1
-              : filteredItems.length;
+            // const rowCount = hasNextPage
+            //   ? filteredItems.length + 1
+            //   : filteredItems.length;
+            const rowCount = filteredItems.length;
 
             // Only load 1 page of items at a time.
             // Pass an empty callback to InfiniteLoader in case it asks us to load more than once.
             const loadMoreRows = nextPageLoading
               ? () => {}
               : () => {
-                load();
+                // load();
                 };
 
             // Every row is loaded except for our loading indicator row.
@@ -124,9 +125,10 @@ export const TxList = ({
                   />
                 </TxRowContainer>
               ) : (
-                <LoadingRov key={key} style={style}>
-                  Loading... <Spinner></Spinner>
-                </LoadingRov>
+                null
+                // <LoadingRov key={key} style={style}>
+                //   Loading... <Spinner></Spinner>
+                // </LoadingRov>
               );
 
             return (
@@ -147,18 +149,9 @@ export const TxList = ({
                       <NoTxPlaceholder />
                     ))}
                   {+transactions.length > 0 && (
-                    <InfiniteLoader
-                      isRowLoaded={isRowLoaded}
-                      loadMoreRows={loadMoreRows}
-                      rowCount={rowCount}
-                      threshold={activeFilter ? 1 : 10}
-                    >
-                      {({ onRowsRendered, registerChild }) => (
-                        <AutoSizer>
+                    <AutoSizer>
                           {({ width, height }) => (
                             <RVList
-                              ref={registerChild}
-                              onRowsRendered={onRowsRendered}
                               rowRenderer={rowRenderer}
                               rowHeight={66}
                               rowCount={rowCount}
@@ -167,8 +160,28 @@ export const TxList = ({
                             />
                           )}
                         </AutoSizer>
-                      )}
-                    </InfiniteLoader>
+                    // <InfiniteLoader
+                    //   isRowLoaded={isRowLoaded}
+                    //   loadMoreRows={loadMoreRows}
+                    //   rowCount={rowCount}
+                    //   threshold={activeFilter ? 1 : 10}
+                    // >
+                    //   {({ onRowsRendered, registerChild }) => (
+                    //     <AutoSizer>
+                    //       {({ width, height }) => (
+                    //         <RVList
+                    //           ref={registerChild}
+                    //           onRowsRendered={onRowsRendered}
+                    //           rowRenderer={rowRenderer}
+                    //           rowHeight={66}
+                    //           rowCount={rowCount}
+                    //           height={height || 500} // defaults for tests
+                    //           width={width || 500} // defaults for tests
+                    //         />
+                    //       )}
+                    //     </AutoSizer>
+                    //   )}
+                    // </InfiniteLoader>
                   )}
                 </ListContainer>
               </React.Fragment>

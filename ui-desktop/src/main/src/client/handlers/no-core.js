@@ -12,10 +12,11 @@ import {
   getDefaultCurrencySetting,
   setDefaultCurrencySetting,
   getKey,
-  setKey
+  setKey,
+  getFailoverSetting,
+  setFailoverSetting
 } from '../settings'
 import apiGateway from '../apiGateway';
-import chatHistory from '../history/chat-history';
 
 const validatePassword = (data) => auth.isValidPassword(data)
 
@@ -115,6 +116,7 @@ export default {
   setProfitSettings,
   getAutoAdjustPriceData,
   setAutoAdjustPriceData,
+  getFailoverSetting,
+  setFailoverSetting,
   ...apiGateway,
-  ...chatHistory
 }

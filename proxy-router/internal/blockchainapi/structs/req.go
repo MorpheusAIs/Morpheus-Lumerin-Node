@@ -33,6 +33,11 @@ type QueryOffsetLimit struct {
 	Limit  uint8      `form:"limit,default=10" binding:"omitempty" validate:"number"`
 }
 
+type QueryOffsetLimitNoDefault struct {
+	Offset lib.BigInt `form:"offset,default=0" binding:"omitempty" validate:"number"`
+	Limit  uint8      `form:"limit,default=0" binding:"omitempty" validate:"number"`
+}
+
 type QueryPageLimit struct {
 	Page  uint64 `form:"page,default=0"   binding:"omitempty" validate:"number"`
 	Limit uint8  `form:"limit,default=10" binding:"omitempty" validate:"number"`
@@ -47,13 +52,21 @@ type QueryApprove struct {
 	Amount *lib.BigInt `form:"amount" binding:"required" validate:"number,gt=0"`
 }
 
-type QueryUserOrProvider struct {
-	User     lib.Address `form:"user" binding:"omitempty" validate:"eth_addr"`
-	Provider lib.Address `form:"provider" binding:"omitempty" validate:"eth_addr"`
+type QueryUser struct {
+	User lib.Address `form:"user" binding:"required" validate:"eth_addr"`
+}
+
+type QueryProvider struct {
+	Provider lib.Address `form:"provider" binding:"required" validate:"eth_addr"`
 }
 
 type OpenSessionWithDurationRequest struct {
 	SessionDuration *lib.BigInt `json:"sessionDuration"`
+}
+
+type OpenSessionWithFailover struct {
+	SessionDuration *lib.BigInt `json:"sessionDuration"`
+	Failover        bool        `json:"failover" binding:"omitempty"`
 }
 
 type CreateBidRequest struct {

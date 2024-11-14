@@ -5,6 +5,7 @@ const Message = styled.div`
   font-weight: 500;
   line-height: 1.5;
   color: ${p => p.theme.colors.dark};
+  text-align: justify;
 
   & span {
     font-size: 13px;
