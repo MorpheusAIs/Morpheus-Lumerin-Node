@@ -619,13 +619,8 @@ func (s *BlockchainService) GetSessions(ctx *gin.Context, user, provider common.
 	return mapSessions(ids, sessions, bids), nil
 }
 
-func (s *BlockchainService) GetSessionsIds(ctx *gin.Context, user, provider common.Address, offset *big.Int, limit uint8) ([]common.Hash, error) {
-	var (
-		ids [][32]byte
-		err error
-	)
-
-	ids, err = s.sessionRouter.GetSessionsIdsByUser(ctx, common.HexToAddress(ctx.Query("user")), offset, limit)
+func (s *BlockchainService) GetSessionsIds(ctx context.Context, user, provider common.Address, offset *big.Int, limit uint8) ([]common.Hash, error) {
+	ids, err := s.sessionRouter.GetSessionsIdsByUser(ctx, user, offset, limit)
 
 	if err != nil {
 		return nil, err
