@@ -8,6 +8,8 @@ import (
 	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/providerregistry"
+	mc "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/multicall"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -20,40 +22,62 @@ type ProviderRegistry struct {
 	nonce uint64
 
 	// deps
-	providerRegistry *providerregistry.ProviderRegistry
-	client           i.ContractBackend
-	log              lib.ILogger
+	providerRegistry    *providerregistry.ProviderRegistry
+	providerRegistryAbi *abi.ABI
+	client              i.ContractBackend
+	multicall           mc.MulticallBackend
+	log                 lib.ILogger
 }
 
-func NewProviderRegistry(providerRegistryAddr common.Address, client i.ContractBackend, log lib.ILogger) *ProviderRegistry {
+func NewProviderRegistry(providerRegistryAddr common.Address, client i.ContractBackend, multicall mc.MulticallBackend, log lib.ILogger) *ProviderRegistry {
 	pr, err := providerregistry.NewProviderRegistry(providerRegistryAddr, client)
+	if err != nil {
+		panic("invalid provider registry ABI")
+	}
+	providerRegistryAbi, err := providerregistry.ProviderRegistryMetaData.GetAbi()
 	if err != nil {
 		panic("invalid provider registry ABI")
 	}
 	return &ProviderRegistry{
 		providerRegistry:     pr,
 		providerRegistryAddr: providerRegistryAddr,
+		providerRegistryAbi:  providerRegistryAbi,
+		multicall:            multicall,
 		client:               client,
 		log:                  log,
 	}
 }
 
 func (g *ProviderRegistry) GetAllProviders(ctx context.Context) ([]common.Address, []providerregistry.IProviderStorageProvider, error) {
-	ids, err := g.providerRegistry.GetActiveProviders(&bind.CallOpts{Context: ctx}, big.NewInt(0), big.NewInt(100))
+	batchSize := 100
+	offset := big.NewInt(0)
+	var allIDs []common.Address
+	var allProviders []providerregistry.IProviderStorageProvider
+	for {
+		ids, providers, err := g.GetProviders(ctx, offset, uint8(batchSize))
+		if err != nil {
+			return nil, nil, err
+		}
+		if len(ids) == 0 {
+			break
+		}
+		allProviders = append(allProviders, providers...)
+		allIDs = append(allIDs, ids...)
+		if len(ids) < batchSize {
+			break
+		}
+		offset.Add(offset, big.NewInt(int64(batchSize)))
+	}
+	return allIDs, allProviders, nil
+}
+
+func (g *ProviderRegistry) GetProviders(ctx context.Context, offset *big.Int, limit uint8) ([]common.Address, []providerregistry.IProviderStorageProvider, error) {
+	ids, err := g.providerRegistry.GetActiveProviders(&bind.CallOpts{Context: ctx}, offset, big.NewInt(int64(limit)))
 	if err != nil {
 		return nil, nil, err
 	}
 
-	providers := make([]providerregistry.IProviderStorageProvider, 0, len(ids))
-	for _, id := range ids {
-		provider, err := g.providerRegistry.GetProvider(&bind.CallOpts{Context: ctx}, id)
-		if err != nil {
-			return nil, nil, err
-		}
-		providers = append(providers, provider)
-	}
-
-	return ids, providers, nil
+	return g.getMultipleProviders(ctx, ids)
 }
 
 func (g *ProviderRegistry) CreateNewProvider(opts *bind.TransactOpts, addStake *lib.BigInt, endpoint string) error {
@@ -103,4 +127,16 @@ func (g *ProviderRegistry) GetProviderById(ctx context.Context, id common.Addres
 	}
 
 	return &provider, nil
+}
+
+func (g *ProviderRegistry) getMultipleProviders(ctx context.Context, IDs []common.Address) ([]common.Address, []providerregistry.IProviderStorageProvider, error) {
+	args := make([][]interface{}, len(IDs))
+	for i, id := range IDs {
+		args[i] = []interface{}{id}
+	}
+	providers, err := mc.Batch[providerregistry.IProviderStorageProvider](ctx, g.multicall, g.providerRegistryAbi, g.providerRegistryAddr, "getProvider", args)
+	if err != nil {
+		return nil, nil, err
+	}
+	return IDs, providers, nil
 }
