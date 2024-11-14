@@ -1,34 +1,13 @@
 package aiengine
 
 import (
-	"net/http"
+	"context"
+
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
+	"github.com/sashabaranov/go-openai"
 )
 
-type ResponderFlusher interface {
-	http.ResponseWriter
-	http.Flusher
-}
-
-type ProdiaGenerationResult struct {
-	Job      string `json:"job"`
-	Status   string `json:"status"`
-	ImageUrl string `json:"imageUrl" binding:"omitempty"`
-}
-
-type ProdiaGenerationRequest struct {
-	Model  string `json:"model"`
-	Prompt string `json:"prompt"`
-	ApiUrl string `json:"apiUrl"`
-	ApiKey string `json:"apiKey"`
-}
-
-type CompletionCallback func(completion interface{}) error
-
-type ProdiaImageGenerationCallback func(completion *ProdiaGenerationResult) error
-
-type LocalModel struct {
-	Id      string
-	Name    string
-	Model   string
-	ApiType string
+type AIEngineStream interface {
+	Prompt(ctx context.Context, prompt *openai.ChatCompletionRequest, cb genericchatstorage.CompletionCallback) error
+	ApiType() string
 }

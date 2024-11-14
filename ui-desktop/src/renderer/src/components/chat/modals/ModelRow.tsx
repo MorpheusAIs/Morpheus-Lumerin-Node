@@ -100,7 +100,12 @@ function ModelRow(props) {
     const modelId = props?.model?.Id || '';
     const hasLocal = props?.model?.hasLocal;
     const hasBids = Boolean(bids.length);
-    const lastAvailabilityCheck: Date | null = bids.map(b => new Date(b.ProviderData.availabilityUpdatedAt))[0] ?? null;
+    const lastAvailabilityCheck: Date = (() => {
+        if(!bids?.length) {
+            return new Date();
+        }
+        return bids.map(b => new Date(b.ProviderData?.availabilityUpdatedAt ?? new Date()))[0];
+    })();
 
     const [selected, changeSelected] = useState<any>();
     const [useSelect, setUseSelect] = useState<boolean>();
@@ -143,7 +148,10 @@ function ModelRow(props) {
         <RowContainer useSelect={useSelect}>
             <ModelNameContainer>
                 { props?.model?.Name } 
-                { !props?.model?.isOnline && <DisconnectedIcon data-rh-negative data-rh={`Last seen offline at ${lastAvailabilityCheck?.toLocaleTimeString()}`} /> }
+                { 
+                    !props?.model?.isOnline && 
+                    <DisconnectedIcon data-rh-negative data-rh={`Last seen offline at ${lastAvailabilityCheck?.toLocaleTimeString()}`} /> 
+                }
             </ModelNameContainer>
             <PriceContainer hasLocal={hasLocal}>
                 {

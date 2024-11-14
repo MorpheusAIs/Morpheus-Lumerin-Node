@@ -22,10 +22,6 @@ type Config struct {
 	App struct {
 		ResetKeychain bool `env:"APP_RESET_KEYCHAIN" flag:"app-reset-keychain" desc:"reset keychain on start"`
 	}
-	AIEngine struct {
-		OpenAIBaseURL string `env:"OPENAI_BASE_URL"     flag:"open-ai-base-url"   validate:"required,url"`
-		OpenAIKey     string `env:"OPENAI_API_KEY"      flag:"open-ai-api-key"`
-	}
 	Blockchain struct {
 		ChainID          int           `env:"ETH_NODE_CHAIN_ID"  flag:"eth-node-chain-id"  validate:"number"`
 		EthNodeAddress   string        `env:"ETH_NODE_ADDRESS"   flag:"eth-node-address"   validate:"omitempty,url"`
@@ -55,11 +51,12 @@ type Config struct {
 		LevelBadger     string `env:"LOG_LEVEL_BADGER"     flag:"log-level-badger"     validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
 	}
 	Proxy struct {
-		Address           string `env:"PROXY_ADDRESS" flag:"proxy-address" validate:"required,hostname_port"`
-		StoragePath       string `env:"PROXY_STORAGE_PATH"    flag:"proxy-storage-path"    validate:"omitempty,dirpath" desc:"enables file storage and sets the folder path"`
-		StoreChatContext  bool   `env:"PROXY_STORE_CHAT_CONTEXT" flag:"proxy-store-chat-context" desc:"store chat context in the proxy storage"`
-		ModelsConfigPath  string `env:"MODELS_CONFIG_PATH" flag:"models-config-path" validate:"omitempty"`
-		ProviderAllowList string `env:"PROVIDER_ALLOW_LIST" flag:"provider-allow-list" validate:"omitempty" desc:"comma separated list of provider addresses allowed to open session with"`
+		Address            string    `env:"PROXY_ADDRESS" flag:"proxy-address" validate:"required,hostname_port"`
+		StoragePath        string    `env:"PROXY_STORAGE_PATH"    flag:"proxy-storage-path"    validate:"omitempty,dirpath" desc:"enables file storage and sets the folder path"`
+		StoreChatContext   *lib.Bool `env:"PROXY_STORE_CHAT_CONTEXT" flag:"proxy-store-chat-context" desc:"store chat context in the proxy storage"`
+		ForwardChatContext *lib.Bool `env:"PROXY_FORWARD_CHAT_CONTEXT" flag:"proxy-forward-chat-context" desc:"prepend whole stored message history to the prompt"`
+		ModelsConfigPath   string    `env:"MODELS_CONFIG_PATH" flag:"models-config-path" validate:"omitempty"`
+		ProviderAllowList  string    `env:"PROVIDER_ALLOW_LIST" flag:"provider-allow-list" validate:"omitempty" desc:"comma separated list of provider addresses allowed to open session with"`
 	}
 	System struct {
 		Enable           bool   `env:"SYS_ENABLE"              flag:"sys-enable" desc:"enable system level configuration adjustments"`
@@ -156,9 +153,16 @@ func (cfg *Config) SetDefaults() {
 			cfg.Web.PublicUrl = fmt.Sprintf("http://%s", strings.Replace(cfg.Web.Address, "0.0.0.0", "localhost", -1))
 		}
 	}
-
 	if cfg.Proxy.StoragePath == "" {
 		cfg.Proxy.StoragePath = "./data/badger/"
+	}
+	if cfg.Proxy.StoreChatContext.Bool == nil {
+		val := true
+		cfg.Proxy.StoreChatContext = &lib.Bool{Bool: &val}
+	}
+	if cfg.Proxy.ForwardChatContext.Bool == nil {
+		val := true
+		cfg.Proxy.ForwardChatContext = &lib.Bool{Bool: &val}
 	}
 }
 
@@ -189,6 +193,11 @@ func (cfg *Config) GetSanitized() interface{} {
 	publicCfg.Log.LevelRPC = cfg.Log.LevelRPC
 
 	publicCfg.Proxy.Address = cfg.Proxy.Address
+	publicCfg.Proxy.ModelsConfigPath = cfg.Proxy.ModelsConfigPath
+	publicCfg.Proxy.ProviderAllowList = cfg.Proxy.ProviderAllowList
+	publicCfg.Proxy.StoragePath = cfg.Proxy.StoragePath
+	publicCfg.Proxy.StoreChatContext = cfg.Proxy.StoreChatContext
+	publicCfg.Proxy.ForwardChatContext = cfg.Proxy.ForwardChatContext
 
 	publicCfg.System.Enable = cfg.System.Enable
 	publicCfg.System.LocalPortRange = cfg.System.LocalPortRange

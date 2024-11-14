@@ -60,6 +60,7 @@ func (c *BlockchainController) RegisterRoutes(r interfaces.Router) {
 	r.GET("/proxy/sessions/:id/providerClaimableBalance", c.getProviderClaimableBalance)
 	r.POST("/proxy/sessions/:id/providerClaim", c.claimProviderBalance)
 	r.GET("/blockchain/sessions/user", c.getSessionsForUser)
+	r.GET("/blockchain/sessions/user/ids", c.getSessionsIdsForUser)
 	r.GET("/blockchain/sessions/provider", c.getSessionsForProvider)
 	r.GET("/blockchain/sessions/:id", c.getSession)
 	r.POST("/blockchain/sessions", c.openSession)
@@ -676,6 +677,44 @@ func (c *BlockchainController) getSessionsForUser(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, structs.SessionsRes{Sessions: sessions})
+	return
+}
+
+// GetSessionsIds godoc
+//
+//	@Summary		Get Sessions for User
+//	@Description	Get sessions from blockchain by user
+//	@Tags			sessions
+//	@Produce		json
+//	@Param			offset	query		string	false	"Offset"
+//	@Param			limit	query		string	false	"Limit"
+//	@Param			user	query		string	true	"User address"
+//	@Success		200		{object}	structs.SessionsRes
+//	@Router			/blockchain/sessions/user/ids [get]
+func (c *BlockchainController) getSessionsIdsForUser(ctx *gin.Context) {
+	offset, limit, err := getOffsetLimit(ctx)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	var req structs.QueryUser
+	err = ctx.ShouldBindQuery(&req)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	sessionsIds, err := c.service.GetSessionsIds(ctx, req.User.Address, common.Address{}, offset, limit)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, sessionsIds)
 	return
 }
 

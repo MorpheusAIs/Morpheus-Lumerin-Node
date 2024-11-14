@@ -330,21 +330,19 @@ func (s *BlockchainService) CreateNewBid(ctx context.Context, modelID common.Has
 		return nil, lib.WrapError(ErrTxOpts, err)
 	}
 
-	_, err = s.marketplace.PostModelBid(transactOpt, modelID, &pricePerSecond.Int)
+	newBidId, err := s.marketplace.PostModelBid(transactOpt, modelID, &pricePerSecond.Int)
 	if err != nil {
 		return nil, lib.WrapError(ErrSendTx, err)
 	}
+	s.log.Infof("Created new Bid with Id %s", newBidId)
 
-	ids, bids, err := s.marketplace.GetBidsByProvider(ctx, transactOpt.From, big.NewInt(0), 1)
+	bid, err := s.GetBidByID(ctx, newBidId)
+
 	if err != nil {
-		return nil, err
+		return nil, lib.WrapError(ErrBid, err)
 	}
 
-	if len(ids) == 0 {
-		return nil, ErrNoBid
-	}
-
-	return mapBid(ids[0], bids[0]), nil
+	return bid, nil
 }
 
 func (s *BlockchainService) DeleteBid(ctx context.Context, bidId common.Hash) (common.Hash, error) {
@@ -619,6 +617,21 @@ func (s *BlockchainService) GetSessions(ctx *gin.Context, user, provider common.
 	}
 
 	return mapSessions(ids, sessions, bids), nil
+}
+
+func (s *BlockchainService) GetSessionsIds(ctx context.Context, user, provider common.Address, offset *big.Int, limit uint8) ([]common.Hash, error) {
+	ids, err := s.sessionRouter.GetSessionsIdsByUser(ctx, user, offset, limit)
+
+	if err != nil {
+		return nil, err
+	}
+
+	bidIDs := make([]common.Hash, len(ids))
+	for i := 0; i < len(ids); i++ {
+		bidIDs[i] = ids[i]
+	}
+
+	return bidIDs, nil
 }
 
 func (s *BlockchainService) GetTransactions(ctx context.Context, page uint64, limit uint8) ([]structs.RawTransaction, error) {
