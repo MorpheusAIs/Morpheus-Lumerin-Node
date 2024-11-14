@@ -183,8 +183,6 @@ const Chat = (props) => {
         const targetModel = chainData.models.find(x => x.Id == targetSessionData.ModelAgentId)
         const targetBid = targetModel.bids.find(x => x.Id == targetSessionData.BidID);
         setSelectedBid(targetBid);
-
-        console.log("setSessionData", sessionId)
     }
 
     const onOpenSession = async (isReopen) => {
