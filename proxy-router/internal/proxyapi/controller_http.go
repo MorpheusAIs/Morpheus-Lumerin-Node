@@ -86,11 +86,11 @@ func (s *ProxyController) InitiateSession(ctx *gin.Context) {
 //	@Description	Send prompt to a local or remote model based on session id in header
 //	@Tags			chat
 //	@Produce		text/event-stream
-//	@Param			session_id	header		string								false	"Session ID"	format(hex32)
-//	@Param			model_id	header		string								false	"Model ID"		format(hex32)
-//	@Param			chat_id		header		string								false	"Chat ID"		format(hex32)
-//	@Param			prompt		body		proxyapi.OpenAiCompletitionRequest	true	"Prompt"
-//	@Success		200			{object}	proxyapi.ChatCompletionResponse
+//	@Param			session_id	header		string	false	"Session ID"	format(hex32)
+//	@Param			model_id	header		string	false	"Model ID"		format(hex32)
+//	@Param			chat_id		header		string	false	"Chat ID"		format(hex32)
+//	@Param			prompt		body		string	true	"Prompt"
+//	@Success		200			{object}	string
 //	@Router			/v1/chat/completions [post]
 func (c *ProxyController) Prompt(ctx *gin.Context) {
 	var (
@@ -175,7 +175,7 @@ func (c *ProxyController) Models(ctx *gin.Context) {
 //	@Summary	Get all chats stored in the system
 //	@Tags		chat
 //	@Produce	json
-//	@Success	200	{object}	[]proxyapi.Chat
+//	@Success	200	{object}	[]genericchatstorage.Chat
 //	@Router		/v1/chats [get]
 func (c *ProxyController) GetChats(ctx *gin.Context) {
 	chats := c.chatStorage.GetChats()
@@ -194,7 +194,7 @@ func (c *ProxyController) GetChats(ctx *gin.Context) {
 //	@Tags		chat
 //	@Produce	json
 //	@Param		id	path		string	true	"Chat ID"
-//	@Success	200	{object}	proxyapi.ChatHistory
+//	@Success	200	{object}	genericchatstorage.ChatHistory
 //	@Router		/v1/chats/{id} [get]
 func (c *ProxyController) GetChat(ctx *gin.Context) {
 	var params structs.PathHex32ID

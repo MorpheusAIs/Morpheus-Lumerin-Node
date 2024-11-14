@@ -8,6 +8,8 @@ import (
 	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/modelregistry"
+	mc "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/multicall"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -20,40 +22,62 @@ type ModelRegistry struct {
 	nonce uint64
 
 	// deps
-	modelRegistry *modelregistry.ModelRegistry
-	client        i.ContractBackend
-	log           lib.ILogger
+	modelRegistry    *modelregistry.ModelRegistry
+	modelRegistryAbi *abi.ABI
+	multicall        mc.MulticallBackend
+	client           i.ContractBackend
+	log              lib.ILogger
 }
 
-func NewModelRegistry(modelRegistryAddr common.Address, client i.ContractBackend, log lib.ILogger) *ModelRegistry {
+func NewModelRegistry(modelRegistryAddr common.Address, client i.ContractBackend, multicall mc.MulticallBackend, log lib.ILogger) *ModelRegistry {
 	mr, err := modelregistry.NewModelRegistry(modelRegistryAddr, client)
+	if err != nil {
+		panic("invalid model registry ABI")
+	}
+	mrAbi, err := modelregistry.ModelRegistryMetaData.GetAbi()
 	if err != nil {
 		panic("invalid model registry ABI")
 	}
 	return &ModelRegistry{
 		modelRegistry:     mr,
 		modelRegistryAddr: modelRegistryAddr,
+		modelRegistryAbi:  mrAbi,
+		multicall:         multicall,
 		client:            client,
 		log:               log,
 	}
 }
 
 func (g *ModelRegistry) GetAllModels(ctx context.Context) ([][32]byte, []modelregistry.IModelStorageModel, error) {
-	ids, err := g.modelRegistry.GetModelIds(&bind.CallOpts{Context: ctx}, big.NewInt(0), big.NewInt(100))
+	batchSize := 100
+	offset := big.NewInt(0)
+	var allIDs [][32]byte
+	var allModels []modelregistry.IModelStorageModel
+	for {
+		ids, providers, err := g.GetModels(ctx, offset, uint8(batchSize))
+		if err != nil {
+			return nil, nil, err
+		}
+		if len(ids) == 0 {
+			break
+		}
+		allModels = append(allModels, providers...)
+		allIDs = append(allIDs, ids...)
+		if len(ids) < batchSize {
+			break
+		}
+		offset.Add(offset, big.NewInt(int64(batchSize)))
+	}
+	return allIDs, allModels, nil
+}
+
+func (g *ModelRegistry) GetModels(ctx context.Context, offset *big.Int, limit uint8) ([][32]byte, []modelregistry.IModelStorageModel, error) {
+	ids, err := g.modelRegistry.GetActiveModelIds(&bind.CallOpts{Context: ctx}, offset, big.NewInt(int64(limit)))
 	if err != nil {
 		return nil, nil, err
 	}
 
-	models := make([]modelregistry.IModelStorageModel, 0, len(ids))
-	for _, id := range ids {
-		model, err := g.modelRegistry.GetModel(&bind.CallOpts{Context: ctx}, id)
-		if err != nil {
-			return nil, nil, err
-		}
-		models = append(models, model)
-	}
-
-	return ids, models, nil
+	return g.getMultipleModels(ctx, ids)
 }
 
 func (g *ModelRegistry) CreateNewModel(opts *bind.TransactOpts, modelId common.Hash, ipfsID common.Hash, fee *lib.BigInt, stake *lib.BigInt, name string, tags []string) error {
@@ -115,4 +139,16 @@ func (g *ModelRegistry) GetModelById(ctx context.Context, modelId common.Hash) (
 		return nil, err
 	}
 	return &model, nil
+}
+
+func (g *ModelRegistry) getMultipleModels(ctx context.Context, IDs [][32]byte) ([][32]byte, []modelregistry.IModelStorageModel, error) {
+	args := make([][]interface{}, len(IDs))
+	for i, id := range IDs {
+		args[i] = []interface{}{id}
+	}
+	models, err := mc.Batch[modelregistry.IModelStorageModel](ctx, g.multicall, g.modelRegistryAbi, g.modelRegistryAddr, "getModel", args)
+	if err != nil {
+		return nil, nil, err
+	}
+	return IDs, models, nil
 }

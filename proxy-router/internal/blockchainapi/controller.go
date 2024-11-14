@@ -105,8 +105,8 @@ func (c *BlockchainController) getProviderClaimableBalance(ctx *gin.Context) {
 //	@Description	Claim provider balance from session
 //	@Tags			sessions
 //	@Produce		json
-//	@Param			id		path		string				true	"Session ID"
-//	@Success		200		{object}	structs.TxRes
+//	@Param			id	path		string	true	"Session ID"
+//	@Success		200	{object}	structs.TxRes
 //	@Router			/proxy/sessions/{id}/providerClaim [post]
 func (c *BlockchainController) claimProviderBalance(ctx *gin.Context) {
 	var params structs.PathHex32ID
@@ -134,10 +134,28 @@ func (c *BlockchainController) claimProviderBalance(ctx *gin.Context) {
 //	@Description	Get providers list from blokchain
 //	@Tags			providers
 //	@Produce		json
-//	@Success		200	{object}	structs.ProvidersRes
+//	@Param			offset	query		string	false	"Offset"
+//	@Param			limit	query		string	false	"Limit"
+//	@Success		200		{object}	structs.ProvidersRes
 //	@Router			/blockchain/providers [get]
 func (c *BlockchainController) getAllProviders(ctx *gin.Context) {
-	providers, err := c.service.GetAllProviders(ctx)
+	offset, limit, err := getOffsetLimitNoDefault(ctx)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	var providers []*structs.Provider
+
+	if limit == 0 {
+		// if pagination is not used return all providers
+		// TODO: deprecate this
+		providers, err = c.service.GetAllProviders(ctx)
+	} else {
+		// if pagination is used return providers with offset and limit
+		providers, err = c.service.GetProviders(ctx, offset, limit)
+	}
 	if err != nil {
 		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
@@ -283,10 +301,27 @@ func (c *BlockchainController) getActiveBidsByProvider(ctx *gin.Context) {
 //	@Description	Get models list from blokchain
 //	@Tags			models
 //	@Produce		json
-//	@Success		200	{object}	structs.ModelsRes
+//	@Param			offset	query		string	false	"Offset"
+//	@Param			limit	query		string	false	"Limit"
+//	@Success		200		{object}	structs.ModelsRes
 //	@Router			/blockchain/models [get]
 func (c *BlockchainController) getAllModels(ctx *gin.Context) {
-	models, err := c.service.GetAllModels(ctx)
+	offset, limit, err := getOffsetLimitNoDefault(ctx)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	var models []*structs.Model
+	if limit == 0 {
+		// if pagination is not used return all models
+		// TODO: deprecate this
+		models, err = c.service.GetAllModels(ctx)
+	} else {
+		// if pagination is used return models with offset and limit
+		models, err = c.service.GetModels(ctx, offset, limit)
+	}
 	if err != nil {
 		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
@@ -1061,6 +1096,17 @@ func (s *BlockchainController) getSendParams(ctx *gin.Context) (to common.Addres
 
 func getOffsetLimit(ctx *gin.Context) (offset *big.Int, limit uint8, err error) {
 	var paging structs.QueryOffsetLimit
+
+	err = ctx.ShouldBindQuery(&paging)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return paging.Offset.Unpack(), paging.Limit, nil
+}
+
+func getOffsetLimitNoDefault(ctx *gin.Context) (offset *big.Int, limit uint8, err error) {
+	var paging structs.QueryOffsetLimitNoDefault
 
 	err = ctx.ShouldBindQuery(&paging)
 	if err != nil {

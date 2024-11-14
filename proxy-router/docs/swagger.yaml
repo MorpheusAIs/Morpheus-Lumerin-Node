@@ -11,29 +11,7 @@ definitions:
       name:
         type: string
     type: object
-  morrpcmesssage.SessionRes:
-    properties:
-      approval:
-        type: string
-      approvalSig:
-        type: string
-      message:
-        type: string
-      signature:
-        type: string
-      timestamp:
-        type: integer
-      user:
-        type: string
-    required:
-    - approval
-    - approvalSig
-    - message
-    - signature
-    - timestamp
-    - user
-    type: object
-  proxyapi.Chat:
+  genericchatstorage.Chat:
     properties:
       chatId:
         type: string
@@ -46,36 +24,7 @@ definitions:
       title:
         type: string
     type: object
-  proxyapi.ChatCompletionChoice:
-    properties:
-      delta:
-        $ref: '#/definitions/proxyapi.ChatCompletionDelta'
-      finish_reason:
-        allOf:
-        - $ref: '#/definitions/proxyapi.FinishReason'
-        description: |-
-          FinishReason
-          stop: API returned complete message,
-          or a message terminated by one of the stop sequences provided via the stop parameter
-          length: Incomplete model output due to max_tokens parameter or token limit
-          function_call: The model decided to call a function
-          content_filter: Omitted content due to a flag from our content filters
-          null: API response still in progress or incomplete
-      index:
-        type: integer
-      logprobs:
-        $ref: '#/definitions/proxyapi.LogProbs'
-      message:
-        $ref: '#/definitions/proxyapi.ChatCompletionMessage'
-    type: object
-  proxyapi.ChatCompletionDelta:
-    properties:
-      content:
-        type: string
-      role:
-        type: string
-    type: object
-  proxyapi.ChatCompletionMessage:
+  genericchatstorage.ChatCompletionMessage:
     properties:
       content:
         type: string
@@ -93,49 +42,30 @@ definitions:
           assistant's prior request to call a tool.
         type: string
     type: object
-  proxyapi.ChatCompletionResponse:
-    properties:
-      choices:
-        items:
-          $ref: '#/definitions/proxyapi.ChatCompletionChoice'
-        type: array
-      created:
-        type: integer
-      id:
-        type: string
-      model:
-        type: string
-      object:
-        type: string
-      system_fingerprint:
-        type: string
-      usage:
-        $ref: '#/definitions/proxyapi.Usage'
-    type: object
-  proxyapi.ChatCompletionResponseFormat:
+  genericchatstorage.ChatCompletionResponseFormat:
     properties:
       type:
         type: string
     type: object
-  proxyapi.ChatHistory:
+  genericchatstorage.ChatHistory:
     properties:
       isLocal:
         type: boolean
       messages:
         items:
-          $ref: '#/definitions/proxyapi.ChatMessage'
+          $ref: '#/definitions/genericchatstorage.ChatMessage'
         type: array
       modelId:
         type: string
       title:
         type: string
     type: object
-  proxyapi.ChatMessage:
+  genericchatstorage.ChatMessage:
     properties:
       isImageContent:
         type: boolean
       prompt:
-        $ref: '#/definitions/proxyapi.OpenAiCompletitionRequest'
+        $ref: '#/definitions/genericchatstorage.OpenAiCompletionRequest'
       promptAt:
         type: integer
       response:
@@ -143,60 +73,7 @@ definitions:
       responseAt:
         type: integer
     type: object
-  proxyapi.FinishReason:
-    enum:
-    - stop
-    type: string
-    x-enum-varnames:
-    - FinishReasonStop
-  proxyapi.InitiateSessionReq:
-    properties:
-      bidId:
-        type: string
-      provider:
-        type: string
-      providerUrl:
-        type: string
-      spend:
-        type: string
-      user:
-        type: string
-    required:
-    - bidId
-    - provider
-    - providerUrl
-    - spend
-    - user
-    type: object
-  proxyapi.LogProb:
-    properties:
-      bytes:
-        description: Omitting the field if it is null
-        items:
-          type: integer
-        type: array
-      logprob:
-        type: number
-      token:
-        type: string
-      top_logprobs:
-        description: |-
-          TopLogProbs is a list of the most likely tokens and their log probability, at this token position.
-          In rare cases, there may be fewer than the number of requested top_logprobs returned.
-        items:
-          $ref: '#/definitions/proxyapi.TopLogProbs'
-        type: array
-    type: object
-  proxyapi.LogProbs:
-    properties:
-      content:
-        description: Content is a list of message content tokens with log probability
-          information.
-        items:
-          $ref: '#/definitions/proxyapi.LogProb'
-        type: array
-    type: object
-  proxyapi.OpenAiCompletitionRequest:
+  genericchatstorage.OpenAiCompletionRequest:
     properties:
       frequency_penalty:
         type: number
@@ -220,7 +97,7 @@ definitions:
         type: integer
       messages:
         items:
-          $ref: '#/definitions/proxyapi.ChatCompletionMessage'
+          $ref: '#/definitions/genericchatstorage.ChatCompletionMessage'
         type: array
       model:
         type: string
@@ -229,7 +106,7 @@ definitions:
       presence_penalty:
         type: number
       response_format:
-        $ref: '#/definitions/proxyapi.ChatCompletionResponseFormat'
+        $ref: '#/definitions/genericchatstorage.ChatCompletionResponseFormat'
       seed:
         type: integer
       stop:
@@ -253,21 +130,51 @@ definitions:
       user:
         type: string
     type: object
+  morrpcmesssage.SessionRes:
+    properties:
+      approval:
+        type: string
+      approvalSig:
+        type: string
+      message:
+        type: string
+      signature:
+        type: string
+      timestamp:
+        type: integer
+      user:
+        type: string
+    required:
+    - approval
+    - approvalSig
+    - message
+    - signature
+    - timestamp
+    - user
+    type: object
+  proxyapi.InitiateSessionReq:
+    properties:
+      bidId:
+        type: string
+      provider:
+        type: string
+      providerUrl:
+        type: string
+      spend:
+        type: string
+      user:
+        type: string
+    required:
+    - bidId
+    - provider
+    - providerUrl
+    - spend
+    - user
+    type: object
   proxyapi.ResultResponse:
     properties:
       result:
         type: boolean
-    type: object
-  proxyapi.TopLogProbs:
-    properties:
-      bytes:
-        items:
-          type: integer
-        type: array
-      logprob:
-        type: number
-      token:
-        type: string
     type: object
   proxyapi.UpdateChatTitleReq:
     properties:
@@ -276,27 +183,11 @@ definitions:
     required:
     - title
     type: object
-  proxyapi.Usage:
-    properties:
-      completion_tokens:
-        type: integer
-      prompt_tokens:
-        type: integer
-      total_tokens:
-        type: integer
-    type: object
   structs.AllowanceRes:
     properties:
       allowance:
         example: "100000000"
         type: string
-    type: object
-  structs.AmountReq:
-    properties:
-      amount:
-        type: string
-    required:
-    - amount
     type: object
   structs.BalanceRes:
     properties:
@@ -834,6 +725,15 @@ paths:
   /blockchain/models:
     get:
       description: Get models list from blokchain
+      parameters:
+      - description: Offset
+        in: query
+        name: offset
+        type: string
+      - description: Limit
+        in: query
+        name: limit
+        type: string
       produces:
       - application/json
       responses:
@@ -950,6 +850,15 @@ paths:
   /blockchain/providers:
     get:
       description: Get providers list from blokchain
+      parameters:
+      - description: Offset
+        in: query
+        name: offset
+        type: string
+      - description: Limit
+        in: query
+        name: limit
+        type: string
       produces:
       - application/json
       responses:
@@ -982,12 +891,6 @@ paths:
       - providers
   /blockchain/providers/{id}:
     delete:
-      parameters:
-      - description: Provider Address
-        in: path
-        name: id
-        required: true
-        type: string
       produces:
       - application/json
       responses:
@@ -1325,12 +1228,6 @@ paths:
     post:
       description: Claim provider balance from session
       parameters:
-      - description: Claim
-        in: body
-        name: claim
-        required: true
-        schema:
-          $ref: '#/definitions/structs.AmountReq'
       - description: Session ID
         in: path
         name: id
@@ -1409,14 +1306,14 @@ paths:
         name: prompt
         required: true
         schema:
-          $ref: '#/definitions/proxyapi.OpenAiCompletitionRequest'
+          type: string
       produces:
       - text/event-stream
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/proxyapi.ChatCompletionResponse'
+            type: string
       summary: Send Local Or Remote Prompt
       tags:
       - chat
@@ -1429,7 +1326,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/proxyapi.Chat'
+              $ref: '#/definitions/genericchatstorage.Chat'
             type: array
       summary: Get all chats stored in the system
       tags:
@@ -1465,7 +1362,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/proxyapi.ChatHistory'
+            $ref: '#/definitions/genericchatstorage.ChatHistory'
       summary: Get chat by id
       tags:
       - chat

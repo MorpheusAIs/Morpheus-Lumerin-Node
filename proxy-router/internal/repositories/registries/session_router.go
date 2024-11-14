@@ -9,6 +9,7 @@ import (
 	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	src "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/sessionrouter"
+	mc "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/multicall"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -20,11 +21,12 @@ type SessionRouter struct {
 
 	// state
 	nonce uint64
-	srABI *abi.ABI
 
 	// deps
 	client        i.ContractBackend
 	sessionRouter *src.SessionRouter
+	multicall     mc.MulticallBackend
+	srABI         *abi.ABI
 	log           lib.ILogger
 }
 
@@ -34,7 +36,7 @@ var closeReportAbi = []lib.AbiParameter{
 	{Type: "uint32"},
 }
 
-func NewSessionRouter(sessionRouterAddr common.Address, client i.ContractBackend, log lib.ILogger) *SessionRouter {
+func NewSessionRouter(sessionRouterAddr common.Address, client i.ContractBackend, multicall mc.MulticallBackend, log lib.ILogger) *SessionRouter {
 	sr, err := src.NewSessionRouter(sessionRouterAddr, client)
 	if err != nil {
 		panic("invalid marketplace ABI")
@@ -43,11 +45,13 @@ func NewSessionRouter(sessionRouterAddr common.Address, client i.ContractBackend
 	if err != nil {
 		panic("invalid marketplace ABI: " + err.Error())
 	}
+
 	return &SessionRouter{
 		sessionRouter:     sr,
 		sessionRouterAddr: sessionRouterAddr,
 		client:            client,
 		srABI:             srABI,
+		multicall:         multicall,
 		log:               log,
 	}
 }
@@ -103,6 +107,14 @@ func (g *SessionRouter) GetSessionsByUser(ctx context.Context, userAddr common.A
 
 func (g *SessionRouter) GetSessionsIdsByUser(ctx context.Context, userAddr common.Address, offset *big.Int, limit uint8) ([][32]byte, error) {
 	IDs, err := g.sessionRouter.GetUserSessions(&bind.CallOpts{Context: ctx}, userAddr, offset, big.NewInt(int64(limit)))
+	if err != nil {
+		return nil, lib.TryConvertGethError(err)
+	}
+	return IDs, nil
+}
+
+func (g *SessionRouter) GetSessionsIDsByProvider(ctx context.Context, userAddr common.Address, offset *big.Int, limit uint8) ([][32]byte, error) {
+	IDs, err := g.sessionRouter.GetProviderSessions(&bind.CallOpts{Context: ctx}, userAddr, offset, big.NewInt(int64(limit)))
 	if err != nil {
 		return nil, lib.TryConvertGethError(err)
 	}
@@ -204,19 +216,18 @@ func (g *SessionRouter) GetABI() *abi.ABI {
 	return g.srABI
 }
 
-func (g *SessionRouter) getMultipleSessions(ctx context.Context, IDs [][32]byte) ([][32]byte, []src.ISessionStorageSession, error) {
-	// todo: replace with multicall
-	sessions := make([]src.ISessionStorageSession, len(IDs))
-	for i, id := range IDs {
-		session, err := g.sessionRouter.GetSession(&bind.CallOpts{Context: ctx}, id)
-		if err != nil {
-			return nil, nil, err
-		}
-		sessions[i] = session
-	}
-	return IDs, sessions, nil
-}
-
 func (g *SessionRouter) GetTotalMORSupply(ctx context.Context, timestamp *big.Int) (*big.Int, error) {
 	return g.sessionRouter.TotalMORSupply(&bind.CallOpts{Context: ctx}, timestamp)
+}
+
+func (g *SessionRouter) getMultipleSessions(ctx context.Context, IDs [][32]byte) ([][32]byte, []src.ISessionStorageSession, error) {
+	args := make([][]interface{}, len(IDs))
+	for i, id := range IDs {
+		args[i] = []interface{}{id}
+	}
+	sessions, err := mc.Batch[src.ISessionStorageSession](ctx, g.multicall, g.srABI, g.sessionRouterAddr, "getSession", args)
+	if err != nil {
+		return nil, nil, err
+	}
+	return IDs, sessions, nil
 }
