@@ -68,7 +68,7 @@ const Chat = (props) => {
     const [requiredStake, setRequiredStake] = useState<{ min: Number, max: number }>({ min: 0, max: 0 })
     const [balances, setBalances] = useState<{ eth: Number, mor: number }>({ eth: 0, mor: 0 });
 
-    const [chat, setChat] = useState<ChatData|undefined>(undefined);
+    const [chat, setChat] = useState<ChatData | undefined>(undefined);
 
     const modelName = selectedModel?.Name || "Model";
     const isLocal = chat?.isLocal;
@@ -91,8 +91,8 @@ const Chat = (props) => {
             setChainData(chainData)
 
             const mappedChatData = chats.reduce((res, item) => {
-                const chatModel = chainData.models.find(x => x.Id == item.modelId); 
-                if(chatModel) {
+                const chatModel = chainData.models.find(x => x.Id == item.modelId);
+                if (chatModel) {
                     res.push({
                         id: item.chatId,
                         title: item.title,
@@ -176,6 +176,17 @@ const Chat = (props) => {
         return (targetDuration - (targetDuration % 60)) - delta;
     }
 
+    const setSessionData = async (sessionId) => {
+        const allSessions = await refreshSessions();
+        const targetSessionData = allSessions.find(x => x.Id == sessionId);
+        setActiveSession({ ...targetSessionData, sessionId });
+        const targetModel = chainData.models.find(x => x.Id == targetSessionData.ModelAgentId)
+        const targetBid = targetModel.bids.find(x => x.Id == targetSessionData.BidID);
+        setSelectedBid(targetBid);
+
+        console.log("setSessionData", sessionId)
+    }
+
     const onOpenSession = async (isReopen) => {
         setIsLoading(true);
         if (!isReopen) {
@@ -193,12 +204,7 @@ const Chat = (props) => {
             if (!openedSession) {
                 return;
             }
-            const allSessions = await refreshSessions();
-            const targetSessionData = allSessions.find(x => x.Id == openedSession);
-            setActiveSession({ ...targetSessionData, sessionId: openedSession });
-            const targetModel = chainData.models.find(x => x.Id == targetSessionData.ModelAgentId)
-            const targetBid = targetModel.bids.find(x => x.Id == targetSessionData.BidID);
-            setSelectedBid(targetBid);
+            await setSessionData(openedSession);
             return openedSession;
         }
         finally {
@@ -229,15 +235,15 @@ const Chat = (props) => {
     }
 
     const refreshSessions = async (models = null) => {
-        const sessions = (await props.getSessionsByUser(props.address)).reduce((res, item) =>  {
+        const sessions = (await props.getSessionsByUser(props.address)).reduce((res, item) => {
             const sessionModel = (models || chainData.models).find(x => x.Id == item.ModelAgentId);
-            if(sessionModel) {
+            if (sessionModel) {
                 item.ModelName = sessionModel.Name;
                 res.push(item);
             }
             return res;
         }, []);
-        
+
         setSessions(sessions);
 
         return sessions;
@@ -400,17 +406,17 @@ const Chat = (props) => {
                 const decodedString = textDecoder.decode(value, { stream: true });
                 const parts = parseDataChunk(decodedString);
                 parts.forEach(part => {
-                    if(!part) {
+                    if (!part) {
                         return;
                     }
-                    
+
                     if (part.error) {
                         console.warn(part.error);
                         return;
                     }
 
-                    if(part.message) {
-                        handleSystemMessage(part.message);
+                    if (typeof part === 'string') {
+                        handleSystemMessage(part);
                         return;
                     }
 
@@ -454,19 +460,19 @@ const Chat = (props) => {
                 autoClose: 1500
             });
         }
-        switch(message) {
-            case openSessionEventMessage:  {
-                renderMessage("Opening session with available provider...");
-                return;
-            }
-            case failoverTurnOnMessage:  {
-                renderMessage("Target provider unavailable. Applying failover policy...");
-                return;
-            }
-            default:
-                renderMessage(message);
-                return;
+
+        if (message.includes(openSessionEventMessage)) {
+            const sessionId = message.split(":")[1].trim(); // new session opened: 0x123456
+            setSessionData(sessionId).catch((err) => renderMessage(`Failed to load session data: ${err.message}`));
+            renderMessage("Opening session with available provider...");
+            return;
         }
+        if (message.includes(failoverTurnOnMessage)) {
+            renderMessage("Target provider unavailable. Applying failover policy...");
+            return;
+        }
+        renderMessage(message);
+        return;
     }
 
     const handleSubmit = () => {

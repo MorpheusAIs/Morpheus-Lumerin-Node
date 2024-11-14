@@ -341,7 +341,8 @@ func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.
 			return nil, err
 		}
 
-		err = cb(ctx, gcs.NewChunkControl("new session opened"))
+		msg := fmt.Sprintf("new session opened: %s", newSessionID.Hex())
+		err = cb(ctx, gcs.NewChunkControl(msg))
 		if err != nil {
 			return nil, err
 		}
@@ -363,18 +364,24 @@ func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.
 	return result, nil
 }
 func (p *ProxyServiceSender) rpcRequestStreamV2(ctx context.Context, cb gcs.CompletionCallback, url string, rpcMessage *msgs.RPCMessage, providerPublicKey lib.HexString) (interface{}, int, int, error) {
+	TIMEOUT_TO_ESTABLISH_CONNECTION := time.Second * 3
+	dialer := net.Dialer{Timeout: TIMEOUT_TO_ESTABLISH_CONNECTION}
+
 	prKey, err := p.privateKey.GetPrivateKey()
 	if err != nil {
 		return nil, 0, 0, ErrMissingPrKey
 	}
 
-	conn, err := net.Dial("tcp", url)
+	conn, err := dialer.Dial("tcp", url)
 	if err != nil {
 		err = lib.WrapError(fmt.Errorf("failed to connect to provider"), err)
 		p.log.Errorf("%s", err)
 		return nil, 0, 0, err
 	}
 	defer conn.Close()
+
+	TIMEOUT_TO_RECEIVE_FIRST_RESPONSE := time.Second * 5
+	conn.SetReadDeadline(time.Now().Add(TIMEOUT_TO_RECEIVE_FIRST_RESPONSE))
 
 	msgJSON, err := json.Marshal(rpcMessage)
 	if err != nil {
@@ -404,6 +411,10 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(ctx context.Context, cb gcs.Comp
 		err = d.Decode(&msg)
 		p.log.Debugf("Received stream msg:", msg)
 		if err != nil {
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				p.log.Warnf("Read operation timed out: %v", err)
+				return nil, ttftMs, totalTokens, fmt.Errorf("first response timed out after 3 seconds: %w", err)
+			}
 			p.log.Warnf("Failed to decode response: %v", err)
 			return responses, ttftMs, totalTokens, nil
 		}
@@ -418,6 +429,7 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(ctx context.Context, cb gcs.Comp
 
 		if ttftMs == 0 {
 			ttftMs = int(time.Now().UnixMilli() - now)
+			conn.SetReadDeadline(time.Time{})
 		}
 
 		var inferenceRes InferenceRes
