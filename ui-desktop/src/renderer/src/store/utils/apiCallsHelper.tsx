@@ -31,12 +31,15 @@ export const getSessionsByUser = async (url, user) => {
     
     const limit = 50;
     let offset = 0;
-    let resultIds: string[] = [];
+    let sessions: any[] = [];
     let all = false;
 
     while (!all) {
+      console.log("Getting session for user: ", user, offset, limit)
       const ids = await getIds(user, offset, limit);
-      resultIds.push(...ids);
+      const results = await Promise.all(ids.map(id => getSessioInfo(id)));
+      sessions.push(...results);
+
       if(ids.length != limit) {
         all = true;
       }
@@ -45,6 +48,5 @@ export const getSessionsByUser = async (url, user) => {
       }
     }
 
-    const results = await Promise.all(resultIds.map(id => getSessioInfo(id)));
-    return results;
+    return sessions;
   }
