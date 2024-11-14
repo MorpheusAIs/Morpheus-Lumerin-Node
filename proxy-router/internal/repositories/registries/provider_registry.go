@@ -81,7 +81,7 @@ func (g *ProviderRegistry) GetProviders(ctx context.Context, offset *big.Int, li
 }
 
 func (g *ProviderRegistry) CreateNewProvider(opts *bind.TransactOpts, addStake *lib.BigInt, endpoint string) error {
-	providerTx, err := g.providerRegistry.ProviderRegister(opts, &addStake.Int, endpoint)
+	providerTx, err := g.providerRegistry.ProviderRegister(opts, opts.From, &addStake.Int, endpoint)
 
 	if err != nil {
 		return lib.TryConvertGethError(err)
@@ -101,7 +101,7 @@ func (g *ProviderRegistry) CreateNewProvider(opts *bind.TransactOpts, addStake *
 }
 
 func (g *ProviderRegistry) DeregisterProvider(opts *bind.TransactOpts) (common.Hash, error) {
-	providerTx, err := g.providerRegistry.ProviderDeregister(opts)
+	providerTx, err := g.providerRegistry.ProviderDeregister(opts, opts.From)
 
 	if err != nil {
 		return common.Hash{}, lib.TryConvertGethError(err)
