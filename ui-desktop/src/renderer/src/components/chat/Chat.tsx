@@ -147,7 +147,9 @@ const Chat = (props) => {
 
     const toggleDrawer = async () => {
         if (!isOpen) {
+            setIsLoading(true);
             await refreshSessions()
+            setIsLoading(false);
         }
         setIsOpen((prevState) => !prevState)
     }
@@ -242,8 +244,10 @@ const Chat = (props) => {
     }
 
     const closeSession = async (sessionId: string) => {
+        setIsLoading(true);
         await props.closeSession(sessionId);
         await refreshSessions();
+        setIsLoading(false);
 
         if (activeSession.Id == sessionId) {
             const localModel = (chainData?.models?.find((m: any) => m.hasLocal));
