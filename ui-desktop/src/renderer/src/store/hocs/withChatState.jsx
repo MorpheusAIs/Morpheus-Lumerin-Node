@@ -4,6 +4,7 @@ import React from 'react';
 import { ToastsContext } from '../../components/toasts';
 import selectors from '../selectors';
 import axios from 'axios';
+import { getSessionsByUser } from '../utils/apiCallsHelper';
 
 const AvailabilityStatus = {
   available: "available",
@@ -215,16 +216,8 @@ const withChatState = WrappedComponent => {
       if(!user) {
         return;
       }
-      try {
-        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions/user?user=${user}`;
-        const response = await fetch(path);
-        const data = await response.json();
-        return data.sessions;
-      }
-      catch (e) {
-        console.log("Error", e)
-        return [];
-      }
+
+      return await getSessionsByUser(this.props.config.chain.localProxyRouterUrl, user);
     }
 
     onOpenSession = async ({ modelId, duration }) => {

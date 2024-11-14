@@ -101,6 +101,14 @@ func (g *SessionRouter) GetSessionsByUser(ctx context.Context, userAddr common.A
 	return g.getMultipleSessions(ctx, IDs)
 }
 
+func (g *SessionRouter) GetSessionsIdsByUser(ctx context.Context, userAddr common.Address, offset *big.Int, limit uint8) ([][32]byte, error) {
+	IDs, err := g.sessionRouter.GetUserSessions(&bind.CallOpts{Context: ctx}, userAddr, offset, big.NewInt(int64(limit)))
+	if err != nil {
+		return nil, lib.TryConvertGethError(err)
+	}
+	return IDs, nil
+}
+
 func (g *SessionRouter) CloseSession(opts *bind.TransactOpts, sessionID common.Hash, report []byte, signedReport []byte, privateKeyHex lib.HexString) (common.Hash, error) {
 	sessionTx, err := g.sessionRouter.CloseSession(opts, report, signedReport)
 	if err != nil {

@@ -619,6 +619,26 @@ func (s *BlockchainService) GetSessions(ctx *gin.Context, user, provider common.
 	return mapSessions(ids, sessions, bids), nil
 }
 
+func (s *BlockchainService) GetSessionsIds(ctx *gin.Context, user, provider common.Address, offset *big.Int, limit uint8) ([]common.Hash, error) {
+	var (
+		ids [][32]byte
+		err error
+	)
+
+	ids, err = s.sessionRouter.GetSessionsIdsByUser(ctx, common.HexToAddress(ctx.Query("user")), offset, limit)
+
+	if err != nil {
+		return nil, err
+	}
+
+	bidIDs := make([]common.Hash, len(ids))
+	for i := 0; i < len(ids); i++ {
+		bidIDs[i] = ids[i]
+	}
+
+	return bidIDs, nil
+}
+
 func (s *BlockchainService) GetTransactions(ctx context.Context, page uint64, limit uint8) ([]structs.RawTransaction, error) {
 	prKey, err := s.privateKey.GetPrivateKey()
 	if err != nil {
