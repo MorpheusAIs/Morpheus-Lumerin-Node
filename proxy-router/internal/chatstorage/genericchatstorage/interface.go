@@ -1,58 +1,67 @@
-package proxyapi
+package genericchatstorage
 
-type ChatMessagePartType string
+import (
+	"time"
 
-const (
-	ChatMessagePartTypeText     ChatMessagePartType = "text"
-	ChatMessagePartTypeImageURL ChatMessagePartType = "image_url"
+	"github.com/sashabaranov/go-openai"
 )
 
-type ImageURLDetail string
-
-const (
-	ImageURLDetailHigh ImageURLDetail = "high"
-	ImageURLDetailLow  ImageURLDetail = "low"
-	ImageURLDetailAuto ImageURLDetail = "auto"
-)
-
-type ChatMessageImageURL struct {
-	URL    string         `json:"url,omitempty"`
-	Detail ImageURLDetail `json:"detail,omitempty"`
+type ChatStorageInterface interface {
+	LoadChatFromFile(chatID string) (*ChatHistory, error)
+	StorePromptResponseToFile(chatID string, isLocal bool, modelID string, prompt *openai.ChatCompletionRequest, responses []Chunk, promptAt time.Time, responseAt time.Time) error
+	GetChats() []Chat
+	DeleteChat(chatID string) error
+	UpdateChatTitle(chatID string, title string) error
 }
 
-type ChatMessagePart struct {
-	Type     ChatMessagePartType  `json:"type,omitempty"`
-	Text     string               `json:"text,omitempty"`
-	ImageURL *ChatMessageImageURL `json:"image_url,omitempty"`
+type ChatHistory struct {
+	Title    string        `json:"title"`
+	ModelId  string        `json:"modelId"`
+	IsLocal  bool          `json:"isLocal"`
+	Messages []ChatMessage `json:"messages"`
 }
 
-type ChatCompletionMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-	// MultiContent []ChatMessagePart `json:"multiContent",omitempty`
+func (h *ChatHistory) AppendChatHistory(req *openai.ChatCompletionRequest) *openai.ChatCompletionRequest {
+	if h == nil {
+		return req
+	}
 
-	// This property isn't in the official documentation, but it's in
-	// the documentation for the official library for python:
-	// - https://github.com/openai/openai-python/blob/main/chatml.md
-	// - https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
-	Name string `json:"name,omitempty"`
+	messagesWithHistory := make([]openai.ChatCompletionMessage, 0)
+	for _, chat := range h.Messages {
+		messagesWithHistory = append(messagesWithHistory, openai.ChatCompletionMessage{
+			Role:    chat.Prompt.Messages[0].Role,
+			Content: chat.Prompt.Messages[0].Content,
+		})
+		messagesWithHistory = append(messagesWithHistory, openai.ChatCompletionMessage{
+			Role:    "assistant",
+			Content: chat.Response,
+		})
+	}
 
-	// For Role=tool prompts this should be set to the ID given in the assistant's prior request to call a tool.
-	ToolCallID string `json:"tool_call_id,omitempty"`
+	messagesWithHistory = append(messagesWithHistory, req.Messages...)
+
+	// superficial copy to avoid modifying the original request
+	newReq := *req
+	newReq.Messages = messagesWithHistory
+	return &newReq
 }
 
-type ChatCompletionDelta struct {
-	Content string `json:"content"`
-	Role    string `json:"role"`
+type ChatMessage struct {
+	Prompt         OpenAiCompletionRequest `json:"prompt"`
+	Response       string                  `json:"response"`
+	PromptAt       int64                   `json:"promptAt"`
+	ResponseAt     int64                   `json:"responseAt"`
+	IsImageContent bool                    `json:"isImageContent"`
+}
+type Chat struct {
+	ChatID    string `json:"chatId"`
+	ModelID   string `json:"modelId"`
+	Title     string `json:"title"`
+	IsLocal   bool   `json:"isLocal"`
+	CreatedAt int64  `json:"createdAt"`
 }
 
-type ChatCompletionResponseFormat struct {
-	Type ChatCompletionResponseFormatType `json:"type,omitempty"`
-}
-
-type ChatCompletionResponseFormatType string
-
-type OpenAiCompletitionRequest struct {
+type OpenAiCompletionRequest struct {
 	Model            string                        `json:"model"`
 	Messages         []ChatCompletionMessage       `json:"messages"`
 	MaxTokens        int                           `json:"max_tokens,omitempty"`
