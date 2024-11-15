@@ -18,7 +18,7 @@ func TestGetSessions(t *testing.T) {
 	ethClient, err := ethclient.Dial(ethNodeAddr)
 	require.NoError(t, err)
 
-	diamondAddr := common.HexToAddress("0x10777866547c53cbd69b02c5c76369d7e24e7b10")
+	diamondAddr := common.HexToAddress("0xb8C55cD613af947E73E262F0d3C54b7211Af16CF")
 	sr := NewSessionRouter(diamondAddr, ethClient, lib.NewTestLogger())
 	sessionIDs, err := sr.GetSessionsIDsByProvider(context.Background(), common.HexToAddress("0x1441Bc52156Cf18c12cde6A92aE6BDE8B7f775D4"), big.NewInt(0), 2)
 	require.NoError(t, err)

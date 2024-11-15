@@ -28,8 +28,11 @@ Numbers below reference the circled elements in the diagram above.
 - In a real-world scenario, this proxy-router would be a separate, small server or even docker container that is not part of the AI Model Server Instance (it can be, but it's nice to separate the architecture either for anonymity or performance)
 - Installation on the provider side is as simple as setting up the environment variables and running the proxy-router software.  
     - There is a sample `.env.example` file located within the ./proxy-router folder that shoudld be copied to `.env` and edited with the appropriate values.
-    - Please see [proxy-router .ENV Variables](#proxy-router-env-variables) below for more information on the key values needed in the .env file
-- The proxy-router needs to be on both the provider and consumer environment and have access to an Arbitrum Ethereum node via web sockets (WSS) for listening to and posting elements on the blockchain
+    - Please see [proxy-router .ENV Variables](proxy-router.all.env) for more information on the key values needed in the .env file
+- The `models-config.json` file is particularly important as it directs the proxy-router to the provider's model(s) and the endpoint(s) for the model(s) 
+    - This file should be copied from the `./proxy-router/models-config.example.json` to `./proxy-router/models-config.json` and edited with the appropriate values
+    - Please see [proxy-router models-config.json](proxy-router.models-config.json.md) for more information on the key values needed in the models-config.json file
+- The proxy-router needs to be on both the provider and consumer environment and have access to an Arbitrum Ethereum node (default) public ethernet nodes or via web sockets (WSS) for listening to and posting elements on the blockchain
 
 ## 3. Provider - setup Provider, Model and Bid on the blockchain
 - [03-provider-offer.md](03-provider-offer.md) - for more details

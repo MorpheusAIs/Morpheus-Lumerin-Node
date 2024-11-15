@@ -8,7 +8,10 @@ It will run 3 different pieces of software on your local machine:
 * `ui-desktop` - Electron GUI that enables the user to interact with the models (via the API) to browse offered bids, purchase and send prompts
 
 ## Installation Steps:
-1. Download latest release for your operating system: https://github.com/Lumerin-protocol/Morpheus-Lumerin-Node/releases
+1. Obtain the software: 
+    1. Package: Download latest release for your operating system: https://github.com/Lumerin-protocol/Morpheus-Lumerin-Node/releases
+        * Mainnet releases will be prefixed with `main-*`
+        * Testnet releases will be prefixed with `test-*` 
 
 1. Extract the zip to a local folder (examples)
     * Windows: `(%USERPROFILE%)/Downloads/morpheus)` 
