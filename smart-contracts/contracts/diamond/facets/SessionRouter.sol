@@ -13,12 +13,11 @@ import {BidStorage, EnumerableSet} from "../storages/BidStorage.sol";
 import {StatsStorage} from "../storages/StatsStorage.sol";
 import {SessionStorage} from "../storages/SessionStorage.sol";
 import {ProviderStorage} from "../storages/ProviderStorage.sol";
+import {DelegationStorage} from "../storages/DelegationStorage.sol";
 
 import {LibSD} from "../../libs/LibSD.sol";
 
 import {ISessionRouter} from "../../interfaces/facets/ISessionRouter.sol";
-
-import "hardhat/console.sol";
 
 contract SessionRouter is
     ISessionRouter,
@@ -26,7 +25,8 @@ contract SessionRouter is
     SessionStorage,
     ProviderStorage,
     BidStorage,
-    StatsStorage
+    StatsStorage,
+    DelegationStorage
 {
     using Math for *;
     using LibSD for LibSD.SD;
@@ -78,38 +78,38 @@ contract SessionRouter is
     ///   OPEN SESSION   ///
     ////////////////////////
     function openSession(
+        address user_,
         uint256 amount_,
         bool isDirectPaymentFromUser_,
         bytes calldata approvalEncoded_,
         bytes calldata signature_
     ) external returns (bytes32) {
+        _validateDelegatee(_msgSender(), user_, DELEGATION_RULES_SESSION);
+
         SessionsStorage storage sessionsStorage = _getSessionsStorage();
 
         bytes32 bidId_ = _extractProviderApproval(approvalEncoded_);
-        Bid storage bid = _getBidsStorage().bids[bidId_];
 
-        bytes32 sessionId_ = getSessionId(_msgSender(), bid.provider, bidId_, sessionsStorage.sessionNonce++);
+        bytes32 sessionId_ = getSessionId(user_, _getBidsStorage().bids[bidId_].provider, bidId_, sessionsStorage.sessionNonce++);
         Session storage session = sessionsStorage.sessions[sessionId_];
 
-        uint128 endsAt_ = _validateSession(bidId_, amount_, isDirectPaymentFromUser_, approvalEncoded_, signature_);
+        IERC20(_getBidsStorage().token).safeTransferFrom(user_, address(this), amount_);
 
-        IERC20(_getBidsStorage().token).safeTransferFrom(_msgSender(), address(this), amount_);
-
-        session.user = _msgSender();
+        session.user = user_;
         session.stake = amount_;
         session.bidId = bidId_;
         session.openedAt = uint128(block.timestamp);
-        session.endsAt = endsAt_;
+        session.endsAt = _validateSession(bidId_, amount_, isDirectPaymentFromUser_, approvalEncoded_, signature_);
         session.isActive = true;
         session.isDirectPaymentFromUser = isDirectPaymentFromUser_;
 
-        sessionsStorage.userSessions[_msgSender()].add(sessionId_);
-        sessionsStorage.providerSessions[bid.provider].add(sessionId_);
-        sessionsStorage.modelSessions[bid.modelId].add(sessionId_);
+        sessionsStorage.userSessions[user_].add(sessionId_);
+        sessionsStorage.providerSessions[_getBidsStorage().bids[bidId_].provider].add(sessionId_);
+        sessionsStorage.modelSessions[_getBidsStorage().bids[bidId_].modelId].add(sessionId_);
 
         sessionsStorage.isProviderApprovalUsed[approvalEncoded_] = true;
 
-        emit SessionOpened(_msgSender(), sessionId_, bid.provider);
+        emit SessionOpened(user_, sessionId_, _getBidsStorage().bids[bidId_].provider);
 
         return sessionId_;
     }
@@ -209,7 +209,8 @@ contract SessionRouter is
         Session storage session = _getSessionsStorage().sessions[sessionId_];
         Bid storage bid = _getBidsStorage().bids[session.bidId];
 
-        _onlyAccount(session.user);
+        _validateDelegatee(_msgSender(), session.user, DELEGATION_RULES_SESSION);
+
         if (session.closedAt != 0) {
             revert SessionAlreadyClosed();
         }
@@ -258,16 +259,26 @@ contract SessionRouter is
         return (sessionEnd_ - session.openedAt) * bid.pricePerSecond - withdrawnAmount;
     }
 
+    function _getProviderOnHoldAmount(Session storage session, Bid storage bid) private view returns (uint256) {
+        uint128 startOfClosedAt = startOfTheDay(session.closedAt);
+        if (block.timestamp >= startOfClosedAt + 1 days) {
+            return 0;
+        }
+
+        // `closedAt` - latest timestamp, cause `endsAt` bigger then `closedAt`
+        // Lock the provider's tokens for the current day.
+        // Withdrawal is allowed after a day after `startOfTheDay(session.closedAt)`.
+        return (session.closedAt - startOfClosedAt.max(session.openedAt)) * bid.pricePerSecond;
+    }
+
     function _rewardProviderAfterClose(bool noDispute_, Session storage session, Bid storage bid) internal {
-        uint128 startOfToday_ = startOfTheDay(uint128(block.timestamp));
-        bool isClosingLate_ = uint128(block.timestamp) > session.endsAt;
+        bool isClosingLate_ = session.closedAt >= session.endsAt;
 
         uint256 providerAmountToWithdraw_ = _getProviderRewards(session, bid, true);
         uint256 providerOnHoldAmount = 0;
+        // Enter when the user has a dispute AND closing early
         if (!noDispute_ && !isClosingLate_) {
-            providerOnHoldAmount =
-                (session.endsAt.min(session.closedAt) - startOfToday_.max(session.openedAt)) *
-                bid.pricePerSecond;
+            providerOnHoldAmount = _getProviderOnHoldAmount(session, bid);
         }
         providerAmountToWithdraw_ -= providerOnHoldAmount;
 
@@ -275,19 +286,19 @@ contract SessionRouter is
     }
 
     function _rewardUserAfterClose(Session storage session, Bid storage bid) private {
-        uint128 startOfToday_ = startOfTheDay(uint128(block.timestamp));
-        bool isClosingLate_ = uint128(block.timestamp) > session.endsAt;
+        uint128 startOfClosedAt_ = startOfTheDay(session.closedAt);
+        bool isClosingLate_ = session.closedAt >= session.endsAt;
 
         uint256 userStakeToProvider = session.isDirectPaymentFromUser ? _getProviderRewards(session, bid, false) : 0;
         uint256 userStake = session.stake - userStakeToProvider;
         uint256 userStakeToLock_ = 0;
         if (!isClosingLate_) {
-            uint256 userDuration_ = session.endsAt.min(session.closedAt) - session.openedAt.max(startOfToday_);
+            uint256 userDuration_ = session.endsAt.min(session.closedAt) - session.openedAt.max(startOfClosedAt_);
             uint256 userInitialLock_ = userDuration_ * bid.pricePerSecond;
-            userStakeToLock_ = userStake.min(stipendToStake(userInitialLock_, startOfToday_));
+            userStakeToLock_ = userStake.min(stipendToStake(userInitialLock_, startOfClosedAt_));
 
             _getSessionsStorage().userStakesOnHold[session.user].push(
-                OnHold(userStakeToLock_, uint128(startOfToday_ + 1 days))
+                OnHold(userStakeToLock_, uint128(startOfClosedAt_ + 1 days))
             );
         }
         uint256 userAmountToWithdraw_ = userStake - userStakeToLock_;
@@ -338,8 +349,11 @@ contract SessionRouter is
         Session storage session = _getSessionsStorage().sessions[sessionId_];
         Bid storage bid = _getBidsStorage().bids[session.bidId];
 
-        _onlyAccount(bid.provider);
-        _claimForProvider(session, _getProviderRewards(session, bid, true));
+        _validateDelegatee(_msgSender(), bid.provider, DELEGATION_RULES_SESSION);
+
+        uint256 amount_ = _getProviderRewards(session, bid, true) - _getProviderOnHoldAmount(session, bid);
+
+        _claimForProvider(session, amount_);
     }
 
     /**
@@ -370,7 +384,11 @@ contract SessionRouter is
         if (session.isDirectPaymentFromUser) {
             IERC20(_getBidsStorage().token).safeTransfer(bid.provider, amount_);
         } else {
-            IERC20(_getBidsStorage().token).safeTransferFrom(_getSessionsStorage().fundingAccount, bid.provider, amount_);
+            IERC20(_getBidsStorage().token).safeTransferFrom(
+                _getSessionsStorage().fundingAccount,
+                bid.provider,
+                amount_
+            );
         }
     }
 
@@ -404,8 +422,10 @@ contract SessionRouter is
         }
     }
 
-    function withdrawUserStakes(uint8 iterations_) external {
-        OnHold[] storage onHoldEntries = _getSessionsStorage().userStakesOnHold[_msgSender()];
+    function withdrawUserStakes(address user_, uint8 iterations_) external {
+        _validateDelegatee(_msgSender(), user_, DELEGATION_RULES_SESSION);
+
+        OnHold[] storage onHoldEntries = _getSessionsStorage().userStakesOnHold[user_];
         uint8 count_ = iterations_ >= onHoldEntries.length ? uint8(onHoldEntries.length) : iterations_;
         uint256 length_ = onHoldEntries.length;
         uint256 amount_ = 0;
@@ -432,9 +452,9 @@ contract SessionRouter is
             revert SessionUserAmountToWithdrawIsZero();
         }
 
-        IERC20(_getBidsStorage().token).safeTransfer(_msgSender(), amount_);
+        IERC20(_getBidsStorage().token).safeTransfer(user_, amount_);
 
-        emit UserWithdrawn(_msgSender(), amount_);
+        emit UserWithdrawn(user_, amount_);
     }
 
     ////////////////////////

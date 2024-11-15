@@ -47,7 +47,7 @@ func NewMarketplace(marketplaceAddr common.Address, client i.ContractBackend, mu
 }
 
 func (g *Marketplace) PostModelBid(opts *bind.TransactOpts, model common.Hash, pricePerSecond *big.Int) (common.Hash, error) {
-	tx, err := g.marketplace.PostModelBid(opts, model, pricePerSecond)
+	tx, err := g.marketplace.PostModelBid(opts, opts.From, model, pricePerSecond)
 	if err != nil {
 		return common.Hash{}, lib.TryConvertGethError(err)
 	}

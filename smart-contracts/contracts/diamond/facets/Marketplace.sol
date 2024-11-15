@@ -10,6 +10,7 @@ import {BidStorage} from "../storages/BidStorage.sol";
 import {ModelStorage} from "../storages/ModelStorage.sol";
 import {ProviderStorage} from "../storages/ProviderStorage.sol";
 import {MarketplaceStorage} from "../storages/MarketplaceStorage.sol";
+import {DelegationStorage} from "../storages/DelegationStorage.sol";
 
 import {IMarketplace} from "../../interfaces/facets/IMarketplace.sol";
 
@@ -19,7 +20,8 @@ contract Marketplace is
     MarketplaceStorage,
     ProviderStorage,
     ModelStorage,
-    BidStorage
+    BidStorage,
+    DelegationStorage
 {
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.Bytes32Set;
@@ -42,14 +44,11 @@ contract Marketplace is
         emit MaretplaceFeeUpdated(bidFee_);
     }
 
-    function setMinMaxBidPricePerSecond(
-        uint256 bidMinPricePerSecond_,
-        uint256 bidMaxPricePerSecond_
-    ) public onlyOwner {
+    function setMinMaxBidPricePerSecond(uint256 bidMinPricePerSecond_, uint256 bidMaxPricePerSecond_) public onlyOwner {
         if (bidMinPricePerSecond_ == 0) {
             revert MarketplaceBidMinPricePerSecondIsZero();
         }
-        
+
         if (bidMinPricePerSecond_ > bidMaxPricePerSecond_) {
             revert MarketplaceBidMinPricePerSecondIsInvalid();
         }
@@ -61,8 +60,8 @@ contract Marketplace is
         emit MarketplaceBidMinMaxPriceUpdated(bidMinPricePerSecond_, bidMaxPricePerSecond_);
     }
 
-    function postModelBid(bytes32 modelId_, uint256 pricePerSecond_) external returns (bytes32 bidId) {
-        address provider_ = _msgSender();
+    function postModelBid(address provider_, bytes32 modelId_, uint256 pricePerSecond_) external returns (bytes32 bidId) {
+        _validateDelegatee(_msgSender(), provider_, DELEGATION_RULES_MARKETPLACE);        
 
         if (!getIsProviderActive(provider_)) {
             revert MarketplaceProviderNotFound();
@@ -74,7 +73,9 @@ contract Marketplace is
         BidsStorage storage bidsStorage = _getBidsStorage();
         MarketStorage storage marketStorage = _getMarketStorage();
 
-        if (pricePerSecond_ < marketStorage.bidMinPricePerSecond || pricePerSecond_ > marketStorage.bidMaxPricePerSecond) {
+        if (
+            pricePerSecond_ < marketStorage.bidMinPricePerSecond || pricePerSecond_ > marketStorage.bidMaxPricePerSecond
+        ) {
             revert MarketplaceBidPricePerSecondInvalid();
         }
 
@@ -111,7 +112,7 @@ contract Marketplace is
 
     function deleteModelBid(bytes32 bidId_) external {
         BidsStorage storage bidsStorage = _getBidsStorage();
-        _onlyAccount(bidsStorage.bids[bidId_].provider);
+        _validateDelegatee(_msgSender(), bidsStorage.bids[bidId_].provider, DELEGATION_RULES_MARKETPLACE);        
 
         if (!isBidActive(bidId_)) {
             revert MarketplaceActiveBidNotFound();

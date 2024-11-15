@@ -38,7 +38,7 @@ contract ModelStorage is IModelStorage {
     }
 
     function getIsModelActive(bytes32 modelId_) public view returns (bool) {
-        return !_getModelsStorage().models[modelId_].isDeleted;
+        return (!_getModelsStorage().models[modelId_].isDeleted && _getModelsStorage().models[modelId_].createdAt != 0);
     }
 
     /** INTERNAL */

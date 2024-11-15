@@ -53,7 +53,7 @@ type IModelStorageModel struct {
 
 // ModelRegistryMetaData contains all meta data concerning the ModelRegistry contract.
 var ModelRegistryMetaData = &bind.MetaData{
-	ABI: "[{\"inputs\":[],\"name\":\"ModelHasActiveBids\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ModelHasAlreadyDeregistered\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ModelNotFound\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minAmount\",\"type\":\"uint256\"}],\"name\":\"ModelStakeTooLow\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account_\",\"type\":\"address\"}],\"name\":\"OwnableUnauthorizedAccount\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"storageSlot\",\"type\":\"bytes32\"}],\"name\":\"Initialized\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"}],\"name\":\"ModelDeregistered\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"modelMinimumStake\",\"type\":\"uint256\"}],\"name\":\"ModelMinimumStakeUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"}],\"name\":\"ModelRegisteredUpdated\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"BIDS_STORAGE_SLOT\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"DIAMOND_OWNABLE_STORAGE_SLOT\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"MODELS_STORAGE_SLOT\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"__ModelRegistry_init\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getActiveModelIds\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"bidId_\",\"type\":\"bytes32\"}],\"name\":\"getBid\",\"outputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"nonce\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"uint128\",\"name\":\"deletedAt\",\"type\":\"uint128\"}],\"internalType\":\"structIBidStorage.Bid\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"}],\"name\":\"getIsModelActive\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"}],\"name\":\"getModel\",\"outputs\":[{\"components\":[{\"internalType\":\"bytes32\",\"name\":\"ipfsCID\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"stake\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string[]\",\"name\":\"tags\",\"type\":\"string[]\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"bool\",\"name\":\"isDeleted\",\"type\":\"bool\"}],\"internalType\":\"structIModelStorage.Model\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getModelActiveBids\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getModelBids\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getModelIds\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getModelMinimumStake\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"provider_\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getProviderActiveBids\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"provider_\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getProviderBids\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getToken\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"bidId_\",\"type\":\"bytes32\"}],\"name\":\"isBidActive\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"}],\"name\":\"modelDeregister\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"ipfsCID_\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"fee_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"amount_\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"name_\",\"type\":\"string\"},{\"internalType\":\"string[]\",\"name\":\"tags_\",\"type\":\"string[]\"}],\"name\":\"modelRegister\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"modelMinimumStake_\",\"type\":\"uint256\"}],\"name\":\"modelSetMinStake\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"}]",
+	ABI: "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"delegator\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"delegatee\",\"type\":\"address\"}],\"name\":\"InsufficientRightsForOperation\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ModelHasActiveBids\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ModelHasAlreadyDeregistered\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ModelNotFound\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minAmount\",\"type\":\"uint256\"}],\"name\":\"ModelStakeTooLow\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account_\",\"type\":\"address\"}],\"name\":\"OwnableUnauthorizedAccount\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"storageSlot\",\"type\":\"bytes32\"}],\"name\":\"Initialized\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"}],\"name\":\"ModelDeregistered\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"modelMinimumStake\",\"type\":\"uint256\"}],\"name\":\"ModelMinimumStakeUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"}],\"name\":\"ModelRegisteredUpdated\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"BIDS_STORAGE_SLOT\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"DELEGATION_RULES_MARKETPLACE\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"DELEGATION_RULES_MODEL\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"DELEGATION_RULES_PROVIDER\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"DELEGATION_RULES_SESSION\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"DELEGATION_STORAGE_SLOT\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"DIAMOND_OWNABLE_STORAGE_SLOT\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"MODELS_STORAGE_SLOT\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"__ModelRegistry_init\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getActiveModelIds\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"bidId_\",\"type\":\"bytes32\"}],\"name\":\"getBid\",\"outputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"modelId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"nonce\",\"type\":\"uint256\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"uint128\",\"name\":\"deletedAt\",\"type\":\"uint128\"}],\"internalType\":\"structIBidStorage.Bid\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"}],\"name\":\"getIsModelActive\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"}],\"name\":\"getModel\",\"outputs\":[{\"components\":[{\"internalType\":\"bytes32\",\"name\":\"ipfsCID\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"stake\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string[]\",\"name\":\"tags\",\"type\":\"string[]\"},{\"internalType\":\"uint128\",\"name\":\"createdAt\",\"type\":\"uint128\"},{\"internalType\":\"bool\",\"name\":\"isDeleted\",\"type\":\"bool\"}],\"internalType\":\"structIModelStorage.Model\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getModelActiveBids\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getModelBids\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account_\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"baseModelId_\",\"type\":\"bytes32\"}],\"name\":\"getModelId\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"pure\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getModelIds\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getModelMinimumStake\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"provider_\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getProviderActiveBids\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"provider_\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"offset_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit_\",\"type\":\"uint256\"}],\"name\":\"getProviderBids\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getRegistry\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getToken\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"bidId_\",\"type\":\"bytes32\"}],\"name\":\"isBidActive\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"delegatee_\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"delegator_\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"rights_\",\"type\":\"bytes32\"}],\"name\":\"isRightsDelegated\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"modelId_\",\"type\":\"bytes32\"}],\"name\":\"modelDeregister\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"modelOwner_\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"baseModelId_\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"ipfsCID_\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"fee_\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"amount_\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"name_\",\"type\":\"string\"},{\"internalType\":\"string[]\",\"name\":\"tags_\",\"type\":\"string[]\"}],\"name\":\"modelRegister\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"modelMinimumStake_\",\"type\":\"uint256\"}],\"name\":\"modelSetMinStake\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"}]",
 }
 
 // ModelRegistryABI is the input ABI used to generate the binding from.
@@ -231,6 +231,161 @@ func (_ModelRegistry *ModelRegistrySession) BIDSSTORAGESLOT() ([32]byte, error) 
 // Solidity: function BIDS_STORAGE_SLOT() view returns(bytes32)
 func (_ModelRegistry *ModelRegistryCallerSession) BIDSSTORAGESLOT() ([32]byte, error) {
 	return _ModelRegistry.Contract.BIDSSTORAGESLOT(&_ModelRegistry.CallOpts)
+}
+
+// DELEGATIONRULESMARKETPLACE is a free data retrieval call binding the contract method 0xad34a150.
+//
+// Solidity: function DELEGATION_RULES_MARKETPLACE() view returns(bytes32)
+func (_ModelRegistry *ModelRegistryCaller) DELEGATIONRULESMARKETPLACE(opts *bind.CallOpts) ([32]byte, error) {
+	var out []interface{}
+	err := _ModelRegistry.contract.Call(opts, &out, "DELEGATION_RULES_MARKETPLACE")
+
+	if err != nil {
+		return *new([32]byte), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new([32]byte)).(*[32]byte)
+
+	return out0, err
+
+}
+
+// DELEGATIONRULESMARKETPLACE is a free data retrieval call binding the contract method 0xad34a150.
+//
+// Solidity: function DELEGATION_RULES_MARKETPLACE() view returns(bytes32)
+func (_ModelRegistry *ModelRegistrySession) DELEGATIONRULESMARKETPLACE() ([32]byte, error) {
+	return _ModelRegistry.Contract.DELEGATIONRULESMARKETPLACE(&_ModelRegistry.CallOpts)
+}
+
+// DELEGATIONRULESMARKETPLACE is a free data retrieval call binding the contract method 0xad34a150.
+//
+// Solidity: function DELEGATION_RULES_MARKETPLACE() view returns(bytes32)
+func (_ModelRegistry *ModelRegistryCallerSession) DELEGATIONRULESMARKETPLACE() ([32]byte, error) {
+	return _ModelRegistry.Contract.DELEGATIONRULESMARKETPLACE(&_ModelRegistry.CallOpts)
+}
+
+// DELEGATIONRULESMODEL is a free data retrieval call binding the contract method 0x86878047.
+//
+// Solidity: function DELEGATION_RULES_MODEL() view returns(bytes32)
+func (_ModelRegistry *ModelRegistryCaller) DELEGATIONRULESMODEL(opts *bind.CallOpts) ([32]byte, error) {
+	var out []interface{}
+	err := _ModelRegistry.contract.Call(opts, &out, "DELEGATION_RULES_MODEL")
+
+	if err != nil {
+		return *new([32]byte), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new([32]byte)).(*[32]byte)
+
+	return out0, err
+
+}
+
+// DELEGATIONRULESMODEL is a free data retrieval call binding the contract method 0x86878047.
+//
+// Solidity: function DELEGATION_RULES_MODEL() view returns(bytes32)
+func (_ModelRegistry *ModelRegistrySession) DELEGATIONRULESMODEL() ([32]byte, error) {
+	return _ModelRegistry.Contract.DELEGATIONRULESMODEL(&_ModelRegistry.CallOpts)
+}
+
+// DELEGATIONRULESMODEL is a free data retrieval call binding the contract method 0x86878047.
+//
+// Solidity: function DELEGATION_RULES_MODEL() view returns(bytes32)
+func (_ModelRegistry *ModelRegistryCallerSession) DELEGATIONRULESMODEL() ([32]byte, error) {
+	return _ModelRegistry.Contract.DELEGATIONRULESMODEL(&_ModelRegistry.CallOpts)
+}
+
+// DELEGATIONRULESPROVIDER is a free data retrieval call binding the contract method 0x58aeef93.
+//
+// Solidity: function DELEGATION_RULES_PROVIDER() view returns(bytes32)
+func (_ModelRegistry *ModelRegistryCaller) DELEGATIONRULESPROVIDER(opts *bind.CallOpts) ([32]byte, error) {
+	var out []interface{}
+	err := _ModelRegistry.contract.Call(opts, &out, "DELEGATION_RULES_PROVIDER")
+
+	if err != nil {
+		return *new([32]byte), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new([32]byte)).(*[32]byte)
+
+	return out0, err
+
+}
+
+// DELEGATIONRULESPROVIDER is a free data retrieval call binding the contract method 0x58aeef93.
+//
+// Solidity: function DELEGATION_RULES_PROVIDER() view returns(bytes32)
+func (_ModelRegistry *ModelRegistrySession) DELEGATIONRULESPROVIDER() ([32]byte, error) {
+	return _ModelRegistry.Contract.DELEGATIONRULESPROVIDER(&_ModelRegistry.CallOpts)
+}
+
+// DELEGATIONRULESPROVIDER is a free data retrieval call binding the contract method 0x58aeef93.
+//
+// Solidity: function DELEGATION_RULES_PROVIDER() view returns(bytes32)
+func (_ModelRegistry *ModelRegistryCallerSession) DELEGATIONRULESPROVIDER() ([32]byte, error) {
+	return _ModelRegistry.Contract.DELEGATIONRULESPROVIDER(&_ModelRegistry.CallOpts)
+}
+
+// DELEGATIONRULESSESSION is a free data retrieval call binding the contract method 0xd1b43638.
+//
+// Solidity: function DELEGATION_RULES_SESSION() view returns(bytes32)
+func (_ModelRegistry *ModelRegistryCaller) DELEGATIONRULESSESSION(opts *bind.CallOpts) ([32]byte, error) {
+	var out []interface{}
+	err := _ModelRegistry.contract.Call(opts, &out, "DELEGATION_RULES_SESSION")
+
+	if err != nil {
+		return *new([32]byte), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new([32]byte)).(*[32]byte)
+
+	return out0, err
+
+}
+
+// DELEGATIONRULESSESSION is a free data retrieval call binding the contract method 0xd1b43638.
+//
+// Solidity: function DELEGATION_RULES_SESSION() view returns(bytes32)
+func (_ModelRegistry *ModelRegistrySession) DELEGATIONRULESSESSION() ([32]byte, error) {
+	return _ModelRegistry.Contract.DELEGATIONRULESSESSION(&_ModelRegistry.CallOpts)
+}
+
+// DELEGATIONRULESSESSION is a free data retrieval call binding the contract method 0xd1b43638.
+//
+// Solidity: function DELEGATION_RULES_SESSION() view returns(bytes32)
+func (_ModelRegistry *ModelRegistryCallerSession) DELEGATIONRULESSESSION() ([32]byte, error) {
+	return _ModelRegistry.Contract.DELEGATIONRULESSESSION(&_ModelRegistry.CallOpts)
+}
+
+// DELEGATIONSTORAGESLOT is a free data retrieval call binding the contract method 0xdd9b48cb.
+//
+// Solidity: function DELEGATION_STORAGE_SLOT() view returns(bytes32)
+func (_ModelRegistry *ModelRegistryCaller) DELEGATIONSTORAGESLOT(opts *bind.CallOpts) ([32]byte, error) {
+	var out []interface{}
+	err := _ModelRegistry.contract.Call(opts, &out, "DELEGATION_STORAGE_SLOT")
+
+	if err != nil {
+		return *new([32]byte), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new([32]byte)).(*[32]byte)
+
+	return out0, err
+
+}
+
+// DELEGATIONSTORAGESLOT is a free data retrieval call binding the contract method 0xdd9b48cb.
+//
+// Solidity: function DELEGATION_STORAGE_SLOT() view returns(bytes32)
+func (_ModelRegistry *ModelRegistrySession) DELEGATIONSTORAGESLOT() ([32]byte, error) {
+	return _ModelRegistry.Contract.DELEGATIONSTORAGESLOT(&_ModelRegistry.CallOpts)
+}
+
+// DELEGATIONSTORAGESLOT is a free data retrieval call binding the contract method 0xdd9b48cb.
+//
+// Solidity: function DELEGATION_STORAGE_SLOT() view returns(bytes32)
+func (_ModelRegistry *ModelRegistryCallerSession) DELEGATIONSTORAGESLOT() ([32]byte, error) {
+	return _ModelRegistry.Contract.DELEGATIONSTORAGESLOT(&_ModelRegistry.CallOpts)
 }
 
 // DIAMONDOWNABLESTORAGESLOT is a free data retrieval call binding the contract method 0x4ac3371e.
@@ -481,6 +636,37 @@ func (_ModelRegistry *ModelRegistryCallerSession) GetModelBids(modelId_ [32]byte
 	return _ModelRegistry.Contract.GetModelBids(&_ModelRegistry.CallOpts, modelId_, offset_, limit_)
 }
 
+// GetModelId is a free data retrieval call binding the contract method 0xbb93d26a.
+//
+// Solidity: function getModelId(address account_, bytes32 baseModelId_) pure returns(bytes32)
+func (_ModelRegistry *ModelRegistryCaller) GetModelId(opts *bind.CallOpts, account_ common.Address, baseModelId_ [32]byte) ([32]byte, error) {
+	var out []interface{}
+	err := _ModelRegistry.contract.Call(opts, &out, "getModelId", account_, baseModelId_)
+
+	if err != nil {
+		return *new([32]byte), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new([32]byte)).(*[32]byte)
+
+	return out0, err
+
+}
+
+// GetModelId is a free data retrieval call binding the contract method 0xbb93d26a.
+//
+// Solidity: function getModelId(address account_, bytes32 baseModelId_) pure returns(bytes32)
+func (_ModelRegistry *ModelRegistrySession) GetModelId(account_ common.Address, baseModelId_ [32]byte) ([32]byte, error) {
+	return _ModelRegistry.Contract.GetModelId(&_ModelRegistry.CallOpts, account_, baseModelId_)
+}
+
+// GetModelId is a free data retrieval call binding the contract method 0xbb93d26a.
+//
+// Solidity: function getModelId(address account_, bytes32 baseModelId_) pure returns(bytes32)
+func (_ModelRegistry *ModelRegistryCallerSession) GetModelId(account_ common.Address, baseModelId_ [32]byte) ([32]byte, error) {
+	return _ModelRegistry.Contract.GetModelId(&_ModelRegistry.CallOpts, account_, baseModelId_)
+}
+
 // GetModelIds is a free data retrieval call binding the contract method 0x08d0aab4.
 //
 // Solidity: function getModelIds(uint256 offset_, uint256 limit_) view returns(bytes32[])
@@ -605,6 +791,37 @@ func (_ModelRegistry *ModelRegistryCallerSession) GetProviderBids(provider_ comm
 	return _ModelRegistry.Contract.GetProviderBids(&_ModelRegistry.CallOpts, provider_, offset_, limit_)
 }
 
+// GetRegistry is a free data retrieval call binding the contract method 0x5ab1bd53.
+//
+// Solidity: function getRegistry() view returns(address)
+func (_ModelRegistry *ModelRegistryCaller) GetRegistry(opts *bind.CallOpts) (common.Address, error) {
+	var out []interface{}
+	err := _ModelRegistry.contract.Call(opts, &out, "getRegistry")
+
+	if err != nil {
+		return *new(common.Address), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(common.Address)).(*common.Address)
+
+	return out0, err
+
+}
+
+// GetRegistry is a free data retrieval call binding the contract method 0x5ab1bd53.
+//
+// Solidity: function getRegistry() view returns(address)
+func (_ModelRegistry *ModelRegistrySession) GetRegistry() (common.Address, error) {
+	return _ModelRegistry.Contract.GetRegistry(&_ModelRegistry.CallOpts)
+}
+
+// GetRegistry is a free data retrieval call binding the contract method 0x5ab1bd53.
+//
+// Solidity: function getRegistry() view returns(address)
+func (_ModelRegistry *ModelRegistryCallerSession) GetRegistry() (common.Address, error) {
+	return _ModelRegistry.Contract.GetRegistry(&_ModelRegistry.CallOpts)
+}
+
 // GetToken is a free data retrieval call binding the contract method 0x21df0da7.
 //
 // Solidity: function getToken() view returns(address)
@@ -665,6 +882,37 @@ func (_ModelRegistry *ModelRegistrySession) IsBidActive(bidId_ [32]byte) (bool, 
 // Solidity: function isBidActive(bytes32 bidId_) view returns(bool)
 func (_ModelRegistry *ModelRegistryCallerSession) IsBidActive(bidId_ [32]byte) (bool, error) {
 	return _ModelRegistry.Contract.IsBidActive(&_ModelRegistry.CallOpts, bidId_)
+}
+
+// IsRightsDelegated is a free data retrieval call binding the contract method 0x54126b8f.
+//
+// Solidity: function isRightsDelegated(address delegatee_, address delegator_, bytes32 rights_) view returns(bool)
+func (_ModelRegistry *ModelRegistryCaller) IsRightsDelegated(opts *bind.CallOpts, delegatee_ common.Address, delegator_ common.Address, rights_ [32]byte) (bool, error) {
+	var out []interface{}
+	err := _ModelRegistry.contract.Call(opts, &out, "isRightsDelegated", delegatee_, delegator_, rights_)
+
+	if err != nil {
+		return *new(bool), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(bool)).(*bool)
+
+	return out0, err
+
+}
+
+// IsRightsDelegated is a free data retrieval call binding the contract method 0x54126b8f.
+//
+// Solidity: function isRightsDelegated(address delegatee_, address delegator_, bytes32 rights_) view returns(bool)
+func (_ModelRegistry *ModelRegistrySession) IsRightsDelegated(delegatee_ common.Address, delegator_ common.Address, rights_ [32]byte) (bool, error) {
+	return _ModelRegistry.Contract.IsRightsDelegated(&_ModelRegistry.CallOpts, delegatee_, delegator_, rights_)
+}
+
+// IsRightsDelegated is a free data retrieval call binding the contract method 0x54126b8f.
+//
+// Solidity: function isRightsDelegated(address delegatee_, address delegator_, bytes32 rights_) view returns(bool)
+func (_ModelRegistry *ModelRegistryCallerSession) IsRightsDelegated(delegatee_ common.Address, delegator_ common.Address, rights_ [32]byte) (bool, error) {
+	return _ModelRegistry.Contract.IsRightsDelegated(&_ModelRegistry.CallOpts, delegatee_, delegator_, rights_)
 }
 
 // Owner is a free data retrieval call binding the contract method 0x8da5cb5b.
@@ -740,25 +988,25 @@ func (_ModelRegistry *ModelRegistryTransactorSession) ModelDeregister(modelId_ [
 	return _ModelRegistry.Contract.ModelDeregister(&_ModelRegistry.TransactOpts, modelId_)
 }
 
-// ModelRegister is a paid mutator transaction binding the contract method 0xec2581a1.
+// ModelRegister is a paid mutator transaction binding the contract method 0x21dea0a0.
 //
-// Solidity: function modelRegister(bytes32 modelId_, bytes32 ipfsCID_, uint256 fee_, uint256 amount_, string name_, string[] tags_) returns()
-func (_ModelRegistry *ModelRegistryTransactor) ModelRegister(opts *bind.TransactOpts, modelId_ [32]byte, ipfsCID_ [32]byte, fee_ *big.Int, amount_ *big.Int, name_ string, tags_ []string) (*types.Transaction, error) {
-	return _ModelRegistry.contract.Transact(opts, "modelRegister", modelId_, ipfsCID_, fee_, amount_, name_, tags_)
+// Solidity: function modelRegister(address modelOwner_, bytes32 baseModelId_, bytes32 ipfsCID_, uint256 fee_, uint256 amount_, string name_, string[] tags_) returns()
+func (_ModelRegistry *ModelRegistryTransactor) ModelRegister(opts *bind.TransactOpts, modelOwner_ common.Address, baseModelId_ [32]byte, ipfsCID_ [32]byte, fee_ *big.Int, amount_ *big.Int, name_ string, tags_ []string) (*types.Transaction, error) {
+	return _ModelRegistry.contract.Transact(opts, "modelRegister", modelOwner_, baseModelId_, ipfsCID_, fee_, amount_, name_, tags_)
 }
 
-// ModelRegister is a paid mutator transaction binding the contract method 0xec2581a1.
+// ModelRegister is a paid mutator transaction binding the contract method 0x21dea0a0.
 //
-// Solidity: function modelRegister(bytes32 modelId_, bytes32 ipfsCID_, uint256 fee_, uint256 amount_, string name_, string[] tags_) returns()
-func (_ModelRegistry *ModelRegistrySession) ModelRegister(modelId_ [32]byte, ipfsCID_ [32]byte, fee_ *big.Int, amount_ *big.Int, name_ string, tags_ []string) (*types.Transaction, error) {
-	return _ModelRegistry.Contract.ModelRegister(&_ModelRegistry.TransactOpts, modelId_, ipfsCID_, fee_, amount_, name_, tags_)
+// Solidity: function modelRegister(address modelOwner_, bytes32 baseModelId_, bytes32 ipfsCID_, uint256 fee_, uint256 amount_, string name_, string[] tags_) returns()
+func (_ModelRegistry *ModelRegistrySession) ModelRegister(modelOwner_ common.Address, baseModelId_ [32]byte, ipfsCID_ [32]byte, fee_ *big.Int, amount_ *big.Int, name_ string, tags_ []string) (*types.Transaction, error) {
+	return _ModelRegistry.Contract.ModelRegister(&_ModelRegistry.TransactOpts, modelOwner_, baseModelId_, ipfsCID_, fee_, amount_, name_, tags_)
 }
 
-// ModelRegister is a paid mutator transaction binding the contract method 0xec2581a1.
+// ModelRegister is a paid mutator transaction binding the contract method 0x21dea0a0.
 //
-// Solidity: function modelRegister(bytes32 modelId_, bytes32 ipfsCID_, uint256 fee_, uint256 amount_, string name_, string[] tags_) returns()
-func (_ModelRegistry *ModelRegistryTransactorSession) ModelRegister(modelId_ [32]byte, ipfsCID_ [32]byte, fee_ *big.Int, amount_ *big.Int, name_ string, tags_ []string) (*types.Transaction, error) {
-	return _ModelRegistry.Contract.ModelRegister(&_ModelRegistry.TransactOpts, modelId_, ipfsCID_, fee_, amount_, name_, tags_)
+// Solidity: function modelRegister(address modelOwner_, bytes32 baseModelId_, bytes32 ipfsCID_, uint256 fee_, uint256 amount_, string name_, string[] tags_) returns()
+func (_ModelRegistry *ModelRegistryTransactorSession) ModelRegister(modelOwner_ common.Address, baseModelId_ [32]byte, ipfsCID_ [32]byte, fee_ *big.Int, amount_ *big.Int, name_ string, tags_ []string) (*types.Transaction, error) {
+	return _ModelRegistry.Contract.ModelRegister(&_ModelRegistry.TransactOpts, modelOwner_, baseModelId_, ipfsCID_, fee_, amount_, name_, tags_)
 }
 
 // ModelSetMinStake is a paid mutator transaction binding the contract method 0x78998329.

@@ -1,10 +1,19 @@
-import { LumerinDiamond, Marketplace, ModelRegistry, MorpheusToken, ProviderRegistry } from '@ethers-v6';
+import {
+  DelegateRegistry,
+  LumerinDiamond,
+  Marketplace,
+  ModelRegistry,
+  MorpheusToken,
+  ProviderRegistry,
+} from '@ethers-v6';
 import { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
 import { expect } from 'chai';
 import { ethers } from 'hardhat';
 
 import { getHex, wei } from '@/scripts/utils/utils';
 import {
+  deployDelegateRegistry,
+  deployFacetDelegation,
   deployFacetMarketplace,
   deployFacetModelRegistry,
   deployFacetProviderRegistry,
@@ -27,20 +36,27 @@ describe('ModelRegistry', () => {
   let marketplace: Marketplace;
 
   let token: MorpheusToken;
+  let delegateRegistry: DelegateRegistry;
 
-  const modelId = getHex(Buffer.from('1'));
+  const baseModelId = getHex(Buffer.from('1'));
+  let modelId = getHex(Buffer.from(''));
   const ipfsCID = getHex(Buffer.from('ipfs://ipfsaddress'));
 
   before(async () => {
     [OWNER, SECOND] = await ethers.getSigners();
 
-    [diamond, token] = await Promise.all([deployLumerinDiamond(), deployMORToken()]);
+    [diamond, token, delegateRegistry] = await Promise.all([
+      deployLumerinDiamond(),
+      deployMORToken(),
+      deployDelegateRegistry(),
+    ]);
 
     [providerRegistry, modelRegistry, , marketplace] = await Promise.all([
       deployFacetProviderRegistry(diamond),
       deployFacetModelRegistry(diamond),
       deployFacetSessionRouter(diamond, OWNER),
       deployFacetMarketplace(diamond, token, wei(0.0001), wei(900)),
+      deployFacetDelegation(diamond, delegateRegistry),
     ]);
 
     await token.transfer(SECOND, wei(1000));
@@ -50,6 +66,8 @@ describe('ModelRegistry', () => {
     await token.approve(modelRegistry, wei(1000));
     await token.connect(SECOND).approve(marketplace, wei(1000));
     await token.approve(marketplace, wei(1000));
+
+    modelId = await modelRegistry.getModelId(SECOND, baseModelId);
 
     await reverter.snapshot();
   });
@@ -88,10 +106,10 @@ describe('ModelRegistry', () => {
       await setNextTime(300);
       await modelRegistry
         .connect(SECOND)
-        .modelRegister(getHex(Buffer.from('1')), ipfsCID, 0, wei(100), 'name1', ['tag_1']);
+        .modelRegister(SECOND, getHex(Buffer.from('1')), ipfsCID, 0, wei(100), 'name1', ['tag_1']);
       await modelRegistry
         .connect(SECOND)
-        .modelRegister(getHex(Buffer.from('2')), ipfsCID, 0, wei(100), 'name2', ['tag_1']);
+        .modelRegister(SECOND, getHex(Buffer.from('2')), ipfsCID, 0, wei(100), 'name2', ['tag_1']);
 
       const modelIds = await modelRegistry.getModelIds(0, 10);
       expect(modelIds.length).to.eq(2);
@@ -108,7 +126,7 @@ describe('ModelRegistry', () => {
   describe('#modelRegister', async () => {
     it('should register a new model', async () => {
       await setNextTime(300);
-      await modelRegistry.connect(SECOND).modelRegister(modelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
+      await modelRegistry.connect(SECOND).modelRegister(SECOND, baseModelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
 
       const data = await modelRegistry.getModel(modelId);
       expect(data.ipfsCID).to.eq(ipfsCID);
@@ -126,14 +144,42 @@ describe('ModelRegistry', () => {
 
       expect(await modelRegistry.getActiveModelIds(0, 10)).to.deep.eq([modelId]);
 
-      await modelRegistry.connect(SECOND).modelRegister(modelId, ipfsCID, 0, wei(0), 'name', ['tag_1']);
+      await modelRegistry.connect(SECOND).modelRegister(SECOND, baseModelId, ipfsCID, 0, wei(0), 'name', ['tag_1']);
+    });
+    it('should register a new model from the delegatee address', async () => {
+      await delegateRegistry
+        .connect(SECOND)
+        .delegateContract(OWNER, providerRegistry, await providerRegistry.DELEGATION_RULES_MODEL(), true);
+
+      await setNextTime(300);
+      await modelRegistry.connect(OWNER).modelRegister(SECOND, baseModelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
+
+      const data = await modelRegistry.getModel(modelId);
+      expect(data.ipfsCID).to.eq(ipfsCID);
+      expect(data.fee).to.eq(0);
+      expect(data.stake).to.eq(wei(100));
+      expect(data.owner).to.eq(SECOND);
+      expect(data.name).to.eq('name');
+      expect(data.tags).deep.eq(['tag_1']);
+      expect(data.createdAt).to.eq(300);
+      expect(data.isDeleted).to.eq(false);
+      expect(await modelRegistry.getIsModelActive(modelId)).to.eq(true);
+
+      expect(await token.balanceOf(modelRegistry)).to.eq(wei(100));
+      expect(await token.balanceOf(SECOND)).to.eq(wei(900));
+
+      expect(await modelRegistry.getActiveModelIds(0, 10)).to.deep.eq([modelId]);
+
+      await modelRegistry.connect(SECOND).modelRegister(SECOND, baseModelId, ipfsCID, 0, wei(0), 'name', ['tag_1']);
     });
     it('should add stake to existed model', async () => {
       const ipfsCID2 = getHex(Buffer.from('ipfs://ipfsaddress/2'));
 
       await setNextTime(300);
-      await modelRegistry.connect(SECOND).modelRegister(modelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
-      await modelRegistry.connect(SECOND).modelRegister(modelId, ipfsCID2, 1, wei(300), 'name2', ['tag_1', 'tag_2']);
+      await modelRegistry.connect(SECOND).modelRegister(SECOND, baseModelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
+      await modelRegistry
+        .connect(SECOND)
+        .modelRegister(SECOND, baseModelId, ipfsCID2, 1, wei(300), 'name2', ['tag_1', 'tag_2']);
 
       const data = await modelRegistry.getModel(modelId);
       expect(data.ipfsCID).to.eq(ipfsCID2);
@@ -151,14 +197,14 @@ describe('ModelRegistry', () => {
     });
     it('should activate deregistered model', async () => {
       await setNextTime(300);
-      await modelRegistry.connect(SECOND).modelRegister(modelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
+      await modelRegistry.connect(SECOND).modelRegister(SECOND, baseModelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
       await modelRegistry.connect(SECOND).modelDeregister(modelId);
 
       let data = await modelRegistry.getModel(modelId);
       expect(data.isDeleted).to.eq(true);
       expect(await modelRegistry.getIsModelActive(modelId)).to.eq(false);
 
-      await modelRegistry.connect(SECOND).modelRegister(modelId, ipfsCID, 4, wei(200), 'name3', ['tag_3']);
+      await modelRegistry.connect(SECOND).modelRegister(SECOND, baseModelId, ipfsCID, 4, wei(200), 'name3', ['tag_3']);
 
       data = await modelRegistry.getModel(modelId);
       expect(data.ipfsCID).to.eq(ipfsCID);
@@ -171,25 +217,47 @@ describe('ModelRegistry', () => {
       expect(data.isDeleted).to.eq(false);
       expect(await modelRegistry.getIsModelActive(modelId)).to.eq(true);
     });
-    it('should throw error when the caller is not a model owner', async () => {
-      await modelRegistry.connect(SECOND).modelRegister(modelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
-      await expect(
-        modelRegistry.connect(OWNER).modelRegister(modelId, ipfsCID, 0, wei(100), 'name', ['tag_1']),
-      ).to.be.revertedWithCustomError(modelRegistry, 'OwnableUnauthorizedAccount');
-    });
     it('should throw error when the stake is too low', async () => {
       await modelRegistry.modelSetMinStake(wei(2));
       await expect(
-        modelRegistry.connect(SECOND).modelRegister(modelId, ipfsCID, 0, wei(1), 'name', ['tag_1']),
+        modelRegistry.connect(SECOND).modelRegister(SECOND, baseModelId, ipfsCID, 0, wei(1), 'name', ['tag_1']),
       ).to.be.revertedWithCustomError(modelRegistry, 'ModelStakeTooLow');
+    });
+    it('should throw error when register the model without delegation or with incorrect rules', async () => {
+      await expect(
+        modelRegistry.connect(OWNER).modelRegister(SECOND, baseModelId, ipfsCID, 0, wei(100), 'name', ['tag_1']),
+      ).to.be.revertedWithCustomError(providerRegistry, 'InsufficientRightsForOperation');
+
+      await delegateRegistry
+        .connect(SECOND)
+        .delegateContract(OWNER, providerRegistry, getHex(Buffer.from('123')), true);
+      await expect(
+        modelRegistry.connect(OWNER).modelRegister(SECOND, baseModelId, ipfsCID, 0, wei(100), 'name', ['tag_1']),
+      ).to.be.revertedWithCustomError(providerRegistry, 'InsufficientRightsForOperation');
     });
   });
 
   describe('#modelDeregister', async () => {
     it('should deregister the model', async () => {
       await setNextTime(300);
-      await modelRegistry.connect(SECOND).modelRegister(modelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
+      await modelRegistry.connect(SECOND).modelRegister(SECOND, baseModelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
       await modelRegistry.connect(SECOND).modelDeregister(modelId);
+
+      expect((await modelRegistry.getModel(modelId)).isDeleted).to.equal(true);
+      expect(await modelRegistry.getIsModelActive(modelId)).to.eq(false);
+      expect(await token.balanceOf(modelRegistry)).to.eq(0);
+      expect(await token.balanceOf(SECOND)).to.eq(wei(1000));
+
+      expect(await modelRegistry.getActiveModelIds(0, 10)).to.deep.eq([]);
+    });
+    it('should deregister the model from the delegatee address', async () => {
+      await setNextTime(300);
+      await modelRegistry.connect(SECOND).modelRegister(SECOND, baseModelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
+
+      await delegateRegistry
+        .connect(SECOND)
+        .delegateContract(OWNER, providerRegistry, await providerRegistry.DELEGATION_RULES_MODEL(), true);
+      await modelRegistry.connect(OWNER).modelDeregister(modelId);
 
       expect((await modelRegistry.getModel(modelId)).isDeleted).to.equal(true);
       expect(await modelRegistry.getIsModelActive(modelId)).to.eq(false);
@@ -201,20 +269,20 @@ describe('ModelRegistry', () => {
     it('should throw error when the caller is not an owner or specified address', async () => {
       await expect(modelRegistry.connect(SECOND).modelDeregister(modelId)).to.be.revertedWithCustomError(
         modelRegistry,
-        'OwnableUnauthorizedAccount',
+        'InsufficientRightsForOperation',
       );
     });
     it('should throw error when model has active bids', async () => {
-      await providerRegistry.connect(SECOND).providerRegister(wei(100), 'test');
-      await modelRegistry.connect(SECOND).modelRegister(modelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
-      await marketplace.connect(SECOND).postModelBid(modelId, wei(10));
+      await providerRegistry.connect(SECOND).providerRegister(SECOND, wei(100), 'test');
+      await modelRegistry.connect(SECOND).modelRegister(SECOND, baseModelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
+      await marketplace.connect(SECOND).postModelBid(SECOND, modelId, wei(10));
       await expect(modelRegistry.connect(SECOND).modelDeregister(modelId)).to.be.revertedWithCustomError(
         modelRegistry,
         'ModelHasActiveBids',
       );
     });
     it('should throw error when delete model few times', async () => {
-      await modelRegistry.connect(SECOND).modelRegister(modelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
+      await modelRegistry.connect(SECOND).modelRegister(SECOND, baseModelId, ipfsCID, 0, wei(100), 'name', ['tag_1']);
       await modelRegistry.connect(SECOND).modelDeregister(modelId);
       await expect(modelRegistry.connect(SECOND).modelDeregister(modelId)).to.be.revertedWithCustomError(
         modelRegistry,

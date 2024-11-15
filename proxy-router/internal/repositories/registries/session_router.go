@@ -57,7 +57,7 @@ func NewSessionRouter(sessionRouterAddr common.Address, client i.ContractBackend
 }
 
 func (g *SessionRouter) OpenSession(opts *bind.TransactOpts, approval []byte, approvalSig []byte, stake *big.Int, privateKeyHex lib.HexString) (sessionID common.Hash, providerID common.Address, userID common.Address, err error) {
-	sessionTx, err := g.sessionRouter.OpenSession(opts, stake, false, approval, approvalSig)
+	sessionTx, err := g.sessionRouter.OpenSession(opts, opts.From, stake, false, approval, approvalSig)
 	if err != nil {
 		return common.Hash{}, common.Address{}, common.Address{}, lib.TryConvertGethError(err)
 	}

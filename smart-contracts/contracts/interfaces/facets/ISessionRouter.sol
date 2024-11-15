@@ -56,12 +56,14 @@ interface ISessionRouter is ISessionStorage {
 
     /**
      * The function to open the session.
+     * @param user_ The user address.
      * @param amount_ The stake amount.
      * @param isDirectPaymentFromUser_ If active, provider rewarded from the user stake.
      * @param approvalEncoded_ Provider approval.
      * @param signature_ Provider signature.
      */
     function openSession(
+        address user_,
         uint256 amount_,
         bool isDirectPaymentFromUser_,
         bytes calldata approvalEncoded_,
@@ -132,9 +134,10 @@ interface ISessionRouter is ISessionStorage {
 
     /**
      * The function to withdraw user stakes.
+     * @param user_ The user address.
      * @param iterations_ The loop interaction amount.
      */
-    function withdrawUserStakes(uint8 iterations_) external;
+    function withdrawUserStakes(address user_, uint8 iterations_) external;
 
     /**
      * Returns today's budget in MOR. 1%.

@@ -81,7 +81,7 @@ func (g *ModelRegistry) GetModels(ctx context.Context, offset *big.Int, limit ui
 }
 
 func (g *ModelRegistry) CreateNewModel(opts *bind.TransactOpts, modelId common.Hash, ipfsID common.Hash, fee *lib.BigInt, stake *lib.BigInt, name string, tags []string) error {
-	tx, err := g.modelRegistry.ModelRegister(opts, modelId, ipfsID, &fee.Int, &stake.Int, name, tags)
+	tx, err := g.modelRegistry.ModelRegister(opts, opts.From, modelId, ipfsID, &fee.Int, &stake.Int, name, tags)
 	if err != nil {
 		return lib.TryConvertGethError(err)
 	}
