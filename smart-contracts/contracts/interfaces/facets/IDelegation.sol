@@ -17,4 +17,4 @@ interface IDelegation is IDelegationStorage {
      * @param registry_ https://docs.delegate.xyz/technical-documentation/delegate-registry/contract-addresses
      */
     function setRegistry(address registry_) external;
-   }
+}

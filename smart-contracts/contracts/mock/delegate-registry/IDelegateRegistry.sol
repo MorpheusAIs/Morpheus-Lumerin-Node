@@ -33,16 +33,42 @@ interface IDelegateRegistry {
     event DelegateAll(address indexed from, address indexed to, bytes32 rights, bool enable);
 
     /// @notice Emitted when an address delegates or revokes rights for a contract address
-    event DelegateContract(address indexed from, address indexed to, address indexed contract_, bytes32 rights, bool enable);
+    event DelegateContract(
+        address indexed from,
+        address indexed to,
+        address indexed contract_,
+        bytes32 rights,
+        bool enable
+    );
 
     /// @notice Emitted when an address delegates or revokes rights for an ERC721 tokenId
-    event DelegateERC721(address indexed from, address indexed to, address indexed contract_, uint256 tokenId, bytes32 rights, bool enable);
+    event DelegateERC721(
+        address indexed from,
+        address indexed to,
+        address indexed contract_,
+        uint256 tokenId,
+        bytes32 rights,
+        bool enable
+    );
 
     /// @notice Emitted when an address delegates or revokes rights for an amount of ERC20 tokens
-    event DelegateERC20(address indexed from, address indexed to, address indexed contract_, bytes32 rights, uint256 amount);
+    event DelegateERC20(
+        address indexed from,
+        address indexed to,
+        address indexed contract_,
+        bytes32 rights,
+        uint256 amount
+    );
 
     /// @notice Emitted when an address delegates or revokes rights for an amount of an ERC1155 tokenId
-    event DelegateERC1155(address indexed from, address indexed to, address indexed contract_, uint256 tokenId, bytes32 rights, uint256 amount);
+    event DelegateERC1155(
+        address indexed from,
+        address indexed to,
+        address indexed contract_,
+        uint256 tokenId,
+        bytes32 rights,
+        uint256 amount
+    );
 
     /// @notice Thrown if multicall calldata is malformed
     error MulticallFailed();
@@ -75,7 +101,12 @@ interface IDelegateRegistry {
      * @param enable Whether to enable or disable this delegation, true delegates and false revokes
      * @return delegationHash The unique identifier of the delegation
      */
-    function delegateContract(address to, address contract_, bytes32 rights, bool enable) external payable returns (bytes32 delegationHash);
+    function delegateContract(
+        address to,
+        address contract_,
+        bytes32 rights,
+        bool enable
+    ) external payable returns (bytes32 delegationHash);
 
     /**
      * @notice Allow the delegate to act on behalf of `msg.sender` for a specific ERC721 token
@@ -86,7 +117,13 @@ interface IDelegateRegistry {
      * @param enable Whether to enable or disable this delegation, true delegates and false revokes
      * @return delegationHash The unique identifier of the delegation
      */
-    function delegateERC721(address to, address contract_, uint256 tokenId, bytes32 rights, bool enable) external payable returns (bytes32 delegationHash);
+    function delegateERC721(
+        address to,
+        address contract_,
+        uint256 tokenId,
+        bytes32 rights,
+        bool enable
+    ) external payable returns (bytes32 delegationHash);
 
     /**
      * @notice Allow the delegate to act on behalf of `msg.sender` for a specific amount of ERC20 tokens
@@ -97,7 +134,12 @@ interface IDelegateRegistry {
      * @param amount The amount to delegate, > 0 delegates and 0 revokes
      * @return delegationHash The unique identifier of the delegation
      */
-    function delegateERC20(address to, address contract_, bytes32 rights, uint256 amount) external payable returns (bytes32 delegationHash);
+    function delegateERC20(
+        address to,
+        address contract_,
+        bytes32 rights,
+        uint256 amount
+    ) external payable returns (bytes32 delegationHash);
 
     /**
      * @notice Allow the delegate to act on behalf of `msg.sender` for a specific amount of ERC1155 tokens
@@ -109,7 +151,13 @@ interface IDelegateRegistry {
      * @param amount The amount of that token id to delegate, > 0 delegates and 0 revokes
      * @return delegationHash The unique identifier of the delegation
      */
-    function delegateERC1155(address to, address contract_, uint256 tokenId, bytes32 rights, uint256 amount) external payable returns (bytes32 delegationHash);
+    function delegateERC1155(
+        address to,
+        address contract_,
+        uint256 tokenId,
+        bytes32 rights,
+        uint256 amount
+    ) external payable returns (bytes32 delegationHash);
 
     /**
      * ----------- CHECKS -----------
@@ -132,7 +180,12 @@ interface IDelegateRegistry {
      * @param rights Specific rights to check for, pass the zero value to ignore subdelegations and check full delegations only
      * @return valid Whether delegate is granted to act on from's behalf for entire wallet or that specific contract
      */
-    function checkDelegateForContract(address to, address from, address contract_, bytes32 rights) external view returns (bool);
+    function checkDelegateForContract(
+        address to,
+        address from,
+        address contract_,
+        bytes32 rights
+    ) external view returns (bool);
 
     /**
      * @notice Check if `to` is a delegate of `from` for the specific `contract` and `tokenId`, the entire `contract_`, or the entire wallet
@@ -143,7 +196,13 @@ interface IDelegateRegistry {
      * @param rights Specific rights to check for, pass the zero value to ignore subdelegations and check full delegations only
      * @return valid Whether delegate is granted to act on from's behalf for entire wallet, that contract, or that specific tokenId
      */
-    function checkDelegateForERC721(address to, address from, address contract_, uint256 tokenId, bytes32 rights) external view returns (bool);
+    function checkDelegateForERC721(
+        address to,
+        address from,
+        address contract_,
+        uint256 tokenId,
+        bytes32 rights
+    ) external view returns (bool);
 
     /**
      * @notice Returns the amount of ERC20 tokens the delegate is granted rights to act on the behalf of
@@ -153,7 +212,12 @@ interface IDelegateRegistry {
      * @param rights Specific rights to check for, pass the zero value to ignore subdelegations and check full delegations only
      * @return balance The delegated balance, which will be 0 if the delegation does not exist
      */
-    function checkDelegateForERC20(address to, address from, address contract_, bytes32 rights) external view returns (uint256);
+    function checkDelegateForERC20(
+        address to,
+        address from,
+        address contract_,
+        bytes32 rights
+    ) external view returns (uint256);
 
     /**
      * @notice Returns the amount of a ERC1155 tokens the delegate is granted rights to act on the behalf of
@@ -164,7 +228,13 @@ interface IDelegateRegistry {
      * @param rights Specific rights to check for, pass the zero value to ignore subdelegations and check full delegations only
      * @return balance The delegated balance, which will be 0 if the delegation does not exist
      */
-    function checkDelegateForERC1155(address to, address from, address contract_, uint256 tokenId, bytes32 rights) external view returns (uint256);
+    function checkDelegateForERC1155(
+        address to,
+        address from,
+        address contract_,
+        uint256 tokenId,
+        bytes32 rights
+    ) external view returns (uint256);
 
     /**
      * ----------- ENUMERATIONS -----------
@@ -203,7 +273,9 @@ interface IDelegateRegistry {
      * @param delegationHashes is an array of hashes that correspond to delegations
      * @return delegations Array of Delegation structs, return empty structs for nonexistent or revoked delegations
      */
-    function getDelegationsFromHashes(bytes32[] calldata delegationHashes) external view returns (Delegation[] memory delegations);
+    function getDelegationsFromHashes(
+        bytes32[] calldata delegationHashes
+    ) external view returns (Delegation[] memory delegations);
 
     /**
      * ----------- STORAGE ACCESS -----------
