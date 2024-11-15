@@ -110,7 +110,7 @@ const Chat = (props) => {
             const openSessions = sessions.filter(s => !isClosed(s));
 
             const useLocalModelChat = () => {
-                const localModel = (chainData?.models?.find((m: any) => m.hasLocal));
+                const localModel = (chainData?.models?.find((m: any) => m.isLocal));
                 if (localModel) {
                     setSelectedModel(localModel);
                     setChat({ id: generateHashId(), createdAt: new Date(), modelId: localModel.Id, isLocal: true });
@@ -254,7 +254,7 @@ const Chat = (props) => {
         setIsLoading(false);
 
         if (activeSession.Id == sessionId) {
-            const localModel = (chainData?.models?.find((m: any) => m.hasLocal));
+            const localModel = (chainData?.models?.find((m: any) => m.isLocal));
             if (localModel) {
                 setSelectedModel(localModel);
                 setChat({ id: generateHashId(), createdAt: new Date(), modelId: localModel.Id, isLocal: true });
@@ -271,22 +271,24 @@ const Chat = (props) => {
             console.warn("Model ID is missed");
             return;
         }
+
+        const selectedModel = chainData.models.find((m: any) => m.Id == modelId);
+        setSelectedModel(selectedModel);
+        setIsReadonly(false);
+
         // toggleDrawer();
 
         setChat({ ...chatData })
 
         if (chatData.isLocal) {
             await loadChatHistory(chatData.id);
-            return
+            return;
         }
 
         const openSessions = sessions.filter(s => !isClosed(s));
         // search open session by model ID
         const openSession = openSessions.find(s => s.ModelAgentId == modelId);
         setIsReadonly(!openSession);
-
-        const selectedModel = chainData.models.find((m: any) => m.Id == modelId);
-        setSelectedModel(selectedModel);
 
         if (openSession) {
             setActiveSession(openSession);

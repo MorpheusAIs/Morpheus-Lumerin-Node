@@ -158,18 +158,20 @@ const withChatState = WrappedComponent => {
         })
       )).reduce((a,b) => ({...a, [b.id]: b.bids}), {});
 
-      const result = [];
+      const result = [...localModels.map(m => ({...m, isLocal: true }))];
 
       for (const model of models) {
         const id = model.Id;
         const bids = responses[id];
         
-        const localModel = localModels.find(lm => lm.Id == id);
+        if(!bids.length) {
+          continue;
+        }
 
-        result.push({ ...model, bids, hasLocal: Boolean(localModel) })
+        result.push({ ...model, bids })
       }
 
-      return { models: result.filter(r => r.bids.length || r.hasLocal), providers }
+      return { models: result, providers }
     }
 
     getProvidersAvailability = async (providers) => {

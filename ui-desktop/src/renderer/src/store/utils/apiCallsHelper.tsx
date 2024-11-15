@@ -3,12 +3,12 @@ export const getSessionsByUser = async (url, user) => {
       return;
     }
 
-    const getIds = async (user, offset, limit) => {
+    const getSessions = async (user, offset, limit) => {
       try {
-        const path = `${url}/blockchain/sessions/user/ids?user=${user}&offset=${offset}&limit=${limit}`;
+        const path = `${url}/blockchain/sessions/user?user=${user}&offset=${offset}&limit=${limit}`;
         const response = await fetch(path);
         const data = await response.json();
-        return data;
+        return data.sessions;
       }
       catch (e) {
         console.log("Error", e)
@@ -16,18 +16,6 @@ export const getSessionsByUser = async (url, user) => {
       }
     } 
 
-    const getSessioInfo = async (id) => {
-      try {
-        const path = `${url}/blockchain/sessions/${id}`;
-        const response = await fetch(path);
-        const data = await response.json();
-        return data.session;
-      }
-      catch (e) {
-        console.log("Error", e)
-        return [];
-      }
-    }
     
     const limit = 50;
     let offset = 0;
@@ -36,11 +24,10 @@ export const getSessionsByUser = async (url, user) => {
 
     while (!all) {
       console.log("Getting session for user: ", user, offset, limit)
-      const ids = await getIds(user, offset, limit);
-      const results = await Promise.all(ids.map(id => getSessioInfo(id)));
-      sessions.push(...results);
+      const sessionsRes = await getSessions(user, offset, limit);
+      sessions.push(...sessionsRes);
 
-      if(ids.length != limit) {
+      if(sessionsRes.length != limit) {
         all = true;
       }
       else {
