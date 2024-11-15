@@ -28,14 +28,16 @@ type PathEthAddrID struct {
 	ID lib.Address `uri:"id" binding:"required" validate:"eth_addr"`
 }
 
-type QueryOffsetLimit struct {
+type QueryOffsetLimitOrder struct {
 	Offset lib.BigInt `form:"offset,default=0" binding:"omitempty" validate:"number"`
 	Limit  uint8      `form:"limit,default=10" binding:"omitempty" validate:"number"`
+	Order  string     `form:"order,default=asc" binding:"omitempty" validate:"oneof=asc desc"`
 }
 
-type QueryOffsetLimitNoDefault struct {
+type QueryOffsetLimitOrderNoDefault struct {
 	Offset lib.BigInt `form:"offset,default=0" binding:"omitempty" validate:"number"`
 	Limit  uint8      `form:"limit,default=0" binding:"omitempty" validate:"number"`
+	Order  string     `form:"order,default=asc" binding:"omitempty" validate:"oneof=asc desc"`
 }
 
 type QueryPageLimit struct {
