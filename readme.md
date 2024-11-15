@@ -21,7 +21,7 @@ manages secure sessions between consumers and providers and routes prompts and r
 ## Tokens and Contract Information (update 11/15/2024)
 ### MainNet: (MAIN Branch and MAIN-* Releases)
 * Morpheus MOR Token: `0x092bAaDB7DEf4C3981454dD9c0A0D7FF07bCFc86` 
-* Diamond MarketPlace Contract: `TBD` 
+* Diamond MarketPlace Contract: `0xDE819AaEE474626E3f34Ef0263373357e5a6C71b` 
 * Blockchain Explorer: `https://arbiscan.io/`
 
 ### TestNet (DEV & STG Branches and TEST-* Releases)
