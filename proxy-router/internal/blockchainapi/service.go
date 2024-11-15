@@ -419,7 +419,7 @@ func (s *BlockchainService) CloseSession(ctx context.Context, sessionID common.H
 	return tx, nil
 }
 
-func (s *BlockchainService) GetSession(ctx *gin.Context, sessionID common.Hash) (*structs.Session, error) {
+func (s *BlockchainService) GetSession(ctx context.Context, sessionID common.Hash) (*structs.Session, error) {
 	ses, err := s.sessionRouter.GetSession(ctx, sessionID)
 	if err != nil {
 		return nil, err
