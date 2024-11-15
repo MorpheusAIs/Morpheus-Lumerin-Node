@@ -2,13 +2,16 @@ package proxyapi
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
@@ -363,8 +366,19 @@ func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.
 
 	return result, nil
 }
-func (p *ProxyServiceSender) rpcRequestStreamV2(ctx context.Context, cb gcs.CompletionCallback, url string, rpcMessage *msgs.RPCMessage, providerPublicKey lib.HexString) (interface{}, int, int, error) {
-	TIMEOUT_TO_ESTABLISH_CONNECTION := time.Second * 3
+func (p *ProxyServiceSender) rpcRequestStreamV2(
+	ctx context.Context,
+	cb gcs.CompletionCallback,
+	url string,
+	rpcMessage *msgs.RPCMessage,
+	providerPublicKey lib.HexString,
+) (interface{}, int, int, error) {
+	const (
+		TIMEOUT_TO_ESTABLISH_CONNECTION   = time.Second * 3
+		TIMEOUT_TO_RECEIVE_FIRST_RESPONSE = time.Second * 5
+		MAX_RETRIES                       = 5
+	)
+
 	dialer := net.Dialer{Timeout: TIMEOUT_TO_ESTABLISH_CONNECTION}
 
 	prKey, err := p.privateKey.GetPrivateKey()
@@ -380,7 +394,7 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(ctx context.Context, cb gcs.Comp
 	}
 	defer conn.Close()
 
-	TIMEOUT_TO_RECEIVE_FIRST_RESPONSE := time.Second * 5
+	// Set initial read deadline
 	conn.SetReadDeadline(time.Now().Add(TIMEOUT_TO_RECEIVE_FIRST_RESPONSE))
 
 	msgJSON, err := json.Marshal(rpcMessage)
@@ -397,27 +411,61 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(ctx context.Context, cb gcs.Comp
 		return nil, ttftMs, totalTokens, err
 	}
 
-	// read response
 	reader := bufio.NewReader(conn)
-	d := json.NewDecoder(reader)
+	// We need to recreate the decoder if it becomes invalid
+	var d *json.Decoder
 
 	responses := make([]interface{}, 0)
+
+	retryCount := 0
 
 	for {
 		if ctx.Err() != nil {
 			return nil, ttftMs, totalTokens, ctx.Err()
 		}
+
+		// Initialize or reset the decoder
+		if d == nil {
+			d = json.NewDecoder(reader)
+		}
+
 		var msg *msgs.RpcResponse
 		err = d.Decode(&msg)
-		p.log.Debugf("Received stream msg:", msg)
 		if err != nil {
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 				p.log.Warnf("Read operation timed out: %v", err)
-				return nil, ttftMs, totalTokens, fmt.Errorf("first response timed out after 3 seconds: %w", err)
+				if retryCount < MAX_RETRIES {
+					alive, availErr := checkProviderAvailability(url)
+					if availErr != nil {
+						p.log.Warnf("Provider availability check failed: %v", availErr)
+						return nil, ttftMs, totalTokens, fmt.Errorf("provider availability check failed: %w", availErr)
+					}
+					if alive {
+						retryCount++
+						p.log.Infof("Provider is alive, retrying (%d/%d)...", retryCount, MAX_RETRIES)
+						// Reset the read deadline
+						conn.SetReadDeadline(time.Now().Add(TIMEOUT_TO_RECEIVE_FIRST_RESPONSE))
+						// Clear the error state by reading any remaining data
+						reader.Discard(reader.Buffered())
+						// Reset the decoder
+						d = nil
+						continue
+					} else {
+						return nil, ttftMs, totalTokens, fmt.Errorf("provider is not available")
+					}
+				} else {
+					return nil, ttftMs, totalTokens, fmt.Errorf("read timed out after %d retries: %w", retryCount, err)
+				}
+			} else if err == io.EOF {
+				p.log.Warnf("Connection closed by provider")
+				return nil, ttftMs, totalTokens, fmt.Errorf("connection closed by provider")
+			} else {
+				p.log.Warnf("Failed to decode response: %v", err)
+				return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
 			}
-			p.log.Warnf("Failed to decode response: %v", err)
-			return responses, ttftMs, totalTokens, nil
 		}
+
+		p.log.Debugf("Received stream msg: %v", msg)
 
 		if msg.Error != nil {
 			return nil, ttftMs, totalTokens, lib.WrapError(ErrResponseErr, fmt.Errorf("error: %v, data: %v", msg.Error.Message, msg.Error.Data))
@@ -429,11 +477,11 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(ctx context.Context, cb gcs.Comp
 
 		if ttftMs == 0 {
 			ttftMs = int(time.Now().UnixMilli() - now)
-			conn.SetReadDeadline(time.Time{})
+			conn.SetReadDeadline(time.Time{}) // Clear read deadline
 		}
 
 		var inferenceRes InferenceRes
-		err := json.Unmarshal(*msg.Result, &inferenceRes)
+		err = json.Unmarshal(*msg.Result, &inferenceRes)
 		if err != nil {
 			return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
 		}
@@ -494,4 +542,62 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(ctx context.Context, cb gcs.Comp
 	}
 
 	return responses, ttftMs, totalTokens, nil
+}
+
+// checkProviderAvailability checks if the provider is alive using portchecker.io API
+func checkProviderAvailability(url string) (bool, error) {
+	host, port, err := net.SplitHostPort(url)
+	if err != nil {
+		return false, err
+	}
+
+	portInt, err := strconv.Atoi(port)
+	if err != nil {
+		return false, err
+	}
+
+	requestBody, err := json.Marshal(map[string]interface{}{
+		"host":  host,
+		"ports": []int{portInt},
+	})
+	if err != nil {
+		return false, err
+	}
+
+	req, err := http.NewRequest("POST", "https://portchecker.io/api/v1/query", bytes.NewBuffer(requestBody))
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false, err
+	}
+
+	var response struct {
+		Check []struct {
+			Status bool `json:"status"`
+			Port   int  `json:"port"`
+		} `json:"check"`
+	}
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		return false, err
+	}
+
+	for _, check := range response.Check {
+		if check.Port == portInt {
+			return check.Status, nil
+		}
+	}
+
+	return false, fmt.Errorf("port status not found in response")
 }
