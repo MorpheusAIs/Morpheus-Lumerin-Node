@@ -1,8 +1,7 @@
 
 # Creating Provider, Model and Bid on the Blockchain:
-**Diamond contract:** `0x10777866547c53cbd69b02c5c76369d7e24e7b10`
 
-**Needed information:**
+**Needed information (samples):**
 * Provider/Owner:   `0x9E26Fea97F7d644BAf62d0e20e4d4b8F836C166c` # Your ERC-20 Wallet with saMOR & saETH
 * Endpoint:         `server.domain.com:3333` # Internet publicly accessible server/node access point 
 * Model ID:         `0xe1e6e3e77148d140065ef2cd4fba7f4ae59c90e1639184b6df5c84` # Random 32byte/hex that you generate 
@@ -11,13 +10,14 @@
 * Bid Cost:         `200000000000` (1*10^18 or ~7MOR) # What will the model cost per second to use
 
 ## Steps
- 1. WEB3/Arbiscan/Metamask: Authorize Diamond Contract to spend on the Provider's behalf 
-       1. https://sepolia.arbiscan.io/address/0x34a285a1b1c166420df5b6630132542923b5b27e#writeContract 
-       1. Connect to Web3 (connect Provider wallet) 
-       1. Click Approve 
-       1. Spender Address = Diamond Contract 
-       1. Authorized Amount = remember that this is in the form 1*10^18 so make sure there's enough MOR 1ranted to cover the contract fees 
-       1. The Diamond Contract is now authorized to spend MOR on provider's behalf 
+1. To complete these steps, you will need to be running the proxy-router and also have access to the API Port (default=8082)for the Swagger API Interface
+    1. http://localhost:8082/swagger/index.html
+
+1. Authorize Diamond Contract to spend on the Provider's behalf 
+    1. http://localhost:8082/swagger/index.html#/transactions/post_blockchain_approve 
+    1. Spender Address = Diamond Contract 
+    1. Authorized Amount = remember that this is in the form `1*10^18` so make sure there's enough MOR 1ranted to cover the contract fees 
+    1. The Diamond Contract is now authorized to spend MOR on provider's behalf 
 
 1. Create Provider in the Diamond contract via swagger api:
     1. Start proxy-router 
@@ -30,8 +30,8 @@
     1. Go to http://localhost:8082/swagger/index.html#/models/post_blockchain_models and enter
         1. modelId: random 32byte/hex that will uniquely identify model (uuid)
         1. ipfsCID: another random32byte/hex for future use (model library)
-        1. Fee: fee for the model usage - 0 for now
-        1. addStake: stake for model usage - 0 for now 
+        1. Fee: fee for the model usage
+        1. addStake: stake for model usage 
         1. Owner: Provider Wallet Address 
         1. name: Human Readable model like "Llama 2.0" or "Mistral 2.5" or "Collective Cognition 1.1" 
         1. tags: array of tag strings for the model 

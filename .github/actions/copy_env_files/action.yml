@@ -6,8 +6,8 @@ runs:
     - name: Copy Environment Files
       shell: bash
       run: | 
-        cp ./proxy-router/models-config.json.example ./proxy-router/models-config.json
-        cp ./proxy-router/models-config.json.example models-config.json
+        cp ./.github/workflows/models-config.json ./proxy-router/models-config.json
+        cp ./.github/workflows/models-config.json models-config.json
         if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
           cp ./.github/workflows/proxy-router.main.env ./proxy-router/.env
           cp ./.github/workflows/proxy-router.main.env .env
@@ -17,7 +17,7 @@ runs:
           cp ./.github/workflows/proxy-router.test.env .env
           cp ./.github/workflows/ui-desktop.test.env ./ui-desktop/.env
         else
-          cp ./proxy-router/.env.example ./proxy-router/.env
-          cp ./proxy-router/.env.example .env
-          cp ./ui-desktop/.env.example ./ui-desktop/.env
+          cp ./.github/workflows/proxy-router.test.env ./proxy-router/.env
+          cp ./.github/workflows/proxy-router.test.env .env
+          cp ./.github/workflows/ui-desktop.test.env ./ui-desktop/.env
         fi
