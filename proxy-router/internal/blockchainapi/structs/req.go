@@ -33,6 +33,11 @@ type QueryOffsetLimit struct {
 	Limit  uint8      `form:"limit,default=10" binding:"omitempty" validate:"number"`
 }
 
+type QueryOffsetLimitNoDefault struct {
+	Offset lib.BigInt `form:"offset,default=0" binding:"omitempty" validate:"number"`
+	Limit  uint8      `form:"limit,default=0" binding:"omitempty" validate:"number"`
+}
+
 type QueryPageLimit struct {
 	Page  uint64 `form:"page,default=0"   binding:"omitempty" validate:"number"`
 	Limit uint8  `form:"limit,default=10" binding:"omitempty" validate:"number"`

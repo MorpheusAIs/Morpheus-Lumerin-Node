@@ -16,10 +16,4 @@ abstract contract OwnableDiamondStorage is DiamondOwnableStorage, Context {
             revert OwnableUnauthorizedAccount(_msgSender());
         }
     }
-
-    function _onlyAccount(address sender_) internal view {
-        if (_msgSender() != sender_) {
-            revert OwnableUnauthorizedAccount(_msgSender());
-        }
-    }
 }

@@ -8,10 +8,11 @@ import {OwnableDiamondStorage} from "../presets/OwnableDiamondStorage.sol";
 
 import {BidStorage} from "../storages/BidStorage.sol";
 import {ModelStorage} from "../storages/ModelStorage.sol";
+import {DelegationStorage} from "../storages/DelegationStorage.sol";
 
 import {IModelRegistry} from "../../interfaces/facets/IModelRegistry.sol";
 
-contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, BidStorage {
+contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, BidStorage, DelegationStorage {
     using EnumerableSet for EnumerableSet.Bytes32Set;
     using SafeERC20 for IERC20;
 
@@ -25,14 +26,19 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
     }
 
     function modelRegister(
-        bytes32 modelId_,
+        address modelOwner_,
+        bytes32 baseModelId_,
         bytes32 ipfsCID_,
         uint256 fee_,
         uint256 amount_,
         string calldata name_,
         string[] memory tags_
     ) external {
+        _validateDelegatee(_msgSender(), modelOwner_, DELEGATION_RULES_MODEL);
+
         ModelsStorage storage modelsStorage = _getModelsStorage();
+
+        bytes32 modelId_ = getModelId(modelOwner_, baseModelId_);
         Model storage model = modelsStorage.models[modelId_];
 
         uint256 newStake_ = model.stake + amount_;
@@ -43,16 +49,14 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
 
         if (amount_ > 0) {
             BidsStorage storage bidsStorage = _getBidsStorage();
-            IERC20(bidsStorage.token).safeTransferFrom(_msgSender(), address(this), amount_);
+            IERC20(bidsStorage.token).safeTransferFrom(modelOwner_, address(this), amount_);
         }
 
         if (model.createdAt == 0) {
             modelsStorage.modelIds.add(modelId_);
 
             model.createdAt = uint128(block.timestamp);
-            model.owner = _msgSender();
-        } else {
-            _onlyAccount(model.owner);
+            model.owner = modelOwner_;
         }
 
         model.stake = newStake_;
@@ -64,14 +68,15 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
 
         modelsStorage.activeModels.add(modelId_);
 
-        emit ModelRegisteredUpdated(_msgSender(), modelId_);
+        emit ModelRegisteredUpdated(modelOwner_, modelId_);
     }
 
     function modelDeregister(bytes32 modelId_) external {
         ModelsStorage storage modelsStorage = _getModelsStorage();
         Model storage model = modelsStorage.models[modelId_];
 
-        _onlyAccount(model.owner);
+        _validateDelegatee(_msgSender(), model.owner, DELEGATION_RULES_MODEL);        
+
         if (!_isModelActiveBidsEmpty(modelId_)) {
             revert ModelHasActiveBids();
         }
@@ -90,5 +95,9 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
         IERC20(bidsStorage.token).safeTransfer(model.owner, withdrawAmount_);
 
         emit ModelDeregistered(model.owner, modelId_);
+    }
+
+    function getModelId(address account_, bytes32 baseModelId_) public pure returns (bytes32) {
+        return keccak256(abi.encodePacked(account_, baseModelId_));
     }
 }

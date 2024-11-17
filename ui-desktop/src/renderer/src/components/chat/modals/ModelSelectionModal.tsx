@@ -48,7 +48,7 @@ const ModelSelectionModal = ({ isActive, handleClose, models, onChangeModel }) =
     }
 
     const sortedModels = models
-        .map(m => ({ ...m, isOnline: m.bids.some(b => b.ProviderData?.availabilityStatus != "disconnected") }))
+        .map(m => ({ ...m, isOnline: m.isLocal || m.bids.some(b => b.ProviderData?.availabilityStatus != "disconnected") }))
         .sort((a, b) => b.isOnline - a.isOnline);
 
     const filterdModels = search ? sortedModels.filter(m => m.Name.toLowerCase().includes(search.toLowerCase())) : sortedModels;

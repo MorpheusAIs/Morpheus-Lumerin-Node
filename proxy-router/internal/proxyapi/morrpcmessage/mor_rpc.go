@@ -2,7 +2,6 @@ package morrpcmesssage
 
 import (
 	"encoding/json"
-	"fmt"
 	"math/big"
 	"time"
 
@@ -283,7 +282,6 @@ func (m *MORRPCMessage) SessionReportRequest(sessionID common.Hash, userPrivateK
 
 func (m *MORRPCMessage) VerifySignature(params any, signature lib.HexString, publicKey lib.HexString, sourceLog lib.ILogger) bool {
 	paramsBytes, err := json.Marshal(params)
-	fmt.Println("\n\nOUTPUT: ", string(paramsBytes))
 	if err != nil {
 		sourceLog.Error("Error marshalling params", err)
 		return false

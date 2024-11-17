@@ -16,6 +16,7 @@ import (
 	m "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/marketplace"
 	pr "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/providerregistry"
 	sr "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/sessionrouter"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/multicall"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
 	sessionrepo "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/session"
 	"github.com/gin-gonic/gin"
@@ -73,6 +74,7 @@ var (
 
 func NewBlockchainService(
 	ethClient i.EthClient,
+	mc multicall.MulticallBackend,
 	diamonContractAddr common.Address,
 	morTokenAddr common.Address,
 	explorerApiUrl string,
@@ -83,10 +85,10 @@ func NewBlockchainService(
 	log lib.ILogger,
 	legacyTx bool,
 ) *BlockchainService {
-	providerRegistry := registries.NewProviderRegistry(diamonContractAddr, ethClient, log)
-	modelRegistry := registries.NewModelRegistry(diamonContractAddr, ethClient, log)
-	marketplace := registries.NewMarketplace(diamonContractAddr, ethClient, log)
-	sessionRouter := registries.NewSessionRouter(diamonContractAddr, ethClient, log)
+	providerRegistry := registries.NewProviderRegistry(diamonContractAddr, ethClient, mc, log)
+	modelRegistry := registries.NewModelRegistry(diamonContractAddr, ethClient, mc, log)
+	marketplace := registries.NewMarketplace(diamonContractAddr, ethClient, mc, log)
+	sessionRouter := registries.NewSessionRouter(diamonContractAddr, ethClient, mc, log)
 	morToken := registries.NewMorToken(morTokenAddr, ethClient, log)
 
 	explorerClient := NewExplorerClient(explorerApiUrl, morTokenAddr.String())
@@ -118,18 +120,16 @@ func (s *BlockchainService) GetAllProviders(ctx context.Context) ([]*structs.Pro
 		return nil, err
 	}
 
-	result := make([]*structs.Provider, len(addrs))
-	for i, value := range providers {
-		result[i] = &structs.Provider{
-			Address:   addrs[i],
-			Endpoint:  value.Endpoint,
-			Stake:     &lib.BigInt{Int: *value.Stake},
-			IsDeleted: value.IsDeleted,
-			CreatedAt: &lib.BigInt{Int: *value.CreatedAt},
-		}
+	return mapProviders(addrs, providers), nil
+}
+
+func (s *BlockchainService) GetProviders(ctx context.Context, offset *big.Int, limit uint8) ([]*structs.Provider, error) {
+	addrs, providers, err := s.providerRegistry.GetProviders(ctx, offset, limit)
+	if err != nil {
+		return nil, err
 	}
 
-	return result, nil
+	return mapProviders(addrs, providers), nil
 }
 
 func (s *BlockchainService) GetAllModels(ctx context.Context) ([]*structs.Model, error) {
@@ -138,22 +138,16 @@ func (s *BlockchainService) GetAllModels(ctx context.Context) ([]*structs.Model,
 		return nil, err
 	}
 
-	result := make([]*structs.Model, len(ids))
-	for i, value := range models {
-		result[i] = &structs.Model{
-			Id:        ids[i],
-			IpfsCID:   value.IpfsCID,
-			Fee:       value.Fee,
-			Stake:     value.Stake,
-			Owner:     value.Owner,
-			Name:      value.Name,
-			Tags:      value.Tags,
-			CreatedAt: value.CreatedAt,
-			IsDeleted: value.IsDeleted,
-		}
+	return mapModels(ids, models), nil
+}
+
+func (s *BlockchainService) GetModels(ctx context.Context, offset *big.Int, limit uint8) ([]*structs.Model, error) {
+	ids, models, err := s.modelRegistry.GetModels(ctx, offset, limit)
+	if err != nil {
+		return nil, err
 	}
 
-	return result, nil
+	return mapModels(ids, models), nil
 }
 
 func (s *BlockchainService) GetBidsByProvider(ctx context.Context, providerAddr common.Address, offset *big.Int, limit uint8) ([]*structs.Bid, error) {
@@ -419,7 +413,7 @@ func (s *BlockchainService) CloseSession(ctx context.Context, sessionID common.H
 	return tx, nil
 }
 
-func (s *BlockchainService) GetSession(ctx *gin.Context, sessionID common.Hash) (*structs.Session, error) {
+func (s *BlockchainService) GetSession(ctx context.Context, sessionID common.Hash) (*structs.Session, error) {
 	ses, err := s.sessionRouter.GetSession(ctx, sessionID)
 	if err != nil {
 		return nil, err

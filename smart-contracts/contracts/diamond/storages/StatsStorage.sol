@@ -9,7 +9,7 @@ contract StatsStorage is IStatsStorage {
         mapping(bytes32 => ModelStats) modelStats;
     }
 
-    bytes32 public constant STATS_STORAGE_SLOT = keccak256("diamond.stats.storage");
+    bytes32 public constant STATS_STORAGE_SLOT = keccak256("diamond.standard.stats.storage");
 
     /** PUBLIC, GETTERS */
     function getProviderModelStats(

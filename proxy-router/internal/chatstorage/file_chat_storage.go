@@ -2,7 +2,6 @@ package chatstorage
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -193,7 +192,6 @@ func (cs *ChatStorage) LoadChatFromFile(identifier string) (*gcs.ChatHistory, er
 	}
 
 	if err := json.Unmarshal(fileContent, &data); err != nil {
-		fmt.Println("Error unmarshalling file content:", err)
 		return nil, err
 	}
 
