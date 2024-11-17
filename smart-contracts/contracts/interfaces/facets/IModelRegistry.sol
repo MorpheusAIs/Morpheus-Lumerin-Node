@@ -25,6 +25,7 @@ interface IModelRegistry is IModelStorage {
 
     /**
      * The function to register the model.
+     * @param modelOwner_ The model owner address.
      * @param modelId_ The model ID.
      * @param ipfsCID_ The model IPFS CID.
      * @param fee_ The model fee.
@@ -33,6 +34,7 @@ interface IModelRegistry is IModelStorage {
      * @param tags_ The model tags.
      */
     function modelRegister(
+        address modelOwner_,
         bytes32 modelId_,
         bytes32 ipfsCID_,
         uint256 fee_,
@@ -46,4 +48,11 @@ interface IModelRegistry is IModelStorage {
      * @param modelId_ The model ID.
      */
     function modelDeregister(bytes32 modelId_) external;
+
+    /**
+     * Form model ID for the user models.
+     * @param account_ The address.
+     * @param baseModelId_ The base model ID.
+     */
+    function getModelId(address account_, bytes32 baseModelId_) external pure returns (bytes32);
 }

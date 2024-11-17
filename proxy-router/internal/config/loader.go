@@ -60,6 +60,8 @@ func LoadConfig(cfg ConfigInterface, osArgs *[]string, validator Validator) erro
 		envValue := os.Getenv(envName)
 		_ = field.Set(envValue)
 		// if err != nil {
+		// replace all bool envs to lib.Bool to uncomment this and error on invalid env var configuration
+		// fmt.Printf("invalid value for env variable %s: %s. Error: %s\n", envName, envValue, err)
 		// TODO: set default value on error
 		// 	return lib.WrapError(ErrEnvParse, fmt.Errorf("%s: %w", envName, err))
 		// }
@@ -106,7 +108,9 @@ func LoadConfig(cfg ConfigInterface, osArgs *[]string, validator Validator) erro
 		if !isErrFlagNotDefined(err) {
 			return lib.WrapError(ErrFlagParse, err)
 		}
-
+		if len(flagset.Args()) == 0 {
+			break
+		}
 		args = flagset.Args()[1:]
 	}
 

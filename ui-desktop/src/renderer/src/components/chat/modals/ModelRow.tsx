@@ -46,7 +46,7 @@ const Buttons = styled.div`
 
 const PriceContainer = styled.div`
     display: flex;
-    justify-content: ${p => p.hasLocal ? "space-evenly" : 'center'};
+    justify-content: center;
     align-items: center;
     white-space: nowrap;
 `
@@ -98,9 +98,13 @@ const selectorStyles = {
 function ModelRow(props) {
     const bids = props?.model?.bids || [];
     const modelId = props?.model?.Id || '';
-    const hasLocal = props?.model?.hasLocal;
-    const hasBids = Boolean(bids.length);
-    const lastAvailabilityCheck: Date | null = bids.map(b => new Date(b.ProviderData.availabilityUpdatedAt))[0] ?? null;
+    const isLocal = props?.model?.isLocal;
+    const lastAvailabilityCheck: Date = (() => {
+        if(!bids?.length) {
+            return new Date();
+        }
+        return bids.map(b => new Date(b.ProviderData?.availabilityUpdatedAt ?? new Date()))[0];
+    })();
 
     const [selected, changeSelected] = useState<any>();
     const [useSelect, setUseSelect] = useState<boolean>();
@@ -143,9 +147,12 @@ function ModelRow(props) {
         <RowContainer useSelect={useSelect}>
             <ModelNameContainer>
                 { props?.model?.Name } 
-                { !props?.model?.isOnline && <DisconnectedIcon data-rh-negative data-rh={`Last seen offline at ${lastAvailabilityCheck?.toLocaleTimeString()}`} /> }
+                { 
+                    !props?.model?.isOnline && 
+                    <DisconnectedIcon data-rh-negative data-rh={`Last seen offline at ${lastAvailabilityCheck?.toLocaleTimeString()}`} /> 
+                }
             </ModelNameContainer>
-            <PriceContainer hasLocal={hasLocal}>
+            <PriceContainer>
                 {
                     useSelect
                         ? <div style={{ width: '100%', display: 'flex', alignItems: 'center' }}>
@@ -166,32 +173,24 @@ function ModelRow(props) {
                         </div>
                         : <div>
                             {
-                                hasBids ? <FlexCenter>
-                                    <span
-                                        data-rh-negative
-                                        data-rh={`Bid ID: ${abbreviateAddress(targetBid?.Id || "", 5)}`}
-                                        style={{ marginRight: '10px' }}>
-                                        {formatPrice()}
-                                    </span>
-
-                                    {/* <IconEdit width={'1.5rem'} style={{ cursor: 'pointer' }} onClick={() => setUseSelect(!useSelect)}></IconEdit> */}
-                                </FlexCenter>
-                                    : <FlexCenter>-</FlexCenter>
-
+                                !isLocal ? (
+                                    <FlexCenter>
+                                        <span
+                                            data-rh-negative
+                                            data-rh={`Bid ID: ${abbreviateAddress(targetBid?.Id || "", 5)}`}
+                                            style={{ marginRight: '10px' }}>
+                                            {formatPrice()}
+                                        </span>
+                                        {/* <IconEdit width={'1.5rem'} style={{ cursor: 'pointer' }} onClick={() => setUseSelect(!useSelect)}></IconEdit> */}
+                                    </FlexCenter>
+                                    ) : 
+                                    <FlexCenter>(local)</FlexCenter>
                             }
-
                         </div>
                 }
             </PriceContainer>
             <Buttons>
-                {
-                    hasLocal &&
-                    <RightBtn block onClick={selectLocal}>Local</RightBtn>
-                }
-                {
-                    hasBids &&
-                    <RightBtn block disabled={!props?.model?.isOnline} onClick={handleChangeModel}>Select</RightBtn>
-                }
+                <RightBtn block disabled={!props?.model?.isOnline && !isLocal} onClick={() => isLocal ? selectLocal() : handleChangeModel()}>Select</RightBtn>
             </Buttons>
         </RowContainer>
     );

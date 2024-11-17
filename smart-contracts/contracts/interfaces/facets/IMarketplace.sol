@@ -19,38 +19,36 @@ interface IMarketplace is IMarketplaceStorage {
 
     /**
      * The function to initialize the facet.
-     * @param token_ Stake token (MOR)
-     * @param bidMinPricePerSecond_ Min price per second for bid
-     * @param bidMaxPricePerSecond_ Max price per second for bid
+     * @param token_ Stake token (MOR).
+     * @param bidMinPricePerSecond_ Min price per second for bid.
+     * @param bidMaxPricePerSecond_ Max price per second for bid.
      */
     function __Marketplace_init(address token_, uint256 bidMinPricePerSecond_, uint256 bidMaxPricePerSecond_) external;
 
     /**
      * The function to set the bidFee.
-     * @param bidFee_ Amount of tokens
+     * @param bidFee_ Amount of tokens.
      */
     function setMarketplaceBidFee(uint256 bidFee_) external;
 
     /**
      * The function to set the min and max price per second for bid.
-     * @param bidMinPricePerSecond_ Min price per second for bid
-     * @param bidMaxPricePerSecond_ Max price per second for bid
+     * @param bidMinPricePerSecond_ Min price per second for bid.
+     * @param bidMaxPricePerSecond_ Max price per second for bid.
      */
-    function setMinMaxBidPricePerSecond(
-        uint256 bidMinPricePerSecond_,
-        uint256 bidMaxPricePerSecond_
-    ) external;
+    function setMinMaxBidPricePerSecond(uint256 bidMinPricePerSecond_, uint256 bidMaxPricePerSecond_) external;
 
     /**
      * The function to create the bid.
-     * @param modelId_ The mode ID
-     * @param pricePerSecond_ The price per second
+     * @param provider_ The provider address.
+     * @param modelId_ The mode ID.
+     * @param pricePerSecond_ The price per second.
      */
-    function postModelBid(bytes32 modelId_, uint256 pricePerSecond_) external returns (bytes32);
+    function postModelBid(address provider_, bytes32 modelId_, uint256 pricePerSecond_) external returns (bytes32);
 
     /**
      * The function to delete the bid.
-     * @param bidId_ The bid ID
+     * @param bidId_ The bid ID.
      */
     function deleteModelBid(bytes32 bidId_) external;
 
@@ -70,7 +68,7 @@ interface IMarketplace is IMarketplaceStorage {
     function getBidId(address provider_, bytes32 modelId_, uint256 nonce_) external view returns (bytes32);
 
     /**
-     * The function to returns provider model ID
+     * The function to returns provider model ID.
      * @param provider_ The provider address.
      * @param modelId_  The model ID.
      */

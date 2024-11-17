@@ -2,7 +2,6 @@ package morrpcmesssage
 
 import (
 	"encoding/json"
-	"fmt"
 	"math/big"
 	"time"
 
@@ -59,7 +58,7 @@ func (m *MORRPCMessage) InitiateSessionResponse(providerPubKey lib.HexString, us
 	}, nil
 }
 
-func (m *MORRPCMessage) SessionReportResponse(providerPubKey lib.HexString, tps uint32, ttfp uint32, sessionID common.Hash, providerPrivateKeyHex lib.HexString, requestID string, chainID *big.Int) (*RpcResponse, error) {
+func (m *MORRPCMessage) SessionReportResponse(tps uint32, ttfp uint32, sessionID common.Hash, providerPrivateKeyHex lib.HexString, requestID string, chainID *big.Int) (*RpcResponse, error) {
 	timestamp := m.generateTimestamp()
 
 	report, err := lib.EncodeAbiParameters(sessionReportAbi, []interface{}{sessionID, chainID, big.NewInt(int64(timestamp)), tps, ttfp})
@@ -283,7 +282,6 @@ func (m *MORRPCMessage) SessionReportRequest(sessionID common.Hash, userPrivateK
 
 func (m *MORRPCMessage) VerifySignature(params any, signature lib.HexString, publicKey lib.HexString, sourceLog lib.ILogger) bool {
 	paramsBytes, err := json.Marshal(params)
-	fmt.Println("\n\nOUTPUT: ", string(paramsBytes))
 	if err != nil {
 		sourceLog.Error("Error marshalling params", err)
 		return false

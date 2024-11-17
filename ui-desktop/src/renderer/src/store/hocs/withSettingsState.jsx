@@ -55,6 +55,11 @@ const withSettingsState = WrappedComponent => {
       this.context.toast('success', "Changed");
     }
 
+    updateFailoverSetting = async (value) => {
+      await this.props.client.setFailoverSetting(value);
+      this.context.toast('success', "Setting changed")
+    }
+
 
     render() {
 
@@ -63,6 +68,7 @@ const withSettingsState = WrappedComponent => {
           logout={this.logout}
           getConfig={this.getConfig}
           updateEthNodeUrl={this.updateEthNodeUrl}
+          updateFailoverSetting={this.updateFailoverSetting}
           {...this.state}
           {...this.props}
         />

@@ -2,20 +2,23 @@ package proxyapi
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
-	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
+	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	msgs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi/morrpcmessage"
+	sessionrepo "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/session"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
@@ -39,27 +42,26 @@ var (
 	ErrProviderNotFound = fmt.Errorf("provider not found")
 )
 
-type SessionService interface {
-	OpenSessionByModelId(ctx context.Context, modelID common.Hash, duration *big.Int, isFailoverEnabled bool, omitProvider common.Address) (common.Hash, error)
-	CloseSession(ctx context.Context, sessionID common.Hash) (common.Hash, error)
-}
-
 type ProxyServiceSender struct {
+	chainID        *big.Int
 	publicUrl      *url.URL
 	privateKey     interfaces.PrKeyProvider
 	logStorage     *lib.Collection[*interfaces.LogStorage]
 	sessionStorage *storages.SessionStorage
+	sessionRepo    *sessionrepo.SessionRepositoryCached
 	morRPC         *msgs.MORRPCMessage
 	sessionService SessionService
 	log            lib.ILogger
 }
 
-func NewProxySender(publicUrl *url.URL, privateKey interfaces.PrKeyProvider, logStorage *lib.Collection[*interfaces.LogStorage], sessionStorage *storages.SessionStorage, log lib.ILogger) *ProxyServiceSender {
+func NewProxySender(chainID *big.Int, publicUrl *url.URL, privateKey interfaces.PrKeyProvider, logStorage *lib.Collection[*interfaces.LogStorage], sessionStorage *storages.SessionStorage, sessionRepo *sessionrepo.SessionRepositoryCached, log lib.ILogger) *ProxyServiceSender {
 	return &ProxyServiceSender{
+		chainID:        chainID,
 		publicUrl:      publicUrl,
 		privateKey:     privateKey,
 		logStorage:     logStorage,
 		sessionStorage: sessionStorage,
+		sessionRepo:    sessionRepo,
 		morRPC:         msgs.NewMorRpc(),
 		log:            log,
 	}
@@ -126,7 +128,7 @@ func (p *ProxyServiceSender) InitiateSession(ctx context.Context, user common.Ad
 	return typedMsg, nil
 }
 
-func (p *ProxyServiceSender) GetSessionReport(ctx context.Context, sessionID common.Hash) (*msgs.SessionReportRes, error) {
+func (p *ProxyServiceSender) GetSessionReportFromProvider(ctx context.Context, sessionID common.Hash) (*msgs.SessionReportRes, error) {
 	requestID := "1"
 
 	prKey, err := p.privateKey.GetPrivateKey()
@@ -134,11 +136,11 @@ func (p *ProxyServiceSender) GetSessionReport(ctx context.Context, sessionID com
 		return nil, ErrMissingPrKey
 	}
 
-	session, ok := p.sessionStorage.GetSession(sessionID.Hex())
-	if !ok {
+	session, err := p.sessionRepo.GetSession(ctx, sessionID)
+	if err != nil {
 		return nil, ErrSessionNotFound
 	}
-	provider, ok := p.sessionStorage.GetUser(session.ProviderAddr)
+	provider, ok := p.sessionStorage.GetUser(session.ProviderAddr().Hex())
 	if !ok {
 		return nil, ErrProviderNotFound
 	}
@@ -187,80 +189,62 @@ func (p *ProxyServiceSender) GetSessionReport(ctx context.Context, sessionID com
 	return typedMsg, nil
 }
 
-func (p *ProxyServiceSender) SendPrompt(ctx context.Context, resWriter ResponderFlusher, prompt *openai.ChatCompletionRequest, sessionID common.Hash) (interface{}, error) {
-	session, ok := p.sessionStorage.GetSession(sessionID.Hex())
-	if !ok {
-		return nil, ErrSessionNotFound
+func (p *ProxyServiceSender) GetSessionReportFromUser(ctx context.Context, sessionID common.Hash) (lib.HexString, lib.HexString, error) {
+	session, err := p.sessionRepo.GetSession(ctx, sessionID)
+	if err != nil {
+		return nil, nil, ErrSessionNotFound
 	}
 
-	isExpired := session.EndsAt.Int64()-time.Now().Unix() < 0
-	if isExpired {
-		return nil, ErrSessionExpired
+	TPSScaled1000Arr, TTFTMsArr := session.GetStats()
+
+	tps := 0
+	ttft := 0
+	for _, tpsVal := range TPSScaled1000Arr {
+		tps += tpsVal
+	}
+	for _, ttftVal := range TTFTMsArr {
+		ttft += ttftVal
 	}
 
-	provider, ok := p.sessionStorage.GetUser(session.ProviderAddr)
-	if !ok {
-		return nil, ErrProviderNotFound
+	if len(TPSScaled1000Arr) != 0 {
+		tps /= len(TPSScaled1000Arr)
+	}
+	if len(TTFTMsArr) != 0 {
+		ttft /= len(TTFTMsArr)
 	}
 
 	prKey, err := p.privateKey.GetPrivateKey()
 	if err != nil {
-		return nil, ErrMissingPrKey
+		return nil, nil, ErrMissingPrKey
 	}
 
-	requestID := "1"
-	pubKey, err := lib.StringToHexString(provider.PubKey)
+	response, err := p.morRPC.SessionReportResponse(
+		uint32(tps),
+		uint32(ttft),
+		sessionID,
+		prKey,
+		"1",
+		p.chainID,
+	)
+
 	if err != nil {
-		return nil, lib.WrapError(ErrCreateReq, err)
+		return nil, nil, lib.WrapError(ErrGenerateReport, err)
 	}
-	promptRequest, err := p.morRPC.SessionPromptRequest(sessionID, prompt, pubKey, prKey, requestID)
+
+	var typedMsg *msgs.SessionReportRes
+	err = json.Unmarshal(*response.Result, &typedMsg)
 	if err != nil {
-		return nil, lib.WrapError(ErrCreateReq, err)
+		return nil, nil, lib.WrapError(ErrInvalidResponse, fmt.Errorf("expected SessionReportRespose, got %s", response.Result))
 	}
 
-	result, err := p.rpcRequestStream(ctx, resWriter, provider.Url, promptRequest, pubKey)
-	if err != nil {
-		if !session.FailoverEnabled {
-			return nil, lib.WrapError(ErrProvider, err)
-		}
-
-		// _, err := p.sessionService.CloseSession(ctx, sessionID)
-		// if err != nil {
-		// 	return nil, err
-		// }
-
-		resWriter.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_EVENT_STREAM)
-		_, err = resWriter.Write([]byte(fmt.Sprintf("data: %s\n\n", "{\"message\": \"provider failed, failover enabled\"}")))
-		if err != nil {
-			return nil, err
-		}
-		resWriter.Flush()
-
-		modelID := common.HexToHash(session.ModelID)
-		provider := common.HexToAddress(session.ProviderAddr)
-		duration := session.EndsAt.Int64() - time.Now().Unix()
-		durationBigInt := big.NewInt(duration)
-		newSessionID, err := p.sessionService.OpenSessionByModelId(ctx, modelID, durationBigInt, session.FailoverEnabled, provider)
-
-		if err != nil {
-			return nil, err
-		}
-
-		_, err = resWriter.Write([]byte(fmt.Sprintf("data: %s\n\n", "{\"message\": \"new session opened\"}")))
-		if err != nil {
-			return nil, err
-		}
-		resWriter.Flush()
-
-		time.Sleep(1 * time.Second) //  sleep for a bit to allow the new session to be created
-		return p.SendPrompt(ctx, resWriter, prompt, newSessionID)
-	}
-
-	return result, nil
+	return typedMsg.Message, typedMsg.SignedReport, nil
 }
 
 func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage) (*msgs.RpcResponse, int, gin.H) {
-	conn, err := net.Dial("tcp", url)
+	TIMEOUT_TO_ESTABLISH_CONNECTION := time.Second * 3
+	dialer := net.Dialer{Timeout: TIMEOUT_TO_ESTABLISH_CONNECTION}
+
+	conn, err := dialer.Dial("tcp", url)
 	if err != nil {
 		err = lib.WrapError(fmt.Errorf("failed to connect to provider"), err)
 		p.log.Errorf("%s", err)
@@ -295,116 +279,325 @@ func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage)
 	return msg, 0, nil
 }
 
-func (p *ProxyServiceSender) rpcRequestStream(ctx context.Context, resWriter ResponderFlusher, url string, rpcMessage *msgs.RPCMessage, providerPublicKey lib.HexString) (interface{}, error) {
+func (p *ProxyServiceSender) validateMsgSignature(result any, signature lib.HexString, providerPubicKey lib.HexString) bool {
+	return p.morRPC.VerifySignature(result, signature, providerPubicKey, p.log)
+}
+
+func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.Hash, prompt *openai.ChatCompletionRequest, cb gcs.CompletionCallback) (interface{}, error) {
+	session, err := p.sessionRepo.GetSession(ctx, sessionID)
+	if err != nil {
+		return nil, ErrSessionNotFound
+	}
+
+	isExpired := session.EndsAt().Int64()-time.Now().Unix() < 0
+	if isExpired {
+		return nil, ErrSessionExpired
+	}
+
+	provider, ok := p.sessionStorage.GetUser(session.ProviderAddr().Hex())
+	if !ok {
+		return nil, ErrProviderNotFound
+	}
+
 	prKey, err := p.privateKey.GetPrivateKey()
 	if err != nil {
 		return nil, ErrMissingPrKey
 	}
 
-	conn, err := net.Dial("tcp", url)
+	requestID := "1"
+	pubKey, err := lib.StringToHexString(provider.PubKey)
+	if err != nil {
+		return nil, lib.WrapError(ErrCreateReq, err)
+	}
+	promptRequest, err := p.morRPC.SessionPromptRequest(sessionID, prompt, pubKey, prKey, requestID)
+	if err != nil {
+		return nil, lib.WrapError(ErrCreateReq, err)
+	}
+
+	now := time.Now().Unix()
+	result, ttftMs, totalTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, promptRequest, pubKey)
+	if err != nil {
+		if !session.FailoverEnabled() {
+			return nil, lib.WrapError(ErrProvider, err)
+		}
+
+		_, err := p.sessionService.CloseSession(ctx, sessionID)
+		if err != nil {
+			return nil, err
+		}
+
+		err = cb(ctx, gcs.NewChunkControl("provider failed, failover enabled"))
+		if err != nil {
+			return nil, err
+		}
+
+		duration := session.EndsAt().Int64() - time.Now().Unix()
+
+		newSessionID, err := p.sessionService.OpenSessionByModelId(
+			ctx,
+			session.ModelID(),
+			big.NewInt(duration),
+			session.FailoverEnabled(),
+			session.ProviderAddr(),
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		msg := fmt.Sprintf("new session opened: %s", newSessionID.Hex())
+		err = cb(ctx, gcs.NewChunkControl(msg))
+		if err != nil {
+			return nil, err
+		}
+
+		return p.SendPromptV2(ctx, newSessionID, prompt, cb)
+	}
+
+	requestDuration := int(time.Now().Unix() - now)
+	if requestDuration == 0 {
+		requestDuration = 1
+	}
+	session.AddStats(totalTokens*1000/requestDuration, ttftMs)
+
+	err = p.sessionRepo.SaveSession(ctx, session)
+	if err != nil {
+		p.log.Error(`failed to update session report stats`, err)
+	}
+
+	return result, nil
+}
+func (p *ProxyServiceSender) rpcRequestStreamV2(
+	ctx context.Context,
+	cb gcs.CompletionCallback,
+	url string,
+	rpcMessage *msgs.RPCMessage,
+	providerPublicKey lib.HexString,
+) (interface{}, int, int, error) {
+	const (
+		TIMEOUT_TO_ESTABLISH_CONNECTION   = time.Second * 3
+		TIMEOUT_TO_RECEIVE_FIRST_RESPONSE = time.Second * 5
+		MAX_RETRIES                       = 5
+	)
+
+	dialer := net.Dialer{Timeout: TIMEOUT_TO_ESTABLISH_CONNECTION}
+
+	prKey, err := p.privateKey.GetPrivateKey()
+	if err != nil {
+		return nil, 0, 0, ErrMissingPrKey
+	}
+
+	conn, err := dialer.Dial("tcp", url)
 	if err != nil {
 		err = lib.WrapError(fmt.Errorf("failed to connect to provider"), err)
 		p.log.Errorf("%s", err)
-		return nil, err
+		return nil, 0, 0, err
 	}
 	defer conn.Close()
 
+	// Set initial read deadline
+	conn.SetReadDeadline(time.Now().Add(TIMEOUT_TO_RECEIVE_FIRST_RESPONSE))
+
 	msgJSON, err := json.Marshal(rpcMessage)
 	if err != nil {
-		return nil, lib.WrapError(ErrMasrshalFailed, err)
-	}
-	_, err = conn.Write(msgJSON)
-	if err != nil {
-		return nil, err
+		return nil, 0, 0, lib.WrapError(ErrMasrshalFailed, err)
 	}
 
-	// read response
+	ttftMs := 0
+	totalTokens := 0
+	now := time.Now().UnixMilli()
+
+	_, err = conn.Write(msgJSON)
+	if err != nil {
+		return nil, ttftMs, totalTokens, err
+	}
+
 	reader := bufio.NewReader(conn)
-	d := json.NewDecoder(reader)
-	resWriter.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_EVENT_STREAM)
+	// We need to recreate the decoder if it becomes invalid
+	var d *json.Decoder
 
 	responses := make([]interface{}, 0)
 
+	retryCount := 0
+
 	for {
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		var msg *msgs.RpcResponse
-		err = d.Decode(&msg)
-		p.log.Debugf("Received stream msg:", msg)
-		if err != nil {
-			p.log.Warnf("Failed to decode response: %v", err)
-			return responses, nil
+			return nil, ttftMs, totalTokens, ctx.Err()
 		}
 
+		// Initialize or reset the decoder
+		if d == nil {
+			d = json.NewDecoder(reader)
+		}
+
+		var msg *msgs.RpcResponse
+		err = d.Decode(&msg)
+		if err != nil {
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				p.log.Warnf("Read operation timed out: %v", err)
+				if retryCount < MAX_RETRIES {
+					alive, availErr := checkProviderAvailability(url)
+					if availErr != nil {
+						p.log.Warnf("Provider availability check failed: %v", availErr)
+						return nil, ttftMs, totalTokens, fmt.Errorf("provider availability check failed: %w", availErr)
+					}
+					if alive {
+						retryCount++
+						p.log.Infof("Provider is alive, retrying (%d/%d)...", retryCount, MAX_RETRIES)
+						// Reset the read deadline
+						conn.SetReadDeadline(time.Now().Add(TIMEOUT_TO_RECEIVE_FIRST_RESPONSE))
+						// Clear the error state by reading any remaining data
+						reader.Discard(reader.Buffered())
+						// Reset the decoder
+						d = nil
+						continue
+					} else {
+						return nil, ttftMs, totalTokens, fmt.Errorf("provider is not available")
+					}
+				} else {
+					return nil, ttftMs, totalTokens, fmt.Errorf("read timed out after %d retries: %w", retryCount, err)
+				}
+			} else if err == io.EOF {
+				p.log.Warnf("Connection closed by provider")
+				return nil, ttftMs, totalTokens, fmt.Errorf("connection closed by provider")
+			} else {
+				p.log.Warnf("Failed to decode response: %v", err)
+				return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
+			}
+		}
+
+		p.log.Debugf("Received stream msg: %v", msg)
+
 		if msg.Error != nil {
-			return nil, lib.WrapError(ErrResponseErr, fmt.Errorf("error: %v, data: %v", msg.Error.Message, msg.Error.Data))
+			return nil, ttftMs, totalTokens, lib.WrapError(ErrResponseErr, fmt.Errorf("error: %v, data: %v", msg.Error.Message, msg.Error.Data))
 		}
 
 		if msg.Result == nil {
-			return nil, lib.WrapError(ErrInvalidResponse, fmt.Errorf("empty result and no error"))
+			return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, fmt.Errorf("empty result and no error"))
+		}
+
+		if ttftMs == 0 {
+			ttftMs = int(time.Now().UnixMilli() - now)
+			conn.SetReadDeadline(time.Time{}) // Clear read deadline
 		}
 
 		var inferenceRes InferenceRes
-		err := json.Unmarshal(*msg.Result, &inferenceRes)
+		err = json.Unmarshal(*msg.Result, &inferenceRes)
 		if err != nil {
-			return nil, lib.WrapError(ErrInvalidResponse, err)
+			return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
 		}
 		sig := inferenceRes.Signature
 		inferenceRes.Signature = []byte{}
 
 		if !p.validateMsgSignature(inferenceRes, sig, providerPublicKey) {
-			return nil, ErrInvalidSig
+			return nil, ttftMs, totalTokens, ErrInvalidSig
 		}
 
 		var message lib.HexString
 		err = json.Unmarshal(inferenceRes.Message, &message)
 		if err != nil {
-			return nil, lib.WrapError(ErrInvalidResponse, err)
+			return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
 		}
 
 		aiResponse, err := lib.DecryptBytes(message, prKey)
 		if err != nil {
-			return nil, lib.WrapError(ErrDecrFailed, err)
+			return nil, ttftMs, totalTokens, lib.WrapError(ErrDecrFailed, err)
 		}
 
-		var payload ChatCompletionResponse
+		var payload openai.ChatCompletionStreamResponse
 		err = json.Unmarshal(aiResponse, &payload)
 		var stop = true
+		var chunk gcs.Chunk
 		if err == nil && len(payload.Choices) > 0 {
 			stop = false
 			choices := payload.Choices
 			for _, choice := range choices {
-				if choice.FinishReason == FinishReasonStop {
+				if choice.FinishReason == openai.FinishReasonStop {
 					stop = true
 				}
 			}
+			totalTokens += len(choices)
 			responses = append(responses, payload)
+			chunk = gcs.NewChunkStreaming(&payload)
 		} else {
-			var prodiaPayload aiengine.ProdiaGenerationResult
-			err = json.Unmarshal(aiResponse, &prodiaPayload)
+			var imageGenerationResult gcs.ImageGenerationResult
+			err = json.Unmarshal(aiResponse, &imageGenerationResult)
 			if err != nil {
-				return nil, lib.WrapError(ErrInvalidResponse, err)
+				return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
 			}
-			responses = append(responses, prodiaPayload)
+			totalTokens += 1
+			responses = append(responses, imageGenerationResult)
+			chunk = gcs.NewChunkImage(&imageGenerationResult)
 		}
 
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return nil, ttftMs, totalTokens, ctx.Err()
 		}
-		_, err = resWriter.Write([]byte(fmt.Sprintf("data: %s\n\n", aiResponse)))
+		err = cb(ctx, chunk)
 		if err != nil {
-			return nil, err
+			return nil, ttftMs, totalTokens, lib.WrapError(ErrResponseErr, err)
 		}
-		resWriter.Flush()
 		if stop {
 			break
 		}
 	}
 
-	return responses, nil
+	return responses, ttftMs, totalTokens, nil
 }
 
-func (p *ProxyServiceSender) validateMsgSignature(result any, signature lib.HexString, providerPubicKey lib.HexString) bool {
-	return p.morRPC.VerifySignature(result, signature, providerPubicKey, p.log)
+// checkProviderAvailability checks if the provider is alive using portchecker.io API
+func checkProviderAvailability(url string) (bool, error) {
+	host, port, err := net.SplitHostPort(url)
+	if err != nil {
+		return false, err
+	}
+
+	portInt, err := strconv.Atoi(port)
+	if err != nil {
+		return false, err
+	}
+
+	requestBody, err := json.Marshal(map[string]interface{}{
+		"host":  host,
+		"ports": []int{portInt},
+	})
+	if err != nil {
+		return false, err
+	}
+
+	req, err := http.NewRequest("POST", "https://portchecker.io/api/v1/query", bytes.NewBuffer(requestBody))
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false, err
+	}
+
+	var response struct {
+		Check []struct {
+			Status bool `json:"status"`
+			Port   int  `json:"port"`
+		} `json:"check"`
+	}
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		return false, err
+	}
+
+	for _, check := range response.Check {
+		if check.Port == portInt {
+			return check.Status, nil
+		}
+	}
+
+	return false, fmt.Errorf("port status not found in response")
 }

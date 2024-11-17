@@ -152,13 +152,13 @@ const withOnboardingState = WrappedComponent => {
       return true;
     }
 
-    onFinishOnboarding = async (e, path) => {
+    onFinishOnboarding = async (e) => {
       if (e && e.preventDefault) e.preventDefault();
-
+      
       const payload = {
         password: this.state.password,
         ethNode: this.state.customEthNode || '',
-        derivationPath: path || 0,
+        derivationPath: this.state.derivationPath || "0",
         privateKey: ''
       };
 

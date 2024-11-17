@@ -4,6 +4,7 @@ import selectors from '../selectors';
 import { connect } from 'react-redux';
 import PropTypes from 'prop-types';
 import { ToastsContext } from '../../components/toasts';
+import { getSessionsByUser } from '../utils/apiCallsHelper';
 
 const withDashboardState = WrappedComponent => {
   class Container extends React.Component {
@@ -66,11 +67,11 @@ const withDashboardState = WrappedComponent => {
       if(!user) {
         return;
       }
+
+      const sessions = await getSessionsByUser(this.props.config.chain.localProxyRouterUrl, user);
+      
       try {
-        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions/user?user=${user}`;
-        const response = await fetch(path);
-        const data = await response.json();
-        const openSessions = data.sessions.filter(s => !isClosed(s));
+        const openSessions = sessions.filter(s => !isClosed(s));
         const sum = openSessions.reduce((curr, next) => curr + next.Stake, 0);
         return (sum / 10 ** 18).toFixed(2);
       }

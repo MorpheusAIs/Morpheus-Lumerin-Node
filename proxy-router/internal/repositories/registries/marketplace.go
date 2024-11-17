@@ -8,6 +8,8 @@ import (
 	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/marketplace"
+	mc "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/multicall"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -17,26 +19,35 @@ type Marketplace struct {
 	marketplaceAddr common.Address
 
 	// deps
-	marketplace *marketplace.Marketplace
-	client      i.ContractBackend
-	log         lib.ILogger
+	marketplace    *marketplace.Marketplace
+	multicall      mc.MulticallBackend
+	marketplaceABI *abi.ABI
+	client         i.ContractBackend
+	log            lib.ILogger
 }
 
-func NewMarketplace(marketplaceAddr common.Address, client i.ContractBackend, log lib.ILogger) *Marketplace {
+func NewMarketplace(marketplaceAddr common.Address, client i.ContractBackend, multicall mc.MulticallBackend, log lib.ILogger) *Marketplace {
 	mp, err := marketplace.NewMarketplace(marketplaceAddr, client)
 	if err != nil {
 		panic("invalid marketplace ABI")
 	}
+	marketplaceABI, err := marketplace.MarketplaceMetaData.GetAbi()
+	if err != nil {
+		panic("invalid marketplace ABI: " + err.Error())
+	}
+
 	return &Marketplace{
 		marketplace:     mp,
 		marketplaceAddr: marketplaceAddr,
+		marketplaceABI:  marketplaceABI,
+		multicall:       multicall,
 		client:          client,
 		log:             log,
 	}
 }
 
 func (g *Marketplace) PostModelBid(opts *bind.TransactOpts, model common.Hash, pricePerSecond *big.Int) (common.Hash, error) {
-	tx, err := g.marketplace.PostModelBid(opts, model, pricePerSecond)
+	tx, err := g.marketplace.PostModelBid(opts, opts.From, model, pricePerSecond)
 	if err != nil {
 		return common.Hash{}, lib.TryConvertGethError(err)
 	}
@@ -47,11 +58,17 @@ func (g *Marketplace) PostModelBid(opts *bind.TransactOpts, model common.Hash, p
 		return common.Hash{}, lib.TryConvertGethError(err)
 	}
 
-	if receipt.Status != 1 {
-		return receipt.TxHash, fmt.Errorf("Transaction failed")
+	for _, log := range receipt.Logs {
+		event, err := g.marketplace.ParseMarketplaceBidPosted(*log)
+		if err == nil {
+			bidId, errBid := g.marketplace.GetBidId(&bind.CallOpts{Context: opts.Context}, event.Provider, event.ModelId, event.Nonce)
+			if errBid == nil {
+				return bidId, nil
+			}
+		}
 	}
 
-	return receipt.TxHash, nil
+	return common.Hash{}, nil
 }
 
 func (g *Marketplace) DeleteBid(opts *bind.TransactOpts, bidID common.Hash) (common.Hash, error) {
@@ -145,14 +162,13 @@ func (g *Marketplace) GetActiveBidsByModel(ctx context.Context, modelAgentId com
 }
 
 func (g *Marketplace) GetMultipleBids(ctx context.Context, IDs [][32]byte) ([][32]byte, []marketplace.IBidStorageBid, error) {
-	// todo: replace with multicall
-	bids := make([]marketplace.IBidStorageBid, len(IDs))
-	for i, ID := range IDs {
-		bid, err := g.marketplace.GetBid(&bind.CallOpts{Context: ctx}, ID)
-		if err != nil {
-			return nil, nil, err
-		}
-		bids[i] = bid
+	args := make([][]interface{}, len(IDs))
+	for i, id := range IDs {
+		args[i] = []interface{}{id}
+	}
+	bids, err := mc.Batch[marketplace.IBidStorageBid](ctx, g.multicall, g.marketplaceABI, g.marketplaceAddr, "getBid", args)
+	if err != nil {
+		return nil, nil, err
 	}
 	return IDs, bids, nil
 }

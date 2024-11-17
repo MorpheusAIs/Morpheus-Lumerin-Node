@@ -68,7 +68,7 @@ const Chat = (props) => {
     const [requiredStake, setRequiredStake] = useState<{ min: Number, max: number }>({ min: 0, max: 0 })
     const [balances, setBalances] = useState<{ eth: Number, mor: number }>({ eth: 0, mor: 0 });
 
-    const [chat, setChat] = useState<ChatData|undefined>(undefined);
+    const [chat, setChat] = useState<ChatData | undefined>(undefined);
 
     const modelName = selectedModel?.Name || "Model";
     const isLocal = chat?.isLocal;
@@ -91,8 +91,8 @@ const Chat = (props) => {
             setChainData(chainData)
 
             const mappedChatData = chats.reduce((res, item) => {
-                const chatModel = chainData.models.find(x => x.Id == item.modelId); 
-                if(chatModel) {
+                const chatModel = chainData.models.find(x => x.Id == item.modelId);
+                if (chatModel) {
                     res.push({
                         id: item.chatId,
                         title: item.title,
@@ -105,21 +105,12 @@ const Chat = (props) => {
             }, [] as ChatData[])
             setChatsData(mappedChatData);
 
-            const sessions = (await props.getSessionsByUser(props.address)).reduce((res, item) =>  {
-                const sessionModel = chainData.models.find(x => x.Id == item.ModelAgentId);
-                if(sessionModel) {
-                    item.ModelName = sessionModel.Name;
-                    res.push(item);
-                }
-                return res;
-            }, []);
+            const sessions = await refreshSessions(chainData?.models);
 
             const openSessions = sessions.filter(s => !isClosed(s));
 
-            setSessions(sessions);
-
             const useLocalModelChat = () => {
-                const localModel = (chainData?.models?.find((m: any) => m.hasLocal));
+                const localModel = (chainData?.models?.find((m: any) => m.isLocal));
                 if (localModel) {
                     setSelectedModel(localModel);
                     setChat({ id: generateHashId(), createdAt: new Date(), modelId: localModel.Id, isLocal: true });
@@ -154,7 +145,12 @@ const Chat = (props) => {
         })
     }, [])
 
-    const toggleDrawer = () => {
+    const toggleDrawer = async () => {
+        if (!isOpen) {
+            setIsLoading(true);
+            await refreshSessions()
+            setIsLoading(false);
+        }
         setIsOpen((prevState) => !prevState)
     }
 
@@ -180,6 +176,15 @@ const Chat = (props) => {
         return (targetDuration - (targetDuration % 60)) - delta;
     }
 
+    const setSessionData = async (sessionId) => {
+        const allSessions = await refreshSessions();
+        const targetSessionData = allSessions.find(x => x.Id == sessionId);
+        setActiveSession({ ...targetSessionData, sessionId });
+        const targetModel = chainData.models.find(x => x.Id == targetSessionData.ModelAgentId)
+        const targetBid = targetModel.bids.find(x => x.Id == targetSessionData.BidID);
+        setSelectedBid(targetBid);
+    }
+
     const onOpenSession = async (isReopen) => {
         setIsLoading(true);
         if (!isReopen) {
@@ -197,12 +202,7 @@ const Chat = (props) => {
             if (!openedSession) {
                 return;
             }
-            const allSessions = await refreshSessions();
-            const targetSessionData = allSessions.find(x => x.Id == openedSession);
-            setActiveSession({ ...targetSessionData, sessionId: openedSession });
-            const targetModel = chainData.models.find(x => x.Id == targetSessionData.ModelAgentId)
-            const targetBid = targetModel.bids.find(x => x.Id == targetSessionData.BidID);
-            setSelectedBid(targetBid);
+            await setSessionData(openedSession);
             return openedSession;
         }
         finally {
@@ -232,18 +232,29 @@ const Chat = (props) => {
         }
     }
 
-    const refreshSessions = async () => {
-        const sessions = await props.getSessionsByUser(props.address);
+    const refreshSessions = async (models = null) => {
+        const sessions = (await props.getSessionsByUser(props.address)).reduce((res, item) => {
+            const sessionModel = (models || chainData.models).find(x => x.Id == item.ModelAgentId);
+            if (sessionModel) {
+                item.ModelName = sessionModel.Name;
+                res.push(item);
+            }
+            return res;
+        }, []);
+
         setSessions(sessions);
+
         return sessions;
     }
 
     const closeSession = async (sessionId: string) => {
+        setIsLoading(true);
         await props.closeSession(sessionId);
         await refreshSessions();
+        setIsLoading(false);
 
         if (activeSession.Id == sessionId) {
-            const localModel = (chainData?.models?.find((m: any) => m.hasLocal));
+            const localModel = (chainData?.models?.find((m: any) => m.isLocal));
             if (localModel) {
                 setSelectedModel(localModel);
                 setChat({ id: generateHashId(), createdAt: new Date(), modelId: localModel.Id, isLocal: true });
@@ -260,22 +271,24 @@ const Chat = (props) => {
             console.warn("Model ID is missed");
             return;
         }
+
+        const selectedModel = chainData.models.find((m: any) => m.Id == modelId);
+        setSelectedModel(selectedModel);
+        setIsReadonly(false);
+
         // toggleDrawer();
 
         setChat({ ...chatData })
 
         if (chatData.isLocal) {
             await loadChatHistory(chatData.id);
-            return
+            return;
         }
 
         const openSessions = sessions.filter(s => !isClosed(s));
         // search open session by model ID
         const openSession = openSessions.find(s => s.ModelAgentId == modelId);
         setIsReadonly(!openSession);
-
-        const selectedModel = chainData.models.find((m: any) => m.Id == modelId);
-        setSelectedModel(selectedModel);
 
         if (openSession) {
             setActiveSession(openSession);
@@ -393,10 +406,20 @@ const Chat = (props) => {
                 const decodedString = textDecoder.decode(value, { stream: true });
                 const parts = parseDataChunk(decodedString);
                 parts.forEach(part => {
+                    if (!part) {
+                        return;
+                    }
+
                     if (part.error) {
                         console.warn(part.error);
                         return;
                     }
+
+                    if (typeof part === 'string') {
+                        handleSystemMessage(part);
+                        return;
+                    }
+
                     const imageContent = part.imageUrl;
 
                     if (!part?.id && !imageContent) {
@@ -420,11 +443,36 @@ const Chat = (props) => {
             }
         }
         catch (e) {
+            props.toasts.toast('error', 'Something goes wrong. Try later.');
             console.error(e);
         }
 
         registerScrollEvent(false);
         return memoState;
+    }
+
+    const handleSystemMessage = (message) => {
+        const openSessionEventMessage = "new session opened";
+        const failoverTurnOnMessage = "provider failed, failover enabled"
+
+        const renderMessage = (value) => {
+            props.toasts.toast('info', value, {
+                autoClose: 1500
+            });
+        }
+
+        if (message.includes(openSessionEventMessage)) {
+            const sessionId = message.split(":")[1].trim(); // new session opened: 0x123456
+            setSessionData(sessionId).catch((err) => renderMessage(`Failed to load session data: ${err.message}`));
+            renderMessage("Opening session with available provider...");
+            return;
+        }
+        if (message.includes(failoverTurnOnMessage)) {
+            renderMessage("Target provider unavailable. Applying failover policy...");
+            return;
+        }
+        renderMessage(message);
+        return;
     }
 
     const handleSubmit = () => {

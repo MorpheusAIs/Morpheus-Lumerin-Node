@@ -260,6 +260,20 @@ const docTemplate = `{
                     "models"
                 ],
                 "summary": "Get models list",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Offset",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Limit",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -438,6 +452,20 @@ const docTemplate = `{
                     "providers"
                 ],
                 "summary": "Get providers list",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Offset",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Limit",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -488,15 +516,6 @@ const docTemplate = `{
                     "providers"
                 ],
                 "summary": "Deregister Provider",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Provider Address",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -1045,15 +1064,6 @@ const docTemplate = `{
                 "summary": "Claim Provider Balance",
                 "parameters": [
                     {
-                        "description": "Claim",
-                        "name": "claim",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/structs.AmountReq"
-                        }
-                    },
-                    {
                         "type": "string",
                         "description": "Session ID",
                         "name": "id",
@@ -1138,7 +1148,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/proxyapi.OpenAiCompletitionRequest"
+                            "type": "string"
                         }
                     }
                 ],
@@ -1146,7 +1156,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/proxyapi.ChatCompletionResponse"
+                            "type": "string"
                         }
                     }
                 }
@@ -1167,7 +1177,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/proxyapi.Chat"
+                                "$ref": "#/definitions/genericchatstorage.Chat"
                             }
                         }
                     }
@@ -1196,7 +1206,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/proxyapi.ChatHistory"
+                            "$ref": "#/definitions/genericchatstorage.ChatHistory"
                         }
                     }
                 }
@@ -1411,38 +1421,7 @@ const docTemplate = `{
                 }
             }
         },
-        "morrpcmesssage.SessionRes": {
-            "type": "object",
-            "required": [
-                "approval",
-                "approvalSig",
-                "message",
-                "signature",
-                "timestamp",
-                "user"
-            ],
-            "properties": {
-                "approval": {
-                    "type": "string"
-                },
-                "approvalSig": {
-                    "type": "string"
-                },
-                "message": {
-                    "type": "string"
-                },
-                "signature": {
-                    "type": "string"
-                },
-                "timestamp": {
-                    "type": "integer"
-                },
-                "user": {
-                    "type": "string"
-                }
-            }
-        },
-        "proxyapi.Chat": {
+        "genericchatstorage.Chat": {
             "type": "object",
             "properties": {
                 "chatId": {
@@ -1462,43 +1441,7 @@ const docTemplate = `{
                 }
             }
         },
-        "proxyapi.ChatCompletionChoice": {
-            "type": "object",
-            "properties": {
-                "delta": {
-                    "$ref": "#/definitions/proxyapi.ChatCompletionDelta"
-                },
-                "finish_reason": {
-                    "description": "FinishReason\nstop: API returned complete message,\nor a message terminated by one of the stop sequences provided via the stop parameter\nlength: Incomplete model output due to max_tokens parameter or token limit\nfunction_call: The model decided to call a function\ncontent_filter: Omitted content due to a flag from our content filters\nnull: API response still in progress or incomplete",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/proxyapi.FinishReason"
-                        }
-                    ]
-                },
-                "index": {
-                    "type": "integer"
-                },
-                "logprobs": {
-                    "$ref": "#/definitions/proxyapi.LogProbs"
-                },
-                "message": {
-                    "$ref": "#/definitions/proxyapi.ChatCompletionMessage"
-                }
-            }
-        },
-        "proxyapi.ChatCompletionDelta": {
-            "type": "object",
-            "properties": {
-                "content": {
-                    "type": "string"
-                },
-                "role": {
-                    "type": "string"
-                }
-            }
-        },
-        "proxyapi.ChatCompletionMessage": {
+        "genericchatstorage.ChatCompletionMessage": {
             "type": "object",
             "properties": {
                 "content": {
@@ -1517,36 +1460,7 @@ const docTemplate = `{
                 }
             }
         },
-        "proxyapi.ChatCompletionResponse": {
-            "type": "object",
-            "properties": {
-                "choices": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/proxyapi.ChatCompletionChoice"
-                    }
-                },
-                "created": {
-                    "type": "integer"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "model": {
-                    "type": "string"
-                },
-                "object": {
-                    "type": "string"
-                },
-                "system_fingerprint": {
-                    "type": "string"
-                },
-                "usage": {
-                    "$ref": "#/definitions/proxyapi.Usage"
-                }
-            }
-        },
-        "proxyapi.ChatCompletionResponseFormat": {
+        "genericchatstorage.ChatCompletionResponseFormat": {
             "type": "object",
             "properties": {
                 "type": {
@@ -1554,7 +1468,7 @@ const docTemplate = `{
                 }
             }
         },
-        "proxyapi.ChatHistory": {
+        "genericchatstorage.ChatHistory": {
             "type": "object",
             "properties": {
                 "isLocal": {
@@ -1563,7 +1477,7 @@ const docTemplate = `{
                 "messages": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/proxyapi.ChatMessage"
+                        "$ref": "#/definitions/genericchatstorage.ChatMessage"
                     }
                 },
                 "modelId": {
@@ -1574,14 +1488,14 @@ const docTemplate = `{
                 }
             }
         },
-        "proxyapi.ChatMessage": {
+        "genericchatstorage.ChatMessage": {
             "type": "object",
             "properties": {
                 "isImageContent": {
                     "type": "boolean"
                 },
                 "prompt": {
-                    "$ref": "#/definitions/proxyapi.OpenAiCompletitionRequest"
+                    "$ref": "#/definitions/genericchatstorage.OpenAiCompletionRequest"
                 },
                 "promptAt": {
                     "type": "integer"
@@ -1594,80 +1508,7 @@ const docTemplate = `{
                 }
             }
         },
-        "proxyapi.FinishReason": {
-            "type": "string",
-            "enum": [
-                "stop"
-            ],
-            "x-enum-varnames": [
-                "FinishReasonStop"
-            ]
-        },
-        "proxyapi.InitiateSessionReq": {
-            "type": "object",
-            "required": [
-                "bidId",
-                "provider",
-                "providerUrl",
-                "spend",
-                "user"
-            ],
-            "properties": {
-                "bidId": {
-                    "type": "string"
-                },
-                "provider": {
-                    "type": "string"
-                },
-                "providerUrl": {
-                    "type": "string"
-                },
-                "spend": {
-                    "type": "string"
-                },
-                "user": {
-                    "type": "string"
-                }
-            }
-        },
-        "proxyapi.LogProb": {
-            "type": "object",
-            "properties": {
-                "bytes": {
-                    "description": "Omitting the field if it is null",
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "logprob": {
-                    "type": "number"
-                },
-                "token": {
-                    "type": "string"
-                },
-                "top_logprobs": {
-                    "description": "TopLogProbs is a list of the most likely tokens and their log probability, at this token position.\nIn rare cases, there may be fewer than the number of requested top_logprobs returned.",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/proxyapi.TopLogProbs"
-                    }
-                }
-            }
-        },
-        "proxyapi.LogProbs": {
-            "type": "object",
-            "properties": {
-                "content": {
-                    "description": "Content is a list of message content tokens with log probability information.",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/proxyapi.LogProb"
-                    }
-                }
-            }
-        },
-        "proxyapi.OpenAiCompletitionRequest": {
+        "genericchatstorage.OpenAiCompletionRequest": {
             "type": "object",
             "properties": {
                 "frequency_penalty": {
@@ -1693,7 +1534,7 @@ const docTemplate = `{
                 "messages": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/proxyapi.ChatCompletionMessage"
+                        "$ref": "#/definitions/genericchatstorage.ChatCompletionMessage"
                     }
                 },
                 "model": {
@@ -1706,7 +1547,7 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "response_format": {
-                    "$ref": "#/definitions/proxyapi.ChatCompletionResponseFormat"
+                    "$ref": "#/definitions/genericchatstorage.ChatCompletionResponseFormat"
                 },
                 "seed": {
                     "type": "integer"
@@ -1738,28 +1579,69 @@ const docTemplate = `{
                 }
             }
         },
+        "morrpcmesssage.SessionRes": {
+            "type": "object",
+            "required": [
+                "approval",
+                "approvalSig",
+                "message",
+                "signature",
+                "timestamp",
+                "user"
+            ],
+            "properties": {
+                "approval": {
+                    "type": "string"
+                },
+                "approvalSig": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "signature": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "integer"
+                },
+                "user": {
+                    "type": "string"
+                }
+            }
+        },
+        "proxyapi.InitiateSessionReq": {
+            "type": "object",
+            "required": [
+                "bidId",
+                "provider",
+                "providerUrl",
+                "spend",
+                "user"
+            ],
+            "properties": {
+                "bidId": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "providerUrl": {
+                    "type": "string"
+                },
+                "spend": {
+                    "type": "string"
+                },
+                "user": {
+                    "type": "string"
+                }
+            }
+        },
         "proxyapi.ResultResponse": {
             "type": "object",
             "properties": {
                 "result": {
                     "type": "boolean"
-                }
-            }
-        },
-        "proxyapi.TopLogProbs": {
-            "type": "object",
-            "properties": {
-                "bytes": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "logprob": {
-                    "type": "number"
-                },
-                "token": {
-                    "type": "string"
                 }
             }
         },
@@ -1774,37 +1656,12 @@ const docTemplate = `{
                 }
             }
         },
-        "proxyapi.Usage": {
-            "type": "object",
-            "properties": {
-                "completion_tokens": {
-                    "type": "integer"
-                },
-                "prompt_tokens": {
-                    "type": "integer"
-                },
-                "total_tokens": {
-                    "type": "integer"
-                }
-            }
-        },
         "structs.AllowanceRes": {
             "type": "object",
             "properties": {
                 "allowance": {
                     "type": "string",
                     "example": "100000000"
-                }
-            }
-        },
-        "structs.AmountReq": {
-            "type": "object",
-            "required": [
-                "amount"
-            ],
-            "properties": {
-                "amount": {
-                    "type": "string"
                 }
             }
         },

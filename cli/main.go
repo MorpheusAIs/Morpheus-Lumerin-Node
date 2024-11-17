@@ -459,8 +459,16 @@ func (a *actions) createBlockchainProvider(cCtx *cli.Context) error {
 	stake := cCtx.Uint64("stake")
 	endpoint := cCtx.String("endpoint")
 
-	providers, err := a.client.CreateNewProvider(cCtx.Context, stake, endpoint)
+	diamondAddr, err := a.client.GetDiamondAddress(cCtx.Context)
+	if err != nil {
+		return err
+	}
+	_, err = a.client.ApproveAllowance(cCtx.Context, diamondAddr.Hex(), stake)
+	if err != nil {
+		return err
+	}
 
+	providers, err := a.client.CreateNewProvider(cCtx.Context, stake, endpoint)
 	if err != nil {
 		return err
 	}
@@ -473,6 +481,15 @@ func (a *actions) createBlockchainProvider(cCtx *cli.Context) error {
 func (a *actions) createBlockchainProviderBid(cCtx *cli.Context) error {
 	model := cCtx.String("model")
 	pricePerSecond := cCtx.Uint64("pricePerSecond")
+
+	diamondAddr, err := a.client.GetDiamondAddress(cCtx.Context)
+	if err != nil {
+		return err
+	}
+	_, err = a.client.ApproveAllowance(cCtx.Context, diamondAddr.Hex(), 300000000000000000)
+	if err != nil {
+		return err
+	}
 
 	result, err := a.client.CreateNewProviderBid(cCtx.Context, model, pricePerSecond)
 	if err != nil {

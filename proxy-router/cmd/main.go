@@ -15,6 +15,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apibus"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/handlers/httphandlers"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
@@ -24,7 +25,9 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/ethclient"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/keychain"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/multicall"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
+	sessionrepo "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/session"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/transport"
 	wlt "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/wallet"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
@@ -33,11 +36,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 
 	docs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/docs"
-)
-
-const (
-	IDLE_READ_CLOSE_TIMEOUT  = 10 * time.Minute
-	IDLE_WRITE_CLOSE_TIMEOUT = 10 * time.Minute
 )
 
 var (
@@ -130,20 +128,13 @@ func start() error {
 	if err != nil {
 		return err
 	}
-	// contractLogFactory := func(contractID string) (lib.ILogger, error) {
-	// 	logStorage := interfaces.NewLogStorage(contractID)
-	// 	contractLogStorage.Store(logStorage)
-	// 	fp := ""
-	// 	if logFolderPath != "" {
-	// 		fp = filepath.Join(logFolderPath, fmt.Sprintf("contract-%s.log", lib.SanitizeFilename(lib.StrShort(contractID))))
-	// 	}
-	// 	return lib.NewLoggerMemory(cfg.Log.LevelContract, cfg.Log.Color, cfg.Log.IsProd, cfg.Log.JSON, fp, logStorage.Buffer)
-	// }
 
 	defer func() {
 		_ = connLog.Close()
 		_ = proxyLog.Close()
 		_ = log.Close()
+		_ = rpcLog.Close()
+		_ = badgerLog.Close()
 	}()
 
 	appLog.Infof("proxy-router %s", config.BuildVersion)
@@ -215,6 +206,7 @@ func start() error {
 		} else {
 			appLog.Info("Eth node urls removed")
 		}
+		return nil
 	}
 
 	var ethNodeAddresses []string
@@ -277,29 +269,25 @@ func start() error {
 		}
 	}
 
-	proxyRouterApi := proxyapi.NewProxySender(publicUrl, wallet, contractLogStorage, sessionStorage, log)
-	blockchainApi := blockchainapi.NewBlockchainService(ethClient, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, cfg.Blockchain.ExplorerApiUrl, wallet, sessionStorage, proxyRouterApi, providerAllowList, proxyLog, cfg.Blockchain.EthLegacyTx)
+	chatStoragePath := filepath.Join(cfg.Proxy.StoragePath, "chats")
+	chatStorage := chatstorage.NewChatStorage(chatStoragePath)
+
+	multicallBackend := multicall.NewMulticall3Custom(ethClient, *cfg.Blockchain.Multicall3Addr)
+	sessionRouter := registries.NewSessionRouter(*cfg.Marketplace.DiamondContractAddress, ethClient, multicallBackend, log)
+	marketplace := registries.NewMarketplace(*cfg.Marketplace.DiamondContractAddress, ethClient, multicallBackend, log)
+	sessionRepo := sessionrepo.NewSessionRepositoryCached(sessionStorage, sessionRouter, marketplace)
+	proxyRouterApi := proxyapi.NewProxySender(chainID, publicUrl, wallet, contractLogStorage, sessionStorage, sessionRepo, log)
+	blockchainApi := blockchainapi.NewBlockchainService(ethClient, multicallBackend, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, cfg.Blockchain.ExplorerApiUrl, wallet, proxyRouterApi, sessionRepo, providerAllowList, proxyLog, cfg.Blockchain.EthLegacyTx)
 	proxyRouterApi.SetSessionService(blockchainApi)
-	aiEngine := aiengine.NewAiEngine(cfg.AIEngine.OpenAIBaseURL, cfg.AIEngine.OpenAIKey, modelConfigLoader, log)
+	aiEngine := aiengine.NewAiEngine(proxyRouterApi, chatStorage, modelConfigLoader, log)
 
-	marketplace := registries.NewMarketplace(*cfg.Marketplace.DiamondContractAddress, ethClient, log)
-	sessionRouter := registries.NewSessionRouter(*cfg.Marketplace.DiamondContractAddress, ethClient, log)
+	eventListener := blockchainapi.NewEventsListener(sessionRepo, sessionRouter, wallet, logWatcher, log)
 
-	eventListener := blockchainapi.NewEventsListener(ethClient, sessionStorage, sessionRouter, marketplace, wallet, modelConfigLoader, logWatcher, log)
-
+	sessionExpiryHandler := blockchainapi.NewSessionExpiryHandler(blockchainApi, sessionStorage, wallet, log)
 	blockchainController := blockchainapi.NewBlockchainController(blockchainApi, log)
 
-	var chatStorage proxyapi.ChatStorageInterface
-	if cfg.Proxy.StoreChatContext {
-		chatStoragePath := filepath.Join(cfg.Proxy.StoragePath, "chats")
-		chatStorage = proxyapi.NewChatStorage(chatStoragePath)
-	} else {
-		log.Warnf("chat context storage is disabled")
-		chatStorage = proxyapi.NewNoOpChatStorage()
-	}
-
 	ethConnectionValidator := system.NewEthConnectionValidator(*big.NewInt(int64(cfg.Blockchain.ChainID)))
-	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine, chatStorage)
+	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine, chatStorage, *cfg.Proxy.StoreChatContext.Bool, *cfg.Proxy.ForwardChatContext.Bool, log)
 	walletController := walletapi.NewWalletController(wallet)
 	systemController := system.NewSystemController(&cfg, wallet, rpcClientStore, sysConfig, appStartTime, chainID, log, ethConnectionValidator)
 
@@ -315,7 +303,7 @@ func start() error {
 		cancel()
 	}()
 
-	proxy := proxyctl.NewProxyCtl(eventListener, wallet, chainID, log, connLog, cfg.Proxy.Address, schedulerLogFactory, sessionStorage, modelConfigLoader, valid, aiEngine, blockchainApi)
+	proxy := proxyctl.NewProxyCtl(eventListener, wallet, chainID, log, connLog, cfg.Proxy.Address, schedulerLogFactory, sessionStorage, modelConfigLoader, valid, aiEngine, blockchainApi, sessionRepo, sessionExpiryHandler)
 	err = proxy.Run(ctx)
 
 	cancelServer()
