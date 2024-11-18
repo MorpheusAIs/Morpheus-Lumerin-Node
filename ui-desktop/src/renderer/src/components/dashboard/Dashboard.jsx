@@ -171,7 +171,7 @@ const Dashboard = ({
             <div>
               Staked Balance
             </div>
-            <div>{staked} MOR</div>
+            <div>{staked} {props.symbol}</div>
           </StakingWidjet>
         <WidjetItem>
         <CustomBtn

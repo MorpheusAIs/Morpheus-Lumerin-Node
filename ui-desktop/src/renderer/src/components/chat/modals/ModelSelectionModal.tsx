@@ -14,9 +14,10 @@ import { IconSearch } from '@tabler/icons-react';
 import ModelRow from './ModelRow';
 import { useState } from 'react';
 
-const rowRenderer = (models, onChangeModel) => ({ index, style }) => (
+const rowRenderer = (models, onChangeModel, symbol) => ({ index, style }) => (
     <div style={style}>
         <ModelRow
+            symbol={symbol}
             onChangeModel={onChangeModel}
             key={models[index].Id}
             model={models[index]}
@@ -35,7 +36,7 @@ const RVContainer = styled(RVList)`
    overflow: visible !important;
   }`
 
-const ModelSelectionModal = ({ isActive, handleClose, models, onChangeModel }) => {
+const ModelSelectionModal = ({ isActive, handleClose, models, onChangeModel, symbol }) => {
     const [search, setSearch] = useState<string | undefined>();
 
     if (!isActive) {
@@ -79,9 +80,9 @@ const ModelSelectionModal = ({ isActive, handleClose, models, onChangeModel }) =
             </SearchContainer>
             { filterdModels.length == 0 && <div>No models found</div> }
             <AutoSizer width={400} height={385}>
-                {({ width, height }) => (
+                {({ width }) => (
                     <RVContainer
-                        rowRenderer={rowRenderer(filterdModels, changeModelHandler)}
+                        rowRenderer={rowRenderer(filterdModels, changeModelHandler, symbol )}
                         rowHeight={45}
                         rowCount={filterdModels.length}
                         height={385} // defaults for tests
