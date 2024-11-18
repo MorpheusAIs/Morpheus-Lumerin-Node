@@ -102,7 +102,7 @@ func (g *Marketplace) GetBestBidByModelId(ctx context.Context, modelID common.Ha
 	limit := big.NewInt(100)
 	offset := big.NewInt(0)
 
-	bidIDs, err := g.marketplace.GetModelActiveBids(&bind.CallOpts{Context: ctx}, modelID, offset, limit)
+	bidIDs, _, err := g.marketplace.GetModelActiveBids(&bind.CallOpts{Context: ctx}, modelID, offset, limit)
 	if err != nil {
 		return common.Hash{}, nil, err
 	}
@@ -128,36 +128,63 @@ func (g *Marketplace) GetBestBidByModelId(ctx context.Context, modelID common.Ha
 	return cheapestBidID, cheapestBid, nil
 }
 
-func (g *Marketplace) GetBidsByProvider(ctx context.Context, provider common.Address, offset *big.Int, limit uint8) ([][32]byte, []marketplace.IBidStorageBid, error) {
-	bidIDs, err := g.marketplace.GetProviderBids(&bind.CallOpts{Context: ctx}, provider, offset, big.NewInt(int64(limit)))
+func (g *Marketplace) GetBidsByProvider(ctx context.Context, provider common.Address, offset *big.Int, limit uint8, order Order) ([][32]byte, []marketplace.IBidStorageBid, error) {
+	_, len, err := g.marketplace.GetProviderBids(&bind.CallOpts{Context: ctx}, provider, big.NewInt(0), big.NewInt(0))
 	if err != nil {
 		return nil, nil, err
 	}
 
+	_offset, _limit := adjustPagination(order, len, offset, limit)
+	bidIDs, _, err := g.marketplace.GetProviderBids(&bind.CallOpts{Context: ctx}, provider, _offset, _limit)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	adjustOrder(order, bidIDs)
 	return g.GetMultipleBids(ctx, bidIDs)
 }
 
-func (g *Marketplace) GetBidsByModelAgent(ctx context.Context, modelAgentId common.Hash, offset *big.Int, limit uint8) ([][32]byte, []marketplace.IBidStorageBid, error) {
-	bidIDs, err := g.marketplace.GetModelBids(&bind.CallOpts{Context: ctx}, modelAgentId, offset, big.NewInt(int64(limit)))
+func (g *Marketplace) GetBidsByModelAgent(ctx context.Context, modelAgentId common.Hash, offset *big.Int, limit uint8, order Order) ([][32]byte, []marketplace.IBidStorageBid, error) {
+	_, len, err := g.marketplace.GetModelBids(&bind.CallOpts{Context: ctx}, modelAgentId, big.NewInt(0), big.NewInt(0))
 	if err != nil {
 		return nil, nil, err
 	}
+	_offset, _limit := adjustPagination(order, len, offset, limit)
+	bidIDs, _, err := g.marketplace.GetModelBids(&bind.CallOpts{Context: ctx}, modelAgentId, _offset, _limit)
+	if err != nil {
+		return nil, nil, err
+	}
+	adjustOrder(order, bidIDs)
 	return g.GetMultipleBids(ctx, bidIDs)
 }
 
-func (g *Marketplace) GetActiveBidsByProvider(ctx context.Context, provider common.Address, offset *big.Int, limit uint8) ([][32]byte, []marketplace.IBidStorageBid, error) {
-	bidIDs, err := g.marketplace.GetProviderActiveBids(&bind.CallOpts{Context: ctx}, provider, offset, big.NewInt(int64(limit)))
+func (g *Marketplace) GetActiveBidsByProvider(ctx context.Context, provider common.Address, offset *big.Int, limit uint8, order Order) ([][32]byte, []marketplace.IBidStorageBid, error) {
+	_, len, err := g.marketplace.GetProviderActiveBids(&bind.CallOpts{Context: ctx}, provider, big.NewInt(0), big.NewInt(0))
 	if err != nil {
 		return nil, nil, err
 	}
+
+	_offset, _limit := adjustPagination(order, len, offset, limit)
+	bidIDs, _, err := g.marketplace.GetProviderActiveBids(&bind.CallOpts{Context: ctx}, provider, _offset, _limit)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	adjustOrder(order, bidIDs)
 	return g.GetMultipleBids(ctx, bidIDs)
 }
 
-func (g *Marketplace) GetActiveBidsByModel(ctx context.Context, modelAgentId common.Hash, offset *big.Int, limit uint8) ([][32]byte, []marketplace.IBidStorageBid, error) {
-	bidIDs, err := g.marketplace.GetModelActiveBids(&bind.CallOpts{Context: ctx}, modelAgentId, offset, big.NewInt(int64(limit)))
+func (g *Marketplace) GetActiveBidsByModel(ctx context.Context, modelAgentId common.Hash, offset *big.Int, limit uint8, order Order) ([][32]byte, []marketplace.IBidStorageBid, error) {
+	_, len, err := g.marketplace.GetModelActiveBids(&bind.CallOpts{Context: ctx}, modelAgentId, big.NewInt(0), big.NewInt(0))
 	if err != nil {
 		return nil, nil, err
 	}
+	_offset, _limit := adjustPagination(order, len, offset, limit)
+	bidIDs, _, err := g.marketplace.GetModelActiveBids(&bind.CallOpts{Context: ctx}, modelAgentId, _offset, _limit)
+	if err != nil {
+		return nil, nil, err
+	}
+	adjustOrder(order, bidIDs)
 	return g.GetMultipleBids(ctx, bidIDs)
 }
 

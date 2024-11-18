@@ -110,7 +110,7 @@ describe('ProviderRegistry', () => {
       expect(await token.balanceOf(providerRegistry)).to.eq(wei(100));
       expect(await token.balanceOf(PROVIDER)).to.eq(wei(900));
 
-      expect(await providerRegistry.getActiveProviders(0, 10)).to.deep.eq([PROVIDER.address]);
+      expect(await providerRegistry.getActiveProviders(0, 10)).to.deep.eq([[PROVIDER.address], 1n]);
 
       await providerRegistry.connect(PROVIDER).providerRegister(PROVIDER, wei(0), 'test');
     });
@@ -174,7 +174,7 @@ describe('ProviderRegistry', () => {
       expect(await token.balanceOf(providerRegistry)).to.eq(wei(100));
       expect(await token.balanceOf(PROVIDER)).to.eq(wei(900));
 
-      expect(await providerRegistry.getActiveProviders(0, 10)).to.deep.eq([PROVIDER.address]);
+      expect(await providerRegistry.getActiveProviders(0, 10)).to.deep.eq([[PROVIDER.address], 1n]);
 
       await providerRegistry.connect(PROVIDER).providerRegister(PROVIDER, wei(0), 'test');
     });
@@ -210,7 +210,7 @@ describe('ProviderRegistry', () => {
       expect(await token.balanceOf(providerRegistry)).to.eq(0);
       expect(await token.balanceOf(PROVIDER)).to.eq(wei(1000));
 
-      expect(await providerRegistry.getActiveProviders(0, 10)).to.deep.eq([]);
+      expect(await providerRegistry.getActiveProviders(0, 10)).to.deep.eq([[], 0n]);
     });
     it('should deregister the provider from the delegatee address', async () => {
       await setNextTime(300);
@@ -227,7 +227,7 @@ describe('ProviderRegistry', () => {
       expect(await token.balanceOf(providerRegistry)).to.eq(0);
       expect(await token.balanceOf(PROVIDER)).to.eq(wei(1000));
 
-      expect(await providerRegistry.getActiveProviders(0, 10)).to.deep.eq([]);
+      expect(await providerRegistry.getActiveProviders(0, 10)).to.deep.eq([[], 0n]);
     });
     it('should deregister the provider without transfer', async () => {
       await providerRegistry.providerSetMinStake(0);

@@ -18,7 +18,8 @@ const config = {
   devTools: process.env.DEV_TOOLS === 'true',
   sentryDsn: process.env.SENTRY_DSN,
   statePersistanceDebounce: 2000,
-  trackingId: process.env.TRACKING_ID
+  trackingId: process.env.TRACKING_ID,
+  isFailoverEnabled: process.env.FAILOVER_ENABLED ? process.env.FAILOVER_ENABLED === 'true' : true
 }
 
 export default config

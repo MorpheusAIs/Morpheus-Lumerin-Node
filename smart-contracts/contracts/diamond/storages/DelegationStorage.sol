@@ -8,7 +8,7 @@ import {Paginator} from "@solarity/solidity-lib/libs/arrays/Paginator.sol";
 import {IDelegationStorage} from "../../interfaces/storage/IDelegationStorage.sol";
 import {IDelegateRegistry} from "../../interfaces/deps/IDelegateRegistry.sol";
 
-contract DelegationStorage is IDelegationStorage {    
+contract DelegationStorage is IDelegationStorage {
     struct DLGTNStorage {
         address registry;
     }
@@ -23,11 +23,12 @@ contract DelegationStorage is IDelegationStorage {
     function getRegistry() external view returns (address) {
         return _getDelegationStorage().registry;
     }
- 
+
     function isRightsDelegated(address delegatee_, address delegator_, bytes32 rights_) public view returns (bool) {
         DLGTNStorage storage delegationStorage = _getDelegationStorage();
 
-        return IDelegateRegistry(delegationStorage.registry).checkDelegateForContract(
+        return
+            IDelegateRegistry(delegationStorage.registry).checkDelegateForContract(
                 delegatee_,
                 delegator_,
                 address(this),

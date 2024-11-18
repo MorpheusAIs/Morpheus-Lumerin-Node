@@ -19,7 +19,8 @@ const envsToInject = [
   'SYMBOL_ETH',
   'SYMBOL_LMR',
   'TOKEN_ADDRESS',
-  'TRACKING_ID'
+  'TRACKING_ID',
+  'FAILOVER_ENABLED'
 ] as const
 
 export default defineConfig(({ /*command,*/ mode }) => {

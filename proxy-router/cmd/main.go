@@ -277,7 +277,8 @@ func start() error {
 	marketplace := registries.NewMarketplace(*cfg.Marketplace.DiamondContractAddress, ethClient, multicallBackend, log)
 	sessionRepo := sessionrepo.NewSessionRepositoryCached(sessionStorage, sessionRouter, marketplace)
 	proxyRouterApi := proxyapi.NewProxySender(chainID, publicUrl, wallet, contractLogStorage, sessionStorage, sessionRepo, log)
-	blockchainApi := blockchainapi.NewBlockchainService(ethClient, multicallBackend, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, cfg.Blockchain.ExplorerApiUrl, wallet, proxyRouterApi, sessionRepo, providerAllowList, proxyLog, cfg.Blockchain.EthLegacyTx)
+	explorer := blockchainapi.NewExplorerClient(cfg.Blockchain.ExplorerApiUrl, *cfg.Marketplace.MorTokenAddress, cfg.Blockchain.ExplorerRetryDelay, cfg.Blockchain.ExplorerMaxRetries)
+	blockchainApi := blockchainapi.NewBlockchainService(ethClient, multicallBackend, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, explorer, wallet, proxyRouterApi, sessionRepo, providerAllowList, proxyLog, cfg.Blockchain.EthLegacyTx)
 	proxyRouterApi.SetSessionService(blockchainApi)
 	aiEngine := aiengine.NewAiEngine(proxyRouterApi, chatStorage, modelConfigLoader, log)
 

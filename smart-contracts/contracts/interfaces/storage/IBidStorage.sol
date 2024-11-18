@@ -36,7 +36,7 @@ interface IBidStorage {
         address provider_,
         uint256 offset_,
         uint256 limit_
-    ) external view returns (bytes32[] memory);
+    ) external view returns (bytes32[] memory, uint256);
 
     /**
      * The function returns active model bids.
@@ -48,7 +48,7 @@ interface IBidStorage {
         bytes32 modelId_,
         uint256 offset_,
         uint256 limit_
-    ) external view returns (bytes32[] memory);
+    ) external view returns (bytes32[] memory, uint256);
 
     /**
      * The function returns provider bids.
@@ -60,7 +60,7 @@ interface IBidStorage {
         address provider_,
         uint256 offset_,
         uint256 limit_
-    ) external view returns (bytes32[] memory);
+    ) external view returns (bytes32[] memory, uint256);
 
     /**
      * The function returns model bids.
@@ -68,7 +68,11 @@ interface IBidStorage {
      * @param offset_ Offset for the pagination.
      * @param limit_ Number of entities to return.
      */
-    function getModelBids(bytes32 modelId_, uint256 offset_, uint256 limit_) external view returns (bytes32[] memory);
+    function getModelBids(
+        bytes32 modelId_,
+        uint256 offset_,
+        uint256 limit_
+    ) external view returns (bytes32[] memory, uint256);
 
     /**
      * The function returns stake token (MOR).

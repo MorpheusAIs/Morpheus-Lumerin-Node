@@ -90,7 +90,12 @@ contract SessionRouter is
 
         bytes32 bidId_ = _extractProviderApproval(approvalEncoded_);
 
-        bytes32 sessionId_ = getSessionId(user_, _getBidsStorage().bids[bidId_].provider, bidId_, sessionsStorage.sessionNonce++);
+        bytes32 sessionId_ = getSessionId(
+            user_,
+            _getBidsStorage().bids[bidId_].provider,
+            bidId_,
+            sessionsStorage.sessionNonce++
+        );
         Session storage session = sessionsStorage.sessions[sessionId_];
 
         IERC20(_getBidsStorage().token).safeTransferFrom(user_, address(this), amount_);

@@ -31,7 +31,11 @@ library RegistryStorage {
      * @return secondPacked The secondPacked storage configured with the parameters
      * @dev Will not revert if `from`, `to`, and `contract_` are > uint160, any inputs with dirty bits outside the last 20 bytes will be cleaned
      */
-    function packAddresses(address from, address to, address contract_) internal pure returns (bytes32 firstPacked, bytes32 secondPacked) {
+    function packAddresses(
+        address from,
+        address to,
+        address contract_
+    ) internal pure returns (bytes32 firstPacked, bytes32 secondPacked) {
         assembly {
             firstPacked := or(shl(64, and(contract_, CLEAN_FIRST8_BYTES_ADDRESS)), and(from, CLEAN_ADDRESS))
             secondPacked := or(shl(160, contract_), and(to, CLEAN_ADDRESS))
@@ -47,7 +51,10 @@ library RegistryStorage {
      * @return contract_ The contract address associated with the delegation
      * @dev Will not revert if `from`, `to`, and `contract_` are > uint160, any inputs with dirty bits outside the last 20 bytes will be cleaned
      */
-    function unpackAddresses(bytes32 firstPacked, bytes32 secondPacked) internal pure returns (address from, address to, address contract_) {
+    function unpackAddresses(
+        bytes32 firstPacked,
+        bytes32 secondPacked
+    ) internal pure returns (address from, address to, address contract_) {
         assembly {
             from := and(firstPacked, CLEAN_ADDRESS)
             to := and(secondPacked, CLEAN_ADDRESS)

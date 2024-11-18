@@ -111,7 +111,12 @@ library RegistryHashes {
      * @param contract_ The address of the contract specified by the delegation
      * @return hash The delegation parameters encoded with CONTRACT_TYPE
      */
-    function contractHash(address from, bytes32 rights, address to, address contract_) internal pure returns (bytes32 hash) {
+    function contractHash(
+        address from,
+        bytes32 rights,
+        address to,
+        address contract_
+    ) internal pure returns (bytes32 hash) {
         assembly ("memory-safe") {
             // This block only allocates memory after the free memory pointer
             let ptr := mload(64) // Load the free memory pointer
@@ -134,7 +139,12 @@ library RegistryHashes {
      * @param contract_ The address of the contract specified by the delegation
      * @return computedLocation The storage location of the contract delegation with those parameters in the delegations mapping
      */
-    function contractLocation(address from, bytes32 rights, address to, address contract_) internal pure returns (bytes32 computedLocation) {
+    function contractLocation(
+        address from,
+        bytes32 rights,
+        address to,
+        address contract_
+    ) internal pure returns (bytes32 computedLocation) {
         assembly ("memory-safe") {
             // This block only allocates memory after the free memory pointer and in the scratch space
             let ptr := mload(64) // Load free memory pointer
@@ -160,7 +170,13 @@ library RegistryHashes {
      * @param contract_ The address of the contract specified by the delegation
      * @return hash The delegation parameters encoded with ERC721_TYPE
      */
-    function erc721Hash(address from, bytes32 rights, address to, uint256 tokenId, address contract_) internal pure returns (bytes32 hash) {
+    function erc721Hash(
+        address from,
+        bytes32 rights,
+        address to,
+        uint256 tokenId,
+        address contract_
+    ) internal pure returns (bytes32 hash) {
         assembly ("memory-safe") {
             // This block only allocates memory after the free memory pointer
             let ptr := mload(64) // Cache the free memory pointer.
@@ -185,7 +201,13 @@ library RegistryHashes {
      * @param contract_ The address of the ERC721 token contract
      * @return computedLocation The storage location of the ERC721 delegation with those parameters in the delegations mapping
      */
-    function erc721Location(address from, bytes32 rights, address to, uint256 tokenId, address contract_) internal pure returns (bytes32 computedLocation) {
+    function erc721Location(
+        address from,
+        bytes32 rights,
+        address to,
+        uint256 tokenId,
+        address contract_
+    ) internal pure returns (bytes32 computedLocation) {
         assembly ("memory-safe") {
             // This block only allocates memory after the free memory pointer and in the scratch space
             let ptr := mload(64) // Cache the free memory pointer.
@@ -211,7 +233,12 @@ library RegistryHashes {
      * @param contract_ The address of the ERC20 token contract
      * @return hash The parameters encoded with ERC20_TYPE
      */
-    function erc20Hash(address from, bytes32 rights, address to, address contract_) internal pure returns (bytes32 hash) {
+    function erc20Hash(
+        address from,
+        bytes32 rights,
+        address to,
+        address contract_
+    ) internal pure returns (bytes32 hash) {
         assembly ("memory-safe") {
             // This block only allocates memory after the free memory pointer
             let ptr := mload(64) // Load free memory pointer
@@ -234,7 +261,12 @@ library RegistryHashes {
      * @param contract_ The address of the ERC20 token contract
      * @return computedLocation The storage location of the ERC20 delegation with those parameters in the delegations mapping
      */
-    function erc20Location(address from, bytes32 rights, address to, address contract_) internal pure returns (bytes32 computedLocation) {
+    function erc20Location(
+        address from,
+        bytes32 rights,
+        address to,
+        address contract_
+    ) internal pure returns (bytes32 computedLocation) {
         assembly ("memory-safe") {
             // This block only allocates memory after the free memory pointer and in the scratch space
             let ptr := mload(64) // Loads the free memory pointer
@@ -260,7 +292,13 @@ library RegistryHashes {
      * @param contract_ The address of the ERC1155 token contract
      * @return hash The parameters encoded with ERC1155_TYPE
      */
-    function erc1155Hash(address from, bytes32 rights, address to, uint256 tokenId, address contract_) internal pure returns (bytes32 hash) {
+    function erc1155Hash(
+        address from,
+        bytes32 rights,
+        address to,
+        uint256 tokenId,
+        address contract_
+    ) internal pure returns (bytes32 hash) {
         assembly ("memory-safe") {
             // This block only allocates memory after the free memory pointer
             let ptr := mload(64) // Load the free memory pointer.
@@ -285,7 +323,13 @@ library RegistryHashes {
      * @param contract_ The address of the ERC1155 token contract
      * @return computedLocation The storage location of the ERC1155 delegation with those parameters in the delegations mapping
      */
-    function erc1155Location(address from, bytes32 rights, address to, uint256 tokenId, address contract_) internal pure returns (bytes32 computedLocation) {
+    function erc1155Location(
+        address from,
+        bytes32 rights,
+        address to,
+        uint256 tokenId,
+        address contract_
+    ) internal pure returns (bytes32 computedLocation) {
         assembly ("memory-safe") {
             // This block only allocates memory after the free memory pointer and in the scratch space
             let ptr := mload(64) // Cache the free memory pointer.
