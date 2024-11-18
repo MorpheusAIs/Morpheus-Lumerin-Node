@@ -45,7 +45,7 @@ const HisotryEntry = ({ entry, deleteHistory, onSelectChat, isActive, onChangeTi
                 !isEdit ?
                     (
                         <>
-                            <span className="title" style={{ width: isActive ? "75%" : undefined }}>{title}</span>
+                            <span className="title" style={{ width: isActive ? "100%" : undefined }}>{title}</span>
                             {
                                 isActive && (
                                     <components.IconsContainer>

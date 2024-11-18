@@ -1,7 +1,7 @@
 'use strict';
 
 const { app, shell, Menu } = require('electron');
-const APP_NAME = 'Lumerin Wallet';
+const APP_NAME = 'Morpheus Wallet';
 
 const template = [
   {
