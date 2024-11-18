@@ -122,6 +122,7 @@ jobs:
           cd ../proxy-router
           go mod download
           cd ../ui-desktop
+          python3 -m pip install setuptools
           yarn install --network-timeout 600000
 
       - name: Copy Environment Files
@@ -153,7 +154,7 @@ jobs:
           unzip -o -j $LLAMACPP build/bin/llama-server
           echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./Morpheus UI.app/Contents/MacOS/Morpheus UI"]}' > mor-launch.json
           mv ./cli/mor-cli mor-cli
-          unzip ./ui-desktop/dist/morpheus-ui-1.0.0-arm64-mac.zip
+          unzip ./ui-desktop/dist/morpheus-ui-1.0.0-x64-mac.zip
           zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json models-config.json mor-cli
           zip -r $ARTIFACT 'Morpheus UI.app'
 
@@ -192,6 +193,7 @@ jobs:
           cd ../proxy-router
           go mod download
           cd ../ui-desktop
+          brew install python-setuptools
           yarn install --network-timeout 600000
 
       - name: Copy Environment Files
