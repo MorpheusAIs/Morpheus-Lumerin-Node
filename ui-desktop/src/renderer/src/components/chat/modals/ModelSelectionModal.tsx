@@ -79,7 +79,7 @@ const ModelSelectionModal = ({ isActive, handleClose, models, onChangeModel }) =
             </SearchContainer>
             { filterdModels.length == 0 && <div>No models found</div> }
             <AutoSizer width={400} height={385}>
-                {({ width, height }) => (
+                {({ width }) => (
                     <RVContainer
                         rowRenderer={rowRenderer(filterdModels, changeModelHandler)}
                         rowHeight={45}
