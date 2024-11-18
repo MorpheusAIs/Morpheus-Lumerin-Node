@@ -43,7 +43,7 @@ func rateBids(bidIds [][32]byte, bids []m.IBidStorageBid, pmStats []s.IStatsStor
 }
 
 func getScore(bid m.IBidStorageBid, pmStats s.IStatsStorageProviderModelStats, pr pr.IProviderStorageProvider, mStats *s.IStatsStorageModelStats) float64 {
-	tpsWeight, ttftWeight, durationWeight, successWeight, stakeWeight := 0.24, 0.08, 0.24, 0.32, 0.12
+	tpsWeight, ttftWeight, durationWeight, successWeight, stakeWeight := 0.1, 0.1, 0.38, 0.17, 0.25
 	count := int64(mStats.Count)
 	minStake := int64(0.2 * math.Pow10(18)) // 0.2 MOR
 
