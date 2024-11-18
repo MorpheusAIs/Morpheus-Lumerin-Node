@@ -388,9 +388,9 @@ func (s *BlockchainService) CloseSession(ctx context.Context, sessionID common.H
 
 	report, err := s.proxyService.GetSessionReportFromProvider(ctx, sessionID)
 	if err != nil {
-		s.log.Errorf("Failed to get session report from provider", err)
+		s.log.Warnf("failed to get provider's report: %s", err)
 
-		s.log.Info("Trying to get session report from user")
+		s.log.Info("using user report")
 		reportMessage, signedReport, err = s.proxyService.GetSessionReportFromUser(ctx, sessionID)
 		if err != nil {
 			return common.Hash{}, lib.WrapError(ErrSessionUserReport, err)
