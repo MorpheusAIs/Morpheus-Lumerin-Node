@@ -77,7 +77,7 @@ func NewBlockchainService(
 	mc multicall.MulticallBackend,
 	diamonContractAddr common.Address,
 	morTokenAddr common.Address,
-	explorerApiUrl string,
+	explorer *ExplorerClient,
 	privateKey i.PrKeyProvider,
 	proxyService *proxyapi.ProxyServiceSender,
 	sessionRepo *sessionrepo.SessionRepositoryCached,
@@ -91,7 +91,6 @@ func NewBlockchainService(
 	sessionRouter := registries.NewSessionRouter(diamonContractAddr, ethClient, mc, log)
 	morToken := registries.NewMorToken(morTokenAddr, ethClient, log)
 
-	explorerClient := NewExplorerClient(explorerApiUrl, morTokenAddr.String())
 	return &BlockchainService{
 		ethClient:          ethClient,
 		providerRegistry:   providerRegistry,
@@ -101,7 +100,7 @@ func NewBlockchainService(
 		legacyTx:           legacyTx,
 		privateKey:         privateKey,
 		morToken:           morToken,
-		explorerClient:     explorerClient,
+		explorerClient:     explorer,
 		proxyService:       proxyService,
 		diamonContractAddr: diamonContractAddr,
 		providerAllowList:  providerAllowList,
@@ -640,12 +639,15 @@ func (s *BlockchainService) GetTransactions(ctx context.Context, page uint64, li
 	}
 	address := transactOpt.From
 
-	ethTrxs, err := s.explorerClient.GetEthTransactions(address, page, limit)
+	morTrxs, err := s.explorerClient.GetTokenTransactions(ctx, address, page, limit)
 	if err != nil {
+		s.log.Errorf("failed to get mor transactions: %s", err.Error())
 		return nil, err
 	}
-	morTrxs, err := s.explorerClient.GetTokenTransactions(address, page, limit)
+
+	ethTrxs, err := s.explorerClient.GetEthTransactions(ctx, address, page, limit)
 	if err != nil {
+		s.log.Errorf("failed to get eth transactions: %s", err.Error())
 		return nil, err
 	}
 
