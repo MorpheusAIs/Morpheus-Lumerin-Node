@@ -1,10 +1,10 @@
 {
-  "name": "ui-desktop",
+  "name": "morpheus-ui",
   "version": "1.0.0",
-  "description": "An Electron application with React and TypeScript",
+  "description": "The Morpheus Decentralized AI Desktop App",
   "main": "./out/main/index.mjs",
-  "author": "example.com",
-  "homepage": "https://electron-vite.org",
+  "author": "Lumerin.io",
+  "homepage": "https://lumerin.io/ai",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix",
