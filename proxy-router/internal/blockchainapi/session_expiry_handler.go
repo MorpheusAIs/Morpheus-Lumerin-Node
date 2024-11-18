@@ -83,7 +83,7 @@ func (s *SessionExpiryHandler) Run(ctx context.Context) error {
 					s.log.Infof("Closing session %s", session.Id)
 					_, err = s.blockchainService.CloseSession(ctx, sessionId)
 					if err != nil {
-						s.log.Error(err)
+						s.log.Warnf("cannot close session: %s", err.Error())
 						continue
 					}
 					s.sessionStorage.RemoveSession(session.Id)

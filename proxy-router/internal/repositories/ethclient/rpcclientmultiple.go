@@ -34,6 +34,7 @@ func NewRPCClientMultiple(urls []string, log lib.ILogger) (*RPCClientMultiple, e
 
 func (c *RPCClientMultiple) CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error {
 	return c.retriableCall(ctx, func(client *rpcClient) error {
+		c.log.Debugf("calling %s", method)
 		return client.client.CallContext(ctx, result, method, args...)
 	})
 }
@@ -104,7 +105,6 @@ func (c *RPCClientMultiple) retriableCall(ctx context.Context, fn func(client *r
 			return ctx.Err()
 		}
 
-		c.log.Debugf("calling eth endpoint %s", rpcClient.url)
 		err := fn(rpcClient)
 		if err == nil {
 			return nil
