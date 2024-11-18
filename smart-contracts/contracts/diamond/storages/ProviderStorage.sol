@@ -31,8 +31,10 @@ contract ProviderStorage is IProviderStorage {
         return _getProvidersStorage().providerMinimumStake;
     }
 
-    function getActiveProviders(uint256 offset_, uint256 limit_) external view returns (address[] memory) {
-        return _getProvidersStorage().activeProviders.part(offset_, limit_);
+    function getActiveProviders(uint256 offset_, uint256 limit_) external view returns (address[] memory, uint256) {
+        EnumerableSet.AddressSet storage activeProviders = _getProvidersStorage().activeProviders;
+
+        return (activeProviders.part(offset_, limit_), activeProviders.length());
     }
 
     function getIsProviderActive(address provider_) public view returns (bool) {

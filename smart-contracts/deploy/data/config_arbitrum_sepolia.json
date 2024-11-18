@@ -6,6 +6,7 @@
   "marketplaceBidFee": "300000000000000000",
   "marketplaceMinBidPricePerSecond": "5000000000000000",
   "marketplaceMaxBidPricePerSecond": "20000000000000000000",
+  "delegateRegistry": "0x00000000000000447e69651d841bD8D104Bed493",
 
   "pools": [
     {

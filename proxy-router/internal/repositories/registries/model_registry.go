@@ -54,7 +54,7 @@ func (g *ModelRegistry) GetAllModels(ctx context.Context) ([][32]byte, []modelre
 	var allIDs [][32]byte
 	var allModels []modelregistry.IModelStorageModel
 	for {
-		ids, providers, err := g.GetModels(ctx, offset, uint8(batchSize))
+		ids, providers, err := g.GetModels(ctx, offset, uint8(batchSize), OrderASC)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -71,12 +71,17 @@ func (g *ModelRegistry) GetAllModels(ctx context.Context) ([][32]byte, []modelre
 	return allIDs, allModels, nil
 }
 
-func (g *ModelRegistry) GetModels(ctx context.Context, offset *big.Int, limit uint8) ([][32]byte, []modelregistry.IModelStorageModel, error) {
-	ids, err := g.modelRegistry.GetActiveModelIds(&bind.CallOpts{Context: ctx}, offset, big.NewInt(int64(limit)))
+func (g *ModelRegistry) GetModels(ctx context.Context, offset *big.Int, limit uint8, order Order) ([][32]byte, []modelregistry.IModelStorageModel, error) {
+	_, len, err := g.modelRegistry.GetActiveModelIds(&bind.CallOpts{Context: ctx}, big.NewInt(0), big.NewInt(0))
 	if err != nil {
 		return nil, nil, err
 	}
-
+	_offset, _limit := adjustPagination(order, len, offset, limit)
+	ids, _, err := g.modelRegistry.GetActiveModelIds(&bind.CallOpts{Context: ctx}, _offset, _limit)
+	if err != nil {
+		return nil, nil, err
+	}
+	adjustOrder(order, ids)
 	return g.getMultipleModels(ctx, ids)
 }
 

@@ -17,7 +17,7 @@ import (
 	pr "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/providerregistry"
 	sr "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/sessionrouter"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/multicall"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
+	r "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
 	sessionrepo "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/session"
 	"github.com/gin-gonic/gin"
 
@@ -30,11 +30,11 @@ import (
 
 type BlockchainService struct {
 	ethClient          i.EthClient
-	providerRegistry   *registries.ProviderRegistry
-	modelRegistry      *registries.ModelRegistry
-	marketplace        *registries.Marketplace
-	sessionRouter      *registries.SessionRouter
-	morToken           *registries.MorToken
+	providerRegistry   *r.ProviderRegistry
+	modelRegistry      *r.ModelRegistry
+	marketplace        *r.Marketplace
+	sessionRouter      *r.SessionRouter
+	morToken           *r.MorToken
 	explorerClient     *ExplorerClient
 	sessionRepo        *sessionrepo.SessionRepositoryCached
 	proxyService       *proxyapi.ProxyServiceSender
@@ -85,11 +85,11 @@ func NewBlockchainService(
 	log lib.ILogger,
 	legacyTx bool,
 ) *BlockchainService {
-	providerRegistry := registries.NewProviderRegistry(diamonContractAddr, ethClient, mc, log)
-	modelRegistry := registries.NewModelRegistry(diamonContractAddr, ethClient, mc, log)
-	marketplace := registries.NewMarketplace(diamonContractAddr, ethClient, mc, log)
-	sessionRouter := registries.NewSessionRouter(diamonContractAddr, ethClient, mc, log)
-	morToken := registries.NewMorToken(morTokenAddr, ethClient, log)
+	providerRegistry := r.NewProviderRegistry(diamonContractAddr, ethClient, mc, log)
+	modelRegistry := r.NewModelRegistry(diamonContractAddr, ethClient, mc, log)
+	marketplace := r.NewMarketplace(diamonContractAddr, ethClient, mc, log)
+	sessionRouter := r.NewSessionRouter(diamonContractAddr, ethClient, mc, log)
+	morToken := r.NewMorToken(morTokenAddr, ethClient, log)
 
 	return &BlockchainService{
 		ethClient:          ethClient,
@@ -122,8 +122,8 @@ func (s *BlockchainService) GetAllProviders(ctx context.Context) ([]*structs.Pro
 	return mapProviders(addrs, providers), nil
 }
 
-func (s *BlockchainService) GetProviders(ctx context.Context, offset *big.Int, limit uint8) ([]*structs.Provider, error) {
-	addrs, providers, err := s.providerRegistry.GetProviders(ctx, offset, limit)
+func (s *BlockchainService) GetProviders(ctx context.Context, offset *big.Int, limit uint8, order r.Order) ([]*structs.Provider, error) {
+	addrs, providers, err := s.providerRegistry.GetProviders(ctx, offset, limit, order)
 	if err != nil {
 		return nil, err
 	}
@@ -140,8 +140,8 @@ func (s *BlockchainService) GetAllModels(ctx context.Context) ([]*structs.Model,
 	return mapModels(ids, models), nil
 }
 
-func (s *BlockchainService) GetModels(ctx context.Context, offset *big.Int, limit uint8) ([]*structs.Model, error) {
-	ids, models, err := s.modelRegistry.GetModels(ctx, offset, limit)
+func (s *BlockchainService) GetModels(ctx context.Context, offset *big.Int, limit uint8, order r.Order) ([]*structs.Model, error) {
+	ids, models, err := s.modelRegistry.GetModels(ctx, offset, limit, order)
 	if err != nil {
 		return nil, err
 	}
@@ -149,8 +149,8 @@ func (s *BlockchainService) GetModels(ctx context.Context, offset *big.Int, limi
 	return mapModels(ids, models), nil
 }
 
-func (s *BlockchainService) GetBidsByProvider(ctx context.Context, providerAddr common.Address, offset *big.Int, limit uint8) ([]*structs.Bid, error) {
-	ids, bids, err := s.marketplace.GetBidsByProvider(ctx, providerAddr, offset, limit)
+func (s *BlockchainService) GetBidsByProvider(ctx context.Context, providerAddr common.Address, offset *big.Int, limit uint8, order r.Order) ([]*structs.Bid, error) {
+	ids, bids, err := s.marketplace.GetBidsByProvider(ctx, providerAddr, offset, limit, order)
 	if err != nil {
 		return nil, err
 	}
@@ -158,8 +158,8 @@ func (s *BlockchainService) GetBidsByProvider(ctx context.Context, providerAddr 
 	return mapBids(ids, bids), nil
 }
 
-func (s *BlockchainService) GetBidsByModelAgent(ctx context.Context, modelId [32]byte, offset *big.Int, limit uint8) ([]*structs.Bid, error) {
-	ids, bids, err := s.marketplace.GetBidsByModelAgent(ctx, modelId, offset, limit)
+func (s *BlockchainService) GetBidsByModelAgent(ctx context.Context, modelId [32]byte, offset *big.Int, limit uint8, order r.Order) ([]*structs.Bid, error) {
+	ids, bids, err := s.marketplace.GetBidsByModelAgent(ctx, modelId, offset, limit, order)
 	if err != nil {
 		return nil, err
 	}
@@ -167,8 +167,8 @@ func (s *BlockchainService) GetBidsByModelAgent(ctx context.Context, modelId [32
 	return mapBids(ids, bids), nil
 }
 
-func (s *BlockchainService) GetActiveBidsByModel(ctx context.Context, modelId common.Hash, offset *big.Int, limit uint8) ([]*structs.Bid, error) {
-	ids, bids, err := s.marketplace.GetActiveBidsByModel(ctx, modelId, offset, limit)
+func (s *BlockchainService) GetActiveBidsByModel(ctx context.Context, modelId common.Hash, offset *big.Int, limit uint8, order r.Order) ([]*structs.Bid, error) {
+	ids, bids, err := s.marketplace.GetActiveBidsByModel(ctx, modelId, offset, limit, order)
 	if err != nil {
 		return nil, err
 	}
@@ -176,8 +176,8 @@ func (s *BlockchainService) GetActiveBidsByModel(ctx context.Context, modelId co
 	return mapBids(ids, bids), nil
 }
 
-func (s *BlockchainService) GetActiveBidsByProvider(ctx context.Context, provider common.Address, offset *big.Int, limit uint8) ([]*structs.Bid, error) {
-	ids, bids, err := s.marketplace.GetActiveBidsByProvider(ctx, provider, offset, limit)
+func (s *BlockchainService) GetActiveBidsByProvider(ctx context.Context, provider common.Address, offset *big.Int, limit uint8, order r.Order) ([]*structs.Bid, error) {
+	ids, bids, err := s.marketplace.GetActiveBidsByProvider(ctx, provider, offset, limit, order)
 	if err != nil {
 		return nil, err
 	}
@@ -583,17 +583,17 @@ func (s *BlockchainService) GetTodaysBudget(ctx context.Context) (*big.Int, erro
 	return s.sessionRouter.GetTodaysBudget(ctx, big.NewInt(time.Now().Unix()))
 }
 
-func (s *BlockchainService) GetSessions(ctx *gin.Context, user, provider common.Address, offset *big.Int, limit uint8) ([]*structs.Session, error) {
+func (s *BlockchainService) GetSessions(ctx *gin.Context, user, provider common.Address, offset *big.Int, limit uint8, order r.Order) ([]*structs.Session, error) {
 	var (
 		ids      [][32]byte
 		sessions []sr.ISessionStorageSession
 		err      error
 	)
 	if (user != common.Address{}) {
-		ids, sessions, err = s.sessionRouter.GetSessionsByUser(ctx, common.HexToAddress(ctx.Query("user")), offset, limit)
+		ids, sessions, err = s.sessionRouter.GetSessionsByUser(ctx, common.HexToAddress(ctx.Query("user")), offset, limit, order)
 	} else {
 		// hasProvider
-		ids, sessions, err = s.sessionRouter.GetSessionsByProvider(ctx, common.HexToAddress(ctx.Query("provider")), offset, limit)
+		ids, sessions, err = s.sessionRouter.GetSessionsByProvider(ctx, common.HexToAddress(ctx.Query("provider")), offset, limit, order)
 	}
 	if err != nil {
 		return nil, err
@@ -612,8 +612,8 @@ func (s *BlockchainService) GetSessions(ctx *gin.Context, user, provider common.
 	return mapSessions(ids, sessions, bids), nil
 }
 
-func (s *BlockchainService) GetSessionsIds(ctx context.Context, user, provider common.Address, offset *big.Int, limit uint8) ([]common.Hash, error) {
-	ids, err := s.sessionRouter.GetSessionsIdsByUser(ctx, user, offset, limit)
+func (s *BlockchainService) GetSessionsIds(ctx context.Context, user, provider common.Address, offset *big.Int, limit uint8, order r.Order) ([]common.Hash, error) {
+	ids, err := s.sessionRouter.GetSessionsIdsByUser(ctx, user, offset, limit, order)
 
 	if err != nil {
 		return nil, err
@@ -781,7 +781,7 @@ func (s *BlockchainService) GetAllBidsWithRating(ctx context.Context, modelAgent
 			return nil, nil, nil, nil, ctx.Err()
 		}
 
-		idsBatch, bidsBatch, err := s.marketplace.GetActiveBidsByModel(ctx, modelAgentID, offset, batchSize)
+		idsBatch, bidsBatch, err := s.marketplace.GetActiveBidsByModel(ctx, modelAgentID, offset, batchSize, r.OrderASC)
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
