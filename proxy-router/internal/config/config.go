@@ -85,7 +85,7 @@ func (cfg *Config) SetDefaults() {
 		cfg.Blockchain.MaxReconnects = 30
 	}
 	if cfg.Blockchain.PollingInterval == 0 {
-		cfg.Blockchain.PollingInterval = 1 * time.Second
+		cfg.Blockchain.PollingInterval = 10 * time.Second
 	}
 	if cfg.Blockchain.Multicall3Addr.Cmp(common.Address{}) == 0 {
 		cfg.Blockchain.Multicall3Addr = &multicall.MULTICALL3_ADDR
