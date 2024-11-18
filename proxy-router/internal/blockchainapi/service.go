@@ -211,7 +211,7 @@ func (s *BlockchainService) GetRatedBids(ctx context.Context, modelID common.Has
 	return ratedBids, nil
 }
 
-func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalSig []byte, stake *big.Int) (common.Hash, error) {
+func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalSig []byte, stake *big.Int, directPayment bool) (common.Hash, error) {
 	prKey, err := s.privateKey.GetPrivateKey()
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrPrKey, err)
@@ -222,7 +222,7 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
 	}
 
-	sessionID, _, _, err := s.sessionRouter.OpenSession(transactOpt, approval, approvalSig, stake, prKey)
+	sessionID, _, _, err := s.sessionRouter.OpenSession(transactOpt, approval, approvalSig, stake, directPayment, prKey)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrSendTx, err)
 	}
@@ -705,10 +705,10 @@ func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.H
 		return common.Hash{}, lib.WrapError(ErrApprove, err)
 	}
 
-	return s.OpenSession(ctx, initRes.Approval, initRes.ApprovalSig, stake)
+	return s.OpenSession(ctx, initRes.Approval, initRes.ApprovalSig, stake, false)
 }
 
-func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID common.Hash, duration *big.Int, isFailoverEnabled bool, omitProvider common.Address) (common.Hash, error) {
+func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID common.Hash, duration *big.Int, directPayment bool, isFailoverEnabled bool, omitProvider common.Address) (common.Hash, error) {
 	supply, err := s.GetTokenSupply(ctx)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrTokenSupply, err)
@@ -754,7 +754,7 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 		s.log.Infof("trying to open session with provider #%d %s", i, bid.Bid.Provider.String())
 		durationCopy := new(big.Int).Set(duration)
 
-		hash, err := s.tryOpenSession(ctx, bid, durationCopy, supply, budget, userAddr, isFailoverEnabled)
+		hash, err := s.tryOpenSession(ctx, bid, durationCopy, supply, budget, userAddr, directPayment, isFailoverEnabled)
 		if err != nil {
 			s.log.Errorf("failed to open session with provider %s: %s", bid.Bid.Provider.String(), err.Error())
 			continue
@@ -811,31 +811,43 @@ func (s *BlockchainService) GetAllBidsWithRating(ctx context.Context, modelAgent
 	return ids, bids, providerModelStats, providers, nil
 }
 
-func (s *BlockchainService) tryOpenSession(ctx context.Context, bid structs.ScoredBid, duration, supply, budget *big.Int, userAddr common.Address, failoverEnabled bool) (common.Hash, error) {
+func (s *BlockchainService) tryOpenSession(ctx context.Context, bid structs.ScoredBid, duration, supply, budget *big.Int, userAddr common.Address, directPayment bool, failoverEnabled bool) (common.Hash, error) {
 	provider, err := s.providerRegistry.GetProviderById(ctx, bid.Bid.Provider)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrProvider, err)
 	}
+	sessionCost := (&big.Int{}).Mul(&bid.Bid.PricePerSecond.Int, duration)
 
-	totalCost := (&big.Int{}).Mul(&bid.Bid.PricePerSecond.Int, duration)
-	stake := (&big.Int{}).Div((&big.Int{}).Mul(supply, totalCost), budget)
+	var amountTransferred = new(big.Int)
+	if directPayment {
+		// amount transferred is the session cost
+		amountTransferred = sessionCost
+	} else {
+		// amount transferred is the stake
+		stake := (&big.Int{}).Div((&big.Int{}).Mul(supply, sessionCost), budget)
+		amountTransferred = stake
+	}
 
-	s.log.Infof("attempting to initiate session with provider %s", bid.Bid.Provider.String())
-	s.log.Infof("stake %s", stake.String())
-	s.log.Infof("duration %s", time.Duration(duration.Int64())*time.Second)
-	s.log.Infof("total cost %s", totalCost.String())
+	s.log.Infof("attempting to initiate session %s", map[string]string{
+		"provider":          bid.Bid.Provider.String(),
+		"directPayment":     strconv.FormatBool(directPayment),
+		"duration":          duration.String(),
+		"bid":               bid.Bid.Id.String(),
+		"endpoint":          provider.Endpoint,
+		"amountTransferred": amountTransferred.String(),
+	})
 
-	initRes, err := s.proxyService.InitiateSession(ctx, userAddr, bid.Bid.Provider, stake, bid.Bid.Id, provider.Endpoint)
+	initRes, err := s.proxyService.InitiateSession(ctx, userAddr, bid.Bid.Provider, amountTransferred, bid.Bid.Id, provider.Endpoint)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrInitSession, err)
 	}
 
-	_, err = s.Approve(ctx, s.diamonContractAddr, stake)
+	_, err = s.Approve(ctx, s.diamonContractAddr, amountTransferred)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrApprove, err)
 	}
 
-	hash, err := s.OpenSession(ctx, initRes.Approval, initRes.ApprovalSig, stake)
+	hash, err := s.OpenSession(ctx, initRes.Approval, initRes.ApprovalSig, amountTransferred, directPayment)
 	if err != nil {
 		return common.Hash{}, err
 	}

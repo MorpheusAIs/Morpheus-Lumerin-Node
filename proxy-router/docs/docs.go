@@ -794,6 +794,47 @@ const docTemplate = `{
                 }
             }
         },
+        "/blockchain/sessions/user/ids": {
+            "get": {
+                "description": "Get sessions from blockchain by user",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "Get Sessions for User",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Offset",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Limit",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "User address",
+                        "name": "user",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.SessionsRes"
+                        }
+                    }
+                }
+            }
+        },
         "/blockchain/sessions/{id}": {
             "get": {
                 "description": "Returns session by ID",
@@ -1882,6 +1923,9 @@ const docTemplate = `{
                     "format": "hex",
                     "example": "0x1234"
                 },
+                "directPayment": {
+                    "type": "boolean"
+                },
                 "stake": {
                     "type": "string",
                     "example": "123000000000"
@@ -1908,6 +1952,9 @@ const docTemplate = `{
         "structs.OpenSessionWithFailover": {
             "type": "object",
             "properties": {
+                "directPayment": {
+                    "type": "boolean"
+                },
                 "failover": {
                     "type": "boolean"
                 },
