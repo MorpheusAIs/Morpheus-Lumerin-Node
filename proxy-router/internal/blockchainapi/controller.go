@@ -535,7 +535,7 @@ func (c *BlockchainController) openSession(ctx *gin.Context) {
 		return
 	}
 
-	sessionId, err := c.service.OpenSession(ctx, reqPayload.Approval, reqPayload.ApprovalSig, reqPayload.Stake.Unpack())
+	sessionId, err := c.service.OpenSession(ctx, reqPayload.Approval, reqPayload.ApprovalSig, reqPayload.Stake.Unpack(), reqPayload.DirectPayment)
 	if err != nil {
 		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
@@ -609,7 +609,7 @@ func (s *BlockchainController) openSessionByModelId(ctx *gin.Context) {
 	}
 
 	isFailoverEnabled := reqPayload.Failover
-	sessionId, err := s.service.OpenSessionByModelId(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), isFailoverEnabled, common.Address{})
+	sessionId, err := s.service.OpenSessionByModelId(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), reqPayload.DirectPayment, isFailoverEnabled, common.Address{})
 	if err != nil {
 		s.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
