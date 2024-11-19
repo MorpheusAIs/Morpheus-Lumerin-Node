@@ -80,6 +80,7 @@ func (r *SessionRepositoryCached) getSessionFromBlockchain(ctx context.Context, 
 		tpsScaled1000Arr: []int{},
 		ttftMsArr:        []int{},
 		failoverEnabled:  false,
+		directPayment:    session.IsDirectPaymentFromUser,
 	}, nil
 }
 
@@ -110,5 +111,6 @@ func (r *SessionRepositoryCached) saveSessionToCache(ses *sessionModel) error {
 		TPSScaled1000Arr: ses.tpsScaled1000Arr,
 		TTFTMsArr:        ses.ttftMsArr,
 		FailoverEnabled:  ses.failoverEnabled,
+		DirectPayment:    ses.directPayment,
 	})
 }

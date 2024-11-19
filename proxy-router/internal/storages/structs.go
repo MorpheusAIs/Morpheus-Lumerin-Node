@@ -12,6 +12,7 @@ type Session struct {
 	TPSScaled1000Arr []int
 	TTFTMsArr        []int
 	FailoverEnabled  bool
+	DirectPayment    bool
 }
 
 type User struct {
