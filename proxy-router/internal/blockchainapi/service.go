@@ -275,13 +275,18 @@ func (s *BlockchainService) CreateNewModel(ctx context.Context, modelID common.H
 		return nil, lib.WrapError(ErrSendTx, err)
 	}
 
-	model, err := s.modelRegistry.GetModelById(ctx, modelID)
+	ID, err := s.modelRegistry.GetModelId(ctx, transactOpt.From, modelID)
+	if err != nil {
+		return nil, lib.WrapError(ErrModel, err)
+	}
+
+	model, err := s.modelRegistry.GetModelById(ctx, ID)
 	if err != nil {
 		return nil, lib.WrapError(ErrModel, err)
 	}
 
 	return &structs.Model{
-		Id:        modelID,
+		Id:        ID,
 		IpfsCID:   model.IpfsCID,
 		Fee:       model.Fee,
 		Stake:     model.Stake,
