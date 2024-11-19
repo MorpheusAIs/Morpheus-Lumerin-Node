@@ -15,7 +15,7 @@ The purpose of this software is to enable interaction with distributed, decentra
 * Local `Llama.cpp` and tinyllama model to run locally for demonstration purposes only
 * Lumerin `proxy-router` is a background process that monitors sepcific blockchain contract events, 
 manages secure sessions between consumers and providers and routes prompts and responses between them
-* Lumerin `ui-desktop` is the front end UI to interact with LLMs and the Morpheus network via the proxy-router as a consumer
+* Lumerin `MorpheusUI` is the front end UI to interact with LLMs and the Morpheus network via the proxy-router as a consumer
 * Lumerin `cli` is the cli client to interact with LLMs and the Morpheus network via the proxy-router as a consumer
 
 ## Tokens and Contract Information (update 11/15/2024)

@@ -1,7 +1,7 @@
 ## "Simple Run From Mac" - 4 terminal windows
 
 ### Overview
-- This is a simple guide to get the Llama.cpp model, Lumerin proxy-router and ui-desktop from source running on a Mac
+- This is a simple guide to get the Llama.cpp model, Lumerin proxy-router and MorpheusUI from source running on a Mac
 - This is a guide for a developer or someone familiar with the codebase and build process
 - Wallet: if you’re going to start with an existing wallet from something like MetaMask (recommended)…make sure it’s a tier 1, not a derived or secondary address. Desktop-ui recover from mnemonic won’t work properly if you try to recover a secondary address with the primary mnemonic.  
 - Install & Configure OS-Specific Dependencies
@@ -15,7 +15,7 @@
     1. Clone, build select model and run local Llama.cpp model
     2. Clone the Morpheus-Lumerin-Node repo from Github 
     3. Configure, Build and run the proxy-router
-    4. Configure, Build and run the ui-desktop
+    4. Configure, Build and run the MorpheusUI
     5. Configure, Build and run the cli
 
 ## **A. LLAMA.CPP**
@@ -124,16 +124,16 @@ make run
 
 **- NOTE** if you would like to interact directly with your proxy-router without the UI, see the instructions in [/docs/proxy-router-api-direct.md](/docs/proxy-router-api-direct.md)
 
-## **C. UI-DESKTOP**
+## **C. MorpheusUI**
 * Open third terminal / cli window 
 * You will need to know 
   * TCP port that your proxy-router API interface is listening on (8082 in this example)
 
-**1. Navigate to ui-desktop**
-`cd <your_path>/Morpheus-Lumerin-Node/ui-desktop`
+**1. Navigate to MorpheusUI**
+`cd <your_path>/Morpheus-Lumerin-Node/MorpheusUI`
 
 **2. Check Environment Variables**
-- Within the ui-desktop directory, copy the `.env.example` to `.env` and check the variables as needed 
+- Within the MorpheusUI directory, copy the `.env.example` to `.env` and check the variables as needed 
 - At the current time, the defaults in the .env file shold be sufficient to operate as long as none of the LLAMA.cpp or proxy-router variables for ports have changed. 
 - Double check that your PROXY_WEB_URL is set to `8082` or what you used for the ASwagger API interface on the proxy-router. 
 - This is what enables the UI to communicate to the proxy-router environment 
@@ -143,13 +143,13 @@ cp .env.example .env
 vi .env 
 ```
 
-**3. Install dependicies, compile and Run the ui-desktop**
+**3. Install dependicies, compile and Run the MorpheusUI**
 ```sh
 yarn install
 yarn dev
 ```
 
-**4. Validate that the ui-desktop is running:**
+**4. Validate that the MorpheusUI is running:**
 - At this point, the electon app should start and if this is the first time walking through, should run through onboarding 
 - Check the following: 
   - Lower left corner - is this your correct ERC20 Wallet Address? 
@@ -161,10 +161,10 @@ yarn dev
 **Cleaning & Troubleshooting**
 - Sometimes, due to development changes or dependency issues, you may need to clean and start fresh.  
 - Make sure you know what your WalletPrivate key is and have it saved in a secure location. before cleaning up and restarting the ui or proxy-router
-  - `rm -rf  ./node_modules` from within ui-desktop 
-  - `rm -rf '~/Library/Application Support/ui-desktop'` to clean old ui-desktop cache and start new wallet
-- The proxy-router or ui-desktop may not start cleanly because of existing processes or open files from previous runs of the software  
-  - If you need to exit either proxy-router or ui-desktop, you can use `ctrl-c` from the terminal window you started them to kill the processes…
+  - `rm -rf  ./node_modules` from within MorpheusUI 
+  - `rm -rf '~/Library/Application Support/MorpheusUI'` to clean old MorpheusUI cache and start new wallet
+- The proxy-router or MorpheusUI may not start cleanly because of existing processes or open files from previous runs of the software  
+  - If you need to exit either proxy-router or MorpheusUI, you can use `ctrl-c` from the terminal window you started them to kill the processes…
   - **Locked Processes** Doing this may leave "dangling" processes or open files to find them: 
     - Run `ps -ax | grep electron` or `ps -ax | grep proxy-router` which will show you the processes and particualrly the procexss id
     - Run `kill -9 xxxxx` where `xxxxx` is the process ID of the un-cleaned process  
@@ -177,7 +177,7 @@ yarn dev
 * You will need to know 
   * TCP port that your proxy-router API interface is listening on (8082 in this example)
 
-**1. Navigate to ui-desktop**
+**1. Navigate to MorpheusUI**
 `cd <your_path>/Morpheus-Lumerin-Node/cli`
 
 **2. Check Environment Variables**

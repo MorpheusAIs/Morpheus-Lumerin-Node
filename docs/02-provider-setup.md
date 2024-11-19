@@ -40,7 +40,7 @@
     * Edit the model-config.json to the following json format
         * The JSON ID will be the ModelID that you created above, modelName, apiTYpe, apiURL and apiKey are from the external provider and specific to their offered models 
         * Full explanation of models-config.json can be found here [proxy-router models-config.json](proxy-router.models-config.json.md)
-    * Once the model-config.json file is updated, the morpheus node will need to be restarted to pick up the new configuration (not all models (eg: image generation can be utilized via the UI-Desktop, but API integration is possible)
+    * Once the model-config.json file is updated, the morpheus node will need to be restarted to pick up the new configuration (not all models (eg: image generation can be utilized via the MorpheusUI, but API integration is possible)
 
 ## Start the Proxy Router 
 1. On your server, launch the proxy-router with the modified .env file shown above

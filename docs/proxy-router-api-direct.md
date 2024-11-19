@@ -1,5 +1,5 @@
-# Direct Consumer interaction with the proxy-router (no ui-desktop)
-This document provides a step-by-step flow to query your local proxy router and interact with a remote model using only the API. This is useful for developers or users who want to interact with the model directly without using the UI-Desktop.
+# Direct Consumer interaction with the proxy-router (no MorpheusUI)
+This document provides a step-by-step flow to query your local proxy router and interact with a remote model using only the API. This is useful for developers or users who want to interact with the model directly without using the MorpheusUI.
 
 ## Pre-requisites:
 * Create or use an existing ERC-20 wallet that has saMOR and saETH (Sepolia Arbitrum) tokens - you can use Metamask (new wallet..not derived) or any other ERC-20 wallet.  

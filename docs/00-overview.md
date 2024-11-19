@@ -49,19 +49,19 @@ Numbers below reference the circled elements in the diagram above.
 - The components are very similar to the Provider side of things with the exception that the consumer node will typically not be hosting a model, but will be sending prompts to the proxy-router and receiving inference back
 - In this case, the easiest way to install is to use the packaged releases for your platform on Github and follow the instructions in the README.md file
 - These packages include 3 different pieces of software 
-    - llama.cpp (llama-server) - a simple example model that can be run on the same machine as the proxy-router and ui-desktop to show how the components work together and run local (free) inference
+    - llama.cpp (llama-server) - a simple example model that can be run on the same machine as the proxy-router and MorpheusUI to show how the components work together and run local (free) inference
     - proxy-router - the same software as the provider side, but with different environment variables and a different role
-    - ui-desktop - Electron GUI that enables the user to interact with the models (via the API) to browse offered bids, purchase and send prompts 
-- The consumer node will need to have the proxy-router running and the UI-Desktop running to interact with the models and bids on the blockchain
+    - MorpheusUI - Electron GUI that enables the user to interact with the models (via the API) to browse offered bids, purchase and send prompts 
+- The consumer node will need to have the proxy-router running and the MorpheusUI running to interact with the models and bids on the blockchain
 
 ## 5. Purchase Bid 
 - [05-bid-purchase.md](05-bid-purchase.md) - for more details
-- Once the UI-Desktop is up and running, the consumer can browse the available bids on the blockchain
+- Once the MorpheusUI is up and running, the consumer can browse the available bids on the blockchain
 - Select a bid and stake the intended MOR amount (minimum should be shown) 
 
 ## 6. Prompt & Inference 
 - [06-model-interaction.md](06-model-interaction.md) - for more details
-- Once the bid is purchased, the consumer can send prompts to the proxy-router via the UI-Desktop
+- Once the bid is purchased, the consumer can send prompts to the proxy-router via the MorpheusUI
 
 ## Proxy-Router and Possible LLM Server Configurations - Reference Architecture 
 ![Reference Architecture](images/system-architecture.png)

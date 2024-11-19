@@ -1,5 +1,5 @@
 appId: com.electron.morpheus-ui
-productName: Morpheus UI
+productName: MorpheusUI
 directories:
   buildResources: buildResources
 files:
@@ -18,7 +18,7 @@ win:
 portable:
   artifactName: ${name}-${version}-${arch}-${os}.${ext}
 mac:
-  executableName: Morpheus UI
+  executableName: MorpheusUI
   entitlementsInherit: buildResources/entitlements.mac.plist
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.
