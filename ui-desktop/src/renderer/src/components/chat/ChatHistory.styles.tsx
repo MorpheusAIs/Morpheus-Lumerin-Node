@@ -102,6 +102,10 @@ export const Duration = styled.div`
 `
 
 export const IconsContainer = styled.div`
+    display: flex;
+    align-items: center;
+    justify-content: space-evenly;
+    width: 100px;
     svg:hover {
         opacity: 0.8
     }

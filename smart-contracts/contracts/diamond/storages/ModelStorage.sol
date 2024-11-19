@@ -25,16 +25,20 @@ contract ModelStorage is IModelStorage {
         return _getModelsStorage().models[modelId_];
     }
 
-    function getModelIds(uint256 offset_, uint256 limit_) external view returns (bytes32[] memory) {
-        return _getModelsStorage().modelIds.part(offset_, limit_);
+    function getModelIds(uint256 offset_, uint256 limit_) external view returns (bytes32[] memory, uint256) {
+        EnumerableSet.Bytes32Set storage modelIds = _getModelsStorage().modelIds;
+
+        return (modelIds.part(offset_, limit_), modelIds.length());
     }
 
     function getModelMinimumStake() external view returns (uint256) {
         return _getModelsStorage().modelMinimumStake;
     }
 
-    function getActiveModelIds(uint256 offset_, uint256 limit_) external view returns (bytes32[] memory) {
-        return _getModelsStorage().activeModels.part(offset_, limit_);
+    function getActiveModelIds(uint256 offset_, uint256 limit_) external view returns (bytes32[] memory, uint256) {
+        EnumerableSet.Bytes32Set storage activeModels = _getModelsStorage().activeModels;
+
+        return (activeModels.part(offset_, limit_), activeModels.length());
     }
 
     function getIsModelActive(bytes32 modelId_) public view returns (bool) {

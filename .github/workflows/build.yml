@@ -83,9 +83,9 @@ jobs:
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
           unzip -o -j $LLAMACPP build/bin/llama-server
-          echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./ui-desktop-1.0.0.AppImage"]}' > mor-launch.json
+          echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./ui-desktop-1.0.0-x64-linux.AppImage"]}' > mor-launch.json
           mv ./cli/mor-cli mor-cli
-          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/bin/proxy-router .env $MODEL mor-launch.json ./ui-desktop/dist/ui-desktop-1.0.0.AppImage models-config.json mor-cli
+          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/bin/proxy-router .env $MODEL mor-launch.json ./ui-desktop/dist/ui-desktop-1.0.0-x64-linux.AppImage models-config.json mor-cli
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -122,6 +122,7 @@ jobs:
           cd ../proxy-router
           go mod download
           cd ../ui-desktop
+          python3 -m pip install setuptools
           yarn install --network-timeout 600000
 
       - name: Copy Environment Files
@@ -151,11 +152,11 @@ jobs:
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
           unzip -o -j $LLAMACPP build/bin/llama-server
-          echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./ui-desktop.app/Contents/MacOS/ui-desktop"]}' > mor-launch.json
+          echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./MorpheusUI.app/Contents/MacOS/MorpheusUI"]}' > mor-launch.json
           mv ./cli/mor-cli mor-cli
-          unzip ./ui-desktop/dist/ui-desktop-1.0.0-mac.zip
+          unzip ./ui-desktop/dist/morpheus-ui-1.0.0-x64-mac.zip
           zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json models-config.json mor-cli
-          zip -r $ARTIFACT ui-desktop.app
+          zip -r $ARTIFACT 'MorpheusUI.app'
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -192,6 +193,7 @@ jobs:
           cd ../proxy-router
           go mod download
           cd ../ui-desktop
+          brew install python-setuptools
           yarn install --network-timeout 600000
 
       - name: Copy Environment Files
@@ -221,11 +223,11 @@ jobs:
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
           unzip -o -j $LLAMACPP build/bin/llama-server
-          echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./ui-desktop.app/Contents/MacOS/ui-desktop"]}' > mor-launch.json
+          echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./MorpheusUI.app/Contents/MacOS/MorpheusUI"]}' > mor-launch.json
           mv ./cli/mor-cli mor-cli
-          unzip ./ui-desktop/dist/ui-desktop-1.0.0-arm64-mac.zip
+          unzip ./ui-desktop/dist/morpheus-ui-1.0.0-arm64-mac.zip
           zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json models-config.json mor-cli
-          zip -r $ARTIFACT ui-desktop.app
+          zip -r $ARTIFACT 'MorpheusUI.app'
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -296,14 +298,14 @@ jobs:
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
           unzip -o -j $LLAMACPP llama-server.exe llama.dll ggml.dll
-          echo '{"run":["./llama-server.exe -m ./'$MODEL'","./proxy-router.exe","./ui-desktop-1.0.0.exe"]}' > mor-launch.json
+          echo '{"run":["./llama-server.exe -m ./'$MODEL'","./proxy-router.exe","./morpheus-ui-1.0.0-x64-win.exe"]}' > mor-launch.json
           mv .env .env.tmp
           sed 's|\./data/|.\\data\\|g' .env.tmp > .env
           mv ./proxy-router/bin/proxy-router proxy-router.exe
           mv ./cli/mor-cli mor-cli.exe
           mv ./launcher/mor-launch mor-launch.exe
-          mv "./ui-desktop/dist/ui-desktop 1.0.0.exe" ui-desktop-1.0.0.exe
-          7z a $ARTIFACT LICENSE mor-launch.exe proxy-router.exe .env llama-server.exe llama.dll ggml.dll $MODEL mor-launch.json ui-desktop-1.0.0.exe models-config.json mor-cli.exe
+          mv "./ui-desktop/dist/morpheus-ui-1.0.0-x64-win" morpheus-ui-1.0.0-x64-win.exe
+          7z a $ARTIFACT LICENSE mor-launch.exe proxy-router.exe .env llama-server.exe llama.dll ggml.dll $MODEL mor-launch.json morpheus-ui-1.0.0-x64-win.exe models-config.json mor-cli.exe
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

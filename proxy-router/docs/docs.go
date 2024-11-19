@@ -284,6 +284,7 @@ const docTemplate = `{
                 }
             },
             "post": {
+                "description": "If you provide ID in request it will be used as \"Base Id\" for generation of new model ID. So actual ID will be generated from it, and you will get it in response.",
                 "consumes": [
                     "application/json"
                 ],
@@ -754,6 +755,47 @@ const docTemplate = `{
             }
         },
         "/blockchain/sessions/user": {
+            "get": {
+                "description": "Get sessions from blockchain by user",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "Get Sessions for User",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Offset",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Limit",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "User address",
+                        "name": "user",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.SessionsRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/sessions/user/ids": {
             "get": {
                 "description": "Get sessions from blockchain by user",
                 "produces": [
@@ -1882,6 +1924,9 @@ const docTemplate = `{
                     "format": "hex",
                     "example": "0x1234"
                 },
+                "directPayment": {
+                    "type": "boolean"
+                },
                 "stake": {
                     "type": "string",
                     "example": "123000000000"
@@ -1908,6 +1953,9 @@ const docTemplate = `{
         "structs.OpenSessionWithFailover": {
             "type": "object",
             "properties": {
+                "directPayment": {
+                    "type": "boolean"
+                },
                 "failover": {
                     "type": "boolean"
                 },

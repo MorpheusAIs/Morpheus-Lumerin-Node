@@ -201,9 +201,9 @@ describe('SessionRouter', () => {
       expect(secondBalBefore - secondBalAfter).to.eq(wei(50));
 
       expect(await sessionRouter.getIsProviderApprovalUsed(msg)).to.eq(true);
-      expect(await sessionRouter.getUserSessions(SECOND, 0, 10)).to.deep.eq([sessionId]);
-      expect(await sessionRouter.getProviderSessions(PROVIDER, 0, 10)).to.deep.eq([sessionId]);
-      expect(await sessionRouter.getModelSessions(modelId, 0, 10)).to.deep.eq([sessionId]);
+      expect(await sessionRouter.getUserSessions(SECOND, 0, 10)).to.deep.eq([[sessionId], 1n]);
+      expect(await sessionRouter.getProviderSessions(PROVIDER, 0, 10)).to.deep.eq([[sessionId], 1n]);
+      expect(await sessionRouter.getModelSessions(modelId, 0, 10)).to.deep.eq([[sessionId], 1n]);
     });
     it('should open a session from the delegatee address', async () => {
       await delegateRegistry
@@ -234,9 +234,9 @@ describe('SessionRouter', () => {
       expect(secondBalBefore - secondBalAfter).to.eq(wei(50));
 
       expect(await sessionRouter.getIsProviderApprovalUsed(msg)).to.eq(true);
-      expect(await sessionRouter.getUserSessions(SECOND, 0, 10)).to.deep.eq([sessionId]);
-      expect(await sessionRouter.getProviderSessions(PROVIDER, 0, 10)).to.deep.eq([sessionId]);
-      expect(await sessionRouter.getModelSessions(modelId, 0, 10)).to.deep.eq([sessionId]);
+      expect(await sessionRouter.getUserSessions(SECOND, 0, 10)).to.deep.eq([[sessionId], 1n]);
+      expect(await sessionRouter.getProviderSessions(PROVIDER, 0, 10)).to.deep.eq([[sessionId], 1n]);
+      expect(await sessionRouter.getModelSessions(modelId, 0, 10)).to.deep.eq([[sessionId], 1n]);
     });
     it('should open two different sessions wit the same input params', async () => {
       await setTime(payoutStart + 10 * DAY);
@@ -256,9 +256,9 @@ describe('SessionRouter', () => {
 
       expect(await sessionRouter.getIsProviderApprovalUsed(msg1)).to.eq(true);
       expect(await sessionRouter.getIsProviderApprovalUsed(msg2)).to.eq(true);
-      expect(await sessionRouter.getUserSessions(SECOND, 0, 10)).to.deep.eq([sessionId1, sessionId2]);
-      expect(await sessionRouter.getProviderSessions(PROVIDER, 0, 10)).to.deep.eq([sessionId1, sessionId2]);
-      expect(await sessionRouter.getModelSessions(modelId, 0, 10)).to.deep.eq([sessionId1, sessionId2]);
+      expect(await sessionRouter.getUserSessions(SECOND, 0, 10)).to.deep.eq([[sessionId1, sessionId2], 2n]);
+      expect(await sessionRouter.getProviderSessions(PROVIDER, 0, 10)).to.deep.eq([[sessionId1, sessionId2], 2n]);
+      expect(await sessionRouter.getModelSessions(modelId, 0, 10)).to.deep.eq([[sessionId1, sessionId2], 2n]);
 
       expect(await sessionRouter.getTotalSessions(PROVIDER)).to.eq(2);
     });
@@ -296,9 +296,9 @@ describe('SessionRouter', () => {
       expect(secondBalBefore - secondBalAfter).to.eq(wei(50));
 
       expect(await sessionRouter.getIsProviderApprovalUsed(msg)).to.eq(true);
-      expect(await sessionRouter.getUserSessions(SECOND, 0, 10)).to.deep.eq([sessionId]);
-      expect(await sessionRouter.getProviderSessions(PROVIDER, 0, 10)).to.deep.eq([sessionId]);
-      expect(await sessionRouter.getModelSessions(modelId, 0, 10)).to.deep.eq([sessionId]);
+      expect(await sessionRouter.getUserSessions(SECOND, 0, 10)).to.deep.eq([[sessionId], 1n]);
+      expect(await sessionRouter.getProviderSessions(PROVIDER, 0, 10)).to.deep.eq([[sessionId], 1n]);
+      expect(await sessionRouter.getModelSessions(modelId, 0, 10)).to.deep.eq([[sessionId], 1n]);
     });
     it('should throw error when the approval is for an another user', async () => {
       const { msg, signature } = await getProviderApproval(PROVIDER, OWNER, bidId);

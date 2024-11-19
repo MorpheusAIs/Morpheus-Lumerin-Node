@@ -63,7 +63,11 @@ interface ISessionStorage {
      * @param offset_ Offset for the pagination.
      * @param limit_ Number of entities to return.
      */
-    function getUserSessions(address user_, uint256 offset_, uint256 limit_) external view returns (bytes32[] memory);
+    function getUserSessions(
+        address user_,
+        uint256 offset_,
+        uint256 limit_
+    ) external view returns (bytes32[] memory, uint256);
 
     /**
      * The function returns the provider session IDs.
@@ -75,7 +79,7 @@ interface ISessionStorage {
         address provider_,
         uint256 offset_,
         uint256 limit_
-    ) external view returns (bytes32[] memory);
+    ) external view returns (bytes32[] memory, uint256);
 
     /**
      * The function returns the model session IDs.
@@ -87,7 +91,7 @@ interface ISessionStorage {
         bytes32 modelId_,
         uint256 offset_,
         uint256 limit_
-    ) external view returns (bytes32[] memory);
+    ) external view returns (bytes32[] memory, uint256);
 
     /**
      * The function returns the pools info.

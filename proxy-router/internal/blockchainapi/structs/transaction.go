@@ -1,9 +1,11 @@
 package structs
 
+import "encoding/json"
+
 type RawEthTransactionResponse struct {
-	Status  string           `json:"status"`
-	Message string           `json:"message"`
-	Result  []RawTransaction `json:"result"`
+	Status  string          `json:"status"`
+	Message string          `json:"message"`
+	Result  json.RawMessage `json:"result"`
 }
 
 type RawTransaction struct {

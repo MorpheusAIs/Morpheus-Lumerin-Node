@@ -6,9 +6,10 @@ import (
 )
 
 type OpenSessionRequest struct {
-	Approval    lib.HexString `json:"approval" binding:"required" validate:"hexadecimal" format:"hex" example:"0x1234"`
-	ApprovalSig lib.HexString `json:"approvalSig" binding:"required" validate:"hexadecimal" format:"hex" example:"0x1234"`
-	Stake       *lib.BigInt   `json:"stake" binding:"required" validate:"number,gt=0" example:"123000000000"`
+	Approval      lib.HexString `json:"approval" binding:"required" validate:"hexadecimal" format:"hex" example:"0x1234"`
+	ApprovalSig   lib.HexString `json:"approvalSig" binding:"required" validate:"hexadecimal" format:"hex" example:"0x1234"`
+	Stake         *lib.BigInt   `json:"stake" binding:"required" validate:"number,gt=0" example:"123000000000"`
+	DirectPayment bool          `json:"directPayment" binding:"omitempty"`
 }
 
 type AmountReq struct {
@@ -28,14 +29,16 @@ type PathEthAddrID struct {
 	ID lib.Address `uri:"id" binding:"required" validate:"eth_addr"`
 }
 
-type QueryOffsetLimit struct {
+type QueryOffsetLimitOrder struct {
 	Offset lib.BigInt `form:"offset,default=0" binding:"omitempty" validate:"number"`
 	Limit  uint8      `form:"limit,default=10" binding:"omitempty" validate:"number"`
+	Order  string     `form:"order,default=asc" binding:"omitempty" validate:"oneof=asc desc"`
 }
 
-type QueryOffsetLimitNoDefault struct {
+type QueryOffsetLimitOrderNoDefault struct {
 	Offset lib.BigInt `form:"offset,default=0" binding:"omitempty" validate:"number"`
 	Limit  uint8      `form:"limit,default=0" binding:"omitempty" validate:"number"`
+	Order  string     `form:"order,default=asc" binding:"omitempty" validate:"oneof=asc desc"`
 }
 
 type QueryPageLimit struct {
@@ -66,6 +69,7 @@ type OpenSessionWithDurationRequest struct {
 
 type OpenSessionWithFailover struct {
 	SessionDuration *lib.BigInt `json:"sessionDuration"`
+	DirectPayment   bool        `json:"directPayment" binding:"omitempty"`
 	Failover        bool        `json:"failover" binding:"omitempty"`
 }
 

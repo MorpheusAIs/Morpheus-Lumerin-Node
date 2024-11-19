@@ -21,7 +21,6 @@ import (
 	sessionrepo "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/session"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/sashabaranov/go-openai"
 )
@@ -40,6 +39,9 @@ var (
 	ErrSessionNotFound  = fmt.Errorf("session not found")
 	ErrSessionExpired   = fmt.Errorf("session expired")
 	ErrProviderNotFound = fmt.Errorf("provider not found")
+	ErrEmpty            = fmt.Errorf("empty result and no error")
+	ErrConnectProvider  = fmt.Errorf("failed to connect to provider")
+	ErrWriteProvider    = fmt.Errorf("failed to write to provider")
 )
 
 type ProxyServiceSender struct {
@@ -84,9 +86,9 @@ func (p *ProxyServiceSender) InitiateSession(ctx context.Context, user common.Ad
 		return nil, lib.WrapError(ErrCreateReq, err)
 	}
 
-	msg, code, ginErr := p.rpcRequest(providerURL, initiateSessionRequest)
-	if ginErr != nil {
-		return nil, lib.WrapError(ErrProvider, fmt.Errorf("code: %d, msg: %v, error: %s", code, msg, ginErr))
+	msg, code, err := p.rpcRequest(providerURL, initiateSessionRequest)
+	if err != nil {
+		return nil, lib.WrapError(ErrProvider, fmt.Errorf("code: %d, msg: %v, error: %s", code, msg, err))
 	}
 
 	if msg.Error != nil {
@@ -94,7 +96,7 @@ func (p *ProxyServiceSender) InitiateSession(ctx context.Context, user common.Ad
 		return nil, lib.WrapError(ErrResponseErr, fmt.Errorf("error: %v, result: %v", msg.Error.Message, msg.Error.Data))
 	}
 	if msg.Result == nil {
-		return nil, lib.WrapError(ErrInvalidResponse, fmt.Errorf("empty result and no error"))
+		return nil, lib.WrapError(ErrInvalidResponse, ErrEmpty)
 	}
 
 	var typedMsg *msgs.SessionRes
@@ -150,9 +152,9 @@ func (p *ProxyServiceSender) GetSessionReportFromProvider(ctx context.Context, s
 		return nil, lib.WrapError(ErrCreateReq, err)
 	}
 
-	msg, code, ginErr := p.rpcRequest(provider.Url, getSessionReportRequest)
-	if ginErr != nil {
-		return nil, lib.WrapError(ErrProvider, fmt.Errorf("code: %d, msg: %v, error: %s", code, msg, ginErr))
+	msg, code, err := p.rpcRequest(provider.Url, getSessionReportRequest)
+	if err != nil {
+		return nil, lib.WrapError(ErrProvider, fmt.Errorf("code: %d, msg: %v, error: %s", code, msg, err))
 	}
 
 	if msg.Error != nil {
@@ -160,7 +162,7 @@ func (p *ProxyServiceSender) GetSessionReportFromProvider(ctx context.Context, s
 		return nil, lib.WrapError(ErrResponseErr, fmt.Errorf("error: %v, result: %v", msg.Error.Message, msg.Error.Data))
 	}
 	if msg.Result == nil {
-		return nil, lib.WrapError(ErrInvalidResponse, fmt.Errorf("empty result and no error"))
+		return nil, lib.WrapError(ErrInvalidResponse, ErrEmpty)
 	}
 
 	var typedMsg *msgs.SessionReportRes
@@ -240,29 +242,29 @@ func (p *ProxyServiceSender) GetSessionReportFromUser(ctx context.Context, sessi
 	return typedMsg.Message, typedMsg.SignedReport, nil
 }
 
-func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage) (*msgs.RpcResponse, int, gin.H) {
+func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage) (*msgs.RpcResponse, int, error) {
 	TIMEOUT_TO_ESTABLISH_CONNECTION := time.Second * 3
 	dialer := net.Dialer{Timeout: TIMEOUT_TO_ESTABLISH_CONNECTION}
 
 	conn, err := dialer.Dial("tcp", url)
 	if err != nil {
-		err = lib.WrapError(fmt.Errorf("failed to connect to provider"), err)
+		err = lib.WrapError(ErrConnectProvider, err)
 		p.log.Errorf("%s", err)
-		return nil, http.StatusInternalServerError, gin.H{"error": err.Error()}
+		return nil, http.StatusInternalServerError, err
 	}
 	defer conn.Close()
 
 	msgJSON, err := json.Marshal(rpcMessage)
 	if err != nil {
-		err = lib.WrapError(fmt.Errorf("failed to marshal request"), err)
+		err = lib.WrapError(ErrMasrshalFailed, err)
 		p.log.Errorf("%s", err)
-		return nil, http.StatusInternalServerError, gin.H{"error": err.Error()}
+		return nil, http.StatusInternalServerError, err
 	}
 	_, err = conn.Write(msgJSON)
 	if err != nil {
-		err = lib.WrapError(fmt.Errorf("failed to write request"), err)
+		err = lib.WrapError(ErrWriteProvider, err)
 		p.log.Errorf("%s", err)
-		return nil, http.StatusInternalServerError, gin.H{"error": err.Error()}
+		return nil, http.StatusInternalServerError, err
 	}
 
 	// read response
@@ -272,9 +274,9 @@ func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage)
 	var msg *msgs.RpcResponse
 	err = d.Decode(&msg)
 	if err != nil {
-		err = lib.WrapError(fmt.Errorf("failed to decode response"), err)
+		err = lib.WrapError(ErrDecode, err)
 		p.log.Errorf("%s", err)
-		return nil, http.StatusBadRequest, gin.H{"error": err.Error()}
+		return nil, http.StatusBadRequest, err
 	}
 	return msg, 0, nil
 }
@@ -337,6 +339,7 @@ func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.
 			ctx,
 			session.ModelID(),
 			big.NewInt(duration),
+			session.DirectPayment(),
 			session.FailoverEnabled(),
 			session.ProviderAddr(),
 		)
@@ -388,14 +391,14 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 
 	conn, err := dialer.Dial("tcp", url)
 	if err != nil {
-		err = lib.WrapError(fmt.Errorf("failed to connect to provider"), err)
+		err = lib.WrapError(ErrConnectProvider, err)
 		p.log.Errorf("%s", err)
 		return nil, 0, 0, err
 	}
 	defer conn.Close()
 
 	// Set initial read deadline
-	conn.SetReadDeadline(time.Now().Add(TIMEOUT_TO_RECEIVE_FIRST_RESPONSE))
+	_ = conn.SetReadDeadline(time.Now().Add(TIMEOUT_TO_RECEIVE_FIRST_RESPONSE))
 
 	msgJSON, err := json.Marshal(rpcMessage)
 	if err != nil {
@@ -472,12 +475,12 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 		}
 
 		if msg.Result == nil {
-			return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, fmt.Errorf("empty result and no error"))
+			return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, ErrEmpty)
 		}
 
 		if ttftMs == 0 {
 			ttftMs = int(time.Now().UnixMilli() - now)
-			conn.SetReadDeadline(time.Time{}) // Clear read deadline
+			_ = conn.SetReadDeadline(time.Time{}) // Clear read deadline
 		}
 
 		var inferenceRes InferenceRes

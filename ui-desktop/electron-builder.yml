@@ -1,7 +1,7 @@
-appId: com.electron.app
-productName: ui-desktop
+appId: com.electron.morpheus-ui
+productName: MorpheusUI
 directories:
-  buildResources: build
+  buildResources: buildResources
 files:
   - '!**/.vscode/*'
   - '!src/*'
@@ -12,31 +12,30 @@ files:
 asarUnpack:
   - resources/**
 win:
-  executableName: ui-desktop
-nsis:
-  artifactName: ${name}-${version}-setup.${ext}
-  shortcutName: ${productName}
-  uninstallDisplayName: ${productName}
-  createDesktopShortcut: always
+  executableName: morpheus-ui
+  target:
+    - portable
+portable:
+  artifactName: ${name}-${version}-${arch}-${os}.${ext}
 mac:
-  entitlementsInherit: build/entitlements.mac.plist
+  executableName: MorpheusUI
+  entitlementsInherit: buildResources/entitlements.mac.plist
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.
     - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
     - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
     - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
   notarize: false
-dmg:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${name}-${version}-${arch}-${os}.${ext}
 linux:
   target:
     - AppImage
-    - snap
     - deb
-  maintainer: electronjs.org
+  maintainer: mor.org
   category: Utility
-appImage:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${name}-${version}-${arch}-${os}.${ext}
+# appImage:
+#   artifactName: ${name}-${version}-${arch}-${os}.${ext}
 npmRebuild: false
 publish:
   provider: generic
