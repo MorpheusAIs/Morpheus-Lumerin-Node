@@ -19,6 +19,6 @@ type BidGetter interface {
 }
 
 type SessionService interface {
-	OpenSessionByModelId(ctx context.Context, modelID common.Hash, duration *big.Int, isFailoverEnabled bool, omitProvider common.Address) (common.Hash, error)
+	OpenSessionByModelId(ctx context.Context, modelID common.Hash, duration *big.Int, isDirectPayment, isFailoverEnabled bool, omitProvider common.Address) (common.Hash, error)
 	CloseSession(ctx context.Context, sessionID common.Hash) (common.Hash, error)
 }

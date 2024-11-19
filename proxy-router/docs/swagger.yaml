@@ -334,6 +334,8 @@ definitions:
         example: "0x1234"
         format: hex
         type: string
+      directPayment:
+        type: boolean
       stake:
         example: "123000000000"
         type: string
@@ -355,6 +357,8 @@ definitions:
     type: object
   structs.OpenSessionWithFailover:
     properties:
+      directPayment:
+        type: boolean
       failover:
         type: boolean
       sessionDuration:
@@ -1088,6 +1092,33 @@ paths:
       tags:
       - sessions
   /blockchain/sessions/user:
+    get:
+      description: Get sessions from blockchain by user
+      parameters:
+      - description: Offset
+        in: query
+        name: offset
+        type: string
+      - description: Limit
+        in: query
+        name: limit
+        type: string
+      - description: User address
+        in: query
+        name: user
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.SessionsRes'
+      summary: Get Sessions for User
+      tags:
+      - sessions
+  /blockchain/sessions/user/ids:
     get:
       description: Get sessions from blockchain by user
       parameters:

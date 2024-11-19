@@ -6,9 +6,10 @@ import (
 )
 
 type OpenSessionRequest struct {
-	Approval    lib.HexString `json:"approval" binding:"required" validate:"hexadecimal" format:"hex" example:"0x1234"`
-	ApprovalSig lib.HexString `json:"approvalSig" binding:"required" validate:"hexadecimal" format:"hex" example:"0x1234"`
-	Stake       *lib.BigInt   `json:"stake" binding:"required" validate:"number,gt=0" example:"123000000000"`
+	Approval      lib.HexString `json:"approval" binding:"required" validate:"hexadecimal" format:"hex" example:"0x1234"`
+	ApprovalSig   lib.HexString `json:"approvalSig" binding:"required" validate:"hexadecimal" format:"hex" example:"0x1234"`
+	Stake         *lib.BigInt   `json:"stake" binding:"required" validate:"number,gt=0" example:"123000000000"`
+	DirectPayment bool          `json:"directPayment" binding:"omitempty"`
 }
 
 type AmountReq struct {
@@ -68,6 +69,7 @@ type OpenSessionWithDurationRequest struct {
 
 type OpenSessionWithFailover struct {
 	SessionDuration *lib.BigInt `json:"sessionDuration"`
+	DirectPayment   bool        `json:"directPayment" binding:"omitempty"`
 	Failover        bool        `json:"failover" binding:"omitempty"`
 }
 
