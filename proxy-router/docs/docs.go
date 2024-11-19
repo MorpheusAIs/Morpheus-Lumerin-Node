@@ -284,6 +284,7 @@ const docTemplate = `{
                 }
             },
             "post": {
+                "description": "If you provide ID in request it will be used as \"Base Id\" for generation of new model ID. So actual ID will be generated from it, and you will get it in response.",
                 "consumes": [
                     "application/json"
                 ],
