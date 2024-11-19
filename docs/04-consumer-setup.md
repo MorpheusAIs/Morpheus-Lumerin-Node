@@ -1,19 +1,22 @@
-### Consumer from Release (Local LLM, Proxy-Router & UI-Desktop): 
+### Consumer from Release (Local LLM, Proxy-Router & MorpheusUI): 
 
 This is the simplest way to get started with the Morpheus Lumerin Node as a Consumer.  This will allow you to interact with the Morpheus network and the models offered on the network as a consumer.
 
 It will run 3 different pieces of software on your local machine:
-* `llama.cpp` (llama-server) - a simple sample AI model that can be run on the same machine as the proxy-router and ui-desktop to show how the components work together and run local (free) inference
+* `llama.cpp` (llama-server) - a simple sample AI model that can be run on the same machine as the proxy-router and MorpheusUI to show how the components work together and run local (free) inference
 * `proxy-router` - the same software as the provider side, but with different environment variables and a different role
-* `ui-desktop` - Electron GUI that enables the user to interact with the models (via the API) to browse offered bids, purchase and send prompts
+* `MorpheusUI` - Electron GUI that enables the user to interact with the models (via the API) to browse offered bids, purchase and send prompts
 
 ## Installation Steps:
-1. Download latest release for your operating system: https://github.com/Lumerin-protocol/Morpheus-Lumerin-Node/releases
+1. Obtain the software: 
+    1. Package: Download latest release for your operating system: https://github.com/Lumerin-protocol/Morpheus-Lumerin-Node/releases
+        * Mainnet releases will be prefixed with `main-*`
+        * Testnet releases will be prefixed with `test-*` 
 
 1. Extract the zip to a local folder (examples)
     * Windows: `(%USERPROFILE%)/Downloads/morpheus)` 
     * Linux & MacOS: `~/Downloads/morpheus`
-    * On MacOS you may need to execute `xattr -c mor-launch proxy-router ui-desktop.app llama-server` in a command window to remove the quarantine flag on MacOS
+    * On MacOS you may need to execute `xattr -c mor-launch proxy-router MorpheusUI.app llama-server` in a command window to remove the quarantine flag on MacOS
 
 1. Launch the node - this should open a command window to see local LLM model server and proxy-router start and then should launch the user interface  
     * Windows: Double click the `mor-launch.exe` (You will need to tell Windows Defender this is ok to run) 
@@ -21,7 +24,7 @@ It will run 3 different pieces of software on your local machine:
 
 1. Startup User Interface: 
     1. Read & accept terms & Conditions 
-    1. Set a strong password (this is for the UI-Desktop only)
+    1. Set a strong password (this is for the MorpheusUI only)
     1. Follow the instructions for creating a new wallet (be sure to save the mnemonic in a safe place)
     1. **OPTIONAL to use existing Wallet** 
         - Instead of creating an new wallet and if you have the existing wallet's mnemonic, when prompted, select **`Recover your wallet Saved Mnemonic`** instead.
@@ -52,9 +55,9 @@ It will run 3 different pieces of software on your local machine:
 1. Cleanup/Closeout 
     * Manually End all Remote Sessions: 
         * In the Chat Window, click on the Time icon to the right of the Model line - this will expand and show current sessions, click the "X" next to each one to make sure it's closed 
-    * Closing the UI-Desktop window should leave the CMD window open
+    * Closing the MorpheusUI window should leave the CMD window open
         * You’ll have to ctrl-c in the window to kill the local model and proxy-router
-    * To FULLY delete and force a clean startup of the UI (including forcing new password and mnemonic recovery), delete the ui-desktop folder and start the UI again
-        * Windows:  `%USERPROFILE%\AppData\Roaming\ui-desktop`
-        * Linux: `~/.config/ui-desktop`
-        * MacOS: `~/Library/Application Support/ui-desktop`
+    * To FULLY delete and force a clean startup of the UI (including forcing new password and mnemonic recovery), delete the MorpheusUI folder and start the UI again
+        * Windows:  `%USERPROFILE%\AppData\Roaming\MorpheusUI`
+        * Linux: `~/.config/MorpheusUI`
+        * MacOS: `~/Library/Application Support/MorpheusUI`

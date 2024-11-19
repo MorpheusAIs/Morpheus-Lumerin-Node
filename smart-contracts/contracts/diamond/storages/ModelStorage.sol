@@ -1,59 +1,56 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import {Paginator} from "@solarity/solidity-lib/libs/arrays/Paginator.sol";
+
 import {IModelStorage} from "../../interfaces/storage/IModelStorage.sol";
 
 contract ModelStorage is IModelStorage {
-    struct MDLStorage {
+    using Paginator for *;
+    using EnumerableSet for EnumerableSet.Bytes32Set;
+
+    struct ModelsStorage {
         uint256 modelMinimumStake;
-        bytes32[] modelIds; // all model ids
+        EnumerableSet.Bytes32Set modelIds;
         mapping(bytes32 modelId => Model) models;
-        mapping(bytes32 modelId => bool) isModelActive;
+        // TODO: move vars below to the graph in the future
+        EnumerableSet.Bytes32Set activeModels;
     }
 
-    bytes32 public constant MODEL_STORAGE_SLOT = keccak256("diamond.standard.model.storage");
+    bytes32 public constant MODELS_STORAGE_SLOT = keccak256("diamond.standard.models.storage");
 
-    function getModel(bytes32 modelId) external view returns (Model memory) {
-        return _getModelStorage().models[modelId];
+    /** PUBLIC, GETTERS */
+    function getModel(bytes32 modelId_) external view returns (Model memory) {
+        return _getModelsStorage().models[modelId_];
     }
 
-    function models(uint256 index) external view returns (bytes32) {
-        return _getModelStorage().modelIds[index];
+    function getModelIds(uint256 offset_, uint256 limit_) external view returns (bytes32[] memory, uint256) {
+        EnumerableSet.Bytes32Set storage modelIds = _getModelsStorage().modelIds;
+
+        return (modelIds.part(offset_, limit_), modelIds.length());
     }
 
-    function modelMinimumStake() public view returns (uint256) {
-        return _getModelStorage().modelMinimumStake;
+    function getModelMinimumStake() external view returns (uint256) {
+        return _getModelsStorage().modelMinimumStake;
     }
 
-    function setModelActive(bytes32 modelId, bool isActive) internal {
-        _getModelStorage().isModelActive[modelId] = isActive;
+    function getActiveModelIds(uint256 offset_, uint256 limit_) external view returns (bytes32[] memory, uint256) {
+        EnumerableSet.Bytes32Set storage activeModels = _getModelsStorage().activeModels;
+
+        return (activeModels.part(offset_, limit_), activeModels.length());
     }
 
-    function addModel(bytes32 modelId) internal {
-        _getModelStorage().modelIds.push(modelId);
+    function getIsModelActive(bytes32 modelId_) public view returns (bool) {
+        return (!_getModelsStorage().models[modelId_].isDeleted && _getModelsStorage().models[modelId_].createdAt != 0);
     }
 
-    function setModel(bytes32 modelId, Model memory model) internal {
-        _getModelStorage().models[modelId] = model;
-    }
-
-    function _setModelMinimumStake(uint256 modelMinimumStake_) internal {
-        _getModelStorage().modelMinimumStake = modelMinimumStake_;
-    }
-
-    function models(bytes32 id) internal view returns (Model storage) {
-        return _getModelStorage().models[id];
-    }
-
-    function isModelActive(bytes32 modelId) internal view returns (bool) {
-        return _getModelStorage().isModelActive[modelId];
-    }
-
-    function _getModelStorage() internal pure returns (MDLStorage storage _ds) {
-        bytes32 slot_ = MODEL_STORAGE_SLOT;
+    /** INTERNAL */
+    function _getModelsStorage() internal pure returns (ModelsStorage storage ds) {
+        bytes32 slot_ = MODELS_STORAGE_SLOT;
 
         assembly {
-            _ds.slot := slot_
+            ds.slot := slot_
         }
     }
 }

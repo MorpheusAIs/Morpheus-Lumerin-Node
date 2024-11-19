@@ -7,7 +7,7 @@ import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 
 abstract contract OwnableDiamondStorage is DiamondOwnableStorage, Context {
     /**
-     * @dev The caller account is not authorized to perform an operation.
+     * @dev The caller account is not authorized to perform an operation as owner.
      */
     error OwnableUnauthorizedAccount(address account_);
 

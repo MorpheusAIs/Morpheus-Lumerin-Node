@@ -1,122 +1,109 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {ISessionStorage} from "../../interfaces/storage/ISessionStorage.sol";
-
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {Paginator} from "@solarity/solidity-lib/libs/arrays/Paginator.sol";
+
+import {ISessionStorage} from "../../interfaces/storage/ISessionStorage.sol";
 
 contract SessionStorage is ISessionStorage {
     using Paginator for *;
+    using EnumerableSet for EnumerableSet.Bytes32Set;
 
-    struct SNStorage {
-        // all sessions
-        uint256 sessionNonce; // used to generate unique session id
+    struct SessionsStorage {
+        // Account which stores the MOR tokens with infinite allowance for this contract
+        address fundingAccount;
+        // Distribution pools configuration that mirrors L1 contract
+        Pool[] pools;
+        // Total amount of MOR claimed by providers
+        uint256 providersTotalClaimed;
+        // Used to generate unique session ID
+        uint256 sessionNonce;
         mapping(bytes32 sessionId => Session) sessions;
-        mapping(address user => bytes32[]) userSessionIds;
-        mapping(address provider => bytes32[]) providerSessionIds;
-        mapping(bytes32 modelId => bytes32[]) modelSessionIds;
-        // active sessions
-        uint256 totalClaimed; // total amount of MOR claimed by providers
-        mapping(address user => mapping(bytes32 => bool)) isUserSessionActive; // user address => active session indexes
-        mapping(address provider => mapping(bytes32 => bool)) isProviderSessionActive; // provider address => active session indexes
-        mapping(address user => OnHold[]) userOnHold; // user address => balance
-        mapping(bytes providerApproval => bool) isApprovalUsed;
-        // other
-        address fundingAccount; // account which stores the MOR tokens with infinite allowance for this contract
-        Pool[] pools; // distribution pools configuration that mirrors L1 contract
+        // Max ession duration
+        uint128 maxSessionDuration;
+        // Session registry for providers, users and models
+        mapping(address user => EnumerableSet.Bytes32Set) userSessions;
+        mapping(address provider => EnumerableSet.Bytes32Set) providerSessions;
+        mapping(bytes32 modelId => EnumerableSet.Bytes32Set) modelSessions;
+        mapping(address user => OnHold[]) userStakesOnHold;
+        mapping(bytes providerApproval => bool) isProviderApprovalUsed;
     }
 
-    bytes32 public constant SESSION_STORAGE_SLOT = keccak256("diamond.standard.session.storage");
+    bytes32 public constant SESSIONS_STORAGE_SLOT = keccak256("diamond.standard.sessions.storage");
+    uint32 public constant MIN_SESSION_DURATION = 5 minutes;
+    uint32 public constant SIGNATURE_TTL = 10 minutes;
+    uint256 public constant COMPUTE_POOL_INDEX = 3;
 
-    function sessions(bytes32 sessionId) external view returns (Session memory) {
-        return _getSessionStorage().sessions[sessionId];
+    /** PUBLIC, GETTERS */
+    function getSession(bytes32 sessionId_) external view returns (Session memory) {
+        return _getSessionsStorage().sessions[sessionId_];
     }
 
-    function getSessionsByUser(address user, uint256 offset_, uint256 limit_) external view returns (bytes32[] memory) {
-        return _getSessionStorage().userSessionIds[user].part(offset_, limit_);
+    function getUserSessions(
+        address user_,
+        uint256 offset_,
+        uint256 limit_
+    ) external view returns (bytes32[] memory, uint256) {
+        EnumerableSet.Bytes32Set storage userSessions = _getSessionsStorage().userSessions[user_];
+
+        return (userSessions.part(offset_, limit_), userSessions.length());
     }
 
-    function pools() external view returns (Pool[] memory) {
-        return _getSessionStorage().pools;
+    function getProviderSessions(
+        address provider_,
+        uint256 offset_,
+        uint256 limit_
+    ) external view returns (bytes32[] memory, uint256) {
+        EnumerableSet.Bytes32Set storage providerSessions = _getSessionsStorage().providerSessions[provider_];
+
+        return (providerSessions.part(offset_, limit_), providerSessions.length());
     }
 
-    function getPools() internal view returns (Pool[] storage) {
-        return _getSessionStorage().pools;
+    function getModelSessions(
+        bytes32 modelId_,
+        uint256 offset_,
+        uint256 limit_
+    ) external view returns (bytes32[] memory, uint256) {
+        EnumerableSet.Bytes32Set storage modelSessions = _getSessionsStorage().modelSessions[modelId_];
+
+        return (modelSessions.part(offset_, limit_), modelSessions.length());
     }
 
-    function getPool(uint256 poolIndex) internal view returns (Pool storage) {
-        return _getSessionStorage().pools[poolIndex];
+    function getPools() external view returns (Pool[] memory) {
+        return _getSessionsStorage().pools;
     }
 
-    function getFundingAccount() public view returns (address) {
-        return _getSessionStorage().fundingAccount;
+    function getPool(uint256 index_) external view returns (Pool memory) {
+        return _getSessionsStorage().pools[index_];
     }
 
-    function setSession(bytes32 sessionId, Session memory session) internal {
-        _getSessionStorage().sessions[sessionId] = session;
+    function getFundingAccount() external view returns (address) {
+        return _getSessionsStorage().fundingAccount;
     }
 
-    function setUserSessionActive(address user, bytes32 sessionId, bool active) internal {
-        _getSessionStorage().isUserSessionActive[user][sessionId] = active;
+    function getTotalSessions(address provider_) public view returns (uint256) {
+        return _getSessionsStorage().providerSessions[provider_].length();
     }
 
-    function setProviderSessionActive(address provider, bytes32 sessionId, bool active) internal {
-        _getSessionStorage().isProviderSessionActive[provider][sessionId] = active;
+    function getProvidersTotalClaimed() external view returns (uint256) {
+        return _getSessionsStorage().providersTotalClaimed;
     }
 
-    function addUserSessionId(address user, bytes32 sessionId) internal {
-        _getSessionStorage().userSessionIds[user].push(sessionId);
+    function getIsProviderApprovalUsed(bytes memory approval_) external view returns (bool) {
+        return _getSessionsStorage().isProviderApprovalUsed[approval_];
     }
 
-    function addProviderSessionId(address provider, bytes32 sessionId) internal {
-        _getSessionStorage().providerSessionIds[provider].push(sessionId);
+    function getMaxSessionDuration() external view returns (uint128) {
+        return _getSessionsStorage().maxSessionDuration;
     }
 
-    function totalSessions(address providerAddr) internal view returns (uint256) {
-        return _getSessionStorage().providerSessionIds[providerAddr].length;
-    }
-
-    function addModelSessionId(bytes32 modelId, bytes32 sessionId) internal {
-        _getSessionStorage().modelSessionIds[modelId].push(sessionId);
-    }
-
-    function addOnHold(address user, OnHold memory onHold) internal {
-        _getSessionStorage().userOnHold[user].push(onHold);
-    }
-
-    function increaseTotalClaimed(uint256 amount) internal {
-        _getSessionStorage().totalClaimed += amount;
-    }
-
-    function totalClaimed() internal view returns (uint256) {
-        return _getSessionStorage().totalClaimed;
-    }
-
-    function getOnHold(address user) internal view returns (OnHold[] storage) {
-        return _getSessionStorage().userOnHold[user];
-    }
-
-    function _getSession(bytes32 sessionId) internal view returns (Session storage) {
-        return _getSessionStorage().sessions[sessionId];
-    }
-
-    function incrementSessionNonce() internal returns (uint256) {
-        return _getSessionStorage().sessionNonce++;
-    }
-
-    function isApprovalUsed(bytes memory approval) internal view returns (bool) {
-        return _getSessionStorage().isApprovalUsed[approval];
-    }
-
-    function setApprovalUsed(bytes memory approval) internal {
-        _getSessionStorage().isApprovalUsed[approval] = true;
-    }
-
-    function _getSessionStorage() internal pure returns (SNStorage storage _ds) {
-        bytes32 slot_ = SESSION_STORAGE_SLOT;
+    /** INTERNAL */
+    function _getSessionsStorage() internal pure returns (SessionsStorage storage ds) {
+        bytes32 slot_ = SESSIONS_STORAGE_SLOT;
 
         assembly {
-            _ds.slot := slot_
+            ds.slot := slot_
         }
     }
 }

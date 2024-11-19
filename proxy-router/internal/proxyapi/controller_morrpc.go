@@ -9,12 +9,14 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	m "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi/morrpcmessage"
 	msg "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi/morrpcmessage"
+	sessionrepo "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/session"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/go-playground/validator/v10"
 )
 
 type MORRPCController struct {
 	service        *ProxyReceiver
+	sessionRepo    *sessionrepo.SessionRepositoryCached
 	validator      *validator.Validate
 	sessionStorage *storages.SessionStorage
 	morRpc         *m.MORRPCMessage
@@ -26,11 +28,12 @@ var (
 	ErrUnknownMethod = fmt.Errorf("unknown method")
 )
 
-func NewMORRPCController(service *ProxyReceiver, validator *validator.Validate, sessionStorage *storages.SessionStorage) *MORRPCController {
+func NewMORRPCController(service *ProxyReceiver, validator *validator.Validate, sessionRepo *sessionrepo.SessionRepositoryCached, sessionStorage *storages.SessionStorage) *MORRPCController {
 	c := &MORRPCController{
 		service:        service,
 		validator:      validator,
 		sessionStorage: sessionStorage,
+		sessionRepo:    sessionRepo,
 		morRpc:         m.NewMorRpc(),
 	}
 
@@ -88,42 +91,32 @@ func (s *MORRPCController) sessionPrompt(ctx context.Context, msg m.RPCMessage, 
 	var req m.SessionPromptReq
 	err := json.Unmarshal(msg.Params, &req)
 	if err != nil {
-		err := lib.WrapError(ErrUnmarshal, err)
-		sourceLog.Error(err)
-		return err
+		return lib.WrapError(ErrUnmarshal, err)
 	}
 
 	if err := s.validator.Struct(req); err != nil {
-		err := lib.WrapError(ErrValidation, err)
-		sourceLog.Error(err)
-		return err
+		return lib.WrapError(ErrValidation, err)
 	}
 
 	sourceLog.Debugf("Received prompt from session %s, timestamp: %s", req.SessionID, req.Timestamp)
-	session, ok := s.sessionStorage.GetSession(req.SessionID.Hex())
-	if !ok {
-		err := fmt.Errorf("session not found")
-		sourceLog.Error(err)
-		return err
+	session, err := s.sessionRepo.GetSession(ctx, req.SessionID)
+	if err != nil {
+		return fmt.Errorf("session cannot be loaded %s", err)
 	}
 
-	isSessionExpired := session.EndsAt.Uint64()*1000 < req.Timestamp
+	isSessionExpired := session.EndsAt().Uint64()*1000 < req.Timestamp
 	if isSessionExpired {
-		err := fmt.Errorf("session expired")
-		sourceLog.Error(err)
-		return err
+		return fmt.Errorf("session expired")
 	}
 
-	user, ok := s.sessionStorage.GetUser(session.UserAddr)
+	user, ok := s.sessionStorage.GetUser(session.UserAddr().Hex())
 	if !ok {
-		err := fmt.Errorf("user not found")
-		sourceLog.Error(err)
-		return err
+		return fmt.Errorf("user not found")
 	}
+
 	pubKeyHex, err := lib.StringToHexString(user.PubKey)
 	if err != nil {
-		sourceLog.Error(err)
-		return err
+		return fmt.Errorf("invalid pubkey %s", err)
 	}
 
 	sig := req.Signature
@@ -144,14 +137,18 @@ func (s *MORRPCController) sessionPrompt(ctx context.Context, msg m.RPCMessage, 
 	}
 
 	requestDuration := int(time.Now().Unix() - now)
-	session.TTFTMsArr = append(session.TTFTMsArr, ttftMs)
-	session.TPSScaled1000Arr = append(session.TPSScaled1000Arr, totalTokens*1000/requestDuration)
-	err = s.sessionStorage.AddSession(session)
-	if err != nil {
-		sourceLog.Error(err)
-		return err
+	if requestDuration == 0 {
+		requestDuration = 1
 	}
-	return err
+
+	tpsScaled1000 := totalTokens * 1000 / requestDuration
+	session.AddStats(tpsScaled1000, ttftMs)
+
+	err = s.sessionRepo.SaveSession(ctx, session)
+	if err != nil {
+		return fmt.Errorf("failed to save session %s", err)
+	}
+	return nil
 }
 
 func (s *MORRPCController) sessionReport(ctx context.Context, msg m.RPCMessage, sendResponse SendResponse, sourceLog lib.ILogger) error {

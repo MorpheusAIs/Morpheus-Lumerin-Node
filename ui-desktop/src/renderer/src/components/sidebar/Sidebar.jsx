@@ -3,7 +3,6 @@ import styled from 'styled-components'
 
 import SecondaryNav from './SecondaryNav'
 import PrimaryNav from './PrimaryNav'
-import LumerinLogo from '../icons/LumerinLogo'
 
 import { LumerinLogoFull } from '../icons/LumerinLogoFull'
 import { AddressHeader } from '../common/AddressHeader'

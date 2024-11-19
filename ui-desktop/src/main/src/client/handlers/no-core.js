@@ -12,10 +12,12 @@ import {
   getDefaultCurrencySetting,
   setDefaultCurrencySetting,
   getKey,
-  setKey
+  setKey,
+  getFailoverSetting,
+  setFailoverSetting
 } from '../settings'
 import apiGateway from '../apiGateway';
-import chatHistory from '../history/chat-history';
+import config from '../../../config';
 
 const validatePassword = (data) => auth.isValidPassword(data)
 
@@ -95,6 +97,14 @@ const getContractHashrate = async ({ contractId, fromDate }) => {
     .sort((a, b) => a.timestamp - b.timestamp)
 }
 
+const isFailoverEnabled = async () => {
+  const settings = await getFailoverSetting();
+  if(!settings) {
+    return ({ isEnabled: config.isFailoverEnabled })
+  }
+  return settings;
+}
+
 const restartWallet = () => restart(1)
 
 export default {
@@ -115,6 +125,7 @@ export default {
   setProfitSettings,
   getAutoAdjustPriceData,
   setAutoAdjustPriceData,
+  isFailoverEnabled,
+  setFailoverSetting,
   ...apiGateway,
-  ...chatHistory
 }

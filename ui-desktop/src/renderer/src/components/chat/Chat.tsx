@@ -31,11 +31,13 @@ import './Chat.css'
 import { ChatHistory } from './ChatHistory';
 import Spinner from 'react-bootstrap/Spinner';
 import ModelSelectionModal from './modals/ModelSelectionModal';
-import { parseDataChunk, makeId, getColor, isClosed } from './utils';
+import { parseDataChunk, makeId, getColor, isClosed, generateHashId } from './utils';
 import { Cooldown } from './Cooldown';
 import ImageViewer from "react-simple-image-viewer";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { coldarkDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { ChatData, ChatHistoryInterface, ChatTitle, HistoryMessage } from './interfaces';
+
 let abort = false;
 let cancelScroll = false;
 const userMessage = { user: 'Me', role: "user", icon: "M", color: "#20dc8e" };
@@ -56,7 +58,7 @@ const Chat = (props) => {
     const [activeSession, setActiveSession] = useState<any>(undefined);
 
     const [chainData, setChainData] = useState<any>(null);
-    const [sessionTitles, setSessionTitles] = useState<{ sessionId: string, title: string, createdAt: any }[]>([]);
+    const [chatData, setChatsData] = useState<ChatData[]>([]);
 
     const [openChangeModal, setOpenChangeModal] = useState(false);
     const [isReadonly, setIsReadonly] = useState(false);
@@ -66,7 +68,7 @@ const Chat = (props) => {
     const [requiredStake, setRequiredStake] = useState<{ min: Number, max: number }>({ min: 0, max: 0 })
     const [balances, setBalances] = useState<{ eth: Number, mor: number }>({ eth: 0, mor: 0 });
 
-    const [chat, setChat] = useState<any>(undefined);
+    const [chat, setChat] = useState<ChatData | undefined>(undefined);
 
     const modelName = selectedModel?.Name || "Model";
     const isLocal = chat?.isLocal;
@@ -78,31 +80,44 @@ const Chat = (props) => {
 
     useEffect(() => {
         (async () => {
-            const [meta, chainData, titles, userBalances] = await Promise.all([
+            const [meta, chainData, chats, userBalances] = await Promise.all([
                 props.getMetaInfo(),
                 props.getModelsData(),
-                props.client.getTitles(),
+                props.client.getChatHistoryTitles() as Promise<ChatTitle[]>,
                 props.getBalances()]);
 
             setBalances(userBalances)
             setMeta(meta);
             setChainData(chainData)
-            setSessionTitles(titles.map(t => ({ ...t, title: t.title, sessionId: t._id })));
 
-            const sessions = await props.getSessionsByUser(props.address);
+            const mappedChatData = chats.reduce((res, item) => {
+                const chatModel = chainData.models.find(x => x.Id == item.modelId);
+                if (chatModel) {
+                    res.push({
+                        id: item.chatId,
+                        title: item.title,
+                        createdAt: new Date(item.createdAt * 1000),
+                        modelId: item.modelId,
+                        isLocal: item.isLocal,
+                    })
+                }
+                return res;
+            }, [] as ChatData[])
+            setChatsData(mappedChatData);
+
+            const sessions = await refreshSessions(chainData?.models);
+
             const openSessions = sessions.filter(s => !isClosed(s));
 
-            setSessions(sessions);
-
             const useLocalModelChat = () => {
-                const localModel = (chainData?.models?.find((m: any) => m.hasLocal));
+                const localModel = (chainData?.models?.find((m: any) => m.isLocal));
                 if (localModel) {
                     setSelectedModel(localModel);
-                    setChat({ id: makeId(16), createdAt: new Date(), modelId: localModel.Id, isLocal: true });
+                    setChat({ id: generateHashId(), createdAt: new Date(), modelId: localModel.Id, isLocal: true });
                 }
             }
 
-            if(!openSessions.length) {
+            if (!openSessions.length) {
                 useLocalModelChat();
                 return;
             }
@@ -110,27 +125,32 @@ const Chat = (props) => {
             const latestSession = openSessions[0];
             const latestSessionModel = (chainData.models.find((m: any) => m.Id == latestSession.ModelAgentId));
 
-            if(!latestSessionModel) {
+            if (!latestSessionModel) {
                 useLocalModelChat();
                 return;
             }
 
             const openBid = latestSessionModel?.bids?.find(b => b.Id == latestSession.BidID);
 
-            if(!openBid) {
+            if (!openBid) {
                 useLocalModelChat();
             }
 
             setSelectedModel(latestSessionModel);
             setSelectedBid(openBid);
             setActiveSession(latestSession);
-            setChat({ id: makeId(16), createdAt: new Date(), modelId: latestSessionModel.ModelAgentId });
+            setChat({ id: generateHashId(), createdAt: new Date(), modelId: latestSessionModel.ModelAgentId });
         })().then(() => {
             setIsLoading(false);
         })
     }, [])
 
-    const toggleDrawer = () => {
+    const toggleDrawer = async () => {
+        if (!isOpen) {
+            setIsLoading(true);
+            await refreshSessions()
+            setIsLoading(false);
+        }
         setIsOpen((prevState) => !prevState)
     }
 
@@ -156,14 +176,23 @@ const Chat = (props) => {
         return (targetDuration - (targetDuration % 60)) - delta;
     }
 
+    const setSessionData = async (sessionId) => {
+        const allSessions = await refreshSessions();
+        const targetSessionData = allSessions.find(x => x.Id == sessionId);
+        setActiveSession({ ...targetSessionData, sessionId });
+        const targetModel = chainData.models.find(x => x.Id == targetSessionData.ModelAgentId)
+        const targetBid = targetModel.bids.find(x => x.Id == targetSessionData.BidID);
+        setSelectedBid(targetBid);
+    }
+
     const onOpenSession = async (isReopen) => {
         setIsLoading(true);
-        if(!isReopen) {
-            setChat({ id: makeId(16), createdAt: new Date(), modelId: selectedModel.Id });
+        if (!isReopen) {
+            setChat({ id: generateHashId(), createdAt: new Date(), modelId: selectedModel.Id });
         }
 
-        const prices = selectedModel.bids.map(x => x.PricePerSecond);
-        const maxPrice = Math.max(prices);
+        const prices = selectedModel.bids.map(x => Number(x.PricePerSecond));
+        const maxPrice = Math.max(...prices);
         const duration = calculateAcceptableDuration(maxPrice, Number(balances.mor), meta);
 
         console.log("open-session", duration);
@@ -173,12 +202,7 @@ const Chat = (props) => {
             if (!openedSession) {
                 return;
             }
-            const allSessions = await refreshSessions();
-            const targetSessionData = allSessions.find(x => x.Id == openedSession);
-            setActiveSession({ ...targetSessionData, sessionId: openedSession });
-            const targetModel = chainData.models.find(x => x.Id == targetSessionData.ModelAgentId)
-            const targetBid = targetModel.bids.find(x => x.Id == targetSessionData.BidID);
-            setSelectedBid(targetBid);
+            await setSessionData(openedSession);
             return openedSession;
         }
         finally {
@@ -186,60 +210,87 @@ const Chat = (props) => {
         }
     }
 
-    const loadHistory = async (id) => {
+    const loadChatHistory = async (chatId: string) => {
         try {
-            const history = await props.client.getChatHistory(id);
-            setMessages(history.length ? (history[0].messages || []) : []);
+            const history: ChatHistoryInterface = await props.client.getChatHistory(chatId);
+            const messages: HistoryMessage[] = [];
+
+            const model = chainData.models.find((m) => m.Id == history.modelId);
+            history.messages.forEach((m) => {
+                const modelName = model.Name || "Model";
+
+                const aiIcon = modelName.toUpperCase()[0];
+                const aiColor = getColor(aiIcon);
+
+                messages.push({ id: makeId(16), text: m.prompt.messages[0].content, user: userMessage.user, role: userMessage.role, icon: userMessage.icon, color: userMessage.color });
+                messages.push({ id: makeId(16), text: m.response, user: modelName, role: "assistant", icon: aiIcon, color: aiColor, isImageContent: m.isImageContent });
+            });
+            setMessages(messages);
         }
         catch (e) {
             props.toasts.toast('error', 'Failed to load chat history');
         }
     }
 
-    const refreshSessions = async () => {
-        const sessions = await props.getSessionsByUser(props.address);
+    const refreshSessions = async (models = null) => {
+        const sessions = (await props.getSessionsByUser(props.address)).reduce((res, item) => {
+            const sessionModel = (models || chainData.models).find(x => x.Id == item.ModelAgentId);
+            if (sessionModel) {
+                item.ModelName = sessionModel.Name;
+                res.push(item);
+            }
+            return res;
+        }, []);
+
         setSessions(sessions);
+
         return sessions;
     }
 
     const closeSession = async (sessionId: string) => {
+        setIsLoading(true);
         await props.closeSession(sessionId);
         await refreshSessions();
+        setIsLoading(false);
 
         if (activeSession.Id == sessionId) {
-            const localModel = (chainData?.models?.find((m: any) => m.hasLocal));
+            const localModel = (chainData?.models?.find((m: any) => m.isLocal));
             if (localModel) {
                 setSelectedModel(localModel);
-                setChat({ id: makeId(16), createdAt: new Date(), modelId: localModel.Id, isLocal: true });
+                setChat({ id: generateHashId(), createdAt: new Date(), modelId: localModel.Id, isLocal: true });
             }
             setMessages([]);
         }
     }
 
-    const selectSession = async (sessionData) => {
-        console.log("select-session", sessionData)
+    const selectChat = async (chatData: ChatData) => {
+        console.log("select-session", chatData)
 
-        if(!sessionData.modelId) {
+        const modelId = chatData.modelId;
+        if (!modelId) {
+            console.warn("Model ID is missed");
             return;
         }
+
+        const selectedModel = chainData.models.find((m: any) => m.Id == modelId);
+        setSelectedModel(selectedModel);
+        setIsReadonly(false);
+
         // toggleDrawer();
 
-        setChat({ ...sessionData})
+        setChat({ ...chatData })
 
-        if(sessionData.isLocal) {
-            await loadHistory(sessionData.id);
-            return
+        if (chatData.isLocal) {
+            await loadChatHistory(chatData.id);
+            return;
         }
 
         const openSessions = sessions.filter(s => !isClosed(s));
         // search open session by model ID
-        const openSession = openSessions.find(s => s.ModelAgentId == sessionData.modelId);
+        const openSession = openSessions.find(s => s.ModelAgentId == modelId);
         setIsReadonly(!openSession);
 
-        const selectedModel = chainData.models.find((m: any) => m.Id == sessionData.modelId);
-        setSelectedModel(selectedModel);
-
-        if(openSession) {
+        if (openSession) {
             setActiveSession(openSession);
             const activeBid = selectedModel.bids.find((b) => b.Id == openSession.BidID);
             setSelectedBid(activeBid);
@@ -249,7 +300,7 @@ const Chat = (props) => {
             setSelectedBid(undefined);
         }
 
-        await loadHistory(sessionData.id);
+        await loadChatHistory(chatData.id);
         setTimeout(() => scrollToBottom("smooth"), 400);
     }
 
@@ -287,8 +338,6 @@ const Chat = (props) => {
     }
 
     const call = async (message) => {
-        const chatHistory = messages.map(m => ({ role: m.role, content: m.text, isImageContent: m.isImageContent }))
-
         let memoState = [...messages, { id: makeId(16), text: value, ...userMessage }];
         setMessages(memoState);
         scrollToBottom();
@@ -301,12 +350,12 @@ const Chat = (props) => {
         } else {
             headers["session_id"] = activeSession.Id;
         }
+        headers["chat_id"] = chat?.id;
 
-        const hasImageHistory = chatHistory.some(x => x.isImageContent);
         const incommingMessage = { role: "user", content: message };
         const payload = {
             stream: true,
-            messages: hasImageHistory ? [incommingMessage] : [...chatHistory, incommingMessage]
+            messages: [incommingMessage]
         };
 
         // If image take only last message
@@ -339,7 +388,8 @@ const Chat = (props) => {
         const reader = response.body.getReader()
         registerScrollEvent(true);
 
-        const iconProps = { icon: modelName.toUpperCase()[0], color: getColor(modelName.toUpperCase()[0]) };
+        const icon = modelName.toUpperCase()[0];
+        const iconProps = { icon, color: getColor(icon) };
         try {
             while (true) {
                 if (abort) {
@@ -356,10 +406,20 @@ const Chat = (props) => {
                 const decodedString = textDecoder.decode(value, { stream: true });
                 const parts = parseDataChunk(decodedString);
                 parts.forEach(part => {
+                    if (!part) {
+                        return;
+                    }
+
                     if (part.error) {
                         console.warn(part.error);
                         return;
                     }
+
+                    if (typeof part === 'string') {
+                        handleSystemMessage(part);
+                        return;
+                    }
+
                     const imageContent = part.imageUrl;
 
                     if (!part?.id && !imageContent) {
@@ -383,15 +443,36 @@ const Chat = (props) => {
             }
         }
         catch (e) {
+            props.toasts.toast('error', 'Something goes wrong. Try later.');
             console.error(e);
         }
 
-        console.log("Flush to storage");
-        await props.client.saveChatHistory({ sessionId: chat?.id, messages: memoState });
-        console.log("Stored succesfully");
-
         registerScrollEvent(false);
         return memoState;
+    }
+
+    const handleSystemMessage = (message) => {
+        const openSessionEventMessage = "new session opened";
+        const failoverTurnOnMessage = "provider failed, failover enabled"
+
+        const renderMessage = (value) => {
+            props.toasts.toast('info', value, {
+                autoClose: 1500
+            });
+        }
+
+        if (message.includes(openSessionEventMessage)) {
+            const sessionId = message.split(":")[1].trim(); // new session opened: 0x123456
+            setSessionData(sessionId).catch((err) => renderMessage(`Failed to load session data: ${err.message}`));
+            renderMessage("Opening session with available provider...");
+            return;
+        }
+        if (message.includes(failoverTurnOnMessage)) {
+            renderMessage("Target provider unavailable. Applying failover policy...");
+            return;
+        }
+        renderMessage(message);
+        return;
     }
 
     const handleSubmit = () => {
@@ -409,11 +490,9 @@ const Chat = (props) => {
             return;
         }
 
-        if (messages.length === 0) {
-            const title = { ...chat, sessionId: chat?.id, title: value };
-            props.client.saveTitle(title).then(() => {
-                setSessionTitles([...sessionTitles, title]);
-            }).catch(console.error);
+        if (messages.length === 0 && chat) {
+            const title = { ...chat, title: value };
+            setChatsData([...chatData, title]);
         }
 
         setIsSpinning(true);
@@ -421,10 +500,10 @@ const Chat = (props) => {
         setValue("");
     }
 
-    const deleteChatEntry = (id) => {
-        props.client.deleteTitle(id).then(() => {
-            const newSessions = sessionTitles.filter(x => x.sessionId != id);
-            setSessionTitles(newSessions);
+    const deleteChatEntry = (id: string) => {
+        props.client.deleteChatHistory(id).then(() => {
+            const newChats = chatData.filter(x => x.id != id);
+            setChatsData(newChats);
         }).catch(console.error);
     }
 
@@ -440,7 +519,7 @@ const Chat = (props) => {
         setActiveSession(undefined);
         setSelectedBid(undefined);
         setIsReadonly(false);
-        setChat({ id: makeId(16), createdAt: new Date(), modelId, isLocal });
+        setChat({ id: generateHashId(), createdAt: new Date(), modelId, isLocal });
 
         const selectedModel = chainData.models.find((m: any) => m.Id == modelId);
         setSelectedModel(selectedModel);
@@ -463,14 +542,14 @@ const Chat = (props) => {
             return;
         }
 
-        const prices = selectedModel.bids.map(x => x.PricePerSecond);
-        const maxPrice = Math.max(prices);
+        const prices = selectedModel.bids.map(x => Number(x.PricePerSecond));
+        const maxPrice = Math.max(...prices);
 
         setRequiredStake({ min: calculateStake(maxPrice, 5), max: calculateStake(maxPrice, 24 * 60) })
     }
 
     const wrapChangeTitle = async (data: { id, title }) => {
-        await props.client.updateChatTitle(data);
+        await props.client.updateChatHistoryTitle(data);
     }
 
     return (
@@ -490,11 +569,11 @@ const Chat = (props) => {
                 <ChatHistory
                     activeChat={chat}
                     open={isOpen}
-                    sessionTitles={sessionTitles}
+                    chatData={chatData}
                     sessions={sessions}
                     deleteHistory={deleteChatEntry}
                     models={chainData?.models || []}
-                    onSelectSession={selectSession}
+                    onSelectChat={selectChat}
                     refreshSessions={refreshSessions}
                     onChangeTitle={wrapChangeTitle}
                     onCloseSession={closeSession} />
@@ -531,7 +610,7 @@ const Chat = (props) => {
                                 }
 
                             </div>
-                            <BtnAccent 
+                            <BtnAccent
                                 className='change-modal'
                                 onClick={() => setOpenChangeModal(true)}>
                                 <IconMessagePlus></IconMessagePlus> New chat
@@ -582,10 +661,10 @@ const Chat = (props) => {
                                         {
                                             isEnoughFunds ?
                                                 <>
-                                                    <div className='session-title'>Staked MOR funds will be reserved to start session</div>
-                                                    <div className='session-title'>Session may last from 5 mins to 24 hours depending on staked funds (min: {(Number(requiredStake.min) / 10 ** 18).toFixed(2)}, max: {(Number(requiredStake.max) / 10 ** 18).toFixed(2)} MOR)</div>
+                                                    <div className='session-title'>Staked funds will be reserved to start session</div>
+                                                    <div className='session-title'>Session may last from 5 mins to 24 hours depending on available balance (min: {(Number(requiredStake.min) / 10 ** 18).toFixed(2)}, max: {(Number(requiredStake.max) / 10 ** 18).toFixed(2)} {props.symbol})</div>
                                                 </> :
-                                                <div className='session-title'>To start session required balance should be at least {(Number(requiredStake.min) / 10 ** 18).toFixed(2)} MOR</div>
+                                                <div className='session-title'>To start session required balance should be at least {(Number(requiredStake.min) / 10 ** 18).toFixed(2)} {props.symbol}</div>
                                         }
                                         <div>
                                             <BtnAccent
@@ -617,15 +696,15 @@ const Chat = (props) => {
                             minRows={1}
                             maxRows={6} />
                         {
-                            isReadonly 
-                            ? (<SendBtn onClick={handleReopen}>
-                                {isSpinning ? <Spinner animation="border" /> : <span>Reopen</span>}
-                            </SendBtn>)
-                            : (
-                                <SendBtn disabled={isDisabled} onClick={handleSubmit}>{
-                                    isSpinning ? <Spinner animation="border" /> : <IconArrowUp size={"26px"}></IconArrowUp>
-                                }</SendBtn>
-                            )
+                            isReadonly
+                                ? (<SendBtn onClick={handleReopen}>
+                                    {isSpinning ? <Spinner animation="border" /> : <span>Reopen</span>}
+                                </SendBtn>)
+                                : (
+                                    <SendBtn disabled={isDisabled} onClick={handleSubmit}>{
+                                        isSpinning ? <Spinner animation="border" /> : <IconArrowUp size={"26px"}></IconArrowUp>
+                                    }</SendBtn>
+                                )
                         }
                     </Control>
                 </Container>
@@ -633,6 +712,7 @@ const Chat = (props) => {
             <ModelSelectionModal
                 models={(chainData as any)?.models}
                 isActive={openChangeModal}
+                symbol={props.symbol}
                 onChangeModel={(eventData) => {
                     onCreateNewChat(eventData);
                 }}

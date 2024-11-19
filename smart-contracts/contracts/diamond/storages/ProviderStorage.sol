@@ -1,52 +1,53 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import {Paginator} from "@solarity/solidity-lib/libs/arrays/Paginator.sol";
+
 import {IProviderStorage} from "../../interfaces/storage/IProviderStorage.sol";
 
 contract ProviderStorage is IProviderStorage {
-    struct PRVDRStorage {
+    using Paginator for *;
+    using EnumerableSet for EnumerableSet.AddressSet;
+
+    struct PovidersStorage {
         uint256 providerMinimumStake;
         mapping(address => Provider) providers;
-        mapping(address => bool) isProviderActive;
+        // TODO: move vars below to the graph in the future
+        EnumerableSet.AddressSet activeProviders;
     }
 
-    uint128 constant PROVIDER_REWARD_LIMITER_PERIOD = 365 days; // reward for this period will be limited by the stake
+    // Reward for this period will be limited by the stake
+    uint128 constant PROVIDER_REWARD_LIMITER_PERIOD = 365 days;
 
-    bytes32 public constant PROVIDER_STORAGE_SLOT = keccak256("diamond.standard.provider.storage");
+    bytes32 public constant PROVIDERS_STORAGE_SLOT = keccak256("diamond.standard.providers.storage");
 
-    function getProvider(address provider) external view returns (Provider memory) {
-        return _getProviderStorage().providers[provider];
+    /** PUBLIC, GETTERS */
+    function getProvider(address provider_) external view returns (Provider memory) {
+        return _getProvidersStorage().providers[provider_];
     }
 
-    function providerMinimumStake() public view returns (uint256) {
-        return _getProviderStorage().providerMinimumStake;
+    function getProviderMinimumStake() external view returns (uint256) {
+        return _getProvidersStorage().providerMinimumStake;
     }
 
-    function setProviderActive(address provider, bool isActive) internal {
-        _getProviderStorage().isProviderActive[provider] = isActive;
+    function getActiveProviders(uint256 offset_, uint256 limit_) external view returns (address[] memory, uint256) {
+        EnumerableSet.AddressSet storage activeProviders = _getProvidersStorage().activeProviders;
+
+        return (activeProviders.part(offset_, limit_), activeProviders.length());
     }
 
-    function setProvider(address provider, Provider memory provider_) internal {
-        _getProviderStorage().providers[provider] = provider_;
+    function getIsProviderActive(address provider_) public view returns (bool) {
+        return (!_getProvidersStorage().providers[provider_].isDeleted &&
+            _getProvidersStorage().providers[provider_].createdAt != 0);
     }
 
-    function setProviderMinimumStake(uint256 _providerMinimumStake) internal {
-        _getProviderStorage().providerMinimumStake = _providerMinimumStake;
-    }
-
-    function providers(address addr) internal view returns (Provider storage) {
-        return _getProviderStorage().providers[addr];
-    }
-
-    function isProviderActive(address provider) internal view returns (bool) {
-        return _getProviderStorage().isProviderActive[provider];
-    }
-
-    function _getProviderStorage() internal pure returns (PRVDRStorage storage _ds) {
-        bytes32 slot_ = PROVIDER_STORAGE_SLOT;
+    /** INTERNAL */
+    function _getProvidersStorage() internal pure returns (PovidersStorage storage ds) {
+        bytes32 slot_ = PROVIDERS_STORAGE_SLOT;
 
         assembly {
-            _ds.slot := slot_
+            ds.slot := slot_
         }
     }
 }

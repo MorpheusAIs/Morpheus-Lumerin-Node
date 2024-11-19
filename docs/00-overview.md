@@ -28,8 +28,11 @@ Numbers below reference the circled elements in the diagram above.
 - In a real-world scenario, this proxy-router would be a separate, small server or even docker container that is not part of the AI Model Server Instance (it can be, but it's nice to separate the architecture either for anonymity or performance)
 - Installation on the provider side is as simple as setting up the environment variables and running the proxy-router software.  
     - There is a sample `.env.example` file located within the ./proxy-router folder that shoudld be copied to `.env` and edited with the appropriate values.
-    - Please see [proxy-router .ENV Variables](#proxy-router-env-variables) below for more information on the key values needed in the .env file
-- The proxy-router needs to be on both the provider and consumer environment and have access to an Arbitrum Ethereum node via web sockets (WSS) for listening to and posting elements on the blockchain
+    - Please see [proxy-router .ENV Variables](proxy-router.all.env) for more information on the key values needed in the .env file
+- The `models-config.json` file is particularly important as it directs the proxy-router to the provider's model(s) and the endpoint(s) for the model(s) 
+    - This file should be copied from the `./proxy-router/models-config.example.json` to `./proxy-router/models-config.json` and edited with the appropriate values
+    - Please see [proxy-router models-config.json](proxy-router.models-config.json.md) for more information on the key values needed in the models-config.json file
+- The proxy-router needs to be on both the provider and consumer environment and have access to an Arbitrum Ethereum node (default) public ethernet nodes or via web sockets (WSS) for listening to and posting elements on the blockchain
 
 ## 3. Provider - setup Provider, Model and Bid on the blockchain
 - [03-provider-offer.md](03-provider-offer.md) - for more details
@@ -46,19 +49,19 @@ Numbers below reference the circled elements in the diagram above.
 - The components are very similar to the Provider side of things with the exception that the consumer node will typically not be hosting a model, but will be sending prompts to the proxy-router and receiving inference back
 - In this case, the easiest way to install is to use the packaged releases for your platform on Github and follow the instructions in the README.md file
 - These packages include 3 different pieces of software 
-    - llama.cpp (llama-server) - a simple example model that can be run on the same machine as the proxy-router and ui-desktop to show how the components work together and run local (free) inference
+    - llama.cpp (llama-server) - a simple example model that can be run on the same machine as the proxy-router and MorpheusUI to show how the components work together and run local (free) inference
     - proxy-router - the same software as the provider side, but with different environment variables and a different role
-    - ui-desktop - Electron GUI that enables the user to interact with the models (via the API) to browse offered bids, purchase and send prompts 
-- The consumer node will need to have the proxy-router running and the UI-Desktop running to interact with the models and bids on the blockchain
+    - MorpheusUI - Electron GUI that enables the user to interact with the models (via the API) to browse offered bids, purchase and send prompts 
+- The consumer node will need to have the proxy-router running and the MorpheusUI running to interact with the models and bids on the blockchain
 
 ## 5. Purchase Bid 
 - [05-bid-purchase.md](05-bid-purchase.md) - for more details
-- Once the UI-Desktop is up and running, the consumer can browse the available bids on the blockchain
+- Once the MorpheusUI is up and running, the consumer can browse the available bids on the blockchain
 - Select a bid and stake the intended MOR amount (minimum should be shown) 
 
 ## 6. Prompt & Inference 
 - [06-model-interaction.md](06-model-interaction.md) - for more details
-- Once the bid is purchased, the consumer can send prompts to the proxy-router via the UI-Desktop
+- Once the bid is purchased, the consumer can send prompts to the proxy-router via the MorpheusUI
 
 ## Proxy-Router and Possible LLM Server Configurations - Reference Architecture 
 ![Reference Architecture](images/system-architecture.png)

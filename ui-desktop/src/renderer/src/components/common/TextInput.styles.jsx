@@ -9,15 +9,15 @@ export const Label = styled.label`
 `;
 
 export const Input = styled.input`
-  border: none;
+  border: 1px solid gray;
   display: block;
   border-radius: 2px;
   padding: 0.8rem 1.6rem;
-  background-color: ${p => p.theme.colors.lightBlue};
+  background-color: transparent;
   margin-top: 0.8rem;
   width: 100%;
   line-height: 2.5rem;
-  color: ${p => (p.disabled ? p.theme.colors.copy : p.theme.colors.primary)};
+  color: ${p => (p.disabled ? p.theme.colors.copy : "white")};
   font-size: 1.3rem;
   font-weight: 600;
   letter-spacing: 0.5px;
@@ -28,11 +28,11 @@ export const Input = styled.input`
 
   &:focus {
     outline: none;
-    box-shadow: 0 2px 0 0px ${p => p.theme.colors.primary};
+    box-shadow: 0 2px 0 0px ${p => p.theme.colors.morMain};
     box-shadow: ${p =>
       p.noFocus && p.value.length > 0
         ? 'none'
-        : `0 2px 0 0px ${p.theme.colors.primary}`};
+        : `0 2px 0 0px ${p.theme.colors.morMains}`};
   }
 `;
 

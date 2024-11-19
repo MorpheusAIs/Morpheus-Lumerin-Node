@@ -10,26 +10,30 @@ The purpose of this software is to enable interaction with distributed, decentra
 5. Consumers purchase the bid and stake MOR for their session time
 6. Once the bid has been purchased, prompt and inference (ChatGPT-like) can start
 
-# **NOTE: ARBITRUM SEPOLIA TESTNET ONLY at this time**
 
 **Components that are included in this repository are:**
 * Local `Llama.cpp` and tinyllama model to run locally for demonstration purposes only
 * Lumerin `proxy-router` is a background process that monitors sepcific blockchain contract events, 
 manages secure sessions between consumers and providers and routes prompts and responses between them
-* Lumerin `ui-desktop` is the front end UI to interact with LLMs and the Morpheus network via the proxy-router as a consumer
+* Lumerin `MorpheusUI` is the front end UI to interact with LLMs and the Morpheus network via the proxy-router as a consumer
 * Lumerin `cli` is the cli client to interact with LLMs and the Morpheus network via the proxy-router as a consumer
 
-## Tokens and Contract Information 
-* Morpheus saMOR Token: `0xc1664f994fd3991f98ae944bc16b9aed673ef5fd` 
-* Lumerin Morpheus Smart Contract : `0x8e19288d908b2d9F8D7C539c74C899808AC3dE45`
-    * Interact with the Morpheus Contract: https://louper.dev/diamond/0x8e19288d908b2d9F8D7C539c74C899808AC3dE45?network=arbitrumSepolia#write
+## Tokens and Contract Information (update 11/15/2024)
+### MainNet: (MAIN Branch and MAIN-* Releases)
+* Morpheus MOR Token: `0x092bAaDB7DEf4C3981454dD9c0A0D7FF07bCFc86` 
+* Diamond MarketPlace Contract: `0xDE819AaEE474626E3f34Ef0263373357e5a6C71b` 
+* Blockchain Explorer: `https://arbiscan.io/`
+
+### TestNet (DEV & STG Branches and TEST-* Releases)
+* Morpheus saMOR Token: `0x34a285a1b1c166420df5b6630132542923b5b27e` 
+* Diamond MarketPlace Contract: `0xb8C55cD613af947E73E262F0d3C54b7211Af16CF`
+    * Interact with the Morpheus Contract: https://louper.dev/diamond/0xb8C55cD613af947E73E262F0d3C54b7211Af16CF?network=arbitrumSepolia#write
 * Blockchain Explorer: `https://sepolia.arbiscan.io/`
-* Swagger API: `http://localhost:8082/swagger/index.html`
 
 ## Funds
-* **WALLET:** For testing as a provider or consumer, you will need both `saMOR` and `saETH` tokens in your wallet. You should be able to get either of these from the usual Sepolia Arbitrum testnet faucets.
-    * `saMOR` is the token used to pay for the model provider staking and consumer usage
-    * `saETH` is the token used to pay for the gas fees on the network  
+* **WALLET:** For testing as a provider or consumer, you will need both `MOR` and `ETH` tokens in your wallet. 
+    * `MOR` is the token used to pay for the model provider staking and consumer usage
+    * `ETH` is the token used to pay for the gas fees on the network  
 
 ## Installation & Operation 
 * [00-Overview](docs/00-overview.md) - This provides a comprehensive picture of the Provider, Blockchain and Consumer environments and how they interact. This will also link to other documents for more advanced setup and configuration.

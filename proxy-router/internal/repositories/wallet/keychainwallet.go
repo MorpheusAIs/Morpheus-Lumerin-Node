@@ -4,9 +4,11 @@ import (
 	"errors"
 	"sync"
 
+	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/keychain"
-	hdwallet "github.com/miguelmota/go-ethereum-hdwallet"
+	"github.com/ethereum/go-ethereum/accounts"
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 const (
@@ -21,14 +23,14 @@ var (
 )
 
 type KeychainWallet struct {
-	storage   *keychain.Keychain
+	storage   i.KeyValueStorage
 	updatedCh chan struct{}
 	mutex     sync.Mutex
 }
 
-func NewKeychainWallet() *KeychainWallet {
+func NewKeychainWallet(keychain i.KeyValueStorage) *KeychainWallet {
 	return &KeychainWallet{
-		storage:   keychain.NewKeychain(),
+		storage:   keychain,
 		updatedCh: make(chan struct{}),
 	}
 }
@@ -76,7 +78,7 @@ func (w *KeychainWallet) SetPrivateKey(privateKey lib.HexString) error {
 	}
 	// either mnemonic or private key can be stored at a time
 	err = w.storage.DeleteIfExists(MNEMONIC_KEY)
-	if err == nil {
+	if err != nil {
 		return err
 	}
 
@@ -104,7 +106,7 @@ func (w *KeychainWallet) SetMnemonic(mnemonic string, derivationPath string) err
 
 	// either mnemonic or private key can be stored at a time
 	err = w.storage.DeleteIfExists(PRIVATE_KEY_KEY)
-	if err == nil {
+	if err != nil {
 		return err
 	}
 
@@ -159,19 +161,19 @@ func (w *KeychainWallet) getStoredMnemonic() (string, string, error) {
 }
 
 func (w *KeychainWallet) mnemonicToPrivateKey(mnemonic, derivationPath string) (lib.HexString, error) {
-	wallet, err := hdwallet.NewFromMnemonic(mnemonic)
+	wallet, err := NewFromMnemonic(mnemonic)
 	if err != nil {
 		return nil, err
 	}
-	path, err := hdwallet.ParseDerivationPath(derivationPath)
+	path, err := accounts.ParseDerivationPath(derivationPath)
 	if err != nil {
 		return nil, err
 	}
-	account, err := wallet.Derive(path, true)
+	prKey, err := wallet.DerivePrivateKey(path)
 	if err != nil {
 		return nil, err
 	}
-	return wallet.PrivateKeyBytes(account)
+	return crypto.FromECDSA(prKey), nil
 }
 
 func (w *KeychainWallet) PrivateKeyUpdated() <-chan struct{} {

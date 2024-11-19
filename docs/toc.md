@@ -9,7 +9,7 @@ Document outline:
 1. Installation 
     1. From Binaries, most simplistic to get up and running [install_from_binaries.md](install_from_binaries.md)
         * Need ETH node solution (Http round robin) from Shev 
-        * Create new Wallet within UI-Desktop 
+        * Create new Wallet within MorpheusUI 
         * Send aETH and aMOR to wallet (from separate wallet or mechanism)
         * Variations for Mac ARM, Mac Intel, Linux, Windows
         * Needs to be as easy and as simple as possible (minimal clicks/configuration)

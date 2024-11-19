@@ -1,11 +1,16 @@
-import * as validators from '../validators';
 import { withClient } from './clientContext';
-import * as utils from '../utils';
 import { connect } from 'react-redux';
-import PropTypes from 'prop-types';
 import React from 'react';
 import { ToastsContext } from '../../components/toasts';
 import selectors from '../selectors';
+import axios from 'axios';
+import { getSessionsByUser } from '../utils/apiCallsHelper';
+
+const AvailabilityStatus = {
+  available: "available",
+  unknown: "unknown",
+  disconnected: "disconnected"
+}
 
 const withChatState = WrappedComponent => {
   class Container extends React.Component {
@@ -129,6 +134,17 @@ const withChatState = WrappedComponent => {
 
       const models = modelsResp.filter(m => !m.IsDeleted);
       const providers = providersResp.filter(m => !m.IsDeleted);
+
+      const availabilityResults = await this.getProvidersAvailability(providers);
+      availabilityResults.forEach(ar => {
+        const provider = providers.find(p => p.Address == ar.id);
+        if(!provider)
+          return;
+
+        provider.availabilityStatus = ar.status;
+        provider.availabilityUpdatedAt = ar.time;
+      });
+
       const providersMap = providers.reduce((a, b) => ({ ...a, [b.Address.toLowerCase()]: b }), {});
 
       const responses = (await Promise.all(
@@ -136,23 +152,59 @@ const withChatState = WrappedComponent => {
           const id = m.Id;
           const bids = (await this.getBidsByModels(id))
             .filter(b => +b.DeletedAt === 0)
-            .map(b => ({ ...b, ProviderData: providersMap[b.Provider.toLowerCase()], Model: m }));
+            .map(b => ({ ...b, ProviderData: providersMap[b.Provider.toLowerCase()], Model: m }))
+            .filter(b => b.ProviderData);
           return { id, bids }
         })
       )).reduce((a,b) => ({...a, [b.id]: b.bids}), {});
 
-      const result = [];
+      const result = [...localModels.map(m => ({...m, isLocal: true }))];
 
       for (const model of models) {
         const id = model.Id;
         const bids = responses[id];
         
-        const localModel = localModels.find(lm => lm.Id == id);
+        if(!bids.length) {
+          continue;
+        }
 
-        result.push({ ...model, bids, hasLocal: Boolean(localModel) })
+        result.push({ ...model, bids })
       }
 
-      return { models: result.filter(r => r.bids.length || r.hasLocal), providers }
+      return { models: result, providers }
+    }
+
+    getProvidersAvailability = async (providers) => {
+      const availabilityResults = await Promise.all(providers.map(async p => {
+        try {
+          const storedRecord = JSON.parse(localStorage.getItem(p.Address));
+          if(storedRecord && storedRecord.status == AvailabilityStatus.available) {
+            const lastUpdatedAt = new Date(storedRecord.time);
+            const cacheMinutes = 15;
+            const timestampBefore = new Date(new Date().getTime() - (cacheMinutes * 60 * 1000));
+
+            if(lastUpdatedAt > timestampBefore) {
+              return ({...storedRecord, id: p.Address});
+            }
+          }
+
+          const endpoint = p.Endpoint;
+          const [domain, port] = endpoint.split(":");
+          const { data } = await axios.post("https://portchecker.io/api/v1/query", {
+            host: domain,
+            ports: [port],
+          });
+    
+          const isValid = !!data.check?.find((c) => c.port == port && c.status == true);
+          const record = ({id: p.Address, status: isValid ? AvailabilityStatus.available : AvailabilityStatus.disconnected, time: new Date() });
+          localStorage.setItem(record.id, JSON.stringify({ status: record.status, time: record.time }));
+          return record;
+        }
+        catch(e) {
+          return ({id: p.Address, status: AvailabilityStatus.unknown, time: new Date() })
+        }
+      }));
+      return availabilityResults;
     }
 
     getMetaInfo = async () => {
@@ -166,23 +218,18 @@ const withChatState = WrappedComponent => {
       if(!user) {
         return;
       }
-      try {
-        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions?user=${user}`;
-        const response = await fetch(path);
-        const data = await response.json();
-        return data.sessions;
-      }
-      catch (e) {
-        console.log("Error", e)
-        return [];
-      }
+
+      return await getSessionsByUser(this.props.config.chain.localProxyRouterUrl, user);
     }
 
     onOpenSession = async ({ modelId, duration }) => {
       this.context.toast('info', 'Processing...');
       try {
+        const failoverSettings = await this.props.client.getFailoverSetting();
+        
         const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/models/${modelId}/session`;
         const body = {
+          failover: failoverSettings?.isEnabled || false,
           sessionDuration: +duration // convert to seconds
         };
         const response = await fetch(path, {
@@ -237,6 +284,7 @@ const withChatState = WrappedComponent => {
     provider: state.models.selectedProvider,
     activeSession: state.models.activeSession,
     address: selectors.getWalletAddress(state),
+    symbol: selectors.getCoinSymbol(state)
   });
 
   const mapDispatchToProps = dispatch => ({

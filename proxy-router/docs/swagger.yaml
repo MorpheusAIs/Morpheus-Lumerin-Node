@@ -11,56 +11,23 @@ definitions:
       name:
         type: string
     type: object
-  morrpcmesssage.SessionRes:
+  genericchatstorage.Chat:
     properties:
-      approval:
+      chatId:
         type: string
-      approvalSig:
-        type: string
-      message:
-        type: string
-      signature:
-        type: string
-      timestamp:
+      createdAt:
         type: integer
-      user:
+      isLocal:
+        type: boolean
+      modelId:
         type: string
-    required:
-    - approval
-    - approvalSig
-    - message
-    - signature
-    - timestamp
-    - user
+      title:
+        type: string
     type: object
-  proxyapi.ChatCompletionChoice:
-    properties:
-      finish_reason:
-        allOf:
-        - $ref: '#/definitions/proxyapi.FinishReason'
-        description: |-
-          FinishReason
-          stop: API returned complete message,
-          or a message terminated by one of the stop sequences provided via the stop parameter
-          length: Incomplete model output due to max_tokens parameter or token limit
-          function_call: The model decided to call a function
-          content_filter: Omitted content due to a flag from our content filters
-          null: API response still in progress or incomplete
-      index:
-        type: integer
-      logprobs:
-        $ref: '#/definitions/proxyapi.LogProbs'
-      message:
-        $ref: '#/definitions/proxyapi.ChatCompletionMessage'
-    type: object
-  proxyapi.ChatCompletionMessage:
+  genericchatstorage.ChatCompletionMessage:
     properties:
       content:
         type: string
-      multiContent:
-        items:
-          $ref: '#/definitions/proxyapi.ChatMessagePart'
-        type: array
       name:
         description: |-
           This property isn't in the official documentation, but it's in
@@ -75,118 +42,38 @@ definitions:
           assistant's prior request to call a tool.
         type: string
     type: object
-  proxyapi.ChatCompletionResponse:
+  genericchatstorage.ChatCompletionResponseFormat:
     properties:
-      choices:
+      type:
+        type: string
+    type: object
+  genericchatstorage.ChatHistory:
+    properties:
+      isLocal:
+        type: boolean
+      messages:
         items:
-          $ref: '#/definitions/proxyapi.ChatCompletionChoice'
+          $ref: '#/definitions/genericchatstorage.ChatMessage'
         type: array
-      created:
+      modelId:
+        type: string
+      title:
+        type: string
+    type: object
+  genericchatstorage.ChatMessage:
+    properties:
+      isImageContent:
+        type: boolean
+      prompt:
+        $ref: '#/definitions/genericchatstorage.OpenAiCompletionRequest'
+      promptAt:
         type: integer
-      id:
+      response:
         type: string
-      model:
-        type: string
-      object:
-        type: string
-      system_fingerprint:
-        type: string
-      usage:
-        $ref: '#/definitions/proxyapi.Usage'
+      responseAt:
+        type: integer
     type: object
-  proxyapi.ChatCompletionResponseFormat:
-    properties:
-      type:
-        type: string
-    type: object
-  proxyapi.ChatMessageImageURL:
-    properties:
-      detail:
-        $ref: '#/definitions/proxyapi.ImageURLDetail'
-      url:
-        type: string
-    type: object
-  proxyapi.ChatMessagePart:
-    properties:
-      image_url:
-        $ref: '#/definitions/proxyapi.ChatMessageImageURL'
-      text:
-        type: string
-      type:
-        $ref: '#/definitions/proxyapi.ChatMessagePartType'
-    type: object
-  proxyapi.ChatMessagePartType:
-    enum:
-    - text
-    - image_url
-    type: string
-    x-enum-varnames:
-    - ChatMessagePartTypeText
-    - ChatMessagePartTypeImageURL
-  proxyapi.FinishReason:
-    enum:
-    - stop
-    type: string
-    x-enum-varnames:
-    - FinishReasonStop
-  proxyapi.ImageURLDetail:
-    enum:
-    - high
-    - low
-    - auto
-    type: string
-    x-enum-varnames:
-    - ImageURLDetailHigh
-    - ImageURLDetailLow
-    - ImageURLDetailAuto
-  proxyapi.InitiateSessionReq:
-    properties:
-      bidId:
-        type: string
-      provider:
-        type: string
-      providerUrl:
-        type: string
-      spend:
-        type: string
-      user:
-        type: string
-    required:
-    - bidId
-    - provider
-    - providerUrl
-    - spend
-    - user
-    type: object
-  proxyapi.LogProb:
-    properties:
-      bytes:
-        description: Omitting the field if it is null
-        items:
-          type: integer
-        type: array
-      logprob:
-        type: number
-      token:
-        type: string
-      top_logprobs:
-        description: |-
-          TopLogProbs is a list of the most likely tokens and their log probability, at this token position.
-          In rare cases, there may be fewer than the number of requested top_logprobs returned.
-        items:
-          $ref: '#/definitions/proxyapi.TopLogProbs'
-        type: array
-    type: object
-  proxyapi.LogProbs:
-    properties:
-      content:
-        description: Content is a list of message content tokens with log probability
-          information.
-        items:
-          $ref: '#/definitions/proxyapi.LogProb'
-        type: array
-    type: object
-  proxyapi.OpenAiCompletitionRequest:
+  genericchatstorage.OpenAiCompletionRequest:
     properties:
       frequency_penalty:
         type: number
@@ -210,7 +97,7 @@ definitions:
         type: integer
       messages:
         items:
-          $ref: '#/definitions/proxyapi.ChatCompletionMessage'
+          $ref: '#/definitions/genericchatstorage.ChatCompletionMessage'
         type: array
       model:
         type: string
@@ -219,7 +106,7 @@ definitions:
       presence_penalty:
         type: number
       response_format:
-        $ref: '#/definitions/proxyapi.ChatCompletionResponseFormat'
+        $ref: '#/definitions/genericchatstorage.ChatCompletionResponseFormat'
       seed:
         type: integer
       stop:
@@ -243,38 +130,64 @@ definitions:
       user:
         type: string
     type: object
-  proxyapi.TopLogProbs:
+  morrpcmesssage.SessionRes:
     properties:
-      bytes:
-        items:
-          type: integer
-        type: array
-      logprob:
-        type: number
-      token:
+      approval:
         type: string
+      approvalSig:
+        type: string
+      message:
+        type: string
+      signature:
+        type: string
+      timestamp:
+        type: integer
+      user:
+        type: string
+    required:
+    - approval
+    - approvalSig
+    - message
+    - signature
+    - timestamp
+    - user
     type: object
-  proxyapi.Usage:
+  proxyapi.InitiateSessionReq:
     properties:
-      completion_tokens:
-        type: integer
-      prompt_tokens:
-        type: integer
-      total_tokens:
-        type: integer
+      bidId:
+        type: string
+      provider:
+        type: string
+      providerUrl:
+        type: string
+      spend:
+        type: string
+      user:
+        type: string
+    required:
+    - bidId
+    - provider
+    - providerUrl
+    - spend
+    - user
+    type: object
+  proxyapi.ResultResponse:
+    properties:
+      result:
+        type: boolean
+    type: object
+  proxyapi.UpdateChatTitleReq:
+    properties:
+      title:
+        type: string
+    required:
+    - title
     type: object
   structs.AllowanceRes:
     properties:
       allowance:
         example: "100000000"
         type: string
-    type: object
-  structs.AmountReq:
-    properties:
-      amount:
-        type: string
-    required:
-    - amount
     type: object
   structs.BalanceRes:
     properties:
@@ -421,6 +334,8 @@ definitions:
         example: "0x1234"
         format: hex
         type: string
+      directPayment:
+        type: boolean
       stake:
         example: "123000000000"
         type: string
@@ -437,6 +352,15 @@ definitions:
     type: object
   structs.OpenSessionWithDurationRequest:
     properties:
+      sessionDuration:
+        type: string
+    type: object
+  structs.OpenSessionWithFailover:
+    properties:
+      directPayment:
+        type: boolean
+      failover:
+        type: boolean
       sessionDuration:
         type: string
     type: object
@@ -630,6 +554,15 @@ definitions:
       version:
         type: string
     type: object
+  system.SetEthNodeURLReq:
+    properties:
+      urls:
+        items:
+          type: string
+        type: array
+    required:
+    - urls
+    type: object
 externalDocs:
   description: OpenAPI
   url: https://swagger.io/resources/open-api/
@@ -796,6 +729,15 @@ paths:
   /blockchain/models:
     get:
       description: Get models list from blokchain
+      parameters:
+      - description: Offset
+        in: query
+        name: offset
+        type: string
+      - description: Limit
+        in: query
+        name: limit
+        type: string
       produces:
       - application/json
       responses:
@@ -809,6 +751,9 @@ paths:
     post:
       consumes:
       - application/json
+      description: If you provide ID in request it will be used as "Base Id" for generation
+        of new model ID. So actual ID will be generated from it, and you will get
+        it in response.
       parameters:
       - description: Model
         in: body
@@ -893,7 +838,7 @@ paths:
         name: opensession
         required: true
         schema:
-          $ref: '#/definitions/structs.OpenSessionWithDurationRequest'
+          $ref: '#/definitions/structs.OpenSessionWithFailover'
       - description: Model ID
         in: path
         name: id
@@ -912,6 +857,15 @@ paths:
   /blockchain/providers:
     get:
       description: Get providers list from blokchain
+      parameters:
+      - description: Offset
+        in: query
+        name: offset
+        type: string
+      - description: Limit
+        in: query
+        name: limit
+        type: string
       produces:
       - application/json
       responses:
@@ -944,12 +898,6 @@ paths:
       - providers
   /blockchain/providers/{id}:
     delete:
-      parameters:
-      - description: Provider Address
-        in: path
-        name: id
-        required: true
-        type: string
       produces:
       - application/json
       responses:
@@ -1047,35 +995,6 @@ paths:
       tags:
       - transactions
   /blockchain/sessions:
-    get:
-      description: Get sessions from blockchain by user or provider
-      parameters:
-      - description: Offset
-        in: query
-        name: offset
-        type: string
-      - description: Limit
-        in: query
-        name: limit
-        type: string
-      - description: Provider address
-        in: query
-        name: provider
-        type: string
-      - description: User address
-        in: query
-        name: user
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/structs.SessionsRes'
-      summary: Get Sessions
-      tags:
-      - sessions
     post:
       consumes:
       - application/json
@@ -1148,6 +1067,87 @@ paths:
       summary: Get Todays Budget
       tags:
       - sessions
+  /blockchain/sessions/provider:
+    get:
+      description: Get sessions from blockchain by provider
+      parameters:
+      - description: Offset
+        in: query
+        name: offset
+        type: string
+      - description: Limit
+        in: query
+        name: limit
+        type: string
+      - description: Provider address
+        in: query
+        name: provider
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.SessionsRes'
+      summary: Get Sessions for Provider
+      tags:
+      - sessions
+  /blockchain/sessions/user:
+    get:
+      description: Get sessions from blockchain by user
+      parameters:
+      - description: Offset
+        in: query
+        name: offset
+        type: string
+      - description: Limit
+        in: query
+        name: limit
+        type: string
+      - description: User address
+        in: query
+        name: user
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.SessionsRes'
+      summary: Get Sessions for User
+      tags:
+      - sessions
+  /blockchain/sessions/user/ids:
+    get:
+      description: Get sessions from blockchain by user
+      parameters:
+      - description: Offset
+        in: query
+        name: offset
+        type: string
+      - description: Limit
+        in: query
+        name: limit
+        type: string
+      - description: User address
+        in: query
+        name: user
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.SessionsRes'
+      summary: Get Sessions for User
+      tags:
+      - sessions
   /blockchain/token/supply:
     get:
       description: Get MOR token supply from blockchain
@@ -1195,7 +1195,41 @@ paths:
             $ref: '#/definitions/system.ConfigResponse'
       summary: Get Config
       tags:
-      - healthcheck
+      - system
+  /config/ethNode:
+    delete:
+      description: Delete the Eth Node URLs
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/system.ConfigResponse'
+      summary: Delete Eth Node URLs
+      tags:
+      - system
+    post:
+      consumes:
+      - application/json
+      description: Set the Eth Node URLs
+      parameters:
+      - description: URLs
+        in: body
+        name: urls
+        required: true
+        schema:
+          $ref: '#/definitions/system.SetEthNodeURLReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/system.ConfigResponse'
+      summary: Set Eth Node URLs
+      tags:
+      - system
   /files:
     get:
       description: Returns opened files
@@ -1210,7 +1244,7 @@ paths:
             type: array
       summary: Get files
       tags:
-      - healthcheck
+      - system
   /healthcheck:
     get:
       description: do ping
@@ -1223,17 +1257,11 @@ paths:
             $ref: '#/definitions/system.HealthCheckResponse'
       summary: Healthcheck example
       tags:
-      - healthcheck
+      - system
   /proxy/sessions/{id}/providerClaim:
     post:
       description: Claim provider balance from session
       parameters:
-      - description: Claim
-        in: body
-        name: claim
-        required: true
-        schema:
-          $ref: '#/definitions/structs.AmountReq'
       - description: Session ID
         in: path
         name: id
@@ -1302,20 +1330,97 @@ paths:
         in: header
         name: model_id
         type: string
+      - description: Chat ID
+        format: hex32
+        in: header
+        name: chat_id
+        type: string
       - description: Prompt
         in: body
         name: prompt
         required: true
         schema:
-          $ref: '#/definitions/proxyapi.OpenAiCompletitionRequest'
+          type: string
       produces:
       - text/event-stream
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/proxyapi.ChatCompletionResponse'
+            type: string
       summary: Send Local Or Remote Prompt
+      tags:
+      - chat
+  /v1/chats:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/genericchatstorage.Chat'
+            type: array
+      summary: Get all chats stored in the system
+      tags:
+      - chat
+  /v1/chats/{id}:
+    delete:
+      parameters:
+      - description: Chat ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.ResultResponse'
+      summary: Delete chat by id from storage
+      tags:
+      - chat
+    get:
+      parameters:
+      - description: Chat ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/genericchatstorage.ChatHistory'
+      summary: Get chat by id
+      tags:
+      - chat
+    post:
+      parameters:
+      - description: Chat ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Chat Title
+        in: body
+        name: title
+        required: true
+        schema:
+          $ref: '#/definitions/proxyapi.UpdateChatTitleReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.ResultResponse'
+      summary: Update chat title by id
       tags:
       - chat
   /v1/models:

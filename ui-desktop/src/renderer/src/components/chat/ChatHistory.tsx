@@ -9,21 +9,22 @@ import Badge from 'react-bootstrap/Badge';
 import { SearchContainer } from '../contracts/modals/CreateContractModal.styles';
 import * as components from './ChatHistory.styles';
 import { useEffect, useState } from "react";
+import { ChatData } from "./interfaces";
 
 interface ChatHistoryProps {
     open: boolean,
-    onCloseSession: (string) => void;
-    onSelectSession: (session) => void;
+    onCloseSession: (id: string) => void;
+    onSelectChat: (chat: ChatData) => void;
     refreshSessions: () => void;
-    deleteHistory: (string) => void
-    onChangeTitle: (data: { id, title }) => Promise<void>;
+    deleteHistory: (chatId: string) => void
+    onChangeTitle: (data: { id: string, title: string }) => Promise<void>;
     sessions: any[];
     models: any[];
     activeChat: any,
-    sessionTitles: { sessionId: string, title: string, createdAt: any }[]
+    chatData: ChatData[]
 }
 
-const HisotryEntry = ({ entry, deleteHistory, onSelectSession, isActive, onChangeTitle }) => {
+const HisotryEntry = ({ entry, deleteHistory, onSelectChat, isActive, onChangeTitle }) => {
     const [isEdit, setIsEdit] = useState<boolean>(false);
     const [title, setTitle] = useState<string>(entry?.title || "");
 
@@ -32,19 +33,19 @@ const HisotryEntry = ({ entry, deleteHistory, onSelectSession, isActive, onChang
         deleteHistory(id);
     }
 
-    const changetTitle = (e, id) => {
+    const changetTitle = (e, chatId) => {
         setIsEdit(!isEdit);
         e.stopPropagation();
-        onChangeTitle({ id, title });
+        onChangeTitle({ id: chatId, title });
     }
 
     return (
-        <components.HistoryEntryTitle data-active={isActive ? true : undefined} onClick={() => onSelectSession(entry)}>
+        <components.HistoryEntryTitle data-active={isActive ? true : undefined} onClick={() => onSelectChat(entry)}>
             {
                 !isEdit ?
                     (
                         <>
-                            <span className="title" style={{ width: isActive ? "75%" : undefined }}>{title}</span>
+                            <span className="title" style={{ width: isActive ? "100%" : undefined }}>{title}</span>
                             {
                                 isActive && (
                                     <components.IconsContainer>
@@ -52,7 +53,7 @@ const HisotryEntry = ({ entry, deleteHistory, onSelectSession, isActive, onChang
                                             e.stopPropagation();
                                             setIsEdit(!isEdit);
                                         }} style={{ marginRight: '1.5rem' }} size={22} />
-                                        <IconTrash size={22} onClick={(e) => wrapDelete(e, entry.sessionId)} />
+                                        <IconTrash size={22} onClick={(e) => wrapDelete(e, entry.id)} />
                                     </components.IconsContainer>
                                 )
                             }
@@ -70,7 +71,7 @@ const HisotryEntry = ({ entry, deleteHistory, onSelectSession, isActive, onChang
                             </InputGroup>
                             <components.IconsContainer>
                                 <IconCheck onClick={(e) => {
-                                    changetTitle(e, entry.sessionId)
+                                    changetTitle(e, entry.id)
                                 }} style={{ margin: '0 1.5rem' }} size={22} />
                                 <IconX size={22} onClick={(e) => {
                                     e.stopPropagation();
@@ -92,26 +93,31 @@ export const ChatHistory = (props: ChatHistoryProps) => {
         setSearch("");
     }, [props.open])
 
-    const renderTitlesGroup = (items) => {
+    const renderTitlesGroup = (items: ChatData[]) => {
         return items.map(t => {
             return (<HisotryEntry
                 onChangeTitle={props.onChangeTitle}
-                isActive={props.activeChat?.id == t.sessionId}
-                key={t.sessionId}
+                isActive={props.activeChat?.id == t.id}
+                key={t.id}
                 entry={t}
                 deleteHistory={props.deleteHistory}
-                onSelectSession={props.onSelectSession} />)
+                onSelectChat={props.onSelectChat} />)
         })
     }
 
-    const getGroupHistory = (items) => {
+    const getGroupHistory = <T extends { createdAt: Date },>(items: T[]) => {
         const getPreviousDate = (shift) => {
             const d = new Date();
             d.setDate(d.getDate() - shift);
             return d;
         }
-        const source = (items || []).filter(i => i.createdAt).sort((a, b) => b.createdAt - a.createdAt);
-        const result: any = {
+        const source = (items || []).filter(i => i.createdAt).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        const result: {
+            today: T[],
+            last7: T[],
+            last30: T[],
+            older: T[],
+        } = {
             today: [],
             last7: [],
             last30: [],
@@ -137,8 +143,8 @@ export const ChatHistory = (props: ChatHistoryProps) => {
         return result;
     }
 
-    const filterdModels = props.sessionTitles && search ? props.sessionTitles.filter(m => m.title.includes(search)) : (props.sessionTitles || []);
-    const groupedItems = getGroupHistory(filterdModels);
+    const filterdModels = props.chatData && search ? props.chatData.filter(m => m.title?.includes(search)) : (props.chatData || []);
+    const groupedItems = getGroupHistory<ChatData>(filterdModels);
 
     return (
         <components.Container>
@@ -146,7 +152,7 @@ export const ChatHistory = (props: ChatHistoryProps) => {
 
                 <Tabs
                     defaultActiveKey="history"
-                    id="uncontrolled-tab-example"
+                    id="history-tabs"
                     className="mb-3"
                 >
                     <Tab eventKey="history" title="History">
@@ -199,23 +205,22 @@ export const ChatHistory = (props: ChatHistoryProps) => {
                         </div>
                     </Tab>
                     <Tab eventKey="sessions" title="Sessions">
+                        <div className="list-container">
                         {
                             sessions?.length ? (
-                                sessions.map(a => {
-                                    const model = props.models.find(x => x.Id == a.ModelAgentId);
-
+                                sessions.map(s => {
                                     return (
-                                        <components.HistoryEntryContainer key={a.Id}>
+                                        <components.HistoryEntryContainer key={s.Id}>
                                             <div>
-                                                {!isClosed(a) ?
+                                                {!isClosed(s) ?
                                                     <components.FlexSpaceBetween>
                                                         <Badge bg="success">Active</Badge>
-                                                        <components.CloseBtn onClick={() => props.onCloseSession(a.Id)}>Close</components.CloseBtn>
+                                                        <components.CloseBtn onClick={() => props.onCloseSession(s.Id)}>Close</components.CloseBtn>
                                                     </components.FlexSpaceBetween> : null}
                                             </div>
                                             <components.HistoryItem>
-                                                <components.ModelName data-rh={abbreviateAddress(a.Id, 3)} data-rh-negative>{model?.Name}</components.ModelName>
-                                                <components.Duration>{((a.EndsAt - a.OpenedAt) / 60).toFixed(0)} min</components.Duration>
+                                                <components.ModelName data-rh={abbreviateAddress(s.Id, 3)} data-rh-negative>{s.ModelName}</components.ModelName>
+                                                <components.Duration>{((s.EndsAt - s.OpenedAt) / 60).toFixed(0)} min</components.Duration>
                                             </components.HistoryItem>
                                         </components.HistoryEntryContainer>
                                     )
@@ -223,6 +228,7 @@ export const ChatHistory = (props: ChatHistoryProps) => {
                                 ))
                                 : <div>You have not any sessions</div>
                         }
+                        </div>
                     </Tab>
                 </Tabs>
             </div>

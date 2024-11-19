@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/sashabaranov/go-openai"
 )
 
@@ -313,7 +314,7 @@ func (c *ApiGatewayClient) GetBidsByModelAgent(ctx context.Context, modelAgentId
 func (c *ApiGatewayClient) ListUserSessions(ctx context.Context, user string) (result []SessionListItem, err error) {
 	response := map[string][]SessionListItem{}
 
-	err = c.getRequest(ctx, fmt.Sprintf("/blockchain/sessions?user=%s", user), &response)
+	err = c.getRequest(ctx, fmt.Sprintf("/blockchain/sessions/user?user=%s", user), &response)
 	if err != nil {
 		return nil, fmt.Errorf("internal error: %v", err)
 	}
@@ -324,7 +325,7 @@ func (c *ApiGatewayClient) ListUserSessions(ctx context.Context, user string) (r
 func (c *ApiGatewayClient) ListProviderSessions(ctx context.Context, provider string) (result []SessionListItem, err error) {
 	response := map[string][]SessionListItem{}
 
-	err = c.getRequest(ctx, fmt.Sprintf("/blockchain/sessions?provider=%s", provider), &response)
+	err = c.getRequest(ctx, fmt.Sprintf("/blockchain/sessions/provider?provider=%s", provider), &response)
 	if err != nil {
 		return nil, fmt.Errorf("internal error: %v", err)
 	}
@@ -419,4 +420,21 @@ func (c *ApiGatewayClient) GetBalance(ctx context.Context) (eth string, mor stri
 	}
 
 	return response["eth"], response["mor"], nil
+}
+
+func (c *ApiGatewayClient) GetDiamondAddress(ctx context.Context) (common.Address, error) {
+	response := struct {
+		Config struct {
+			Marketplace struct {
+				DiamondContractAddress string
+			}
+		}
+	}{}
+
+	err := c.getRequest(ctx, "/config", &response)
+	if err != nil {
+		return common.Address{}, fmt.Errorf("internal error: %v", err)
+	}
+
+	return common.HexToAddress(response.Config.Marketplace.DiamondContractAddress), nil
 }

@@ -8,7 +8,7 @@ if [ -z "$COMMIT" ]; then
   COMMIT=$(git rev-parse HEAD)
 fi
 echo COMMIT=$COMMIT
-
+go mod tidy 
 go build \
   -tags docker \
   -ldflags="-s -w \

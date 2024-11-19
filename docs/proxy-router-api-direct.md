@@ -1,5 +1,5 @@
-# Direct Consumer interaction with the proxy-router (no ui-desktop)
-This document provides a step-by-step flow to query your local proxy router and interact with a remote model using only the API. This is useful for developers or users who want to interact with the model directly without using the UI-Desktop.
+# Direct Consumer interaction with the proxy-router (no MorpheusUI)
+This document provides a step-by-step flow to query your local proxy router and interact with a remote model using only the API. This is useful for developers or users who want to interact with the model directly without using the MorpheusUI.
 
 ## Pre-requisites:
 * Create or use an existing ERC-20 wallet that has saMOR and saETH (Sepolia Arbitrum) tokens - you can use Metamask (new wallet..not derived) or any other ERC-20 wallet.  
@@ -21,7 +21,7 @@ Either via the swagger interface http://localhost:8082/swagger/index.html#/walle
 Approve the contract to spend 3 saMOR tokens on your behalf
 
 ```sh 
-curl -X 'POST' 'http://localhost:8082/blockchain/approve?spender=0x8e19288d908b2d9F8D7C539c74C899808AC3dE45&amount=3' -H 'accept: application/json' -d '' 
+curl -X 'POST' 'http://localhost:8082/blockchain/approve?spender=0xb8C55cD613af947E73E262F0d3C54b7211Af16CF&amount=3' -H 'accept: application/json' -d '' 
 ``` 
 
 ### C. Query the blockchain for various models / providers (Get ModelID)
@@ -110,7 +110,7 @@ curl -X 'POST' \
 
 
 ### Quick and Dirty Sample:
-`curl -X 'POST' 'http://localhost:8082/blockchain/approve?spender=0x8e19288d908b2d9F8D7C539c74C899808AC3dE45&amount=3' -H 'accept: application/json' -d ''`
+`curl -X 'POST' 'http://localhost:8082/blockchain/approve?spender=0xb8C55cD613af947E73E262F0d3C54b7211Af16CF&amount=3' -H 'accept: application/json' -d ''`
     # approves the smart contract `0x8e19...dE45` to spend 3 saMOR tokens on your behalf
 
 `curl -s -X 'GET' 'http://localhost:8082/wallet' -H 'accept: application/json' | jq .address` 

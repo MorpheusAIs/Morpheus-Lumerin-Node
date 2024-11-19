@@ -260,6 +260,20 @@ const docTemplate = `{
                     "models"
                 ],
                 "summary": "Get models list",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Offset",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Limit",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -270,6 +284,7 @@ const docTemplate = `{
                 }
             },
             "post": {
+                "description": "If you provide ID in request it will be used as \"Base Id\" for generation of new model ID. So actual ID will be generated from it, and you will get it in response.",
                 "consumes": [
                     "application/json"
                 ],
@@ -407,7 +422,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/structs.OpenSessionWithDurationRequest"
+                            "$ref": "#/definitions/structs.OpenSessionWithFailover"
                         }
                     },
                     {
@@ -438,6 +453,20 @@ const docTemplate = `{
                     "providers"
                 ],
                 "summary": "Get providers list",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Offset",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Limit",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -488,15 +517,6 @@ const docTemplate = `{
                     "providers"
                 ],
                 "summary": "Deregister Provider",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Provider Address",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -640,50 +660,6 @@ const docTemplate = `{
             }
         },
         "/blockchain/sessions": {
-            "get": {
-                "description": "Get sessions from blockchain by user or provider",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "sessions"
-                ],
-                "summary": "Get Sessions",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Offset",
-                        "name": "offset",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Limit",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Provider address",
-                        "name": "provider",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "User address",
-                        "name": "user",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/structs.SessionsRes"
-                        }
-                    }
-                }
-            },
             "post": {
                 "description": "Sends transaction in blockchain to open a session",
                 "consumes": [
@@ -732,6 +708,129 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/structs.BudgetRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/sessions/provider": {
+            "get": {
+                "description": "Get sessions from blockchain by provider",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "Get Sessions for Provider",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Offset",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Limit",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Provider address",
+                        "name": "provider",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.SessionsRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/sessions/user": {
+            "get": {
+                "description": "Get sessions from blockchain by user",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "Get Sessions for User",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Offset",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Limit",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "User address",
+                        "name": "user",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.SessionsRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/sessions/user/ids": {
+            "get": {
+                "description": "Get sessions from blockchain by user",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "Get Sessions for User",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Offset",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Limit",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "User address",
+                        "name": "user",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.SessionsRes"
                         }
                     }
                 }
@@ -856,9 +955,61 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "healthcheck"
+                    "system"
                 ],
                 "summary": "Get Config",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/system.ConfigResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/config/ethNode": {
+            "post": {
+                "description": "Set the Eth Node URLs",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Set Eth Node URLs",
+                "parameters": [
+                    {
+                        "description": "URLs",
+                        "name": "urls",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/system.SetEthNodeURLReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/system.ConfigResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete the Eth Node URLs",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Delete Eth Node URLs",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -876,7 +1027,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "healthcheck"
+                    "system"
                 ],
                 "summary": "Get files",
                 "responses": {
@@ -899,7 +1050,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "healthcheck"
+                    "system"
                 ],
                 "summary": "Healthcheck example",
                 "responses": {
@@ -954,15 +1105,6 @@ const docTemplate = `{
                 ],
                 "summary": "Claim Provider Balance",
                 "parameters": [
-                    {
-                        "description": "Claim",
-                        "name": "claim",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/structs.AmountReq"
-                        }
-                    },
                     {
                         "type": "string",
                         "description": "Session ID",
@@ -1036,12 +1178,19 @@ const docTemplate = `{
                         "in": "header"
                     },
                     {
+                        "type": "string",
+                        "format": "hex32",
+                        "description": "Chat ID",
+                        "name": "chat_id",
+                        "in": "header"
+                    },
+                    {
                         "description": "Prompt",
                         "name": "prompt",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/proxyapi.OpenAiCompletitionRequest"
+                            "type": "string"
                         }
                     }
                 ],
@@ -1049,7 +1198,118 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/proxyapi.ChatCompletionResponse"
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/chats": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Get all chats stored in the system",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/genericchatstorage.Chat"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/chats/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Get chat by id",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Chat ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/genericchatstorage.ChatHistory"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Update chat title by id",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Chat ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Chat Title",
+                        "name": "title",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.UpdateChatTitleReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.ResultResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Delete chat by id from storage",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Chat ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.ResultResponse"
                         }
                     }
                 }
@@ -1203,70 +1463,31 @@ const docTemplate = `{
                 }
             }
         },
-        "morrpcmesssage.SessionRes": {
+        "genericchatstorage.Chat": {
             "type": "object",
-            "required": [
-                "approval",
-                "approvalSig",
-                "message",
-                "signature",
-                "timestamp",
-                "user"
-            ],
             "properties": {
-                "approval": {
+                "chatId": {
                     "type": "string"
                 },
-                "approvalSig": {
-                    "type": "string"
-                },
-                "message": {
-                    "type": "string"
-                },
-                "signature": {
-                    "type": "string"
-                },
-                "timestamp": {
+                "createdAt": {
                     "type": "integer"
                 },
-                "user": {
+                "isLocal": {
+                    "type": "boolean"
+                },
+                "modelId": {
+                    "type": "string"
+                },
+                "title": {
                     "type": "string"
                 }
             }
         },
-        "proxyapi.ChatCompletionChoice": {
-            "type": "object",
-            "properties": {
-                "finish_reason": {
-                    "description": "FinishReason\nstop: API returned complete message,\nor a message terminated by one of the stop sequences provided via the stop parameter\nlength: Incomplete model output due to max_tokens parameter or token limit\nfunction_call: The model decided to call a function\ncontent_filter: Omitted content due to a flag from our content filters\nnull: API response still in progress or incomplete",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/proxyapi.FinishReason"
-                        }
-                    ]
-                },
-                "index": {
-                    "type": "integer"
-                },
-                "logprobs": {
-                    "$ref": "#/definitions/proxyapi.LogProbs"
-                },
-                "message": {
-                    "$ref": "#/definitions/proxyapi.ChatCompletionMessage"
-                }
-            }
-        },
-        "proxyapi.ChatCompletionMessage": {
+        "genericchatstorage.ChatCompletionMessage": {
             "type": "object",
             "properties": {
                 "content": {
                     "type": "string"
-                },
-                "multiContent": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/proxyapi.ChatMessagePart"
-                    }
                 },
                 "name": {
                     "description": "This property isn't in the official documentation, but it's in\nthe documentation for the official library for python:\n- https://github.com/openai/openai-python/blob/main/chatml.md\n- https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb",
@@ -1281,166 +1502,55 @@ const docTemplate = `{
                 }
             }
         },
-        "proxyapi.ChatCompletionResponse": {
+        "genericchatstorage.ChatCompletionResponseFormat": {
             "type": "object",
             "properties": {
-                "choices": {
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "genericchatstorage.ChatHistory": {
+            "type": "object",
+            "properties": {
+                "isLocal": {
+                    "type": "boolean"
+                },
+                "messages": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/proxyapi.ChatCompletionChoice"
+                        "$ref": "#/definitions/genericchatstorage.ChatMessage"
                     }
                 },
-                "created": {
+                "modelId": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "genericchatstorage.ChatMessage": {
+            "type": "object",
+            "properties": {
+                "isImageContent": {
+                    "type": "boolean"
+                },
+                "prompt": {
+                    "$ref": "#/definitions/genericchatstorage.OpenAiCompletionRequest"
+                },
+                "promptAt": {
                     "type": "integer"
                 },
-                "id": {
+                "response": {
                     "type": "string"
                 },
-                "model": {
-                    "type": "string"
-                },
-                "object": {
-                    "type": "string"
-                },
-                "system_fingerprint": {
-                    "type": "string"
-                },
-                "usage": {
-                    "$ref": "#/definitions/proxyapi.Usage"
+                "responseAt": {
+                    "type": "integer"
                 }
             }
         },
-        "proxyapi.ChatCompletionResponseFormat": {
-            "type": "object",
-            "properties": {
-                "type": {
-                    "type": "string"
-                }
-            }
-        },
-        "proxyapi.ChatMessageImageURL": {
-            "type": "object",
-            "properties": {
-                "detail": {
-                    "$ref": "#/definitions/proxyapi.ImageURLDetail"
-                },
-                "url": {
-                    "type": "string"
-                }
-            }
-        },
-        "proxyapi.ChatMessagePart": {
-            "type": "object",
-            "properties": {
-                "image_url": {
-                    "$ref": "#/definitions/proxyapi.ChatMessageImageURL"
-                },
-                "text": {
-                    "type": "string"
-                },
-                "type": {
-                    "$ref": "#/definitions/proxyapi.ChatMessagePartType"
-                }
-            }
-        },
-        "proxyapi.ChatMessagePartType": {
-            "type": "string",
-            "enum": [
-                "text",
-                "image_url"
-            ],
-            "x-enum-varnames": [
-                "ChatMessagePartTypeText",
-                "ChatMessagePartTypeImageURL"
-            ]
-        },
-        "proxyapi.FinishReason": {
-            "type": "string",
-            "enum": [
-                "stop"
-            ],
-            "x-enum-varnames": [
-                "FinishReasonStop"
-            ]
-        },
-        "proxyapi.ImageURLDetail": {
-            "type": "string",
-            "enum": [
-                "high",
-                "low",
-                "auto"
-            ],
-            "x-enum-varnames": [
-                "ImageURLDetailHigh",
-                "ImageURLDetailLow",
-                "ImageURLDetailAuto"
-            ]
-        },
-        "proxyapi.InitiateSessionReq": {
-            "type": "object",
-            "required": [
-                "bidId",
-                "provider",
-                "providerUrl",
-                "spend",
-                "user"
-            ],
-            "properties": {
-                "bidId": {
-                    "type": "string"
-                },
-                "provider": {
-                    "type": "string"
-                },
-                "providerUrl": {
-                    "type": "string"
-                },
-                "spend": {
-                    "type": "string"
-                },
-                "user": {
-                    "type": "string"
-                }
-            }
-        },
-        "proxyapi.LogProb": {
-            "type": "object",
-            "properties": {
-                "bytes": {
-                    "description": "Omitting the field if it is null",
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "logprob": {
-                    "type": "number"
-                },
-                "token": {
-                    "type": "string"
-                },
-                "top_logprobs": {
-                    "description": "TopLogProbs is a list of the most likely tokens and their log probability, at this token position.\nIn rare cases, there may be fewer than the number of requested top_logprobs returned.",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/proxyapi.TopLogProbs"
-                    }
-                }
-            }
-        },
-        "proxyapi.LogProbs": {
-            "type": "object",
-            "properties": {
-                "content": {
-                    "description": "Content is a list of message content tokens with log probability information.",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/proxyapi.LogProb"
-                    }
-                }
-            }
-        },
-        "proxyapi.OpenAiCompletitionRequest": {
+        "genericchatstorage.OpenAiCompletionRequest": {
             "type": "object",
             "properties": {
                 "frequency_penalty": {
@@ -1466,7 +1576,7 @@ const docTemplate = `{
                 "messages": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/proxyapi.ChatCompletionMessage"
+                        "$ref": "#/definitions/genericchatstorage.ChatCompletionMessage"
                     }
                 },
                 "model": {
@@ -1479,7 +1589,7 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "response_format": {
-                    "$ref": "#/definitions/proxyapi.ChatCompletionResponseFormat"
+                    "$ref": "#/definitions/genericchatstorage.ChatCompletionResponseFormat"
                 },
                 "seed": {
                     "type": "integer"
@@ -1511,34 +1621,80 @@ const docTemplate = `{
                 }
             }
         },
-        "proxyapi.TopLogProbs": {
+        "morrpcmesssage.SessionRes": {
             "type": "object",
+            "required": [
+                "approval",
+                "approvalSig",
+                "message",
+                "signature",
+                "timestamp",
+                "user"
+            ],
             "properties": {
-                "bytes": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
+                "approval": {
+                    "type": "string"
                 },
-                "logprob": {
-                    "type": "number"
+                "approvalSig": {
+                    "type": "string"
                 },
-                "token": {
+                "message": {
+                    "type": "string"
+                },
+                "signature": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "integer"
+                },
+                "user": {
                     "type": "string"
                 }
             }
         },
-        "proxyapi.Usage": {
+        "proxyapi.InitiateSessionReq": {
+            "type": "object",
+            "required": [
+                "bidId",
+                "provider",
+                "providerUrl",
+                "spend",
+                "user"
+            ],
+            "properties": {
+                "bidId": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "providerUrl": {
+                    "type": "string"
+                },
+                "spend": {
+                    "type": "string"
+                },
+                "user": {
+                    "type": "string"
+                }
+            }
+        },
+        "proxyapi.ResultResponse": {
             "type": "object",
             "properties": {
-                "completion_tokens": {
-                    "type": "integer"
-                },
-                "prompt_tokens": {
-                    "type": "integer"
-                },
-                "total_tokens": {
-                    "type": "integer"
+                "result": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "proxyapi.UpdateChatTitleReq": {
+            "type": "object",
+            "required": [
+                "title"
+            ],
+            "properties": {
+                "title": {
+                    "type": "string"
                 }
             }
         },
@@ -1548,17 +1704,6 @@ const docTemplate = `{
                 "allowance": {
                     "type": "string",
                     "example": "100000000"
-                }
-            }
-        },
-        "structs.AmountReq": {
-            "type": "object",
-            "required": [
-                "amount"
-            ],
-            "properties": {
-                "amount": {
-                    "type": "string"
                 }
             }
         },
@@ -1779,6 +1924,9 @@ const docTemplate = `{
                     "format": "hex",
                     "example": "0x1234"
                 },
+                "directPayment": {
+                    "type": "boolean"
+                },
                 "stake": {
                     "type": "string",
                     "example": "123000000000"
@@ -1797,6 +1945,20 @@ const docTemplate = `{
         "structs.OpenSessionWithDurationRequest": {
             "type": "object",
             "properties": {
+                "sessionDuration": {
+                    "type": "string"
+                }
+            }
+        },
+        "structs.OpenSessionWithFailover": {
+            "type": "object",
+            "properties": {
+                "directPayment": {
+                    "type": "boolean"
+                },
+                "failover": {
+                    "type": "boolean"
+                },
                 "sessionDuration": {
                     "type": "string"
                 }
@@ -2089,6 +2251,20 @@ const docTemplate = `{
                 },
                 "version": {
                     "type": "string"
+                }
+            }
+        },
+        "system.SetEthNodeURLReq": {
+            "type": "object",
+            "required": [
+                "urls"
+            ],
+            "properties": {
+                "urls": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         }
