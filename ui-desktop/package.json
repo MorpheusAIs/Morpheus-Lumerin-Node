@@ -1,6 +1,6 @@
 {
   "name": "morpheus-ui",
-  "version": "1.0.4",
+  "version": "1.0.0",
   "description": "The Morpheus Decentralized AI Desktop App",
   "main": "./out/main/index.mjs",
   "author": "mor.org",
