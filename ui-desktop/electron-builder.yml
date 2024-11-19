@@ -31,7 +31,7 @@ linux:
   target:
     - AppImage
     - deb
-  maintainer: lumerin.io
+  maintainer: mor.org
   category: Utility
   artifactName: ${name}-${version}-${arch}-${os}.${ext}
 # appImage:
