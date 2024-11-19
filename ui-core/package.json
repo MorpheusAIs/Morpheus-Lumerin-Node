@@ -3,8 +3,8 @@
   "version": "1.0.90",
   "author": {
     "name": "Lumerin",
-    "email": "developer@lumerin.io",
-    "url": "https://lumerin.io"
+    "email": "developer@mor.org",
+    "url": "https://mor.org"
   },
   "description": "Core logic to develop a Lumerin wallet",
   "keywords": [
