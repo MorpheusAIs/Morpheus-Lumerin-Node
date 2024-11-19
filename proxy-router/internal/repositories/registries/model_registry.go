@@ -146,6 +146,14 @@ func (g *ModelRegistry) GetModelById(ctx context.Context, modelId common.Hash) (
 	return &model, nil
 }
 
+func (g *ModelRegistry) GetModelId(ctx context.Context, accountAddr common.Address, baseModelId common.Hash) (common.Hash, error) {
+	id, err := g.modelRegistry.GetModelId(&bind.CallOpts{Context: ctx}, accountAddr, baseModelId)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	return id, nil
+}
+
 func (g *ModelRegistry) getMultipleModels(ctx context.Context, IDs [][32]byte) ([][32]byte, []modelregistry.IModelStorageModel, error) {
 	args := make([][]interface{}, len(IDs))
 	for i, id := range IDs {

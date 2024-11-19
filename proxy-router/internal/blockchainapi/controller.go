@@ -958,13 +958,14 @@ func (c *BlockchainController) deregisterProvider(ctx *gin.Context) {
 
 // CreateNewModel godoc
 //
-//	@Summary	Creates model in blockchain
-//	@Tags		models
-//	@Produce	json
-//	@Accept		json
-//	@Param		model	body		structs.CreateModelRequest	true	"Model"
-//	@Success	200		{object}	structs.ModelRes
-//	@Router		/blockchain/models [post]
+//	@Summary		Creates model in blockchain
+//	@Description	If you provide ID in request it will be used as "Base Id" for generation of new model ID. So actual ID will be generated from it, and you will get it in response.
+//	@Tags			models
+//	@Produce		json
+//	@Accept			json
+//	@Param			model	body		structs.CreateModelRequest	true	"Model"
+//	@Success		200		{object}	structs.ModelRes
+//	@Router			/blockchain/models [post]
 func (c *BlockchainController) createNewModel(ctx *gin.Context) {
 	var model structs.CreateModelRequest
 	if err := ctx.ShouldBindJSON(&model); err != nil {

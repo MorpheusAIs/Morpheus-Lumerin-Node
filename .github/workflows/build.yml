@@ -152,11 +152,11 @@ jobs:
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
           unzip -o -j $LLAMACPP build/bin/llama-server
-          echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./Morpheus UI.app/Contents/MacOS/Morpheus UI"]}' > mor-launch.json
+          echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./MorpheusUI.app/Contents/MacOS/MorpheusUI"]}' > mor-launch.json
           mv ./cli/mor-cli mor-cli
           unzip ./ui-desktop/dist/morpheus-ui-1.0.0-x64-mac.zip
           zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json models-config.json mor-cli
-          zip -r $ARTIFACT 'Morpheus UI.app'
+          zip -r $ARTIFACT 'MorpheusUI.app'
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -223,11 +223,11 @@ jobs:
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
           unzip -o -j $LLAMACPP build/bin/llama-server
-          echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./Morpheus UI.app/Contents/MacOS/Morpheus UI"]}' > mor-launch.json
+          echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./MorpheusUI.app/Contents/MacOS/MorpheusUI"]}' > mor-launch.json
           mv ./cli/mor-cli mor-cli
           unzip ./ui-desktop/dist/morpheus-ui-1.0.0-arm64-mac.zip
           zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json models-config.json mor-cli
-          zip -r $ARTIFACT 'Morpheus UI.app'
+          zip -r $ARTIFACT 'MorpheusUI.app'
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
