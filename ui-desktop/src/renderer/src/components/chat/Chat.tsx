@@ -661,10 +661,10 @@ const Chat = (props) => {
                                         {
                                             isEnoughFunds ?
                                                 <>
-                                                    <div className='session-title'>Staked MOR funds will be reserved to start session</div>
-                                                    <div className='session-title'>Session may last from 5 mins to 24 hours depending on staked funds (min: {(Number(requiredStake.min) / 10 ** 18).toFixed(2)}, max: {(Number(requiredStake.max) / 10 ** 18).toFixed(2)} MOR)</div>
+                                                    <div className='session-title'>Staked funds will be reserved to start session</div>
+                                                    <div className='session-title'>Session may last from 5 mins to 24 hours depending on available balance (min: {(Number(requiredStake.min) / 10 ** 18).toFixed(2)}, max: {(Number(requiredStake.max) / 10 ** 18).toFixed(2)} {props.symbol})</div>
                                                 </> :
-                                                <div className='session-title'>To start session required balance should be at least {(Number(requiredStake.min) / 10 ** 18).toFixed(2)} MOR</div>
+                                                <div className='session-title'>To start session required balance should be at least {(Number(requiredStake.min) / 10 ** 18).toFixed(2)} {props.symbol}</div>
                                         }
                                         <div>
                                             <BtnAccent
@@ -712,6 +712,7 @@ const Chat = (props) => {
             <ModelSelectionModal
                 models={(chainData as any)?.models}
                 isActive={openChangeModal}
+                symbol={props.symbol}
                 onChangeModel={(eventData) => {
                     onCreateNewChat(eventData);
                 }}
