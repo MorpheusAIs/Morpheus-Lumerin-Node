@@ -56,7 +56,7 @@ const template = [
       {
         label: 'Learn More',
         click () {
-          return shell.openExternal('https://lumerin.io')
+          return shell.openExternal('https://mor.org')
         }
       }
     ]
