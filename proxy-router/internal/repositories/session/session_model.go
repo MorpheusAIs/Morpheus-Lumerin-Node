@@ -16,6 +16,7 @@ type sessionModel struct {
 	tpsScaled1000Arr []int
 	ttftMsArr        []int
 	failoverEnabled  bool
+	directPayment    bool
 }
 
 func (s *sessionModel) ID() common.Hash {
@@ -45,6 +46,10 @@ func (s *sessionModel) ModelID() common.Hash {
 
 func (s *sessionModel) FailoverEnabled() bool {
 	return s.failoverEnabled
+}
+
+func (s *sessionModel) DirectPayment() bool {
+	return s.directPayment
 }
 
 func (s *sessionModel) AddStats(tpsScaled1000 int, ttftMs int) {

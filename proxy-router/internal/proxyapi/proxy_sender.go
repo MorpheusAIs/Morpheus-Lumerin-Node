@@ -334,14 +334,13 @@ func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.
 		}
 
 		duration := session.EndsAt().Int64() - time.Now().Unix()
-		isFailoverEnabled := session.FailoverEnabled()
 
 		newSessionID, err := p.sessionService.OpenSessionByModelId(
 			ctx,
 			session.ModelID(),
 			big.NewInt(duration),
 			session.FailoverEnabled(),
-			isFailoverEnabled,
+			session.DirectPayment(),
 			session.ProviderAddr(),
 		)
 		if err != nil {
