@@ -1924,6 +1924,9 @@ const docTemplate = `{
                     "format": "hex",
                     "example": "0x1234"
                 },
+                "directPayment": {
+                    "type": "boolean"
+                },
                 "stake": {
                     "type": "string",
                     "example": "123000000000"
@@ -1950,6 +1953,9 @@ const docTemplate = `{
         "structs.OpenSessionWithFailover": {
             "type": "object",
             "properties": {
+                "directPayment": {
+                    "type": "boolean"
+                },
                 "failover": {
                     "type": "boolean"
                 },

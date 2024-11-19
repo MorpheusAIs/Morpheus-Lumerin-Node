@@ -111,7 +111,7 @@ function ModelRow(props) {
     const [targetBid, setTargetBid] = useState<any>();
 
     const options = bids.map(x => {
-        return ({ value: x.Id, label: `${abbreviateAddress(x.Provider || "", 3)} ${formatSmallNumber(x.PricePerSecond / (10 ** 18))} MOR` })
+        return ({ value: x.Id, label: `${abbreviateAddress(x.Provider || "", 3)} ${formatSmallNumber(x.PricePerSecond / (10 ** 18))} ${props.symbol}` })
     });
 
     const handleChangeModel = () => {
@@ -129,18 +129,18 @@ function ModelRow(props) {
 
     const formatPrice = () => {
         if (targetBid) {
-            return `${formatSmallNumber(targetBid?.PricePerSecond / (10 ** 18))} MOR`;
+            return `${formatSmallNumber(targetBid?.PricePerSecond / (10 ** 18))} ${props.symbol}`;
         }
 
         const prices = bids.filter(x => x.Id).map(x => Number(x.PricePerSecond));
         if (prices.length == 1) {
-            return `${formatSmallNumber(prices[0] / (10 ** 18))} MOR`;
+            return `${formatSmallNumber(prices[0] / (10 ** 18))} ${props.symbol}`;
         }
 
         const minPrice = Math.min(...prices);
         const maxPrice = Math.max(...prices);
 
-        return `${formatSmallNumber(minPrice / (10 ** 18))} - ${formatSmallNumber(maxPrice / (10 ** 18))} MOR`
+        return `${formatSmallNumber(minPrice / (10 ** 18))} - ${formatSmallNumber(maxPrice / (10 ** 18))} ${props.symbol}`
     }
 
     return (

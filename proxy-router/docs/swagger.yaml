@@ -334,6 +334,8 @@ definitions:
         example: "0x1234"
         format: hex
         type: string
+      directPayment:
+        type: boolean
       stake:
         example: "123000000000"
         type: string
@@ -355,6 +357,8 @@ definitions:
     type: object
   structs.OpenSessionWithFailover:
     properties:
+      directPayment:
+        type: boolean
       failover:
         type: boolean
       sessionDuration:

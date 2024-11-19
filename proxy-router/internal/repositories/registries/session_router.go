@@ -56,8 +56,8 @@ func NewSessionRouter(sessionRouterAddr common.Address, client i.ContractBackend
 	}
 }
 
-func (g *SessionRouter) OpenSession(opts *bind.TransactOpts, approval []byte, approvalSig []byte, stake *big.Int, privateKeyHex lib.HexString) (sessionID common.Hash, providerID common.Address, userID common.Address, err error) {
-	sessionTx, err := g.sessionRouter.OpenSession(opts, opts.From, stake, false, approval, approvalSig)
+func (g *SessionRouter) OpenSession(opts *bind.TransactOpts, approval []byte, approvalSig []byte, stake *big.Int, directPayment bool, privateKeyHex lib.HexString) (sessionID common.Hash, providerID common.Address, userID common.Address, err error) {
+	sessionTx, err := g.sessionRouter.OpenSession(opts, opts.From, stake, directPayment, approval, approvalSig)
 	if err != nil {
 		return common.Hash{}, common.Address{}, common.Address{}, lib.TryConvertGethError(err)
 	}
@@ -66,6 +66,10 @@ func (g *SessionRouter) OpenSession(opts *bind.TransactOpts, approval []byte, ap
 	receipt, err := bind.WaitMined(opts.Context, g.client, sessionTx)
 	if err != nil {
 		return common.Hash{}, common.Address{}, common.Address{}, lib.TryConvertGethError(err)
+	}
+
+	if receipt.Status != 1 {
+		return receipt.TxHash, common.Address{}, common.Address{}, fmt.Errorf("Transaction failed with status %d", receipt.Status)
 	}
 
 	// Find the event log
