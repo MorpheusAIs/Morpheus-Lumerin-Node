@@ -339,8 +339,8 @@ func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.
 			ctx,
 			session.ModelID(),
 			big.NewInt(duration),
-			session.FailoverEnabled(),
 			session.DirectPayment(),
+			session.FailoverEnabled(),
 			session.ProviderAddr(),
 		)
 		if err != nil {
