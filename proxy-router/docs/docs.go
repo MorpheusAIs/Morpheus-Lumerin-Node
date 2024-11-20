@@ -1321,7 +1321,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "chat"
+                    "system"
                 ],
                 "summary": "Get local models",
                 "responses": {
@@ -1452,6 +1452,9 @@ const docTemplate = `{
                 "apiType": {
                     "type": "string"
                 },
+                "capacityPolicy": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -1460,6 +1463,9 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "slots": {
+                    "type": "integer"
                 }
             }
         },

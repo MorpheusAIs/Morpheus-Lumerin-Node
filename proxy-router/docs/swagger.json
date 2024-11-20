@@ -1314,7 +1314,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "chat"
+                    "system"
                 ],
                 "summary": "Get local models",
                 "responses": {
@@ -1445,6 +1445,9 @@
                 "apiType": {
                     "type": "string"
                 },
+                "capacityPolicy": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -1453,6 +1456,9 @@
                 },
                 "name": {
                     "type": "string"
+                },
+                "slots": {
+                    "type": "integer"
                 }
             }
         },

@@ -4,12 +4,16 @@ definitions:
     properties:
       apiType:
         type: string
+      capacityPolicy:
+        type: string
       id:
         type: string
       model:
         type: string
       name:
         type: string
+      slots:
+        type: integer
     type: object
   genericchatstorage.Chat:
     properties:
@@ -1452,7 +1456,7 @@ paths:
             type: array
       summary: Get local models
       tags:
-      - chat
+      - system
   /wallet:
     delete:
       description: Remove wallet from proxy storage
