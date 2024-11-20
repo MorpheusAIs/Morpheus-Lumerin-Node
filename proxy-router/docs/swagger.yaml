@@ -152,6 +152,22 @@ definitions:
     - timestamp
     - user
     type: object
+  proxyapi.ChatCompletionRequestSwaggerExample:
+    properties:
+      messages:
+        items:
+          properties:
+            content:
+              example: tell me a joke
+              type: string
+            role:
+              example: user
+              type: string
+          type: object
+        type: array
+      stream:
+        type: boolean
+    type: object
   proxyapi.InitiateSessionReq:
     properties:
       bidId:
@@ -1340,7 +1356,7 @@ paths:
         name: prompt
         required: true
         schema:
-          type: string
+          $ref: '#/definitions/proxyapi.ChatCompletionRequestSwaggerExample'
       produces:
       - text/event-stream
       responses:
