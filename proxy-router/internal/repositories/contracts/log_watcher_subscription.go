@@ -2,6 +2,7 @@ package contracts
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 
 	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
@@ -89,9 +90,15 @@ func (w *LogWatcherSubscription) Watch(ctx context.Context, contractAddr common.
 func (w *LogWatcherSubscription) subscribeFilterLogsRetry(ctx context.Context, query ethereum.FilterQuery, ch chan<- types.Log) (ethereum.Subscription, error) {
 	var lastErr error
 
-	for attempts := 0; attempts < w.maxReconnects; attempts++ {
+	for attempts := 0; attempts < w.maxReconnects || w.maxReconnects == 0; attempts++ {
 		sub, err := w.client.SubscribeFilterLogs(ctx, query, ch)
 		if err != nil {
+			maxReconnects := fmt.Sprintf("%d", w.maxReconnects)
+			if w.maxReconnects == 0 {
+				maxReconnects = "∞"
+			}
+			w.log.Warnf("subscription error, retrying (%d/%s): %s", attempts, maxReconnects, err)
+
 			lastErr = err
 			continue
 		}
@@ -102,5 +109,8 @@ func (w *LogWatcherSubscription) subscribeFilterLogsRetry(ctx context.Context, q
 		return sub, nil
 	}
 
-	return nil, lastErr
+	err := fmt.Errorf("subscription error, retries exhausted (%d), stopping: %s", w.maxReconnects, lastErr)
+	w.log.Warnf(err.Error())
+
+	return nil, err
 }
