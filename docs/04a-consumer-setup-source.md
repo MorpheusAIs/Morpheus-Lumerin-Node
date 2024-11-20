@@ -2,7 +2,7 @@
 This document provides a step-by-step guide to setting up a Consumer Node for the Morepheus Network so that you can setup session and interact with the remote providers.
 
 ## Pre-requisites:
-* Create or use an existing ERC-20 wallet that has saMOR and saETH (Sepolia Arbitrum) tokens - you can use Metamask (new wallet..not derived) or any other ERC-20 wallet.  You will need to have access to the wallet's private key **NEVER SHARE THIS WITH ANYONE** for steps below to authorize the contract to spend on your behalf.
+* Create or use an existing ERC-20 wallet that has MOR and ETH (Sepolia Arbitrum) tokens - you can use Metamask (new wallet..not derived) or any other ERC-20 wallet.  You will need to have access to the wallet's private key **NEVER SHARE THIS WITH ANYONE** for steps below to authorize the contract to spend on your behalf.
 
 ## TL;DR
 * Install and Configure the proxy-router node (once)
@@ -62,7 +62,7 @@ Loaded config: {AIEngine:{OpenAIBaseURL: OpenAIKey:} Blockchain:{EthNodeAddress:
 ### B. Authorize the contract to spend on your behalf
 Either via the swagger interface http://localhost:8082/swagger/index.html#/wallet/post_blockchain_allowance or following CLI, you can authorize the contract to spend on your behalf. **This only needs to be done once per wallet, or when funds have been depleted.**
 
-`curl -X 'POST' 'http://localhost:8082/blockchain/approve?spender=0xb8C55cD613af947E73E262F0d3C54b7211Af16CF&amount=3' -H 'accept: application/json' -d ''` # Approve the contract to spend 3 saMOR tokens on your behalf
+`curl -X 'POST' 'http://localhost:8082/blockchain/approve?spender=0xb8C55cD613af947E73E262F0d3C54b7211Af16CF&amount=3' -H 'accept: application/json' -d ''` # Approve the contract to spend 3 MOR tokens on your behalf
 
 ### C. Query the blockchain for various models / providers (Get ModelID)
 You can query the blockchain for various models and providers to get the ModelID. This can be done via the swagger interface http://localhost:8082/swagger/index.html#/marketplace/get_marketplace_models or following CLI:
@@ -145,7 +145,7 @@ curl -X 'POST' \
 
 ### Quick and Dirty Sample:
 `curl -X 'POST' 'http://localhost:8082/blockchain/approve?spender=0xb8C55cD613af947E73E262F0d3C54b7211Af16CF&amount=3' -H 'accept: application/json' -d ''`
-    # approves the smart contract `0x8e19...dE45` to spend 3 saMOR tokens on your behalf
+    # approves the smart contract `0x8e19...dE45` to spend 3 MOR tokens on your behalf
 
 `curl -s -X 'GET' 'http://localhost:8082/wallet' -H 'accept: application/json' | jq .address` 
     # returns the wallet ID (confirm that it matches your wallet)
