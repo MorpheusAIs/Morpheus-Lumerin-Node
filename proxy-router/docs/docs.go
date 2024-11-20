@@ -1190,7 +1190,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/proxyapi.ChatCompletionRequestSwaggerExample"
                         }
                     }
                 ],
@@ -1321,7 +1321,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "chat"
+                    "system"
                 ],
                 "summary": "Get local models",
                 "responses": {
@@ -1452,6 +1452,9 @@ const docTemplate = `{
                 "apiType": {
                     "type": "string"
                 },
+                "capacityPolicy": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -1460,6 +1463,9 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "slots": {
+                    "type": "integer"
                 }
             }
         },
@@ -1649,6 +1655,30 @@ const docTemplate = `{
                 },
                 "user": {
                     "type": "string"
+                }
+            }
+        },
+        "proxyapi.ChatCompletionRequestSwaggerExample": {
+            "type": "object",
+            "properties": {
+                "messages": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "content": {
+                                "type": "string",
+                                "example": "tell me a joke"
+                            },
+                            "role": {
+                                "type": "string",
+                                "example": "user"
+                            }
+                        }
+                    }
+                },
+                "stream": {
+                    "type": "boolean"
                 }
             }
         },

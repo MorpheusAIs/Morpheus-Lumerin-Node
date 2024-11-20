@@ -71,10 +71,12 @@ func (a *AiEngine) GetLocalModels() ([]LocalModel, error) {
 	IDs, modelsFromConfig := a.modelsConfigLoader.GetAll()
 	for i, model := range modelsFromConfig {
 		models = append(models, LocalModel{
-			Id:      IDs[i],
-			Name:    model.ModelName,
-			Model:   model.ModelName,
-			ApiType: model.ApiType,
+			Id:             IDs[i],
+			Name:           model.ModelName,
+			Model:          model.ModelName,
+			ApiType:        model.ApiType,
+			Slots:          model.ConcurrentSlots,
+			CapacityPolicy: model.CapacityPolicy,
 		})
 	}
 

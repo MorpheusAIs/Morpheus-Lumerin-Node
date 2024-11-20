@@ -8,7 +8,7 @@
         * If your local model is listening on a different port locally, you will need to modify the `models-config.json` file to match the correct port
 * You have an existing funded wallet with MOR and ETH and also have the `private key` for the wallet (this will be needed for the .env file configuration)
 * You have created an Alchemy or Infura free account and have a private API key for the Arbitrum Sepolia testnet (wss://arb-sepolia.g.alchemy.com/v2/<your_private_alchemy_api_key>)
-* Your proxy-router must have a publicly accessible endpoint for the provider (ip:port or fqdn:port no protocol) eg: `mycoolmornode.domain.com:3333` - this will be used when creating the provider on the blockchain
+* Your proxy-router must have a **publicly accessible endpoint** for the provider (ip:port or fqdn:port no protocol) eg: `mycoolmornode.domain.com:3333` - this will be used when creating the provider on the blockchain
 
 ## Installation & Configuration Steps:
 1. Obtain the software: 
@@ -28,7 +28,10 @@
 
 1. Environment configuration 
     * In most cases, to start with, the default .env file will work for the proxy-router...in some cases you will want to modify the .env file with advanced capability (log entries, private keys, private endpoints, etc)
-    * Change the name of the `.env.example` or `.env.example.win` file to `.env` and edit the file with the appropriate values
+    * Choose which chain and environment you want to work with (MAIN or TEST) and select the right example .env file 
+        * Mainnet: `env.main.example` for Max/Unix or `env.main.example.win` for Windows
+        * Testnet: `env.test.example` for Max/Unix or `env.test.example.win` for Windows
+    * Change the name of the desired file to `.env` 
     * Please see [proxy-router.all.env](proxy-router.all.env) for more information on the key values needed in the .env file
 
 1. **(OPTIONAL)** - External Provider or Pass through 
