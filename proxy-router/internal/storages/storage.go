@@ -12,17 +12,18 @@ type Storage struct {
 }
 
 func NewStorage(log lib.ILogger, path string) *Storage {
+	badgerLogger := NewBadgerLogger(log)
 	if err := os.Mkdir(path, os.ModePerm); err != nil {
-		log.Warn(err)
+		badgerLogger.Debugf("%s", err)
 	}
 	opts := badger.DefaultOptions(path)
-	opts.Logger = NewBadgerLogger(log)
+	opts.Logger = badgerLogger
 
 	db, err := badger.Open(opts)
-
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	return &Storage{db}
 }
 
