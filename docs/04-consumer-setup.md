@@ -34,8 +34,8 @@ It will run 3 different pieces of software on your local machine:
 
 ## Validation Steps:
 1. Local Test: Once the UI is up and running,
-    1. You should see tokens for saETH and saMOR that you sent to this wallet earlier. 
-        * If this is a new wallet, you will need to send saMOR and saETH to this wallet to be able to interact with the blockchain 
+    1. You should see tokens for ETH and MOR that you sent to this wallet earlier. 
+        * If this is a new wallet, you will need to send MOR and ETH to this wallet to be able to interact with the blockchain 
         * This can be done externally via metamask or usual Arbitrum testnet faucets
     1. Once you have a funded Wallet, you can interact with the local model
     1. Click on the `Chat` icon on the left side of the screen

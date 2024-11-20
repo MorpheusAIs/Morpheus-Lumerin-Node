@@ -20,14 +20,15 @@ manages secure sessions between consumers and providers and routes prompts and r
 
 ## Tokens and Contract Information (update 11/15/2024)
 ### MainNet: (MAIN Branch and MAIN-* Releases)
+* Blockchain: Arbitrum One (ChainID: `42161`)
 * Morpheus MOR Token: `0x092bAaDB7DEf4C3981454dD9c0A0D7FF07bCFc86` 
 * Diamond MarketPlace Contract: `0xDE819AaEE474626E3f34Ef0263373357e5a6C71b` 
 * Blockchain Explorer: `https://arbiscan.io/`
 
-### TestNet (DEV & STG Branches and TEST-* Releases)
-* Morpheus saMOR Token: `0x34a285a1b1c166420df5b6630132542923b5b27e` 
+### TestNet (STG Branch and TEST-* Releases)
+* Blockchain: Sepolia Arbitrum (ChainID: `421614`)
+* Morpheus MOR Token: `0x34a285a1b1c166420df5b6630132542923b5b27e` 
 * Diamond MarketPlace Contract: `0xb8C55cD613af947E73E262F0d3C54b7211Af16CF`
-    * Interact with the Morpheus Contract: https://louper.dev/diamond/0xb8C55cD613af947E73E262F0d3C54b7211Af16CF?network=arbitrumSepolia#write
 * Blockchain Explorer: `https://sepolia.arbiscan.io/`
 
 ## Funds
