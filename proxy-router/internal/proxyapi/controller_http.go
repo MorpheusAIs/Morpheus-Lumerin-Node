@@ -86,10 +86,10 @@ func (s *ProxyController) InitiateSession(ctx *gin.Context) {
 //	@Description	Send prompt to a local or remote model based on session id in header
 //	@Tags			chat
 //	@Produce		text/event-stream
-//	@Param			session_id	header		string	false	"Session ID"	format(hex32)
-//	@Param			model_id	header		string	false	"Model ID"		format(hex32)
-//	@Param			chat_id		header		string	false	"Chat ID"		format(hex32)
-//	@Param			prompt		body		string	true	"Prompt"
+//	@Param			session_id	header		string											false	"Session ID"	format(hex32)
+//	@Param			model_id	header		string											false	"Model ID"		format(hex32)
+//	@Param			chat_id		header		string											false	"Chat ID"		format(hex32)
+//	@Param			prompt		body		proxyapi.ChatCompletionRequestSwaggerExample	true	"Prompt"
 //	@Success		200			{object}	string
 //	@Router			/v1/chat/completions [post]
 func (c *ProxyController) Prompt(ctx *gin.Context) {
@@ -157,7 +157,7 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 // GetLocalModels godoc
 //
 //	@Summary	Get local models
-//	@Tags		chat
+//	@Tags		system
 //	@Produce	json
 //	@Success	200	{object}	[]aiengine.LocalModel
 //	@Router		/v1/models [get]

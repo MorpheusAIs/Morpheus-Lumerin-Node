@@ -4,12 +4,16 @@ definitions:
     properties:
       apiType:
         type: string
+      capacityPolicy:
+        type: string
       id:
         type: string
       model:
         type: string
       name:
         type: string
+      slots:
+        type: integer
     type: object
   genericchatstorage.Chat:
     properties:
@@ -151,6 +155,22 @@ definitions:
     - signature
     - timestamp
     - user
+    type: object
+  proxyapi.ChatCompletionRequestSwaggerExample:
+    properties:
+      messages:
+        items:
+          properties:
+            content:
+              example: tell me a joke
+              type: string
+            role:
+              example: user
+              type: string
+          type: object
+        type: array
+      stream:
+        type: boolean
     type: object
   proxyapi.InitiateSessionReq:
     properties:
@@ -1340,7 +1360,7 @@ paths:
         name: prompt
         required: true
         schema:
-          type: string
+          $ref: '#/definitions/proxyapi.ChatCompletionRequestSwaggerExample'
       produces:
       - text/event-stream
       responses:
@@ -1436,7 +1456,7 @@ paths:
             type: array
       summary: Get local models
       tags:
-      - chat
+      - system
   /wallet:
     delete:
       description: Remove wallet from proxy storage
