@@ -1,0 +1,37 @@
+name: Trigger GitLab Pipeline
+
+on:
+  push:
+    branches:
+      - dev
+      - stg
+      - main
+
+jobs:
+  trigger_gitlab_pipeline:
+    runs-on: ubuntu-latest
+    if: ${{ github.repository == 'Lumerin-protocol/Morpheus-Lumerin-Node' }}
+    steps:
+      - name: Determine GitLab Target Branch
+        id: set_target_branch
+        run: |
+          if [ "${{ github.ref_name }}" == "dev" ]; then
+            echo "gitlab_branch=dev" >> $GITHUB_ENV
+          elif [ "${{ github.ref_name }}" == "stg" ]; then
+            echo "gitlab_branch=stg" >> $GITHUB_ENV
+          elif [ "${{ github.ref_name }}" == "main" ]; then
+            echo "gitlab_branch=main" >> $GITHUB_ENV
+          else
+            echo "This branch is not configured to trigger GitLab pipelines."
+            exit 1
+          fi
+
+      - name: Trigger GitLab Pipeline
+        run: |
+          echo "Triggering GitLab pipeline for branch ${{ env.gitlab_branch }}"
+          curl --request POST \
+            --url "${{ secrets.GITLAB_TRIGGER_URL }}" \
+            --form "token=${{ secrets.GITLAB_TRIGGER_TOKEN }}" \
+            --form "ref=${{ env.gitlab_branch }}" \
+            --form "variables[SOURCE_REPO]=${{ github.repository }}" \
+            --form "variables[SOURCE_BRANCH]=${{ github.ref_name }}"
