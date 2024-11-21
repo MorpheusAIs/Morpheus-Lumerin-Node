@@ -314,7 +314,7 @@ jobs:
           name: mor-launch-win-x64.zip
 
   release:
-    if: ${{ (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/stg')) || github.event.inputs.create_release == 'true' }}
+    if: ${{ github.repository =='Lumerin-protocol/Morpheus-Lumerin-Node' && (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/stg')) || github.event.inputs.create_release == 'true' }}
     runs-on: ubuntu-latest
     needs:
       - Ubuntu-22-x64
