@@ -10,9 +10,7 @@ on:
 jobs:
   trigger_gitlab_pipeline:
     runs-on: ubuntu-latest
-
     if: ${{ github.repository == 'Lumerin-protocol/Morpheus-Lumerin-Node' }}
-
     steps:
       - name: Determine GitLab Target Branch
         id: set_target_branch
