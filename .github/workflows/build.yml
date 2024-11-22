@@ -413,7 +413,7 @@ jobs:
               --form "variables[SOURCE_REPO]=${{ github.repository }}" \
               --form "variables[SOURCE_BRANCH]=${{ github.ref_name }}")
 
-            if [ "$response" -ne 200 ]; then
+            if [[ "$response" != 2* ]]; then
               echo "Failed to trigger GitLab pipeline. HTTP status: $response"
               exit 1
             fi
