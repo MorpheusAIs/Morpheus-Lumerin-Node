@@ -11,7 +11,7 @@ on:
     branches:
       - main
       - stg
-      - fix-examples 
+      - fix-envexamples 
 
     paths: ['.github/workflows/**', '**/Makefile', '**/*.go', '**/*.json', '**/*.yml', '**/*.ts', '**/*.js']
   pull_request:
