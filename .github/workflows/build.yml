@@ -29,10 +29,13 @@ defaults:
     
 jobs:
   trigger_gitlab:
-    runs-on: ubuntu-latest
     if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' )) }}
-
+    runs-on: ubuntu-latest
     steps:
+      - name: Clone
+        uses: actions/checkout@v4
+        id: checkout
+             
       - name: Generate Tag Name
         uses: ./.github/actions/gen_tag_name
 
@@ -75,6 +78,7 @@ jobs:
             exit 1
           fi
           echo "GitLab pipeline triggered successfully. HTTP status: $status_code"
+
   Ubuntu-22-x64:
     if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' }}
     runs-on: ubuntu-22.04
