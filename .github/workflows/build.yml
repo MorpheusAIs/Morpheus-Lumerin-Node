@@ -28,14 +28,18 @@ defaults:
     shell: bash
     
 jobs:
-  trigger_gitlab:
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' )) }}
+  GitLab-Deploy:
+    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) }}
     runs-on: ubuntu-latest
     steps:
       - name: Clone
         uses: actions/checkout@v4
         id: checkout
-             
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y jq
+
       - name: Generate Tag Name
         uses: ./.github/actions/gen_tag_name
 
@@ -55,29 +59,34 @@ jobs:
 
       - name: Trigger GitLab Pipeline
         run: |
-          echo "Triggering GitLab pipeline for branch ${{ env.gitlab_branch }} with tag ${{ env.TAG_NAME }}"
+          echo "Triggering GitLab pipeline for branch ${{ github.ref_name }} with tag ${{ env.TAG_NAME }}"
       
           # Send request to GitLab
-          response=$(curl --write-out "\n%{http_code}" --silent --output /tmp/gitlab_response \
+          response=$(curl --silent \
             --request POST \
             --url "${{ secrets.GITLAB_TRIGGER_URL }}" \
             --form "token=${{ secrets.GITLAB_TRIGGER_TOKEN }}" \
-            --form "ref=${{ env.gitlab_branch }}" \
+            --form "ref=${{ github.ref_name }}" \
             --form "variables[SOURCE_REPO]=${{ github.repository }}" \
             --form "variables[SOURCE_BRANCH]=${{ github.ref_name }}" \
             --form "variables[GITHUB_TAG]=${{ env.TAG_NAME }}")
-          
-          # Extract status code and response body
-          status_code=$(tail -n 1 /tmp/gitlab_response)
-          response_body=$(head -n -1 /tmp/gitlab_response)
       
-          # Log and handle response
-          if [[ "$status_code" != 2* ]]; then
-            echo "Gitlab pipeline FAILED. HTTP status: $status_code"
-            echo "GitLab Response: $response_body"
+          # Parse JSON response using jq
+          gitlab_status=$(echo "$response" | jq -r '.status // "unknown"')
+          gitlab_web_url=$(echo "$response" | jq -r '.web_url // "N/A"')
+      
+          # Log the response
+          echo "GitLab Response: $response"
+      
+          # Validate the status field
+          if [[ "$gitlab_status" =~ ^(created|preparing|success|running|scheduled)$ ]]; then
+            echo "GitLab pipeline triggered successfully! Status: $gitlab_status"
+            echo "Pipeline details: $gitlab_web_url"
+          else
+            echo "GitLab pipeline FAILED. Invalid status: $gitlab_status"
+            echo "Pipeline details: $gitlab_web_url"
             exit 1
           fi
-          echo "GitLab pipeline triggered successfully. HTTP status: $status_code"
 
   Ubuntu-22-x64:
     if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' }}
