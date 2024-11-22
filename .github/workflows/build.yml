@@ -10,8 +10,7 @@ on:
   push:
     branches:
       - main
-      - stg
-      - fix-envexamples 
+      - test
 
     paths: ['.github/workflows/**', '**/Makefile', '**/*.go', '**/*.json', '**/*.yml', '**/*.ts', '**/*.js']
   pull_request:
@@ -320,7 +319,7 @@ jobs:
           name: mor-launch-win-x64.zip
 
   release:
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/stg' || github.ref == 'refs/heads/fix-envexamples')) || github.event.inputs.create_release == 'true' }}
+    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' )) || github.event.inputs.create_release == 'true' }}
     runs-on: ubuntu-latest
     needs:
       - Ubuntu-22-x64
@@ -380,7 +379,7 @@ jobs:
 
   trigger_gitlab_pipeline:
       runs-on: ubuntu-latest
-      if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/stg' || github.ref == 'refs/heads/dev'|| github.ref == 'refs/heads/fix-envexamples')) }}
+      if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' )) }}
       needs:
         - Ubuntu-22-x64
         - macOS-13-x64
@@ -392,7 +391,7 @@ jobs:
           run: |
             if [ "${{ github.ref_name }}" == "dev" ]; then
               echo "gitlab_branch=dev" >> $GITHUB_ENV
-            elif [ "${{ github.ref_name }}" == "stg" ]; then
+            elif [ "${{ github.ref_name }}" == "test" ]; then
               echo "gitlab_branch=stg" >> $GITHUB_ENV
             elif [ "${{ github.ref_name }}" == "main" ]; then
               echo "gitlab_branch=main" >> $GITHUB_ENV
