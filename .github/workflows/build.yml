@@ -7,12 +7,14 @@ on:
         description: 'Create new release'
         required: true
         type: boolean
+        
   push:
     branches:
       - main
       - test
-
+      - dev
     paths: ['.github/workflows/**', '**/Makefile', '**/*.go', '**/*.json', '**/*.yml', '**/*.ts', '**/*.js']
+
   pull_request:
     types: [opened, reopened, synchronize]
     paths: ['.github/workflows/**', '**/Makefile', '**/*.go', '**/*.json', '**/*.yml', '**/*.ts', '**/*.js']
