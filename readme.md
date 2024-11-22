@@ -25,7 +25,7 @@ manages secure sessions between consumers and providers and routes prompts and r
 * Diamond MarketPlace Contract: `0xDE819AaEE474626E3f34Ef0263373357e5a6C71b` 
 * Blockchain Explorer: `https://arbiscan.io/`
 
-### TestNet (STG Branch and TEST-* Releases)
+### TestNet (TEST Branch and TEST-* Releases)
 * Blockchain: Sepolia Arbitrum (ChainID: `421614`)
 * Morpheus MOR Token: `0x34a285a1b1c166420df5b6630132542923b5b27e` 
 * Diamond MarketPlace Contract: `0xb8C55cD613af947E73E262F0d3C54b7211Af16CF`
