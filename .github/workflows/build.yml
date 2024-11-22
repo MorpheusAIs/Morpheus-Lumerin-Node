@@ -59,7 +59,7 @@ jobs:
 
       - name: Trigger GitLab Pipeline
         run: |
-          echo "Triggering GitLab pipeline for branch ${{ github.ref_name }} with tag ${{ env.TAG_NAME }}"
+          echo "Triggering GitLab Build and Deploy for branch ${{ github.ref_name }} with tag ${{ env.TAG_NAME }}"
       
           # Send request to GitLab
           response=$(curl --silent \
