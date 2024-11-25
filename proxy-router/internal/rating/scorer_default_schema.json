@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "weights": {
+      "type": "object",
+      "properties": {
+        "tps": {
+          "type": "number"
+        },
+        "ttft": {
+          "type": "number"
+        },
+        "duration": {
+          "type": "number"
+        },
+        "success": {
+          "type": "number"
+        },
+        "stake": {
+          "type": "number"
+        }
+      }
+    }
+  },
+  "required": ["weights"]
+}

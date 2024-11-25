@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["algorithm", "params"],
+  "properties": {
+    "algorithm": {
+      "type": "string",
+      "enum": ["default"]
+    },
+    "providerAllowlist": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "algorithm": {
+            "const": "default"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "$ref": "./scorer_default_schema.json"
+          }
+        }
+      }
+    }
+  ]
+}
