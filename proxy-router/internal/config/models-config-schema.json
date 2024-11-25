@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "models": {
+      "type": "array",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "modelId": {
+            "type": "string"
+          },
+          "modelName": {
+            "type": "string"
+          },
+          "apiType": {
+            "type": "string",
+            "enum": [
+              "openai",
+              "prodia-sd",
+              "prodia-sdxl"
+            ]
+          },
+          "apiUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "apiKey": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "modelName",
+          "apiType",
+          "apiUrl"
+        ]
+      }
+    }
+  }
+}

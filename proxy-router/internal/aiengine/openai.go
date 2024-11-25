@@ -100,7 +100,6 @@ func (a *OpenAI) readStream(ctx context.Context, body io.Reader, cb gcs.Completi
 			var compl openai.ChatCompletionStreamResponse
 			if err := json.Unmarshal([]byte(data), &compl); err != nil {
 				if isStreamFinished(data) {
-					a.log.Debugf("reached end of the response")
 					return nil
 				} else {
 					return fmt.Errorf("error decoding response: %s\n%s", err, line)
