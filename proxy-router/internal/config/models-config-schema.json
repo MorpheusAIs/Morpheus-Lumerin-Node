@@ -38,6 +38,18 @@
             "description": "Optional API key",
             "type": "string",
             "minLength": 1
+          },
+          "concurrentSlots": {
+            "title": "Concurrent Slots",
+            "description": "The number of concurrent slots to be used with this model",
+            "type": "integer",
+            "minimum": 1
+          },
+          "capacityPolicy": {
+            "title": "Capacity Policy",
+            "description": "The policy to be used for capacity management",
+            "type": "string",
+            "enum": ["simple", "idle_timeout"]
           }
         },
         "required": ["modelId", "modelName", "apiType", "apiUrl"]
