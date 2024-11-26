@@ -1,39 +1,44 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "https://json-schema.org/draft-07/schema",
   "type": "object",
   "properties": {
     "models": {
       "type": "array",
-      "additionalProperties": {
+      "items": {
         "type": "object",
         "properties": {
           "modelId": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^(0x)?[0-9a-fA-F]{64}$",
+            "title": "Model ID",
+            "description": "The model ID from blockchain",
+            "examples": ["0x0000000000000000000000000000000000000000000000000000000000000001"]
           },
           "modelName": {
-            "type": "string"
+            "type": "string",
+            "title": "Model Name",
+            "description": "The name of the model to be used from this provider"
           },
           "apiType": {
             "type": "string",
-            "enum": [
-              "openai",
-              "prodia-sd",
-              "prodia-sdxl"
-            ]
+            "enum": ["openai", "prodia-sd", "prodia-sdxl"],
+            "title": "API Type",
+            "description": "Defines the type of API to be used with this model"
           },
           "apiUrl": {
             "type": "string",
-            "format": "uri"
+            "format": "uri",
+            "title": "API URL",
+            "description": "The URL of the API to be used with this model",
+            "examples": ["http://localhost:11434/v1"]
           },
           "apiKey": {
-            "type": "string"
+            "type": "string",
+            "title": "API Key",
+            "description": "Optional API key"
           }
         },
-        "required": [
-          "modelName",
-          "apiType",
-          "apiUrl"
-        ]
+        "required": ["modelId", "modelName", "apiType", "apiUrl"]
       }
     }
   }

@@ -1,24 +1,46 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "https://json-schema.org/draft-07/schema",
   "type": "object",
   "properties": {
     "weights": {
+      "title": "Weights",
+      "description": "Weights for each metric",
       "type": "object",
       "properties": {
         "tps": {
-          "type": "number"
+          "title": "TPS",
+          "description": "Tokens per second weight",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
         },
         "ttft": {
-          "type": "number"
+          "title": "TTFT",
+          "description": "Time to first token weight",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
         },
         "duration": {
-          "type": "number"
+          "title": "Duration",
+          "description": "Duration weight",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
         },
         "success": {
-          "type": "number"
+          "title": "Success rate",
+          "description": "Success rate weight",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
         },
         "stake": {
-          "type": "number"
+          "title": "Stake",
+          "description": "Stake weight",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
         }
       }
     }

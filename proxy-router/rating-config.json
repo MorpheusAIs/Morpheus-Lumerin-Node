@@ -1,7 +1,7 @@
 {
   "$schema": "./internal/rating/rating-config-schema.json",
   "algorithm": "default",
-  "providerAllowlist": [],
+  "providerAllowlist": ["0x0000000000000000000000000000000000000000"],
   "params": {
     "weights": {
       "tps": 0.24,
