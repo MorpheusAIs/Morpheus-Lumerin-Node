@@ -258,7 +258,7 @@ func start() error {
 		log.Warnf("failed to load model config: %s, run with empty", err)
 	}
 
-	scorer, err := config.LoadScorer(cfg.Proxy.RatingConfigPath, log)
+	scorer, err := config.LoadRating(cfg.Proxy.RatingConfigPath, log)
 	if err != nil {
 		return err
 	}

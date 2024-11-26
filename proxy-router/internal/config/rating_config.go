@@ -11,7 +11,7 @@ const (
 	DefaultRatingConfigPath = "rating-config.json"
 )
 
-func LoadScorer(path string, log lib.ILogger) (*rating.Rating, error) {
+func LoadRating(path string, log lib.ILogger) (*rating.Rating, error) {
 	filePath := DefaultRatingConfigPath
 	if path != "" {
 		filePath = path
