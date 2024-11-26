@@ -17,12 +17,12 @@ func LoadRating(path string, log lib.ILogger) (*rating.Rating, error) {
 		filePath = path
 	}
 
-	modelsConfig, err := lib.ReadJSONFile(filePath)
+	config, err := lib.ReadJSONFile(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read models config file: %s", err)
+		return nil, fmt.Errorf("failed to rating config file: %s", err)
 	}
 
 	log.Infof("rating config loaded from file: %s", filePath)
 
-	return rating.NewRatingFromConfig([]byte(modelsConfig))
+	return rating.NewRatingFromConfig([]byte(config), log)
 }
