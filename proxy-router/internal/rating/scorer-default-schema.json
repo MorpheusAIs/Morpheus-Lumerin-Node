@@ -42,7 +42,8 @@
           "minimum": 0,
           "maximum": 1
         }
-      }
+      },
+      "required": ["tps", "ttft", "duration", "success", "stake"]
     }
   },
   "required": ["weights"]

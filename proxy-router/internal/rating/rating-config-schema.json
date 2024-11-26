@@ -15,6 +15,7 @@
         "type": "string",
         "pattern": "^0x[0-9a-fA-F]{40}$"
       },
+      "uniqueItems": true,
       "title": "Provider allowlist",
       "description": "List of provider addresses that are allowed to open session with"
     }
@@ -31,7 +32,7 @@
       "then": {
         "properties": {
           "params": {
-            "$ref": "./scorer_default_schema.json"
+            "$ref": "./scorer-default-schema.json"
           }
         }
       }
