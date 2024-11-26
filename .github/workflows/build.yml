@@ -33,8 +33,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Clone
-        uses: actions/checkout@v4
         id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Install dependencies
         run: |
@@ -93,8 +96,11 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Clone
-        uses: actions/checkout@v4
         id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -162,8 +168,11 @@ jobs:
     runs-on: macos-13
     steps:
       - name: Clone
-        uses: actions/checkout@v4
         id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -234,8 +243,11 @@ jobs:
     runs-on: macos-14
     steps:
       - name: Clone
-        uses: actions/checkout@v4
         id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -306,8 +318,11 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Clone
-        uses: actions/checkout@v4
         id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -392,6 +407,9 @@ jobs:
       - name: Clone
         id: checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Generate Tag Name
         uses: ./.github/actions/gen_tag_name
@@ -438,4 +456,4 @@ jobs:
                 });
               }
             }
-         
+
