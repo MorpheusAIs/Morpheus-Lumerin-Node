@@ -187,19 +187,16 @@ contract SessionRouter is
     }
 
     function _extractProviderApproval(bytes calldata providerApproval_) private view returns (bytes32) {
-        (bytes32 bidId_, uint256 chainId_, address user_, uint128 timestamp_) = abi.decode(
+        (bytes32 bidId_, uint256 chainId_,, uint128 timestamp_) = abi.decode(
             providerApproval_,
             (bytes32, uint256, address, uint128)
         );
 
-        if (user_ != _msgSender()) {
-            revert SessionApprovedForAnotherUser();
-        }
         if (chainId_ != block.chainid) {
-            revert SesssionApprovedForAnotherChainId();
+            revert SessionApprovedForAnotherChainId();
         }
         if (block.timestamp > timestamp_ + SIGNATURE_TTL) {
-            revert SesssionApproveExpired();
+            revert SessionApproveExpired();
         }
 
         return bidId_;
@@ -240,10 +237,10 @@ contract SessionRouter is
         );
 
         if (chainId_ != block.chainid) {
-            revert SesssionReceiptForAnotherChainId();
+            revert SessionReceiptForAnotherChainId();
         }
         if (block.timestamp > timestamp_ + SIGNATURE_TTL) {
-            revert SesssionReceiptExpired();
+            revert SessionReceiptExpired();
         }
 
         return (sessionId_, tpsScaled1000_, ttftMs_);
@@ -533,9 +530,14 @@ contract SessionRouter is
         address provider_,
         bytes calldata receipt_,
         bytes calldata signature_
-    ) private pure returns (bool) {
+    ) private view returns (bool) {
         bytes32 receiptHash_ = ECDSA.toEthSignedMessageHash(keccak256(receipt_));
+        address user_ = ECDSA.recover(receiptHash_, signature_);
 
-        return ECDSA.recover(receiptHash_, signature_) == provider_;
+        if (user_ != provider_ && !isRightsDelegated(user_, provider_, DELEGATION_RULES_PROVIDER)) {
+            return false;
+        }
+
+        return true;
     }
 }

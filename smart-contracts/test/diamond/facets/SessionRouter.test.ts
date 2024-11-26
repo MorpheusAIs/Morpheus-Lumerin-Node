@@ -238,6 +238,42 @@ describe('SessionRouter', () => {
       expect(await sessionRouter.getProviderSessions(PROVIDER, 0, 10)).to.deep.eq([[sessionId], 1n]);
       expect(await sessionRouter.getModelSessions(modelId, 0, 10)).to.deep.eq([[sessionId], 1n]);
     });
+    it('should open a session from the delegatee address with approval from delegatee to delegatee', async () => {
+      await delegateRegistry
+        .connect(SECOND)
+        .delegateContract(OWNER, providerRegistry, await providerRegistry.DELEGATION_RULES_SESSION(), true);
+      await delegateRegistry
+        .connect(PROVIDER)
+        .delegateContract(OWNER, providerRegistry, await providerRegistry.DELEGATION_RULES_PROVIDER(), true);
+
+      await setTime(payoutStart + 10 * DAY);
+      const { msg, signature } = await getProviderApproval(OWNER, OWNER, bidId);
+      await sessionRouter.connect(OWNER).openSession(SECOND, wei(50), false, msg, signature);
+
+      const sessionId = await sessionRouter.getSessionId(SECOND, PROVIDER, bidId, 0);
+      const data = await sessionRouter.getSession(sessionId);
+      expect(data.user).to.eq(SECOND);
+      expect(data.bidId).to.eq(bidId);
+      expect(data.stake).to.eq(wei(50));
+      expect(data.closeoutReceipt).to.eq('0x');
+      expect(data.closeoutType).to.eq(0);
+      expect(data.providerWithdrawnAmount).to.eq(0);
+      expect(data.openedAt).to.eq(payoutStart + 10 * DAY + 1);
+      expect(data.endsAt).to.greaterThan(data.openedAt);
+      expect(data.closedAt).to.eq(0);
+      expect(data.isActive).to.eq(true);
+      expect(data.isDirectPaymentFromUser).to.eq(false);
+
+      const tokenBalAfter = await token.balanceOf(sessionRouter);
+      expect(tokenBalAfter - tokenBalBefore).to.eq(wei(50));
+      const secondBalAfter = await token.balanceOf(SECOND);
+      expect(secondBalBefore - secondBalAfter).to.eq(wei(50));
+
+      expect(await sessionRouter.getIsProviderApprovalUsed(msg)).to.eq(true);
+      expect(await sessionRouter.getUserSessions(SECOND, 0, 10)).to.deep.eq([[sessionId], 1n]);
+      expect(await sessionRouter.getProviderSessions(PROVIDER, 0, 10)).to.deep.eq([[sessionId], 1n]);
+      expect(await sessionRouter.getModelSessions(modelId, 0, 10)).to.deep.eq([[sessionId], 1n]);
+    });
     it('should open two different sessions wit the same input params', async () => {
       await setTime(payoutStart + 10 * DAY);
       const { msg: msg1, signature: signature1 } = await getProviderApproval(PROVIDER, SECOND, bidId);
@@ -300,25 +336,25 @@ describe('SessionRouter', () => {
       expect(await sessionRouter.getProviderSessions(PROVIDER, 0, 10)).to.deep.eq([[sessionId], 1n]);
       expect(await sessionRouter.getModelSessions(modelId, 0, 10)).to.deep.eq([[sessionId], 1n]);
     });
-    it('should throw error when the approval is for an another user', async () => {
-      const { msg, signature } = await getProviderApproval(PROVIDER, OWNER, bidId);
-      await expect(
-        sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg, signature),
-      ).to.be.revertedWithCustomError(sessionRouter, 'SessionApprovedForAnotherUser');
-    });
     it('should throw error when the approval is for an another chain', async () => {
       const { msg, signature } = await getProviderApproval(PROVIDER, SECOND, bidId, 1n);
       await expect(
         sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg, signature),
-      ).to.be.revertedWithCustomError(sessionRouter, 'SesssionApprovedForAnotherChainId');
+      ).to.be.revertedWithCustomError(sessionRouter, 'SessionApprovedForAnotherChainId');
     });
-    it('should throw error when an aprrove expired', async () => {
+    it('should throw error when an approval expired', async () => {
       await setTime(payoutStart);
       const { msg, signature } = await getProviderApproval(PROVIDER, SECOND, bidId);
       await setTime(payoutStart + 600);
       await expect(
         sessionRouter.connect(SECOND).openSession(SECOND, wei(50), false, msg, signature),
-      ).to.be.revertedWithCustomError(sessionRouter, 'SesssionApproveExpired');
+      ).to.be.revertedWithCustomError(sessionRouter, 'SessionApproveExpired');
+    });
+    it('should throw error when approval is not from provider and without delegation', async () => {
+      const { msg, signature } = await getProviderApproval(PROVIDER, SECOND, bidId);
+      await expect(
+        sessionRouter.connect(OWNER).openSession(PROVIDER, wei(50), false, msg, signature),
+      ).to.be.revertedWithCustomError(sessionRouter, 'InsufficientRightsForOperation');
     });
     it('should throw error when the bid is not found', async () => {
       const { msg, signature } = await getProviderApproval(PROVIDER, SECOND, getHex(Buffer.from('1')));
@@ -672,7 +708,7 @@ describe('SessionRouter', () => {
       const { msg: receiptMsg, signature: receiptSig } = await getReceipt(PROVIDER, sessionId, 0, 0, 1n);
       await expect(sessionRouter.connect(SECOND).closeSession(receiptMsg, receiptSig)).to.be.revertedWithCustomError(
         sessionRouter,
-        'SesssionReceiptForAnotherChainId',
+        'SessionReceiptForAnotherChainId',
       );
     });
     it('should throw error when the provider receipt expired', async () => {
@@ -684,7 +720,7 @@ describe('SessionRouter', () => {
       await setTime(openedAt + 10000);
       await expect(sessionRouter.connect(SECOND).closeSession(receiptMsg, receiptSig)).to.be.revertedWithCustomError(
         sessionRouter,
-        'SesssionReceiptExpired',
+        'SessionReceiptExpired',
       );
     });
   });
