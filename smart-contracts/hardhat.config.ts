@@ -39,12 +39,20 @@ const config: HardhatUserConfig = {
       // forking: {
       //   url: `https://arbitrum-sepolia.infura.io/v3/${process.env.INFURA_KEY}`,
       // },
+      forking: {
+        url: `https://arbitrum-mainnet.infura.io/v3/${process.env.INFURA_KEY}`,
+      },
     },
     localhost: {
       url: 'http://127.0.0.1:8545',
       initialDate: '1970-01-01T00:00:00Z',
       gasMultiplier: 1.2,
       timeout: 1000000000000000,
+    },
+    arbitrum: {
+      url: `https://arbitrum-mainnet.infura.io/v3/${process.env.INFURA_KEY}`,
+      accounts: privateKey(),
+      gasMultiplier: 1.1,
     },
     arbitrum_sepolia: {
       url: `https://arbitrum-sepolia.infura.io/v3/${process.env.INFURA_KEY}`,
@@ -94,6 +102,7 @@ const config: HardhatUserConfig = {
     apiKey: {
       mainnet: `${process.env.ETHERSCAN_API_KEY}`,
       arbitrumSepolia: `${process.env.ARBITRUM_API_KEY}`,
+      arbitrumOne: `${process.env.ARBITRUM_API_KEY}`,
     },
   },
 };

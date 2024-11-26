@@ -12,10 +12,11 @@ export type Config = {
   marketplaceMinBidPricePerSecond: string;
   marketplaceMaxBidPricePerSecond: string;
   delegateRegistry: string;
+  owner: string;
 };
 
 export function parseConfig(): Config {
-  const configPath = `deploy/data/config_arbitrum_sepolia.json`;
+  const configPath = `deploy/data/config_arbitrum_mainnet.json`;
 
   return JSON.parse(readFileSync(configPath, 'utf-8')) as Config;
 }

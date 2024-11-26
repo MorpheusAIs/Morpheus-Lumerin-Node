@@ -116,7 +116,7 @@ module.exports = async function (deployer: Deployer) {
   await modelRegistryFacet.modelSetMinStake(config.modelMinStake);
   await marketplaceFacet.setMarketplaceBidFee(config.marketplaceBidFee);
 
-  // TODO: add allowance from the treasury
+  await lumerinDiamond.transferOwnership(config.owner);
 
   Reporter.reportContracts(
     ['Lumerin Diamond', await lumerinDiamond.getAddress()],
