@@ -14,6 +14,7 @@ on:
       - test
       - dev
       - vertag
+      - anything
     paths: ['.github/workflows/**', '**/Makefile', '**/*.go', '**/*.json', '**/*.yml', '**/*.ts', '**/*.js']
 
   pull_request:
