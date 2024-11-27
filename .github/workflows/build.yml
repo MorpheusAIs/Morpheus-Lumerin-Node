@@ -13,6 +13,7 @@ on:
       - main
       - test
       - dev
+      - vertag
     paths: ['.github/workflows/**', '**/Makefile', '**/*.go', '**/*.json', '**/*.yml', '**/*.ts', '**/*.js']
 
   pull_request:
