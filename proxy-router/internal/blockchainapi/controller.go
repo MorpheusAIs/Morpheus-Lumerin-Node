@@ -135,8 +135,7 @@ func (c *BlockchainController) claimProviderBalance(ctx *gin.Context) {
 //	@Description	Get providers list from blokchain
 //	@Tags			providers
 //	@Produce		json
-//	@Param			offset	query		string	false	"Offset"
-//	@Param			limit	query		string	false	"Limit"
+//	@Param			request	query		structs.QueryOffsetLimitOrderNoDefault	true	"Query Params"
 //	@Success		200		{object}	structs.ProvidersRes
 //	@Router			/blockchain/providers [get]
 func (c *BlockchainController) getAllProviders(ctx *gin.Context) {
@@ -228,9 +227,8 @@ func (c *BlockchainController) sendMOR(ctx *gin.Context) {
 //	@Description	Get bids from blockchain by provider
 //	@Tags			bids
 //	@Produce		json
-//	@Param			offset	query		string	false	"Offset"
-//	@Param			limit	query		string	false	"Limit"
-//	@Param			id		path		string	true	"Provider ID"
+//	@Param			id		path		string							true	"Provider ID"
+//	@Param			request	query		structs.QueryOffsetLimitOrder	true	"Query Params"
 //	@Success		200		{object}	structs.BidsRes
 //	@Router			/blockchain/providers/{id}/bids [get]
 func (c *BlockchainController) getBidsByProvider(ctx *gin.Context) {
@@ -266,8 +264,9 @@ func (c *BlockchainController) getBidsByProvider(ctx *gin.Context) {
 //	@Description	Get bids from blockchain by provider
 //	@Tags			bids
 //	@Produce		json
-//	@Param			id	path		string	true	"Provider ID"
-//	@Success		200	{object}	structs.BidsRes
+//	@Param			id		path		string							true	"Provider ID"
+//	@Param			request	query		structs.QueryOffsetLimitOrder	true	"Query Params"
+//	@Success		200		{object}	structs.BidsRes
 //	@Router			/blockchain/providers/{id}/bids/active [get]
 func (c *BlockchainController) getActiveBidsByProvider(ctx *gin.Context) {
 	var params structs.PathEthAddrID
@@ -302,8 +301,7 @@ func (c *BlockchainController) getActiveBidsByProvider(ctx *gin.Context) {
 //	@Description	Get models list from blokchain
 //	@Tags			models
 //	@Produce		json
-//	@Param			offset	query		string	false	"Offset"
-//	@Param			limit	query		string	false	"Limit"
+//	@Param			request	query		structs.QueryOffsetLimitOrderNoDefault	true	"Query Params"
 //	@Success		200		{object}	structs.ModelsRes
 //	@Router			/blockchain/models [get]
 func (c *BlockchainController) getAllModels(ctx *gin.Context) {
@@ -339,9 +337,8 @@ func (c *BlockchainController) getAllModels(ctx *gin.Context) {
 //	@Description	Get bids from blockchain by model agent
 //	@Tags			bids
 //	@Produce		json
-//	@Param			offset	query		string	false	"Offset"
-//	@Param			limit	query		string	false	"Limit"
-//	@Param			id		path		string	true	"ModelAgent ID"
+//	@Param			id		path		string							true	"ModelAgent ID"
+//	@Param			request	query		structs.QueryOffsetLimitOrder	true	"Query Params"
 //	@Success		200		{object}	structs.BidsRes
 //	@Router			/blockchain/models/{id}/bids [get]
 func (c *BlockchainController) getBidsByModelAgent(ctx *gin.Context) {
@@ -377,8 +374,9 @@ func (c *BlockchainController) getBidsByModelAgent(ctx *gin.Context) {
 //	@Description	Get bids from blockchain by model agent
 //	@Tags			bids
 //	@Produce		json
-//	@Param			id	path		string	true	"ModelAgent ID"
-//	@Success		200	{object}	structs.BidsRes
+//	@Param			id		path		string							true	"ModelAgent ID"
+//	@Param			request	query		structs.QueryOffsetLimitOrder	true	"Query Params"
+//	@Success		200		{object}	structs.BidsRes
 //	@Router			/blockchain/models/{id}/bids [get]
 func (c *BlockchainController) getActiveBidsByModel(ctx *gin.Context) {
 	var params structs.PathHex32ID
@@ -684,9 +682,8 @@ func (c *BlockchainController) getSession(ctx *gin.Context) {
 //	@Description	Get sessions from blockchain by user
 //	@Tags			sessions
 //	@Produce		json
-//	@Param			offset	query		string	false	"Offset"
-//	@Param			limit	query		string	false	"Limit"
-//	@Param			user	query		string	true	"User address"
+//	@Param			user	query		string							true	"User address"
+//	@Param			request	query		structs.QueryOffsetLimitOrder	true	"Query Params"
 //	@Success		200		{object}	structs.SessionsRes
 //	@Router			/blockchain/sessions/user [get]
 func (c *BlockchainController) getSessionsForUser(ctx *gin.Context) {
@@ -722,9 +719,8 @@ func (c *BlockchainController) getSessionsForUser(ctx *gin.Context) {
 //	@Description	Get sessions from blockchain by user
 //	@Tags			sessions
 //	@Produce		json
-//	@Param			offset	query		string	false	"Offset"
-//	@Param			limit	query		string	false	"Limit"
-//	@Param			user	query		string	true	"User address"
+//	@Param			user	query		string							true	"User address"
+//	@Param			request	query		structs.QueryOffsetLimitOrder	true	"Query Params"
 //	@Success		200		{object}	structs.SessionsRes
 //	@Router			/blockchain/sessions/user/ids [get]
 func (c *BlockchainController) getSessionsIdsForUser(ctx *gin.Context) {
@@ -760,9 +756,8 @@ func (c *BlockchainController) getSessionsIdsForUser(ctx *gin.Context) {
 //	@Description	Get sessions from blockchain by provider
 //	@Tags			sessions
 //	@Produce		json
-//	@Param			offset		query		string	false	"Offset"
-//	@Param			limit		query		string	false	"Limit"
-//	@Param			provider	query		string	true	"Provider address"
+//	@Param			request		query		structs.QueryOffsetLimitOrder	true	"Query Params"
+//	@Param			provider	query		string							true	"Provider address"
 //	@Success		200			{object}	structs.SessionsRes
 //	@Router			/blockchain/sessions/provider [get]
 func (c *BlockchainController) getSessionsForProvider(ctx *gin.Context) {
@@ -942,6 +937,7 @@ func (c *BlockchainController) createProvider(ctx *gin.Context) {
 //	@Summary	Deregister Provider
 //	@Tags		providers
 //	@Produce	json
+//	@Param		id	path		string	true	"Provider ID"
 //	@Success	200	{object}	structs.TxRes
 //	@Router		/blockchain/providers/{id} [delete]
 func (c *BlockchainController) deregisterProvider(ctx *gin.Context) {

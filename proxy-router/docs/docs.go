@@ -262,15 +262,25 @@ const docTemplate = `{
                 "summary": "Get models list",
                 "parameters": [
                     {
-                        "type": "string",
-                        "description": "Offset",
-                        "name": "offset",
+                        "type": "integer",
+                        "example": 10,
+                        "name": "limit",
                         "in": "query"
                     },
                     {
                         "type": "string",
-                        "description": "Limit",
-                        "name": "limit",
+                        "example": "0",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "example": "asc",
+                        "name": "order",
                         "in": "query"
                     }
                 ],
@@ -361,6 +371,28 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "example": 10,
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "example": "0",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "example": "asc",
+                        "name": "order",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -455,15 +487,25 @@ const docTemplate = `{
                 "summary": "Get providers list",
                 "parameters": [
                     {
-                        "type": "string",
-                        "description": "Offset",
-                        "name": "offset",
+                        "type": "integer",
+                        "example": 10,
+                        "name": "limit",
                         "in": "query"
                     },
                     {
                         "type": "string",
-                        "description": "Limit",
-                        "name": "limit",
+                        "example": "0",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "example": "asc",
+                        "name": "order",
                         "in": "query"
                     }
                 ],
@@ -517,6 +559,15 @@ const docTemplate = `{
                     "providers"
                 ],
                 "summary": "Deregister Provider",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Provider ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -540,22 +591,32 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Offset",
-                        "name": "offset",
-                        "in": "query"
+                        "description": "Provider ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
                     },
                     {
-                        "type": "string",
-                        "description": "Limit",
+                        "type": "integer",
+                        "example": 10,
                         "name": "limit",
                         "in": "query"
                     },
                     {
                         "type": "string",
-                        "description": "Provider ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
+                        "example": "0",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "example": "asc",
+                        "name": "order",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -585,6 +646,28 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "example": 10,
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "example": "0",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "example": "asc",
+                        "name": "order",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -725,15 +808,25 @@ const docTemplate = `{
                 "summary": "Get Sessions for Provider",
                 "parameters": [
                     {
-                        "type": "string",
-                        "description": "Offset",
-                        "name": "offset",
+                        "type": "integer",
+                        "example": 10,
+                        "name": "limit",
                         "in": "query"
                     },
                     {
                         "type": "string",
-                        "description": "Limit",
-                        "name": "limit",
+                        "example": "0",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "example": "asc",
+                        "name": "order",
                         "in": "query"
                     },
                     {
@@ -767,22 +860,32 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Offset",
-                        "name": "offset",
-                        "in": "query"
+                        "description": "User address",
+                        "name": "user",
+                        "in": "query",
+                        "required": true
                     },
                     {
-                        "type": "string",
-                        "description": "Limit",
+                        "type": "integer",
+                        "example": 10,
                         "name": "limit",
                         "in": "query"
                     },
                     {
                         "type": "string",
-                        "description": "User address",
-                        "name": "user",
-                        "in": "query",
-                        "required": true
+                        "example": "0",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "example": "asc",
+                        "name": "order",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -808,22 +911,32 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Offset",
-                        "name": "offset",
-                        "in": "query"
+                        "description": "User address",
+                        "name": "user",
+                        "in": "query",
+                        "required": true
                     },
                     {
-                        "type": "string",
-                        "description": "Limit",
+                        "type": "integer",
+                        "example": 10,
                         "name": "limit",
                         "in": "query"
                     },
                     {
                         "type": "string",
-                        "description": "User address",
-                        "name": "user",
-                        "in": "query",
-                        "required": true
+                        "example": "0",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "example": "asc",
+                        "name": "order",
+                        "in": "query"
                     }
                 ],
                 "responses": {
