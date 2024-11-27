@@ -262,12 +262,14 @@ const docTemplate = `{
                 "summary": "Get models list",
                 "parameters": [
                     {
+                        "minimum": 0,
                         "type": "integer",
                         "example": 10,
                         "name": "limit",
                         "in": "query"
                     },
                     {
+                        "minLength": 0,
                         "type": "string",
                         "example": "0",
                         "name": "offset",
@@ -373,12 +375,14 @@ const docTemplate = `{
                         "required": true
                     },
                     {
+                        "minimum": 0,
                         "type": "integer",
                         "example": 10,
                         "name": "limit",
                         "in": "query"
                     },
                     {
+                        "minLength": 0,
                         "type": "string",
                         "example": "0",
                         "name": "offset",
@@ -487,12 +491,14 @@ const docTemplate = `{
                 "summary": "Get providers list",
                 "parameters": [
                     {
+                        "minimum": 0,
                         "type": "integer",
                         "example": 10,
                         "name": "limit",
                         "in": "query"
                     },
                     {
+                        "minLength": 0,
                         "type": "string",
                         "example": "0",
                         "name": "offset",
@@ -597,12 +603,14 @@ const docTemplate = `{
                         "required": true
                     },
                     {
+                        "minimum": 0,
                         "type": "integer",
                         "example": 10,
                         "name": "limit",
                         "in": "query"
                     },
                     {
+                        "minLength": 0,
                         "type": "string",
                         "example": "0",
                         "name": "offset",
@@ -648,12 +656,14 @@ const docTemplate = `{
                         "required": true
                     },
                     {
+                        "minimum": 0,
                         "type": "integer",
                         "example": 10,
                         "name": "limit",
                         "in": "query"
                     },
                     {
+                        "minLength": 0,
                         "type": "string",
                         "example": "0",
                         "name": "offset",
@@ -808,12 +818,14 @@ const docTemplate = `{
                 "summary": "Get Sessions for Provider",
                 "parameters": [
                     {
+                        "minimum": 0,
                         "type": "integer",
                         "example": 10,
                         "name": "limit",
                         "in": "query"
                     },
                     {
+                        "minLength": 0,
                         "type": "string",
                         "example": "0",
                         "name": "offset",
@@ -866,12 +878,14 @@ const docTemplate = `{
                         "required": true
                     },
                     {
+                        "minimum": 0,
                         "type": "integer",
                         "example": 10,
                         "name": "limit",
                         "in": "query"
                     },
                     {
+                        "minLength": 0,
                         "type": "string",
                         "example": "0",
                         "name": "offset",
@@ -917,12 +931,14 @@ const docTemplate = `{
                         "required": true
                     },
                     {
+                        "minimum": 0,
                         "type": "integer",
                         "example": 10,
                         "name": "limit",
                         "in": "query"
                     },
                     {
+                        "minLength": 0,
                         "type": "string",
                         "example": "0",
                         "name": "offset",

@@ -754,10 +754,12 @@ paths:
       parameters:
       - example: 10
         in: query
+        minimum: 0
         name: limit
         type: integer
       - example: "0"
         in: query
+        minLength: 0
         name: offset
         type: string
       - enum:
@@ -829,10 +831,12 @@ paths:
         type: string
       - example: 10
         in: query
+        minimum: 0
         name: limit
         type: integer
       - example: "0"
         in: query
+        minLength: 0
         name: offset
         type: string
       - enum:
@@ -904,10 +908,12 @@ paths:
       parameters:
       - example: 10
         in: query
+        minimum: 0
         name: limit
         type: integer
       - example: "0"
         in: query
+        minLength: 0
         name: offset
         type: string
       - enum:
@@ -976,10 +982,12 @@ paths:
         type: string
       - example: 10
         in: query
+        minimum: 0
         name: limit
         type: integer
       - example: "0"
         in: query
+        minLength: 0
         name: offset
         type: string
       - enum:
@@ -1010,10 +1018,12 @@ paths:
         type: string
       - example: 10
         in: query
+        minimum: 0
         name: limit
         type: integer
       - example: "0"
         in: query
+        minLength: 0
         name: offset
         type: string
       - enum:
@@ -1152,10 +1162,12 @@ paths:
       parameters:
       - example: 10
         in: query
+        minimum: 0
         name: limit
         type: integer
       - example: "0"
         in: query
+        minLength: 0
         name: offset
         type: string
       - enum:
@@ -1191,10 +1203,12 @@ paths:
         type: string
       - example: 10
         in: query
+        minimum: 0
         name: limit
         type: integer
       - example: "0"
         in: query
+        minLength: 0
         name: offset
         type: string
       - enum:
@@ -1225,10 +1239,12 @@ paths:
         type: string
       - example: 10
         in: query
+        minimum: 0
         name: limit
         type: integer
       - example: "0"
         in: query
+        minLength: 0
         name: offset
         type: string
       - enum:
