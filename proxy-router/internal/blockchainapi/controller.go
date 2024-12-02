@@ -2,6 +2,7 @@ package blockchainapi
 
 import (
 	"crypto/rand"
+	"fmt"
 	"math/big"
 	"net/http"
 
@@ -592,6 +593,8 @@ func (s *BlockchainController) openSessionByBid(ctx *gin.Context) {
 //	@Success		200			{object}	structs.OpenSessionRes
 //	@Router			/blockchain/models/{id}/session [post]
 func (s *BlockchainController) openSessionByModelId(ctx *gin.Context) {
+	fmt.Printf("openSessionByModelId\n")
+
 	var reqPayload structs.OpenSessionWithFailover
 	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
 		s.log.Error(err)
@@ -606,7 +609,7 @@ func (s *BlockchainController) openSessionByModelId(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
+fmt.Printf("request payload: %+v\n", reqPayload)
 	isFailoverEnabled := reqPayload.Failover
 	sessionId, err := s.service.OpenSessionByModelId(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), isFailoverEnabled, common.Address{})
 	if err != nil {
