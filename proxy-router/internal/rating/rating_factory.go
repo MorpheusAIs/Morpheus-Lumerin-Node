@@ -33,9 +33,16 @@ func NewRatingFromConfig(config json.RawMessage, log lib.ILogger) (*Rating, erro
 		return nil, err
 	}
 
+	return NewRating(scorer, cfg.ProviderAllowList, log), nil
+}
+
+func NewRating(scorer Scorer, providerAllowList []common.Address, log lib.ILogger) *Rating {
 	allowList := map[common.Address]struct{}{}
-	for _, addr := range cfg.ProviderAllowList {
-		allowList[addr] = struct{}{}
+
+	if providerAllowList != nil {
+		for _, addr := range providerAllowList {
+			allowList[addr] = struct{}{}
+		}
 	}
 
 	providerAllowListLegacy := os.Getenv("PROVIDER_ALLOW_LIST")
@@ -63,7 +70,7 @@ func NewRatingFromConfig(config json.RawMessage, log lib.ILogger) (*Rating, erro
 	return &Rating{
 		scorer:            scorer,
 		providerAllowList: allowList,
-	}, nil
+	}
 }
 
 var (
