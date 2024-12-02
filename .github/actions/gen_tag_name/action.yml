@@ -20,7 +20,7 @@ runs:
             VFULL=${VMAJ}.${VMIN}
             VTAG=v$VFULL
         else
-            MB=$(git merge-base refs/remotes/origin/dev refs/remotes/origin/main HEAD)
+            MB=$(git merge-base refs/remotes/origin/main HEAD)
             VPAT=$(git rev-list --count --no-merges ${MB}..HEAD)
             VFULL=${VMAJ}.${VMIN}.${VPAT}
             RNAME=${GITHUB_REF_NAME##*/}
