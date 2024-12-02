@@ -1,6 +1,6 @@
 #!/bin/sh
 
-VERSION=$(grep '^VERSION=' .version | cut -d '=' -f 2-)
+VERSION=${TAG_NAME:-0.1.0}
 echo VERSION=$VERSION
 
 # if commit is not set, use the latest commit
@@ -12,6 +12,8 @@ go mod tidy
 go build \
   -tags docker \
   -ldflags="-s -w \
+    -X 'github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/config.BuildVersion=$VERSION' \
+    -X 'github.com/Lumerin-protocol/Morpheus-Lumerin-Node/proxy-router/internal/config.Commit=$COMMIT' \
     -X 'github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config.BuildVersion=$VERSION' \
     -X 'github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config.Commit=$COMMIT' \
   " \
