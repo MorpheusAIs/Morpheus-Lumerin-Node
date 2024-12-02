@@ -75,7 +75,7 @@ contract ModelRegistry is IModelRegistry, OwnableDiamondStorage, ModelStorage, B
         ModelsStorage storage modelsStorage = _getModelsStorage();
         Model storage model = modelsStorage.models[modelId_];
 
-        _validateDelegatee(_msgSender(), model.owner, DELEGATION_RULES_MODEL);        
+        _validateDelegatee(_msgSender(), model.owner, DELEGATION_RULES_MODEL);
 
         if (!_isModelActiveBidsEmpty(modelId_)) {
             revert ModelHasActiveBids();

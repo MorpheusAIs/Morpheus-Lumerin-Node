@@ -3,7 +3,7 @@ import styled from 'styled-components'
 
 import withDashboardState from '../../store/hocs/withDashboardState'
 
-import { LayoutHeader } from '../common/LayoutHeader'
+import { ChainHeader } from '../common/ChainHeader'
 import BalanceBlock from './BalanceBlock'
 import TransactionModal from './tx-modal'
 import TxList from './tx-list/TxList'
@@ -11,7 +11,6 @@ import { View } from '../common/View'
 import { toUSD } from '../../store/utils/syncAmounts';
 import {
   BtnAccent,
-
 } from './BalanceBlock.styles';
 
 const CustomBtn = styled(BtnAccent)`
@@ -27,14 +26,11 @@ const WidjetsContainer = styled.div`
 
 const WidjetItem = styled.div`
     margin: 1.6rem 0 1.6rem;
-    background-color: #fff;
     padding: 1.6rem 3.2rem;
     border-radius: 0.375rem;
     color: white;
     max-width: 720px;
-    background: rgba(255,255,255,0.04);
-    border-width: 1px;
-    border: 1px solid rgba(255,255,255,0.04);
+
     color: white;
 `
 
@@ -43,6 +39,9 @@ const StakingWidjet = styled(WidjetItem)`
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  background: rgba(255,255,255,0.04);
+  border-width: 1px;
+  border: 1px solid rgba(255,255,255,0.04);
 `
 
 const Dashboard = ({
@@ -157,7 +156,7 @@ const Dashboard = ({
 
   return (
     <View data-testid="dashboard-container">
-      <LayoutHeader title="My Wallet" address={address} copyToClipboard={copyToClipboard} />
+      <ChainHeader title="My Wallet" chain={props.config.chain} address={address} copyToClipboard={copyToClipboard} />
 
       <BalanceBlock
         {...balanceData}
@@ -171,7 +170,7 @@ const Dashboard = ({
             <div>
               Staked Balance
             </div>
-            <div>{staked} MOR</div>
+            <div>{staked} {props.symbol}</div>
           </StakingWidjet>
         <WidjetItem>
         <CustomBtn

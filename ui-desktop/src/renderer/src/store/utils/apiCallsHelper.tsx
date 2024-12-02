@@ -5,7 +5,7 @@ export const getSessionsByUser = async (url, user) => {
 
     const getSessions = async (user, offset, limit) => {
       try {
-        const path = `${url}/blockchain/sessions/user?user=${user}&offset=${offset}&limit=${limit}`;
+        const path = `${url}/blockchain/sessions/user?user=${user}&offset=${offset}&limit=${limit}&order=desc`;
         const response = await fetch(path);
         const data = await response.json();
         return data.sessions;
@@ -15,9 +15,8 @@ export const getSessionsByUser = async (url, user) => {
         return [];
       }
     } 
-
     
-    const limit = 50;
+    const limit = 20;
     let offset = 0;
     let sessions: any[] = [];
     let all = false;
@@ -36,4 +35,43 @@ export const getSessionsByUser = async (url, user) => {
     }
 
     return sessions;
+}
+
+export const getBidsByModelId = async (url, modelId) => {
+  if(!modelId || !url) {
+    return;
   }
+
+  const getBidsByModels = async (modelId, offset, limit) => {
+    try {
+      const path = `${url}/blockchain/models/${modelId}/bids?offset=${offset}&limit=${limit}&order=desc`
+      const response = await fetch(path);
+      const data = await response.json();
+      return data.bids;
+    }
+    catch (e) {
+      console.log("Error", e)
+      return [];
+    }
+  }
+  
+  const limit = 20;
+  let offset = 0;
+  let bids: any[] = [];
+  let all = false;
+
+  while (!all) {
+    console.log("Getting bids by model id: ", modelId, offset, limit)
+    const bidsRes = await getBidsByModels(modelId, offset, limit);
+    bids.push(...bidsRes);
+
+    if(bids.length != limit) {
+      all = true;
+    }
+    else {
+      offset++;
+    }
+  }
+
+  return bids;
+}

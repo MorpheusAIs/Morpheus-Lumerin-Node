@@ -139,3 +139,9 @@ type ImageGenerationResult struct {
 }
 
 type ImageGenerationCallback func(completion *ImageGenerationResult) error
+
+type VideoGenerationResult struct {
+	VideoRawContent string `json:"videoRawContent"`
+}
+
+type VideoGenerationCallback func(completion *VideoGenerationResult) error

@@ -24,14 +24,16 @@ type Config struct {
 		ResetKeychain bool `env:"APP_RESET_KEYCHAIN" flag:"app-reset-keychain" desc:"reset keychain on start"`
 	}
 	Blockchain struct {
-		ChainID          int             `env:"ETH_NODE_CHAIN_ID"  flag:"eth-node-chain-id"  validate:"number"`
-		EthNodeAddress   string          `env:"ETH_NODE_ADDRESS"   flag:"eth-node-address"   validate:"omitempty,url"`
-		EthLegacyTx      bool            `env:"ETH_NODE_LEGACY_TX" flag:"eth-node-legacy-tx" desc:"use it to disable EIP-1559 transactions"`
-		ExplorerApiUrl   string          `env:"EXPLORER_API_URL"   flag:"explorer-api-url"   validate:"required,url"`
-		UseSubscriptions bool            `env:"ETH_NODE_USE_SUBSCRIPTIONS"  flag:"eth-node-use-subscriptions"  desc:"set it to true to enable subscriptions for blockchain events, otherwise default polling will be used"`
-		PollingInterval  time.Duration   `env:"ETH_NODE_POLLING_INTERVAL" flag:"eth-node-polling-interval" validate:"omitempty,duration" desc:"interval for polling eth node for new events"`
-		MaxReconnects    int             `env:"ETH_NODE_MAX_RECONNECTS" flag:"eth-node-max-reconnects" validate:"omitempty,gte=0" desc:"max reconnects to eth node"`
-		Multicall3Addr   *common.Address `env:"MULTICALL3_ADDR" flag:"multicall3-addr" validate:"omitempty,eth_addr" desc:"multicall3 custom contract address"`
+		ChainID            int             `env:"ETH_NODE_CHAIN_ID"  flag:"eth-node-chain-id"  validate:"number"`
+		EthNodeAddress     string          `env:"ETH_NODE_ADDRESS"   flag:"eth-node-address"   validate:"omitempty,url"`
+		EthLegacyTx        bool            `env:"ETH_NODE_LEGACY_TX" flag:"eth-node-legacy-tx" desc:"use it to disable EIP-1559 transactions"`
+		ExplorerApiUrl     string          `env:"EXPLORER_API_URL"   flag:"explorer-api-url"   validate:"required,url"`
+		ExplorerRetryDelay time.Duration   `env:"EXPLORER_RETRY_DELAY" flag:"explorer-retry-delay" validate:"omitempty,duration" desc:"delay between retries"`
+		ExplorerMaxRetries uint8           `env:"EXPLORER_MAX_RETRIES" flag:"explorer-max-retries" validate:"omitempty,gte=0" desc:"max retries for explorer requests"`
+		UseSubscriptions   bool            `env:"ETH_NODE_USE_SUBSCRIPTIONS"  flag:"eth-node-use-subscriptions"  desc:"set it to true to enable subscriptions for blockchain events, otherwise default polling will be used"`
+		PollingInterval    time.Duration   `env:"ETH_NODE_POLLING_INTERVAL" flag:"eth-node-polling-interval" validate:"omitempty,duration" desc:"interval for polling eth node for new events"`
+		MaxReconnects      int             `env:"ETH_NODE_MAX_RECONNECTS" flag:"eth-node-max-reconnects" validate:"omitempty,gte=0" desc:"max reconnects to eth node"`
+		Multicall3Addr     *common.Address `env:"MULTICALL3_ADDR" flag:"multicall3-addr" validate:"omitempty,eth_addr" desc:"multicall3 custom contract address"`
 	}
 	Environment string `env:"ENVIRONMENT" flag:"environment"`
 	Marketplace struct {
@@ -58,7 +60,7 @@ type Config struct {
 		StoreChatContext   *lib.Bool `env:"PROXY_STORE_CHAT_CONTEXT" flag:"proxy-store-chat-context" desc:"store chat context in the proxy storage"`
 		ForwardChatContext *lib.Bool `env:"PROXY_FORWARD_CHAT_CONTEXT" flag:"proxy-forward-chat-context" desc:"prepend whole stored message history to the prompt"`
 		ModelsConfigPath   string    `env:"MODELS_CONFIG_PATH" flag:"models-config-path" validate:"omitempty"`
-		ProviderAllowList  string    `env:"PROVIDER_ALLOW_LIST" flag:"provider-allow-list" validate:"omitempty" desc:"comma separated list of provider addresses allowed to open session with"`
+		RatingConfigPath   string    `env:"RATING_CONFIG_PATH" flag:"rating-config-path" validate:"omitempty" desc:"path to the rating config file"`
 	}
 	System struct {
 		Enable           bool   `env:"SYS_ENABLE"              flag:"sys-enable" desc:"enable system level configuration adjustments"`
@@ -85,10 +87,16 @@ func (cfg *Config) SetDefaults() {
 		cfg.Blockchain.MaxReconnects = 30
 	}
 	if cfg.Blockchain.PollingInterval == 0 {
-		cfg.Blockchain.PollingInterval = 1 * time.Second
+		cfg.Blockchain.PollingInterval = 10 * time.Second
 	}
 	if cfg.Blockchain.Multicall3Addr.Cmp(common.Address{}) == 0 {
 		cfg.Blockchain.Multicall3Addr = &multicall.MULTICALL3_ADDR
+	}
+	if cfg.Blockchain.ExplorerRetryDelay == 0 {
+		cfg.Blockchain.ExplorerRetryDelay = 5 * time.Second
+	}
+	if cfg.Blockchain.ExplorerMaxRetries == 0 {
+		cfg.Blockchain.ExplorerMaxRetries = 5
 	}
 
 	// Log
@@ -169,6 +177,9 @@ func (cfg *Config) SetDefaults() {
 		val := true
 		cfg.Proxy.ForwardChatContext = &lib.Bool{Bool: &val}
 	}
+	if cfg.Proxy.RatingConfigPath == "" {
+		cfg.Proxy.RatingConfigPath = "./rating-config.json"
+	}
 }
 
 // GetSanitized returns a copy of the config with sensitive data removed
@@ -181,6 +192,7 @@ func (cfg *Config) GetSanitized() interface{} {
 	publicCfg.Blockchain.MaxReconnects = cfg.Blockchain.MaxReconnects
 	publicCfg.Blockchain.PollingInterval = cfg.Blockchain.PollingInterval
 	publicCfg.Blockchain.UseSubscriptions = cfg.Blockchain.UseSubscriptions
+	publicCfg.Blockchain.ExplorerApiUrl = cfg.Blockchain.ExplorerApiUrl
 
 	publicCfg.Environment = cfg.Environment
 
@@ -199,10 +211,10 @@ func (cfg *Config) GetSanitized() interface{} {
 
 	publicCfg.Proxy.Address = cfg.Proxy.Address
 	publicCfg.Proxy.ModelsConfigPath = cfg.Proxy.ModelsConfigPath
-	publicCfg.Proxy.ProviderAllowList = cfg.Proxy.ProviderAllowList
 	publicCfg.Proxy.StoragePath = cfg.Proxy.StoragePath
 	publicCfg.Proxy.StoreChatContext = cfg.Proxy.StoreChatContext
 	publicCfg.Proxy.ForwardChatContext = cfg.Proxy.ForwardChatContext
+	publicCfg.Proxy.RatingConfigPath = cfg.Proxy.RatingConfigPath
 
 	publicCfg.System.Enable = cfg.System.Enable
 	publicCfg.System.LocalPortRange = cfg.System.LocalPortRange

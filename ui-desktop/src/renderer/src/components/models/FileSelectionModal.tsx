@@ -1,5 +1,4 @@
 //import Modal from '../../contracts/modals/Modal';
-import { List as RVList } from 'react-virtualized';
 import Modal from '../contracts/modals/Modal';
 import styled from 'styled-components';
 import {
@@ -18,10 +17,6 @@ const bodyProps = {
     overflow: 'hidden',
     onClick: e => e.stopPropagation()
 }
-const RVContainer = styled(RVList)`
- .ReactVirtualized__Grid__innerScrollContainer {
-   overflow: visible !important;
-  }`
 
 const RowContainer = styled.div`
   padding: 1rem;
@@ -37,23 +32,6 @@ const FileSelectionModal = ({ isActive, handleClose }) => {
     }
 
     const [files, setFiles] = useState<any>([]);
-
-    const openSelectionModal = () => {
-        return new Promise(resolve => {
-            let input = document.createElement('input');
-            input.type = 'file';
-            input.multiple = true;
-
-            input.onchange = () => {
-                const files = Array.from(input.files as any);
-                setFiles(files)
-                    ;
-            };
-
-            input.click();
-        });
-    }
-
 
     return (
         <Modal

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema",
+  "type": "object",
+  "properties": {
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "modelId": {
+            "title": "Model ID",
+            "description": "The model ID from blockchain",
+            "type": "string",
+            "pattern": "^(0x)?[0-9a-fA-F]{64}$",
+            "examples": ["0x0000000000000000000000000000000000000000000000000000000000000001"]
+          },
+          "modelName": {
+            "title": "Model Name",
+            "description": "The name of the model to be used from this provider",
+            "type": "string",
+            "minLength": 1
+          },
+          "apiType": {
+            "title": "API Type",
+            "description": "Defines the type of API to be used with this model",
+            "type": "string",
+            "enum": ["openai", "prodia-sd", "prodia-sdxl", "prodia-v2"]
+          },
+          "apiUrl": {
+            "title": "API URL",
+            "description": "The URL of the API to be used with this model",
+            "type": "string",
+            "format": "uri",
+            "examples": ["http://localhost:11434/v1"]
+          },
+          "apiKey": {
+            "title": "API Key",
+            "description": "Optional API key",
+            "type": "string",
+            "minLength": 1
+          },
+          "concurrentSlots": {
+            "title": "Concurrent Slots",
+            "description": "The number of concurrent slots to be used with this model",
+            "type": "integer",
+            "minimum": 1
+          },
+          "capacityPolicy": {
+            "title": "Capacity Policy",
+            "description": "The policy to be used for capacity management",
+            "type": "string",
+            "enum": ["simple", "idle_timeout"]
+          }
+        },
+        "required": ["modelId", "modelName", "apiType", "apiUrl"]
+      }
+    }
+  }
+}

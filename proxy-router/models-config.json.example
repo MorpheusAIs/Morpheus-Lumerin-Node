@@ -1,4 +1,6 @@
-"$schema": "./internal/config/models-config-schema.json",
+
+{
+  "$schema": "./internal/config/models-config-schema.json",
   "models": [
     {
       "modelId": "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -14,3 +16,4 @@
       "apiKey": "FILL_ME_IN"
     }
   ]
+}

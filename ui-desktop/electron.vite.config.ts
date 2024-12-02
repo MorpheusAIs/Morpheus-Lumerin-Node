@@ -17,9 +17,10 @@ const envsToInject = [
   'PROXY_WEB_DEFAULT_PORT',
   'SENTRY_DSN',
   'SYMBOL_ETH',
-  'SYMBOL_LMR',
+  'SYMBOL_COIN',
   'TOKEN_ADDRESS',
-  'TRACKING_ID'
+  'TRACKING_ID',
+  'FAILOVER_ENABLED'
 ] as const
 
 export default defineConfig(({ /*command,*/ mode }) => {

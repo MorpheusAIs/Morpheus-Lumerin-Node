@@ -1,7 +1,11 @@
 {
-    "0x0000000000000000000000000000000000000000000000000000000000000000": {
+  "$schema": "https://raw.githubusercontent.com/Lumerin-protocol/Morpheus-Lumerin-Node/a719073670adb17de6282b12d1852d39d629cb6e/proxy-router/internal/config/models-config-schema.json",
+  "models": [
+    {
+      "modelId": "0x0000000000000000000000000000000000000000000000000000000000000000",
       "modelName": "llama2",
       "apiType": "openai",
       "apiUrl": "http://localhost:8080/v1"
     }
-  }
+  ]
+}

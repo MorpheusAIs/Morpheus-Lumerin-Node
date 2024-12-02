@@ -4,7 +4,7 @@ import React from 'react';
 import { ToastsContext } from '../../components/toasts';
 import selectors from '../selectors';
 import axios from 'axios';
-import { getSessionsByUser } from '../utils/apiCallsHelper';
+import { getSessionsByUser, getBidsByModelId } from '../utils/apiCallsHelper';
 
 const AvailabilityStatus = {
   available: "available",
@@ -19,23 +19,6 @@ const withChatState = WrappedComponent => {
 
     static displayName = `withChatState(${WrappedComponent.displayName ||
       WrappedComponent.name})`;
-
-    getBidsByModels = async (modelId) => {
-      try {
-        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/models/${modelId}/bids`
-        const response = await fetch(path);
-        const data = await response.json();
-        if (data.error) {
-          console.error(data.error);
-          return [];
-        }
-        return data.bids;
-      }
-      catch (e) {
-        console.log("Error", e)
-        return [];
-      }
-    }
 
     getProviders = async () => {
       try {
@@ -73,23 +56,6 @@ const withChatState = WrappedComponent => {
       catch (e) {
         console.log("Error", e)
         this.context.toast('error', 'Failed to close session');
-        return [];
-      }
-    }
-
-    getBidsRatingByModel = async (modelId) => {
-      try {
-        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/models/${modelId}/bids/rated`;
-        const response = await fetch(path);
-        const data = await response.json();
-        if (data.error) {
-          console.error(data.error);
-          return [];
-        }
-        return data.bids;
-      }
-      catch (e) {
-        console.log("Error", e)
         return [];
       }
     }
@@ -150,7 +116,7 @@ const withChatState = WrappedComponent => {
       const responses = (await Promise.all(
         models.map(async m => {
           const id = m.Id;
-          const bids = (await this.getBidsByModels(id))
+          const bids = (await getBidsByModelId(this.props.config.chain.localProxyRouterUrl, id))
             .filter(b => +b.DeletedAt === 0)
             .map(b => ({ ...b, ProviderData: providersMap[b.Provider.toLowerCase()], Model: m }))
             .filter(b => b.ProviderData);
@@ -284,6 +250,7 @@ const withChatState = WrappedComponent => {
     provider: state.models.selectedProvider,
     activeSession: state.models.activeSession,
     address: selectors.getWalletAddress(state),
+    symbol: selectors.getCoinSymbol(state)
   });
 
   const mapDispatchToProps = dispatch => ({

@@ -16,7 +16,7 @@ type ModelStats struct {
 	Count         int
 }
 
-func sampleDataTPS() ([][32]byte, []m.IBidStorageBid, []s.IStatsStorageProviderModelStats, ModelStats) {
+func sampleDataTPS() ([][32]byte, []m.IBidStorageBid, []s.IStatsStorageProviderModelStats, *s.IStatsStorageModelStats) {
 	modelID := common.HexToHash("0x01")
 	bidIds := [][32]byte{
 		{0x01},
@@ -73,7 +73,7 @@ func sampleDataTPS() ([][32]byte, []m.IBidStorageBid, []s.IStatsStorageProviderM
 			TotalCount:    10,
 		},
 	}
-	mStats := ModelStats{
+	mStats := &s.IStatsStorageModelStats{
 		TpsScaled1000: s.LibSDSD{Mean: 20, SqSum: 100},
 		TtftMs:        s.LibSDSD{Mean: 20, SqSum: 200},
 		TotalDuration: s.LibSDSD{Mean: 30, SqSum: 300},

@@ -54,7 +54,7 @@ func (g *ProviderRegistry) GetAllProviders(ctx context.Context) ([]common.Addres
 	var allIDs []common.Address
 	var allProviders []providerregistry.IProviderStorageProvider
 	for {
-		ids, providers, err := g.GetProviders(ctx, offset, uint8(batchSize))
+		ids, providers, err := g.GetProviders(ctx, offset, uint8(batchSize), OrderASC)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -71,12 +71,19 @@ func (g *ProviderRegistry) GetAllProviders(ctx context.Context) ([]common.Addres
 	return allIDs, allProviders, nil
 }
 
-func (g *ProviderRegistry) GetProviders(ctx context.Context, offset *big.Int, limit uint8) ([]common.Address, []providerregistry.IProviderStorageProvider, error) {
-	ids, err := g.providerRegistry.GetActiveProviders(&bind.CallOpts{Context: ctx}, offset, big.NewInt(int64(limit)))
+func (g *ProviderRegistry) GetProviders(ctx context.Context, offset *big.Int, limit uint8, order Order) ([]common.Address, []providerregistry.IProviderStorageProvider, error) {
+	_, len, err := g.providerRegistry.GetActiveProviders(&bind.CallOpts{Context: ctx}, big.NewInt(0), big.NewInt(0))
 	if err != nil {
 		return nil, nil, err
 	}
 
+	_offset, _limit := adjustPagination(order, len, offset, limit)
+	ids, _, err := g.providerRegistry.GetActiveProviders(&bind.CallOpts{Context: ctx}, _offset, _limit)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	adjustOrder(order, ids)
 	return g.getMultipleProviders(ctx, ids)
 }
 
@@ -127,6 +134,15 @@ func (g *ProviderRegistry) GetProviderById(ctx context.Context, id common.Addres
 	}
 
 	return &provider, nil
+}
+
+func (g *ProviderRegistry) GetMinStake(ctx context.Context) (*big.Int, error) {
+	minStake, err := g.providerRegistry.GetProviderMinimumStake(&bind.CallOpts{Context: ctx})
+	if err != nil {
+		return nil, err
+	}
+
+	return minStake, nil
 }
 
 func (g *ProviderRegistry) getMultipleProviders(ctx context.Context, IDs []common.Address) ([]common.Address, []providerregistry.IProviderStorageProvider, error) {

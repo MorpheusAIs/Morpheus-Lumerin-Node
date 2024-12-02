@@ -9,6 +9,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/modelregistry"
 	pr "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/providerregistry"
 	s "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/sessionrouter"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
 	"github.com/ethereum/go-ethereum/common"
 )
 
@@ -96,4 +97,11 @@ func mapProvider(addr common.Address, provider pr.IProviderStorageProvider) *str
 		IsDeleted: provider.IsDeleted,
 		CreatedAt: &lib.BigInt{Int: *provider.CreatedAt},
 	}
+}
+
+func mapOrder(order string) registries.Order {
+	if order == "desc" {
+		return registries.OrderDESC
+	}
+	return registries.OrderASC
 }

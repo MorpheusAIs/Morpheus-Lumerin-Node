@@ -56,8 +56,8 @@ func NewSessionRouter(sessionRouterAddr common.Address, client i.ContractBackend
 	}
 }
 
-func (g *SessionRouter) OpenSession(opts *bind.TransactOpts, approval []byte, approvalSig []byte, stake *big.Int, privateKeyHex lib.HexString) (sessionID common.Hash, providerID common.Address, userID common.Address, err error) {
-	sessionTx, err := g.sessionRouter.OpenSession(opts, opts.From, stake, false, approval, approvalSig)
+func (g *SessionRouter) OpenSession(opts *bind.TransactOpts, approval []byte, approvalSig []byte, stake *big.Int, directPayment bool, privateKeyHex lib.HexString) (sessionID common.Hash, providerID common.Address, userID common.Address, err error) {
+	sessionTx, err := g.sessionRouter.OpenSession(opts, opts.From, stake, directPayment, approval, approvalSig)
 	if err != nil {
 		return common.Hash{}, common.Address{}, common.Address{}, lib.TryConvertGethError(err)
 	}
@@ -66,6 +66,10 @@ func (g *SessionRouter) OpenSession(opts *bind.TransactOpts, approval []byte, ap
 	receipt, err := bind.WaitMined(opts.Context, g.client, sessionTx)
 	if err != nil {
 		return common.Hash{}, common.Address{}, common.Address{}, lib.TryConvertGethError(err)
+	}
+
+	if receipt.Status != 1 {
+		return receipt.TxHash, common.Address{}, common.Address{}, fmt.Errorf("Transaction failed with status %d", receipt.Status)
 	}
 
 	// Find the event log
@@ -89,35 +93,59 @@ func (g *SessionRouter) GetSession(ctx context.Context, sessionID common.Hash) (
 	return &session, nil
 }
 
-func (g *SessionRouter) GetSessionsByProvider(ctx context.Context, providerAddr common.Address, offset *big.Int, limit uint8) ([][32]byte, []src.ISessionStorageSession, error) {
-	sessionIDs, err := g.sessionRouter.GetProviderSessions(&bind.CallOpts{Context: ctx}, providerAddr, offset, big.NewInt(int64(limit)))
+func (g *SessionRouter) GetSessionsByProvider(ctx context.Context, providerAddr common.Address, offset *big.Int, limit uint8, order Order) ([][32]byte, []src.ISessionStorageSession, error) {
+	_, length, err := g.sessionRouter.GetProviderSessions(&bind.CallOpts{Context: ctx}, providerAddr, big.NewInt(0), big.NewInt(0))
 	if err != nil {
 		return nil, nil, lib.TryConvertGethError(err)
 	}
-	return g.getMultipleSessions(ctx, sessionIDs)
-}
-
-func (g *SessionRouter) GetSessionsByUser(ctx context.Context, userAddr common.Address, offset *big.Int, limit uint8) ([][32]byte, []src.ISessionStorageSession, error) {
-	IDs, err := g.sessionRouter.GetUserSessions(&bind.CallOpts{Context: ctx}, userAddr, offset, big.NewInt(int64(limit)))
+	_offset, _limit := adjustPagination(order, length, offset, limit)
+	ids, _, err := g.sessionRouter.GetProviderSessions(&bind.CallOpts{Context: ctx}, providerAddr, _offset, _limit)
 	if err != nil {
 		return nil, nil, lib.TryConvertGethError(err)
 	}
-	return g.getMultipleSessions(ctx, IDs)
+	adjustOrder(order, ids)
+	return g.getMultipleSessions(ctx, ids)
 }
 
-func (g *SessionRouter) GetSessionsIdsByUser(ctx context.Context, userAddr common.Address, offset *big.Int, limit uint8) ([][32]byte, error) {
-	IDs, err := g.sessionRouter.GetUserSessions(&bind.CallOpts{Context: ctx}, userAddr, offset, big.NewInt(int64(limit)))
+func (g *SessionRouter) GetSessionsByUser(ctx context.Context, userAddr common.Address, offset *big.Int, limit uint8, order Order) ([][32]byte, []src.ISessionStorageSession, error) {
+	_, length, err := g.sessionRouter.GetUserSessions(&bind.CallOpts{Context: ctx}, userAddr, big.NewInt(0), big.NewInt(0))
+	if err != nil {
+		return nil, nil, lib.TryConvertGethError(err)
+	}
+	_offset, _limit := adjustPagination(order, length, offset, limit)
+	ids, _, err := g.sessionRouter.GetUserSessions(&bind.CallOpts{Context: ctx}, userAddr, _offset, _limit)
+	if err != nil {
+		return nil, nil, lib.TryConvertGethError(err)
+	}
+	adjustOrder(order, ids)
+	return g.getMultipleSessions(ctx, ids)
+}
+
+func (g *SessionRouter) GetSessionsIdsByUser(ctx context.Context, userAddr common.Address, offset *big.Int, limit uint8, order Order) ([][32]byte, error) {
+	_, length, err := g.sessionRouter.GetUserSessions(&bind.CallOpts{Context: ctx}, userAddr, big.NewInt(0), big.NewInt(0))
 	if err != nil {
 		return nil, lib.TryConvertGethError(err)
 	}
+	_offset, _limit := adjustPagination(order, length, offset, limit)
+	IDs, _, err := g.sessionRouter.GetUserSessions(&bind.CallOpts{Context: ctx}, userAddr, _offset, _limit)
+	if err != nil {
+		return nil, lib.TryConvertGethError(err)
+	}
+	adjustOrder(order, IDs)
 	return IDs, nil
 }
 
-func (g *SessionRouter) GetSessionsIDsByProvider(ctx context.Context, userAddr common.Address, offset *big.Int, limit uint8) ([][32]byte, error) {
-	IDs, err := g.sessionRouter.GetProviderSessions(&bind.CallOpts{Context: ctx}, userAddr, offset, big.NewInt(int64(limit)))
+func (g *SessionRouter) GetSessionsIDsByProvider(ctx context.Context, userAddr common.Address, offset *big.Int, limit uint8, order Order) ([][32]byte, error) {
+	_, length, err := g.sessionRouter.GetProviderSessions(&bind.CallOpts{Context: ctx}, userAddr, big.NewInt(0), big.NewInt(0))
 	if err != nil {
 		return nil, lib.TryConvertGethError(err)
 	}
+	_offset, _limit := adjustPagination(order, length, offset, limit)
+	IDs, _, err := g.sessionRouter.GetProviderSessions(&bind.CallOpts{Context: ctx}, userAddr, _offset, _limit)
+	if err != nil {
+		return nil, lib.TryConvertGethError(err)
+	}
+	adjustOrder(order, IDs)
 	return IDs, nil
 }
 
