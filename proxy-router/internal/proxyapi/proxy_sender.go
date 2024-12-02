@@ -249,7 +249,7 @@ func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage)
 	conn, err := dialer.Dial("tcp", url)
 	if err != nil {
 		err = lib.WrapError(ErrConnectProvider, err)
-		p.log.Errorf("%s", err)
+		p.log.Warnf(err.Error())
 		return nil, http.StatusInternalServerError, err
 	}
 	defer conn.Close()
@@ -400,7 +400,7 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 	conn, err := dialer.Dial("tcp", url)
 	if err != nil {
 		err = lib.WrapError(ErrConnectProvider, err)
-		p.log.Errorf("%s", err)
+		p.log.Warnf(err.Error())
 		return nil, 0, 0, err
 	}
 	defer conn.Close()

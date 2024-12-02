@@ -136,6 +136,15 @@ func (g *ProviderRegistry) GetProviderById(ctx context.Context, id common.Addres
 	return &provider, nil
 }
 
+func (g *ProviderRegistry) GetMinStake(ctx context.Context) (*big.Int, error) {
+	minStake, err := g.providerRegistry.GetProviderMinimumStake(&bind.CallOpts{Context: ctx})
+	if err != nil {
+		return nil, err
+	}
+
+	return minStake, nil
+}
+
 func (g *ProviderRegistry) getMultipleProviders(ctx context.Context, IDs []common.Address) ([]common.Address, []providerregistry.IProviderStorageProvider, error) {
 	args := make([][]interface{}, len(IDs))
 	for i, id := range IDs {

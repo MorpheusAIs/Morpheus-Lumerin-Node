@@ -32,7 +32,7 @@ func NewLogWatcherPolling(client i.EthClient, pollInterval time.Duration, maxRec
 		client:        client,
 		pollInterval:  pollInterval,
 		maxReconnects: maxReconnects,
-		log:           log,
+		log:           log.Named("POLLING"),
 	}
 }
 
@@ -76,7 +76,7 @@ func (w *LogWatcherPolling) pollReconnect(ctx context.Context, quit <-chan struc
 		if w.maxReconnects == 0 {
 			maxReconnects = "∞"
 		}
-		w.log.Warnf("polling error, retrying (%d/%s): %s", i, maxReconnects, err)
+		w.log.Warnf("request error, retrying (%d/%s): %s", i, maxReconnects, err)
 		lastErr = err
 
 		// retry delay
@@ -89,7 +89,7 @@ func (w *LogWatcherPolling) pollReconnect(ctx context.Context, quit <-chan struc
 		}
 	}
 
-	err := fmt.Errorf("polling error, retries exhausted (%d), stopping: %s", w.maxReconnects, lastErr)
+	err := fmt.Errorf("request error, retries exhausted (%d), stopping: %s", w.maxReconnects, lastErr)
 	w.log.Warnf(err.Error())
 	return nextFromBlock, err
 }
@@ -123,7 +123,7 @@ func (w *LogWatcherPolling) pollChanges(ctx context.Context, nextFromBlock *big.
 		ToBlock:   currentBlock.Number,
 	}
 
-	w.log.Debugf("=====> calling poll from %s to %s", query.FromBlock.String(), query.ToBlock.String())
+	w.log.Debugf("requesting changes from %s to %s block", query.FromBlock.String(), query.ToBlock.String())
 	sub, err := w.client.FilterLogs(ctx, query)
 	if err != nil {
 		return nextFromBlock, err
