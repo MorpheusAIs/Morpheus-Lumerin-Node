@@ -1,7 +1,7 @@
 # Example models config file.  Local model configurations are stored in this file
 * `root_key` (required) is the model id
 * `modelName` (required) is the name of the model
-* `apiType` (required) is the type of the model api.  Currently supported values are "prodia" and "openai"
+* `apiType` (required) is the type of the model api.  Currently supported values are "prodia-sd", "prodia-sdxl", "prodia-v2" and "openai"
 * `apiUrl` (required) is the url of the LLM server or model API
 * `apiKey` (optional) is the api key for the model
 * `cononcurrentSlots` (optional) are number of available distinct chats on the llm server and used for capacity policy
@@ -37,6 +37,12 @@
         "apiUrl": "http://llmserver.domain.io:8080/v1",
         "concurrentSlots": 8,
         "capacityPolicy": "simple"
+    },
+    "0xe086adc275c99e32bb10b0aff5e8bfc391aad18cbb184727a75b2569149425c6": {
+        "modelName": "inference.mochi1.txt2vid.v1",
+        "apiType": "prodia-v2",
+        "apiUrl": "https://inference.prodia.com/v2",
+        "apiKey": "replace-with-your-api-key"
     }
 }
 ```
