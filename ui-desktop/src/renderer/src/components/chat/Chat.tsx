@@ -146,11 +146,6 @@ const Chat = (props) => {
     }, [])
 
     const toggleDrawer = async () => {
-        if (!isOpen) {
-            setIsLoading(true);
-            await refreshSessions()
-            setIsLoading(false);
-        }
         setIsOpen((prevState) => !prevState)
     }
 
@@ -574,7 +569,11 @@ const Chat = (props) => {
                     deleteHistory={deleteChatEntry}
                     models={chainData?.models || []}
                     onSelectChat={selectChat}
-                    refreshSessions={refreshSessions}
+                    refreshSessions={async () => {
+                        setIsLoading(true);
+                        await refreshSessions()
+                        setIsLoading(false);
+                    }}
                     onChangeTitle={wrapChangeTitle}
                     onCloseSession={closeSession} />
             </Drawer>
