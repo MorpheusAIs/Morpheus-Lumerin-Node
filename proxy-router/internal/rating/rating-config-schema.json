@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema",
+  "type": "object",
+  "required": ["algorithm", "params"],
+  "properties": {
+    "algorithm": {
+      "type": "string",
+      "enum": ["default"],
+      "title": "Rating algorithm",
+      "description": "The algorithm used to calculate the rating of a provider"
+    },
+    "providerAllowlist": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^0x[0-9a-fA-F]{40}$"
+      },
+      "uniqueItems": true,
+      "title": "Provider allowlist",
+      "description": "List of provider addresses that are allowed to open session with"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "algorithm": {
+            "const": "default"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "$ref": "./scorer-default-schema.json"
+          }
+        }
+      }
+    }
+  ]
+}
