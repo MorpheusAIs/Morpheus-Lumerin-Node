@@ -7,15 +7,27 @@ runs:
       id: tag
       shell: bash
       run: |
-        SHORT_HASH="$(git rev-parse --short=7 HEAD)"
-        echo $SHORT_HASH
-        if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
-          PREFIX="main-"
-        elif [[ "${GITHUB_REF}" == "refs/heads/test" ]]; then
-          PREFIX="test-"
+        VMAJ=1
+        VMIN=0
+        VPAT=0
+        set +o pipefail
+        VLAST=$(git describe --tags --abbrev=0 --match='v[1-9]*' 2>/dev/null | cut -c2-)
+        [ $VLAST ] && IFS=. read -r VMAJ VMIN VPAT <<< $VLAST
+        if [ "$GITHUB_REF_NAME" = "main" ]
+        then
+            VPAT=0
+            VMIN=$((VMIN+1))
+            VFULL=${VMAJ}.${VMIN}
+            VTAG=v$VFULL
         else
-          PREFIX="dev-"
+            MB=$(git merge-base refs/remotes/origin/main HEAD)
+            VPAT=$(git rev-list --count --no-merges ${MB}..HEAD)
+            VFULL=${VMAJ}.${VMIN}.${VPAT}
+            RNAME=${GITHUB_REF_NAME##*/}
+            [ "$GITHUB_EVENT_NAME" = "pull_request" ] && RNAME=pr${GITHUB_REF_NAME%/merge}
+            VTAG=v${VFULL}-${RNAME}
         fi
-        TAG_NAME="${PREFIX}${SHORT_HASH}"
-        echo $TAG_NAME
-        echo "TAG_NAME=${TAG_NAME}" >> $GITHUB_ENV
+        echo "VLAST=$VLAST VMAJ=$VMAJ VMIN=$VMIN VPAT=$VPAT VFULL=$VFULL VTAG=$VTAG"
+        echo "TAG_NAME=${VTAG}" >> $GITHUB_ENV
+        echo "VTAG=${VTAG}" >> $GITHUB_ENV
+        echo "VFULL=${VFULL}" >> $GITHUB_ENV

@@ -13,17 +13,34 @@ const (
 )
 
 // function to "reverse" pagination based on the desired ordering
-func adjustPagination(order Order, length *big.Int, offset *big.Int, limit uint8) (_offset *big.Int, _limit *big.Int) {
-	bigLimit := big.NewInt(int64(limit))
-	if order == OrderASC {
-		return offset, bigLimit
+func adjustPagination(order Order, length *big.Int, offset *big.Int, limit uint8) (newOffset *big.Int, newLimit *big.Int) {
+	newOffset, newLimit = new(big.Int), new(big.Int)
+
+	// if offset is larger than the length of the array,
+	// just return empty array
+	if offset.Cmp(length) >= 0 {
+		return newOffset, newLimit
 	}
-	offsetPlusLimit := new(big.Int).Add(offset, bigLimit)
-	if offsetPlusLimit.Cmp(length) > 0 {
-		offsetPlusLimit.Set(length)
+
+	newOffset.Set(offset)
+	newLimit.SetUint64(uint64(limit))
+
+	// calculate the remaining elements at the end of the array
+	remainingAtEnd := new(big.Int).Add(offset, newLimit)
+	remainingAtEnd.Sub(length, remainingAtEnd)
+
+	if remainingAtEnd.Sign() < 0 {
+		// means that offset+limit is out of bounds,
+		// so limit has to be reduced by the amount of overflow
+		newLimit.Add(newLimit, remainingAtEnd)
 	}
-	newOffset := new(big.Int).Sub(length, offsetPlusLimit)
-	return newOffset, bigLimit
+
+	// if the order is DESC, the offset has to be adjusted
+	if order == OrderDESC {
+		newOffset.Set(max(remainingAtEnd, big.NewInt(0)))
+	}
+
+	return newOffset, newLimit
 }
 
 // adjustOrder in-plase reverses the order of the array if the order is DESC
@@ -32,4 +49,11 @@ func adjustOrder[T any](order Order, arr []T) {
 		return
 	}
 	slices.Reverse(arr)
+}
+
+func max(a, b *big.Int) *big.Int {
+	if a.Cmp(b) > 0 {
+		return a
+	}
+	return b
 }

@@ -94,7 +94,7 @@ export const Avatar = styled.div`
 `
 
 export const AvatarHeader = styled.div`
-    color: ${p => p.theme.colors.morMain}
+    color: ${p => p.theme.colors.morMain};
     font-weight: 900;
     padding: 0 8px;
     font-size: 18px;
@@ -118,7 +118,7 @@ export const MessageBody = styled.div`
 `
 
 export const ChatTitleContainer = styled.div`
-    color: ${p => p.theme.colors.morMain}
+    color: ${p => p.theme.colors.morMain};
     font-weight: 900;
     padding: 0 8px;
     font-size: 18px;
@@ -213,6 +213,17 @@ export const ImageContainer = styled.img`
     background-color: ${p => p.theme.colors.morMain}B3;
     border: var(--bs-border-width) solid var(--bs-highlight-color);
     border-radius: var(--bs-border-radius);
+    max-width: 100%;
+    height: 256px;
+
+    @media (min-height: 700px) { 
+        height: 320px;
+    } 
+`
+
+export const VideoContainer = styled.div`
+    cursor: pointer;
+    padding: 0.25rem;
     max-width: 100%;
     height: 256px;
 

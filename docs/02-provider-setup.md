@@ -38,7 +38,7 @@
         * Edit the .env file and 
         * Uncomment the `TESTNET VALUES` and comment the `MAINNET VALUES` lines & save the file
 
-1. **(OPTIONAL)** - External Provider or Pass through 
+1. **(OPTIONAL) - External Provider or Pass through** 
     * In some cases you will want to leverage external or existing AI Providers in the network via their own, private API
     * Dependencies: 
         * `model-config.json` file in the proxy-router directory
@@ -46,8 +46,16 @@
     * Once your provider is up and running, deploy a new model and model bid via the API interface (you will need the `model_ID` for the configuration)
     * Edit the model-config.json to the following json format
         * The JSON ID will be the ModelID that you created above, modelName, apiTYpe, apiURL and apiKey are from the external provider and specific to their offered models 
-        * Full explanation of models-config.json can be found here [proxy-router models-config.json](proxy-router.models-config.json.md)
+        * Full explanation of models-config.json can be found here [models-config.json.md](models-config.json.md)
     * Once the model-config.json file is updated, the morpheus node will need to be restarted to pick up the new configuration (not all models (eg: image generation can be utilized via the MorpheusUI, but API integration is possible)
+
+1. **(OPTIONAL) - Weights and Preferred Providers**
+    * In some cases you will want to adjust the weights of the providers or set a preferred provider for the models you'd like to use 
+    * Edit the `rating-config.json` file located in the proxy-router directory to adjust the weights and preferred providers for the models you'd like to use
+        * Weights must add up to 1 
+        * Full explanation of rating-config.json can be found here [rating-config.json.md](rating-config.json.md)
+    * Add preferred providerIDs to the `providerAllowlist` array for the providers you'd like to use
+        * **If this array is left blank**, all providers are available
 
 ## Start the Proxy Router 
 1. On your server, launch the proxy-router with the modified .env file shown above

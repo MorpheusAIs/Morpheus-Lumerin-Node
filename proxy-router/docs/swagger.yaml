@@ -752,13 +752,22 @@ paths:
     get:
       description: Get models list from blokchain
       parameters:
-      - description: Offset
+      - example: 10
         in: query
+        minimum: 0
+        name: limit
+        type: integer
+      - example: "0"
+        in: query
+        minLength: 0
         name: offset
         type: string
-      - description: Limit
+      - enum:
+        - asc
+        - desc
+        example: asc
         in: query
-        name: limit
+        name: order
         type: string
       produces:
       - application/json
@@ -820,6 +829,23 @@ paths:
         name: id
         required: true
         type: string
+      - example: 10
+        in: query
+        minimum: 0
+        name: limit
+        type: integer
+      - example: "0"
+        in: query
+        minLength: 0
+        name: offset
+        type: string
+      - enum:
+        - asc
+        - desc
+        example: asc
+        in: query
+        name: order
+        type: string
       produces:
       - application/json
       responses:
@@ -880,13 +906,22 @@ paths:
     get:
       description: Get providers list from blokchain
       parameters:
-      - description: Offset
+      - example: 10
         in: query
+        minimum: 0
+        name: limit
+        type: integer
+      - example: "0"
+        in: query
+        minLength: 0
         name: offset
         type: string
-      - description: Limit
+      - enum:
+        - asc
+        - desc
+        example: asc
         in: query
-        name: limit
+        name: order
         type: string
       produces:
       - application/json
@@ -920,6 +955,12 @@ paths:
       - providers
   /blockchain/providers/{id}:
     delete:
+      parameters:
+      - description: Provider ID
+        in: path
+        name: id
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -934,18 +975,27 @@ paths:
     get:
       description: Get bids from blockchain by provider
       parameters:
-      - description: Offset
-        in: query
-        name: offset
-        type: string
-      - description: Limit
-        in: query
-        name: limit
-        type: string
       - description: Provider ID
         in: path
         name: id
         required: true
+        type: string
+      - example: 10
+        in: query
+        minimum: 0
+        name: limit
+        type: integer
+      - example: "0"
+        in: query
+        minLength: 0
+        name: offset
+        type: string
+      - enum:
+        - asc
+        - desc
+        example: asc
+        in: query
+        name: order
         type: string
       produces:
       - application/json
@@ -965,6 +1015,23 @@ paths:
         in: path
         name: id
         required: true
+        type: string
+      - example: 10
+        in: query
+        minimum: 0
+        name: limit
+        type: integer
+      - example: "0"
+        in: query
+        minLength: 0
+        name: offset
+        type: string
+      - enum:
+        - asc
+        - desc
+        example: asc
+        in: query
+        name: order
         type: string
       produces:
       - application/json
@@ -1093,13 +1160,22 @@ paths:
     get:
       description: Get sessions from blockchain by provider
       parameters:
-      - description: Offset
+      - example: 10
         in: query
+        minimum: 0
+        name: limit
+        type: integer
+      - example: "0"
+        in: query
+        minLength: 0
         name: offset
         type: string
-      - description: Limit
+      - enum:
+        - asc
+        - desc
+        example: asc
         in: query
-        name: limit
+        name: order
         type: string
       - description: Provider address
         in: query
@@ -1120,18 +1196,27 @@ paths:
     get:
       description: Get sessions from blockchain by user
       parameters:
-      - description: Offset
-        in: query
-        name: offset
-        type: string
-      - description: Limit
-        in: query
-        name: limit
-        type: string
       - description: User address
         in: query
         name: user
         required: true
+        type: string
+      - example: 10
+        in: query
+        minimum: 0
+        name: limit
+        type: integer
+      - example: "0"
+        in: query
+        minLength: 0
+        name: offset
+        type: string
+      - enum:
+        - asc
+        - desc
+        example: asc
+        in: query
+        name: order
         type: string
       produces:
       - application/json
@@ -1147,18 +1232,27 @@ paths:
     get:
       description: Get sessions from blockchain by user
       parameters:
-      - description: Offset
-        in: query
-        name: offset
-        type: string
-      - description: Limit
-        in: query
-        name: limit
-        type: string
       - description: User address
         in: query
         name: user
         required: true
+        type: string
+      - example: 10
+        in: query
+        minimum: 0
+        name: limit
+        type: integer
+      - example: "0"
+        in: query
+        minLength: 0
+        name: offset
+        type: string
+      - enum:
+        - asc
+        - desc
+        example: asc
+        in: query
+        name: order
         type: string
       produces:
       - application/json
