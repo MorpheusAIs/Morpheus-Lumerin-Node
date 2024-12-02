@@ -18,7 +18,8 @@ import {
     SendBtn,
     LoadingCover,
     ImageContainer,
-    SubPriceLabel
+    SubPriceLabel,
+    VideoContainer
 } from './Chat.styles';
 import { BtnAccent } from '../dashboard/BalanceBlock.styles';
 import { withRouter } from 'react-router-dom';
@@ -223,7 +224,7 @@ const Chat = (props) => {
                 const aiColor = getColor(aiIcon);
 
                 messages.push({ id: makeId(16), text: m.prompt.messages[0].content, user: userMessage.user, role: userMessage.role, icon: userMessage.icon, color: userMessage.color });
-                messages.push({ id: makeId(16), text: m.response, user: modelName, role: "assistant", icon: aiIcon, color: aiColor, isImageContent: m.isImageContent });
+                messages.push({ id: makeId(16), text: m.response, user: modelName, role: "assistant", icon: aiIcon, color: aiColor, isImageContent: m.isImageContent, isVideoRawContent: m.isVideoRawContent });
             });
             setMessages(messages);
         }
@@ -272,7 +273,7 @@ const Chat = (props) => {
             return;
         }
 
-        const selectedModel = chainData.models.find((m: any) => m.Id == modelId);
+        const selectedModel = chainData.isLocal ? chainData.models.find((m: any) => m.Id == modelId) : chainData.models.find((m: any) => m.Id == modelId && m.bids);
         setSelectedModel(selectedModel);
         setIsReadonly(false);
 
@@ -421,8 +422,9 @@ const Chat = (props) => {
                     }
 
                     const imageContent = part.imageUrl;
+                    const videoRawContent = part.videoRawContent;
 
-                    if (!part?.id && !imageContent) {
+                    if (!part?.id && !imageContent && !videoRawContent) {
                         return;
                     }
 
@@ -431,6 +433,9 @@ const Chat = (props) => {
                     const otherMessages = memoState.filter(m => m.id != part.id);
                     if (imageContent) {
                         result = [...otherMessages, { id: part.job, user: modelName, role: "assistant", text: imageContent, isImageContent: true, ...iconProps }];
+                    }
+                    if (videoRawContent) {
+                        result = [...otherMessages, { id: part.job, user: modelName, role: "assistant", text: videoRawContent, isVideoRawContent: true, ...iconProps }];
                     }
                     else {
                         const text = `${message?.text || ''}${part?.choices[0]?.delta?.content || ''}`.replace("<|im_start|>", "").replace("<|im_end|>", "");
@@ -521,7 +526,7 @@ const Chat = (props) => {
         setIsReadonly(false);
         setChat({ id: generateHashId(), createdAt: new Date(), modelId, isLocal });
 
-        const selectedModel = chainData.models.find((m: any) => m.Id == modelId);
+        const selectedModel = isLocal ? chainData.models.find((m: any) => m.Id == modelId) : chainData.models.find((m: any) => m.Id == modelId && m.bids);
         setSelectedModel(selectedModel);
 
         if (isLocal) {
@@ -534,7 +539,7 @@ const Chat = (props) => {
         const openModelSession = openSessions.find(s => s.ModelAgentId == modelId);
 
         if (openModelSession) {
-            const selectedBid = selectedModel.bids.find(b => b.Id == openModelSession.BidID);
+            const selectedBid = selectedModel.bids.find(b => b.Id == openModelSession.BidID && b.bids);
             if (selectedBid) {
                 setSelectedBid(selectedBid);
             }
@@ -721,6 +726,42 @@ const Chat = (props) => {
     )
 }
 
+const renderMessage = (message, onOpenImage) => {
+    if (message.isImageContent) {
+        return (<MessageBody>{<ImageContainer src={message.text} onClick={() => onOpenImage(message.text)} />}</MessageBody>)
+    }
+
+    if (message.isVideoRawContent) {
+        return (<MessageBody><VideoContainer><video controls src={`${message.text}`}/></VideoContainer></MessageBody>)
+    }
+
+    return (
+        <MessageBody>
+            <Markdown
+                children={message.text}
+                components={{
+                    code(props) {
+                        const { children, className, node, ...rest } = props
+                        const match = /language-(\w+)/.exec(className || '')
+                        return match ? (
+                            <SyntaxHighlighter
+                                {...rest}
+                                PreTag="div"
+                                children={String(children).replace(/\n$/, '')}
+                                language={match[1]}
+                                style={coldarkDark}
+                            />
+                        ) : (
+                            <code {...rest} className={className}>
+                                {children}
+                            </code>
+                        )
+                    }
+                }}
+            />
+        </MessageBody>)
+};
+
 const Message = ({ message, onOpenImage }) => {
     return (
         <div style={{ display: 'flex', margin: '12px 0 28px 0' }}>
@@ -730,33 +771,7 @@ const Message = ({ message, onOpenImage }) => {
             <div>
                 <AvatarHeader>{message.user}</AvatarHeader>
                 {
-                    message.isImageContent
-                        ? (<MessageBody>{<ImageContainer src={message.text} onClick={() => onOpenImage(message.text)} />}</MessageBody>)
-                        : (
-                            <MessageBody>
-                                <Markdown
-                                    children={message.text}
-                                    components={{
-                                        code(props) {
-                                            const { children, className, node, ...rest } = props
-                                            const match = /language-(\w+)/.exec(className || '')
-                                            return match ? (
-                                                <SyntaxHighlighter
-                                                    {...rest}
-                                                    PreTag="div"
-                                                    children={String(children).replace(/\n$/, '')}
-                                                    language={match[1]}
-                                                    style={coldarkDark}
-                                                />
-                                            ) : (
-                                                <code {...rest} className={className}>
-                                                    {children}
-                                                </code>
-                                            )
-                                        }
-                                    }}
-                                />
-                            </MessageBody>)
+                    renderMessage(message, onOpenImage)
                 }
             </div>
         </div>)
