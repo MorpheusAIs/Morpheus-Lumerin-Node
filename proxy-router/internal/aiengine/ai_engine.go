@@ -55,7 +55,15 @@ func (a *AiEngine) GetAdapter(ctx context.Context, chatID, modelID, sessionID co
 	}
 
 	if storeChatContext {
-		engine = NewHistory(engine, a.storage, chatID, modelID, forwardChatContext, a.log)
+		var actualModelID common.Hash
+		if modelID == (common.Hash{}) {
+			modelID, err := a.service.GetModelIdSession(ctx, sessionID)
+			if err != nil {
+				return nil, err
+			}
+			actualModelID = modelID
+		}
+		engine = NewHistory(engine, a.storage, chatID, actualModelID, forwardChatContext, a.log)
 	}
 
 	return engine, nil
