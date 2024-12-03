@@ -12,7 +12,7 @@ runs:
         VPAT=0
         set +o pipefail
         VLAST=$(git describe --tags --abbrev=0 --match='v[1-9]*' 2>/dev/null | cut -c2-)
-        [ $VLAST ] && IFS=. read -r VMAJ VMIN VPAT <<< $VLAST
+        [ $VLAST ] && declare $(echo $VLAST | awk -F '.' '{print "VMAJ="$1" VMIN="$2" VPAT="$3}')
         if [ "$GITHUB_REF_NAME" = "main" ]
         then
             VPAT=0
