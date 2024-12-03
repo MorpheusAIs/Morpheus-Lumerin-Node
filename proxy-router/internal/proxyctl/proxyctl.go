@@ -2,6 +2,7 @@ package proxyctl
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 
@@ -134,7 +135,13 @@ func (p *Proxy) Run(ctx context.Context) error {
 		case <-tsk.Done():
 			err := tsk.Err()
 			if err != nil {
-				p.log.Errorf("proxy stopped with error: %s", err)
+				var logFunc func(string, ...interface{})
+				if errors.Is(err, context.Canceled) {
+					logFunc = p.log.Warnf
+				} else {
+					logFunc = p.log.Errorf
+				}
+				logFunc("proxy stopped with error: %s", err)
 				return err
 			}
 		}
