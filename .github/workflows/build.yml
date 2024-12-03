@@ -142,24 +142,24 @@ jobs:
           cd ../cli
           make build
           cd ../ui-desktop
-          echo "Injecting version ${TAG_NAME} into package.json"
-          sed -i "s/\"version\": \".*\"/\"version\": \"${TAG_NAME}\"/" package.json
+          echo "Injecting version ${VFULL} into package.json"
+          sed -i "s/\"version\": \".*\"/\"version\": \"${VFULL}\"/" package.json
           cat package.json | grep '"version"'  # Optional: Verify the change
           yarn build:linux
 
       - name: Pack artifacts
         id: pack_artifacts
         run: |
-          ARTIFACT="mor-launch-${TAG_NAME}-ubuntu-x64.zip"
+          ARTIFACT="mor-launch-$TAG_NAME-ubuntu-x64.zip"
           echo "Artifact: $ARTIFACT"
           LLAMACPP=llama-b3256-bin-ubuntu-x64.zip
           MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
           unzip -o -j $LLAMACPP build/bin/llama-server
-          echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./morpheus-ui-${TAG_NAME}-x64-linux.AppImage"]}' > mor-launch.json
+          echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./morpheus-ui-${VFULL}-x64-linux.AppImage"]}' > mor-launch.json
           mv ./cli/mor-cli mor-cli
-          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/bin/proxy-router .env $MODEL mor-launch.json ./ui-desktop/dist/morpheus-ui-${TAG_NAME}-x64-linux.AppImage models-config.json rating-config.json mor-cli
+          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/bin/proxy-router .env $MODEL mor-launch.json ./ui-desktop/dist/morpheus-ui-${VFULL}-x64-linux.AppImage models-config.json rating-config.json mor-cli
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -219,15 +219,15 @@ jobs:
           cd ../cli
           make build
           cd ../ui-desktop
-          echo "Injecting version ${TAG_NAME} into package.json"
-          sed -i "" "s/\"version\": \".*\"/\"version\": \"${TAG_NAME}\"/" package.json
+          echo "Injecting version ${VFULL} into package.json"
+          sed -i "" "s/\"version\": \".*\"/\"version\": \"${VFULL}\"/" package.json
           cat package.json | grep '"version"'  # Optional: Verify the change
           yarn build:mac
 
       - name: Pack artifacts
         id: pack_artifacts
         run: |
-          ARTIFACT="mor-launch-${TAG_NAME}-macos-x64.zip"
+          ARTIFACT="mor-launch-$TAG_NAME-macos-x64.zip"
           echo "Artifact: $ARTIFACT"
           LLAMACPP=llama-b3256-bin-macos-x64.zip
           MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
@@ -236,7 +236,7 @@ jobs:
           unzip -o -j $LLAMACPP build/bin/llama-server
           echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./MorpheusUI.app/Contents/MacOS/MorpheusUI"]}' > mor-launch.json
           mv ./cli/mor-cli mor-cli
-          unzip ./ui-desktop/dist/morpheus-ui-${TAG_NAME}-x64-mac.zip
+          unzip ./ui-desktop/dist/morpheus-ui-${VFULL}-x64-mac.zip
           zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json models-config.json rating-config.json mor-cli
           zip -r $ARTIFACT 'MorpheusUI.app'
 
@@ -298,15 +298,15 @@ jobs:
           cd ../cli
           make build
           cd ../ui-desktop
-          echo "Injecting version ${TAG_NAME} into package.json"
-          sed -i "" "s/\"version\": \".*\"/\"version\": \"${TAG_NAME}\"/" package.json
+          echo "Injecting version ${VFULL}} into package.json"
+          sed -i "" "s/\"version\": \".*\"/\"version\": \"${VFULL}\"/" package.json
           cat package.json | grep '"version"'  # Optional: Verify the change
           yarn build:mac
 
       - name: Pack artifacts
         id: pack_artifacts
         run: |
-          ARTIFACT="mor-launch-${TAG_NAME}-macos-arm64.zip"
+          ARTIFACT="mor-launch-$TAG_NAME-macos-arm64.zip"
           ehco "Artifact: $ARTIFACT"
           LLAMACPP=llama-b3256-bin-macos-arm64.zip
           MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
@@ -315,7 +315,7 @@ jobs:
           unzip -o -j $LLAMACPP build/bin/llama-server
           echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./MorpheusUI.app/Contents/MacOS/MorpheusUI"]}' > mor-launch.json
           mv ./cli/mor-cli mor-cli
-          unzip ./ui-desktop/dist/morpheus-ui-${TAG_NAME}-arm64-mac.zip
+          unzip ./ui-desktop/dist/morpheus-ui-${VFULL}-arm64-mac.zip
           zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json models-config.json rating-config.json mor-cli
           zip -r $ARTIFACT 'MorpheusUI.app'
 
@@ -381,29 +381,29 @@ jobs:
           cd ../cli
           make build
           cd ../ui-desktop
-          echo "Injecting version ${TAG_NAME} into package.json"
-          sed -i "s/\"version\": \".*\"/\"version\": \"${TAG_NAME}\"/" package.json
+          echo "Injecting version ${VFULL} into package.json"
+          sed -i "s/\"version\": \".*\"/\"version\": \"${VFULL}\"/" package.json
           cat package.json | grep '"version"'  # Optional: Verify the change
           yarn build:win
 
       - name: Pack artifacts
         id: pack_artifacts
         run: |
-          ARTIFACT="mor-launch-${TAG_NAME}-win-x64.zip"
+          ARTIFACT="mor-launch-$TAG_NAME-win-x64.zip"
           echo "Artifact: $ARTIFACT"
           LLAMACPP=llama-b3256-bin-win-avx2-x64.zip
           MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
           unzip -o -j $LLAMACPP llama-server.exe llama.dll ggml.dll
-          echo '{"run":["./llama-server.exe -m ./'$MODEL'","./proxy-router.exe","./morpheus-ui-${TAG_NAME}-x64-win.exe"]}' > mor-launch.json
+          echo '{"run":["./llama-server.exe -m ./'$MODEL'","./proxy-router.exe","./morpheus-ui-${VFULL}-x64-win.exe"]}' > mor-launch.json
           mv .env .env.tmp
           sed 's|\./data/|.\\data\\|g' .env.tmp > .env
           mv ./proxy-router/bin/proxy-router proxy-router.exe
           mv ./cli/mor-cli mor-cli.exe
           mv ./launcher/mor-launch mor-launch.exe
-          mv "./ui-desktop/dist/morpheus-ui-${TAG_NAME}-x64-win" morpheus-ui-${TAG_NAME}-x64-win.exe
-          7z a $ARTIFACT LICENSE mor-launch.exe proxy-router.exe .env llama-server.exe llama.dll ggml.dll $MODEL mor-launch.json morpheus-ui-${TAG_NAME}-x64-win.exe models-config.json rating-config.json mor-cli.exe
+          mv "./ui-desktop/dist/morpheus-ui-${VFULL}-x64-win" morpheus-ui-${VFULL}-x64-win.exe
+          7z a $ARTIFACT LICENSE mor-launch.exe proxy-router.exe .env llama-server.exe llama.dll ggml.dll $MODEL mor-launch.json morpheus-ui-${VFULL}-x64-win.exe models-config.json rating-config.json mor-cli.exe
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
