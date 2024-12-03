@@ -69,6 +69,7 @@ var (
 	ErrInitSession = errors.New("failed to initiate session")
 	ErrApprove     = errors.New("failed to approve")
 	ErrMarshal     = errors.New("failed to marshal open session payload")
+	ErrOpenOwnBid  = errors.New("cannot open session with own bid")
 
 	ErrNoBid = errors.New("no bids available")
 	ErrModel = errors.New("can't get model")
@@ -750,6 +751,10 @@ func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.H
 		return common.Hash{}, lib.WrapError(ErrMyAddress, err)
 	}
 
+	if bid.Provider == userAddr {
+		return common.Hash{}, lib.WrapError(ErrOpenOwnBid, fmt.Errorf("failed to open session"))
+	}
+
 	provider, err := s.providerRegistry.GetProviderById(ctx, bid.Provider)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrProvider, err)
@@ -808,6 +813,11 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 		providerAddr := bid.Bid.Provider
 		if providerAddr == omitProvider {
 			s.log.Infof("skipping provider #%d %s", i, providerAddr.String())
+			continue
+		}
+
+		if providerAddr == userAddr {
+			s.log.Infof("skipping own bid #%d %s", i, bid.Bid.Id)
 			continue
 		}
 

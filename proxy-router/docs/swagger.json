@@ -4,8 +4,7 @@
         "description": "API for Morpheus Lumerin Node",
         "title": "Morpheus Lumerin Node API",
         "termsOfService": "http://swagger.io/terms/",
-        "contact": {},
-        "version": "1.0"
+        "contact": {}
     },
     "basePath": "/",
     "paths": {
@@ -255,7 +254,7 @@
                 "summary": "Get models list",
                 "parameters": [
                     {
-                        "minimum": 0,
+                        "minimum": 1,
                         "type": "integer",
                         "example": 10,
                         "name": "limit",
@@ -368,7 +367,7 @@
                         "required": true
                     },
                     {
-                        "minimum": 0,
+                        "minimum": 1,
                         "type": "integer",
                         "example": 10,
                         "name": "limit",
@@ -484,7 +483,7 @@
                 "summary": "Get providers list",
                 "parameters": [
                     {
-                        "minimum": 0,
+                        "minimum": 1,
                         "type": "integer",
                         "example": 10,
                         "name": "limit",
@@ -596,7 +595,7 @@
                         "required": true
                     },
                     {
-                        "minimum": 0,
+                        "minimum": 1,
                         "type": "integer",
                         "example": 10,
                         "name": "limit",
@@ -649,7 +648,7 @@
                         "required": true
                     },
                     {
-                        "minimum": 0,
+                        "minimum": 1,
                         "type": "integer",
                         "example": 10,
                         "name": "limit",
@@ -811,7 +810,7 @@
                 "summary": "Get Sessions for Provider",
                 "parameters": [
                     {
-                        "minimum": 0,
+                        "minimum": 1,
                         "type": "integer",
                         "example": 10,
                         "name": "limit",
@@ -871,7 +870,7 @@
                         "required": true
                     },
                     {
-                        "minimum": 0,
+                        "minimum": 1,
                         "type": "integer",
                         "example": 10,
                         "name": "limit",
@@ -924,7 +923,7 @@
                         "required": true
                     },
                     {
-                        "minimum": 0,
+                        "minimum": 1,
                         "type": "integer",
                         "example": 10,
                         "name": "limit",
@@ -1665,6 +1664,9 @@
             "type": "object",
             "properties": {
                 "isImageContent": {
+                    "type": "boolean"
+                },
+                "isVideoRawContent": {
                     "type": "boolean"
                 },
                 "prompt": {
