@@ -89,6 +89,7 @@ func start() error {
 	} else {
 		docs.SwaggerInfo.Host = "localhost:8082"
 	}
+	docs.SwaggerInfo.Version = config.BuildVersion
 
 	log, err := lib.NewLogger(cfg.Log.LevelApp, cfg.Log.Color, cfg.Log.IsProd, cfg.Log.JSON, mainLogFilePath)
 	if err != nil {

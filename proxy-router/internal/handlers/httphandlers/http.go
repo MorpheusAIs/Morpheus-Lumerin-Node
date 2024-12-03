@@ -22,7 +22,6 @@ type Registrable interface {
 }
 
 //	@title			Morpheus Lumerin Node API
-//	@version		1.0
 //	@description	API for Morpheus Lumerin Node
 //	@termsOfService	http://swagger.io/terms/
 
