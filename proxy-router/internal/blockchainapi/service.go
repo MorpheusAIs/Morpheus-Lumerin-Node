@@ -69,6 +69,7 @@ var (
 	ErrInitSession = errors.New("failed to initiate session")
 	ErrApprove     = errors.New("failed to approve")
 	ErrMarshal     = errors.New("failed to marshal open session payload")
+	ErrOpenOwnBid  = errors.New("cannot open session with own bid")
 
 	ErrNoBid = errors.New("no bids available")
 	ErrModel = errors.New("can't get model")
@@ -748,6 +749,10 @@ func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.H
 	userAddr, err := s.GetMyAddress(ctx)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrMyAddress, err)
+	}
+
+	if bid.Provider == userAddr {
+		return common.Hash{}, lib.WrapError(ErrOpenOwnBid, fmt.Errorf("failed to open session"))
 	}
 
 	provider, err := s.providerRegistry.GetProviderById(ctx, bid.Provider)
