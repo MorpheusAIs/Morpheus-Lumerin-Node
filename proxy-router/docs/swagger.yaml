@@ -4,12 +4,18 @@ definitions:
     properties:
       apiType:
         type: string
+      apiUrl:
+        type: string
+      capacityPolicy:
+        type: string
       id:
         type: string
       model:
         type: string
       name:
         type: string
+      slots:
+        type: integer
     type: object
   genericchatstorage.Chat:
     properties:
@@ -63,6 +69,8 @@ definitions:
   genericchatstorage.ChatMessage:
     properties:
       isImageContent:
+        type: boolean
+      isVideoRawContent:
         type: boolean
       prompt:
         $ref: '#/definitions/genericchatstorage.OpenAiCompletionRequest'
@@ -151,6 +159,22 @@ definitions:
     - signature
     - timestamp
     - user
+    type: object
+  proxyapi.ChatCompletionRequestSwaggerExample:
+    properties:
+      messages:
+        items:
+          properties:
+            content:
+              example: tell me a joke
+              type: string
+            role:
+              example: user
+              type: string
+          type: object
+        type: array
+      stream:
+        type: boolean
     type: object
   proxyapi.InitiateSessionReq:
     properties:
@@ -571,7 +595,6 @@ info:
   description: API for Morpheus Lumerin Node
   termsOfService: http://swagger.io/terms/
   title: Morpheus Lumerin Node API
-  version: "1.0"
 paths:
   /blockchain/allowance:
     get:
@@ -730,13 +753,22 @@ paths:
     get:
       description: Get models list from blokchain
       parameters:
-      - description: Offset
+      - example: 10
         in: query
+        minimum: 1
+        name: limit
+        type: integer
+      - example: "0"
+        in: query
+        minLength: 0
         name: offset
         type: string
-      - description: Limit
+      - enum:
+        - asc
+        - desc
+        example: asc
         in: query
-        name: limit
+        name: order
         type: string
       produces:
       - application/json
@@ -798,6 +830,23 @@ paths:
         name: id
         required: true
         type: string
+      - example: 10
+        in: query
+        minimum: 1
+        name: limit
+        type: integer
+      - example: "0"
+        in: query
+        minLength: 0
+        name: offset
+        type: string
+      - enum:
+        - asc
+        - desc
+        example: asc
+        in: query
+        name: order
+        type: string
       produces:
       - application/json
       responses:
@@ -858,13 +907,22 @@ paths:
     get:
       description: Get providers list from blokchain
       parameters:
-      - description: Offset
+      - example: 10
         in: query
+        minimum: 1
+        name: limit
+        type: integer
+      - example: "0"
+        in: query
+        minLength: 0
         name: offset
         type: string
-      - description: Limit
+      - enum:
+        - asc
+        - desc
+        example: asc
         in: query
-        name: limit
+        name: order
         type: string
       produces:
       - application/json
@@ -898,6 +956,12 @@ paths:
       - providers
   /blockchain/providers/{id}:
     delete:
+      parameters:
+      - description: Provider ID
+        in: path
+        name: id
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -912,18 +976,27 @@ paths:
     get:
       description: Get bids from blockchain by provider
       parameters:
-      - description: Offset
-        in: query
-        name: offset
-        type: string
-      - description: Limit
-        in: query
-        name: limit
-        type: string
       - description: Provider ID
         in: path
         name: id
         required: true
+        type: string
+      - example: 10
+        in: query
+        minimum: 1
+        name: limit
+        type: integer
+      - example: "0"
+        in: query
+        minLength: 0
+        name: offset
+        type: string
+      - enum:
+        - asc
+        - desc
+        example: asc
+        in: query
+        name: order
         type: string
       produces:
       - application/json
@@ -943,6 +1016,23 @@ paths:
         in: path
         name: id
         required: true
+        type: string
+      - example: 10
+        in: query
+        minimum: 1
+        name: limit
+        type: integer
+      - example: "0"
+        in: query
+        minLength: 0
+        name: offset
+        type: string
+      - enum:
+        - asc
+        - desc
+        example: asc
+        in: query
+        name: order
         type: string
       produces:
       - application/json
@@ -1071,13 +1161,22 @@ paths:
     get:
       description: Get sessions from blockchain by provider
       parameters:
-      - description: Offset
+      - example: 10
         in: query
+        minimum: 1
+        name: limit
+        type: integer
+      - example: "0"
+        in: query
+        minLength: 0
         name: offset
         type: string
-      - description: Limit
+      - enum:
+        - asc
+        - desc
+        example: asc
         in: query
-        name: limit
+        name: order
         type: string
       - description: Provider address
         in: query
@@ -1098,18 +1197,27 @@ paths:
     get:
       description: Get sessions from blockchain by user
       parameters:
-      - description: Offset
-        in: query
-        name: offset
-        type: string
-      - description: Limit
-        in: query
-        name: limit
-        type: string
       - description: User address
         in: query
         name: user
         required: true
+        type: string
+      - example: 10
+        in: query
+        minimum: 1
+        name: limit
+        type: integer
+      - example: "0"
+        in: query
+        minLength: 0
+        name: offset
+        type: string
+      - enum:
+        - asc
+        - desc
+        example: asc
+        in: query
+        name: order
         type: string
       produces:
       - application/json
@@ -1125,18 +1233,27 @@ paths:
     get:
       description: Get sessions from blockchain by user
       parameters:
-      - description: Offset
-        in: query
-        name: offset
-        type: string
-      - description: Limit
-        in: query
-        name: limit
-        type: string
       - description: User address
         in: query
         name: user
         required: true
+        type: string
+      - example: 10
+        in: query
+        minimum: 1
+        name: limit
+        type: integer
+      - example: "0"
+        in: query
+        minLength: 0
+        name: offset
+        type: string
+      - enum:
+        - asc
+        - desc
+        example: asc
+        in: query
+        name: order
         type: string
       produces:
       - application/json
@@ -1340,7 +1457,7 @@ paths:
         name: prompt
         required: true
         schema:
-          type: string
+          $ref: '#/definitions/proxyapi.ChatCompletionRequestSwaggerExample'
       produces:
       - text/event-stream
       responses:
@@ -1436,7 +1553,7 @@ paths:
             type: array
       summary: Get local models
       tags:
-      - chat
+      - system
   /wallet:
     delete:
       description: Remove wallet from proxy storage

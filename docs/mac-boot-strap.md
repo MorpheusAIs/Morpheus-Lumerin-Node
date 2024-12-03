@@ -153,8 +153,8 @@ yarn dev
 - At this point, the electon app should start and if this is the first time walking through, should run through onboarding 
 - Check the following: 
   - Lower left corner - is this your correct ERC20 Wallet Address? 
-  - On the Wallet tab, do you show saMOR and saETH balances? 
-    - if not, you'll need to convert and transfer some saETH to saMOR to get started
+  - On the Wallet tab, do you show MOR and ETH balances? 
+    - if not, you'll need to convert and transfer some ETH to MOR to get started
   - On the Chat tab, your should see your `Provider: (local)` selected by default...use the "Ask me anything..." prompt to run inference - this verifies that all three layers have been setup correctly?
   - Click the Change Model, select a remote model, click Start and now you should be able to interact with the model through the UI. 
 

@@ -262,15 +262,27 @@ const docTemplate = `{
                 "summary": "Get models list",
                 "parameters": [
                     {
+                        "minimum": 1,
+                        "type": "integer",
+                        "example": 10,
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "minLength": 0,
                         "type": "string",
-                        "description": "Offset",
+                        "example": "0",
                         "name": "offset",
                         "in": "query"
                     },
                     {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
                         "type": "string",
-                        "description": "Limit",
-                        "name": "limit",
+                        "example": "asc",
+                        "name": "order",
                         "in": "query"
                     }
                 ],
@@ -361,6 +373,30 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "example": 10,
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "minLength": 0,
+                        "type": "string",
+                        "example": "0",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "example": "asc",
+                        "name": "order",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -455,15 +491,27 @@ const docTemplate = `{
                 "summary": "Get providers list",
                 "parameters": [
                     {
+                        "minimum": 1,
+                        "type": "integer",
+                        "example": 10,
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "minLength": 0,
                         "type": "string",
-                        "description": "Offset",
+                        "example": "0",
                         "name": "offset",
                         "in": "query"
                     },
                     {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
                         "type": "string",
-                        "description": "Limit",
-                        "name": "limit",
+                        "example": "asc",
+                        "name": "order",
                         "in": "query"
                     }
                 ],
@@ -517,6 +565,15 @@ const docTemplate = `{
                     "providers"
                 ],
                 "summary": "Deregister Provider",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Provider ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -540,22 +597,34 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Offset",
-                        "name": "offset",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Limit",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
                         "description": "Provider ID",
                         "name": "id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "example": 10,
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "minLength": 0,
+                        "type": "string",
+                        "example": "0",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "example": "asc",
+                        "name": "order",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -585,6 +654,30 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "example": 10,
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "minLength": 0,
+                        "type": "string",
+                        "example": "0",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "example": "asc",
+                        "name": "order",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -725,15 +818,27 @@ const docTemplate = `{
                 "summary": "Get Sessions for Provider",
                 "parameters": [
                     {
+                        "minimum": 1,
+                        "type": "integer",
+                        "example": 10,
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "minLength": 0,
                         "type": "string",
-                        "description": "Offset",
+                        "example": "0",
                         "name": "offset",
                         "in": "query"
                     },
                     {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
                         "type": "string",
-                        "description": "Limit",
-                        "name": "limit",
+                        "example": "asc",
+                        "name": "order",
                         "in": "query"
                     },
                     {
@@ -767,22 +872,34 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Offset",
-                        "name": "offset",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Limit",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
                         "description": "User address",
                         "name": "user",
                         "in": "query",
                         "required": true
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "example": 10,
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "minLength": 0,
+                        "type": "string",
+                        "example": "0",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "example": "asc",
+                        "name": "order",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -808,22 +925,34 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Offset",
-                        "name": "offset",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Limit",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
                         "description": "User address",
                         "name": "user",
                         "in": "query",
                         "required": true
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "example": 10,
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "minLength": 0,
+                        "type": "string",
+                        "example": "0",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "example": "asc",
+                        "name": "order",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -1190,7 +1319,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/proxyapi.ChatCompletionRequestSwaggerExample"
                         }
                     }
                 ],
@@ -1321,7 +1450,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "chat"
+                    "system"
                 ],
                 "summary": "Get local models",
                 "responses": {
@@ -1452,6 +1581,12 @@ const docTemplate = `{
                 "apiType": {
                     "type": "string"
                 },
+                "apiUrl": {
+                    "type": "string"
+                },
+                "capacityPolicy": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -1460,6 +1595,9 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "slots": {
+                    "type": "integer"
                 }
             }
         },
@@ -1534,6 +1672,9 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "isImageContent": {
+                    "type": "boolean"
+                },
+                "isVideoRawContent": {
                     "type": "boolean"
                 },
                 "prompt": {
@@ -1649,6 +1790,30 @@ const docTemplate = `{
                 },
                 "user": {
                     "type": "string"
+                }
+            }
+        },
+        "proxyapi.ChatCompletionRequestSwaggerExample": {
+            "type": "object",
+            "properties": {
+                "messages": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "content": {
+                                "type": "string",
+                                "example": "tell me a joke"
+                            },
+                            "role": {
+                                "type": "string",
+                                "example": "user"
+                            }
+                        }
+                    }
+                },
+                "stream": {
+                    "type": "boolean"
                 }
             }
         },
@@ -2277,7 +2442,7 @@ const docTemplate = `{
 
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
-	Version:          "1.0",
+	Version:          "",
 	Host:             "",
 	BasePath:         "/",
 	Schemes:          []string{},

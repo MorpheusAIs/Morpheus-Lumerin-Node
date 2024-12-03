@@ -15,6 +15,7 @@ type RemoteModel struct {
 
 type ProxyService interface {
 	SendPromptV2(ctx context.Context, sessionID common.Hash, prompt *openai.ChatCompletionRequest, cb gcs.CompletionCallback) (interface{}, error)
+	GetModelIdSession(ctx context.Context, sessionID common.Hash) (common.Hash, error)
 }
 
 func (p *RemoteModel) Prompt(ctx context.Context, prompt *openai.ChatCompletionRequest, cb gcs.CompletionCallback) error {

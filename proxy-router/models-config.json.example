@@ -1,13 +1,18 @@
 {
-  "0x0000000000000000000000000000000000000000000000000000000000000000": {
-    "modelName": "llama2",
-    "apiType": "openai",
-    "apiUrl": "http://localhost:8080/v1"
-  },
-  "0x0000000000000000000000000000000000000000000000000000000000000001": {
-    "modelName": "v1-5-pruned-emaonly.safetensors [d7049739]",
-    "apiType": "prodia-sd",
-    "apiUrl": "https://api.prodia.com/v1",
-    "apiKey": ""
-  }
+  "$schema": "./internal/config/models-config-schema.json",
+  "models": [
+    {
+      "modelId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "modelName": "llama2",
+      "apiType": "openai",
+      "apiUrl": "http://localhost:8080/v1"
+    },
+    {
+      "modelId": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "modelName": "v1-5-pruned-emaonly.safetensors [d7049739]",
+      "apiType": "prodia-sd",
+      "apiUrl": "https://api.prodia.com/v1",
+      "apiKey": "FILL_ME_IN"
+    }
+  ]
 }
