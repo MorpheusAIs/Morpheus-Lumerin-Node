@@ -262,7 +262,7 @@ const docTemplate = `{
                 "summary": "Get models list",
                 "parameters": [
                     {
-                        "minimum": 0,
+                        "minimum": 1,
                         "type": "integer",
                         "example": 10,
                         "name": "limit",
@@ -375,7 +375,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "minimum": 0,
+                        "minimum": 1,
                         "type": "integer",
                         "example": 10,
                         "name": "limit",
@@ -491,7 +491,7 @@ const docTemplate = `{
                 "summary": "Get providers list",
                 "parameters": [
                     {
-                        "minimum": 0,
+                        "minimum": 1,
                         "type": "integer",
                         "example": 10,
                         "name": "limit",
@@ -603,7 +603,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "minimum": 0,
+                        "minimum": 1,
                         "type": "integer",
                         "example": 10,
                         "name": "limit",
@@ -656,7 +656,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "minimum": 0,
+                        "minimum": 1,
                         "type": "integer",
                         "example": 10,
                         "name": "limit",
@@ -818,7 +818,7 @@ const docTemplate = `{
                 "summary": "Get Sessions for Provider",
                 "parameters": [
                     {
-                        "minimum": 0,
+                        "minimum": 1,
                         "type": "integer",
                         "example": 10,
                         "name": "limit",
@@ -878,7 +878,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "minimum": 0,
+                        "minimum": 1,
                         "type": "integer",
                         "example": 10,
                         "name": "limit",
@@ -931,7 +931,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "minimum": 0,
+                        "minimum": 1,
                         "type": "integer",
                         "example": 10,
                         "name": "limit",
@@ -1672,6 +1672,9 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "isImageContent": {
+                    "type": "boolean"
+                },
+                "isVideoRawContent": {
                     "type": "boolean"
                 },
                 "prompt": {
@@ -2439,7 +2442,7 @@ const docTemplate = `{
 
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
-	Version:          "1.0",
+	Version:          "",
 	Host:             "",
 	BasePath:         "/",
 	Schemes:          []string{},
