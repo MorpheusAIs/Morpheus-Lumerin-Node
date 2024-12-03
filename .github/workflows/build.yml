@@ -142,7 +142,9 @@ jobs:
           cd ../cli
           make build
           cd ../ui-desktop
-          sed -i "s/\"version\": \".*\"/\"version\": \"$TAG_NAME\"/" package.json
+          echo "Injecting version ${TAG_NAME} into package.json"
+          sed -i "s/\"version\": \".*\"/\"version\": \"${TAG_NAME}\"/" package.json
+          cat package.json | grep '"version"'  # Optional: Verify the change
           yarn build:linux
 
       - name: Pack artifacts
@@ -216,8 +218,8 @@ jobs:
           cd ../cli
           make build
           cd ../ui-desktop
-          echo "Injecting version $TAG_NAME into package.json"
-          sed -i "" "s/\"version\": \".*\"/\"version\": \"$TAG_NAME\"/" package.json
+          echo "Injecting version ${TAG_NAME} into package.json"
+          sed -i "" "s/\"version\": \".*\"/\"version\": \"${TAG_NAME}\"/" package.json
           cat package.json | grep '"version"'  # Optional: Verify the change
           yarn build:mac
 
@@ -294,8 +296,8 @@ jobs:
           cd ../cli
           make build
           cd ../ui-desktop
-          echo "Injecting version $TAG_NAME into package.json"
-          sed -i "" "s/\"version\": \".*\"/\"version\": \"$TAG_NAME\"/" package.json
+          echo "Injecting version ${TAG_NAME} into package.json"
+          sed -i "" "s/\"version\": \".*\"/\"version\": \"${TAG_NAME}\"/" package.json
           cat package.json | grep '"version"'  # Optional: Verify the change
           yarn build:mac
 
@@ -376,7 +378,9 @@ jobs:
           cd ../cli
           make build
           cd ../ui-desktop
-          sed -i "s/\"version\": \".*\"/\"version\": \"$TAG_NAME\"/" package.json
+          echo "Injecting version ${TAG_NAME} into package.json"
+          sed -i "s/\"version\": \".*\"/\"version\": \"${TAG_NAME}\"/" package.json
+          cat package.json | grep '"version"'  # Optional: Verify the change
           yarn build:win
 
       - name: Pack artifacts
