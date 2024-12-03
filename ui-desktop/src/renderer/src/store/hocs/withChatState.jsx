@@ -119,7 +119,9 @@ const withChatState = WrappedComponent => {
           const bids = (await getBidsByModelId(this.props.config.chain.localProxyRouterUrl, id))
             .filter(b => +b.DeletedAt === 0)
             .map(b => ({ ...b, ProviderData: providersMap[b.Provider.toLowerCase()], Model: m }))
-            .filter(b => b.ProviderData);
+            .filter(b => b.ProviderData)
+            .filter(b => b.Provider != this.props.address);
+
           return { id, bids }
         })
       )).reduce((a,b) => ({...a, [b.id]: b.bids}), {});

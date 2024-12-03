@@ -811,6 +811,11 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 			continue
 		}
 
+		if providerAddr == userAddr {
+			s.log.Infof("skipping own bid #%d %s", i, bid.Bid.Id)
+			continue
+		}
+
 		s.log.Infof("trying to open session with provider #%d %s", i, bid.Bid.Provider.String())
 		durationCopy := new(big.Int).Set(duration)
 
