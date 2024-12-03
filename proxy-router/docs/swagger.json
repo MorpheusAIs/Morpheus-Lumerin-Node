@@ -4,8 +4,7 @@
         "description": "API for Morpheus Lumerin Node",
         "title": "Morpheus Lumerin Node API",
         "termsOfService": "http://swagger.io/terms/",
-        "contact": {},
-        "version": "1.0"
+        "contact": {}
     },
     "basePath": "/",
     "paths": {
@@ -255,15 +254,27 @@
                 "summary": "Get models list",
                 "parameters": [
                     {
+                        "minimum": 1,
+                        "type": "integer",
+                        "example": 10,
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "minLength": 0,
                         "type": "string",
-                        "description": "Offset",
+                        "example": "0",
                         "name": "offset",
                         "in": "query"
                     },
                     {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
                         "type": "string",
-                        "description": "Limit",
-                        "name": "limit",
+                        "example": "asc",
+                        "name": "order",
                         "in": "query"
                     }
                 ],
@@ -354,6 +365,30 @@
                         "name": "id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "example": 10,
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "minLength": 0,
+                        "type": "string",
+                        "example": "0",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "example": "asc",
+                        "name": "order",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -448,15 +483,27 @@
                 "summary": "Get providers list",
                 "parameters": [
                     {
+                        "minimum": 1,
+                        "type": "integer",
+                        "example": 10,
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "minLength": 0,
                         "type": "string",
-                        "description": "Offset",
+                        "example": "0",
                         "name": "offset",
                         "in": "query"
                     },
                     {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
                         "type": "string",
-                        "description": "Limit",
-                        "name": "limit",
+                        "example": "asc",
+                        "name": "order",
                         "in": "query"
                     }
                 ],
@@ -510,6 +557,15 @@
                     "providers"
                 ],
                 "summary": "Deregister Provider",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Provider ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -533,22 +589,34 @@
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Offset",
-                        "name": "offset",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Limit",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
                         "description": "Provider ID",
                         "name": "id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "example": 10,
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "minLength": 0,
+                        "type": "string",
+                        "example": "0",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "example": "asc",
+                        "name": "order",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -578,6 +646,30 @@
                         "name": "id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "example": 10,
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "minLength": 0,
+                        "type": "string",
+                        "example": "0",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "example": "asc",
+                        "name": "order",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -718,15 +810,27 @@
                 "summary": "Get Sessions for Provider",
                 "parameters": [
                     {
+                        "minimum": 1,
+                        "type": "integer",
+                        "example": 10,
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "minLength": 0,
                         "type": "string",
-                        "description": "Offset",
+                        "example": "0",
                         "name": "offset",
                         "in": "query"
                     },
                     {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
                         "type": "string",
-                        "description": "Limit",
-                        "name": "limit",
+                        "example": "asc",
+                        "name": "order",
                         "in": "query"
                     },
                     {
@@ -760,22 +864,34 @@
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Offset",
-                        "name": "offset",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Limit",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
                         "description": "User address",
                         "name": "user",
                         "in": "query",
                         "required": true
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "example": 10,
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "minLength": 0,
+                        "type": "string",
+                        "example": "0",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "example": "asc",
+                        "name": "order",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -801,22 +917,34 @@
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Offset",
-                        "name": "offset",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Limit",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
                         "description": "User address",
                         "name": "user",
                         "in": "query",
                         "required": true
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "example": 10,
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "minLength": 0,
+                        "type": "string",
+                        "example": "0",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "example": "asc",
+                        "name": "order",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -1183,7 +1311,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/proxyapi.ChatCompletionRequestSwaggerExample"
                         }
                     }
                 ],
@@ -1314,7 +1442,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "chat"
+                    "system"
                 ],
                 "summary": "Get local models",
                 "responses": {
@@ -1445,6 +1573,12 @@
                 "apiType": {
                     "type": "string"
                 },
+                "apiUrl": {
+                    "type": "string"
+                },
+                "capacityPolicy": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -1453,6 +1587,9 @@
                 },
                 "name": {
                     "type": "string"
+                },
+                "slots": {
+                    "type": "integer"
                 }
             }
         },
@@ -1527,6 +1664,9 @@
             "type": "object",
             "properties": {
                 "isImageContent": {
+                    "type": "boolean"
+                },
+                "isVideoRawContent": {
                     "type": "boolean"
                 },
                 "prompt": {
@@ -1642,6 +1782,30 @@
                 },
                 "user": {
                     "type": "string"
+                }
+            }
+        },
+        "proxyapi.ChatCompletionRequestSwaggerExample": {
+            "type": "object",
+            "properties": {
+                "messages": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "content": {
+                                "type": "string",
+                                "example": "tell me a joke"
+                            },
+                            "role": {
+                                "type": "string",
+                                "example": "user"
+                            }
+                        }
+                    }
+                },
+                "stream": {
+                    "type": "boolean"
                 }
             }
         },

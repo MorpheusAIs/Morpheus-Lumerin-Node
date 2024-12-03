@@ -22,6 +22,7 @@ export interface HistoryMessage {
     icon: string;
     color: string;
     isImageContent?: boolean;
+    isVideoRawContent?: boolean;
 }
 
 export interface ChatHistoryInterface {
@@ -36,6 +37,7 @@ export interface ChatMessage {
     promptAt: number;
     responseAt: number;
     isImageContent?: boolean;
+    isVideoRawContent?: boolean;
 }
 
 export interface ChatPrompt {

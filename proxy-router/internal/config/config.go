@@ -60,7 +60,7 @@ type Config struct {
 		StoreChatContext   *lib.Bool `env:"PROXY_STORE_CHAT_CONTEXT" flag:"proxy-store-chat-context" desc:"store chat context in the proxy storage"`
 		ForwardChatContext *lib.Bool `env:"PROXY_FORWARD_CHAT_CONTEXT" flag:"proxy-forward-chat-context" desc:"prepend whole stored message history to the prompt"`
 		ModelsConfigPath   string    `env:"MODELS_CONFIG_PATH" flag:"models-config-path" validate:"omitempty"`
-		ProviderAllowList  string    `env:"PROVIDER_ALLOW_LIST" flag:"provider-allow-list" validate:"omitempty" desc:"comma separated list of provider addresses allowed to open session with"`
+		RatingConfigPath   string    `env:"RATING_CONFIG_PATH" flag:"rating-config-path" validate:"omitempty" desc:"path to the rating config file"`
 	}
 	System struct {
 		Enable           bool   `env:"SYS_ENABLE"              flag:"sys-enable" desc:"enable system level configuration adjustments"`
@@ -177,6 +177,9 @@ func (cfg *Config) SetDefaults() {
 		val := true
 		cfg.Proxy.ForwardChatContext = &lib.Bool{Bool: &val}
 	}
+	if cfg.Proxy.RatingConfigPath == "" {
+		cfg.Proxy.RatingConfigPath = "./rating-config.json"
+	}
 }
 
 // GetSanitized returns a copy of the config with sensitive data removed
@@ -208,10 +211,10 @@ func (cfg *Config) GetSanitized() interface{} {
 
 	publicCfg.Proxy.Address = cfg.Proxy.Address
 	publicCfg.Proxy.ModelsConfigPath = cfg.Proxy.ModelsConfigPath
-	publicCfg.Proxy.ProviderAllowList = cfg.Proxy.ProviderAllowList
 	publicCfg.Proxy.StoragePath = cfg.Proxy.StoragePath
 	publicCfg.Proxy.StoreChatContext = cfg.Proxy.StoreChatContext
 	publicCfg.Proxy.ForwardChatContext = cfg.Proxy.ForwardChatContext
+	publicCfg.Proxy.RatingConfigPath = cfg.Proxy.RatingConfigPath
 
 	publicCfg.System.Enable = cfg.System.Enable
 	publicCfg.System.LocalPortRange = cfg.System.LocalPortRange

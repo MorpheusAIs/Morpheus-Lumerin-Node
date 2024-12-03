@@ -1,6 +1,8 @@
 package lib
 
 import (
+	"fmt"
+
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/lumerintoken"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/marketplace"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/modelregistry"
@@ -31,11 +33,7 @@ type EVMError struct {
 }
 
 func (e EVMError) Error() string {
-	idBytes := e.Abi.ID.Bytes()
-	if len(idBytes) > 4 {
-		idBytes = idBytes[:4]
-	}
-	return "EVM error: " + e.Abi.Sig + " " + common.BytesToHash(idBytes).Hex()
+	return fmt.Sprintf("EVM error: %s %+v", e.Abi.Sig, e.Args)
 }
 
 // TryConvertGethError attempts to convert geth error to an EVMError, otherwise just returns original error
