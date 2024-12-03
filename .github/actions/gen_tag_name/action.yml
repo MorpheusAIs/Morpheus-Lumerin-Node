@@ -17,7 +17,7 @@ runs:
         then
             VPAT=0
             VMIN=$((VMIN+1))
-            VFULL=${VMAJ}.${VMIN}
+            VFULL=${VMAJ}.${VMIN}.${VPAT}
             VTAG=v$VFULL
         else
             MB=$(git merge-base refs/remotes/origin/main HEAD)
