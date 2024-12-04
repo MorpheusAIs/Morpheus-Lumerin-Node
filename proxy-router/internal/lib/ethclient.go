@@ -2,6 +2,7 @@ package lib
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/lumerintoken"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/marketplace"
@@ -34,6 +35,23 @@ type EVMError struct {
 
 func (e EVMError) Error() string {
 	return fmt.Sprintf("EVM error: %s %+v", e.Abi.Sig, e.Args)
+}
+
+// Implement As() method to check if EVMError can be converted to another type.
+func (e EVMError) As(target interface{}) bool {
+	// Ensure that the target is a pointer.
+	if reflect.TypeOf(target).Kind() != reflect.Ptr {
+		// As target should be a pointer
+		return false
+	}
+
+	switch v := target.(type) {
+	case *EVMError:
+		*v = e // Assign the concrete EVMError to the target
+		return true
+	default:
+		return false
+	}
 }
 
 // TryConvertGethError attempts to convert geth error to an EVMError, otherwise just returns original error

@@ -21,7 +21,7 @@ func NewSessionExpiryHandler(blockchainService *BlockchainService, sessionStorag
 		blockchainService: blockchainService,
 		sessionStorage:    sessionStorage,
 		wallet:            wallet,
-		log:               log,
+		log:               log.Named("SESSION_CLOSER"),
 	}
 }
 

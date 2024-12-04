@@ -1,10 +1,14 @@
 package blockchainapi
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
+	"net"
+	"net/http"
 	"sort"
 	"strconv"
 	"time"
@@ -21,7 +25,6 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/multicall"
 	r "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
 	sessionrepo "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/session"
-	"github.com/gin-gonic/gin"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -29,6 +32,9 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 )
+
+// basefeeWiggleMultiplier is a multiplier for the basefee to set the maxFeePerGas
+const basefeeWiggleMultiplier = 2
 
 type BlockchainService struct {
 	ethClient          i.EthClient
@@ -134,6 +140,24 @@ func (s *BlockchainService) GetProviders(ctx context.Context, offset *big.Int, l
 	return mapProviders(addrs, providers), nil
 }
 
+// GetMyAddress returns the provider by its wallet address, returns nil if provider is not registered
+func (s *BlockchainService) GetProvider(ctx context.Context, providerAddr common.Address) (*structs.Provider, error) {
+	provider, err := s.providerRegistry.GetProviderById(ctx, providerAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	if provider.IsDeleted {
+		return nil, nil
+	}
+
+	if provider.CreatedAt.Cmp(big.NewInt(0)) == 0 {
+		return nil, nil
+	}
+
+	return mapProvider(providerAddr, *provider), nil
+}
+
 func (s *BlockchainService) GetAllModels(ctx context.Context) ([]*structs.Model, error) {
 	ids, models, err := s.modelRegistry.GetAllModels(ctx)
 	if err != nil {
@@ -177,6 +201,10 @@ func (s *BlockchainService) GetActiveBidsByModel(ctx context.Context, modelId co
 	}
 
 	return mapBids(ids, bids), nil
+}
+
+func (s *BlockchainService) GetActiveBidsByProviderCount(ctx context.Context, provider common.Address) (*big.Int, error) {
+	return s.marketplace.GetActiveBidsByProviderCount(ctx, provider)
 }
 
 func (s *BlockchainService) GetActiveBidsByProvider(ctx context.Context, provider common.Address, offset *big.Int, limit uint8, order r.Order) ([]*structs.Bid, error) {
@@ -270,6 +298,11 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 		return common.Hash{}, lib.WrapError(ErrPrKey, err)
 	}
 
+	_, err = s.Approve(ctx, s.diamonContractAddr, stake)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrApprove, err)
+	}
+
 	transactOpt, err := s.getTransactOpts(ctx, prKey)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
@@ -292,6 +325,11 @@ func (s *BlockchainService) CreateNewProvider(ctx context.Context, stake *lib.Bi
 	transactOpt, err := s.getTransactOpts(ctx, prKey)
 	if err != nil {
 		return nil, lib.WrapError(ErrTxOpts, err)
+	}
+
+	_, err = s.Approve(ctx, s.diamonContractAddr, &stake.Int)
+	if err != nil {
+		return nil, lib.WrapError(ErrApprove, err)
 	}
 
 	err = s.providerRegistry.CreateNewProvider(transactOpt, stake, endpoint)
@@ -322,6 +360,11 @@ func (s *BlockchainService) CreateNewModel(ctx context.Context, modelID common.H
 	transactOpt, err := s.getTransactOpts(ctx, prKey)
 	if err != nil {
 		return nil, lib.WrapError(ErrTxOpts, err)
+	}
+
+	_, err = s.Approve(ctx, s.diamonContractAddr, &stake.Int)
+	if err != nil {
+		return nil, lib.WrapError(ErrApprove, err)
 	}
 
 	err = s.modelRegistry.CreateNewModel(transactOpt, modelID, ipfsID, fee, stake, name, tags)
@@ -371,7 +414,33 @@ func (s *BlockchainService) DeregisterModel(ctx context.Context, modelId common.
 	return tx, nil
 }
 
+func (s *BlockchainService) ModelExists(ctx context.Context, modelID common.Hash) (bool, error) {
+	m, err := s.modelRegistry.GetModelById(ctx, modelID)
+
+	// cannot pull blockchain data
+	if err != nil {
+		return false, err
+	}
+
+	// model never existed
+	if m.CreatedAt.Cmp(big.NewInt(0)) == 0 {
+		return false, nil
+	}
+
+	// model was deleted
+	if m.IsDeleted {
+		return false, nil
+	}
+
+	return true, nil
+}
+
 func (s *BlockchainService) CreateNewBid(ctx context.Context, modelID common.Hash, pricePerSecond *lib.BigInt) (*structs.Bid, error) {
+	fee, err := s.marketplace.GetBidFee(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	prKey, err := s.privateKey.GetPrivateKey()
 	if err != nil {
 		return nil, lib.WrapError(ErrPrKey, err)
@@ -382,14 +451,17 @@ func (s *BlockchainService) CreateNewBid(ctx context.Context, modelID common.Has
 		return nil, lib.WrapError(ErrTxOpts, err)
 	}
 
+	_, err = s.Approve(ctx, s.diamonContractAddr, fee)
+	if err != nil {
+		return nil, lib.WrapError(ErrApprove, err)
+	}
+
 	newBidId, err := s.marketplace.PostModelBid(transactOpt, modelID, &pricePerSecond.Int)
 	if err != nil {
 		return nil, lib.WrapError(ErrSendTx, err)
 	}
-	s.log.Infof("Created new Bid with Id %s", newBidId)
 
 	bid, err := s.GetBidByID(ctx, newBidId)
-
 	if err != nil {
 		return nil, lib.WrapError(ErrBid, err)
 	}
@@ -483,11 +555,11 @@ func (s *BlockchainService) GetSession(ctx context.Context, sessionID common.Has
 	return mapSession(sessionID, *ses, *bid), nil
 }
 
-func (s *BlockchainService) GetProviderClaimableBalance(ctx *gin.Context, sessionID common.Hash) (*big.Int, error) {
+func (s *BlockchainService) GetProviderClaimableBalance(ctx context.Context, sessionID common.Hash) (*big.Int, error) {
 	return s.sessionRouter.GetProviderClaimableBalance(ctx, sessionID)
 }
 
-func (s *BlockchainService) GetBalance(ctx *gin.Context) (*big.Int, *big.Int, error) {
+func (s *BlockchainService) GetBalance(ctx context.Context) (eth *big.Int, mor *big.Int, err error) {
 	prKey, err := s.privateKey.GetPrivateKey()
 	if err != nil {
 		return nil, nil, lib.WrapError(ErrPrKey, err)
@@ -511,51 +583,87 @@ func (s *BlockchainService) GetBalance(ctx *gin.Context) (*big.Int, *big.Int, er
 	return ethBalance, morBalance, nil
 }
 
-func (s *BlockchainService) SendETH(ctx *gin.Context, to common.Address, amount *big.Int) (common.Hash, error) {
-	prKey, err := s.privateKey.GetPrivateKey()
-	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrPrKey, err)
-	}
-
-	transactOpt, err := s.getTransactOpts(ctx, prKey)
-	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
-	}
-
-	nonce, err := s.ethClient.PendingNonceAt(ctx, transactOpt.From)
-	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrNonce, err)
-	}
-
-	estimatedGas, err := s.ethClient.EstimateGas(ctx, ethereum.CallMsg{
-		From:  transactOpt.From,
+func (s *BlockchainService) SendETH(ctx context.Context, to common.Address, amount *big.Int) (common.Hash, error) {
+	signedTx, err := s.createSignedTransaction(ctx, &types.DynamicFeeTx{
 		To:    &to,
 		Value: amount,
 	})
-	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrEstimateGas, err)
-	}
-
-	//TODO: check if this is the right way to calculate gas
-	gas := float64(estimatedGas) * 1.5
-	tx := types.NewTransaction(nonce, to, amount, uint64(gas), transactOpt.GasPrice, nil)
-	signedTx, err := s.signTx(ctx, tx, prKey)
-	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrSignTx, err)
-	}
 
 	err = s.ethClient.SendTransaction(ctx, signedTx)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrSendTx, err)
 	}
 
-	// Wait for the transaction receipt
 	_, err = bind.WaitMined(ctx, s.ethClient, signedTx)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrWaitMined, err)
 	}
 
 	return signedTx.Hash(), nil
+}
+
+func (s *BlockchainService) createSignedTransaction(ctx context.Context, txdata *types.DynamicFeeTx) (*types.Transaction, error) {
+	prKey, err := s.privateKey.GetPrivateKey()
+	if err != nil {
+		return nil, lib.WrapError(ErrPrKey, err)
+	}
+	addr, err := lib.PrivKeyBytesToAddr(prKey)
+	if err != nil {
+		return nil, err
+	}
+
+	gasTipCap, err := s.ethClient.SuggestGasTipCap(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	head, err := s.ethClient.HeaderByNumber(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	nonce, err := s.ethClient.PendingNonceAt(ctx, addr)
+	if err != nil {
+		return nil, err
+	}
+
+	gasFeeCap := new(big.Int).Add(
+		gasTipCap,
+		new(big.Int).Mul(head.BaseFee, big.NewInt(basefeeWiggleMultiplier)),
+	)
+
+	gas, err := s.ethClient.EstimateGas(ctx, ethereum.CallMsg{
+		From:  addr,
+		To:    txdata.To,
+		Value: txdata.Value,
+	})
+
+	chainID, err := s.ethClient.ChainID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tx := types.NewTx(&types.DynamicFeeTx{
+		ChainID:   chainID,
+		Nonce:     nonce,
+		GasTipCap: gasTipCap,
+		GasFeeCap: gasFeeCap,
+		Gas:       gas,
+		To:        txdata.To,
+		Value:     txdata.Value,
+	})
+
+	privateKey, err := crypto.ToECDSA(prKey)
+	if err != nil {
+		return nil, err
+	}
+
+	signedTx, err := types.SignTx(tx, types.LatestSignerForChainID(tx.ChainId()), privateKey)
+	if err != nil {
+		return nil, lib.WrapError(ErrSignTx, err)
+	}
+
+	return signedTx, nil
 }
 
 func (s *BlockchainService) SendMOR(ctx context.Context, to common.Address, amount *big.Int) (common.Hash, error) {
@@ -642,17 +750,17 @@ func (s *BlockchainService) GetTodaysBudget(ctx context.Context) (*big.Int, erro
 	return s.sessionRouter.GetTodaysBudget(ctx, big.NewInt(time.Now().Unix()))
 }
 
-func (s *BlockchainService) GetSessions(ctx *gin.Context, user, provider common.Address, offset *big.Int, limit uint8, order r.Order) ([]*structs.Session, error) {
+func (s *BlockchainService) GetSessions(ctx context.Context, user, provider common.Address, offset *big.Int, limit uint8, order r.Order) ([]*structs.Session, error) {
 	var (
 		ids      [][32]byte
 		sessions []sr.ISessionStorageSession
 		err      error
 	)
 	if (user != common.Address{}) {
-		ids, sessions, err = s.sessionRouter.GetSessionsByUser(ctx, common.HexToAddress(ctx.Query("user")), offset, limit, order)
+		ids, sessions, err = s.sessionRouter.GetSessionsByUser(ctx, user, offset, limit, order)
 	} else {
 		// hasProvider
-		ids, sessions, err = s.sessionRouter.GetSessionsByProvider(ctx, common.HexToAddress(ctx.Query("provider")), offset, limit, order)
+		ids, sessions, err = s.sessionRouter.GetSessionsByProvider(ctx, provider, offset, limit, order)
 	}
 	if err != nil {
 		return nil, err
@@ -738,13 +846,10 @@ func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.H
 		return common.Hash{}, lib.WrapError(ErrBudget, err)
 	}
 
-	bid, err := s.marketplace.GetBidById(ctx, bidID)
+	bid, err := s.GetBidByID(ctx, bidID)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrBid, err)
 	}
-
-	totalCost := duration.Mul(bid.PricePerSecond, duration)
-	stake := totalCost.Div(totalCost.Mul(supply, totalCost), budget)
 
 	userAddr, err := s.GetMyAddress(ctx)
 	if err != nil {
@@ -752,25 +857,10 @@ func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.H
 	}
 
 	if bid.Provider == userAddr {
-		return common.Hash{}, lib.WrapError(ErrOpenOwnBid, fmt.Errorf("failed to open session"))
+		return common.Hash{}, ErrOpenOwnBid
 	}
 
-	provider, err := s.providerRegistry.GetProviderById(ctx, bid.Provider)
-	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrProvider, err)
-	}
-
-	initRes, err := s.proxyService.InitiateSession(ctx, userAddr, bid.Provider, stake, bidID, provider.Endpoint)
-	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrInitSession, err)
-	}
-
-	_, err = s.Approve(ctx, s.diamonContractAddr, stake)
-	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrApprove, err)
-	}
-
-	return s.OpenSession(ctx, initRes.Approval, initRes.ApprovalSig, stake, false)
+	return s.tryOpenSession(ctx, bid, duration, supply, budget, userAddr, false, false)
 }
 
 func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID common.Hash, duration *big.Int, directPayment bool, isFailoverEnabled bool, omitProvider common.Address) (common.Hash, error) {
@@ -824,7 +914,7 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 		s.log.Infof("trying to open session with provider #%d %s", i, bid.Bid.Provider.String())
 		durationCopy := new(big.Int).Set(duration)
 
-		hash, err := s.tryOpenSession(ctx, bid, durationCopy, supply, budget, userAddr, directPayment, isFailoverEnabled)
+		hash, err := s.tryOpenSession(ctx, &bid.Bid, durationCopy, supply, budget, userAddr, directPayment, isFailoverEnabled)
 		if err != nil {
 			s.log.Errorf("failed to open session with provider %s: %s", bid.Bid.Provider.String(), err.Error())
 			continue
@@ -881,12 +971,12 @@ func (s *BlockchainService) GetAllBidsWithRating(ctx context.Context, modelAgent
 	return ids, bids, providerModelStats, providers, nil
 }
 
-func (s *BlockchainService) tryOpenSession(ctx context.Context, bid structs.ScoredBid, duration, supply, budget *big.Int, userAddr common.Address, directPayment bool, failoverEnabled bool) (common.Hash, error) {
-	provider, err := s.providerRegistry.GetProviderById(ctx, bid.Bid.Provider)
+func (s *BlockchainService) tryOpenSession(ctx context.Context, bid *structs.Bid, duration, supply, budget *big.Int, userAddr common.Address, directPayment bool, failoverEnabled bool) (common.Hash, error) {
+	provider, err := s.providerRegistry.GetProviderById(ctx, bid.Provider)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrProvider, err)
 	}
-	sessionCost := (&big.Int{}).Mul(&bid.Bid.PricePerSecond.Int, duration)
+	sessionCost := (&big.Int{}).Mul(&bid.PricePerSecond.Int, duration)
 
 	var amountTransferred = new(big.Int)
 	if directPayment {
@@ -899,15 +989,15 @@ func (s *BlockchainService) tryOpenSession(ctx context.Context, bid structs.Scor
 	}
 
 	s.log.Infof("attempting to initiate session %s", map[string]string{
-		"provider":          bid.Bid.Provider.String(),
+		"provider":          bid.Provider.String(),
 		"directPayment":     strconv.FormatBool(directPayment),
 		"duration":          duration.String(),
-		"bid":               bid.Bid.Id.String(),
+		"bid":               bid.Id.String(),
 		"endpoint":          provider.Endpoint,
 		"amountTransferred": amountTransferred.String(),
 	})
 
-	initRes, err := s.proxyService.InitiateSession(ctx, userAddr, bid.Bid.Provider, amountTransferred, bid.Bid.Id, provider.Endpoint)
+	initRes, err := s.proxyService.InitiateSession(ctx, userAddr, bid.Provider, amountTransferred, bid.Id, provider.Endpoint)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrInitSession, err)
 	}
@@ -944,6 +1034,69 @@ func (s *BlockchainService) GetMyAddress(ctx context.Context) (common.Address, e
 	}
 
 	return lib.PrivKeyBytesToAddr(prKey)
+}
+
+func (s *BlockchainService) CheckConnectivity(ctx context.Context, url string, addr common.Address) (time.Duration, error) {
+	return s.proxyService.Ping(ctx, url, addr)
+}
+
+func (s *BlockchainService) CheckPortOpen(ctx context.Context, urlStr string) (bool, error) {
+	host, port, err := net.SplitHostPort(urlStr)
+	if err != nil {
+		return false, err
+	}
+	portInt, err := strconv.ParseInt(port, 10, 0)
+	if err != nil {
+		return false, err
+	}
+
+	body, _ := json.Marshal(struct {
+		Host  string  `json:"host"`
+		Ports []int64 `json:"ports"`
+	}{
+		Host:  host,
+		Ports: []int64{portInt},
+	})
+
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://portchecker.io/api/query", bytes.NewBuffer(body))
+	if err != nil {
+		return false, err
+	}
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("unexpected status code: %d", res.StatusCode)
+	}
+
+	var response struct {
+		Error bool
+		Msg   string
+		Check []struct {
+			Port   int
+			Status bool
+		}
+		Host string
+	}
+
+	err = json.NewDecoder(res.Body).Decode(&response)
+	if err != nil {
+		return false, err
+	}
+
+	if response.Error {
+		return false, fmt.Errorf("portchecker.io error: %s", response.Msg)
+	}
+
+	if len(response.Check) != 1 {
+		return false, fmt.Errorf("unexpected response from portchecker.io")
+	}
+
+	return response.Check[0].Status, nil
 }
 
 func (s *BlockchainService) getTransactOpts(ctx context.Context, privKey lib.HexString) (*bind.TransactOpts, error) {
