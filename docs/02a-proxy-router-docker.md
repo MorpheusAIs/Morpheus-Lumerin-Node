@@ -26,8 +26,8 @@
 1. Configure the 3 key files for your environment:
     1. Environment file configuration 
         1. Copy the example file to .env: 
-            * Linux/Mac: `cp env.example .env`  
-            * Windows: `copy env.example.win .env`
+            * Linux/Mac: `cp .env.example .env`  
+            * Windows: `copy .env.example.win .env`
         1. Edit values within the .env as desired
             * Add your private key to`WALLET_PRIVATE_KEY=`
             * Modify the following values to ensure that those files remain "outside of the running container" for persistence and are mounted by the docker-compose.yml file's `volume` directive
@@ -41,13 +41,15 @@
         1. Copy the example file to models-config.json: 
             * Linux/Mac: `cp models-config.json.example models-config.json`  
             * Windows: `copy models-config.json.example models-config.json` 
-        1. Edit the models-config.json file to include the models you'd like to use.. details here: [models-config.json.md](models-config.json.md)
+        1. Edit the models-config.json file to include the models you'd like to use. 
+        1. Details here: [models-config.json.md](models-config.json.md)
         1. Once your provider is up and running, deploy a new model and model bid via the API interface (you will need to update the `modelId` for the configuration)
     1. Rating Configuration file
         1. Copy the example file to rating-config.json: 
             * Linux/Mac: `cp rating-config.json.example rating-config.json`  
             * Windows: `copy rating-config.json.example rating-config.json` 
-        1. Edit the rating-config.json file to include the weights and preferred providers you'd like to use.. details here: [rating-config.json.md](rating-config.json.md)
+        1. Edit the rating-config.json file to include the weights and preferred providers you'd like to use. 
+        1. Details here: [rating-config.json.md](rating-config.json.md)
 
 ## Build the proxy-router Docker Image:
 1. Build the Docker image using the provided `docker_build.sh` script

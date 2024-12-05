@@ -28,7 +28,7 @@ if [ -z "$COMMIT" ]; then
 fi
 COMMIT=$SHORT_COMMIT
 echo COMMIT=$COMMIT
-export VERSION COMMIT
+export VERSION COMMIT TAG_NAME
 
 # Check if the user wants to build or run the Docker image
 if [ "$1" = "--build" ]; then
