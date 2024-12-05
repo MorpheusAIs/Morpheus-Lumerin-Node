@@ -11,7 +11,7 @@ runs:
         VMIN=0
         VPAT=0
         set +o pipefail
-        VLAST=$(git describe --tags --abbrev=0 --match='v[1-9]*' 2>/dev/null | cut -c2-)
+        VLAST=$(git describe --tags --abbrev=0 --match='v[1-9]*' refs/remotes/origin/main 2>/dev/null | cut -c2-)
         [ $VLAST ] && declare $(echo $VLAST | awk -F '.' '{print "VMAJ="$1" VMIN="$2" VPAT="$3}')
         if [ "$GITHUB_REF_NAME" = "main" ]
         then
