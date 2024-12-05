@@ -1,5 +1,5 @@
 # Stage 1: Build
-FROM golang:1.22.3-alpine as builder
+FROM golang:1.22.3-alpine AS builder
 
 # Capture the Git tag and commit hash during build
 ARG TAG_NAME
