@@ -30,8 +30,10 @@
             * Windows: `copy env.example.win .env`
         1. Edit values within the .env as desired
             * Add your private key to`WALLET_PRIVATE_KEY=`
-            * `MODELS_CONFIG_PATH=/app/data/models-config.json` 
-            * `RATING_CONFIG_PATH=/app/data/rating-config.json`
+            * Modify the following values to ensure that those files remain "outside of the running container" for persistence and are mounted by the docker-compose.yml file's `volume` directive
+                * `MODELS_CONFIG_PATH=/app/data/models-config.json` 
+                * `RATING_CONFIG_PATH=/app/data/rating-config.json`
+                * `PROXY_STORAGE_PATH=/app/data/badger`
         1. Choose the **blockchain** you'd like to work on...**Arbitrum MAINNET is the default** 
             * To operate on the Sepolia Arbitrum TESTNET,  
             * Uncomment the `TESTNET VALUES` and comment the `MAINNET VALUES` lines & save the file
