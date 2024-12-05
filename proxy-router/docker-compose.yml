@@ -1,8 +1,15 @@
 services:
   proxy-router:
-    build: .
+    build:
+      context: .
+      args:
+        COMMIT: ${COMMIT:-unknown}
+        TAG_NAME: ${TAG_NAME:-latest}
+    image: proxy-router:${TAG_NAME}
     env_file:
       - .env
     ports:
-      - 8082:8082
-      - 3333:3333
+      - "8082:8082"
+      - "3333:3333"
+    volumes:
+      - .:/app/data
