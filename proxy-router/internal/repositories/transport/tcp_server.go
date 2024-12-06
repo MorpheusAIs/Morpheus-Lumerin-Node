@@ -14,12 +14,14 @@ import (
 type TCPServer struct {
 	serverAddr string
 	handler    Handler
+	started    chan struct{}
 	log        lib.ILogger
 }
 
 func NewTCPServer(serverAddr string, log lib.ILogger) *TCPServer {
 	return &TCPServer{
 		serverAddr: serverAddr,
+		started:    make(chan struct{}),
 		log:        log,
 	}
 }
@@ -35,10 +37,10 @@ func (p *TCPServer) Run(ctx context.Context) error {
 	}
 
 	listener, err := net.Listen("tcp", add.String())
-
 	if err != nil {
 		return fmt.Errorf("listener error %s %w", p.serverAddr, err)
 	}
+	close(p.started)
 
 	p.log.Infof("tcp server is listening: %s", p.serverAddr)
 
@@ -62,6 +64,10 @@ func (p *TCPServer) Run(ctx context.Context) error {
 	}
 
 	return err
+}
+
+func (p *TCPServer) Started() <-chan struct{} {
+	return p.started
 }
 
 func (p *TCPServer) startAccepting(ctx context.Context, listener net.Listener) error {

@@ -112,6 +112,7 @@ func (g *SessionRouter) GetSessionsByUser(ctx context.Context, userAddr common.A
 	if err != nil {
 		return nil, nil, lib.TryConvertGethError(err)
 	}
+
 	_offset, _limit := adjustPagination(order, length, offset, limit)
 	ids, _, err := g.sessionRouter.GetUserSessions(&bind.CallOpts{Context: ctx}, userAddr, _offset, _limit)
 	if err != nil {

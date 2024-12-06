@@ -26,7 +26,7 @@ func NewRatingFromConfig(config json.RawMessage, log lib.ILogger) (*Rating, erro
 		return nil, fmt.Errorf("failed to unmarshal rating config: %w", err)
 	}
 
-	log.Infof("rating algorithm: %s, params %s", cfg.Algorithm, string(cfg.Params))
+	log.Infof("rating algorithm: %s", cfg.Algorithm)
 
 	scorer, err := factory(cfg.Algorithm, cfg.Params)
 	if err != nil {
@@ -58,13 +58,13 @@ func NewRating(scorer Scorer, providerAllowList []common.Address, log lib.ILogge
 	}
 
 	if len(allowList) == 0 {
-		log.Infof("providerAllowList is disabled, all providers are allowed")
+		log.Infof("provider filtering is disabled")
 	} else {
 		keys := maps.Keys(allowList)
 		sort.Slice(keys, func(i, j int) bool {
 			return keys[i].Hex() < keys[j].Hex()
 		})
-		log.Infof("providerAllowList: %v", keys)
+		log.Warnf("provider filtering is enabled, allowList: %v", keys)
 	}
 
 	return &Rating{

@@ -96,3 +96,13 @@ type ReqObject struct {
 	Res  uint `json:"res"`
 	Toks uint `json:"toks"`
 }
+
+type PingReq struct {
+	Nonce     lib.HexString `json:"nonce"     validate:"required,hexadecimal"`
+	Signature lib.HexString `json:"signature" validate:"required,hexadecimal"`
+}
+
+type PongRes struct {
+	Nonce     lib.HexString `json:"nonce"     validate:"required,hexadecimal"`
+	Signature lib.HexString `json:"signature" validate:"required,hexadecimal"`
+}

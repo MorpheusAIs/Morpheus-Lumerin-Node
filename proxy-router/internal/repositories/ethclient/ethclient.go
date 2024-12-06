@@ -16,12 +16,13 @@ import (
 
 // Client defines typed wrappers for the Ethereum RPC API.
 type Client struct {
-	c RPCClient
+	c       RPCClient
+	chainID *big.Int
 }
 
 // NewClient creates a client that uses the given RPC client.
 func NewClient(c RPCClient) *Client {
-	return &Client{c}
+	return &Client{c, nil}
 }
 
 // Close closes the underlying RPC connection.
@@ -38,12 +39,16 @@ func (ec *Client) Client() RPCClient {
 
 // ChainID retrieves the current chain ID for transaction replay protection.
 func (ec *Client) ChainID(ctx context.Context) (*big.Int, error) {
-	var result hexutil.Big
-	err := ec.c.CallContext(ctx, &result, "eth_chainId")
-	if err != nil {
-		return nil, err
+	if ec.chainID == nil {
+		var result hexutil.Big
+		err := ec.c.CallContext(ctx, &result, "eth_chainId")
+		if err != nil {
+			return nil, err
+		}
+		ec.chainID = (*big.Int)(&result)
 	}
-	return (*big.Int)(&result), err
+
+	return new(big.Int).Set(ec.chainID), nil
 }
 
 // BlockNumber returns the most recent block number

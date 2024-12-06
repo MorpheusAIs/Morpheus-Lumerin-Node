@@ -22,13 +22,13 @@ func NewTCPHandler(
 		sourceLog := connLog.Named("SRC").With("SrcAddr", addr)
 
 		defer func() {
-			sourceLog.Info("Closing connection")
+			sourceLog.Debugf("closing connection")
 			conn.Close()
 		}()
 
 		msg, err := getMessage(conn)
 		if err != nil {
-			sourceLog.Error("Error reading message", err)
+			sourceLog.Error("error reading message", err)
 			return
 		}
 

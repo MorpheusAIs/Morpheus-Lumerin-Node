@@ -45,6 +45,7 @@ func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStor
 }
 
 func (s *ProxyController) RegisterRoutes(r interfaces.Router) {
+	r.POST("/proxy/provider/ping", s.Ping)
 	r.POST("/proxy/sessions/initiate", s.InitiateSession)
 	r.POST("/v1/chat/completions", s.Prompt)
 	r.GET("/v1/models", s.Models)
@@ -52,6 +53,31 @@ func (s *ProxyController) RegisterRoutes(r interfaces.Router) {
 	r.GET("/v1/chats/:id", s.GetChat)
 	r.DELETE("/v1/chats/:id", s.DeleteChat)
 	r.POST("/v1/chats/:id", s.UpdateChatTitle)
+}
+
+// Ping godoc
+//
+//	@Summary		Ping Provider
+//	@Description	sends a ping to the provider on the RPC level
+//	@Tags			chat
+//	@Produce		json
+//	@Param			pingReq	body		proxyapi.PingReq	true	"Ping Request"
+//	@Success		200		{object}	proxyapi.PingRes
+//	@Router			/proxy/provider/ping [post]
+func (s *ProxyController) Ping(ctx *gin.Context) {
+	var req *PingReq
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ping, err := s.service.Ping(ctx, req.ProviderURL, req.ProviderAddr)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, &PingRes{PingMs: ping.Milliseconds()})
 }
 
 // InitiateSession godoc

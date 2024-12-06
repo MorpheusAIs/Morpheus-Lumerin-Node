@@ -72,6 +72,7 @@ jobs:
             --form "ref=${{ env.gitlab_branch }}" \
             --form "variables[SOURCE_REPO]=${{ github.repository }}" \
             --form "variables[SOURCE_BRANCH]=${{ github.ref_name }}" \
+            --form "variables[GITHUB_VFULL]=${{ env.VFULL }}" \
             --form "variables[GITHUB_TAG]=${{ env.TAG_NAME }}")
       
           # Parse JSON response using jq

@@ -69,17 +69,13 @@ func (a *AiEngine) GetAdapter(ctx context.Context, chatID, modelID, sessionID co
 	return engine, nil
 }
 
-func (a *AiEngine) GetModelsConfig() ([]string, []config.ModelConfig) {
-	return a.modelsConfigLoader.GetAll()
-}
-
 func (a *AiEngine) GetLocalModels() ([]LocalModel, error) {
 	models := []LocalModel{}
 
 	IDs, modelsFromConfig := a.modelsConfigLoader.GetAll()
 	for i, model := range modelsFromConfig {
 		models = append(models, LocalModel{
-			Id:             IDs[i],
+			Id:             IDs[i].Hex(),
 			Name:           model.ModelName,
 			Model:          model.ModelName,
 			ApiType:        model.ApiType,
