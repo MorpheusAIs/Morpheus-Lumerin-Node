@@ -10,12 +10,12 @@ interface ISessionRouter is ISessionStorage {
     event SessionClosed(address indexed user, bytes32 indexed sessionId, address indexed providerId);
     event UserWithdrawn(address indexed user, uint256 amount_);
     error SessionProviderSignatureMismatch();
-    error SesssionApproveExpired();
-    error SesssionApprovedForAnotherChainId();
+    error SessionApproveExpired();
+    error SessionApprovedForAnotherChainId();
     error SessionDuplicateApproval();
     error SessionApprovedForAnotherUser();
-    error SesssionReceiptForAnotherChainId();
-    error SesssionReceiptExpired();
+    error SessionReceiptForAnotherChainId();
+    error SessionReceiptExpired();
     error SessionTooShort();
     error SessionAlreadyClosed();
     error SessionNotEndedOrNotExist();
