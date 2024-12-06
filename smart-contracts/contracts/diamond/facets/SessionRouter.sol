@@ -19,6 +19,8 @@ import {LibSD} from "../../libs/LibSD.sol";
 
 import {ISessionRouter} from "../../interfaces/facets/ISessionRouter.sol";
 
+import "hardhat/console.sol";
+
 contract SessionRouter is
     ISessionRouter,
     OwnableDiamondStorage,
@@ -187,7 +189,7 @@ contract SessionRouter is
     }
 
     function _extractProviderApproval(bytes calldata providerApproval_) private view returns (bytes32) {
-        (bytes32 bidId_, uint256 chainId_,, uint128 timestamp_) = abi.decode(
+        (bytes32 bidId_, uint256 chainId_, , uint128 timestamp_) = abi.decode(
             providerApproval_,
             (bytes32, uint256, address, uint128)
         );
@@ -534,10 +536,20 @@ contract SessionRouter is
         bytes32 receiptHash_ = ECDSA.toEthSignedMessageHash(keccak256(receipt_));
         address user_ = ECDSA.recover(receiptHash_, signature_);
 
-        if (user_ != provider_ && !isRightsDelegated(user_, provider_, DELEGATION_RULES_PROVIDER)) {
-            return false;
+        if (user_ == provider_ || isRightsDelegated(user_, provider_, DELEGATION_RULES_PROVIDER)) {
+            return true;
         }
 
-        return true;
+        if (provider_.code.length > 0) {
+            (bool success, bytes memory result) = provider_.staticcall(abi.encodeWithSignature("owner()"));
+            if (success && result.length == 32) {
+                address owner_ = abi.decode(result, (address));
+                if (user_ == owner_) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 }
