@@ -249,7 +249,7 @@ func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage)
 	conn, err := dialer.Dial("tcp", url)
 	if err != nil {
 		err = lib.WrapError(ErrConnectProvider, err)
-		p.log.Errorf("%s", err)
+		p.log.Warnf(err.Error())
 		return nil, http.StatusInternalServerError, err
 	}
 	defer conn.Close()
@@ -283,6 +283,14 @@ func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage)
 
 func (p *ProxyServiceSender) validateMsgSignature(result any, signature lib.HexString, providerPubicKey lib.HexString) bool {
 	return p.morRPC.VerifySignature(result, signature, providerPubicKey, p.log)
+}
+
+func (p *ProxyServiceSender) GetModelIdSession(ctx context.Context, sessionID common.Hash) (common.Hash, error) {
+	session, err := p.sessionRepo.GetSession(ctx, sessionID)
+	if err != nil {
+		return common.Hash{}, ErrSessionNotFound
+	}
+	return session.ModelID(), nil
 }
 
 func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.Hash, prompt *openai.ChatCompletionRequest, cb gcs.CompletionCallback) (interface{}, error) {
@@ -378,7 +386,7 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 ) (interface{}, int, int, error) {
 	const (
 		TIMEOUT_TO_ESTABLISH_CONNECTION   = time.Second * 3
-		TIMEOUT_TO_RECEIVE_FIRST_RESPONSE = time.Second * 5
+		TIMEOUT_TO_RECEIVE_FIRST_RESPONSE = time.Second * 30
 		MAX_RETRIES                       = 5
 	)
 
@@ -392,7 +400,7 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 	conn, err := dialer.Dial("tcp", url)
 	if err != nil {
 		err = lib.WrapError(ErrConnectProvider, err)
-		p.log.Errorf("%s", err)
+		p.log.Warnf(err.Error())
 		return nil, 0, 0, err
 	}
 	defer conn.Close()
@@ -468,8 +476,6 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 			}
 		}
 
-		p.log.Debugf("Received stream msg: %v", msg)
-
 		if msg.Error != nil {
 			return nil, ttftMs, totalTokens, lib.WrapError(ErrResponseErr, fmt.Errorf("error: %v, data: %v", msg.Error.Message, msg.Error.Data))
 		}
@@ -524,12 +530,21 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 		} else {
 			var imageGenerationResult gcs.ImageGenerationResult
 			err = json.Unmarshal(aiResponse, &imageGenerationResult)
-			if err != nil {
-				return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
+			if err == nil && imageGenerationResult.ImageUrl != "" {
+				totalTokens += 1
+				responses = append(responses, imageGenerationResult)
+				chunk = gcs.NewChunkImage(&imageGenerationResult)
+			} else {
+				var videoGenerationResult gcs.VideoGenerationResult
+				err = json.Unmarshal(aiResponse, &videoGenerationResult)
+				if err == nil && videoGenerationResult.VideoRawContent != "" {
+					totalTokens += 1
+					responses = append(responses, videoGenerationResult)
+					chunk = gcs.NewChunkVideo(&videoGenerationResult)
+				} else {
+					return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
+				}
 			}
-			totalTokens += 1
-			responses = append(responses, imageGenerationResult)
-			chunk = gcs.NewChunkImage(&imageGenerationResult)
 		}
 
 		if ctx.Err() != nil {

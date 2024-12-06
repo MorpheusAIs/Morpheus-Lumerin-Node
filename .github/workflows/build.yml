@@ -1,4 +1,4 @@
-name: CI
+name: CI-CD
 
 on:
   workflow_dispatch:
@@ -7,11 +7,14 @@ on:
         description: 'Create new release'
         required: true
         type: boolean
+        
   push:
     branches:
       - main
-      - stg
+      - test
+      - dev
     paths: ['.github/workflows/**', '**/Makefile', '**/*.go', '**/*.json', '**/*.yml', '**/*.ts', '**/*.js']
+
   pull_request:
     types: [opened, reopened, synchronize]
     paths: ['.github/workflows/**', '**/Makefile', '**/*.go', '**/*.json', '**/*.yml', '**/*.ts', '**/*.js']
@@ -25,12 +28,79 @@ defaults:
     shell: bash
     
 jobs:
+  GitLab-Deploy:
+    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone
+        id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Generate Tag Name
+        uses: ./.github/actions/gen_tag_name
+
+      - name: Determine GitLab Target Branch
+        id: set_target_branch
+        run: |
+          if [ "${{ github.ref_name }}" == "dev" ]; then
+            echo "gitlab_branch=dev" >> $GITHUB_ENV
+          elif [ "${{ github.ref_name }}" == "test" ]; then
+            echo "gitlab_branch=stg" >> $GITHUB_ENV
+          elif [ "${{ github.ref_name }}" == "main" ]; then
+            echo "gitlab_branch=main" >> $GITHUB_ENV
+          else
+            echo "This branch is not configured to trigger GitLab pipelines."
+            exit 1
+          fi
+
+      - name: Trigger GitLab Pipeline
+        run: |
+          echo "Triggering GitLab Build and Deploy for branch ${{ github.ref_name }} with tag ${{ env.TAG_NAME }}"
+      
+          # Send request to GitLab
+          response=$(curl --silent \
+            --request POST \
+            --url "${{ secrets.GITLAB_TRIGGER_URL }}" \
+            --form "token=${{ secrets.GITLAB_TRIGGER_TOKEN }}" \
+            --form "ref=${{ env.gitlab_branch }}" \
+            --form "variables[SOURCE_REPO]=${{ github.repository }}" \
+            --form "variables[SOURCE_BRANCH]=${{ github.ref_name }}" \
+            --form "variables[GITHUB_TAG]=${{ env.TAG_NAME }}")
+      
+          # Parse JSON response using jq
+          gitlab_status=$(echo "$response" | jq -r '.status // "unknown"')
+          gitlab_web_url=$(echo "$response" | jq -r '.web_url // "N/A"')
+      
+          # Log the response
+          echo "GitLab Response: $response"
+      
+          # Validate the status field
+          if [[ "$gitlab_status" =~ ^(created|preparing|success|running|scheduled)$ ]]; then
+            echo "GitLab pipeline triggered successfully! Status: $gitlab_status"
+            echo "Pipeline details: $gitlab_web_url"
+          else
+            echo "GitLab pipeline FAILED. Invalid status: $gitlab_status"
+            echo "Pipeline details: $gitlab_web_url"
+            exit 1
+          fi
+
   Ubuntu-22-x64:
+    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' }}
     runs-on: ubuntu-22.04
     steps:
       - name: Clone
-        uses: actions/checkout@v4
         id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -72,20 +142,24 @@ jobs:
           cd ../cli
           make build
           cd ../ui-desktop
+          echo "Injecting version ${VFULL} into package.json"
+          sed -i "s/\"version\": \".*\"/\"version\": \"${VFULL}\"/" package.json
+          cat package.json | grep '"version"'  # Optional: Verify the change
           yarn build:linux
 
       - name: Pack artifacts
         id: pack_artifacts
         run: |
           ARTIFACT="mor-launch-$TAG_NAME-ubuntu-x64.zip"
+          echo "Artifact: $ARTIFACT"
           LLAMACPP=llama-b3256-bin-ubuntu-x64.zip
           MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
           unzip -o -j $LLAMACPP build/bin/llama-server
-          echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./ui-desktop-1.0.0-x64-linux.AppImage"]}' > mor-launch.json
+          echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./morpheus-ui-${VFULL}-x86_64-linux.AppImage"]}' > mor-launch.json
           mv ./cli/mor-cli mor-cli
-          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/bin/proxy-router .env $MODEL mor-launch.json ./ui-desktop/dist/ui-desktop-1.0.0-x64-linux.AppImage models-config.json mor-cli
+          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/bin/proxy-router .env $MODEL mor-launch.json ./ui-desktop/dist/morpheus-ui-${VFULL}-x86_64-linux.AppImage models-config.json rating-config.json mor-cli
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -94,11 +168,15 @@ jobs:
           name: mor-launch-ubuntu-x64.zip
 
   macOS-13-x64:
+    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' }}
     runs-on: macos-13
     steps:
       - name: Clone
-        uses: actions/checkout@v4
         id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -141,12 +219,16 @@ jobs:
           cd ../cli
           make build
           cd ../ui-desktop
+          echo "Injecting version ${VFULL} into package.json"
+          sed -i "" "s/\"version\": \".*\"/\"version\": \"${VFULL}\"/" package.json
+          cat package.json | grep '"version"'  # Optional: Verify the change
           yarn build:mac
 
       - name: Pack artifacts
         id: pack_artifacts
         run: |
           ARTIFACT="mor-launch-$TAG_NAME-macos-x64.zip"
+          echo "Artifact: $ARTIFACT"
           LLAMACPP=llama-b3256-bin-macos-x64.zip
           MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
@@ -154,8 +236,8 @@ jobs:
           unzip -o -j $LLAMACPP build/bin/llama-server
           echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./MorpheusUI.app/Contents/MacOS/MorpheusUI"]}' > mor-launch.json
           mv ./cli/mor-cli mor-cli
-          unzip ./ui-desktop/dist/morpheus-ui-1.0.0-x64-mac.zip
-          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json models-config.json mor-cli
+          unzip ./ui-desktop/dist/morpheus-ui-${VFULL}-x64-mac.zip
+          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json models-config.json rating-config.json mor-cli
           zip -r $ARTIFACT 'MorpheusUI.app'
 
       - name: Upload artifacts
@@ -165,11 +247,15 @@ jobs:
           name: mor-launch-macos-x64.zip
 
   macOS-14-arm64:
+    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' }}
     runs-on: macos-14
     steps:
       - name: Clone
-        uses: actions/checkout@v4
         id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -212,12 +298,16 @@ jobs:
           cd ../cli
           make build
           cd ../ui-desktop
+          echo "Injecting version ${VFULL}} into package.json"
+          sed -i "" "s/\"version\": \".*\"/\"version\": \"${VFULL}\"/" package.json
+          cat package.json | grep '"version"'  # Optional: Verify the change
           yarn build:mac
 
       - name: Pack artifacts
         id: pack_artifacts
         run: |
           ARTIFACT="mor-launch-$TAG_NAME-macos-arm64.zip"
+          echo "Artifact: $ARTIFACT"
           LLAMACPP=llama-b3256-bin-macos-arm64.zip
           MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
@@ -225,8 +315,8 @@ jobs:
           unzip -o -j $LLAMACPP build/bin/llama-server
           echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./MorpheusUI.app/Contents/MacOS/MorpheusUI"]}' > mor-launch.json
           mv ./cli/mor-cli mor-cli
-          unzip ./ui-desktop/dist/morpheus-ui-1.0.0-arm64-mac.zip
-          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json models-config.json mor-cli
+          unzip ./ui-desktop/dist/morpheus-ui-${VFULL}-arm64-mac.zip
+          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json models-config.json rating-config.json mor-cli
           zip -r $ARTIFACT 'MorpheusUI.app'
 
       - name: Upload artifacts
@@ -236,11 +326,15 @@ jobs:
           name: mor-launch-macos-arm64.zip
 
   Windows-avx2-x64:
+    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' }}
     runs-on: windows-latest
     steps:
       - name: Clone
-        uses: actions/checkout@v4
         id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -287,25 +381,29 @@ jobs:
           cd ../cli
           make build
           cd ../ui-desktop
+          echo "Injecting version ${VFULL} into package.json"
+          sed -i "s/\"version\": \".*\"/\"version\": \"${VFULL}\"/" package.json
+          cat package.json | grep '"version"'  # Optional: Verify the change
           yarn build:win
 
       - name: Pack artifacts
         id: pack_artifacts
         run: |
           ARTIFACT="mor-launch-$TAG_NAME-win-x64.zip"
+          echo "Artifact: $ARTIFACT"
           LLAMACPP=llama-b3256-bin-win-avx2-x64.zip
           MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
           unzip -o -j $LLAMACPP llama-server.exe llama.dll ggml.dll
-          echo '{"run":["./llama-server.exe -m ./'$MODEL'","./proxy-router.exe","./morpheus-ui-1.0.0-x64-win.exe"]}' > mor-launch.json
+          echo '{"run":["./llama-server.exe -m ./'$MODEL'","./proxy-router.exe","./morpheus-ui-${VFULL}-x64-win.exe"]}' > mor-launch.json
           mv .env .env.tmp
           sed 's|\./data/|.\\data\\|g' .env.tmp > .env
           mv ./proxy-router/bin/proxy-router proxy-router.exe
           mv ./cli/mor-cli mor-cli.exe
           mv ./launcher/mor-launch mor-launch.exe
-          mv "./ui-desktop/dist/morpheus-ui-1.0.0-x64-win" morpheus-ui-1.0.0-x64-win.exe
-          7z a $ARTIFACT LICENSE mor-launch.exe proxy-router.exe .env llama-server.exe llama.dll ggml.dll $MODEL mor-launch.json morpheus-ui-1.0.0-x64-win.exe models-config.json mor-cli.exe
+          mv "./ui-desktop/dist/morpheus-ui-${VFULL}-x64-win" morpheus-ui-${VFULL}-x64-win.exe
+          7z a $ARTIFACT LICENSE mor-launch.exe proxy-router.exe .env llama-server.exe llama.dll ggml.dll $MODEL mor-launch.json morpheus-ui-${VFULL}-x64-win.exe models-config.json rating-config.json mor-cli.exe
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -314,7 +412,7 @@ jobs:
           name: mor-launch-win-x64.zip
 
   release:
-    if: ${{ (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/stg')) || github.event.inputs.create_release == 'true' }}
+    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' )) || github.event.inputs.create_release == 'true' }}
     runs-on: ubuntu-latest
     needs:
       - Ubuntu-22-x64
@@ -325,6 +423,9 @@ jobs:
       - name: Clone
         id: checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Generate Tag Name
         uses: ./.github/actions/gen_tag_name

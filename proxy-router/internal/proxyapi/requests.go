@@ -40,3 +40,11 @@ type UpdateChatTitleReq struct {
 type ResultResponse struct {
 	Result bool `json:"result"`
 }
+
+type ChatCompletionRequestSwaggerExample struct {
+	Stream   bool `json:"stream"`
+	Messages []struct {
+		Role    string `json:"role" example:"user"`
+		Content string `json:"content" example:"tell me a joke"`
+	} `json:"messages"`
+}

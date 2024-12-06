@@ -15,7 +15,7 @@ interface ChatHistoryProps {
     open: boolean,
     onCloseSession: (id: string) => void;
     onSelectChat: (chat: ChatData) => void;
-    refreshSessions: () => void;
+    refreshSessions: () => Promise<void>;
     deleteHistory: (chatId: string) => void
     onChangeTitle: (data: { id: string, title: string }) => Promise<void>;
     sessions: any[];
@@ -143,6 +143,12 @@ export const ChatHistory = (props: ChatHistoryProps) => {
         return result;
     }
 
+    const handleTabSwitch = async (tabName) => {
+        if(tabName == 'sessions') {
+            await props.refreshSessions();
+        }
+    }
+
     const filterdModels = props.chatData && search ? props.chatData.filter(m => m.title?.includes(search)) : (props.chatData || []);
     const groupedItems = getGroupHistory<ChatData>(filterdModels);
 
@@ -151,6 +157,7 @@ export const ChatHistory = (props: ChatHistoryProps) => {
             <div className='history-scroll-block'>
 
                 <Tabs
+                    onSelect={handleTabSwitch}
                     defaultActiveKey="history"
                     id="history-tabs"
                     className="mb-3"

@@ -8,11 +8,13 @@ runs:
       run: | 
         cp ./.github/workflows/models-config.json ./proxy-router/models-config.json
         cp ./.github/workflows/models-config.json models-config.json
+        cp ./.github/workflows/rating-config.json ./proxy-router/rating-config.json
+        cp ./.github/workflows/rating-config.json rating-config.json
         if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
           cp ./.github/workflows/proxy-router.main.env ./proxy-router/.env
           cp ./.github/workflows/proxy-router.main.env .env
           cp ./.github/workflows/ui-desktop.main.env ./ui-desktop/.env
-        elif [[ "${GITHUB_REF}" == "refs/heads/stg" ]]; then
+        elif [[ "${GITHUB_REF}" == "refs/heads/test" ]]; then
           cp ./.github/workflows/proxy-router.test.env ./proxy-router/.env
           cp ./.github/workflows/proxy-router.test.env .env
           cp ./.github/workflows/ui-desktop.test.env ./ui-desktop/.env

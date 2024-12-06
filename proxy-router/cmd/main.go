@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
@@ -33,7 +32,6 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/walletapi"
-	"github.com/ethereum/go-ethereum/common"
 
 	docs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/docs"
 )
@@ -91,6 +89,7 @@ func start() error {
 	} else {
 		docs.SwaggerInfo.Host = "localhost:8082"
 	}
+	docs.SwaggerInfo.Version = config.BuildVersion
 
 	log, err := lib.NewLogger(cfg.Log.LevelApp, cfg.Log.Color, cfg.Log.IsProd, cfg.Log.JSON, mainLogFilePath)
 	if err != nil {
@@ -260,13 +259,9 @@ func start() error {
 		log.Warnf("failed to load model config: %s, run with empty", err)
 	}
 
-	providerAllowList := []common.Address{}
-	if cfg.Proxy.ProviderAllowList != "" {
-		addresses := strings.Split(cfg.Proxy.ProviderAllowList, ",")
-		for _, address := range addresses {
-			addr := strings.TrimSpace(address)
-			providerAllowList = append(providerAllowList, common.HexToAddress(addr))
-		}
+	scorer, err := config.LoadRating(cfg.Proxy.RatingConfigPath, log)
+	if err != nil {
+		return err
 	}
 
 	chatStoragePath := filepath.Join(cfg.Proxy.StoragePath, "chats")
@@ -278,7 +273,7 @@ func start() error {
 	sessionRepo := sessionrepo.NewSessionRepositoryCached(sessionStorage, sessionRouter, marketplace)
 	proxyRouterApi := proxyapi.NewProxySender(chainID, publicUrl, wallet, contractLogStorage, sessionStorage, sessionRepo, log)
 	explorer := blockchainapi.NewExplorerClient(cfg.Blockchain.ExplorerApiUrl, *cfg.Marketplace.MorTokenAddress, cfg.Blockchain.ExplorerRetryDelay, cfg.Blockchain.ExplorerMaxRetries)
-	blockchainApi := blockchainapi.NewBlockchainService(ethClient, multicallBackend, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, explorer, wallet, proxyRouterApi, sessionRepo, providerAllowList, proxyLog, cfg.Blockchain.EthLegacyTx)
+	blockchainApi := blockchainapi.NewBlockchainService(ethClient, multicallBackend, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, explorer, wallet, proxyRouterApi, sessionRepo, scorer, proxyLog, cfg.Blockchain.EthLegacyTx)
 	proxyRouterApi.SetSessionService(blockchainApi)
 	aiEngine := aiengine.NewAiEngine(proxyRouterApi, chatStorage, modelConfigLoader, log)
 

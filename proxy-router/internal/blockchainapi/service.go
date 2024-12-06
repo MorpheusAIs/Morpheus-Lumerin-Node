@@ -13,8 +13,10 @@ import (
 	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/rating"
 	m "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/marketplace"
 	pr "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/providerregistry"
+	s "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/sessionrouter"
 	sr "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/sessionrouter"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/multicall"
 	r "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
@@ -39,8 +41,8 @@ type BlockchainService struct {
 	sessionRepo        *sessionrepo.SessionRepositoryCached
 	proxyService       *proxyapi.ProxyServiceSender
 	diamonContractAddr common.Address
-
-	providerAllowList []common.Address
+	rating             *rating.Rating
+	minStake           *big.Int
 
 	legacyTx   bool
 	privateKey i.PrKeyProvider
@@ -67,6 +69,7 @@ var (
 	ErrInitSession = errors.New("failed to initiate session")
 	ErrApprove     = errors.New("failed to approve")
 	ErrMarshal     = errors.New("failed to marshal open session payload")
+	ErrOpenOwnBid  = errors.New("cannot open session with own bid")
 
 	ErrNoBid = errors.New("no bids available")
 	ErrModel = errors.New("can't get model")
@@ -81,7 +84,7 @@ func NewBlockchainService(
 	privateKey i.PrKeyProvider,
 	proxyService *proxyapi.ProxyServiceSender,
 	sessionRepo *sessionrepo.SessionRepositoryCached,
-	providerAllowList []common.Address,
+	scorerAlgo *rating.Rating,
 	log lib.ILogger,
 	legacyTx bool,
 ) *BlockchainService {
@@ -103,8 +106,8 @@ func NewBlockchainService(
 		explorerClient:     explorer,
 		proxyService:       proxyService,
 		diamonContractAddr: diamonContractAddr,
-		providerAllowList:  providerAllowList,
 		sessionRepo:        sessionRepo,
+		rating:             scorerAlgo,
 		log:                log,
 	}
 }
@@ -204,10 +207,61 @@ func (s *BlockchainService) GetRatedBids(ctx context.Context, modelID common.Has
 	if err != nil {
 		return nil, err
 	}
+	minStake, err := s.getMinStakeCached(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get min stake: %w", err)
+	}
 
-	ratedBids := rateBids(bidIDs, bids, providerModelStats, provider, modelStats, s.log)
+	ratedBids := s.rateBids(bidIDs, bids, providerModelStats, provider, modelStats, minStake, s.log)
 
 	return ratedBids, nil
+}
+
+func (s *BlockchainService) rateBids(bidIds [][32]byte, bids []m.IBidStorageBid, pmStats []s.IStatsStorageProviderModelStats, provider []pr.IProviderStorageProvider, mStats *s.IStatsStorageModelStats, minStake *big.Int, log lib.ILogger) []structs.ScoredBid {
+	ratingInputs := make([]rating.RatingInput, len(bids))
+	bidIDIndexMap := make(map[common.Hash]int)
+
+	for i := range bids {
+		ratingInputs[i] = rating.RatingInput{
+			ScoreInput: rating.ScoreInput{
+				ProviderModel:  &pmStats[i],
+				Model:          mStats,
+				ProviderStake:  provider[i].Stake,
+				PricePerSecond: bids[i].PricePerSecond,
+				MinStake:       minStake,
+			},
+			BidID:      bidIds[i],
+			ModelID:    bids[i].ModelId,
+			ProviderID: bids[i].Provider,
+		}
+		bidIDIndexMap[bidIds[i]] = i
+	}
+
+	result := s.rating.RateBids(ratingInputs, log)
+	scoredBids := make([]structs.ScoredBid, len(result))
+
+	for i, score := range result {
+		inputBidIndex := bidIDIndexMap[score.BidID]
+		scoredBid := structs.ScoredBid{
+			Bid: structs.Bid{
+				Id:             bidIds[inputBidIndex],
+				Provider:       bids[inputBidIndex].Provider,
+				ModelAgentId:   bids[inputBidIndex].ModelId,
+				PricePerSecond: &lib.BigInt{Int: *(bids[inputBidIndex].PricePerSecond)},
+				Nonce:          &lib.BigInt{Int: *(bids[inputBidIndex].Nonce)},
+				CreatedAt:      &lib.BigInt{Int: *(bids[inputBidIndex].CreatedAt)},
+				DeletedAt:      &lib.BigInt{Int: *(bids[inputBidIndex].DeletedAt)},
+			},
+			Score: score.Score,
+		}
+		scoredBids[i] = scoredBid
+	}
+
+	sort.Slice(scoredBids, func(i, j int) bool {
+		return scoredBids[i].Score > scoredBids[j].Score
+	})
+
+	return scoredBids
 }
 
 func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalSig []byte, stake *big.Int, directPayment bool) (common.Hash, error) {
@@ -697,6 +751,10 @@ func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.H
 		return common.Hash{}, lib.WrapError(ErrMyAddress, err)
 	}
 
+	if bid.Provider == userAddr {
+		return common.Hash{}, lib.WrapError(ErrOpenOwnBid, fmt.Errorf("failed to open session"))
+	}
+
 	provider, err := s.providerRegistry.GetProviderById(ctx, bid.Provider)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrProvider, err)
@@ -745,7 +803,12 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 		return common.Hash{}, lib.WrapError(ErrMyAddress, err)
 	}
 
-	scoredBids := rateBids(bidIDs, bids, providerStats, providers, modelStats, s.log)
+	minStake, err := s.getMinStakeCached(ctx)
+	if err != nil {
+		return common.Hash{}, fmt.Errorf("failed to get min stake: %w", err)
+	}
+
+	scoredBids := s.rateBids(bidIDs, bids, providerStats, providers, modelStats, minStake, s.log)
 	for i, bid := range scoredBids {
 		providerAddr := bid.Bid.Provider
 		if providerAddr == omitProvider {
@@ -753,8 +816,8 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 			continue
 		}
 
-		if !s.isProviderAllowed(providerAddr) {
-			s.log.Infof("skipping not allowed provider #%d %s", i, providerAddr.String())
+		if providerAddr == userAddr {
+			s.log.Infof("skipping own bid #%d %s", i, bid.Bid.Id)
 			continue
 		}
 
@@ -883,19 +946,6 @@ func (s *BlockchainService) GetMyAddress(ctx context.Context) (common.Address, e
 	return lib.PrivKeyBytesToAddr(prKey)
 }
 
-func (s *BlockchainService) isProviderAllowed(providerAddr common.Address) bool {
-	if len(s.providerAllowList) == 0 {
-		return true
-	}
-
-	for _, addr := range s.providerAllowList {
-		if addr.Hex() == providerAddr.Hex() {
-			return true
-		}
-	}
-	return false
-}
-
 func (s *BlockchainService) getTransactOpts(ctx context.Context, privKey lib.HexString) (*bind.TransactOpts, error) {
 	privateKey, err := crypto.ToECDSA(privKey)
 	if err != nil {
@@ -939,4 +989,17 @@ func (s *BlockchainService) signTx(ctx context.Context, tx *types.Transaction, p
 	}
 
 	return types.SignTx(tx, types.NewEIP155Signer(chainId), privateKey)
+}
+
+func (s *BlockchainService) getMinStakeCached(ctx context.Context) (*big.Int, error) {
+	if s.minStake != nil {
+		return s.minStake, nil
+	}
+
+	minStake, err := s.providerRegistry.GetMinStake(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s.minStake = minStake
+	return minStake, nil
 }

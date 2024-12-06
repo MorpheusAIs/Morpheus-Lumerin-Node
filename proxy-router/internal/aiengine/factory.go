@@ -10,6 +10,8 @@ func ApiAdapterFactory(apiType string, modelName string, url string, apikey stri
 		return NewProdiaSDEngine(modelName, url, apikey, log), true
 	case API_TYPE_PRODIA_SDXL:
 		return NewProdiaSDXLEngine(modelName, url, apikey, log), true
+	case API_TYPE_PRODIA_V2:
+		return NewProdiaV2Engine(modelName, url, apikey, log), true
 	}
 	return nil, false
 }

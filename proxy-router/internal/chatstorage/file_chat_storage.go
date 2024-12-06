@@ -76,16 +76,19 @@ func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool
 	}
 
 	isImageContent := false
+	isVideoRawContent := false
 	if len(responses) > 0 {
 		isImageContent = responses[0].Type() == gcs.ChunkTypeImage
+		isVideoRawContent = responses[0].Type() == gcs.ChunkTypeVideo
 	}
 
 	newEntry := gcs.ChatMessage{
-		Prompt:         p,
-		Response:       strings.Join(resps, ""),
-		PromptAt:       promptAt.Unix(),
-		ResponseAt:     responseAt.Unix(),
-		IsImageContent: isImageContent,
+		Prompt:            p,
+		Response:          strings.Join(resps, ""),
+		PromptAt:          promptAt.Unix(),
+		ResponseAt:        responseAt.Unix(),
+		IsImageContent:    isImageContent,
+		IsVideoRawContent: isVideoRawContent,
 	}
 
 	if chatHistory.Messages == nil && len(chatHistory.Messages) == 0 {

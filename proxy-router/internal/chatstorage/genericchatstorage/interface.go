@@ -47,12 +47,14 @@ func (h *ChatHistory) AppendChatHistory(req *openai.ChatCompletionRequest) *open
 }
 
 type ChatMessage struct {
-	Prompt         OpenAiCompletionRequest `json:"prompt"`
-	Response       string                  `json:"response"`
-	PromptAt       int64                   `json:"promptAt"`
-	ResponseAt     int64                   `json:"responseAt"`
-	IsImageContent bool                    `json:"isImageContent"`
+	Prompt            OpenAiCompletionRequest `json:"prompt"`
+	Response          string                  `json:"response"`
+	PromptAt          int64                   `json:"promptAt"`
+	ResponseAt        int64                   `json:"responseAt"`
+	IsImageContent    bool                    `json:"isImageContent"`
+	IsVideoRawContent bool                    `json:"isVideoRawContent"`
 }
+
 type Chat struct {
 	ChatID    string `json:"chatId"`
 	ModelID   string `json:"modelId"`
