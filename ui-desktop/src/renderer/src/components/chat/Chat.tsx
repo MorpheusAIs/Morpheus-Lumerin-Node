@@ -84,8 +84,9 @@ const Chat = (props) => {
     useEffect(() => {
         (async () => {
             console.time("LOAD")
-            const [chainData, chats] = await Promise.all([
+            const [chainData, userSessions, chats] = await Promise.all([
                 props.getModelsData(),
+                props.getSessionsByUser(props.address),
                 props.client.getChatHistoryTitles() as Promise<ChatTitle[]>]);
 
             setBalances(chainData.userBalances)
@@ -107,7 +108,15 @@ const Chat = (props) => {
             }, [] as ChatData[])
             setChatsData(mappedChatData);
 
-            const sessions = await refreshSessions(chainData?.models);
+            const sessions = userSessions.reduce((res, item) => {
+                const sessionModel = chainData.models.find(x => x.Id == item.ModelAgentId);
+                if (sessionModel) {
+                    item.ModelName = sessionModel.Name;
+                    res.push(item);
+                }
+                return res;
+            }, []);
+            setSessions(sessions);
 
             const openSessions = sessions.filter(s => !isClosed(s));
 
@@ -285,9 +294,9 @@ const Chat = (props) => {
         }
     }
 
-    const refreshSessions = async (models = null) => {
+    const refreshSessions = async () => {
         const sessions = (await props.getSessionsByUser(props.address)).reduce((res, item) => {
-            const sessionModel = (models || chainData.models).find(x => x.Id == item.ModelAgentId);
+            const sessionModel = chainData.models.find(x => x.Id == item.ModelAgentId);
             if (sessionModel) {
                 item.ModelName = sessionModel.Name;
                 res.push(item);
