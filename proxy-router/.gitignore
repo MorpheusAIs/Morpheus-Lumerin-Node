@@ -12,3 +12,12 @@ data*
 
 models-config.json
 rating-config.json
+
+#Badger DB
+*.vlog
+*.mem
+DISCARD
+KEYREGISTRY
+LOCK
+MANIFEST
+chats/
