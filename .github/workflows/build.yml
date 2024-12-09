@@ -12,6 +12,7 @@ on:
     branches:
       - main
       - test
+      - concom
       - dev
     paths: ['.github/workflows/**', '**/Makefile', '**/*.go', '**/*.json', '**/*.yml', '**/*.ts', '**/*.js']
 
@@ -413,7 +414,7 @@ jobs:
           name: mor-launch-win-x64.zip
 
   release:
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' )) || github.event.inputs.create_release == 'true' }}
+    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/concom' )) || github.event.inputs.create_release == 'true' }}
     runs-on: ubuntu-latest
     needs:
       - Ubuntu-22-x64
