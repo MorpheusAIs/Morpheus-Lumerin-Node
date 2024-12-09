@@ -18,7 +18,7 @@ func NewMorRpc() *MORRPCMessage {
 
 // RESPONSES
 
-func (m *MORRPCMessage) PongResponce(requestId string, providerPrKey lib.HexString, nonce lib.HexString) (*RpcResponse, error) {
+func (m *MORRPCMessage) PongResponse(requestId string, providerPrKey lib.HexString, nonce lib.HexString) (*RpcResponse, error) {
 	params := PongRes{
 		Nonce: nonce,
 	}
@@ -42,7 +42,7 @@ func (m *MORRPCMessage) PongResponce(requestId string, providerPrKey lib.HexStri
 	}, nil
 }
 
-func (m *MORRPCMessage) InitiateSessionResponse(providerPubKey lib.HexString, userAddr common.Address, bidID common.Hash, providerPrivateKeyHex lib.HexString, requestID string, chainID *big.Int) (*RpcResponse, error) {
+func (m *MORRPCMessage) InitiateSessionResponse(providerPubKey lib.HexString, userAddr common.Address, bidID common.Hash, providerPrivateKeyHex lib.HexString, requestID string, chainID *big.Int, providerPubKeyForSharedSecret lib.HexString) (*RpcResponse, error) {
 	timestamp := m.generateTimestamp()
 
 	approval, err := lib.EncodeAbiParameters(approvalAbi, []interface{}{bidID, chainID, userAddr, big.NewInt(int64(timestamp))})
@@ -55,11 +55,12 @@ func (m *MORRPCMessage) InitiateSessionResponse(providerPubKey lib.HexString, us
 	}
 
 	params := SessionRes{
-		PubKey:      providerPubKey,
-		Approval:    approval,
-		ApprovalSig: approvalSig,
-		User:        userAddr,
-		Timestamp:   timestamp,
+		PubKey:                        providerPubKey,
+		Approval:                      approval,
+		ApprovalSig:                   approvalSig,
+		User:                          userAddr,
+		Timestamp:                     timestamp,
+		ProviderPubKeyForSharedSecret: providerPubKeyForSharedSecret,
 	}
 
 	signature, err := m.generateSignature(params, providerPrivateKeyHex)
@@ -272,14 +273,10 @@ func (m *MORRPCMessage) InitiateSessionRequest(user common.Address, provider com
 	}, nil
 }
 
-func (m *MORRPCMessage) SessionPromptRequest(sessionID common.Hash, prompt interface{}, providerPubKey lib.HexString, userPrivateKeyHex lib.HexString, requestId string) (*RPCMessage, error) {
+func (m *MORRPCMessage) SessionPromptRequest(sessionID common.Hash, prompt lib.HexString, providerPubKey lib.HexString, userPrivateKeyHex lib.HexString, requestId string) (*RPCMessage, error) {
 	method := "session.prompt"
-	promptStr, err := json.Marshal(prompt)
-	if err != nil {
-		return &RPCMessage{}, err
-	}
 	params2 := SessionPromptReq{
-		Message:   string(promptStr),
+		Message:   prompt.Hex(),
 		SessionID: sessionID,
 		Timestamp: uint64(time.Now().UnixMilli()),
 	}
@@ -368,4 +365,28 @@ func (m *MORRPCMessage) generateSignature(params any, privateKeyHex lib.HexStrin
 	}
 
 	return signature, nil
+}
+
+func (m *MORRPCMessage) CreateSharedKeyRequest(userPublicKey []byte, userAddr common.Address, userPrivateKeyHex lib.HexString, requestId string) (*RPCMessage, error) {
+	method := "session.dh-keys"
+
+	params2 := CreateSharedEncrKeyReq{
+		UserPublicKeyForSharedSecret: userPublicKey,
+		UserAddress:                  userAddr,
+	}
+
+	signature, err := m.generateSignature(params2, userPrivateKeyHex)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
+	params2.Signature = signature
+	serializedParams, err := json.Marshal(params2)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
+	return &RPCMessage{
+		ID:     requestId,
+		Method: method,
+		Params: serializedParams,
+	}, nil
 }

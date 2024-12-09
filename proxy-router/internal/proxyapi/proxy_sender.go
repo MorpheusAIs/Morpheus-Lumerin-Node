@@ -57,17 +57,22 @@ type ProxyServiceSender struct {
 	morRPC         *msgs.MORRPCMessage
 	sessionService SessionService
 	log            lib.ILogger
+
+	useDhEncryption bool
+	dhKeysMap       map[string]string
 }
 
-func NewProxySender(chainID *big.Int, privateKey interfaces.PrKeyProvider, logStorage *lib.Collection[*interfaces.LogStorage], sessionStorage *storages.SessionStorage, sessionRepo *sessionrepo.SessionRepositoryCached, log lib.ILogger) *ProxyServiceSender {
+func NewProxySender(chainID *big.Int, privateKey interfaces.PrKeyProvider, logStorage *lib.Collection[*interfaces.LogStorage], sessionStorage *storages.SessionStorage, sessionRepo *sessionrepo.SessionRepositoryCached, log lib.ILogger, useDhEncryption bool) *ProxyServiceSender {
 	return &ProxyServiceSender{
-		chainID:        chainID,
-		privateKey:     privateKey,
-		logStorage:     logStorage,
-		sessionStorage: sessionStorage,
-		sessionRepo:    sessionRepo,
-		morRPC:         msgs.NewMorRpc(),
-		log:            log,
+		chainID:         chainID,
+		privateKey:      privateKey,
+		logStorage:      logStorage,
+		sessionStorage:  sessionStorage,
+		sessionRepo:     sessionRepo,
+		morRPC:          msgs.NewMorRpc(),
+		log:             log,
+		dhKeysMap:       make(map[string]string),
+		useDhEncryption: useDhEncryption,
 	}
 }
 
@@ -170,6 +175,35 @@ func (p *ProxyServiceSender) InitiateSession(ctx context.Context, user common.Ad
 	providerPubKey := typedMsg.PubKey
 	if !p.validateMsgSignature(typedMsg, signature, typedMsg.PubKey) {
 		return nil, ErrInvalidSig
+	}
+
+	if p.useDhEncryption {
+		userPublicKey, userPrivateKey, err := lib.GenerateEphemeralKeyPair()
+		if err != nil {
+			return nil, err
+		}
+
+		sharedSecret, err := lib.ComputeSharedSecret(userPrivateKey, typedMsg.ProviderPubKeyForSharedSecret)
+		if err != nil {
+			return nil, err
+		}
+
+		encryptionKey, err := lib.DeriveKeysFromSharedSecret(sharedSecret)
+		if err != nil {
+			return nil, err
+		}
+
+		p.dhKeysMap[provider.Hex()] = string(encryptionKey)
+
+		createSharedKeyRequest, err := p.morRPC.CreateSharedKeyRequest(userPublicKey, user, prKey, requestID)
+		if err != nil {
+			return nil, lib.WrapError(ErrCreateReq, err)
+		}
+
+		msg, code, err = p.rpcRequest(providerURL, createSharedKeyRequest)
+		if err != nil {
+			return nil, lib.WrapError(ErrProvider, fmt.Errorf("code: %d, msg: %v, error: %s", code, msg, err))
+		}
 	}
 
 	err = p.sessionStorage.AddUser(&storages.User{
@@ -380,13 +414,44 @@ func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.
 	if err != nil {
 		return nil, lib.WrapError(ErrCreateReq, err)
 	}
-	promptRequest, err := p.morRPC.SessionPromptRequest(sessionID, prompt, pubKey, prKey, requestID)
+
+	hexPrompt := lib.HexString{}
+	var sharedEncrKeyBytes []byte
+	if p.useDhEncryption {
+		sharedEncrKeyStr, ok := p.dhKeysMap[string(session.ProviderAddr().Hex())]
+		if !ok {
+			return nil, fmt.Errorf("encryption key not found")
+		}
+
+		sharedEncrKeyBytes = []byte(sharedEncrKeyStr)
+		promptStr, err := json.Marshal(prompt)
+		if err != nil {
+			return nil, lib.WrapError(ErrCreateReq, err)
+		}
+
+		encryptedPrompt, err := lib.SharedSecretEncrypt(sharedEncrKeyBytes, promptStr)
+		if err != nil {
+			return nil, lib.WrapError(ErrCreateReq, err)
+		}
+
+		hexPrompt = lib.HexString(encryptedPrompt)
+	} else {
+		promptStr, err := json.Marshal(prompt)
+		if err != nil {
+			return nil, lib.WrapError(ErrCreateReq, err)
+		}
+
+		hexPrompt = lib.HexString(promptStr)
+		sharedEncrKeyBytes = []byte{}
+	}
+
+	promptRequest, err := p.morRPC.SessionPromptRequest(sessionID, hexPrompt, pubKey, prKey, requestID)
 	if err != nil {
 		return nil, lib.WrapError(ErrCreateReq, err)
 	}
 
 	now := time.Now().Unix()
-	result, ttftMs, totalTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, promptRequest, pubKey)
+	result, ttftMs, totalTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, promptRequest, pubKey, sharedEncrKeyBytes)
 	if err != nil {
 		if !session.FailoverEnabled() {
 			return nil, lib.WrapError(ErrProvider, err)
@@ -444,6 +509,7 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 	url string,
 	rpcMessage *msgs.RPCMessage,
 	providerPublicKey lib.HexString,
+	encrKey []byte,
 ) (interface{}, int, int, error) {
 	const (
 		TIMEOUT_TO_ESTABLISH_CONNECTION   = time.Second * 3
@@ -568,7 +634,13 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 			return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
 		}
 
-		aiResponse, err := lib.DecryptBytes(message, prKey)
+		aiResponse := []byte{}
+		responseEncryptedBytes := common.FromHex(message.Hex())
+		if !p.useDhEncryption {
+			aiResponse, err = lib.DecryptBytes(responseEncryptedBytes, prKey)
+		} else {
+			aiResponse, err = lib.SharedSecretDecrypt(encrKey, responseEncryptedBytes)
+		}
 		if err != nil {
 			return nil, ttftMs, totalTokens, lib.WrapError(ErrDecrFailed, err)
 		}

@@ -17,12 +17,13 @@ type SessionReq struct {
 }
 
 type SessionRes struct {
-	PubKey      lib.HexString  `json:"message" validate:"required,hexadecimal"`
-	Approval    lib.HexString  `json:"approval" validate:"required,hexadecimal"`
-	ApprovalSig lib.HexString  `json:"approvalSig" validate:"required,hexadecimal"`
-	User        common.Address `json:"user" validate:"required,eth_addr"`
-	Timestamp   uint64         `json:"timestamp" validate:"required,timestamp"`
-	Signature   lib.HexString  `json:"signature,omitempty" validate:"required,hexadecimal"`
+	PubKey                        lib.HexString  `json:"message" validate:"required,hexadecimal"`
+	ProviderPubKeyForSharedSecret lib.HexString  `json:"providerPubKeyForSharedSecret,omitempty" validate:"hexadecimal"`
+	Approval                      lib.HexString  `json:"approval" validate:"required,hexadecimal"`
+	ApprovalSig                   lib.HexString  `json:"approvalSig" validate:"required,hexadecimal"`
+	User                          common.Address `json:"user" validate:"required,eth_addr"`
+	Timestamp                     uint64         `json:"timestamp" validate:"required,timestamp"`
+	Signature                     lib.HexString  `json:"signature,omitempty" validate:"required,hexadecimal"`
 }
 
 type SessionPromptReq struct {
@@ -105,4 +106,10 @@ type PingReq struct {
 type PongRes struct {
 	Nonce     lib.HexString `json:"nonce"     validate:"required,hexadecimal"`
 	Signature lib.HexString `json:"signature" validate:"required,hexadecimal"`
+}
+
+type CreateSharedEncrKeyReq struct {
+	Signature                    lib.HexString  `json:"signature" validate:"required,hexadecimal"`
+	UserPublicKeyForSharedSecret lib.HexString  `json:"userPublicKeyForSharedSecret"     validate:"required,hexadecimal"`
+	UserAddress                  common.Address `json:"userAddress" validate:"required,eth_addr"`
 }

@@ -52,6 +52,8 @@ func (s *MORRPCController) Handle(ctx context.Context, msg m.RPCMessage, sourceL
 		return s.sessionPrompt(ctx, msg, sendResponse, sourceLog)
 	case "session.report":
 		return s.sessionReport(ctx, msg, sendResponse, sourceLog)
+	case "session.dh-keys":
+		return s.createSharedEncrKey(ctx, msg, sendResponse, sourceLog)
 	default:
 		return lib.WrapError(ErrUnknownMethod, fmt.Errorf("unknown method: %s", msg.Method))
 	}
@@ -74,7 +76,7 @@ func (s *MORRPCController) networkPing(_ context.Context, msg m.RPCMessage, send
 		return lib.WrapError(ErrValidation, err)
 	}
 
-	res, err := s.morRpc.PongResponce(msg.ID, s.prKey, req.Nonce)
+	res, err := s.morRpc.PongResponse(msg.ID, s.prKey, req.Nonce)
 	if err != nil {
 		sourceLog.Error(err)
 		return err
@@ -225,6 +227,53 @@ func (s *MORRPCController) sessionReport(ctx context.Context, msg m.RPCMessage, 
 	if err != nil {
 		sourceLog.Error(err)
 		return ErrGenerateReport
+	}
+
+	return sendResponse(res)
+}
+
+func (s *MORRPCController) createSharedEncrKey(ctx context.Context, msg m.RPCMessage, sendResponse SendResponse, sourceLog lib.ILogger) error {
+	var req m.CreateSharedEncrKeyReq
+	err := json.Unmarshal(msg.Params, &req)
+	if err != nil {
+		return lib.WrapError(ErrUnmarshal, err)
+	}
+
+	if err := s.validator.Struct(req); err != nil {
+		return lib.WrapError(ErrValidation, err)
+	}
+
+	user, ok := s.sessionStorage.GetUser(req.UserAddress.Hex())
+	if !ok {
+		err := fmt.Errorf("user not found")
+		sourceLog.Error(err)
+		return err
+	}
+	pubKeyHex, err := lib.StringToHexString(user.PubKey)
+	if err != nil {
+		sourceLog.Error(err)
+		return err
+	}
+
+	sig := req.Signature
+	req.Signature = lib.HexString{}
+
+	isValid := s.morRpc.VerifySignature(req, sig, pubKeyHex, sourceLog)
+	if !isValid {
+		err := fmt.Errorf("invalid signature")
+		sourceLog.Error(err)
+		return err
+	}
+
+	err = s.service.CreateSharedEncryptionKey(ctx, msg.ID, msg.ID, &req, sourceLog)
+	if err != nil {
+		return lib.WrapError(fmt.Errorf("failed to confirm tee"), err)
+	}
+
+	res, err := s.morRpc.PongResponse(msg.ID, s.prKey, lib.HexString{})
+	if err != nil {
+		sourceLog.Error(err)
+		return err
 	}
 
 	return sendResponse(res)

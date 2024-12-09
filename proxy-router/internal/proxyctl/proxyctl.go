@@ -74,6 +74,7 @@ type Proxy struct {
 	modelConfigLoader    *config.ModelConfigLoader
 	blockchainService    *blockchainapi.BlockchainService
 	sessionExpiryHandler *blockchainapi.SessionExpiryHandler
+	useDhEncryption      bool
 
 	state         lib.AtomicValue[ProxyState]
 	tsk           *lib.Task
@@ -81,7 +82,7 @@ type Proxy struct {
 }
 
 // NewProxyCtl creates a new Proxy controller instance
-func NewProxyCtl(eventListerer *blockchainapi.EventsListener, wallet interfaces.PrKeyProvider, chainID *big.Int, log *lib.Logger, connLog *lib.Logger, proxyAddr string, scl SchedulerLogFactory, sessionStorage *storages.SessionStorage, modelConfigLoader *config.ModelConfigLoader, valid *validator.Validate, aiEngine *aiengine.AiEngine, blockchainService *blockchainapi.BlockchainService, sessionRepo *sessionrepo.SessionRepositoryCached, sessionExpiryHandler *blockchainapi.SessionExpiryHandler) *Proxy {
+func NewProxyCtl(eventListerer *blockchainapi.EventsListener, wallet interfaces.PrKeyProvider, chainID *big.Int, log *lib.Logger, connLog *lib.Logger, proxyAddr string, scl SchedulerLogFactory, sessionStorage *storages.SessionStorage, modelConfigLoader *config.ModelConfigLoader, valid *validator.Validate, aiEngine *aiengine.AiEngine, blockchainService *blockchainapi.BlockchainService, sessionRepo *sessionrepo.SessionRepositoryCached, sessionExpiryHandler *blockchainapi.SessionExpiryHandler, useDhEncryption bool) *Proxy {
 	return &Proxy{
 		eventListener:        eventListerer,
 		chainID:              chainID,
@@ -98,6 +99,7 @@ func NewProxyCtl(eventListerer *blockchainapi.EventsListener, wallet interfaces.
 		sessionRepo:          sessionRepo,
 		sessionExpiryHandler: sessionExpiryHandler,
 		serverStarted:        make(chan struct{}),
+		useDhEncryption:      useDhEncryption,
 	}
 }
 
@@ -190,7 +192,7 @@ func (p *Proxy) run(ctx context.Context, prKey lib.HexString) error {
 		return err
 	}
 
-	proxyReceiver := proxyapi.NewProxyReceiver(prKey, pubKey, p.sessionStorage, p.aiEngine, p.chainID, p.modelConfigLoader, p.blockchainService, p.sessionRepo)
+	proxyReceiver := proxyapi.NewProxyReceiver(prKey, pubKey, p.sessionStorage, p.aiEngine, p.chainID, p.modelConfigLoader, p.blockchainService, p.sessionRepo, p.useDhEncryption)
 	morTcpHandler := proxyapi.NewMORRPCController(proxyReceiver, p.validator, p.sessionRepo, p.sessionStorage, prKey)
 	tcpHandler := tcphandlers.NewTCPHandler(
 		p.log, p.connLog, p.schedulerLogFactory, morTcpHandler,
