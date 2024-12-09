@@ -18,6 +18,10 @@ runs:
           cp ./.github/workflows/proxy-router.test.env ./proxy-router/.env
           cp ./.github/workflows/proxy-router.test.env .env
           cp ./.github/workflows/ui-desktop.test.env ./ui-desktop/.env
+         elif [[ "${GITHUB_REF}" == "refs/heads/concom" ]]; then
+          cp ./.github/workflows/proxy-router.concom.env ./proxy-router/.env
+          cp ./.github/workflows/proxy-router.concom.env .env
+          cp ./.github/workflows/ui-desktop.test.env ./ui-desktop/.env
         else
           cp ./.github/workflows/proxy-router.test.env ./proxy-router/.env
           cp ./.github/workflows/proxy-router.test.env .env

@@ -2,6 +2,7 @@ package proxyapi
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -29,9 +30,12 @@ type ProxyReceiver struct {
 	modelConfigLoader *config.ModelConfigLoader
 	service           BidGetter
 	sessionRepo       *sessionrepo.SessionRepositoryCached
+
+	useDhEncryption bool
+	dhKeysMap       map[string]string
 }
 
-func NewProxyReceiver(privateKeyHex, publicKeyHex lib.HexString, sessionStorage *storages.SessionStorage, aiEngine *aiengine.AiEngine, chainID *big.Int, modelConfigLoader *config.ModelConfigLoader, blockchainService BidGetter, sessionRepo *sessionrepo.SessionRepositoryCached) *ProxyReceiver {
+func NewProxyReceiver(privateKeyHex, publicKeyHex lib.HexString, sessionStorage *storages.SessionStorage, aiEngine *aiengine.AiEngine, chainID *big.Int, modelConfigLoader *config.ModelConfigLoader, blockchainService BidGetter, sessionRepo *sessionrepo.SessionRepositoryCached, useDhEncryption bool) *ProxyReceiver {
 	return &ProxyReceiver{
 		privateKeyHex:     privateKeyHex,
 		publicKeyHex:      publicKeyHex,
@@ -42,24 +46,45 @@ func NewProxyReceiver(privateKeyHex, publicKeyHex lib.HexString, sessionStorage 
 		service:           blockchainService,
 		sessionStorage:    sessionStorage,
 		sessionRepo:       sessionRepo,
+		dhKeysMap:         make(map[string]string),
+		useDhEncryption:   useDhEncryption,
 	}
 }
 
 func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, userPubKey string, rq *m.SessionPromptReq, sendResponse SendResponse, sourceLog lib.ILogger) (int, int, error) {
-	var req *openai.ChatCompletionRequest
-
-	err := json.Unmarshal([]byte(rq.Message), &req)
-	if err != nil {
-		err := lib.WrapError(fmt.Errorf("failed to unmarshal prompt"), err)
-		sourceLog.Error(err)
-		return 0, 0, err
-	}
-
 	session, err := s.sessionRepo.GetSession(ctx, rq.SessionID)
 	if err != nil {
 		err := lib.WrapError(fmt.Errorf("failed to get session"), err)
 		sourceLog.Error(err)
 		return 0, 0, err
+	}
+
+	var req *openai.ChatCompletionRequest
+	sharedEncryptionKey := []byte{}
+	if s.useDhEncryption {
+		key := fmt.Sprintf("shared_key_%s", session.UserAddr())
+		sharedEncryptionKey = []byte(s.dhKeysMap[key])
+
+		promptBytes := common.FromHex(rq.Message)
+		dectyptedMessage, err := lib.SharedSecretDecrypt(sharedEncryptionKey, promptBytes)
+		if err != nil {
+			return 0, 0, err
+		}
+
+		err = json.Unmarshal(dectyptedMessage, &req)
+		if err != nil {
+			err := lib.WrapError(fmt.Errorf("failed to unmarshal prompt"), err)
+			sourceLog.Error(err)
+			return 0, 0, err
+		}
+	} else {
+		promptBytes := common.FromHex(rq.Message)
+		err := json.Unmarshal(promptBytes, &req)
+		if err != nil {
+			err := lib.WrapError(fmt.Errorf("failed to unmarshal prompt"), err)
+			sourceLog.Error(err)
+			return 0, 0, err
+		}
 	}
 
 	ttftMs := 0
@@ -85,14 +110,27 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 			return err
 		}
 
-		encryptedResponse, err := lib.EncryptString(string(marshalledResponse), lib.RemoveHexPrefix(userPubKey))
-		if err != nil {
-			return err
+		var encryptedResponse []byte
+		if s.useDhEncryption {
+			encryptedResponse, err = lib.SharedSecretEncrypt([]byte(sharedEncryptionKey), marshalledResponse)
+			if err != nil {
+				return err
+			}
+		} else {
+			encryptedResponseStr, err := lib.EncryptString(string(marshalledResponse), lib.RemoveHexPrefix(userPubKey))
+			if err != nil {
+				return err
+			}
+			encryptedResponse, err = hex.DecodeString(encryptedResponseStr)
+			if err != nil {
+				return err
+			}
 		}
+		responseHex := lib.HexString(encryptedResponse)
 
 		// Send response
 		r, err := s.morRpc.SessionPromptResponse(
-			encryptedResponse,
+			responseHex.Hex(),
 			s.privateKeyHex,
 			requestID,
 		)
@@ -143,6 +181,17 @@ func (s *ProxyReceiver) SessionRequest(ctx context.Context, msgID string, reqID 
 		return nil, err
 	}
 
+	providerPublicKeyForSharedSecret := []byte{}
+	if s.useDhEncryption {
+		pubKey, providerPrivateKey, err := lib.GenerateEphemeralKeyPair()
+		if err != nil {
+			return nil, err
+		}
+
+		s.dhKeysMap[req.User.Hex()] = string(providerPrivateKey)
+		providerPublicKeyForSharedSecret = pubKey
+	}
+
 	// Send response
 	response, err := s.morRpc.InitiateSessionResponse(
 		s.publicKeyHex,
@@ -151,6 +200,7 @@ func (s *ProxyReceiver) SessionRequest(ctx context.Context, msgID string, reqID 
 		s.privateKeyHex,
 		reqID,
 		s.chainID,
+		providerPublicKeyForSharedSecret,
 	)
 	if err != nil {
 		err := lib.WrapError(fmt.Errorf("failed to create response"), err)
@@ -207,4 +257,23 @@ func (s *ProxyReceiver) SessionReport(ctx context.Context, msgID string, reqID s
 	}
 
 	return response, nil
+}
+
+func (s *ProxyReceiver) CreateSharedEncryptionKey(ctx context.Context, msgID string, reqID string, data *m.CreateSharedEncrKeyReq, sourceLog lib.ILogger) error {
+	providerPrivateKey := s.dhKeysMap[data.UserAddress.String()]
+
+	sharedSecret, err := lib.ComputeSharedSecret([]byte(providerPrivateKey), data.UserPublicKeyForSharedSecret)
+	if err != nil {
+		return err
+	}
+
+	encryptionKey, err := lib.DeriveKeysFromSharedSecret(sharedSecret)
+	if err != nil {
+		return err
+	}
+
+	key := fmt.Sprintf("shared_key_%s", data.UserAddress.String())
+	s.dhKeysMap[key] = string(encryptionKey)
+
+	return nil
 }
