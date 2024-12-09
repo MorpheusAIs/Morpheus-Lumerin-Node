@@ -493,11 +493,9 @@ const Chat = (props) => {
                     const otherMessages = memoState.filter(m => m.id != part.id);
                     if (imageContent) {
                         result = [...otherMessages, { id: part.job, user: modelName, role: "assistant", text: imageContent, isImageContent: true, ...iconProps }];
-                    }
-                    if (videoRawContent) {
+                    } else if (videoRawContent) {
                         result = [...otherMessages, { id: part.job, user: modelName, role: "assistant", text: videoRawContent, isVideoRawContent: true, ...iconProps }];
-                    }
-                    else {
+                    } else {
                         const text = `${message?.text || ''}${part?.choices[0]?.delta?.content || ''}`.replace("<|im_start|>", "").replace("<|im_end|>", "");
                         result = [...otherMessages, { id: part.id, user: modelName, role: "assistant", text: text, ...iconProps }];
                     }
