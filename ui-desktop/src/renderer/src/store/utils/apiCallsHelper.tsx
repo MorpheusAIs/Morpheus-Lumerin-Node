@@ -16,7 +16,7 @@ export const getSessionsByUser = async (url, user) => {
       }
     } 
     
-    const limit = 20;
+    const limit = 50;
     let offset = 0;
     let sessions: any[] = [];
     let all = false;
@@ -30,7 +30,7 @@ export const getSessionsByUser = async (url, user) => {
         all = true;
       }
       else {
-        offset++;
+        offset += limit;
       }
     }
 
@@ -55,7 +55,7 @@ export const getBidsByModelId = async (url, modelId) => {
     }
   }
   
-  const limit = 20;
+  const limit = 50;
   let offset = 0;
   let bids: any[] = [];
   let all = false;
@@ -69,7 +69,7 @@ export const getBidsByModelId = async (url, modelId) => {
       all = true;
     }
     else {
-      offset++;
+      offset += limit;
     }
   }
 

@@ -208,7 +208,7 @@ const Chat = (props) => {
         while(!bidsSpinWaitClosed.current) {
             await new Promise(resolve => setTimeout(resolve, 300));
         }
-        setIsLoading(true);
+        setIsLoading(false);
     }
 
     const toggleDrawer = async () => {
