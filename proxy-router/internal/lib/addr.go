@@ -21,6 +21,15 @@ func AddrShort(addr string) string {
 	return StrShortConf(addr, 5, 3)
 }
 
+type Hexable interface {
+	Hex() string
+}
+
+// Short returns a short representation of a Hexable in "0x123..567" format
+func Short(s Hexable) string {
+	return StrShortConf(s.Hex(), 5, 3)
+}
+
 func RemoveHexPrefix(s string) string {
 	if len(s) >= 2 && s[0:2] == "0x" {
 		return s[2:]

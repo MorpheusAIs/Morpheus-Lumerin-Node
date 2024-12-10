@@ -2,6 +2,7 @@ package registries
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 
@@ -26,6 +27,10 @@ type Marketplace struct {
 	log            lib.ILogger
 }
 
+var (
+	ErrBidPricePerSecondInvalid = errors.New("Invalid bid price per second")
+)
+
 func NewMarketplace(marketplaceAddr common.Address, client i.ContractBackend, multicall mc.MulticallBackend, log lib.ILogger) *Marketplace {
 	mp, err := marketplace.NewMarketplace(marketplaceAddr, client)
 	if err != nil {
@@ -49,6 +54,20 @@ func NewMarketplace(marketplaceAddr common.Address, client i.ContractBackend, mu
 func (g *Marketplace) PostModelBid(opts *bind.TransactOpts, model common.Hash, pricePerSecond *big.Int) (common.Hash, error) {
 	tx, err := g.marketplace.PostModelBid(opts, opts.From, model, pricePerSecond)
 	if err != nil {
+		err = lib.TryConvertGethError(err)
+
+		evmErr := lib.EVMError{}
+		if errors.As(err, &evmErr) {
+			if evmErr.Abi.Name == "MarketplaceBidPricePerSecondInvalid" {
+				min, max, err := g.GetMinMaxBidPricePerSecond(opts.Context)
+				if err != nil {
+					return common.Hash{}, lib.WrapError(ErrBidPricePerSecondInvalid, err)
+				}
+
+				return common.Hash{}, lib.WrapError(ErrBidPricePerSecondInvalid, fmt.Errorf("must be between %s and %s, %w", min.String(), max.String(), evmErr))
+			}
+		}
+
 		return common.Hash{}, lib.TryConvertGethError(err)
 	}
 
@@ -158,8 +177,16 @@ func (g *Marketplace) GetBidsByModelAgent(ctx context.Context, modelAgentId comm
 	return g.GetMultipleBids(ctx, bidIDs)
 }
 
-func (g *Marketplace) GetActiveBidsByProvider(ctx context.Context, provider common.Address, offset *big.Int, limit uint8, order Order) ([][32]byte, []marketplace.IBidStorageBid, error) {
+func (g *Marketplace) GetActiveBidsByProviderCount(ctx context.Context, provider common.Address) (*big.Int, error) {
 	_, len, err := g.marketplace.GetProviderActiveBids(&bind.CallOpts{Context: ctx}, provider, big.NewInt(0), big.NewInt(0))
+	if err != nil {
+		return nil, err
+	}
+	return len, nil
+}
+
+func (g *Marketplace) GetActiveBidsByProvider(ctx context.Context, provider common.Address, offset *big.Int, limit uint8, order Order) ([][32]byte, []marketplace.IBidStorageBid, error) {
+	len, err := g.GetActiveBidsByProviderCount(ctx, provider)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -198,4 +225,20 @@ func (g *Marketplace) GetMultipleBids(ctx context.Context, IDs [][32]byte) ([][3
 		return nil, nil, err
 	}
 	return IDs, bids, nil
+}
+
+func (g *Marketplace) GetBidFee(ctx context.Context) (*big.Int, error) {
+	fee, err := g.marketplace.GetBidFee(&bind.CallOpts{Context: ctx})
+	if err != nil {
+		return nil, lib.TryConvertGethError(err)
+	}
+	return fee, nil
+}
+
+func (g *Marketplace) GetMinMaxBidPricePerSecond(ctx context.Context) (*big.Int, *big.Int, error) {
+	min, max, err := g.marketplace.GetMinMaxBidPricePerSecond(&bind.CallOpts{Context: ctx})
+	if err != nil {
+		return nil, nil, lib.TryConvertGethError(err)
+	}
+	return min, max, nil
 }

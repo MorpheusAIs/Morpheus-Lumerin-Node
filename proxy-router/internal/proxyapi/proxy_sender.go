@@ -4,13 +4,13 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
 	"math/big"
 	"net"
 	"net/http"
-	"net/url"
 	"strconv"
 	"time"
 
@@ -44,9 +44,12 @@ var (
 	ErrWriteProvider    = fmt.Errorf("failed to write to provider")
 )
 
+const (
+	TimeoutPingDefault = 5 * time.Second
+)
+
 type ProxyServiceSender struct {
 	chainID        *big.Int
-	publicUrl      *url.URL
 	privateKey     interfaces.PrKeyProvider
 	logStorage     *lib.Collection[*interfaces.LogStorage]
 	sessionStorage *storages.SessionStorage
@@ -56,10 +59,9 @@ type ProxyServiceSender struct {
 	log            lib.ILogger
 }
 
-func NewProxySender(chainID *big.Int, publicUrl *url.URL, privateKey interfaces.PrKeyProvider, logStorage *lib.Collection[*interfaces.LogStorage], sessionStorage *storages.SessionStorage, sessionRepo *sessionrepo.SessionRepositoryCached, log lib.ILogger) *ProxyServiceSender {
+func NewProxySender(chainID *big.Int, privateKey interfaces.PrKeyProvider, logStorage *lib.Collection[*interfaces.LogStorage], sessionStorage *storages.SessionStorage, sessionRepo *sessionrepo.SessionRepositoryCached, log lib.ILogger) *ProxyServiceSender {
 	return &ProxyServiceSender{
 		chainID:        chainID,
-		publicUrl:      publicUrl,
 		privateKey:     privateKey,
 		logStorage:     logStorage,
 		sessionStorage: sessionStorage,
@@ -71,6 +73,58 @@ func NewProxySender(chainID *big.Int, publicUrl *url.URL, privateKey interfaces.
 
 func (p *ProxyServiceSender) SetSessionService(service SessionService) {
 	p.sessionService = service
+}
+
+func (p *ProxyServiceSender) Ping(ctx context.Context, providerURL string, providerAddr common.Address) (time.Duration, error) {
+	prKey, err := p.privateKey.GetPrivateKey()
+	if err != nil {
+		return 0, ErrMissingPrKey
+	}
+
+	// check if context has timeout set
+	if _, ok := ctx.Deadline(); !ok {
+		subCtx, cancel := context.WithTimeout(ctx, TimeoutPingDefault)
+		defer cancel()
+		ctx = subCtx
+	}
+
+	nonce := make([]byte, 8)
+	_, err = rand.Read(nonce)
+	if err != nil {
+		return 0, lib.WrapError(ErrCreateReq, err)
+	}
+
+	msg, err := p.morRPC.PingRequest("0", prKey, nonce)
+	if err != nil {
+		return 0, lib.WrapError(ErrCreateReq, err)
+	}
+
+	reqStartTime := time.Now()
+	res, code, err := p.rpcRequest(providerURL, msg)
+	if err != nil {
+		return 0, lib.WrapError(ErrProvider, fmt.Errorf("code: %d, msg: %v, error: %s", code, res, err))
+	}
+	pingDuration := time.Since(reqStartTime)
+
+	var typedMsg *msgs.PongRes
+	err = json.Unmarshal(*res.Result, &typedMsg)
+	if err != nil {
+		return pingDuration, lib.WrapError(ErrInvalidResponse, fmt.Errorf("expected PongRes, got %s", res.Result))
+	}
+
+	err = binding.Validator.ValidateStruct(typedMsg)
+	if err != nil {
+		return pingDuration, lib.WrapError(ErrInvalidResponse, err)
+	}
+
+	signature := typedMsg.Signature
+	typedMsg.Signature = lib.HexString{}
+
+	if !p.morRPC.VerifySignatureAddr(typedMsg, signature, providerAddr, p.log) {
+		return pingDuration, ErrInvalidSig
+	}
+
+	return pingDuration, nil
 }
 
 func (p *ProxyServiceSender) InitiateSession(ctx context.Context, user common.Address, provider common.Address, spend *big.Int, bidID common.Hash, providerURL string) (*msgs.SessionRes, error) {
@@ -243,6 +297,9 @@ func (p *ProxyServiceSender) GetSessionReportFromUser(ctx context.Context, sessi
 }
 
 func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage) (*msgs.RpcResponse, int, error) {
+	// TODO: enable request-response matching by using requestID
+	// TODO: add context cancellation
+
 	TIMEOUT_TO_ESTABLISH_CONNECTION := time.Second * 3
 	dialer := net.Dialer{Timeout: TIMEOUT_TO_ESTABLISH_CONNECTION}
 
@@ -291,6 +348,10 @@ func (p *ProxyServiceSender) GetModelIdSession(ctx context.Context, sessionID co
 		return common.Hash{}, ErrSessionNotFound
 	}
 	return session.ModelID(), nil
+}
+
+func (p *ProxyServiceSender) validateMsgSignatureAddr(result any, signature lib.HexString, providerAddr common.Address) bool {
+	return p.morRPC.VerifySignatureAddr(result, signature, providerAddr, p.log)
 }
 
 func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.Hash, prompt *openai.ChatCompletionRequest, cb gcs.CompletionCallback) (interface{}, error) {

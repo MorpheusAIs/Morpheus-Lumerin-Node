@@ -1192,6 +1192,37 @@ const docTemplate = `{
                 }
             }
         },
+        "/proxy/provider/ping": {
+            "post": {
+                "description": "sends a ping to the provider on the RPC level",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Ping Provider",
+                "parameters": [
+                    {
+                        "description": "Ping Request",
+                        "name": "pingReq",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.PingReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.PingRes"
+                        }
+                    }
+                }
+            }
+        },
         "/proxy/sessions/initiate": {
             "post": {
                 "description": "sends a handshake to the provider",
@@ -1841,6 +1872,29 @@ const docTemplate = `{
                 },
                 "user": {
                     "type": "string"
+                }
+            }
+        },
+        "proxyapi.PingReq": {
+            "type": "object",
+            "required": [
+                "providerAddr",
+                "providerUrl"
+            ],
+            "properties": {
+                "providerAddr": {
+                    "type": "string"
+                },
+                "providerUrl": {
+                    "type": "string"
+                }
+            }
+        },
+        "proxyapi.PingRes": {
+            "type": "object",
+            "properties": {
+                "ping": {
+                    "type": "integer"
                 }
             }
         },

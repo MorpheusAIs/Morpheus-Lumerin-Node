@@ -86,9 +86,9 @@ func start() error {
 		docs.SwaggerInfo.Host = hostWithoutProtocol
 	} else if cfg.Web.Address != "" {
 		docs.SwaggerInfo.Host = cfg.Web.Address
-	} else {
-		docs.SwaggerInfo.Host = "localhost:8082"
 	}
+	docs.SwaggerInfo.Version = config.BuildVersion
+
 	docs.SwaggerInfo.Version = config.BuildVersion
 
 	log, err := lib.NewLogger(cfg.Log.LevelApp, cfg.Log.Color, cfg.Log.IsProd, cfg.Log.JSON, mainLogFilePath)
@@ -227,11 +227,6 @@ func start() error {
 	}
 	appLog.Infof("connected to ethereum node: %s, chainID: %d", cfg.Blockchain.EthNodeAddress, chainID)
 
-	publicUrl, err := url.Parse(cfg.Web.PublicUrl)
-	if err != nil {
-		return err
-	}
-
 	storage := storages.NewStorage(badgerLog, cfg.Proxy.StoragePath)
 	sessionStorage := storages.NewSessionStorage(storage)
 
@@ -246,17 +241,11 @@ func start() error {
 
 	var logWatcher contracts.LogWatcher
 	if cfg.Blockchain.UseSubscriptions {
-		logWatcher = contracts.NewLogWatcherSubscription(ethClient, cfg.Blockchain.MaxReconnects, log)
+		logWatcher = contracts.NewLogWatcherSubscription(ethClient, cfg.Blockchain.MaxReconnects, rpcLog)
 		appLog.Infof("using websocket log subscription for blockchain events")
 	} else {
-		logWatcher = contracts.NewLogWatcherPolling(ethClient, cfg.Blockchain.PollingInterval, cfg.Blockchain.MaxReconnects, log)
+		logWatcher = contracts.NewLogWatcherPolling(ethClient, cfg.Blockchain.PollingInterval, cfg.Blockchain.MaxReconnects, rpcLog)
 		appLog.Infof("using polling for blockchain events")
-	}
-
-	modelConfigLoader := config.NewModelConfigLoader(cfg.Proxy.ModelsConfigPath, log)
-	err = modelConfigLoader.Init()
-	if err != nil {
-		log.Warnf("failed to load model config: %s, run with empty", err)
 	}
 
 	scorer, err := config.LoadRating(cfg.Proxy.RatingConfigPath, log)
@@ -271,10 +260,17 @@ func start() error {
 	sessionRouter := registries.NewSessionRouter(*cfg.Marketplace.DiamondContractAddress, ethClient, multicallBackend, log)
 	marketplace := registries.NewMarketplace(*cfg.Marketplace.DiamondContractAddress, ethClient, multicallBackend, log)
 	sessionRepo := sessionrepo.NewSessionRepositoryCached(sessionStorage, sessionRouter, marketplace)
-	proxyRouterApi := proxyapi.NewProxySender(chainID, publicUrl, wallet, contractLogStorage, sessionStorage, sessionRepo, log)
+	proxyRouterApi := proxyapi.NewProxySender(chainID, wallet, contractLogStorage, sessionStorage, sessionRepo, log)
 	explorer := blockchainapi.NewExplorerClient(cfg.Blockchain.ExplorerApiUrl, *cfg.Marketplace.MorTokenAddress, cfg.Blockchain.ExplorerRetryDelay, cfg.Blockchain.ExplorerMaxRetries)
 	blockchainApi := blockchainapi.NewBlockchainService(ethClient, multicallBackend, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, explorer, wallet, proxyRouterApi, sessionRepo, scorer, proxyLog, cfg.Blockchain.EthLegacyTx)
 	proxyRouterApi.SetSessionService(blockchainApi)
+
+	modelConfigLoader := config.NewModelConfigLoader(cfg.Proxy.ModelsConfigPath, valid, blockchainApi, &aiengine.ConnectionChecker{}, log)
+	err = modelConfigLoader.Init()
+	if err != nil {
+		log.Warnf("failed to load model config, running with empty: %s", err)
+	}
+
 	aiEngine := aiengine.NewAiEngine(proxyRouterApi, chatStorage, modelConfigLoader, log)
 
 	eventListener := blockchainapi.NewEventsListener(sessionRepo, sessionRouter, wallet, logWatcher, log)
@@ -298,6 +294,8 @@ func start() error {
 		serverErrCh <- httpServer.Run(serverCtx)
 		cancel()
 	}()
+
+	log.Infof("API docs available at %s/swagger/index.html", cfg.Web.PublicUrl)
 
 	proxy := proxyctl.NewProxyCtl(eventListener, wallet, chainID, log, connLog, cfg.Proxy.Address, schedulerLogFactory, sessionStorage, modelConfigLoader, valid, aiEngine, blockchainApi, sessionRepo, sessionExpiryHandler)
 	err = proxy.Run(ctx)

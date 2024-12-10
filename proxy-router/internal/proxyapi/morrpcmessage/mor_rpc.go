@@ -18,6 +18,30 @@ func NewMorRpc() *MORRPCMessage {
 
 // RESPONSES
 
+func (m *MORRPCMessage) PongResponce(requestId string, providerPrKey lib.HexString, nonce lib.HexString) (*RpcResponse, error) {
+	params := PongRes{
+		Nonce: nonce,
+	}
+	signature, err := m.generateSignature(params, providerPrKey)
+	if err != nil {
+		return &RpcResponse{}, err
+	}
+
+	params.Signature = signature
+
+	paramsBytes, err := json.Marshal(params)
+	if err != nil {
+		return &RpcResponse{}, err
+	}
+
+	paramsJSON := json.RawMessage(paramsBytes)
+
+	return &RpcResponse{
+		ID:     requestId,
+		Result: &paramsJSON,
+	}, nil
+}
+
 func (m *MORRPCMessage) InitiateSessionResponse(providerPubKey lib.HexString, userAddr common.Address, bidID common.Hash, providerPrivateKeyHex lib.HexString, requestID string, chainID *big.Int) (*RpcResponse, error) {
 	timestamp := m.generateTimestamp()
 
@@ -195,6 +219,28 @@ func (m *MORRPCMessage) SpendLimitError(privateKeyHex lib.HexString, requestId s
 
 // REQUESTS
 
+func (m *MORRPCMessage) PingRequest(requestId string, userPrivateKeyHex lib.HexString, nonce lib.HexString) (*RPCMessage, error) {
+	params := PingReq{
+		Nonce: nonce,
+	}
+	signature, err := m.generateSignature(params, userPrivateKeyHex)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
+	params.Signature = signature
+
+	serializedParams, err := json.Marshal(params)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
+
+	return &RPCMessage{
+		ID:     requestId,
+		Method: "network.ping",
+		Params: serializedParams,
+	}, nil
+}
+
 func (m *MORRPCMessage) InitiateSessionRequest(user common.Address, provider common.Address, spend *big.Int, bidID common.Hash, userPrivateKeyHex lib.HexString, requestId string) (*RPCMessage, error) {
 	method := "session.request"
 	pbKey, err := lib.PubKeyFromPrivate(userPrivateKeyHex)
@@ -290,6 +336,16 @@ func (m *MORRPCMessage) VerifySignature(params any, signature lib.HexString, pub
 	return lib.VerifySignature(paramsBytes, signature, publicKey)
 }
 
+func (m *MORRPCMessage) VerifySignatureAddr(params any, signature lib.HexString, addr common.Address, sourceLog lib.ILogger) bool {
+	paramsBytes, err := json.Marshal(params)
+	if err != nil {
+		sourceLog.Error("Error marshalling params", err)
+		return false
+	}
+
+	return lib.VerifySignatureAddr(paramsBytes, signature, addr)
+}
+
 func (m *MORRPCMessage) generateTimestamp() uint64 {
 	now := time.Now()
 	return uint64(now.UnixMilli())
@@ -310,5 +366,6 @@ func (m *MORRPCMessage) generateSignature(params any, privateKeyHex lib.HexStrin
 	if err != nil {
 		return nil, err
 	}
+
 	return signature, nil
 }

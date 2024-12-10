@@ -32,3 +32,7 @@ func NewRat(numerator, denominator *big.Int) *big.Rat {
 	bFloat := new(big.Rat).SetInt(denominator)
 	return new(big.Rat).Quo(aFloat, bFloat)
 }
+
+func Exp10(exp int) *big.Int {
+	return big.NewInt(0).Exp(big.NewInt(10), big.NewInt(int64(exp)), nil)
+}
