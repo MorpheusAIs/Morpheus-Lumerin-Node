@@ -400,7 +400,8 @@ jobs:
         id: pack_artifacts
         run: |
           VFULL=${VFULL:-0.0.1}
-          echo "VFULL: $VFULL"ARTIFACT="mor-launch-$TAG_NAME-win-x64.zip"
+          echo "VFULL: $VFULL"
+          ARTIFACT="mor-launch-$TAG_NAME-win-x64.zip"
           echo "Artifact: $ARTIFACT"
           LLAMACPP=llama-b3256-bin-win-avx2-x64.zip
           MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
