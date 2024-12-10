@@ -219,7 +219,7 @@ describe('ProvidersDelegator', () => {
       );
     });
     it('should throw error when the stake closed', async () => {
-      providersDelegator.setIsStakeClosed(true);
+      await providersDelegator.setIsStakeClosed(true);
       await expect(providersDelegator.connect(KYLE).stake(wei(1))).to.be.revertedWithCustomError(
         providersDelegator,
         'StakeClosed',
