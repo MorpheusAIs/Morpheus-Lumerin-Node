@@ -2,6 +2,8 @@
 pragma solidity ^0.8.24;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
@@ -19,8 +21,6 @@ import {LibSD} from "../../libs/LibSD.sol";
 
 import {ISessionRouter} from "../../interfaces/facets/ISessionRouter.sol";
 
-import "hardhat/console.sol";
-
 contract SessionRouter is
     ISessionRouter,
     OwnableDiamondStorage,
@@ -34,6 +34,7 @@ contract SessionRouter is
     using LibSD for LibSD.SD;
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.Bytes32Set;
+    using Address for address;
 
     function __SessionRouter_init(
         address fundingAccount_,
@@ -540,7 +541,7 @@ contract SessionRouter is
             return true;
         }
 
-        if (provider_.code.length > 0) {
+        if (provider_.isContract()) {
             (bool success, bytes memory result) = provider_.staticcall(abi.encodeWithSignature("owner()"));
             if (success && result.length == 32) {
                 address owner_ = abi.decode(result, (address));

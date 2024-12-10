@@ -120,12 +120,14 @@ contract ProvidersDelegator is IProvidersDelegator, OwnableUpgradeable {
         if (amount_ == 0) {
             revert InsufficientAmount();
         }
-
+        
         address user_ = _msgSender();
         Staker storage staker = stakers[user_];
 
         (uint256 currentRate_, uint256 contractBalance_) = getCurrentRate();
         uint256 pendingRewards_ = _getCurrentStakerRewards(currentRate_, staker);
+
+        IERC20(token).safeTransferFrom(user_, address(this), amount_);
 
         totalRate = currentRate_;
         totalStaked += amount_;
@@ -136,7 +138,6 @@ contract ProvidersDelegator is IProvidersDelegator, OwnableUpgradeable {
         staker.staked += amount_;
         staker.pendingRewards = pendingRewards_;
 
-        IERC20(token).safeTransferFrom(user_, address(this), amount_);
         IProviderRegistry(lumerinDiamond).providerRegister(address(this), amount_, endpoint);
 
         emit Staked(user_, staker.staked, staker.pendingRewards, staker.rate);
