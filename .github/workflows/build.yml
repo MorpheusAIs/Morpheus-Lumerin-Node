@@ -159,9 +159,9 @@ jobs:
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
           unzip -o -j $LLAMACPP build/bin/llama-server
-          echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./morpheus-ui-${VFULL}-x86_64-linux.AppImage"]}' > mor-launch.json
+          echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./morpheus-ui-$VFULL-x86_64-linux.AppImage"]}' > mor-launch.json
           mv ./cli/mor-cli mor-cli
-          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/bin/proxy-router .env $MODEL mor-launch.json ./ui-desktop/dist/morpheus-ui-${VFULL}-x86_64-linux.AppImage models-config.json rating-config.json mor-cli
+          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/bin/proxy-router .env $MODEL mor-launch.json ./ui-desktop/dist/morpheus-ui-$VFULL-x86_64-linux.AppImage models-config.json rating-config.json mor-cli
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
