@@ -398,14 +398,14 @@ jobs:
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
           unzip -o -j $LLAMACPP llama-server.exe llama.dll ggml.dll
-          echo '{"run":["./llama-server.exe -m ./'$MODEL'","./proxy-router.exe","./morpheus-ui-${VFULL}-x64-win.exe"]}' > mor-launch.json
+          echo '{"run":["./llama-server.exe -m ./'$MODEL'","./proxy-router.exe","./morpheus-ui-$VFULL-x64-win.exe"]}' > mor-launch.json
           mv .env .env.tmp
           sed 's|\./data/|.\\data\\|g' .env.tmp > .env
           mv ./proxy-router/bin/proxy-router proxy-router.exe
           mv ./cli/mor-cli mor-cli.exe
           mv ./launcher/mor-launch mor-launch.exe
-          mv "./ui-desktop/dist/morpheus-ui-${VFULL}-x64-win" morpheus-ui-${VFULL}-x64-win.exe
-          7z a $ARTIFACT LICENSE mor-launch.exe proxy-router.exe .env llama-server.exe llama.dll ggml.dll $MODEL mor-launch.json morpheus-ui-${VFULL}-x64-win.exe models-config.json rating-config.json mor-cli.exe
+          mv "./ui-desktop/dist/morpheus-ui-$VFULL-x64-win" morpheus-ui-$VFULL-x64-win.exe
+          7z a $ARTIFACT LICENSE mor-launch.exe proxy-router.exe .env llama-server.exe llama.dll ggml.dll $MODEL mor-launch.json morpheus-ui-$VFULL-x64-win.exe models-config.json rating-config.json mor-cli.exe
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
