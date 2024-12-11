@@ -12,6 +12,8 @@ func ApiAdapterFactory(apiType string, modelName string, url string, apikey stri
 		return NewProdiaSDXLEngine(modelName, url, apikey, log), true
 	case API_TYPE_PRODIA_V2:
 		return NewProdiaV2Engine(modelName, url, apikey, log), true
+	case API_TYPE_HYPERBOLIC_SD:
+		return NewHyperbolicSDEngine(modelName, url, apikey, log), true
 	}
 	return nil, false
 }
