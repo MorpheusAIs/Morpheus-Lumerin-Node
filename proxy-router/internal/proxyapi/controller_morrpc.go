@@ -20,6 +20,7 @@ type MORRPCController struct {
 	validator      *validator.Validate
 	sessionStorage *storages.SessionStorage
 	morRpc         *m.MORRPCMessage
+	prKey          lib.HexString
 }
 
 type SendResponse func(*msg.RpcResponse) error
@@ -28,13 +29,14 @@ var (
 	ErrUnknownMethod = fmt.Errorf("unknown method")
 )
 
-func NewMORRPCController(service *ProxyReceiver, validator *validator.Validate, sessionRepo *sessionrepo.SessionRepositoryCached, sessionStorage *storages.SessionStorage) *MORRPCController {
+func NewMORRPCController(service *ProxyReceiver, validator *validator.Validate, sessionRepo *sessionrepo.SessionRepositoryCached, sessionStorage *storages.SessionStorage, prKey lib.HexString) *MORRPCController {
 	c := &MORRPCController{
 		service:        service,
 		validator:      validator,
 		sessionStorage: sessionStorage,
 		sessionRepo:    sessionRepo,
 		morRpc:         m.NewMorRpc(),
+		prKey:          prKey,
 	}
 
 	return c
@@ -42,6 +44,8 @@ func NewMORRPCController(service *ProxyReceiver, validator *validator.Validate, 
 
 func (s *MORRPCController) Handle(ctx context.Context, msg m.RPCMessage, sourceLog lib.ILogger, sendResponse SendResponse) error {
 	switch msg.Method {
+	case "network.ping":
+		return s.networkPing(ctx, msg, sendResponse, sourceLog)
 	case "session.request":
 		return s.sessionRequest(ctx, msg, sendResponse, sourceLog)
 	case "session.prompt":
@@ -58,6 +62,26 @@ var (
 	ErrUnmarshal      = fmt.Errorf("failed to unmarshal request")
 	ErrGenerateReport = fmt.Errorf("failed to generate report")
 )
+
+func (s *MORRPCController) networkPing(_ context.Context, msg m.RPCMessage, sendResponse SendResponse, sourceLog lib.ILogger) error {
+	var req m.PingReq
+	err := json.Unmarshal(msg.Params, &req)
+	if err != nil {
+		return lib.WrapError(ErrUnmarshal, err)
+	}
+
+	if err := s.validator.Struct(req); err != nil {
+		return lib.WrapError(ErrValidation, err)
+	}
+
+	res, err := s.morRpc.PongResponce(msg.ID, s.prKey, req.Nonce)
+	if err != nil {
+		sourceLog.Error(err)
+		return err
+	}
+
+	return sendResponse(res)
+}
 
 func (s *MORRPCController) sessionRequest(ctx context.Context, msg m.RPCMessage, sendResponse SendResponse, sourceLog lib.ILogger) error {
 	var req m.SessionReq
