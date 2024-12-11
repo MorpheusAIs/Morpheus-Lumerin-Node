@@ -13,6 +13,13 @@
       "apiType": "prodia-sd",
       "apiUrl": "https://api.prodia.com/v1",
       "apiKey": "FILL_ME_IN"
+    },
+    {
+      "modelId": "0x0000000000000000000000000000000000000000000000000000000000000002",
+      "modelName": "SDXL1.0-base",
+      "apiType": "hyperbolic-sd",
+      "apiUrl": "https://api.hyperbolic.xyz/v1",
+      "apiKey": "Authentication Token"
     }
   ]
 }
