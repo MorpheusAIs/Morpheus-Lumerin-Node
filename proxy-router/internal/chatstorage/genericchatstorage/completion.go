@@ -192,7 +192,7 @@ func (c *ChunkImageRawContent) Type() ChunkType {
 }
 
 func (c *ChunkImageRawContent) String() string {
-	return c.data.Image
+	return c.data.ImageRawContent
 }
 
 func (c *ChunkImageRawContent) Data() interface{} {

@@ -141,7 +141,7 @@ type ImageGenerationResult struct {
 type ImageGenerationCallback func(completion *ImageGenerationResult) error
 
 type ImageRawContentResult struct {
-	Image string `json:"image"`
+	ImageRawContent string `json:"imageRawContent"`
 }
 
 type ImageRawContentCallback func(completion *ImageRawContentResult) error

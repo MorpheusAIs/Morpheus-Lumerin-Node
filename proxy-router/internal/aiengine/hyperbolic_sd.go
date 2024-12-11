@@ -47,11 +47,11 @@ func NewHyperbolicSDEngine(modelName, apiURL, apiKey string, log lib.ILogger) *H
 
 func (s *HyperbolicSD) Prompt(ctx context.Context, prompt *openai.ChatCompletionRequest, cb gcs.CompletionCallback) error {
 	body := map[string]string{
-		"model":   s.modelName,
-		"prompt":  prompt.Messages[len(prompt.Messages)-1].Content,
-		"height":  "512",
-		"width":   "512",
-		"backend": "auto",
+		"model_name": s.modelName,
+		"prompt":     prompt.Messages[len(prompt.Messages)-1].Content,
+		"height":     "512",
+		"width":      "512",
+		"backend":    "auto",
 	}
 
 	payload, err := json.Marshal(body)
@@ -102,7 +102,7 @@ func (s *HyperbolicSD) Prompt(ctx context.Context, prompt *openai.ChatCompletion
 
 	dataPrefix := "data:image/png;base64,"
 	chunk := gcs.NewChunkImageRawContent(&gcs.ImageRawContentResult{
-		Image: dataPrefix + result.Images[0].Image,
+		ImageRawContent: dataPrefix + result.Images[0].Image,
 	})
 
 	return cb(ctx, chunk)
