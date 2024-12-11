@@ -100,8 +100,9 @@ func (s *HyperbolicSD) Prompt(ctx context.Context, prompt *openai.ChatCompletion
 		return err
 	}
 
-	chunk := gcs.NewChunkBase64Image(&gcs.ImageBase64Result{
-		Base64Image: result.Images[0].Image,
+	dataPrefix := "data:image/png;base64,"
+	chunk := gcs.NewChunkImageRawContent(&gcs.ImageRawContentResult{
+		Image: dataPrefix + result.Images[0].Image,
 	})
 
 	return cb(ctx, chunk)

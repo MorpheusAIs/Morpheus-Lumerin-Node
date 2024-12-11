@@ -169,33 +169,33 @@ func (c *ChunkVideo) Data() interface{} {
 	return c.data
 }
 
-type ChunkBase64Image struct {
-	data *ImageBase64Result
+type ChunkImageRawContent struct {
+	data *ImageRawContentResult
 }
 
-func NewChunkBase64Image(data *ImageBase64Result) *ChunkBase64Image {
-	return &ChunkBase64Image{
+func NewChunkImageRawContent(data *ImageRawContentResult) *ChunkImageRawContent {
+	return &ChunkImageRawContent{
 		data: data,
 	}
 }
 
-func (c *ChunkBase64Image) IsStreaming() bool {
+func (c *ChunkImageRawContent) IsStreaming() bool {
 	return false
 }
 
-func (c *ChunkBase64Image) Tokens() int {
+func (c *ChunkImageRawContent) Tokens() int {
 	return 1
 }
 
-func (c *ChunkBase64Image) Type() ChunkType {
+func (c *ChunkImageRawContent) Type() ChunkType {
 	return ChunkTypeImage
 }
 
-func (c *ChunkBase64Image) String() string {
-	return c.data.Base64Image
+func (c *ChunkImageRawContent) String() string {
+	return c.data.Image
 }
 
-func (c *ChunkBase64Image) Data() interface{} {
+func (c *ChunkImageRawContent) Data() interface{} {
 	return c.data
 }
 
@@ -212,4 +212,4 @@ var _ Chunk = &ChunkImage{}
 var _ Chunk = &ChunkControl{}
 var _ Chunk = &ChunkStreaming{}
 var _ Chunk = &ChunkVideo{}
-var _ Chunk = &ChunkBase64Image{}
+var _ Chunk = &ChunkImageRawContent{}
