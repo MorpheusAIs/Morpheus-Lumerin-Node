@@ -501,8 +501,11 @@ const Chat = (props) => {
                     let result: any[] = [];
                     const message = memoState.find(m => m.id == part.id);
                     const otherMessages = memoState.filter(m => m.id != part.id);
-                    if (imageContent || imageRawContent) {
-                        result = [...otherMessages, { id: part.job, text: imageContent || imageRawContent, isImageContent: true, ...iconProps }];
+                    
+                    if (imageRawContent) {
+                        result = [...otherMessages, { id: makeId(16), text: imageRawContent, isImageContent: true, ...iconProps }];
+                    } else if (imageContent) {
+                        result = [...otherMessages, { id: part.job, text: imageContent, isImageContent: true, ...iconProps }];
                     } else if (videoRawContent) {
                         result = [...otherMessages, { id: part.job, text: videoRawContent, isVideoRawContent: true, ...iconProps }];
                     } else {
