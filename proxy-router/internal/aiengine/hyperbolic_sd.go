@@ -18,9 +18,10 @@ const API_TYPE_HYPERBOLIC_SD = "hyperbolic-sd"
 const HYPERBOLIC_DEFAULT_BASE_URL = "https://api.hyperbolic.xyz/v1"
 
 type HyperbolicSD struct {
-	modelName string
-	apiURL    string
-	apiKey    string
+	modelName  string
+	apiURL     string
+	apiKey     string
+	parameters ModelParameters
 
 	log lib.ILogger
 }
@@ -33,15 +34,16 @@ type Image struct {
 	Image string `json:"image"`
 }
 
-func NewHyperbolicSDEngine(modelName, apiURL, apiKey string, log lib.ILogger) *HyperbolicSD {
+func NewHyperbolicSDEngine(modelName, apiURL, apiKey string, parameters ModelParameters, log lib.ILogger) *HyperbolicSD {
 	if apiURL == "" {
 		apiURL = HYPERBOLIC_DEFAULT_BASE_URL
 	}
 	return &HyperbolicSD{
-		modelName: modelName,
-		apiURL:    apiURL,
-		apiKey:    apiKey,
-		log:       log,
+		modelName:  modelName,
+		apiURL:     apiURL,
+		apiKey:     apiKey,
+		log:        log,
+		parameters: parameters,
 	}
 }
 
@@ -52,6 +54,10 @@ func (s *HyperbolicSD) Prompt(ctx context.Context, prompt *openai.ChatCompletion
 		"height":     "512",
 		"width":      "512",
 		"backend":    "auto",
+	}
+
+	for key, value := range s.parameters {
+		body[key] = value
 	}
 
 	payload, err := json.Marshal(body)
@@ -68,8 +74,6 @@ func (s *HyperbolicSD) Prompt(ctx context.Context, prompt *openai.ChatCompletion
 		err = lib.WrapError(ErrImageGenerationRequest, err)
 		s.log.Error(err)
 	}
-
-	s.log.Debugf("payload: %s", payload)
 
 	req.Header.Add(c.HEADER_ACCEPT, c.CONTENT_TYPE_JSON)
 	req.Header.Add(c.HEADER_CONTENT_TYPE, c.CONTENT_TYPE_JSON)

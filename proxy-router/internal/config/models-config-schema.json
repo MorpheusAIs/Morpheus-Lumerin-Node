@@ -39,6 +39,12 @@
             "type": "string",
             "minLength": 1
           },
+          "parameters": {
+            "title": "Configuration parameters for model",
+            "description": "Optional parameters that can be passed to model",
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          },
           "concurrentSlots": {
             "title": "Concurrent Slots",
             "description": "The number of concurrent slots to be used with this model",
