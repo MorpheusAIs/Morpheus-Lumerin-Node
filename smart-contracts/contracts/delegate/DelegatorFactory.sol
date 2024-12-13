@@ -9,28 +9,26 @@ import {UpgradeableBeacon} from "@openzeppelin/contracts/proxy/beacon/Upgradeabl
 import {BeaconProxy} from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 
 import {IProvidersDelegator} from "../interfaces/delegate/IProvidersDelegator.sol";
+import {IDelegatorFactory} from "../interfaces/delegate/IDelegatorFactory.sol";
 import {IOwnable} from "../interfaces/utils/IOwnable.sol";
 
-contract DelegatorFactory is OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable {
+contract DelegatorFactory is IDelegatorFactory, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable {
     address public lumerinDiamond;
     address public beacon;
     mapping(address => address[]) public proxies;
-
-    event ProxyDeployed(address indexed proxyAddress);
-    event ImplementationUpdated(address indexed newImplementation);
 
     constructor() {
         _disableInitializers();
     }
 
-    function DelegatorFactory_init(address _lumerinDiamond, address _implementation) external initializer {
+    function DelegatorFactory_init(address lumerinDiamond_, address implementation_) external initializer {
         __Pausable_init();
         __Ownable_init();
         __UUPSUpgradeable_init();
 
-        lumerinDiamond = _lumerinDiamond;
+        lumerinDiamond = lumerinDiamond_;
 
-        beacon = address(new UpgradeableBeacon(_implementation));
+        beacon = address(new UpgradeableBeacon(implementation_));
     }
 
     function pause() external onlyOwner {
@@ -45,23 +43,33 @@ contract DelegatorFactory is OwnableUpgradeable, PausableUpgradeable, UUPSUpgrad
         address feeTreasury_,
         uint256 fee_,
         string memory name_,
-        string memory endpoint_
+        string memory endpoint_,
+        uint128 deregistrationTimeout_,
+        uint128 deregistrationNonFeePeriod_
     ) external whenNotPaused returns (address) {
         bytes32 salt_ = _calculatePoolSalt(_msgSender());
         address proxy_ = address(new BeaconProxy{salt: salt_}(beacon, bytes("")));
 
-        proxies[_msgSender()].push(address(proxy_));
+        proxies[_msgSender()].push(proxy_);
 
-        IProvidersDelegator(proxy_).ProvidersDelegator_init(lumerinDiamond, feeTreasury_, fee_, name_, endpoint_);
+        IProvidersDelegator(proxy_).ProvidersDelegator_init(
+            lumerinDiamond,
+            feeTreasury_,
+            fee_,
+            name_,
+            endpoint_,
+            deregistrationTimeout_,
+            deregistrationNonFeePeriod_
+        );
         IOwnable(proxy_).transferOwnership(_msgSender());
 
-        emit ProxyDeployed(address(proxy_));
+        emit ProxyDeployed(proxy_);
 
-        return address(proxy_);
+        return proxy_;
     }
 
-    function predictProxyAddress(address _deployer) external view returns (address) {
-        bytes32 salt_ = _calculatePoolSalt(_deployer);
+    function predictProxyAddress(address deployer_) external view returns (address) {
+        bytes32 salt_ = _calculatePoolSalt(deployer_);
 
         bytes32 bytecodeHash_ = keccak256(
             abi.encodePacked(type(BeaconProxy).creationCode, abi.encode(address(beacon), bytes("")))
@@ -70,10 +78,8 @@ contract DelegatorFactory is OwnableUpgradeable, PausableUpgradeable, UUPSUpgrad
         return Create2.computeAddress(salt_, bytecodeHash_);
     }
 
-    function updateImplementation(address _newImplementation) external onlyOwner {
-        UpgradeableBeacon(beacon).upgradeTo(_newImplementation);
-
-        emit ImplementationUpdated(_newImplementation);
+    function updateImplementation(address newImplementation_) external onlyOwner {
+        UpgradeableBeacon(beacon).upgradeTo(newImplementation_);
     }
 
     function version() external pure returns (uint256) {

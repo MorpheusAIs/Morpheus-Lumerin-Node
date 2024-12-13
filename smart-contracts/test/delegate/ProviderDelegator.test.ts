@@ -53,6 +53,7 @@ describe('ProvidersDelegator', () => {
   let delegateRegistry: DelegateRegistry;
 
   before(async () => {
+    // await setTime(5000);
     [OWNER, DELEGATOR, TREASURY, KYLE, SHEV, ALAN] = await ethers.getSigners();
 
     [diamond, token, delegateRegistry] = await Promise.all([
@@ -75,6 +76,8 @@ describe('ProvidersDelegator', () => {
       wei(0.2, 25),
       'DLNAME',
       'ENDPOINT',
+      3600,
+      300,
     );
 
     await token.transfer(KYLE, wei(1000));
@@ -86,6 +89,7 @@ describe('ProvidersDelegator', () => {
     await token.connect(ALAN).approve(sessionRouter, wei(1000));
     await token.connect(KYLE).approve(providersDelegator, wei(1000));
     await token.connect(SHEV).approve(providersDelegator, wei(1000));
+    await token.connect(ALAN).approve(providersDelegator, wei(1000));
     await token.connect(DELEGATOR).approve(modelRegistry, wei(1000));
 
     await reverter.snapshot();
@@ -96,8 +100,13 @@ describe('ProvidersDelegator', () => {
   describe('#ProvidersDelegator_init', () => {
     it('should revert if try to call init function twice', async () => {
       await expect(
-        providersDelegator.ProvidersDelegator_init(OWNER, await TREASURY.getAddress(), 1, '', ''),
+        providersDelegator.ProvidersDelegator_init(OWNER, await TREASURY.getAddress(), 1, '', '', 0, 0),
       ).to.be.rejectedWith('Initializable: contract is already initialized');
+    });
+    it('should throw error when fee is invalid', async () => {
+      await expect(
+        deployProvidersDelegator(diamond, await TREASURY.getAddress(), wei(1.1, 25), 'DLNAME', 'ENDPOINT', 3600, 300),
+      ).to.be.revertedWithCustomError(providersDelegator, 'InvalidFee');
     });
   });
 
@@ -137,27 +146,20 @@ describe('ProvidersDelegator', () => {
     });
   });
 
-  describe('#setFee', () => {
+  describe('#setFeeTreasuryTreasury', () => {
     it('should set the provider fee', async () => {
-      await providersDelegator.setFee(KYLE, wei(0.1, 25));
+      await providersDelegator.setFeeTreasury(KYLE);
 
-      expect(await providersDelegator.fee()).eq(wei(0.1, 25));
       expect(await providersDelegator.feeTreasury()).eq(KYLE);
     });
     it('should throw error when fee treasury is invalid', async () => {
-      await expect(providersDelegator.setFee(ZERO_ADDR, wei(0.1, 25))).to.be.revertedWithCustomError(
+      await expect(providersDelegator.setFeeTreasury(ZERO_ADDR)).to.be.revertedWithCustomError(
         providersDelegator,
         'InvalidFeeTreasuryAddress',
       );
     });
-    it('should throw error when fee is invalid', async () => {
-      await expect(providersDelegator.setFee(KYLE, wei(1.01, 25))).to.be.revertedWithCustomError(
-        providersDelegator,
-        'InvalidFee',
-      );
-    });
     it('should throw error when caller is not an owner', async () => {
-      await expect(providersDelegator.connect(KYLE).setFee(KYLE, wei(1.01, 25))).to.be.revertedWith(
+      await expect(providersDelegator.connect(KYLE).setFeeTreasury(KYLE)).to.be.revertedWith(
         'Ownable: caller is not the owner',
       );
     });
@@ -229,13 +231,14 @@ describe('ProvidersDelegator', () => {
 
   describe('#claim', () => {
     beforeEach(async () => {
-      await providersDelegator.setFee(TREASURY, wei(0.2, 25));
+      await setTime(5000);
     });
-
     it('should correctly claim, one staker, full claim', async () => {
       await providersDelegator.connect(KYLE).stake(wei(100));
 
       await token.transfer(providersDelegator, wei(10));
+
+      expect(await providersDelegator.getCurrentStakerRewards(KYLE)).to.eq(wei(10));
 
       await providersDelegator.connect(KYLE).claim(KYLE, wei(9999));
       expect(await token.balanceOf(KYLE)).to.eq(wei(908));
@@ -303,19 +306,6 @@ describe('ProvidersDelegator', () => {
       expect(await token.balanceOf(SHEV)).to.eq(wei(784));
       expect(await token.balanceOf(TREASURY)).to.eq(wei(4 + 4 + 4 + 5 + 13));
     });
-    it('should correctly claim, full amount without fee', async () => {
-      await providersDelegator.setFee(TREASURY, wei(0, 25));
-
-      await providersDelegator.connect(KYLE).stake(wei(100));
-      expect(await providersDelegator.getCurrentStakerRewards(KYLE)).to.eq(wei(0));
-
-      await token.transfer(providersDelegator, wei(10));
-      expect(await providersDelegator.getCurrentStakerRewards(KYLE)).to.eq(wei(10));
-
-      await providersDelegator.connect(KYLE).claim(KYLE, wei(9999));
-      expect(await token.balanceOf(KYLE)).to.eq(wei(910));
-      expect(await token.balanceOf(TREASURY)).to.eq(wei(0));
-    });
     it('should throw error when nothing to claim', async () => {
       await expect(providersDelegator.connect(KYLE).claim(KYLE, wei(999))).to.be.revertedWithCustomError(
         providersDelegator,
@@ -326,9 +316,8 @@ describe('ProvidersDelegator', () => {
 
   describe('#restake', () => {
     beforeEach(async () => {
-      await providersDelegator.setFee(TREASURY, wei(0.2, 25));
+      await setTime(5000);
     });
-
     it('should correctly restake, two stakers, full restake', async () => {
       await providersDelegator.connect(KYLE).stake(wei(100));
       await providersDelegator.connect(SHEV).stake(wei(300));
@@ -397,26 +386,22 @@ describe('ProvidersDelegator', () => {
   });
 
   describe('#providerDeregister', () => {
-    beforeEach(async () => {
-      await providersDelegator.setFee(TREASURY, wei(0.2, 25));
-    });
-
     it('should deregister the provider', async () => {
       await providersDelegator.connect(KYLE).stake(wei(100));
-      await providersDelegator.providerDeregister();
+      await providersDelegator.providerDeregister([]);
 
       await providersDelegator.connect(KYLE).claim(KYLE, wei(9999));
-      expect(await token.balanceOf(KYLE)).to.eq(wei(980));
-      expect(await token.balanceOf(TREASURY)).to.eq(wei(20));
+      expect(await token.balanceOf(KYLE)).to.eq(wei(1000));
+      expect(await token.balanceOf(TREASURY)).to.eq(wei(0));
     });
     it('should throw error when caller is not an owner', async () => {
-      await expect(providersDelegator.connect(KYLE).providerDeregister()).to.be.revertedWith(
+      await expect(providersDelegator.connect(KYLE).providerDeregister([])).to.be.revertedWith(
         'Ownable: caller is not the owner',
       );
     });
   });
 
-  describe('#postModelBid, #deleteModelBid', () => {
+  describe('#postModelBid, #deleteModelBids', () => {
     const baseModelId = getHex(Buffer.from('1'));
 
     it('should deregister the model bid and delete it', async () => {
@@ -433,9 +418,16 @@ describe('ProvidersDelegator', () => {
 
       // Register bid
       await providersDelegator.postModelBid(modelId, wei(0.0001));
-      const bidId = await marketplace.getBidId(await providersDelegator.getAddress(), modelId, 0);
+      let bidId = await marketplace.getBidId(await providersDelegator.getAddress(), modelId, 0);
 
-      await providersDelegator.deleteModelBid(bidId);
+      await providersDelegator.deleteModelBids([bidId]);
+
+      // Register bid again and deregister not from OWNER
+      await providersDelegator.postModelBid(modelId, wei(0.0001));
+      bidId = await marketplace.getBidId(await providersDelegator.getAddress(), modelId, 1);
+
+      await setTime(10000);
+      await providersDelegator.connect(ALAN).deleteModelBids([bidId]);
     });
     it('should throw error when caller is not an owner', async () => {
       await expect(providersDelegator.connect(KYLE).postModelBid(baseModelId, wei(0.0001))).to.be.revertedWith(
@@ -443,7 +435,7 @@ describe('ProvidersDelegator', () => {
       );
     });
     it('should throw error when caller is not an owner', async () => {
-      await expect(providersDelegator.connect(KYLE).deleteModelBid(baseModelId)).to.be.revertedWith(
+      await expect(providersDelegator.connect(KYLE).deleteModelBids([baseModelId])).to.be.revertedWith(
         'Ownable: caller is not the owner',
       );
     });
@@ -458,9 +450,8 @@ describe('ProvidersDelegator', () => {
   describe('full flow', () => {
     const baseModelId = getHex(Buffer.from('1'));
 
-    it('should deregister the provider', async () => {
+    it('should claim correct reward amount', async () => {
       // Register provider
-      await providersDelegator.setFee(TREASURY, wei(0.2, 25));
       await providersDelegator.connect(KYLE).stake(wei(100));
       await providersDelegator.connect(SHEV).stake(wei(300));
 
@@ -496,6 +487,53 @@ describe('ProvidersDelegator', () => {
       expect(await token.balanceOf(KYLE)).to.eq(wei(900) + BigInt(Number(reward.toString()) * 0.25 * 0.8));
       expect(await token.balanceOf(SHEV)).to.eq(wei(700) + BigInt(Number(reward.toString()) * 0.75 * 0.8));
       expect(await token.balanceOf(TREASURY)).to.eq(BigInt(Number(reward.toString()) * 0.2));
+    });
+
+    it('should correctly deregister provider without fees', async () => {
+      await setTime(payoutStart + 1 * DAY);
+
+      // Register provider
+      await providersDelegator.connect(KYLE).stake(wei(100));
+      await providersDelegator.connect(SHEV).stake(wei(300));
+
+      // Register model
+      await modelRegistry
+        .connect(DELEGATOR)
+        .modelRegister(DELEGATOR, baseModelId, getHex(Buffer.from('ipfs://ipfsaddress')), 0, wei(100), 'name', [
+          'tag_1',
+        ]);
+      const modelId = await modelRegistry.getModelId(DELEGATOR, baseModelId);
+
+      // Register bid
+      await providersDelegator.postModelBid(modelId, wei(0.0001));
+      const bidId = await marketplace.getBidId(await providersDelegator.getAddress(), modelId, 0);
+
+      // Open session
+      await setTime(payoutStart + 10 * DAY);
+      const { msg, signature } = await getProviderApproval(OWNER, ALAN, bidId);
+      await sessionRouter.connect(ALAN).openSession(ALAN, wei(50), false, msg, signature);
+      const sessionId = await sessionRouter.getSessionId(ALAN, providersDelegator, bidId, 0);
+
+      // Close session
+      await setTime(payoutStart + 15 * DAY);
+      const { msg: receiptMsg } = await getReceipt(OWNER, sessionId, 0, 0);
+      const { signature: receiptSig } = await getReceipt(OWNER, sessionId, 0, 0);
+      await sessionRouter.connect(ALAN).closeSession(receiptMsg, receiptSig);
+
+      // Add the new Staker
+      await providersDelegator.connect(ALAN).stake(wei(1000));
+
+      // Deregister the providers
+      await providersDelegator.connect(KYLE).providerDeregister([bidId]);
+
+      // Claim rewards
+      await providersDelegator.claim(KYLE, wei(9999));
+      await providersDelegator.claim(SHEV, wei(9999));
+      await providersDelegator.claim(ALAN, wei(9999));
+      expect(await token.balanceOf(KYLE)).to.closeTo(wei(1000), wei(0.1));
+      expect(await token.balanceOf(SHEV)).to.closeTo(wei(1000), wei(0.1));
+      expect(await token.balanceOf(ALAN)).to.closeTo(wei(1000), wei(0.2));
+      expect(await token.balanceOf(TREASURY)).to.eq(wei(0));
     });
   });
 });

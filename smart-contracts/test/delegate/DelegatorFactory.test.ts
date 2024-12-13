@@ -87,7 +87,7 @@ describe('DelegatorFactory', () => {
     });
 
     it('should deploy a new proxy', async () => {
-      await delegatorFactory.connect(SHEV).deployProxy(KYLE, wei(0.1, 25), 'name', 'endpoint');
+      await delegatorFactory.connect(SHEV).deployProxy(KYLE, wei(0.1, 25), 'name', 'endpoint', 1, 2);
 
       const proxy = providersDelegatorFactory.attach(await delegatorFactory.proxies(SHEV, 0)) as ProvidersDelegator;
 
@@ -98,9 +98,9 @@ describe('DelegatorFactory', () => {
       expect(await proxy.endpoint()).to.eq('endpoint');
     });
     it('should deploy new proxies', async () => {
-      await delegatorFactory.connect(SHEV).deployProxy(KYLE, wei(0.1, 25), 'name1', 'endpoint1');
-      await delegatorFactory.connect(SHEV).deployProxy(SHEV, wei(0.2, 25), 'name2', 'endpoint2');
-      await delegatorFactory.connect(KYLE).deployProxy(SHEV, wei(0.3, 25), 'name3', 'endpoint3');
+      await delegatorFactory.connect(SHEV).deployProxy(KYLE, wei(0.1, 25), 'name1', 'endpoint1', 1, 2);
+      await delegatorFactory.connect(SHEV).deployProxy(SHEV, wei(0.2, 25), 'name2', 'endpoint2', 1, 2);
+      await delegatorFactory.connect(KYLE).deployProxy(SHEV, wei(0.3, 25), 'name3', 'endpoint3', 1, 2);
 
       let proxy = providersDelegatorFactory.attach(await delegatorFactory.proxies(SHEV, 1)) as ProvidersDelegator;
       expect(await proxy.owner()).to.eq(SHEV);
@@ -120,11 +120,11 @@ describe('DelegatorFactory', () => {
       it('should revert when paused and not after the unpause', async () => {
         await delegatorFactory.pause();
         await expect(
-          delegatorFactory.connect(SHEV).deployProxy(KYLE, wei(0.1, 25), 'name1', 'endpoint1'),
+          delegatorFactory.connect(SHEV).deployProxy(KYLE, wei(0.1, 25), 'name1', 'endpoint1', 1, 2),
         ).to.be.rejectedWith('Pausable: paused');
 
         await delegatorFactory.unpause();
-        await delegatorFactory.connect(SHEV).deployProxy(KYLE, wei(0.1, 25), 'name1', 'endpoint1');
+        await delegatorFactory.connect(SHEV).deployProxy(KYLE, wei(0.1, 25), 'name1', 'endpoint1', 1, 2);
       });
       it('should throw error when caller is not an owner', async () => {
         await expect(delegatorFactory.connect(KYLE).pause()).to.be.revertedWith('Ownable: caller is not the owner');
@@ -138,7 +138,7 @@ describe('DelegatorFactory', () => {
   describe('#predictProxyAddress', () => {
     it('should predict a proxy address', async () => {
       const predictedProxyAddress = await delegatorFactory.predictProxyAddress(SHEV);
-      await delegatorFactory.connect(SHEV).deployProxy(KYLE, wei(0.1, 25), 'name', 'endpoint');
+      await delegatorFactory.connect(SHEV).deployProxy(KYLE, wei(0.1, 25), 'name', 'endpoint', 1, 2);
 
       const proxyAddress = await delegatorFactory.proxies(SHEV, 0);
 
@@ -146,28 +146,28 @@ describe('DelegatorFactory', () => {
     });
     it('should predict proxy addresses', async () => {
       let predictedProxyAddress = await delegatorFactory.predictProxyAddress(SHEV);
-      await delegatorFactory.connect(SHEV).deployProxy(KYLE, wei(0.1, 25), 'name', 'endpoint');
+      await delegatorFactory.connect(SHEV).deployProxy(KYLE, wei(0.1, 25), 'name', 'endpoint', 1, 2);
       expect(await delegatorFactory.proxies(SHEV, 0)).to.eq(predictedProxyAddress);
 
       predictedProxyAddress = await delegatorFactory.predictProxyAddress(SHEV);
-      await delegatorFactory.connect(SHEV).deployProxy(KYLE, wei(0.1, 25), 'name', 'endpoint');
+      await delegatorFactory.connect(SHEV).deployProxy(KYLE, wei(0.1, 25), 'name', 'endpoint', 1, 2);
       expect(await delegatorFactory.proxies(SHEV, 1)).to.eq(predictedProxyAddress);
 
       predictedProxyAddress = await delegatorFactory.predictProxyAddress(KYLE);
-      await delegatorFactory.connect(KYLE).deployProxy(KYLE, wei(0.1, 25), 'name', 'endpoint');
+      await delegatorFactory.connect(KYLE).deployProxy(KYLE, wei(0.1, 25), 'name', 'endpoint', 1, 2);
       expect(await delegatorFactory.proxies(KYLE, 0)).to.eq(predictedProxyAddress);
 
       predictedProxyAddress = await delegatorFactory.predictProxyAddress(SHEV);
-      await delegatorFactory.connect(SHEV).deployProxy(KYLE, wei(0.1, 25), 'name', 'endpoint');
+      await delegatorFactory.connect(SHEV).deployProxy(KYLE, wei(0.1, 25), 'name', 'endpoint', 1, 2);
       expect(await delegatorFactory.proxies(SHEV, 2)).to.eq(predictedProxyAddress);
     });
   });
 
   describe('#updateImplementation', () => {
     it('should update proxies implementation', async () => {
-      await delegatorFactory.connect(SHEV).deployProxy(KYLE, wei(0.1, 25), 'name', 'endpoint');
-      await delegatorFactory.connect(SHEV).deployProxy(KYLE, wei(0.1, 25), 'name', 'endpoint');
-      await delegatorFactory.connect(KYLE).deployProxy(KYLE, wei(0.1, 25), 'name', 'endpoint');
+      await delegatorFactory.connect(SHEV).deployProxy(KYLE, wei(0.1, 25), 'name', 'endpoint', 1, 2);
+      await delegatorFactory.connect(SHEV).deployProxy(KYLE, wei(0.1, 25), 'name', 'endpoint', 1, 2);
+      await delegatorFactory.connect(KYLE).deployProxy(KYLE, wei(0.1, 25), 'name', 'endpoint', 1, 2);
 
       const factory = await ethers.getContractFactory('UUPSMock');
       const newImpl = await factory.deploy();
