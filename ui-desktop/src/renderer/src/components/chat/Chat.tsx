@@ -439,19 +439,22 @@ const Chat = (props) => {
             return;
         }
 
-        const textDecoder = new TextDecoder();
 
         if (!response.body) {
             console.error("Body is missed");
             return;
         }
 
-        const reader = response.body.getReader()
         registerScrollEvent(true);
 
+        const textDecoder = new TextDecoder();
+        const reader = response.body.getReader()
+
         const icon = modelName.toUpperCase()[0];
-        const iconProps = { icon, color: getColor(icon) };
+        const iconProps = { icon, color: getColor(icon), user: modelName, role: "assistant" };
         try {
+
+            let chunksBuffer = ""
             while (true) {
                 if (abort) {
                     await reader.cancel();
@@ -464,8 +467,14 @@ const Chat = (props) => {
                     break;
                 }
 
-                const decodedString = textDecoder.decode(value, { stream: true });
-                const parts = parseDataChunk(decodedString);
+                const decodedString = textDecoder.decode(value, { stream: true }).trim();
+                chunksBuffer = chunksBuffer + decodedString;
+
+                if(decodedString[decodedString.length - 1] !== "}") {
+                    continue;
+                }
+                
+                const parts = parseDataChunk(chunksBuffer);
                 parts.forEach(part => {
                     if (!part) {
                         return;
@@ -482,22 +491,26 @@ const Chat = (props) => {
                     }
 
                     const imageContent = part.imageUrl;
+                    const imageRawContent = part.imageRawContent;
                     const videoRawContent = part.videoRawContent;
 
-                    if (!part?.id && !imageContent && !videoRawContent) {
+                    if (!part?.id && !imageContent && !videoRawContent && !imageRawContent) {
                         return;
                     }
 
                     let result: any[] = [];
                     const message = memoState.find(m => m.id == part.id);
                     const otherMessages = memoState.filter(m => m.id != part.id);
-                    if (imageContent) {
-                        result = [...otherMessages, { id: part.job, user: modelName, role: "assistant", text: imageContent, isImageContent: true, ...iconProps }];
+                    
+                    if (imageRawContent) {
+                        result = [...otherMessages, { id: makeId(16), text: imageRawContent, isImageContent: true, ...iconProps }];
+                    } else if (imageContent) {
+                        result = [...otherMessages, { id: part.job, text: imageContent, isImageContent: true, ...iconProps }];
                     } else if (videoRawContent) {
-                        result = [...otherMessages, { id: part.job, user: modelName, role: "assistant", text: videoRawContent, isVideoRawContent: true, ...iconProps }];
+                        result = [...otherMessages, { id: part.job, text: videoRawContent, isVideoRawContent: true, ...iconProps }];
                     } else {
                         const text = `${message?.text || ''}${part?.choices[0]?.delta?.content || ''}`.replace("<|im_start|>", "").replace("<|im_end|>", "");
-                        result = [...otherMessages, { id: part.id, user: modelName, role: "assistant", text: text, ...iconProps }];
+                        result = [...otherMessages, { id: part.id, text: text, ...iconProps }];
                     }
                     memoState = result;
                     setMessages(result);

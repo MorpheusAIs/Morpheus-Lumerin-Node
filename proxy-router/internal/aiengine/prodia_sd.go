@@ -50,8 +50,6 @@ func (s *ProdiaSD) Prompt(ctx context.Context, prompt *openai.ChatCompletionRequ
 		return err
 	}
 
-	s.log.Debugf("payload: %s", payload)
-
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s/sd/generate", s.apiURL), bytes.NewReader(payload))
 	if err != nil {
 		err = lib.WrapError(ErrImageGenerationRequest, err)
@@ -76,8 +74,6 @@ func (s *ProdiaSD) Prompt(ctx context.Context, prompt *openai.ChatCompletionRequ
 		s.log.Error(err)
 		return err
 	}
-
-	s.log.Debugf("response: %s", response)
 
 	bodyStr := string(response)
 	if strings.Contains(bodyStr, "Invalid Generation Parameters") {
