@@ -67,8 +67,6 @@ func (s *HyperbolicSD) Prompt(ctx context.Context, prompt *openai.ChatCompletion
 		return err
 	}
 
-	s.log.Debugf("payload: %s", payload)
-
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s/image/generation", s.apiURL), bytes.NewReader(payload))
 	if err != nil {
 		err = lib.WrapError(ErrImageGenerationRequest, err)
@@ -93,8 +91,6 @@ func (s *HyperbolicSD) Prompt(ctx context.Context, prompt *openai.ChatCompletion
 		s.log.Error(err)
 		return err
 	}
-
-	s.log.Debugf("response: %s", response)
 
 	result := HyperbolicImageGenerationResult{}
 	err = json.Unmarshal(response, &result)
