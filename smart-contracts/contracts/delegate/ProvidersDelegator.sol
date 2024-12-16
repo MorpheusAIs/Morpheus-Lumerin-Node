@@ -16,21 +16,26 @@ contract ProvidersDelegator is IProvidersDelegator, OwnableUpgradeable {
     using SafeERC20 for IERC20;
     using Math for uint256;
 
+    // Deps
     address public lumerinDiamond;
     address public token;
 
+    // Fee
     address public feeTreasury;
     uint256 public fee;
 
+    // Metadata
     string public name;
     string public endpoint;
 
+    // Main calculation storage
     uint256 public totalStaked;
     uint256 public totalRate;
     uint256 public lastContractBalance;
     bool public isStakeClosed;
     mapping(address => Staker) public stakers;
 
+    // Deregistration limits
     uint128 public deregistrationOpenAt;
     uint128 public deregistrationTimeout;
     uint128 public deregistrationNonFeeOpened;

@@ -2,8 +2,11 @@
 pragma solidity ^0.8.24;
 
 interface IDelegatorFactory {
+    /**
+     * The event that is emitted when the proxy deployed.
+     * @param proxyAddress The pool's id.
+     */
     event ProxyDeployed(address indexed proxyAddress);
-    event ImplementationUpdated(address indexed newImplementation);
 
     /**
      * The function to initialize the contract.
@@ -30,6 +33,7 @@ interface IDelegatorFactory {
      * @param endpoint_ The subnet endpoint.
      * @param deregistrationTimeout_ Provider deregistration will be available after this timeout.
      * @param deregistrationNonFeePeriod_ Period after deregistration when Stakers can claim rewards without fee.
+     * @return Deployed proxy address
      */
     function deployProxy(
         address feeTreasury_,
@@ -42,18 +46,18 @@ interface IDelegatorFactory {
 
     /**
      * The function to predict new proxy address.
-     * @param _deployer The deployer address.
+     * @param deployer_ The deployer address.
      */
-    function predictProxyAddress(address _deployer) external view returns (address);
+    function predictProxyAddress(address deployer_) external view returns (address);
 
     /**
      * The function to upgrade the implementation.
-     * @param _newImplementation The new implementation address.
+     * @param newImplementation_ The new implementation address.
      */
-    function updateImplementation(address _newImplementation) external;
+    function updateImplementation(address newImplementation_) external;
 
     /**
-     * The function to get contract version.
+     * @return The contract version.
      */
     function version() external pure returns (uint256);
 }
