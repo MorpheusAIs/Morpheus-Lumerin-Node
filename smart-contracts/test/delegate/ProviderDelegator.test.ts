@@ -325,21 +325,20 @@ describe('ProvidersDelegator', () => {
       await token.transfer(providersDelegator, wei(100));
 
       await providersDelegator.connect(OWNER).restake(KYLE, wei(9999));
-      expect((await providersDelegator.stakers(KYLE)).staked).to.eq(wei(125));
+      expect((await providersDelegator.stakers(KYLE)).staked).to.eq(wei(120));
       expect(await token.balanceOf(KYLE)).to.eq(wei(900));
-      expect(await token.balanceOf(TREASURY)).to.eq(wei(0));
+      expect(await token.balanceOf(TREASURY)).to.eq(wei(5));
 
       await token.transfer(providersDelegator, wei(100));
 
       await providersDelegator.connect(KYLE).claim(KYLE, wei(9999));
-      expect(await token.balanceOf(KYLE)).to.closeTo(wei(900 + 29.41 * 0.8), wei(0.01));
-      expect(await token.balanceOf(TREASURY)).to.closeTo(wei(29.41 * 0.2), wei(0.01));
+      expect(await token.balanceOf(KYLE)).to.closeTo(wei(900 + 28.57 * 0.8), wei(0.01));
+      expect(await token.balanceOf(TREASURY)).to.closeTo(wei(5 + 28.57 * 0.2), wei(0.01));
 
       await providersDelegator.connect(SHEV).claim(SHEV, wei(9999));
-      expect(await token.balanceOf(SHEV)).to.closeTo(wei(700 + 75 * 0.8 + 70.58 * 0.8), wei(0.01));
-      expect(await token.balanceOf(TREASURY)).to.closeTo(wei(29.41 * 0.2 + 75 * 0.2 + 70.58 * 0.2), wei(0.01));
+      expect(await token.balanceOf(SHEV)).to.closeTo(wei(700 + 75 * 0.8 + 71.42 * 0.8), wei(0.01));
+      expect(await token.balanceOf(TREASURY)).to.closeTo(wei(5 + 28.57 * 0.2 + 75 * 0.2 + 71.42 * 0.2), wei(0.01));
     });
-
     it('should correctly restake, two stakers, partial restake', async () => {
       await providersDelegator.connect(KYLE).stake(wei(100));
       await providersDelegator.connect(SHEV).stake(wei(300));
@@ -347,22 +346,29 @@ describe('ProvidersDelegator', () => {
       await token.transfer(providersDelegator, wei(100));
 
       await providersDelegator.connect(OWNER).restake(KYLE, wei(20));
-      expect((await providersDelegator.stakers(KYLE)).staked).to.eq(wei(120));
+      expect((await providersDelegator.stakers(KYLE)).staked).to.eq(wei(116));
       expect(await token.balanceOf(KYLE)).to.eq(wei(900));
-      expect(await token.balanceOf(TREASURY)).to.eq(wei(0));
+      expect(await token.balanceOf(TREASURY)).to.eq(wei(4));
 
       await token.transfer(providersDelegator, wei(100));
 
       await providersDelegator.connect(KYLE).claim(KYLE, wei(9999));
-      expect(await token.balanceOf(KYLE)).to.closeTo(wei(900 + 5 * 0.8 + 28.57 * 0.8), wei(0.01));
-      expect(await token.balanceOf(TREASURY)).to.closeTo(wei(5 * 0.2 + 28.57 * 0.2), wei(0.01));
+      expect(await token.balanceOf(KYLE)).to.closeTo(wei(900 + 5 * 0.8 + 27.88 * 0.8), wei(0.01));
+      expect(await token.balanceOf(TREASURY)).to.closeTo(wei(4 + 5 * 0.2 + 27.88 * 0.2), wei(0.01));
 
       await providersDelegator.connect(SHEV).claim(SHEV, wei(9999));
-      expect(await token.balanceOf(SHEV)).to.closeTo(wei(700 + 75 * 0.8 + 71.42 * 0.8), wei(0.01));
+      expect(await token.balanceOf(SHEV)).to.closeTo(wei(700 + 75 * 0.8 + 72.11 * 0.8), wei(0.01));
       expect(await token.balanceOf(TREASURY)).to.closeTo(
-        wei(5 * 0.2 + 28.57 * 0.2 + 75 * 0.2 + 71.42 * 0.2),
+        wei(4 + 5 * 0.2 + 27.88 * 0.2 + 75 * 0.2 + 72.11 * 0.2),
         wei(0.01),
       );
+    });
+    it('should correctly restake with zero fee', async () => {
+      await providersDelegator.connect(KYLE).stake(wei(100));
+      await token.transfer(providersDelegator, wei(10));
+      await providersDelegator.connect(OWNER).restake(KYLE, 1);
+
+      expect(await token.balanceOf(TREASURY)).to.eq(wei(0));
     });
     it('should throw error when restake caller is invalid', async () => {
       await expect(providersDelegator.connect(KYLE).restake(SHEV, wei(999))).to.be.revertedWithCustomError(

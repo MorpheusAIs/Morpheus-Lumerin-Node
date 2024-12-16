@@ -166,17 +166,25 @@ contract ProvidersDelegator is IProvidersDelegator, OwnableUpgradeable {
             revert InsufficientAmount();
         }
 
+        uint256 feeAmount_ = (amount_ * fee) / PRECISION;
+        uint256 amountWithFee_ = amount_ - feeAmount_;
+        if (feeAmount_ != 0) {
+            IERC20(token).safeTransfer(feeTreasury, feeAmount_);
+
+            emit FeeClaimed(feeTreasury, feeAmount_);
+        }
+
+        IProviderRegistry(lumerinDiamond).providerRegister(address(this), amountWithFee_, endpoint);
+
         totalRate = currentRate_;
-        totalStaked += amount_;
+        totalStaked += amountWithFee_;
 
         lastContractBalance = contractBalance_ - amount_;
 
         staker.rate = currentRate_;
-        staker.staked += amount_;
+        staker.staked += amountWithFee_;
         staker.claimed += amount_;
         staker.pendingRewards = pendingRewards_ - amount_;
-
-        IProviderRegistry(lumerinDiamond).providerRegister(address(this), amount_, endpoint);
 
         emit Restaked(staker_, staker.staked, staker.pendingRewards, staker.rate);
     }
