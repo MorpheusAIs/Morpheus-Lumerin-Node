@@ -119,7 +119,6 @@ function SecondaryNav({
       {/* <NavHeader parent={parent}>Tools</NavHeader>
       <Button
         onClick={() => setActiveIndex(4)}
-        activeClassName="active"
         data-testid="auction-nav-btn"
         to="/sockets"
       >
@@ -130,7 +129,6 @@ function SecondaryNav({
       </Button>
       <Button
         onClick={() => setActiveIndex(5)}
-        activeClassName="active"
         to="/devices"
       >
         <IconWrapper>
@@ -142,7 +140,7 @@ function SecondaryNav({
 
       <Button
         onClick={() => setActiveIndex(6)}
-        activeClassName="active"
+        className={(navData) => (navData.isActive ? "active-style" : 'none')}
         data-testid="tools-nav-btn"
         parent={parent}
         to="/settings"

@@ -22,7 +22,6 @@ import {
     VideoContainer
 } from './Chat.styles';
 import { BtnAccent } from '../dashboard/BalanceBlock.styles';
-import { withRouter } from 'react-router-dom';
 import withChatState from '../../store/hocs/withChatState';
 import { abbreviateAddress } from '../../utils'
 import Markdown from 'react-markdown'
@@ -47,7 +46,7 @@ const Chat = (props) => {
     const chatBlockRef = useRef<null | HTMLDivElement>(null);
     const bidsSpinWaitClosed = useRef(false);
 
-    const [value, setValue] = useState("");
+    const [promptInput, setPromptInput] = useState("");
     const [isLoading, setIsLoading] = useState(true);
     const [messages, setMessages] = useState<any>([]);
     const [isOpen, setIsOpen] = useState(false);
@@ -61,6 +60,7 @@ const Chat = (props) => {
     const [activeSession, setActiveSession] = useState<any>(undefined);
 
     const [chainData, setChainData] = useState<any>(null);
+    const [isChainDataSet, setIsChainDataSet] = useState<boolean>(false);
     const [chatData, setChatsData] = useState<ChatData[]>([]);
 
     const [openChangeModal, setOpenChangeModal] = useState(false);
@@ -92,6 +92,7 @@ const Chat = (props) => {
             setBalances(chainData.userBalances)
             setMeta(chainData.meta);
             setChainData(chainData)
+            setIsChainDataSet(true);
 
             const mappedChatData = chats.reduce((res, item) => {
                 const chatModel = chainData.models.find(x => x.Id == item.modelId);
@@ -161,7 +162,7 @@ const Chat = (props) => {
     }, [])
 
     useEffect(() => {
-        if(!chainData)
+        if(!isChainDataSet)
             return;
 
         (async () => {
@@ -199,7 +200,7 @@ const Chat = (props) => {
             setProvidersAvailability(availabilityResults);            
         })();
 
-    }, chainData)
+    }, [isChainDataSet])
 
     const spinWaitForBids = async () => {
         if(bidsSpinWaitClosed.current)
@@ -399,7 +400,7 @@ const Chat = (props) => {
     }
 
     const call = async (message) => {
-        let memoState = [...messages, { id: makeId(16), text: value, ...userMessage }];
+        let memoState = [...messages, { id: makeId(16), text: promptInput, ...userMessage }];
         setMessages(memoState);
         scrollToBottom();
 
@@ -562,18 +563,18 @@ const Chat = (props) => {
             return;
         }
 
-        if (!value) {
+        if (!promptInput) {
             return;
         }
 
         if (messages.length === 0 && chat) {
-            const title = { ...chat, title: value };
+            const title = { ...chat, title: promptInput };
             setChatsData([...chatData, title]);
         }
 
         setIsSpinning(true);
-        call(value).finally(() => setIsSpinning(false));
-        setValue("");
+        call(promptInput).finally(() => setIsSpinning(false));
+        setPromptInput("");
     }
 
     const deleteChatEntry = (id: string) => {
@@ -774,8 +775,8 @@ const Chat = (props) => {
                                     handleSubmit();
                                 }
                             }}
-                            value={value}
-                            onChange={ev => setValue(ev.target.value)}
+                            value={promptInput}
+                            onChange={ev => setPromptInput(ev.target.value)}
                             placeholder={isReadonly ? "Session is closed. Chat in ReadOnly Mode" : "Ask me anything..."}
                             minRows={1}
                             maxRows={6} />
@@ -857,4 +858,4 @@ const Message = ({ message, onOpenImage }) => {
         </div>)
 }
 
-export default withRouter(withChatState(Chat));
+export default withChatState(Chat);

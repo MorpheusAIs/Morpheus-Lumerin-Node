@@ -20,7 +20,6 @@ export default class SentDetails extends React.Component {
   static propTypes = {
     isCancelApproval: PropTypes.bool,
     isApproval: PropTypes.bool,
-    isPending: PropTypes.bool.isRequired,
     to: PropTypes.string.isRequired
   };
 

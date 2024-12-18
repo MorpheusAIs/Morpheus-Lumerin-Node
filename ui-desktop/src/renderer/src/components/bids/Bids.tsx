@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { withRouter } from 'react-router-dom';
+
 import withBidsState from '../../store/hocs/withBidsState';
 
 import { LayoutHeader } from '../common/LayoutHeader'
@@ -61,13 +61,12 @@ function renderTable({ onStart, bids, providers }) {
     );
 }
 
-const Bids = ({ history, getProviders, selectedModel, getBitsByModels, setBid }) => {
+const Bids = ({ getProviders, selectedModel, getBitsByModels, setBid }) => {
     const [bids, setBids] = useState([]);
     const [providers, setProviders] = useState([]);
 
     useEffect(() => {
         if (!selectedModel) {
-            history.push("/models");
             return;
         }
 
@@ -86,7 +85,6 @@ const Bids = ({ history, getProviders, selectedModel, getBitsByModels, setBid })
             if(!isSuccess) {
                 return;
             }
-            history.push("/chat");
         })
     }
 
@@ -97,4 +95,4 @@ const Bids = ({ history, getProviders, selectedModel, getBitsByModels, setBid })
         </View>)
 }
 
-export default withRouter(withBidsState((Bids)));
+export default withBidsState((Bids));

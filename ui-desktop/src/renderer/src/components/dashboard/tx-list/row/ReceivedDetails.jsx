@@ -18,7 +18,6 @@ const Address = styled.span`
 
 export default class ReceivedDetails extends React.Component {
   static propTypes = {
-    isPending: PropTypes.bool.isRequired,
     from: PropTypes.string.isRequired
   };
 
