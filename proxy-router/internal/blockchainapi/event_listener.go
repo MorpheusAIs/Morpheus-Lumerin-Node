@@ -16,7 +16,7 @@ type EventsListener struct {
 	sessionRouter *registries.SessionRouter
 	sessionRepo   *sessionrepo.SessionRepositoryCached
 	tsk           *lib.Task
-	log           *lib.Logger
+	log           lib.ILogger
 	wallet        interfaces.Wallet
 	logWatcher    contracts.LogWatcher
 
@@ -24,7 +24,7 @@ type EventsListener struct {
 	addr common.Address
 }
 
-func NewEventsListener(sessionRepo *sessionrepo.SessionRepositoryCached, sessionRouter *registries.SessionRouter, wallet interfaces.Wallet, logWatcher contracts.LogWatcher, log *lib.Logger) *EventsListener {
+func NewEventsListener(sessionRepo *sessionrepo.SessionRepositoryCached, sessionRouter *registries.SessionRouter, wallet interfaces.Wallet, logWatcher contracts.LogWatcher, log lib.ILogger) *EventsListener {
 	return &EventsListener{
 		log:           log,
 		sessionRouter: sessionRouter,

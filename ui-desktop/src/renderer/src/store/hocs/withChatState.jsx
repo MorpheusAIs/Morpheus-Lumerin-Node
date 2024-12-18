@@ -192,7 +192,7 @@ const withChatState = WrappedComponent => {
         });
         const dataResponse = await response.json();
         if (!response.ok) {
-          this.context.toast('error', 'Failed to open session');
+          this.context.toast('error', `Failed to open session: "${dataResponse.error}"`);
           console.log("Failed initiate session", dataResponse);
           return;
         }
