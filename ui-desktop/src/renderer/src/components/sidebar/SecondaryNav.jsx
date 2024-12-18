@@ -139,7 +139,7 @@ function SecondaryNav({
        */}
 
       <Button
-        onClick={() => setActiveIndex(6)}
+        onClick={() => setActiveIndex(5)}
         className={(navData) => (navData.isActive ? "active-style" : 'none')}
         data-testid="tools-nav-btn"
         parent={parent}
