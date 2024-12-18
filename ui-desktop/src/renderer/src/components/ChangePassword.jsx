@@ -1,5 +1,4 @@
 import withChangePasswordState from '../store/hocs/withChangePasswordState';
-import { withRouter } from 'react-router-dom';
 import styled from 'styled-components';
 import React, { useEffect, useContext } from 'react';
 
@@ -78,7 +77,6 @@ function ChangePassword({
 
   useEffect(() => {
     if (status === 'success') {
-      history.push('/tools');
       context.toast('success', 'Password successfully changed');
     }
   }, [status]);
@@ -151,4 +149,4 @@ function ChangePassword({
   );
 }
 
-export default withRouter(withChangePasswordState(ChangePassword));
+export default withChangePasswordState(ChangePassword);

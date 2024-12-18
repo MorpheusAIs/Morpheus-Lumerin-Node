@@ -6,7 +6,7 @@ export const Container = styled.div`
         display: none !important; 
     }
     .history-block {
-        height: calc(100vh - 100px);
+        height: calc(100vh - 140px);
     }
     .history-scroll-block {
         overflow-y: auto;
