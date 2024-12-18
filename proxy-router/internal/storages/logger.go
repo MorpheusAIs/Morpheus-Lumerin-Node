@@ -6,26 +6,26 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 )
 
-type BadgerLogger struct {
+type StorageLogger struct {
 	log lib.ILogger
 }
 
-func NewBadgerLogger(log lib.ILogger) *BadgerLogger {
-	return &BadgerLogger{
-		log: log.Named("BADGER"),
+func NewStorageLogger(log lib.ILogger) *StorageLogger {
+	return &StorageLogger{
+		log: log.Named("Storage"),
 	}
 }
 
-func (l *BadgerLogger) Errorf(s string, p ...interface{}) {
+func (l *StorageLogger) Errorf(s string, p ...interface{}) {
 	l.log.Errorf(normalize(s), p...)
 }
-func (l *BadgerLogger) Warningf(s string, p ...interface{}) {
+func (l *StorageLogger) Warningf(s string, p ...interface{}) {
 	l.log.Warnf(normalize(s), p...)
 }
-func (l *BadgerLogger) Infof(s string, p ...interface{}) {
+func (l *StorageLogger) Infof(s string, p ...interface{}) {
 	l.log.Infof(normalize(s), p...)
 }
-func (l *BadgerLogger) Debugf(s string, p ...interface{}) {
+func (l *StorageLogger) Debugf(s string, p ...interface{}) {
 	l.log.Debugf(normalize(s), p...)
 }
 

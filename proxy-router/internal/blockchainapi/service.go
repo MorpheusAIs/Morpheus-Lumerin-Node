@@ -73,7 +73,7 @@ var (
 	ErrBudget      = errors.New("failed to parse token budget")
 	ErrMyAddress   = errors.New("failed to get my address")
 	ErrInitSession = errors.New("failed to initiate session")
-	ErrApprove     = errors.New("failed to approve")
+	ErrApprove     = errors.New("failed to approve funds")
 	ErrMarshal     = errors.New("failed to marshal open session payload")
 	ErrOpenOwnBid  = errors.New("cannot open session with own bid")
 
@@ -92,13 +92,14 @@ func NewBlockchainService(
 	sessionRepo *sessionrepo.SessionRepositoryCached,
 	scorerAlgo *rating.Rating,
 	log lib.ILogger,
+	logEthRpc lib.ILogger,
 	legacyTx bool,
 ) *BlockchainService {
-	providerRegistry := r.NewProviderRegistry(diamonContractAddr, ethClient, mc, log)
-	modelRegistry := r.NewModelRegistry(diamonContractAddr, ethClient, mc, log)
-	marketplace := r.NewMarketplace(diamonContractAddr, ethClient, mc, log)
-	sessionRouter := r.NewSessionRouter(diamonContractAddr, ethClient, mc, log)
-	morToken := r.NewMorToken(morTokenAddr, ethClient, log)
+	providerRegistry := r.NewProviderRegistry(diamonContractAddr, ethClient, mc, logEthRpc)
+	modelRegistry := r.NewModelRegistry(diamonContractAddr, ethClient, mc, logEthRpc)
+	marketplace := r.NewMarketplace(diamonContractAddr, ethClient, mc, logEthRpc)
+	sessionRouter := r.NewSessionRouter(diamonContractAddr, ethClient, mc, logEthRpc)
+	morToken := r.NewMorToken(morTokenAddr, ethClient, logEthRpc)
 
 	return &BlockchainService{
 		ethClient:          ethClient,
@@ -860,7 +861,8 @@ func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.H
 		return common.Hash{}, ErrOpenOwnBid
 	}
 
-	return s.tryOpenSession(ctx, bid, duration, supply, budget, userAddr, false, false)
+	hash, _, err := s.tryOpenSession(ctx, bid, duration, supply, budget, userAddr, false, false)
+	return hash, err
 }
 
 func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID common.Hash, duration *big.Int, directPayment bool, isFailoverEnabled bool, omitProvider common.Address) (common.Hash, error) {
@@ -914,10 +916,14 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 		s.log.Infof("trying to open session with provider #%d %s", i, bid.Bid.Provider.String())
 		durationCopy := new(big.Int).Set(duration)
 
-		hash, err := s.tryOpenSession(ctx, &bid.Bid, durationCopy, supply, budget, userAddr, directPayment, isFailoverEnabled)
+		hash, tryNext, err := s.tryOpenSession(ctx, &bid.Bid, durationCopy, supply, budget, userAddr, directPayment, isFailoverEnabled)
 		if err != nil {
 			s.log.Errorf("failed to open session with provider %s: %s", bid.Bid.Provider.String(), err.Error())
-			continue
+			if tryNext {
+				continue
+			} else {
+				return common.Hash{}, err
+			}
 		}
 
 		return hash, nil
@@ -971,10 +977,10 @@ func (s *BlockchainService) GetAllBidsWithRating(ctx context.Context, modelAgent
 	return ids, bids, providerModelStats, providers, nil
 }
 
-func (s *BlockchainService) tryOpenSession(ctx context.Context, bid *structs.Bid, duration, supply, budget *big.Int, userAddr common.Address, directPayment bool, failoverEnabled bool) (common.Hash, error) {
+func (s *BlockchainService) tryOpenSession(ctx context.Context, bid *structs.Bid, duration, supply, budget *big.Int, userAddr common.Address, directPayment bool, failoverEnabled bool) (common.Hash, bool, error) {
 	provider, err := s.providerRegistry.GetProviderById(ctx, bid.Provider)
 	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrProvider, err)
+		return common.Hash{}, false, lib.WrapError(ErrProvider, err)
 	}
 	sessionCost := (&big.Int{}).Mul(&bid.PricePerSecond.Int, duration)
 
@@ -999,32 +1005,32 @@ func (s *BlockchainService) tryOpenSession(ctx context.Context, bid *structs.Bid
 
 	initRes, err := s.proxyService.InitiateSession(ctx, userAddr, bid.Provider, amountTransferred, bid.Id, provider.Endpoint)
 	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrInitSession, err)
+		return common.Hash{}, true, lib.WrapError(ErrInitSession, err)
 	}
 
 	_, err = s.Approve(ctx, s.diamonContractAddr, amountTransferred)
 	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrApprove, err)
+		return common.Hash{}, false, lib.WrapError(ErrApprove, err)
 	}
 
 	hash, err := s.OpenSession(ctx, initRes.Approval, initRes.ApprovalSig, amountTransferred, directPayment)
 	if err != nil {
-		return common.Hash{}, err
+		return common.Hash{}, false, err
 	}
 
 	session, err := s.sessionRepo.GetSession(ctx, hash)
 	if err != nil {
-		return hash, fmt.Errorf("failed to get session: %s", err.Error())
+		return hash, false, fmt.Errorf("failed to get session: %s", err.Error())
 	}
 
 	session.SetFailoverEnabled(failoverEnabled)
 
 	err = s.sessionRepo.SaveSession(ctx, session)
 	if err != nil {
-		return hash, fmt.Errorf("failed to store session: %s", err.Error())
+		return hash, false, fmt.Errorf("failed to store session: %s", err.Error())
 	}
 
-	return hash, nil
+	return hash, false, nil
 }
 
 func (s *BlockchainService) GetMyAddress(ctx context.Context) (common.Address, error) {
