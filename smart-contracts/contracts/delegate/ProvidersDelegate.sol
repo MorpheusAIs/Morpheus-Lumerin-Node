@@ -7,52 +7,51 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {PRECISION} from "@solarity/solidity-lib/utils/Globals.sol";
 
-import {IProvidersDelegator} from "../interfaces/delegate/IProvidersDelegator.sol";
+import {IProvidersDelegate} from "../interfaces/delegate/IProvidersDelegate.sol";
 import {IBidStorage} from "../interfaces/storage/IBidStorage.sol";
 import {IProviderRegistry} from "../interfaces/facets/IProviderRegistry.sol";
 import {IMarketplace} from "../interfaces/facets/IMarketplace.sol";
 
-contract ProvidersDelegator is IProvidersDelegator, OwnableUpgradeable {
+contract ProvidersDelegate is IProvidersDelegate, OwnableUpgradeable {
     using SafeERC20 for IERC20;
     using Math for uint256;
 
-    // Deps
+    // The contract deps
     address public lumerinDiamond;
     address public token;
 
-    // Fee
+    // The owner fee
     address public feeTreasury;
     uint256 public fee;
 
-    // Metadata
+    // The contract metadata
     string public name;
     string public endpoint;
 
-    // Main calculation storage
+    // The main calculation storage
     uint256 public totalStaked;
     uint256 public totalRate;
     uint256 public lastContractBalance;
+
+    // The Staker data
     bool public isStakeClosed;
     mapping(address => Staker) public stakers;
 
     // Deregistration limits
+    bool isDeregistered;
     uint128 public deregistrationOpenAt;
-    uint128 public deregistrationTimeout;
-    uint128 public deregistrationNonFeeOpened;
-    uint128 public deregistrationNonFeePeriod;
 
     constructor() {
         _disableInitializers();
     }
 
-    function ProvidersDelegator_init(
+    function ProvidersDelegate_init(
         address lumerinDiamond_,
         address feeTreasury_,
         uint256 fee_,
         string memory name_,
         string memory endpoint_,
-        uint128 deregistrationTimeout_,
-        uint128 deregistrationNonFeePeriod_
+        uint128 deregistrationOpenAt_
     ) external initializer {
         __Ownable_init();
 
@@ -66,13 +65,11 @@ contract ProvidersDelegator is IProvidersDelegator, OwnableUpgradeable {
         if (fee_ > PRECISION) {
             revert InvalidFee(fee_, PRECISION);
         }
+
         fee = fee_;
+        deregistrationOpenAt = deregistrationOpenAt_;
 
         IERC20(token).approve(lumerinDiamond_, type(uint256).max);
-
-        deregistrationTimeout = deregistrationTimeout_;
-        deregistrationOpenAt = uint128(block.timestamp) + deregistrationTimeout_;
-        deregistrationNonFeePeriod = deregistrationNonFeePeriod_;
     }
 
     function setName(string memory name_) public onlyOwner {
@@ -118,21 +115,26 @@ contract ProvidersDelegator is IProvidersDelegator, OwnableUpgradeable {
     }
 
     function stake(uint256 amount_) external {
+        _stake(_msgSender(), amount_);
+    }
+
+    function _stake(address staker_, uint256 amount_) private {
         if (isStakeClosed) {
             revert StakeClosed();
         }
-
+        if (isDeregistered) {
+            revert ProviderDeregistered();
+        }
         if (amount_ == 0) {
             revert InsufficientAmount();
         }
 
-        address user_ = _msgSender();
-        Staker storage staker = stakers[user_];
+        Staker storage staker = stakers[staker_];
 
         (uint256 currentRate_, uint256 contractBalance_) = getCurrentRate();
         uint256 pendingRewards_ = _getCurrentStakerRewards(currentRate_, staker);
 
-        IERC20(token).safeTransferFrom(user_, address(this), amount_);
+        IERC20(token).safeTransferFrom(staker_, address(this), amount_);
 
         totalRate = currentRate_;
         totalStaked += amount_;
@@ -145,51 +147,22 @@ contract ProvidersDelegator is IProvidersDelegator, OwnableUpgradeable {
 
         IProviderRegistry(lumerinDiamond).providerRegister(address(this), amount_, endpoint);
 
-        emit Staked(user_, staker.staked, staker.pendingRewards, staker.rate);
-    }
+        emit Staked(staker_, staker.staked, totalStaked, staker.rate);
+    } 
 
     function restake(address staker_, uint256 amount_) external {
         if (_msgSender() != staker_ && _msgSender() != owner()) {
             revert RestakeInvalidCaller(_msgSender(), staker_);
         }
-
-        Staker storage staker = stakers[staker_];
-        if (staker.isRestakeDisabled) {
+        if (_msgSender() == owner() && stakers[staker_].isRestakeDisabled) {
             revert RestakeDisabled(staker_);
         }
 
-        (uint256 currentRate_, uint256 contractBalance_) = getCurrentRate();
-        uint256 pendingRewards_ = _getCurrentStakerRewards(currentRate_, staker);
-
-        amount_ = amount_.min(contractBalance_).min(pendingRewards_);
-        if (amount_ == 0) {
-            revert InsufficientAmount();
-        }
-
-        uint256 feeAmount_ = (amount_ * fee) / PRECISION;
-        uint256 amountWithFee_ = amount_ - feeAmount_;
-        if (feeAmount_ != 0) {
-            IERC20(token).safeTransfer(feeTreasury, feeAmount_);
-
-            emit FeeClaimed(feeTreasury, feeAmount_);
-        }
-
-        IProviderRegistry(lumerinDiamond).providerRegister(address(this), amountWithFee_, endpoint);
-
-        totalRate = currentRate_;
-        totalStaked += amountWithFee_;
-
-        lastContractBalance = contractBalance_ - amount_;
-
-        staker.rate = currentRate_;
-        staker.staked += amountWithFee_;
-        staker.claimed += amount_;
-        staker.pendingRewards = pendingRewards_ - amount_;
-
-        emit Restaked(staker_, staker.staked, staker.pendingRewards, staker.rate);
+        amount_ = claim(staker_, amount_);
+        _stake(staker_, amount_);
     }
 
-    function claim(address staker_, uint256 amount_) external {
+    function claim(address staker_, uint256 amount_) public returns (uint256) {
         Staker storage staker = stakers[staker_];
 
         (uint256 currentRate_, uint256 contractBalance_) = getCurrentRate();
@@ -209,7 +182,7 @@ contract ProvidersDelegator is IProvidersDelegator, OwnableUpgradeable {
         staker.claimed += amount_;
 
         uint256 feeAmount_ = (amount_ * fee) / PRECISION;
-        if (feeAmount_ != 0 && block.timestamp > deregistrationNonFeeOpened + deregistrationNonFeePeriod) {
+        if (feeAmount_ != 0) {
             IERC20(token).safeTransfer(feeTreasury, feeAmount_);
 
             amount_ -= feeAmount_;
@@ -219,7 +192,9 @@ contract ProvidersDelegator is IProvidersDelegator, OwnableUpgradeable {
 
         IERC20(token).safeTransfer(staker_, amount_);
 
-        emit Claimed(staker_, staker.staked, staker.pendingRewards, staker.rate);
+        emit Claimed(staker_, staker.claimed, staker.rate);
+
+        return amount_;
     }
 
     function getCurrentRate() public view returns (uint256, uint256) {
@@ -242,28 +217,38 @@ contract ProvidersDelegator is IProvidersDelegator, OwnableUpgradeable {
     }
 
     function providerDeregister(bytes32[] calldata bidIds_) external {
-        if (block.timestamp < deregistrationOpenAt) {
+        if (!isDeregisterAvailable()) {
             _checkOwner();
-        } else {
-            deregistrationOpenAt = uint128(block.timestamp) + deregistrationTimeout;
+        }
+        if (isDeregistered) {
+            revert ProviderDeregistered();
         }
 
         _deleteModelBids(bidIds_);
         IProviderRegistry(lumerinDiamond).providerDeregister(address(this));
 
-        deregistrationNonFeeOpened = uint128(block.timestamp);
+        isDeregistered = true;
+        fee = 0;
     }
 
     function postModelBid(bytes32 modelId_, uint256 pricePerSecond_) external onlyOwner returns (bytes32) {
+        if (isDeregisterAvailable()) {
+            revert BidCannotBeCreatedDuringThisPeriod();
+        }
+
         return IMarketplace(lumerinDiamond).postModelBid(address(this), modelId_, pricePerSecond_);
     }
 
     function deleteModelBids(bytes32[] calldata bidIds_) external {
-        if (block.timestamp < deregistrationOpenAt) {
+        if (!isDeregisterAvailable()) {
             _checkOwner();
         }
 
         _deleteModelBids(bidIds_);
+    }
+
+    function isDeregisterAvailable() public view returns (bool) {
+        return block.timestamp >= deregistrationOpenAt;
     }
 
     function _deleteModelBids(bytes32[] calldata bidIds_) private {

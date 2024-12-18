@@ -8,24 +8,31 @@ import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/security/
 import {UpgradeableBeacon} from "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 import {BeaconProxy} from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 
-import {IProvidersDelegator} from "../interfaces/delegate/IProvidersDelegator.sol";
-import {IDelegatorFactory} from "../interfaces/delegate/IDelegatorFactory.sol";
+import {IProvidersDelegate} from "../interfaces/delegate/IProvidersDelegate.sol";
+import {IDelegateFactory} from "../interfaces/delegate/IDelegateFactory.sol";
 import {IOwnable} from "../interfaces/utils/IOwnable.sol";
 
-contract DelegatorFactory is IDelegatorFactory, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable {
+contract DelegateFactory is IDelegateFactory, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable {
     address public lumerinDiamond;
     address public beacon;
+
     mapping(address => address[]) public proxies;
+    uint128 public minDeregistrationTimeout;
 
     constructor() {
         _disableInitializers();
     }
 
-    function DelegatorFactory_init(address lumerinDiamond_, address implementation_) external initializer {
+    function DelegateFactory_init(
+        address lumerinDiamond_,
+        address implementation_,
+        uint128 minDeregistrationTimeout_
+        ) external initializer {
         __Pausable_init();
         __Ownable_init();
         __UUPSUpgradeable_init();
 
+        setMinDeregistrationTimeout(minDeregistrationTimeout_);
         lumerinDiamond = lumerinDiamond_;
 
         beacon = address(new UpgradeableBeacon(implementation_));
@@ -39,27 +46,35 @@ contract DelegatorFactory is IDelegatorFactory, OwnableUpgradeable, PausableUpgr
         _unpause();
     }
 
+      function setMinDeregistrationTimeout(uint128 minDeregistrationTimeout_) public onlyOwner {
+        minDeregistrationTimeout = minDeregistrationTimeout_;
+
+        emit MinDeregistrationTimeoutUpdated(minDeregistrationTimeout_);
+    }
+
     function deployProxy(
         address feeTreasury_,
         uint256 fee_,
         string memory name_,
         string memory endpoint_,
-        uint128 deregistrationTimeout_,
-        uint128 deregistrationNonFeePeriod_
+        uint128 deregistrationOpenAt
     ) external whenNotPaused returns (address) {
+        if (deregistrationOpenAt <= block.timestamp + minDeregistrationTimeout) {
+            revert InvalidDeregistrationOpenAt(deregistrationOpenAt, uint128(block.timestamp + minDeregistrationTimeout));
+        }
+
         bytes32 salt_ = _calculatePoolSalt(_msgSender());
         address proxy_ = address(new BeaconProxy{salt: salt_}(beacon, bytes("")));
 
         proxies[_msgSender()].push(proxy_);
 
-        IProvidersDelegator(proxy_).ProvidersDelegator_init(
+        IProvidersDelegate(proxy_).ProvidersDelegate_init(
             lumerinDiamond,
             feeTreasury_,
             fee_,
             name_,
             endpoint_,
-            deregistrationTimeout_,
-            deregistrationNonFeePeriod_
+            deregistrationOpenAt
         );
         IOwnable(proxy_).transferOwnership(_msgSender());
 

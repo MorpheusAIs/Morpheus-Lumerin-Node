@@ -1,26 +1,75 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-interface IProvidersDelegator {
-    event NameUpdated(string name);
-    event EndpointUpdated(string endpoint);
-    event FeeTreasuryUpdated(address feeTreasury);
-    event IsStakeClosedUpdated(bool isStakeClosed);
-    event IsRestakeDisabledUpdated(address staker, bool isRestakeDisabled);
-    event Staked(address staker, uint256 staked, uint256 pendingRewards, uint256 rate);
-    event Restaked(address staker, uint256 staked, uint256 pendingRewards, uint256 rate);
-    event Claimed(address staker, uint256 staked, uint256 pendingRewards, uint256 rate);
-    event FeeClaimed(address feeTreasury, uint256 feeAmount);
-
+interface IProvidersDelegate {
     error InvalidNameLength();
     error InvalidEndpointLength();
     error InvalidFeeTreasuryAddress();
     error InvalidFee(uint256 current, uint256 max);
     error StakeClosed();
+    error ProviderDeregistered();
+    error BidCannotBeCreatedDuringThisPeriod();
     error InsufficientAmount();
     error RestakeDisabled(address staker);
     error RestakeInvalidCaller(address caller, address staker);
     error ClaimAmountIsZero();
+
+    /**
+     * The event that is emitted when the name updated.
+     * @param name The new value.
+     */
+    event NameUpdated(string name);
+
+    /**
+     * The event that is emitted when the endpoint updated.
+     * @param endpoint The new value.
+     */
+    event EndpointUpdated(string endpoint);
+
+    /**
+     * The event that is emitted when the `feeTreasury` updated.
+     * @param feeTreasury The new value.
+     */
+    event FeeTreasuryUpdated(address feeTreasury);
+
+    /**
+     * The event that is emitted when the stake closed or opened for all users.
+     * @param isStakeClosed The new value.
+     */
+    event IsStakeClosedUpdated(bool isStakeClosed);
+
+    /**
+     * The event that is emitted when restake was disabled or enabled by user.
+     * @param staker The user address.
+     * @param isRestakeDisabled The new value.
+     */
+    event IsRestakeDisabledUpdated(address staker, bool isRestakeDisabled);
+
+    /**
+     * The event that is emitted when user staked.
+     * @param staker The user address.
+     * @param staked The total staked amount for user.
+     * @param totalStaked The total staked amount for the contract.
+     * @param rate The contract rate.
+     */
+    event Staked(address staker, uint256 staked, uint256 totalStaked, uint256 rate);
+
+    /**
+     * The event that is emitted when user claimed.
+     * @param staker The user address.
+     * @param claimed The total claimed amount for user.
+     * @param rate The contract rate.
+     */
+    event Claimed(address staker, uint256 claimed, uint256 rate);
+
+    /**
+     * The event that is emitted when rewards claimed for owner.
+     * @param feeTreasury The fee treasury address.
+     * @param feeAmount The fee amount.
+     */
+    event FeeClaimed(address feeTreasury, uint256 feeAmount);
+
+
 
     /**
      * @param staked Staked amount.
@@ -44,17 +93,15 @@ interface IProvidersDelegator {
      * @param fee_ The fee percent where 100% = 10^25.
      * @param name_ The Subnet name.
      * @param endpoint_ The subnet endpoint.
-     * @param deregistrationTimeout_ Provider deregistration will be available after this timeout.
-     * @param deregistrationNonFeePeriod_ Period after deregistration when Stakers can claim rewards without fee.
+     * @param deregistrationOpenAt Provider deregistration will be available after this time.
      */
-    function ProvidersDelegator_init(
+    function ProvidersDelegate_init(
         address lumerinDiamond_,
         address feeTreasury_,
         uint256 fee_,
         string memory name_,
         string memory endpoint_,
-        uint128 deregistrationTimeout_,
-        uint128 deregistrationNonFeePeriod_
+        uint128 deregistrationOpenAt
     ) external;
 
     /**
@@ -105,7 +152,7 @@ interface IProvidersDelegator {
      * @param staker_ Staker address.
      * @param amount_ Amount to stake.
      */
-    function claim(address staker_, uint256 amount_) external;
+    function claim(address staker_, uint256 amount_) external returns(uint256);
 
     /**
      * The function to return the current rate.

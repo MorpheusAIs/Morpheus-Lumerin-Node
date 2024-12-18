@@ -1,2 +1,2 @@
-export * from './delegator-factory';
-export * from './providers-delegator';
+export * from './delegate-factory';
+export * from './providers-delegate';
