@@ -8,6 +8,7 @@
   "marketplaceMaxBidPricePerSecond": "20000000000000000000",
   "delegateRegistry": "0x00000000000000447e69651d841bD8D104Bed493",
   "owner": "0x1FE04BC15Cf2c5A2d41a0b3a96725596676eBa1E",
+  "lumerinProtocol": "0xb8C55cD613af947E73E262F0d3C54b7211Af16CF",
   "pools": [
     {
       "payoutStart": 1707393600,

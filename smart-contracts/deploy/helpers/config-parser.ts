@@ -13,10 +13,11 @@ export type Config = {
   marketplaceMaxBidPricePerSecond: string;
   delegateRegistry: string;
   owner: string;
+  lumerinProtocol: string;
 };
 
 export function parseConfig(): Config {
-  const configPath = `deploy/data/config_arbitrum_mainnet.json`;
+  const configPath = `deploy/data/config_arbitrum_sepolia.json`;
 
   return JSON.parse(readFileSync(configPath, 'utf-8')) as Config;
 }
