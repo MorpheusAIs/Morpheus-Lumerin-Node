@@ -93,7 +93,7 @@ interface IProvidersDelegate {
      * @param fee_ The fee percent where 100% = 10^25.
      * @param name_ The Subnet name.
      * @param endpoint_ The subnet endpoint.
-     * @param deregistrationOpenAt Provider deregistration will be available after this time.
+     * @param deregistrationOpensAt_ Provider deregistration will be available after this time.
      */
     function ProvidersDelegate_init(
         address lumerinDiamond_,
@@ -101,7 +101,7 @@ interface IProvidersDelegate {
         uint256 fee_,
         string memory name_,
         string memory endpoint_,
-        uint128 deregistrationOpenAt
+        uint128 deregistrationOpensAt_
     ) external;
 
     /**

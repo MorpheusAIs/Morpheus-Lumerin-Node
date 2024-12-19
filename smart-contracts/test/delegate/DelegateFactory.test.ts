@@ -111,7 +111,7 @@ describe('DelegateFactory', () => {
       expect(await proxy.feeTreasury()).to.eq(KYLE);
       expect(await proxy.name()).to.eq('name');
       expect(await proxy.endpoint()).to.eq('endpoint');
-      expect(await proxy.deregistrationOpenAt()).to.eq(9998887771);
+      expect(await proxy.deregistrationOpensAt()).to.eq(9998887771);
     });
     it('should deploy new proxies', async () => {
       await delegatorFactory.connect(SHEV).deployProxy(KYLE, wei(0.1, 25), 'name1', 'endpoint1', 9998887771);
@@ -124,7 +124,7 @@ describe('DelegateFactory', () => {
       expect(await proxy.feeTreasury()).to.eq(SHEV);
       expect(await proxy.name()).to.eq('name2');
       expect(await proxy.endpoint()).to.eq('endpoint2');
-      expect(await proxy.deregistrationOpenAt()).to.eq(9998887772);
+      expect(await proxy.deregistrationOpensAt()).to.eq(9998887772);
 
       proxy = providersDelegateFactory.attach(await delegatorFactory.proxies(KYLE, 0)) as ProvidersDelegate;
       expect(await proxy.owner()).to.eq(KYLE);
@@ -132,7 +132,7 @@ describe('DelegateFactory', () => {
       expect(await proxy.feeTreasury()).to.eq(SHEV);
       expect(await proxy.name()).to.eq('name3');
       expect(await proxy.endpoint()).to.eq('endpoint3');
-      expect(await proxy.deregistrationOpenAt()).to.eq(9998887773);
+      expect(await proxy.deregistrationOpensAt()).to.eq(9998887773);
     });
     it('should throw error when fee is invalid', async () => {
       await expect(

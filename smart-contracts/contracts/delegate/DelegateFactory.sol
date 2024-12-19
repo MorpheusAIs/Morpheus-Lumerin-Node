@@ -57,10 +57,10 @@ contract DelegateFactory is IDelegateFactory, OwnableUpgradeable, PausableUpgrad
         uint256 fee_,
         string memory name_,
         string memory endpoint_,
-        uint128 deregistrationOpenAt
+        uint128 deregistrationOpensAt_
     ) external whenNotPaused returns (address) {
-        if (deregistrationOpenAt <= block.timestamp + minDeregistrationTimeout) {
-            revert InvalidDeregistrationOpenAt(deregistrationOpenAt, uint128(block.timestamp + minDeregistrationTimeout));
+        if (deregistrationOpensAt_ <= block.timestamp + minDeregistrationTimeout) {
+            revert InvalidDeregistrationOpenAt(deregistrationOpensAt_, uint128(block.timestamp + minDeregistrationTimeout));
         }
 
         bytes32 salt_ = _calculatePoolSalt(_msgSender());
@@ -74,7 +74,7 @@ contract DelegateFactory is IDelegateFactory, OwnableUpgradeable, PausableUpgrad
             fee_,
             name_,
             endpoint_,
-            deregistrationOpenAt
+            deregistrationOpensAt_
         );
         IOwnable(proxy_).transferOwnership(_msgSender());
 

@@ -9,7 +9,7 @@ export const deployProvidersDelegate = async (
   fee: BigNumberish,
   name: string,
   endpoint: string,
-  deregistrationOpenAt_: bigint | number,
+  deregistrationOpensAt_: bigint | number,
 ): Promise<ProvidersDelegate> => {
   const [implFactory, proxyFactory] = await Promise.all([
     ethers.getContractFactory('ProvidersDelegate'),
@@ -20,7 +20,7 @@ export const deployProvidersDelegate = async (
   const proxy = await proxyFactory.deploy(impl, '0x');
   const contract = implFactory.attach(proxy) as ProvidersDelegate;
 
-  await contract.ProvidersDelegate_init(diamond, feeTreasury, fee, name, endpoint, deregistrationOpenAt_);
+  await contract.ProvidersDelegate_init(diamond, feeTreasury, fee, name, endpoint, deregistrationOpensAt_);
 
   return contract;
 };

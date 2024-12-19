@@ -39,7 +39,7 @@ contract ProvidersDelegate is IProvidersDelegate, OwnableUpgradeable {
 
     // Deregistration limits
     bool isDeregistered;
-    uint128 public deregistrationOpenAt;
+    uint128 public deregistrationOpensAt;
 
     constructor() {
         _disableInitializers();
@@ -51,7 +51,7 @@ contract ProvidersDelegate is IProvidersDelegate, OwnableUpgradeable {
         uint256 fee_,
         string memory name_,
         string memory endpoint_,
-        uint128 deregistrationOpenAt_
+        uint128 deregistrationOpensAt_
     ) external initializer {
         __Ownable_init();
 
@@ -67,7 +67,7 @@ contract ProvidersDelegate is IProvidersDelegate, OwnableUpgradeable {
         }
 
         fee = fee_;
-        deregistrationOpenAt = deregistrationOpenAt_;
+        deregistrationOpensAt = deregistrationOpensAt_;
 
         IERC20(token).approve(lumerinDiamond_, type(uint256).max);
     }
@@ -248,7 +248,7 @@ contract ProvidersDelegate is IProvidersDelegate, OwnableUpgradeable {
     }
 
     function isDeregisterAvailable() public view returns (bool) {
-        return block.timestamp >= deregistrationOpenAt;
+        return block.timestamp >= deregistrationOpensAt;
     }
 
     function _deleteModelBids(bytes32[] calldata bidIds_) private {
