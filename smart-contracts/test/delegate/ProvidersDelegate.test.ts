@@ -30,7 +30,7 @@ import {
 import { Reverter } from '@/test/helpers/reverter';
 import { setTime } from '@/utils/block-helper';
 import { getProviderApproval, getReceipt } from '@/utils/provider-helper';
-import { DAY } from '@/utils/time';
+import { DAY, YEAR } from '@/utils/time';
 
 describe('ProvidersDelegate', () => {
   const reverter = new Reverter();
@@ -209,6 +209,11 @@ describe('ProvidersDelegate', () => {
       expect(await token.balanceOf(KYLE)).to.eq(wei(900));
       expect(await token.balanceOf(SHEV)).to.eq(wei(800));
     });
+    it('should stake tokens when stake closed but deregistration is available', async () => {
+      await providersDelegate.setIsStakeClosed(true);
+      await setTime(payoutStart + 4 * DAY);
+      await providersDelegate.connect(KYLE).stake(wei(100));
+    });
     it('should throw error when the stake is too low', async () => {
       await expect(providersDelegate.connect(KYLE).stake(wei(0))).to.be.revertedWithCustomError(
         providersDelegate,
@@ -220,15 +225,6 @@ describe('ProvidersDelegate', () => {
       await expect(providersDelegate.connect(KYLE).stake(wei(1))).to.be.revertedWithCustomError(
         providersDelegate,
         'StakeClosed',
-      );
-    });
-    it('should throw error when provider deregistered', async () => {
-      await providersDelegate.connect(KYLE).stake(wei(1));
-      await providersDelegate.providerDeregister([]);
-
-      await expect(providersDelegate.connect(KYLE).stake(wei(1))).to.be.revertedWithCustomError(
-        providersDelegate,
-        'ProviderDeregistered',
       );
     });
   });
@@ -403,15 +399,6 @@ describe('ProvidersDelegate', () => {
         'Ownable: caller is not the owner',
       );
     });
-    it('should throw error when provider already deregistered', async () => {
-      await providersDelegate.connect(KYLE).stake(wei(100));
-      await providersDelegate.providerDeregister([]);
-
-      await expect(providersDelegate.providerDeregister([])).to.be.revertedWithCustomError(
-        providersDelegate,
-        'ProviderDeregistered',
-      );
-    });
   });
 
   describe('#postModelBid, #deleteModelBids', () => {
@@ -555,6 +542,13 @@ describe('ProvidersDelegate', () => {
       expect(await token.balanceOf(SHEV)).to.closeTo(wei(1000), wei(0.1));
       expect(await token.balanceOf(ALAN)).to.closeTo(wei(1000), wei(0.2));
       expect(await token.balanceOf(TREASURY)).to.eq(wei(0));
+
+      // Withdraw all stake after the first limit period
+      expect((await providerRegistry.getProvider(await providersDelegate.getAddress()))[1]).to.greaterThan(0);
+      await setTime(payoutStart + 15 * DAY + 1.1 * YEAR);
+      await providersDelegate.connect(KYLE).stake(wei(1));
+      await providersDelegate.connect(KYLE).providerDeregister([]);
+      expect((await providerRegistry.getProvider(await providersDelegate.getAddress()))[1]).to.eq(0);
     });
   });
 });

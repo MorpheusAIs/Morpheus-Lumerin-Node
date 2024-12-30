@@ -38,7 +38,6 @@ contract ProvidersDelegate is IProvidersDelegate, OwnableUpgradeable {
     mapping(address => Staker) public stakers;
 
     // Deregistration limits
-    bool isDeregistered;
     uint128 public deregistrationOpensAt;
 
     constructor() {
@@ -119,11 +118,8 @@ contract ProvidersDelegate is IProvidersDelegate, OwnableUpgradeable {
     }
 
     function _stake(address staker_, uint256 amount_) private {
-        if (isStakeClosed) {
+        if (isStakeClosed && !isDeregisterAvailable()) {
             revert StakeClosed();
-        }
-        if (isDeregistered) {
-            revert ProviderDeregistered();
         }
         if (amount_ == 0) {
             revert InsufficientAmount();
@@ -220,14 +216,10 @@ contract ProvidersDelegate is IProvidersDelegate, OwnableUpgradeable {
         if (!isDeregisterAvailable()) {
             _checkOwner();
         }
-        if (isDeregistered) {
-            revert ProviderDeregistered();
-        }
 
         _deleteModelBids(bidIds_);
         IProviderRegistry(lumerinDiamond).providerDeregister(address(this));
 
-        isDeregistered = true;
         fee = 0;
     }
 
