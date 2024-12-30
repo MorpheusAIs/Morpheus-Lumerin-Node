@@ -229,6 +229,8 @@ contract ProvidersDelegate is IProvidersDelegate, OwnableUpgradeable {
             revert BidCannotBeCreatedDuringThisPeriod();
         }
 
+        IERC20(token).safeTransferFrom(_msgSender(), address(this), IMarketplace(lumerinDiamond).getBidFee());
+
         return IMarketplace(lumerinDiamond).postModelBid(address(this), modelId_, pricePerSecond_);
     }
 

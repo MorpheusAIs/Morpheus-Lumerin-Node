@@ -417,8 +417,10 @@ describe('ProvidersDelegate', () => {
       const modelId = await modelRegistry.getModelId(DELEGATOR, baseModelId);
 
       // Register bid
+      const balance = await token.balanceOf(providersDelegate);
       await providersDelegate.postModelBid(modelId, wei(0.0001));
       let bidId = await marketplace.getBidId(await providersDelegate.getAddress(), modelId, 0);
+      expect(balance).to.eq(await token.balanceOf(providersDelegate));
 
       await providersDelegate.deleteModelBids([bidId]);
 
