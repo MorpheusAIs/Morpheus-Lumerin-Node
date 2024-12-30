@@ -9,6 +9,7 @@ import {PRECISION} from "@solarity/solidity-lib/utils/Globals.sol";
 
 import {IProvidersDelegate} from "../interfaces/delegate/IProvidersDelegate.sol";
 import {IBidStorage} from "../interfaces/storage/IBidStorage.sol";
+import {ISessionRouter} from "../interfaces/facets/ISessionRouter.sol";
 import {IProviderRegistry} from "../interfaces/facets/IProviderRegistry.sol";
 import {IMarketplace} from "../interfaces/facets/IMarketplace.sol";
 
@@ -237,6 +238,10 @@ contract ProvidersDelegate is IProvidersDelegate, OwnableUpgradeable {
         }
 
         _deleteModelBids(bidIds_);
+    }
+
+    function claimForProvider(bytes32 sessionId_) external {
+        ISessionRouter(lumerinDiamond).claimForProvider(sessionId_);
     }
 
     function isDeregisterAvailable() public view returns (bool) {
