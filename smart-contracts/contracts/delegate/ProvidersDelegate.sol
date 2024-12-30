@@ -119,7 +119,7 @@ contract ProvidersDelegate is IProvidersDelegate, OwnableUpgradeable {
     }
 
     function _stake(address staker_, uint256 amount_) private {
-        if (isStakeClosed && !isDeregisterAvailable()) {
+        if (isStakeClosed && !isStakeAfterDeregisterAvailable()) {
             revert StakeClosed();
         }
         if (amount_ == 0) {
@@ -248,6 +248,11 @@ contract ProvidersDelegate is IProvidersDelegate, OwnableUpgradeable {
 
     function isDeregisterAvailable() public view returns (bool) {
         return block.timestamp >= deregistrationOpensAt;
+    }
+
+    function isStakeAfterDeregisterAvailable() public view returns (bool) {
+        IProviderRegistry.Provider memory provider_ = IProviderRegistry(lumerinDiamond).getProvider(address(this));
+        return isDeregisterAvailable() && provider_.stake > 0 && provider_.isDeleted;
     }
 
     function _deleteModelBids(bytes32[] calldata bidIds_) private {

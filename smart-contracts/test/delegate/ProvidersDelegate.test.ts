@@ -209,11 +209,6 @@ describe('ProvidersDelegate', () => {
       expect(await token.balanceOf(KYLE)).to.eq(wei(900));
       expect(await token.balanceOf(SHEV)).to.eq(wei(800));
     });
-    it('should stake tokens when stake closed but deregistration is available', async () => {
-      await providersDelegate.setIsStakeClosed(true);
-      await setTime(payoutStart + 4 * DAY);
-      await providersDelegate.connect(KYLE).stake(wei(100));
-    });
     it('should throw error when the stake is too low', async () => {
       await expect(providersDelegate.connect(KYLE).stake(wei(0))).to.be.revertedWithCustomError(
         providersDelegate,
