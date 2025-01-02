@@ -602,6 +602,11 @@ definitions:
     required:
     - urls
     type: object
+  system.StatusRes:
+    properties:
+      status:
+        type: string
+    type: object
 externalDocs:
   description: OpenAPI
   url: https://swagger.io/resources/open-api/
@@ -1337,7 +1342,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/system.ConfigResponse'
+            $ref: '#/definitions/system.StatusRes'
       summary: Delete Eth Node URLs
       tags:
       - system
@@ -1358,7 +1363,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/system.ConfigResponse'
+            $ref: '#/definitions/system.StatusRes'
       summary: Set Eth Node URLs
       tags:
       - system

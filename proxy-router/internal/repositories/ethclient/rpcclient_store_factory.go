@@ -11,6 +11,7 @@ import (
 type RPCEndpointsPersister interface {
 	GetURLs() []string
 	SetURLs(urls []string) error
+	SetURLsNoPersist(urls []string) error
 	RemoveURLs() error
 	GetClient() RPCClient
 }
