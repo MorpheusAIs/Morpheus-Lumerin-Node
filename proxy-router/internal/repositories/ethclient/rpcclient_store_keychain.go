@@ -38,6 +38,10 @@ func (p *RPCClientStoreKeychain) SetURLs(urls []string) error {
 	return p.rpcClient.SetURLs(urls)
 }
 
+func (p *RPCClientStoreKeychain) SetURLsNoPersist(urls []string) error {
+	return p.rpcClient.SetURLs(urls)
+}
+
 func (p *RPCClientStoreKeychain) RemoveURLs() error {
 	return p.deleteURLsInStorage()
 }
@@ -47,7 +51,6 @@ func (p *RPCClientStoreKeychain) GetClient() RPCClient {
 }
 
 func (p *RPCClientStoreKeychain) loadURLsFromStorage() ([]string, error) {
-	// return []string{"https://arb-sepolia.g.alchemy.com/v2/3-pxwBaJ7vilkz1jl-fMmCvZThGxpmo2"}, nil
 	str, err := p.storage.Get(ETH_NODE_URL_KEY)
 	if err != nil {
 		return nil, err
