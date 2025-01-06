@@ -81,7 +81,7 @@ export default function PrimaryNav({ parent, activeIndex, setActiveIndex }) {
     <Container>
       <Button
         onClick={() => setActiveIndex(0)}
-        activeClassName="active"
+        className={(navData) => (navData.isActive ? "active-style" : 'none')}
         data-testid="wallet-nav-btn"
         to="/wallet"
       >
@@ -105,44 +105,33 @@ export default function PrimaryNav({ parent, activeIndex, setActiveIndex }) {
 
       <Button
         onClick={() => setActiveIndex(2)}
-        to="/media"
-      >
-        <IconWrapper>
-          <IconPhoto width={iconSize} />
-        </IconWrapper>
-        <Label active={activeIndex === 2} parent={parent}>Media</Label>
-      </Button>
-
-
-      <Button
-        onClick={() => setActiveIndex(3)}
         to="/models"
       >
         <IconWrapper>
           <IconPackages width={iconSize} />
         </IconWrapper>
-        <Label active={activeIndex === 3} parent={parent}>Models</Label>
+        <Label active={activeIndex === 2} parent={parent}>Models</Label>
       </Button>
 
 
       <Button
-        onClick={() => setActiveIndex(4)}
+        onClick={() => setActiveIndex(3)}
         to="/agents"
       >
         <IconWrapper>
           <IconUsers width={iconSize} />
         </IconWrapper>
-        <Label active={activeIndex === 4} parent={parent}>Agents</Label>
+        <Label active={activeIndex === 3} parent={parent}>Agents</Label>
       </Button>
 
       <Button
-        onClick={() => setActiveIndex(5)}
+        onClick={() => setActiveIndex(4)}
         to="/providers"
       >
         <IconWrapper>
           <IconBrandStackshare width={iconSize} />
         </IconWrapper>
-        <Label active={activeIndex === 5} parent={parent}>Provider Hub</Label>
+        <Label active={activeIndex === 4} parent={parent}>Provider Hub</Label>
       </Button>
       
     </Container>

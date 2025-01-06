@@ -1,4 +1,4 @@
-import { HashRouter, Switch, Route, Redirect } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from "react-router";
 import styled, { keyframes } from 'styled-components'
 
 import OfflineWarning from './OfflineWarning'
@@ -6,10 +6,9 @@ import OfflineWarning from './OfflineWarning'
 import Dashboard from './dashboard/Dashboard'
 import Sidebar from './sidebar/Sidebar'
 import Chat from './chat/Chat';
-import { Models } from './models/Models'
-import { Agents } from './agents/Agents'
+import Models from './models/Models'
+import Agents from './agents/Agents'
 import Settings from './settings/Settings';
-import Bids from './bids/Bids'
 import 'bootstrap/dist/css/bootstrap.min.css';
 import Providers from './providers/Providers'
 
@@ -51,16 +50,15 @@ export const Layout = () => (
     <Main
       data-scrollelement // Required by react-virtualized implementation in Dashboard/TxList
     >
-      <Switch>
-        <Route path="/" exact render={() => <Redirect to="/wallet" />} />
-        <Route path="/wallet" component={Dashboard} />
-        <Route path="/chat" component={Chat} />
-        <Route path="/agents" component={Agents} />
-        <Route path="/models" component={Models} />
-        <Route path="/bids" component={Bids} />
-        <Route path="/providers" component={Providers} />
-        <Route path="/settings" component={Settings} />
-      </Switch>
+      <Routes>
+        <Route path="/wallet" element={<Dashboard />} />
+        <Route path="/chat" element={<Chat />} />
+        <Route path="/agents" element={<Agents />} />
+        <Route path="/models" element={<Models />} />
+        <Route path="/providers" element={<Providers />} />
+        <Route path="/settings" element={<Settings />} />
+        <Route path="*" element={<Navigate replace to="/wallet" />} />
+      </Routes>
     </Main>
     {/* <AutoPriceAdjuster /> */}
     <OfflineWarning />
@@ -69,8 +67,8 @@ export const Layout = () => (
 
 export default function Router() {
   return (
-    <HashRouter>
+    <BrowserRouter>
       <Layout />
-    </HashRouter>
+    </BrowserRouter>
   )
 }

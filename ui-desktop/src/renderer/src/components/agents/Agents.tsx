@@ -1,9 +1,12 @@
 import { LayoutHeader } from '../common/LayoutHeader'
 import { View } from '../common/View'
 
-export const Agents = () => {
+const Agents = () => {
     return (    
     <View data-testid="agents-container">
         <LayoutHeader title="Agents" />
+        Section currently is under development.
     </View>)
 }
+
+export default Agents;

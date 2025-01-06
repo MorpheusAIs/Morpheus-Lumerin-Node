@@ -51,13 +51,12 @@ func CreateHTTPServer(log lib.ILogger, controllers ...Registrable) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 
 	r := gin.New()
+	r.Use(RequestLogger(log))
 
 	r.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"*"},
 		AllowHeaders: []string{"session_id", "model_id", "chat_id"},
 	}))
-
-	// r.Use(RequestLogger(log))
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	// r.Any("/debug/pprof/*action", gin.WrapF(pprof.Index))

@@ -18,6 +18,10 @@ func (p *RPCClientStoreEnv) SetURLs(urls []string) error {
 	return ErrEnvRPCSet
 }
 
+func (p *RPCClientStoreEnv) SetURLsNoPersist(urls []string) error {
+	return ErrEnvRPCSet
+}
+
 func (p *RPCClientStoreEnv) RemoveURLs() error {
 	return ErrEnvRPCSet
 }

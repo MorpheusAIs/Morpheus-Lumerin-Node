@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { LayoutHeader } from '../common/LayoutHeader'
 import { View } from '../common/View'
 import ProvidersList from './ProvidersList'
-import { withRouter } from 'react-router-dom';
+
 import { BtnAccent } from '../dashboard/BalanceBlock.styles';
 
 import withProvidersState from "../../store/hocs/withProvidersState";
@@ -27,4 +27,4 @@ const Providers = ({ fetchData, providerId }) => {
     </View>)
 }
 
-export default withRouter(withProvidersState(Providers));
+export default withProvidersState(Providers);

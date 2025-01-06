@@ -75,8 +75,6 @@ func (s *ProdiaSDXL) Prompt(ctx context.Context, prompt *openai.ChatCompletionRe
 		return err
 	}
 
-	s.log.Debugf("response: %s", response)
-
 	bodyStr := string(response)
 	if strings.Contains(bodyStr, "Invalid Generation Parameters") {
 		return lib.WrapError(ErrImageGenerationRequest, fmt.Errorf(bodyStr))
