@@ -1,10 +1,13 @@
 import { Deployer } from '@solarity/hardhat-migrate';
 
+import { parseConfig } from './helpers/config-parser';
+
 import { Marketplace__factory } from '@/generated-types/ethers';
 
 module.exports = async function (deployer: Deployer) {
-  // const marketplaceFacet = await deployer.deployed(Marketplace__factory, '0xb8C55cD613af947E73E262F0d3C54b7211Af16CF');
-  const marketplaceFacet = await deployer.deployed(Marketplace__factory, '0xDE819AaEE474626E3f34Ef0263373357e5a6C71b');
+  const config = parseConfig();
+
+  const marketplaceFacet = await deployer.deployed(Marketplace__factory, config.lumerinProtocol);
 
   console.log(await marketplaceFacet.getMinMaxBidPricePerSecond());
 
