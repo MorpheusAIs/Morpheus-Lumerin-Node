@@ -17,8 +17,11 @@ const withBidsState = WrappedComponent => {
 
         getBitsByModels = async (modelId) => {
             try {
+                const authHeaders = await this.props.client.getAuthHeaders();
                 const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/models/${modelId}/bids`
-                const response = await fetch(path);
+                const response = await fetch(path, {
+                    headers: authHeaders
+                });
                 const data = await response.json();
                 return data.bids;
             }
@@ -30,8 +33,11 @@ const withBidsState = WrappedComponent => {
 
         getProviders = async () => {
             try {
+                const authHeaders = await this.props.client.getAuthHeaders();
                 const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/providers`
-                const response = await fetch(path);
+                const response = await fetch(path, {
+                    headers: authHeaders
+                });
                 const data = await response.json();
                 return data.providers;
             }
@@ -45,6 +51,7 @@ const withBidsState = WrappedComponent => {
             let signature = '';
             let sessionId = '';
 
+            const authHeaders = await this.props.client.getAuthHeaders();
             try {
                 const path = `${this.props.config.chain.localProxyRouterUrl}/proxy/sessions/initiate`;
                 const body = {
@@ -55,7 +62,8 @@ const withBidsState = WrappedComponent => {
                 };
                 const response = await fetch(path, {
                     method: "POST",
-                    body: JSON.stringify(body)
+                    body: JSON.stringify(body),
+                    headers: authHeaders
                 });
                 const dataResponse = await response.json();
                 signature = dataResponse.response.result.message;
@@ -73,7 +81,8 @@ const withBidsState = WrappedComponent => {
                 };
                 const response = await fetch(path, {
                     method: "POST",
-                    body: JSON.stringify(body)
+                    body: JSON.stringify(body),
+                    headers: authHeaders
                 });
                 const dataResponse = await response.json();
                 sessionId = dataResponse.sessionId;
