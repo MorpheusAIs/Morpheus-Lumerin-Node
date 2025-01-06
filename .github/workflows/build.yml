@@ -12,6 +12,7 @@ on:
     branches:
       - main
       - test
+      - concom
       - dev
     paths: ['.github/workflows/**', '**/Makefile', '**/*.go', '**/*.json', '**/*.yml', '**/*.ts', '**/*.js']
 
@@ -72,6 +73,7 @@ jobs:
             --form "ref=${{ env.gitlab_branch }}" \
             --form "variables[SOURCE_REPO]=${{ github.repository }}" \
             --form "variables[SOURCE_BRANCH]=${{ github.ref_name }}" \
+            --form "variables[GITHUB_VFULL]=${{ env.VFULL }}" \
             --form "variables[GITHUB_TAG]=${{ env.TAG_NAME }}")
       
           # Parse JSON response using jq
@@ -150,6 +152,8 @@ jobs:
       - name: Pack artifacts
         id: pack_artifacts
         run: |
+          VFULL=${VFULL:-0.0.1}
+          echo "VFULL: $VFULL"
           ARTIFACT="mor-launch-$TAG_NAME-ubuntu-x64.zip"
           echo "Artifact: $ARTIFACT"
           LLAMACPP=llama-b3256-bin-ubuntu-x64.zip
@@ -157,9 +161,11 @@ jobs:
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
           unzip -o -j $LLAMACPP build/bin/llama-server
-          echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./morpheus-ui-${VFULL}-x86_64-linux.AppImage"]}' > mor-launch.json
+          echo '{"run":["./llama-server -m ./'"$MODEL"'","./proxy-router","./morpheus-ui-'"$VFULL"'-x86_64-linux.AppImage"]}' > mor-launch.json
+          echo "Contents of mor-launch.json: "
+          cat mor-launch.json
           mv ./cli/mor-cli mor-cli
-          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/bin/proxy-router .env $MODEL mor-launch.json ./ui-desktop/dist/morpheus-ui-${VFULL}-x86_64-linux.AppImage models-config.json rating-config.json mor-cli
+          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/bin/proxy-router .env $MODEL mor-launch.json ./ui-desktop/dist/morpheus-ui-$VFULL-x86_64-linux.AppImage models-config.json rating-config.json mor-cli
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -235,6 +241,8 @@ jobs:
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
           unzip -o -j $LLAMACPP build/bin/llama-server
           echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./MorpheusUI.app/Contents/MacOS/MorpheusUI"]}' > mor-launch.json
+          echo "Contents of mor-launch.json: "
+          cat mor-launch.json
           mv ./cli/mor-cli mor-cli
           unzip ./ui-desktop/dist/morpheus-ui-${VFULL}-x64-mac.zip
           zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json models-config.json rating-config.json mor-cli
@@ -314,6 +322,8 @@ jobs:
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
           unzip -o -j $LLAMACPP build/bin/llama-server
           echo '{"run":["./llama-server -m ./'$MODEL'","./proxy-router","./MorpheusUI.app/Contents/MacOS/MorpheusUI"]}' > mor-launch.json
+          echo "Contents of mor-launch.json: "
+          cat mor-launch.json
           mv ./cli/mor-cli mor-cli
           unzip ./ui-desktop/dist/morpheus-ui-${VFULL}-arm64-mac.zip
           zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/bin/proxy-router .env llama-server $MODEL mor-launch.json models-config.json rating-config.json mor-cli
@@ -389,6 +399,8 @@ jobs:
       - name: Pack artifacts
         id: pack_artifacts
         run: |
+          VFULL=${VFULL:-0.0.1}
+          echo "VFULL: $VFULL"
           ARTIFACT="mor-launch-$TAG_NAME-win-x64.zip"
           echo "Artifact: $ARTIFACT"
           LLAMACPP=llama-b3256-bin-win-avx2-x64.zip
@@ -396,14 +408,16 @@ jobs:
           wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b3256/$LLAMACPP
           wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
           unzip -o -j $LLAMACPP llama-server.exe llama.dll ggml.dll
-          echo '{"run":["./llama-server.exe -m ./'$MODEL'","./proxy-router.exe","./morpheus-ui-${VFULL}-x64-win.exe"]}' > mor-launch.json
+          echo '{"run":["./llama-server.exe -m ./'"$MODEL"'","./proxy-router.exe","./morpheus-ui-'"$VFULL"'-x64-win.exe"]}' > mor-launch.json
+          echo "Contents of mor-launch.json: "
+          cat mor-launch.json
           mv .env .env.tmp
           sed 's|\./data/|.\\data\\|g' .env.tmp > .env
           mv ./proxy-router/bin/proxy-router proxy-router.exe
           mv ./cli/mor-cli mor-cli.exe
           mv ./launcher/mor-launch mor-launch.exe
-          mv "./ui-desktop/dist/morpheus-ui-${VFULL}-x64-win" morpheus-ui-${VFULL}-x64-win.exe
-          7z a $ARTIFACT LICENSE mor-launch.exe proxy-router.exe .env llama-server.exe llama.dll ggml.dll $MODEL mor-launch.json morpheus-ui-${VFULL}-x64-win.exe models-config.json rating-config.json mor-cli.exe
+          mv "./ui-desktop/dist/morpheus-ui-$VFULL-x64-win" morpheus-ui-$VFULL-x64-win.exe
+          7z a $ARTIFACT LICENSE mor-launch.exe proxy-router.exe .env llama-server.exe llama.dll ggml.dll $MODEL mor-launch.json morpheus-ui-$VFULL-x64-win.exe models-config.json rating-config.json mor-cli.exe
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -412,7 +426,7 @@ jobs:
           name: mor-launch-win-x64.zip
 
   release:
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' )) || github.event.inputs.create_release == 'true' }}
+    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/concom' )) || github.event.inputs.create_release == 'true' }}
     runs-on: ubuntu-latest
     needs:
       - Ubuntu-22-x64

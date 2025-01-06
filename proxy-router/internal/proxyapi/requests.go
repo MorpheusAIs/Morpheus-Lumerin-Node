@@ -7,6 +7,15 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
+type PingReq struct {
+	ProviderAddr common.Address `json:"providerAddr" validate:"required,eth_addr"`
+	ProviderURL  string         `json:"providerUrl"  validate:"required,hostname_port"`
+}
+
+type PingRes struct {
+	PingMs int64 `json:"ping,omitempty"`
+}
+
 type InitiateSessionReq struct {
 	User        common.Address `json:"user"        validate:"required,eth_addr"`
 	Provider    common.Address `json:"provider"    validate:"required,eth_addr"`
@@ -17,14 +26,14 @@ type InitiateSessionReq struct {
 
 type PromptReq struct {
 	Signature string          `json:"signature" validate:"required,hexadecimal"`
-	Message   json.RawMessage `json:"message" validate:"required"`
+	Message   json.RawMessage `json:"message"   validate:"required"`
 	Timestamp string          `json:"timestamp" validate:"required,timestamp"`
 }
 
 type PromptHead struct {
 	SessionID lib.Hash `header:"session_id" validate:"hex32"`
-	ModelID   lib.Hash `header:"model_id" validate:"hex32"`
-	ChatID    lib.Hash `header:"chat_id" validate:"hex32"`
+	ModelID   lib.Hash `header:"model_id"   validate:"hex32"`
+	ChatID    lib.Hash `header:"chat_id"    validate:"hex32"`
 }
 
 type InferenceRes struct {

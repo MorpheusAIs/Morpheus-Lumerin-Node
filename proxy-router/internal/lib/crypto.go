@@ -151,3 +151,24 @@ func VerifySignature(params []byte, signature []byte, publicKeyBytes []byte) boo
 	signatureNoRecoverID := signature[:len(signature)-1] // remove recovery ID
 	return crypto.VerifySignature(publicKeyBytes, hash.Bytes(), signatureNoRecoverID)
 }
+
+func VerifySignatureAddr(params []byte, signature []byte, addr common.Address) bool {
+	hash := crypto.Keccak256Hash(params)
+	if len(signature) == 0 {
+		return false
+	}
+	// signature = signature[:len(signature)-1] // remove recovery ID
+
+	recoveredPubKey, err := crypto.Ecrecover(hash.Bytes(), signature)
+	if err != nil {
+		return false
+	}
+
+	pubKey, err := crypto.UnmarshalPubkey(recoveredPubKey)
+	if err != nil {
+		return false
+	}
+
+	recoveredAddress := crypto.PubkeyToAddress(*pubKey)
+	return recoveredAddress == addr
+}

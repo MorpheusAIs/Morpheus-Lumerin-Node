@@ -195,6 +195,21 @@ definitions:
     - spend
     - user
     type: object
+  proxyapi.PingReq:
+    properties:
+      providerAddr:
+        type: string
+      providerUrl:
+        type: string
+    required:
+    - providerAddr
+    - providerUrl
+    type: object
+  proxyapi.PingRes:
+    properties:
+      ping:
+        type: integer
+    type: object
   proxyapi.ResultResponse:
     properties:
       result:
@@ -1375,6 +1390,26 @@ paths:
       summary: Healthcheck example
       tags:
       - system
+  /proxy/provider/ping:
+    post:
+      description: sends a ping to the provider on the RPC level
+      parameters:
+      - description: Ping Request
+        in: body
+        name: pingReq
+        required: true
+        schema:
+          $ref: '#/definitions/proxyapi.PingReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.PingRes'
+      summary: Ping Provider
+      tags:
+      - chat
   /proxy/sessions/{id}/providerClaim:
     post:
       description: Claim provider balance from session
