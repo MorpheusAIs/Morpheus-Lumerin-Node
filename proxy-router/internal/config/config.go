@@ -58,7 +58,6 @@ type Config struct {
 		ForwardChatContext *lib.Bool `env:"PROXY_FORWARD_CHAT_CONTEXT" flag:"proxy-forward-chat-context" desc:"prepend whole stored message history to the prompt"`
 		ModelsConfigPath   string    `env:"MODELS_CONFIG_PATH" flag:"models-config-path" validate:"omitempty"`
 		RatingConfigPath   string    `env:"RATING_CONFIG_PATH" flag:"rating-config-path" validate:"omitempty" desc:"path to the rating config file"`
-		CookieFilePath     string    `env:"COOKIE_FILE_PATH" flag:"cookie-file-path" validate:"omitempty" desc:"path to the cookie file"`
 	}
 	System struct {
 		Enable           bool   `env:"SYS_ENABLE"              flag:"sys-enable" desc:"enable system level configuration adjustments"`
@@ -168,9 +167,6 @@ func (cfg *Config) SetDefaults() {
 	}
 	if cfg.Proxy.RatingConfigPath == "" {
 		cfg.Proxy.RatingConfigPath = "./rating-config.json"
-	}
-	if cfg.Proxy.CookieFilePath == "" {
-		cfg.Proxy.CookieFilePath = "./.cookie"
 	}
 }
 

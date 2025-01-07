@@ -22,11 +22,8 @@ const withModelsState = WrappedComponent => {
 
     getAllProviders = async () => {
       try {
-        const authHeaders = await this.props.client.getAuthHeaders();
         const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/providers`
-        const response = await fetch(path, {
-          headers: authHeaders
-        });
+        const response = await fetch(path);
         const data = await response.json();
         return data.providers;
       }

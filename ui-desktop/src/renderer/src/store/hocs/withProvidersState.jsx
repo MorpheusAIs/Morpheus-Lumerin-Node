@@ -22,11 +22,8 @@ const withProvidersState = WrappedComponent => {
 
     getAllProviders = async () => {
       try {
-        const authHeaders = await this.props.client.getAuthHeaders();
         const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/providers`
-        const response = await fetch(path, {
-          headers: authHeaders
-        });
+        const response = await fetch(path);
         const data = await response.json();
         return data.providers;
       }
@@ -38,11 +35,8 @@ const withProvidersState = WrappedComponent => {
 
     getSessionsByProvider = async (provider) => {
       try {
-        const authHeaders = await this.props.client.getAuthHeaders();
         const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions/provider?provider=${provider}`;
-        const response = await fetch(path, {
-          headers: authHeaders
-        });
+        const response = await fetch(path);
         const data = await response.json();
         return data.sessions;
       }
@@ -54,11 +48,8 @@ const withProvidersState = WrappedComponent => {
 
     getBalanceBySession = async (sessionId) => {
       try {
-        const authHeaders = await this.props.client.getAuthHeaders();
         const path = `${this.props.config.chain.localProxyRouterUrl}/proxy/sessions/${sessionId}/providerClaimableBalance`
-        const response = await fetch(path, {
-          headers: authHeaders
-        });
+        const response = await fetch(path);
         const data = await response.json();
         return data.balance;
       }
@@ -70,11 +61,9 @@ const withProvidersState = WrappedComponent => {
 
     claimFunds = async (sessionId) => {
       try {
-        const authHeaders = await this.props.client.getAuthHeaders();
         const path = `${props.config.chain.localProxyRouterUrl}/proxy/sessions/${sessionId}/providerClaim`;
         const response = await fetch(path, {
             method: "POST",
-            headers: authHeaders
         });
         const dataResponse = await response.json();
       }

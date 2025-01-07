@@ -9,22 +9,19 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
 )
 
 type BlockchainController struct {
-	service  *BlockchainService
-	log      lib.ILogger
-	authConf system.HTTPAuthConfig
+	service *BlockchainService
+	log     lib.ILogger
 }
 
-func NewBlockchainController(service *BlockchainService, authConf system.HTTPAuthConfig, log lib.ILogger) *BlockchainController {
+func NewBlockchainController(service *BlockchainService, log lib.ILogger) *BlockchainController {
 	c := &BlockchainController{
-		service:  service,
-		log:      log,
-		authConf: authConf,
+		service: service,
+		log:     log,
 	}
 
 	return c
@@ -32,47 +29,47 @@ func NewBlockchainController(service *BlockchainService, authConf system.HTTPAut
 
 func (c *BlockchainController) RegisterRoutes(r interfaces.Router) {
 	// transactions
-	r.GET("/blockchain/balance", c.authConf.CheckAuth("get_balance"), c.getBalance)
-	r.GET("/blockchain/transactions", c.authConf.CheckAuth("get_transactions"), c.getTransactions)
-	r.GET("/blockchain/allowance", c.authConf.CheckAuth("get_allowance"), c.getAllowance)
-	r.GET("/blockchain/latestBlock", c.authConf.CheckAuth("get_latest_block"), c.getLatestBlock)
-	r.POST("/blockchain/approve", c.authConf.CheckAuth("approve"), c.approve)
-	r.POST("/blockchain/send/eth", c.authConf.CheckAuth("send_eth"), c.sendETH)
-	r.POST("/blockchain/send/mor", c.authConf.CheckAuth("send_mor"), c.sendMOR)
+	r.GET("/blockchain/balance", c.getBalance)
+	r.GET("/blockchain/transactions", c.getTransactions)
+	r.GET("/blockchain/allowance", c.getAllowance)
+	r.GET("/blockchain/latestBlock", c.getLatestBlock)
+	r.POST("/blockchain/approve", c.approve)
+	r.POST("/blockchain/send/eth", c.sendETH)
+	r.POST("/blockchain/send/mor", c.sendMOR)
 
 	// providers
-	r.GET("/blockchain/providers", c.authConf.CheckAuth("get_providers"), c.getAllProviders)
-	r.POST("/blockchain/providers", c.authConf.CheckAuth("create_provider"), c.createProvider)
-	r.DELETE("/blockchain/providers/:id", c.authConf.CheckAuth("delete_provider"), c.deregisterProvider)
+	r.GET("/blockchain/providers", c.getAllProviders)
+	r.POST("/blockchain/providers", c.createProvider)
+	r.DELETE("/blockchain/providers/:id", c.deregisterProvider)
 
 	// models
-	r.GET("/blockchain/models", c.authConf.CheckAuth("get_models"), c.getAllModels)
-	r.POST("/blockchain/models", c.authConf.CheckAuth("create_model"), c.createNewModel)
-	r.DELETE("/blockchain/models/:id", c.authConf.CheckAuth("delete_model"), c.deregisterModel)
+	r.GET("/blockchain/models", c.getAllModels)
+	r.POST("/blockchain/models", c.createNewModel)
+	r.DELETE("/blockchain/models/:id", c.deregisterModel)
 
 	// bids
-	r.POST("/blockchain/bids", c.authConf.CheckAuth("create_bid"), c.createNewBid)
-	r.GET("/blockchain/bids/:id", c.authConf.CheckAuth("get_bids"), c.getBidByID)
-	r.DELETE("/blockchain/bids/:id", c.authConf.CheckAuth("delete_bids"), c.deleteBid)
-	r.GET("/blockchain/models/:id/bids", c.authConf.CheckAuth("get_bids"), c.getBidsByModelAgent)
-	r.GET("/blockchain/models/:id/bids/rated", c.authConf.CheckAuth("get_bids"), c.getRatedBids)
-	r.GET("/blockchain/models/:id/bids/active", c.authConf.CheckAuth("get_bids"), c.getActiveBidsByModel)
-	r.GET("/blockchain/providers/:id/bids", c.authConf.CheckAuth("get_bids"), c.getBidsByProvider)
-	r.GET("/blockchain/providers/:id/bids/active", c.authConf.CheckAuth("get_bids"), c.getActiveBidsByProvider)
+	r.POST("/blockchain/bids", c.createNewBid)
+	r.GET("/blockchain/bids/:id", c.getBidByID)
+	r.DELETE("/blockchain/bids/:id", c.deleteBid)
+	r.GET("/blockchain/models/:id/bids", c.getBidsByModelAgent)
+	r.GET("/blockchain/models/:id/bids/rated", c.getRatedBids)
+	r.GET("/blockchain/models/:id/bids/active", c.getActiveBidsByModel)
+	r.GET("/blockchain/providers/:id/bids", c.getBidsByProvider)
+	r.GET("/blockchain/providers/:id/bids/active", c.getActiveBidsByProvider)
 
 	// sessions
-	r.GET("/proxy/sessions/:id/providerClaimableBalance", c.authConf.CheckAuth("get_sessions"), c.getProviderClaimableBalance)
-	r.POST("/proxy/sessions/:id/providerClaim", c.authConf.CheckAuth("session_provider_claim"), c.claimProviderBalance)
-	r.GET("/blockchain/sessions/user", c.authConf.CheckAuth("get_sessions"), c.getSessionsForUser)
-	r.GET("/blockchain/sessions/user/ids", c.authConf.CheckAuth("get_sessions"), c.getSessionsIdsForUser)
-	r.GET("/blockchain/sessions/provider", c.authConf.CheckAuth("get_sessions"), c.getSessionsForProvider)
-	r.GET("/blockchain/sessions/:id", c.authConf.CheckAuth("get_sessions"), c.getSession)
-	r.POST("/blockchain/sessions", c.authConf.CheckAuth("open_session"), c.openSession)
-	r.POST("/blockchain/bids/:id/session", c.authConf.CheckAuth("open_session"), c.openSessionByBid)
-	r.POST("/blockchain/models/:id/session", c.authConf.CheckAuth("open_session"), c.openSessionByModelId)
-	r.POST("/blockchain/sessions/:id/close", c.authConf.CheckAuth("close_session"), c.closeSession)
-	r.GET("/blockchain/sessions/budget", c.authConf.CheckAuth("get_budget"), c.getBudget)
-	r.GET("/blockchain/token/supply", c.authConf.CheckAuth("get_supply"), c.getSupply)
+	r.GET("/proxy/sessions/:id/providerClaimableBalance", c.getProviderClaimableBalance)
+	r.POST("/proxy/sessions/:id/providerClaim", c.claimProviderBalance)
+	r.GET("/blockchain/sessions/user", c.getSessionsForUser)
+	r.GET("/blockchain/sessions/user/ids", c.getSessionsIdsForUser)
+	r.GET("/blockchain/sessions/provider", c.getSessionsForProvider)
+	r.GET("/blockchain/sessions/:id", c.getSession)
+	r.POST("/blockchain/sessions", c.openSession)
+	r.POST("/blockchain/bids/:id/session", c.openSessionByBid)
+	r.POST("/blockchain/models/:id/session", c.openSessionByModelId)
+	r.POST("/blockchain/sessions/:id/close", c.closeSession)
+	r.GET("/blockchain/sessions/budget", c.getBudget)
+	r.GET("/blockchain/token/supply", c.getSupply)
 }
 
 // GetProviderClaimableBalance godoc

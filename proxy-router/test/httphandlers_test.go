@@ -292,8 +292,8 @@ func InitializeApiBus(t *testing.T) *apibus.APIBus {
 	sessionStorage := storages.NewSessionStorage(storage)
 
 	wlt := wallet.NewEnvWallet(WALLET_PRIVATE_KEY)
-	proxyRouterApi := proxyapi.NewProxySender(&url.URL{}, wlt, contractLogStorage, sessionStorage, log.Named("PROXY_SENDER"))
-	blockchainApi := blockchainapi.NewBlockchainService(ethClient, DIAMOND_CONTRACT_ADDR.Address, MOR_CONTRACT_ADDR.Address, EXPLORER_API_URL, wlt, sessionStorage, proxyRouterApi, log, log, ETH_LEGACY_TX)
+	proxyRouterApi := proxyapi.NewProxySender(&url.URL{}, wlt, contractLogStorage, sessionStorage, log)
+	blockchainApi := blockchainapi.NewBlockchainService(ethClient, DIAMOND_CONTRACT_ADDR.Address, MOR_CONTRACT_ADDR.Address, EXPLORER_API_URL, wlt, sessionStorage, proxyRouterApi, log, ETH_LEGACY_TX)
 	aiEngine := aiengine.NewAiEngine("http://localhost:11434/v1", "", log)
 
 	apiBus := apibus.NewApiBus(

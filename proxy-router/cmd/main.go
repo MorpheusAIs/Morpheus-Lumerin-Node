@@ -13,7 +13,6 @@ import (
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apibus"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/authapi"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
@@ -204,29 +203,6 @@ func start() error {
 		return lib.WrapError(ErrConnectToEthNode, err)
 	}
 
-	authCfg := system.NewAuthConfig("./proxy.conf", cfg.Proxy.CookieFilePath)
-
-	if err := authCfg.ReadConfig(); err != nil {
-		return err
-	}
-
-	// Ensure cookie file with admin credentials exists
-	if err := authCfg.EnsureCookieFileExists(); err != nil {
-		return err
-	}
-
-	if err := authCfg.CheckFilePermissions(); err != nil {
-		appLog.Warnf("Config file permissions: %s", err)
-	}
-
-	adminUser, adminPass, err := authCfg.ReadCookieFile()
-	if err != nil {
-		appLog.Errorf("Failed to read cookie file: %s", err)
-	} else {
-		valid := authCfg.ValidatePassword(adminUser, adminPass)
-		appLog.Infof("Admin user: %s, valid: %t", adminUser, valid)
-	}
-
 	ethClient := ethclient.NewClient(rpcClientStore.GetClient())
 	chainID, err := ethClient.ChainID(ctx)
 	if err != nil {
@@ -286,16 +262,15 @@ func start() error {
 	eventListener := blockchainapi.NewEventsListener(sessionRepo, sessionRouter, wallet, logWatcher, appLog)
 
 	sessionExpiryHandler := blockchainapi.NewSessionExpiryHandler(blockchainApi, sessionStorage, wallet, appLog)
-	blockchainController := blockchainapi.NewBlockchainController(blockchainApi, *authCfg, appLog)
+	blockchainController := blockchainapi.NewBlockchainController(blockchainApi, appLog)
 
 	ethConnectionValidator := system.NewEthConnectionValidator(*big.NewInt(int64(cfg.Blockchain.ChainID)))
-	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine, chatStorage, *cfg.Proxy.StoreChatContext.Bool, *cfg.Proxy.ForwardChatContext.Bool, *authCfg, appLog)
-	walletController := walletapi.NewWalletController(wallet, *authCfg)
-	systemController := system.NewSystemController(&cfg, wallet, rpcClientStore, sysConfig, appStartTime, chainID, appLog, ethConnectionValidator, *authCfg)
-	authController := authapi.NewAuthController(authCfg, appLog)
+	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine, chatStorage, *cfg.Proxy.StoreChatContext.Bool, *cfg.Proxy.ForwardChatContext.Bool, appLog)
+	walletController := walletapi.NewWalletController(wallet)
+	systemController := system.NewSystemController(&cfg, wallet, rpcClientStore, sysConfig, appStartTime, chainID, appLog, ethConnectionValidator)
 
-	apiBus := apibus.NewApiBus(blockchainController, proxyController, walletController, systemController, authController)
-	httpHandler := httphandlers.CreateHTTPServer(appLog, *authCfg, apiBus)
+	apiBus := apibus.NewApiBus(blockchainController, proxyController, walletController, systemController)
+	httpHandler := httphandlers.CreateHTTPServer(appLog, apiBus)
 	httpServer := transport.NewServer(cfg.Web.Address, httpHandler, appLog.Named("HTTP"))
 
 	// http server should shut down latest to keep pprof running
