@@ -420,14 +420,10 @@ const Chat = (props) => {
             messages: [incommingMessage]
         };
 
-        const authHeaders = await props.client.getAuthHeaders();
         // If image take only last message
         const response = await fetch(`${props.config.chain.localProxyRouterUrl}/v1/chat/completions`, {
             method: 'POST',
-            headers: {
-                ...headers,
-                ...authHeaders,
-            },
+            headers,
             body: JSON.stringify(payload)
         }).catch((e) => {
             console.log("Failed to send request", e)

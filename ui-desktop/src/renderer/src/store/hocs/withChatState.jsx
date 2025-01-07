@@ -22,11 +22,8 @@ const withChatState = WrappedComponent => {
 
     getProviders = async () => {
       try {
-        const authHeaders = await this.props.client.getAuthHeaders();
         const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/providers`
-        const response = await fetch(path, {
-          headers: authHeaders
-        });
+        const response = await fetch(path);
         const data = await response.json();
         if (data.error) {
           console.error(data.error);
@@ -43,11 +40,9 @@ const withChatState = WrappedComponent => {
     closeSession = async (sessionId) => {
       this.context.toast('info', 'Closing...');
       try {
-        const authHeaders = await this.props.client.getAuthHeaders();
         const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions/${sessionId}/close`;
         const response = await fetch(path, {
-          method: "POST",
-          headers: authHeaders
+          method: "POST"
         });
         const data = await response.json();
         if (data.error) {
@@ -67,12 +62,8 @@ const withChatState = WrappedComponent => {
 
     getAllModels = async () => {
       try {
-        const authHeaders = await this.props.client.getAuthHeaders();
         const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/models`;
-        const response = await fetch(path, {
-          headers: authHeaders,
-          method: 'GET'
-        });
+        const response = await fetch(path);
         const data = await response.json();
         if (data.error) {
           console.error(data.error);
@@ -88,11 +79,8 @@ const withChatState = WrappedComponent => {
 
     getLocalModels = async () => {
       try {
-        const authHeaders = await this.props.client.getAuthHeaders();
         const path = `${this.props.config.chain.localProxyRouterUrl}/v1/models`;
-        const response = await fetch(path, {
-          headers: authHeaders
-        });
+        const response = await fetch(path);
         if (!response.ok) {
           return [];
         }
@@ -168,8 +156,7 @@ const withChatState = WrappedComponent => {
         return;
       }
 
-      const authHeaders = await this.props.client.getAuthHeaders();
-      return await getSessionsByUser(this.props.config.chain.localProxyRouterUrl, user, authHeaders);
+      return await getSessionsByUser(this.props.config.chain.localProxyRouterUrl, user);
     }
 
     getBidInfo = async (id) => {
@@ -177,8 +164,7 @@ const withChatState = WrappedComponent => {
         return;
       }
 
-      const authHeaders = await this.props.client.getAuthHeaders();
-      return await getBidInfoById(this.props.config.chain.localProxyRouterUrl, id, authHeaders)
+      return await getBidInfoById(this.props.config.chain.localProxyRouterUrl, id)
     }
 
     getBidsByModelId = async(modelId) => {
@@ -186,8 +172,7 @@ const withChatState = WrappedComponent => {
         return;
       }
 
-      const authHeaders = await this.props.client.getAuthHeaders();
-      const bids = await getBidsByModelId(this.props.config.chain.localProxyRouterUrl, modelId, authHeaders);
+      const bids = await getBidsByModelId(this.props.config.chain.localProxyRouterUrl, modelId);
       return bids.filter(b => +b.DeletedAt === 0).filter(b => b.Provider != this.props.address);
     }
 
@@ -196,7 +181,6 @@ const withChatState = WrappedComponent => {
       try {
         const failoverSettings = await this.props.client.getFailoverSetting();
         
-        const authHeaders = await this.props.client.getAuthHeaders();
         const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/models/${modelId}/session`;
         const body = {
           failover: failoverSettings?.isEnabled || false,
@@ -204,8 +188,7 @@ const withChatState = WrappedComponent => {
         };
         const response = await fetch(path, {
           method: "POST",
-          body: JSON.stringify(body),
-          headers: authHeaders
+          body: JSON.stringify(body)
         });
         const dataResponse = await response.json();
         if (!response.ok) {

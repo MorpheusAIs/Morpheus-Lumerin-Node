@@ -12,7 +12,6 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
 	"github.com/sashabaranov/go-openai"
@@ -30,10 +29,9 @@ type ProxyController struct {
 	storeChatContext   bool
 	forwardChatContext bool
 	log                lib.ILogger
-	authConfig         system.HTTPAuthConfig
 }
 
-func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStorage genericchatstorage.ChatStorageInterface, storeChatContext, forwardChatContext bool, authConfig system.HTTPAuthConfig, log lib.ILogger) *ProxyController {
+func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStorage genericchatstorage.ChatStorageInterface, storeChatContext, forwardChatContext bool, log lib.ILogger) *ProxyController {
 	c := &ProxyController{
 		service:            service,
 		aiEngine:           aiEngine,
@@ -41,7 +39,6 @@ func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStor
 		storeChatContext:   storeChatContext,
 		forwardChatContext: forwardChatContext,
 		log:                log,
-		authConfig:         authConfig,
 	}
 
 	return c
