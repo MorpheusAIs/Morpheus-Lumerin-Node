@@ -29,7 +29,6 @@ const listeners = {
   'get-rates': handlers.getMorRate,
   "get-todays-budget": handlers.getTodaysBudget,
   "get-supply": handlers.getTokenSupply,
-  "get-auth-headers": handlers.getAuthHeaders,
   // Chat history
   "get-chat-history-titles": handlers.getChatHistoryTitles,
   "get-chat-history": handlers.getChatHistory,

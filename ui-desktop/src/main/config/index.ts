@@ -9,7 +9,6 @@ const config = {
     displayName: process.env.DISPLAY_NAME,
     explorerUrl: process.env.EXPLORER_URL,
     localProxyRouterUrl: `http://localhost:${process.env.PROXY_WEB_DEFAULT_PORT || 8082}`,
-    proxyRouterCookieFilePath: process.env.COOKIE_FILE_PATH,
     mainTokenAddress: process.env.TOKEN_ADDRESS,
     symbol: process.env.SYMBOL_COIN || 'MOR',
     symbolEth: process.env.SYMBOL_ETH || 'ETH'
@@ -22,6 +21,5 @@ const config = {
   trackingId: process.env.TRACKING_ID,
   isFailoverEnabled: process.env.FAILOVER_ENABLED ? process.env.FAILOVER_ENABLED === 'true' : true
 }
-console.log("🚀 ~ config:", config)
 
 export default config

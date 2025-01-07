@@ -68,8 +68,7 @@ const withDashboardState = WrappedComponent => {
         return;
       }
 
-      const authHeaders = await this.props.client.getAuthHeaders();
-      const sessions = await getSessionsByUser(this.props.config.chain.localProxyRouterUrl, user, authHeaders);
+      const sessions = await getSessionsByUser(this.props.config.chain.localProxyRouterUrl, user);
       
       try {
         const openSessions = sessions.filter(s => !isClosed(s));

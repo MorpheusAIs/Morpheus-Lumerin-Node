@@ -12,7 +12,6 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
 	"github.com/sashabaranov/go-openai"
@@ -30,10 +29,9 @@ type ProxyController struct {
 	storeChatContext   bool
 	forwardChatContext bool
 	log                lib.ILogger
-	authConfig         system.HTTPAuthConfig
 }
 
-func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStorage genericchatstorage.ChatStorageInterface, storeChatContext, forwardChatContext bool, authConfig system.HTTPAuthConfig, log lib.ILogger) *ProxyController {
+func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStorage genericchatstorage.ChatStorageInterface, storeChatContext, forwardChatContext bool, log lib.ILogger) *ProxyController {
 	c := &ProxyController{
 		service:            service,
 		aiEngine:           aiEngine,
@@ -41,7 +39,6 @@ func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStor
 		storeChatContext:   storeChatContext,
 		forwardChatContext: forwardChatContext,
 		log:                log,
-		authConfig:         authConfig,
 	}
 
 	return c
@@ -49,13 +46,13 @@ func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStor
 
 func (s *ProxyController) RegisterRoutes(r interfaces.Router) {
 	r.POST("/proxy/provider/ping", s.Ping)
-	r.POST("/proxy/sessions/initiate", s.authConfig.CheckAuth("iniate_session"), s.InitiateSession)
-	r.POST("/v1/chat/completions", s.authConfig.CheckAuth("chat"), s.Prompt)
-	r.GET("/v1/models", s.authConfig.CheckAuth("get_local_models"), s.Models)
-	r.GET("/v1/chats", s.authConfig.CheckAuth("get_chat_history"), s.GetChats)
-	r.GET("/v1/chats/:id", s.authConfig.CheckAuth("get_chat_history"), s.GetChat)
-	r.DELETE("/v1/chats/:id", s.authConfig.CheckAuth("edit_chat_history"), s.DeleteChat)
-	r.POST("/v1/chats/:id", s.authConfig.CheckAuth("edit_chat_history"), s.UpdateChatTitle)
+	r.POST("/proxy/sessions/initiate", s.InitiateSession)
+	r.POST("/v1/chat/completions", s.Prompt)
+	r.GET("/v1/models", s.Models)
+	r.GET("/v1/chats", s.GetChats)
+	r.GET("/v1/chats/:id", s.GetChat)
+	r.DELETE("/v1/chats/:id", s.DeleteChat)
+	r.POST("/v1/chats/:id", s.UpdateChatTitle)
 }
 
 // Ping godoc

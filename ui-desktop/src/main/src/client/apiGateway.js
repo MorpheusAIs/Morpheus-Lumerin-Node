@@ -1,19 +1,9 @@
 import config from '../../config'
-import fs from 'fs'
-
-const cookieFile = fs.readFileSync(config.chain.proxyRouterCookieFilePath, 'utf8').trim();
-const [username, password] = cookieFile.split(':');
-const auth = {
-    Authorization: `Basic ${Buffer.from(`${username}:${password}`, 'utf-8').toString('base64')}`
-}
 
 const getAllModels = async () => {
     try {
         const path = `${config.chain.localProxyRouterUrl}/blockchain/models`
-        const response = await fetch(path, {
-            headers: auth,
-            method: "GET"
-        });
+        const response = await fetch(path);
         const data = await response.json();
         return data.models;
     }
@@ -26,9 +16,7 @@ const getAllModels = async () => {
 const getBalances = async () => {
     try {
         const path = `${config.chain.localProxyRouterUrl}/blockchain/balance`
-        const response = await fetch(path, {
-            headers: auth
-        });
+        const response = await fetch(path);
         const data = await response.json();
         return data;
     }
@@ -45,8 +33,7 @@ const sendEth = async (to, amount) => {
             method: "POST",
             body: JSON.stringify({
                 to, amount
-            }),
-            headers: auth
+            })
         });
         const data = await response.json();
         return data.txHash;
@@ -64,8 +51,7 @@ const sendMor = async (to, amount) => {
             method: "POST",
             body: JSON.stringify({
                 to, amount
-            }),
-            headers: auth
+            })
         });
         const data = await response.json();
         return data.txHash;
@@ -79,9 +65,7 @@ const sendMor = async (to, amount) => {
 const getTransactions = async (payload) => {
     try {
         const path = `${config.chain.localProxyRouterUrl}/blockchain/transactions?page=${payload.page}&limit=${payload.pageSize}`
-        const response = await fetch(path, {
-            headers: auth
-        });
+        const response = await fetch(path);
         const data = await response.json();
         return data.transactions;
     }
@@ -107,9 +91,7 @@ const getMorRate = async (tokenAddress = "0x092baadb7def4c3981454dd9c0a0d7ff07bc
 const getTodaysBudget = async () => {
     try {
         const path = `${config.chain.localProxyRouterUrl}/blockchain/sessions/budget`;
-        const response = await fetch(path, {
-            headers: auth
-        });
+        const response = await fetch(path);
         const body = await response.json();
         return body.budget;
     }
@@ -122,9 +104,7 @@ const getTodaysBudget = async () => {
 const getTokenSupply = async () => {
     try {
         const path = `${config.chain.localProxyRouterUrl}/blockchain/token/supply`;
-        const response = await fetch(path, {
-            headers: auth
-        });
+        const response = await fetch(path);
         const body = await response.json();
         return body.supply;
     }
@@ -144,9 +124,7 @@ const getTokenSupply = async () => {
 const getChatHistoryTitles = async () => {
     try {
         const path = `${config.chain.localProxyRouterUrl}/v1/chats`;
-        const response = await fetch(path, {
-            headers: auth
-        });
+        const response = await fetch(path);
         const body = await response.json();
         return body;
     }
@@ -188,9 +166,7 @@ const getChatHistoryTitles = async () => {
 const getChatHistory = async (chatId) => {
    try {
        const path = `${config.chain.localProxyRouterUrl}/v1/chats/${chatId}`;
-       const response = await fetch(path, {
-              headers: auth
-       });
+       const response = await fetch(path);
        const body = await response.json();
        return body;
    }
@@ -209,7 +185,6 @@ const deleteChatHistory = async (chatId) => {
         const path = `${config.chain.localProxyRouterUrl}/v1/chats/${chatId}`;
         const response = await fetch(path, {
             method: "DELETE",
-            headers: auth
         });
         const body = await response.json();
         return body.result;
@@ -231,7 +206,6 @@ const updateChatHistoryTitle = async ({ id, title}) => {
         const response = await fetch(path, {
             method: "POST",
             body: JSON.stringify({ title }),
-            headers: auth
         });
         const body = await response.json();
         return body.result;
@@ -256,7 +230,6 @@ const checkProviderConnectivity = async ({ address, endpoint}) => {
                 providerAddr: address,
                 providerUrl: endpoint
              }),
-            headers: auth
         });
 
         if(!response.ok) {
@@ -272,8 +245,6 @@ const checkProviderConnectivity = async ({ address, endpoint}) => {
     }
  }
 
-const getAuthHeaders = async () => auth;
-
 export default {
     getAllModels,
     getBalances,
@@ -287,6 +258,5 @@ export default {
     getChatHistory,
     updateChatHistoryTitle,
     deleteChatHistory,
-    checkProviderConnectivity,
-    getAuthHeaders
+    checkProviderConnectivity
 }

@@ -16,69 +16,6 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/auth/users": {
-            "post": {
-                "security": [
-                    {
-                        "BasicAuth": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "auth"
-                ],
-                "summary": "Add/Update User in Proxy Conf",
-                "parameters": [
-                    {
-                        "description": "Add User Request",
-                        "name": "addUserReq",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/authapi.AddUserReq"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/authapi.AuthRes"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "auth"
-                ],
-                "summary": "Add User to Proxy API",
-                "parameters": [
-                    {
-                        "description": "Remove User Request",
-                        "name": "removeUserReq",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/authapi.RemoveUserReq"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/authapi.AuthRes"
-                        }
-                    }
-                }
-            }
-        },
         "/blockchain/allowance": {
             "get": {
                 "description": "Get MOR allowance for spender",
@@ -1695,39 +1632,6 @@ const docTemplate = `{
                 }
             }
         },
-        "authapi.AddUserReq": {
-            "type": "object",
-            "properties": {
-                "password": {
-                    "type": "string"
-                },
-                "perms": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "username": {
-                    "type": "string"
-                }
-            }
-        },
-        "authapi.AuthRes": {
-            "type": "object",
-            "properties": {
-                "result": {
-                    "type": "boolean"
-                }
-            }
-        },
-        "authapi.RemoveUserReq": {
-            "type": "object",
-            "properties": {
-                "username": {
-                    "type": "string"
-                }
-            }
-        },
         "genericchatstorage.Chat": {
             "type": "object",
             "properties": {
@@ -2590,11 +2494,6 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
-        }
-    },
-    "securityDefinitions": {
-        "BasicAuth": {
-            "type": "basic"
         }
     },
     "externalDocs": {

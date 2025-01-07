@@ -391,8 +391,6 @@ jobs:
           cd ../cli
           make build
           cd ../ui-desktop
-          mv .env .env.tmp
-          sed 's|\./.cookie|.\\.cookie|g' .env.tmp > .env
           echo "Injecting version ${VFULL} into package.json"
           sed -i "s/\"version\": \".*\"/\"version\": \"${VFULL}\"/" package.json
           cat package.json | grep '"version"'  # Optional: Verify the change
