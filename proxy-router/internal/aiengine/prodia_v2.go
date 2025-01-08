@@ -66,7 +66,6 @@ func (s *ProdiaV2) Prompt(ctx context.Context, prompt *openai.ChatCompletionRequ
 		s.log.Error(err)
 	}
 
-	req.Header.Add(c.HEADER_ACCEPT, c.CONTENT_TYPE_VIDEO_MP4)
 	req.Header.Add(c.HEADER_CONTENT_TYPE, c.CONTENT_TYPE_JSON)
 	req.Header.Add(c.HEADER_AUTHORIZATION, fmt.Sprintf("Bearer %s", s.apiKey))
 
@@ -84,6 +83,7 @@ func (s *ProdiaV2) Prompt(ctx context.Context, prompt *openai.ChatCompletionRequ
 		return lib.WrapError(ErrBadResponse, fmt.Errorf("status code: %d", res.StatusCode))
 	}
 
+	contentType := res.Header.Get(c.HEADER_CONTENT_TYPE)
 	response, err := io.ReadAll(res.Body)
 	if err != nil {
 		err = lib.WrapError(ErrVideoGenerationRequest, err)
@@ -93,10 +93,17 @@ func (s *ProdiaV2) Prompt(ctx context.Context, prompt *openai.ChatCompletionRequ
 
 	sEnc := b64.StdEncoding.EncodeToString(response)
 
-	dataPrefix := "data:video/mp4;base64,"
-	chunk := gcs.NewChunkVideo(&gcs.VideoGenerationResult{
-		VideoRawContent: dataPrefix + sEnc,
-	})
+	dataPrefix := fmt.Sprintf("data:%s;base64,", contentType)
+	var chunk gcs.Chunk
+	if contentType == "video/mp4" {
+		chunk = gcs.NewChunkVideo(&gcs.VideoGenerationResult{
+			VideoRawContent: dataPrefix + sEnc,
+		})
+	} else {
+		chunk = gcs.NewChunkImageRawContent(&gcs.ImageRawContentResult{
+			ImageRawContent: dataPrefix + sEnc,
+		})
+	}
 
 	return cb(ctx, chunk)
 }
