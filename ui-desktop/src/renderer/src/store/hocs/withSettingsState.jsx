@@ -21,8 +21,11 @@ const withSettingsState = WrappedComponent => {
 
     getConfig = async () => {
       try {
+        const authHeaders = await this.props.client.getAuthHeaders();
         const path = `${this.props.config.chain.localProxyRouterUrl}/config`;
-        const response = await fetch(path);
+        const response = await fetch(path, {
+          headers: authHeaders
+        });
         const data = await response.json();
         return data;
       }
@@ -41,9 +44,11 @@ const withSettingsState = WrappedComponent => {
         return;
       }
 
+      const authHeaders = await this.props.client.getAuthHeaders();
       const ethNodeResult = await fetch(`${this.props.config.chain.localProxyRouterUrl}/config/ethNode`, {
         method: 'POST',
-        body: JSON.stringify({ urls: [value] })
+        body: JSON.stringify({ urls: [value] }),
+        headers: authHeaders,
       })
 
       const dataResponse = await ethNodeResult.json();

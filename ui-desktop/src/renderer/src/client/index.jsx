@@ -130,6 +130,7 @@ const createClient = function (createStore) {
     setAutoAdjustPriceData: utils.forwardToMainProcess('set-auto-adjust-price'),
     getContractHashrate: utils.forwardToMainProcess('get-contract-hashrate'),
     // API Gateway
+    getAuthHeaders: utils.forwardToMainProcess('get-auth-headers'),
     getAllModels: utils.forwardToMainProcess('get-all-models'),
 
     getTransactions: utils.forwardToMainProcess('get-transactions'),
