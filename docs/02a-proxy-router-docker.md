@@ -31,6 +31,8 @@
         1. Edit values within the .env as desired
             * Add your private key to`WALLET_PRIVATE_KEY=`
             * Modify the following values to ensure that those files remain "outside of the running container" for persistence and are mounted by the docker-compose.yml file's `volume` directive
+                * `AUTH_CONFIG_FILE_PATH=/app/data/proxy.conf`
+                * `COOKIE_FILE_PATH=/app/data/.cookie`
                 * `MODELS_CONFIG_PATH=/app/data/models-config.json` 
                 * `RATING_CONFIG_PATH=/app/data/rating-config.json`
                 * `PROXY_STORAGE_PATH=/app/data/`

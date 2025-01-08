@@ -49,7 +49,7 @@ func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStor
 
 func (s *ProxyController) RegisterRoutes(r interfaces.Router) {
 	r.POST("/proxy/provider/ping", s.Ping)
-	r.POST("/proxy/sessions/initiate", s.authConfig.CheckAuth("iniate_session"), s.InitiateSession)
+	r.POST("/proxy/sessions/initiate", s.authConfig.CheckAuth("initiate_session"), s.InitiateSession)
 	r.POST("/v1/chat/completions", s.authConfig.CheckAuth("chat"), s.Prompt)
 	r.GET("/v1/models", s.authConfig.CheckAuth("get_local_models"), s.Models)
 	r.GET("/v1/chats", s.authConfig.CheckAuth("get_chat_history"), s.GetChats)

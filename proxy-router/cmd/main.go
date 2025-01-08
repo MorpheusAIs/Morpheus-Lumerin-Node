@@ -204,7 +204,9 @@ func start() error {
 		return lib.WrapError(ErrConnectToEthNode, err)
 	}
 
-	authCfg := system.NewAuthConfig("./proxy.conf", cfg.Proxy.CookieFilePath)
+	appLog.Infof("Auth config file: %s", cfg.Proxy.AuthConfigFilePath)
+	appLog.Infof("Cookie file: %s", cfg.Proxy.CookieFilePath)
+	authCfg := system.NewAuthConfig(cfg.Proxy.AuthConfigFilePath, cfg.Proxy.CookieFilePath)
 
 	if err := authCfg.ReadConfig(); err != nil {
 		return err
