@@ -7,6 +7,7 @@ import wallet from '../wallet'
 import noCore from './no-core'
 import WalletError from '../WalletError'
 import { setProxyRouterConfig, cleanupDb, getProxyRouterConfig } from '../settings'
+import httpClient from '../apiGateway'
 
 export const withAuth =
   (fn) =>
@@ -317,7 +318,13 @@ export const refreshProxyRouterConnection = async (data, { api }) =>
 export const getLocalIp = async ({ }, { api }) => api['proxy-router'].getLocalIp()
 
 export const logout = async (data) => {
-  return cleanupDb()
+  console.log("start cleaning local database and settings...")
+  cleanupDb()
+  console.log("start cleaning wallet...")
+  await httpClient.clearWallet();
+  console.log("start cleaning eth node...")
+  await httpClient.clearEthNodeEnv();
+  return;
 }
 
 export const getPoolAddress = async (data) => {

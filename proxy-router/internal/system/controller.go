@@ -158,7 +158,7 @@ func (s *SystemController) SetEthNode(ctx *gin.Context) {
 	for _, url := range req.URLs {
 		validationErr := s.ethConnectionValidator.ValidateEthResourse(ctx, url, time.Second*2)
 		if validationErr != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Resource %s is not available", url)})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Resource %s is not available. %s", url, validationErr)})
 			return
 		}
 	}
