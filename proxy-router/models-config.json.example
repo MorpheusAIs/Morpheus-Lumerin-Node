@@ -9,9 +9,9 @@
     },
     {
       "modelId": "0x0000000000000000000000000000000000000000000000000000000000000001",
-      "modelName": "v1-5-pruned-emaonly.safetensors [d7049739]",
-      "apiType": "prodia-sd",
-      "apiUrl": "https://api.prodia.com/v1",
+      "modelName": "inference.sdxl.txt2img.v1",
+      "apiType": "prodia-v2",
+      "apiUrl": "https://inference.prodia.com/v2",
       "apiKey": "FILL_ME_IN"
     },
     {
