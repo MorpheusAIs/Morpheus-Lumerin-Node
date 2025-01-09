@@ -195,15 +195,6 @@ func start() error {
 		return nil
 	}
 
-	var ethNodeAddresses []string
-	if cfg.Blockchain.EthNodeAddress != "" {
-		ethNodeAddresses = []string{cfg.Blockchain.EthNodeAddress}
-	}
-	rpcClientStore, err := ethclient.ConfigureRPCClientStore(keychainStorage, ethNodeAddresses, cfg.Blockchain.ChainID, rpcLog.Named("RPC"))
-	if err != nil {
-		return lib.WrapError(ErrConnectToEthNode, err)
-	}
-
 	appLog.Infof("Auth config file: %s", cfg.Proxy.AuthConfigFilePath)
 	appLog.Infof("Cookie file: %s", cfg.Proxy.CookieFilePath)
 	authCfg := system.NewAuthConfig(cfg.Proxy.AuthConfigFilePath, cfg.Proxy.CookieFilePath)
@@ -227,6 +218,15 @@ func start() error {
 	} else {
 		valid := authCfg.ValidatePassword(adminUser, adminPass)
 		appLog.Infof("Admin user: %s, valid: %t", adminUser, valid)
+	}
+
+	var ethNodeAddresses []string
+	if cfg.Blockchain.EthNodeAddress != "" {
+		ethNodeAddresses = []string{cfg.Blockchain.EthNodeAddress}
+	}
+	rpcClientStore, err := ethclient.ConfigureRPCClientStore(keychainStorage, ethNodeAddresses, cfg.Blockchain.ChainID, rpcLog.Named("RPC"))
+	if err != nil {
+		return lib.WrapError(ErrConnectToEthNode, err)
 	}
 
 	ethClient := ethclient.NewClient(rpcClientStore.GetClient())
