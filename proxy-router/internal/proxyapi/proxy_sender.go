@@ -603,15 +603,7 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 					responses = append(responses, videoGenerationResult)
 					chunk = gcs.NewChunkVideo(&videoGenerationResult)
 				} else {
-					var imageGenerationResult gcs.ImageRawContentResult
-					err = json.Unmarshal(aiResponse, &imageGenerationResult)
-					if err == nil && imageGenerationResult.ImageRawContent != "" {
-						totalTokens += 1
-						responses = append(responses, imageGenerationResult)
-						chunk = gcs.NewChunkImageRawContent(&imageGenerationResult)
-					} else {
-						return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
-					}
+					return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
 				}
 			}
 		}
