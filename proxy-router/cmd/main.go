@@ -253,6 +253,15 @@ func start() error {
 		appLog.Infof("Admin user: %s, valid: %t", adminUser, valid)
 	}
 
+	var ethNodeAddresses []string
+	if cfg.Blockchain.EthNodeAddress != "" {
+		ethNodeAddresses = []string{cfg.Blockchain.EthNodeAddress}
+	}
+	rpcClientStore, err := ethclient.ConfigureRPCClientStore(keychainStorage, ethNodeAddresses, cfg.Blockchain.ChainID, rpcLog.Named("RPC"))
+	if err != nil {
+		return lib.WrapError(ErrConnectToEthNode, err)
+	}
+
 	ethClient := ethclient.NewClient(rpcClientStore.GetClient())
 	chainID, err := ethClient.ChainID(ctx)
 	if err != nil {
