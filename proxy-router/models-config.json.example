@@ -20,6 +20,20 @@
       "apiType": "hyperbolic-sd",
       "apiUrl": "https://api.hyperbolic.xyz/v1",
       "apiKey": "Authentication Token"
-    }
+    },
+    {
+      "modelId": "0x0000000000000000000000000000000000000000000000000000000000000003",
+      "modelName": "claude-3-5-sonnet-20241022",
+      "apiType": "claudeai",
+      "apiUrl": "https://api.anthropic.com/v1",
+      "apiKey": "FILL_ME_IN"
+    },
+    {
+      "modelId": "0x0000000000000000000000000000000000000000000000000000000000000004",
+      "modelName": "inference.sd15.txt2img.v1",
+      "apiType": "prodia-v2",
+      "apiUrl": "https://inference.prodia.com/v2",
+      "apiKey": "FILL_ME_IN"  
+    },
   ]
 }
