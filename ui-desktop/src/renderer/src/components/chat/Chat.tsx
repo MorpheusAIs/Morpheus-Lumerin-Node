@@ -471,11 +471,13 @@ const Chat = (props) => {
                 const decodedString = textDecoder.decode(value, { stream: true }).trim();
                 chunksBuffer = chunksBuffer + decodedString;
 
-                if(decodedString[decodedString.length - 1] !== "}") {
+                if (decodedString[decodedString.length - 1] !== "}") {
                     continue;
                 }
                 
                 const parts = parseDataChunk(chunksBuffer);
+                chunksBuffer = "";
+
                 parts.forEach(part => {
                     if (!part) {
                         return;
