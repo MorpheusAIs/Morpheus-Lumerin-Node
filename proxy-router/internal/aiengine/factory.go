@@ -14,6 +14,8 @@ func ApiAdapterFactory(apiType string, modelName string, url string, apikey stri
 		return NewProdiaV2Engine(modelName, url, apikey, log), true
 	case API_TYPE_HYPERBOLIC_SD:
 		return NewHyperbolicSDEngine(modelName, url, apikey, parameters, log), true
+	case API_TYPE_CLAUDEAI:
+		return NewClaudeAIEngine(modelName, url, apikey, log), true
 	}
 	return nil, false
 }
