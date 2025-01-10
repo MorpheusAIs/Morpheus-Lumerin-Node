@@ -21,3 +21,11 @@ type HealthCheckResponse struct {
 	Version string
 	Uptime  string
 }
+
+type StatusRes struct {
+	Status string `json:"status"`
+}
+
+func OkRes() StatusRes {
+	return StatusRes{Status: "ok"}
+}

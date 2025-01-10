@@ -1125,7 +1125,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/system.ConfigResponse"
+                            "$ref": "#/definitions/system.StatusRes"
                         }
                     }
                 }
@@ -1143,7 +1143,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/system.ConfigResponse"
+                            "$ref": "#/definitions/system.StatusRes"
                         }
                     }
                 }
@@ -2484,6 +2484,14 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "system.StatusRes": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string"
                 }
             }
         }

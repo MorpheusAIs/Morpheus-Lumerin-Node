@@ -11,3 +11,5 @@ type AIEngineStream interface {
 	Prompt(ctx context.Context, prompt *openai.ChatCompletionRequest, cb genericchatstorage.CompletionCallback) error
 	ApiType() string
 }
+
+type ModelParameters map[string]string

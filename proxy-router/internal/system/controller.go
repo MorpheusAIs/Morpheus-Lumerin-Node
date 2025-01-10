@@ -12,6 +12,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/ethclient"
 	"github.com/gin-gonic/gin"
 )
 
@@ -47,6 +48,7 @@ func (s *SystemController) RegisterRoutes(r i.Router) {
 	r.GET("/files", s.GetFiles)
 
 	r.POST("/config/ethNode", s.SetEthNode)
+	r.DELETE("/config/ethNode", s.RemoveEthNode)
 }
 
 // HealthCheck godoc
@@ -142,7 +144,7 @@ func (s *SystemController) GetFiles(ctx *gin.Context) {
 //	@Accept			json
 //	@Produce		json
 //	@Param			urls	body		SetEthNodeURLReq	true	"URLs"
-//	@Success		200		{object}	ConfigResponse
+//	@Success		200		{object}	StatusRes
 //	@Router			/config/ethNode [post]
 func (s *SystemController) SetEthNode(ctx *gin.Context) {
 	var req SetEthNodeURLReq
@@ -154,7 +156,7 @@ func (s *SystemController) SetEthNode(ctx *gin.Context) {
 	for _, url := range req.URLs {
 		validationErr := s.ethConnectionValidator.ValidateEthResourse(ctx, url, time.Second*2)
 		if validationErr != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Resource %s is not available", url)})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Resource %s is not available. %s", url, validationErr)})
 			return
 		}
 	}
@@ -165,7 +167,7 @@ func (s *SystemController) SetEthNode(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
+	ctx.JSON(http.StatusOK, OkRes())
 }
 
 // DeleteEthNode godoc
@@ -174,7 +176,7 @@ func (s *SystemController) SetEthNode(ctx *gin.Context) {
 //	@Description	Delete the Eth Node URLs
 //	@Tags			system
 //	@Produce		json
-//	@Success		200	{object}	ConfigResponse
+//	@Success		200	{object}	StatusRes
 //	@Router			/config/ethNode [delete]
 func (c *SystemController) RemoveEthNode(ctx *gin.Context) {
 	err := c.ethRPC.RemoveURLs()
@@ -183,7 +185,19 @@ func (c *SystemController) RemoveEthNode(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
+	urls, err := ethclient.GetPublicRPCURLs(int(c.chainID.Int64()))
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	err = c.ethRPC.SetURLsNoPersist(urls)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, OkRes())
 }
 
 func writeFiles(writer io.Writer, files []FD) error {

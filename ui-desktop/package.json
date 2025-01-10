@@ -58,7 +58,7 @@
     "react-modern-drawer": "^1.2.2",
     "react-motion": "^0.5.2",
     "react-redux": "^9.1.0",
-    "react-router-dom": "4.3.1",
+    "react-router-dom": "^7.0.2",
     "react-select": "^5.8.0",
     "react-simple-image-viewer": "^1.2.2",
     "react-syntax-highlighter": "^15.5.0",

@@ -1,4 +1,4 @@
-import { withRouter } from 'react-router-dom';
+
 import withProvidersState from "../../store/hocs/withProvidersState";
 import styled from 'styled-components';
 import Accordion from 'react-bootstrap/Accordion';
@@ -86,4 +86,4 @@ function ProvidersList({ data, claimFunds }) {
     </Container>)
 }
 
-export default withRouter(withProvidersState(ProvidersList));
+export default withProvidersState(ProvidersList);

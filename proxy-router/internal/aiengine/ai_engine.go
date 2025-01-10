@@ -45,7 +45,7 @@ func (a *AiEngine) GetAdapter(ctx context.Context, chatID, modelID, sessionID co
 			return nil, fmt.Errorf("model not found: %s", modelID.Hex())
 		}
 		var ok bool
-		engine, ok = ApiAdapterFactory(modelConfig.ApiType, modelConfig.ModelName, modelConfig.ApiURL, modelConfig.ApiKey, a.log)
+		engine, ok = ApiAdapterFactory(modelConfig.ApiType, modelConfig.ModelName, modelConfig.ApiURL, modelConfig.ApiKey, modelConfig.Parameters, a.log)
 		if !ok {
 			return nil, fmt.Errorf("api adapter not found: %s", modelConfig.ApiType)
 		}
