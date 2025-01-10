@@ -5,26 +5,29 @@ import (
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 	"github.com/gin-gonic/gin"
 )
 
 type WalletController struct {
-	service interfaces.Wallet
+	service    interfaces.Wallet
+	authConfig system.HTTPAuthConfig
 }
 
-func NewWalletController(service interfaces.Wallet) *WalletController {
+func NewWalletController(service interfaces.Wallet, authConfig system.HTTPAuthConfig) *WalletController {
 	c := &WalletController{
-		service: service,
+		service:    service,
+		authConfig: authConfig,
 	}
 
 	return c
 }
 
 func (s *WalletController) RegisterRoutes(r interfaces.Router) {
-	r.GET("/wallet", s.GetWallet)
-	r.POST("/wallet/privateKey", s.SetupWalletPrivateKey)
-	r.POST("/wallet/mnemonic", s.SetupWalletMnemonic)
-	r.DELETE("/wallet", s.DeleteWallet)
+	r.GET("/wallet", s.authConfig.CheckAuth("get_wallet"), s.GetWallet)
+	r.POST("/wallet/privateKey", s.authConfig.CheckAuth("set_wallet"), s.SetupWalletPrivateKey)
+	r.POST("/wallet/mnemonic", s.authConfig.CheckAuth("set_wallet"), s.SetupWalletMnemonic)
+	r.DELETE("/wallet", s.authConfig.CheckAuth("remove_wallet"), s.DeleteWallet)
 }
 
 // GetWallet godoc

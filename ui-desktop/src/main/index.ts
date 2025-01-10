@@ -49,10 +49,12 @@ function createWindow(): void {
 
 errorHandler({ logger: logger.error })
 
+const sleepBeforeStart = 3000;
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
+app.whenReady().then(() => new Promise(r => setTimeout(r, sleepBeforeStart))).then(() => {
   app.setName("morpheus");
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')

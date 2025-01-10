@@ -17,6 +17,27 @@ definitions:
       slots:
         type: integer
     type: object
+  authapi.AddUserReq:
+    properties:
+      password:
+        type: string
+      perms:
+        items:
+          type: string
+        type: array
+      username:
+        type: string
+    type: object
+  authapi.AuthRes:
+    properties:
+      result:
+        type: boolean
+    type: object
+  authapi.RemoveUserReq:
+    properties:
+      username:
+        type: string
+    type: object
   genericchatstorage.Chat:
     properties:
       chatId:
@@ -616,6 +637,45 @@ info:
   termsOfService: http://swagger.io/terms/
   title: Morpheus Lumerin Node API
 paths:
+  /auth/users:
+    delete:
+      parameters:
+      - description: Remove User Request
+        in: body
+        name: removeUserReq
+        required: true
+        schema:
+          $ref: '#/definitions/authapi.RemoveUserReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/authapi.AuthRes'
+      summary: Add User to Proxy API
+      tags:
+      - auth
+    post:
+      parameters:
+      - description: Add User Request
+        in: body
+        name: addUserReq
+        required: true
+        schema:
+          $ref: '#/definitions/authapi.AddUserReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/authapi.AuthRes'
+      security:
+      - BasicAuth: []
+      summary: Add/Update User in Proxy Conf
+      tags:
+      - auth
   /blockchain/allowance:
     get:
       description: Get MOR allowance for spender
@@ -1663,4 +1723,7 @@ paths:
       summary: Setup wallet with private key
       tags:
       - wallet
+securityDefinitions:
+  BasicAuth:
+    type: basic
 swagger: "2.0"

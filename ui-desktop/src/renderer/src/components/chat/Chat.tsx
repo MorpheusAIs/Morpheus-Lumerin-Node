@@ -31,7 +31,7 @@ import './Chat.css'
 import { ChatHistory } from './ChatHistory';
 import Spinner from 'react-bootstrap/Spinner';
 import ModelSelectionModal from './modals/ModelSelectionModal';
-import { parseDataChunk, makeId, getColor, isClosed, generateHashId } from './utils';
+import { tryParseDataChunk, makeId, getColor, isClosed, generateHashId } from './utils';
 import { Cooldown } from './Cooldown';
 import ImageViewer from "react-simple-image-viewer";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
@@ -420,10 +420,14 @@ const Chat = (props) => {
             messages: [incommingMessage]
         };
 
+        const authHeaders = await props.client.getAuthHeaders();
         // If image take only last message
         const response = await fetch(`${props.config.chain.localProxyRouterUrl}/v1/chat/completions`, {
             method: 'POST',
-            headers,
+            headers: {
+                ...headers,
+                ...authHeaders,
+            },
             body: JSON.stringify(payload)
         }).catch((e) => {
             console.log("Failed to send request", e)
@@ -468,15 +472,18 @@ const Chat = (props) => {
                     break;
                 }
 
-                const decodedString = textDecoder.decode(value, { stream: true }).trim();
+                const decodedString = textDecoder.decode(value, { stream: true });
+                
                 chunksBuffer = chunksBuffer + decodedString;
 
-                if (decodedString[decodedString.length - 1] !== "}") {
+                const { data: parts, isChunkIncomplete } = tryParseDataChunk(chunksBuffer);
+
+                if(isChunkIncomplete) {
                     continue;
                 }
-                
-                const parts = parseDataChunk(chunksBuffer);
-                chunksBuffer = "";
+                else {
+                    chunksBuffer = "";
+                }
 
                 parts.forEach(part => {
                     if (!part) {

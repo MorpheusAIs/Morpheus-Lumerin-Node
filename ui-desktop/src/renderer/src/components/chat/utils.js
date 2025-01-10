@@ -38,13 +38,24 @@ export const getColor = (name) => {
     return colors[(getHashCode(name) + 1) % colors.length]
 }
 
-export const parseDataChunk = (decodedChunk) => {
+export const tryParseDataChunk = (decodedChunk) => {
     const lines = decodedChunk.split('\n');
     const trimmedData = lines.map(line => line.replace(/^data: /, ""));
     const filteredData = trimmedData.filter(line => !["", "[DONE]"].includes(line));
-    const parsedData = filteredData.map(line => JSON.parse(line));
 
-    return parsedData;
+    let isChunkIncomplete = false;
+    const parsedData = filteredData.map(line => {
+        try {
+            return JSON.parse(line);
+        }
+        catch (e) {
+            console.warn("Failed to parse line")
+            isChunkIncomplete = true;
+            return null;
+        }
+    });
+
+    return { data: parsedData, isChunkIncomplete };
 }
 
 export const formatSmallNumber = (number) => {

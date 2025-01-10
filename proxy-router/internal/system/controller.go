@@ -25,9 +25,10 @@ type SystemController struct {
 	chainID                *big.Int
 	log                    lib.ILogger
 	ethConnectionValidator IEthConnectionValidator
+	authConfig             HTTPAuthConfig
 }
 
-func NewSystemController(config *config.Config, wallet i.Wallet, ethRPC i.RPCEndpoints, sysConfig *SystemConfigurator, appStartTime time.Time, chainID *big.Int, log lib.ILogger, ethConnectionValidator IEthConnectionValidator) *SystemController {
+func NewSystemController(config *config.Config, wallet i.Wallet, ethRPC i.RPCEndpoints, sysConfig *SystemConfigurator, appStartTime time.Time, chainID *big.Int, log lib.ILogger, ethConnectionValidator IEthConnectionValidator, authConfig HTTPAuthConfig) *SystemController {
 	c := &SystemController{
 		config:                 config,
 		wallet:                 wallet,
@@ -37,6 +38,7 @@ func NewSystemController(config *config.Config, wallet i.Wallet, ethRPC i.RPCEnd
 		chainID:                chainID,
 		log:                    log,
 		ethConnectionValidator: ethConnectionValidator,
+		authConfig:             authConfig,
 	}
 
 	return c
@@ -44,11 +46,11 @@ func NewSystemController(config *config.Config, wallet i.Wallet, ethRPC i.RPCEnd
 
 func (s *SystemController) RegisterRoutes(r i.Router) {
 	r.GET("/healthcheck", s.HealthCheck)
-	r.GET("/config", s.GetConfig)
-	r.GET("/files", s.GetFiles)
+	r.GET("/config", s.authConfig.CheckAuth("system_config"), s.GetConfig)
+	r.GET("/files", s.authConfig.CheckAuth("system_config"), s.GetFiles)
 
-	r.POST("/config/ethNode", s.SetEthNode)
-	r.DELETE("/config/ethNode", s.RemoveEthNode)
+	r.POST("/config/ethNode", s.authConfig.CheckAuth("system_config"), s.SetEthNode)
+	r.DELETE("/config/ethNode", s.authConfig.CheckAuth("system_config"), s.RemoveEthNode)
 }
 
 // HealthCheck godoc
@@ -156,7 +158,7 @@ func (s *SystemController) SetEthNode(ctx *gin.Context) {
 	for _, url := range req.URLs {
 		validationErr := s.ethConnectionValidator.ValidateEthResourse(ctx, url, time.Second*2)
 		if validationErr != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Resource %s is not available", url)})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Resource %s is not available. %s", url, validationErr)})
 			return
 		}
 	}
