@@ -258,10 +258,23 @@ const clearEthNodeEnv = async () => {
     }
 }
 
+const clearEthNodeEnv = async () => {
+    try {
+        const path = `${config.chain.localProxyRouterUrl}/config/ethNode`
+        const response = await fetch(path, { method: "DELETE", headers: auth });
+        const data = await response.json();
+        return data.status;
+    }
+    catch (e) {
+        console.log("CLEAR ETH NODE ERROR", e)
+        return false;
+    }
+}
+
 const clearWallet = async () => {
     try {
         const path = `${config.chain.localProxyRouterUrl}/wallet`
-        const response = await fetch(path, { method: "DELETE" });
+        const response = await fetch(path, { method: "DELETE", headers: auth });
         const data = await response.json();
         return data.status;
     }
@@ -285,6 +298,7 @@ export default {
     updateChatHistoryTitle,
     deleteChatHistory,
     checkProviderConnectivity,
+    getAuthHeaders,
     clearWallet,
     clearEthNodeEnv
 }

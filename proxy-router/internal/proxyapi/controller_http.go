@@ -46,13 +46,13 @@ func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStor
 
 func (s *ProxyController) RegisterRoutes(r interfaces.Router) {
 	r.POST("/proxy/provider/ping", s.Ping)
-	r.POST("/proxy/sessions/initiate", s.InitiateSession)
-	r.POST("/v1/chat/completions", s.Prompt)
-	r.GET("/v1/models", s.Models)
-	r.GET("/v1/chats", s.GetChats)
-	r.GET("/v1/chats/:id", s.GetChat)
-	r.DELETE("/v1/chats/:id", s.DeleteChat)
-	r.POST("/v1/chats/:id", s.UpdateChatTitle)
+	r.POST("/proxy/sessions/initiate", s.authConfig.CheckAuth("initiate_session"), s.InitiateSession)
+	r.POST("/v1/chat/completions", s.authConfig.CheckAuth("chat"), s.Prompt)
+	r.GET("/v1/models", s.authConfig.CheckAuth("get_local_models"), s.Models)
+	r.GET("/v1/chats", s.authConfig.CheckAuth("get_chat_history"), s.GetChats)
+	r.GET("/v1/chats/:id", s.authConfig.CheckAuth("get_chat_history"), s.GetChat)
+	r.DELETE("/v1/chats/:id", s.authConfig.CheckAuth("edit_chat_history"), s.DeleteChat)
+	r.POST("/v1/chats/:id", s.authConfig.CheckAuth("edit_chat_history"), s.UpdateChatTitle)
 }
 
 // Ping godoc

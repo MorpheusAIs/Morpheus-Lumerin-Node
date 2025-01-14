@@ -194,6 +194,31 @@ func start() error {
 		return nil
 	}
 
+	appLog.Infof("Auth config file: %s", cfg.Proxy.AuthConfigFilePath)
+	appLog.Infof("Cookie file: %s", cfg.Proxy.CookieFilePath)
+	authCfg := system.NewAuthConfig(cfg.Proxy.AuthConfigFilePath, cfg.Proxy.CookieFilePath)
+
+	if err := authCfg.ReadConfig(); err != nil {
+		return err
+	}
+
+	// Ensure cookie file with admin credentials exists
+	if err := authCfg.EnsureCookieFileExists(); err != nil {
+		return err
+	}
+
+	if err := authCfg.CheckFilePermissions(); err != nil {
+		appLog.Warnf("Config file permissions: %s", err)
+	}
+
+	adminUser, adminPass, err := authCfg.ReadCookieFile()
+	if err != nil {
+		appLog.Errorf("Failed to read cookie file: %s", err)
+	} else {
+		valid := authCfg.ValidatePassword(adminUser, adminPass)
+		appLog.Infof("Admin user: %s, valid: %t", adminUser, valid)
+	}
+
 	var ethNodeAddresses []string
 	if cfg.Blockchain.EthNodeAddress != "" {
 		ethNodeAddresses = []string{cfg.Blockchain.EthNodeAddress}
