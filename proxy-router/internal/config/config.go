@@ -59,6 +59,7 @@ type Config struct {
 		ModelsConfigPath   string    `env:"MODELS_CONFIG_PATH" flag:"models-config-path" validate:"omitempty"`
 		RatingConfigPath   string    `env:"RATING_CONFIG_PATH" flag:"rating-config-path" validate:"omitempty" desc:"path to the rating config file"`
 		CookieFilePath     string    `env:"COOKIE_FILE_PATH" flag:"cookie-file-path" validate:"omitempty" desc:"path to the cookie file"`
+		AuthConfigFilePath string    `env:"AUTH_CONFIG_FILE_PATH" flag:"auth-config-file-path" validate:"omitempty"`
 	}
 	System struct {
 		Enable           bool   `env:"SYS_ENABLE"              flag:"sys-enable" desc:"enable system level configuration adjustments"`
@@ -171,6 +172,9 @@ func (cfg *Config) SetDefaults() {
 	}
 	if cfg.Proxy.CookieFilePath == "" {
 		cfg.Proxy.CookieFilePath = "./.cookie"
+	}
+	if cfg.Proxy.AuthConfigFilePath == "" {
+		cfg.Proxy.AuthConfigFilePath = "./proxy.conf"
 	}
 }
 
