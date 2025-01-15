@@ -478,7 +478,7 @@ const Chat = (props) => {
 
                 const { data: parts, isChunkIncomplete } = tryParseDataChunk(chunksBuffer);
 
-                if(isChunkIncomplete) {
+                if (isChunkIncomplete) {
                     continue;
                 }
                 else {
