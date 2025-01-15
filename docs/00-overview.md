@@ -24,6 +24,7 @@ Numbers below reference the circled elements in the diagram above.
 
 ## 2. Provider Proxy-Router
 - [02-provider-setup.md](02-provider-setup.md) - for more details
+- [02.1-proxy-router-docker.md](02.1-proxy-router-docker.md) - for more details on running the proxy-router in a docker container
 - The proxy-router is the core "router" that talks to and listens to the blockchain, routes prompts and inference between the providers hosted models via bids and the consumers that purchase and use the model
 - In a real-world scenario, this proxy-router would be a separate, small server or even docker container that is not part of the AI Model Server Instance (it can be, but it's nice to separate the architecture either for anonymity or performance)
 - Installation on the provider side is as simple as setting up the environment variables and running the proxy-router software.  
@@ -33,6 +34,17 @@ Numbers below reference the circled elements in the diagram above.
     - This file should be copied from the `./proxy-router/models-config.example.json` to `./proxy-router/models-config.json` and edited with the appropriate values
     - Please see [proxy-router models-config.json](proxy-router.models-config.json.md) for more information on the key values needed in the models-config.json file
 - The proxy-router needs to be on both the provider and consumer environment and have access to an Arbitrum Ethereum node (default) public ethernet nodes or via web sockets (WSS) for listening to and posting elements on the blockchain
+
+## 2.5 API Authentication 
+- As of main release version 2.0.0 (and starting with dev & test 1.6.1) and greater, API access will require authentication as well as network access to function
+- The reason for this change is twofold: 
+    1. To prevent unauthorized access to the API and the wallet in case of network or firewall mis-configuration 
+    1. To enable interaction with AI Agents - agents access from the local machine should have "goverened" access to the API 
+- For details in setting up the API authentication, please see [02.5 API Auth](02.5-api-auth.md)
+- Key changes and features to note: 
+    * There will be a `.cookie` file created in the proxy-router folder that will contain the username and password for the API access
+    * The proxy-router will require the .cookie file to be present and the username and password to be correct in order to start
+    * There is a `proxy.conf` file that will contain the details of username and permissions for the proxy-router API
 
 ## 3. Provider - setup Provider, Model and Bid on the blockchain
 - [03-provider-offer.md](03-provider-offer.md) - for more details
