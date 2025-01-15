@@ -277,7 +277,7 @@ const getAuthHeaders = async () => auth;
 const clearEthNodeEnv = async () => {
     try {
         const path = `${config.chain.localProxyRouterUrl}/config/ethNode`
-        const response = await fetch(path, { method: "DELETE" });
+        const response = await fetch(path, { method: "DELETE", headers: auth });
         const data = await response.json();
         return data.status;
     }
@@ -290,7 +290,7 @@ const clearEthNodeEnv = async () => {
 const clearWallet = async () => {
     try {
         const path = `${config.chain.localProxyRouterUrl}/wallet`
-        const response = await fetch(path, { method: "DELETE" });
+        const response = await fetch(path, { method: "DELETE", headers: auth });
         const data = await response.json();
         return data.status;
     }
