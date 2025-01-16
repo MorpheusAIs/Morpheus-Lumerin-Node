@@ -1,31 +1,41 @@
-# Stage 1: Build
-FROM golang:1.23-bullseye AS builder
-
-# Capture the Git tag, commit hash, and architecture
-ARG TAG_NAME
-ARG COMMIT
+# Base image selection based on OS
 ARG TARGETOS
 ARG TARGETARCH
+
+# Use Bullseye for Linux builds
+FROM golang:1.23-bullseye AS builder-linux
+
+# Use Windows Server Core for Windows builds
+FROM golang:1.23-windowsservercore AS builder-windows
+
+# Select the correct base image dynamically
+FROM builder-${TARGETOS} AS builder
+
+# Common build arguments
+ARG TAG_NAME
+ARG COMMIT
 ENV TAG_NAME=$TAG_NAME
 ENV COMMIT=$COMMIT
 
 WORKDIR /app
 COPY . .
 
-# Build the Go binary for the target platform
-RUN GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=0 \
-    TAG_NAME=$TAG_NAME COMMIT=$COMMIT ./build.sh && \
-    cp /bin/sh /app/sh && chmod +x /app/sh
+# Build for the target platform
+RUN if [ "$TARGETOS" = "windows" ]; then \
+      go build -o /app/bin/proxy-router.exe ./cmd/main.go; \
+    else \
+      CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+      go build -o /app/bin/proxy-router ./cmd/main.go; \
+    fi
 
-# Stage 2: Final Image
-FROM scratch
+# Runtime image selection
+FROM ${TARGETOS} == "windows" ? mcr.microsoft.com/windows/nanoserver:ltsc2022 : scratch AS runtime
+
 WORKDIR /app
 
-# Copy required files and binary
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=builder /app/bin/proxy-router /usr/bin/
+# Copy the built binary and certificates
+COPY --from=builder /app/bin/* /usr/bin/
+COPY --from=builder-linux /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
-SHELL ["/bin/sh", "-c"]
-EXPOSE 3333 8082
-
+# Set the entrypoint based on OS
 ENTRYPOINT ["proxy-router"]
