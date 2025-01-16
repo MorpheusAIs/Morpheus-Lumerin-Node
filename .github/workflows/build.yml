@@ -14,7 +14,7 @@ on:
       - test
       - concom
       - dev
-      # - feat/ghcr-docker-build
+      - feat/ghcr-docker-build
     paths: ['.github/workflows/**', '**/Makefile', '**/*.go', '**/*.json', '**/*.yml', '**/*.ts', '**/*.js']
 
   pull_request:
