@@ -13,7 +13,6 @@ on:
       - main
       - test
       - dev
-      - feat/ghcr-docker-build
 
     paths: ['.github/workflows/**', '**/Makefile', '**/*.go', '**/*.json', '**/*.yml', '**/*.ts', '**/*.js', 'proxy-router/Dockerfile']
 
@@ -431,7 +430,7 @@ jobs:
       IMAGE_NAME_BASE: ghcr.io/lumerin-protocol/morpheus-lumerin-node
     needs:
       - Ubuntu-22-x64
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/feat/ghcr-docker-build') }}
+    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' ) }}
     runs-on: ubuntu-latest
 
     steps:
