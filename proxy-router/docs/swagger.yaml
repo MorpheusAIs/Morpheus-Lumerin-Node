@@ -598,6 +598,13 @@ definitions:
       version:
         type: string
     type: object
+  system.FD:
+    properties:
+      id:
+        type: string
+      path:
+        type: string
+    type: object
   system.HealthCheckResponse:
     properties:
       status:
@@ -605,6 +612,20 @@ definitions:
       uptime:
         type: string
       version:
+        type: string
+    type: object
+  system.SetEthNodeURLReq:
+    properties:
+      urls:
+        items:
+          type: string
+        type: array
+    required:
+    - urls
+    type: object
+  system.StatusRes:
+    properties:
+      status:
         type: string
     type: object
 externalDocs:
@@ -1440,12 +1461,59 @@ paths:
       - system
   /config/ethNode:
     delete:
-      responses: {}
+      description: Delete the Eth Node URLs
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/system.StatusRes'
+      security:
+      - BasicAuth: []
+      summary: Delete Eth Node URLs
+      tags:
+      - system
     post:
-      responses: {}
+      consumes:
+      - application/json
+      description: Set the Eth Node URLs
+      parameters:
+      - description: URLs
+        in: body
+        name: urls
+        required: true
+        schema:
+          $ref: '#/definitions/system.SetEthNodeURLReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/system.StatusRes'
+      security:
+      - BasicAuth: []
+      summary: Set Eth Node URLs
+      tags:
+      - system
   /files:
     get:
-      responses: {}
+      description: Returns opened files
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/system.FD'
+            type: array
+      security:
+      - BasicAuth: []
+      summary: Get files
+      tags:
+      - system
   /healthcheck:
     get:
       description: do ping

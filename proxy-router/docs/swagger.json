@@ -1316,15 +1316,92 @@
         },
         "/config/ethNode": {
             "post": {
-                "responses": {}
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Set the Eth Node URLs",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Set Eth Node URLs",
+                "parameters": [
+                    {
+                        "description": "URLs",
+                        "name": "urls",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/system.SetEthNodeURLReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/system.StatusRes"
+                        }
+                    }
+                }
             },
             "delete": {
-                "responses": {}
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Delete the Eth Node URLs",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Delete Eth Node URLs",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/system.StatusRes"
+                        }
+                    }
+                }
             }
         },
         "/files": {
             "get": {
-                "responses": {}
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Returns opened files",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Get files",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/system.FD"
+                            }
+                        }
+                    }
+                }
             }
         },
         "/healthcheck": {
@@ -2701,6 +2778,17 @@
                 }
             }
         },
+        "system.FD": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                }
+            }
+        },
         "system.HealthCheckResponse": {
             "type": "object",
             "properties": {
@@ -2711,6 +2799,28 @@
                     "type": "string"
                 },
                 "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "system.SetEthNodeURLReq": {
+            "type": "object",
+            "required": [
+                "urls"
+            ],
+            "properties": {
+                "urls": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "system.StatusRes": {
+            "type": "object",
+            "properties": {
+                "status": {
                     "type": "string"
                 }
             }
