@@ -1,17 +1,16 @@
-# Base image selection based on OS
+# Common build arguments
 ARG TARGETOS
 ARG TARGETARCH
 
-# Use Bullseye for Linux builds
+# Use Bullseye for Linux
 FROM golang:1.23-bullseye AS builder-linux
 
-# Use Windows Server Core for Windows builds
+# Use Windows Server Core for Windows
 FROM golang:1.23-windowsservercore AS builder-windows
 
-# Select the correct base image dynamically
+# Dynamically choose the builder base image
 FROM builder-${TARGETOS} AS builder
 
-# Common build arguments
 ARG TAG_NAME
 ARG COMMIT
 ENV TAG_NAME=$TAG_NAME
@@ -28,14 +27,17 @@ RUN if [ "$TARGETOS" = "windows" ]; then \
       go build -o /app/bin/proxy-router ./cmd/main.go; \
     fi
 
-# Runtime image selection
-FROM ${TARGETOS} == "windows" ? mcr.microsoft.com/windows/nanoserver:ltsc2022 : scratch AS runtime
-
+# Use runtime images for Linux and Windows
+FROM scratch AS runtime-linux
 WORKDIR /app
-
-# Copy the built binary and certificates
-COPY --from=builder /app/bin/* /usr/bin/
+COPY --from=builder /app/bin/proxy-router /usr/bin/
 COPY --from=builder-linux /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-
-# Set the entrypoint based on OS
 ENTRYPOINT ["proxy-router"]
+
+FROM mcr.microsoft.com/windows/nanoserver:ltsc2022 AS runtime-windows
+WORKDIR /app
+COPY --from=builder /app/bin/proxy-router.exe /usr/bin/
+ENTRYPOINT ["proxy-router.exe"]
+
+# Use ARG to select the runtime stage
+FROM runtime-${TARGETOS} AS runtime
