@@ -458,7 +458,7 @@ jobs:
         run: |
           IMAGE_NAME=${{ env.IMAGE_NAME_BASE }}:${{ env.TAG_NAME }}
           docker buildx build \
-            --platform linux/amd64,linux/arm64,windows/amd64 \
+            --platform linux/amd64,linux/arm64 \
             --build-arg TAG_NAME=${{ env.TAG_NAME }} \
             --build-arg COMMIT=${{ github.sha }} \
             --push \
@@ -471,7 +471,7 @@ jobs:
         run: |
           LATEST_IMAGE=${{ env.IMAGE_NAME_BASE }}:latest
           docker buildx build \
-            --platform linux/amd64,linux/arm64,windows/amd64 \
+            --platform linux/amd64,linux/arm64 \
             --build-arg TAG_NAME=${{ env.TAG_NAME }} \
             --build-arg COMMIT=${{ github.sha }} \
             --push \
