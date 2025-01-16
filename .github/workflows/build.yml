@@ -12,9 +12,7 @@ on:
     branches:
       - main
       - test
-      - concom
       - dev
-      - feat/ghcr-docker-build
     paths: ['.github/workflows/**', '**/Makefile', '**/*.go', '**/*.json', '**/*.yml', '**/*.ts', '**/*.js']
 
   pull_request:
@@ -496,7 +494,7 @@ jobs:
     #   - macOS-13-x64
     #   - macOS-14-arm64
     #   - Windows-avx2-x64
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/feat/ghcr-docker-build') }}
+    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev') }}
     runs-on: ubuntu-latest
 
     steps:
