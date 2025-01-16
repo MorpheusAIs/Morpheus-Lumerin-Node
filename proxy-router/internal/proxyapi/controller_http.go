@@ -91,6 +91,8 @@ func (s *ProxyController) Ping(ctx *gin.Context) {
 //	@Produce		json
 //	@Param			initiateSession	body		proxyapi.InitiateSessionReq	true	"Initiate Session"
 //	@Success		200				{object}	morrpcmesssage.SessionRes
+//	@Security		BasicAuth
+//
 //	@Router			/proxy/sessions/initiate [post]
 func (s *ProxyController) InitiateSession(ctx *gin.Context) {
 	var req *InitiateSessionReq
@@ -120,6 +122,8 @@ func (s *ProxyController) InitiateSession(ctx *gin.Context) {
 //	@Param			chat_id		header		string											false	"Chat ID"		format(hex32)
 //	@Param			prompt		body		proxyapi.ChatCompletionRequestSwaggerExample	true	"Prompt"
 //	@Success		200			{object}	string
+//	@Security		BasicAuth
+//
 //	@Router			/v1/chat/completions [post]
 func (c *ProxyController) Prompt(ctx *gin.Context) {
 	var (
@@ -189,6 +193,7 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 //	@Tags		system
 //	@Produce	json
 //	@Success	200	{object}	[]aiengine.LocalModel
+//	@Security	BasicAuth
 //	@Router		/v1/models [get]
 func (c *ProxyController) Models(ctx *gin.Context) {
 	models, err := c.aiEngine.GetLocalModels()
@@ -205,6 +210,7 @@ func (c *ProxyController) Models(ctx *gin.Context) {
 //	@Tags		chat
 //	@Produce	json
 //	@Success	200	{object}	[]genericchatstorage.Chat
+//	@Security	BasicAuth
 //	@Router		/v1/chats [get]
 func (c *ProxyController) GetChats(ctx *gin.Context) {
 	chats := c.chatStorage.GetChats()
@@ -224,6 +230,7 @@ func (c *ProxyController) GetChats(ctx *gin.Context) {
 //	@Produce	json
 //	@Param		id	path		string	true	"Chat ID"
 //	@Success	200	{object}	genericchatstorage.ChatHistory
+//	@Security	BasicAuth
 //	@Router		/v1/chats/{id} [get]
 func (c *ProxyController) GetChat(ctx *gin.Context) {
 	var params structs.PathHex32ID
@@ -248,6 +255,7 @@ func (c *ProxyController) GetChat(ctx *gin.Context) {
 //	@Produce	json
 //	@Param		id	path		string	true	"Chat ID"
 //	@Success	200	{object}	proxyapi.ResultResponse
+//	@Security	BasicAuth
 //	@Router		/v1/chats/{id} [delete]
 func (c *ProxyController) DeleteChat(ctx *gin.Context) {
 	var params structs.PathHex32ID
@@ -273,6 +281,7 @@ func (c *ProxyController) DeleteChat(ctx *gin.Context) {
 //	@Param		id		path		string						true	"Chat ID"
 //	@Param		title	body		proxyapi.UpdateChatTitleReq	true	"Chat Title"
 //	@Success	200		{object}	proxyapi.ResultResponse
+//	@Security	BasicAuth
 //	@Router		/v1/chats/{id} [post]
 func (c *ProxyController) UpdateChatTitle(ctx *gin.Context) {
 	var params structs.PathHex32ID
