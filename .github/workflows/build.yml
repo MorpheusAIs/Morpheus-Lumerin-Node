@@ -489,6 +489,7 @@ jobs:
                 });
               }
             }
+ 
   GHCR-Build-and-Push:
     # needs:
     #   - Ubuntu-22-x64
@@ -499,40 +500,45 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        fetch-tags: true
 
-      - name: Generate Tag Name
-        uses: ./.github/actions/gen_tag_name
+    - name: Generate Tag Name
+      uses: ./.github/actions/gen_tag_name
 
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Push Docker Image
-        run: |
-          # Convert repository owner to lowercase
-          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          IMAGE_NAME=ghcr.io/$REPO_OWNER/proxy-router:${{ env.TAG_NAME }}
+    - name: Build and Push Docker Image
+      run: |
+        # Convert repository owner to lowercase
+        REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+        IMAGE_NAME=ghcr.io/$REPO_OWNER/proxy-router:${{ env.TAG_NAME }}
 
-          docker build \
-            --build-arg TAG_NAME=${{ env.TAG_NAME }} \
-            --build-arg COMMIT=${{ github.sha }} \
-            -t $IMAGE_NAME .
-          
-          # Push image with the specific tag
-          docker push $IMAGE_NAME
+        # Change to the subdirectory where the Dockerfile resides
+        cd proxy-router
 
-          # Optionally push "latest" tag if on main branch
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            LATEST_IMAGE=ghcr.io/${{ github.repository_owner }}/proxy-router:latest
-            docker tag $IMAGE_NAME $LATEST_IMAGE
-            docker push $LATEST_IMAGE
-          fi
+        # Build the Docker image using the specified context and Dockerfile
+        docker build \
+          --build-arg TAG_NAME=${{ env.TAG_NAME }} \
+          --build-arg COMMIT=${{ github.sha }} \
+          -t $IMAGE_NAME \
+          .
+
+        # Push image with the specific tag
+        docker push $IMAGE_NAME
+
+        # Optionally push "latest" tag if on main branch
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          LATEST_IMAGE=ghcr.io/$REPO_OWNER/proxy-router:latest
+          docker tag $IMAGE_NAME $LATEST_IMAGE
+          docker push $LATEST_IMAGE
+        fi
 
