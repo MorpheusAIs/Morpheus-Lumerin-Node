@@ -83,6 +83,7 @@ func (c *BlockchainController) RegisterRoutes(r interfaces.Router) {
 //	@Produce		json
 //	@Param			id	path		string	true	"Session ID"
 //	@Success		200	{object}	structs.BalanceRes
+//	@Security		BasicAuth
 //	@Router			/proxy/sessions/{id}/providerClaimableBalance [get]
 func (c *BlockchainController) getProviderClaimableBalance(ctx *gin.Context) {
 	var params structs.PathHex32ID
@@ -111,6 +112,7 @@ func (c *BlockchainController) getProviderClaimableBalance(ctx *gin.Context) {
 //	@Produce		json
 //	@Param			id	path		string	true	"Session ID"
 //	@Success		200	{object}	structs.TxRes
+//	@Security		BasicAuth
 //	@Router			/proxy/sessions/{id}/providerClaim [post]
 func (c *BlockchainController) claimProviderBalance(ctx *gin.Context) {
 	var params structs.PathHex32ID
@@ -140,6 +142,7 @@ func (c *BlockchainController) claimProviderBalance(ctx *gin.Context) {
 //	@Produce		json
 //	@Param			request	query		structs.QueryOffsetLimitOrderNoDefault	true	"Query Params"
 //	@Success		200		{object}	structs.ProvidersRes
+//	@Security		BasicAuth
 //	@Router			/blockchain/providers [get]
 func (c *BlockchainController) getAllProviders(ctx *gin.Context) {
 	offset, limit, order, err := getOffsetLimitOrderNoDefault(ctx)
@@ -174,6 +177,7 @@ func (c *BlockchainController) getAllProviders(ctx *gin.Context) {
 //	@Summary		Send Eth
 //	@Description	Send Eth to address
 //	@Tags			transactions
+//	@Security		BasicAuth
 //	@Produce		json
 //	@Param			sendeth	body		structs.SendRequest	true	"Send Eth"
 //	@Success		200		{object}	structs.TxRes
@@ -206,6 +210,7 @@ func (c *BlockchainController) sendETH(ctx *gin.Context) {
 //	@Param			sendmor	body		structs.SendRequest	true	"Send Mor"
 //	@Success		200		{object}	structs.TxRes
 //	@Router			/blockchain/send/mor [post]
+//	@Security		BasicAuth
 func (c *BlockchainController) sendMOR(ctx *gin.Context) {
 	to, amount, err := c.getSendParams(ctx)
 	if err != nil {
@@ -233,6 +238,7 @@ func (c *BlockchainController) sendMOR(ctx *gin.Context) {
 //	@Param			id		path		string							true	"Provider ID"
 //	@Param			request	query		structs.QueryOffsetLimitOrder	true	"Query Params"
 //	@Success		200		{object}	structs.BidsRes
+//	@Security		BasicAuth
 //	@Router			/blockchain/providers/{id}/bids [get]
 func (c *BlockchainController) getBidsByProvider(ctx *gin.Context) {
 	var params structs.PathEthAddrID
@@ -270,6 +276,7 @@ func (c *BlockchainController) getBidsByProvider(ctx *gin.Context) {
 //	@Param			id		path		string							true	"Provider ID"
 //	@Param			request	query		structs.QueryOffsetLimitOrder	true	"Query Params"
 //	@Success		200		{object}	structs.BidsRes
+//	@Security		BasicAuth
 //	@Router			/blockchain/providers/{id}/bids/active [get]
 func (c *BlockchainController) getActiveBidsByProvider(ctx *gin.Context) {
 	var params structs.PathEthAddrID
@@ -306,6 +313,7 @@ func (c *BlockchainController) getActiveBidsByProvider(ctx *gin.Context) {
 //	@Produce		json
 //	@Param			request	query		structs.QueryOffsetLimitOrderNoDefault	true	"Query Params"
 //	@Success		200		{object}	structs.ModelsRes
+//	@Security		BasicAuth
 //	@Router			/blockchain/models [get]
 func (c *BlockchainController) getAllModels(ctx *gin.Context) {
 	offset, limit, order, err := getOffsetLimitOrderNoDefault(ctx)
@@ -343,6 +351,7 @@ func (c *BlockchainController) getAllModels(ctx *gin.Context) {
 //	@Param			id		path		string							true	"ModelAgent ID"
 //	@Param			request	query		structs.QueryOffsetLimitOrder	true	"Query Params"
 //	@Success		200		{object}	structs.BidsRes
+//	@Security		BasicAuth
 //	@Router			/blockchain/models/{id}/bids [get]
 func (c *BlockchainController) getBidsByModelAgent(ctx *gin.Context) {
 	var params structs.PathHex32ID
@@ -380,6 +389,7 @@ func (c *BlockchainController) getBidsByModelAgent(ctx *gin.Context) {
 //	@Param			id		path		string							true	"ModelAgent ID"
 //	@Param			request	query		structs.QueryOffsetLimitOrder	true	"Query Params"
 //	@Success		200		{object}	structs.BidsRes
+//	@Security		BasicAuth
 //	@Router			/blockchain/models/{id}/bids [get]
 func (c *BlockchainController) getActiveBidsByModel(ctx *gin.Context) {
 	var params structs.PathHex32ID
@@ -416,6 +426,7 @@ func (c *BlockchainController) getActiveBidsByModel(ctx *gin.Context) {
 //	@Produce		json
 //	@Success		200	{object}	structs.TokenBalanceRes
 //	@Router			/blockchain/balance [get]
+//	@Security		BasicAuth
 func (s *BlockchainController) getBalance(ctx *gin.Context) {
 	ethBalance, morBalance, err := s.service.GetBalance(ctx)
 	if err != nil {
@@ -441,6 +452,7 @@ func (s *BlockchainController) getBalance(ctx *gin.Context) {
 //	@Param			limit	query		string	false	"Limit"
 //	@Success		200		{object}	structs.TransactionsRes
 //	@Router			/blockchain/transactions [get]
+//	@Security		BasicAuth
 func (c *BlockchainController) getTransactions(ctx *gin.Context) {
 	page, limit, err := getPageLimit(ctx)
 	if err != nil {
@@ -468,6 +480,7 @@ func (c *BlockchainController) getTransactions(ctx *gin.Context) {
 //	@Param			spender	query		string	true	"Spender address"
 //	@Success		200		{object}	structs.AllowanceRes
 //	@Router			/blockchain/allowance [get]
+//	@Security		BasicAuth
 func (c *BlockchainController) getAllowance(ctx *gin.Context) {
 	var query structs.QuerySpender
 	err := ctx.ShouldBindQuery(&query)
@@ -498,6 +511,7 @@ func (c *BlockchainController) getAllowance(ctx *gin.Context) {
 //	@Param			amount	query		string	true	"Amount"
 //	@Success		200		{object}	structs.TxRes
 //	@Router			/blockchain/approve [post]
+//	@Security		BasicAuth
 func (c *BlockchainController) approve(ctx *gin.Context) {
 	var query structs.QueryApprove
 	err := ctx.ShouldBindQuery(&query)
@@ -528,6 +542,7 @@ func (c *BlockchainController) approve(ctx *gin.Context) {
 //	@Param			opensession	body		structs.OpenSessionRequest	true	"Open session"
 //	@Success		200			{object}	structs.OpenSessionRes
 //	@Router			/blockchain/sessions [post]
+//	@Security		BasicAuth
 func (c *BlockchainController) openSession(ctx *gin.Context) {
 	var reqPayload structs.OpenSessionRequest
 	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
@@ -558,6 +573,7 @@ func (c *BlockchainController) openSession(ctx *gin.Context) {
 //	@Param			id			path		string									true	"Bid ID"
 //	@Success		200			{object}	structs.OpenSessionRes
 //	@Router			/blockchain/bids/{id}/session [post]
+//	@Security		BasicAuth
 func (s *BlockchainController) openSessionByBid(ctx *gin.Context) {
 	var reqPayload structs.OpenSessionWithDurationRequest
 	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
@@ -593,6 +609,7 @@ func (s *BlockchainController) openSessionByBid(ctx *gin.Context) {
 //	@Param			id			path		string							true	"Model ID"
 //	@Success		200			{object}	structs.OpenSessionRes
 //	@Router			/blockchain/models/{id}/session [post]
+//	@Security		BasicAuth
 func (s *BlockchainController) openSessionByModelId(ctx *gin.Context) {
 	var reqPayload structs.OpenSessionWithFailover
 	if err := ctx.ShouldBindJSON(&reqPayload); err != nil {
@@ -630,6 +647,7 @@ func (s *BlockchainController) openSessionByModelId(ctx *gin.Context) {
 //	@Param			id	path		string	true	"Session ID"
 //	@Success		200	{object}	structs.TxRes
 //	@Router			/blockchain/sessions/{id}/close [post]
+//	@Security		BasicAuth
 func (c *BlockchainController) closeSession(ctx *gin.Context) {
 	var params structs.PathHex32ID
 	err := ctx.ShouldBindUri(&params)
@@ -659,6 +677,7 @@ func (c *BlockchainController) closeSession(ctx *gin.Context) {
 //	@Param			id	path		string	true	"Session ID"
 //	@Success		200	{object}	structs.SessionRes
 //	@Router			/blockchain/sessions/{id} [get]
+//	@Security		BasicAuth
 func (c *BlockchainController) getSession(ctx *gin.Context) {
 	var params structs.PathHex32ID
 	err := ctx.ShouldBindUri(&params)
@@ -689,6 +708,7 @@ func (c *BlockchainController) getSession(ctx *gin.Context) {
 //	@Param			request	query		structs.QueryOffsetLimitOrder	true	"Query Params"
 //	@Success		200		{object}	structs.SessionsRes
 //	@Router			/blockchain/sessions/user [get]
+//	@Security		BasicAuth
 func (c *BlockchainController) getSessionsForUser(ctx *gin.Context) {
 	offset, limit, order, err := getOffsetLimitOrder(ctx)
 	if err != nil {
@@ -726,6 +746,7 @@ func (c *BlockchainController) getSessionsForUser(ctx *gin.Context) {
 //	@Param			request	query		structs.QueryOffsetLimitOrder	true	"Query Params"
 //	@Success		200		{object}	structs.SessionsRes
 //	@Router			/blockchain/sessions/user/ids [get]
+//	@Security		BasicAuth
 func (c *BlockchainController) getSessionsIdsForUser(ctx *gin.Context) {
 	offset, limit, order, err := getOffsetLimitOrder(ctx)
 	if err != nil {
@@ -763,6 +784,7 @@ func (c *BlockchainController) getSessionsIdsForUser(ctx *gin.Context) {
 //	@Param			provider	query		string							true	"Provider address"
 //	@Success		200			{object}	structs.SessionsRes
 //	@Router			/blockchain/sessions/provider [get]
+//	@Security		BasicAuth
 func (c *BlockchainController) getSessionsForProvider(ctx *gin.Context) {
 	offset, limit, order, err := getOffsetLimitOrder(ctx)
 	if err != nil {
@@ -798,6 +820,7 @@ func (c *BlockchainController) getSessionsForProvider(ctx *gin.Context) {
 //	@Produce		json
 //	@Success		200	{object}	structs.BudgetRes
 //	@Router			/blockchain/sessions/budget [get]
+//	@Security		BasicAuth
 func (s *BlockchainController) getBudget(ctx *gin.Context) {
 	budget, err := s.service.GetTodaysBudget(ctx)
 	if err != nil {
@@ -818,6 +841,7 @@ func (s *BlockchainController) getBudget(ctx *gin.Context) {
 //	@Produce		json
 //	@Success		200	{object}	structs.SupplyRes
 //	@Router			/blockchain/token/supply [get]
+//	@Security		BasicAuth
 func (s *BlockchainController) getSupply(ctx *gin.Context) {
 	supply, err := s.service.GetTokenSupply(ctx)
 	if err != nil {
@@ -838,6 +862,7 @@ func (s *BlockchainController) getSupply(ctx *gin.Context) {
 //	@Produce		json
 //	@Success		200	{object}	structs.BlockRes
 //	@Router			/blockchain/latestBlock [get]
+//	@Security		BasicAuth
 func (c *BlockchainController) getLatestBlock(ctx *gin.Context) {
 	block, err := c.service.GetLatestBlock(ctx)
 	if err != nil {
@@ -858,6 +883,7 @@ func (c *BlockchainController) getLatestBlock(ctx *gin.Context) {
 //	@Param			id	path		string	true	"Bid ID"
 //	@Success		200	{object}	structs.BidRes
 //	@Router			/blockchain/bids/{id} [get]
+//	@Security		BasicAuth
 func (c *BlockchainController) getBidByID(ctx *gin.Context) {
 	var params structs.PathHex32ID
 	err := ctx.ShouldBindUri(&params)
@@ -887,6 +913,7 @@ func (c *BlockchainController) getBidByID(ctx *gin.Context) {
 //	@Param			id	path		string	true	"Model ID"
 //	@Success		200	{object}	structs.ScoredBidsRes
 //	@Router			/blockchain/models/{id}/bids/rated [get]
+//	@Security		BasicAuth
 func (c *BlockchainController) getRatedBids(ctx *gin.Context) {
 	var params structs.PathHex32ID
 	err := ctx.ShouldBindUri(&params)
@@ -916,6 +943,7 @@ func (c *BlockchainController) getRatedBids(ctx *gin.Context) {
 //	@Param		provider	body		structs.CreateProviderRequest	true	"Provider"
 //	@Success	200			{object}	structs.ProviderRes
 //	@Router		/blockchain/providers [post]
+//	@Security	BasicAuth
 func (c *BlockchainController) createProvider(ctx *gin.Context) {
 	var provider structs.CreateProviderRequest
 	if err := ctx.ShouldBindJSON(&provider); err != nil {
@@ -943,6 +971,7 @@ func (c *BlockchainController) createProvider(ctx *gin.Context) {
 //	@Param		id	path		string	true	"Provider ID"
 //	@Success	200	{object}	structs.TxRes
 //	@Router		/blockchain/providers/{id} [delete]
+//	@Security	BasicAuth
 func (c *BlockchainController) deregisterProvider(ctx *gin.Context) {
 	txHash, err := c.service.DeregisterProdiver(ctx)
 	if err != nil {
@@ -965,6 +994,7 @@ func (c *BlockchainController) deregisterProvider(ctx *gin.Context) {
 //	@Param			model	body		structs.CreateModelRequest	true	"Model"
 //	@Success		200		{object}	structs.ModelRes
 //	@Router			/blockchain/models [post]
+//	@Security		BasicAuth
 func (c *BlockchainController) createNewModel(ctx *gin.Context) {
 	var model structs.CreateModelRequest
 	if err := ctx.ShouldBindJSON(&model); err != nil {
@@ -1008,6 +1038,7 @@ func (c *BlockchainController) createNewModel(ctx *gin.Context) {
 //	@Param		id	path		string	true	"Model ID"
 //	@Success	200	{object}	structs.TxRes
 //	@Router		/blockchain/models/{id} [delete]
+//	@Security	BasicAuth
 func (c *BlockchainController) deregisterModel(ctx *gin.Context) {
 	var params structs.PathHex32ID
 	err := ctx.ShouldBindUri(&params)
@@ -1037,6 +1068,7 @@ func (c *BlockchainController) deregisterModel(ctx *gin.Context) {
 //	@Param		bid	body		structs.CreateBidRequest	true	"Bid"
 //	@Success	200	{object}	structs.BidRes
 //	@Router		/blockchain/bids [post]
+//	@Security	BasicAuth
 func (c *BlockchainController) createNewBid(ctx *gin.Context) {
 	var bid structs.CreateBidRequest
 	if err := ctx.ShouldBindJSON(&bid); err != nil {
@@ -1065,6 +1097,7 @@ func (c *BlockchainController) createNewBid(ctx *gin.Context) {
 //	@Param		id	path		string	true	"Bid ID"
 //	@Success	200	{object}	structs.TxRes
 //	@Router		/blockchain/bids/{id} [delete]
+//	@Security	BasicAuth
 func (c *BlockchainController) deleteBid(ctx *gin.Context) {
 	var params structs.PathHex32ID
 	err := ctx.ShouldBindUri(&params)

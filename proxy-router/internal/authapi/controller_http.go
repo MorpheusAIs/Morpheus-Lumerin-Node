@@ -30,14 +30,14 @@ func (s *AuthController) RegisterRoutes(r interfaces.Router) {
 
 // AddUser godoc
 //
-//	@Summary	Add/Update User in Proxy Conf
+//	@Summary		Add/Update User in Proxy Conf
 //	@Description	Permission: add_user
-//	@Tags		auth
-//	@Produce	json
-//	@Param		addUserReq	body		authapi.AddUserReq	true	"Add User Request"
-//	@Success	200			{object}	authapi.AuthRes
-//	@Security	BasicAuth
-//	@Router		/auth/users [post]
+//	@Tags			auth
+//	@Produce		json
+//	@Param			addUserReq	body		authapi.AddUserReq	true	"Add User Request"
+//	@Success		200			{object}	authapi.AuthRes
+//	@Security		BasicAuth
+//	@Router			/auth/users [post]
 func (a *AuthController) AddUser(ctx *gin.Context) {
 	var req *AddUserReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -56,13 +56,14 @@ func (a *AuthController) AddUser(ctx *gin.Context) {
 
 // RemoveUser godoc
 //
-//	@Summary	Add User to Proxy API
+//	@Summary		Add User to Proxy API
 //	@Description	Permission: remove_user
-//	@Tags		auth
-//	@Produce	json
-//	@Param		removeUserReq	body		authapi.RemoveUserReq	true	"Remove User Request"
-//	@Success	200				{object}	authapi.AuthRes
-//	@Router		/auth/users [delete]
+//	@Tags			auth
+//	@Produce		json
+//	@Param			removeUserReq	body		authapi.RemoveUserReq	true	"Remove User Request"
+//	@Success		200				{object}	authapi.AuthRes
+//	@Security		BasicAuth
+//	@Router			/auth/users [delete]
 func (a *AuthController) DeleteUser(ctx *gin.Context) {
 	var req *RemoveUserReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {

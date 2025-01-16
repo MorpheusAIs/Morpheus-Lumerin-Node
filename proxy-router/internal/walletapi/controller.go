@@ -37,6 +37,7 @@ func (s *WalletController) RegisterRoutes(r interfaces.Router) {
 //	@Tags			wallet
 //	@Produce		json
 //	@Success		200	{WalletRes}	WalletRes
+//	@Security		BasicAuth
 //	@Router			/wallet [get]
 func (s *WalletController) GetWallet(ctx *gin.Context) {
 	prKey, err := s.service.GetPrivateKey()
@@ -60,6 +61,7 @@ func (s *WalletController) GetWallet(ctx *gin.Context) {
 //	@Produce		json
 //	@Param			privatekey	body		string	true	"Private key"
 //	@Success		200			{WalletRes}	walletRes
+//	@Security		BasicAuth
 //	@Router			/wallet/privateKey [post]
 func (s *WalletController) SetupWalletPrivateKey(ctx *gin.Context) {
 	var req SetupWalletPrKeyReqBody
@@ -98,6 +100,7 @@ func (s *WalletController) SetupWalletPrivateKey(ctx *gin.Context) {
 //	@Param			mnemonic		body		string	false	"Mnemonic"
 //	@Param			derivationPath	body		string	false	"Derivation path"
 //	@Success		200				{WalletRes}	walletRes
+//	@Security		BasicAuth
 //	@Router			/wallet/mnemonic [post]
 func (s *WalletController) SetupWalletMnemonic(ctx *gin.Context) {
 	var req SetupWalletMnemonicReqBody
@@ -134,6 +137,7 @@ func (s *WalletController) SetupWalletMnemonic(ctx *gin.Context) {
 //	@Tags			wallet
 //	@Produce		json
 //	@Success		200	{statusRes}	res
+//	@Security		BasicAuth
 //	@Router			/wallet [delete]
 func (s *WalletController) DeleteWallet(ctx *gin.Context) {
 	err := s.service.DeleteWallet()

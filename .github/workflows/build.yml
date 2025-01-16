@@ -12,13 +12,13 @@ on:
     branches:
       - main
       - test
-      - concom
       - dev
-    paths: ['.github/workflows/**', '**/Makefile', '**/*.go', '**/*.json', '**/*.yml', '**/*.ts', '**/*.js']
+
+    paths: ['.github/workflows/**', '**/Makefile', '**/*.go', '**/*.json', '**/*.yml', '**/*.ts', '**/*.js', 'proxy-router/Dockerfile']
 
   pull_request:
     types: [opened, reopened, synchronize]
-    paths: ['.github/workflows/**', '**/Makefile', '**/*.go', '**/*.json', '**/*.yml', '**/*.ts', '**/*.js']
+    paths: ['.github/workflows/**', '**/Makefile', '**/*.go', '**/*.json', '**/*.yml', '**/*.ts', '**/*.js', 'proxy-router/Dockerfile']
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -29,70 +29,6 @@ defaults:
     shell: bash
     
 jobs:
-  GitLab-Deploy:
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Clone
-        id: checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update && sudo apt-get install -y jq
-
-      - name: Generate Tag Name
-        uses: ./.github/actions/gen_tag_name
-
-      - name: Determine GitLab Target Branch
-        id: set_target_branch
-        run: |
-          if [ "${{ github.ref_name }}" == "dev" ]; then
-            echo "gitlab_branch=dev" >> $GITHUB_ENV
-          elif [ "${{ github.ref_name }}" == "test" ]; then
-            echo "gitlab_branch=stg" >> $GITHUB_ENV
-          elif [ "${{ github.ref_name }}" == "main" ]; then
-            echo "gitlab_branch=main" >> $GITHUB_ENV
-          else
-            echo "This branch is not configured to trigger GitLab pipelines."
-            exit 1
-          fi
-
-      - name: Trigger GitLab Pipeline
-        run: |
-          echo "Triggering GitLab Build and Deploy for branch ${{ github.ref_name }} with tag ${{ env.TAG_NAME }}"
-      
-          # Send request to GitLab
-          response=$(curl --silent \
-            --request POST \
-            --url "${{ secrets.GITLAB_TRIGGER_URL }}" \
-            --form "token=${{ secrets.GITLAB_TRIGGER_TOKEN }}" \
-            --form "ref=${{ env.gitlab_branch }}" \
-            --form "variables[SOURCE_REPO]=${{ github.repository }}" \
-            --form "variables[SOURCE_BRANCH]=${{ github.ref_name }}" \
-            --form "variables[GITHUB_VFULL]=${{ env.VFULL }}" \
-            --form "variables[GITHUB_TAG]=${{ env.TAG_NAME }}")
-      
-          # Parse JSON response using jq
-          gitlab_status=$(echo "$response" | jq -r '.status // "unknown"')
-          gitlab_web_url=$(echo "$response" | jq -r '.web_url // "N/A"')
-      
-          # Log the response
-          echo "GitLab Response: $response"
-      
-          # Validate the status field
-          if [[ "$gitlab_status" =~ ^(created|preparing|success|running|scheduled)$ ]]; then
-            echo "GitLab pipeline triggered successfully! Status: $gitlab_status"
-            echo "Pipeline details: $gitlab_web_url"
-          else
-            echo "GitLab pipeline FAILED. Invalid status: $gitlab_status"
-            echo "Pipeline details: $gitlab_web_url"
-            exit 1
-          fi
-
   Ubuntu-22-x64:
     if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' }}
     runs-on: ubuntu-22.04
@@ -488,4 +424,122 @@ jobs:
                 });
               }
             }
+ 
+  GHCR-Build-and-Push:
+    env:
+      IMAGE_NAME_BASE: ghcr.io/lumerin-protocol/morpheus-lumerin-node
+    needs:
+      - Ubuntu-22-x64
+    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' ) }}
+    runs-on: ubuntu-latest
 
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Generate Tag Name
+        uses: ./.github/actions/gen_tag_name
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push Multi-Platform Docker Image
+        run: |
+          IMAGE_NAME=${{ env.IMAGE_NAME_BASE }}:${{ env.TAG_NAME }}
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --build-arg TAG_NAME=${{ env.TAG_NAME }} \
+            --build-arg COMMIT=${{ github.sha }} \
+            --push \
+            -t $IMAGE_NAME \
+            -f proxy-router/Dockerfile \
+            proxy-router
+
+      - name: Optionally Push Latest Tag
+        if: ${{ github.ref == 'refs/heads/main' }}
+        run: |
+          LATEST_IMAGE=${{ env.IMAGE_NAME_BASE }}:latest
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --build-arg TAG_NAME=${{ env.TAG_NAME }} \
+            --build-arg COMMIT=${{ github.sha }} \
+            --push \
+            -t $LATEST_IMAGE \
+            -f proxy-router/Dockerfile \
+            proxy-router
+
+  GitLab-Deploy:
+    needs:
+      - Ubuntu-22-x64
+    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone
+        id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Generate Tag Name
+        uses: ./.github/actions/gen_tag_name
+
+      - name: Determine GitLab Target Branch
+        id: set_target_branch
+        run: |
+          if [ "${{ github.ref_name }}" == "dev" ]; then
+            echo "gitlab_branch=dev" >> $GITHUB_ENV
+          elif [ "${{ github.ref_name }}" == "test" ]; then
+            echo "gitlab_branch=stg" >> $GITHUB_ENV
+          elif [ "${{ github.ref_name }}" == "main" ]; then
+            echo "gitlab_branch=main" >> $GITHUB_ENV
+          else
+            echo "This branch is not configured to trigger GitLab pipelines."
+            exit 1
+          fi
+
+      - name: Trigger GitLab Pipeline
+        run: |
+          echo "Triggering GitLab Build and Deploy for branch ${{ github.ref_name }} with tag ${{ env.TAG_NAME }}"
+      
+          # Send request to GitLab
+          response=$(curl --silent \
+            --request POST \
+            --url "${{ secrets.GITLAB_TRIGGER_URL }}" \
+            --form "token=${{ secrets.GITLAB_TRIGGER_TOKEN }}" \
+            --form "ref=${{ env.gitlab_branch }}" \
+            --form "variables[SOURCE_REPO]=${{ github.repository }}" \
+            --form "variables[SOURCE_BRANCH]=${{ github.ref_name }}" \
+            --form "variables[GITHUB_VFULL]=${{ env.VFULL }}" \
+            --form "variables[GITHUB_TAG]=${{ env.TAG_NAME }}")
+      
+          # Parse JSON response using jq
+          gitlab_status=$(echo "$response" | jq -r '.status // "unknown"')
+          gitlab_web_url=$(echo "$response" | jq -r '.web_url // "N/A"')
+      
+          # Log the response
+          echo "GitLab Response: $response"
+      
+          # Validate the status field
+          if [[ "$gitlab_status" =~ ^(created|preparing|success|running|scheduled)$ ]]; then
+            echo "GitLab pipeline triggered successfully! Status: $gitlab_status"
+            echo "Pipeline details: $gitlab_web_url"
+          else
+            echo "GitLab pipeline FAILED. Invalid status: $gitlab_status"
+            echo "Pipeline details: $gitlab_web_url"
+            exit 1
+          fi
