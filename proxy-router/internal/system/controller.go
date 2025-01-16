@@ -76,6 +76,8 @@ func (s *SystemController) HealthCheck(ctx *gin.Context) {
 //	@Tags			system
 //	@Produce		json
 //	@Success		200	{object}	ConfigResponse
+//	@Security		BasicAuth
+//
 //	@Router			/config [get]
 func (s *SystemController) GetConfig(ctx *gin.Context) {
 	prkey, err := s.wallet.GetPrivateKey()
@@ -107,7 +109,9 @@ func (s *SystemController) GetConfig(ctx *gin.Context) {
 //	@Tags			system
 //	@Produce		json
 //	@Success		200	{object}	[]FD
-//	@Router			/files [get]
+//	@Security		BasicAuth
+
+//	@Router	/files [get]
 func (s *SystemController) GetFiles(ctx *gin.Context) {
 	files, err := s.sysConfig.GetFileDescriptors(ctx, os.Getpid())
 	if err != nil {
@@ -147,7 +151,9 @@ func (s *SystemController) GetFiles(ctx *gin.Context) {
 //	@Produce		json
 //	@Param			urls	body		SetEthNodeURLReq	true	"URLs"
 //	@Success		200		{object}	StatusRes
-//	@Router			/config/ethNode [post]
+//	@Security		BasicAuth
+
+//	@Router	/config/ethNode [post]
 func (s *SystemController) SetEthNode(ctx *gin.Context) {
 	var req SetEthNodeURLReq
 	if err := ctx.BindJSON(&req); err != nil {
@@ -179,7 +185,9 @@ func (s *SystemController) SetEthNode(ctx *gin.Context) {
 //	@Tags			system
 //	@Produce		json
 //	@Success		200	{object}	StatusRes
-//	@Router			/config/ethNode [delete]
+//	@Security		BasicAuth
+
+//	@Router	/config/ethNode [delete]
 func (c *SystemController) RemoveEthNode(ctx *gin.Context) {
 	err := c.ethRPC.RemoveURLs()
 	if err != nil {

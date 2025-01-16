@@ -23,6 +23,7 @@ const docTemplate = `{
                         "BasicAuth": []
                     }
                 ],
+                "description": "Permission: add_user",
                 "produces": [
                     "application/json"
                 ],
@@ -51,6 +52,12 @@ const docTemplate = `{
                 }
             },
             "delete": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Permission: remove_user",
                 "produces": [
                     "application/json"
                 ],
@@ -81,6 +88,11 @@ const docTemplate = `{
         },
         "/blockchain/allowance": {
             "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Get MOR allowance for spender",
                 "produces": [
                     "application/json"
@@ -110,6 +122,11 @@ const docTemplate = `{
         },
         "/blockchain/approve": {
             "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Approve MOR allowance for spender",
                 "produces": [
                     "application/json"
@@ -146,6 +163,11 @@ const docTemplate = `{
         },
         "/blockchain/balance": {
             "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Get ETH and MOR balance of the user",
                 "produces": [
                     "application/json"
@@ -166,6 +188,11 @@ const docTemplate = `{
         },
         "/blockchain/bids": {
             "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -199,6 +226,11 @@ const docTemplate = `{
         },
         "/blockchain/bids/{id}": {
             "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Get bid from blockchain by ID",
                 "produces": [
                     "application/json"
@@ -226,6 +258,11 @@ const docTemplate = `{
                 }
             },
             "delete": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -254,6 +291,11 @@ const docTemplate = `{
         },
         "/blockchain/bids/{id}/session": {
             "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Full flow to open a session by bidId",
                 "consumes": [
                     "application/json"
@@ -295,6 +337,11 @@ const docTemplate = `{
         },
         "/blockchain/latestBlock": {
             "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Get latest block number from blockchain",
                 "produces": [
                     "application/json"
@@ -315,6 +362,11 @@ const docTemplate = `{
         },
         "/blockchain/models": {
             "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Get models list from blokchain",
                 "produces": [
                     "application/json"
@@ -359,6 +411,11 @@ const docTemplate = `{
                 }
             },
             "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "If you provide ID in request it will be used as \"Base Id\" for generation of new model ID. So actual ID will be generated from it, and you will get it in response.",
                 "consumes": [
                     "application/json"
@@ -393,6 +450,11 @@ const docTemplate = `{
         },
         "/blockchain/models/{id}": {
             "delete": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -421,6 +483,11 @@ const docTemplate = `{
         },
         "/blockchain/models/{id}/bids": {
             "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Get bids from blockchain by model agent",
                 "produces": [
                     "application/json"
@@ -474,6 +541,11 @@ const docTemplate = `{
         },
         "/blockchain/models/{id}/bids/rated": {
             "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Get rated bids from blockchain by model",
                 "produces": [
                     "application/json"
@@ -503,6 +575,11 @@ const docTemplate = `{
         },
         "/blockchain/models/{id}/session": {
             "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Full flow to open a session by modelId",
                 "consumes": [
                     "application/json"
@@ -544,6 +621,11 @@ const docTemplate = `{
         },
         "/blockchain/providers": {
             "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Get providers list from blokchain",
                 "produces": [
                     "application/json"
@@ -588,6 +670,11 @@ const docTemplate = `{
                 }
             },
             "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -621,6 +708,11 @@ const docTemplate = `{
         },
         "/blockchain/providers/{id}": {
             "delete": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -649,6 +741,11 @@ const docTemplate = `{
         },
         "/blockchain/providers/{id}/bids": {
             "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Get bids from blockchain by provider",
                 "produces": [
                     "application/json"
@@ -702,6 +799,11 @@ const docTemplate = `{
         },
         "/blockchain/providers/{id}/bids/active": {
             "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Get bids from blockchain by provider",
                 "produces": [
                     "application/json"
@@ -755,6 +857,11 @@ const docTemplate = `{
         },
         "/blockchain/send/eth": {
             "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Send Eth to address",
                 "produces": [
                     "application/json"
@@ -786,6 +893,11 @@ const docTemplate = `{
         },
         "/blockchain/send/mor": {
             "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Send Mor to address",
                 "produces": [
                     "application/json"
@@ -817,6 +929,11 @@ const docTemplate = `{
         },
         "/blockchain/sessions": {
             "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Sends transaction in blockchain to open a session",
                 "consumes": [
                     "application/json"
@@ -851,6 +968,11 @@ const docTemplate = `{
         },
         "/blockchain/sessions/budget": {
             "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Get todays budget from blockchain",
                 "produces": [
                     "application/json"
@@ -871,6 +993,11 @@ const docTemplate = `{
         },
         "/blockchain/sessions/provider": {
             "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Get sessions from blockchain by provider",
                 "produces": [
                     "application/json"
@@ -924,6 +1051,11 @@ const docTemplate = `{
         },
         "/blockchain/sessions/user": {
             "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Get sessions from blockchain by user",
                 "produces": [
                     "application/json"
@@ -977,6 +1109,11 @@ const docTemplate = `{
         },
         "/blockchain/sessions/user/ids": {
             "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Get sessions from blockchain by user",
                 "produces": [
                     "application/json"
@@ -1030,6 +1167,11 @@ const docTemplate = `{
         },
         "/blockchain/sessions/{id}": {
             "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Returns session by ID",
                 "produces": [
                     "application/json"
@@ -1059,6 +1201,11 @@ const docTemplate = `{
         },
         "/blockchain/sessions/{id}/close": {
             "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Sends transaction in blockchain to close a session",
                 "produces": [
                     "application/json"
@@ -1088,6 +1235,11 @@ const docTemplate = `{
         },
         "/blockchain/token/supply": {
             "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Get MOR token supply from blockchain",
                 "produces": [
                     "application/json"
@@ -1108,6 +1260,11 @@ const docTemplate = `{
         },
         "/blockchain/transactions": {
             "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Get MOR and ETH transactions",
                 "produces": [
                     "application/json"
@@ -1142,6 +1299,11 @@ const docTemplate = `{
         },
         "/config": {
             "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Return the current config of proxy router",
                 "produces": [
                     "application/json"
@@ -1162,77 +1324,15 @@ const docTemplate = `{
         },
         "/config/ethNode": {
             "post": {
-                "description": "Set the Eth Node URLs",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "system"
-                ],
-                "summary": "Set Eth Node URLs",
-                "parameters": [
-                    {
-                        "description": "URLs",
-                        "name": "urls",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/system.SetEthNodeURLReq"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/system.StatusRes"
-                        }
-                    }
-                }
+                "responses": {}
             },
             "delete": {
-                "description": "Delete the Eth Node URLs",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "system"
-                ],
-                "summary": "Delete Eth Node URLs",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/system.StatusRes"
-                        }
-                    }
-                }
+                "responses": {}
             }
         },
         "/files": {
             "get": {
-                "description": "Returns opened files",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "system"
-                ],
-                "summary": "Get files",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/system.FD"
-                            }
-                        }
-                    }
-                }
+                "responses": {}
             }
         },
         "/healthcheck": {
@@ -1288,6 +1388,11 @@ const docTemplate = `{
         },
         "/proxy/sessions/initiate": {
             "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "sends a handshake to the provider",
                 "produces": [
                     "application/json"
@@ -1319,6 +1424,11 @@ const docTemplate = `{
         },
         "/proxy/sessions/{id}/providerClaim": {
             "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Claim provider balance from session",
                 "produces": [
                     "application/json"
@@ -1348,6 +1458,11 @@ const docTemplate = `{
         },
         "/proxy/sessions/{id}/providerClaimableBalance": {
             "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Get provider claimable balance from session",
                 "produces": [
                     "application/json"
@@ -1377,6 +1492,11 @@ const docTemplate = `{
         },
         "/v1/chat/completions": {
             "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Send prompt to a local or remote model based on session id in header",
                 "produces": [
                     "text/event-stream"
@@ -1429,6 +1549,11 @@ const docTemplate = `{
         },
         "/v1/chats": {
             "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -1451,6 +1576,11 @@ const docTemplate = `{
         },
         "/v1/chats/{id}": {
             "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -1477,6 +1607,11 @@ const docTemplate = `{
                 }
             },
             "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -1512,6 +1647,11 @@ const docTemplate = `{
                 }
             },
             "delete": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -1540,6 +1680,11 @@ const docTemplate = `{
         },
         "/v1/models": {
             "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -1562,6 +1707,11 @@ const docTemplate = `{
         },
         "/wallet": {
             "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Get wallet address",
                 "produces": [
                     "application/json"
@@ -1580,6 +1730,11 @@ const docTemplate = `{
                 }
             },
             "delete": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Remove wallet from proxy storage",
                 "produces": [
                     "application/json"
@@ -1600,6 +1755,11 @@ const docTemplate = `{
         },
         "/wallet/mnemonic": {
             "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Setup wallet using mnemonic",
                 "produces": [
                     "application/json"
@@ -1638,6 +1798,11 @@ const docTemplate = `{
         },
         "/wallet/privateKey": {
             "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
                 "description": "Setup wallet with private key",
                 "produces": [
                     "application/json"
@@ -2544,17 +2709,6 @@ const docTemplate = `{
                 }
             }
         },
-        "system.FD": {
-            "type": "object",
-            "properties": {
-                "id": {
-                    "type": "string"
-                },
-                "path": {
-                    "type": "string"
-                }
-            }
-        },
         "system.HealthCheckResponse": {
             "type": "object",
             "properties": {
@@ -2565,28 +2719,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "version": {
-                    "type": "string"
-                }
-            }
-        },
-        "system.SetEthNodeURLReq": {
-            "type": "object",
-            "required": [
-                "urls"
-            ],
-            "properties": {
-                "urls": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
-        "system.StatusRes": {
-            "type": "object",
-            "properties": {
-                "status": {
                     "type": "string"
                 }
             }
