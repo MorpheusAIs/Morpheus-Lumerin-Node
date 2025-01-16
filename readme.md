@@ -44,3 +44,4 @@ manages secure sessions between consumers and providers and routes prompts and r
 * [04-Consumer-Setup](docs/04-consumer-setup.md) - This is the simplest way to get started with the Morpheus Lumerin Node as a Consumer.  This will allow you to interact with the Morpheus network and the models offered on the network as a consumer running from packaged releases.
 
 * [02-Provider-Setup](docs/02-provider-setup.md) - This is the simplest way to get started with the Morpheus Lumerin Node as a Provider.  This will allow you to connect your existing AI-Model to the Morpheus network and offer it for use by consumers.
+    * [02.1-Proxy-Router-Docker](docs/02.1-proxy-router-docker.md) - Fast start using existing Docker image and proxy-router configuration
