@@ -489,11 +489,11 @@ jobs:
             }
  
   GHCR-Build-and-Push:
-    # needs:
-    #   - Ubuntu-22-x64
-    #   - macOS-13-x64
-    #   - macOS-14-arm64
-    #   - Windows-avx2-x64
+    needs:
+      - Ubuntu-22-x64
+      - macOS-13-x64
+      - macOS-14-arm64
+      - Windows-avx2-x64
     if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev') }}
     runs-on: ubuntu-latest
 
