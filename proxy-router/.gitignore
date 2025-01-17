@@ -12,6 +12,8 @@ data*
 
 models-config.json
 rating-config.json
+proxy.config
+.cookie
 
 #Badger DB
 *.vlog
