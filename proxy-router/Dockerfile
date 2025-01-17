@@ -12,6 +12,9 @@ ENV COMMIT=$COMMIT
 WORKDIR /app
 COPY . .
 
+# Install dbus
+RUN apt-get update && apt-get install -y dbus-x11 && apt-get clean
+
 # Build the Go binary for the target platform
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=0 \
     TAG_NAME=$TAG_NAME COMMIT=$COMMIT ./build.sh && \
@@ -24,6 +27,7 @@ WORKDIR /app
 # Copy required files and binary
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /app/bin/proxy-router /usr/bin/
+COPY --from=builder /usr/bin/dbus-launch /usr/bin/
 
 SHELL ["/bin/sh", "-c"]
 EXPOSE 3333 8082
