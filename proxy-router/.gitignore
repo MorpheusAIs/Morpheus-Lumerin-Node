@@ -12,7 +12,7 @@ data*
 
 models-config.json
 rating-config.json
-proxy.config
+proxy.conf
 .cookie
 
 #Badger DB

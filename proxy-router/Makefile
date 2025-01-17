@@ -11,7 +11,7 @@ build:
 	./build.sh
 	
 clean:
-	rm -rf bin logs
+	rm -rf bin logs data .cookie proxy.conf
 
 install:
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.53.3
