@@ -17,6 +17,27 @@ definitions:
       slots:
         type: integer
     type: object
+  authapi.AddUserReq:
+    properties:
+      password:
+        type: string
+      perms:
+        items:
+          type: string
+        type: array
+      username:
+        type: string
+    type: object
+  authapi.AuthRes:
+    properties:
+      result:
+        type: boolean
+    type: object
+  authapi.RemoveUserReq:
+    properties:
+      username:
+        type: string
+    type: object
   genericchatstorage.Chat:
     properties:
       chatId:
@@ -616,6 +637,49 @@ info:
   termsOfService: http://swagger.io/terms/
   title: Morpheus Lumerin Node API
 paths:
+  /auth/users:
+    delete:
+      description: 'Permission: remove_user'
+      parameters:
+      - description: Remove User Request
+        in: body
+        name: removeUserReq
+        required: true
+        schema:
+          $ref: '#/definitions/authapi.RemoveUserReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/authapi.AuthRes'
+      security:
+      - BasicAuth: []
+      summary: Add User to Proxy API
+      tags:
+      - auth
+    post:
+      description: 'Permission: add_user'
+      parameters:
+      - description: Add User Request
+        in: body
+        name: addUserReq
+        required: true
+        schema:
+          $ref: '#/definitions/authapi.AddUserReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/authapi.AuthRes'
+      security:
+      - BasicAuth: []
+      summary: Add/Update User in Proxy Conf
+      tags:
+      - auth
   /blockchain/allowance:
     get:
       description: Get MOR allowance for spender
@@ -632,6 +696,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.AllowanceRes'
+      security:
+      - BasicAuth: []
       summary: Get Allowance for MOR
       tags:
       - transactions
@@ -656,6 +722,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.TxRes'
+      security:
+      - BasicAuth: []
       summary: Approve MOR allowance
       tags:
       - transactions
@@ -669,6 +737,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.TokenBalanceRes'
+      security:
+      - BasicAuth: []
       summary: Get ETH and MOR balance
       tags:
       - transactions
@@ -690,6 +760,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.BidRes'
+      security:
+      - BasicAuth: []
       summary: Creates bid in blockchain
       tags:
       - bids
@@ -708,6 +780,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.TxRes'
+      security:
+      - BasicAuth: []
       summary: Delete Bid
       tags:
       - bids
@@ -726,6 +800,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.BidRes'
+      security:
+      - BasicAuth: []
       summary: Get Bid by ID
       tags:
       - bids
@@ -753,6 +829,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.OpenSessionRes'
+      security:
+      - BasicAuth: []
       summary: Open Session by bidId in blockchain
       tags:
       - sessions
@@ -766,6 +844,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.BlockRes'
+      security:
+      - BasicAuth: []
       summary: Get Latest Block
       tags:
       - transactions
@@ -797,6 +877,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.ModelsRes'
+      security:
+      - BasicAuth: []
       summary: Get models list
       tags:
       - models
@@ -820,6 +902,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.ModelRes'
+      security:
+      - BasicAuth: []
       summary: Creates model in blockchain
       tags:
       - models
@@ -838,6 +922,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.TxRes'
+      security:
+      - BasicAuth: []
       summary: Deregister Model
       tags:
       - models
@@ -874,6 +960,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.BidsRes'
+      security:
+      - BasicAuth: []
       summary: Get Active Bids by Model
       tags:
       - bids
@@ -893,6 +981,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.ScoredBidsRes'
+      security:
+      - BasicAuth: []
       summary: Get Rated Bids
       tags:
       - bids
@@ -920,6 +1010,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.OpenSessionRes'
+      security:
+      - BasicAuth: []
       summary: Open Session by ModelID in blockchain
       tags:
       - sessions
@@ -951,6 +1043,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.ProvidersRes'
+      security:
+      - BasicAuth: []
       summary: Get providers list
       tags:
       - providers
@@ -971,6 +1065,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.ProviderRes'
+      security:
+      - BasicAuth: []
       summary: Creates or updates provider in blockchain
       tags:
       - providers
@@ -989,6 +1085,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.TxRes'
+      security:
+      - BasicAuth: []
       summary: Deregister Provider
       tags:
       - providers
@@ -1025,6 +1123,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.BidsRes'
+      security:
+      - BasicAuth: []
       summary: Get Bids by Provider
       tags:
       - bids
@@ -1061,6 +1161,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.BidsRes'
+      security:
+      - BasicAuth: []
       summary: Get Bids by Provider
       tags:
       - bids
@@ -1081,6 +1183,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.TxRes'
+      security:
+      - BasicAuth: []
       summary: Send Eth
       tags:
       - transactions
@@ -1101,6 +1205,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.TxRes'
+      security:
+      - BasicAuth: []
       summary: Send Mor
       tags:
       - transactions
@@ -1123,6 +1229,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.OpenSessionRes'
+      security:
+      - BasicAuth: []
       summary: Open Session with Provider in blockchain
       tags:
       - sessions
@@ -1142,6 +1250,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.SessionRes'
+      security:
+      - BasicAuth: []
       summary: Get session
       tags:
       - sessions
@@ -1161,6 +1271,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.TxRes'
+      security:
+      - BasicAuth: []
       summary: Close Session with Provider
       tags:
       - sessions
@@ -1174,6 +1286,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.BudgetRes'
+      security:
+      - BasicAuth: []
       summary: Get Todays Budget
       tags:
       - sessions
@@ -1210,6 +1324,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.SessionsRes'
+      security:
+      - BasicAuth: []
       summary: Get Sessions for Provider
       tags:
       - sessions
@@ -1246,6 +1362,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.SessionsRes'
+      security:
+      - BasicAuth: []
       summary: Get Sessions for User
       tags:
       - sessions
@@ -1282,6 +1400,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.SessionsRes'
+      security:
+      - BasicAuth: []
       summary: Get Sessions for User
       tags:
       - sessions
@@ -1295,6 +1415,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.SupplyRes'
+      security:
+      - BasicAuth: []
       summary: Get Token Supply
       tags:
       - sessions
@@ -1317,6 +1439,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.TransactionsRes'
+      security:
+      - BasicAuth: []
       summary: Get Transactions
       tags:
       - transactions
@@ -1330,6 +1454,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/system.ConfigResponse'
+      security:
+      - BasicAuth: []
       summary: Get Config
       tags:
       - system
@@ -1343,6 +1469,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/system.StatusRes'
+      security:
+      - BasicAuth: []
       summary: Delete Eth Node URLs
       tags:
       - system
@@ -1364,6 +1492,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/system.StatusRes'
+      security:
+      - BasicAuth: []
       summary: Set Eth Node URLs
       tags:
       - system
@@ -1379,6 +1509,8 @@ paths:
             items:
               $ref: '#/definitions/system.FD'
             type: array
+      security:
+      - BasicAuth: []
       summary: Get files
       tags:
       - system
@@ -1431,6 +1563,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.TxRes'
+      security:
+      - BasicAuth: []
       summary: Claim Provider Balance
       tags:
       - sessions
@@ -1450,6 +1584,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/structs.BalanceRes'
+      security:
+      - BasicAuth: []
       summary: Get Provider Claimable Balance
       tags:
       - sessions
@@ -1470,6 +1606,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/morrpcmesssage.SessionRes'
+      security:
+      - BasicAuth: []
       summary: Initiate Session with Provider
       tags:
       - chat
@@ -1505,6 +1643,8 @@ paths:
           description: OK
           schema:
             type: string
+      security:
+      - BasicAuth: []
       summary: Send Local Or Remote Prompt
       tags:
       - chat
@@ -1519,6 +1659,8 @@ paths:
             items:
               $ref: '#/definitions/genericchatstorage.Chat'
             type: array
+      security:
+      - BasicAuth: []
       summary: Get all chats stored in the system
       tags:
       - chat
@@ -1537,6 +1679,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/proxyapi.ResultResponse'
+      security:
+      - BasicAuth: []
       summary: Delete chat by id from storage
       tags:
       - chat
@@ -1554,6 +1698,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/genericchatstorage.ChatHistory'
+      security:
+      - BasicAuth: []
       summary: Get chat by id
       tags:
       - chat
@@ -1577,6 +1723,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/proxyapi.ResultResponse'
+      security:
+      - BasicAuth: []
       summary: Update chat title by id
       tags:
       - chat
@@ -1591,6 +1739,8 @@ paths:
             items:
               $ref: '#/definitions/aiengine.LocalModel'
             type: array
+      security:
+      - BasicAuth: []
       summary: Get local models
       tags:
       - system
@@ -1604,6 +1754,8 @@ paths:
           description: OK
           schema:
             type: statusRes
+      security:
+      - BasicAuth: []
       summary: Remove wallet from proxy
       tags:
       - wallet
@@ -1616,6 +1768,8 @@ paths:
           description: OK
           schema:
             type: WalletRes
+      security:
+      - BasicAuth: []
       summary: Get Wallet
       tags:
       - wallet
@@ -1640,6 +1794,8 @@ paths:
           description: OK
           schema:
             type: WalletRes
+      security:
+      - BasicAuth: []
       summary: Setup wallet using mnemonic
       tags:
       - wallet
@@ -1660,7 +1816,12 @@ paths:
           description: OK
           schema:
             type: WalletRes
+      security:
+      - BasicAuth: []
       summary: Setup wallet with private key
       tags:
       - wallet
+securityDefinitions:
+  BasicAuth:
+    type: basic
 swagger: "2.0"

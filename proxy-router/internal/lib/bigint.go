@@ -22,7 +22,7 @@ func (b *BigInt) UnmarshalJSON(data []byte) error {
 	if !ok {
 		return fmt.Errorf("invalid big.Int string: %s", str)
 	}
-	
+
 	return nil
 }
 

@@ -1,4 +1,4 @@
-export const getSessionsByUser = async (url, user) => {
+export const getSessionsByUser = async (url, user, headers) => {
     if(!user || !url) {
       return;
     }
@@ -6,7 +6,10 @@ export const getSessionsByUser = async (url, user) => {
     const getSessions = async (user, offset, limit) => {
       try {
         const path = `${url}/blockchain/sessions/user?user=${user}&offset=${offset}&limit=${limit}&order=desc`;
-        const response = await fetch(path);
+        const response = await fetch(path, {
+          headers,
+          method: 'GET',
+        });
         const data = await response.json();
         return data.sessions;
       }
@@ -37,7 +40,7 @@ export const getSessionsByUser = async (url, user) => {
     return sessions;
 }
 
-export const getBidsByModelId = async (url, modelId) => {
+export const getBidsByModelId = async (url, modelId, headers) => {
   if(!modelId || !url) {
     return;
   }
@@ -45,7 +48,9 @@ export const getBidsByModelId = async (url, modelId) => {
   const getBidsByModels = async (modelId, offset, limit) => {
     try {
       const path = `${url}/blockchain/models/${modelId}/bids?offset=${offset}&limit=${limit}&order=desc`
-      const response = await fetch(path);
+      const response = await fetch(path, {
+        headers,
+      });
       const data = await response.json();
       return data.bids;
     }
@@ -76,10 +81,12 @@ export const getBidsByModelId = async (url, modelId) => {
   return bids;
 }
 
-export const getBidInfoById = async (url, id) => {
+export const getBidInfoById = async (url, id, headers) => {
   try {
     const path = `${url}/blockchain/bids/${id}`
-    const response = await fetch(path);
+    const response = await fetch(path, {
+      headers,
+    });
     const data = await response.json();
     return data.bid;
   }
