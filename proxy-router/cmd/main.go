@@ -197,7 +197,10 @@ func start() error {
 
 	appLog.Infof("Auth config file: %s", cfg.Proxy.AuthConfigFilePath)
 	appLog.Infof("Cookie file: %s", cfg.Proxy.CookieFilePath)
-	authCfg := system.NewAuthConfig(cfg.Proxy.AuthConfigFilePath, cfg.Proxy.CookieFilePath)
+
+	storage := storages.NewStorage(storageLog, cfg.Proxy.StoragePath)
+	authStorage := storages.NewAuthStorage(storage)
+	authCfg := system.NewAuthConfig(cfg.Proxy.AuthConfigFilePath, cfg.Proxy.CookieFilePath, authStorage)
 
 	if err := authCfg.ReadConfig(); err != nil {
 		return err
@@ -239,7 +242,6 @@ func start() error {
 	}
 	appLog.Infof("connected to ethereum node: %s, chainID: %d", cfg.Blockchain.EthNodeAddress, chainID)
 
-	storage := storages.NewStorage(storageLog, cfg.Proxy.StoragePath)
 	sessionStorage := storages.NewSessionStorage(storage)
 
 	var wallet interfaces.Wallet
@@ -274,7 +276,7 @@ func start() error {
 	sessionRepo := sessionrepo.NewSessionRepositoryCached(sessionStorage, sessionRouter, marketplace)
 	proxyRouterApi := proxyapi.NewProxySender(chainID, wallet, contractLogStorage, sessionStorage, sessionRepo, appLog)
 	explorer := blockchainapi.NewExplorerClient(cfg.Blockchain.ExplorerApiUrl, *cfg.Marketplace.MorTokenAddress, cfg.Blockchain.ExplorerRetryDelay, cfg.Blockchain.ExplorerMaxRetries)
-	blockchainApi := blockchainapi.NewBlockchainService(ethClient, multicallBackend, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, explorer, wallet, proxyRouterApi, sessionRepo, scorer, appLog, rpcLog, cfg.Blockchain.EthLegacyTx)
+	blockchainApi := blockchainapi.NewBlockchainService(ethClient, multicallBackend, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, explorer, wallet, proxyRouterApi, sessionRepo, scorer, authCfg, appLog, rpcLog, cfg.Blockchain.EthLegacyTx)
 	proxyRouterApi.SetSessionService(blockchainApi)
 
 	modelConfigLoader := config.NewModelConfigLoader(cfg.Proxy.ModelsConfigPath, valid, blockchainApi, &aiengine.ConnectionChecker{}, appLog)

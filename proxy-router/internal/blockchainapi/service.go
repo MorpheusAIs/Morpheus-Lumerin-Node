@@ -25,6 +25,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/multicall"
 	r "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
 	sessionrepo "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/session"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -43,9 +44,11 @@ type BlockchainService struct {
 	marketplace        *r.Marketplace
 	sessionRouter      *r.SessionRouter
 	morToken           *r.MorToken
+	morTokenAddr       common.Address
 	explorerClient     *ExplorerClient
 	sessionRepo        *sessionrepo.SessionRepositoryCached
 	proxyService       *proxyapi.ProxyServiceSender
+	authConfig         *system.HTTPAuthConfig
 	diamonContractAddr common.Address
 	rating             *rating.Rating
 	minStake           *big.Int
@@ -91,6 +94,7 @@ func NewBlockchainService(
 	proxyService *proxyapi.ProxyServiceSender,
 	sessionRepo *sessionrepo.SessionRepositoryCached,
 	scorerAlgo *rating.Rating,
+	authConfig *system.HTTPAuthConfig,
 	log lib.ILogger,
 	logEthRpc lib.ILogger,
 	legacyTx bool,
@@ -113,9 +117,11 @@ func NewBlockchainService(
 		explorerClient:     explorer,
 		proxyService:       proxyService,
 		diamonContractAddr: diamonContractAddr,
+		morTokenAddr:       morTokenAddr,
 		sessionRepo:        sessionRepo,
 		rating:             scorerAlgo,
 		log:                log,
+		authConfig:         authConfig,
 	}
 }
 
