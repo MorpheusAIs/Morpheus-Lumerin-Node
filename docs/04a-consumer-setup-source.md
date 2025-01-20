@@ -36,9 +36,9 @@ Save the .env file and exit the editor
 #### 4. Build and start the proxy-router 
 ```bash 
 ./build.sh
-./bin/proxy-router
+./proxy-router
 ```
-After the iniial setup, you can execute `git pull` to get the latest updates and re-run the `./build.sh` and `./bin/proxy-router` to update the proxy-router with the latest changes.
+After the iniial setup, you can execute `git pull` to get the latest updates and re-run the `./build.sh` and `./proxy-router` to update the proxy-router with the latest changes.
 
 #### 5. Confirm that the build is successful and console should show similar to below after started (and listening on specified ports 8082 for Swagger API and 3333 for the proxy-router):
 
