@@ -7,7 +7,7 @@ logs
 # binary folders
 dist
 bin 
-
+proxy-router
 data*
 
 models-config.json
