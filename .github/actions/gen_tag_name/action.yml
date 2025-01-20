@@ -7,19 +7,26 @@ runs:
       id: tag
       shell: bash
       run: |
-        VMAJ=2 # Manual major version
-        VMIN=0
-        VPAT=0
+        VMAJ_NEW=2
+        VMIN_NEW=0
+        VPAT_NEW=0
         set +o pipefail
         VLAST=$(git describe --tags --abbrev=0 --match='v[1-9]*' refs/remotes/origin/main 2>/dev/null | cut -c2-)
-        [ $VLAST ] && declare $(echo $VLAST | awk -F '.' '{print "VMAJ="$1" VMIN="$2" VPAT="$3}')
+        
+        if [ -n "$VLAST" ]; then
+            eval $(echo "$VLAST" | awk -F '.' '{print "VMAJ="$1" VMIN="$2" VPAT="$3}')
+        else
+            VMAJ=0
+            VMIN=0
+            VPAT=0
+        fi
+
         if [ "$GITHUB_REF_NAME" = "main" ]; then
-            if [ "$VMAJ" -gt "${VLAST%%.*}" ]; then
-                # If manual VMAJ is set and is higher than the current VLAST major version
-                VMIN=0
-                VPAT=0
+            if [ "$VMAJ_NEW" -gt "$VMAJ" ]; then
+                VMAJ=$VMAJ_NEW
+                VMIN=$VMIN_NEW
+                VPAT=$VPAT_NEW
             else
-                # Increment minor version
                 VMIN=$((VMIN+1))
                 VPAT=0
             fi
@@ -33,6 +40,7 @@ runs:
             [ "$GITHUB_EVENT_NAME" = "pull_request" ] && RNAME=pr${GITHUB_REF_NAME%/merge}
             VTAG=v${VFULL}-${RNAME}
         fi
+
         echo "VLAST=$VLAST VMAJ=$VMAJ VMIN=$VMIN VPAT=$VPAT VFULL=$VFULL VTAG=$VTAG"
         echo "TAG_NAME=${VTAG}" >> $GITHUB_ENV
         echo "VTAG=${VTAG}" >> $GITHUB_ENV
