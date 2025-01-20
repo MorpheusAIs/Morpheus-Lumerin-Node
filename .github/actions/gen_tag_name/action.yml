@@ -7,16 +7,22 @@ runs:
       id: tag
       shell: bash
       run: |
-        VMAJ=2
+        VMAJ=2 # Manual major version
         VMIN=0
         VPAT=0
         set +o pipefail
         VLAST=$(git describe --tags --abbrev=0 --match='v[1-9]*' refs/remotes/origin/main 2>/dev/null | cut -c2-)
         [ $VLAST ] && declare $(echo $VLAST | awk -F '.' '{print "VMAJ="$1" VMIN="$2" VPAT="$3}')
-        if [ "$GITHUB_REF_NAME" = "main" ]
-        then
-            VPAT=0
-            VMIN=$((VMIN+1))
+        if [ "$GITHUB_REF_NAME" = "main" ]; then
+            if [ "$VMAJ" -gt "${VLAST%%.*}" ]; then
+                # If manual VMAJ is set and is higher than the current VLAST major version
+                VMIN=0
+                VPAT=0
+            else
+                # Increment minor version
+                VMIN=$((VMIN+1))
+                VPAT=0
+            fi
             VFULL=${VMAJ}.${VMIN}.${VPAT}
             VTAG=v$VFULL
         else
