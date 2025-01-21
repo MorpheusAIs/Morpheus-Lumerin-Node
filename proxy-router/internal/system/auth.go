@@ -38,6 +38,11 @@ type HTTPAuthConfig struct {
 	AuthStorage *storages.AuthStorage
 }
 
+type AgentTx struct {
+	TxHash string
+	Username string
+}
+
 // NewAuthConfig initializes an empty RPCConfig struct, pointing to config + cookie paths.
 func NewAuthConfig(configFilePath, cookieFilePath string, authStorage *storages.AuthStorage) *HTTPAuthConfig {
 	return &HTTPAuthConfig{
@@ -527,4 +532,17 @@ func (cfg *HTTPAuthConfig) DecreaseAllowance(username string, token string, amou
 
 	allowance.Sub(&allowance.Int, &amount.Int)
 	return cfg.AuthStorage.SetAllowance(username, token, allowance)
+}
+
+func (cfg *HTTPAuthConfig) GetAllAgentTx() ([]AgentTx, error) {
+	txs, err := cfg.AuthStorage.GetAgentTxs()
+	if err != nil {
+		return nil, err
+	}
+
+	agentTxs := []AgentTx{}
+	for txHash, username := range txs {
+		agentTxs = append(agentTxs, AgentTx{TxHash: txHash, Username: username})
+	}
+	return agentTxs, nil
 }

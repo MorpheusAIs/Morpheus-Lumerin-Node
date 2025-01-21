@@ -65,3 +65,12 @@ type AgentUsersReq struct {
 type AgentUsersRes struct {
 	Agents []string `json:"agents"`
 }
+
+type AgentTx struct {
+	TxHash string `json:"tx_hash"`
+	Username string `json:"username"`
+}
+
+type AgentTxsRes struct {
+	Txs []AgentTx `json:"txs"`
+}

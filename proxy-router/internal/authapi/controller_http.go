@@ -35,6 +35,8 @@ func (s *AuthController) RegisterRoutes(r interfaces.Router) {
 	r.POST("/auth/allowance/confirm", s.authConfig.CheckAuth("agent_requests"), s.ConfirmAllowance)
 	r.GET("/auth/allowance/requests", s.authConfig.CheckAuth("agent_requests"), s.GetAllowanceRequests)
 	r.POST("/auth/allowance/revoke", s.authConfig.CheckAuth("agent_requests"), s.RevokeAllowance)
+
+	r.GET("/auth/txs", s.authConfig.CheckAuth("agent_requests"), s.GetAgentTxs)
 }
 
 // AddUser godoc
@@ -255,4 +257,22 @@ func (a *AuthController) RevokeAllowance(ctx *gin.Context) {
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"result": true})
+}
+
+// GetAgentTxs godoc
+//
+//	@Summary		Get Agent Transactions
+//	@Description	Permission: agent_requests
+//	@Tags			auth
+//	@Produce		json
+//	@Success		200	{object}	authapi.AgentTxsRes
+//	@Security		BasicAuth
+//	@Router			/auth/txs [get]
+func (a *AuthController) GetAgentTxs(ctx *gin.Context) {
+	txs, err := a.authConfig.GetAllAgentTx()
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"txs": txs})
 }

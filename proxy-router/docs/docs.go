@@ -147,6 +147,31 @@ const docTemplate = `{
                 }
             }
         },
+        "/auth/txs": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Permission: agent_requests",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Get Agent Transactions",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/authapi.AgentTxsRes"
+                        }
+                    }
+                }
+            }
+        },
         "/auth/users": {
             "get": {
                 "security": [
@@ -2171,6 +2196,28 @@ const docTemplate = `{
                 },
                 "username": {
                     "type": "string"
+                }
+            }
+        },
+        "authapi.AgentTx": {
+            "type": "object",
+            "properties": {
+                "tx_hash": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "authapi.AgentTxsRes": {
+            "type": "object",
+            "properties": {
+                "txs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/authapi.AgentTx"
+                    }
                 }
             }
         },

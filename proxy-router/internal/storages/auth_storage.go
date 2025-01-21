@@ -176,3 +176,28 @@ func (s *AuthStorage) SetAllowance(username string, token string, amount lib.Big
 
 	return s.db.Set([]byte(key), updatedJson)
 }
+
+func (s *AuthStorage) SetAgentTx(txHash string, username string) error {
+	key := fmt.Sprintf("agent_tx:%s", txHash)
+	return s.db.Set([]byte(key), []byte(username))
+}
+
+func (s *AuthStorage) GetAgentTxs() (map[string]string, error) {
+	var txs map[string]string = make(map[string]string)
+	prefix := []byte("agent_tx:")
+
+	keys, err := s.db.GetPrefix(prefix)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, key := range keys {
+		txHash := strings.TrimPrefix(string(key), "agent_tx:")
+		username, err := s.db.Get([]byte(key))
+		if err != nil {
+			return nil, err
+		}
+		txs[txHash] = string(username)
+	}
+	return txs, nil
+}

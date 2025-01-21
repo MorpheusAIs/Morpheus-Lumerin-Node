@@ -28,6 +28,20 @@ definitions:
       username:
         type: string
     type: object
+  authapi.AgentTx:
+    properties:
+      tx_hash:
+        type: string
+      username:
+        type: string
+    type: object
+  authapi.AgentTxsRes:
+    properties:
+      txs:
+        items:
+          $ref: '#/definitions/authapi.AgentTx'
+        type: array
+    type: object
   authapi.AgentUsersRes:
     properties:
       agents:
@@ -789,6 +803,21 @@ paths:
       security:
       - BasicAuth: []
       summary: Revoke Token Allowance for Agent
+      tags:
+      - auth
+  /auth/txs:
+    get:
+      description: 'Permission: agent_requests'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/authapi.AgentTxsRes'
+      security:
+      - BasicAuth: []
+      summary: Get Agent Transactions
       tags:
       - auth
   /auth/users:

@@ -190,7 +190,15 @@ func (c *BlockchainController) sendETH(ctx *gin.Context) {
 		return
 	}
 
-	txHash, err := c.service.SendETH(ctx, to, amount)
+	username, ok := ctx.Get("username")
+	if !ok {
+		c.log.Error("username not found in context")
+		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: "username not found in context"})
+		return
+	}
+
+	usernameStr := username.(string)
+	txHash, err := c.service.SendETH(ctx, to, amount, usernameStr)
 	if err != nil {
 		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
@@ -226,28 +234,12 @@ func (c *BlockchainController) sendMOR(ctx *gin.Context) {
 		return
 	}
 	usernameStr := username.(string)
-	shouldDecrease, err := c.authConf.IsAllowanceEnough(usernameStr, c.service.morTokenAddr.Hex(), amount)
+
+	txhash, err := c.service.SendMOR(ctx, to, amount, usernameStr)
 	if err != nil {
 		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
 		return
-	}
-
-	txhash, err := c.service.SendMOR(ctx, to, amount)
-	if err != nil {
-		c.log.Error(err)
-		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
-		return
-	}
-
-	if shouldDecrease {
-		amountBigInt := lib.BigInt{Int: *amount}
-		err = c.authConf.DecreaseAllowance(usernameStr, c.service.morTokenAddr.Hex(), amountBigInt)
-		if err != nil {
-			c.log.Error(err)
-			ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
-			return
-		}
 	}
 
 	ctx.JSON(http.StatusOK, structs.TxRes{Tx: txhash})

@@ -59,16 +59,17 @@ type BlockchainService struct {
 }
 
 var (
-	ErrPrKey             = errors.New("cannot get private key")
-	ErrTxOpts            = errors.New("failed to get transactOpts")
-	ErrNonce             = errors.New("failed to get nonce")
-	ErrEstimateGas       = errors.New("failed to estimate gas")
-	ErrSignTx            = errors.New("failed to sign transaction")
-	ErrSendTx            = errors.New("failed to send transaction")
-	ErrWaitMined         = errors.New("failed to wait for transaction to be mined")
-	ErrSessionStore      = errors.New("failed to store session")
-	ErrSessionReport     = errors.New("failed to get session report from provider")
-	ErrSessionUserReport = errors.New("failed to get session report from user")
+	ErrPrKey              = errors.New("cannot get private key")
+	ErrTxOpts             = errors.New("failed to get transactOpts")
+	ErrNonce              = errors.New("failed to get nonce")
+	ErrEstimateGas        = errors.New("failed to estimate gas")
+	ErrSignTx             = errors.New("failed to sign transaction")
+	ErrSendTx             = errors.New("failed to send transaction")
+	ErrWaitMined          = errors.New("failed to wait for transaction to be mined")
+	ErrSessionStore       = errors.New("failed to store session")
+	ErrSessionReport      = errors.New("failed to get session report from provider")
+	ErrSessionUserReport  = errors.New("failed to get session report from user")
+	ErrAgentUserAllowance = errors.New("low agent user allowance")
 
 	ErrBid         = errors.New("failed to get bid")
 	ErrProvider    = errors.New("failed to get provider")
@@ -590,7 +591,12 @@ func (s *BlockchainService) GetBalance(ctx context.Context) (eth *big.Int, mor *
 	return ethBalance, morBalance, nil
 }
 
-func (s *BlockchainService) SendETH(ctx context.Context, to common.Address, amount *big.Int) (common.Hash, error) {
+func (s *BlockchainService) SendETH(ctx context.Context, to common.Address, amount *big.Int, agentUsername string) (common.Hash, error) {
+	shouldDecrease, err := s.authConfig.IsAllowanceEnough(agentUsername, "eth", amount)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrAgentUserAllowance, err)
+	}
+
 	signedTx, err := s.createSignedTransaction(ctx, &types.DynamicFeeTx{
 		To:    &to,
 		Value: amount,
@@ -604,6 +610,16 @@ func (s *BlockchainService) SendETH(ctx context.Context, to common.Address, amou
 	_, err = bind.WaitMined(ctx, s.ethClient, signedTx)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrWaitMined, err)
+	}
+
+	if shouldDecrease {
+		amountBigInt := lib.BigInt{Int: *amount}
+		err = s.authConfig.DecreaseAllowance(agentUsername, "eth", amountBigInt)
+		if err != nil {
+			s.log.Errorf("failed to decrease allowance: %s", err)
+			return common.Hash{}, err
+		}
+		s.authConfig.AuthStorage.SetAgentTx(signedTx.Hash().Hex(), agentUsername)
 	}
 
 	return signedTx.Hash(), nil
@@ -673,7 +689,12 @@ func (s *BlockchainService) createSignedTransaction(ctx context.Context, txdata 
 	return signedTx, nil
 }
 
-func (s *BlockchainService) SendMOR(ctx context.Context, to common.Address, amount *big.Int) (common.Hash, error) {
+func (s *BlockchainService) SendMOR(ctx context.Context, to common.Address, amount *big.Int, agentUsername string) (common.Hash, error) {
+	shouldDecrease, err := s.authConfig.IsAllowanceEnough(agentUsername, s.morTokenAddr.Hex(), amount)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrAgentUserAllowance, err)
+	}
+
 	prKey, err := s.privateKey.GetPrivateKey()
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrPrKey, err)
@@ -687,6 +708,16 @@ func (s *BlockchainService) SendMOR(ctx context.Context, to common.Address, amou
 	tx, err := s.morToken.Transfer(transactOpt, to, amount)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrSendTx, err)
+	}
+
+	if shouldDecrease {
+		amountBigInt := lib.BigInt{Int: *amount}
+		err = s.authConfig.DecreaseAllowance(agentUsername, s.morTokenAddr.Hex(), amountBigInt)
+		if err != nil {
+			s.log.Errorf("failed to decrease allowance: %s", err)
+			return common.Hash{}, err
+		}
+		s.authConfig.AuthStorage.SetAgentTx(tx.Hash().Hex(), agentUsername)
 	}
 
 	return tx.Hash(), nil
