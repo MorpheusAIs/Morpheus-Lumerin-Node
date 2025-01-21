@@ -34,6 +34,6 @@
       "apiType": "prodia-v2",
       "apiUrl": "https://inference.prodia.com/v2",
       "apiKey": "FILL_ME_IN"  
-    },
+    }
   ]
 }
