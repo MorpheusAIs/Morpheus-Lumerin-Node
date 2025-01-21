@@ -4,7 +4,7 @@ import * as utils from '../utils';
 import PropTypes from 'prop-types';
 import React from 'react';
 
-const withTxRowState = WrappedComponent => {
+const withTxRowState = (WrappedComponent) => {
   class Container extends React.Component {
     // static propTypes = {
     //   confirmations: PropTypes.number.isRequired,
@@ -15,8 +15,9 @@ const withTxRowState = WrappedComponent => {
     //   }).isRequired
     // }
 
-    static displayName = `withTxRowState(${WrappedComponent.displayName ||
-      WrappedComponent.name})`;
+    static displayName = `withTxRowState(${
+      WrappedComponent.displayName || WrappedComponent.name
+    })`;
 
     render() {
       return <WrappedComponent {...this.props} />;
@@ -25,9 +26,14 @@ const withTxRowState = WrappedComponent => {
 
   const mapStateToProps = (state, props) => ({
     explorerUrl: selectors.getTransactionExplorerUrl(state, {
-      hash: props.tx.hash
+      hash: props.tx.hash,
     }),
-    morAddress: state.config.chain.diamondAddress
+
+    morAddress: state.config.chain.diamondAddress,
+
+    morTokenAddress: state.config.chain.mainTokenAddress,
+    diamondAddress: state.config.chain.diamondAddress,
+    walletAddress: state.chain.wallet.address,
   });
 
   return connect(mapStateToProps)(Container);

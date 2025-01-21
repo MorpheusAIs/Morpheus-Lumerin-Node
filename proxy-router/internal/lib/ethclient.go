@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/delegation"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/lumerintoken"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/marketplace"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/modelregistry"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/morpheustoken"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/multicall3"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/providerregistry"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/contracts/bindings/sessionrouter"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -25,6 +27,8 @@ var allContractsMeta = []Meta{
 	sessionrouter.SessionRouterMetaData,
 	morpheustoken.MorpheusTokenMetaData,
 	lumerintoken.LumerinTokenMetaData,
+	multicall3.Multicall3MetaData,
+	delegation.DelegationMetaData,
 }
 
 type EVMError struct {
@@ -70,13 +74,9 @@ func ConvertGethError(gethErr error, contractMeta []Meta) (*EVMError, bool) {
 		return nil, false
 	}
 
-	abis := make([]*abi.ABI, len(contractMeta))
-	for i, meta := range contractMeta {
-		abi, err := meta.GetAbi()
-		if err != nil {
-			return nil, false
-		}
-		abis[i] = abi
+	abis, err := getAbi(contractMeta)
+	if err != nil {
+		return nil, false
 	}
 
 	abiError, args, ok := CastErrorData(errData, abis)
@@ -119,4 +119,59 @@ func CastErrorData(errData []byte, abis []*abi.ABI) (abi.Error, interface{}, boo
 		}
 	}
 	return abi.Error{}, nil, false
+}
+
+// DecodeInput decodes the input data of a transaction
+func DecodeInput(rawInput []byte) (methodName string, entries []InputEntry, err error) {
+	abi, err := getAbi(allContractsMeta)
+	if err != nil {
+		return "", nil, err
+	}
+
+	for _, a := range abi {
+		// find method across all ABIs
+		method, err := a.MethodById(rawInput)
+		if err != nil {
+			continue
+		}
+
+		// decode input
+		args := make(map[string]interface{})
+		err = method.Inputs.UnpackIntoMap(args, rawInput[4:])
+		if err != nil {
+			return "", nil, err
+		}
+
+		// remap to our format
+		entries := make([]InputEntry, len(args))
+		for k, v := range method.Inputs {
+			entries[k] = InputEntry{
+				Key:   v.Name,
+				Type:  v.Type.String(),
+				Value: args[v.Name],
+			}
+		}
+
+		return method.RawName, entries, nil
+	}
+
+	return "", nil, fmt.Errorf("method not found")
+}
+
+type InputEntry struct {
+	Key   string
+	Type  string
+	Value interface{}
+}
+
+func getAbi(meta []Meta) ([]*abi.ABI, error) {
+	abis := make([]*abi.ABI, len(meta))
+	for i, m := range meta {
+		abi, err := m.GetAbi()
+		if err != nil {
+			return nil, err
+		}
+		abis[i] = abi
+	}
+	return abis, nil
 }

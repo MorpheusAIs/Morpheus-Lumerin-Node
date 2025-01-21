@@ -23,3 +23,7 @@ KEYREGISTRY
 LOCK
 MANIFEST
 chats/
+
+# proxy auth
+proxy.conf
+.cookie
