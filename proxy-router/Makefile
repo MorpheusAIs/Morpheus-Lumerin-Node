@@ -9,9 +9,12 @@ run-race:
 
 build:
 	./build.sh
+	cp .env.example .env 
+	cp models-config.json.example models-config.json
+	cp rating-config.json.example rating-config.json
 	
 clean:
-	rm -rf bin logs data .cookie proxy.conf
+	rm -rf bin logs data .cookie proxy.conf proxy-router .env models-config.json rating-config.json
 
 install:
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.53.3
