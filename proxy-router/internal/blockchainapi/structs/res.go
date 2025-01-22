@@ -59,7 +59,7 @@ type TokenBalanceRes struct {
 }
 
 type TransactionsRes struct {
-	Transactions []RawTransaction `json:"transactions"`
+	Transactions []MappedTransaction `json:"transactions"`
 }
 
 type SessionRes struct {

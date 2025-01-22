@@ -43,7 +43,7 @@ type BlockchainService struct {
 	marketplace        *r.Marketplace
 	sessionRouter      *r.SessionRouter
 	morToken           *r.MorToken
-	explorerClient     *ExplorerClient
+	explorerClient     ExplorerClientInterface
 	sessionRepo        *sessionrepo.SessionRepositoryCached
 	proxyService       *proxyapi.ProxyServiceSender
 	diamonContractAddr common.Address
@@ -53,6 +53,10 @@ type BlockchainService struct {
 	legacyTx   bool
 	privateKey i.PrKeyProvider
 	log        lib.ILogger
+}
+
+type ExplorerClientInterface interface {
+	GetLastTransactions(ctx context.Context, address common.Address) ([]structs.MappedTransaction, error)
 }
 
 var (
@@ -86,7 +90,7 @@ func NewBlockchainService(
 	mc multicall.MulticallBackend,
 	diamonContractAddr common.Address,
 	morTokenAddr common.Address,
-	explorer *ExplorerClient,
+	explorer ExplorerClientInterface,
 	privateKey i.PrKeyProvider,
 	proxyService *proxyapi.ProxyServiceSender,
 	sessionRepo *sessionrepo.SessionRepositoryCached,
@@ -795,7 +799,7 @@ func (s *BlockchainService) GetSessionsIds(ctx context.Context, user, provider c
 	return bidIDs, nil
 }
 
-func (s *BlockchainService) GetTransactions(ctx context.Context, page uint64, limit uint8) ([]structs.RawTransaction, error) {
+func (s *BlockchainService) GetTransactions(ctx context.Context, page uint64, limit uint8) ([]structs.MappedTransaction, error) {
 	prKey, err := s.privateKey.GetPrivateKey()
 	if err != nil {
 		return nil, lib.WrapError(ErrPrKey, err)
@@ -807,31 +811,11 @@ func (s *BlockchainService) GetTransactions(ctx context.Context, page uint64, li
 	}
 	address := transactOpt.From
 
-	morTrxs, err := s.explorerClient.GetTokenTransactions(ctx, address, page, limit)
+	allTrxs, err := s.explorerClient.GetLastTransactions(ctx, address)
 	if err != nil {
-		s.log.Errorf("failed to get mor transactions: %s", err.Error())
+		s.log.Errorf("failed to get  transactions: %s", err.Error())
 		return nil, err
 	}
-
-	ethTrxs, err := s.explorerClient.GetEthTransactions(ctx, address, page, limit)
-	if err != nil {
-		s.log.Errorf("failed to get eth transactions: %s", err.Error())
-		return nil, err
-	}
-
-	allTrxs := append(ethTrxs, morTrxs...)
-	sort.Slice(allTrxs, func(i, j int) bool {
-		blockNumber1, err := strconv.ParseInt(allTrxs[i].BlockNumber, 10, 0)
-		if err != nil {
-			return false
-		}
-		blockNumber2, err := strconv.ParseInt(allTrxs[j].BlockNumber, 10, 0)
-		if err != nil {
-			return false
-		}
-
-		return blockNumber1 > blockNumber2
-	})
 
 	return allTrxs, nil
 }
