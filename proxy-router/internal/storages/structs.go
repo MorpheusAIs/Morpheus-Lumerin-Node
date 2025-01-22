@@ -3,11 +3,12 @@ package storages
 import "math/big"
 
 type Session struct {
-	Id           string
-	UserAddr     string
-	ProviderAddr string
-	EndsAt       *big.Int
-	ModelID      string
+	Id            string
+	UserAddr      string
+	ProviderAddr  string
+	AgentUsername string
+	EndsAt        *big.Int
+	ModelID       string
 
 	TPSScaled1000Arr []int
 	TTFTMsArr        []int

@@ -411,6 +411,7 @@ func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.
 			session.DirectPayment(),
 			session.FailoverEnabled(),
 			session.ProviderAddr(),
+			session.AgentUsername(),
 		)
 		if err != nil {
 			return nil, err

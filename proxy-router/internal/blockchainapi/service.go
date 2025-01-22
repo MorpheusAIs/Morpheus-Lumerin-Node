@@ -300,15 +300,24 @@ func (s *BlockchainService) rateBids(bidIds [][32]byte, bids []m.IBidStorageBid,
 	return scoredBids
 }
 
-func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalSig []byte, stake *big.Int, directPayment bool) (common.Hash, error) {
+func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalSig []byte, stake *big.Int, directPayment bool, agentUsername string) (common.Hash, error) {
+	shouldDecrease, err := s.authConfig.IsAllowanceEnough(agentUsername, s.morTokenAddr.Hex(), stake)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrAgentUserAllowance, err)
+	}
+
 	prKey, err := s.privateKey.GetPrivateKey()
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrPrKey, err)
 	}
 
-	_, err = s.Approve(ctx, s.diamonContractAddr, stake)
+	approveTx, err := s.Approve(ctx, s.diamonContractAddr, stake)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrApprove, err)
+	}
+
+	if shouldDecrease {
+		s.authConfig.AuthStorage.SetAgentTx(approveTx.Hex(), agentUsername)
 	}
 
 	transactOpt, err := s.getTransactOpts(ctx, prKey)
@@ -316,9 +325,31 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
 	}
 
-	sessionID, _, _, err := s.sessionRouter.OpenSession(transactOpt, approval, approvalSig, stake, directPayment, prKey)
+	sessionID, _, _, txHash, err := s.sessionRouter.OpenSession(transactOpt, approval, approvalSig, stake, directPayment, prKey)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrSendTx, err)
+	}
+
+	if shouldDecrease {
+		amountBigInt := lib.BigInt{Int: *stake}
+		err = s.authConfig.DecreaseAllowance(agentUsername, s.morTokenAddr.Hex(), amountBigInt)
+		if err != nil {
+			s.log.Errorf("failed to decrease allowance: %s", err)
+			return common.Hash{}, err
+		}
+		s.authConfig.AuthStorage.SetAgentTx(txHash.Hex(), agentUsername)
+	}
+
+	session, err := s.sessionRepo.GetSession(ctx, sessionID)
+	if err != nil {
+		return sessionID, fmt.Errorf("failed to get session: %s", err.Error())
+	}
+
+	session.SetAgentUsername(agentUsername)
+
+	err = s.sessionRepo.SaveSession(ctx, session)
+	if err != nil {
+		return sessionID, fmt.Errorf("failed to store session: %s", err.Error())
 	}
 
 	return sessionID, err
@@ -873,7 +904,7 @@ func (s *BlockchainService) GetTransactions(ctx context.Context, page uint64, li
 	return allTrxs, nil
 }
 
-func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.Hash, duration *big.Int) (common.Hash, error) {
+func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.Hash, duration *big.Int, agentUsername string) (common.Hash, error) {
 	supply, err := s.GetTokenSupply(ctx)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrTokenSupply, err)
@@ -898,11 +929,11 @@ func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.H
 		return common.Hash{}, ErrOpenOwnBid
 	}
 
-	hash, _, err := s.tryOpenSession(ctx, bid, duration, supply, budget, userAddr, false, false)
+	hash, _, err := s.tryOpenSession(ctx, bid, duration, supply, budget, userAddr, false, false, agentUsername)
 	return hash, err
 }
 
-func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID common.Hash, duration *big.Int, directPayment bool, isFailoverEnabled bool, omitProvider common.Address) (common.Hash, error) {
+func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID common.Hash, duration *big.Int, directPayment bool, isFailoverEnabled bool, omitProvider common.Address, agentUsername string) (common.Hash, error) {
 	supply, err := s.GetTokenSupply(ctx)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrTokenSupply, err)
@@ -953,7 +984,7 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 		s.log.Infof("trying to open session with provider #%d %s", i, bid.Bid.Provider.String())
 		durationCopy := new(big.Int).Set(duration)
 
-		hash, tryNext, err := s.tryOpenSession(ctx, &bid.Bid, durationCopy, supply, budget, userAddr, directPayment, isFailoverEnabled)
+		hash, tryNext, err := s.tryOpenSession(ctx, &bid.Bid, durationCopy, supply, budget, userAddr, directPayment, isFailoverEnabled, agentUsername)
 		if err != nil {
 			s.log.Errorf("failed to open session with provider %s: %s", bid.Bid.Provider.String(), err.Error())
 			if tryNext {
@@ -1014,7 +1045,7 @@ func (s *BlockchainService) GetAllBidsWithRating(ctx context.Context, modelAgent
 	return ids, bids, providerModelStats, providers, nil
 }
 
-func (s *BlockchainService) tryOpenSession(ctx context.Context, bid *structs.Bid, duration, supply, budget *big.Int, userAddr common.Address, directPayment bool, failoverEnabled bool) (common.Hash, bool, error) {
+func (s *BlockchainService) tryOpenSession(ctx context.Context, bid *structs.Bid, duration, supply, budget *big.Int, userAddr common.Address, directPayment bool, failoverEnabled bool, agentUsername string) (common.Hash, bool, error) {
 	provider, err := s.providerRegistry.GetProviderById(ctx, bid.Provider)
 	if err != nil {
 		return common.Hash{}, false, lib.WrapError(ErrProvider, err)
@@ -1045,26 +1076,9 @@ func (s *BlockchainService) tryOpenSession(ctx context.Context, bid *structs.Bid
 		return common.Hash{}, true, lib.WrapError(ErrInitSession, err)
 	}
 
-	_, err = s.Approve(ctx, s.diamonContractAddr, amountTransferred)
-	if err != nil {
-		return common.Hash{}, false, lib.WrapError(ErrApprove, err)
-	}
-
-	hash, err := s.OpenSession(ctx, initRes.Approval, initRes.ApprovalSig, amountTransferred, directPayment)
+	hash, err := s.OpenSession(ctx, initRes.Approval, initRes.ApprovalSig, amountTransferred, directPayment, agentUsername)
 	if err != nil {
 		return common.Hash{}, false, err
-	}
-
-	session, err := s.sessionRepo.GetSession(ctx, hash)
-	if err != nil {
-		return hash, false, fmt.Errorf("failed to get session: %s", err.Error())
-	}
-
-	session.SetFailoverEnabled(failoverEnabled)
-
-	err = s.sessionRepo.SaveSession(ctx, session)
-	if err != nil {
-		return hash, false, fmt.Errorf("failed to store session: %s", err.Error())
 	}
 
 	return hash, false, nil
