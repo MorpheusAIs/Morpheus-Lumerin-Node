@@ -14,6 +14,7 @@ This document provides a step-by-step flow to query your local proxy router and 
 
 ## Detail:
 ### A. Start the proxy-router (per instructions)
+See [/docs/proxy-router-api-auth.md](/docs/proxy-router-api-auth.md) for auth instructions.
 
 ### B. Authorize the contract to spend on your behalf
 Either via the swagger interface http://localhost:8082/swagger/index.html#/wallet/post_blockchain_allowance or following CLI, you can authorize the contract to spend on your behalf. **This only needs to be done once per wallet, or when funds have been depleted.**

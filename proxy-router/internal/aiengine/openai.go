@@ -62,6 +62,7 @@ func (a *OpenAI) Prompt(ctx context.Context, compl *openai.ChatCompletionRequest
 	}
 	defer resp.Body.Close()
 
+	a.log.Debugf("AI Model responded with status code: %d", resp.StatusCode)
 	if isContentTypeStream(resp.Header) {
 		return a.readStream(ctx, resp.Body, cb)
 	}

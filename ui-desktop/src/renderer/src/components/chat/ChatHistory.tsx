@@ -87,10 +87,10 @@ const HisotryEntry = ({ entry, deleteHistory, onSelectChat, isActive, onChangeTi
 
 export const ChatHistory = (props: ChatHistoryProps) => {
     const sessions = props.sessions;
-    const [search, setSearch] = useState<string | undefined>();
+    const [search, setSearch] = useState<string>('');
 
     useEffect(() => {
-        setSearch("");
+        setSearch('');
     }, [props.open])
 
     const renderTitlesGroup = (items: ChatData[]) => {

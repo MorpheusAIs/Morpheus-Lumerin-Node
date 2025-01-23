@@ -1,6 +1,8 @@
 package httphandlers
 
 import (
+	"time"
+
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/gin-gonic/gin"
 )
@@ -12,6 +14,12 @@ func RequestLogger(logger lib.ILogger) gin.HandlerFunc {
 		path := c.Request.URL.Path
 		raw := c.Request.URL.RawQuery
 
+		start := time.Now()
+		logger.Debugf("[HTTP-REQ] %s %s",
+			c.Request.Method,
+			path,
+		)
+
 		// Process request
 		c.Next()
 
@@ -20,11 +28,13 @@ func RequestLogger(logger lib.ILogger) gin.HandlerFunc {
 		}
 
 		// Log details
-		logger.Infof("[REQ] %s %s [%d] \n [ERROR]: %s",
+		status := c.Writer.Status()
+		latency := time.Since(start).Round(time.Millisecond)
+		logger.Debugf("[HTTP-RES] %s %s [%d] %v",
 			c.Request.Method,
 			path,
-			c.Writer.Status(),
-			c.Errors.ByType(gin.ErrorTypePrivate).String(),
+			status,
+			latency,
 		)
 	}
 }

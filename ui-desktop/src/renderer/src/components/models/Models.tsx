@@ -23,7 +23,7 @@ const Container = styled.div`
     }
 `
 
-export const Models = () => {
+const Models = () => {
 
     const [openChangeModal, setOpenChangeModal] = useState(false);
     
@@ -53,3 +53,5 @@ export const Models = () => {
         </View>)
 
 }
+
+export default Models;

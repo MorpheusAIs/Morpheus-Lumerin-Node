@@ -38,12 +38,13 @@ type ModelConfigLoader struct {
 }
 
 type ModelConfig struct {
-	ModelName       string `json:"modelName" validate:"required"`
-	ApiType         string `json:"apiType" validate:"required"`
-	ApiURL          string `json:"apiUrl" validate:"required,url"`
-	ApiKey          string `json:"apiKey"`
-	ConcurrentSlots int    `json:"concurrentSlots" validate:"number"`
-	CapacityPolicy  string `json:"capacityPolicy"`
+	ModelName       string            `json:"modelName" validate:"required"`
+	ApiType         string            `json:"apiType" validate:"required"`
+	ApiURL          string            `json:"apiUrl" validate:"required,url"`
+	ApiKey          string            `json:"apiKey"`
+	ConcurrentSlots int               `json:"concurrentSlots" validate:"number"`
+	CapacityPolicy  string            `json:"capacityPolicy"`
+	Parameters      map[string]string `json:"parameters"`
 }
 
 type ModelConfigs map[string]ModelConfig
@@ -125,7 +126,7 @@ func (e *ModelConfigLoader) ModelConfigFromID(ID string) *ModelConfig {
 	}
 
 	modelConfig := e.modelConfigs[ID]
-	if modelConfig == (ModelConfig{}) {
+	if modelConfig.ModelName == "" {
 		e.log.Warnf("model config not found for ID: %s", ID)
 		return &ModelConfig{}
 	}

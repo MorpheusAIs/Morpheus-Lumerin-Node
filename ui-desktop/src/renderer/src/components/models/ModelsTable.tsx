@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { withRouter } from 'react-router-dom';
+
 import withModelsState from "../../store/hocs/withModelsState";
 import styled from 'styled-components';
 
@@ -80,7 +80,6 @@ function ModelsTable({
   const onSelect = (id) => {
     console.log("selected", id);
     setSelectedModel(models.find(x => x.Id == id));
-    history.push("/bids");
   }
 
   return (<Container>
@@ -90,4 +89,4 @@ function ModelsTable({
     </Container>)
 }
 
-export default withRouter(withModelsState(ModelsTable));
+export default withModelsState(ModelsTable);

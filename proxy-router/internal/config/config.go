@@ -42,17 +42,14 @@ type Config struct {
 		WalletPrivateKey       *lib.HexString  `env:"WALLET_PRIVATE_KEY"       flag:"wallet-private-key"     desc:"if set, will use this private key to sign transactions, otherwise it will be retrieved from the system keychain"`
 	}
 	Log struct {
-		Color           bool   `env:"LOG_COLOR"            flag:"log-color"`
-		FolderPath      string `env:"LOG_FOLDER_PATH"      flag:"log-folder-path"      validate:"omitempty,dirpath"    desc:"enables file logging and sets the folder path"`
-		IsProd          bool   `env:"LOG_IS_PROD"          flag:"log-is-prod"          validate:""                     desc:"affects the format of the log output"`
-		JSON            bool   `env:"LOG_JSON"             flag:"log-json"`
-		LevelApp        string `env:"LOG_LEVEL_APP"        flag:"log-level-app"        validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
-		LevelConnection string `env:"LOG_LEVEL_CONNECTION" flag:"log-level-connection" validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
-		LevelProxy      string `env:"LOG_LEVEL_PROXY"      flag:"log-level-proxy"      validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
-		LevelScheduler  string `env:"LOG_LEVEL_SCHEDULER"  flag:"log-level-scheduler"  validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
-		LevelContract   string `env:"LOG_LEVEL_CONTRACT"   flag:"log-level-contract"   validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
-		LevelRPC        string `env:"LOG_LEVEL_RPC"        flag:"log-level-rpc"        validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
-		LevelBadger     string `env:"LOG_LEVEL_BADGER"     flag:"log-level-badger"     validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
+		Color        bool   `env:"LOG_COLOR"            flag:"log-color"`
+		FolderPath   string `env:"LOG_FOLDER_PATH"      flag:"log-folder-path"      validate:"omitempty,dirpath"    desc:"enables file logging and sets the folder path"`
+		IsProd       bool   `env:"LOG_IS_PROD"          flag:"log-is-prod"          validate:""                     desc:"affects the format of the log output"`
+		JSON         bool   `env:"LOG_JSON"             flag:"log-json"`
+		LevelApp     string `env:"LOG_LEVEL_APP"        flag:"log-level-app"        validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
+		LevelTCP     string `env:"LOG_LEVEL_TCP" flag:"log-level-tcp" validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
+		LevelEthRPC  string `env:"LOG_LEVEL_ETH_RPC"    flag:"log-level-eth-rpc"        validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
+		LevelStorage string `env:"LOG_LEVEL_STORAGE"     flag:"log-level-storage"     validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
 	}
 	Proxy struct {
 		Address            string    `env:"PROXY_ADDRESS" flag:"proxy-address" validate:"required,hostname_port"`
@@ -61,6 +58,8 @@ type Config struct {
 		ForwardChatContext *lib.Bool `env:"PROXY_FORWARD_CHAT_CONTEXT" flag:"proxy-forward-chat-context" desc:"prepend whole stored message history to the prompt"`
 		ModelsConfigPath   string    `env:"MODELS_CONFIG_PATH" flag:"models-config-path" validate:"omitempty"`
 		RatingConfigPath   string    `env:"RATING_CONFIG_PATH" flag:"rating-config-path" validate:"omitempty" desc:"path to the rating config file"`
+		CookieFilePath     string    `env:"COOKIE_FILE_PATH" flag:"cookie-file-path" validate:"omitempty" desc:"path to the cookie file"`
+		AuthConfigFilePath string    `env:"AUTH_CONFIG_FILE_PATH" flag:"auth-config-file-path" validate:"omitempty"`
 	}
 	System struct {
 		Enable           bool   `env:"SYS_ENABLE"              flag:"sys-enable" desc:"enable system level configuration adjustments"`
@@ -101,26 +100,17 @@ func (cfg *Config) SetDefaults() {
 
 	// Log
 
-	if cfg.Log.LevelConnection == "" {
-		cfg.Log.LevelConnection = "info"
-	}
-	if cfg.Log.LevelProxy == "" {
-		cfg.Log.LevelProxy = "info"
-	}
-	if cfg.Log.LevelScheduler == "" {
-		cfg.Log.LevelScheduler = "info"
-	}
-	if cfg.Log.LevelContract == "" {
-		cfg.Log.LevelContract = "debug"
+	if cfg.Log.LevelTCP == "" {
+		cfg.Log.LevelTCP = "info"
 	}
 	if cfg.Log.LevelApp == "" {
 		cfg.Log.LevelApp = "debug"
 	}
-	if cfg.Log.LevelRPC == "" {
-		cfg.Log.LevelRPC = "info"
+	if cfg.Log.LevelEthRPC == "" {
+		cfg.Log.LevelEthRPC = "info"
 	}
-	if cfg.Log.LevelBadger == "" {
-		cfg.Log.LevelBadger = "info"
+	if cfg.Log.LevelStorage == "" {
+		cfg.Log.LevelStorage = "info"
 	}
 
 	// System
@@ -180,6 +170,12 @@ func (cfg *Config) SetDefaults() {
 	if cfg.Proxy.RatingConfigPath == "" {
 		cfg.Proxy.RatingConfigPath = "./rating-config.json"
 	}
+	if cfg.Proxy.CookieFilePath == "" {
+		cfg.Proxy.CookieFilePath = "./.cookie"
+	}
+	if cfg.Proxy.AuthConfigFilePath == "" {
+		cfg.Proxy.AuthConfigFilePath = "./proxy.conf"
+	}
 }
 
 // GetSanitized returns a copy of the config with sensitive data removed
@@ -204,10 +200,8 @@ func (cfg *Config) GetSanitized() interface{} {
 	publicCfg.Log.IsProd = cfg.Log.IsProd
 	publicCfg.Log.JSON = cfg.Log.JSON
 	publicCfg.Log.LevelApp = cfg.Log.LevelApp
-	publicCfg.Log.LevelConnection = cfg.Log.LevelConnection
-	publicCfg.Log.LevelProxy = cfg.Log.LevelProxy
-	publicCfg.Log.LevelScheduler = cfg.Log.LevelScheduler
-	publicCfg.Log.LevelRPC = cfg.Log.LevelRPC
+	publicCfg.Log.LevelTCP = cfg.Log.LevelTCP
+	publicCfg.Log.LevelEthRPC = cfg.Log.LevelEthRPC
 
 	publicCfg.Proxy.Address = cfg.Proxy.Address
 	publicCfg.Proxy.ModelsConfigPath = cfg.Proxy.ModelsConfigPath

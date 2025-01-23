@@ -5,26 +5,29 @@ import (
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 	"github.com/gin-gonic/gin"
 )
 
 type WalletController struct {
-	service interfaces.Wallet
+	service    interfaces.Wallet
+	authConfig system.HTTPAuthConfig
 }
 
-func NewWalletController(service interfaces.Wallet) *WalletController {
+func NewWalletController(service interfaces.Wallet, authConfig system.HTTPAuthConfig) *WalletController {
 	c := &WalletController{
-		service: service,
+		service:    service,
+		authConfig: authConfig,
 	}
 
 	return c
 }
 
 func (s *WalletController) RegisterRoutes(r interfaces.Router) {
-	r.GET("/wallet", s.GetWallet)
-	r.POST("/wallet/privateKey", s.SetupWalletPrivateKey)
-	r.POST("/wallet/mnemonic", s.SetupWalletMnemonic)
-	r.DELETE("/wallet", s.DeleteWallet)
+	r.GET("/wallet", s.authConfig.CheckAuth("get_wallet"), s.GetWallet)
+	r.POST("/wallet/privateKey", s.authConfig.CheckAuth("set_wallet"), s.SetupWalletPrivateKey)
+	r.POST("/wallet/mnemonic", s.authConfig.CheckAuth("set_wallet"), s.SetupWalletMnemonic)
+	r.DELETE("/wallet", s.authConfig.CheckAuth("remove_wallet"), s.DeleteWallet)
 }
 
 // GetWallet godoc
@@ -34,6 +37,7 @@ func (s *WalletController) RegisterRoutes(r interfaces.Router) {
 //	@Tags			wallet
 //	@Produce		json
 //	@Success		200	{WalletRes}	WalletRes
+//	@Security		BasicAuth
 //	@Router			/wallet [get]
 func (s *WalletController) GetWallet(ctx *gin.Context) {
 	prKey, err := s.service.GetPrivateKey()
@@ -57,6 +61,7 @@ func (s *WalletController) GetWallet(ctx *gin.Context) {
 //	@Produce		json
 //	@Param			privatekey	body		string	true	"Private key"
 //	@Success		200			{WalletRes}	walletRes
+//	@Security		BasicAuth
 //	@Router			/wallet/privateKey [post]
 func (s *WalletController) SetupWalletPrivateKey(ctx *gin.Context) {
 	var req SetupWalletPrKeyReqBody
@@ -95,6 +100,7 @@ func (s *WalletController) SetupWalletPrivateKey(ctx *gin.Context) {
 //	@Param			mnemonic		body		string	false	"Mnemonic"
 //	@Param			derivationPath	body		string	false	"Derivation path"
 //	@Success		200				{WalletRes}	walletRes
+//	@Security		BasicAuth
 //	@Router			/wallet/mnemonic [post]
 func (s *WalletController) SetupWalletMnemonic(ctx *gin.Context) {
 	var req SetupWalletMnemonicReqBody
@@ -131,6 +137,7 @@ func (s *WalletController) SetupWalletMnemonic(ctx *gin.Context) {
 //	@Tags			wallet
 //	@Produce		json
 //	@Success		200	{statusRes}	res
+//	@Security		BasicAuth
 //	@Router			/wallet [delete]
 func (s *WalletController) DeleteWallet(ctx *gin.Context) {
 	err := s.service.DeleteWallet()

@@ -22,7 +22,6 @@ import {
     VideoContainer
 } from './Chat.styles';
 import { BtnAccent } from '../dashboard/BalanceBlock.styles';
-import { withRouter } from 'react-router-dom';
 import withChatState from '../../store/hocs/withChatState';
 import { abbreviateAddress } from '../../utils'
 import Markdown from 'react-markdown'
@@ -32,7 +31,7 @@ import './Chat.css'
 import { ChatHistory } from './ChatHistory';
 import Spinner from 'react-bootstrap/Spinner';
 import ModelSelectionModal from './modals/ModelSelectionModal';
-import { parseDataChunk, makeId, getColor, isClosed, generateHashId } from './utils';
+import { tryParseDataChunk, makeId, getColor, isClosed, generateHashId } from './utils';
 import { Cooldown } from './Cooldown';
 import ImageViewer from "react-simple-image-viewer";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
@@ -47,7 +46,7 @@ const Chat = (props) => {
     const chatBlockRef = useRef<null | HTMLDivElement>(null);
     const bidsSpinWaitClosed = useRef(false);
 
-    const [value, setValue] = useState("");
+    const [promptInput, setPromptInput] = useState("");
     const [isLoading, setIsLoading] = useState(true);
     const [messages, setMessages] = useState<any>([]);
     const [isOpen, setIsOpen] = useState(false);
@@ -61,6 +60,7 @@ const Chat = (props) => {
     const [activeSession, setActiveSession] = useState<any>(undefined);
 
     const [chainData, setChainData] = useState<any>(null);
+    const [isChainDataSet, setIsChainDataSet] = useState<boolean>(false);
     const [chatData, setChatsData] = useState<ChatData[]>([]);
 
     const [openChangeModal, setOpenChangeModal] = useState(false);
@@ -92,6 +92,7 @@ const Chat = (props) => {
             setBalances(chainData.userBalances)
             setMeta(chainData.meta);
             setChainData(chainData)
+            setIsChainDataSet(true);
 
             const mappedChatData = chats.reduce((res, item) => {
                 const chatModel = chainData.models.find(x => x.Id == item.modelId);
@@ -161,7 +162,7 @@ const Chat = (props) => {
     }, [])
 
     useEffect(() => {
-        if(!chainData)
+        if(!isChainDataSet)
             return;
 
         (async () => {
@@ -199,7 +200,7 @@ const Chat = (props) => {
             setProvidersAvailability(availabilityResults);            
         })();
 
-    }, chainData)
+    }, [isChainDataSet])
 
     const spinWaitForBids = async () => {
         if(bidsSpinWaitClosed.current)
@@ -399,7 +400,7 @@ const Chat = (props) => {
     }
 
     const call = async (message) => {
-        let memoState = [...messages, { id: makeId(16), text: value, ...userMessage }];
+        let memoState = [...messages, { id: makeId(16), text: promptInput, ...userMessage }];
         setMessages(memoState);
         scrollToBottom();
 
@@ -419,10 +420,14 @@ const Chat = (props) => {
             messages: [incommingMessage]
         };
 
+        const authHeaders = await props.client.getAuthHeaders();
         // If image take only last message
         const response = await fetch(`${props.config.chain.localProxyRouterUrl}/v1/chat/completions`, {
             method: 'POST',
-            headers,
+            headers: {
+                ...headers,
+                ...authHeaders,
+            },
             body: JSON.stringify(payload)
         }).catch((e) => {
             console.log("Failed to send request", e)
@@ -439,19 +444,22 @@ const Chat = (props) => {
             return;
         }
 
-        const textDecoder = new TextDecoder();
 
         if (!response.body) {
             console.error("Body is missed");
             return;
         }
 
-        const reader = response.body.getReader()
         registerScrollEvent(true);
 
+        const textDecoder = new TextDecoder();
+        const reader = response.body.getReader()
+
         const icon = modelName.toUpperCase()[0];
-        const iconProps = { icon, color: getColor(icon) };
+        const iconProps = { icon, color: getColor(icon), user: modelName, role: "assistant" };
         try {
+
+            let chunksBuffer = ""
             while (true) {
                 if (abort) {
                     await reader.cancel();
@@ -465,7 +473,18 @@ const Chat = (props) => {
                 }
 
                 const decodedString = textDecoder.decode(value, { stream: true });
-                const parts = parseDataChunk(decodedString);
+                
+                chunksBuffer = chunksBuffer + decodedString;
+
+                const { data: parts, isChunkIncomplete } = tryParseDataChunk(chunksBuffer);
+
+                if (isChunkIncomplete) {
+                    continue;
+                }
+                else {
+                    chunksBuffer = "";
+                }
+
                 parts.forEach(part => {
                     if (!part) {
                         return;
@@ -482,22 +501,26 @@ const Chat = (props) => {
                     }
 
                     const imageContent = part.imageUrl;
+                    const imageRawContent = part.imageRawContent;
                     const videoRawContent = part.videoRawContent;
 
-                    if (!part?.id && !imageContent && !videoRawContent) {
+                    if (!part?.id && !imageContent && !videoRawContent && !imageRawContent) {
                         return;
                     }
 
                     let result: any[] = [];
                     const message = memoState.find(m => m.id == part.id);
                     const otherMessages = memoState.filter(m => m.id != part.id);
-                    if (imageContent) {
-                        result = [...otherMessages, { id: part.job, user: modelName, role: "assistant", text: imageContent, isImageContent: true, ...iconProps }];
+                    
+                    if (imageRawContent) {
+                        result = [...otherMessages, { id: makeId(16), text: imageRawContent, isImageContent: true, ...iconProps }];
+                    } else if (imageContent) {
+                        result = [...otherMessages, { id: part.job, text: imageContent, isImageContent: true, ...iconProps }];
                     } else if (videoRawContent) {
-                        result = [...otherMessages, { id: part.job, user: modelName, role: "assistant", text: videoRawContent, isVideoRawContent: true, ...iconProps }];
+                        result = [...otherMessages, { id: part.job, text: videoRawContent, isVideoRawContent: true, ...iconProps }];
                     } else {
                         const text = `${message?.text || ''}${part?.choices[0]?.delta?.content || ''}`.replace("<|im_start|>", "").replace("<|im_end|>", "");
-                        result = [...otherMessages, { id: part.id, user: modelName, role: "assistant", text: text, ...iconProps }];
+                        result = [...otherMessages, { id: part.id, text: text, ...iconProps }];
                     }
                     memoState = result;
                     setMessages(result);
@@ -549,18 +572,18 @@ const Chat = (props) => {
             return;
         }
 
-        if (!value) {
+        if (!promptInput) {
             return;
         }
 
         if (messages.length === 0 && chat) {
-            const title = { ...chat, title: value };
+            const title = { ...chat, title: promptInput };
             setChatsData([...chatData, title]);
         }
 
         setIsSpinning(true);
-        call(value).finally(() => setIsSpinning(false));
-        setValue("");
+        call(promptInput).finally(() => setIsSpinning(false));
+        setPromptInput("");
     }
 
     const deleteChatEntry = (id: string) => {
@@ -761,8 +784,8 @@ const Chat = (props) => {
                                     handleSubmit();
                                 }
                             }}
-                            value={value}
-                            onChange={ev => setValue(ev.target.value)}
+                            value={promptInput}
+                            onChange={ev => setPromptInput(ev.target.value)}
                             placeholder={isReadonly ? "Session is closed. Chat in ReadOnly Mode" : "Ask me anything..."}
                             minRows={1}
                             maxRows={6} />
@@ -844,4 +867,4 @@ const Message = ({ message, onOpenImage }) => {
         </div>)
 }
 
-export default withRouter(withChatState(Chat));
+export default withChatState(Chat);

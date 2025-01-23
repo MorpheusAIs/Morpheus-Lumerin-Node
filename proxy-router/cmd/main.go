@@ -13,6 +13,7 @@ import (
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apibus"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/authapi"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
@@ -98,42 +99,28 @@ func start() error {
 
 	appLog := log.Named("APP")
 
-	proxyLog, err := lib.NewLogger(cfg.Log.LevelProxy, cfg.Log.Color, cfg.Log.IsProd, cfg.Log.JSON, mainLogFilePath)
+	tcpLog, err := lib.NewLogger(cfg.Log.LevelTCP, cfg.Log.Color, cfg.Log.IsProd, cfg.Log.JSON, mainLogFilePath)
 	if err != nil {
 		return err
-	}
-
-	connLog, err := lib.NewLogger(cfg.Log.LevelConnection, cfg.Log.Color, cfg.Log.IsProd, cfg.Log.JSON, mainLogFilePath)
-	if err != nil {
-		return err
-	}
-
-	schedulerLogFactory := func(remoteAddr string) (lib.ILogger, error) {
-		fp := ""
-		if logFolderPath != "" {
-			fp = filepath.Join(logFolderPath, fmt.Sprintf("scheduler-%s.log", lib.SanitizeFilename(remoteAddr)))
-		}
-		return lib.NewLogger(cfg.Log.LevelScheduler, cfg.Log.Color, cfg.Log.IsProd, cfg.Log.JSON, fp)
 	}
 
 	contractLogStorage := lib.NewCollection[*interfaces.LogStorage]()
 
-	rpcLog, err := lib.NewLogger(cfg.Log.LevelRPC, cfg.Log.Color, cfg.Log.IsProd, cfg.Log.JSON, mainLogFilePath)
+	rpcLog, err := lib.NewLogger(cfg.Log.LevelEthRPC, cfg.Log.Color, cfg.Log.IsProd, cfg.Log.JSON, mainLogFilePath)
 	if err != nil {
 		return err
 	}
 
-	badgerLog, err := lib.NewLogger(cfg.Log.LevelBadger, cfg.Log.Color, cfg.Log.IsProd, cfg.Log.JSON, mainLogFilePath)
+	storageLog, err := lib.NewLogger(cfg.Log.LevelStorage, cfg.Log.Color, cfg.Log.IsProd, cfg.Log.JSON, mainLogFilePath)
 	if err != nil {
 		return err
 	}
 
 	defer func() {
-		_ = connLog.Close()
-		_ = proxyLog.Close()
+		_ = tcpLog.Close()
 		_ = log.Close()
 		_ = rpcLog.Close()
-		_ = badgerLog.Close()
+		_ = storageLog.Close()
 	}()
 
 	appLog.Infof("proxy-router %s", config.BuildVersion)
@@ -198,7 +185,7 @@ func start() error {
 			appLog.Info("Wallet deleted")
 		}
 
-		ethNodeStorage := ethclient.NewRPCClientStoreKeychain(keychainStorage, nil, log)
+		ethNodeStorage := ethclient.NewRPCClientStoreKeychain(keychainStorage, nil, rpcLog.Named("RPC"))
 		err = ethNodeStorage.RemoveURLs()
 		if err != nil {
 			appLog.Warnf("Failed to remove eth node urls\n%s", err)
@@ -206,6 +193,31 @@ func start() error {
 			appLog.Info("Eth node urls removed")
 		}
 		return nil
+	}
+
+	appLog.Infof("Auth config file: %s", cfg.Proxy.AuthConfigFilePath)
+	appLog.Infof("Cookie file: %s", cfg.Proxy.CookieFilePath)
+	authCfg := system.NewAuthConfig(cfg.Proxy.AuthConfigFilePath, cfg.Proxy.CookieFilePath)
+
+	if err := authCfg.ReadConfig(); err != nil {
+		return err
+	}
+
+	// Ensure cookie file with admin credentials exists
+	if err := authCfg.EnsureCookieFileExists(); err != nil {
+		return err
+	}
+
+	if err := authCfg.CheckFilePermissions(); err != nil {
+		appLog.Warnf("Config file permissions: %s", err)
+	}
+
+	adminUser, adminPass, err := authCfg.ReadCookieFile()
+	if err != nil {
+		appLog.Errorf("Failed to read cookie file: %s", err)
+	} else {
+		valid := authCfg.ValidatePassword(adminUser, adminPass)
+		appLog.Infof("Admin user: %s, valid: %t", adminUser, valid)
 	}
 
 	var ethNodeAddresses []string
@@ -227,16 +239,16 @@ func start() error {
 	}
 	appLog.Infof("connected to ethereum node: %s, chainID: %d", cfg.Blockchain.EthNodeAddress, chainID)
 
-	storage := storages.NewStorage(badgerLog, cfg.Proxy.StoragePath)
+	storage := storages.NewStorage(storageLog, cfg.Proxy.StoragePath)
 	sessionStorage := storages.NewSessionStorage(storage)
 
 	var wallet interfaces.Wallet
 	if len(*cfg.Marketplace.WalletPrivateKey) > 0 {
 		wallet = wlt.NewEnvWallet(*cfg.Marketplace.WalletPrivateKey)
-		log.Warnf("Using env wallet. Private key persistance unavailable")
+		appLog.Warnf("Using env wallet. Private key persistance unavailable")
 	} else {
 		wallet = wlt.NewKeychainWallet(keychainStorage)
-		log.Infof("Using keychain wallet")
+		appLog.Infof("Using keychain wallet")
 	}
 
 	var logWatcher contracts.LogWatcher
@@ -248,7 +260,7 @@ func start() error {
 		appLog.Infof("using polling for blockchain events")
 	}
 
-	scorer, err := config.LoadRating(cfg.Proxy.RatingConfigPath, log)
+	scorer, err := config.LoadRating(cfg.Proxy.RatingConfigPath, appLog)
 	if err != nil {
 		return err
 	}
@@ -257,35 +269,36 @@ func start() error {
 	chatStorage := chatstorage.NewChatStorage(chatStoragePath)
 
 	multicallBackend := multicall.NewMulticall3Custom(ethClient, *cfg.Blockchain.Multicall3Addr)
-	sessionRouter := registries.NewSessionRouter(*cfg.Marketplace.DiamondContractAddress, ethClient, multicallBackend, log)
-	marketplace := registries.NewMarketplace(*cfg.Marketplace.DiamondContractAddress, ethClient, multicallBackend, log)
+	sessionRouter := registries.NewSessionRouter(*cfg.Marketplace.DiamondContractAddress, ethClient, multicallBackend, rpcLog)
+	marketplace := registries.NewMarketplace(*cfg.Marketplace.DiamondContractAddress, ethClient, multicallBackend, rpcLog)
 	sessionRepo := sessionrepo.NewSessionRepositoryCached(sessionStorage, sessionRouter, marketplace)
-	proxyRouterApi := proxyapi.NewProxySender(chainID, wallet, contractLogStorage, sessionStorage, sessionRepo, log)
+	proxyRouterApi := proxyapi.NewProxySender(chainID, wallet, contractLogStorage, sessionStorage, sessionRepo, appLog)
 	explorer := blockchainapi.NewExplorerClient(cfg.Blockchain.ExplorerApiUrl, *cfg.Marketplace.MorTokenAddress, cfg.Blockchain.ExplorerRetryDelay, cfg.Blockchain.ExplorerMaxRetries)
-	blockchainApi := blockchainapi.NewBlockchainService(ethClient, multicallBackend, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, explorer, wallet, proxyRouterApi, sessionRepo, scorer, proxyLog, cfg.Blockchain.EthLegacyTx)
+	blockchainApi := blockchainapi.NewBlockchainService(ethClient, multicallBackend, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, explorer, wallet, proxyRouterApi, sessionRepo, scorer, appLog, rpcLog, cfg.Blockchain.EthLegacyTx)
 	proxyRouterApi.SetSessionService(blockchainApi)
 
-	modelConfigLoader := config.NewModelConfigLoader(cfg.Proxy.ModelsConfigPath, valid, blockchainApi, &aiengine.ConnectionChecker{}, log)
+	modelConfigLoader := config.NewModelConfigLoader(cfg.Proxy.ModelsConfigPath, valid, blockchainApi, &aiengine.ConnectionChecker{}, appLog)
 	err = modelConfigLoader.Init()
 	if err != nil {
-		log.Warnf("failed to load model config, running with empty: %s", err)
+		appLog.Warnf("failed to load model config, running with empty: %s", err)
 	}
 
-	aiEngine := aiengine.NewAiEngine(proxyRouterApi, chatStorage, modelConfigLoader, log)
+	aiEngine := aiengine.NewAiEngine(proxyRouterApi, chatStorage, modelConfigLoader, appLog)
 
-	eventListener := blockchainapi.NewEventsListener(sessionRepo, sessionRouter, wallet, logWatcher, log)
+	eventListener := blockchainapi.NewEventsListener(sessionRepo, sessionRouter, wallet, logWatcher, appLog)
 
-	sessionExpiryHandler := blockchainapi.NewSessionExpiryHandler(blockchainApi, sessionStorage, wallet, log)
-	blockchainController := blockchainapi.NewBlockchainController(blockchainApi, log)
+	sessionExpiryHandler := blockchainapi.NewSessionExpiryHandler(blockchainApi, sessionStorage, wallet, appLog)
+	blockchainController := blockchainapi.NewBlockchainController(blockchainApi, *authCfg, appLog)
 
 	ethConnectionValidator := system.NewEthConnectionValidator(*big.NewInt(int64(cfg.Blockchain.ChainID)))
-	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine, chatStorage, *cfg.Proxy.StoreChatContext.Bool, *cfg.Proxy.ForwardChatContext.Bool, log)
-	walletController := walletapi.NewWalletController(wallet)
-	systemController := system.NewSystemController(&cfg, wallet, rpcClientStore, sysConfig, appStartTime, chainID, log, ethConnectionValidator)
+	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine, chatStorage, *cfg.Proxy.StoreChatContext.Bool, *cfg.Proxy.ForwardChatContext.Bool, *authCfg, appLog)
+	walletController := walletapi.NewWalletController(wallet, *authCfg)
+	systemController := system.NewSystemController(&cfg, wallet, rpcClientStore, sysConfig, appStartTime, chainID, appLog, ethConnectionValidator, *authCfg)
+	authController := authapi.NewAuthController(authCfg, appLog)
 
-	apiBus := apibus.NewApiBus(blockchainController, proxyController, walletController, systemController)
-	httpHandler := httphandlers.CreateHTTPServer(log, apiBus)
-	httpServer := transport.NewServer(cfg.Web.Address, httpHandler, log.Named("HTTP"))
+	apiBus := apibus.NewApiBus(blockchainController, proxyController, walletController, systemController, authController)
+	httpHandler := httphandlers.CreateHTTPServer(appLog, *authCfg, apiBus)
+	httpServer := transport.NewServer(cfg.Web.Address, httpHandler, appLog.Named("HTTP"))
 
 	// http server should shut down latest to keep pprof running
 	serverErrCh := make(chan error, 1)
@@ -295,9 +308,9 @@ func start() error {
 		cancel()
 	}()
 
-	log.Infof("API docs available at %s/swagger/index.html", cfg.Web.PublicUrl)
+	appLog.Infof("API docs available at %s/swagger/index.html", cfg.Web.PublicUrl)
 
-	proxy := proxyctl.NewProxyCtl(eventListener, wallet, chainID, log, connLog, cfg.Proxy.Address, schedulerLogFactory, sessionStorage, modelConfigLoader, valid, aiEngine, blockchainApi, sessionRepo, sessionExpiryHandler)
+	proxy := proxyctl.NewProxyCtl(eventListener, wallet, chainID, appLog, tcpLog, cfg.Proxy.Address, sessionStorage, modelConfigLoader, valid, aiEngine, blockchainApi, sessionRepo, sessionExpiryHandler)
 	err = proxy.Run(ctx)
 
 	cancelServer()

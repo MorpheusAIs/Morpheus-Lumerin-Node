@@ -24,7 +24,7 @@
             "title": "API Type",
             "description": "Defines the type of API to be used with this model",
             "type": "string",
-            "enum": ["openai", "prodia-sd", "prodia-sdxl", "prodia-v2"]
+            "enum": ["openai", "prodia-v2", "hyperbolic-sd", "claudeai"]
           },
           "apiUrl": {
             "title": "API URL",
@@ -38,6 +38,12 @@
             "description": "Optional API key",
             "type": "string",
             "minLength": 1
+          },
+          "parameters": {
+            "title": "Configuration parameters for model",
+            "description": "Optional parameters that can be passed to model",
+            "type": "object",
+            "additionalProperties": { "type": "string" }
           },
           "concurrentSlots": {
             "title": "Concurrent Slots",
