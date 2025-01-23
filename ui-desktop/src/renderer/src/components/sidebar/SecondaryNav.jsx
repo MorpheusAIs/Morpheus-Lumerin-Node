@@ -13,7 +13,7 @@ const Container = styled.div`
   flex-direction: column;
   justify-content: space-between;
   max-height: 10%;
-  color: ${p => p.theme.colors.morMain}
+  color: ${(p) => p.theme.colors.morMain}
   padding-left: 0.5rem;
   @media (min-width: 800px) {
     padding-left: 2.2rem;
@@ -25,16 +25,15 @@ const Button = styled(NavLink)`
   min-height: 6rem;
   align-items: center;
   text-decoration: none;
-  color: ${p => p.theme.colors.morMain}
+  color: ${(p) => p.theme.colors.morMain};
   padding: 1.6rem;
-  border-top: 1px solid rgba;
 
   &:focus {
     outline: none;
   }
 
   &.active {
-    color: ${p => p.theme.colors.morMain}
+    color: ${(p) => p.theme.colors.morMain}
     pointer-events: none;
   }
 `;
@@ -44,7 +43,7 @@ const HelpLink = styled.span`
   min-height: 7.1rem;
   align-items: center;
   text-decoration: none;
-  color: ${p => p.theme.colors.morMain};
+  color: ${(p) => p.theme.colors.morMain};
   padding: 1.6rem;
   cursor: pointer;
 
@@ -53,7 +52,7 @@ const HelpLink = styled.span`
   }
 
   &.active {
-    color: ${p => p.theme.colors.morMain};
+    color: ${(p) => p.theme.colors.morMain};
     pointer-events: none;
   }
 `;
@@ -94,7 +93,7 @@ const Label = styled.span`
 `;
 
 const NavHeader = styled.h3`
-  color: ${p => p.theme.colors.primary};
+  color: ${(p) => p.theme.colors.primary};
   padding-left: 2rem;
   text-transform: uppercase;
   font-size: 1.2rem;
@@ -112,7 +111,7 @@ function SecondaryNav({
   parent,
   client: { onHelpLinkClick },
   activeIndex,
-  setActiveIndex
+  setActiveIndex,
 }) {
   return (
     <Container>
@@ -137,10 +136,9 @@ function SecondaryNav({
         <Label parent={parent}>Devices</Label>
       </Button>
        */}
-
       <Button
         onClick={() => setActiveIndex(5)}
-        className={(navData) => (navData.isActive ? "active-style" : 'none')}
+        // className={(navData) => (navData.isActive ? "active-style" : 'none')}
         data-testid="tools-nav-btn"
         parent={parent}
         to="/settings"
@@ -150,7 +148,6 @@ function SecondaryNav({
         </IconWrapper>
         <Label parent={parent}>Settings</Label>
       </Button>
-
       <HelpLink data-testid="help-nav-btn" onClick={onHelpLinkClick}>
         <IconWrapper parent={parent}>
           <IconHelp width={iconSize} />

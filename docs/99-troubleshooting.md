@@ -23,7 +23,7 @@
         * These four items MUST be accurate to the chain and your OS., Use the example files `/proxy-router/env.main.example` to make sure you have the correct values: 
             * `DIAMOND_CONTRACT_ADDRESS=`
             * `MOR_TOKEN_ADDRESS=`
-            * `EXPLORER_API_URL=`
+            * `BLOCKSCOUT_API_URL=`
             * `ETH_NODE_CHAIN_ID=`
             * `PROXY_STORAGE_PATH=`
         * If you are running the proxy-router by itself (without the UI), you will need to set the private key of your provider wallet in the  `WALLET_PRIVATE_KEY=`

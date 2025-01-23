@@ -47,7 +47,7 @@ const config: HardhatUserConfig = {
       timeout: 1000000000000000,
     },
     arbitrum_sepolia: {
-      url: `https://arbitrum-sepolia.infura.io/v3/${process.env.INFURA_KEY}`,
+      url: 'https://arb-sepolia.g.alchemy.com/v2/yigo5wrDsGyTjHq1fMeeLlH36FCYuyAr',
       accounts: privateKey(),
       gasMultiplier: 1.1,
     },
@@ -92,9 +92,22 @@ const config: HardhatUserConfig = {
   },
   etherscan: {
     apiKey: {
-      mainnet: `${process.env.ETHERSCAN_API_KEY}`,
-      arbitrumSepolia: `${process.env.ARBITRUM_API_KEY}`,
+      // mainnet: `${process.env.ETHERSCAN_API_KEY}`,
+      'arbitrum-sepolia': `empty`,
     },
+    customChains: [
+      {
+        network: 'arbitrum-sepolia',
+        chainId: 421614,
+        urls: {
+          apiURL: 'https://arbitrum-sepolia.blockscout.com/api',
+          browserURL: 'https://arbitrum-sepolia.blockscout.com',
+        },
+      },
+    ],
+  },
+  sourcify: {
+    enabled: true,
   },
 };
 

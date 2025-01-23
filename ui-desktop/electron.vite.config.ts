@@ -76,7 +76,11 @@ export default defineConfig(({ /*command,*/ mode }) => {
           '@renderer': resolve('src/renderer/src')
         }
       },
-      plugins: [react(), svgr(), nodePolyfills()],
+      plugins: [
+        react({ babel: { plugins: ['styled-components'], babelrc: false, configFile: false } }),
+        svgr(),
+        nodePolyfills()
+      ],
       define: processEnvDefineMap
     }
   }

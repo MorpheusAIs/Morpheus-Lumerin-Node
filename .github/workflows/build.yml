@@ -39,6 +39,9 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+                
+      - name: Generate Tag Name
+        uses: ./.github/actions/gen_tag_name
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -66,9 +69,6 @@ jobs:
 
       - name: Copy Environment Files
         uses: ./.github/actions/copy_env_files
-      
-      - name: Generate Tag Name
-        uses: ./.github/actions/gen_tag_name
 
       - name: Build
         id: build
@@ -119,6 +119,9 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+      
+      - name: Generate Tag Name
+        uses: ./.github/actions/gen_tag_name
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -148,9 +151,6 @@ jobs:
       - name: Copy Environment Files
         uses: ./.github/actions/copy_env_files
 
-      - name: Generate Tag Name
-        uses: ./.github/actions/gen_tag_name
-      
       - name: Build
         id: build
         run: |
@@ -200,6 +200,9 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+      
+      - name: Generate Tag Name
+        uses: ./.github/actions/gen_tag_name
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -228,9 +231,6 @@ jobs:
 
       - name: Copy Environment Files
         uses: ./.github/actions/copy_env_files
-
-      - name: Generate Tag Name
-        uses: ./.github/actions/gen_tag_name
       
       - name: Build
         id: build
@@ -281,6 +281,9 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+      
+      - name: Generate Tag Name
+        uses: ./.github/actions/gen_tag_name
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -313,9 +316,6 @@ jobs:
 
       - name: Copy Environment Files
         uses: ./.github/actions/copy_env_files
-
-      - name: Generate Tag Name
-        uses: ./.github/actions/gen_tag_name
       
       - name: Build
         id: build
