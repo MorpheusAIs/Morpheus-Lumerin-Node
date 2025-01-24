@@ -7,11 +7,13 @@ logs
 # binary folders
 dist
 bin 
-
+proxy-router
 data*
 
 models-config.json
 rating-config.json
+proxy.conf
+.cookie
 
 #Badger DB
 *.vlog
@@ -21,3 +23,7 @@ KEYREGISTRY
 LOCK
 MANIFEST
 chats/
+
+# proxy auth
+proxy.conf
+.cookie

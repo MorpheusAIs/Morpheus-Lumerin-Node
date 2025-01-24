@@ -1508,6 +1508,9 @@ const docTemplate = `{
                 "security": [
                     {
                         "BasicAuth": []
+                    },
+                    {
+                        "BasicAuth": []
                     }
                 ],
                 "description": "Get MOR and ETH transactions",
@@ -2716,6 +2719,26 @@ const docTemplate = `{
                 }
             }
         },
+        "structs.ContractInteraction": {
+            "type": "object",
+            "properties": {
+                "contractAddress": {
+                    "type": "string"
+                },
+                "contractName": {
+                    "type": "string"
+                },
+                "decodedInput": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/structs.InputEntry"
+                    }
+                },
+                "methodName": {
+                    "type": "string"
+                }
+            }
+        },
         "structs.CreateBidRequest": {
             "type": "object",
             "required": [
@@ -2787,6 +2810,44 @@ const docTemplate = `{
                 "stake": {
                     "type": "string",
                     "example": "123000000000"
+                }
+            }
+        },
+        "structs.InputEntry": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "value": {}
+            }
+        },
+        "structs.MappedTransaction": {
+            "type": "object",
+            "properties": {
+                "contract": {
+                    "$ref": "#/definitions/structs.ContractInteraction"
+                },
+                "from": {
+                    "type": "string"
+                },
+                "hash": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "string"
+                },
+                "to": {
+                    "type": "string"
+                },
+                "transfers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/structs.TokenTransfer"
+                    }
                 }
             }
         },
@@ -2941,74 +3002,6 @@ const docTemplate = `{
                 }
             }
         },
-        "structs.RawTransaction": {
-            "type": "object",
-            "properties": {
-                "blockHash": {
-                    "type": "string"
-                },
-                "blockNumber": {
-                    "type": "string"
-                },
-                "confirmations": {
-                    "type": "string"
-                },
-                "contractAddress": {
-                    "type": "string"
-                },
-                "cumulativeGasUsed": {
-                    "type": "string"
-                },
-                "from": {
-                    "type": "string"
-                },
-                "functionName": {
-                    "type": "string"
-                },
-                "gas": {
-                    "type": "string"
-                },
-                "gasPrice": {
-                    "type": "string"
-                },
-                "gasPriceBid": {
-                    "type": "string"
-                },
-                "gasUsed": {
-                    "type": "string"
-                },
-                "hash": {
-                    "type": "string"
-                },
-                "input": {
-                    "type": "string"
-                },
-                "isError": {
-                    "type": "string"
-                },
-                "methodId": {
-                    "type": "string"
-                },
-                "nonce": {
-                    "type": "string"
-                },
-                "timeStamp": {
-                    "type": "string"
-                },
-                "to": {
-                    "type": "string"
-                },
-                "transactionIndex": {
-                    "type": "string"
-                },
-                "txreceipt_status": {
-                    "type": "string"
-                },
-                "value": {
-                    "type": "string"
-                }
-            }
-        },
         "structs.ScoredBid": {
             "type": "object",
             "properties": {
@@ -3134,13 +3127,43 @@ const docTemplate = `{
                 }
             }
         },
+        "structs.TokenTransfer": {
+            "type": "object",
+            "properties": {
+                "from": {
+                    "type": "string"
+                },
+                "to": {
+                    "type": "string"
+                },
+                "tokenAddress": {
+                    "description": "nil for eth transfers",
+                    "type": "string"
+                },
+                "tokenDecimals": {
+                    "type": "integer"
+                },
+                "tokenIcon": {
+                    "type": "string"
+                },
+                "tokenName": {
+                    "type": "string"
+                },
+                "tokenSymbol": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
         "structs.TransactionsRes": {
             "type": "object",
             "properties": {
                 "transactions": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/structs.RawTransaction"
+                        "$ref": "#/definitions/structs.MappedTransaction"
                     }
                 }
             }

@@ -32,7 +32,7 @@ var WALLET_PRIVATE_KEY = lib.MustStringToHexString("") // Set this to a valid pr
 
 var DIAMOND_CONTRACT_ADDR = lib.MustStringToAddress("0x70768f0ff919e194e11abfc3a2edf43213359dc1")
 var MOR_CONTRACT_ADDR = lib.MustStringToAddress("0x34a285a1b1c166420df5b6630132542923b5b27e")
-var EXPLORER_API_URL = "https://api-sepolia.arbiscan.io/api"
+var BLOCKSCOUT_API_URL = "https://arbitrum-sepolia.blockscout.com/api/v2"
 var ETH_LEGACY_TX = false
 var ETH_NODE_ADDRESS = "wss://arb-sepolia.g.alchemy.com/v2/Ken3T8xkvWUxtpKvb3yDedzF-sNsQDlZ"
 
@@ -293,7 +293,7 @@ func InitializeApiBus(t *testing.T) *apibus.APIBus {
 
 	wlt := wallet.NewEnvWallet(WALLET_PRIVATE_KEY)
 	proxyRouterApi := proxyapi.NewProxySender(&url.URL{}, wlt, contractLogStorage, sessionStorage, log.Named("PROXY_SENDER"))
-	blockchainApi := blockchainapi.NewBlockchainService(ethClient, DIAMOND_CONTRACT_ADDR.Address, MOR_CONTRACT_ADDR.Address, EXPLORER_API_URL, wlt, sessionStorage, proxyRouterApi, log, log, ETH_LEGACY_TX)
+	blockchainApi := blockchainapi.NewBlockchainService(ethClient, DIAMOND_CONTRACT_ADDR.Address, MOR_CONTRACT_ADDR.Address, BLOCKSCOUT_API_URL, wlt, sessionStorage, proxyRouterApi, log, log, ETH_LEGACY_TX)
 	aiEngine := aiengine.NewAiEngine("http://localhost:11434/v1", "", log)
 
 	apiBus := apibus.NewApiBus(

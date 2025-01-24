@@ -465,9 +465,10 @@ func (s *BlockchainController) getBalance(ctx *gin.Context) {
 //	@Description	Get MOR and ETH transactions
 //	@Tags			transactions
 //	@Produce		json
-//	@Param			page	query		string	false	"Page"
-//	@Param			limit	query		string	false	"Limit"
-//	@Success		200		{object}	structs.TransactionsRes
+//	@Param			page	query	string	false	"Page"
+//	@Param			limit	query	string	false	"Limit"
+//	@Security		BasicAuth
+//	@Success		200	{object}	structs.TransactionsRes
 //	@Router			/blockchain/transactions [get]
 //	@Security		BasicAuth
 func (c *BlockchainController) getTransactions(ctx *gin.Context) {

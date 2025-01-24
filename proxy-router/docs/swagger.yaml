@@ -383,6 +383,19 @@ definitions:
         example: "100000000"
         type: string
     type: object
+  structs.ContractInteraction:
+    properties:
+      contractAddress:
+        type: string
+      contractName:
+        type: string
+      decodedInput:
+        items:
+          $ref: '#/definitions/structs.InputEntry'
+        type: array
+      methodName:
+        type: string
+    type: object
   structs.CreateBidRequest:
     properties:
       modelID:
@@ -436,6 +449,31 @@ definitions:
     required:
     - endpoint
     - stake
+    type: object
+  structs.InputEntry:
+    properties:
+      key:
+        type: string
+      type:
+        type: string
+      value: {}
+    type: object
+  structs.MappedTransaction:
+    properties:
+      contract:
+        $ref: '#/definitions/structs.ContractInteraction'
+      from:
+        type: string
+      hash:
+        type: string
+      timestamp:
+        type: string
+      to:
+        type: string
+      transfers:
+        items:
+          $ref: '#/definitions/structs.TokenTransfer'
+        type: array
     type: object
   structs.Model:
     properties:
@@ -537,51 +575,6 @@ definitions:
           $ref: '#/definitions/structs.Provider'
         type: array
     type: object
-  structs.RawTransaction:
-    properties:
-      blockHash:
-        type: string
-      blockNumber:
-        type: string
-      confirmations:
-        type: string
-      contractAddress:
-        type: string
-      cumulativeGasUsed:
-        type: string
-      from:
-        type: string
-      functionName:
-        type: string
-      gas:
-        type: string
-      gasPrice:
-        type: string
-      gasPriceBid:
-        type: string
-      gasUsed:
-        type: string
-      hash:
-        type: string
-      input:
-        type: string
-      isError:
-        type: string
-      methodId:
-        type: string
-      nonce:
-        type: string
-      timeStamp:
-        type: string
-      to:
-        type: string
-      transactionIndex:
-        type: string
-      txreceipt_status:
-        type: string
-      value:
-        type: string
-    type: object
   structs.ScoredBid:
     properties:
       bid:
@@ -664,11 +657,31 @@ definitions:
         example: "100000000"
         type: string
     type: object
+  structs.TokenTransfer:
+    properties:
+      from:
+        type: string
+      to:
+        type: string
+      tokenAddress:
+        description: nil for eth transfers
+        type: string
+      tokenDecimals:
+        type: integer
+      tokenIcon:
+        type: string
+      tokenName:
+        type: string
+      tokenSymbol:
+        type: string
+      value:
+        type: string
+    type: object
   structs.TransactionsRes:
     properties:
       transactions:
         items:
-          $ref: '#/definitions/structs.RawTransaction'
+          $ref: '#/definitions/structs.MappedTransaction'
         type: array
     type: object
   structs.TxRes:
@@ -1678,6 +1691,7 @@ paths:
           schema:
             $ref: '#/definitions/structs.TransactionsRes'
       security:
+      - BasicAuth: []
       - BasicAuth: []
       summary: Get Transactions
       tags:
