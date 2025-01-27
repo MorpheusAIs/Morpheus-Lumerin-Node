@@ -2,6 +2,8 @@
 pragma solidity ^0.8.24;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
@@ -32,6 +34,7 @@ contract SessionRouter is
     using LibSD for LibSD.SD;
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.Bytes32Set;
+    using Address for address;
 
     function __SessionRouter_init(
         address fundingAccount_,
@@ -187,19 +190,16 @@ contract SessionRouter is
     }
 
     function _extractProviderApproval(bytes calldata providerApproval_) private view returns (bytes32) {
-        (bytes32 bidId_, uint256 chainId_, address user_, uint128 timestamp_) = abi.decode(
+        (bytes32 bidId_, uint256 chainId_, , uint128 timestamp_) = abi.decode(
             providerApproval_,
             (bytes32, uint256, address, uint128)
         );
 
-        if (user_ != _msgSender()) {
-            revert SessionApprovedForAnotherUser();
-        }
         if (chainId_ != block.chainid) {
-            revert SesssionApprovedForAnotherChainId();
+            revert SessionApprovedForAnotherChainId();
         }
         if (block.timestamp > timestamp_ + SIGNATURE_TTL) {
-            revert SesssionApproveExpired();
+            revert SessionApproveExpired();
         }
 
         return bidId_;
@@ -240,10 +240,10 @@ contract SessionRouter is
         );
 
         if (chainId_ != block.chainid) {
-            revert SesssionReceiptForAnotherChainId();
+            revert SessionReceiptForAnotherChainId();
         }
         if (block.timestamp > timestamp_ + SIGNATURE_TTL) {
-            revert SesssionReceiptExpired();
+            revert SessionReceiptExpired();
         }
 
         return (sessionId_, tpsScaled1000_, ttftMs_);
@@ -533,9 +533,24 @@ contract SessionRouter is
         address provider_,
         bytes calldata receipt_,
         bytes calldata signature_
-    ) private pure returns (bool) {
+    ) private view returns (bool) {
         bytes32 receiptHash_ = ECDSA.toEthSignedMessageHash(keccak256(receipt_));
+        address user_ = ECDSA.recover(receiptHash_, signature_);
 
-        return ECDSA.recover(receiptHash_, signature_) == provider_;
+        if (user_ == provider_ || isRightsDelegated(user_, provider_, DELEGATION_RULES_PROVIDER)) {
+            return true;
+        }
+
+        if (provider_.isContract()) {
+            (bool success, bytes memory result) = provider_.staticcall(abi.encodeWithSignature("owner()"));
+            if (success && result.length == 32) {
+                address owner_ = abi.decode(result, (address));
+                if (user_ == owner_) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 }
