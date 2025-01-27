@@ -39,12 +39,23 @@ const config: HardhatUserConfig = {
       // forking: {
       //   url: `https://arbitrum-sepolia.infura.io/v3/${process.env.INFURA_KEY}`,
       // },
+      // forking: {
+      //   url: `https://arb-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_KEY}`,
+      // },
+      // forking: {
+      //   url: `https://arbitrum-mainnet.infura.io/v3/${process.env.INFURA_KEY}`,
+      // },
     },
     localhost: {
       url: 'http://127.0.0.1:8545',
       initialDate: '1970-01-01T00:00:00Z',
       gasMultiplier: 1.2,
       timeout: 1000000000000000,
+    },
+    arbitrum: {
+      url: `https://arbitrum-mainnet.infura.io/v3/${process.env.INFURA_KEY}`,
+      accounts: privateKey(),
+      gasMultiplier: 1.1,
     },
     arbitrum_sepolia: {
       url: 'https://arb-sepolia.g.alchemy.com/v2/yigo5wrDsGyTjHq1fMeeLlH36FCYuyAr',
@@ -92,19 +103,10 @@ const config: HardhatUserConfig = {
   },
   etherscan: {
     apiKey: {
-      // mainnet: `${process.env.ETHERSCAN_API_KEY}`,
-      'arbitrum-sepolia': `empty`,
+      mainnet: `${process.env.ETHERSCAN_API_KEY}`,
+      arbitrumSepolia: `${process.env.ARBITRUM_API_KEY}`,
+      arbitrumOne: `${process.env.ARBITRUM_API_KEY}`,
     },
-    customChains: [
-      {
-        network: 'arbitrum-sepolia',
-        chainId: 421614,
-        urls: {
-          apiURL: 'https://arbitrum-sepolia.blockscout.com/api',
-          browserURL: 'https://arbitrum-sepolia.blockscout.com',
-        },
-      },
-    ],
   },
   sourcify: {
     enabled: true,

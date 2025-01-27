@@ -12,6 +12,8 @@ export type Config = {
   marketplaceMinBidPricePerSecond: string;
   marketplaceMaxBidPricePerSecond: string;
   delegateRegistry: string;
+  owner: string;
+  lumerinProtocol: string;
 };
 
 export function parseConfig(): Config {
