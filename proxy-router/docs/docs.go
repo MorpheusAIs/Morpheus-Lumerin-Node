@@ -16,7 +16,186 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/auth/allowance/confirm": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Permission: agent_requests",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Confirm or Decline Token Allowance Request",
+                "parameters": [
+                    {
+                        "description": "Confirm Token Allowance Request",
+                        "name": "confirmAllowanceReq",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/authapi.ConfirmAllowanceReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/authapi.AuthRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/allowance/requests": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Permission: agent_requests",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Get All Token Allowance Requests",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/authapi.AllowanceRequestsRes"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Permission: request_allowance",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Request Allowance for Agent",
+                "parameters": [
+                    {
+                        "description": "Request Allowance Request with token and amount",
+                        "name": "requestAllowanceReq",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/authapi.RequestAllowanceReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/authapi.AuthRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/allowance/revoke": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Permission: agent_requests",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Revoke Token Allowance for Agent",
+                "parameters": [
+                    {
+                        "description": "Revoke Token Allowance Request",
+                        "name": "revokeAllowanceReq",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/authapi.RevokeAllowanceReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/authapi.AuthRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/txs": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Permission: agent_requests",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Get Agent Transactions",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/authapi.AgentTxsRes"
+                        }
+                    }
+                }
+            }
+        },
         "/auth/users": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Permission: agent_requests",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Get Agent Users",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/authapi.AgentUsersRes"
+                        }
+                    }
+                }
+            },
             "post": {
                 "security": [
                     {
@@ -64,7 +243,7 @@ const docTemplate = `{
                 "tags": [
                     "auth"
                 ],
-                "summary": "Add User to Proxy API",
+                "summary": "Remove User from Proxy API",
                 "parameters": [
                     {
                         "description": "Remove User Request",
@@ -73,6 +252,72 @@ const docTemplate = `{
                         "required": true,
                         "schema": {
                             "$ref": "#/definitions/authapi.RemoveUserReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/authapi.AuthRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/users/confirm": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Permission: agent_requests",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Confirm or Decline Agent User",
+                "parameters": [
+                    {
+                        "description": "Confirm Agent User Request",
+                        "name": "confirmAgentUserReq",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/authapi.ConfirmAgentReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/authapi.AuthRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/users/request": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Request New User for Agent",
+                "parameters": [
+                    {
+                        "description": "Request Agent User Request",
+                        "name": "requestAgentUserReq",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/authapi.RequestAgentUserReq"
                         }
                     }
                 ],
@@ -1957,6 +2202,64 @@ const docTemplate = `{
                 }
             }
         },
+        "authapi.AgentTx": {
+            "type": "object",
+            "properties": {
+                "tx_hash": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "authapi.AgentTxsRes": {
+            "type": "object",
+            "properties": {
+                "txs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/authapi.AgentTx"
+                    }
+                }
+            }
+        },
+        "authapi.AgentUsersRes": {
+            "type": "object",
+            "properties": {
+                "agents": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "authapi.AllowanceRequest": {
+            "type": "object",
+            "properties": {
+                "allowance": {
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "authapi.AllowanceRequestsRes": {
+            "type": "object",
+            "properties": {
+                "requests": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/authapi.AllowanceRequest"
+                    }
+                }
+            }
+        },
         "authapi.AuthRes": {
             "type": "object",
             "properties": {
@@ -1965,9 +2268,87 @@ const docTemplate = `{
                 }
             }
         },
+        "authapi.ConfirmAgentReq": {
+            "type": "object",
+            "properties": {
+                "confirm": {
+                    "type": "boolean"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "authapi.ConfirmAllowanceReq": {
+            "type": "object",
+            "required": [
+                "confirm",
+                "token",
+                "username"
+            ],
+            "properties": {
+                "confirm": {
+                    "type": "boolean"
+                },
+                "token": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
         "authapi.RemoveUserReq": {
             "type": "object",
             "properties": {
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "authapi.RequestAgentUserReq": {
+            "type": "object",
+            "properties": {
+                "allowances": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "password": {
+                    "type": "string"
+                },
+                "perms": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "authapi.RequestAllowanceReq": {
+            "type": "object",
+            "properties": {
+                "allowance": {
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "authapi.RevokeAllowanceReq": {
+            "type": "object",
+            "properties": {
+                "token": {
+                    "type": "string"
+                },
                 "username": {
                     "type": "string"
                 }
