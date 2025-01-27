@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       create_release:
-        description: 'Create updated Morpheus release'
+        description: 'Create updated Morpheus-Lumerin-Node release'
         required: true
         type: boolean
         
