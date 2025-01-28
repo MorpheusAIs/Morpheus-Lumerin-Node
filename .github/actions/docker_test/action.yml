@@ -56,36 +56,35 @@ runs:
           ${{ inputs.image }}
 
     # Wait for the container to initialize (adjust sleep time as needed)
-    - name: Wait for container to be ready
+    - name: Wait for Proxy-Router to Start  
       shell: bash
       run: |
-        echo "Container started, checking logs in 20 seconds..."
-        echo "####################################################"
-        sleep 20
-        echo "####################################################"
+        timeout=10
+        while ! curl -s http://localhost:8082/healthcheck >/dev/null; do
+          ((timeout--))
+          if [ $timeout -le 0 ]; then
+            echo "Container failed to start in time"
+            docker logs test-container
+            exit 1
+          fi
+          sleep 1
+        done
+        echo "Proxy-router is running."
         docker logs test-container
 
     # Set up the Go environment
     - name: Set up Go environment
       uses: actions/setup-go@v4
       with:
-        go-version: 1.22
+        go-version: 1.23
 
-    # (Optional) Run Go tests (customize this step if needed)
-    # Uncomment this if you have tests to run
-    - name: Run tests
+    - name: Run Go API Tests
       shell: bash
       run: |
-        echo "Simple api test"
-        curl -X 'GET' 'http://localhost:8082/healthcheck' -H 'accept: application/json'
-        curl -s -o /dev/null -w "%{http_code}" http://localhost:8082/healthcheck | grep 200
-        if [ $? -ne 0 ]; then
-          echo "Health check failed"
-          exit 1
-        fi
-
-        # Ensure test files are present in ./tests or adjust path accordingly
-        # go test ./tests -v
+        cd .github/actions/docker_test
+        go mod init tests
+        go mod tidy
+        go test -v
 
     # Stop and clean up the container after tests
     - name: Stop and clean up container
