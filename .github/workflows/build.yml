@@ -425,13 +425,12 @@ jobs:
               }
             }
  
-  GHCR-Build-and-Push:
-    env:
-      IMAGE_NAME_BASE: ghcr.io/lumerin-protocol/morpheus-lumerin-node
- 
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' ) }}
-    runs-on: ubuntu-latest
+  GHCR-Build:
+    name: Build Docker Image
+    # if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' ) }}
+    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/ghcr-docker-build' ) }}
 
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -441,10 +440,58 @@ jobs:
 
       - name: Generate Tag Name
         uses: ./.github/actions/gen_tag_name
-
+      
+      - name: Debug Image base, tag and create IMAGE_NAME
+        run: |
+          echo "TAG_NAME=${{ env.TAG_NAME }}"
+          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
+          echo "IMAGE_NAME=${{ env.IMAGE_NAME_BASE }}:${{ env.TAG_NAME }}" >> $GITHUB_ENV
+          
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
+    
+      - name: Build Multi-Platform Docker Image
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --build-arg TAG_NAME=${{ env.TAG_NAME }} \
+            --build-arg COMMIT=${{ github.sha }} \
+            --load \
+            -t ${{ env.IMAGE_NAME }} \
+            -f proxy-router/Dockerfile \
+            proxy-router || (echo "Failed to build image with tag: ${{ env.IMAGE_NAME }}" && exit 1)
 
+
+  GHCR-Test:
+    name: Test Docker Image
+    # if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' ) }}
+    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/ghcr-docker-build' ) }}
+
+    needs: 
+      - GHCR-Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Pull Built Image
+        run: docker pull ${{ env.IMAGE_NAME }}
+
+      - name: Run Docker Tests
+        uses: ./.github/actions/docker_test
+        with:
+          image: ${{ env.IMAGE_NAME }}
+
+  GHCR-Push:
+    name: Push Docker Image
+    # if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' ) }}
+    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/ghcr-docker-build' ) }}
+    
+    needs: 
+      - GHCR-Build 
+      - GHCR-Test
+    runs-on: ubuntu-latest
+    steps:
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -452,34 +499,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Push Multi-Platform Docker Image
+      - name: Push Multi-Platform Docker Image
         run: |
-          IMAGE_NAME=${{ env.IMAGE_NAME_BASE }}:${{ env.TAG_NAME }}
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --build-arg TAG_NAME=${{ env.TAG_NAME }} \
-            --build-arg COMMIT=${{ github.sha }} \
-            --push \
-            -t $IMAGE_NAME \
-            -f proxy-router/Dockerfile \
-            proxy-router
+          echo "Pushing image with tag: ${{ env.IMAGE_NAME }}"
+          docker push ${{ env.IMAGE_NAME }} || (echo "Failed to push image with tag: ${{ env.IMAGE_NAME }}" && exit 1)
 
       - name: Optionally Push Latest Tag
         if: ${{ github.ref == 'refs/heads/main' }}
         run: |
+          echo "Tagging image as :latest"
           LATEST_IMAGE=${{ env.IMAGE_NAME_BASE }}:latest
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --build-arg TAG_NAME=${{ env.TAG_NAME }} \
-            --build-arg COMMIT=${{ github.sha }} \
-            --push \
-            -t $LATEST_IMAGE \
-            -f proxy-router/Dockerfile \
-            proxy-router
+          docker tag ${{ env.IMAGE_NAME }} $LATEST_IMAGE
+          echo "Pushing image as :latest"
+          docker push $LATEST_IMAGE || (echo "Failed to push image as :latest" && exit 1)
 
   GitLab-Deploy:
-    needs:
-      - GHCR-Build-and-Push
+    needs: [GHCR-Push]
     if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) }}
     runs-on: ubuntu-latest
     steps:

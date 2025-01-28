@@ -45,3 +45,4 @@ runs:
         echo "TAG_NAME=${VTAG}" >> $GITHUB_ENV
         echo "VTAG=${VTAG}" >> $GITHUB_ENV
         echo "VFULL=${VFULL}" >> $GITHUB_ENV
+        echo "IMAGE_NAME_BASE=ghcr.io/lumerin-protocol/morpheus-lumerin-node" >> $GITHUB_ENV

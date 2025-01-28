@@ -1,0 +1,43 @@
+name: Docker Test
+
+description: Test the published Docker image by running the container and verifying functionality.
+
+runs:
+  using: "composite"
+  steps:
+    # Pull the Docker image to test
+    - name: Pull published Docker image
+      run: docker pull ${{ inputs.image }}
+
+    # Run the container in detached mode
+    - name: Run Docker container
+      run: |
+        docker run -d --name test-container -p 8082:8082 -p 3333:3333 ${{ inputs.image }}
+
+    # Wait for the container to initialize (adjust sleep time as needed)
+    - name: Wait for container to be ready
+      run: |
+        sleep 10 # Adjust this to match your container's startup time
+        docker logs test-container
+
+    # Set up the Go environment
+    - name: Set up Go environment
+      uses: actions/setup-go@v4
+      with:
+        go-version: 1.21
+
+    # # Run the Go tests (uncomment and customize this step if needed)
+    # - name: Run tests
+    #   run: |
+    #     # Make sure test files are present in ./tests directory or adjust path
+    #     go test ./tests -v
+
+    # Stop and clean up the container after tests
+    - name: Stop and clean up container
+      run: docker rm -f test-container
+
+# Input variables
+inputs:
+  image:
+    description: "The Docker image to test"
+    required: true
