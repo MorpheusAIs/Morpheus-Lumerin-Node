@@ -30,7 +30,7 @@ defaults:
     
 jobs:
   Generate-Tags: 
-    name: Push Docker Image
+    name: Generate Global Version Tags
     if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/feat/ghcr-docker-build') }}
 
     runs-on: ubuntu-latest
@@ -49,7 +49,7 @@ jobs:
           echo "TAG_NAME=${{ env.TAG_NAME }}"
           echo "VTAG=${{ env.VTAG }}"
           echo "VFULL=${{ env.VFULL }}" 
-          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}
+          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
           echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"
         
   Ubuntu-22-x64:
