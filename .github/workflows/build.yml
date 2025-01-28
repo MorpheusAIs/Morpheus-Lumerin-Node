@@ -31,7 +31,7 @@ defaults:
 jobs:
   Generate-Tags: 
     name: Push Docker Image
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/feat/ghcr-docker-build ') }}
+    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/feat/ghcr-docker-build ') }}
 
     runs-on: ubuntu-latest
     steps:
