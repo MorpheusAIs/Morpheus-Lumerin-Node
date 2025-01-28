@@ -53,6 +53,9 @@ runs:
           -p 3333:3333 \
           -p 8082:8082 \
           ${{ inputs.image }}
+        echo "####################################################"
+        echo "Container started, checking running env variables..."
+        docker exec -it test-container env
 
     # Wait for the container to initialize (adjust sleep time as needed)
     - name: Wait for container to be ready
@@ -79,7 +82,7 @@ runs:
           echo "Health check failed"
           exit 1
         fi
-        
+
         # Ensure test files are present in ./tests or adjust path accordingly
         # go test ./tests -v
 
