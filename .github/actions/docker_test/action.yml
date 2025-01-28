@@ -11,7 +11,6 @@ runs:
       run: |
         echo "Setting up volumes and control files..."
         mkdir -p /tmp/proxy-router-test/data
-        mkdir -p /tmp/proxy-router-test/data/data
 
         echo "Creating the .cookie file..."
         echo "admintest:strongpassword" > /tmp/proxy-router-test/.cookie
@@ -42,6 +41,7 @@ runs:
       shell: bash
       run: |
         echo "Starting Docker container for testing..."
+        echo "####################################################"
         docker run -d --name test-container \
           --env-file /tmp/proxy-router-test/proxy-router.env \
           -e WALLET_PRIVATE_KEY=${{ inputs.private_key }} \
@@ -49,7 +49,8 @@ runs:
           -e RATING_CONFIG_PATH=/app/data/rating-config.json \
           -e COOKIE_FILE_PATH=/app/data/.cookie \
           -e AUTH_CONFIG_FILE_PATH=/app/data/proxy.conf \
-          -v /tmp/proxy-router-test/data:/app/data \
+          -e PROXY_STORAGE_PATH=/app/data/data/ \
+          -v /tmp/proxy-router-test:/app/data \
           -p 3333:3333 \
           -p 8082:8082 \
           ${{ inputs.image }}
@@ -58,18 +59,17 @@ runs:
     - name: Wait for container to be ready
       shell: bash
       run: |
+        echo "Container started, checking logs in 20 seconds..."
         echo "####################################################"
-        sleep 10 # Adjust this to match your container's startup time
-        echo "Container started, checking running env variables..."
+        sleep 20
         echo "####################################################"
-        docker exec -i --entrypoint /bin/bash test-container -c "env"
         docker logs test-container
 
     # Set up the Go environment
     - name: Set up Go environment
       uses: actions/setup-go@v4
       with:
-        go-version: 1.21
+        go-version: 1.22
 
     # (Optional) Run Go tests (customize this step if needed)
     # Uncomment this if you have tests to run

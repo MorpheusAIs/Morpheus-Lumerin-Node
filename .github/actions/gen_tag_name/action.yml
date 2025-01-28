@@ -48,5 +48,5 @@ runs:
         echo "VFULL=${VFULL}" >> $GITHUB_ENV
         echo "IMAGE_NAME_BASE=ghcr.io/lumerin-protocol/morpheus-lumerin-node" >> $GITHUB_ENV
         echo "IMAGE_NAME=ghcr.io/lumerin-protocol/morpheus-lumerin-node:${VTAG}" >> $GITHUB_ENV
-        echo "VLAST"
+
         echo "VLAST=$VLAST VMAJ=$VMAJ VMIN=$VMIN VPAT=$VPAT VFULL=$VFULL VTAG=$VTAG"
