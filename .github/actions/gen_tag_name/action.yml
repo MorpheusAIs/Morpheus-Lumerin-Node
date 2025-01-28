@@ -40,12 +40,10 @@ runs:
             [ "$GITHUB_EVENT_NAME" = "pull_request" ] && RNAME=pr${GITHUB_REF_NAME%/merge}
             VTAG=v${VFULL}-${RNAME}
         fi
-
-        echo "VLAST=$VLAST VMAJ=$VMAJ VMIN=$VMIN VPAT=$VPAT VFULL=$VFULL VTAG=$VTAG"
         
         # Output to GitHub Actions environment
         echo "TAG_NAME=${VTAG}" >> $GITHUB_ENV
         echo "VTAG=${VTAG}" >> $GITHUB_ENV
         echo "VFULL=${VFULL}" >> $GITHUB_ENV
         echo "IMAGE_NAME_BASE=ghcr.io/lumerin-protocol/morpheus-lumerin-node" >> $GITHUB_ENV
-        echo "IMAGE_NAME=${{ env.IMAGE_NAME_BASE }}:${{ env.TAG_NAME }}" >> $GITHUB_ENV
+        echo "IMAGE_NAME=ghcr.io/lumerin-protocol/morpheus-lumerin-node:${VTAG}" >> $GITHUB_ENV

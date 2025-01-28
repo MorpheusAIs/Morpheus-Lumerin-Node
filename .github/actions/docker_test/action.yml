@@ -7,6 +7,7 @@ runs:
   steps:
     # Build the Docker image to test
     - name: Build Docker Image to Test
+      shell: bash
       run: |
         docker build \
           --platform linux/amd64 \
@@ -19,11 +20,13 @@ runs:
 
     # Run the container in detached mode
     - name: Run Docker container
+      shell: bash
       run: |
         docker run -d --name test-container -p 8082:8082 -p 3333:3333 ${{ env.IMAGE_NAME }}
 
     # Wait for the container to initialize (adjust sleep time as needed)
     - name: Wait for container to be ready
+      shell: bash
       run: |
         sleep 10 # Adjust this to match your container's startup time
         docker logs test-container
@@ -42,4 +45,5 @@ runs:
 
     # Stop and clean up the container after tests
     - name: Stop and clean up container
+      shell: bash
       run: docker rm -f test-container

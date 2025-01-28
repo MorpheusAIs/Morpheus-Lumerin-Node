@@ -29,32 +29,10 @@ defaults:
     shell: bash
     
 jobs:
-  Generate-Tags: 
-    name: Generate Global Version Tags
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/feat/ghcr-docker-build') }}
-
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-
-      - name: Generate Tag Name
-        uses: ./.github/actions/gen_tag_name
-
-      - name: Debug Image base, tag and create IMAGE_NAME
-        run: |
-          echo "TAG_NAME=${{ env.TAG_NAME }}"
-          echo "VTAG=${{ env.VTAG }}"
-          echo "VFULL=${{ env.VFULL }}" 
-          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
-          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"
         
   Ubuntu-22-x64:
     name: Build Ubuntu Image
-    needs: Generate-Tags
+    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/feat/ghcr-docker-build') }}
     runs-on: ubuntu-22.04
     steps:
       - name: Clone
@@ -63,7 +41,18 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-                
+
+      - name: Generate Tag Name
+        uses: ./.github/actions/gen_tag_name    
+
+      - name: Verify environment variables
+        run: |
+          echo "TAG_NAME=${{ env.TAG_NAME }}"
+          echo "VTAG=${{ env.VTAG }}"
+          echo "VFULL=${{ env.VFULL }}" 
+          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
+          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"       
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -130,8 +119,7 @@ jobs:
 
   macOS-13-x64:
     name: Build macOS-x64 Image
-    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' ) }}
-    needs: Generate-Tags
+    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' ) }}
     runs-on: macos-13
     steps:
       - name: Clone
@@ -140,6 +128,17 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+          
+      - name: Generate Tag Name
+        uses: ./.github/actions/gen_tag_name    
+
+      - name: Verify environment variables
+        run: |
+          echo "TAG_NAME=${{ env.TAG_NAME }}"
+          echo "VTAG=${{ env.VTAG }}"
+          echo "VFULL=${{ env.VFULL }}" 
+          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
+          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"       
       
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -210,8 +209,7 @@ jobs:
 
   macOS-14-arm64:
     name: Build macOS-arm64 Image
-    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' ) }}
-    needs: Generate-Tags
+    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' ) }}
     runs-on: macos-14
     steps:
       - name: Clone
@@ -223,6 +221,14 @@ jobs:
       
       - name: Generate Tag Name
         uses: ./.github/actions/gen_tag_name
+
+      - name: Verify environment variables
+        run: |
+          echo "TAG_NAME=${{ env.TAG_NAME }}"
+          echo "VTAG=${{ env.VTAG }}"
+          echo "VFULL=${{ env.VFULL }}" 
+          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
+          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"       
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -293,8 +299,7 @@ jobs:
 
   Windows-avx2-x64:
     name: Build Windows Image
-    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' ) }}
-    needs: Generate-Tags
+    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' ) }}
     runs-on: windows-latest
     steps:
       - name: Clone
@@ -303,6 +308,17 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+          
+      - name: Generate Tag Name
+        uses: ./.github/actions/gen_tag_name    
+      
+      - name: Verify environment variables
+        run: |
+          echo "TAG_NAME=${{ env.TAG_NAME }}"
+          echo "VTAG=${{ env.VTAG }}"
+          echo "VFULL=${{ env.VFULL }}" 
+          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
+          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"       
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -382,12 +398,13 @@ jobs:
 
   Release:
     name: Create Release
-    runs-on: ubuntu-latest
+    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' ) }}
     needs:
       - Ubuntu-22-x64
       - macOS-13-x64
       - macOS-14-arm64
       - Windows-avx2-x64
+    runs-on: ubuntu-latest
     steps:
       - name: Clone
         id: checkout
@@ -395,6 +412,17 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+          
+      - name: Generate Tag Name
+        uses: ./.github/actions/gen_tag_name    
+
+      - name: Verify environment variables
+        run: |
+          echo "TAG_NAME=${{ env.TAG_NAME }}"
+          echo "VTAG=${{ env.VTAG }}"
+          echo "VFULL=${{ env.VFULL }}" 
+          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
+          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"       
 
       - name: Download artifacts
         id: download-artifact
@@ -441,8 +469,7 @@ jobs:
 
   GHCR-Test:
     name: Test Docker Image
-    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/feat/ghcr-docker-build') }}
-    needs: Generate-Tags
+    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/feat/ghcr-docker-build') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -450,6 +477,17 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+          
+      - name: Generate Tag Name
+        uses: ./.github/actions/gen_tag_name 
+
+      - name: Verify environment variables
+        run: |
+          echo "TAG_NAME=${{ env.TAG_NAME }}"
+          echo "VTAG=${{ env.VTAG }}"
+          echo "VFULL=${{ env.VFULL }}" 
+          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
+          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"       
 
       - name: Run Docker Tests
         uses: ./.github/actions/docker_test
@@ -465,6 +503,17 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+          
+      - name: Generate Tag Name
+        uses: ./.github/actions/gen_tag_name    
+       
+      - name: Verify environment variables
+        run: |
+          echo "TAG_NAME=${{ env.TAG_NAME }}"
+          echo "VTAG=${{ env.VTAG }}"
+          echo "VFULL=${{ env.VFULL }}" 
+          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
+          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"       
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -521,6 +570,17 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+          
+      - name: Generate Tag Name
+        uses: ./.github/actions/gen_tag_name    
+      
+      - name: Verify environment variables
+        run: |
+          echo "TAG_NAME=${{ env.TAG_NAME }}"
+          echo "VTAG=${{ env.VTAG }}"
+          echo "VFULL=${{ env.VFULL }}" 
+          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
+          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"       
 
       - name: Install dependencies
         run: |
