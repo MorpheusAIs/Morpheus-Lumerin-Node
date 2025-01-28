@@ -5,11 +5,48 @@ description: Test the published Docker image by running the container and verify
 runs:
   using: "composite"
   steps:
-    # Run the container in detached mode
-    - name: Run Docker container
-      shell: bash 
+      # Pre-Launch Setup: Create necessary configuration files and directories
+    - name: Prepare Configuration and Volume Setup
+      shell: bash
       run: |
-        docker run -d --name test-container -p 8082:8082 -p 3333:3333 ${{ inputs.image }}
+        echo "Setting up volumes and control files..."
+        mkdir -p /tmp/proxy-router-test/data
+
+        echo "Creting the .cookie file..."
+        touch /tmp/proxy-router-test/.cookie
+        echo "admintest:strongpassword" > /tmp/proxy-router-test/.cookie
+
+        echo "Creating .env file..."
+        echo "WALLET_PRIVATE_KEY=0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a" >> /tmp/proxy-router-test/proxy-router.env
+        echo "ETH_NODE_CHAIN_ID=421614" >> /tmp/proxy-router-test/proxy-router.env
+        echo "BLOCKSCOUT_API_URL=https://arbitrum-sepolia.blockscout.com/api/v2" >> /tmp/proxy-router-test/proxy-router.env
+        echo "DIAMOND_CONTRACT_ADDRESS=0xb8C55cD613af947E73E262F0d3C54b7211Af16CF" >> /tmp/proxy-router-test/proxy-router.env
+        echo "MOR_TOKEN_ADDRESS=0x34a285a1b1c166420df5b6630132542923b5b27e" >> /tmp/proxy-router-test/proxy-router.env
+        
+        echo "AUTH_CONFIG_FILE_PATH=/app/data/proxy.conf" > /tmp/proxy-router-test/proxy-router.env
+        echo "COOKIE_FILE_PATH=/app/data/.cookie" >> /tmp/proxy-router-test/proxy-router.env
+        echo "RATING_CONFIG_PATH=/app/data/rating-config.json" >> /tmp/proxy-router-test/proxy-router.env
+        echo "PROXY_STORAGE_PATH=/app/data/data" >> /tmp/proxy-router-test/proxy-router.env
+        echo "MODELS_CONFIG_PATH=/app/data/models-config.json" >> /tmp/proxy-router-test/proxy-router.env
+        echo "PROXY_ADDRESS=0.0.0.0:3333" >> /tmp/proxy-router-test/proxy-router.env
+        echo "WEB_ADDRESS=0.0.0.0:8082" >> /tmp/proxy-router-test/proxy-router.env
+        echo "WEB_PUBLIC_URL=http://localhost:8082" >> /tmp/proxy-router-test/proxy-router.env
+        
+        echo "Creating empty configuration files..."
+        # echo "{}" > /tmp/proxy-router-test/models-config.json
+        # echo "{}" > /tmp/proxy-router-test/rating-config.json
+
+    # Run the container in detached mode with the preconfigured .env file and volumes
+    - name: Run Docker container
+      shell: bash
+      run: |
+        echo "Starting Docker container for testing..."
+        docker run -d --name test-container \
+          --env-file /tmp/proxy-router-test/proxy-router.env \
+          -v /tmp/proxy-router-test/data:/app/data \
+          -p 3333:3333 \
+          -p 8082:8082 \
+          ${{ inputs.image }}
 
     # Wait for the container to initialize (adjust sleep time as needed)
     - name: Wait for container to be ready
