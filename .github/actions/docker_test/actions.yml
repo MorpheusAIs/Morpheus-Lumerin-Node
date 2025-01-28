@@ -1,18 +1,26 @@
 name: Docker Test
 
-description: Test the published Docker image by running the container and verifying functionality.
+description: Build and Test the published Docker image by running the container and verifying functionality.
 
 runs:
   using: "composite"
   steps:
-    # Pull the Docker image to test
-    - name: Pull published Docker image
-      run: docker pull ${{ inputs.image }}
+    # Build the Docker image to test
+    - name: Build Docker Image to Test
+      run: |
+        docker build \
+          --platform linux/amd64 \
+          --build-arg TAG_NAME=${{ env.TAG_NAME }} \
+          --build-arg COMMIT=${{ github.sha }} \
+          --load \
+          -t ${{ env.IMAGE_NAME }} \
+          -f proxy-router/Dockerfile \
+          proxy-router || (echo "Failed to build image with tag: ${{ env.IMAGE_NAME }}" && exit 1)
 
     # Run the container in detached mode
     - name: Run Docker container
       run: |
-        docker run -d --name test-container -p 8082:8082 -p 3333:3333 ${{ inputs.image }}
+        docker run -d --name test-container -p 8082:8082 -p 3333:3333 ${{ env.IMAGE_NAME }}
 
     # Wait for the container to initialize (adjust sleep time as needed)
     - name: Wait for container to be ready
@@ -35,9 +43,3 @@ runs:
     # Stop and clean up the container after tests
     - name: Stop and clean up container
       run: docker rm -f test-container
-
-# Input variables
-inputs:
-  image:
-    description: "The Docker image to test"
-    required: true
