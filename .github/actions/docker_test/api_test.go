@@ -14,7 +14,7 @@ const (
 )
 
 func TestAuthentication(t *testing.T) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/auth-endpoint", baseURL), nil)
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/authConfig", baseURL), nil)
 	if err != nil {
 		t.Fatalf("Failed to create request: %v", err)
 	}
