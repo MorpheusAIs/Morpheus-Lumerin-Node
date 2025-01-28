@@ -11,7 +11,6 @@ runs:
       run: |
         echo "Setting up volumes and control files..."
         mkdir -p /tmp/proxy-router-test/data
-        mkddir -p /tmp/proxy-router-test/data/data
 
         echo "Creting the .cookie file..."
         touch /tmp/proxy-router-test/.cookie
