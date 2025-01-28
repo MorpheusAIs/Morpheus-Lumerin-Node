@@ -62,7 +62,10 @@ runs:
         sleep 10 # Adjust this to match your container's startup time
         echo "Container started, checking running env variables..."
         echo "####################################################"
-        docker exec -i test-container env
+        docker exec -i test-container cat /proc/self/environ | tr '\0' '\n'
+        echo "####################################################"
+        docker inspect test-container | jq '.[0].Config.Env'
+        # docker exec -i test-container env
         docker logs test-container
 
     # Set up the Go environment
