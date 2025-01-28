@@ -504,6 +504,7 @@ jobs:
         uses: ./.github/actions/docker_test
         with:
           image: ${{ env.IMAGE_NAME }}
+          private_key: ${{ secrets.TEST_PRIVATE_KEY }}
 
   GHCR-Build-and-Push:
     name: Build & Push Docker Image
