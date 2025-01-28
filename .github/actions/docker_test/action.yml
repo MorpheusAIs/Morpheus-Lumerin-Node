@@ -5,11 +5,6 @@ description: Test the published Docker image by running the container and verify
 runs:
   using: "composite"
   steps:
-    # Pull the Docker image to test
-    - name: Pull published Docker image
-      shell: bash
-      run: docker pull ${{ inputs.image }}
-
     # Run the container in detached mode
     - name: Run Docker container
       shell: bash 
@@ -29,10 +24,11 @@ runs:
       with:
         go-version: 1.21
 
-    # # Run the Go tests (uncomment and customize this step if needed)
+    # (Optional) Run Go tests (customize this step if needed)
+    # Uncomment this if you have tests to run
     # - name: Run tests
     #   run: |
-    #     # Make sure test files are present in ./tests directory or adjust path
+    #     # Ensure test files are present in ./tests or adjust path accordingly
     #     go test ./tests -v
 
     # Stop and clean up the container after tests

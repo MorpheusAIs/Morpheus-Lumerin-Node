@@ -500,9 +500,6 @@ jobs:
             -f proxy-router/Dockerfile \
             proxy-router || (echo "Failed to build image with tag: ${{ env.IMAGE_NAME }}" && exit 1)
 
-      - name: Pull Built Image
-        run: docker pull ${{ env.IMAGE_NAME }}
-
       - name: Run Docker Tests
         uses: ./.github/actions/docker_test
         with:
