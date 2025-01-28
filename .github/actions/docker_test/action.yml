@@ -11,7 +11,7 @@ runs:
       run: |
         echo "Setting up volumes and control files..."
         mkdir -p /tmp/proxy-router-test/data
-        mkdir =p /tmp/proxy-router-test/data/data
+        mkdir -p /tmp/proxy-router-test/data/data
 
         echo "Creating the .cookie file..."
         echo "admintest:strongpassword" > /tmp/proxy-router-test/.cookie
@@ -22,9 +22,19 @@ runs:
         echo "Copying models and ratings control files..."
         cp .github/workflows/models-config.json /tmp/proxy-router-test/models-config.json
         cp .github/workflows/rating-config.json /tmp/proxy-router-test/rating-config.json
-
+        
+        echo "####################################"
         echo "Output .env file for confirmation..."
         cat /tmp/proxy-router-test/proxy-router.env
+        echo "####################################"
+        echo "Output models-config.json file for confirmation..."
+        cat /tmp/proxy-router-test/models-config.json
+        echo "####################################"
+        echo "Output rating-config.json file for confirmation..."
+        cat /tmp/proxy-router-test/rating-config.json
+        echo "####################################"
+        echo "Output .cookie file for confirmation..."
+        cat /tmp/proxy-router-test/.cookie
         echo "####################################"
 
     # Run the container in detached mode with the preconfigured .env file and volumes
@@ -38,7 +48,7 @@ runs:
           -e MODELS_CONFIG_PATH=/app/data/models-config.json \
           -e RATING_CONFIG_PATH=/app/data/rating-config.json \
           -e COOKIE_FILE_PATH=/app/data/.cookie \
-          -e AUTH_CONFIG_FILE_PATH=/app/data/proxy.conf \ 
+          -e AUTH_CONFIG_FILE_PATH=/app/data/proxy.conf \
           -v /tmp/proxy-router-test/data:/app/data \
           -p 3333:3333 \
           -p 8082:8082 \
@@ -64,6 +74,12 @@ runs:
       run: |
         echo "Simple api test"
         curl -X 'GET' 'http://localhost:8082/healthcheck' -H 'accept: application/json'
+        curl -s -o /dev/null -w "%{http_code}" http://localhost:8082/healthcheck | grep 200
+        if [ $? -ne 0 ]; then
+          echo "Health check failed"
+          exit 1
+        fi
+        
         # Ensure test files are present in ./tests or adjust path accordingly
         # go test ./tests -v
 
