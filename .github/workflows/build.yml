@@ -489,11 +489,28 @@ jobs:
           echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
           echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"       
 
+      - name: Build Docker Image to Test
+        run: |
+          docker build \
+            --platform linux/amd64 \
+            --build-arg TAG_NAME=${{ env.TAG_NAME }} \
+            --build-arg COMMIT=${{ github.sha }} \
+            --load \
+            -t ${{ env.IMAGE_NAME }} \
+            -f proxy-router/Dockerfile \
+            proxy-router || (echo "Failed to build image with tag: ${{ env.IMAGE_NAME }}" && exit 1)
+
+      - name: Pull Built Image
+        run: docker pull ${{ env.IMAGE_NAME }}
+
       - name: Run Docker Tests
         uses: ./.github/actions/docker_test
+        with:
+          image: ${{ env.IMAGE_NAME }}
 
   GHCR-Build-and-Push:
     name: Build & Push Docker Image
+    if: ${{ ( github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' ) }}
     needs: 
       - GHCR-Test
     runs-on: ubuntu-latest

@@ -7,6 +7,7 @@ runs:
       id: tag
       shell: bash
       run: |
+        # Update the version number based on the branch
         VMAJ_NEW=2
         VMIN_NEW=0
         VPAT_NEW=0
