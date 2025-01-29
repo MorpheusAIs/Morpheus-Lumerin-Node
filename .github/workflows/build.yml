@@ -44,7 +44,6 @@ jobs:
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
         (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
-        (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'test' || github.base_ref == 'dev')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
       )
     
@@ -459,6 +458,12 @@ jobs:
 
   Release:
     name: Create Release
+    if: |
+      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+      )
     needs:
       - GHCR-Test
       - Ubuntu-22-x64
