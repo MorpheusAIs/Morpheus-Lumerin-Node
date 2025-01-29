@@ -82,8 +82,8 @@ runs:
       shell: bash
       run: |
         cd .github/actions/docker_test
-        go mod init tests
-        go mod tidy
+        # go mod init tests
+        # go mod tidy
         go test -v
 
     # Stop and clean up the container after tests
