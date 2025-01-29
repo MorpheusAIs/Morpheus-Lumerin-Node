@@ -134,8 +134,8 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          path: mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip
-          name: mor-launch-$OS_NAME.zip
+          path: mor-launch-${{ env.TAG_NAME }}-ubuntu-x64.zip
+          name: mor-launch-ubuntu-x64.zip
 
   macOS-13-x64:
     name: Build macOS-x64 Image
@@ -231,8 +231,8 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          path: mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip
-          name: mor-launch-$OS_NAME.zip
+          path: mor-launch-${{ env.TAG_NAME }}-macos-x64.zip
+          name: mor-launch-macos-x64.zip
 
   macOS-14-arm64:
     name: Build macOS-arm64 Image
@@ -328,8 +328,8 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          path: mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip
-          name: mor-launch-$OS_NAME.zip
+          path: mor-launch-${{ env.TAG_NAME }}-macos-arm64.zip
+          name: mor-launch-macos-arm64.zip
 
   Windows-avx2-x64:
     name: Build Windows Image
@@ -434,8 +434,8 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          path: mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip
-          name: mor-launch-$OS_NAME.zip
+          path: mor-launch-${{ env.TAG_NAME }}-win-x64.zip
+          name: mor-launch-win-x64.zip
 
   Release:
     name: Create Release
