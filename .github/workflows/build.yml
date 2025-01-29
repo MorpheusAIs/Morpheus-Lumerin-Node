@@ -42,15 +42,12 @@ jobs:
     name: Build Ubuntu Image
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
-      (github.event_name == 'push' || github.event_name == 'pull_request') &&
       (
-        github.event_name == 'push' && 
-        (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')
-      ) ||
-      (
-        github.event_name == 'pull_request' &&
-        (github.base_ref == 'main' || github.base_ref == 'test' || github.base_ref == 'dev')
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
+        (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'test' || github.base_ref == 'dev')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
       )
+    
     runs-on: ubuntu-22.04
     steps:
       - name: Clone
@@ -146,7 +143,12 @@ jobs:
 
   macOS-13-x64:
     name: Build macOS-x64 Image
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' ) }}
+    if: |
+      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+      )
     runs-on: macos-13
     steps:
       - name: Clone
@@ -245,14 +247,10 @@ jobs:
     name: Build macOS-arm64 Image
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
-      (github.event_name == 'push' || github.event_name == 'pull_request') &&
       (
-        github.event_name == 'push' && 
-        (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')
-      ) ||
-      (
-        github.event_name == 'pull_request' &&
-        (github.base_ref == 'main' || github.base_ref == 'test' || github.base_ref == 'dev')
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
+        (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'test' || github.base_ref == 'dev')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
       )
     runs-on: macos-14
     steps:
@@ -350,7 +348,12 @@ jobs:
 
   Windows-avx2-x64:
     name: Build Windows Image
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push'  && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' ) }}
+    if: |
+      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+      )
     runs-on: windows-latest
     steps:
       - name: Clone
@@ -456,7 +459,6 @@ jobs:
 
   Release:
     name: Create Release
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' ) }}
     needs:
       - GHCR-Test
       - Ubuntu-22-x64
@@ -530,14 +532,10 @@ jobs:
     name: Test Docker Image
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
-      (github.event_name == 'push' || github.event_name == 'pull_request') &&
       (
-        github.event_name == 'push' && 
-        (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')
-      ) ||
-      (
-        github.event_name == 'pull_request' &&
-        (github.base_ref == 'main' || github.base_ref == 'test' || github.base_ref == 'dev')
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
+        (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'test' || github.base_ref == 'dev')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
       )
     runs-on: ubuntu-latest
     steps:
@@ -577,7 +575,12 @@ jobs:
 
   GHCR-Build-and-Push:
     name: Build & Push Docker Image
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' ) }}
+    if: |
+      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+      )
     needs: 
       - GHCR-Test
     runs-on: ubuntu-latest
@@ -620,19 +623,6 @@ jobs:
             -f proxy-router/Dockerfile \
             proxy-router || (echo "Failed to push image with tag: ${{ env.IMAGE_NAME }}" && exit 1)
 
-      # - name: Optionally Push Latest Tag
-      #   if: ${{ github.ref == 'refs/heads/main' }}
-      #   run: |
-      #     LATEST_IMAGE=${{ env.IMAGE_NAME_BASE }}:latest
-      #     docker buildx build \
-      #       --platform linux/amd64,linux/arm64 \
-      #       --build-arg TAG_NAME=${{ env.TAG_NAME }} \
-      #       --build-arg COMMIT=${{ github.sha }} \
-      #       --push \
-      #       -t $LATEST_IMAGE \
-      #       -f proxy-router/Dockerfile \
-      #       proxy-router
-
       - name: Optionally Push Latest Tag
         if: ${{ github.ref == 'refs/heads/main' }}
         run: |
@@ -644,7 +634,6 @@ jobs:
 
   GitLab-Deploy:
     name: Deploy to GitLab
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' ) }}
     needs: 
       - GHCR-Build-and-Push
     runs-on: ubuntu-latest
