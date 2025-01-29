@@ -13,7 +13,6 @@ on:
       - main
       - test
       - dev
-      - feat/ghcr-docker-build
     paths: ['.github/workflows/**', '**/Makefile', '**/*.go', '**/*.json', '**/*.yml', '**/*.ts', '**/*.js', 'proxy-router/Dockerfile']
 
   pull_request:
@@ -41,7 +40,17 @@ jobs:
         
   Ubuntu-22-x64:
     name: Build Ubuntu Image
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && ( github.event_name == 'push' || github.event_name == 'pull_request' ) && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' ) }}
+    if: |
+      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (github.event_name == 'push' || github.event_name == 'pull_request') &&
+      (
+        github.event_name == 'push' && 
+        (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')
+      ) ||
+      (
+        github.event_name == 'pull_request' &&
+        (github.base_ref == 'main' || github.base_ref == 'test' || github.base_ref == 'dev')
+      )
     runs-on: ubuntu-22.04
     steps:
       - name: Clone
@@ -234,7 +243,17 @@ jobs:
 
   macOS-14-arm64:
     name: Build macOS-arm64 Image
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && ( github.event_name == 'push' || github.event_name == 'pull_request' ) && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' ) }}
+    if: |
+      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (github.event_name == 'push' || github.event_name == 'pull_request') &&
+      (
+        github.event_name == 'push' && 
+        (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')
+      ) ||
+      (
+        github.event_name == 'pull_request' &&
+        (github.base_ref == 'main' || github.base_ref == 'test' || github.base_ref == 'dev')
+      )
     runs-on: macos-14
     steps:
       - name: Clone
@@ -509,7 +528,17 @@ jobs:
 
   GHCR-Test:
     name: Test Docker Image
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && ( github.event_name == 'push' || github.event_name == 'pull_request' ) && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' ) }}
+    if: |
+      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (github.event_name == 'push' || github.event_name == 'pull_request') &&
+      (
+        github.event_name == 'push' && 
+        (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')
+      ) ||
+      (
+        github.event_name == 'pull_request' &&
+        (github.base_ref == 'main' || github.base_ref == 'test' || github.base_ref == 'dev')
+      )
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
