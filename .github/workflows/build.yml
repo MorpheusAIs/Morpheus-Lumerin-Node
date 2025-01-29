@@ -29,8 +29,6 @@ defaults:
     shell: bash
 
 env:
-  TAG_NAME: v9.9.9
-  VFULL: 9.9.9
   LLAMA_URL: https://github.com/ggerganov/llama.cpp/releases/download
   LLAMA_RELEASE: b4354 
   LLAMA_FILEBASE: llama-b4354-bin
