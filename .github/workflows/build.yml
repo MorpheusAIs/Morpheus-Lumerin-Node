@@ -439,6 +439,7 @@ jobs:
     name: Create Release
     if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' ) }}
     needs:
+      - GHCR-Test
       - Ubuntu-22-x64
       - macOS-13-x64
       - macOS-14-arm64
