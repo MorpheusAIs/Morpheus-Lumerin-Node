@@ -27,12 +27,23 @@ concurrency:
 defaults:
   run:
     shell: bash
-    
+
+env:
+  TAG_NAME: v9.9.9
+  VFULL: 9.9.9
+  LLAMA_URL: https://github.com/ggerganov/llama.cpp/releases/download
+  LLAMA_RELEASE: b4354 
+  LLAMA_FILEBASE: llama-b4354-bin
+  MODEL_URL: https://huggingface.co
+  MODEL_NAME: tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
+  MODEL_OWNER: TheBloke
+  MODEL_REPO: TinyLlama-1.1B-Chat-v1.0-GGUF  
+  
 jobs:
         
   Ubuntu-22-x64:
     name: Build Ubuntu Image
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev') }}
+    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/feat/ghcr-docker-build' ) }}
     runs-on: ubuntu-22.04
     steps:
       - name: Clone
@@ -98,18 +109,27 @@ jobs:
       - name: Pack artifacts
         id: pack_artifacts
         run: |
-          ARTIFACT="mor-launch-${{ env.TAG_NAME }}-ubuntu-x64.zip"
-          echo "Artifact: $ARTIFACT"
-          LLAMACPP=llama-b4354-bin-ubuntu-x64.zip
-          MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
-          wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b4354/$LLAMACPP
-          wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
-          unzip -o -j $LLAMACPP build/bin/llama-server
-          echo '{"run":["./llama-server --no-webui -m ./'"$MODEL"'","./proxy-router","./morpheus-ui-'"${{ env.VFULL }}"'-x86_64-linux.AppImage"]}' > mor-launch.json
-          echo "Contents of mor-launch.json: "
+          OS_NAME="ubuntu-x64"
+          echo "Artifact: mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip"
+          echo "LLAMA Binary: ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$OS_NAME.zip"
+          echo "LLAMA Model: ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}"
+          wget -nv ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$OS_NAME.zip
+          wget -nv ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}
+          unzip -o -j ${{ env.LLAMA_FILEBASE}}-$OS_NAME.zip build/bin/llama-server
+          # Proper JSON formatting with dynamic variables
+          echo '{
+            "run": [
+              "./llama-server --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
+              "./proxy-router",
+              "./morpheus-ui-'${{ env.VFULL }}'-x86_64-linux.AppImage"
+            ]
+          }' > mor-launch.json
+
+          echo "Contents of mor-launch.json:"
           cat mor-launch.json
+
           mv ./cli/mor-cli mor-cli
-          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/proxy-router .env $MODEL mor-launch.json ./ui-desktop/dist/morpheus-ui-${{ env.VFULL }}-x86_64-linux.AppImage models-config.json rating-config.json mor-cli
+          zip -j mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/proxy-router .env ${{ env.MODEL_NAME}} mor-launch.json ./ui-desktop/dist/morpheus-ui-${{ env.VFULL }}-x86_64-linux.AppImage models-config.json rating-config.json mor-cli
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
