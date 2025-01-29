@@ -110,13 +110,13 @@ jobs:
         id: pack_artifacts
         run: |
           OS_NAME="ubuntu-x64"
+          BIN_NAME="ubuntu-x64"
           echo "Artifact: mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip"
-          echo "LLAMA Binary: ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$OS_NAME.zip"
+          echo "LLAMA Binary: ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip"
           echo "LLAMA Model: ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}"
-          wget -nv ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$OS_NAME.zip
+          wget -nv ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip
           wget -nv ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}
-          unzip -o -j ${{ env.LLAMA_FILEBASE}}-$OS_NAME.zip build/bin/llama-server
-          # Proper JSON formatting with dynamic variables
+          unzip -o -j ${{ env.LLAMA_FILEBASE}}-$BIN_NAME.zip build/bin/llama-server
           echo '{
             "run": [
               "./llama-server --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
@@ -125,7 +125,7 @@ jobs:
             ]
           }' > mor-launch.json
 
-          echo "Contents of mor-launch.json:"
+          echo "############# Contents of mor-launch.json: ############# "
           cat mor-launch.json
 
           mv ./cli/mor-cli mor-cli
@@ -134,12 +134,12 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          path: mor-launch-${{ env.TAG_NAME }}-ubuntu-x64.zip
-          name: mor-launch-ubuntu-x64.zip
+          path: mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip
+          name: mor-launch-$OS_NAME.zip
 
   macOS-13-x64:
     name: Build macOS-x64 Image
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' ) }}
+    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/feat/ghcr-docker-build' ) }}
     runs-on: macos-13
     steps:
       - name: Clone
@@ -206,30 +206,37 @@ jobs:
       - name: Pack artifacts
         id: pack_artifacts
         run: |
-          ARTIFACT="mor-launch-${{ env.TAG_NAME }}-macos-x64.zip"
-          echo "Artifact: $ARTIFACT"
-          LLAMACPP=llama-b4354-bin-macos-x64.zip
-          MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
-          wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b4354/$LLAMACPP
-          wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
-          unzip -o -j $LLAMACPP build/bin/llama-server
-          echo '{"run":["./llama-server --no-webui -m ./'$MODEL'","./proxy-router","./MorpheusUI.app/Contents/MacOS/MorpheusUI"]}' > mor-launch.json
-          echo "Contents of mor-launch.json: "
+          OS_NAME="macos-x64"
+          BIN_NAME="macos-x64"
+          echo "Artifact: mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip"
+          echo "LLAMA Binary: ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip"
+          echo "LLAMA Model: ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}"
+          wget -nv ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip
+          wget -nv ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}
+          unzip -o -j ${{ env.LLAMA_FILEBASE}}-$BIN_NAME.zip build/bin/llama-server
+          echo '{
+            "run": [
+              "./llama-server --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
+              "./proxy-router",
+              "./MorpheusUI.app/Contents/MacOS/MorpheusUI"
+            ]
+          }' > mor-launch.json
+          echo "############# Contents of mor-launch.json: ############# "
           cat mor-launch.json
           mv ./cli/mor-cli mor-cli
           unzip ./ui-desktop/dist/morpheus-ui-${{ env.VFULL }}-x64-mac.zip
-          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/proxy-router .env llama-server $MODEL mor-launch.json models-config.json rating-config.json mor-cli
-          zip -r $ARTIFACT 'MorpheusUI.app'
+          zip -j mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/proxy-router .env ${{ env.MODEL_NAME}} mor-launch.json models-config.json rating-config.json mor-cli
+          zip -r mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip 'MorpheusUI.app'
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          path: mor-launch-${{ env.TAG_NAME }}-macos-x64.zip
-          name: mor-launch-macos-x64.zip
+          path: mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip
+          name: mor-launch-$OS_NAME.zip
 
   macOS-14-arm64:
     name: Build macOS-arm64 Image
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' ) }}
+    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/feat/ghcr-docker-build' ) }}
     runs-on: macos-14
     steps:
       - name: Clone
@@ -296,30 +303,37 @@ jobs:
       - name: Pack artifacts
         id: pack_artifacts
         run: |
-          ARTIFACT="mor-launch-${{ env.TAG_NAME }}-macos-arm64.zip"
-          echo "Artifact: $ARTIFACT"
-          LLAMACPP=llama-b4354-bin-macos-arm64.zip
-          MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
-          wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b4354/$LLAMACPP
-          wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
-          unzip -o -j $LLAMACPP build/bin/llama-server
-          echo '{"run":["./llama-server --no-webui -m ./'$MODEL'","./proxy-router","./MorpheusUI.app/Contents/MacOS/MorpheusUI"]}' > mor-launch.json
-          echo "Contents of mor-launch.json: "
+          OS_NAME="macos-arm64"
+          BIN_NAME="macos-arm64"
+          echo "Artifact: mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip"
+          echo "LLAMA Binary: ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip"
+          echo "LLAMA Model: ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}"
+          wget -nv ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip
+          wget -nv ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}
+          unzip -o -j ${{ env.LLAMA_FILEBASE}}-$BIN_NAME.zip build/bin/llama-server
+          echo '{
+            "run": [
+              "./llama-server --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
+              "./proxy-router",
+              "./MorpheusUI.app/Contents/MacOS/MorpheusUI"
+            ]
+          }' > mor-launch.json
+          echo "############# Contents of mor-launch.json: ############# "
           cat mor-launch.json
           mv ./cli/mor-cli mor-cli
           unzip ./ui-desktop/dist/morpheus-ui-${{ env.VFULL }}-arm64-mac.zip
-          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/proxy-router .env llama-server $MODEL mor-launch.json models-config.json rating-config.json mor-cli
-          zip -r $ARTIFACT 'MorpheusUI.app'
+          zip -j mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/proxy-router .env ${{ env.MODEL_NAME}} mor-launch.json models-config.json rating-config.json mor-cli
+          zip -r mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip 'MorpheusUI.app'
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          path: mor-launch-${{ env.TAG_NAME }}-macos-arm64.zip
-          name: mor-launch-macos-arm64.zip
+          path: mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip
+          name: mor-launch-$OS_NAME.zip
 
   Windows-avx2-x64:
     name: Build Windows Image
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' ) }}
+    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/feat/ghcr-docker-build' ) }}
     runs-on: windows-latest
     steps:
       - name: Clone
@@ -392,14 +406,21 @@ jobs:
       - name: Pack artifacts
         id: pack_artifacts
         run: |
-          ARTIFACT="mor-launch-${{ env.TAG_NAME }}-win-x64.zip"
-          echo "Artifact: $ARTIFACT"
-          LLAMACPP=llama-b4354-bin-win-avx2-x64.zip
-          MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
-          wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b4354/$LLAMACPP
-          wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
-          unzip -o -j $LLAMACPP llama-server.exe llama.dll ggml.dll
-          echo '{"run":["./llama-server.exe --no-webui -m ./'"$MODEL"'","./proxy-router.exe","./morpheus-ui-'"${{ env.VFULL }}"'-x64-win.exe"]}' > mor-launch.json
+          OS_NAME="win-x64"
+          BIN_NAME="win-avx2-x64"
+          echo "Artifact: mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip"
+          echo "LLAMA Binary: ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip"
+          echo "LLAMA Model: ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}"
+          wget -nv ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip
+          wget -nv ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}
+          unzip -o -j ${{ env.LLAMA_FILEBASE}}-$BIN_NAME.zip llama-server.exe llama.dll ggml.dll
+          echo '{
+            "run": [
+              "./llama-server.exe --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
+              "./proxy-router.exe",
+              "./morpheus-ui-'"${{ env.VFULL }}"'-x64-win.exe"
+            ]
+          }' > mor-launch.json
           echo "Contents of mor-launch.json: "
           cat mor-launch.json
           mv .env .env.tmp
@@ -408,13 +429,13 @@ jobs:
           mv ./cli/mor-cli mor-cli.exe
           mv ./launcher/mor-launch mor-launch.exe
           mv "./ui-desktop/dist/morpheus-ui-${{ env.VFULL }}-x64-win" morpheus-ui-${{ env.VFULL }}-x64-win.exe
-          7z a $ARTIFACT LICENSE mor-launch.exe proxy-router.exe .env llama-server.exe llama.dll ggml.dll $MODEL mor-launch.json morpheus-ui-${{ env.VFULL }}-x64-win.exe models-config.json rating-config.json mor-cli.exe
+          7z a mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip LICENSE mor-launch.exe proxy-router.exe .env llama-server.exe llama.dll ggml.dll ${{ env.MODEL_NAME}} mor-launch.json morpheus-ui-${{ env.VFULL }}-x64-win.exe models-config.json rating-config.json mor-cli.exe
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          path: mor-launch-${{ env.TAG_NAME }}-win-x64.zip
-          name: mor-launch-win-x64.zip
+          path: mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip
+          name: mor-launch-$OS_NAME.zip
 
   Release:
     name: Create Release
