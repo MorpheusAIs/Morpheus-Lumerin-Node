@@ -94,12 +94,6 @@ func LoadConfig(cfg ConfigInterface, osArgs *[]string, validator Validator) erro
 			break
 		}
 
-		// skipping keys that are not flags
-		// or values for flags that are not defined
-		if args[0][0] != '-' {
-			continue
-		}
-
 		err = flagset.Parse(args)
 		if err == nil {
 			break
