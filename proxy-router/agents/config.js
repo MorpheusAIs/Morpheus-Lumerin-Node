@@ -1,4 +1,4 @@
-const proxyRouterUrl = 'http://localhost:8084';
+const proxyRouterUrl = 'http://localhost:8082';
 const agentUsername = 'agent-test-1';
 const agentPassword = '123456';
 const agentPerms = ['get_local_models', 'get_balance', 'chat'];
