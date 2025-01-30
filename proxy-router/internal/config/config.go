@@ -24,10 +24,11 @@ type Config struct {
 		ResetKeychain bool `env:"APP_RESET_KEYCHAIN" flag:"app-reset-keychain" desc:"reset keychain on start"`
 	}
 	Blockchain struct {
-		ChainID            int             `env:"ETH_NODE_CHAIN_ID"  flag:"eth-node-chain-id"  validate:"number"`
-		EthNodeAddress     string          `env:"ETH_NODE_ADDRESS"   flag:"eth-node-address"   validate:"omitempty,url"`
-		EthLegacyTx        bool            `env:"ETH_NODE_LEGACY_TX" flag:"eth-node-legacy-tx" desc:"use it to disable EIP-1559 transactions"`
-		ExplorerApiUrl     string          `env:"EXPLORER_API_URL"   flag:"explorer-api-url"   validate:"required,url"`
+		ChainID        int    `env:"ETH_NODE_CHAIN_ID"  flag:"eth-node-chain-id"  validate:"number"`
+		EthNodeAddress string `env:"ETH_NODE_ADDRESS"   flag:"eth-node-address"   validate:"omitempty,url"`
+		EthLegacyTx    bool   `env:"ETH_NODE_LEGACY_TX" flag:"eth-node-legacy-tx" desc:"use it to disable EIP-1559 transactions"`
+		// ExplorerApiUrl     string          `env:"EXPLORER_API_URL"   flag:"explorer-api-url"   validate:"required,url"`
+		BlockscoutApiUrl   string          `env:"BLOCKSCOUT_API_URL" flag:"blockscout-api-url" validate:"required,url"`
 		ExplorerRetryDelay time.Duration   `env:"EXPLORER_RETRY_DELAY" flag:"explorer-retry-delay" validate:"omitempty,duration" desc:"delay between retries"`
 		ExplorerMaxRetries uint8           `env:"EXPLORER_MAX_RETRIES" flag:"explorer-max-retries" validate:"omitempty,gte=0" desc:"max retries for explorer requests"`
 		UseSubscriptions   bool            `env:"ETH_NODE_USE_SUBSCRIPTIONS"  flag:"eth-node-use-subscriptions"  desc:"set it to true to enable subscriptions for blockchain events, otherwise default polling will be used"`
@@ -188,7 +189,7 @@ func (cfg *Config) GetSanitized() interface{} {
 	publicCfg.Blockchain.MaxReconnects = cfg.Blockchain.MaxReconnects
 	publicCfg.Blockchain.PollingInterval = cfg.Blockchain.PollingInterval
 	publicCfg.Blockchain.UseSubscriptions = cfg.Blockchain.UseSubscriptions
-	publicCfg.Blockchain.ExplorerApiUrl = cfg.Blockchain.ExplorerApiUrl
+	// publicCfg.Blockchain.ExplorerApiUrl = cfg.Blockchain.ExplorerApiUrl
 
 	publicCfg.Environment = cfg.Environment
 

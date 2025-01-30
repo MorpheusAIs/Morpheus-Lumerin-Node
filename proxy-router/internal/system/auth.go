@@ -199,8 +199,8 @@ func (cfg *HTTPAuthConfig) CheckFilePermissions() error {
 // Cookie File Management
 // ----------------------------------------------------------------------------
 
-// EnsureCookieFileExists checks if cookie file exists; if not, creates it with admin credentials.
-func (cfg *HTTPAuthConfig) EnsureCookieFileExists() error {
+// EnsureConfigFilesExist checks if cookie file exists; if not, creates it with admin credentials.
+func (cfg *HTTPAuthConfig) EnsureConfigFilesExist() error {
 	// If user doesn't want a cookie file, or path is empty, skip
 	if cfg.CookieFilePath == "" {
 		return nil
@@ -228,6 +228,16 @@ func (cfg *HTTPAuthConfig) EnsureCookieFileExists() error {
 		f.Close()
 
 		if err := cfg.AddUser("admin", pass, []string{"*"}); err != nil {
+			return fmt.Errorf("failed to add admin rpcauth: %v", err)
+		}
+	}
+
+	if _, err := os.Stat(cfg.FilePath); os.IsNotExist(err) {
+		adminUser, adminPass, err := cfg.ReadCookieFile()
+		if err != nil {
+			return fmt.Errorf("failed reading cookie file: %v", err)
+		}
+		if err := cfg.AddUser(adminUser, adminPass, []string{"*"}); err != nil {
 			return fmt.Errorf("failed to add admin rpcauth: %v", err)
 		}
 	}

@@ -87,7 +87,7 @@ curl -s -X 'POST' 'http://localhost:8082/blockchain/models/<Id_from_model_query_
 -d '{"sessionDuration": 600}'
 ```
 Now that the session is open, you can send inference queries to the provider and process responses in usual OpenAI format. 
-Your Wallet (on https://sepolia.arbiscan.io/address/<wallet_id>) should show the transaction for the session creation.
+Your Wallet (on https://arbitrum-sepolia.blockscan.com/address/<wallet_id>) should show the transaction for the session creation.
 
 ### E. Interact with the provider
 * Send the prompt (Standard OpenAI format) with session_id in the header to interact.  

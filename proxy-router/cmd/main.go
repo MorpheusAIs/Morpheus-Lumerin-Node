@@ -203,8 +203,8 @@ func start() error {
 		return err
 	}
 
-	// Ensure cookie file with admin credentials exists
-	if err := authCfg.EnsureCookieFileExists(); err != nil {
+	// Ensure cookie file with admin credentials exists and proxy.config file exists
+	if err := authCfg.EnsureConfigFilesExist(); err != nil {
 		return err
 	}
 
@@ -273,7 +273,7 @@ func start() error {
 	marketplace := registries.NewMarketplace(*cfg.Marketplace.DiamondContractAddress, ethClient, multicallBackend, rpcLog)
 	sessionRepo := sessionrepo.NewSessionRepositoryCached(sessionStorage, sessionRouter, marketplace)
 	proxyRouterApi := proxyapi.NewProxySender(chainID, wallet, contractLogStorage, sessionStorage, sessionRepo, appLog)
-	explorer := blockchainapi.NewExplorerClient(cfg.Blockchain.ExplorerApiUrl, *cfg.Marketplace.MorTokenAddress, cfg.Blockchain.ExplorerRetryDelay, cfg.Blockchain.ExplorerMaxRetries)
+	explorer := blockchainapi.NewBlockscoutApiV2Client(cfg.Blockchain.BlockscoutApiUrl, log.Named("INDEXER"))
 	blockchainApi := blockchainapi.NewBlockchainService(ethClient, multicallBackend, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, explorer, wallet, proxyRouterApi, sessionRepo, scorer, appLog, rpcLog, cfg.Blockchain.EthLegacyTx)
 	proxyRouterApi.SetSessionService(blockchainApi)
 

@@ -11,21 +11,21 @@ import httpClient from '../apiGateway'
 
 export const withAuth =
   (fn) =>
-    (data, { api }) => {
-      if (typeof data.walletId !== 'string') {
-        throw new WalletError('walletId is not defined')
-      }
-
-      return auth
-        .isValidPassword(data.password)
-        .then(() => {
-          return wallet.getSeed(data.password)
-        })
-        .then((seed, index) => {
-          return wallet.createPrivateKey(seed, index)
-        })
-        .then((privateKey) => fn(privateKey, data))
+  (data, { api }) => {
+    if (typeof data.walletId !== 'string') {
+      throw new WalletError('walletId is not defined')
     }
+
+    return auth
+      .isValidPassword(data.password)
+      .then(() => {
+        return wallet.getSeed(data.password)
+      })
+      .then((seed, index) => {
+        return wallet.createPrivateKey(seed, index)
+      })
+      .then((privateKey) => fn(privateKey, data))
+  }
 
 export const createContract = async function (data, { api }) {
   data.walletId = wallet.getAddress().address
@@ -137,29 +137,29 @@ export const setContractDeleteStatus = async function (data, { api }) {
 
 export async function openWallet({ emitter }, password) {
   const storedAddress = wallet.getAddress()
-  if(!storedAddress) {
-    return;
+  if (!storedAddress) {
+    return
   }
 
-  const { address } = storedAddress;
+  const { address } = storedAddress
 
   emitter.emit('open-wallet', { address, isActive: true })
   emitter.emit('open-proxy-router', { password })
 }
 
 export const suggestAddresses = async (mnemonic) => {
-  const seed = keys.mnemonicToSeedHex(mnemonic);
-  let results = [];
+  const seed = keys.mnemonicToSeedHex(mnemonic)
+  let results = []
   for (let i = 0; i < 10; i++) {
-    const walletAddress = wallet.createAddress(seed, i);
-    results.push(walletAddress);
+    const walletAddress = wallet.createAddress(seed, i)
+    results.push(walletAddress)
   }
-  return results;
+  return results
 }
 
 export const onboardingCompleted = async (data, core) => {
   try {
-    const { proxyUrl } = data;
+    const { proxyUrl } = data
 
     if (data.ethNode) {
       const ethNodeResult = await fetch(`${proxyUrl}/config/ethNode`, {
@@ -167,13 +167,13 @@ export const onboardingCompleted = async (data, core) => {
         body: JSON.stringify({ urls: [data.ethNode] })
       })
 
-      const dataResponse = await ethNodeResult.json();
+      const dataResponse = await ethNodeResult.json()
       if (dataResponse.error) {
-        return (dataResponse.error)
+        return dataResponse.error
       }
     }
 
-    await auth.setPassword(data.password);
+    await auth.setPassword(data.password)
 
     if (data.mnemonic) {
       const mnemonicRes = await fetch(`${proxyUrl}/wallet/mnemonic`, {
@@ -184,28 +184,31 @@ export const onboardingCompleted = async (data, core) => {
         })
       })
 
-      console.log("Set Mnemonic To Wallet", await mnemonicRes.json());
-    }
-    else {
+      console.log('Set Mnemonic To Wallet', await mnemonicRes.json())
+    } else {
       const pKeyResp = await fetch(`${proxyUrl}/wallet/privateKey`, {
         method: 'POST',
-        body: JSON.stringify({ "PrivateKey": String(data.privateKey) })
+        body: JSON.stringify({ PrivateKey: String(data.privateKey) }),
+        headers: await httpClient.getAuthHeaders()
       })
-      console.log("Set Private Key To Wallet", await pKeyResp.json());
+      console.log('Set Private Key To Wallet', await pKeyResp.json())
     }
 
-    const walletResp = await fetch(`${proxyUrl}/wallet`);
-    const walletAddress = (await walletResp.json()).address;
+    const walletAddress = await fetch(`${proxyUrl}/wallet`, {
+      method: 'GET',
+      headers: await httpClient.getAuthHeaders()
+    })
+      .then((res) => res.json())
+      .then((res) => res.address)
 
-    console.log("Address Wallet Is", walletAddress);
+    console.log('Wallet Address Is', walletAddress)
 
-    await wallet.setSeed(walletAddress, data.password),
-    await wallet.setAddress(walletAddress)
+    wallet.setSeed(walletAddress, data.password)
+    wallet.setAddress(walletAddress)
     await core.emitter.emit('create-wallet', { address: walletAddress })
     openWallet(core, data.password)
-  }
-  catch (err) {
-    return ({ error: new WalletError('Onboarding unable to be completed: ', err) });
+  } catch (err) {
+    return { error: new WalletError('Onboarding unable to be completed: ', err) }
   }
 }
 
@@ -269,7 +272,7 @@ export const getMarketplaceFee = async function (data, { api }) {
   return api.contracts.getMarketplaceFee(data)
 }
 
-export function refreshAllContracts({ }, { api }) {
+export function refreshAllContracts({}, { api }) {
   const walletId = wallet.getAddress().address
   return api.contracts.refreshContracts(null, walletId)
 }
@@ -315,16 +318,16 @@ export const getAddressAndPrivateKey = async (data, { api }) => {
 export const refreshProxyRouterConnection = async (data, { api }) =>
   api['proxy-router'].refreshConnectionsStream(data)
 
-export const getLocalIp = async ({ }, { api }) => api['proxy-router'].getLocalIp()
+export const getLocalIp = async ({}, { api }) => api['proxy-router'].getLocalIp()
 
 export const logout = async (data) => {
-  console.log("start cleaning local database and settings...")
+  console.log('start cleaning local database and settings...')
   cleanupDb()
-  console.log("start cleaning wallet...")
-  await httpClient.clearWallet();
-  console.log("start cleaning eth node...")
-  await httpClient.clearEthNodeEnv();
-  return;
+  console.log('start cleaning wallet...')
+  await httpClient.clearWallet()
+  console.log('start cleaning eth node...')
+  await httpClient.clearEthNodeEnv()
+  return
 }
 
 export const getPoolAddress = async (data) => {

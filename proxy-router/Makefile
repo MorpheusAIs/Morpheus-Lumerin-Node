@@ -2,16 +2,19 @@ run:
 	go run cmd/main.go
 
 run-user:
-	WALLET_PRIVATE_KEY=0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a DIAMOND_CONTRACT_ADDRESS=0xDE819AaEE474626E3f34Ef0263373357e5a6C71b MOR_TOKEN_ADDRESS=0x092bAaDB7DEf4C3981454dD9c0A0D7FF07bCFc86 PROXY_STORAGE_PATH='./data/badger2/' PROXY_ADDRESS='0.0.0.0:3334' WEB_ADDRESS='0.0.0.0:8083' EXPLORER_API_URL=https://api.arbiscan.io/api ETH_NODE_CHAIN_ID=42161 make run
+	WALLET_PRIVATE_KEY=0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a DIAMOND_CONTRACT_ADDRESS=0xDE819AaEE474626E3f34Ef0263373357e5a6C71b MOR_TOKEN_ADDRESS=0x092bAaDB7DEf4C3981454dD9c0A0D7FF07bCFc86 PROXY_STORAGE_PATH='./data/badger2/' PROXY_ADDRESS='0.0.0.0:3334' WEB_ADDRESS='0.0.0.0:8083' BLOCKSCOUT_API_URL=https://arbitrum.blockscan.com/api/v2 ETH_NODE_CHAIN_ID=42161 make run
 
 run-race:
 	GOTRACEBACK=crash go run -gcflags '-N -l' -race cmd/main.go
 
 build:
 	./build.sh
+	cp .env.example .env 
+	cp models-config.json.example models-config.json
+	cp rating-config.json.example rating-config.json
 	
 clean:
-	rm -rf bin logs data .cookie proxy.conf
+	rm -rf bin logs data .cookie proxy.conf proxy-router .env models-config.json rating-config.json
 
 install:
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.53.3

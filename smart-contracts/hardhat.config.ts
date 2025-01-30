@@ -58,7 +58,7 @@ const config: HardhatUserConfig = {
       gasMultiplier: 1.1,
     },
     arbitrum_sepolia: {
-      url: `https://arbitrum-sepolia.infura.io/v3/${process.env.INFURA_KEY}`,
+      url: 'https://arb-sepolia.g.alchemy.com/v2/yigo5wrDsGyTjHq1fMeeLlH36FCYuyAr',
       accounts: privateKey(),
       gasMultiplier: 1.1,
     },
@@ -107,6 +107,9 @@ const config: HardhatUserConfig = {
       arbitrumSepolia: `${process.env.ARBITRUM_API_KEY}`,
       arbitrumOne: `${process.env.ARBITRUM_API_KEY}`,
     },
+  },
+  sourcify: {
+    enabled: true,
   },
 };
 
