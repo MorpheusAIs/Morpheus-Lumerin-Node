@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/gin-gonic/gin"
 )
 
@@ -32,16 +34,24 @@ type HTTPAuthConfig struct {
 	AuthEntries      map[string]*HTTPAuthEntry // keyed by username
 	Whitelists       map[string][]string       // keyed by username
 	WhitelistDefault bool                      // true => methods allowed if not listed
+
+	AuthStorage *storages.AuthStorage
+}
+
+type AgentTx struct {
+	TxHash string
+	Username string
 }
 
 // NewAuthConfig initializes an empty RPCConfig struct, pointing to config + cookie paths.
-func NewAuthConfig(configFilePath, cookieFilePath string) *HTTPAuthConfig {
+func NewAuthConfig(configFilePath, cookieFilePath string, authStorage *storages.AuthStorage) *HTTPAuthConfig {
 	return &HTTPAuthConfig{
 		FilePath:         configFilePath,
 		CookieFilePath:   cookieFilePath,
 		AuthEntries:      make(map[string]*HTTPAuthEntry),
 		Whitelists:       make(map[string][]string),
 		WhitelistDefault: false,
+		AuthStorage:      authStorage,
 	}
 }
 
@@ -302,7 +312,7 @@ func generateRandomString(n int) (string, error) {
 	return string(result), nil
 }
 
-// ValidatePassword checks a user’s plaintext password against the HMAC-based hash.
+// ValidatePassword checks a user's plaintext password against the HMAC-based hash.
 func (cfg *HTTPAuthConfig) ValidatePassword(username, password string) bool {
 	entry, ok := cfg.AuthEntries[username]
 	if !ok {
@@ -368,7 +378,6 @@ func (cfg *HTTPAuthConfig) IsMethodAllowed(username, method string) bool {
 func (cfg *HTTPAuthConfig) CheckAuth(method string) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		basicAuth := ctx.GetHeader("Authorization")
-		fmt.Println("basicAuth: ", basicAuth)
 		if basicAuth == "" {
 			ctx.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "no basic auth provided"})
 			return
@@ -391,5 +400,159 @@ func (cfg *HTTPAuthConfig) CheckAuth(method string) gin.HandlerFunc {
 			ctx.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "method not allowed"})
 			return
 		}
+
+		ctx.Set("username", username)
 	}
+}
+
+func (cfg *HTTPAuthConfig) IsAllowanceEnough(username string, token string, amount *big.Int) (bool, error) {
+	agentUser, ok := cfg.AuthStorage.GetAgentUser(username)
+	if username == "admin" {
+		return false, nil
+	}
+	if !ok {
+		return false, fmt.Errorf("user not found")
+	}
+
+	token = strings.ToLower(token)
+	allowance := agentUser.Allowances[token]
+	if amount.Cmp(&allowance.Int) > 0 {
+		return false, fmt.Errorf("not enough allowance")
+	}
+	return true, nil
+}
+
+func (cfg *HTTPAuthConfig) RequestAgentUser(username, password string, perms []string, allowances map[string]lib.BigInt) error {
+	if username == "admin" {
+		return fmt.Errorf("admin is a reserved username")
+	}
+
+	_, ok := cfg.AuthStorage.GetAgentUser(username)
+	if ok {
+		return fmt.Errorf("username %s already has an active request", username)
+	}
+
+	err := cfg.AuthStorage.AddAuthRequest(&storages.AgentUser{
+		Username:    username,
+		Password:    password,
+		Perms:       perms,
+		Allowances:  allowances,
+		IsConfirmed: false,
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (cfg *HTTPAuthConfig) ConfirmAgentUser(username string) error {
+	request, ok := cfg.AuthStorage.GetAgentUser(username)
+	if !ok {
+		return fmt.Errorf("auth request not found")
+	}
+
+	err := cfg.AddUser(request.Username, request.Password, request.Perms)
+	if err != nil {
+		return err
+	}
+
+	request.IsConfirmed = true
+	err = cfg.AuthStorage.AddAuthRequest(request)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (cfg *HTTPAuthConfig) DeclineAgentUser(username string) error {
+	err := cfg.AuthStorage.DeleteAuthRequest(username)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (cfg *HTTPAuthConfig) GetAgentUsers() ([]*storages.AgentUser, error) {
+	requests, err := cfg.AuthStorage.GetAgentUsers()
+	if err != nil {
+		return nil, err
+	}
+	if requests == nil {
+		return []*storages.AgentUser{}, nil
+	}
+	return requests, nil
+}
+
+func (cfg *HTTPAuthConfig) RemoveAgentUser(username string) error {
+	err := cfg.RemoveUser(username)
+	if err != nil {
+		return err
+	}
+
+	_, ok := cfg.AuthStorage.GetAgentUser(username)
+	if !ok {
+		return nil
+	}
+
+	return cfg.AuthStorage.DeleteAuthRequest(username)
+}
+
+func (cfg *HTTPAuthConfig) RequestAllowance(username string, token string, allowance lib.BigInt) error {
+	token = strings.ToLower(token)
+	return cfg.AuthStorage.AddAllowanceRequest(&storages.AllowanceRequest{
+		Username:  username,
+		Token:     token,
+		Allowance: allowance,
+	})
+}
+
+func (cfg *HTTPAuthConfig) GetAllowanceRequests() ([]*storages.AllowanceRequest, error) {
+	requests, err := cfg.AuthStorage.GetAllowanceRequests()
+	if err != nil {
+		return nil, err
+	}
+	if requests == nil {
+		return []*storages.AllowanceRequest{}, nil
+	}
+	return requests, nil
+}
+
+func (cfg *HTTPAuthConfig) ConfirmOrDeclineAllowanceRequest(username string, token string, isConfirmed bool) error {
+	return cfg.AuthStorage.ConfirmOrDeclineAllowanceRequest(username, token, isConfirmed)
+}
+
+func (cfg *HTTPAuthConfig) RevokeAllowance(username string, token string) error {
+	zeroBigInt := lib.BigInt{}
+	token = strings.ToLower(token)
+	return cfg.AuthStorage.SetAllowance(username, token, zeroBigInt)
+}
+
+func (cfg *HTTPAuthConfig) DecreaseAllowance(username string, token string, amount lib.BigInt) error {
+	agentUser, ok := cfg.AuthStorage.GetAgentUser(username)
+	if !ok {
+		return fmt.Errorf("allowance not found")
+	}
+
+	token = strings.ToLower(token)
+	allowance, ok := agentUser.Allowances[token]
+	if !ok {
+		return fmt.Errorf("allowance not found")
+	}
+
+	allowance.Sub(&allowance.Int, &amount.Int)
+	return cfg.AuthStorage.SetAllowance(username, token, allowance)
+}
+
+func (cfg *HTTPAuthConfig) GetAllAgentTx() ([]AgentTx, error) {
+	txs, err := cfg.AuthStorage.GetAgentTxs()
+	if err != nil {
+		return nil, err
+	}
+
+	agentTxs := []AgentTx{}
+	for txHash, username := range txs {
+		agentTxs = append(agentTxs, AgentTx{TxHash: txHash, Username: username})
+	}
+	return agentTxs, nil
 }

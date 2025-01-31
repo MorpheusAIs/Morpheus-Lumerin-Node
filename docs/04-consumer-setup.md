@@ -16,7 +16,7 @@ It will run 3 different pieces of software on your local machine:
 1. Extract the zip to a local folder (examples)
     * Windows: `(%USERPROFILE%)/Downloads/morpheus)` 
     * Linux & MacOS: `~/Downloads/morpheus`
-    * On MacOS you may need to execute `xattr -c mor-launch proxy-router MorpheusUI.app llama-server` in a command window to remove the quarantine flag on MacOS
+    * On MacOS you may need to execute `xattr -c mor-launch mor-cli proxy-router MorpheusUI.app llama-server` in a command window to remove the quarantine flag on MacOS
 
 1. Launch the node - this should open a command window to see local LLM model server and proxy-router start and then should launch the user interface  
     * Windows: Double click the `mor-launch.exe` (You will need to tell Windows Defender this is ok to run) 
