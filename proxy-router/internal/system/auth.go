@@ -248,6 +248,16 @@ func (cfg *HTTPAuthConfig) EnsureCookieFileExists() error {
 		}
 	}
 
+	if _, err := os.Stat(cfg.FilePath); os.IsNotExist(err) {
+		adminUser, adminPass, err := cfg.ReadCookieFile()
+		if err != nil {
+			return fmt.Errorf("failed reading cookie file: %v", err)
+		}
+		if err := cfg.AddUser(adminUser, adminPass, []string{"*"}); err != nil {
+			return fmt.Errorf("failed to add admin rpcauth: %v", err)
+		}
+	}
+
 	return nil
 }
 

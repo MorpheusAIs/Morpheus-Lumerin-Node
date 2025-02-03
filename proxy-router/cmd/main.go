@@ -206,8 +206,8 @@ func start() error {
 		return err
 	}
 
-	// Ensure cookie file with admin credentials exists
-	if err := authCfg.EnsureCookieFileExists(); err != nil {
+	// Ensure cookie file with admin credentials exists and proxy.config file exists
+	if err := authCfg.EnsureConfigFilesExist(); err != nil {
 		return err
 	}
 
