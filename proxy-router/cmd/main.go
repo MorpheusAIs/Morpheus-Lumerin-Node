@@ -200,7 +200,7 @@ func start() error {
 
 	storage := storages.NewStorage(storageLog, cfg.Proxy.StoragePath)
 	authStorage := storages.NewAuthStorage(storage)
-	authCfg := system.NewAuthConfig(cfg.Proxy.AuthConfigFilePath, cfg.Proxy.CookieFilePath, authStorage)
+	authCfg := system.NewAuthConfig(cfg.Proxy.AuthConfigFilePath, cfg.Proxy.CookieFilePath, cfg.Proxy.CookieContent, authStorage)
 
 	if err := authCfg.ReadConfig(); err != nil {
 		return err
@@ -279,7 +279,7 @@ func start() error {
 	blockchainApi := blockchainapi.NewBlockchainService(ethClient, multicallBackend, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, explorer, wallet, proxyRouterApi, sessionRepo, scorer, authCfg, appLog, rpcLog, cfg.Blockchain.EthLegacyTx)
 	proxyRouterApi.SetSessionService(blockchainApi)
 
-	modelConfigLoader := config.NewModelConfigLoader(cfg.Proxy.ModelsConfigPath, valid, blockchainApi, &aiengine.ConnectionChecker{}, appLog)
+	modelConfigLoader := config.NewModelConfigLoader(cfg.Proxy.ModelsConfigPath, cfg.Proxy.ModelsConfigContent, valid, blockchainApi, &aiengine.ConnectionChecker{}, appLog)
 	err = modelConfigLoader.Init()
 	if err != nil {
 		appLog.Warnf("failed to load model config, running with empty: %s", err)

@@ -1,6 +1,7 @@
 package authapi
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
@@ -60,6 +61,14 @@ func (a *AuthController) AddUser(ctx *gin.Context) {
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	if req.Username == "admin" {
+		err = a.authConfig.UpdateCookieContent(fmt.Sprintf("admin:%s\n", req.Password))
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{"result": true})
