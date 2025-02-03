@@ -210,8 +210,8 @@ func (cfg *HTTPAuthConfig) CheckFilePermissions() error {
 // Cookie File Management
 // ----------------------------------------------------------------------------
 
-// EnsureCookieFileExists checks if cookie file exists; if not, creates it with admin credentials.
-func (cfg *HTTPAuthConfig) EnsureCookieFileExists() error {
+// EnsureConfigFilesExist checks if cookie file exists; if not, creates it with admin credentials.
+func (cfg *HTTPAuthConfig) EnsureConfigFilesExist() error {
 	if _, err := os.Stat(cfg.CookieFilePath); os.IsNotExist(err) {
 		// Cookie file: "admin:<password>"
 		var cookieLine string
