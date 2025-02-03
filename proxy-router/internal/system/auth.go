@@ -31,6 +31,7 @@ type HTTPAuthEntry struct {
 type HTTPAuthConfig struct {
 	FilePath         string
 	CookieFilePath   string
+	CookieContent    string
 	AuthEntries      map[string]*HTTPAuthEntry // keyed by username
 	Whitelists       map[string][]string       // keyed by username
 	WhitelistDefault bool                      // true => methods allowed if not listed
@@ -39,15 +40,16 @@ type HTTPAuthConfig struct {
 }
 
 type AgentTx struct {
-	TxHash string
+	TxHash   string
 	Username string
 }
 
 // NewAuthConfig initializes an empty RPCConfig struct, pointing to config + cookie paths.
-func NewAuthConfig(configFilePath, cookieFilePath string, authStorage *storages.AuthStorage) *HTTPAuthConfig {
+func NewAuthConfig(configFilePath, cookieFilePath string, cookieContent string, authStorage *storages.AuthStorage) *HTTPAuthConfig {
 	return &HTTPAuthConfig{
 		FilePath:         configFilePath,
 		CookieFilePath:   cookieFilePath,
+		CookieContent:    cookieContent,
 		AuthEntries:      make(map[string]*HTTPAuthEntry),
 		Whitelists:       make(map[string][]string),
 		WhitelistDefault: false,
@@ -171,7 +173,6 @@ func (cfg *HTTPAuthConfig) WriteConfig() error {
 	// Write whitelist lines
 	for user, methods := range cfg.Whitelists {
 		if len(methods) == 0 {
-			// e.g. if user has no methods, skip writing? up to you
 			continue
 		}
 		line := fmt.Sprintf("rpcwhitelist=%s:%s\n", user, strings.Join(methods, ","))
@@ -211,20 +212,25 @@ func (cfg *HTTPAuthConfig) CheckFilePermissions() error {
 
 // EnsureCookieFileExists checks if cookie file exists; if not, creates it with admin credentials.
 func (cfg *HTTPAuthConfig) EnsureCookieFileExists() error {
-	// If user doesn't want a cookie file, or path is empty, skip
-	if cfg.CookieFilePath == "" {
-		return nil
-	}
-
 	if _, err := os.Stat(cfg.CookieFilePath); os.IsNotExist(err) {
-		// Generate a random password
-		pass, err := generateRandomString(32)
-		if err != nil {
-			return fmt.Errorf("failed generating cookie password: %v", err)
-		}
-
 		// Cookie file: "admin:<password>"
-		cookieLine := fmt.Sprintf("admin:%s\n", pass)
+		var cookieLine string
+		var pass string
+		if cfg.CookieContent != "" {
+			cookieLine = cfg.CookieContent
+			parts := strings.SplitN(cfg.CookieContent, ":", 2)
+			if len(parts) != 2 {
+				return fmt.Errorf("invalid cookie content: %s", cfg.CookieContent)
+			}
+			pass = parts[1]
+		} else {
+			// Generate a random password
+			pass, err = generateRandomString(32)
+			if err != nil {
+				return fmt.Errorf("failed generating cookie password: %v", err)
+			}
+			cookieLine = fmt.Sprintf("admin:%s\n", pass)
+		}
 
 		// Write cookie file with perms 0600
 		f, errCreate := os.OpenFile(cfg.CookieFilePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
@@ -271,6 +277,13 @@ func (cfg *HTTPAuthConfig) AddUser(username string, plaintextPassword string, pe
 		return fmt.Errorf("failed writing config after cookie creation: %v", errWriteCfg)
 	}
 
+	return nil
+}
+
+func (cfg *HTTPAuthConfig) UpdateCookieContent(cookieLine string) error {
+	if err := os.WriteFile(cfg.CookieFilePath, []byte(cookieLine), 0600); err != nil {
+		return fmt.Errorf("failed updating cookie file: %v", err)
+	}
 	return nil
 }
 
