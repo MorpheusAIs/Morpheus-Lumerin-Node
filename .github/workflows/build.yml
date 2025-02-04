@@ -415,8 +415,6 @@ jobs:
           cd ../cli
           make build
           cd ../ui-desktop
-          mv .env .env.tmp
-          sed 's|\./.cookie|.\\.cookie|g' .env.tmp > .env
           echo "Injecting version ${{ env.VFULL }} into package.json"
           sed -i "s/\"version\": \".*\"/\"version\": \"${{ env.VFULL }}\"/" package.json
           cat package.json | grep '"version"'  # Optional: Verify the change
@@ -442,8 +440,6 @@ jobs:
           }' > mor-launch.json
           echo "Contents of mor-launch.json: "
           cat mor-launch.json
-          mv .env .env.tmp
-          sed 's|\./data/|.\\data\\|g' .env.tmp > .env
           mv ./proxy-router/proxy-router proxy-router.exe
           mv ./cli/mor-cli mor-cli.exe
           mv ./launcher/mor-launch mor-launch.exe
