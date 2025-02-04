@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"path/filepath"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/multicall"
@@ -179,6 +180,13 @@ func (cfg *Config) SetDefaults() {
 	if cfg.Proxy.AuthConfigFilePath == "" {
 		cfg.Proxy.AuthConfigFilePath = "./proxy.conf"
 	}
+
+	cfg.Log.FolderPath = filepath.FromSlash(cfg.Log.FolderPath)
+	cfg.Proxy.StoragePath = filepath.FromSlash(cfg.Proxy.StoragePath)
+	cfg.Proxy.ModelsConfigPath = filepath.FromSlash(cfg.Proxy.ModelsConfigPath)
+	cfg.Proxy.RatingConfigPath = filepath.FromSlash(cfg.Proxy.RatingConfigPath)
+	cfg.Proxy.CookieFilePath = filepath.FromSlash(cfg.Proxy.CookieFilePath)
+	cfg.Proxy.AuthConfigFilePath = filepath.FromSlash(cfg.Proxy.AuthConfigFilePath)
 }
 
 // GetSanitized returns a copy of the config with sensitive data removed

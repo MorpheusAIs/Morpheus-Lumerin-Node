@@ -1,7 +1,10 @@
 import config from '../../config'
 import fs from 'fs'
+import os from 'os'
 
-const cookieFile = fs.readFileSync(config.chain.proxyRouterCookieFilePath, 'utf8').trim();
+const isWindows = os.platform() === 'win32' || os.platform() === 'win64';
+const cookieFilePath = isWindows ? config.chain.proxyRouterCookieFilePath.replace('/', '\\') : config.chain.proxyRouterCookieFilePath;
+const cookieFile = fs.readFileSync(cookieFilePath, 'utf8').trim();
 const [username, password] = cookieFile.split(':');
 const auth = {
     Authorization: `Basic ${Buffer.from(`${username}:${password}`, 'utf-8').toString('base64')}`
