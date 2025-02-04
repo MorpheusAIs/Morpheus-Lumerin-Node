@@ -3,7 +3,7 @@ import fs from 'fs'
 import os from 'os'
 
 const isWindows = os.platform() === 'win32' || os.platform() === 'win64';
-const cookieFilePath = isWindows ? config.chain.proxyRouterCookieFilePath.replace('/', '\\') : config.chain.proxyRouterCookieFilePath;
+const cookieFilePath = isWindows ? config.chain.proxyRouterCookieFilePath.replace(/\//g, '\\') : config.chain.proxyRouterCookieFilePath;
 const cookieFile = fs.readFileSync(cookieFilePath, 'utf8').trim();
 const [username, password] = cookieFile.split(':');
 const auth = {
