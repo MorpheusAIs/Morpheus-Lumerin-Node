@@ -1,9 +1,26 @@
 import config from '../../config'
 import fs from 'fs'
 import os from 'os'
+import path from 'path'
+import { app } from 'electron'
+
+let cookieFilePath = config.chain.proxyRouterCookieFilePath;
+if (app.isPackaged) {
+    let basePath;
+
+    if (process.platform === 'darwin' && process.execPath.includes('.app')) {
+      const appBundlePath = process.execPath.match(/(.*\.app)/)[0];
+      basePath = path.dirname(appBundlePath);
+    } else {
+      basePath = path.dirname(process.execPath);
+    }
+    
+    cookieFilePath = path.join(basePath, config.chain.proxyRouterCookieFilePath);
+}
 
 const isWindows = os.platform() === 'win32' || os.platform() === 'win64';
-const cookieFilePath = isWindows ? config.chain.proxyRouterCookieFilePath.replace(/\//g, '\\') : config.chain.proxyRouterCookieFilePath;
+cookieFilePath = isWindows ? cookieFilePath.replace(/\//g, '\\') : cookieFilePath;
+
 const cookieFile = fs.readFileSync(cookieFilePath, 'utf8').trim();
 const [username, password] = cookieFile.split(':');
 const auth = {
