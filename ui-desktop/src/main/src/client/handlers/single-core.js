@@ -164,7 +164,8 @@ export const onboardingCompleted = async (data, core) => {
     if (data.ethNode) {
       const ethNodeResult = await fetch(`${proxyUrl}/config/ethNode`, {
         method: 'POST',
-        body: JSON.stringify({ urls: [data.ethNode] })
+        body: JSON.stringify({ urls: [data.ethNode] }),
+        headers: await httpClient.getAuthHeaders(),
       })
 
       const dataResponse = await ethNodeResult.json()
@@ -181,7 +182,8 @@ export const onboardingCompleted = async (data, core) => {
         body: JSON.stringify({
           mnemonic: data.mnemonic,
           derivationPath: String(data.derivationPath || 0)
-        })
+        }),
+        headers: await httpClient.getAuthHeaders()
       })
 
       console.log('Set Mnemonic To Wallet', await mnemonicRes.json())
