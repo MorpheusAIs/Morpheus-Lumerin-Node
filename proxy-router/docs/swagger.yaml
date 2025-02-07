@@ -818,6 +818,15 @@ paths:
       summary: Revoke Token Allowance for Agent
       tags:
       - auth
+  /auth/cookie/path:
+    get:
+      description: Get the path to the cookie file
+      produces:
+      - application/json
+      responses: {}
+      summary: Get Path to Cookie File
+      tags:
+      - auth
   /auth/txs:
     get:
       description: 'Permission: agent_requests'

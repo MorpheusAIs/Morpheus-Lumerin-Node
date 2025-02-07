@@ -296,7 +296,7 @@ func start() error {
 	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine, chatStorage, *cfg.Proxy.StoreChatContext.Bool, *cfg.Proxy.ForwardChatContext.Bool, *authCfg, appLog)
 	walletController := walletapi.NewWalletController(wallet, *authCfg)
 	systemController := system.NewSystemController(&cfg, wallet, rpcClientStore, sysConfig, appStartTime, chainID, appLog, ethConnectionValidator, *authCfg)
-	authController := authapi.NewAuthController(authCfg, appLog)
+	authController := authapi.NewAuthController(authCfg, cfg.Environment, appLog)
 
 	apiBus := apibus.NewApiBus(blockchainController, proxyController, walletController, systemController, authController)
 	httpHandler := httphandlers.CreateHTTPServer(appLog, *authCfg, apiBus)
