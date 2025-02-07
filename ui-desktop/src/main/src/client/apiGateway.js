@@ -10,7 +10,7 @@ const getAuthHeaders = async () => {
     }
 
     try {
-        const path = `${config.chain.localProxyRouterUrl}/auth/cookie/path`
+        const path = `${config.chain.localProxyRouterUrl}/auth/cookie/path`;
         const response = await fetch(path);
         const body = await response.json();
         let cookieFilePath = body.path;
@@ -22,11 +22,11 @@ const getAuthHeaders = async () => {
         const [username, password] = cookieFile.split(':');
         auth = {
             Authorization: `Basic ${Buffer.from(`${username}:${password}`, 'utf-8').toString('base64')}`
-        }
+        };
         return auth;
     }
     catch (e) {
-        console.log("Error", e)
+        console.log("Error", e);
         throw e;
     }
 }
