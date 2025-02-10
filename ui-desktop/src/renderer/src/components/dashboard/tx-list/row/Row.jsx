@@ -96,11 +96,6 @@ const Row = ({
     Icon = EtherIcon;
   }
 
-  if (action === 'openSession') {
-    console.log('diamondAddress,', diamondAddress);
-    console.log('tx,', tx);
-  }
-
   const MetaComponent = metaComponentMap[action] || defaultMeta;
 
   return (

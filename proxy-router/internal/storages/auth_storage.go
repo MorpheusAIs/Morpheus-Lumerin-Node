@@ -1,26 +1,22 @@
 package storages
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
+	"math/big"
+	"strconv"
 	"strings"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 )
 
-type AgentUser struct {
-	Username    string
-	Password    string
-	Perms       []string
-	Allowances  map[string]lib.BigInt
-	IsConfirmed bool
-}
-
-type AllowanceRequest struct {
-	Username  string
-	Token     string
-	Allowance lib.BigInt
-}
+const (
+	authRequestPrefix      = "auth_request"
+	allowanceRequestPrefix = "allowance_request"
+	agentTxPrefix          = "agent_tx"
+)
 
 type AuthStorage struct {
 	db *Storage
@@ -33,13 +29,13 @@ func NewAuthStorage(storage *Storage) *AuthStorage {
 }
 
 func (s *AuthStorage) AddAuthRequest(request *AgentUser) error {
-	key := fmt.Sprintf("auth_request:%s", request.Username)
 	requestJson, err := json.Marshal(request)
 	if err != nil {
 		return err
 	}
 
-	err = s.db.Set([]byte(key), requestJson)
+	key := formatKey(authRequestPrefix, request.Username)
+	err = s.db.Set(key, requestJson)
 	if err != nil {
 		return err
 	}
@@ -47,29 +43,33 @@ func (s *AuthStorage) AddAuthRequest(request *AgentUser) error {
 }
 
 func (s *AuthStorage) GetAgentUser(username string) (*AgentUser, bool) {
-	key := fmt.Sprintf("auth_request:%s", username)
-	requestJson, err := s.db.Get([]byte(key))
+	key := formatKey(authRequestPrefix, username)
+	requestJson, err := s.db.Get(key)
 	if err != nil {
 		return nil, false
 	}
 
 	request := &AgentUser{}
-	json.Unmarshal(requestJson, request)
+	err = json.Unmarshal(requestJson, request)
+	if err != nil {
+		return nil, false
+	}
+
 	return request, true
 }
 
 func (s *AuthStorage) GetAgentUsers() ([]*AgentUser, error) {
 	var requests []*AgentUser
-	prefix := []byte("auth_request:")
 
+	prefix := formatPrefix(authRequestPrefix)
 	keys, err := s.db.GetPrefix(prefix)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, key := range keys {
-		username := strings.TrimPrefix(string(key), "auth_request:")
-		request, ok := s.GetAgentUser(username)
+		username := trimPrefix(key, prefix)
+		request, ok := s.GetAgentUser(string(username))
 		if !ok {
 			return nil, fmt.Errorf("error getting auth request: %s", string(key))
 		}
@@ -79,37 +79,41 @@ func (s *AuthStorage) GetAgentUsers() ([]*AgentUser, error) {
 }
 
 func (s *AuthStorage) DeleteAuthRequest(username string) error {
-	key := fmt.Sprintf("auth_request:%s", username)
-	return s.db.Delete([]byte(key))
+	key := formatKey(authRequestPrefix, username)
+	return s.db.Delete(key)
 }
 
 func (s *AuthStorage) AddAllowanceRequest(request *AllowanceRequest) error {
-	key := fmt.Sprintf("allowance_request:%s:%s", request.Username, request.Token)
+	key := formatKey(allowanceRequestPrefix, request.Username, request.Token)
 	requestJson, err := json.Marshal(request)
 	if err != nil {
 		return err
 	}
 
-	return s.db.Set([]byte(key), requestJson)
+	return s.db.Set(key, requestJson)
 }
 
 func (s *AuthStorage) GetAllowanceRequest(username string, token string) (*AllowanceRequest, bool) {
 	token = strings.ToLower(token)
-	key := fmt.Sprintf("allowance_request:%s:%s", username, token)
-	requestJson, err := s.db.Get([]byte(key))
+	key := formatKey(allowanceRequestPrefix, username, token)
+	requestJson, err := s.db.Get(key)
 	if err != nil {
 		return nil, false
 	}
 
 	request := &AllowanceRequest{}
-	json.Unmarshal(requestJson, request)
+	err = json.Unmarshal(requestJson, request)
+	if err != nil {
+		return nil, false
+	}
+
 	return request, true
 }
 
 func (s *AuthStorage) GetAllowanceRequests() ([]*AllowanceRequest, error) {
 	var requests []*AllowanceRequest
-	prefix := []byte("allowance_request:")
 
+	prefix := formatPrefix(allowanceRequestPrefix)
 	keys, err := s.db.GetPrefix(prefix)
 	if err != nil {
 		return nil, err
@@ -117,16 +121,17 @@ func (s *AuthStorage) GetAllowanceRequests() ([]*AllowanceRequest, error) {
 
 	for _, key := range keys {
 		// Split key into username and token
-		parts := strings.Split(strings.TrimPrefix(string(key), "allowance_request:"), ":")
+		parts := bytes.Split(trimPrefix(key, prefix), []byte(":"))
 		if len(parts) != 2 {
 			continue
 		}
-		username, token := parts[0], parts[1]
 
+		username, token := string(parts[0]), string(parts[1])
 		request, ok := s.GetAllowanceRequest(username, token)
 		if !ok {
 			return nil, fmt.Errorf("error getting allowance request: %s", string(key))
 		}
+
 		requests = append(requests, request)
 	}
 	return requests, nil
@@ -147,13 +152,13 @@ func (s *AuthStorage) ConfirmOrDeclineAllowanceRequest(username string, token st
 	}
 
 	// Delete the request after processing (whether confirmed or declined)
-	key := fmt.Sprintf("allowance_request:%s:%s", username, token)
-	return s.db.Delete([]byte(key))
+	key := formatKey(allowanceRequestPrefix, username, token)
+	return s.db.Delete(key)
 }
 
 func (s *AuthStorage) SetAllowance(username string, token string, amount lib.BigInt) error {
-	key := fmt.Sprintf("auth_request:%s", username)
-	requestJson, err := s.db.Get([]byte(key))
+	key := formatKey(authRequestPrefix, username)
+	requestJson, err := s.db.Get(key)
 	if err != nil {
 		return err
 	}
@@ -174,30 +179,45 @@ func (s *AuthStorage) SetAllowance(username string, token string, amount lib.Big
 		return err
 	}
 
-	return s.db.Set([]byte(key), updatedJson)
+	return s.db.Set(key, updatedJson)
 }
 
-func (s *AuthStorage) SetAgentTx(txHash string, username string) error {
-	key := fmt.Sprintf("agent_tx:%s", txHash)
-	return s.db.Set([]byte(key), []byte(username))
+func (s *AuthStorage) SetAgentTx(txHash string, username string, blockNumber *big.Int) error {
+	// reversing to maintain reverse order of indexing
+	reversedBlockNumber := math.MaxUint64 - blockNumber.Uint64()
+	key := formatKey(agentTxPrefix, username, strconv.FormatUint(reversedBlockNumber, 10))
+	return s.db.Set(key, []byte(txHash))
 }
 
-func (s *AuthStorage) GetAgentTxs() (map[string]string, error) {
-	var txs map[string]string = make(map[string]string)
-	prefix := []byte("agent_tx:")
+func (s *AuthStorage) GetAgentTxs(username string, cursor []byte, limit uint) ([]string, []byte, error) {
+	txs := make([]string, 0)
+	prefix := formatPrefix(agentTxPrefix, username)
 
-	keys, err := s.db.GetPrefix(prefix)
+	keys, nextCursor, err := s.db.Paginate(prefix, cursor, limit)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	for _, key := range keys {
-		txHash := strings.TrimPrefix(string(key), "agent_tx:")
-		username, err := s.db.Get([]byte(key))
+		txhash, err := s.db.Get(key)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		txs[txHash] = string(username)
+		txs = append(txs, string(txhash))
 	}
-	return txs, nil
+	return txs, nextCursor, nil
+}
+
+// formatKey formats a key by joining the path components with a colon
+func formatKey(path ...string) []byte {
+	return []byte(strings.Join(path, ":"))
+}
+
+// formatPrefix formats a prefix by joining the path components with a colon and adding a trailing colon
+func formatPrefix(path ...string) []byte {
+	return []byte(strings.Join(path, ":") + ":")
+}
+
+func trimPrefix(key []byte, prefix []byte) []byte {
+	return bytes.TrimPrefix(key, prefix)
 }
