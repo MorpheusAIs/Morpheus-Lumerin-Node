@@ -1,4 +1,5 @@
 # Morpheus Lumerin Node
+### Take part in the Lumerin coding weight rewards!! [stake.mor.lumerin.io](https://stake.mor.lumerin.io/)
 ![Simple-Overview](docs/images/simple.png)
 The purpose of this software is to enable interaction with distributed, decentralized LLMs on the Morpheus network through a desktop chat experience.
 
