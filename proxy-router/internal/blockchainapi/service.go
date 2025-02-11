@@ -305,7 +305,7 @@ func (s *BlockchainService) rateBids(bidIds [][32]byte, bids []m.IBidStorageBid,
 }
 
 func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalSig []byte, stake *big.Int, directPayment bool, agentUsername string) (common.Hash, error) {
-	shouldDecrease, err := s.authConfig.IsAllowanceEnough(agentUsername, s.morTokenAddr.Hex(), stake)
+	isAgent, err := s.authConfig.IsAllowanceEnough(agentUsername, s.morTokenAddr.Hex(), stake)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrAgentUserAllowance, err)
 	}
@@ -315,33 +315,44 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 		return common.Hash{}, lib.WrapError(ErrPrKey, err)
 	}
 
-	approveTx, err := s.Approve(ctx, s.diamonContractAddr, stake)
-	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrApprove, err)
-	}
-
-	if shouldDecrease {
-		s.authConfig.AuthStorage.SetAgentTx(approveTx.Hex(), agentUsername)
-	}
-
 	transactOpt, err := s.getTransactOpts(ctx, prKey)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
 	}
 
-	sessionID, _, _, txHash, err := s.sessionRouter.OpenSession(transactOpt, approval, approvalSig, stake, directPayment, prKey)
+	tx, err := s.morToken.Approve(transactOpt, s.diamonContractAddr, stake)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrSendTx, err)
 	}
 
-	if shouldDecrease {
+	receipt, err := bind.WaitMined(ctx, s.ethClient, tx)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrWaitMined, err)
+	}
+
+	if isAgent {
+		err = s.authConfig.AuthStorage.SetAgentTx(tx.Hash().Hex(), agentUsername, receipt.BlockNumber)
+		if err != nil {
+			s.log.Errorf("failed to set agent tx: %s", err)
+		}
+	}
+
+	sessionID, _, _, receipt, err := s.sessionRouter.OpenSession(transactOpt, approval, approvalSig, stake, directPayment, prKey)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrSendTx, err)
+	}
+
+	if isAgent {
 		amountBigInt := lib.BigInt{Int: *stake}
 		err = s.authConfig.DecreaseAllowance(agentUsername, s.morTokenAddr.Hex(), amountBigInt)
 		if err != nil {
 			s.log.Errorf("failed to decrease allowance: %s", err)
 			return common.Hash{}, err
 		}
-		s.authConfig.AuthStorage.SetAgentTx(txHash.Hex(), agentUsername)
+		err = s.authConfig.AuthStorage.SetAgentTx(receipt.TxHash.Hex(), agentUsername, receipt.BlockNumber)
+		if err != nil {
+			s.log.Errorf("failed to set agent tx: %s", err)
+		}
 	}
 
 	session, err := s.sessionRepo.GetSession(ctx, sessionID)
@@ -642,7 +653,7 @@ func (s *BlockchainService) SendETH(ctx context.Context, to common.Address, amou
 		return common.Hash{}, lib.WrapError(ErrSendTx, err)
 	}
 
-	_, err = bind.WaitMined(ctx, s.ethClient, signedTx)
+	tx, err := bind.WaitMined(ctx, s.ethClient, signedTx)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrWaitMined, err)
 	}
@@ -654,7 +665,7 @@ func (s *BlockchainService) SendETH(ctx context.Context, to common.Address, amou
 			s.log.Errorf("failed to decrease allowance: %s", err)
 			return common.Hash{}, err
 		}
-		s.authConfig.AuthStorage.SetAgentTx(signedTx.Hash().Hex(), agentUsername)
+		s.authConfig.AuthStorage.SetAgentTx(signedTx.Hash().Hex(), agentUsername, tx.BlockNumber)
 	}
 
 	return signedTx.Hash(), nil
@@ -745,6 +756,11 @@ func (s *BlockchainService) SendMOR(ctx context.Context, to common.Address, amou
 		return common.Hash{}, lib.WrapError(ErrSendTx, err)
 	}
 
+	receipt, err := bind.WaitMined(ctx, s.ethClient, tx)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrWaitMined, err)
+	}
+
 	if shouldDecrease {
 		amountBigInt := lib.BigInt{Int: *amount}
 		err = s.authConfig.DecreaseAllowance(agentUsername, s.morTokenAddr.Hex(), amountBigInt)
@@ -752,7 +768,10 @@ func (s *BlockchainService) SendMOR(ctx context.Context, to common.Address, amou
 			s.log.Errorf("failed to decrease allowance: %s", err)
 			return common.Hash{}, err
 		}
-		s.authConfig.AuthStorage.SetAgentTx(tx.Hash().Hex(), agentUsername)
+		err = s.authConfig.AuthStorage.SetAgentTx(tx.Hash().Hex(), agentUsername, receipt.BlockNumber)
+		if err != nil {
+			s.log.Errorf("failed to set agent tx: %s", err)
+		}
 	}
 
 	return tx.Hash(), nil

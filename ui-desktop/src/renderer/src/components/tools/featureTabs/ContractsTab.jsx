@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
-import { Tab, Tabs, TabList, TabPanel } from 'react-tabs';
-import { ConfirmationWizard, TextInput, Flex, BaseBtn } from '../../common';
+import { TextInput, BaseBtn } from '../../common';
 const StyledParagraph = styled.p`
-  color: ${p => p.theme.colors.dark};
+  color: ${(p) => p.theme.colors.dark};
 
   span {
     font-weight: bold;
@@ -16,8 +15,8 @@ const StyledBtn = styled(BaseBtn)`
   font-size: 1.5rem;
   border-radius: 5px;
   padding: 0 0.6rem;
-  background-color: ${p => p.theme.colors.primary};
-  color: ${p => p.theme.colors.light};
+  background-color: ${(p) => p.theme.colors.primary};
+  color: ${(p) => p.theme.colors.light};
 
   @media (min-width: 1040px) {
     width: 35%;
@@ -38,7 +37,7 @@ const Input = styled(TextInput)`
 `;
 
 const Subtitle = styled.h3`
-  color: ${p => p.theme.colors.dark};
+  color: ${(p) => p.theme.colors.dark};
 `;
 
 export const ContractsTab = ({ settings, onCommit }) => {
@@ -57,7 +56,7 @@ export const ContractsTab = ({ settings, onCommit }) => {
           min={0}
           max={50}
           placeholder={10}
-          onChange={e =>
+          onChange={(e) =>
             setProfitSettings({ ...profitSettings, target: e.value })
           }
           value={profitSettings?.target}
@@ -70,7 +69,7 @@ export const ContractsTab = ({ settings, onCommit }) => {
           min={0}
           max={10}
           placeholder={2}
-          onChange={e => {
+          onChange={(e) => {
             setProfitSettings({ ...profitSettings, deviation: e.value });
             return;
           }}
@@ -86,7 +85,7 @@ export const ContractsTab = ({ settings, onCommit }) => {
             setAdaptExisting(!adaptExisting);
             setProfitSettings({
               ...profitSettings,
-              adaptExisting: !adaptExisting
+              adaptExisting: !adaptExisting,
             });
           }}
           checked={adaptExisting}

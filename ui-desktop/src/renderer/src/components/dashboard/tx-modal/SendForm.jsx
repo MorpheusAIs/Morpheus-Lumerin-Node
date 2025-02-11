@@ -14,7 +14,7 @@ import {
   Header,
   Footer,
   FooterRow,
-  FooterLabel
+  FooterLabel,
 } from './common.styles';
 
 const AmountContainer = styled.label`
@@ -29,14 +29,14 @@ const AmountInput = styled.input`
   font-size: 4rem;
   width: 100%;
   text-align: center;
-  background: #03160e!important;
+  background: #03160e !important;
   outline: none;
   border: none;
   color: ${({ isActive, theme }) =>
     isActive ? theme.colors.morMain : theme.colors.morMain};
 
   ::placeholder {
-    color: ${p => p.theme.colors.morMain};
+    color: ${(p) => p.theme.colors.morMain};
   }
 
   &[type='number']::-webkit-inner-spin-button,
@@ -48,13 +48,13 @@ const AmountInput = styled.input`
   }
 `;
 const AmountSublabel = styled.label`
-  color: ${p => p.theme.colors.dark};
+  color: ${(p) => p.theme.colors.dark};
   font-size: 1.4rem;
   text-align: center;
 `;
 
 const SubAmount = styled.div`
-  color: ${p => p.theme.colors.lumerin.helpertextGray};
+  color: ${(p) => p.theme.colors.helpertextGray};
   font-size: 13px;
   text-align: center;
 `;
@@ -69,12 +69,11 @@ const FeeRow = styled.div`
   display: flex;
   flex-direction: row;
   justify-content: space-between;
-  
 `;
 
 const FeeLabel = styled.div`
   font-size: 1.2rem;
-  color: ${p => p.theme.colors.dark};
+  color: ${(p) => p.theme.colors.dark};
 `;
 
 const Column = styled.div`
@@ -95,21 +94,21 @@ const WalletInputLabel = styled.span`
   margin-left: 20px;
   -ms-transform: translateY(-50%);
   transform: translateY(-50%);
-  color: ${p => p.theme.colors.lumerin.placeholderGray};
+  color: ${(p) => p.theme.colors.placeholderGray};
 `;
 
 const WalletInput = styled.input`
   width: 100%;
   height: 40px;
-  color: ${p => p.theme.colors.dark};
+  color: ${(p) => p.theme.colors.dark};
   font-weight: 300;
   font-size: 16px;
-  background: #03160e!important;
+  background: #03160e !important;
   outline: none;
   border-radius: 5px;
   border-style: solid;
   padding: 8px 20px 6px 60px;
-  border: none!important;
+  border: none !important;
 `;
 
 const SendBtn = styled(BaseBtn)`
@@ -119,7 +118,7 @@ const SendBtn = styled(BaseBtn)`
   color: black;
   font-weight: 600;
   background-color: ${({ isActive, theme }) =>
-    isActive ? theme.colors.lumerin.helpertextGray : theme.colors.morMain};
+    isActive ? theme.colors.helpertextGray : theme.colors.morMain};
 `;
 
 const IconContainer = styled.div`
@@ -141,11 +140,17 @@ const LMR_MODE = 'coinAmount';
 const USD_MODE = 'usdAmount';
 
 const selectorStyles = {
-  singleValue: provided => ({
+  singleValue: (provided) => ({
     ...provided,
-    color: 'white'
+    color: 'white',
   }),
-  control: (base, state) => ({ ...base, borderColor: '#20dc8e', color: '#FFFFFF', backgroundColor: '#03160e',  width: '100%' }),
+  control: (base, state) => ({
+    ...base,
+    borderColor: '#20dc8e',
+    color: '#FFFFFF',
+    backgroundColor: '#03160e',
+    width: '100%',
+  }),
   option: (base, state) => ({
     ...base,
     backgroundColor: state.isSelected ? '#03160e' : undefined,
@@ -153,21 +158,21 @@ const selectorStyles = {
     ':active': {
       ...base[':active'],
       backgroundColor: '#0e435380',
-      color: '#FFFFFF'
-    }
-  })
+      color: '#FFFFFF',
+    },
+  }),
 };
 
 export function SendForm(props) {
   const rangeSelectOptions = [
     {
       label: props.symbol,
-      value: 'LMR'
+      value: 'LMR',
     },
     {
       label: props.symbolEth,
-      value: 'ETH'
-    }
+      value: 'ETH',
+    },
   ];
 
   const [mode, setMode] = useState(LMR_MODE);
@@ -175,7 +180,7 @@ export function SendForm(props) {
   const context = useContext(ToastsContext);
   const selectedCurrency = props.selectedCurrency;
 
-  const handleSendLmr = async e => {
+  const handleSendLmr = async (e) => {
     e.preventDefault();
 
     const errorObj = props.validate();
@@ -200,14 +205,14 @@ export function SendForm(props) {
     setIsPending(false);
   };
 
-  const handleDestinationAddressInput = e => {
+  const handleDestinationAddressInput = (e) => {
     e.preventDefault();
 
     props.onInputChange(e.target);
     props.onDestinationAddressInput(e.target.value);
   };
 
-  const handleAmountInput = e => {
+  const handleAmountInput = (e) => {
     e.preventDefault();
 
     const { value } = e.target;
@@ -219,7 +224,7 @@ export function SendForm(props) {
     return <></>;
   }
 
-  const sanitize = amount => (amount === '< 0.01' ? '0.01' : amount);
+  const sanitize = (amount) => (amount === '< 0.01' ? '0.01' : amount);
 
   const onModeChange = () => {
     const newMode = mode === LMR_MODE ? USD_MODE : LMR_MODE;
@@ -227,7 +232,7 @@ export function SendForm(props) {
     setMode(newMode);
     props.onAmountInput(sanitize(newAmount));
   };
-  
+
   return (
     <>
       <HeaderWrapper>
@@ -265,7 +270,7 @@ export function SendForm(props) {
         <IconContainer>
           <SwapIcon
             onClick={onModeChange}
-            fill={theme.colors.lumerin.helpertextGray}
+            fill={theme.colors.helpertextGray}
           ></SwapIcon>
         </IconContainer>
         {mode === LMR_MODE ? (

@@ -1,5 +1,3 @@
-'use strict'
-
 import logger from '../../../logger'
 import restart from '../electron-restart'
 import dbManager from '../database'
@@ -16,8 +14,8 @@ import {
   getFailoverSetting,
   setFailoverSetting
 } from '../settings'
-import apiGateway from '../apiGateway';
-import config from '../../../config';
+import apiGateway from '../apiGateway'
+import config from '../../../config'
 
 const validatePassword = (data) => auth.isValidPassword(data)
 
@@ -75,39 +73,25 @@ const setAutoAdjustPriceData = async (value) => {
   })
 }
 
-/**
- *
- * @param {string} contractId
- * @param {Date} fromDate
- * @returns
- */
-const getContractHashrate = async ({ contractId, fromDate }) => {
+const getContractHashrate = async (params: { contractId: string; fromDate: Date }) => {
+  const { contractId, fromDate } = params
   const collection = await dbManager.getDb().collection('hashrate').findAsync({ id: contractId })
-  // Uncomment to get a random data
-  // const data = []
-  // const now = new Date().getTime();
-  // for (let i = 10; i >= 0; i--) {
-  //   const timestamp = now - i * 1000 * 60 * 5;
-  //   const hashrate = Math.round(Math.random() * 50000) + 70000;
-  //   data.push({ timestamp, hashrate })
-  // }
-  // return data;
   return collection
     .filter((x) => x.timestamp > fromDate.getTime())
     .sort((a, b) => a.timestamp - b.timestamp)
 }
 
 const isFailoverEnabled = async () => {
-  const settings = await getFailoverSetting();
-  if(!settings) {
-    return ({ isEnabled: config.isFailoverEnabled })
+  const settings = await getFailoverSetting()
+  if (!settings) {
+    return { isEnabled: config.isFailoverEnabled }
   }
-  return settings;
+  return settings
 }
 
 const restartWallet = () => restart(1)
 
-export default {
+const handlers = {
   validatePassword,
   changePassword,
   persistState,
@@ -127,5 +111,9 @@ export default {
   setAutoAdjustPriceData,
   isFailoverEnabled,
   setFailoverSetting,
-  ...apiGateway,
+  ...apiGateway
 }
+
+export default handlers
+
+export type NoCoreHandlers = typeof handlers

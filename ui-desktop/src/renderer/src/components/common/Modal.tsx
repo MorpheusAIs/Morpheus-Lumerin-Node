@@ -1,15 +1,16 @@
 import ReactModal from 'react-modal';
-import PropTypes from 'prop-types';
 import styled from 'styled-components';
 import theme from '../../ui/theme';
-import React from 'react';
-
 import CloseIcon from '../icons/CloseIcon';
+
+type Variant = 'primary' | 'secondary';
 
 const Container = styled(ReactModal)`
   &.ReactModal__Content {
     opacity: 0;
-    transition: transform 0.3s, opacity 0.3s;
+    transition:
+      transform 0.3s,
+      opacity 0.3s;
     will-change: transform, opacity;
     transform: translate3d(-50%, 10%, 0);
   }
@@ -24,38 +25,41 @@ const Container = styled(ReactModal)`
   }
 `;
 
-const Header = styled.header`
+const Header = styled.header<{
+  variant: Variant;
+  hasTitle: boolean;
+}>`
   padding: 1.6rem;
   display: flex;
-  background-color: ${p =>
+  background-color: ${(p) =>
     p.variant === 'primary' ? p.theme.colors.primary : 'transparent'};
-  justify-content: ${p => (p.hasTitle ? 'space-between' : 'flex-end')};
+  justify-content: ${(p) => (p.hasTitle ? 'space-between' : 'flex-end')};
   flex-shrink: 0;
 `;
 
-const Title = styled.h1`
+const Title = styled.h1<{ variant: Variant }>`
   font-size: 1.8rem;
   line-height: 2.4rem;
   font-weight: normal;
-  color: ${p =>
+  color: ${(p) =>
     p.variant === 'primary' ? p.theme.colors.light : p.theme.colors.copy};
   margin: 0;
   flex-grow: 1;
   cursor: default;
 `;
 
-export const HeaderButton = styled.button`
+const HeaderButton = styled.button<{ variant: Variant }>`
   margin-left: 2rem;
   background: transparent;
   border: none;
   padding: 0;
   outline: none;
   cursor: pointer;
-  color: ${p =>
+  color: ${(p) =>
     p.variant === 'primary' ? p.theme.colors.light : p.theme.colors.primary};
 
   &[disabled] {
-    color: ${p => p.theme.colors.weak};
+    color: ${(p) => p.theme.colors.weak};
   }
 
   &:not([disabled]):hover,
@@ -63,6 +67,16 @@ export const HeaderButton = styled.button`
     opacity: 0.5;
   }
 `;
+
+type ModalProps = {
+  onRequestClose: () => void;
+  headerChildren?: React.ReactNode;
+  children: React.ReactNode;
+  variant: Variant;
+  isOpen: boolean;
+  title?: string;
+  styleOverrides?: React.CSSProperties;
+};
 
 export default function Modal({
   onRequestClose,
@@ -73,7 +87,7 @@ export default function Modal({
   title,
   styleOverrides,
   ...other
-}) {
+}: ModalProps) {
   return (
     <Container
       onRequestClose={onRequestClose}
@@ -82,11 +96,11 @@ export default function Modal({
       isOpen={isOpen}
       style={{
         overlay: {
-          backgroundColor: 'transparent',
-          zIndex: '3'
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          zIndex: '3',
         },
         content: {
-          background: theme.colors.light,
+          background: theme.colors.primaryDark,
           flexDirection: 'column',
           marginBottom: '1.6rem',
           borderRadius: '5px',
@@ -101,8 +115,8 @@ export default function Modal({
           right: 'auto',
           left: '50%',
           top: '10rem',
-          ...styleOverrides
-        }
+          ...styleOverrides,
+        },
       }}
       {...other}
     >

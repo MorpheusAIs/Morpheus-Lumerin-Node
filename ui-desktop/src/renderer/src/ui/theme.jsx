@@ -3,49 +3,38 @@ const darkShade = 'rgba(0, 0, 0, 0.2)';
 export default {
   colors: {
     transparent: 'transparent',
-    primary: '#0e4353',
-    primaryLight: '#53b1bd',
-    primaryDark: '#252b34',
-    translucentPrimary: '#014353',
-    inactive: '#384764',
-    active: '#5ADCE2',
-    cancelled: '#8B8B96',
-    // translucentPrimary: 'rgba(126, 97, 248, 0.2)',
-    secondary: '#014353',
-    tertiary: '#DB2642',
-    light: '#fff',
-    copy: '#545454',
-    dark: '#fff',
-    darker: '#1d1d1d',
-    translucentDark: '#323232EE',
+    primary: 'rgba(23, 54, 41, 1)',
+    primaryLight: 'rgba(32, 220, 142, 1)',
+    primaryDark: 'rgba(12,31,23,1',
+    translucentPrimary: 'rgb(1, 67, 83)',
+    inactive: 'rgba(56, 71, 100, 1)',
+    active: 'rgba(90, 220, 226, 1)',
+    cancelled: 'rgba(139, 139, 150, 1)',
+    secondary: 'rgba(1, 67, 83, 1)',
+    tertiary: 'rgba(219, 38, 66, 1)',
+    light: 'rgba(255, 255, 255, 1)',
+    copy: 'rgba(84, 84, 84, 1)',
+    dark: 'rgba(255, 255, 255, 1)',
+    darker: 'rgba(29, 29, 29, 1)',
+    translucentDark: 'rgba(50, 50, 50, 0.93)',
     lightShade: 'rgba(0, 0, 0, 0.1)',
     darkShade,
     darkSuccess: 'rgba(119, 132, 125, 0.68)',
-    success: '#399E5A',
-    warning: '#FFC857',
-    danger: '#d46045',
+    success: 'rgba(57, 158, 90, 1)',
+    warning: 'rgba(255, 200, 87, 1)',
+    danger: 'rgba(212, 96, 69, 1)',
     darkDanger: 'rgba(212, 96, 69, 0.12)',
-    weak: '#888',
-    morMain: '#20dc8e',
-    morLight: '#173629',
+    weak: 'rgba(136, 136, 136, 1)',
+    morMain: 'rgba(32, 220, 142, 1)',
+    morLight: 'rgba(23, 54, 41, 1)',
     // BACKGROUNDS
-    medium: '#f4f4f4',
-    lightBlue: '#EAF7FC',
-    lightBG: '#ededed',
-    xLight: '#f7f7f7',
+    medium: 'rgba(244, 244, 244, 1)',
+    lightBlue: 'rgba(234, 247, 252, 1)',
+    lightBG: 'rgba(237, 237, 237, 1)',
+    xLight: 'rgba(247, 247, 247, 1)',
     darkGradient: 'linear-gradient(to bottom, #353535, #323232)',
-
-    lumerin: {
-      gray: '#F2F5F9',
-      darkGray: '#DEE3EA',
-      inputGray: '#EDEEF2',
-      placeholderGray: '#C4C4C4',
-      helpertextGray: '#707070',
-      aqua: '#11B4BF',
-      tableBorderGray: '#E5E7EB',
-      lightAqua: '#DBECED',
-      green: '#66BE26'
-    }
+    helpertextGray: 'rgba(112, 112, 112, 1)',
+    placeholderGray: 'rgba(196, 196, 196, 1)',
   },
 
   // SIZES
@@ -55,7 +44,7 @@ export default {
     medium: 16,
     large: 20,
     xLarge: 24,
-    xxLarge: 32
+    xxLarge: 32,
   },
 
   // FONT WEIGHTS
@@ -66,9 +55,9 @@ export default {
     semibold: { fileName: 'Muli-SemiBold', value: '600' },
     bold: { fileName: 'Muli-Bold', value: '700' },
     xBold: { fileName: 'Muli-ExtraBold', value: '800' },
-    black: { fileName: 'Muli-Black', value: '900' }
+    black: { fileName: 'Muli-Black', value: '900' },
   },
 
   textShadow: `0 1px 1px ${darkShade}`,
-  spacing: n => n * 8 // used as rem multiplier
+  spacing: (n) => n * 8, // used as rem multiplier
 };

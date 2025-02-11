@@ -5,6 +5,7 @@ import pickBy from 'lodash/pickBy'
 import * as utils from './utils'
 import keys from './keys'
 import './sentry'
+import { type NoCoreHandlers } from 'src/main/src/client/handlers/no-core'
 
 const createClient = function (createStore) {
   const reduxDevtoolsOptions = {
@@ -146,8 +147,16 @@ const createClient = function (createStore) {
     // Failover
     getFailoverSetting: utils.forwardToMainProcess('get-failover-setting', 750000),
     setFailoverSetting: utils.forwardToMainProcess('set-failover-setting', 750000),
-    checkProviderConnectivity: utils.forwardToMainProcess('check-provider-connectivity', 750000)
-  }
+    checkProviderConnectivity: utils.forwardToMainProcess('check-provider-connectivity', 750000),
+    // Agents
+    getAgentUsers: utils.forwardToMainProcess('get-agent-users', 750000),
+    confirmDeclineAgentUser: utils.forwardToMainProcess('confirm-decline-agent-user', 750000),
+    removeAgentUser: utils.forwardToMainProcess('remove-agent-user', 750000),
+    getAgentTxs: utils.forwardToMainProcess('get-agent-txs', 750000),
+    revokeAgentAllowance: utils.forwardToMainProcess('revoke-agent-allowance', 750000),
+    getAgentAllowanceRequests: utils.forwardToMainProcess('get-agent-allowance-requests', 750000),
+    confirmDeclineAgentAllowanceRequest: utils.forwardToMainProcess('confirm-decline-agent-allowance-request', 750000),
+  } as unknown as NoCoreHandlers;
 
   const api = {
     ...utils,
@@ -170,3 +179,4 @@ const createClient = function (createStore) {
 }
 
 export default createClient
+export type Client = ReturnType<typeof createClient>

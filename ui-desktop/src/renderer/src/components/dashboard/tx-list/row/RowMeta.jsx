@@ -1,7 +1,6 @@
-//@ts-check
-
 import React from 'react';
 import { Field } from './Field';
+import { formatAddress } from '@renderer/lib/address';
 
 /** @param {{tx: import("./tx").Tx, tokens: Record<string,{decimals: number, symbol:string}>}} props */
 export const ApproveMeta = ({ tx, tokens }) => {
@@ -75,11 +74,6 @@ const TransfersMeta = ({ transfers, walletAddress }) => {
       </>
     );
   }
-};
-
-/** @param {string} address */
-const formatAddress = (address) => {
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
 };
 
 const formatCurrency = ({

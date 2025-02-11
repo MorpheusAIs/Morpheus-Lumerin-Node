@@ -6,18 +6,26 @@ import ToastsContainer from './ToastsContainer';
 import Toast from './Toast';
 import Timer from './Timer';
 
-export const ToastsContext = React.createContext({});
+type ToastsContextType = {
+  toast: (
+    type: string,
+    message: string,
+    options?: { autoClose?: number },
+  ) => void;
+};
+
+export const ToastsContext = React.createContext<ToastsContextType>({});
 
 const defaults = {
   messagesPerToast: 1,
-  autoClose: 6000
+  autoClose: 6000,
 };
 
-export class ToastsProvider extends React.Component {
+export class ToastsProvider extends React.Component<React.PropsWithChildren> {
   static propTypes = {
     messagesPerToast: PropTypes.number,
     autoClose: PropTypes.number,
-    children: PropTypes.node.isRequired
+    children: PropTypes.node.isRequired,
   };
 
   timers = {};
@@ -29,8 +37,8 @@ export class ToastsProvider extends React.Component {
       typeof options.autoClose === 'number'
         ? options.autoClose
         : typeof this.props.autoClose === 'number'
-        ? this.props.autoClose
-        : defaults.autoClose;
+          ? this.props.autoClose
+          : defaults.autoClose;
 
     // check if requested type is already visible
     const typeGroup = this.state.stack.find(([typeName]) => typeName === type);
@@ -44,7 +52,7 @@ export class ToastsProvider extends React.Component {
       this.timers[type] = new Timer(() => this.removeToast(type), autoClose);
     }
 
-    this.setState(state => ({
+    this.setState((state) => ({
       ...state,
       stack: typeGroup
         ? // if type group exists, append message to it
@@ -52,46 +60,46 @@ export class ToastsProvider extends React.Component {
             typeName === type
               ? // append using Set to automatically avoid duplicates
                 [typeName, ...new Set([...messages, message])]
-              : [typeName, ...messages]
+              : [typeName, ...messages],
           )
         : // if not, append a new type group with the new message
-          [...state.stack, [type, message]]
+          [...state.stack, [type, message]],
     }));
   };
 
   state = {
-    stack: []
+    stack: [],
   };
 
   componentDidMount() {
     window.ipcRenderer.on('wallet-error', (_, { message }) =>
-      this.addToast('error', message, { autoClose: 15000 })
+      this.addToast('error', message, { autoClose: 15000 }),
     );
   }
 
-  removeToast = type => {
-    this.setState(state => ({
+  removeToast = (type) => {
+    this.setState((state) => ({
       ...state,
-      stack: state.stack.filter(([typeName]) => typeName !== type)
+      stack: state.stack.filter(([typeName]) => typeName !== type),
     }));
   };
 
-  clearTimeout = type => {
+  clearTimeout = (type) => {
     if (this.timers[type]) this.timers[type].stop();
   };
 
-  handleDismiss = type => this.removeToast(type);
+  handleDismiss = (type) => this.removeToast(type);
 
-  handleShowMore = type => this.clearTimeout(type);
+  handleShowMore = (type) => this.clearTimeout(type);
 
-  handleMouseEnter = e => {
+  handleMouseEnter = (e) => {
     const type = e.currentTarget.dataset.type;
     if (this.timers[type] && this.timers[type].timerId) {
       this.timers[type].pause();
     }
   };
 
-  handleMouseLeave = e => {
+  handleMouseLeave = (e) => {
     const type = e.currentTarget.dataset.type;
     if (this.timers[type] && this.timers[type].timerId) {
       this.timers[type].resume();
@@ -103,7 +111,7 @@ export class ToastsProvider extends React.Component {
   willLeave = () => ({
     translate: spring(-45),
     maxHeight: spring(0),
-    opacity: spring(0)
+    opacity: spring(0),
   });
 
   contextValue = { toast: this.addToast };
@@ -119,13 +127,13 @@ export class ToastsProvider extends React.Component {
             style: {
               maxHeight: spring(450, { stiffness: 150, damping: 20 }),
               translate: spring(0, { stiffness: 170, damping: 15 }),
-              opacity: spring(1)
+              opacity: spring(1),
             },
             data: messages,
-            key: type
+            key: type,
           }))}
         >
-          {interpolatedStyles => (
+          {(interpolatedStyles) => (
             <ToastsContainer>
               {interpolatedStyles.map(
                 ({ key, data, style: { translate, ...other } }) => (
@@ -135,7 +143,7 @@ export class ToastsProvider extends React.Component {
                     data-type={key}
                     style={{
                       ...other,
-                      transform: `translateY(${translate || 0}px)`
+                      transform: `translateY(${translate || 0}px)`,
                     }}
                     key={`toast-${key}`}
                   >
@@ -149,7 +157,7 @@ export class ToastsProvider extends React.Component {
                       type={key}
                     />
                   </div>
-                )
+                ),
               )}
             </ToastsContainer>
           )}
