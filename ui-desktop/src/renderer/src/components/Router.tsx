@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router";
+import { HashRouter, Routes, Route, Navigate } from "react-router";
 import styled, { keyframes } from 'styled-components'
 
 import OfflineWarning from './OfflineWarning'
@@ -67,8 +67,8 @@ export const Layout = () => (
 
 export default function Router() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <Layout />
-    </BrowserRouter>
+    </HashRouter>
   )
 }

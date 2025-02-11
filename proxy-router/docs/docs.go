@@ -147,6 +147,19 @@ const docTemplate = `{
                 }
             }
         },
+        "/auth/cookie/path": {
+            "get": {
+                "description": "Get the path to the cookie file",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Get Path to Cookie File",
+                "responses": {}
+            }
+        },
         "/auth/txs": {
             "get": {
                 "security": [

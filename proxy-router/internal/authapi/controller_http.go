@@ -1,7 +1,10 @@
 package authapi
 
 import (
+	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
@@ -12,12 +15,14 @@ import (
 type AuthController struct {
 	authConfig *system.HTTPAuthConfig
 	log        lib.ILogger
+	environment string
 }
 
-func NewAuthController(authConfig *system.HTTPAuthConfig, log lib.ILogger) *AuthController {
+func NewAuthController(authConfig *system.HTTPAuthConfig, environment string, log lib.ILogger) *AuthController {
 	a := &AuthController{
 		authConfig: authConfig,
 		log:        log,
+		environment: environment,
 	}
 
 	return a
@@ -37,6 +42,7 @@ func (s *AuthController) RegisterRoutes(r interfaces.Router) {
 	r.POST("/auth/allowance/revoke", s.authConfig.CheckAuth("agent_requests"), s.RevokeAllowance)
 
 	r.GET("/auth/txs", s.authConfig.CheckAuth("agent_requests"), s.GetAgentTxs)
+	r.GET("/auth/cookie/path", s.GetPathToCookieFile)
 }
 
 // AddUser godoc
@@ -60,6 +66,14 @@ func (a *AuthController) AddUser(ctx *gin.Context) {
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	if req.Username == "admin" {
+		err = a.authConfig.UpdateCookieContent(fmt.Sprintf("admin:%s\n", req.Password))
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{"result": true})
@@ -275,4 +289,35 @@ func (a *AuthController) GetAgentTxs(ctx *gin.Context) {
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"txs": txs})
+}
+
+// GetPathToCookieFile godoc
+//
+//	@Summary		Get Path to Cookie File
+//	@Description	Get the path to the cookie file
+//	@Tags			auth
+//	@Produce		json
+//	@Router			/auth/cookie/path [get]
+func (a *AuthController) GetPathToCookieFile(ctx *gin.Context) {
+	cookieFilePath := a.authConfig.CookieFilePath
+	if a.environment == "development" {
+		workingDir, err := os.Getwd()	
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		cookieFilePath = filepath.Join(workingDir, cookieFilePath)
+	} else {
+		executablePath, err := os.Executable()
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		executableDir := filepath.Dir(executablePath)
+		cookieFilePath = filepath.Join(executableDir, cookieFilePath)
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"path": cookieFilePath})
 }
