@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       create_release:
-        description: 'Create updated Morpheus release'
+        description: 'Create updated Morpheus-Lumerin-Node release'
         required: true
         type: boolean
         
@@ -13,7 +13,6 @@ on:
       - main
       - test
       - dev
-
     paths: ['.github/workflows/**', '**/Makefile', '**/*.go', '**/*.json', '**/*.yml', '**/*.ts', '**/*.js', 'proxy-router/Dockerfile']
 
   pull_request:
@@ -27,10 +26,27 @@ concurrency:
 defaults:
   run:
     shell: bash
-    
+
+env:
+  LLAMA_URL: https://github.com/ggerganov/llama.cpp/releases/download
+  LLAMA_RELEASE: b4354 
+  LLAMA_FILEBASE: llama-b4354-bin
+  MODEL_URL: https://huggingface.co
+  MODEL_NAME: tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
+  MODEL_OWNER: TheBloke
+  MODEL_REPO: TinyLlama-1.1B-Chat-v1.0-GGUF  
+  
 jobs:
+        
   Ubuntu-22-x64:
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' }}
+    name: Build Ubuntu Image
+    if: |
+      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+      )
+    
     runs-on: ubuntu-22.04
     steps:
       - name: Clone
@@ -39,9 +55,17 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-                
+
       - name: Generate Tag Name
-        uses: ./.github/actions/gen_tag_name
+        uses: ./.github/actions/gen_tag_name    
+
+      - name: Verify environment variables
+        run: |
+          echo "TAG_NAME=${{ env.TAG_NAME }}"
+          echo "VTAG=${{ env.VTAG }}"
+          echo "VFULL=${{ env.VFULL }}" 
+          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
+          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"       
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -80,28 +104,35 @@ jobs:
           cd ../cli
           make build
           cd ../ui-desktop
-          echo "Injecting version ${VFULL} into package.json"
-          sed -i "s/\"version\": \".*\"/\"version\": \"${VFULL}\"/" package.json
+          echo "Injecting version ${{ env.VFULL }} into package.json"
+          sed -i "s/\"version\": \".*\"/\"version\": \"${{ env.VFULL }}\"/" package.json
           cat package.json | grep '"version"'  # Optional: Verify the change
           yarn build:linux
 
       - name: Pack artifacts
         id: pack_artifacts
         run: |
-          VFULL=${VFULL:-0.0.1}
-          echo "VFULL: $VFULL"
-          ARTIFACT="mor-launch-$TAG_NAME-ubuntu-x64.zip"
-          echo "Artifact: $ARTIFACT"
-          LLAMACPP=llama-b4354-bin-ubuntu-x64.zip
-          MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
-          wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b4354/$LLAMACPP
-          wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
-          unzip -o -j $LLAMACPP build/bin/llama-server
-          echo '{"run":["./llama-server --no-webui -m ./'"$MODEL"'","./proxy-router","./morpheus-ui-'"$VFULL"'-x86_64-linux.AppImage"]}' > mor-launch.json
-          echo "Contents of mor-launch.json: "
+          OS_NAME="ubuntu-x64"
+          BIN_NAME="ubuntu-x64"
+          echo "Artifact: mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip"
+          echo "LLAMA Binary: ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip"
+          echo "LLAMA Model: ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}"
+          wget -nv ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip
+          wget -nv ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}
+          unzip -o -j ${{ env.LLAMA_FILEBASE}}-$BIN_NAME.zip build/bin/llama-server
+          echo '{
+            "run": [
+              "./llama-server --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
+              "./proxy-router",
+              "./morpheus-ui-'${{ env.VFULL }}'-x86_64-linux.AppImage"
+            ]
+          }' > mor-launch.json
+
+          echo "############# Contents of mor-launch.json: ############# "
           cat mor-launch.json
+
           mv ./cli/mor-cli mor-cli
-          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/proxy-router .env $MODEL mor-launch.json ./ui-desktop/dist/morpheus-ui-$VFULL-x86_64-linux.AppImage models-config.json rating-config.json mor-cli
+          zip -j mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/proxy-router .env ${{ env.MODEL_NAME}} mor-launch.json ./ui-desktop/dist/morpheus-ui-${{ env.VFULL }}-x86_64-linux.AppImage models-config.json rating-config.json mor-cli
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -110,7 +141,13 @@ jobs:
           name: mor-launch-ubuntu-x64.zip
 
   macOS-13-x64:
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' }}
+    name: Build macOS-x64 Image
+    if: |
+      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+      )
     runs-on: macos-13
     steps:
       - name: Clone
@@ -119,10 +156,18 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-      
+          
       - name: Generate Tag Name
-        uses: ./.github/actions/gen_tag_name
+        uses: ./.github/actions/gen_tag_name    
 
+      - name: Verify environment variables
+        run: |
+          echo "TAG_NAME=${{ env.TAG_NAME }}"
+          echo "VTAG=${{ env.VTAG }}"
+          echo "VFULL=${{ env.VFULL }}" 
+          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
+          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"       
+      
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -161,28 +206,35 @@ jobs:
           cd ../cli
           make build
           cd ../ui-desktop
-          echo "Injecting version ${VFULL} into package.json"
-          sed -i "" "s/\"version\": \".*\"/\"version\": \"${VFULL}\"/" package.json
+          echo "Injecting version ${{ env.VFULL }} into package.json"
+          sed -i "" "s/\"version\": \".*\"/\"version\": \"${{ env.VFULL }}\"/" package.json
           cat package.json | grep '"version"'  # Optional: Verify the change
           yarn build:mac
 
       - name: Pack artifacts
         id: pack_artifacts
         run: |
-          ARTIFACT="mor-launch-$TAG_NAME-macos-x64.zip"
-          echo "Artifact: $ARTIFACT"
-          LLAMACPP=llama-b4354-bin-macos-x64.zip
-          MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
-          wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b4354/$LLAMACPP
-          wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
-          unzip -o -j $LLAMACPP build/bin/llama-server
-          echo '{"run":["./llama-server --no-webui -m ./'$MODEL'","./proxy-router","./MorpheusUI.app/Contents/MacOS/MorpheusUI"]}' > mor-launch.json
-          echo "Contents of mor-launch.json: "
+          OS_NAME="macos-x64"
+          BIN_NAME="macos-x64"
+          echo "Artifact: mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip"
+          echo "LLAMA Binary: ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip"
+          echo "LLAMA Model: ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}"
+          wget -nv ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip
+          wget -nv ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}
+          unzip -o -j ${{ env.LLAMA_FILEBASE}}-$BIN_NAME.zip build/bin/llama-server
+          echo '{
+            "run": [
+              "./llama-server --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
+              "./proxy-router",
+              "./MorpheusUI.app/Contents/MacOS/MorpheusUI"
+            ]
+          }' > mor-launch.json
+          echo "############# Contents of mor-launch.json: ############# "
           cat mor-launch.json
           mv ./cli/mor-cli mor-cli
-          unzip ./ui-desktop/dist/morpheus-ui-${VFULL}-x64-mac.zip
-          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/proxy-router .env llama-server $MODEL mor-launch.json models-config.json rating-config.json mor-cli
-          zip -r $ARTIFACT 'MorpheusUI.app'
+          unzip ./ui-desktop/dist/morpheus-ui-${{ env.VFULL }}-x64-mac.zip
+          zip -j mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/proxy-router .env ${{ env.MODEL_NAME}} mor-launch.json models-config.json rating-config.json mor-cli
+          zip -r mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip 'MorpheusUI.app'
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -191,7 +243,14 @@ jobs:
           name: mor-launch-macos-x64.zip
 
   macOS-14-arm64:
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' }}
+    name: Build macOS-arm64 Image
+    if: |
+      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
+        (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'test' || github.base_ref == 'dev')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+      )
     runs-on: macos-14
     steps:
       - name: Clone
@@ -203,6 +262,14 @@ jobs:
       
       - name: Generate Tag Name
         uses: ./.github/actions/gen_tag_name
+
+      - name: Verify environment variables
+        run: |
+          echo "TAG_NAME=${{ env.TAG_NAME }}"
+          echo "VTAG=${{ env.VTAG }}"
+          echo "VFULL=${{ env.VFULL }}" 
+          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
+          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"       
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -242,28 +309,35 @@ jobs:
           cd ../cli
           make build
           cd ../ui-desktop
-          echo "Injecting version ${VFULL}} into package.json"
-          sed -i "" "s/\"version\": \".*\"/\"version\": \"${VFULL}\"/" package.json
+          echo "Injecting version ${{ env.VFULL }}} into package.json"
+          sed -i "" "s/\"version\": \".*\"/\"version\": \"${{ env.VFULL }}\"/" package.json
           cat package.json | grep '"version"'  # Optional: Verify the change
           yarn build:mac
 
       - name: Pack artifacts
         id: pack_artifacts
         run: |
-          ARTIFACT="mor-launch-$TAG_NAME-macos-arm64.zip"
-          echo "Artifact: $ARTIFACT"
-          LLAMACPP=llama-b4354-bin-macos-arm64.zip
-          MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
-          wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b4354/$LLAMACPP
-          wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
-          unzip -o -j $LLAMACPP build/bin/llama-server
-          echo '{"run":["./llama-server --no-webui -m ./'$MODEL'","./proxy-router","./MorpheusUI.app/Contents/MacOS/MorpheusUI"]}' > mor-launch.json
-          echo "Contents of mor-launch.json: "
+          OS_NAME="macos-arm64"
+          BIN_NAME="macos-arm64"
+          echo "Artifact: mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip"
+          echo "LLAMA Binary: ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip"
+          echo "LLAMA Model: ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}"
+          wget -nv ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip
+          wget -nv ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}
+          unzip -o -j ${{ env.LLAMA_FILEBASE}}-$BIN_NAME.zip build/bin/llama-server
+          echo '{
+            "run": [
+              "./llama-server --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
+              "./proxy-router",
+              "./MorpheusUI.app/Contents/MacOS/MorpheusUI"
+            ]
+          }' > mor-launch.json
+          echo "############# Contents of mor-launch.json: ############# "
           cat mor-launch.json
           mv ./cli/mor-cli mor-cli
-          unzip ./ui-desktop/dist/morpheus-ui-${VFULL}-arm64-mac.zip
-          zip -j $ARTIFACT ./LICENSE ./launcher/mor-launch ./proxy-router/proxy-router .env llama-server $MODEL mor-launch.json models-config.json rating-config.json mor-cli
-          zip -r $ARTIFACT 'MorpheusUI.app'
+          unzip ./ui-desktop/dist/morpheus-ui-${{ env.VFULL }}-arm64-mac.zip
+          zip -j mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/proxy-router .env ${{ env.MODEL_NAME}} mor-launch.json models-config.json rating-config.json mor-cli
+          zip -r mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip 'MorpheusUI.app'
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -272,7 +346,13 @@ jobs:
           name: mor-launch-macos-arm64.zip
 
   Windows-avx2-x64:
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' }}
+    name: Build Windows Image
+    if: |
+      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+      )
     runs-on: windows-latest
     steps:
       - name: Clone
@@ -281,9 +361,17 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-      
+          
       - name: Generate Tag Name
-        uses: ./.github/actions/gen_tag_name
+        uses: ./.github/actions/gen_tag_name    
+      
+      - name: Verify environment variables
+        run: |
+          echo "TAG_NAME=${{ env.TAG_NAME }}"
+          echo "VTAG=${{ env.VTAG }}"
+          echo "VFULL=${{ env.VFULL }}" 
+          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
+          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"       
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -327,35 +415,36 @@ jobs:
           cd ../cli
           make build
           cd ../ui-desktop
-          mv .env .env.tmp
-          sed 's|\./.cookie|.\\.cookie|g' .env.tmp > .env
-          echo "Injecting version ${VFULL} into package.json"
-          sed -i "s/\"version\": \".*\"/\"version\": \"${VFULL}\"/" package.json
+          echo "Injecting version ${{ env.VFULL }} into package.json"
+          sed -i "s/\"version\": \".*\"/\"version\": \"${{ env.VFULL }}\"/" package.json
           cat package.json | grep '"version"'  # Optional: Verify the change
           yarn build:win
 
       - name: Pack artifacts
         id: pack_artifacts
         run: |
-          VFULL=${VFULL:-0.0.1}
-          echo "VFULL: $VFULL"
-          ARTIFACT="mor-launch-$TAG_NAME-win-x64.zip"
-          echo "Artifact: $ARTIFACT"
-          LLAMACPP=llama-b4354-bin-win-avx2-x64.zip
-          MODEL=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
-          wget -nv https://github.com/ggerganov/llama.cpp/releases/download/b4354/$LLAMACPP
-          wget -nv https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/$MODEL
-          unzip -o -j $LLAMACPP llama-server.exe llama.dll ggml.dll
-          echo '{"run":["./llama-server.exe --no-webui -m ./'"$MODEL"'","./proxy-router.exe","./morpheus-ui-'"$VFULL"'-x64-win.exe"]}' > mor-launch.json
+          OS_NAME="win-x64"
+          BIN_NAME="win-avx2-x64"
+          echo "Artifact: mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip"
+          echo "LLAMA Binary: ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip"
+          echo "LLAMA Model: ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}"
+          wget -nv ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip
+          wget -nv ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}
+          unzip -o -j ${{ env.LLAMA_FILEBASE}}-$BIN_NAME.zip llama-server.exe llama.dll ggml.dll
+          echo '{
+            "run": [
+              "./llama-server.exe --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
+              "./proxy-router.exe",
+              "./morpheus-ui-'"${{ env.VFULL }}"'-x64-win.exe"
+            ]
+          }' > mor-launch.json
           echo "Contents of mor-launch.json: "
           cat mor-launch.json
-          mv .env .env.tmp
-          sed 's|\./data/|.\\data\\|g' .env.tmp > .env
           mv ./proxy-router/proxy-router proxy-router.exe
           mv ./cli/mor-cli mor-cli.exe
           mv ./launcher/mor-launch mor-launch.exe
-          mv "./ui-desktop/dist/morpheus-ui-$VFULL-x64-win" morpheus-ui-$VFULL-x64-win.exe
-          7z a $ARTIFACT LICENSE mor-launch.exe proxy-router.exe .env llama-server.exe llama.dll ggml.dll $MODEL mor-launch.json morpheus-ui-$VFULL-x64-win.exe models-config.json rating-config.json mor-cli.exe
+          mv "./ui-desktop/dist/morpheus-ui-${{ env.VFULL }}-x64-win" morpheus-ui-${{ env.VFULL }}-x64-win.exe
+          7z a mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip LICENSE mor-launch.exe proxy-router.exe .env llama-server.exe llama.dll ggml.dll ${{ env.MODEL_NAME}} mor-launch.json morpheus-ui-${{ env.VFULL }}-x64-win.exe models-config.json rating-config.json mor-cli.exe
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -363,14 +452,21 @@ jobs:
           path: mor-launch-${{ env.TAG_NAME }}-win-x64.zip
           name: mor-launch-win-x64.zip
 
-  release:
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/concom' )) || github.event.inputs.create_release == 'true' }}
-    runs-on: ubuntu-latest
+  Release:
+    name: Create Release
+    if: |
+      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+      )
     needs:
+      - GHCR-Test
       - Ubuntu-22-x64
       - macOS-13-x64
       - macOS-14-arm64
       - Windows-avx2-x64
+    runs-on: ubuntu-latest
     steps:
       - name: Clone
         id: checkout
@@ -378,9 +474,17 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-
+          
       - name: Generate Tag Name
-        uses: ./.github/actions/gen_tag_name
+        uses: ./.github/actions/gen_tag_name    
+
+      - name: Verify environment variables
+        run: |
+          echo "TAG_NAME=${{ env.TAG_NAME }}"
+          echo "VTAG=${{ env.VTAG }}"
+          echo "VFULL=${{ env.VFULL }}" 
+          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
+          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"       
 
       - name: Download artifacts
         id: download-artifact
@@ -407,7 +511,7 @@ jobs:
         id: upload_release
         uses: actions/github-script@v3
         with:
-          github-token: ${{secrets.GITHUB_TOKEN}}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const path = require('path');
             const fs = require('fs');
@@ -424,23 +528,80 @@ jobs:
                 });
               }
             }
- 
-  GHCR-Build-and-Push:
-    env:
-      IMAGE_NAME_BASE: ghcr.io/lumerin-protocol/morpheus-lumerin-node
- 
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' ) }}
-    runs-on: ubuntu-latest
 
+  GHCR-Test:
+    name: Test Docker Image
+    if: |
+      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
+        (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'test' || github.base_ref == 'dev')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+      )
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           fetch-tags: true
-
+          
       - name: Generate Tag Name
-        uses: ./.github/actions/gen_tag_name
+        uses: ./.github/actions/gen_tag_name 
+
+      - name: Verify environment variables
+        run: |
+          echo "TAG_NAME=${{ env.TAG_NAME }}"
+          echo "VTAG=${{ env.VTAG }}"
+          echo "VFULL=${{ env.VFULL }}" 
+          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
+          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"       
+
+      - name: Build Docker Image to Test
+        run: |
+          docker build \
+            --platform linux/amd64 \
+            --build-arg TAG_NAME=${{ env.TAG_NAME }} \
+            --build-arg COMMIT=${{ github.sha }} \
+            --load \
+            -t ${{ env.IMAGE_NAME }} \
+            -f proxy-router/Dockerfile \
+            proxy-router || (echo "Failed to build image with tag: ${{ env.IMAGE_NAME }}" && exit 1)
+
+      - name: Run Docker Tests
+        uses: ./.github/actions/docker_test
+        with:
+          image: ${{ env.IMAGE_NAME }}
+          private_key: ${{ secrets.TEST_PRIVATE_KEY }}
+
+  GHCR-Build-and-Push:
+    name: Build & Push Docker Image
+    if: |
+      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+      )
+    needs: 
+      - GHCR-Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          
+      - name: Generate Tag Name
+        uses: ./.github/actions/gen_tag_name    
+       
+      - name: Verify environment variables
+        run: |
+          echo "TAG_NAME=${{ env.TAG_NAME }}"
+          echo "VTAG=${{ env.VTAG }}"
+          echo "VFULL=${{ env.VFULL }}" 
+          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
+          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"       
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -454,33 +615,28 @@ jobs:
 
       - name: Build and Push Multi-Platform Docker Image
         run: |
-          IMAGE_NAME=${{ env.IMAGE_NAME_BASE }}:${{ env.TAG_NAME }}
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             --build-arg TAG_NAME=${{ env.TAG_NAME }} \
             --build-arg COMMIT=${{ github.sha }} \
             --push \
-            -t $IMAGE_NAME \
+            -t ${{ env.IMAGE_NAME }} \
             -f proxy-router/Dockerfile \
-            proxy-router
+            proxy-router || (echo "Failed to push image with tag: ${{ env.IMAGE_NAME }}" && exit 1)
 
       - name: Optionally Push Latest Tag
         if: ${{ github.ref == 'refs/heads/main' }}
         run: |
+          echo "Tagging image as :latest"
           LATEST_IMAGE=${{ env.IMAGE_NAME_BASE }}:latest
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --build-arg TAG_NAME=${{ env.TAG_NAME }} \
-            --build-arg COMMIT=${{ github.sha }} \
-            --push \
-            -t $LATEST_IMAGE \
-            -f proxy-router/Dockerfile \
-            proxy-router
+          docker tag ${{ env.IMAGE_NAME }} $LATEST_IMAGE
+          echo "Pushing image as :latest"
+          docker push $LATEST_IMAGE || (echo "Failed to push image as :latest" && exit 1)          
 
   GitLab-Deploy:
-    needs:
+    name: Deploy to GitLab
+    needs: 
       - GHCR-Build-and-Push
-    if: ${{ github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' && (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) }}
     runs-on: ubuntu-latest
     steps:
       - name: Clone
@@ -489,13 +645,21 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+          
+      - name: Generate Tag Name
+        uses: ./.github/actions/gen_tag_name    
+      
+      - name: Verify environment variables
+        run: |
+          echo "TAG_NAME=${{ env.TAG_NAME }}"
+          echo "VTAG=${{ env.VTAG }}"
+          echo "VFULL=${{ env.VFULL }}" 
+          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
+          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"       
 
       - name: Install dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y jq
-
-      - name: Generate Tag Name
-        uses: ./.github/actions/gen_tag_name
 
       - name: Determine GitLab Target Branch
         id: set_target_branch

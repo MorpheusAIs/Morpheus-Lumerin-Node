@@ -190,7 +190,15 @@ func (c *BlockchainController) sendETH(ctx *gin.Context) {
 		return
 	}
 
-	txHash, err := c.service.SendETH(ctx, to, amount)
+	username, ok := ctx.Get("username")
+	if !ok {
+		c.log.Error("username not found in context")
+		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: "username not found in context"})
+		return
+	}
+
+	usernameStr := username.(string)
+	txHash, err := c.service.SendETH(ctx, to, amount, usernameStr)
 	if err != nil {
 		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
@@ -218,7 +226,16 @@ func (c *BlockchainController) sendMOR(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
 		return
 	}
-	txhash, err := c.service.SendMOR(ctx, to, amount)
+
+	username, ok := ctx.Get("username")
+	if !ok {
+		c.log.Error("username not found in context")
+		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: "username not found in context"})
+		return
+	}
+	usernameStr := username.(string)
+
+	txhash, err := c.service.SendMOR(ctx, to, amount, usernameStr)
 	if err != nil {
 		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
@@ -552,7 +569,15 @@ func (c *BlockchainController) openSession(ctx *gin.Context) {
 		return
 	}
 
-	sessionId, err := c.service.OpenSession(ctx, reqPayload.Approval, reqPayload.ApprovalSig, reqPayload.Stake.Unpack(), reqPayload.DirectPayment)
+	username, ok := ctx.Get("username")
+	if !ok {
+		c.log.Error("username not found in context")
+		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: "username not found in context"})
+		return
+	}
+	usernameStr := username.(string)
+
+	sessionId, err := c.service.OpenSession(ctx, reqPayload.Approval, reqPayload.ApprovalSig, reqPayload.Stake.Unpack(), reqPayload.DirectPayment, usernameStr)
 	if err != nil {
 		c.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
@@ -589,7 +614,15 @@ func (s *BlockchainController) openSessionByBid(ctx *gin.Context) {
 		return
 	}
 
-	sessionId, err := s.service.openSessionByBid(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack())
+	username, ok := ctx.Get("username")
+	if !ok {
+		s.log.Error("username not found in context")
+		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: "username not found in context"})
+		return
+	}
+	usernameStr := username.(string)
+
+	sessionId, err := s.service.openSessionByBid(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), usernameStr)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
 		return
@@ -627,8 +660,16 @@ func (s *BlockchainController) openSessionByModelId(ctx *gin.Context) {
 		return
 	}
 
+	username, ok := ctx.Get("username")
+	if !ok {
+		s.log.Error("username not found in context")
+		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: "username not found in context"})
+		return
+	}
+	usernameStr := username.(string)
+
 	isFailoverEnabled := reqPayload.Failover
-	sessionId, err := s.service.OpenSessionByModelId(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), reqPayload.DirectPayment, isFailoverEnabled, common.Address{})
+	sessionId, err := s.service.OpenSessionByModelId(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), reqPayload.DirectPayment, isFailoverEnabled, common.Address{}, usernameStr)
 	if err != nil {
 		s.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})

@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"path/filepath"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/multicall"
@@ -58,8 +59,10 @@ type Config struct {
 		StoreChatContext   *lib.Bool `env:"PROXY_STORE_CHAT_CONTEXT" flag:"proxy-store-chat-context" desc:"store chat context in the proxy storage"`
 		ForwardChatContext *lib.Bool `env:"PROXY_FORWARD_CHAT_CONTEXT" flag:"proxy-forward-chat-context" desc:"prepend whole stored message history to the prompt"`
 		ModelsConfigPath   string    `env:"MODELS_CONFIG_PATH" flag:"models-config-path" validate:"omitempty"`
+		ModelsConfigContent string    `env:"MODELS_CONFIG_CONTENT" flag:"models-config-content" validate:"omitempty" desc:"content of the models config file"`
 		RatingConfigPath   string    `env:"RATING_CONFIG_PATH" flag:"rating-config-path" validate:"omitempty" desc:"path to the rating config file"`
 		CookieFilePath     string    `env:"COOKIE_FILE_PATH" flag:"cookie-file-path" validate:"omitempty" desc:"path to the cookie file"`
+		CookieContent      string    `env:"COOKIE_CONTENT" flag:"cookie-content" validate:"omitempty" desc:"content of the cookie file"`
 		AuthConfigFilePath string    `env:"AUTH_CONFIG_FILE_PATH" flag:"auth-config-file-path" validate:"omitempty"`
 	}
 	System struct {
@@ -177,6 +180,13 @@ func (cfg *Config) SetDefaults() {
 	if cfg.Proxy.AuthConfigFilePath == "" {
 		cfg.Proxy.AuthConfigFilePath = "./proxy.conf"
 	}
+
+	cfg.Log.FolderPath = filepath.FromSlash(cfg.Log.FolderPath)
+	cfg.Proxy.StoragePath = filepath.FromSlash(cfg.Proxy.StoragePath)
+	cfg.Proxy.ModelsConfigPath = filepath.FromSlash(cfg.Proxy.ModelsConfigPath)
+	cfg.Proxy.RatingConfigPath = filepath.FromSlash(cfg.Proxy.RatingConfigPath)
+	cfg.Proxy.CookieFilePath = filepath.FromSlash(cfg.Proxy.CookieFilePath)
+	cfg.Proxy.AuthConfigFilePath = filepath.FromSlash(cfg.Proxy.AuthConfigFilePath)
 }
 
 // GetSanitized returns a copy of the config with sensitive data removed
