@@ -35,8 +35,8 @@ defaults:
 
 env:
   LLAMA_URL: https://github.com/ggerganov/llama.cpp/releases/download
-  LLAMA_RELEASE: b4523 
-  LLAMA_FILEBASE: llama-b4523-bin
+  LLAMA_RELEASE: b4406 
+  LLAMA_FILEBASE: llama-b4406-bin
   MODEL_URL: https://huggingface.co
   MODEL_NAME: TinyLlama-1.1B-Chat-v1.0.Q2_K.gguf
   MODEL_OWNER: QuantFactory
