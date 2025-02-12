@@ -4,8 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       create_release:
-        description: 'Create updated Morpheus-Lumerin-Node release'
+        description:  'Create updated Morpheus-Lumerin-Node release'
         required: true
+        type: boolean
+      build_all_os:
+        description:  'Build all OS & container image'
+        required: false
         type: boolean
         
   push:
@@ -43,8 +47,8 @@ jobs:
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
       )
     
     runs-on: ubuntu-22.04
@@ -145,8 +149,8 @@ jobs:
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
       )
     runs-on: macos-13
     steps:
@@ -248,8 +252,7 @@ jobs:
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
         (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
-        (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'test' || github.base_ref == 'dev')) ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
       )
     runs-on: macos-14
     steps:
@@ -350,8 +353,8 @@ jobs:
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
       )
     runs-on: windows-latest
     steps:
@@ -534,9 +537,9 @@ jobs:
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'test' || github.base_ref == 'dev')) ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
+        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
       )
     runs-on: ubuntu-latest
     steps:
@@ -579,8 +582,8 @@ jobs:
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
       )
     needs: 
       - GHCR-Test
@@ -635,6 +638,11 @@ jobs:
 
   GitLab-Deploy:
     name: Deploy to GitLab
+    if: |
+      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test'))
+      )
     needs: 
       - GHCR-Build-and-Push
     runs-on: ubuntu-latest
@@ -664,10 +672,8 @@ jobs:
       - name: Determine GitLab Target Branch
         id: set_target_branch
         run: |
-          if [ "${{ github.ref_name }}" == "dev" ]; then
+          if [ "${{ github.ref_name }}" == "test" ]; then
             echo "gitlab_branch=dev" >> $GITHUB_ENV
-          elif [ "${{ github.ref_name }}" == "test" ]; then
-            echo "gitlab_branch=stg" >> $GITHUB_ENV
           elif [ "${{ github.ref_name }}" == "main" ]; then
             echo "gitlab_branch=main" >> $GITHUB_ENV
           else

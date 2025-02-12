@@ -34,7 +34,7 @@
         * The `models-config.json` file is used to direct the proxy to find the models that the proxy-router will use to route prompts and responses between consumers and providers.
         * Ensure that: 
             * the `MODELS_CONFIG_PATH=` in your .env file is correct and points to the correct directory and file and has the right permissions 
-            * the `models-confi.json` should follow the formatting shown in the example file [models-config.json.md](./models-config.json.md)
+            * the `models-config.json` should follow the formatting shown in the example file [models-config.json.md](./models-config.json.md)
 * **Resolution:**
     * Check the .env and models-config.json file configuration and ensure that the blockchain node is accessible.
     * Restart the proxy-router and check the logs for any errors related to the connection.
