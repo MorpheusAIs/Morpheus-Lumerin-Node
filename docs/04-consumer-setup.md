@@ -29,13 +29,14 @@ It will run 3 different pieces of software on your local machine:
     * Read & accept terms & Conditions 
     * Set a strong password (this is for the MorpheusUI only)
     * Follow the instructions for creating a new wallet (be sure to save the mnemonic in a safe place)
-    * **OPTIONAL to use existing Wallet** 
+    * [OPTIONAL] to use existing Wallet** 
         - Instead of creating an new wallet and if you have the existing wallet's mnemonic, when prompted, select **`Recover your wallet Saved Mnemonic`** instead.
-
-1. Startup CLI Interface (Optional): 
-    * Linux & MacOS: Open a terminal and navigate to the folder and run `./mor-cli`
+    * [OPTIONAL] Startup CLI Interface: Linux & MacOS: Open a terminal and navigate to the folder and run `./mor-cli`
 
 ## Validation Steps:
+1. Once the proxy-router is running, you can navigate to the Swagger API Interface (http://localhost:8082/swagger/index.html as example) to validate that the proxy-router is running and listening for blockchain events
+    * You can also check the logs in the `./data` directory for any errors or issues that may have occurred during startup
+
 1. Local Test: Once the UI is up and running,
     * You should see tokens for ETH and MOR that you sent to this wallet earlier. 
         - If this is a new wallet, you will need to send MOR and ETH to this wallet to be able to interact with the blockchain 
