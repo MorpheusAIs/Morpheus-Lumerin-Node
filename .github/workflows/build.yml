@@ -17,6 +17,8 @@ on:
       - main
       - test
       - dev
+      - cicd/simplifytestandmain
+      
     paths: ['.github/workflows/**', '**/Makefile', '**/*.go', '**/*.json', '**/*.yml', '**/*.ts', '**/*.js', 'proxy-router/Dockerfile']
 
   pull_request:
