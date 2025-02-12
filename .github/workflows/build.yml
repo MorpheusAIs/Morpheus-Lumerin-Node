@@ -34,14 +34,15 @@ defaults:
 
 env:
   LLAMA_URL: https://github.com/ggerganov/llama.cpp/releases/download
-  LLAMA_RELEASE: b4354 
-  LLAMA_FILEBASE: llama-b4354-bin
+  LLAMA_RELEASE: b4689 
+  LLAMA_FILEBASE: llama-b4689-bin
   MODEL_URL: https://huggingface.co
-  MODEL_NAME: tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
-  MODEL_OWNER: TheBloke
+  MODEL_NAME: TinyLlama-1.1B-Chat-v1.0.Q2_K.gguf
+  MODEL_OWNER: QuantFactory
   MODEL_REPO: TinyLlama-1.1B-Chat-v1.0-GGUF  
-  
-jobs:
+  # https://huggingface.co/QuantFactory/TinyLlama-1.1B-Chat-v1.0-GGUF/blob/main/TinyLlama-1.1B-Chat-v1.0.Q2_K.gguf
+
+  jobs:
         
   Ubuntu-22-x64:
     name: Build Ubuntu Image
