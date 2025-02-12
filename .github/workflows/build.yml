@@ -9,7 +9,7 @@ on:
         type: boolean
       build_all_os:
         description:  'Build all OS & container image'
-        required: false
+        required: true
         type: boolean
         
   push:
@@ -17,7 +17,6 @@ on:
       - main
       - test
       - dev
-      
     paths: ['.github/workflows/**', '**/Makefile', '**/*.go', '**/*.json', '**/*.yml', '**/*.ts', '**/*.js', 'proxy-router/Dockerfile']
 
   pull_request:
@@ -42,7 +41,7 @@ env:
   MODEL_REPO: TinyLlama-1.1B-Chat-v1.0-GGUF  
   # https://huggingface.co/QuantFactory/TinyLlama-1.1B-Chat-v1.0-GGUF/blob/main/TinyLlama-1.1B-Chat-v1.0.Q2_K.gguf
 
-  jobs:
+jobs:
         
   Ubuntu-22-x64:
     name: Build Ubuntu Image
