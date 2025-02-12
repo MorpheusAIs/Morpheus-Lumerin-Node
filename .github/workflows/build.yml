@@ -17,6 +17,8 @@ on:
       - main
       - test
       - dev
+      - cicd/*
+
     paths: ['.github/workflows/**', '**/Makefile', '**/*.go', '**/*.json', '**/*.yml', '**/*.ts', '**/*.js', 'proxy-router/Dockerfile']
 
   pull_request:
@@ -33,8 +35,8 @@ defaults:
 
 env:
   LLAMA_URL: https://github.com/ggerganov/llama.cpp/releases/download
-  LLAMA_RELEASE: b4689 
-  LLAMA_FILEBASE: llama-b4689-bin
+  LLAMA_RELEASE: b4523 
+  LLAMA_FILEBASE: llama-b4523-bin
   MODEL_URL: https://huggingface.co
   MODEL_NAME: TinyLlama-1.1B-Chat-v1.0.Q2_K.gguf
   MODEL_OWNER: QuantFactory
@@ -252,7 +254,7 @@ jobs:
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
+        (github.event_name == 'push' && (github.ref == 'refs/heads/cicd/*' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
       )
     runs-on: macos-14
@@ -539,7 +541,7 @@ jobs:
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
         (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'test' || github.base_ref == 'dev')) ||
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
+        (github.event_name == 'push' && (github.ref == 'refs/heads/cicd/*' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
       )
     runs-on: ubuntu-latest
