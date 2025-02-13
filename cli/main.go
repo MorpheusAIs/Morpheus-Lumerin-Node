@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"math/big"
-	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -15,21 +14,19 @@ import (
 	chatCommon "github.com/MorpheusAIs/Morpheus-Lumerin-Node/cli/chat/common"
 	"github.com/ethereum/go-ethereum/common"
 
-	dotenv "github.com/joho/godotenv"
 	"github.com/urfave/cli/v2"
 )
 
 const httpErrorMessage string = "internal error: %v; http status: %v"
 
 func main() {
-	api_host := "http://localhost:8082"
-	dotenv.Load(".env")
 
-	if v := os.Getenv("API_HOST"); v != "" {
-		api_host = v
+	apiClient, err := client.NewApiGatewayClientFromEnv(os.Getenv)
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	actions := NewActions(client.NewApiGatewayClient(api_host, http.DefaultClient))
+	actions := NewActions(apiClient)
 	app := &cli.App{
 		Usage: "A client to call the Morpheus Lumerin API",
 		Commands: []*cli.Command{
