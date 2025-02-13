@@ -633,12 +633,15 @@ jobs:
       - name: Optionally Push Latest Tag
         if: ${{ github.ref == 'refs/heads/main' }}
         run: |
+          echo "Pulling image before tagging as :latest"
+          docker pull ${{ env.IMAGE_NAME }} || (echo "Failed to pull image: ${{ env.IMAGE_NAME }}" && exit 1)
+          
           echo "Tagging image as :latest"
           LATEST_IMAGE=${{ env.IMAGE_NAME_BASE }}:latest
           docker tag ${{ env.IMAGE_NAME }} $LATEST_IMAGE
+          
           echo "Pushing image as :latest"
-          docker push $LATEST_IMAGE || (echo "Failed to push image as :latest" && exit 1)          
-
+          docker push $LATEST_IMAGE || (echo "Failed to push image as :latest" && exit 1)
   GitLab-Deploy:
     name: Deploy to GitLab
     if: |
