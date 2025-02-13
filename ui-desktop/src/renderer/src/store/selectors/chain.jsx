@@ -4,30 +4,30 @@ import get from 'lodash/get';
 import { getConfig } from './config';
 
 // Returns the "chains" state branch
-export const getChain = state => state.chain;
+export const getChain = (state) => state.chain;
 
 // Returns the chain-specific config of the active chain
 export const getChainConfig = createSelector(
   getConfig,
-  configData => configData.chain
+  (configData) => configData.chain,
 );
 
 // Returns the active chain display name
 export const getChainDisplayName = createSelector(
   getChainConfig,
-  chainConfigData => chainConfigData.displayName
+  (chainConfigData) => chainConfigData.displayName,
 );
 
 // Returns the active chain "meta" state branch
 export const getChainMeta = createSelector(
   getChain,
-  chainData => chainData.meta
+  (chainData) => chainData.meta,
 );
 
 // Returns the active chain height
 export const getBlockHeight = createSelector(
   getChainMeta,
-  chainMetaData => chainMetaData.height
+  (chainMetaData) => chainMetaData.height,
 );
 
 // Returns the active chain connection status
@@ -35,7 +35,7 @@ export const getChainConnectionStatus = createSelector(
   getChain,
   getChainMeta,
   (chainData, chainMetaData) =>
-    chainData ? chainMetaData.isWeb3Connected : null
+    chainData ? chainMetaData.isWeb3Connected : null,
 );
 
 // Returns the explorer URL for a specific transaction
@@ -45,7 +45,15 @@ export const getTransactionExplorerUrl = createSelector(
   (chainConfigData, hash) =>
     chainConfigData.explorerUrl
       ? chainConfigData.explorerUrl.replace('{{hash}}', hash)
-      : '#'
+      : '#',
+);
+
+export const getTransactionExplorerUrlResolver = createSelector(
+  getChainConfig,
+  (chainConfigData) => (hash) =>
+    chainConfigData.explorerUrl
+      ? chainConfigData.explorerUrl.replace('{{hash}}', hash)
+      : '#',
 );
 
 export const getContractExplorerUrl = createSelector(
@@ -56,7 +64,7 @@ export const getContractExplorerUrl = createSelector(
       ? chainConfigData.explorerUrl
           .replace('tx', 'address') // TODO: Replace with url builder
           .replace('{{hash}}', hash)
-      : '#'
+      : '#',
 );
 
 // Returns the indexer connection status
@@ -64,7 +72,7 @@ export const getIndexerConnectionStatus = createSelector(
   getChain,
   getChainMeta,
   (chainData, chainMetaData) =>
-    chainData ? chainMetaData.isIndexerConnected : null
+    chainData ? chainMetaData.isIndexerConnected : null,
 );
 
 // Returns the amount of confirmations for a given transaction
@@ -74,32 +82,32 @@ export const getTxConfirmations = createSelector(
   (blockHeight, txBlockNumber) =>
     txBlockNumber === null || txBlockNumber > blockHeight
       ? 0
-      : blockHeight - txBlockNumber + 1
+      : blockHeight - txBlockNumber + 1,
 );
 
 export const getRate = createSelector(
   getChain,
   getChainMeta,
-  (chainData, chainMetaData) => (chainData ? chainMetaData.rate : null)
+  (chainData, chainMetaData) => (chainData ? chainMetaData.rate : null),
 );
 
 export const getNetworkDifficulty = createSelector(
   getChain,
   getChainMeta,
   (chainData, chainMetaData) =>
-    chainData ? chainMetaData.networkDifficulty : null
+    chainData ? chainMetaData.networkDifficulty : null,
 );
 
 export const getRateEth = createSelector(
   getChain,
   getChainMeta,
-  (chainData, chainMetaData) => (chainData ? chainMetaData.rateEth : null)
+  (chainData, chainMetaData) => (chainData ? chainMetaData.rateEth : null),
 );
 
 export const getRateBtc = createSelector(
   getChain,
   getChainMeta,
-  (chainData, chainMetaData) => (chainData ? chainMetaData.rateBtc : null)
+  (chainData, chainMetaData) => (chainData ? chainMetaData.rateBtc : null),
 );
 
 export const getChainReadyStatus = createSelector(
@@ -114,7 +122,7 @@ export const getChainReadyStatus = createSelector(
       hasLmrBalance: get(walletData, 'token.lmrBalance', null) !== null,
       hasBlockHeight: chainMeta.height > -1,
       displayName: chainConfig.displayName,
-      symbol: chainConfig.symbol
+      symbol: chainConfig.symbol,
     };
-  }
+  },
 );

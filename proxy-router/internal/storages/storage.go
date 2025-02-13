@@ -88,3 +88,29 @@ func (s *Storage) Delete(key []byte) error {
 		return txn.Delete(key)
 	})
 }
+
+func (s *Storage) Paginate(prefix []byte, cursor []byte, limit uint) ([][]byte, []byte, error) {
+	keys := make([][]byte, 0, limit)
+	var nextCursor []byte
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		it := txn.NewIterator(badger.IteratorOptions{PrefetchValues: false, Prefix: prefix})
+		defer it.Close()
+
+		if len(cursor) == 0 {
+			cursor = prefix
+		}
+
+		for it.Seek(cursor); it.ValidForPrefix(prefix); it.Next() {
+			if uint(len(keys)) >= limit {
+				nextCursor = it.Item().KeyCopy(nil)
+				break
+			}
+			item := it.Item()
+			k := item.KeyCopy(nil)
+			keys = append(keys, k)
+		}
+		return nil
+	})
+	return keys, nextCursor, err
+}

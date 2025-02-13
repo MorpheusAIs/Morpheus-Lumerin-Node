@@ -83,7 +83,6 @@ const Chat = (props) => {
 
     useEffect(() => {
         (async () => {
-            console.time("LOAD")
             const [chainData, userSessions, chats] = await Promise.all([
                 props.getModelsData(),
                 props.getSessionsByUser(props.address),
@@ -327,8 +326,6 @@ const Chat = (props) => {
     }
 
     const selectChat = async (chatData: ChatData) => {
-        console.log("select-session", chatData)
-
         const modelId = chatData.modelId;
         if (!modelId) {
             console.warn("Model ID is missed");
@@ -370,7 +367,6 @@ const Chat = (props) => {
         setIsLoading(true);
         const newSessionId = await onOpenSession(true);
         setIsReadonly(false);
-        console.log("Reopened session id: ", newSessionId)
     }
 
     const registerScrollEvent = (register) => {

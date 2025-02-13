@@ -13,15 +13,15 @@ import (
 )
 
 type AuthController struct {
-	authConfig *system.HTTPAuthConfig
-	log        lib.ILogger
+	authConfig  *system.HTTPAuthConfig
+	log         lib.ILogger
 	environment string
 }
 
 func NewAuthController(authConfig *system.HTTPAuthConfig, environment string, log lib.ILogger) *AuthController {
 	a := &AuthController{
-		authConfig: authConfig,
-		log:        log,
+		authConfig:  authConfig,
+		log:         log,
 		environment: environment,
 	}
 
@@ -41,7 +41,7 @@ func (s *AuthController) RegisterRoutes(r interfaces.Router) {
 	r.GET("/auth/allowance/requests", s.authConfig.CheckAuth("agent_requests"), s.GetAllowanceRequests)
 	r.POST("/auth/allowance/revoke", s.authConfig.CheckAuth("agent_requests"), s.RevokeAllowance)
 
-	r.GET("/auth/txs", s.authConfig.CheckAuth("agent_requests"), s.GetAgentTxs)
+	r.GET("/auth/users/:username/txs", s.authConfig.CheckAuth("agent_requests"), s.GetAgentTxs)
 	r.GET("/auth/cookie/path", s.GetPathToCookieFile)
 }
 
@@ -144,7 +144,19 @@ func (a *AuthController) GetAgentUsers(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"agents": requests})
+
+	var res AgentUsersRes
+	res.Agents = make([]*AgentUser, len(requests))
+
+	for i, request := range requests {
+		res.Agents[i] = &AgentUser{
+			Username:    request.Username,
+			Perms:       request.Perms,
+			IsConfirmed: request.IsConfirmed,
+			Allowances:  request.Allowances,
+		}
+	}
+	ctx.JSON(http.StatusOK, res)
 }
 
 // ConfirmAgentRequest godoc
@@ -245,7 +257,18 @@ func (a *AuthController) GetAllowanceRequests(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"requests": requests})
+	var res AllowanceRequestsRes
+	res.Requests = make([]AllowanceRequest, len(requests))
+
+	for i, request := range requests {
+		res.Requests[i] = AllowanceRequest{
+			Username:  request.Username,
+			Token:     request.Token,
+			Allowance: request.Allowance,
+		}
+	}
+
+	ctx.JSON(http.StatusOK, res)
 }
 
 // RevokeAllowance godoc
@@ -281,14 +304,27 @@ func (a *AuthController) RevokeAllowance(ctx *gin.Context) {
 //	@Produce		json
 //	@Success		200	{object}	authapi.AgentTxsRes
 //	@Security		BasicAuth
-//	@Router			/auth/txs [get]
+//	@Router			/auth/users/{username}/txs [get]
 func (a *AuthController) GetAgentTxs(ctx *gin.Context) {
-	txs, err := a.authConfig.GetAllAgentTx()
+	var req AgentTxReqURI
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var query CursorQuery
+	if err := ctx.ShouldBindQuery(&query); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	txs, newCursor, err := a.authConfig.GetAgentTxs(req.Username, query.Cursor, query.Limit)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"txs": txs})
+
+	ctx.JSON(http.StatusOK, AgentTxsRes{TxHashes: txs, NextCursor: newCursor})
 }
 
 // GetPathToCookieFile godoc
@@ -301,7 +337,7 @@ func (a *AuthController) GetAgentTxs(ctx *gin.Context) {
 func (a *AuthController) GetPathToCookieFile(ctx *gin.Context) {
 	cookieFilePath := a.authConfig.CookieFilePath
 	if a.environment == "development" {
-		workingDir, err := os.Getwd()	
+		workingDir, err := os.Getwd()
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return

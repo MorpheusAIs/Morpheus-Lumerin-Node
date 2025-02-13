@@ -160,31 +160,6 @@ const docTemplate = `{
                 "responses": {}
             }
         },
-        "/auth/txs": {
-            "get": {
-                "security": [
-                    {
-                        "BasicAuth": []
-                    }
-                ],
-                "description": "Permission: agent_requests",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "auth"
-                ],
-                "summary": "Get Agent Transactions",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/authapi.AgentTxsRes"
-                        }
-                    }
-                }
-            }
-        },
         "/auth/users": {
             "get": {
                 "security": [
@@ -339,6 +314,31 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/authapi.AuthRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/users/{username}/txs": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Permission: agent_requests",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Get Agent Transactions",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/authapi.AgentTxsRes"
                         }
                     }
                 }
@@ -2200,6 +2200,11 @@ const docTemplate = `{
         },
         "authapi.AddUserReq": {
             "type": "object",
+            "required": [
+                "password",
+                "perms",
+                "username"
+            ],
             "properties": {
                 "password": {
                     "type": "string"
@@ -2215,25 +2220,43 @@ const docTemplate = `{
                 }
             }
         },
-        "authapi.AgentTx": {
-            "type": "object",
-            "properties": {
-                "tx_hash": {
-                    "type": "string"
-                },
-                "username": {
-                    "type": "string"
-                }
-            }
-        },
         "authapi.AgentTxsRes": {
             "type": "object",
             "properties": {
-                "txs": {
+                "nextCursor": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/authapi.AgentTx"
+                        "type": "integer"
                     }
+                },
+                "txHashes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "authapi.AgentUser": {
+            "type": "object",
+            "properties": {
+                "allowances": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "isConfirmed": {
+                    "type": "boolean"
+                },
+                "perms": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "username": {
+                    "type": "string"
                 }
             }
         },
@@ -2243,7 +2266,7 @@ const docTemplate = `{
                 "agents": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/authapi.AgentUser"
                     }
                 }
             }
@@ -2283,6 +2306,10 @@ const docTemplate = `{
         },
         "authapi.ConfirmAgentReq": {
             "type": "object",
+            "required": [
+                "confirm",
+                "username"
+            ],
             "properties": {
                 "confirm": {
                     "type": "boolean"
@@ -2313,6 +2340,9 @@ const docTemplate = `{
         },
         "authapi.RemoveUserReq": {
             "type": "object",
+            "required": [
+                "username"
+            ],
             "properties": {
                 "username": {
                     "type": "string"
@@ -2321,6 +2351,12 @@ const docTemplate = `{
         },
         "authapi.RequestAgentUserReq": {
             "type": "object",
+            "required": [
+                "allowances",
+                "password",
+                "perms",
+                "username"
+            ],
             "properties": {
                 "allowances": {
                     "type": "object",
@@ -2344,6 +2380,10 @@ const docTemplate = `{
         },
         "authapi.RequestAllowanceReq": {
             "type": "object",
+            "required": [
+                "token",
+                "username"
+            ],
             "properties": {
                 "allowance": {
                     "type": "string"
@@ -2358,6 +2398,10 @@ const docTemplate = `{
         },
         "authapi.RevokeAllowanceReq": {
             "type": "object",
+            "required": [
+                "token",
+                "username"
+            ],
             "properties": {
                 "token": {
                     "type": "string"

@@ -7,7 +7,6 @@ const Cooldown = ({ endDate }) => {
     useEffect(() => {
         const interval = setInterval(() => setTime(getTimeRemaining(new Date(endDate * 1000))), 1000);
         return () => {
-            console.log("Clear cooldown");
             clearInterval(interval)
         }
     }, [endDate])

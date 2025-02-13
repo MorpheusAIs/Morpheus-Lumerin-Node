@@ -13,7 +13,6 @@ const Providers = ({ fetchData, providerId }) => {
     useEffect(() => {
         (async () => {
             const data = await fetchData(providerId);
-            console.log(data);
             setData(data);
         })()
     }, [])
