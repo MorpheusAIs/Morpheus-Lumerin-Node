@@ -1,6 +1,9 @@
 package client
 
 import (
+	"encoding/base64"
+	"fmt"
+
 	openai "github.com/sashabaranov/go-openai"
 )
 
@@ -20,4 +23,9 @@ func StringTo32Byte(s string) [32]byte {
 	copy(array[:], byteSlice)
 
 	return array
+}
+
+func FormatBasicAuthHeader(login, pass string) string {
+	encoded := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", login, pass)))
+	return fmt.Sprintf("Basic %s", encoded)
 }

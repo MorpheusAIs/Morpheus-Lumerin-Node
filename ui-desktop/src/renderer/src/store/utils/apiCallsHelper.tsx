@@ -25,7 +25,6 @@ export const getSessionsByUser = async (url, user, headers) => {
     let all = false;
 
     while (!all) {
-      console.log("Getting session for user: ", user, offset, limit)
       const sessionsRes = await getSessions(user, offset, limit);
       sessions.push(...sessionsRes);
 
@@ -66,7 +65,6 @@ export const getBidsByModelId = async (url, modelId, headers) => {
   let all = false;
 
   while (!all) {
-    console.log("Getting bids by model id: ", modelId, offset, limit)
     const bidsRes = await getBidsByModels(modelId, offset, limit);
     bids.push(...bidsRes);
 

@@ -27,26 +27,42 @@ definitions:
         type: array
       username:
         type: string
-    type: object
-  authapi.AgentTx:
-    properties:
-      tx_hash:
-        type: string
-      username:
-        type: string
+    required:
+    - password
+    - perms
+    - username
     type: object
   authapi.AgentTxsRes:
     properties:
-      txs:
+      nextCursor:
         items:
-          $ref: '#/definitions/authapi.AgentTx'
+          type: integer
         type: array
+      txHashes:
+        items:
+          type: string
+        type: array
+    type: object
+  authapi.AgentUser:
+    properties:
+      allowances:
+        additionalProperties:
+          type: string
+        type: object
+      isConfirmed:
+        type: boolean
+      perms:
+        items:
+          type: string
+        type: array
+      username:
+        type: string
     type: object
   authapi.AgentUsersRes:
     properties:
       agents:
         items:
-          type: string
+          $ref: '#/definitions/authapi.AgentUser'
         type: array
     type: object
   authapi.AllowanceRequest:
@@ -76,6 +92,9 @@ definitions:
         type: boolean
       username:
         type: string
+    required:
+    - confirm
+    - username
     type: object
   authapi.ConfirmAllowanceReq:
     properties:
@@ -94,6 +113,8 @@ definitions:
     properties:
       username:
         type: string
+    required:
+    - username
     type: object
   authapi.RequestAgentUserReq:
     properties:
@@ -109,6 +130,11 @@ definitions:
         type: array
       username:
         type: string
+    required:
+    - allowances
+    - password
+    - perms
+    - username
     type: object
   authapi.RequestAllowanceReq:
     properties:
@@ -118,6 +144,9 @@ definitions:
         type: string
       username:
         type: string
+    required:
+    - token
+    - username
     type: object
   authapi.RevokeAllowanceReq:
     properties:
@@ -125,6 +154,9 @@ definitions:
         type: string
       username:
         type: string
+    required:
+    - token
+    - username
     type: object
   genericchatstorage.Chat:
     properties:
@@ -827,21 +859,6 @@ paths:
       summary: Get Path to Cookie File
       tags:
       - auth
-  /auth/txs:
-    get:
-      description: 'Permission: agent_requests'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/authapi.AgentTxsRes'
-      security:
-      - BasicAuth: []
-      summary: Get Agent Transactions
-      tags:
-      - auth
   /auth/users:
     delete:
       description: 'Permission: remove_user'
@@ -897,6 +914,21 @@ paths:
       security:
       - BasicAuth: []
       summary: Add/Update User in Proxy Conf
+      tags:
+      - auth
+  /auth/users/{username}/txs:
+    get:
+      description: 'Permission: agent_requests'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/authapi.AgentTxsRes'
+      security:
+      - BasicAuth: []
+      summary: Get Agent Transactions
       tags:
       - auth
   /auth/users/confirm:

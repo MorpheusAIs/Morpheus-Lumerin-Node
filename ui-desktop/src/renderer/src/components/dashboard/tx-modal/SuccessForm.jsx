@@ -21,7 +21,7 @@ const HeaderWrapper = styled.div`
 const Header = styled.div`
   font-size: 1.6rem;
   font-weight: bold;
-  color: ${p => p.theme.colors.dark};
+  color: ${(p) => p.theme.colors.dark};
   text-align: center;
   width: 100%;
 `;
@@ -44,7 +44,7 @@ const AmountInput = styled.input`
     isActive ? theme.colors.primary : theme.colors.dark};
 
   ::placeholder {
-    color: ${p => p.theme.colors.dark};
+    color: ${(p) => p.theme.colors.dark};
   }
 `;
 
@@ -53,7 +53,7 @@ const DoneBtn = styled(BaseBtn)`
   height: 50px;
   border-radius: 5px;
   background-color: ${({ isActive, theme }) =>
-    isActive ? theme.colors.lumerin.helpertextGray : theme.colors.primary};
+    isActive ? theme.colors.helpertextGray : theme.colors.primary};
 `;
 
 const Column = styled.div`
@@ -69,20 +69,20 @@ const Footer = styled.div`
 `;
 
 const FooterLabel = styled.label`
-  color: ${p => p.theme.colors.dark};
+  color: ${(p) => p.theme.colors.dark};
   font-size: 1.2rem;
   font-weight: 600;
   margin-bottom: 5px;
 `;
 
 const SubAmount = styled.div`
-  color: ${p => p.theme.colors.lumerin.helpertextGray};
+  color: ${(p) => p.theme.colors.helpertextGray};
   font-size: 13px;
   text-align: center;
 `;
 
 export function SuccessForm(props) {
-  const LMRtoUSD = val => {
+  const LMRtoUSD = (val) => {
     return toUSD(val, props.coinPrice);
   };
 

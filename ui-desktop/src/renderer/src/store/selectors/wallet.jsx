@@ -8,60 +8,57 @@ import { getConfig } from './config';
 import { getIsOnline } from './connectivity';
 import {
   fromTokenBaseUnitsToETH,
-  fromTokenBaseUnitsToLMR
+  fromTokenBaseUnitsToLMR,
 } from '../../utils/coinValue';
 import { toUSD } from '../utils/syncAmounts';
 
 export const getWallet = createSelector(
   getChain,
-  chainData => chainData.wallet
+  (chainData) => chainData.wallet,
 );
 
 // Returns the Wallet address
 export const getWalletAddress = createSelector(
   getWallet,
-  walletData => walletData.address
+  (walletData) => walletData.address,
 );
 
 // Returns the marketplace fee
 export const getMarketplaceFee = createSelector(
   getWallet,
-  walletData => walletData.marketplaceFee
+  (walletData) => walletData.marketplaceFee,
 );
 
 // Returns the LMR balance of the active address in wei
 export const getWalletEthBalance = createSelector(
   getWallet,
-  walletData => fromTokenBaseUnitsToETH(walletData.ethBalance)
+  (walletData) => fromTokenBaseUnitsToETH(walletData.ethBalance),
   // (walletData) => walletData.ethBalance / lmrDecimals
 );
 
 // Returns the LMR balance of the active address in wei
-export const getWalletLmrBalance = createSelector(getWallet, walletData =>
-  fromTokenBaseUnitsToLMR(get(walletData, 'token.lmrBalance', 0))
+export const getWalletLmrBalance = createSelector(getWallet, (walletData) =>
+  fromTokenBaseUnitsToLMR(get(walletData, 'token.lmrBalance', 0)),
 );
 
 export const getWalletLmrBalanceUSD = createSelector(
   getWalletLmrBalance,
   getRate,
-  (lmrBalance, rate) => toUSD(lmrBalance, rate)
+  (lmrBalance, rate) => toUSD(lmrBalance, rate),
 );
 
 export const getWalletEthBalanceUSD = createSelector(
   getWalletEthBalance,
   getRateEth,
-  (ethBalance, rateEth) => toUSD(ethBalance, rateEth)
+  (ethBalance, rateEth) => toUSD(ethBalance, rateEth),
 );
 
 // Returns the LMR balance of the active address in wei
 export const getLmrBalanceWei = getWalletLmrBalance;
 
-// TODO implement when we have a definition about LMR:USD rate
-// export const getLmrRateUSD = createSelector(chainData => chainData.wallet)
-
 // Returns the array of transactions of the current chain/wallet/address.
 // The items are mapped to contain properties useful for rendering.
-export const getTransactions = createSelector(getWallet, walletData => {
+export const getTransactions = createSelector(getWallet, (walletData) => {
   const transactionParser = utils.createTransactionParser(walletData.address);
 
   const transactions = Object.values(walletData?.token?.transactions) || [];
@@ -69,7 +66,7 @@ export const getTransactions = createSelector(getWallet, walletData => {
   const sorted = sortBy(transactions, [
     'receipt.blockNumber',
     'receipt.transactionIndex',
-    'transaction.nonce'
+    'transaction.nonce',
   ]).reverse();
 
   return sorted.map(transactionParser);
@@ -77,29 +74,29 @@ export const getTransactions = createSelector(getWallet, walletData => {
 
 export const getTransactionPage = createSelector(
   getWallet,
-  walletData => walletData.page
+  (walletData) => walletData.page,
 );
 
 export const getTransactionPageSize = createSelector(
   getWallet,
-  walletData => walletData.pageSize
+  (walletData) => walletData.pageSize,
 );
 
 export const getHasNextPage = createSelector(
   getWallet,
-  walletData => walletData.hasNextPage
+  (walletData) => walletData.hasNextPage,
 );
 
 // Returns if the current wallet/address has transactions on the active chain
 export const hasTransactions = createSelector(
   getTransactions,
-  transactions => transactions.length !== 0
+  (transactions) => transactions.length !== 0,
 );
 
 // Returns wallet transactions sync status on the active chain
 export const getTxSyncStatus = createSelector(
   getWallet,
-  walletData => walletData.syncStatus
+  (walletData) => walletData.syncStatus,
 );
 
 // Returns the status of the "Send Lumerin" feature on the chain
@@ -112,7 +109,7 @@ export const sendLmrFeatureStatus = createSelector(
       ? utils.hasFunds(lmrBalance) || utils.hasFunds(ethBalance)
         ? 'ok'
         : 'no-funds'
-      : 'offline'
+      : 'offline',
 );
 
 // Returns the status of the "Receive Lumerin" feature on the chain
@@ -120,7 +117,7 @@ export const receiveLmrFeatureStatus = createSelector(
   getWalletLmrBalance,
   getIsOnline,
   (lmrBalance, isOnline) =>
-    isOnline ? (utils.hasFunds(lmrBalance) ? 'ok' : 'no-funds') : 'offline'
+    isOnline ? (utils.hasFunds(lmrBalance) ? 'ok' : 'no-funds') : 'offline',
 );
 
 // Returns the status of the "Retry Import" feature on the chain
@@ -128,25 +125,25 @@ export const retryImportLmrFeatureStatus = createSelector(
   getIsOnline,
   getConfig,
   (isOnline, config) =>
-    config.chain.chainId ? (isOnline ? 'ok' : 'no-coin') : 'offline'
+    config.chain.chainId ? (isOnline ? 'ok' : 'no-coin') : 'offline',
 );
 
 export const getMergedTransactions = createSelector(
   getChain,
-  chain => chain.wallet.token.transactions
+  (chain) => chain.wallet.token.transactions,
 );
 
 // Returns a transaction object given a transaction hash
 export const getTransactionFromHash = createSelector(
   getTransactions,
   getWalletAddress,
-  props => props.hash,
+  (props) => props.hash,
   (transactions, activeAddress, hash) =>
     transactions
       .map(utils.createTransactionParser(activeAddress))
-      .find(tx => tx.hash === hash)
+      .find((tx) => tx.hash === hash),
 );
 
-export const isAllowSendTransaction = createSelector(getWallet, walletData =>
-  get(walletData, 'allowSendTransaction', true)
+export const isAllowSendTransaction = createSelector(getWallet, (walletData) =>
+  get(walletData, 'allowSendTransaction', true),
 );
