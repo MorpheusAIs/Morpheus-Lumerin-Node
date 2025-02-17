@@ -75,7 +75,15 @@ const ModelSelectionModal = ({ isActive, handleClose, models, onChangeModel, sym
         } )
         .sort((a, b) => b.isOnline - a.isOnline);
 
-    const filterdModels = search ? sortedModels.filter(m => m.Name.toLowerCase().includes(search.toLowerCase())) : sortedModels;
+    const searchModel = (model) => {
+        if (search) {
+            return model.Name.toLowerCase().includes(search.toLowerCase()) || model.Tags?.some(tag => tag.toLowerCase().includes(search.toLowerCase()));
+        }
+
+        return true;
+    };
+
+    const filterdModels = search ? sortedModels.filter(searchModel) : sortedModels;
 
     return (
         <Modal 
