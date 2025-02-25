@@ -1,4 +1,30 @@
 name: CI-CD
+# Intended workflow and validation: 
+# 0. Develop in feature branches and PR to `dev` branch for internal validation, 
+#    - Once validated in dev, PR/PUSH to `test` - this will create OS Test Release, Test Container image and deploy to DEV environment
+#    - Once validated in test, PR/PUSH to `main` - this will create Latest Release, Latest container image and deploy to LMR environment
+#    - Once validated in main, PR/PUSH to origin main on the MorpheusAI repo (no builds/triggers will happen here, only code updates)
+# 1. PUSH to cicd/* will (special branches that will enable push testing of cicd changes)
+#    - Generate a new tag 
+#    - Build and test the Docker image
+#    - Build and test the macOS-arm64 image
+# 2. PR to dev will 
+#   - Generate a new tag 
+#   - Build and test the Docker image
+# 2 PUSH to dev will 
+#   - Generate a new tag 
+#   - Build and test the Docker image
+#   - Build and test the macOS-arm64 image
+# 3. PR to test or main will
+#   - Generate a new tag 
+#   - Build and test the Docker image
+# 4. PUSH to test or main will
+#   - Generate a new tag 
+#   - Build and test the Docker image
+#   - Build all 4 OS Versions
+#   - Create a release and upload the artifacts
+#   - Build and push the Docker image to GitHub Container Registry
+#   - Deploy to GitLab
 
 on:
   workflow_dispatch:
@@ -145,7 +171,105 @@ jobs:
         with:
           image: "${{ needs.Generate-Tag.outputs.image_name }}:${{ needs.Generate-Tag.outputs.tag_name }}"
           private_key: ${{ secrets.TEST_PRIVATE_KEY }}     
-        
+
+  macOS-14-arm64:
+    name: Build macOS-arm64 Image
+    if: |
+      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
+        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
+      )
+    runs-on: macos-14
+    needs: 
+      - Generate-Tag
+      - Build-Test
+    steps:
+      - name: Clone
+        id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+          cache-dependency-path: |
+            launcher/go.sum
+            proxy-router/go.sum
+
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'yarn'
+          cache-dependency-path: ui-desktop/yarn.lock
+
+      - name: Install dependencies
+        run: |
+          cd launcher
+          go mod tidy
+          cd ../proxy-router
+          go mod download
+          cd ../ui-desktop
+          brew install python-setuptools
+          yarn install --network-timeout 600000
+
+      - name: Copy Environment Files
+        uses: ./.github/actions/copy_env_files
+      
+      - name: Build
+        id: build
+        run: |
+          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
+          cd launcher
+          make
+          cd ../proxy-router
+          make build
+          cd ../cli
+          make build
+          cd ../ui-desktop
+          echo "Injecting version $FULLTAG into package.json"
+          sed -i "" "s/\"version\": \".*\"/\"version\": \"$FULLTAG\"/" package.json
+          cat package.json | grep '"version"'  # Optional: Verify the change
+          yarn build:mac
+
+      - name: Pack artifacts
+        id: pack_artifacts
+        run: |
+          OS_NAME="macos-arm64"
+          BIN_NAME="macos-arm64"
+          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
+          echo "Artifact: mor-launch-$BUILDTAG-$OS_NAME.zip"
+          echo "LLAMA Binary: ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip"
+          echo "LLAMA Model: ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}"
+          wget -nv ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip
+          wget -nv ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}
+          unzip -o -j ${{ env.LLAMA_FILEBASE}}-$BIN_NAME.zip build/bin/llama-server
+          echo '{
+            "run": [
+              "./llama-server --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
+              "./proxy-router",
+              "./MorpheusUI.app/Contents/MacOS/MorpheusUI"
+            ]
+          }' > mor-launch.json
+          echo "############# Contents of mor-launch.json: ############# "
+          cat mor-launch.json
+          mv ./cli/mor-cli mor-cli
+          unzip ./ui-desktop/dist/morpheus-ui-$FULLTAG-arm64-mac.zip
+          zip -j mor-launch-$BUILDTAG-$OS_NAME.zip ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/proxy-router .env ${{ env.MODEL_NAME}} mor-launch.json models-config.json rating-config.json mor-cli
+          zip -r mor-launch-$BUILDTAG-$OS_NAME.zip 'MorpheusUI.app'
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          path: mor-launch-${{ needs.Generate-Tag.outputs.tag_name }}-macos-arm64.zip
+          name: mor-launch-macos-arm64.zip
+  
   Ubuntu-22-x64:
     name: Build Ubuntu Image
     if: |
@@ -338,105 +462,6 @@ jobs:
         with:
           path: mor-launch-${{ needs.Generate-Tag.outputs.tag_name }}-macos-x64.zip
           name: mor-launch-macos-x64.zip
-
-  macOS-14-arm64:
-    name: Build macOS-arm64 Image
-    if: |
-      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
-      (
-        (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'test' || github.base_ref == 'dev')) ||
-        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
-        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
-      )
-    runs-on: macos-14
-    needs: 
-      - Generate-Tag
-      - Build-Test
-    steps:
-      - name: Clone
-        id: checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.22.x'
-          cache-dependency-path: |
-            launcher/go.sum
-            proxy-router/go.sum
-
-      - name: Setup node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'yarn'
-          cache-dependency-path: ui-desktop/yarn.lock
-
-      - name: Install dependencies
-        run: |
-          cd launcher
-          go mod tidy
-          cd ../proxy-router
-          go mod download
-          cd ../ui-desktop
-          brew install python-setuptools
-          yarn install --network-timeout 600000
-
-      - name: Copy Environment Files
-        uses: ./.github/actions/copy_env_files
-      
-      - name: Build
-        id: build
-        run: |
-          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
-          FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
-          cd launcher
-          make
-          cd ../proxy-router
-          make build
-          cd ../cli
-          make build
-          cd ../ui-desktop
-          echo "Injecting version $FULLTAG into package.json"
-          sed -i "" "s/\"version\": \".*\"/\"version\": \"$FULLTAG\"/" package.json
-          cat package.json | grep '"version"'  # Optional: Verify the change
-          yarn build:mac
-
-      - name: Pack artifacts
-        id: pack_artifacts
-        run: |
-          OS_NAME="macos-arm64"
-          BIN_NAME="macos-arm64"
-          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
-          FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
-          echo "Artifact: mor-launch-$BUILDTAG-$OS_NAME.zip"
-          echo "LLAMA Binary: ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip"
-          echo "LLAMA Model: ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}"
-          wget -nv ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip
-          wget -nv ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}
-          unzip -o -j ${{ env.LLAMA_FILEBASE}}-$BIN_NAME.zip build/bin/llama-server
-          echo '{
-            "run": [
-              "./llama-server --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
-              "./proxy-router",
-              "./MorpheusUI.app/Contents/MacOS/MorpheusUI"
-            ]
-          }' > mor-launch.json
-          echo "############# Contents of mor-launch.json: ############# "
-          cat mor-launch.json
-          mv ./cli/mor-cli mor-cli
-          unzip ./ui-desktop/dist/morpheus-ui-$FULLTAG-arm64-mac.zip
-          zip -j mor-launch-$BUILDTAG-$OS_NAME.zip ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/proxy-router .env ${{ env.MODEL_NAME}} mor-launch.json models-config.json rating-config.json mor-cli
-          zip -r mor-launch-$BUILDTAG-$OS_NAME.zip 'MorpheusUI.app'
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          path: mor-launch-${{ needs.Generate-Tag.outputs.tag_name }}-macos-arm64.zip
-          name: mor-launch-macos-arm64.zip
 
   Windows-avx2-x64:
     name: Build Windows Image
