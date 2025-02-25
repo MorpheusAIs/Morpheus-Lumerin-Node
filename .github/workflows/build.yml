@@ -143,7 +143,7 @@ jobs:
       - name: Run Docker Tests
         uses: ./.github/actions/docker_test
         with:
-          image: $BUILDIMAGE:$BUILDTAG
+          image: "${{ needs.Generate-Tag.outputs.image_name }}:${{ needs.Generate-Tag.outputs.tag_name }}"
           private_key: ${{ secrets.TEST_PRIVATE_KEY }}     
         
   Ubuntu-22-x64:
