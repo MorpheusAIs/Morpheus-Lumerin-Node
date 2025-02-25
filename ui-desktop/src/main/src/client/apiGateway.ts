@@ -5,7 +5,7 @@ import {
   AgentTxRes,
   AgentUserRes,
   ChatHistory,
-  ChatHistoryTitle
+  ChatTitle
 } from './api.types'
 
 import os from 'os'
@@ -162,7 +162,7 @@ const getTokenSupply = async () => {
   }
 }
 
-const getChatHistoryTitles = async (): Promise<ChatHistoryTitle[] | null> => {
+const getChatHistoryTitles = async (): Promise<ChatTitle[] | null> => {
   try {
     const path = `${config.chain.localProxyRouterUrl}/v1/chats`
     const response = await fetch(path, {
