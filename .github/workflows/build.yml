@@ -225,6 +225,7 @@ jobs:
         run: |
           TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }}
           echo "TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }}" >> $GITHUB_ENV
+          echo "Outbound TAG_NAME=${{ env.TAG_NAME }}"
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
           cd launcher
           make
