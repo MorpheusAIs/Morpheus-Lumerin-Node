@@ -223,12 +223,11 @@ jobs:
       - name: Build
         id: build
         run: |
-          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }}
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
           cd launcher
           make
           cd ../proxy-router
-          make build 
+          make build TAG_NAME="${{ needs.Generate-Tag.outputs.tag_name }}"
           cd ../cli
           make build
           cd ../ui-desktop
@@ -320,12 +319,11 @@ jobs:
       - name: Build
         id: build
         run: |
-          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }}
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
           cd launcher
           make
           cd ../proxy-router
-          make build
+          make build TAG_NAME="${{ needs.Generate-Tag.outputs.tag_name }}"
           cd ../cli
           make build
           cd ../ui-desktop
@@ -418,12 +416,11 @@ jobs:
       - name: Build
         id: build
         run: |
-          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }}
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
           cd launcher
           make
           cd ../proxy-router
-          make build
+          make build TAG_NAME="${{ needs.Generate-Tag.outputs.tag_name }}"
           cd ../cli
           make build
           cd ../ui-desktop
@@ -520,12 +517,11 @@ jobs:
       - name: Build
         id: build
         run: |
-          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }}
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}       
           cd launcher
           make
           cd ../proxy-router
-          make build
+          make build TAG_NAME="${{ needs.Generate-Tag.outputs.tag_name }}"
           cd ../cli
           make build
           cd ../ui-desktop
