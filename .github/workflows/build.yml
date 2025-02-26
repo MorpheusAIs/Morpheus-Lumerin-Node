@@ -224,6 +224,7 @@ jobs:
         id: build
         run: |
           TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }}
+          echo "TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }}" >> $GITHUB_ENV
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
           cd launcher
           make
@@ -321,6 +322,7 @@ jobs:
         id: build
         run: |
           TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }}
+          echo "TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }}" >> $GITHUB_ENV
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
           cd launcher
           make
@@ -419,6 +421,7 @@ jobs:
         id: build
         run: |
           TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }}
+          echo "TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }}" >> $GITHUB_ENV
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
           cd launcher
           make
@@ -521,6 +524,7 @@ jobs:
         id: build
         run: |
           TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }}
+          echo "TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }}" >> $GITHUB_ENV
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}       
           cd launcher
           make
