@@ -254,7 +254,7 @@ jobs:
             "model_repo": "${{ env.MODEL_REPO }}",
             "model_name": "${{ env.MODEL_NAME }}",
             "run": [
-              "./llama-server --no-webui -m ./model.gguf",
+              "./llama-server --no-webui -m ./${{ env.MODEL_NAME }}",
               "./proxy-router",
               "./MorpheusUI.app/Contents/MacOS/MorpheusUI"
             ]
@@ -264,7 +264,7 @@ jobs:
           cat mor-launch.json
           mv ./cli/mor-cli mor-cli
           unzip ./ui-desktop/dist/morpheus-ui-$FULLTAG-arm64-mac.zip
-          zip -j mor-launch-$BUILDTAG-$OS_NAME.zip ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/proxy-router .env ${{ env.MODEL_NAME}} mor-launch.json models-config.json rating-config.json mor-cli
+          zip -j mor-launch-$BUILDTAG-$OS_NAME.zip ./LICENSE ./launcher/mor-launch ./proxy-router/proxy-router .env mor-launch.json models-config.json rating-config.json mor-cli
           zip -r mor-launch-$BUILDTAG-$OS_NAME.zip 'MorpheusUI.app'
 
       - name: Upload artifacts
