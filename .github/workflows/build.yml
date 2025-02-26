@@ -526,7 +526,7 @@ jobs:
           make build
           cd ../ui-desktop
           echo "Injecting version $FULLTAG into package.json"
-          sed -i "s/\"version\": \".*\"/\"version\": \"$FULLTAG}\"/" package.json
+          sed -i "s/\"version\": \".*\"/\"version\": \"$FULLTAG\"/" package.json
           cat package.json | grep '"version"'  # Optional: Verify the change
           yarn build:win
 
@@ -669,7 +669,7 @@ jobs:
             --build-arg TAG_NAME=$BUILDTAG \
             --build-arg COMMIT=$BUILDCOMMIT \
             --push \
-            -t $BUILDIMAGE:BUILDTAG \
+            -t $BUILDIMAGE:$BUILDTAG \
             -f proxy-router/Dockerfile \
             proxy-router || (echo "❌ Failed to push image with tag: $BUILDIMAGE:$BUILDTAG" && exit 1)
           echo "✅ Proxy-Router Build and Push of $BUILDIMAGE:$BUILDTAG Successful!"
