@@ -244,18 +244,22 @@ jobs:
           BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
           echo "Artifact: mor-launch-$BUILDTAG-$OS_NAME.zip"
-          echo "LLAMA Binary: ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip"
-          echo "LLAMA Model: ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}"
-          wget -nv ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip
-          wget -nv ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}
-          unzip -o -j ${{ env.LLAMA_FILEBASE}}-$BIN_NAME.zip build/bin/llama-server
-          echo '{
+          cat <<EOF > mor-launch.json
+          {
+            "llama_url": "${{ env.LLAMA_URL }}",
+            "llama_release": "${{ env.LLAMA_RELEASE }}",
+            "llama_filebase": "${{ env.LLAMA_FILEBASE }}",
+            "model_url": "${{ env.MODEL_URL }}",
+            "model_owner": "${{ env.MODEL_OWNER }}",
+            "model_repo": "${{ env.MODEL_REPO }}",
+            "model_name": "${{ env.MODEL_NAME }}",
             "run": [
-              "./llama-server --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
+              "./llama-server --no-webui -m ./model.gguf",
               "./proxy-router",
               "./MorpheusUI.app/Contents/MacOS/MorpheusUI"
             ]
-          }' > mor-launch.json
+          }
+          EOF
           echo "############# Contents of mor-launch.json: ############# "
           cat mor-launch.json
           mv ./cli/mor-cli mor-cli
