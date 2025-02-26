@@ -25,9 +25,12 @@ export type AgentAllowanceRequest = {
   allowance: string
 }
 
-export type ChatHistoryTitle = {
+export type ChatTitle = {
+  chatId: string
+  createdAt: number
+  isLocal: boolean
+  modelId: string
   title: string
-  chatId: string[]
 }
 
 export type ChatHistory = {
@@ -39,7 +42,14 @@ export type ChatHistory = {
 
 export type ChatMessage = {
   response: string
-  prompt: string
+  prompt: {
+    messages: {
+      role: string
+      content: string
+    }[]
+  }
   promptAt: number
   responseAt: number
+  isImageContent: boolean
+  isVideoRawContent: boolean
 }

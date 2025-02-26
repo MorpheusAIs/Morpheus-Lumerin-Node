@@ -1,11 +1,11 @@
 const darkShade = 'rgba(0, 0, 0, 0.2)';
 
-export default {
+const theme = {
   colors: {
     transparent: 'transparent',
     primary: 'rgba(23, 54, 41, 1)',
     primaryLight: 'rgba(32, 220, 142, 1)',
-    primaryDark: 'rgba(12,31,23,1',
+    primaryDark: 'rgba(12,31,23,1)',
     translucentPrimary: 'rgb(1, 67, 83)',
     inactive: 'rgba(56, 71, 100, 1)',
     active: 'rgba(90, 220, 226, 1)',
@@ -59,5 +59,8 @@ export default {
   },
 
   textShadow: `0 1px 1px ${darkShade}`,
-  spacing: (n) => n * 8, // used as rem multiplier
-};
+  spacing: (n: number) => n * 8, // used as rem multiplier
+} as const;
+
+export default theme;
+export type Theme = typeof theme;

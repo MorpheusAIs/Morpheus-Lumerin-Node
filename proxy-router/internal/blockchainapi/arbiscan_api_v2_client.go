@@ -301,10 +301,10 @@ type TokenTransfer struct {
 }
 
 type TokenInfo struct {
-	IconURL      string  `json:"icon_url"`
-	Name         string  `json:"name"`
-	Decimals     string  `json:"decimals"`
-	Symbol       string  `json:"symbol"`
-	Address      string  `json:"address"`
-	ExchangeRate float64 `json:"exchange_rate"`
+	IconURL      string `json:"icon_url"`
+	Name         string `json:"name"`
+	Decimals     string `json:"decimals"`
+	Symbol       string `json:"symbol"`
+	Address      string `json:"address"`
+	ExchangeRate string `json:"exchange_rate"`
 }
