@@ -2,6 +2,7 @@ package ethclient
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
@@ -34,7 +35,9 @@ func NewRPCClientMultiple(urls []string, log lib.ILogger) (*RPCClientMultiple, e
 
 func (c *RPCClientMultiple) CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error {
 	return c.retriableCall(ctx, func(client *rpcClient) error {
-		c.log.Debugf("calling %s", method)
+		// serialize args to json
+		jsonArgs, _ := json.Marshal(args)
+		c.log.Debugf("calling %s %s", method, string(jsonArgs))
 		return client.client.CallContext(ctx, result, method, args...)
 	})
 }

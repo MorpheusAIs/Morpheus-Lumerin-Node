@@ -8,7 +8,7 @@ run-race:
 	GOTRACEBACK=crash go run -gcflags '-N -l' -race cmd/main.go
 
 build:
-	./build.sh
+	TAG_NAME=$(TAG_NAME) ./build.sh
 	cp .env.example .env 
 	cp models-config.json.example models-config.json
 	cp rating-config.json.example rating-config.json

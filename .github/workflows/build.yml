@@ -1,4 +1,30 @@
 name: CI-CD
+# Intended workflow and validation: 
+# 0. Develop in feature branches and PR to `dev` branch for internal validation, 
+#    - Once validated in dev, PR/PUSH to `test` - this will create OS Test Release, Test Container image and deploy to DEV environment
+#    - Once validated in test, PR/PUSH to `main` - this will create Latest Release, Latest container image and deploy to LMR environment
+#    - Once validated in main, PR/PUSH to origin main on the MorpheusAI repo (no builds/triggers will happen here, only code updates)
+# 1. PUSH to cicd/* will (special branches that will enable push testing of cicd changes)
+#    - Generate a new tag 
+#    - Build and test the Docker image
+#    - Build and test the macOS-arm64 image
+# 2. PR to dev will 
+#   - Generate a new tag 
+#   - Build and test the Docker image
+# 2 PUSH to dev will 
+#   - Generate a new tag 
+#   - Build and test the Docker image
+#   - Build and test the macOS-arm64 image
+# 3. PR to test or main will
+#   - Generate a new tag 
+#   - Build and test the Docker image
+# 4. PUSH to test or main will
+#   - Generate a new tag 
+#   - Build and test the Docker image
+#   - Build all 4 OS Versions
+#   - Create a release and upload the artifacts
+#   - Build and push the Docker image to GitHub Container Registry
+#   - Deploy to GitLab
 
 on:
   workflow_dispatch:
@@ -44,210 +70,107 @@ env:
   MODEL_REPO: TinyLlama-1.1B-Chat-v1.0-GGUF  
   
 jobs:
-        
-  Ubuntu-22-x64:
-    name: Build Ubuntu Image
-    if: |
-      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
-      (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
-        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
-      )
-    
-    runs-on: ubuntu-22.04
+  Generate-Tag: 
+    runs-on: ubuntu-latest
+    name: Generate Tag Name
+    outputs:
+      tag_name: ${{ steps.gen_tag_name.outputs.tag_name }}
+      vtag: ${{ steps.gen_tag_name.outputs.vtag }}
+      vfull: ${{ steps.gen_tag_name.outputs.vfull }}
+      image_name: ${{ steps.gen_tag_name.outputs.image_name }}
     steps:
-      - name: Clone
-        id: checkout
+      - name: Clone repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Generate Tag Name
-        uses: ./.github/actions/gen_tag_name    
-
-      - name: Verify environment variables
+      - name: Determine tag name
+        id: gen_tag_name
+        shell: bash
         run: |
-          echo "TAG_NAME=${{ env.TAG_NAME }}"
-          echo "VTAG=${{ env.VTAG }}"
-          echo "VFULL=${{ env.VFULL }}" 
-          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
-          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"       
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.22.x'
-          cache-dependency-path: |
-            launcher/go.sum
-            proxy-router/go.sum
-
-      - name: Setup node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'yarn'
-          cache-dependency-path: ui-desktop/yarn.lock
-
-      - name: Install dependencies
-        run: |
-          cd launcher
-          go mod tidy
-          cd ../proxy-router
-          go mod download
-          cd ../ui-desktop
-          yarn install --network-timeout 600000
-
-      - name: Copy Environment Files
-        uses: ./.github/actions/copy_env_files
-
-      - name: Build
-        id: build
-        run: |
-          cd launcher
-          make
-          cd ../proxy-router
-          make build
-          cd ../cli
-          make build
-          cd ../ui-desktop
-          echo "Injecting version ${{ env.VFULL }} into package.json"
-          sed -i "s/\"version\": \".*\"/\"version\": \"${{ env.VFULL }}\"/" package.json
-          cat package.json | grep '"version"'  # Optional: Verify the change
-          yarn build:linux
-
-      - name: Pack artifacts
-        id: pack_artifacts
-        run: |
-          OS_NAME="ubuntu-x64"
-          BIN_NAME="ubuntu-x64"
-          echo "Artifact: mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip"
-          echo "LLAMA Binary: ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip"
-          echo "LLAMA Model: ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}"
-          wget -nv ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip
-          wget -nv ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}
-          unzip -o -j ${{ env.LLAMA_FILEBASE}}-$BIN_NAME.zip build/bin/llama-server
-          echo '{
-            "run": [
-              "./llama-server --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
-              "./proxy-router",
-              "./morpheus-ui-'${{ env.VFULL }}'-x86_64-linux.AppImage"
-            ]
-          }' > mor-launch.json
-
-          echo "############# Contents of mor-launch.json: ############# "
-          cat mor-launch.json
-
-          mv ./cli/mor-cli mor-cli
-          zip -j mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/proxy-router .env ${{ env.MODEL_NAME}} mor-launch.json ./ui-desktop/dist/morpheus-ui-${{ env.VFULL }}-x86_64-linux.AppImage models-config.json rating-config.json mor-cli
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          path: mor-launch-${{ env.TAG_NAME }}-ubuntu-x64.zip
-          name: mor-launch-ubuntu-x64.zip
-
-  macOS-13-x64:
-    name: Build macOS-x64 Image
-    if: |
-      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
-      (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
-        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
-      )
-    runs-on: macos-13
-    steps:
-      - name: Clone
-        id: checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
+          IMAGE_NAME="ghcr.io/lumerin-protocol/morpheus-lumerin-node"
+          VMAJ_NEW=2
+          VMIN_NEW=0
+          VPAT_NEW=0
+          set +o pipefail
+          VLAST=$(git describe --tags --abbrev=0 --match='v[1-9]*' refs/remotes/origin/main 2>/dev/null | cut -c2-)
           
-      - name: Generate Tag Name
-        uses: ./.github/actions/gen_tag_name    
+          if [ -n "$VLAST" ]; then
+              eval $(echo "$VLAST" | awk -F '.' '{print "VMAJ="$1" VMIN="$2" VPAT="$3}')
+          else
+              VMAJ=0
+              VMIN=0
+              VPAT=0
+          fi
 
-      - name: Verify environment variables
-        run: |
-          echo "TAG_NAME=${{ env.TAG_NAME }}"
-          echo "VTAG=${{ env.VTAG }}"
-          echo "VFULL=${{ env.VFULL }}" 
-          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
-          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"       
-      
-      - name: Setup Go
-        uses: actions/setup-go@v5
+          if [ "$GITHUB_REF_NAME" = "main" ]; then
+              if [ "$VMAJ_NEW" -gt "$VMAJ" ]; then
+                  VMAJ=$VMAJ_NEW
+                  VMIN=$VMIN_NEW
+                  VPAT=$VPAT_NEW
+              else
+                  VMIN=$((VMIN+1))
+                  VPAT=0
+              fi
+              VFULL=${VMAJ}.${VMIN}.${VPAT}
+              VTAG=v$VFULL
+          else
+              MB=$(git merge-base refs/remotes/origin/main HEAD)
+              VPAT=$(git rev-list --count --no-merges ${MB}..HEAD)
+              VFULL=${VMAJ}.${VMIN}.${VPAT}
+              RNAME=${GITHUB_REF_NAME##*/}
+              [ "$GITHUB_EVENT_NAME" = "pull_request" ] && RNAME=pr${GITHUB_REF_NAME%/merge}
+              VTAG=v${VFULL}-${RNAME}
+          fi
+
+          # Output variables for use in subsequent jobs environment
+          echo "::set-output name=tag_name::${VTAG}"
+          echo "::set-output name=vtag::${VTAG}"
+          echo "::set-output name=vfull::${VFULL}"
+          echo "::set-output name=image_name::${IMAGE_NAME}"
+          echo "✅ New Build Tag: $VTAG" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Docker Image: ${IMAGE_NAME}:${VTAG}" >> $GITHUB_STEP_SUMMARY
+          echo "❌ Old Major Tag: $VLAST"  >> $GITHUB_STEP_SUMMARY
+        
+  Build-Test:
+    name: Test Docker Image
+    if: |
+      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'test' || github.base_ref == 'dev')) ||
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
+        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
+      )
+    runs-on: ubuntu-latest
+    needs: Generate-Tag
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
-          go-version: '1.22.x'
-          cache-dependency-path: |
-            launcher/go.sum
-            proxy-router/go.sum
+          fetch-depth: 0
+          fetch-tags: true
 
-      - name: Setup node
-        uses: actions/setup-node@v4
+      - name: Build Docker Image to Test
+        run: |
+          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          BUILDIMAGE=${{ needs.Generate-Tag.outputs.image_name }}
+          BUILDCOMMIT=${{ github.sha }}
+          docker build \
+            --platform linux/amd64 \
+            --build-arg TAG_NAME=$BUILDTAG \
+            --build-arg COMMIT=$BUILDCOMMIT \
+            --load \
+            -t $BUILDIMAGE:$BUILDTAG \
+            -f proxy-router/Dockerfile \
+            proxy-router || (echo "❌ Failed to build image with tag: $BUILDIMAGE:$BUILDTAG" && exit 1)
+          echo "✅ Morpheus-Router Test Build Successful!"
+
+      - name: Run Docker Tests
+        uses: ./.github/actions/docker_test
         with:
-          node-version: 20
-          cache: 'yarn'
-          cache-dependency-path: ui-desktop/yarn.lock
-
-      - name: Install dependencies
-        run: |
-          cd launcher
-          go mod tidy
-          cd ../proxy-router
-          go mod download
-          cd ../ui-desktop
-          python3 -m pip install setuptools
-          yarn install --network-timeout 600000
-
-      - name: Copy Environment Files
-        uses: ./.github/actions/copy_env_files
-
-      - name: Build
-        id: build
-        run: |
-          cd launcher
-          make
-          cd ../proxy-router
-          make build
-          cd ../cli
-          make build
-          cd ../ui-desktop
-          echo "Injecting version ${{ env.VFULL }} into package.json"
-          sed -i "" "s/\"version\": \".*\"/\"version\": \"${{ env.VFULL }}\"/" package.json
-          cat package.json | grep '"version"'  # Optional: Verify the change
-          yarn build:mac
-
-      - name: Pack artifacts
-        id: pack_artifacts
-        run: |
-          OS_NAME="macos-x64"
-          BIN_NAME="macos-x64"
-          echo "Artifact: mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip"
-          echo "LLAMA Binary: ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip"
-          echo "LLAMA Model: ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}"
-          wget -nv ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip
-          wget -nv ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}
-          unzip -o -j ${{ env.LLAMA_FILEBASE}}-$BIN_NAME.zip build/bin/llama-server
-          echo '{
-            "run": [
-              "./llama-server --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
-              "./proxy-router",
-              "./MorpheusUI.app/Contents/MacOS/MorpheusUI"
-            ]
-          }' > mor-launch.json
-          echo "############# Contents of mor-launch.json: ############# "
-          cat mor-launch.json
-          mv ./cli/mor-cli mor-cli
-          unzip ./ui-desktop/dist/morpheus-ui-${{ env.VFULL }}-x64-mac.zip
-          zip -j mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/proxy-router .env ${{ env.MODEL_NAME}} mor-launch.json models-config.json rating-config.json mor-cli
-          zip -r mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip 'MorpheusUI.app'
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          path: mor-launch-${{ env.TAG_NAME }}-macos-x64.zip
-          name: mor-launch-macos-x64.zip
+          image: "${{ needs.Generate-Tag.outputs.image_name }}:${{ needs.Generate-Tag.outputs.tag_name }}"
+          private_key: ${{ secrets.TEST_PRIVATE_KEY }}     
 
   macOS-14-arm64:
     name: Build macOS-arm64 Image
@@ -258,6 +181,9 @@ jobs:
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
       )
     runs-on: macos-14
+    needs: 
+      - Generate-Tag
+      - Build-Test
     steps:
       - name: Clone
         id: checkout
@@ -265,17 +191,6 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-      
-      - name: Generate Tag Name
-        uses: ./.github/actions/gen_tag_name
-
-      - name: Verify environment variables
-        run: |
-          echo "TAG_NAME=${{ env.TAG_NAME }}"
-          echo "VTAG=${{ env.VTAG }}"
-          echo "VFULL=${{ env.VFULL }}" 
-          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
-          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"       
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -308,15 +223,16 @@ jobs:
       - name: Build
         id: build
         run: |
+          FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
           cd launcher
           make
           cd ../proxy-router
-          make build
+          make build TAG_NAME="${{ needs.Generate-Tag.outputs.tag_name }}"
           cd ../cli
           make build
           cd ../ui-desktop
-          echo "Injecting version ${{ env.VFULL }}} into package.json"
-          sed -i "" "s/\"version\": \".*\"/\"version\": \"${{ env.VFULL }}\"/" package.json
+          echo "Injecting version $FULLTAG into package.json"
+          sed -i "" "s/\"version\": \".*\"/\"version\": \"$FULLTAG\"/" package.json
           cat package.json | grep '"version"'  # Optional: Verify the change
           yarn build:mac
 
@@ -325,7 +241,9 @@ jobs:
         run: |
           OS_NAME="macos-arm64"
           BIN_NAME="macos-arm64"
-          echo "Artifact: mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip"
+          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
+          echo "Artifact: mor-launch-$BUILDTAG-$OS_NAME.zip"
           echo "LLAMA Binary: ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip"
           echo "LLAMA Model: ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}"
           wget -nv ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip
@@ -341,15 +259,208 @@ jobs:
           echo "############# Contents of mor-launch.json: ############# "
           cat mor-launch.json
           mv ./cli/mor-cli mor-cli
-          unzip ./ui-desktop/dist/morpheus-ui-${{ env.VFULL }}-arm64-mac.zip
-          zip -j mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/proxy-router .env ${{ env.MODEL_NAME}} mor-launch.json models-config.json rating-config.json mor-cli
-          zip -r mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip 'MorpheusUI.app'
+          unzip ./ui-desktop/dist/morpheus-ui-$FULLTAG-arm64-mac.zip
+          zip -j mor-launch-$BUILDTAG-$OS_NAME.zip ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/proxy-router .env ${{ env.MODEL_NAME}} mor-launch.json models-config.json rating-config.json mor-cli
+          zip -r mor-launch-$BUILDTAG-$OS_NAME.zip 'MorpheusUI.app'
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          path: mor-launch-${{ env.TAG_NAME }}-macos-arm64.zip
+          path: mor-launch-${{ needs.Generate-Tag.outputs.tag_name }}-macos-arm64.zip
           name: mor-launch-macos-arm64.zip
+  
+  Ubuntu-22-x64:
+    name: Build Ubuntu Image
+    if: |
+      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
+      )
+    runs-on: ubuntu-22.04
+    needs: 
+      - Generate-Tag
+      - Build-Test
+    steps:
+      - name: Clone
+        id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+          cache-dependency-path: |
+            launcher/go.sum
+            proxy-router/go.sum
+
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'yarn'
+          cache-dependency-path: ui-desktop/yarn.lock
+
+      - name: Install dependencies
+        run: |
+          cd launcher
+          go mod tidy
+          cd ../proxy-router
+          go mod download
+          cd ../ui-desktop
+          yarn install --network-timeout 600000
+
+      - name: Copy Environment Files
+        uses: ./.github/actions/copy_env_files
+
+      - name: Build
+        id: build
+        run: |
+          FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
+          cd launcher
+          make
+          cd ../proxy-router
+          make build TAG_NAME="${{ needs.Generate-Tag.outputs.tag_name }}"
+          cd ../cli
+          make build
+          cd ../ui-desktop
+          echo "Injecting version $FULLTAG into package.json"
+          sed -i "s/\"version\": \".*\"/\"version\": \"$FULLTAG\"/" package.json
+          cat package.json | grep '"version"'  # Optional: Verify the change
+          yarn build:linux
+
+      - name: Pack artifacts
+        id: pack_artifacts
+        run: |
+          OS_NAME="ubuntu-x64"
+          BIN_NAME="ubuntu-x64"
+          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
+          echo "Artifact: mor-launch-$BUILDTAG-$OS_NAME.zip"
+          echo "LLAMA Binary: ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip"
+          echo "LLAMA Model: ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}"
+          wget -nv ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip
+          wget -nv ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}
+          unzip -o -j ${{ env.LLAMA_FILEBASE}}-$BIN_NAME.zip build/bin/llama-server
+          echo '{
+            "run": [
+              "./llama-server --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
+              "./proxy-router",
+              "./morpheus-ui-'$FULLTAG'-x86_64-linux.AppImage"
+            ]
+          }' > mor-launch.json
+
+          echo "############# Contents of mor-launch.json: ############# "
+          cat mor-launch.json
+
+          mv ./cli/mor-cli mor-cli
+          zip -j mor-launch-$BUILDTAG-$OS_NAME.zip ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/proxy-router .env ${{ env.MODEL_NAME}} mor-launch.json ./ui-desktop/dist/morpheus-ui-$FULLTAG-x86_64-linux.AppImage models-config.json rating-config.json mor-cli
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          path: mor-launch-${{ needs.Generate-Tag.outputs.tag_name }}-ubuntu-x64.zip
+          name: mor-launch-ubuntu-x64.zip
+
+  macOS-13-x64:
+    name: Build macOS-x64 Image
+    if: |
+      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
+      )
+    runs-on: macos-13
+    needs: 
+      - Generate-Tag
+      - Build-Test
+    steps:
+      - name: Clone
+        id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true    
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+          cache-dependency-path: |
+            launcher/go.sum
+            proxy-router/go.sum
+
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'yarn'
+          cache-dependency-path: ui-desktop/yarn.lock
+
+      - name: Install dependencies
+        run: |
+          cd launcher
+          go mod tidy
+          cd ../proxy-router
+          go mod download
+          cd ../ui-desktop
+          python3 -m pip install setuptools
+          yarn install --network-timeout 600000
+
+      - name: Copy Environment Files
+        uses: ./.github/actions/copy_env_files
+
+      - name: Build
+        id: build
+        run: |
+          FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
+          cd launcher
+          make
+          cd ../proxy-router
+          make build TAG_NAME="${{ needs.Generate-Tag.outputs.tag_name }}"
+          cd ../cli
+          make build
+          cd ../ui-desktop
+          echo "Injecting version $FULLTAG into package.json"
+          sed -i "" "s/\"version\": \".*\"/\"version\": \"$FULLTAG\"/" package.json
+          cat package.json | grep '"version"'  # Optional: Verify the change
+          yarn build:mac
+
+      - name: Pack artifacts
+        id: pack_artifacts
+        run: |
+          OS_NAME="macos-x64"
+          BIN_NAME="macos-x64"
+          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
+          echo "Artifact: mor-launch-$BUILDTAG-$OS_NAME.zip"
+          echo "LLAMA Binary: ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip"
+          echo "LLAMA Model: ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}"
+          wget -nv ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip
+          wget -nv ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}
+          unzip -o -j ${{ env.LLAMA_FILEBASE}}-$BIN_NAME.zip build/bin/llama-server
+          echo '{
+            "run": [
+              "./llama-server --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
+              "./proxy-router",
+              "./MorpheusUI.app/Contents/MacOS/MorpheusUI"
+            ]
+          }' > mor-launch.json
+          echo "############# Contents of mor-launch.json: ############# "
+          cat mor-launch.json
+          mv ./cli/mor-cli mor-cli
+          unzip ./ui-desktop/dist/morpheus-ui-$FULLTAG-x64-mac.zip
+          zip -j mor-launch-$BUILDTAG-$OS_NAME.zip ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/proxy-router .env ${{ env.MODEL_NAME}} mor-launch.json models-config.json rating-config.json mor-cli
+          zip -r mor-launch-$BUILDTAG-$OS_NAME.zip 'MorpheusUI.app'
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          path: mor-launch-${{ needs.Generate-Tag.outputs.tag_name }}-macos-x64.zip
+          name: mor-launch-macos-x64.zip
 
   Windows-avx2-x64:
     name: Build Windows Image
@@ -360,6 +471,9 @@ jobs:
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
       )
     runs-on: windows-latest
+    needs: 
+      - Generate-Tag
+      - Build-Test
     steps:
       - name: Clone
         id: checkout
@@ -367,17 +481,6 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-          
-      - name: Generate Tag Name
-        uses: ./.github/actions/gen_tag_name    
-      
-      - name: Verify environment variables
-        run: |
-          echo "TAG_NAME=${{ env.TAG_NAME }}"
-          echo "VTAG=${{ env.VTAG }}"
-          echo "VFULL=${{ env.VFULL }}" 
-          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
-          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"       
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -414,15 +517,16 @@ jobs:
       - name: Build
         id: build
         run: |
+          FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}       
           cd launcher
           make
           cd ../proxy-router
-          make build
+          make build TAG_NAME="${{ needs.Generate-Tag.outputs.tag_name }}"
           cd ../cli
           make build
           cd ../ui-desktop
-          echo "Injecting version ${{ env.VFULL }} into package.json"
-          sed -i "s/\"version\": \".*\"/\"version\": \"${{ env.VFULL }}\"/" package.json
+          echo "Injecting version $FULLTAG into package.json"
+          sed -i "s/\"version\": \".*\"/\"version\": \"$FULLTAG\"/" package.json
           cat package.json | grep '"version"'  # Optional: Verify the change
           yarn build:win
 
@@ -431,7 +535,9 @@ jobs:
         run: |
           OS_NAME="win-x64"
           BIN_NAME="win-avx2-x64"
-          echo "Artifact: mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip"
+          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}    
+          echo "Artifact: mor-launch-$BUILDTAG-$OS_NAME.zip"
           echo "LLAMA Binary: ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip"
           echo "LLAMA Model: ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}"
           wget -nv ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip
@@ -441,7 +547,7 @@ jobs:
             "run": [
               "./llama-server.exe --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
               "./proxy-router.exe",
-              "./morpheus-ui-'"${{ env.VFULL }}"'-x64-win.exe"
+              "./morpheus-ui-'"$FULLTAG"'-x64-win.exe"
             ]
           }' > mor-launch.json
           echo "Contents of mor-launch.json: "
@@ -449,13 +555,13 @@ jobs:
           mv ./proxy-router/proxy-router proxy-router.exe
           mv ./cli/mor-cli mor-cli.exe
           mv ./launcher/mor-launch mor-launch.exe
-          mv "./ui-desktop/dist/morpheus-ui-${{ env.VFULL }}-x64-win" morpheus-ui-${{ env.VFULL }}-x64-win.exe
-          7z a mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip LICENSE mor-launch.exe proxy-router.exe .env llama-server.exe llama.dll ggml.dll ${{ env.MODEL_NAME}} mor-launch.json morpheus-ui-${{ env.VFULL }}-x64-win.exe models-config.json rating-config.json mor-cli.exe
+          mv "./ui-desktop/dist/morpheus-ui-$FULLTAG-x64-win" morpheus-ui-$FULLTAG-x64-win.exe
+          7z a mor-launch-$BUILDTAG-$OS_NAME.zip LICENSE mor-launch.exe proxy-router.exe .env llama-server.exe llama.dll ggml.dll ${{ env.MODEL_NAME}} mor-launch.json morpheus-ui-$FULLTAG-x64-win.exe models-config.json rating-config.json mor-cli.exe
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          path: mor-launch-${{ env.TAG_NAME }}-win-x64.zip
+          path: mor-launch-${{ needs.Generate-Tag.outputs.tag_name }}-win-x64.zip
           name: mor-launch-win-x64.zip
 
   Release:
@@ -467,7 +573,7 @@ jobs:
         (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
       )
     needs:
-      - GHCR-Test
+      - Generate-Tag
       - Ubuntu-22-x64
       - macOS-13-x64
       - macOS-14-arm64
@@ -480,17 +586,6 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-          
-      - name: Generate Tag Name
-        uses: ./.github/actions/gen_tag_name    
-
-      - name: Verify environment variables
-        run: |
-          echo "TAG_NAME=${{ env.TAG_NAME }}"
-          echo "VTAG=${{ env.VTAG }}"
-          echo "VFULL=${{ env.VFULL }}" 
-          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
-          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"       
 
       - name: Download artifacts
         id: download-artifact
@@ -508,9 +603,9 @@ jobs:
         id: create_release
         uses: anzz1/action-create-release@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
         with:
-          tag_name: ${{ env.TAG_NAME }}
+          tag_name: ${{ needs.Generate-Tag.outputs.tag_name }}
           prerelease: ${{ github.ref != 'refs/heads/main' }}
 
       - name: Upload release
@@ -535,51 +630,6 @@ jobs:
               }
             }
 
-  GHCR-Test:
-    name: Test Docker Image
-    if: |
-      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
-      (
-        (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'test' || github.base_ref == 'dev')) ||
-        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
-        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
-      )
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-          
-      - name: Generate Tag Name
-        uses: ./.github/actions/gen_tag_name 
-
-      - name: Verify environment variables
-        run: |
-          echo "TAG_NAME=${{ env.TAG_NAME }}"
-          echo "VTAG=${{ env.VTAG }}"
-          echo "VFULL=${{ env.VFULL }}" 
-          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
-          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"       
-
-      - name: Build Docker Image to Test
-        run: |
-          docker build \
-            --platform linux/amd64 \
-            --build-arg TAG_NAME=${{ env.TAG_NAME }} \
-            --build-arg COMMIT=${{ github.sha }} \
-            --load \
-            -t ${{ env.IMAGE_NAME }} \
-            -f proxy-router/Dockerfile \
-            proxy-router || (echo "Failed to build image with tag: ${{ env.IMAGE_NAME }}" && exit 1)
-
-      - name: Run Docker Tests
-        uses: ./.github/actions/docker_test
-        with:
-          image: ${{ env.IMAGE_NAME }}
-          private_key: ${{ secrets.TEST_PRIVATE_KEY }}
-
   GHCR-Build-and-Push:
     name: Build & Push Docker Image
     if: |
@@ -589,25 +639,15 @@ jobs:
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
       )
     needs: 
-      - GHCR-Test
+      - Generate-Tag
+      - Build-Test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          fetch-tags: true
-          
-      - name: Generate Tag Name
-        uses: ./.github/actions/gen_tag_name    
-       
-      - name: Verify environment variables
-        run: |
-          echo "TAG_NAME=${{ env.TAG_NAME }}"
-          echo "VTAG=${{ env.VTAG }}"
-          echo "VFULL=${{ env.VFULL }}" 
-          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
-          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"       
+          fetch-tags: true    
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -621,27 +661,29 @@ jobs:
 
       - name: Build and Push Multi-Platform Docker Image
         run: |
+          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          BUILDIMAGE=${{ needs.Generate-Tag.outputs.image_name }}
+          BUILDCOMMIT=${{ github.sha }}
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
-            --build-arg TAG_NAME=${{ env.TAG_NAME }} \
-            --build-arg COMMIT=${{ github.sha }} \
+            --build-arg TAG_NAME=$BUILDTAG \
+            --build-arg COMMIT=$BUILDCOMMIT \
             --push \
-            -t ${{ env.IMAGE_NAME }} \
+            -t $BUILDIMAGE:$BUILDTAG \
             -f proxy-router/Dockerfile \
-            proxy-router || (echo "Failed to push image with tag: ${{ env.IMAGE_NAME }}" && exit 1)
+            proxy-router || (echo "❌ Failed to push image with tag: $BUILDIMAGE:$BUILDTAG" && exit 1)
+          echo "✅ Proxy-Router Build and Push of $BUILDIMAGE:$BUILDTAG Successful!"
 
       - name: Optionally Push Latest Tag
         if: ${{ github.ref == 'refs/heads/main' }}
         run: |
-          echo "Pulling image before tagging as :latest"
-          docker pull ${{ env.IMAGE_NAME }} || (echo "Failed to pull image: ${{ env.IMAGE_NAME }}" && exit 1)
-          
-          echo "Tagging image as :latest"
-          LATEST_IMAGE=${{ env.IMAGE_NAME_BASE }}:latest
-          docker tag ${{ env.IMAGE_NAME }} $LATEST_IMAGE
-          
-          echo "Pushing image as :latest"
-          docker push $LATEST_IMAGE || (echo "Failed to push image as :latest" && exit 1)
+          BUILDIMAGE=${{ needs.Generate-Tag.outputs.image_name }}
+          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          docker pull $BUILDIMAGE:$BUILDTAG || (echo "❌ Failed to pull image: $BUILDIMAGE:$BUILDTAG" && exit 1)
+          docker tag $BUILDIMAGE:$BUILDTAG $BUILDIMAGE:latest || (echo "❌ Failed to tag image as :latest" && exit 1)
+          docker push $BUILDIMAGE:latest || (echo "❌ Failed to push image as :latest" && exit 1)
+          echo "✅ Morpheus-Router Push $BUILDIMAGE:latest Tag Successful!"
+
   GitLab-Deploy:
     name: Deploy to GitLab
     if: |
@@ -650,6 +692,7 @@ jobs:
         (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test'))
       )
     needs: 
+      - Generate-Tag
       - GHCR-Build-and-Push
     runs-on: ubuntu-latest
     steps:
@@ -658,49 +701,36 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          fetch-tags: true
-          
-      - name: Generate Tag Name
-        uses: ./.github/actions/gen_tag_name    
-      
-      - name: Verify environment variables
-        run: |
-          echo "TAG_NAME=${{ env.TAG_NAME }}"
-          echo "VTAG=${{ env.VTAG }}"
-          echo "VFULL=${{ env.VFULL }}" 
-          echo "IMAGE_NAME_BASE=${{ env.IMAGE_NAME_BASE }}"
-          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}"       
+          fetch-tags: true   
 
       - name: Install dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Determine GitLab Target Branch
-        id: set_target_branch
-        run: |
-          if [ "${{ github.ref_name }}" == "test" ]; then
-            echo "gitlab_branch=dev" >> $GITHUB_ENV
-          elif [ "${{ github.ref_name }}" == "main" ]; then
-            echo "gitlab_branch=main" >> $GITHUB_ENV
-          else
-            echo "This branch is not configured to trigger GitLab pipelines."
-            exit 1
-          fi
-
       - name: Trigger GitLab Pipeline
         run: |
-          echo "Triggering GitLab Build and Deploy for branch ${{ github.ref_name }} with tag ${{ env.TAG_NAME }}"
-      
-          # Send request to GitLab
+          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}       
+          echo "Triggering GitLab Deploy for branch ${{ github.ref_name }} with tag $BUILDTAG"
+          # Determine branch
+          if [ "${{ github.ref_name }}" == "test" ]; then
+            GITLABBRANCH="dev"
+          elif [ "${{ github.ref_name }}" == "main" ]; then
+            GITLABBRANCH="main"
+          else
+            echo "❌ This branch is not configured to trigger GitLab pipelines."
+            exit 1
+          fi
+          echo "✅ Sending Request to GitLab branch: $GITLABBRANCH"
           response=$(curl --silent \
             --request POST \
             --url "${{ secrets.GITLAB_TRIGGER_URL }}" \
             --form "token=${{ secrets.GITLAB_TRIGGER_TOKEN }}" \
-            --form "ref=${{ env.gitlab_branch }}" \
+            --form "ref=$GITLABBRANCH" \
             --form "variables[SOURCE_REPO]=${{ github.repository }}" \
             --form "variables[SOURCE_BRANCH]=${{ github.ref_name }}" \
-            --form "variables[GITHUB_VFULL]=${{ env.VFULL }}" \
-            --form "variables[GITHUB_TAG]=${{ env.TAG_NAME }}")
+            --form "variables[GITHUB_VFULL]=$FULLTAG" \
+            --form "variables[GITHUB_TAG]=$BUILDTAG")
       
           # Parse JSON response using jq
           gitlab_status=$(echo "$response" | jq -r '.status // "unknown"')
@@ -711,10 +741,10 @@ jobs:
       
           # Validate the status field
           if [[ "$gitlab_status" =~ ^(created|preparing|success|running|scheduled)$ ]]; then
-            echo "GitLab pipeline triggered successfully! Status: $gitlab_status"
+            echo "✅ GitLab pipeline triggered successfully! Status: $gitlab_status"
             echo "Pipeline details: $gitlab_web_url"
           else
-            echo "GitLab pipeline FAILED. Invalid status: $gitlab_status"
+            echo "❌ GitLab pipeline FAILED. Invalid status: $gitlab_status"
             echo "Pipeline details: $gitlab_web_url"
             exit 1
           fi

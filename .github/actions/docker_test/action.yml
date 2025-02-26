@@ -73,8 +73,8 @@ runs:
           fi
           sleep 1
         done
-        echo "✅ Proxy-Router started successfully!"
-        echo "Running proxy-router container version: $(curl -s http://localhost:8082/swagger/doc.json | jq -r '.info.version')"
+        echo "✅ Morpheus Proxy-Router started successfully!"
+        echo "Running Morpheus proxy-router container version: $(curl -s http://localhost:8082/swagger/doc.json | jq -r '.info.version')"
         echo "📜 Fetching container logs:"
         docker logs test-container
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import Select from "react-select";
 import {
@@ -64,6 +64,22 @@ const DisconnectedIcon = styled(IconPlugConnectedX)`
     margin-left: 10px;
 `
 
+const TagsContainer = styled.div`
+    padding-left: 5px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+`
+
+const Tag = styled.div`
+    font-size: 1.1rem;
+    background: #20dc8e;
+    color: #03160e;
+    padding: 3px;
+    border-radius: 5px;
+`
+
 const selectorStyles = {
     control: (base) => ({ ...base, borderColor: '#20dc8e', width: '100%', background: 'transparent' }),
     option: (base, state) => ({
@@ -100,10 +116,25 @@ function ModelRow(props) {
     const modelId = props?.model?.Id || '';
     const isLocal = props?.model?.isLocal;
     const lastAvailabilityCheck: Date = new Date(props?.model?.lastCheck ?? new Date());
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [isOverflowing, setIsOverflowing] = useState(false);
 
     const [selected, changeSelected] = useState<any>();
     const [useSelect, setUseSelect] = useState<boolean>();
     const [targetBid, setTargetBid] = useState<any>();
+
+    useEffect(() => {
+        const checkOverflow = () => {
+            if (containerRef.current) {
+                const isContentOverflowing = containerRef.current.scrollWidth > containerRef.current.clientWidth;
+                setIsOverflowing(isContentOverflowing);
+            }
+        };
+
+        checkOverflow();
+        window.addEventListener('resize', checkOverflow);
+        return () => window.removeEventListener('resize', checkOverflow);
+    }, [props.model]);
 
     const options = bids.map(x => {
         return ({ value: x.Id, label: `${abbreviateAddress(x.Provider || "", 3)} ${formatSmallNumber(x.PricePerSecond / (10 ** 18))} ${props.symbol}` })
@@ -124,27 +155,39 @@ function ModelRow(props) {
 
     const formatPrice = () => {
         if (targetBid) {
-            return `${formatSmallNumber(targetBid?.PricePerSecond / (10 ** 18))} ${props.symbol}`;
+            return `${formatSmallNumber(targetBid?.PricePerSecond / (10 ** 18))} ${props.symbol}/s`;
         }
 
         const prices = bids.filter(x => x.Id).map(x => Number(x.PricePerSecond));
         if (prices.length == 1) {
-            return `${formatSmallNumber(prices[0] / (10 ** 18))} ${props.symbol}`;
+            return `${formatSmallNumber(prices[0] / (10 ** 18))} ${props.symbol}/s`;
         }
 
         const minPrice = Math.min(...prices);
         const maxPrice = Math.max(...prices);
 
-        return `${formatSmallNumber(minPrice / (10 ** 18))} - ${formatSmallNumber(maxPrice / (10 ** 18))} ${props.symbol}`
+        return `${formatSmallNumber(minPrice / (10 ** 18))} - ${formatSmallNumber(maxPrice / (10 ** 18))} ${props.symbol}/s`
     }
+
+    const dataRh = `${props?.model?.Name} ${props.model?.Tags?.length ? `(${props.model?.Tags?.join(', ')})` : ''}`
 
     return (
         <RowContainer useSelect={useSelect}>
-            <ModelNameContainer>
+            <ModelNameContainer 
+                ref={containerRef}
+                {...(isOverflowing ? { 'data-rh': dataRh } : {})}>
                 { props?.model?.Name } 
                 { 
                     !props?.model?.isOnline && 
                     <DisconnectedIcon data-rh-negative data-rh={`Last seen offline at ${lastAvailabilityCheck?.toLocaleTimeString()}`} /> 
+                }
+                {
+                    props?.model?.Tags?.length > 0 &&
+                    <TagsContainer>
+                        {props?.model?.Tags?.map((tag) => (
+                            <Tag key={tag}>{tag}</Tag>
+                        ))}
+                    </TagsContainer>
                 }
             </ModelNameContainer>
             <PriceContainer>
