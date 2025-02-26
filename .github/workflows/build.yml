@@ -254,7 +254,7 @@ jobs:
             "model_repo": "${{ env.MODEL_REPO }}",
             "model_name": "${{ env.MODEL_NAME }}",
             "run": [
-              "./llama-server --no-webui -m ./${{ env.MODEL_NAME }}",
+              "./llama-server --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
               "./proxy-router",
               "./MorpheusUI.app/Contents/MacOS/MorpheusUI"
             ]
@@ -278,7 +278,7 @@ jobs:
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/reduce') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
       )
     runs-on: ubuntu-22.04
@@ -344,24 +344,26 @@ jobs:
           BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
           echo "Artifact: mor-launch-$BUILDTAG-$OS_NAME.zip"
-          echo "LLAMA Binary: ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip"
-          echo "LLAMA Model: ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}"
-          wget -nv ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip
-          wget -nv ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}
-          unzip -o -j ${{ env.LLAMA_FILEBASE}}-$BIN_NAME.zip build/bin/llama-server
-          echo '{
+          cat <<EOF > mor-launch.json
+          {
+            "llama_url": "${{ env.LLAMA_URL }}",
+            "llama_release": "${{ env.LLAMA_RELEASE }}",
+            "llama_filebase": "${{ env.LLAMA_FILEBASE }}",
+            "model_url": "${{ env.MODEL_URL }}",
+            "model_owner": "${{ env.MODEL_OWNER }}",
+            "model_repo": "${{ env.MODEL_REPO }}",
+            "model_name": "${{ env.MODEL_NAME }}",
             "run": [
               "./llama-server --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
               "./proxy-router",
               "./morpheus-ui-'$FULLTAG'-x86_64-linux.AppImage"
             ]
-          }' > mor-launch.json
-
+          }
+          EOF
           echo "############# Contents of mor-launch.json: ############# "
           cat mor-launch.json
-
           mv ./cli/mor-cli mor-cli
-          zip -j mor-launch-$BUILDTAG-$OS_NAME.zip ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/proxy-router .env ${{ env.MODEL_NAME}} mor-launch.json ./ui-desktop/dist/morpheus-ui-$FULLTAG-x86_64-linux.AppImage models-config.json rating-config.json mor-cli
+          zip -j mor-launch-$BUILDTAG-$OS_NAME.zip ./LICENSE ./launcher/mor-launch ./proxy-router/proxy-router .env mor-launch.json ./ui-desktop/dist/morpheus-ui-$FULLTAG-x86_64-linux.AppImage models-config.json rating-config.json mor-cli
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -374,7 +376,7 @@ jobs:
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/reduce') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
       )
     runs-on: macos-13
@@ -441,23 +443,27 @@ jobs:
           BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
           echo "Artifact: mor-launch-$BUILDTAG-$OS_NAME.zip"
-          echo "LLAMA Binary: ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip"
-          echo "LLAMA Model: ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}"
-          wget -nv ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip
-          wget -nv ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}
-          unzip -o -j ${{ env.LLAMA_FILEBASE}}-$BIN_NAME.zip build/bin/llama-server
-          echo '{
+          cat <<EOF > mor-launch.json
+          {
+            "llama_url": "${{ env.LLAMA_URL }}",
+            "llama_release": "${{ env.LLAMA_RELEASE }}",
+            "llama_filebase": "${{ env.LLAMA_FILEBASE }}",
+            "model_url": "${{ env.MODEL_URL }}",
+            "model_owner": "${{ env.MODEL_OWNER }}",
+            "model_repo": "${{ env.MODEL_REPO }}",
+            "model_name": "${{ env.MODEL_NAME }}",
             "run": [
-              "./llama-server --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
+              "./llama-server --no-webui -m ./${{ env.MODEL_NAME }}",
               "./proxy-router",
               "./MorpheusUI.app/Contents/MacOS/MorpheusUI"
             ]
-          }' > mor-launch.json
+          }
+          EOF
           echo "############# Contents of mor-launch.json: ############# "
           cat mor-launch.json
           mv ./cli/mor-cli mor-cli
           unzip ./ui-desktop/dist/morpheus-ui-$FULLTAG-x64-mac.zip
-          zip -j mor-launch-$BUILDTAG-$OS_NAME.zip ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/proxy-router .env ${{ env.MODEL_NAME}} mor-launch.json models-config.json rating-config.json mor-cli
+          zip -j mor-launch-$BUILDTAG-$OS_NAME.zip ./LICENSE ./launcher/mor-launch ./proxy-router/proxy-router .env mor-launch.json models-config.json rating-config.json mor-cli
           zip -r mor-launch-$BUILDTAG-$OS_NAME.zip 'MorpheusUI.app'
 
       - name: Upload artifacts
@@ -471,7 +477,7 @@ jobs:
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/reduce') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
       )
     runs-on: windows-latest
@@ -542,25 +548,29 @@ jobs:
           BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}    
           echo "Artifact: mor-launch-$BUILDTAG-$OS_NAME.zip"
-          echo "LLAMA Binary: ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip"
-          echo "LLAMA Model: ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}"
-          wget -nv ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip
-          wget -nv ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}
-          unzip -o -j ${{ env.LLAMA_FILEBASE}}-$BIN_NAME.zip llama-server.exe llama.dll ggml.dll
-          echo '{
+          cat <<EOF > mor-launch.json
+          {
+            "llama_url": "${{ env.LLAMA_URL }}",
+            "llama_release": "${{ env.LLAMA_RELEASE }}",
+            "llama_filebase": "${{ env.LLAMA_FILEBASE }}",
+            "model_url": "${{ env.MODEL_URL }}",
+            "model_owner": "${{ env.MODEL_OWNER }}",
+            "model_repo": "${{ env.MODEL_REPO }}",
+            "model_name": "${{ env.MODEL_NAME }}",
             "run": [
               "./llama-server.exe --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
               "./proxy-router.exe",
               "./morpheus-ui-'"$FULLTAG"'-x64-win.exe"
             ]
-          }' > mor-launch.json
-          echo "Contents of mor-launch.json: "
+          }
+          EOF
+          echo "############# Contents of mor-launch.json: ############# "
           cat mor-launch.json
           mv ./proxy-router/proxy-router proxy-router.exe
           mv ./cli/mor-cli mor-cli.exe
           mv ./launcher/mor-launch mor-launch.exe
           mv "./ui-desktop/dist/morpheus-ui-$FULLTAG-x64-win" morpheus-ui-$FULLTAG-x64-win.exe
-          7z a mor-launch-$BUILDTAG-$OS_NAME.zip LICENSE mor-launch.exe proxy-router.exe .env llama-server.exe llama.dll ggml.dll ${{ env.MODEL_NAME}} mor-launch.json morpheus-ui-$FULLTAG-x64-win.exe models-config.json rating-config.json mor-cli.exe
+          7z a mor-launch-$BUILDTAG-$OS_NAME.zip LICENSE mor-launch.exe proxy-router.exe .env llama.dll ggml.dll mor-launch.json morpheus-ui-$FULLTAG-x64-win.exe models-config.json rating-config.json mor-cli.exe
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -573,7 +583,7 @@ jobs:
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/reduce') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
       )
     needs:
