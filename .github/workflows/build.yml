@@ -223,14 +223,11 @@ jobs:
       - name: Build
         id: build
         run: |
-          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }}
-          echo "TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }}" >> $GITHUB_ENV
-          echo "Outbound TAG_NAME=${{ env.TAG_NAME }}"
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
           cd launcher
           make
           cd ../proxy-router
-          make build 
+          make build TAG_NAME="${{ needs.Generate-Tag.outputs.tag_name }}"
           cd ../cli
           make build
           cd ../ui-desktop
@@ -322,13 +319,11 @@ jobs:
       - name: Build
         id: build
         run: |
-          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }}
-          echo "TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }}" >> $GITHUB_ENV
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
           cd launcher
           make
           cd ../proxy-router
-          make build
+          make build TAG_NAME="${{ needs.Generate-Tag.outputs.tag_name }}"
           cd ../cli
           make build
           cd ../ui-desktop
@@ -421,13 +416,11 @@ jobs:
       - name: Build
         id: build
         run: |
-          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }}
-          echo "TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }}" >> $GITHUB_ENV
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
           cd launcher
           make
           cd ../proxy-router
-          make build
+          make build TAG_NAME="${{ needs.Generate-Tag.outputs.tag_name }}"
           cd ../cli
           make build
           cd ../ui-desktop
@@ -524,13 +517,11 @@ jobs:
       - name: Build
         id: build
         run: |
-          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }}
-          echo "TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }}" >> $GITHUB_ENV
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}       
           cd launcher
           make
           cd ../proxy-router
-          make build
+          make build TAG_NAME="${{ needs.Generate-Tag.outputs.tag_name }}"
           cd ../cli
           make build
           cd ../ui-desktop
