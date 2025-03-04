@@ -368,7 +368,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          path: mor-launch-$BUILDTAG-ubuntu-x64.zip
+          path: mor-launch-${{ needs.Generate-Tag.outputs.tag_name }}-ubuntu-x64.zip
           name: mor-launch-ubuntu-x64.zip
 
   macOS-13-x64:
