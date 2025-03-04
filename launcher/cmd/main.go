@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 
 	"github.com/google/shlex"
@@ -48,6 +50,19 @@ func getBinName() string {
 	}
 
 	return fmt.Sprintf("%s-%s", osName, archName)
+}
+
+// Prompts the user for confirmation
+func askForConfirmation(prompt string) bool {
+	fmt.Print(prompt + " [y/N]: ")
+	reader := bufio.NewReader(os.Stdin)
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		log.Printf("Failed to read input: %v", err)
+		return false
+	}
+	response = strings.TrimSpace(strings.ToLower(response))
+	return response == "y" || response == "yes"
 }
 
 // Downloads a file from a given URL
@@ -134,6 +149,9 @@ func main() {
 		log.Fatalf("Error reading config file: %v", err)
 	}
 
+	// Ask the user for confirmation before downloading
+	runLlamaServer := askForConfirmation("Do you want to download and run a local model for testing?")
+
 	// Determine correct binary name
 	binName := getBinName()
 	llamaZip := filepath.Join(base, fmt.Sprintf("%s-%s.zip", config.LlamaFileBase, binName))
@@ -144,27 +162,34 @@ func main() {
 	llamaDownloadURL := fmt.Sprintf("%s/%s/%s-%s.zip", config.LlamaURL, config.LlamaRelease, config.LlamaFileBase, binName)
 	modelDownloadURL := fmt.Sprintf("%s/%s/%s/resolve/main/%s", config.ModelURL, config.ModelOwner, config.ModelRepo, config.ModelName)
 
-	// Download necessary files
-	if err := downloadFile(llamaZip, llamaDownloadURL); err != nil {
-		log.Fatalf("Failed to download Llama binary: %v", err)
-	}
-	if err := downloadFile(modelFile, modelDownloadURL); err != nil {
-		log.Fatalf("Failed to download model file: %v", err)
-	}
+	if runLlamaServer {
+		// Download necessary files
+		if err := downloadFile(llamaZip, llamaDownloadURL); err != nil {
+			log.Fatalf("Failed to download Llama binary: %v", err)
+		}
+		if err := downloadFile(modelFile, modelDownloadURL); err != nil {
+			log.Fatalf("Failed to download model file: %v", err)
+		}
 
-	// Extract llama-server binary
-	if err := extractFileFromZip(llamaZip, "build/bin/llama-server", llamaBinary); err != nil {
-		log.Fatalf("Failed to extract llama-server: %v", err)
-	}
+		// Extract llama-server binary
+		if err := extractFileFromZip(llamaZip, "build/bin/llama-server", llamaBinary); err != nil {
+			log.Fatalf("Failed to extract llama-server: %v", err)
+		}
 
-	// Set execute permission on llama-server
-	if err := os.Chmod(llamaBinary, 0755); err != nil {
-		log.Fatalf("Failed to set execute permission on llama-server: %v", err)
+		// Set execute permission on llama-server
+		if err := os.Chmod(llamaBinary, 0755); err != nil {
+			log.Fatalf("Failed to set execute permission on llama-server: %v", err)
+		}
 	}
 
 	// Execute commands from config
 	var wg sync.WaitGroup
 	for _, cmdStr := range config.Run {
+		if !runLlamaServer && strings.Contains(cmdStr, "llama-server") {
+			log.Println("Skipping llama-server command based on user input.")
+			continue
+		}
+
 		wg.Add(1)
 		go func(cmdStr string) {
 			defer wg.Done()
