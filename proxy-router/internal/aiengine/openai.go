@@ -63,6 +63,19 @@ func (a *OpenAI) Prompt(ctx context.Context, compl *openai.ChatCompletionRequest
 	defer resp.Body.Close()
 
 	a.log.Debugf("AI Model responded with status code: %d", resp.StatusCode)
+
+	if resp.StatusCode != http.StatusOK {
+		var errorBody interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&errorBody); err != nil {
+			return fmt.Errorf("failed to decode response: %v", err)
+		}
+		json, err := json.MarshalIndent(errorBody, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to decode error response: %v", err)
+		}
+		return fmt.Errorf("AI Model responded with error: %s", string(json))
+	}
+
 	if isContentTypeStream(resp.Header) {
 		return a.readStream(ctx, resp.Body, cb)
 	}

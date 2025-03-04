@@ -27,16 +27,136 @@ definitions:
         type: array
       username:
         type: string
+    required:
+    - password
+    - perms
+    - username
+    type: object
+  authapi.AgentTxsRes:
+    properties:
+      nextCursor:
+        items:
+          type: integer
+        type: array
+      txHashes:
+        items:
+          type: string
+        type: array
+    type: object
+  authapi.AgentUser:
+    properties:
+      allowances:
+        additionalProperties:
+          type: string
+        type: object
+      isConfirmed:
+        type: boolean
+      perms:
+        items:
+          type: string
+        type: array
+      username:
+        type: string
+    type: object
+  authapi.AgentUsersRes:
+    properties:
+      agents:
+        items:
+          $ref: '#/definitions/authapi.AgentUser'
+        type: array
+    type: object
+  authapi.AllowanceRequest:
+    properties:
+      allowance:
+        type: string
+      token:
+        type: string
+      username:
+        type: string
+    type: object
+  authapi.AllowanceRequestsRes:
+    properties:
+      requests:
+        items:
+          $ref: '#/definitions/authapi.AllowanceRequest'
+        type: array
     type: object
   authapi.AuthRes:
     properties:
       result:
         type: boolean
     type: object
+  authapi.ConfirmAgentReq:
+    properties:
+      confirm:
+        type: boolean
+      username:
+        type: string
+    required:
+    - confirm
+    - username
+    type: object
+  authapi.ConfirmAllowanceReq:
+    properties:
+      confirm:
+        type: boolean
+      token:
+        type: string
+      username:
+        type: string
+    required:
+    - confirm
+    - token
+    - username
+    type: object
   authapi.RemoveUserReq:
     properties:
       username:
         type: string
+    required:
+    - username
+    type: object
+  authapi.RequestAgentUserReq:
+    properties:
+      allowances:
+        additionalProperties:
+          type: string
+        type: object
+      password:
+        type: string
+      perms:
+        items:
+          type: string
+        type: array
+      username:
+        type: string
+    required:
+    - allowances
+    - password
+    - perms
+    - username
+    type: object
+  authapi.RequestAllowanceReq:
+    properties:
+      allowance:
+        type: string
+      token:
+        type: string
+      username:
+        type: string
+    required:
+    - token
+    - username
+    type: object
+  authapi.RevokeAllowanceReq:
+    properties:
+      token:
+        type: string
+      username:
+        type: string
+    required:
+    - token
+    - username
     type: object
   genericchatstorage.Chat:
     properties:
@@ -650,6 +770,95 @@ info:
   termsOfService: http://swagger.io/terms/
   title: Morpheus Lumerin Node API
 paths:
+  /auth/allowance/confirm:
+    post:
+      description: 'Permission: agent_requests'
+      parameters:
+      - description: Confirm Token Allowance Request
+        in: body
+        name: confirmAllowanceReq
+        required: true
+        schema:
+          $ref: '#/definitions/authapi.ConfirmAllowanceReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/authapi.AuthRes'
+      security:
+      - BasicAuth: []
+      summary: Confirm or Decline Token Allowance Request
+      tags:
+      - auth
+  /auth/allowance/requests:
+    get:
+      description: 'Permission: agent_requests'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/authapi.AllowanceRequestsRes'
+      security:
+      - BasicAuth: []
+      summary: Get All Token Allowance Requests
+      tags:
+      - auth
+    post:
+      description: 'Permission: request_allowance'
+      parameters:
+      - description: Request Allowance Request with token and amount
+        in: body
+        name: requestAllowanceReq
+        required: true
+        schema:
+          $ref: '#/definitions/authapi.RequestAllowanceReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/authapi.AuthRes'
+      security:
+      - BasicAuth: []
+      summary: Request Allowance for Agent
+      tags:
+      - auth
+  /auth/allowance/revoke:
+    post:
+      description: 'Permission: agent_requests'
+      parameters:
+      - description: Revoke Token Allowance Request
+        in: body
+        name: revokeAllowanceReq
+        required: true
+        schema:
+          $ref: '#/definitions/authapi.RevokeAllowanceReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/authapi.AuthRes'
+      security:
+      - BasicAuth: []
+      summary: Revoke Token Allowance for Agent
+      tags:
+      - auth
+  /auth/cookie/path:
+    get:
+      description: Get the path to the cookie file
+      produces:
+      - application/json
+      responses: {}
+      summary: Get Path to Cookie File
+      tags:
+      - auth
   /auth/users:
     delete:
       description: 'Permission: remove_user'
@@ -669,7 +878,21 @@ paths:
             $ref: '#/definitions/authapi.AuthRes'
       security:
       - BasicAuth: []
-      summary: Add User to Proxy API
+      summary: Remove User from Proxy API
+      tags:
+      - auth
+    get:
+      description: 'Permission: agent_requests'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/authapi.AgentUsersRes'
+      security:
+      - BasicAuth: []
+      summary: Get Agent Users
       tags:
       - auth
     post:
@@ -691,6 +914,62 @@ paths:
       security:
       - BasicAuth: []
       summary: Add/Update User in Proxy Conf
+      tags:
+      - auth
+  /auth/users/{username}/txs:
+    get:
+      description: 'Permission: agent_requests'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/authapi.AgentTxsRes'
+      security:
+      - BasicAuth: []
+      summary: Get Agent Transactions
+      tags:
+      - auth
+  /auth/users/confirm:
+    post:
+      description: 'Permission: agent_requests'
+      parameters:
+      - description: Confirm Agent User Request
+        in: body
+        name: confirmAgentUserReq
+        required: true
+        schema:
+          $ref: '#/definitions/authapi.ConfirmAgentReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/authapi.AuthRes'
+      security:
+      - BasicAuth: []
+      summary: Confirm or Decline Agent User
+      tags:
+      - auth
+  /auth/users/request:
+    post:
+      parameters:
+      - description: Request Agent User Request
+        in: body
+        name: requestAgentUserReq
+        required: true
+        schema:
+          $ref: '#/definitions/authapi.RequestAgentUserReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/authapi.AuthRes'
+      summary: Request New User for Agent
       tags:
       - auth
   /blockchain/allowance:

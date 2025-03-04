@@ -7,11 +7,12 @@ import (
 )
 
 type sessionModel struct {
-	id           common.Hash
-	userAddr     common.Address
-	providerAddr common.Address
-	endsAt       *big.Int
-	modelID      common.Hash
+	id            common.Hash
+	userAddr      common.Address
+	providerAddr  common.Address
+	agentUsername string
+	endsAt        *big.Int
+	modelID       common.Hash
 
 	tpsScaled1000Arr []int
 	ttftMsArr        []int
@@ -29,6 +30,10 @@ func (s *sessionModel) UserAddr() common.Address {
 
 func (s *sessionModel) ProviderAddr() common.Address {
 	return s.providerAddr
+}
+
+func (s *sessionModel) AgentUsername() string {
+	return s.agentUsername
 }
 
 func (s *sessionModel) EndsAt() *big.Int {
@@ -59,4 +64,8 @@ func (s *sessionModel) AddStats(tpsScaled1000 int, ttftMs int) {
 
 func (s *sessionModel) SetFailoverEnabled(enabled bool) {
 	s.failoverEnabled = enabled
+}
+
+func (s *sessionModel) SetAgentUsername(username string) {
+	s.agentUsername = username
 }

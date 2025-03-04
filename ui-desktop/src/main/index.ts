@@ -31,6 +31,9 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+    if (is.dev) {
+      mainWindow.webContents.openDevTools()
+    }
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -49,48 +52,51 @@ function createWindow(): void {
 
 errorHandler({ logger: logger.error })
 
-const sleepBeforeStart = 3000;
+const sleepBeforeStart = 3000
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(() => new Promise(r => setTimeout(r, sleepBeforeStart))).then(() => {
-  app.setName("morpheus");
-  // Set app user model id for windows
-  electronApp.setAppUserModelId('com.electron')
+app
+  .whenReady()
+  .then(() => new Promise((r) => setTimeout(r, sleepBeforeStart)))
+  .then(() => {
+    app.setName('morpheus')
+    // Set app user model id for windows
+    electronApp.setAppUserModelId('com.electron')
 
-  // Default open or close DevTools by F12 in development
-  // and ignore CommandOrControl + R in production.
-  // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
-  app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
+    // Default open or close DevTools by F12 in development
+    // and ignore CommandOrControl + R in production.
+    // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
+    app.on('browser-window-created', (_, window) => {
+      optimizer.watchWindowShortcuts(window)
+    })
+
+    // install devtools
+    if (is.dev) {
+      installExtension([REDUX_DEVTOOLS])
+        .then((name) => console.log(`Added Extension:  ${name[0].name}`))
+        .catch((err) => console.log('An error occurred: ', err))
+    }
+
+    // IPC test
+    ipcMain.on('ping', () => console.log('pong'))
+
+    createWindow()
+
+    app.on('activate', function () {
+      // On macOS it's common to re-create a window in the app when the
+      // dock icon is clicked and there are no other windows open.
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    })
+
+    logger.info('App ready, initializing...')
+
+    initMenu()
+    initContextMenu()
+
+    createClient(config)
   })
-
-  // install devtools
-  if (is.dev) {
-    installExtension([REDUX_DEVTOOLS])
-      .then((name) => console.log(`Added Extension:  ${name}`))
-      .catch((err) => console.log('An error occurred: ', err))
-  }
-
-  // IPC test
-  ipcMain.on('ping', () => console.log('pong'))
-
-  createWindow()
-
-  app.on('activate', function () {
-    // On macOS it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  })
-
-  logger.info('App ready, initializing...')
-
-  initMenu()
-  initContextMenu()
-
-  createClient(config)
-})
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits

@@ -26,7 +26,6 @@ const UserMnemonic = props => {
             onPaste={e => {
               e.preventDefault();
               const value = e.clipboardData.getData('Text').trim();
-              console.log(value);
               props.onInputChange({ value, id });
             }}
             label="Recovery Mnemonic"

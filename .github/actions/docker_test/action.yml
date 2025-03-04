@@ -1,0 +1,107 @@
+name: Docker Test
+
+description: Test the published Docker image by running the container and verifying functionality.
+
+runs:
+  using: "composite"
+  steps:
+      # Pre-Launch Setup: Create necessary configuration files and directories
+    - name: Prepare Configuration and Volume Setup
+      shell: bash
+      run: |
+        echo "Setting up volumes and control files..."
+        mkdir -p /tmp/proxy-router-test/data
+
+        echo "Creating the .cookie file..."
+        echo "admin:strongpassword" > /tmp/proxy-router-test/.cookie
+
+        echo "Copying .env file..."
+        cp .github/workflows/proxy-router.test.env /tmp/proxy-router-test/proxy-router.env
+        
+        echo "Copying models and ratings control files..."
+        cp .github/workflows/models-config.json /tmp/proxy-router-test/models-config.json
+        cp .github/workflows/rating-config.json /tmp/proxy-router-test/rating-config.json
+        
+        echo "####################################"
+        echo "Output .env file for confirmation..."
+        cat /tmp/proxy-router-test/proxy-router.env
+        echo "####################################"
+        echo "Output models-config.json file for confirmation..."
+        cat /tmp/proxy-router-test/models-config.json
+        echo "####################################"
+        echo "Output rating-config.json file for confirmation..."
+        cat /tmp/proxy-router-test/rating-config.json
+        echo "####################################"
+        echo "Output .cookie file for confirmation..."
+        cat /tmp/proxy-router-test/.cookie
+        echo "####################################"
+
+    # Run the container in detached mode with the preconfigured .env file and volumes
+    - name: Run Docker container
+      shell: bash
+      run: |
+        echo "Starting Docker container for testing..."
+        echo "####################################################"
+        docker run -d --name test-container \
+          --env-file /tmp/proxy-router-test/proxy-router.env \
+          -e WALLET_PRIVATE_KEY=${{ inputs.private_key }} \
+          -e MODELS_CONFIG_PATH=/app/data/models-config.json \
+          -e RATING_CONFIG_PATH=/app/data/rating-config.json \
+          -e COOKIE_FILE_PATH=/app/data/.cookie \
+          -e AUTH_CONFIG_FILE_PATH=/app/data/proxy.conf \
+          -e PROXY_STORAGE_PATH=/app/data/data/ \
+          -v /tmp/proxy-router-test:/app/data \
+          -p 3333:3333 \
+          -p 8082:8082 \
+          ${{ inputs.image }}
+
+    # Wait for the container to initialize (adjust sleep time as needed)
+    - name: Wait for Proxy-Router to Start  
+      shell: bash
+      run: |
+        if ! command -v jq &> /dev/null; then
+            sudo apt update && sudo apt install jq -y
+        fi
+
+        timeout=10
+        while ! curl -s http://localhost:8082/healthcheck >/dev/null; do
+          ((timeout--))
+          if ((timeout <= 0)); then
+            echo "❌ Container failed to start in time"
+            docker logs test-container
+            exit 1
+          fi
+          sleep 1
+        done
+        echo "✅ Morpheus Proxy-Router started successfully!"
+        echo "Running Morpheus proxy-router container version: $(curl -s http://localhost:8082/swagger/doc.json | jq -r '.info.version')"
+        echo "📜 Fetching container logs:"
+        docker logs test-container
+
+    # Set up the Go environment
+    - name: Set up Go environment
+      uses: actions/setup-go@v4
+      with:
+        go-version: 1.23
+
+    - name: Run Go API Tests
+      shell: bash
+      run: |
+        cd .github/actions/docker_test
+        go mod tidy || true  
+        go mod download || true 
+        go test -v
+
+    # Stop and clean up the container after tests
+    - name: Stop and clean up container
+      shell: bash
+      run: docker rm -f test-container
+
+# Input variables
+inputs:
+  image:
+    description: "The Docker image to test"
+    required: true
+  private_key:
+    description: "The private key for the wallet"
+    required: true

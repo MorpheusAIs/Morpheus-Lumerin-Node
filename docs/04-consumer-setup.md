@@ -9,55 +9,74 @@ It will run 3 different pieces of software on your local machine:
 
 ## Installation Steps:
 1. Obtain the software: 
-    1. Package: Download latest release for your operating system: https://github.com/Lumerin-protocol/Morpheus-Lumerin-Node/releases
-        * Mainnet releases will be prefixed with `main-*`
-        * Testnet releases will be prefixed with `test-*` 
+    * Package: Download latest release for your operating system: https://github.com/Lumerin-protocol/Morpheus-Lumerin-Node/releases
+        - Mainnet releases will have no suffix (eg: `v2.3.0`)
+        - Testnet releases will be suffixed with `*-test` (eg: `v2.2.56-test`) 
 
 1. Extract the zip to a local folder (examples)
     * Windows: `(%USERPROFILE%)/Downloads/morpheus)` 
     * Linux & MacOS: `~/Downloads/morpheus`
-    * On MacOS you may need to execute `xattr -c mor-launch proxy-router MorpheusUI.app llama-server` in a command window to remove the quarantine flag on MacOS
+    * On MacOS you will need to execute `xattr -c mor-launch mor-cli proxy-router MorpheusUI.app llama-server` in a command window to remove the quarantine flag on MacOS
+
+1. [OPTIONAL] Examine the .env file included in the package and make any necessary updates for your setup 
+    * See [proxy-router.all.env](./proxy-router.all.env) for a list of environment variables that can be set in the `.env` file
 
 1. Launch the node - this should open a command window to see local LLM model server and proxy-router start and then should launch the user interface  
     * Windows: Double click the `mor-launch.exe` (You will need to tell Windows Defender this is ok to run) 
     * Linux & MacOS: Open a terminal and navigate to the folder and run `./mor-launch`
 
 1. Startup User Interface: 
-    1. Read & accept terms & Conditions 
-    1. Set a strong password (this is for the MorpheusUI only)
-    1. Follow the instructions for creating a new wallet (be sure to save the mnemonic in a safe place)
-    1. **OPTIONAL to use existing Wallet** 
+    * Read & accept terms & Conditions 
+    * Set a strong password (this is for the MorpheusUI only)
+    * Follow the instructions for creating a new wallet (be sure to save the mnemonic in a safe place)
+    * [OPTIONAL] to use existing Wallet** 
         - Instead of creating an new wallet and if you have the existing wallet's mnemonic, when prompted, select **`Recover your wallet Saved Mnemonic`** instead.
-
-5. Startup CLI Interface (Optional): 
-    * Linux & MacOS: Open a terminal and navigate to the folder and run `./mor-cli`
+    * [OPTIONAL] Startup CLI Interface: Linux & MacOS: Open a terminal and navigate to the folder and run `./mor-cli`
 
 ## Validation Steps:
+1. Once the proxy-router is running, you can navigate to the Swagger API Interface (http://localhost:8082/swagger/index.html as example) to validate that the proxy-router is running and listening for blockchain events
+    * You can also check the logs in the `./data` directory for any errors or issues that may have occurred during startup
+
 1. Local Test: Once the UI is up and running,
-    1. You should see tokens for ETH and MOR that you sent to this wallet earlier. 
-        * If this is a new wallet, you will need to send MOR and ETH to this wallet to be able to interact with the blockchain 
-        * This can be done externally via metamask or usual Arbitrum testnet faucets
-    1. Once you have a funded Wallet, you can interact with the local model
-    1. Click on the `Chat` icon on the left side of the screen
-    1. Make sure the `Local Model` is selected
-    1. Begin your conversation with the model by typing in the chat window and pressing `Enter`
-        * You should see the model respond with the appropriate response to the prompt you entered, if not, there may be an issue with the local model service
+    * You should see tokens for ETH and MOR that you sent to this wallet earlier. 
+        - If this is a new wallet, you will need to send MOR and ETH to this wallet to be able to interact with the blockchain 
+        - This can be done externally via metamask or usual Arbitrum testnet faucets
+    * Once you have a funded Wallet, you can interact with the local model
+    * Click on the `Chat` icon on the left side of the screen
+    * Make sure the `Local Model` is selected
+    * Begin your conversation with the model by typing in the chat window and pressing `Enter`
+        - You should see the model respond with the appropriate response to the prompt you entered, if not, there may be an issue with the local model service
 
 1. Remote Test: Once you've verified that your wallet can access the blockchain and you can see the local model working, you can switch to a remote model and test that as well
-    1. In the `Chat` window, select `Change Model `
-        1. Select a different model from remote providers
-        1. DropDown and select the contract address of the model you want to use 
-        1. Click Change 
-        1. Click Open Session 
-        1. MUST Enter at least **5** MOR to open session 
-    1. You can now chat with the remote model and see the responses in the chat window 
+    * In the `Chat` window, select `Change Model `
+        - Select a different model from remote providers
+        - DropDown and select the contract address of the model you want to use 
+        - Click Change 
+        - Click Open Session 
+        - MUST Enter at least **5** MOR to open session 
+    * You can now chat with the remote model and see the responses in the chat window 
 
-1. Cleanup/Closeout 
+1. Closeout 
     * Manually End all Remote Sessions: 
-        * In the Chat Window, click on the Time icon to the right of the Model line - this will expand and show current sessions, click the "X" next to each one to make sure it's closed 
+        - In the Chat Window, click on the Time icon to the right of the Model line - this will expand and show current sessions, click the "X" next to each one to make sure it's closed 
     * Closing the MorpheusUI window should leave the CMD window open
-        * You’ll have to ctrl-c in the window to kill the local model and proxy-router
-    * To FULLY delete and force a clean startup of the UI (including forcing new password and mnemonic recovery), delete the MorpheusUI folder and start the UI again
-        * Windows:  `%USERPROFILE%\AppData\Roaming\MorpheusUI`
-        * Linux: `~/.config/MorpheusUI`
-        * MacOS: `~/Library/Application Support/MorpheusUI`
+        - You’ll have to ctrl-c in the window to kill the local model and proxy-router
+1. Cleanup
+    * When testing multiple versions or if you get into an inconsistent state, you may need to clean up the local environment
+        - **Ensure that you have (or saved) your `wallet mnemonic or private key` before proceeding!**
+        - Close the MorpheusUI window
+        - Close the CMD window (or CTRL+C to stop the processes)
+        - Delete the following files/folders from your downloaded, unzipped Morpheus folder
+        ``` bash
+        # Mac and Ubuntu Commands: 
+        rm .cookie proxy.conf
+        rm -rf ~/Library/Logs/morpheus-ui
+        rm -rf ~/Library/Application\ Support/morpheus-ui
+        rm -rf data
+        xattr -c MorpheusUI.app llama-server mor-launch proxy-router
+        ```
+    * Check these other locations for Morpheus related files and delete them if necessary
+        - Windows:  `%USERPROFILE%\AppData\Roaming\morpheus-ui`
+        - Linux: `~/.config/morpheus-ui`
+        - MacOS: `~/Library/Application Support/morpheus-ui`
+    * At this point, all stored is removed and you can start fresh with a new wallet or recover an existing wallet per instructions above

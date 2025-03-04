@@ -65,8 +65,6 @@ export function Totals(props) {
 
   const pingMessengerAPI = async () => {
     const { data } = await axios('http://localhost:8080/connection');
-    console.log('connection data: ', data);
-
     setSocketData(data);
   };
 

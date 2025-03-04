@@ -92,7 +92,6 @@ class Root extends React.Component {
       .then(() => this.props.dispatch({ type: 'session-started' }))
 
   render() {
-    console.log('Root component render')
     const {
       OnboardingComponent,
       LoadingComponent,

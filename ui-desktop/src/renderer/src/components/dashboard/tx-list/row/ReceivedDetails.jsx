@@ -1,4 +1,3 @@
-import FilteredMessage from '../../../../components/common/FilteredMessage';
 import PropTypes from 'prop-types';
 import styled from 'styled-components';
 import React from 'react';
@@ -18,7 +17,7 @@ const Address = styled.span`
 
 export default class ReceivedDetails extends React.Component {
   static propTypes = {
-    from: PropTypes.string.isRequired
+    from: PropTypes.string.isRequired,
   };
 
   render() {

@@ -1,4 +1,3 @@
-import FilteredMessage from '../../../../components/common/FilteredMessage';
 import PropTypes from 'prop-types';
 import styled from 'styled-components';
 import React from 'react';
@@ -20,7 +19,7 @@ export default class SentDetails extends React.Component {
   static propTypes = {
     isCancelApproval: PropTypes.bool,
     isApproval: PropTypes.bool,
-    to: PropTypes.string.isRequired
+    to: PropTypes.string.isRequired,
   };
 
   render() {

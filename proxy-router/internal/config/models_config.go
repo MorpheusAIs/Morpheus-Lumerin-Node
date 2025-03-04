@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/ethereum/go-ethereum/common"
@@ -35,6 +36,7 @@ type ModelConfigLoader struct {
 	blockchainChecker BlockchainChecker
 	connectionChecker ConnectionChecker
 	configPath        string
+	configContent     string
 }
 
 type ModelConfig struct {
@@ -55,7 +57,7 @@ type ModelConfigsV2 struct {
 	} `json:"models"`
 }
 
-func NewModelConfigLoader(configPath string, validator Validator, blockchainChecker BlockchainChecker, connectionChecker ConnectionChecker, log lib.ILogger) *ModelConfigLoader {
+func NewModelConfigLoader(configPath string, configContent string, validator Validator, blockchainChecker BlockchainChecker, connectionChecker ConnectionChecker, log lib.ILogger) *ModelConfigLoader {
 	return &ModelConfigLoader{
 		log:               log.Named("MODEL_LOADER"),
 		modelConfigs:      ModelConfigs{},
@@ -63,6 +65,7 @@ func NewModelConfigLoader(configPath string, validator Validator, blockchainChec
 		blockchainChecker: blockchainChecker,
 		connectionChecker: connectionChecker,
 		configPath:        configPath,
+		configContent:     configContent,
 	}
 }
 
@@ -70,6 +73,17 @@ func (e *ModelConfigLoader) Init() error {
 	filePath := ConfigPathDefault
 	if e.configPath != "" {
 		filePath = e.configPath
+	}
+
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		if e.configContent != "" {
+			err = os.WriteFile(filePath, []byte(e.configContent), 0644)
+			if err != nil {
+				return fmt.Errorf("failed to write models config content to file: %s", err)
+			}
+		} else {
+			return fmt.Errorf("models config file not found: %s", filePath)
+		}
 	}
 
 	modelsConfig, err := lib.ReadJSONFile(filePath)
