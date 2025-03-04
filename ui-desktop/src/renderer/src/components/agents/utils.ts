@@ -26,7 +26,10 @@ export function formatTokenNameValue(
 export function getAbbreviation(username: string) {
   let [first, second] = username.split(' ');
   if (!second) {
-    second = first.slice(1, 1);
+    second = first.slice(1, 2);
+  }
+  if (!second) {
+    second = '';
   }
 
   return `${first[0]}${second[0]}`.toUpperCase();
