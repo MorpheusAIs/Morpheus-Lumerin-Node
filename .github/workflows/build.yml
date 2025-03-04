@@ -254,7 +254,7 @@ jobs:
             "model_repo": "${{ env.MODEL_REPO }}",
             "model_name": "${{ env.MODEL_NAME }}",
             "run": [
-              "./llama-server --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
+              "./llama-server --no-webui -m ./${{ env.MODEL_NAME }}",
               "./proxy-router",
               "./MorpheusUI.app/Contents/MacOS/MorpheusUI"
             ]
@@ -354,7 +354,7 @@ jobs:
             "model_repo": "${{ env.MODEL_REPO }}",
             "model_name": "${{ env.MODEL_NAME }}",
             "run": [
-              "./llama-server --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
+              "./llama-server --no-webui -m ./${{ env.MODEL_NAME }}",
               "./proxy-router",
               "./morpheus-ui-'$FULLTAG'-x86_64-linux.AppImage"
             ]
@@ -558,7 +558,7 @@ jobs:
             "model_repo": "${{ env.MODEL_REPO }}",
             "model_name": "${{ env.MODEL_NAME }}",
             "run": [
-              "./llama-server.exe --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
+              "./llama-server --no-webui -m ./${{ env.MODEL_NAME }}",
               "./proxy-router.exe",
               "./morpheus-ui-'"$FULLTAG"'-x64-win.exe"
             ]
