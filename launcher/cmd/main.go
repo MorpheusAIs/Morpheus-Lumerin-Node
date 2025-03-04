@@ -65,6 +65,16 @@ func askForConfirmation(prompt string) bool {
 	return response == "y" || response == "yes"
 }
 
+// Checks if the required files already exist
+func filesExist(files ...string) bool {
+	for _, file := range files {
+		if _, err := os.Stat(file); os.IsNotExist(err) {
+			return false
+		}
+	}
+	return true
+}
+
 // Downloads a file from a given URL
 func downloadFile(filepath string, url string) error {
 	if _, err := os.Stat(filepath); err == nil {
@@ -149,20 +159,23 @@ func main() {
 		log.Fatalf("Error reading config file: %v", err)
 	}
 
-	// Ask the user for confirmation before downloading
-	runLlamaServer := askForConfirmation("Do you want to download and run a local model for testing?")
-
 	// Determine correct binary name
 	binName := getBinName()
 	llamaZip := filepath.Join(base, fmt.Sprintf("%s-%s.zip", config.LlamaFileBase, binName))
 	llamaBinary := filepath.Join(base, "llama-server")
 	modelFile := filepath.Join(base, config.ModelName)
 
-	// Construct URLs
-	llamaDownloadURL := fmt.Sprintf("%s/%s/%s-%s.zip", config.LlamaURL, config.LlamaRelease, config.LlamaFileBase, binName)
-	modelDownloadURL := fmt.Sprintf("%s/%s/%s/resolve/main/%s", config.ModelURL, config.ModelOwner, config.ModelRepo, config.ModelName)
+	// Check if files exist to bypass the prompt
+	autoRunLlamaServer := filesExist(llamaBinary, modelFile)
 
-	if runLlamaServer {
+	// Ask for confirmation only if files are not already present
+	runLlamaServer := autoRunLlamaServer || askForConfirmation("Do you want to download and run the local model?")
+
+	if runLlamaServer && !autoRunLlamaServer {
+		// Construct URLs
+		llamaDownloadURL := fmt.Sprintf("%s/%s/%s-%s.zip", config.LlamaURL, config.LlamaRelease, config.LlamaFileBase, binName)
+		modelDownloadURL := fmt.Sprintf("%s/%s/%s/resolve/main/%s", config.ModelURL, config.ModelOwner, config.ModelRepo, config.ModelName)
+
 		// Download necessary files
 		if err := downloadFile(llamaZip, llamaDownloadURL); err != nil {
 			log.Fatalf("Failed to download Llama binary: %v", err)
