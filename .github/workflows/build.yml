@@ -570,7 +570,7 @@ jobs:
           mv ./cli/mor-cli mor-cli.exe
           mv ./launcher/mor-launch mor-launch.exe
           mv "./ui-desktop/dist/morpheus-ui-$FULLTAG-x64-win" morpheus-ui-$FULLTAG-x64-win.exe
-          7z a mor-launch-$BUILDTAG-$OS_NAME.zip LICENSE mor-launch.exe proxy-router.exe .env llama.dll ggml.dll mor-launch.json morpheus-ui-$FULLTAG-x64-win.exe models-config.json rating-config.json mor-cli.exe
+          7z a mor-launch-$BUILDTAG-$OS_NAME.zip LICENSE mor-launch.exe proxy-router.exe .env mor-launch.json morpheus-ui-$FULLTAG-x64-win.exe models-config.json rating-config.json mor-cli.exe
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
