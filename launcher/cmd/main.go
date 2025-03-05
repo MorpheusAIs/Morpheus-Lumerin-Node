@@ -2,7 +2,6 @@ package main
 
 import (
 	"archive/zip"
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -50,19 +49,6 @@ func getBinName() string {
 	}
 
 	return fmt.Sprintf("%s-%s", osName, archName)
-}
-
-// Prompts the user for confirmation
-func askForConfirmation(prompt string) bool {
-	fmt.Print(prompt + " [y/N]: ")
-	reader := bufio.NewReader(os.Stdin)
-	response, err := reader.ReadString('\n')
-	if err != nil {
-		log.Printf("Failed to read input: %v", err)
-		return false
-	}
-	response = strings.TrimSpace(strings.ToLower(response))
-	return response == "y" || response == "yes"
 }
 
 // Checks if the required files already exist
@@ -165,33 +151,49 @@ func main() {
 	llamaBinary := filepath.Join(base, "llama-server")
 	modelFile := filepath.Join(base, config.ModelName)
 
-	// Check if files exist to bypass the prompt
-	autoRunLlamaServer := filesExist(llamaBinary, modelFile)
+	// Construct download URLs
+	llamaDownloadURL := fmt.Sprintf("%s/%s/%s-%s.zip", config.LlamaURL, config.LlamaRelease, config.LlamaFileBase, binName)
+	modelDownloadURL := fmt.Sprintf("%s/%s/%s/resolve/main/%s", config.ModelURL, config.ModelOwner, config.ModelRepo, config.ModelName)
 
-	// Ask for confirmation only if files are not already present
-	runLlamaServer := autoRunLlamaServer || askForConfirmation("Do you want to download and run the local model?")
+	// Check if "local" flag is provided
+	isLocalMode := len(os.Args) > 1 && os.Args[1] == "local"
 
-	if runLlamaServer && !autoRunLlamaServer {
-		// Construct URLs
-		llamaDownloadURL := fmt.Sprintf("%s/%s/%s-%s.zip", config.LlamaURL, config.LlamaRelease, config.LlamaFileBase, binName)
-		modelDownloadURL := fmt.Sprintf("%s/%s/%s/resolve/main/%s", config.ModelURL, config.ModelOwner, config.ModelRepo, config.ModelName)
+	runLlamaServer := false
 
-		// Download necessary files
-		if err := downloadFile(llamaZip, llamaDownloadURL); err != nil {
-			log.Fatalf("Failed to download Llama binary: %v", err)
+	if isLocalMode {
+		// "local" mode: Download if files are missing, run all commands
+		if !filesExist(llamaBinary) {
+			log.Println("Llama-server not found. Downloading...")
+			if err := downloadFile(llamaZip, llamaDownloadURL); err != nil {
+				log.Fatalf("Failed to download Llama binary: %v", err)
+			}
+			if err := extractFileFromZip(llamaZip, "build/bin/llama-server", llamaBinary); err != nil {
+				log.Fatalf("Failed to extract llama-server: %v", err)
+			}
+			if err := os.Chmod(llamaBinary, 0755); err != nil {
+				log.Fatalf("Failed to set execute permission on llama-server: %v", err)
+			}
 		}
-		if err := downloadFile(modelFile, modelDownloadURL); err != nil {
-			log.Fatalf("Failed to download model file: %v", err)
+		if !filesExist(modelFile) {
+			log.Println("Model file not found. Downloading...")
+			if err := downloadFile(modelFile, modelDownloadURL); err != nil {
+				log.Fatalf("Failed to download model file: %v", err)
+			}
 		}
-
-		// Extract llama-server binary
-		if err := extractFileFromZip(llamaZip, "build/bin/llama-server", llamaBinary); err != nil {
-			log.Fatalf("Failed to extract llama-server: %v", err)
-		}
-
-		// Set execute permission on llama-server
-		if err := os.Chmod(llamaBinary, 0755); err != nil {
-			log.Fatalf("Failed to set execute permission on llama-server: %v", err)
+		runLlamaServer = true
+	} else {
+		// Default mode: Conditional execution based on file presence
+		if filesExist(llamaBinary) {
+			log.Println("Llama-server found. Checking for model file...")
+			if !filesExist(modelFile) {
+				log.Println("Model file not found. Downloading...")
+				if err := downloadFile(modelFile, modelDownloadURL); err != nil {
+					log.Fatalf("Failed to download model file: %v", err)
+				}
+			}
+			runLlamaServer = true
+		} else {
+			log.Println("Llama-server not found. Skipping llama-server command.")
 		}
 	}
 
@@ -199,7 +201,7 @@ func main() {
 	var wg sync.WaitGroup
 	for _, cmdStr := range config.Run {
 		if !runLlamaServer && strings.Contains(cmdStr, "llama-server") {
-			log.Println("Skipping llama-server command based on user input.")
+			log.Println("Skipping llama-server command based on startup mode.")
 			continue
 		}
 
