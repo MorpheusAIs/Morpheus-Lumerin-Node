@@ -51,6 +51,14 @@ func getBinName() string {
 	return fmt.Sprintf("%s-%s", osName, archName)
 }
 
+// Gets the appropriate llama-server binary name based on the OS
+func getLlamaServerBinaryName() string {
+	if runtime.GOOS == "windows" {
+		return "llama-server.exe"
+	}
+	return "llama-server"
+}
+
 // Checks if the required files already exist
 func filesExist(files ...string) bool {
 	for _, file := range files {
@@ -145,15 +153,21 @@ func main() {
 		log.Fatalf("Error reading config file: %v", err)
 	}
 
-	// Determine correct binary name
+	// Determine correct binary and model file paths
 	binName := getBinName()
+	llamaBinary := filepath.Join(base, getLlamaServerBinaryName())
 	llamaZip := filepath.Join(base, fmt.Sprintf("%s-%s.zip", config.LlamaFileBase, binName))
-	llamaBinary := filepath.Join(base, "llama-server")
 	modelFile := filepath.Join(base, config.ModelName)
 
 	// Construct download URLs
 	llamaDownloadURL := fmt.Sprintf("%s/%s/%s-%s.zip", config.LlamaURL, config.LlamaRelease, config.LlamaFileBase, binName)
 	modelDownloadURL := fmt.Sprintf("%s/%s/%s/resolve/main/%s", config.ModelURL, config.ModelOwner, config.ModelRepo, config.ModelName)
+
+	// Determine the zip path for Windows vs other platforms
+	llamaServerInZip := "build/bin/llama-server"
+	if runtime.GOOS == "windows" {
+		llamaServerInZip = "build/bin/llama-server.exe"
+	}
 
 	// Check if "local" flag is provided
 	isLocalMode := len(os.Args) > 1 && os.Args[1] == "local"
@@ -167,7 +181,7 @@ func main() {
 			if err := downloadFile(llamaZip, llamaDownloadURL); err != nil {
 				log.Fatalf("Failed to download Llama binary: %v", err)
 			}
-			if err := extractFileFromZip(llamaZip, "build/bin/llama-server", llamaBinary); err != nil {
+			if err := extractFileFromZip(llamaZip, llamaServerInZip, llamaBinary); err != nil {
 				log.Fatalf("Failed to extract llama-server: %v", err)
 			}
 			if err := os.Chmod(llamaBinary, 0755); err != nil {
@@ -213,13 +227,10 @@ func main() {
 				log.Printf("Error parsing command: %s", cmdStr)
 				return
 			}
-			if len(args) == 0 {
-				log.Printf("Empty command, skipping")
-				return
-			}
 
 			cmd := exec.Command(args[0], args[1:]...)
 			cmd.Dir = base
+
 			stdout, err := cmd.StdoutPipe()
 			if err != nil {
 				log.Printf("Error creating stdout pipe: %v", err)
