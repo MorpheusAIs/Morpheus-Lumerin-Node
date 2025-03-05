@@ -139,6 +139,15 @@ func readConfig(filePath string) (*Config, error) {
 	return config, nil
 }
 
+// Replaces placeholder in run commands with the actual model name
+func replaceModelPlaceholder(runCommands []string, modelName string) []string {
+	updatedCommands := make([]string, len(runCommands))
+	for i, cmd := range runCommands {
+		updatedCommands[i] = strings.ReplaceAll(cmd, "{model_name}", modelName)
+	}
+	return updatedCommands
+}
+
 func main() {
 	exePath, err := os.Executable()
 	if err != nil {
@@ -156,18 +165,10 @@ func main() {
 	// Determine correct binary and model file paths
 	binName := getBinName()
 	llamaBinary := filepath.Join(base, getLlamaServerBinaryName())
-	llamaZip := filepath.Join(base, fmt.Sprintf("%s-%s.zip", config.LlamaFileBase, binName))
 	modelFile := filepath.Join(base, config.ModelName)
 
-	// Construct download URLs
-	llamaDownloadURL := fmt.Sprintf("%s/%s/%s-%s.zip", config.LlamaURL, config.LlamaRelease, config.LlamaFileBase, binName)
+	// Construct download URL for the model file
 	modelDownloadURL := fmt.Sprintf("%s/%s/%s/resolve/main/%s", config.ModelURL, config.ModelOwner, config.ModelRepo, config.ModelName)
-
-	// Determine the zip path for Windows vs other platforms
-	llamaServerInZip := "build/bin/llama-server"
-	if runtime.GOOS == "windows" {
-		llamaServerInZip = "build/bin/llama-server.exe"
-	}
 
 	// Check if "local" flag is provided
 	isLocalMode := len(os.Args) > 1 && os.Args[1] == "local"
@@ -175,9 +176,13 @@ func main() {
 	runLlamaServer := false
 
 	if isLocalMode {
-		// "local" mode: Download if files are missing, run all commands
+		// "local" mode: Ensure llama-server and model file exist, download if missing
 		if !filesExist(llamaBinary) {
 			log.Println("Llama-server not found. Downloading...")
+			llamaZip := filepath.Join(base, fmt.Sprintf("%s-%s.zip", config.LlamaFileBase, binName))
+			llamaServerInZip := "build/bin/" + getLlamaServerBinaryName()
+			llamaDownloadURL := fmt.Sprintf("%s/%s/%s-%s.zip", config.LlamaURL, config.LlamaRelease, config.LlamaFileBase, binName)
+
 			if err := downloadFile(llamaZip, llamaDownloadURL); err != nil {
 				log.Fatalf("Failed to download Llama binary: %v", err)
 			}
@@ -195,21 +200,18 @@ func main() {
 			}
 		}
 		runLlamaServer = true
-	} else {
-		// Default mode: Conditional execution based on file presence
-		if filesExist(llamaBinary) {
-			log.Println("Llama-server found. Checking for model file...")
-			if !filesExist(modelFile) {
-				log.Println("Model file not found. Downloading...")
-				if err := downloadFile(modelFile, modelDownloadURL); err != nil {
-					log.Fatalf("Failed to download model file: %v", err)
-				}
+	} else if filesExist(llamaBinary) {
+		if !filesExist(modelFile) {
+			log.Println("Model file not found. Downloading...")
+			if err := downloadFile(modelFile, modelDownloadURL); err != nil {
+				log.Fatalf("Failed to download model file: %v", err)
 			}
-			runLlamaServer = true
-		} else {
-			log.Println("Llama-server not found. Skipping llama-server command.")
 		}
+		runLlamaServer = true
 	}
+
+	// Replace {model_name} placeholder in run commands
+	config.Run = replaceModelPlaceholder(config.Run, config.ModelName)
 
 	// Execute commands from config
 	var wg sync.WaitGroup
