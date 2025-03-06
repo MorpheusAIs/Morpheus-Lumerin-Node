@@ -13,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 )
 
 type SessionRouter struct {
@@ -56,20 +57,20 @@ func NewSessionRouter(sessionRouterAddr common.Address, client i.ContractBackend
 	}
 }
 
-func (g *SessionRouter) OpenSession(opts *bind.TransactOpts, approval []byte, approvalSig []byte, stake *big.Int, directPayment bool, privateKeyHex lib.HexString) (sessionID common.Hash, providerID common.Address, userID common.Address, txHash common.Hash, err error) {
+func (g *SessionRouter) OpenSession(opts *bind.TransactOpts, approval []byte, approvalSig []byte, stake *big.Int, directPayment bool, privateKeyHex lib.HexString) (sessionID common.Hash, providerID common.Address, userID common.Address, receipt *types.Receipt, err error) {
 	sessionTx, err := g.sessionRouter.OpenSession(opts, opts.From, stake, directPayment, approval, approvalSig)
 	if err != nil {
-		return common.Hash{}, common.Address{}, common.Address{}, common.Hash{}, lib.TryConvertGethError(err)
+		return common.Hash{}, common.Address{}, common.Address{}, receipt, lib.TryConvertGethError(err)
 	}
 
 	// Wait for the transaction receipt
-	receipt, err := bind.WaitMined(opts.Context, g.client, sessionTx)
+	receipt, err = bind.WaitMined(opts.Context, g.client, sessionTx)
 	if err != nil {
-		return common.Hash{}, common.Address{}, common.Address{}, common.Hash{}, lib.TryConvertGethError(err)
+		return common.Hash{}, common.Address{}, common.Address{}, receipt, lib.TryConvertGethError(err)
 	}
 
 	if receipt.Status != 1 {
-		return receipt.TxHash, common.Address{}, common.Address{}, common.Hash{}, fmt.Errorf("Transaction failed with status %d", receipt.Status)
+		return receipt.TxHash, common.Address{}, common.Address{}, receipt, fmt.Errorf("Transaction failed with status %d", receipt.Status)
 	}
 
 	// Find the event log
@@ -77,11 +78,11 @@ func (g *SessionRouter) OpenSession(opts *bind.TransactOpts, approval []byte, ap
 		// Check if the log belongs to the OpenSession event
 		event, err := g.sessionRouter.ParseSessionOpened(*log)
 		if err == nil {
-			return event.SessionId, event.ProviderId, event.User, sessionTx.Hash(), nil
+			return event.SessionId, event.ProviderId, event.User, receipt, nil
 		}
 	}
 
-	return common.Hash{}, common.Address{}, common.Address{}, common.Hash{}, fmt.Errorf("OpenSession event not found in transaction logs")
+	return common.Hash{}, common.Address{}, common.Address{}, receipt, fmt.Errorf("OpenSession event not found in transaction logs")
 }
 
 func (g *SessionRouter) GetSession(ctx context.Context, sessionID common.Hash) (*src.ISessionStorageSession, error) {

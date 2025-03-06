@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 
+import withModelsState from '../../store/hocs/withModelsState';
 import styled from 'styled-components';
 
 import Card from 'react-bootstrap/Card';
@@ -9,19 +10,19 @@ import Form from 'react-bootstrap/esm/Form';
 
 
 const CustomCard = styled(Card)`
-  background: #244a47!important;
-  color: #21dc8f!important;
-  border: 0.5px solid!important;
-  cursor: pointer!important;
+  background: #244a47 !important;
+  color: #21dc8f !important;
+  border: 0.5px solid !important;
+  cursor: pointer !important;
 
   p {
-    color: white!important;
+    color: white !important;
   }
 
   .gap-20 {
-    gap: 20px!important;
+    gap: 20px !important;
   }
-`
+`;
 
 const Container = styled.div`
   display: flex;
@@ -30,7 +31,7 @@ const Container = styled.div`
   gap: 24px;
   max-height: 75vh;
   overflow-y: auto;
-`
+`;
 
 function ModelCard({ onSelect, model, openSelectDonwloadFolder, downloadModelFromIpfs, toasts }) {
   const handleFolderSelect = async (e) => {
@@ -62,14 +63,19 @@ function ModelCard({ onSelect, model, openSelectDonwloadFolder, downloadModelFro
   return (
     <CustomCard style={{ width: '36rem' }} onClick={() => onSelect(model.Id)}>
       <Card.Body>
-        <Card.Title as={"div"} style={{ display: 'flex', justifyContent: "space-between"}}>
+        <Card.Title
+          as={'div'}
+          style={{ display: 'flex', justifyContent: 'space-between' }}
+        >
           {model.Name}
           <IconDownload 
             style={{ cursor: 'pointer' }} 
             onClick={handleFolderSelect}
           />
         </Card.Title>
-        <Card.Subtitle className="mb-2">{abbreviateAddress(model.Id, 6)}</Card.Subtitle>
+        <Card.Subtitle className="mb-2">
+          {abbreviateAddress(model.Id, 6)}
+        </Card.Subtitle>
         <Card.Text>
           {/* <div>
           Fee: {model.Fee}
@@ -78,10 +84,10 @@ function ModelCard({ onSelect, model, openSelectDonwloadFolder, downloadModelFro
           Stake: {model.Stake}
           </div> */}
         </Card.Text>
-        <Card.Footer className='d-flex gap-20'>
-          {
-            model.Tags.map(t => (<div key={t}>{t}</div>)) 
-          }
+        <Card.Footer className="d-flex gap-20">
+          {model.Tags.map((t) => (
+            <div key={t}>{t}</div>
+          ))}
         </Card.Footer>
       </Card.Body>
     </CustomCard>
@@ -98,9 +104,8 @@ function  ModelsTable({
   toasts,
 } : any) {
   const onSelect = (id) => {
-    console.log("selected", id);
-    setSelectedModel(models.find(x => x.Id == id));
-  }
+    setSelectedModel(models.find((x) => x.Id == id));
+  };
 
   return (<Container>
      {

@@ -1,12 +1,10 @@
 import logger from '../../../logger'
-
 import auth from '../auth'
 import keys from '../keys'
 import config from '../../../config'
 import wallet from '../wallet'
-import noCore from './no-core'
 import WalletError from '../WalletError'
-import { setProxyRouterConfig, cleanupDb, getProxyRouterConfig } from '../settings'
+import { cleanupDb, getProxyRouterConfig } from '../settings'
 import httpClient from '../apiGateway'
 
 export const withAuth =
@@ -322,7 +320,7 @@ export const refreshProxyRouterConnection = async (data, { api }) =>
 
 export const getLocalIp = async ({}, { api }) => api['proxy-router'].getLocalIp()
 
-export const logout = async (data) => {
+export const logout = async () => {
   console.log('start cleaning local database and settings...')
   cleanupDb()
   console.log('start cleaning wallet...')
@@ -332,7 +330,7 @@ export const logout = async (data) => {
   return
 }
 
-export const getPoolAddress = async (data) => {
+export const getPoolAddress = async () => {
   const config = getProxyRouterConfig()
   return config.buyerDefaultPool || config.defaultPool
 }

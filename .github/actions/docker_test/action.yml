@@ -59,17 +59,23 @@ runs:
     - name: Wait for Proxy-Router to Start  
       shell: bash
       run: |
+        if ! command -v jq &> /dev/null; then
+            sudo apt update && sudo apt install jq -y
+        fi
+
         timeout=10
         while ! curl -s http://localhost:8082/healthcheck >/dev/null; do
           ((timeout--))
-          if [ $timeout -le 0 ]; then
-            echo "Container failed to start in time"
+          if ((timeout <= 0)); then
+            echo "❌ Container failed to start in time"
             docker logs test-container
             exit 1
           fi
           sleep 1
         done
-        echo "Proxy-router is running."
+        echo "✅ Morpheus Proxy-Router started successfully!"
+        echo "Running Morpheus proxy-router container version: $(curl -s http://localhost:8082/swagger/doc.json | jq -r '.info.version')"
+        echo "📜 Fetching container logs:"
         docker logs test-container
 
     # Set up the Go environment

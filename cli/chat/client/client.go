@@ -15,7 +15,6 @@ import (
 )
 
 func NewApiGatewayClient(baseURL string, httpClient *http.Client) *ApiGatewayClient {
-
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
@@ -29,15 +28,23 @@ func NewApiGatewayClient(baseURL string, httpClient *http.Client) *ApiGatewayCli
 type ApiGatewayClient struct {
 	BaseURL    string
 	HttpClient *http.Client
+	login      string
+	pass       string
+}
+
+func (c *ApiGatewayClient) SetAuth(login, pass string) {
+	c.login = login
+	c.pass = pass
 }
 
 // Helper function to make GET requests
 func (c *ApiGatewayClient) getRequest(ctx context.Context, endpoint string, result interface{}) error {
 	req, err := http.NewRequestWithContext(ctx, "GET", c.BaseURL+endpoint, nil)
-
 	if err != nil {
 		return err
 	}
+
+	req.Header.Set("Authorization", c.GetAuthHeaderValue())
 
 	resp, err := c.HttpClient.Do(req)
 
@@ -52,6 +59,53 @@ func (c *ApiGatewayClient) getRequest(ctx context.Context, endpoint string, resu
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 	return json.NewDecoder(resp.Body).Decode(result)
+}
+
+// Helper function to make POST requests
+func (c *ApiGatewayClient) postRequest(ctx context.Context, endpoint string, body interface{}, result interface{}) error {
+	reqBody, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+
+	reader := bytes.NewReader(reqBody)
+
+	req, err := http.NewRequestWithContext(ctx, "POST", c.BaseURL+endpoint, reader)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Authorization", c.GetAuthHeaderValue())
+
+	resp, err := c.HttpClient.Do(req)
+	if err != nil {
+		return err
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var errResp map[string]interface{}
+		err = json.NewDecoder(resp.Body).Decode(&errResp)
+		if err != nil {
+			return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		}
+		return fmt.Errorf("unexpected status code: %d, response: %s", resp.StatusCode, errResp["error"])
+	}
+
+	if resp == nil {
+		return nil
+	}
+
+	if result != nil {
+		err = json.NewDecoder(resp.Body).Decode(result)
+	}
+
+	return err
+}
+
+func (c *ApiGatewayClient) GetAuthHeaderValue() string {
+	return FormatBasicAuthHeader(c.login, c.pass)
 }
 
 func (c *ApiGatewayClient) requestChatCompletionStream(ctx context.Context, endpoint string, request *openai.ChatCompletionRequest, callback CompletionCallback, modelId string, sessionId string) (*openai.ChatCompletionStreamResponse, error) {
@@ -71,8 +125,9 @@ func (c *ApiGatewayClient) requestChatCompletionStream(ctx context.Context, endp
 		req.Header.Set("model_id", modelId)
 	}
 
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", c.GetAuthHeaderValue())
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Connection", "keep-alive")
 
 	client := &http.Client{}
@@ -127,46 +182,6 @@ func (c *ApiGatewayClient) requestChatCompletionStream(ctx context.Context, endp
 	return nil, err
 }
 
-// Helper function to make POST requests
-func (c *ApiGatewayClient) postRequest(ctx context.Context, endpoint string, body interface{}, result interface{}) error {
-	reqBody, err := json.Marshal(body)
-	if err != nil {
-		return err
-	}
-
-	reader := bytes.NewReader(reqBody)
-
-	req, err := http.NewRequestWithContext(ctx, "POST", c.BaseURL+endpoint, reader)
-	if err != nil {
-		return err
-	}
-	resp, err := c.HttpClient.Do(req)
-	if err != nil {
-		return err
-	}
-
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		var errResp map[string]interface{}
-		err = json.NewDecoder(resp.Body).Decode(&errResp)
-		if err != nil {
-			return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		}
-		return fmt.Errorf("unexpected status code: %d, response: %s", resp.StatusCode, errResp["error"])
-	}
-
-	if resp == nil {
-		return nil
-	}
-
-	if result != nil {
-		err = json.NewDecoder(resp.Body).Decode(result)
-	}
-
-	return err
-}
-
 func (c *ApiGatewayClient) GetProxyRouterConfig(ctx context.Context) (interface{}, error) {
 	var result map[string]interface{}
 	err := c.getRequest(ctx, "/config", &result)
@@ -215,15 +230,12 @@ func (c *ApiGatewayClient) PromptStream(ctx context.Context, message string, mes
 }
 
 func (c *ApiGatewayClient) GetLatestBlock(ctx context.Context) (result uint64, err error) {
-
 	err = c.getRequest(ctx, "/blockchain/latestBlock", &result)
 	return result, err
 }
 
 func (c *ApiGatewayClient) GetAllProviders(ctx context.Context) (result map[string]interface{}, err error) {
-
 	err = c.getRequest(ctx, "/blockchain/providers", &result)
-
 	if err != nil {
 		return nil, fmt.Errorf("internal error: %v", err)
 	}
@@ -271,7 +283,6 @@ func (c *ApiGatewayClient) CreateNewProviderBid(ctx context.Context, model strin
 	}{model, pricePerSecond}
 
 	err = c.postRequest(ctx, "/blockchain/bids", &request, &result)
-
 	if err != nil {
 		return nil, fmt.Errorf("internal error: %v", err)
 	}
@@ -280,9 +291,7 @@ func (c *ApiGatewayClient) CreateNewProviderBid(ctx context.Context, model strin
 }
 
 func (c *ApiGatewayClient) GetAllModels(ctx context.Context) (result map[string]interface{}, err error) {
-
 	err = c.getRequest(ctx, "/blockchain/models", &result)
-
 	if err != nil {
 		return nil, fmt.Errorf("internal error: %v", err)
 	}
@@ -334,9 +343,7 @@ func (c *ApiGatewayClient) ListProviderSessions(ctx context.Context, provider st
 }
 
 func (c *ApiGatewayClient) OpenStakeSession(ctx context.Context, req *SessionStakeRequest) (session *Session, err error) {
-
 	err = c.postRequest(ctx, "/blockchain/sessions", req, session)
-
 	if err != nil {
 		return nil, fmt.Errorf("internal error: %v", err)
 	}
@@ -345,10 +352,9 @@ func (c *ApiGatewayClient) OpenStakeSession(ctx context.Context, req *SessionSta
 }
 
 func (c *ApiGatewayClient) OpenSession(ctx context.Context, req *SessionRequest) (session *Session, err error) {
-
 	session = &Session{}
-	err = c.postRequest(ctx, fmt.Sprintf("/blockchain/models/%s/session", req.ModelId), req, session)
 
+	err = c.postRequest(ctx, fmt.Sprintf("/blockchain/models/%s/session", req.ModelId), req, session)
 	if err != nil {
 		return nil, fmt.Errorf("internal error: %v", err)
 	}
@@ -358,7 +364,6 @@ func (c *ApiGatewayClient) OpenSession(ctx context.Context, req *SessionRequest)
 
 func (c *ApiGatewayClient) GetLocalModels(ctx context.Context) (models *[]interface{}, err error) {
 	err = c.getRequest(ctx, "/v1/models", &models)
-
 	if err != nil {
 		return nil, fmt.Errorf("internal error: %v", err)
 	}
@@ -367,9 +372,7 @@ func (c *ApiGatewayClient) GetLocalModels(ctx context.Context) (models *[]interf
 }
 
 func (c *ApiGatewayClient) CloseSession(ctx context.Context, sessionId string) error {
-
 	err := c.postRequest(ctx, fmt.Sprintf("/blockchain/sessions/%s/close", sessionId), nil, nil)
-
 	if err != nil {
 		return fmt.Errorf("internal error: %v", err)
 	}
@@ -437,4 +440,17 @@ func (c *ApiGatewayClient) GetDiamondAddress(ctx context.Context) (common.Addres
 	}
 
 	return common.HexToAddress(response.Config.Marketplace.DiamondContractAddress), nil
+}
+
+func (c *ApiGatewayClient) GetCookiePath(ctx context.Context) (string, error) {
+	response := struct {
+		Path string `json:"path"`
+	}{}
+
+	err := c.getRequest(ctx, "/auth/cookie/path", &response)
+	if err != nil {
+		return "", fmt.Errorf("internal error: %v", err)
+	}
+
+	return response.Path, nil
 }

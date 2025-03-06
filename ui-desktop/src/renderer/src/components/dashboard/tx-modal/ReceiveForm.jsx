@@ -14,7 +14,7 @@ import {
   FooterRow,
   FooterLabel,
   FooterBlock,
-  FooterSublabel
+  FooterSublabel,
 } from './common.styles';
 import { abbreviateAddress } from '../../../utils';
 import { BtnAccent } from '../BalanceBlock.styles';
@@ -54,15 +54,14 @@ export function ReceiveForm({
   copyToClipboard,
   explorerUrl,
   eth,
-  mor
+  mor,
 }) {
-  console.log("te", eth, mor);
   const context = useContext(ToastsContext);
 
   const handleCopyToClipboard = () => {
     copyToClipboard(address);
     context.toast('info', 'Address copied to clipboard', {
-      autoClose: 1500
+      autoClose: 1500,
     });
   };
 
@@ -79,7 +78,7 @@ export function ReceiveForm({
         <Header>You are receiving</Header>
       </HeaderWrapper>
       <QRContainer>
-        <QRCode value={address} bgColor='transparent' fgColor='#20dc8e' />
+        <QRCode value={address} bgColor="transparent" fgColor="#20dc8e" />
       </QRContainer>
       <Footer>
         <FooterRow>
@@ -88,7 +87,7 @@ export function ReceiveForm({
             <FooterSublabel>{abbreviateAddress(address, 6)}</FooterSublabel>
           </FooterBlock>
           <CopyBtn onClick={handleCopyToClipboard}>
-            <CopyIcon fill="#20dc8e" size="3.8rem"/>
+            <CopyIcon fill="#20dc8e" size="3.8rem" />
           </CopyBtn>
         </FooterRow>
         <FooterLabel>{mor.symbol} Balance</FooterLabel>

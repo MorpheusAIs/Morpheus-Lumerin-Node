@@ -1,5 +1,4 @@
 #!/bin/sh
-
 # Check if TAG_NAME is set; if not, use the latest Git tag or fallback to 0.1.0
 if [ -z "$TAG_NAME" ]; then
   TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.1.0")

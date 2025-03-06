@@ -557,15 +557,11 @@ func (cfg *HTTPAuthConfig) DecreaseAllowance(username string, token string, amou
 	return cfg.AuthStorage.SetAllowance(username, token, allowance)
 }
 
-func (cfg *HTTPAuthConfig) GetAllAgentTx() ([]AgentTx, error) {
-	txs, err := cfg.AuthStorage.GetAgentTxs()
+func (cfg *HTTPAuthConfig) GetAgentTxs(username string, cursor []byte, limit uint) ([]string, []byte, error) {
+	txhashes, newCursor, err := cfg.AuthStorage.GetAgentTxs(username, cursor, limit)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	agentTxs := []AgentTx{}
-	for txHash, username := range txs {
-		agentTxs = append(agentTxs, AgentTx{TxHash: txHash, Username: username})
-	}
-	return agentTxs, nil
+	return txhashes, newCursor, nil
 }

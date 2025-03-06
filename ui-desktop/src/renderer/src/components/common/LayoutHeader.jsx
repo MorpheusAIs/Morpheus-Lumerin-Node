@@ -1,5 +1,4 @@
 import React from 'react';
-import { AddressHeader } from './AddressHeader';
 import styled from 'styled-components';
 
 const Container = styled.div`
@@ -14,7 +13,7 @@ const Container = styled.div`
   right: 0;
   left: 0;
   top: 0;
-  padding-bottom: 32px!important;
+  padding-bottom: 32px !important;
 `;
 
 const TitleRow = styled.div`
@@ -31,7 +30,7 @@ const Title = styled.label`
   white-space: nowrap;
   margin: 0;
   font-weight: 600;
-  color: ${p => p.theme.colors.morMain};
+  color: ${(p) => p.theme.colors.morMain};
   margin-bottom: 4.8px;
   margin-right: 2.4rem;
   cursor: default;
@@ -45,10 +44,10 @@ const Title = styled.label`
 `;
 
 export const LayoutHeader = ({ title, children }) => (
-    <Container>
-      <TitleRow>
-        <Title>{title}</Title>
-        {children}
-      </TitleRow>
-    </Container>
+  <Container>
+    <TitleRow>
+      <Title>{title}</Title>
+      {children}
+    </TitleRow>
+  </Container>
 );

@@ -155,18 +155,18 @@ function ModelRow(props) {
 
     const formatPrice = () => {
         if (targetBid) {
-            return `${formatSmallNumber(targetBid?.PricePerSecond / (10 ** 18))} ${props.symbol}`;
+            return `${formatSmallNumber(targetBid?.PricePerSecond / (10 ** 18))} ${props.symbol}/s`;
         }
 
         const prices = bids.filter(x => x.Id).map(x => Number(x.PricePerSecond));
         if (prices.length == 1) {
-            return `${formatSmallNumber(prices[0] / (10 ** 18))} ${props.symbol}`;
+            return `${formatSmallNumber(prices[0] / (10 ** 18))} ${props.symbol}/s`;
         }
 
         const minPrice = Math.min(...prices);
         const maxPrice = Math.max(...prices);
 
-        return `${formatSmallNumber(minPrice / (10 ** 18))} - ${formatSmallNumber(maxPrice / (10 ** 18))} ${props.symbol}`
+        return `${formatSmallNumber(minPrice / (10 ** 18))} - ${formatSmallNumber(maxPrice / (10 ** 18))} ${props.symbol}/s`
     }
 
     const dataRh = `${props?.model?.Name} ${props.model?.Tags?.length ? `(${props.model?.Tags?.join(', ')})` : ''}`

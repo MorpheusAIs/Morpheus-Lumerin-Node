@@ -53,7 +53,6 @@ export const SetCustomEthStep = props => {
             onPaste={e => {
               e.preventDefault();
               const value = e.clipboardData.getData('Text').trim();
-              console.log(value);
               props.onInputChange({ value, id: 'customEthNode' });
             }}
             label="Custom ETH Node Url"

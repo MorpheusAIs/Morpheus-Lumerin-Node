@@ -1,16 +1,14 @@
-'use strict'
-
 import handlers from '../handlers'
 import utils from './utils'
 
 const listeners = {
+  logout: handlers.logout,
   'validate-password': handlers.validatePassword,
   'change-password': handlers.changePassword,
   'persist-state': handlers.persistState,
   'clear-cache': handlers.clearCache,
   'handle-client-error': handlers.handleClientSideError,
   'get-pool-address': handlers.getPoolAddress,
-  logout: handlers.logout,
   'save-proxy-router-settings': handlers.saveProxyRouterSettings,
   'get-proxy-router-settings': handlers.getProxyRouterSettings,
   'get-default-currency-settings': handlers.getDefaultCurrency,
@@ -27,14 +25,14 @@ const listeners = {
   'get-transactions': handlers.getTransactions,
   'get-balances': handlers.getBalances,
   'get-rates': handlers.getMorRate,
-  "get-todays-budget": handlers.getTodaysBudget,
-  "get-supply": handlers.getTokenSupply,
-  "get-auth-headers": handlers.getAuthHeaders,
+  'get-todays-budget': handlers.getTodaysBudget,
+  'get-supply': handlers.getTokenSupply,
+  'get-auth-headers': handlers.getAuthHeaders,
   // Chat history
-  "get-chat-history-titles": handlers.getChatHistoryTitles,
-  "get-chat-history": handlers.getChatHistory,
-  "delete-chat-history": handlers.deleteChatHistory,
-  "update-chat-history-title": handlers.updateChatHistoryTitle,
+  'get-chat-history-titles': handlers.getChatHistoryTitles,
+  'get-chat-history': handlers.getChatHistory,
+  'delete-chat-history': handlers.deleteChatHistory,
+  'update-chat-history-title': handlers.updateChatHistoryTitle,
   // Failover
   "get-failover-setting": handlers.isFailoverEnabled,
   "set-failover-setting": handlers.setFailoverSetting,
@@ -46,7 +44,17 @@ const listeners = {
   "pin-ipfs-file": handlers.pinIpfsFile,
   "unpin-ipfs-file": handlers.unpinIpfsFile,
   "add-file-to-ipfs": handlers.addFileToIpfs,
+  
   "open-select-folder-dialog": handlers.openSelectFolderDialog,
+
+  // Agent
+  'get-agent-users': handlers.getAgentUsers,
+  'confirm-decline-agent-user': handlers.confirmDeclineAgentUser,
+  'remove-agent-user': handlers.removeAgentUser,
+  'get-agent-txs': handlers.getAgentTxs,
+  'revoke-agent-allowance': handlers.revokeAgentAllowance,
+  'get-agent-allowance-requests': handlers.getAgentAllowanceRequests,
+  'confirm-decline-agent-allowance-request': handlers.confirmDeclineAgentAllowanceRequest
 }
 
 // Subscribe to messages where no core has to react

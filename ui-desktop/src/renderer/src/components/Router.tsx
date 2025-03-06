@@ -1,16 +1,15 @@
-import { HashRouter, Routes, Route, Navigate } from "react-router";
-import styled, { keyframes } from 'styled-components'
-
-import OfflineWarning from './OfflineWarning'
+import { HashRouter, Routes, Route, Navigate } from 'react-router';
+import styled, { keyframes } from 'styled-components';
+import OfflineWarning from './OfflineWarning';
 // import ChangePassword from './ChangePassword'
-import Dashboard from './dashboard/Dashboard'
-import Sidebar from './sidebar/Sidebar'
+import Dashboard from './dashboard/Dashboard';
+import Sidebar from './sidebar/Sidebar';
 import Chat from './chat/Chat';
-import Models from './models/Models'
-import Agents from './agents/Agents'
+import Models from './models/Models';
+import Agents from './agents/Agents';
 import Settings from './settings/Settings';
 import 'bootstrap/dist/css/bootstrap.min.css';
-import Providers from './providers/Providers'
+import Providers from './providers/Providers';
 
 const fadeIn = keyframes`
   from {
@@ -21,7 +20,7 @@ const fadeIn = keyframes`
     transform: scale(1);
     opacity: 1;
   }
-`
+`;
 
 const Container = styled.div`
   display: flex;
@@ -33,16 +32,15 @@ const Container = styled.div`
     left: 200px;
     padding-left: 0;
   }
-`
+`;
 
 const Main = styled.div`
   flex-grow: 1;
   overflow-x: hidden;
   overflow-y: hidden;
   min-height: 100vh;
-  padding-top: 1.4rem;
   position: relative;
-`
+`;
 
 export const Layout = () => (
   <Container data-testid="router-container">
@@ -63,12 +61,12 @@ export const Layout = () => (
     {/* <AutoPriceAdjuster /> */}
     <OfflineWarning />
   </Container>
-)
+);
 
 export default function Router() {
   return (
     <HashRouter>
       <Layout />
     </HashRouter>
-  )
+  );
 }

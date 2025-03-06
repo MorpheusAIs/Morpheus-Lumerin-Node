@@ -1,7 +1,6 @@
 import { BaseBtn, FieldBtn, Btn } from './Btn';
 import { Label } from './TextInput.styles';
 import TextInput from './TextInput';
-import ConfirmationWizard from './ConfirmationWizard';
 import DisplayValue from './DisplayValue';
 import AmountFields from './AmountFields';
 import PasswordStrengthMeter from './PasswordStrengthMeter';
@@ -21,7 +20,6 @@ import Flex from './Flex';
 import Sp from './Spacing';
 
 export {
-  ConfirmationWizard,
   DisplayValue,
   AmountFields,
   PasswordStrengthMeter,
@@ -44,5 +42,5 @@ export {
   Text,
   Flex,
   Btn,
-  Sp
+  Sp,
 };
