@@ -33,11 +33,11 @@ const Container = styled.div`
   overflow-y: auto;
 `;
 
-function ModelCard({ onSelect, model, openSelectDonwloadFolder, downloadModelFromIpfs, toasts }) {
+function ModelCard({ onSelect, model, openSelectDownloadFolder, downloadModelFromIpfs, toasts }) {
   const handleFolderSelect = async (e) => {
     e.stopPropagation();
     try {
-      const result = await openSelectDonwloadFolder();
+      const result = await openSelectDownloadFolder();
       const { canceled, filePaths } = result;
       if (canceled) {
         return;
@@ -99,7 +99,7 @@ function  ModelsTable({
   setSelectedModel,
   models,
   client,
-  openSelectDonwloadFolder,
+  openSelectDownloadFolder,
   downloadModelFromIpfs,
   toasts,
 } : any) {
@@ -109,7 +109,7 @@ function  ModelsTable({
 
   return (<Container>
      {
-      models.length ? models.map((x => (<div>{ModelCard({ onSelect, model: x, openSelectDonwloadFolder, downloadModelFromIpfs, toasts })}</div>))) : null
+      models.length ? models.map((x => (<div>{ModelCard({ onSelect, model: x, openSelectDownloadFolder, downloadModelFromIpfs, toasts })}</div>))) : null
      }
     </Container>)
 }

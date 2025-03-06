@@ -9,6 +9,7 @@ import Tab from 'react-bootstrap/Tab';
 import Tabs from 'react-bootstrap/Tabs';
 import styled from 'styled-components'
 import FileSelectionModal from './FileSelectionModal';
+import PinnedFilesTable from './PinnedFilesTable';
 
 
 const Container = styled.div`
@@ -34,9 +35,10 @@ const Models = ({
     setSelectedModel,
     getIpfsVersion,
     getAllModels,
-    openSelectDonwloadFolder,
+    openSelectDownloadFolder,
     downloadModelFromIpfs,
     addFileToIpfs,
+    getPinnedFiles,
     pinFile,
     unpinFile,
     toasts,
@@ -45,9 +47,10 @@ const Models = ({
     const [openChangeModal, setOpenChangeModal] = useState(false);
     const [ipfsVersion, setIpfsVersion] = useState(null);
     const [isIpfsConnected, setIsIpfsConnected] = useState(false);
+    const [pinnedFiles, setPinnedFiles] = useState([]);
     const [models, setModels] = useState([]);
 
-    useEffect(() => {
+    const reload = () => {
         getIpfsVersion().then((response) => {
             if (response?.version) {
                 setIpfsVersion(response?.version);
@@ -65,7 +68,38 @@ const Models = ({
         }).catch((error) => {
             console.error("Error", error);
         });
+
+        getPinnedFiles().then((response) => {
+            setPinnedFiles(response.files);
+        }).catch((error) => {
+            console.error("Error", error);
+        });
+    }
+
+    useEffect(() => {
+        reload();
     }, []);
+
+    const handleUnpinFile = async (hash) => {
+        try {
+            const response = await unpinFile(hash);
+            if (response) {
+                toasts.toast("success", "File unpinned successfully");
+                setPinnedFiles(pinnedFiles.filter((file: any) => file.hash !== hash));
+            } else {
+                toasts.toast("error", "Failed to unpin file");
+            }
+        } catch (error) {
+            toasts.toast("error", "Failed to unpin file");
+            console.error("Error", error);
+        }
+    }
+
+    const onPinModel = async (hash) => {
+        const response = await pinFile(hash);
+        reload();
+        return response;
+    }
 
     return (
         <View data-testid="models-container">
@@ -88,10 +122,10 @@ const Models = ({
                     className="mb-3"
                 >
                     <Tab eventKey="registry" title="Registry">
-                        <ModelsTable setSelectedModel={setSelectedModel} models={models} openSelectDonwloadFolder={openSelectDonwloadFolder} downloadModelFromIpfs={downloadModelFromIpfs} toasts={toasts} />
+                        <ModelsTable setSelectedModel={setSelectedModel} models={models} openSelectDownloadFolder={openSelectDownloadFolder} downloadModelFromIpfs={downloadModelFromIpfs} toasts={toasts} />
                     </Tab>
                     <Tab eventKey="pinned" title="Pinned Models">
-
+                        <PinnedFilesTable pinnedFiles={pinnedFiles} unpinFile={handleUnpinFile} toasts={toasts} />
                     </Tab>
                 </Tabs>
 
@@ -99,8 +133,7 @@ const Models = ({
             <FileSelectionModal
                 isActive={openChangeModal}
                 addFileToIpfs={addFileToIpfs}
-                pinFile={pinFile}
-                unpinFile={unpinFile}
+                pinFile={onPinModel}
                 toasts={toasts}
                 handleClose={() => setOpenChangeModal(false)}
                  />

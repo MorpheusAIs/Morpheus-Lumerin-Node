@@ -464,6 +464,19 @@ const addFileToIpfs = async ({ filePath }: { filePath: string }): Promise<{ hash
   }
 }
 
+const getIpfsPinnedFiles = async (): Promise<{ files: { cid: string, hash: string }[] } | null> => {
+  try {
+    const path = `${config.chain.localProxyRouterUrl}/ipfs/pin`;
+    const response = await fetch(path, { headers: await getAuthHeaders() });
+    const body = await response.json();
+    return body;
+  }
+  catch (e) {
+    console.log("Error", e)
+    return null;
+  }
+}
+
 const apiGateway = {
   getAllModels,
   getBalances,
@@ -492,7 +505,8 @@ const apiGateway = {
   getIpfsFile,
   pinIpfsFile,
   unpinIpfsFile,
-  addFileToIpfs
+  addFileToIpfs,
+  getIpfsPinnedFiles,
 }
 
 export default apiGateway

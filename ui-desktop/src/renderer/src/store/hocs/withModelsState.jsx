@@ -46,7 +46,7 @@ const withModelsState = WrappedComponent => {
       return response;
     }
 
-    openSelectDonwloadFolder = async () => {
+    openSelectDownloadFolder = async () => {
       const response = await this.props.client.openSelectFolderDialog();
       return response;
     }
@@ -71,6 +71,11 @@ const withModelsState = WrappedComponent => {
       const response = await this.props.client.unpinIpfsFile({ cid });
       return response;
     }
+
+    getPinnedFiles = async () => {
+      const response = await this.props.client.getIpfsPinnedFiles();
+      return response;
+    }
  
     render() {
 
@@ -79,9 +84,10 @@ const withModelsState = WrappedComponent => {
             getAllModels={this.getAllModels}
             getAllProviders={this.getAllProviders}
             getIpfsVersion={this.getIpfsVersion}
-            openSelectDonwloadFolder={this.openSelectDonwloadFolder}
+            openSelectDownloadFolder={this.openSelectDownloadFolder}
             downloadModelFromIpfs={this.downloadModelFromIpfs}
             addFileToIpfs={this.addFileToIpfs}
+            getPinnedFiles={this.getPinnedFiles}
             pinFile={this.pinFile}
             unpinFile={this.unpinFile}
             toasts={this.context}

@@ -155,6 +155,7 @@ const createClient = function (createStore) {
     pinIpfsFile: utils.forwardToMainProcess('pin-ipfs-file', 750000),
     unpinIpfsFile: utils.forwardToMainProcess('unpin-ipfs-file', 750000),
     addFileToIpfs: utils.forwardToMainProcess('add-file-to-ipfs', 750000),
+    getIpfsPinnedFiles: utils.forwardToMainProcess('get-ipfs-pinned-files', 750000),
 
     openSelectFolderDialog: utils.forwardToMainProcess('open-select-folder-dialog', 750000),
 

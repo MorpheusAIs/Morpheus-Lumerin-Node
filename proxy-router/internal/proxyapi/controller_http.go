@@ -492,7 +492,14 @@ func (c *ProxyController) GetPinnedFiles(ctx *gin.Context) {
 
 	filesWithHashes := make([]IpfsPinnedFile, len(files))
 	for i, file := range files {
-		filesWithHashes[i] = IpfsPinnedFile{CID: file, Hash: lib.HexString(file)}
+		cidBytes, err := lib.CIDToBytes32(file)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		hash := lib.HexString(cidBytes)
+		filesWithHashes[i] = IpfsPinnedFile{CID: file, Hash: hash}
 	}
 	ctx.JSON(http.StatusOK, IpfsPinnedFilesRes{Files: filesWithHashes})
 }
