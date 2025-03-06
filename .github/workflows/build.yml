@@ -114,17 +114,20 @@ jobs:
         run: |
           OS_NAME="ubuntu-x64"
           BIN_NAME="ubuntu-x64"
+          KUBO=kubo_v0.30.0_linux-amd64.tar.gz
           echo "Artifact: mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip"
           echo "LLAMA Binary: ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip"
           echo "LLAMA Model: ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}"
           wget -nv ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip
           wget -nv ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}
+          wget -nv https://github.com/ipfs/kubo/releases/download/v0.30.0/$KUBO
           unzip -o -j ${{ env.LLAMA_FILEBASE}}-$BIN_NAME.zip build/bin/llama-server
           echo '{
             "run": [
               "./llama-server --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
               "./proxy-router",
-              "./morpheus-ui-'${{ env.VFULL }}'-x86_64-linux.AppImage"
+              "./morpheus-ui-'${{ env.VFULL }}'-x86_64-linux.AppImage",
+              "./ipfs daemon --init"
             ]
           }' > mor-launch.json
 
@@ -132,7 +135,8 @@ jobs:
           cat mor-launch.json
 
           mv ./cli/mor-cli mor-cli
-          zip -j mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/proxy-router .env ${{ env.MODEL_NAME}} mor-launch.json ./ui-desktop/dist/morpheus-ui-${{ env.VFULL }}-x86_64-linux.AppImage models-config.json rating-config.json mor-cli
+          tar xzf $KUBO --strip-components=1 kubo/ipfs
+          zip -j mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/proxy-router .env ${{ env.MODEL_NAME}} mor-launch.json ./ui-desktop/dist/morpheus-ui-${{ env.VFULL }}-x86_64-linux.AppImage models-config.json rating-config.json mor-cli ipfs
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -216,24 +220,28 @@ jobs:
         run: |
           OS_NAME="macos-x64"
           BIN_NAME="macos-x64"
+          KUBO=kubo_v0.30.0_darwin-amd64.tar.gz
           echo "Artifact: mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip"
           echo "LLAMA Binary: ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip"
           echo "LLAMA Model: ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}"
           wget -nv ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip
           wget -nv ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}
+          wget -nv https://github.com/ipfs/kubo/releases/download/v0.30.0/$KUBO
           unzip -o -j ${{ env.LLAMA_FILEBASE}}-$BIN_NAME.zip build/bin/llama-server
           echo '{
             "run": [
               "./llama-server --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
               "./proxy-router",
-              "./MorpheusUI.app/Contents/MacOS/MorpheusUI"
+              "./MorpheusUI.app/Contents/MacOS/MorpheusUI",
+              "./ipfs daemon --init"
             ]
           }' > mor-launch.json
           echo "############# Contents of mor-launch.json: ############# "
           cat mor-launch.json
           mv ./cli/mor-cli mor-cli
           unzip ./ui-desktop/dist/morpheus-ui-${{ env.VFULL }}-x64-mac.zip
-          zip -j mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/proxy-router .env ${{ env.MODEL_NAME}} mor-launch.json models-config.json rating-config.json mor-cli
+          tar xzf $KUBO --strip-components=1 kubo/ipfs
+          zip -j mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/proxy-router .env ${{ env.MODEL_NAME}} mor-launch.json models-config.json rating-config.json mor-cli ipfs
           zip -r mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip 'MorpheusUI.app'
 
       - name: Upload artifacts
@@ -319,6 +327,7 @@ jobs:
         run: |
           OS_NAME="macos-arm64"
           BIN_NAME="macos-arm64"
+          KUBO=kubo_v0.30.0_darwin-arm64.tar.gz
           echo "Artifact: mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip"
           echo "LLAMA Binary: ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip"
           echo "LLAMA Model: ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}"
@@ -336,7 +345,8 @@ jobs:
           cat mor-launch.json
           mv ./cli/mor-cli mor-cli
           unzip ./ui-desktop/dist/morpheus-ui-${{ env.VFULL }}-arm64-mac.zip
-          zip -j mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/proxy-router .env ${{ env.MODEL_NAME}} mor-launch.json models-config.json rating-config.json mor-cli
+          tar xzf $KUBO --strip-components=1 kubo/ipfs
+          zip -j mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip ./LICENSE ./launcher/mor-launch llama-server ./proxy-router/proxy-router .env ${{ env.MODEL_NAME}} mor-launch.json models-config.json rating-config.json mor-cli ipfs
           zip -r mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip 'MorpheusUI.app'
 
       - name: Upload artifacts
@@ -425,6 +435,7 @@ jobs:
         run: |
           OS_NAME="win-x64"
           BIN_NAME="win-avx2-x64"
+          KUBO=kubo_v0.30.0_windows-amd64.zip
           echo "Artifact: mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip"
           echo "LLAMA Binary: ${{ env.LLAMA_URL }}/${{ env.LLAMA_RELEASE }}/${{ env.LLAMA_FILEBASE }}-$BIN_NAME.zip"
           echo "LLAMA Model: ${{ env.MODEL_URL }}/${{ env.MODEL_OWNER }}/${{ env.MODEL_REPO }}/resolve/main/${{ env.MODEL_NAME }}"
@@ -435,7 +446,8 @@ jobs:
             "run": [
               "./llama-server.exe --no-webui -m ./'"${{ env.MODEL_NAME }}"'",
               "./proxy-router.exe",
-              "./morpheus-ui-'"${{ env.VFULL }}"'-x64-win.exe"
+              "./morpheus-ui-'"${{ env.VFULL }}"'-x64-win.exe",
+              "./ipfs.exe daemon --init"
             ]
           }' > mor-launch.json
           echo "Contents of mor-launch.json: "
@@ -444,7 +456,8 @@ jobs:
           mv ./cli/mor-cli mor-cli.exe
           mv ./launcher/mor-launch mor-launch.exe
           mv "./ui-desktop/dist/morpheus-ui-${{ env.VFULL }}-x64-win" morpheus-ui-${{ env.VFULL }}-x64-win.exe
-          7z a mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip LICENSE mor-launch.exe proxy-router.exe .env llama-server.exe llama.dll ggml.dll ${{ env.MODEL_NAME}} mor-launch.json morpheus-ui-${{ env.VFULL }}-x64-win.exe models-config.json rating-config.json mor-cli.exe
+          unzip -o -j $KUBO kubo/ipfs.exe
+          7z a mor-launch-${{ env.TAG_NAME }}-$OS_NAME.zip LICENSE mor-launch.exe proxy-router.exe .env llama-server.exe llama.dll ggml.dll ${{ env.MODEL_NAME}} mor-launch.json morpheus-ui-${{ env.VFULL }}-x64-win.exe models-config.json rating-config.json mor-cli.exe ipfs.exe
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

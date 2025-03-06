@@ -25,14 +25,35 @@ const RowContainer = styled.div`
     margin-bottom: 1rem;
   `
 
-const FileSelectionModal = ({ isActive, handleClose }) => {
+const FileSelectionModal = ({ isActive, handleClose, addFileToIpfs, pinFile, unpinFile, toasts }) => {
 
     if (!isActive) {
         return <></>;
     }
 
     const [files, setFiles] = useState<any>([]);
-
+    
+    const onPinModel = async () => {
+        const response = await addFileToIpfs(files[0].path);
+        if (response) {
+            await pinFile(response.hash).then((res) => {
+                if (res.result) {
+                    handleClose();
+                    toasts.toast("success", "Model pinned successfully");
+                } else {
+                    handleClose();
+                    toasts.toast("error", "Failed to pin model");
+                }
+            }).catch(() => {
+                handleClose();
+                toasts.toast("error", "Failed to pin model");
+            });
+        } else {
+            handleClose();
+            toasts.toast("error", "Failed to pin model");
+        }
+    }
+    
     return (
         <Modal
             onClose={() => {
@@ -73,7 +94,7 @@ const FileSelectionModal = ({ isActive, handleClose }) => {
             }
 
             <Sp mt={2} style={{ dispay: 'flex', justifyContent: 'center'}}>
-                <RightBtn>Pin Model Files</RightBtn>
+                <RightBtn onClick={onPinModel}>Pin Model Files</RightBtn>
             </Sp>
 
         </Modal>

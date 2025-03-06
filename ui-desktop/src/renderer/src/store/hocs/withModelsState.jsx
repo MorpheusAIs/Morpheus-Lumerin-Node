@@ -6,6 +6,7 @@ import PropTypes from 'prop-types';
 import React from 'react';
 import { ToastsContext } from '../../components/toasts';
 import selectors from '../selectors';
+import path from 'path';
 
 const withModelsState = WrappedComponent => {
   class Container extends React.Component {
@@ -39,6 +40,37 @@ const withModelsState = WrappedComponent => {
     getBitsByModels = async (modelId) => {
         
     }
+
+    getIpfsVersion = async () => {
+      const response = await this.props.client.getIpfsVersion();
+      return response;
+    }
+
+    openSelectDonwloadFolder = async () => {
+      const response = await this.props.client.openSelectFolderDialog();
+      return response;
+    }
+
+    downloadModelFromIpfs = async (modelId, folderPath) => {
+      const filePath = path.join(folderPath, modelId);
+      const response = await this.props.client.getIpfsFile({ cid: modelId, destinationPath: filePath });
+      return response;
+    }
+
+    addFileToIpfs = async (filePath) => {
+      const response = await this.props.client.addFileToIpfs({ filePath });
+      return response;
+    }
+
+    pinFile = async (cid) => {
+      const response = await this.props.client.pinIpfsFile({ cid });
+      return response;
+    }
+
+    unpinFile = async (cid) => {
+      const response = await this.props.client.unpinIpfsFile({ cid });
+      return response;
+    }
  
     render() {
 
@@ -46,6 +78,13 @@ const withModelsState = WrappedComponent => {
         <WrappedComponent
             getAllModels={this.getAllModels}
             getAllProviders={this.getAllProviders}
+            getIpfsVersion={this.getIpfsVersion}
+            openSelectDonwloadFolder={this.openSelectDonwloadFolder}
+            downloadModelFromIpfs={this.downloadModelFromIpfs}
+            addFileToIpfs={this.addFileToIpfs}
+            pinFile={this.pinFile}
+            unpinFile={this.unpinFile}
+            toasts={this.context}
             {...this.state}
             {...this.props}
         />

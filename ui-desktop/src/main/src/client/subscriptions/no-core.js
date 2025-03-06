@@ -38,7 +38,15 @@ const listeners = {
   // Failover
   "get-failover-setting": handlers.isFailoverEnabled,
   "set-failover-setting": handlers.setFailoverSetting,
-  "check-provider-connectivity": handlers.checkProviderConnectivity
+  "check-provider-connectivity": handlers.checkProviderConnectivity,
+
+  // IPFS
+  "get-ipfs-version": handlers.getIpfsVersion,
+  "get-ipfs-file": handlers.getIpfsFile,
+  "pin-ipfs-file": handlers.pinIpfsFile,
+  "unpin-ipfs-file": handlers.unpinIpfsFile,
+  "add-file-to-ipfs": handlers.addFileToIpfs,
+  "open-select-folder-dialog": handlers.openSelectFolderDialog,
 }
 
 // Subscribe to messages where no core has to react

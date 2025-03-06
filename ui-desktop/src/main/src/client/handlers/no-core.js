@@ -1,5 +1,7 @@
 'use strict'
 
+import { dialog } from 'electron';
+
 import logger from '../../../logger'
 import restart from '../electron-restart'
 import dbManager from '../database'
@@ -105,7 +107,13 @@ const isFailoverEnabled = async () => {
   return settings;
 }
 
-const restartWallet = () => restart(1)
+const restartWallet = () => restart(1);
+
+const openSelectFolderDialog = () => {
+  return dialog.showOpenDialog({
+    properties: ['openDirectory']
+  });
+}
 
 export default {
   validatePassword,
@@ -127,5 +135,6 @@ export default {
   setAutoAdjustPriceData,
   isFailoverEnabled,
   setFailoverSetting,
+  openSelectFolderDialog,
   ...apiGateway,
 }

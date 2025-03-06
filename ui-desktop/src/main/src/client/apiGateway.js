@@ -322,6 +322,72 @@ const clearWallet = async () => {
     }
 }
 
+const getIpfsVersion = async () => {
+    try {
+        const path = `${config.chain.localProxyRouterUrl}/ipfs/version`;
+        const response = await fetch(path, { headers: await getAuthHeaders() });
+        const body = await response.json();
+        return body;
+    }
+    catch (e) {
+        console.log("Error", e)
+        return null;
+    }
+}
+
+const getIpfsFile = async ({ cid, destinationPath }) => {
+    try {
+        const path = `${config.chain.localProxyRouterUrl}/ipfs/download/${cid}`;
+        const response = await fetch(path, { headers: await getAuthHeaders(), method: "POST", body: JSON.stringify({ destinationPath }) });
+        const body = await response.json();
+        return body;
+    }
+    catch (e) {
+        console.log("Error", e)
+        return null;
+    }
+}
+
+const pinIpfsFile = async ({ cid }) => {
+    try {
+        const path = `${config.chain.localProxyRouterUrl}/ipfs/pin`;
+        const response = await fetch(path, { method: "POST", headers: await getAuthHeaders(), body: JSON.stringify({ cid }) });
+        const body = await response.json();
+        return body;
+    }
+    catch (e) {
+        console.log("Error", e)
+        return false;
+    }
+}
+
+const unpinIpfsFile = async ({ cid }) => {
+    try {
+        const path = `${config.chain.localProxyRouterUrl}/ipfs/unpin    `;
+        const response = await fetch(path, { method: "POST", headers: await getAuthHeaders(), body: JSON.stringify({ cid }) });
+        const body = await response.json();
+        return body;
+    }
+    catch (e) {
+        console.log("Error", e)
+        return false;
+    }
+}
+
+const addFileToIpfs = async ({ filePath }) => {
+    console.log("🚀 ~ addFileToIpfs ~ filePath:", filePath)
+    try {
+        const path = `${config.chain.localProxyRouterUrl}/ipfs/add`;
+        const response = await fetch(path, { method: "POST", headers: await getAuthHeaders(), body: JSON.stringify({ filePath }) });
+        const body = await response.json();
+        return body;
+    }
+    catch (e) {
+        console.log("Error", e)
+        return false;
+    }
+}
+
 export default {
     getAllModels,
     getBalances,
@@ -338,5 +404,10 @@ export default {
     checkProviderConnectivity,
     getAuthHeaders,
     clearWallet,
-    clearEthNodeEnv
+    clearEthNodeEnv,
+    getIpfsVersion,
+    getIpfsFile,
+    pinIpfsFile,
+    unpinIpfsFile,
+    addFileToIpfs
 }
