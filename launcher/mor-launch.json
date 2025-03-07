@@ -1,6 +1,14 @@
 {
-    "run":[
-        "sh -c 'echo Launched'",
-        "server -m /tmp/models/llama2_7b_chat_uncensored.Q4_K_M.gguf"
+    "llama_url": "https://github.com/ggml-org/llama.cpp/releases/download",
+    "llama_release": "b4406",
+    "llama_filebase": "llama-b4406-bin",
+    "model_url": "https://huggingface.co",
+    "model_owner": "TheBloke",
+    "model_repo": "TinyLlama-1.1B-Chat-v1.0-GGUF",
+    "model_name": "tinyllama-1.1b-chat-v1.0.Q2_K.gguf",
+    "run": [
+      "./llama-server --no-webui -m ./{model_name}",
+      "./proxy-router",
+      "./MorpheusUI.app/Contents/MacOS/MorpheusUI"
     ]
-}
+  }
