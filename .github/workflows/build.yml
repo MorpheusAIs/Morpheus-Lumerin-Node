@@ -60,7 +60,7 @@ defaults:
     shell: bash
 
 env:
-  LLAMA_URL: https://github.com/ggerganov/llama.cpp/releases/download
+  LLAMA_URL: https://github.com/ggml-org/llama.cpp/releases/download
   LLAMA_RELEASE: b4406 
   LLAMA_FILEBASE: llama-b4406-bin
   MODEL_URL: https://huggingface.co
@@ -558,9 +558,9 @@ jobs:
             "model_repo": "${{ env.MODEL_REPO }}",
             "model_name": "${{ env.MODEL_NAME }}",
             "run": [
-              "./llama-server.exe --no-webui -m ./{model_name}",
-              "./proxy-router.exe",
-              "./morpheus-ui-'"$FULLTAG"'-x64-win.exe"
+              ".\llama-server.exe --no-webui -m .\{model_name}",
+              ".\proxy-router.exe",
+              ".\morpheus-ui-$FULLTAG-x64-win.exe"
             ]
           }
           EOF

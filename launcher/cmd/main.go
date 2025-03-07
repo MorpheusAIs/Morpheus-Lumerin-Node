@@ -52,11 +52,11 @@ func getBinName() string {
 }
 
 // Gets the appropriate llama-server binary name based on the OS
-func getLlamaServerBinaryName() string {
+func getLlamaServerBinaryName() (string, string) {
 	if runtime.GOOS == "windows" {
-		return "llama-server.exe"
+		return "llama-server.exe", "llama-server.exe" // Root of the zip file
 	}
-	return "llama-server"
+	return "llama-server", "build/bin/llama-server" // MacOS and Ubuntu
 }
 
 // Checks if the required files already exist
@@ -93,7 +93,7 @@ func downloadFile(filepath string, url string) error {
 	return err
 }
 
-// Extracts a specific file from a zip archive
+// Extracts the llama-server binary from the zip archive
 func extractFileFromZip(zipPath, fileToExtract, destPath string) error {
 	r, err := zip.OpenReader(zipPath)
 	if err != nil {
@@ -164,7 +164,8 @@ func main() {
 
 	// Determine correct binary and model file paths
 	binName := getBinName()
-	llamaBinary := filepath.Join(base, getLlamaServerBinaryName())
+	llamaBinary, llamaServerInZip := getLlamaServerBinaryName()
+	llamaBinaryPath := filepath.Join(base, llamaBinary)
 	modelFile := filepath.Join(base, config.ModelName)
 
 	// Construct download URL for the model file
@@ -176,20 +177,20 @@ func main() {
 	runLlamaServer := false
 
 	if isLocalMode {
-		// "local" mode: Ensure llama-server and model file exist, download if missing
-		if !filesExist(llamaBinary) {
+		if !filesExist(llamaBinaryPath) {
 			log.Println("Llama-server not found. Downloading...")
 			llamaZip := filepath.Join(base, fmt.Sprintf("%s-%s.zip", config.LlamaFileBase, binName))
-			llamaServerInZip := "build/bin/" + getLlamaServerBinaryName()
 			llamaDownloadURL := fmt.Sprintf("%s/%s/%s-%s.zip", config.LlamaURL, config.LlamaRelease, config.LlamaFileBase, binName)
 
 			if err := downloadFile(llamaZip, llamaDownloadURL); err != nil {
 				log.Fatalf("Failed to download Llama binary: %v", err)
 			}
-			if err := extractFileFromZip(llamaZip, llamaServerInZip, llamaBinary); err != nil {
+
+			if err := extractFileFromZip(llamaZip, llamaServerInZip, llamaBinaryPath); err != nil {
 				log.Fatalf("Failed to extract llama-server: %v", err)
 			}
-			if err := os.Chmod(llamaBinary, 0755); err != nil {
+
+			if err := os.Chmod(llamaBinaryPath, 0755); err != nil {
 				log.Fatalf("Failed to set execute permission on llama-server: %v", err)
 			}
 		}
@@ -200,7 +201,7 @@ func main() {
 			}
 		}
 		runLlamaServer = true
-	} else if filesExist(llamaBinary) {
+	} else if filesExist(llamaBinaryPath) {
 		if !filesExist(modelFile) {
 			log.Println("Model file not found. Downloading...")
 			if err := downloadFile(modelFile, modelDownloadURL); err != nil {
@@ -210,10 +211,8 @@ func main() {
 		runLlamaServer = true
 	}
 
-	// Replace {model_name} placeholder in run commands
 	config.Run = replaceModelPlaceholder(config.Run, config.ModelName)
 
-	// Execute commands from config
 	var wg sync.WaitGroup
 	for _, cmdStr := range config.Run {
 		if !runLlamaServer && strings.Contains(cmdStr, "llama-server") {
