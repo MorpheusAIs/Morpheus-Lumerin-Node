@@ -51,12 +51,12 @@ func getBinName() string {
 	return fmt.Sprintf("%s-%s", osName, archName)
 }
 
-// Gets the appropriate llama-server binary name based on the OS
-func getLlamaServerBinaryName() (string, string) {
+// Gets the list of files to extract based on the OS
+func getFilesToExtract() []string {
 	if runtime.GOOS == "windows" {
-		return "llama-server.exe", "llama-server.exe" // Root of the zip file
+		return []string{"llama-server.exe", "llama.dll", "ggml.dll", "ggml-base.dll", "ggml-cpu.dll", "ggml-rpc.dll"}
 	}
-	return "llama-server", "build/bin/llama-server" // MacOS and Ubuntu
+	return []string{"build/bin/llama-server"}
 }
 
 // Checks if the required files already exist
@@ -93,17 +93,24 @@ func downloadFile(filepath string, url string) error {
 	return err
 }
 
-// Extracts the llama-server binary from the zip archive
-func extractFileFromZip(zipPath, fileToExtract, destPath string) error {
+// Extracts specific files from a zip archive
+func extractFilesFromZip(zipPath string, filesToExtract []string, destDir string) error {
 	r, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return err
 	}
 	defer r.Close()
 
+	extractedFiles := make(map[string]bool)
+	for _, f := range filesToExtract {
+		extractedFiles[f] = false
+	}
+
 	for _, f := range r.File {
-		if f.Name == fileToExtract {
-			log.Printf("Extracting %s from %s", fileToExtract, zipPath)
+		if _, shouldExtract := extractedFiles[f.Name]; shouldExtract {
+			destPath := filepath.Join(destDir, filepath.Base(f.Name))
+			log.Printf("Extracting %s to %s", f.Name, destPath)
+
 			rc, err := f.Open()
 			if err != nil {
 				return err
@@ -116,11 +123,25 @@ func extractFileFromZip(zipPath, fileToExtract, destPath string) error {
 			}
 			defer outFile.Close()
 
-			_, err = io.Copy(outFile, rc)
-			return err
+			if _, err = io.Copy(outFile, rc); err != nil {
+				return err
+			}
+
+			if err := os.Chmod(destPath, 0755); err != nil {
+				return fmt.Errorf("failed to set execute permission for %s: %v", destPath, err)
+			}
+
+			extractedFiles[f.Name] = true
 		}
 	}
-	return fmt.Errorf("file %s not found in zip %s", fileToExtract, zipPath)
+
+	for file, extracted := range extractedFiles {
+		if !extracted {
+			return fmt.Errorf("file %s not found in zip %s", file, zipPath)
+		}
+	}
+
+	return nil
 }
 
 // Reads configuration from mor-launch.json
@@ -155,30 +176,30 @@ func main() {
 	}
 	base := filepath.Dir(exePath)
 
-	// Load configuration from mor-launch.json
 	configPath := filepath.Join(base, "mor-launch.json")
 	config, err := readConfig(configPath)
 	if err != nil {
 		log.Fatalf("Error reading config file: %v", err)
 	}
 
-	// Determine correct binary and model file paths
 	binName := getBinName()
-	llamaBinary, llamaServerInZip := getLlamaServerBinaryName()
-	llamaBinaryPath := filepath.Join(base, llamaBinary)
+	filesToExtract := getFilesToExtract()
 	modelFile := filepath.Join(base, config.ModelName)
 
-	// Construct download URL for the model file
 	modelDownloadURL := fmt.Sprintf("%s/%s/%s/resolve/main/%s", config.ModelURL, config.ModelOwner, config.ModelRepo, config.ModelName)
 
-	// Check if "local" flag is provided
 	isLocalMode := len(os.Args) > 1 && os.Args[1] == "local"
 
 	runLlamaServer := false
 
 	if isLocalMode {
-		if !filesExist(llamaBinaryPath) {
-			log.Println("Llama-server not found. Downloading...")
+		filesNeeded := make([]string, len(filesToExtract))
+		for i, f := range filesToExtract {
+			filesNeeded[i] = filepath.Join(base, filepath.Base(f))
+		}
+
+		if !filesExist(filesNeeded...) {
+			log.Println("Required binaries not found. Downloading...")
 			llamaZip := filepath.Join(base, fmt.Sprintf("%s-%s.zip", config.LlamaFileBase, binName))
 			llamaDownloadURL := fmt.Sprintf("%s/%s/%s-%s.zip", config.LlamaURL, config.LlamaRelease, config.LlamaFileBase, binName)
 
@@ -186,28 +207,20 @@ func main() {
 				log.Fatalf("Failed to download Llama binary: %v", err)
 			}
 
-			if err := extractFileFromZip(llamaZip, llamaServerInZip, llamaBinaryPath); err != nil {
-				log.Fatalf("Failed to extract llama-server: %v", err)
+			if err := extractFilesFromZip(llamaZip, filesToExtract, base); err != nil {
+				log.Fatalf("Failed to extract binaries: %v", err)
 			}
+		}
 
-			if err := os.Chmod(llamaBinaryPath, 0755); err != nil {
-				log.Fatalf("Failed to set execute permission on llama-server: %v", err)
-			}
-		}
 		if !filesExist(modelFile) {
 			log.Println("Model file not found. Downloading...")
 			if err := downloadFile(modelFile, modelDownloadURL); err != nil {
 				log.Fatalf("Failed to download model file: %v", err)
 			}
 		}
+
 		runLlamaServer = true
-	} else if filesExist(llamaBinaryPath) {
-		if !filesExist(modelFile) {
-			log.Println("Model file not found. Downloading...")
-			if err := downloadFile(modelFile, modelDownloadURL); err != nil {
-				log.Fatalf("Failed to download model file: %v", err)
-			}
-		}
+	} else if filesExist(filepath.Join(base, "llama-server"), modelFile) || filesExist(filepath.Join(base, "llama-server.exe"), modelFile) {
 		runLlamaServer = true
 	}
 

@@ -64,10 +64,11 @@ env:
   LLAMA_RELEASE: b4406 
   LLAMA_FILEBASE: llama-b4406-bin
   MODEL_URL: https://huggingface.co
-  MODEL_NAME: tinyllama-1.1b-chat-v1.0.Q2_K.gguf
-  #tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
   MODEL_OWNER: TheBloke
   MODEL_REPO: TinyLlama-1.1B-Chat-v1.0-GGUF  
+  MODEL_NAME: tinyllama-1.1b-chat-v1.0.Q2_K.gguf
+  #tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
+
   
 jobs:
   Generate-Tag: 
