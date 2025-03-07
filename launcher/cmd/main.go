@@ -229,7 +229,10 @@ func main() {
 	var wg sync.WaitGroup
 	for _, cmdStr := range config.Run {
 		if !runLlamaServer && strings.Contains(cmdStr, "llama-server") {
-			log.Println("Skipping llama-server command based on startup mode.")
+			log.Println("######################################################")
+			log.Println("### Skipping llama-server command based on startup mode.")
+			log.Println("### If you want a local model server, run the `mor-launch local` command.")
+			log.Println("######################################################")
 			continue
 		}
 
