@@ -20,7 +20,7 @@ Numbers below reference the circled elements in the diagram above.
 - [01-model-setup.md](01-model-setup.md) - for more details 
 - Existing, Hosted AI model that is available for inference
 - In the real world, this is assumed to be a high-horsepower server or server farm tuned for large language models and available via standard OpenAI API interface on a privately accessed endpoint (IP address:port or DNS name:port) eg: `http://mycoolaimodel.serverfarm.io:8080` 
-- In the packaged software releases, llama.cpp (llama-server) example is included to run on the same machine as the other components to show how the components work together.  It is not a real-world model and is not tuned for performance.  
+- In the packaged software releases, llama.cpp (llama-server) example can be automatically downloaded (`./mor-launch local`) to run on the same machine as the other components to show how the components work together.  It is not a real-world model and is not tuned for performance.  
 
 ## 2. Provider Proxy-Router
 - [02-provider-setup.md](02-provider-setup.md) - for more details
@@ -61,7 +61,7 @@ Numbers below reference the circled elements in the diagram above.
 - The components are very similar to the Provider side of things with the exception that the consumer node will typically not be hosting a model, but will be sending prompts to the proxy-router and receiving inference back
 - In this case, the easiest way to install is to use the packaged releases for your platform on Github and follow the instructions in the README.md file
 - These packages include 3 different pieces of software 
-    - llama.cpp (llama-server) - a simple example model that can be run on the same machine as the proxy-router and MorpheusUI to show how the components work together and run local (free) inference
+    - llama.cpp (llama-server) - a simple example model that can be automatically downloaded (`./mor-launch local`) and run on the same machine as the proxy-router and MorpheusUI to show how the components work together and run local (free) inference
     - proxy-router - the same software as the provider side, but with different environment variables and a different role
     - MorpheusUI - Electron GUI that enables the user to interact with the models (via the API) to browse offered bids, purchase and send prompts 
 - The consumer node will need to have the proxy-router running and the MorpheusUI running to interact with the models and bids on the blockchain
