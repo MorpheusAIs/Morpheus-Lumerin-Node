@@ -1,12 +1,14 @@
 {
   "name": "@lumerin/wallet-core",
   "version": "1.0.90",
+  "description": "Core logic to develop a Lumerin wallet",
+  "repository": "https://github.com/lumerin-protocol/morpheus-lumerin-node.git//ui-core",
+  "main": "src/index.js",
   "author": {
     "name": "Lumerin",
     "email": "developer@mor.org",
     "url": "https://mor.org"
   },
-  "description": "Core logic to develop a Lumerin wallet",
   "keywords": [
     "crypto",
     "cryptocurrency",
@@ -16,11 +18,10 @@
   ],
   "license": "MIT",
   "files": [
+    "LICENSE",
     "patches",
     "src"
   ],
-  "main": "src/index.js",
-  "repository": "https://github.com/lumerin-protocol/WalletCore",
   "scripts": {
     "test": "mocha --recursive test src",
     "check": "dependency-check . --no-dev --ignore-module patch-package --ignore-module websocket-reconnector",

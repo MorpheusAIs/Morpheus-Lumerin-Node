@@ -3,9 +3,9 @@
 This is the simplest way to get started with the Morpheus Lumerin Node as a Consumer.  This will allow you to interact with the Morpheus network and the models offered on the network as a consumer.
 
 It will run 3 different pieces of software on your local machine:
-* `llama.cpp` (llama-server) - a simple sample AI model that can be run on the same machine as the proxy-router and MorpheusUI to show how the components work together and run local (free) inference
 * `proxy-router` - the same software as the provider side, but with different environment variables and a different role
 * `MorpheusUI` - Electron GUI that enables the user to interact with the models (via the API) to browse offered bids, purchase and send prompts
+* [Optional] `llama.cpp` (llama-server) - a simple sample AI model that can be run on the same machine as the proxy-router and MorpheusUI to show how the components work together and run local (free) inference (to launch this, include the `local` argument when starting the node)
 
 ## Installation Steps:
 1. Obtain the software: 
@@ -16,7 +16,7 @@ It will run 3 different pieces of software on your local machine:
 1. Extract the zip to a local folder (examples)
     * Windows: `(%USERPROFILE%)/Downloads/morpheus)` 
     * Linux & MacOS: `~/Downloads/morpheus`
-    * On MacOS you will need to execute `xattr -c mor-launch mor-cli proxy-router MorpheusUI.app llama-server` in a command window to remove the quarantine flag on MacOS
+    * On MacOS you will need to execute `xattr -c mor-launch mor-cli proxy-router MorpheusUI.app` in a command window to remove the quarantine flag on MacOS
 
 1. [OPTIONAL] Examine the .env file included in the package and make any necessary updates for your setup 
     * See [proxy-router.all.env](./proxy-router.all.env) for a list of environment variables that can be set in the `.env` file
@@ -24,6 +24,7 @@ It will run 3 different pieces of software on your local machine:
 1. Launch the node - this should open a command window to see local LLM model server and proxy-router start and then should launch the user interface  
     * Windows: Double click the `mor-launch.exe` (You will need to tell Windows Defender this is ok to run) 
     * Linux & MacOS: Open a terminal and navigate to the folder and run `./mor-launch`
+    * **NOTE** By Default, the Morpheus node will launch the proxy-router and then the user interface (UI).  If you want to also run a local model for testing or understanding how the system works without having to use MOR, execute `./mor-launch local` (or for Windows `./mor-launch.exe local`) to start the local model server before the router and UI. 
 
 1. Startup User Interface: 
     * Read & accept terms & Conditions 
@@ -73,7 +74,14 @@ It will run 3 different pieces of software on your local machine:
         rm -rf ~/Library/Logs/morpheus-ui
         rm -rf ~/Library/Application\ Support/morpheus-ui
         rm -rf data
-        xattr -c MorpheusUI.app llama-server mor-launch proxy-router
+
+        # For MacOS, you may need to remove the quarantine flag on the files
+        xattr -c proxy-router MorpheusUI.app mor-launch mor-cli
+
+        # Windows Commands:
+        del .cookie proxy.conf
+        rmdir /s /q data
+        rmdir /s /q %USERPROFILE%\AppData\Roaming\morpheus-ui
         ```
     * Check these other locations for Morpheus related files and delete them if necessary
         - Windows:  `%USERPROFILE%\AppData\Roaming\morpheus-ui`
