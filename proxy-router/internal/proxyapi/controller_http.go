@@ -387,7 +387,7 @@ func (c *ProxyController) Unpin(ctx *gin.Context) {
 //	@Summary	Download a file from IPFS
 //	@Tags		ipfs
 //	@Produce	json
-//	@Param		cid	uri			proxyapi.CIDReq	true	"CID"
+//	@Param		cid	path		string	true	"CID"
 //	@Success	200	{object}	proxyapi.ResultResponse
 //	@Security	BasicAuth
 //	@Router		/ipfs/download/{cid} [post]

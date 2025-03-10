@@ -67,7 +67,7 @@ type AddFileReq struct {
 }
 
 type AddIpfsFileRes struct {
-	Hash lib.HexString `json:"hash" validate:"required,hex32"`
+	Hash lib.HexString `json:"hash" validate:"required,hex32" swaggertype:"string"`
 	CID  string        `json:"cid" validate:"required"`
 }
 
@@ -77,7 +77,7 @@ type IpfsVersionRes struct {
 
 type IpfsPinnedFile struct {
 	CID  string        `json:"cid" validate:"required"`
-	Hash lib.HexString `json:"hash" validate:"required"`
+	Hash lib.HexString `json:"hash" validate:"required" swaggertype:"string"`
 }
 
 type IpfsPinnedFilesRes struct {
