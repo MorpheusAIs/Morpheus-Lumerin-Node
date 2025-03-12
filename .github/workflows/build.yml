@@ -260,10 +260,11 @@ jobs:
             "model_repo": "${{ env.MODEL_REPO }}",
             "model_name": "${{ env.MODEL_NAME }}",
             "run": [
+              "./ipfs daemon --init",
+              "sleep 2",
               "./llama-server --no-webui -m ./{model_name}",
               "./proxy-router",
-              "./MorpheusUI.app/Contents/MacOS/MorpheusUI",
-              "./ipfs daemon --init"
+              "./MorpheusUI.app/Contents/MacOS/MorpheusUI"
             ]
           }
           EOF
@@ -363,10 +364,11 @@ jobs:
             "model_repo": "${{ env.MODEL_REPO }}",
             "model_name": "${{ env.MODEL_NAME }}",
             "run": [
+              "./ipfs daemon --init",
+              "sleep 2",
               "./llama-server --no-webui -m ./{model_name}",
               "./proxy-router",
-              "./morpheus-ui-'$FULLTAG'-x86_64-linux.AppImage",
-              "./ipfs daemon --init"
+              "./morpheus-ui-'$FULLTAG'-x86_64-linux.AppImage"
             ]
           }
           EOF
@@ -465,10 +467,11 @@ jobs:
             "model_repo": "${{ env.MODEL_REPO }}",
             "model_name": "${{ env.MODEL_NAME }}",
             "run": [
+              "./ipfs daemon --init",
+              "sleep 2",
               "./llama-server --no-webui -m ./{model_name}",
               "./proxy-router",
-              "./MorpheusUI.app/Contents/MacOS/MorpheusUI",
-              "./ipfs daemon --init"
+              "./MorpheusUI.app/Contents/MacOS/MorpheusUI"
             ]
           }
           EOF
@@ -573,9 +576,10 @@ jobs:
             "model_repo": "${{ env.MODEL_REPO }}",
             "model_name": "${{ env.MODEL_NAME }}",
             "run": [
+              "./ipfs.exe daemon --init",
+              "sleep 2",
               "./llama-server.exe --no-webui -m ./{model_name}",
               "./proxy-router.exe",
-              "./ipfs.exe daemon --init"
               "./morpheus-ui-$FULLTAG-x64-win.exe"
             ]
           }
