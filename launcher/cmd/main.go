@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"strconv"
 
 	"github.com/google/shlex"
 )
@@ -239,7 +240,12 @@ func main() {
 
 		if strings.Contains(cmdStr, "sleep") {
 			seconds := strings.Split(cmdStr, " ")[1]
-			time.Sleep(time.Duration(seconds) * time.Second)
+			secondsInt, err := strconv.Atoi(seconds)
+			if err != nil {
+				log.Printf("Error converting sleep seconds to int: %v", err)
+				continue
+			}
+			time.Sleep(time.Duration(secondsInt) * time.Second)
 			continue
 		}
 
