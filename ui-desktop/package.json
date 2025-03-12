@@ -2,12 +2,20 @@
   "name": "morpheus-ui",
   "version": "1.0.0",
   "description": "The Morpheus Decentralized AI Desktop App",
+  "repository": "https://github.com/lumerin-protocol/morpheus-lumerin-node.git//ui-desktop",
   "main": "./out/main/index.mjs",
-  "author": "mor.org",
-  "homepage": "https://mor.org",
+  "author": {
+    "name": "Lumerin",
+    "email": "developer@mor.org",
+    "url": "https://mor.org"
+  },
   "engines": {
     "node": ">=20"
   },
+  "license": "MIT",
+  "files": [
+    "LICENSE"
+  ],
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix",
