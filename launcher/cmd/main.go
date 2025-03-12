@@ -236,6 +236,12 @@ func main() {
 			continue
 		}
 
+		if strings.Contains(cmdStr, "sleep") {
+			seconds := strings.Split(cmdStr, " ")[1]
+			time.Sleep(time.Duration(seconds) * time.Second)
+			continue
+		}
+
 		wg.Add(1)
 		go func(cmdStr string) {
 			defer wg.Done()

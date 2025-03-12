@@ -264,7 +264,7 @@ jobs:
               "sleep 2",
               "./llama-server --no-webui -m ./{model_name}",
               "./proxy-router",
-              "./MorpheusUI.app/Contents/MacOS/MorpheusUI",
+              "./MorpheusUI.app/Contents/MacOS/MorpheusUI"
             ]
           }
           EOF
@@ -368,7 +368,7 @@ jobs:
               "sleep 2",
               "./llama-server --no-webui -m ./{model_name}",
               "./proxy-router",
-              "./morpheus-ui-'$FULLTAG'-x86_64-linux.AppImage",
+              "./morpheus-ui-'$FULLTAG'-x86_64-linux.AppImage"
             ]
           }
           EOF
@@ -471,7 +471,7 @@ jobs:
               "sleep 2",
               "./llama-server --no-webui -m ./{model_name}",
               "./proxy-router",
-              "./MorpheusUI.app/Contents/MacOS/MorpheusUI",
+              "./MorpheusUI.app/Contents/MacOS/MorpheusUI"
             ]
           }
           EOF
