@@ -35,7 +35,7 @@ type ProxyController struct {
 }
 
 func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStorage genericchatstorage.ChatStorageInterface, storeChatContext, forwardChatContext bool, authConfig system.HTTPAuthConfig, log lib.ILogger) *ProxyController {
-	ipfsManager := NewIpfsManager()
+	ipfsManager := NewIpfsManager(log)
 	c := &ProxyController{
 		service:            service,
 		aiEngine:           aiEngine,

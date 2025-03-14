@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/ipfs/boxo/files"
 	ipfspath "github.com/ipfs/boxo/path"
 	"github.com/ipfs/go-cid"
@@ -16,20 +17,32 @@ import (
 
 type IpfsManager struct {
 	node *rpc.HttpApi
+	log  lib.ILogger
 }
 
 // NewIpfsManager connects to the local Kubo (IPFS) node using the RPC client.
-func NewIpfsManager() *IpfsManager {
+func NewIpfsManager(log lib.ILogger) *IpfsManager {
 	node, err := rpc.NewLocalApi()
 	if err != nil {
-		fmt.Println("Error creating local API:", err)
-		return nil
+		log.Error("Error creating IPFS client:", err)
+		return &IpfsManager{node: nil, log: log}
 	}
-	return &IpfsManager{node: node}
+	return &IpfsManager{node: node, log: log}
+}
+
+func (i *IpfsManager) IsNodeReady() error {
+	if i.node == nil {
+		return fmt.Errorf("IPFS node is not ready")
+	}
+	return nil
 }
 
 // AddFile adds a file to IPFS by reading the file from disk.
 func (i *IpfsManager) AddFile(ctx context.Context, filePath string) (string, error) {
+	if err := i.IsNodeReady(); err != nil {
+		return "", err
+	}
+
 	f, err := os.Open(filePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to open file: %w", err)
@@ -48,6 +61,10 @@ func (i *IpfsManager) AddFile(ctx context.Context, filePath string) (string, err
 
 // Pin pins a CID on the local IPFS node.
 func (i *IpfsManager) Pin(ctx context.Context, cidStr string) error {
+	if err := i.IsNodeReady(); err != nil {
+		return err
+	}
+
 	c, err := cid.Decode(cidStr)
 	if err != nil {
 		return fmt.Errorf("invalid CID: %w", err)
@@ -62,6 +79,10 @@ func (i *IpfsManager) Pin(ctx context.Context, cidStr string) error {
 
 // Unpin removes a pin for a given CID.
 func (i *IpfsManager) Unpin(ctx context.Context, cidStr string) error {
+	if err := i.IsNodeReady(); err != nil {
+		return err
+	}
+
 	c, err := cid.Decode(cidStr)
 	if err != nil {
 		return fmt.Errorf("invalid CID: %w", err)
@@ -75,6 +96,10 @@ func (i *IpfsManager) Unpin(ctx context.Context, cidStr string) error {
 }
 
 func (i *IpfsManager) GetFile(ctx context.Context, cidStr string, destinationPath string) error {
+	if err := i.IsNodeReady(); err != nil {
+		return err
+	}
+
 	// 1) "Probe" phase: short context to see if we can get ANY data
 	probeCtx, probeCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer probeCancel()
@@ -131,6 +156,10 @@ func (i *IpfsManager) GetFile(ctx context.Context, cidStr string, destinationPat
 }
 
 func (i *IpfsManager) GetVersion(ctx context.Context) (string, error) {
+	if err := i.IsNodeReady(); err != nil {
+		return "", err
+	}
+
 	var resp struct {
 		Version string `json:"Version"`
 		Commit  string `json:"Commit,omitempty"`
@@ -148,6 +177,10 @@ func (i *IpfsManager) GetVersion(ctx context.Context) (string, error) {
 }
 
 func (i *IpfsManager) GetPinnedFiles(ctx context.Context) ([]string, error) {
+	if err := i.IsNodeReady(); err != nil {
+		return nil, err
+	}
+
 	pinChan := make(chan iface.Pin)
 	errChan := make(chan error, 1)
 
