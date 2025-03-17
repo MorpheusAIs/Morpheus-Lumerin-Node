@@ -196,7 +196,9 @@ func (i *IpfsManager) GetPinnedFiles(ctx context.Context) ([]string, error) {
 	var pinnedCIDs []string
 	// Now read pins from pinChan until the library closes it
 	for pin := range pinChan {
-		pinnedCIDs = append(pinnedCIDs, pin.Path().RootCid().String())
+		if pin.Type() != "indirect" {
+			pinnedCIDs = append(pinnedCIDs, pin.Path().RootCid().String())
+		}
 	}
 
 	// When pinChan is closed, we exit the for-loop. Check the final error:

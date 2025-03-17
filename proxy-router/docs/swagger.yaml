@@ -284,11 +284,6 @@ definitions:
       big.Int:
         type: string
     type: object
-  lib.Hash:
-    properties:
-      common.Hash:
-        type: string
-    type: object
   morrpcmesssage.SessionRes:
     properties:
       approval:
@@ -339,7 +334,7 @@ definitions:
   proxyapi.CIDReq:
     properties:
       cid:
-        $ref: '#/definitions/lib.Hash'
+        type: string
     required:
     - cid
     type: object
