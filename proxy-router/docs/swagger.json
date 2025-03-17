@@ -2756,14 +2756,6 @@
                 }
             }
         },
-        "lib.Hash": {
-            "type": "object",
-            "properties": {
-                "common.Hash": {
-                    "type": "string"
-                }
-            }
-        },
         "morrpcmesssage.SessionRes": {
             "type": "object",
             "required": [
@@ -2840,7 +2832,7 @@
             ],
             "properties": {
                 "cid": {
-                    "$ref": "#/definitions/lib.Hash"
+                    "type": "string"
                 }
             }
         },

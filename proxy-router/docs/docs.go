@@ -2764,14 +2764,6 @@ const docTemplate = `{
                 }
             }
         },
-        "lib.Hash": {
-            "type": "object",
-            "properties": {
-                "common.Hash": {
-                    "type": "string"
-                }
-            }
-        },
         "morrpcmesssage.SessionRes": {
             "type": "object",
             "required": [
@@ -2848,7 +2840,7 @@ const docTemplate = `{
             ],
             "properties": {
                 "cid": {
-                    "$ref": "#/definitions/lib.Hash"
+                    "type": "string"
                 }
             }
         },

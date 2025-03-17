@@ -59,7 +59,7 @@ type ChatCompletionRequestSwaggerExample struct {
 }
 
 type CIDReq struct {
-	CID lib.Hash `json:"cid" validate:"required,hex32"`
+	CID lib.Hash `json:"cid" validate:"required,hex32" swaggertype:"string"`
 }
 
 type AddFileReq struct {
