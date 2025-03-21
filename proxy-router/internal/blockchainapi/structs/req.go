@@ -8,17 +8,17 @@ import (
 type OpenSessionRequest struct {
 	Approval      lib.HexString `json:"approval" binding:"required" validate:"hexadecimal" format:"hex" example:"0x1234"`
 	ApprovalSig   lib.HexString `json:"approvalSig" binding:"required" validate:"hexadecimal" format:"hex" example:"0x1234"`
-	Stake         *lib.BigInt   `json:"stake" binding:"required" validate:"number,gt=0" example:"123000000000"`
+	Stake         *lib.BigInt   `json:"stake" binding:"required" validate:"number,gt=0" example:"123000000000" swaggertype:"integer"`
 	DirectPayment bool          `json:"directPayment" binding:"omitempty"`
 }
 
 type AmountReq struct {
-	Amount *lib.BigInt `json:"amount" binding:"required" validate:"number,gt=0"`
+	Amount *lib.BigInt `json:"amount" binding:"required" validate:"number,gt=0" swaggertype:"integer"`
 }
 
 type SendRequest struct {
 	To     common.Address `json:"to" binding:"required" validate:"eth_addr"`
-	Amount *lib.BigInt    `json:"amount" binding:"required" validate:"number,gt=0"`
+	Amount *lib.BigInt    `json:"amount" binding:"required" validate:"number,gt=0" swaggertype:"integer"`
 }
 
 type PathHex32ID struct {
@@ -31,14 +31,14 @@ type PathEthAddrID struct {
 
 type QueryOffsetLimitOrder struct {
 	Offset lib.BigInt `form:"offset,default=0" binding:"omitempty" validate:"number,gte=0" example:"0" swaggertype:"integer"`
-	Limit  uint8       `form:"limit,default=10" binding:"omitempty" validate:"number,gte=1" example:"10"`
-	Order  string      `form:"order,default=asc" binding:"omitempty" validate:"oneof=asc desc" example:"asc"`
+	Limit  uint8      `form:"limit,default=10" binding:"omitempty" validate:"number,gte=1" example:"10"`
+	Order  string     `form:"order,default=asc" binding:"omitempty" validate:"oneof=asc desc" example:"asc"`
 }
 
 type QueryOffsetLimitOrderNoDefault struct {
 	Offset lib.BigInt `form:"offset,default=0" binding:"omitempty" validate:"number,gte=0" example:"0" swaggertype:"integer"`
-	Limit  uint8       `form:"limit,default=0" binding:"omitempty" validate:"number,gte=1" example:"10"`
-	Order  string      `form:"order,default=asc" binding:"omitempty" validate:"oneof=asc desc" example:"asc"`
+	Limit  uint8      `form:"limit,default=0" binding:"omitempty" validate:"number,gte=1" example:"10"`
+	Order  string     `form:"order,default=asc" binding:"omitempty" validate:"oneof=asc desc" example:"asc"`
 }
 
 type QueryPageLimit struct {
@@ -52,7 +52,7 @@ type QuerySpender struct {
 
 type QueryApprove struct {
 	*QuerySpender
-	Amount *lib.BigInt `form:"amount" binding:"required" validate:"number,gt=0"`
+	Amount *lib.BigInt `form:"amount" binding:"required" validate:"number,gt=0" swaggertype:"integer"`
 }
 
 type QueryUser struct {
@@ -64,30 +64,30 @@ type QueryProvider struct {
 }
 
 type OpenSessionWithDurationRequest struct {
-	SessionDuration *lib.BigInt `json:"sessionDuration"`
+	SessionDuration *lib.BigInt `json:"sessionDuration" swaggertype:"integer"`
 }
 
 type OpenSessionWithFailover struct {
-	SessionDuration *lib.BigInt `json:"sessionDuration"`
+	SessionDuration *lib.BigInt `json:"sessionDuration" swaggertype:"integer"`
 	DirectPayment   bool        `json:"directPayment" binding:"omitempty"`
 	Failover        bool        `json:"failover" binding:"omitempty"`
 }
 
 type CreateBidRequest struct {
 	ModelID        string      `json:"modelID" binding:"required" validate:"hex32"`
-	PricePerSecond *lib.BigInt `json:"pricePerSecond" binding:"required" validate:"number,gt=0"`
+	PricePerSecond *lib.BigInt `json:"pricePerSecond" binding:"required" validate:"number,gt=0" swaggertype:"integer"`
 }
 
 type CreateProviderRequest struct {
-	Stake    *lib.BigInt `json:"stake" binding:"required" validate:"number" example:"123000000000"`
+	Stake    *lib.BigInt `json:"stake" binding:"required" validate:"number" example:"123000000000" swaggertype:"integer"`
 	Endpoint string      `json:"endpoint" binding:"required" validate:"string" example:"mycoolmornode.domain.com:3989"`
 }
 
 type CreateModelRequest struct {
 	ID     string      `json:"id" binding:"omitempty" validate:"hex32" example:"0x1234"`
 	IpfsID string      `json:"ipfsID" binding:"required" validate:"hex32" example:"0x1234"`
-	Fee    *lib.BigInt `json:"fee" binding:"required" validate:"number" example:"123000000000"`
-	Stake  *lib.BigInt `json:"stake" binding:"required" validate:"number" example:"123000000000"`
+	Fee    *lib.BigInt `json:"fee" binding:"required" validate:"number" example:"123000000000" swaggertype:"integer"`
+	Stake  *lib.BigInt `json:"stake" binding:"required" validate:"number" example:"123000000000" swaggertype:"integer"`
 	Name   string      `json:"name" binding:"required" validate:"min=1,max=64" example:"Llama 2.0"`
 	Tags   []string    `json:"tags" binding:"required" validate:"min=1,max=64,dive,min=1,max=64"`
 }

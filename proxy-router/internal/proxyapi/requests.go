@@ -2,6 +2,7 @@ package proxyapi
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/ethereum/go-ethereum/common"
@@ -59,27 +60,40 @@ type ChatCompletionRequestSwaggerExample struct {
 }
 
 type CIDReq struct {
-	CID lib.Hash `json:"cid" validate:"required,hex32" swaggertype:"string"`
+	CID lib.Hash `json:"cidHash" validate:"required,hex32" swaggertype:"string"`
 }
 
 type AddFileReq struct {
-	FilePath string `json:"filePath" validate:"required"`
+	FilePath  string        `json:"filePath" binding:"required" validate:"required"`
+	Tags      []string      `json:"tags"`
+	ID        lib.HexString `json:"id" swaggertype:"string"`
+	ModelName string        `json:"modelName"`
 }
 
 type AddIpfsFileRes struct {
-	Hash lib.HexString `json:"hash" validate:"required,hex32" swaggertype:"string"`
-	CID  string        `json:"cid" validate:"required"`
+	FileCID         string        `json:"fileCID" validate:"required"`
+	MetadataCID     string        `json:"metadataCID" validate:"required"`
+	FileCIDHash     lib.HexString `json:"fileCIDHash" validate:"required" swaggertype:"string"`
+	MetadataCIDHash lib.HexString `json:"metadataCIDHash" validate:"required" swaggertype:"string"`
 }
 
 type IpfsVersionRes struct {
 	Version string `json:"version" validate:"required"`
 }
 
-type IpfsPinnedFile struct {
-	CID  string        `json:"cid" validate:"required"`
-	Hash lib.HexString `json:"hash" validate:"required" swaggertype:"string"`
+type PinnedFileRes struct {
+	FileName        string        `json:"fileName"`
+	FileSize        int64         `json:"fileSize"`
+	FileCID         string        `json:"fileCID" validate:"required"`
+	FileCIDHash     lib.HexString `json:"fileCIDHash" validate:"required" swaggertype:"string"`
+	UploadTime      time.Time     `json:"uploadTime"`
+	Tags            []string      `json:"tags"`
+	ID              string        `json:"id"`
+	ModelName       string        `json:"modelName"`
+	MetadataCID     string        `json:"metadataCID" validate:"required"`
+	MetadataCIDHash lib.HexString `json:"metadataCIDHash" validate:"required" swaggertype:"string"`
 }
 
-type IpfsPinnedFilesRes struct {
-	Files []IpfsPinnedFile `json:"files" validate:"required"`
+type DownloadFileReq struct {
+	DestinationPath string `json:"destinationPath" validate:"required"`
 }

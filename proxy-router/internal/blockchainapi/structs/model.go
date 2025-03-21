@@ -9,11 +9,11 @@ import (
 type Model struct {
 	Id        common.Hash
 	IpfsCID   common.Hash
-	Fee       *big.Int
-	Stake     *big.Int
+	Fee       *big.Int `swaggertype:"integer"`
+	Stake     *big.Int `swaggertype:"integer"`
 	Owner     common.Address
 	Name      string
 	Tags      []string
-	CreatedAt *big.Int
+	CreatedAt *big.Int `swaggertype:"integer"`
 	IsDeleted bool
 }
