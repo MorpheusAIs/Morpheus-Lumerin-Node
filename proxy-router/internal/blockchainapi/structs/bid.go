@@ -9,10 +9,10 @@ type Bid struct {
 	Id             common.Hash
 	Provider       common.Address
 	ModelAgentId   common.Hash
-	PricePerSecond *lib.BigInt
-	Nonce          *lib.BigInt
-	CreatedAt      *lib.BigInt
-	DeletedAt      *lib.BigInt
+	PricePerSecond *lib.BigInt `swaggertype:"integer"`
+	Nonce          *lib.BigInt `swaggertype:"integer"`
+	CreatedAt      *lib.BigInt `swaggertype:"integer"`
+	DeletedAt      *lib.BigInt `swaggertype:"integer"`
 }
 
 type ScoredBid struct {

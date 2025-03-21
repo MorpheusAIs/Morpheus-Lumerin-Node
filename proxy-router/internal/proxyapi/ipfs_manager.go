@@ -2,6 +2,7 @@ package proxyapi
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -37,26 +38,78 @@ func (i *IpfsManager) IsNodeReady() error {
 	return nil
 }
 
-// AddFile adds a file to IPFS by reading the file from disk.
-func (i *IpfsManager) AddFile(ctx context.Context, filePath string) (string, error) {
+// PinnedFileMetadata represents metadata about a file stored in IPFS
+type PinnedFileMetadata struct {
+	FileName    string    `json:"fileName"`
+	FileSize    int64     `json:"fileSize"`
+	FileCID     string    `json:"fileCID"`
+	UploadTime  time.Time `json:"uploadTime"`
+	Tags        []string  `json:"tags"`
+	ID          string    `json:"id"`
+	ModelName   string    `json:"modelName"`
+	MetadataCID string    `json:"metadataCID,omitempty"`
+}
+
+// AddFileResult contains CIDs for both the file and its metadata
+type AddFileResult struct {
+	FileCID     string `json:"fileCID"`
+	MetadataCID string `json:"metadataCID"`
+}
+
+// AddFile adds a file and its metadata to IPFS.
+func (i *IpfsManager) AddFile(ctx context.Context, filePath string, tags []string, id string, modelName string) (*AddFileResult, error) {
 	if err := i.IsNodeReady(); err != nil {
-		return "", err
+		return nil, err
 	}
 
+	// Open and get file info
 	f, err := os.Open(filePath)
 	if err != nil {
-		return "", fmt.Errorf("failed to open file: %w", err)
+		return nil, fmt.Errorf("failed to open file: %w", err)
 	}
 	defer f.Close()
 
-	fileNode := files.NewReaderFile(f)
-
-	addedOutput, err := i.node.Unixfs().Add(ctx, fileNode)
+	fileInfo, err := f.Stat()
 	if err != nil {
-		return "", fmt.Errorf("failed to add file: %w", err)
+		return nil, fmt.Errorf("failed to get file info: %w", err)
 	}
 
-	return addedOutput.RootCid().String(), nil
+	// Add the main file to IPFS
+	fileNode := files.NewReaderFile(f)
+	addedFile, err := i.node.Unixfs().Add(ctx, fileNode)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add file: %w", err)
+	}
+	fileCID := addedFile.RootCid().String()
+
+	// Create metadata
+	metadata := PinnedFileMetadata{
+		FileName:   fileInfo.Name(),
+		FileSize:   fileInfo.Size(),
+		FileCID:    fileCID,
+		UploadTime: time.Now(),
+		Tags:       tags,
+		ID:         id,
+		ModelName:  modelName,
+	}
+
+	// Convert metadata to JSON
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal metadata: %w", err)
+	}
+
+	// Add metadata to IPFS
+	metadataNode := files.NewBytesFile(metadataJSON)
+	addedMetadata, err := i.node.Unixfs().Add(ctx, metadataNode)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add metadata: %w", err)
+	}
+
+	return &AddFileResult{
+		FileCID:     fileCID,
+		MetadataCID: addedMetadata.RootCid().String(),
+	}, nil
 }
 
 // Pin pins a CID on the local IPFS node.
@@ -95,43 +148,107 @@ func (i *IpfsManager) Unpin(ctx context.Context, cidStr string) error {
 	return nil
 }
 
-func (i *IpfsManager) GetFile(ctx context.Context, cidStr string, destinationPath string) error {
+// GetFile downloads a file using its metadata CID. It first fetches the metadata,
+// then downloads the actual file content using the FileCID from the metadata.
+func (i *IpfsManager) GetFile(ctx context.Context, metadataCIDStr string, destinationPath string) error {
 	if err := i.IsNodeReady(); err != nil {
 		return err
 	}
 
-	// 1) "Probe" phase: short context to see if we can get ANY data
+	// First decode the metadata CID
+	c, err := cid.Decode(metadataCIDStr)
+	if err != nil {
+		return fmt.Errorf("invalid metadata CID: %w", err)
+	}
+
+	// 1) "Probe" phase for metadata: short context to see if metadata is available
 	probeCtx, probeCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer probeCancel()
 
-	c, err := cid.Decode(cidStr)
+	probeMetadataNode, err := i.node.Unixfs().Get(probeCtx, ipfspath.FromCid(c))
 	if err != nil {
-		return fmt.Errorf("invalid CID: %w", err)
+		return fmt.Errorf("failed to find metadata within 10s: %w", err)
 	}
 
-	probeNode, err := i.node.Unixfs().Get(probeCtx, ipfspath.FromCid(c))
+	probeMetadataFile, ok := probeMetadataNode.(files.File)
+	if !ok {
+		probeMetadataNode.Close()
+		return fmt.Errorf("metadata object at CID %s is not a regular file", metadataCIDStr)
+	}
+
+	// Read a small chunk to ensure metadata is available
+	buf := make([]byte, 1)
+	_, err = probeMetadataFile.Read(buf)
+	if err != nil && err != io.EOF {
+		probeMetadataFile.Close()
+		return fmt.Errorf("failed to read metadata in probe phase: %w", err)
+	}
+
+	probeMetadataFile.Close()
+
+	// 2) Get the full metadata with a reasonable timeout
+	metadataCtx, metadataCancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer metadataCancel()
+
+	// Get metadata file
+	metadataNode, err := i.node.Unixfs().Get(metadataCtx, ipfspath.FromCid(c))
+	if err != nil {
+		return fmt.Errorf("failed to get metadata: %w", err)
+	}
+	defer metadataNode.Close()
+
+	metadataFile, ok := metadataNode.(files.File)
+	if !ok {
+		return fmt.Errorf("metadata object at CID %s is not a regular file", metadataCIDStr)
+	}
+
+	// Read and parse metadata
+	metadataBytes, err := io.ReadAll(metadataFile)
+	if err != nil {
+		return fmt.Errorf("failed to read metadata: %w", err)
+	}
+
+	var metadata PinnedFileMetadata
+	if err := json.Unmarshal(metadataBytes, &metadata); err != nil {
+		return fmt.Errorf("failed to parse metadata: %w", err)
+	}
+
+	// Now get the actual file using FileCID from metadata
+	// 3) "Probe" phase for actual file: short context to see if we can get ANY data
+	fileProbeCtx, fileProbeCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer fileProbeCancel()
+
+	fileC, err := cid.Decode(metadata.FileCID)
+	if err != nil {
+		return fmt.Errorf("invalid file CID in metadata: %w", err)
+	}
+
+	probeNode, err := i.node.Unixfs().Get(fileProbeCtx, ipfspath.FromCid(fileC))
 	if err != nil {
 		return fmt.Errorf("failed to find file within 10s: %w", err)
 	}
 
 	probeFile, ok := probeNode.(files.File)
 	if !ok {
-		return fmt.Errorf("object at CID %s is not a regular file", cidStr)
+		probeNode.Close()
+		return fmt.Errorf("object at CID %s is not a regular file", metadata.FileCID)
 	}
 
 	// Read a small chunk to ensure data is available
-	buf := make([]byte, 1)
-	_, err = probeFile.Read(buf)
+	fileBuf := make([]byte, 1)
+	_, err = probeFile.Read(fileBuf)
 	if err != nil && err != io.EOF {
+		probeFile.Close()
 		return fmt.Errorf("failed to read data in probe phase: %w", err)
 	}
 
 	probeFile.Close()
 
-	downloadCtx, downloadCancel := context.WithTimeout(ctx, 30*time.Minute)
+	// 4) Download phase with longer timeout
+	downloadCtx, downloadCancel := context.WithTimeout(ctx, 12*time.Hour)
 	defer downloadCancel()
 
-	node, err := i.node.Unixfs().Get(downloadCtx, ipfspath.FromCid(c))
+	node, err := i.node.Unixfs().Get(downloadCtx, ipfspath.FromCid(fileC))
 	if err != nil {
 		return fmt.Errorf("download phase failed: %w", err)
 	}
@@ -139,7 +256,7 @@ func (i *IpfsManager) GetFile(ctx context.Context, cidStr string, destinationPat
 
 	fileNode, ok := node.(files.File)
 	if !ok {
-		return fmt.Errorf("object at CID %s is not a regular file", cidStr)
+		return fmt.Errorf("object at CID %s is not a regular file", metadata.FileCID)
 	}
 
 	destFile, err := os.Create(destinationPath)
@@ -176,7 +293,9 @@ func (i *IpfsManager) GetVersion(ctx context.Context) (string, error) {
 	return resp.Version, nil
 }
 
-func (i *IpfsManager) GetPinnedFiles(ctx context.Context) ([]string, error) {
+// GetPinnedFiles returns metadata for all pinned files.
+// It only returns metadata files, ignoring the actual content files.
+func (i *IpfsManager) GetPinnedFiles(ctx context.Context) ([]PinnedFileMetadata, error) {
 	if err := i.IsNodeReady(); err != nil {
 		return nil, err
 	}
@@ -184,27 +303,72 @@ func (i *IpfsManager) GetPinnedFiles(ctx context.Context) ([]string, error) {
 	pinChan := make(chan iface.Pin)
 	errChan := make(chan error, 1)
 
-	// Call Pin().Ls in a goroutine, passing it pinChan
-	// That function will close pinChan when done
 	go func() {
 		err := i.node.Pin().Ls(ctx, pinChan)
 		errChan <- err
-		// We *only* close errChan ourselves; do NOT close pinChan here
 		close(errChan)
 	}()
 
-	var pinnedCIDs []string
-	// Now read pins from pinChan until the library closes it
+	var metadataList []PinnedFileMetadata
 	for pin := range pinChan {
-		if pin.Type() != "indirect" {
-			pinnedCIDs = append(pinnedCIDs, pin.Path().RootCid().String())
+		if pin.Type() == "indirect" {
+			continue
 		}
+
+		fileCtx, _ := context.WithTimeout(ctx, 2*time.Second)
+
+		// Try to get and parse the pinned file as metadata
+		node, err := i.node.Unixfs().Get(fileCtx, pin.Path())
+
+		if err != nil {
+			i.log.Debug("Failed to get pinned file:", err)
+			continue
+		}
+
+		file, ok := node.(files.File)
+		if !ok {
+			node.Close()
+			continue
+		}
+
+		// Read only the first few KB to check if it's a metadata file
+		// Metadata files should be very small
+		limitReader := io.LimitReader(file, 8192) // 8KB limit
+		metadataBytes, err := io.ReadAll(limitReader)
+		file.Close()
+
+		if err != nil {
+			i.log.Debug("Failed to read pinned file:", err)
+			continue
+		}
+
+		// If we hit the limit, it's probably not a metadata file
+		if len(metadataBytes) >= 8192 {
+			i.log.Debug("Skipping large file, likely not metadata:", pin.Path().String())
+			continue
+		}
+
+		var metadata PinnedFileMetadata
+		if err := json.Unmarshal(metadataBytes, &metadata); err != nil {
+			// Not a metadata file, skip it
+			continue
+		}
+
+		// Validate that this is actually a metadata file by checking required fields
+		if metadata.FileCID == "" || metadata.FileName == "" {
+			continue
+		}
+
+		// Add the metadata CID itself
+		metadata.MetadataCID = pin.Path().RootCid().String()
+		metadata.FileCID = metadata.FileCID
+
+		metadataList = append(metadataList, metadata)
 	}
 
-	// When pinChan is closed, we exit the for-loop. Check the final error:
 	if err := <-errChan; err != nil {
 		return nil, fmt.Errorf("failed to list pinned files: %w", err)
 	}
 
-	return pinnedCIDs, nil
+	return metadataList, nil
 }

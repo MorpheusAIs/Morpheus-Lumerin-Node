@@ -70,7 +70,7 @@ const Models = ({
         });
 
         getPinnedFiles().then((response) => {
-            setPinnedFiles(response.files);
+            setPinnedFiles(response);
         }).catch((error) => {
             console.error("Error", error);
         });
@@ -85,7 +85,7 @@ const Models = ({
             const response = await unpinFile(hash);
             if (response) {
                 toasts.toast("success", "File unpinned successfully");
-                setPinnedFiles(pinnedFiles.filter((file: any) => file.hash !== hash));
+                setPinnedFiles(pinnedFiles.filter((file: any) => file.metadataCIDHash !== hash));
             } else {
                 toasts.toast("error", "Failed to unpin file");
             }

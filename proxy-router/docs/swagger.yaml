@@ -318,25 +318,39 @@ definitions:
     properties:
       filePath:
         type: string
+      id:
+        type: string
+      modelName:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
     required:
     - filePath
     type: object
   proxyapi.AddIpfsFileRes:
     properties:
-      cid:
+      fileCID:
         type: string
-      hash:
+      fileCIDHash:
+        type: string
+      metadataCID:
+        type: string
+      metadataCIDHash:
         type: string
     required:
-    - cid
-    - hash
+    - fileCID
+    - fileCIDHash
+    - metadataCID
+    - metadataCIDHash
     type: object
   proxyapi.CIDReq:
     properties:
-      cid:
+      cidHash:
         type: string
     required:
-    - cid
+    - cidHash
     type: object
   proxyapi.ChatCompletionRequestSwaggerExample:
     properties:
@@ -353,6 +367,13 @@ definitions:
         type: array
       stream:
         type: boolean
+    type: object
+  proxyapi.DownloadFileReq:
+    properties:
+      destinationPath:
+        type: string
+    required:
+    - destinationPath
     type: object
   proxyapi.InitiateSessionReq:
     properties:
@@ -372,25 +393,6 @@ definitions:
     - providerUrl
     - spend
     - user
-    type: object
-  proxyapi.IpfsPinnedFile:
-    properties:
-      cid:
-        type: string
-      hash:
-        type: string
-    required:
-    - cid
-    - hash
-    type: object
-  proxyapi.IpfsPinnedFilesRes:
-    properties:
-      files:
-        items:
-          $ref: '#/definitions/proxyapi.IpfsPinnedFile'
-        type: array
-    required:
-    - files
     type: object
   proxyapi.IpfsVersionRes:
     properties:
@@ -414,6 +416,36 @@ definitions:
       ping:
         type: integer
     type: object
+  proxyapi.PinnedFileRes:
+    properties:
+      fileCID:
+        type: string
+      fileCIDHash:
+        type: string
+      fileName:
+        type: string
+      fileSize:
+        type: integer
+      id:
+        type: string
+      metadataCID:
+        type: string
+      metadataCIDHash:
+        type: string
+      modelName:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      uploadTime:
+        type: string
+    required:
+    - fileCID
+    - fileCIDHash
+    - metadataCID
+    - metadataCIDHash
+    type: object
   proxyapi.ResultResponse:
     properties:
       result:
@@ -435,22 +467,22 @@ definitions:
   structs.BalanceRes:
     properties:
       balance:
-        $ref: '#/definitions/lib.BigInt'
+        type: string
     type: object
   structs.Bid:
     properties:
       createdAt:
-        $ref: '#/definitions/lib.BigInt'
+        type: integer
       deletedAt:
-        $ref: '#/definitions/lib.BigInt'
+        type: integer
       id:
         type: string
       modelAgentId:
         type: string
       nonce:
-        $ref: '#/definitions/lib.BigInt'
+        type: integer
       pricePerSecond:
-        $ref: '#/definitions/lib.BigInt'
+        type: integer
       provider:
         type: string
     type: object
@@ -496,14 +528,54 @@ definitions:
       modelID:
         type: string
       pricePerSecond:
-        $ref: '#/definitions/lib.BigInt'
+        type: integer
     required:
     - modelID
     - pricePerSecond
     type: object
   structs.CreateModelRequest:
+    properties:
+      fee:
+        example: 123000000000
+        type: integer
+      id:
+        example: "0x1234"
+        type: string
+      ipfsID:
+        example: "0x1234"
+        type: string
+      name:
+        example: Llama 2.0
+        maxLength: 64
+        minLength: 1
+        type: string
+      stake:
+        example: 123000000000
+        type: integer
+      tags:
+        items:
+          type: string
+        maxItems: 64
+        minItems: 1
+        type: array
+    required:
+    - fee
+    - ipfsID
+    - name
+    - stake
+    - tags
     type: object
   structs.CreateProviderRequest:
+    properties:
+      endpoint:
+        example: mycoolmornode.domain.com:3989
+        type: string
+      stake:
+        example: 123000000000
+        type: integer
+    required:
+    - endpoint
+    - stake
     type: object
   structs.InputEntry:
     properties:
@@ -533,9 +605,9 @@ definitions:
   structs.Model:
     properties:
       createdAt:
-        type: string
+        type: integer
       fee:
-        type: string
+        type: integer
       id:
         type: string
       ipfsCID:
@@ -547,7 +619,7 @@ definitions:
       owner:
         type: string
       stake:
-        type: string
+        type: integer
       tags:
         items:
           type: string
@@ -576,7 +648,7 @@ definitions:
   structs.OpenSessionWithDurationRequest:
     properties:
       sessionDuration:
-        $ref: '#/definitions/lib.BigInt'
+        type: integer
     type: object
   structs.OpenSessionWithFailover:
     properties:
@@ -585,20 +657,20 @@ definitions:
       failover:
         type: boolean
       sessionDuration:
-        $ref: '#/definitions/lib.BigInt'
+        type: integer
     type: object
   structs.Provider:
     properties:
       address:
         type: string
       createdAt:
-        $ref: '#/definitions/lib.BigInt'
+        type: integer
       endpoint:
         type: string
       isDeleted:
         type: boolean
       stake:
-        $ref: '#/definitions/lib.BigInt'
+        type: integer
     type: object
   structs.ProviderRes:
     properties:
@@ -631,7 +703,7 @@ definitions:
   structs.SendRequest:
     properties:
       amount:
-        $ref: '#/definitions/lib.BigInt'
+        type: integer
       to:
         type: string
     required:
@@ -643,27 +715,27 @@ definitions:
       bidID:
         type: string
       closedAt:
-        type: string
+        type: integer
       closeoutReceipt:
         type: string
       closeoutType:
-        type: string
+        type: integer
       endsAt:
-        type: string
+        type: integer
       id:
         type: string
       modelAgentId:
         type: string
       openedAt:
-        type: string
+        type: integer
       pricePerSecond:
-        type: string
+        type: integer
       provider:
         type: string
       providerWithdrawnAmount:
-        type: string
+        type: integer
       stake:
-        type: string
+        type: integer
       user:
         type: string
     type: object
@@ -1828,9 +1900,9 @@ paths:
   /ipfs/add:
     post:
       parameters:
-      - description: File Path
+      - description: File Path and Metadata
         in: body
-        name: filePath
+        name: request
         required: true
         schema:
           $ref: '#/definitions/proxyapi.AddFileReq'
@@ -1843,17 +1915,23 @@ paths:
             $ref: '#/definitions/proxyapi.AddIpfsFileRes'
       security:
       - BasicAuth: []
-      summary: Add a file to IPFS
+      summary: Add a file to IPFS with metadata
       tags:
       - ipfs
-  /ipfs/download/{cid}:
+  /ipfs/download/{cidHash}:
     post:
       parameters:
-      - description: CID
+      - description: cidHash
         in: path
-        name: cid
+        name: cidHash
         required: true
         type: string
+      - description: Destination Path
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/proxyapi.DownloadFileReq'
       produces:
       - application/json
       responses:
@@ -1874,17 +1952,19 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/proxyapi.IpfsPinnedFilesRes'
+            items:
+              $ref: '#/definitions/proxyapi.PinnedFileRes'
+            type: array
       security:
       - BasicAuth: []
-      summary: Get all pinned files
+      summary: Get all pinned files metadata
       tags:
       - ipfs
     post:
       parameters:
-      - description: CID
+      - description: cidHash
         in: body
-        name: cid
+        name: cidHash
         required: true
         schema:
           $ref: '#/definitions/proxyapi.CIDReq'
@@ -1903,9 +1983,9 @@ paths:
   /ipfs/unpin:
     post:
       parameters:
-      - description: CID
+      - description: cidHash
         in: body
-        name: cid
+        name: cidHash
         required: true
         schema:
           $ref: '#/definitions/proxyapi.CIDReq'

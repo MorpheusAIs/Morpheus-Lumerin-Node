@@ -57,8 +57,8 @@ const withModelsState = WrappedComponent => {
       return response;
     }
 
-    addFileToIpfs = async (filePath) => {
-      const response = await this.props.client.addFileToIpfs({ filePath });
+    addFileToIpfs = async (filePath, modelId, modelName, tags) => {
+      const response = await this.props.client.addFileToIpfs({ filePath, modelId, modelName, tags });
       return response;
     }
 

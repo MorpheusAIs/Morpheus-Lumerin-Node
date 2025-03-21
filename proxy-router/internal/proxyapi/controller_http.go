@@ -62,7 +62,7 @@ func (s *ProxyController) RegisterRoutes(r interfaces.Router) {
 
 	r.POST("/ipfs/pin", s.authConfig.CheckAuth("ipfs_pin"), s.Pin)
 	r.POST("/ipfs/unpin", s.authConfig.CheckAuth("ipfs_unpin"), s.Unpin)
-	r.POST("/ipfs/download/:cid", s.authConfig.CheckAuth("ipfs_get"), s.DownloadFile)
+	r.POST("/ipfs/download/:cidHash", s.authConfig.CheckAuth("ipfs_get"), s.DownloadFile)
 	r.POST("/ipfs/add", s.authConfig.CheckAuth("ipfs_add"), s.AddFile)
 	r.GET("/ipfs/version", s.authConfig.CheckAuth("ipfs_version"), s.GetIpfsVersion)
 	r.GET("/ipfs/pin", s.authConfig.CheckAuth("ipfs_pinned"), s.GetPinnedFiles)
@@ -322,14 +322,12 @@ func (c *ProxyController) UpdateChatTitle(ctx *gin.Context) {
 //	@Summary	Pin a file to IPFS
 //	@Tags		ipfs
 //	@Produce	json
-//	@Param		cid	body		proxyapi.CIDReq	true	"CID"
-//	@Success	200	{object}	proxyapi.ResultResponse
+//	@Param		cidHash	body		proxyapi.CIDReq	true	"cidHash"
+//	@Success	200		{object}	proxyapi.ResultResponse
 //	@Security	BasicAuth
 //	@Router		/ipfs/pin [post]
 func (c *ProxyController) Pin(ctx *gin.Context) {
-	var req struct {
-		CID lib.Hash `json:"cid"`
-	}
+	var req CIDReq
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -354,14 +352,12 @@ func (c *ProxyController) Pin(ctx *gin.Context) {
 //	@Summary	Unpin a file from IPFS
 //	@Tags		ipfs
 //	@Produce	json
-//	@Param		cid	body		proxyapi.CIDReq	true	"CID"
-//	@Success	200	{object}	proxyapi.ResultResponse
+//	@Param		cidHash	body		proxyapi.CIDReq	true	"cidHash"
+//	@Success	200		{object}	proxyapi.ResultResponse
 //	@Security	BasicAuth
 //	@Router		/ipfs/unpin [post]
 func (c *ProxyController) Unpin(ctx *gin.Context) {
-	var req struct {
-		CID lib.Hash `json:"cid"`
-	}
+	var req CIDReq
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -387,13 +383,14 @@ func (c *ProxyController) Unpin(ctx *gin.Context) {
 //	@Summary	Download a file from IPFS
 //	@Tags		ipfs
 //	@Produce	json
-//	@Param		cid	path		string	true	"CID"
-//	@Success	200	{object}	proxyapi.ResultResponse
+//	@Param		cidHash	path		string						true	"cidHash"
+//	@Param		request	body		proxyapi.DownloadFileReq	true	"Destination Path"
+//	@Success	200		{object}	proxyapi.ResultResponse
 //	@Security	BasicAuth
-//	@Router		/ipfs/download/{cid} [post]
+//	@Router		/ipfs/download/{cidHash} [post]
 func (c *ProxyController) DownloadFile(ctx *gin.Context) {
 	var params struct {
-		CID lib.Hash `uri:"cid" binding:"required"`
+		CID lib.Hash `uri:"cidHash" binding:"required"`
 	}
 
 	if err := ctx.ShouldBindUri(&params); err != nil {
@@ -401,9 +398,7 @@ func (c *ProxyController) DownloadFile(ctx *gin.Context) {
 		return
 	}
 
-	var req struct {
-		DestinationPath string `json:"destinationPath"`
-	}
+	var req DownloadFileReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -425,37 +420,47 @@ func (c *ProxyController) DownloadFile(ctx *gin.Context) {
 
 // AddFile godoc
 //
-//	@Summary	Add a file to IPFS
+//	@Summary	Add a file to IPFS with metadata
 //	@Tags		ipfs
 //	@Produce	json
-//	@Param		filePath	body		proxyapi.AddFileReq	true	"File Path"
-//	@Success	200			{object}	proxyapi.AddIpfsFileRes
+//	@Param		request	body		proxyapi.AddFileReq	true	"File Path and Metadata"
+//	@Success	200		{object}	proxyapi.AddIpfsFileRes
 //	@Security	BasicAuth
 //	@Router		/ipfs/add [post]
 func (c *ProxyController) AddFile(ctx *gin.Context) {
-	var req struct {
-		FilePath string `json:"filePath"`
-	}
+	var req AddFileReq
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	cid, err := c.ipfsManager.AddFile(ctx, req.FilePath)
+	result, err := c.ipfsManager.AddFile(ctx, req.FilePath, req.Tags, req.ID.Hex(), req.ModelName)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	cidHash, err := lib.CIDToBytes32(cid)
+	fileCIDHash, err := lib.CIDToBytes32(result.FileCID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	fileHash := lib.HexString(fileCIDHash)
 
-	hash := lib.HexString(cidHash)
-	ctx.JSON(http.StatusOK, AddIpfsFileRes{CID: cid, Hash: hash})
+	metadataCIDHash, err := lib.CIDToBytes32(result.MetadataCID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	metadataHash := lib.HexString(metadataCIDHash)
+
+	ctx.JSON(http.StatusOK, AddIpfsFileRes{
+		FileCID:         result.FileCID,
+		MetadataCID:     result.MetadataCID,
+		FileCIDHash:     fileHash,
+		MetadataCIDHash: metadataHash,
+	})
 }
 
 // GetIpfsVersion godoc
@@ -477,29 +482,51 @@ func (c *ProxyController) GetIpfsVersion(ctx *gin.Context) {
 
 // GetPinnedFiles godoc
 //
-//	@Summary	Get all pinned files
+//	@Summary	Get all pinned files metadata
 //	@Tags		ipfs
 //	@Produce	json
-//	@Success	200	{object}	proxyapi.IpfsPinnedFilesRes
+//	@Success	200	{array}	proxyapi.PinnedFileRes
 //	@Security	BasicAuth
 //	@Router		/ipfs/pin [get]
 func (c *ProxyController) GetPinnedFiles(ctx *gin.Context) {
-	files, err := c.ipfsManager.GetPinnedFiles(ctx)
+	metadata, err := c.ipfsManager.GetPinnedFiles(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	filesWithHashes := make([]IpfsPinnedFile, len(files))
-	for i, file := range files {
-		cidBytes, err := lib.CIDToBytes32(file)
+	responses := make([]PinnedFileRes, 0, len(metadata))
+	for _, item := range metadata {
+		fileCIDBytes, err := lib.CIDToBytes32(item.FileCID)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		fileCIDHash := lib.HexString(fileCIDBytes)
 
-		hash := lib.HexString(cidBytes)
-		filesWithHashes[i] = IpfsPinnedFile{CID: file, Hash: hash}
+		metadataCIDBytes, err := lib.CIDToBytes32(item.MetadataCID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		metadataCIDHash := lib.HexString(metadataCIDBytes)
+
+		// Create response object
+		response := PinnedFileRes{
+			FileName:        item.FileName,
+			FileSize:        item.FileSize,
+			FileCID:         item.FileCID,
+			FileCIDHash:     fileCIDHash,
+			UploadTime:      item.UploadTime,
+			Tags:            item.Tags,
+			ID:              item.ID,
+			ModelName:       item.ModelName,
+			MetadataCID:     item.MetadataCID,
+			MetadataCIDHash: metadataCIDHash,
+		}
+
+		responses = append(responses, response)
 	}
-	ctx.JSON(http.StatusOK, IpfsPinnedFilesRes{Files: filesWithHashes})
+
+	ctx.JSON(http.StatusOK, responses)
 }

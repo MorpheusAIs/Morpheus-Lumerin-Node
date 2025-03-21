@@ -22,7 +22,7 @@ type OpenSessionRes struct {
 }
 
 type BalanceRes struct {
-	Balance *lib.BigInt `json:"balance"`
+	Balance *lib.BigInt `json:"balance" swaggertype:"string"`
 }
 
 type ProviderRes struct {
