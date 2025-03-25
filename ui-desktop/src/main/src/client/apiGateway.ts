@@ -441,9 +441,8 @@ const unpinIpfsFile = async ({ cid }: { cid: string }): Promise<ResultResponse |
 const addFileToIpfs = async ({ filePath, modelId, modelName, tags }: { filePath: string, modelId: string, modelName: string, tags: string[] }): Promise<{ fileCID: string, metadataCID: string, fileCIDHash: string, metadataCIDHash: string } | null> => {
   try {
     const path = `${config.chain.localProxyRouterUrl}/ipfs/add`;
-    const response = await fetch(path, { method: "POST", headers: await getAuthHeaders(), body: JSON.stringify({ filePath, id: modelId, modelName, tags }), signal: AbortSignal.timeout(86400000) });
+    const response = await fetch(path, { method: "POST", headers: await getAuthHeaders(), body: JSON.stringify({ filePath, id: modelId, modelName, tags }), signal: AbortSignal.timeout(10 * 60 * 1000) });
     const body = await response.json();
-    console.log("🚀 ~ addFileToIpfs ~ JSON.stringify({ filePath, id: modelId, modelName, tags }):", JSON.stringify({ filePath, id: modelId, modelName, tags }))
     return body;
   }
   catch (e) {

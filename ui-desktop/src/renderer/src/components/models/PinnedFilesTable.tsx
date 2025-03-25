@@ -201,7 +201,6 @@ interface PinnedFile {
 function ModelCard({ model, toasts, unpinFile }: { model: PinnedFile, toasts: any, unpinFile: any }) {
   const onUnpinFile = (e) => {
     e.stopPropagation();
-    console.log("🚀 ~ onUnpinFile ~ model:", model)
     unpinFile(model.fileCIDHash);
     unpinFile(model.metadataCIDHash);
     toasts.toast("success", "File unpinned successfully", { autoClose: 2000 });
