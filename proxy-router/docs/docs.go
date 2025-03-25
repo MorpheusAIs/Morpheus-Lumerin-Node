@@ -1728,8 +1728,48 @@ const docTemplate = `{
                 }
             }
         },
+        "/ipfs/download/stream/{cidHash}": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "ipfs"
+                ],
+                "summary": "Download a file from IPFS with progress updates as SSE stream",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "cidHash",
+                        "name": "cidHash",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Destination Path",
+                        "name": "dest",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.DownloadProgressEvent"
+                        }
+                    }
+                }
+            }
+        },
         "/ipfs/download/{cidHash}": {
-            "post": {
+            "get": {
                 "security": [
                     {
                         "BasicAuth": []
@@ -1751,13 +1791,11 @@ const docTemplate = `{
                         "required": true
                     },
                     {
+                        "type": "string",
                         "description": "Destination Path",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/proxyapi.DownloadFileReq"
-                        }
+                        "name": "dest",
+                        "in": "query",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -2900,14 +2938,32 @@ const docTemplate = `{
                 }
             }
         },
-        "proxyapi.DownloadFileReq": {
+        "proxyapi.DownloadProgressEvent": {
             "type": "object",
-            "required": [
-                "destinationPath"
-            ],
             "properties": {
-                "destinationPath": {
+                "downloaded": {
+                    "description": "Bytes downloaded so far",
+                    "type": "integer"
+                },
+                "error": {
+                    "description": "Error message, if status is \"error\"",
                     "type": "string"
+                },
+                "percentage": {
+                    "description": "Percentage complete (0-100)",
+                    "type": "number"
+                },
+                "status": {
+                    "description": "\"downloading\", \"completed\", \"error\"",
+                    "type": "string"
+                },
+                "timeUpdated": {
+                    "description": "Timestamp of the update",
+                    "type": "integer"
+                },
+                "total": {
+                    "description": "Total bytes to download",
+                    "type": "integer"
                 }
             }
         },
@@ -3010,9 +3066,6 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
-                },
-                "uploadTime": {
-                    "type": "string"
                 }
             }
         },

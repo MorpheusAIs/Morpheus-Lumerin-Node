@@ -21,6 +21,18 @@ type IpfsManager struct {
 	log  lib.ILogger
 }
 
+// ProgressReader is an io.Reader wrapper that reports progress
+type ProgressReader struct {
+	Reader     io.Reader
+	Total      int64
+	Downloaded int64
+	OnProgress ProgressCallback
+	Ctx        context.Context // Add context for cancellation checks
+}
+
+// ProgressCallback is a function that reports download progress
+type ProgressCallback func(downloaded, total int64) error
+
 // NewIpfsManager connects to the local Kubo (IPFS) node using the RPC client.
 func NewIpfsManager(log lib.ILogger) *IpfsManager {
 	node, err := rpc.NewLocalApi()
@@ -40,14 +52,13 @@ func (i *IpfsManager) IsNodeReady() error {
 
 // PinnedFileMetadata represents metadata about a file stored in IPFS
 type PinnedFileMetadata struct {
-	FileName    string    `json:"fileName"`
-	FileSize    int64     `json:"fileSize"`
-	FileCID     string    `json:"fileCID"`
-	UploadTime  time.Time `json:"uploadTime"`
-	Tags        []string  `json:"tags"`
-	ID          string    `json:"id"`
-	ModelName   string    `json:"modelName"`
-	MetadataCID string    `json:"metadataCID,omitempty"`
+	FileName    string   `json:"fileName"`
+	FileSize    int64    `json:"fileSize"`
+	FileCID     string   `json:"fileCID"`
+	Tags        []string `json:"tags"`
+	ID          string   `json:"id"`
+	ModelName   string   `json:"modelName"`
+	MetadataCID string   `json:"metadataCID,omitempty"`
 }
 
 // AddFileResult contains CIDs for both the file and its metadata
@@ -84,13 +95,12 @@ func (i *IpfsManager) AddFile(ctx context.Context, filePath string, tags []strin
 
 	// Create metadata
 	metadata := PinnedFileMetadata{
-		FileName:   fileInfo.Name(),
-		FileSize:   fileInfo.Size(),
-		FileCID:    fileCID,
-		UploadTime: time.Now(),
-		Tags:       tags,
-		ID:         id,
-		ModelName:  modelName,
+		FileName:  fileInfo.Name(),
+		FileSize:  fileInfo.Size(),
+		FileCID:   fileCID,
+		Tags:      tags,
+		ID:        id,
+		ModelName: modelName,
 	}
 
 	// Convert metadata to JSON
@@ -148,17 +158,19 @@ func (i *IpfsManager) Unpin(ctx context.Context, cidStr string) error {
 	return nil
 }
 
-// GetFile downloads a file using its metadata CID. It first fetches the metadata,
-// then downloads the actual file content using the FileCID from the metadata.
-func (i *IpfsManager) GetFile(ctx context.Context, metadataCIDStr string, destinationPath string) error {
+// GetFileWithProgress downloads a file using its metadata CID with progress reporting
+func (i *IpfsManager) GetFileWithProgress(ctx context.Context, metadataCIDStr string, destinationPath string, progressCallback ProgressCallback) error {
 	if err := i.IsNodeReady(); err != nil {
 		return err
 	}
 
-	// First decode the metadata CID
 	c, err := cid.Decode(metadataCIDStr)
 	if err != nil {
 		return fmt.Errorf("invalid metadata CID: %w", err)
+	}
+
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
 
 	// 1) "Probe" phase for metadata: short context to see if metadata is available
@@ -186,6 +198,10 @@ func (i *IpfsManager) GetFile(ctx context.Context, metadataCIDStr string, destin
 
 	probeMetadataFile.Close()
 
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
 	// 2) Get the full metadata with a reasonable timeout
 	metadataCtx, metadataCancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer metadataCancel()
@@ -211,6 +227,13 @@ func (i *IpfsManager) GetFile(ctx context.Context, metadataCIDStr string, destin
 	var metadata PinnedFileMetadata
 	if err := json.Unmarshal(metadataBytes, &metadata); err != nil {
 		return fmt.Errorf("failed to parse metadata: %w", err)
+	}
+
+	// Get the file size for progress reporting
+	fileSize := metadata.FileSize
+
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
 
 	// Now get the actual file using FileCID from metadata
@@ -244,7 +267,11 @@ func (i *IpfsManager) GetFile(ctx context.Context, metadataCIDStr string, destin
 
 	probeFile.Close()
 
-	// 4) Download phase with longer timeout
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	// 4) Download phase with longer timeout but still respect parent context
 	downloadCtx, downloadCancel := context.WithTimeout(ctx, 12*time.Hour)
 	defer downloadCancel()
 
@@ -265,11 +292,83 @@ func (i *IpfsManager) GetFile(ctx context.Context, metadataCIDStr string, destin
 	}
 	defer destFile.Close()
 
-	if _, err := io.Copy(destFile, fileNode); err != nil {
-		return fmt.Errorf("failed to copy content: %w", err)
+	if progressCallback != nil {
+		// Create a proxy reader that tracks progress
+		progressReader := &ProgressReader{
+			Reader:     fileNode,
+			Total:      fileSize,
+			Downloaded: 0,
+			OnProgress: progressCallback,
+			Ctx:        ctx, // Pass context to reader for cancellation checks
+		}
+
+		_, err := io.CopyBuffer(destFile, progressReader, make([]byte, 32*1024))
+		if err != nil {
+			// If the error is due to context cancellation, return that as the main error
+			if ctx.Err() != nil {
+				// Clean up the partial file
+				destFile.Close()
+				os.Remove(destinationPath)
+				return ctx.Err()
+			}
+			return fmt.Errorf("failed to copy content: %w", err)
+		}
+	} else {
+		// Even without progress callback, we should periodically check context
+		buf := make([]byte, 32*1024) // 32KB buffer
+		for {
+			// Check context before each read
+			if ctx.Err() != nil {
+				destFile.Close()
+				os.Remove(destinationPath)
+				return ctx.Err()
+			}
+			
+			n, err := fileNode.Read(buf)
+			if n > 0 {
+				_, writeErr := destFile.Write(buf[:n])
+				if writeErr != nil {
+					return fmt.Errorf("failed to write to destination: %w", writeErr)
+				}
+			}
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return fmt.Errorf("failed to read content: %w", err)
+			}
+		}
 	}
 
 	return nil
+}
+
+// Read reads data from the underlying reader and reports progress
+func (r *ProgressReader) Read(p []byte) (int, error) {
+	if r.Ctx != nil && r.Ctx.Err() != nil {
+		return 0, r.Ctx.Err()
+	}
+	
+	n, err := r.Reader.Read(p)
+	if n > 0 {
+		r.Downloaded += int64(n)
+		if r.OnProgress != nil {
+			if progressErr := r.OnProgress(r.Downloaded, r.Total); progressErr != nil {
+				return n, progressErr
+			}
+		}
+	}
+	
+	if r.Ctx != nil && r.Ctx.Err() != nil {
+		return n, r.Ctx.Err()
+	}
+	
+	return n, err
+}
+
+// GetFile downloads a file using GetFileWithProgress with a nil progress callback
+func (i *IpfsManager) GetFile(ctx context.Context, metadataCIDStr string, destinationPath string) error {
+	return i.GetFileWithProgress(ctx, metadataCIDStr, destinationPath, nil)
 }
 
 func (i *IpfsManager) GetVersion(ctx context.Context) (string, error) {

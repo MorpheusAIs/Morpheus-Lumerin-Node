@@ -412,23 +412,10 @@ const getIpfsVersion = async (): Promise<{ version: string } | null> => {
   }
 }
 
-const getIpfsFile = async ({ cid, destinationPath }: { cid: string, destinationPath: string }): Promise<ResultResponse | null> => {
-  try {
-    const path = `${config.chain.localProxyRouterUrl}/ipfs/download/${cid}`;
-    const response = await fetch(path, { headers: await getAuthHeaders(), method: "POST", body: JSON.stringify({ destinationPath }) });
-    const body = await response.json();
-    return body;
-  }
-  catch (e) {
-    console.log("Error", e)
-    return null;
-  }
-}
-
 const pinIpfsFile = async ({ cid }: { cid: string }): Promise<ResultResponse | null> => {
   try {
     const path = `${config.chain.localProxyRouterUrl}/ipfs/pin`;
-    const response = await fetch(path, { method: "POST", headers: await getAuthHeaders(), signal: AbortSignal.timeout(Infinity), body: JSON.stringify({ cidHash: cid }) });
+    const response = await fetch(path, { method: "POST", headers: await getAuthHeaders(), body: JSON.stringify({ cidHash: cid }) });
     const body = await response.json();
     return body;
   }
@@ -441,7 +428,7 @@ const pinIpfsFile = async ({ cid }: { cid: string }): Promise<ResultResponse | n
 const unpinIpfsFile = async ({ cid }: { cid: string }): Promise<ResultResponse | null> => {
   try {
     const path = `${config.chain.localProxyRouterUrl}/ipfs/unpin    `;
-    const response = await fetch(path, { method: "POST", headers: await getAuthHeaders(), body: JSON.stringify({ cidHash: cid }) });
+    const response = await fetch(path, { method: "POST", headers: await getAuthHeaders(), body: JSON.stringify({ cidHash: cid })});
     const body = await response.json();
     return body;
   }
@@ -454,9 +441,8 @@ const unpinIpfsFile = async ({ cid }: { cid: string }): Promise<ResultResponse |
 const addFileToIpfs = async ({ filePath, modelId, modelName, tags }: { filePath: string, modelId: string, modelName: string, tags: string[] }): Promise<{ fileCID: string, metadataCID: string, fileCIDHash: string, metadataCIDHash: string } | null> => {
   try {
     const path = `${config.chain.localProxyRouterUrl}/ipfs/add`;
-    const response = await fetch(path, { method: "POST", headers: await getAuthHeaders(), body: JSON.stringify({ filePath, id: modelId, modelName, tags }) });
+    const response = await fetch(path, { method: "POST", headers: await getAuthHeaders(), body: JSON.stringify({ filePath, id: modelId, modelName, tags }), signal: AbortSignal.timeout(10 * 60 * 1000) });
     const body = await response.json();
-    console.log("🚀 ~ addFileToIpfs ~ JSON.stringify({ filePath, id: modelId, modelName, tags }):", JSON.stringify({ filePath, id: modelId, modelName, tags }))
     return body;
   }
   catch (e) {
@@ -472,7 +458,6 @@ const getIpfsPinnedFiles = async (): Promise<{
   metadataCIDHash: string,
   fileName: string,
   fileSize: number,
-  uploadTime: string, 
   tags: string[],
   modelName: string,
   modelId: string,
@@ -514,7 +499,6 @@ const apiGateway = {
   getAgentAllowanceRequests,
   confirmDeclineAgentAllowanceRequest,
   getIpfsVersion,
-  getIpfsFile,
   pinIpfsFile,
   unpinIpfsFile,
   addFileToIpfs,
