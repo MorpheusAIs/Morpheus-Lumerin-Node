@@ -368,12 +368,26 @@ definitions:
       stream:
         type: boolean
     type: object
-  proxyapi.DownloadFileReq:
+  proxyapi.DownloadProgressEvent:
     properties:
-      destinationPath:
+      downloaded:
+        description: Bytes downloaded so far
+        type: integer
+      error:
+        description: Error message, if status is "error"
         type: string
-    required:
-    - destinationPath
+      percentage:
+        description: Percentage complete (0-100)
+        type: number
+      status:
+        description: '"downloading", "completed", "error"'
+        type: string
+      timeUpdated:
+        description: Timestamp of the update
+        type: integer
+      total:
+        description: Total bytes to download
+        type: integer
     type: object
   proxyapi.InitiateSessionReq:
     properties:
@@ -438,8 +452,6 @@ definitions:
         items:
           type: string
         type: array
-      uploadTime:
-        type: string
     required:
     - fileCID
     - fileCIDHash
@@ -1919,7 +1931,7 @@ paths:
       tags:
       - ipfs
   /ipfs/download/{cidHash}:
-    post:
+    get:
       parameters:
       - description: cidHash
         in: path
@@ -1927,11 +1939,10 @@ paths:
         required: true
         type: string
       - description: Destination Path
-        in: body
-        name: request
+        in: query
+        name: dest
         required: true
-        schema:
-          $ref: '#/definitions/proxyapi.DownloadFileReq'
+        type: string
       produces:
       - application/json
       responses:
@@ -1942,6 +1953,31 @@ paths:
       security:
       - BasicAuth: []
       summary: Download a file from IPFS
+      tags:
+      - ipfs
+  /ipfs/download/stream/{cidHash}:
+    get:
+      parameters:
+      - description: cidHash
+        in: path
+        name: cidHash
+        required: true
+        type: string
+      - description: Destination Path
+        in: query
+        name: dest
+        required: true
+        type: string
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.DownloadProgressEvent'
+      security:
+      - BasicAuth: []
+      summary: Download a file from IPFS with progress updates as SSE stream
       tags:
       - ipfs
   /ipfs/pin:

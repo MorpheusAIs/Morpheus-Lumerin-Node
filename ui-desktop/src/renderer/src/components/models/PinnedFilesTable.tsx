@@ -31,8 +31,9 @@ const CustomCard = styled(Card)`
 
   .card-title {
     font-weight: 600;
-    font-size: 1.25rem;
+    font-size: 1.3rem;
     letter-spacing: 0.02em;
+    text-overflow: ellipsis;
     color: #21dc8f;
   }
 
@@ -56,7 +57,7 @@ const CustomCard = styled(Card)`
   .model-info-item {
     display: flex;
     align-items: center;
-    font-size: 0.9rem;
+    font-size: 1.1rem;
     padding: 4px 0;
   }
 
@@ -73,6 +74,10 @@ const CustomCard = styled(Card)`
     color: white;
     display: flex;
     align-items: center;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    display: inline-block;
   }
 
   .icon-button {
@@ -121,7 +126,7 @@ const CustomCard = styled(Card)`
     background: rgba(33, 220, 143, 0.15);
     padding: 4px 8px;
     border-radius: 6px;
-    font-size: 0.8rem;
+    font-size: 1rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -148,6 +153,7 @@ const CustomCard = styled(Card)`
     padding: 6px 10px;
     display: flex;
     align-items: center;
+    font-size: 1.1rem;
   }
 `;
 
@@ -187,7 +193,6 @@ interface PinnedFile {
   metadataCIDHash: string;
   fileName: string;
   fileSize: number;
-  uploadTime: string;
   tags: string[] | null;
   modelName: string;
   id: string;
@@ -196,6 +201,7 @@ interface PinnedFile {
 function ModelCard({ model, toasts, unpinFile }: { model: PinnedFile, toasts: any, unpinFile: any }) {
   const onUnpinFile = (e) => {
     e.stopPropagation();
+    console.log("🚀 ~ onUnpinFile ~ model:", model)
     unpinFile(model.fileCIDHash);
     unpinFile(model.metadataCIDHash);
     toasts.toast("success", "File unpinned successfully", { autoClose: 2000 });
@@ -204,6 +210,13 @@ function ModelCard({ model, toasts, unpinFile }: { model: PinnedFile, toasts: an
   const copyHash = () => {
     navigator.clipboard.writeText(model.metadataCIDHash);
     toasts.toast("success", "Hash copied to clipboard", {
+      autoClose: 700
+    });
+  };
+
+  const copyCID = () => {
+    navigator.clipboard.writeText(model.metadataCID);
+    toasts.toast("success", "CID copied to clipboard", {
       autoClose: 700
     });
   };
@@ -255,7 +268,9 @@ function ModelCard({ model, toasts, unpinFile }: { model: PinnedFile, toasts: an
           as={'div'}
           style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
         >
-          {model.fileName || "Unnamed File"}
+          <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: '90%' }}>
+            {model.fileName || "Unnamed File"}
+          </span>
           <IconPinnedOff
             className="icon-button"
             style={{ width: '2.5rem', height: '2.5rem' }}
@@ -268,7 +283,15 @@ function ModelCard({ model, toasts, unpinFile }: { model: PinnedFile, toasts: an
             <span className="info-label">
               <IconHash size={16} strokeWidth={2} />
               CID:</span>
-            <span className="info-value" style={{ fontSize: '0.85rem' }}>{model.metadataCID}</span>
+              <div className="info-value">
+              <span className="hash-container monospace">
+                {abbreviateAddress(model.metadataCID, 6)}
+                <IconCopy
+                  style={{ width: '1rem', height: '1rem', marginLeft: '8px', cursor: 'pointer', opacity: 0.8 }}
+                  onClick={() => copyCID()}
+                />
+              </span>
+            </div>
           </div>
 
           <div className="model-info-item">
@@ -293,16 +316,6 @@ function ModelCard({ model, toasts, unpinFile }: { model: PinnedFile, toasts: an
                 Size:
               </span>
               <span className="info-value">{formatFileSize(model.fileSize)}</span>
-            </div>
-          ) : null}
-
-          {model.uploadTime ? (
-            <div className="model-info-item">
-              <span className="info-label">
-                <IconCalendar size={16} strokeWidth={2} />
-                Uploaded:
-              </span>
-              <span className="info-value">{formatDate(model.uploadTime)}</span>
             </div>
           ) : null}
 

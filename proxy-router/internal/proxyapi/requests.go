@@ -2,7 +2,6 @@ package proxyapi
 
 import (
 	"encoding/json"
-	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/ethereum/go-ethereum/common"
@@ -86,7 +85,6 @@ type PinnedFileRes struct {
 	FileSize        int64         `json:"fileSize"`
 	FileCID         string        `json:"fileCID" validate:"required"`
 	FileCIDHash     lib.HexString `json:"fileCIDHash" validate:"required" swaggertype:"string"`
-	UploadTime      time.Time     `json:"uploadTime"`
 	Tags            []string      `json:"tags"`
 	ID              string        `json:"id"`
 	ModelName       string        `json:"modelName"`
@@ -96,4 +94,13 @@ type PinnedFileRes struct {
 
 type DownloadFileReq struct {
 	DestinationPath string `json:"destinationPath" validate:"required"`
+}
+
+type DownloadProgressEvent struct {
+	Status      string  `json:"status"`          // "downloading", "completed", "error"
+	Downloaded  int64   `json:"downloaded"`      // Bytes downloaded so far
+	Total       int64   `json:"total"`           // Total bytes to download
+	Percentage  float64 `json:"percentage"`      // Percentage complete (0-100)
+	Error       string  `json:"error,omitempty"` // Error message, if status is "error"
+	TimeUpdated int64   `json:"timeUpdated"`     // Timestamp of the update
 }

@@ -51,12 +51,6 @@ const withModelsState = WrappedComponent => {
       return response;
     }
 
-    downloadModelFromIpfs = async (modelId, folderPath) => {
-      const filePath = path.join(folderPath, modelId);
-      const response = await this.props.client.getIpfsFile({ cid: modelId, destinationPath: filePath });
-      return response;
-    }
-
     addFileToIpfs = async (filePath, modelId, modelName, tags) => {
       const response = await this.props.client.addFileToIpfs({ filePath, modelId, modelName, tags });
       return response;
@@ -85,7 +79,6 @@ const withModelsState = WrappedComponent => {
             getAllProviders={this.getAllProviders}
             getIpfsVersion={this.getIpfsVersion}
             openSelectDownloadFolder={this.openSelectDownloadFolder}
-            downloadModelFromIpfs={this.downloadModelFromIpfs}
             addFileToIpfs={this.addFileToIpfs}
             getPinnedFiles={this.getPinnedFiles}
             pinFile={this.pinFile}
@@ -93,6 +86,7 @@ const withModelsState = WrappedComponent => {
             toasts={this.context}
             {...this.state}
             {...this.props}
+            client={this.props.client}
         />
       );
     }
