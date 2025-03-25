@@ -406,7 +406,6 @@ function ModelCard({ onSelect, model, openSelectDownloadFolder, toasts, client, 
               return null;
             }
           }).filter(Boolean);
-          console.log("🚀 ~ decodedString:", decodedString)
 
           if (objects.length === 0) {
             continue;
@@ -414,7 +413,6 @@ function ModelCard({ onSelect, model, openSelectDownloadFolder, toasts, client, 
 
           const latestProgress = objects[objects.length - 1];
 
-          console.log("🚀 ~ latestProgress.error:", latestProgress)
           if (latestProgress.error) {
             handleDownloadError(latestProgress.error);
             break;
