@@ -8,7 +8,7 @@ import (
 type Provider struct {
 	Address   common.Address
 	Endpoint  string
-	Stake     *lib.BigInt
-	CreatedAt *lib.BigInt
+	Stake     *lib.BigInt `swaggertype:"integer"`
+	CreatedAt *lib.BigInt `swaggertype:"integer"`
 	IsDeleted bool
 }

@@ -12,12 +12,12 @@ type Session struct {
 	Provider                common.Address
 	ModelAgentId            string
 	BidID                   string
-	Stake                   *big.Int
-	PricePerSecond          *big.Int
+	Stake                   *big.Int `swaggertype:"integer"`
+	PricePerSecond          *big.Int `swaggertype:"integer"`
 	CloseoutReceipt         string
-	CloseoutType            *big.Int
-	ProviderWithdrawnAmount *big.Int
-	OpenedAt                *big.Int
-	EndsAt                  *big.Int
-	ClosedAt                *big.Int
+	CloseoutType            *big.Int `swaggertype:"integer"`
+	ProviderWithdrawnAmount *big.Int `swaggertype:"integer"`
+	OpenedAt                *big.Int `swaggertype:"integer"`
+	EndsAt                  *big.Int `swaggertype:"integer"`
+	ClosedAt                *big.Int `swaggertype:"integer"`
 }

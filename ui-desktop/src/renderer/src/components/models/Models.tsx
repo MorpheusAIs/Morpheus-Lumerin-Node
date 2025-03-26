@@ -36,12 +36,13 @@ const Models = ({
     getIpfsVersion,
     getAllModels,
     openSelectDownloadFolder,
-    downloadModelFromIpfs,
     addFileToIpfs,
     getPinnedFiles,
     pinFile,
     unpinFile,
     toasts,
+    client,
+    config,
 }: any) => {
 
     const [openChangeModal, setOpenChangeModal] = useState(false);
@@ -70,7 +71,7 @@ const Models = ({
         });
 
         getPinnedFiles().then((response) => {
-            setPinnedFiles(response.files);
+            setPinnedFiles(response);
         }).catch((error) => {
             console.error("Error", error);
         });
@@ -85,7 +86,8 @@ const Models = ({
             const response = await unpinFile(hash);
             if (response) {
                 toasts.toast("success", "File unpinned successfully");
-                setPinnedFiles(pinnedFiles.filter((file: any) => file.hash !== hash));
+                setPinnedFiles(pinnedFiles.filter((file: any) => file.metadataCIDHash !== hash));
+                setPinnedFiles(pinnedFiles.filter((file: any) => file.fileCIDHash !== hash));
             } else {
                 toasts.toast("error", "Failed to unpin file");
             }
@@ -103,15 +105,15 @@ const Models = ({
 
     return (
         <View data-testid="models-container">
-                        {isIpfsConnected ? (
-                    <IpfsStatus>
-                        <span>IPFS Connected. Version: {ipfsVersion}</span>
-                    </IpfsStatus>
-                ) : (
-                    <IpfsStatus>
-                        <span>IPFS is not connected</span>
-                    </IpfsStatus>
-                )}
+            {isIpfsConnected ? (
+                <IpfsStatus>
+                    <span>IPFS Connected. Version: {ipfsVersion}</span>
+                </IpfsStatus>
+            ) : (
+                <IpfsStatus>
+                    <span>IPFS is not connected</span>
+                </IpfsStatus>
+            )}
             <LayoutHeader title="Models">
                 <BtnAccent style={{ padding: '1.5rem' }} onClick={() => setOpenChangeModal(true)}>Pin Model</BtnAccent>
             </LayoutHeader>
@@ -122,7 +124,7 @@ const Models = ({
                     className="mb-3"
                 >
                     <Tab eventKey="registry" title="Registry">
-                        <ModelsTable setSelectedModel={setSelectedModel} models={models} openSelectDownloadFolder={openSelectDownloadFolder} downloadModelFromIpfs={downloadModelFromIpfs} toasts={toasts} />
+                        <ModelsTable setSelectedModel={setSelectedModel} models={models} openSelectDownloadFolder={openSelectDownloadFolder} toasts={toasts} client={client} config={config} />
                     </Tab>
                     <Tab eventKey="pinned" title="Pinned Models">
                         <PinnedFilesTable pinnedFiles={pinnedFiles} unpinFile={handleUnpinFile} toasts={toasts} />
@@ -136,7 +138,7 @@ const Models = ({
                 pinFile={onPinModel}
                 toasts={toasts}
                 handleClose={() => setOpenChangeModal(false)}
-                 />
+            />
         </View>)
 
 }

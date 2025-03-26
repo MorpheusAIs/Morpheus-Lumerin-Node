@@ -151,7 +151,7 @@ const createClient = function (createStore) {
 
     // IPFS
     getIpfsVersion: utils.forwardToMainProcess('get-ipfs-version', 750000),
-    getIpfsFile: utils.forwardToMainProcess('get-ipfs-file', 750000),
+    getIpfsFile: utils.forwardToMainProcess('get-ipfs-file', null),
     pinIpfsFile: utils.forwardToMainProcess('pin-ipfs-file', 750000),
     unpinIpfsFile: utils.forwardToMainProcess('unpin-ipfs-file', 750000),
     addFileToIpfs: utils.forwardToMainProcess('add-file-to-ipfs', 750000),

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
@@ -35,7 +36,7 @@ type ProxyController struct {
 }
 
 func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStorage genericchatstorage.ChatStorageInterface, storeChatContext, forwardChatContext bool, authConfig system.HTTPAuthConfig, log lib.ILogger) *ProxyController {
-	ipfsManager := NewIpfsManager()
+	ipfsManager := NewIpfsManager(log)
 	c := &ProxyController{
 		service:            service,
 		aiEngine:           aiEngine,
@@ -62,7 +63,8 @@ func (s *ProxyController) RegisterRoutes(r interfaces.Router) {
 
 	r.POST("/ipfs/pin", s.authConfig.CheckAuth("ipfs_pin"), s.Pin)
 	r.POST("/ipfs/unpin", s.authConfig.CheckAuth("ipfs_unpin"), s.Unpin)
-	r.POST("/ipfs/download/:cid", s.authConfig.CheckAuth("ipfs_get"), s.DownloadFile)
+	r.GET("/ipfs/download/:cidHash", s.authConfig.CheckAuth("ipfs_get"), s.DownloadFile)
+	r.GET("/ipfs/download/stream/:cidHash", s.authConfig.CheckAuth("ipfs_get"), s.StreamDownloadFile)
 	r.POST("/ipfs/add", s.authConfig.CheckAuth("ipfs_add"), s.AddFile)
 	r.GET("/ipfs/version", s.authConfig.CheckAuth("ipfs_version"), s.GetIpfsVersion)
 	r.GET("/ipfs/pin", s.authConfig.CheckAuth("ipfs_pinned"), s.GetPinnedFiles)
@@ -322,14 +324,12 @@ func (c *ProxyController) UpdateChatTitle(ctx *gin.Context) {
 //	@Summary	Pin a file to IPFS
 //	@Tags		ipfs
 //	@Produce	json
-//	@Param		cid	body		proxyapi.CIDReq	true	"CID"
-//	@Success	200	{object}	proxyapi.ResultResponse
+//	@Param		cidHash	body		proxyapi.CIDReq	true	"cidHash"
+//	@Success	200		{object}	proxyapi.ResultResponse
 //	@Security	BasicAuth
 //	@Router		/ipfs/pin [post]
 func (c *ProxyController) Pin(ctx *gin.Context) {
-	var req struct {
-		CID lib.Hash `json:"cid"`
-	}
+	var req CIDReq
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -354,14 +354,12 @@ func (c *ProxyController) Pin(ctx *gin.Context) {
 //	@Summary	Unpin a file from IPFS
 //	@Tags		ipfs
 //	@Produce	json
-//	@Param		cid	body		proxyapi.CIDReq	true	"CID"
-//	@Success	200	{object}	proxyapi.ResultResponse
+//	@Param		cidHash	body		proxyapi.CIDReq	true	"cidHash"
+//	@Success	200		{object}	proxyapi.ResultResponse
 //	@Security	BasicAuth
 //	@Router		/ipfs/unpin [post]
 func (c *ProxyController) Unpin(ctx *gin.Context) {
-	var req struct {
-		CID lib.Hash `json:"cid"`
-	}
+	var req CIDReq
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -387,13 +385,14 @@ func (c *ProxyController) Unpin(ctx *gin.Context) {
 //	@Summary	Download a file from IPFS
 //	@Tags		ipfs
 //	@Produce	json
-//	@Param		cid	path		string	true	"CID"
-//	@Success	200	{object}	proxyapi.ResultResponse
+//	@Param		cidHash	path		string	true	"cidHash"
+//	@Param		dest	query		string	true	"Destination Path"
+//	@Success	200		{object}	proxyapi.ResultResponse
 //	@Security	BasicAuth
-//	@Router		/ipfs/download/{cid} [post]
+//	@Router		/ipfs/download/{cidHash} [get]
 func (c *ProxyController) DownloadFile(ctx *gin.Context) {
 	var params struct {
-		CID lib.Hash `uri:"cid" binding:"required"`
+		CID lib.Hash `uri:"cidHash" binding:"required"`
 	}
 
 	if err := ctx.ShouldBindUri(&params); err != nil {
@@ -401,11 +400,9 @@ func (c *ProxyController) DownloadFile(ctx *gin.Context) {
 		return
 	}
 
-	var req struct {
-		DestinationPath string `json:"destinationPath"`
-	}
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	destinationPath := ctx.Query("dest")
+	if destinationPath == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "destination path is required"})
 		return
 	}
 
@@ -415,7 +412,7 @@ func (c *ProxyController) DownloadFile(ctx *gin.Context) {
 		return
 	}
 
-	err = c.ipfsManager.GetFile(ctx, CID, req.DestinationPath)
+	err = c.ipfsManager.GetFile(ctx, CID, destinationPath)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -423,39 +420,213 @@ func (c *ProxyController) DownloadFile(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{"result": true})
 }
 
+// StreamDownloadFile godoc
+//
+//	@Summary	Download a file from IPFS with progress updates as SSE stream
+//	@Tags		ipfs
+//	@Produce	text/event-stream
+//	@Param		cidHash	path		string	true	"cidHash"
+//	@Param		dest	query		string	true	"Destination Path"
+//	@Success	200		{object}	proxyapi.DownloadProgressEvent
+//	@Security	BasicAuth
+//	@Router		/ipfs/download/stream/{cidHash} [get]
+func (c *ProxyController) StreamDownloadFile(ctx *gin.Context) {
+	var params struct {
+		CID lib.Hash `uri:"cidHash" binding:"required"`
+	}
+
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	destinationPath := ctx.Query("dest")
+	if destinationPath == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "destination path is required"})
+		return
+	}
+
+	CID, err := lib.ManualBytes32ToCID(params.CID.Bytes())
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if ctx.Request.Method == "OPTIONS" {
+		ctx.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		ctx.Writer.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		ctx.Writer.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+		ctx.Writer.Header().Set("Access-Control-Max-Age", "86400")
+		ctx.Writer.WriteHeader(http.StatusNoContent)
+		return
+	}
+	
+	if ctx.Request.Method == "HEAD" {
+		ctx.Writer.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Set headers for SSE
+	ctx.Writer.Header().Set("Content-Type", "text/event-stream")
+	ctx.Writer.Header().Set("Cache-Control", "no-cache")
+	ctx.Writer.Header().Set("Connection", "keep-alive")
+	ctx.Writer.Header().Set("X-Accel-Buffering", "no") // For Nginx
+	ctx.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+	ctx.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+
+	// Create a cancelable context that will be used to stop the download when client disconnects
+	downloadCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	
+	// Setup client disconnection detection
+	// Use a done channel to signal when the client disconnects
+	clientGone := ctx.Request.Context().Done()
+	
+	// Monitor for client disconnection in a separate goroutine
+	go func() {
+		select {
+		case <-clientGone:
+			c.log.Info("Client disconnected, canceling download operation")
+			cancel() // Cancel the download context when client disconnects
+		case <-downloadCtx.Done():
+			// Context canceled elsewhere, just return
+		}
+	}()
+
+	progressCallback := func(downloaded, total int64) error {
+		select {
+		case <-downloadCtx.Done():
+			return fmt.Errorf("download canceled: client disconnected or context canceled")
+		default:
+		}
+
+		var percentage float64
+		if total > 0 {
+			percentage = float64(downloaded) / float64(total) * 100
+		}
+		
+		event := DownloadProgressEvent{
+			Status:      "downloading",
+			Downloaded:  downloaded,
+			Total:       total,
+			Percentage:  percentage,
+			TimeUpdated: time.Now().UnixMilli(),
+		}
+		
+		data, err := json.Marshal(event)
+		if err != nil {
+			return err
+		}
+		
+		// Check context again before writing to avoid writing to closed connection
+		select {
+		case <-downloadCtx.Done():
+			return fmt.Errorf("download canceled: client disconnected or context canceled")
+		default:
+			if _, err = fmt.Fprintf(ctx.Writer, "data: %s\n\n", data); err != nil {
+				cancel() // Cancel if we can't write to the client
+				return err
+			}
+			
+			ctx.Writer.Flush()
+			
+			// Don't spam too many updates
+			if downloaded < total && downloaded%1048576 != 0 { // Send at least every 1MB
+				// Skip some updates for better performance
+				return nil
+			}
+			
+			return nil
+		}
+	}
+
+	// Start the download with progress tracking
+	err = c.ipfsManager.GetFileWithProgress(downloadCtx, CID, destinationPath, progressCallback)
+	if err != nil {
+		// Check if this is a cancellation error, which is expected when client disconnects
+		if downloadCtx.Err() != nil {
+			c.log.Info("Download canceled: %v", err)
+			return // Just return without sending an error event since client is gone
+		}
+		
+		event := DownloadProgressEvent{
+			Status:      "error",
+			Error:       err.Error(),
+			TimeUpdated: time.Now().UnixMilli(),
+		}
+		data, _ := json.Marshal(event)
+		
+		select {
+		case <-downloadCtx.Done():
+			return // Client is gone, no need to write
+		default:
+			fmt.Fprintf(ctx.Writer, "data: %s\n\n", data)
+			ctx.Writer.Flush()
+		}
+		return
+	}
+
+	// Only send completion event if the client is still connected
+	select {
+	case <-downloadCtx.Done():
+		return // Client is gone, no need to send completion
+	default:
+		event := DownloadProgressEvent{
+			Status:      "completed",
+			Downloaded:  100,
+			Total:       100,
+			Percentage:  100,
+			TimeUpdated: time.Now().UnixMilli(),
+		}
+		data, _ := json.Marshal(event)
+		fmt.Fprintf(ctx.Writer, "data: %s\n\n", data)
+		ctx.Writer.Flush()
+	}
+}
+
 // AddFile godoc
 //
-//	@Summary	Add a file to IPFS
+//	@Summary	Add a file to IPFS with metadata
 //	@Tags		ipfs
 //	@Produce	json
-//	@Param		filePath	body		proxyapi.AddFileReq	true	"File Path"
-//	@Success	200			{object}	proxyapi.AddIpfsFileRes
+//	@Param		request	body		proxyapi.AddFileReq	true	"File Path and Metadata"
+//	@Success	200		{object}	proxyapi.AddIpfsFileRes
 //	@Security	BasicAuth
 //	@Router		/ipfs/add [post]
 func (c *ProxyController) AddFile(ctx *gin.Context) {
-	var req struct {
-		FilePath string `json:"filePath"`
-	}
+	var req AddFileReq
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	cid, err := c.ipfsManager.AddFile(ctx, req.FilePath)
+	result, err := c.ipfsManager.AddFile(ctx, req.FilePath, req.Tags, req.ID.Hex(), req.ModelName)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	cidHash, err := lib.CIDToBytes32(cid)
+	fileCIDHash, err := lib.CIDToBytes32(result.FileCID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	fileHash := lib.HexString(fileCIDHash)
 
-	hash := lib.HexString(cidHash)
-	ctx.JSON(http.StatusOK, AddIpfsFileRes{CID: cid, Hash: hash})
+	metadataCIDHash, err := lib.CIDToBytes32(result.MetadataCID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	metadataHash := lib.HexString(metadataCIDHash)
+
+	ctx.JSON(http.StatusOK, AddIpfsFileRes{
+		FileCID:         result.FileCID,
+		MetadataCID:     result.MetadataCID,
+		FileCIDHash:     fileHash,
+		MetadataCIDHash: metadataHash,
+	})
 }
 
 // GetIpfsVersion godoc
@@ -477,29 +648,50 @@ func (c *ProxyController) GetIpfsVersion(ctx *gin.Context) {
 
 // GetPinnedFiles godoc
 //
-//	@Summary	Get all pinned files
+//	@Summary	Get all pinned files metadata
 //	@Tags		ipfs
 //	@Produce	json
-//	@Success	200	{object}	proxyapi.IpfsPinnedFilesRes
+//	@Success	200	{array}	proxyapi.PinnedFileRes
 //	@Security	BasicAuth
 //	@Router		/ipfs/pin [get]
 func (c *ProxyController) GetPinnedFiles(ctx *gin.Context) {
-	files, err := c.ipfsManager.GetPinnedFiles(ctx)
+	metadata, err := c.ipfsManager.GetPinnedFiles(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	filesWithHashes := make([]IpfsPinnedFile, len(files))
-	for i, file := range files {
-		cidBytes, err := lib.CIDToBytes32(file)
+	responses := make([]PinnedFileRes, 0, len(metadata))
+	for _, item := range metadata {
+		fileCIDBytes, err := lib.CIDToBytes32(item.FileCID)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		fileCIDHash := lib.HexString(fileCIDBytes)
 
-		hash := lib.HexString(cidBytes)
-		filesWithHashes[i] = IpfsPinnedFile{CID: file, Hash: hash}
+		metadataCIDBytes, err := lib.CIDToBytes32(item.MetadataCID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		metadataCIDHash := lib.HexString(metadataCIDBytes)
+
+		// Create response object
+		response := PinnedFileRes{
+			FileName:        item.FileName,
+			FileSize:        item.FileSize,
+			FileCID:         item.FileCID,
+			FileCIDHash:     fileCIDHash,
+			Tags:            item.Tags,
+			ID:              item.ID,
+			ModelName:       item.ModelName,
+			MetadataCID:     item.MetadataCID,
+			MetadataCIDHash: metadataCIDHash,
+		}
+
+		responses = append(responses, response)
 	}
-	ctx.JSON(http.StatusOK, IpfsPinnedFilesRes{Files: filesWithHashes})
+
+	ctx.JSON(http.StatusOK, responses)
 }

@@ -40,12 +40,10 @@ const listeners = {
 
   // IPFS
   "get-ipfs-version": handlers.getIpfsVersion,
-  "get-ipfs-file": handlers.getIpfsFile,
   "pin-ipfs-file": handlers.pinIpfsFile,
   "unpin-ipfs-file": handlers.unpinIpfsFile,
   "add-file-to-ipfs": handlers.addFileToIpfs,
   "get-ipfs-pinned-files": handlers.getIpfsPinnedFiles,
-  
   "open-select-folder-dialog": handlers.openSelectFolderDialog,
 
   // Agent
