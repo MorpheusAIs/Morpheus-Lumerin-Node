@@ -57,3 +57,50 @@ type ChatCompletionRequestSwaggerExample struct {
 		Content string `json:"content" example:"tell me a joke"`
 	} `json:"messages"`
 }
+
+type CIDReq struct {
+	CID lib.Hash `json:"cidHash" validate:"required,hex32" swaggertype:"string"`
+}
+
+type AddFileReq struct {
+	FilePath  string        `json:"filePath" binding:"required" validate:"required"`
+	Tags      []string      `json:"tags"`
+	ID        lib.HexString `json:"id" swaggertype:"string"`
+	ModelName string        `json:"modelName"`
+}
+
+type AddIpfsFileRes struct {
+	FileCID         string        `json:"fileCID" validate:"required"`
+	MetadataCID     string        `json:"metadataCID" validate:"required"`
+	FileCIDHash     lib.HexString `json:"fileCIDHash" validate:"required" swaggertype:"string"`
+	MetadataCIDHash lib.HexString `json:"metadataCIDHash" validate:"required" swaggertype:"string"`
+}
+
+type IpfsVersionRes struct {
+	Version string `json:"version" validate:"required"`
+}
+
+type PinnedFileRes struct {
+	FileName        string        `json:"fileName"`
+	FileSize        int64         `json:"fileSize"`
+	FileCID         string        `json:"fileCID" validate:"required"`
+	FileCIDHash     lib.HexString `json:"fileCIDHash" validate:"required" swaggertype:"string"`
+	Tags            []string      `json:"tags"`
+	ID              string        `json:"id"`
+	ModelName       string        `json:"modelName"`
+	MetadataCID     string        `json:"metadataCID" validate:"required"`
+	MetadataCIDHash lib.HexString `json:"metadataCIDHash" validate:"required" swaggertype:"string"`
+}
+
+type DownloadFileReq struct {
+	DestinationPath string `json:"destinationPath" validate:"required"`
+}
+
+type DownloadProgressEvent struct {
+	Status      string  `json:"status"`          // "downloading", "completed", "error"
+	Downloaded  int64   `json:"downloaded"`      // Bytes downloaded so far
+	Total       int64   `json:"total"`           // Total bytes to download
+	Percentage  float64 `json:"percentage"`      // Percentage complete (0-100)
+	Error       string  `json:"error,omitempty"` // Error message, if status is "error"
+	TimeUpdated int64   `json:"timeUpdated"`     // Timestamp of the update
+}

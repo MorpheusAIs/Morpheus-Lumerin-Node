@@ -47,7 +47,7 @@ definitions:
     properties:
       allowances:
         additionalProperties:
-          type: string
+          $ref: '#/definitions/lib.BigInt'
         type: object
       isConfirmed:
         type: boolean
@@ -68,7 +68,7 @@ definitions:
   authapi.AllowanceRequest:
     properties:
       allowance:
-        type: string
+        $ref: '#/definitions/lib.BigInt'
       token:
         type: string
       username:
@@ -120,7 +120,7 @@ definitions:
     properties:
       allowances:
         additionalProperties:
-          type: string
+          $ref: '#/definitions/lib.BigInt'
         type: object
       password:
         type: string
@@ -139,7 +139,7 @@ definitions:
   authapi.RequestAllowanceReq:
     properties:
       allowance:
-        type: string
+        $ref: '#/definitions/lib.BigInt'
       token:
         type: string
       username:
@@ -279,16 +279,29 @@ definitions:
       user:
         type: string
     type: object
+  lib.BigInt:
+    properties:
+      big.Int:
+        type: string
+    type: object
   morrpcmesssage.SessionRes:
     properties:
       approval:
-        type: string
+        items:
+          type: integer
+        type: array
       approvalSig:
-        type: string
+        items:
+          type: integer
+        type: array
       message:
-        type: string
+        items:
+          type: integer
+        type: array
       signature:
-        type: string
+        items:
+          type: integer
+        type: array
       timestamp:
         type: integer
       user:
@@ -300,6 +313,44 @@ definitions:
     - signature
     - timestamp
     - user
+    type: object
+  proxyapi.AddFileReq:
+    properties:
+      filePath:
+        type: string
+      id:
+        type: string
+      modelName:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+    required:
+    - filePath
+    type: object
+  proxyapi.AddIpfsFileRes:
+    properties:
+      fileCID:
+        type: string
+      fileCIDHash:
+        type: string
+      metadataCID:
+        type: string
+      metadataCIDHash:
+        type: string
+    required:
+    - fileCID
+    - fileCIDHash
+    - metadataCID
+    - metadataCIDHash
+    type: object
+  proxyapi.CIDReq:
+    properties:
+      cidHash:
+        type: string
+    required:
+    - cidHash
     type: object
   proxyapi.ChatCompletionRequestSwaggerExample:
     properties:
@@ -317,6 +368,27 @@ definitions:
       stream:
         type: boolean
     type: object
+  proxyapi.DownloadProgressEvent:
+    properties:
+      downloaded:
+        description: Bytes downloaded so far
+        type: integer
+      error:
+        description: Error message, if status is "error"
+        type: string
+      percentage:
+        description: Percentage complete (0-100)
+        type: number
+      status:
+        description: '"downloading", "completed", "error"'
+        type: string
+      timeUpdated:
+        description: Timestamp of the update
+        type: integer
+      total:
+        description: Total bytes to download
+        type: integer
+    type: object
   proxyapi.InitiateSessionReq:
     properties:
       bidId:
@@ -326,7 +398,7 @@ definitions:
       providerUrl:
         type: string
       spend:
-        type: string
+        $ref: '#/definitions/lib.BigInt'
       user:
         type: string
     required:
@@ -335,6 +407,13 @@ definitions:
     - providerUrl
     - spend
     - user
+    type: object
+  proxyapi.IpfsVersionRes:
+    properties:
+      version:
+        type: string
+    required:
+    - version
     type: object
   proxyapi.PingReq:
     properties:
@@ -351,6 +430,34 @@ definitions:
       ping:
         type: integer
     type: object
+  proxyapi.PinnedFileRes:
+    properties:
+      fileCID:
+        type: string
+      fileCIDHash:
+        type: string
+      fileName:
+        type: string
+      fileSize:
+        type: integer
+      id:
+        type: string
+      metadataCID:
+        type: string
+      metadataCIDHash:
+        type: string
+      modelName:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+    required:
+    - fileCID
+    - fileCIDHash
+    - metadataCID
+    - metadataCIDHash
+    type: object
   proxyapi.ResultResponse:
     properties:
       result:
@@ -366,8 +473,8 @@ definitions:
   structs.AllowanceRes:
     properties:
       allowance:
-        example: "100000000"
-        type: string
+        example: 100000000
+        type: integer
     type: object
   structs.BalanceRes:
     properties:
@@ -377,17 +484,17 @@ definitions:
   structs.Bid:
     properties:
       createdAt:
-        type: string
+        type: integer
       deletedAt:
-        type: string
+        type: integer
       id:
         type: string
       modelAgentId:
         type: string
       nonce:
-        type: string
+        type: integer
       pricePerSecond:
-        type: string
+        type: integer
       provider:
         type: string
     type: object
@@ -412,8 +519,8 @@ definitions:
   structs.BudgetRes:
     properties:
       budget:
-        example: "100000000"
-        type: string
+        example: 100000000
+        type: integer
     type: object
   structs.ContractInteraction:
     properties:
@@ -433,7 +540,7 @@ definitions:
       modelID:
         type: string
       pricePerSecond:
-        type: string
+        type: integer
     required:
     - modelID
     - pricePerSecond
@@ -441,8 +548,8 @@ definitions:
   structs.CreateModelRequest:
     properties:
       fee:
-        example: "123000000000"
-        type: string
+        example: 123000000000
+        type: integer
       id:
         example: "0x1234"
         type: string
@@ -455,8 +562,8 @@ definitions:
         minLength: 1
         type: string
       stake:
-        example: "123000000000"
-        type: string
+        example: 123000000000
+        type: integer
       tags:
         items:
           type: string
@@ -476,8 +583,8 @@ definitions:
         example: mycoolmornode.domain.com:3989
         type: string
       stake:
-        example: "123000000000"
-        type: string
+        example: 123000000000
+        type: integer
     required:
     - endpoint
     - stake
@@ -510,9 +617,9 @@ definitions:
   structs.Model:
     properties:
       createdAt:
-        type: string
+        type: integer
       fee:
-        type: string
+        type: integer
       id:
         type: string
       ipfsCID:
@@ -524,7 +631,7 @@ definitions:
       owner:
         type: string
       stake:
-        type: string
+        type: integer
       tags:
         items:
           type: string
@@ -543,24 +650,6 @@ definitions:
         type: array
     type: object
   structs.OpenSessionRequest:
-    properties:
-      approval:
-        example: "0x1234"
-        format: hex
-        type: string
-      approvalSig:
-        example: "0x1234"
-        format: hex
-        type: string
-      directPayment:
-        type: boolean
-      stake:
-        example: "123000000000"
-        type: string
-    required:
-    - approval
-    - approvalSig
-    - stake
     type: object
   structs.OpenSessionRes:
     properties:
@@ -571,7 +660,7 @@ definitions:
   structs.OpenSessionWithDurationRequest:
     properties:
       sessionDuration:
-        type: string
+        type: integer
     type: object
   structs.OpenSessionWithFailover:
     properties:
@@ -580,20 +669,20 @@ definitions:
       failover:
         type: boolean
       sessionDuration:
-        type: string
+        type: integer
     type: object
   structs.Provider:
     properties:
       address:
         type: string
       createdAt:
-        type: string
+        type: integer
       endpoint:
         type: string
       isDeleted:
         type: boolean
       stake:
-        type: string
+        type: integer
     type: object
   structs.ProviderRes:
     properties:
@@ -626,7 +715,7 @@ definitions:
   structs.SendRequest:
     properties:
       amount:
-        type: string
+        type: integer
       to:
         type: string
     required:
@@ -638,27 +727,27 @@ definitions:
       bidID:
         type: string
       closedAt:
-        type: string
+        type: integer
       closeoutReceipt:
         type: string
       closeoutType:
-        type: string
+        type: integer
       endsAt:
-        type: string
+        type: integer
       id:
         type: string
       modelAgentId:
         type: string
       openedAt:
-        type: string
+        type: integer
       pricePerSecond:
-        type: string
+        type: integer
       provider:
         type: string
       providerWithdrawnAmount:
-        type: string
+        type: integer
       stake:
-        type: string
+        type: integer
       user:
         type: string
     type: object
@@ -677,17 +766,17 @@ definitions:
   structs.SupplyRes:
     properties:
       supply:
-        example: "100000000"
-        type: string
+        example: 100000000
+        type: integer
     type: object
   structs.TokenBalanceRes:
     properties:
       eth:
-        example: "100000000"
-        type: string
+        example: 100000000
+        type: integer
       mor:
-        example: "100000000"
-        type: string
+        example: 100000000
+        type: integer
     type: object
   structs.TokenTransfer:
     properties:
@@ -1150,11 +1239,11 @@ paths:
         minimum: 1
         name: limit
         type: integer
-      - example: "0"
+      - example: 0
         in: query
-        minLength: 0
+        minimum: 0
         name: offset
-        type: string
+        type: integer
       - enum:
         - asc
         - desc
@@ -1233,11 +1322,11 @@ paths:
         minimum: 1
         name: limit
         type: integer
-      - example: "0"
+      - example: 0
         in: query
-        minLength: 0
+        minimum: 0
         name: offset
-        type: string
+        type: integer
       - enum:
         - asc
         - desc
@@ -1316,11 +1405,11 @@ paths:
         minimum: 1
         name: limit
         type: integer
-      - example: "0"
+      - example: 0
         in: query
-        minLength: 0
+        minimum: 0
         name: offset
-        type: string
+        type: integer
       - enum:
         - asc
         - desc
@@ -1396,11 +1485,11 @@ paths:
         minimum: 1
         name: limit
         type: integer
-      - example: "0"
+      - example: 0
         in: query
-        minLength: 0
+        minimum: 0
         name: offset
-        type: string
+        type: integer
       - enum:
         - asc
         - desc
@@ -1434,11 +1523,11 @@ paths:
         minimum: 1
         name: limit
         type: integer
-      - example: "0"
+      - example: 0
         in: query
-        minLength: 0
+        minimum: 0
         name: offset
-        type: string
+        type: integer
       - enum:
         - asc
         - desc
@@ -1592,11 +1681,11 @@ paths:
         minimum: 1
         name: limit
         type: integer
-      - example: "0"
+      - example: 0
         in: query
-        minLength: 0
+        minimum: 0
         name: offset
-        type: string
+        type: integer
       - enum:
         - asc
         - desc
@@ -1635,11 +1724,11 @@ paths:
         minimum: 1
         name: limit
         type: integer
-      - example: "0"
+      - example: 0
         in: query
-        minLength: 0
+        minimum: 0
         name: offset
-        type: string
+        type: integer
       - enum:
         - asc
         - desc
@@ -1673,11 +1762,11 @@ paths:
         minimum: 1
         name: limit
         type: integer
-      - example: "0"
+      - example: 0
         in: query
-        minLength: 0
+        minimum: 0
         name: offset
-        type: string
+        type: integer
       - enum:
         - asc
         - desc
@@ -1820,6 +1909,148 @@ paths:
       summary: Healthcheck example
       tags:
       - system
+  /ipfs/add:
+    post:
+      parameters:
+      - description: File Path and Metadata
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/proxyapi.AddFileReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.AddIpfsFileRes'
+      security:
+      - BasicAuth: []
+      summary: Add a file to IPFS with metadata
+      tags:
+      - ipfs
+  /ipfs/download/{cidHash}:
+    get:
+      parameters:
+      - description: cidHash
+        in: path
+        name: cidHash
+        required: true
+        type: string
+      - description: Destination Path
+        in: query
+        name: dest
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.ResultResponse'
+      security:
+      - BasicAuth: []
+      summary: Download a file from IPFS
+      tags:
+      - ipfs
+  /ipfs/download/stream/{cidHash}:
+    get:
+      parameters:
+      - description: cidHash
+        in: path
+        name: cidHash
+        required: true
+        type: string
+      - description: Destination Path
+        in: query
+        name: dest
+        required: true
+        type: string
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.DownloadProgressEvent'
+      security:
+      - BasicAuth: []
+      summary: Download a file from IPFS with progress updates as SSE stream
+      tags:
+      - ipfs
+  /ipfs/pin:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/proxyapi.PinnedFileRes'
+            type: array
+      security:
+      - BasicAuth: []
+      summary: Get all pinned files metadata
+      tags:
+      - ipfs
+    post:
+      parameters:
+      - description: cidHash
+        in: body
+        name: cidHash
+        required: true
+        schema:
+          $ref: '#/definitions/proxyapi.CIDReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.ResultResponse'
+      security:
+      - BasicAuth: []
+      summary: Pin a file to IPFS
+      tags:
+      - ipfs
+  /ipfs/unpin:
+    post:
+      parameters:
+      - description: cidHash
+        in: body
+        name: cidHash
+        required: true
+        schema:
+          $ref: '#/definitions/proxyapi.CIDReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.ResultResponse'
+      security:
+      - BasicAuth: []
+      summary: Unpin a file from IPFS
+      tags:
+      - ipfs
+  /ipfs/version:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.IpfsVersionRes'
+      security:
+      - BasicAuth: []
+      summary: Get IPFS Version
+      tags:
+      - ipfs
   /proxy/provider/ping:
     post:
       description: sends a ping to the provider on the RPC level

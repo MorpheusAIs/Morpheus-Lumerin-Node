@@ -642,9 +642,9 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "minLength": 0,
-                        "type": "string",
-                        "example": "0",
+                        "minimum": 0,
+                        "type": "integer",
+                        "example": 0,
                         "name": "offset",
                         "in": "query"
                     },
@@ -770,9 +770,9 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "minLength": 0,
-                        "type": "string",
-                        "example": "0",
+                        "minimum": 0,
+                        "type": "integer",
+                        "example": 0,
                         "name": "offset",
                         "in": "query"
                     },
@@ -901,9 +901,9 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "minLength": 0,
-                        "type": "string",
-                        "example": "0",
+                        "minimum": 0,
+                        "type": "integer",
+                        "example": 0,
                         "name": "offset",
                         "in": "query"
                     },
@@ -1028,9 +1028,9 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "minLength": 0,
-                        "type": "string",
-                        "example": "0",
+                        "minimum": 0,
+                        "type": "integer",
+                        "example": 0,
                         "name": "offset",
                         "in": "query"
                     },
@@ -1086,9 +1086,9 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "minLength": 0,
-                        "type": "string",
-                        "example": "0",
+                        "minimum": 0,
+                        "type": "integer",
+                        "example": 0,
                         "name": "offset",
                         "in": "query"
                     },
@@ -1273,9 +1273,9 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "minLength": 0,
-                        "type": "string",
-                        "example": "0",
+                        "minimum": 0,
+                        "type": "integer",
+                        "example": 0,
                         "name": "offset",
                         "in": "query"
                     },
@@ -1338,9 +1338,9 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "minLength": 0,
-                        "type": "string",
-                        "example": "0",
+                        "minimum": 0,
+                        "type": "integer",
+                        "example": 0,
                         "name": "offset",
                         "in": "query"
                     },
@@ -1396,9 +1396,9 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "minLength": 0,
-                        "type": "string",
-                        "example": "0",
+                        "minimum": 0,
+                        "type": "integer",
+                        "example": 0,
                         "name": "offset",
                         "in": "query"
                     },
@@ -1688,6 +1688,240 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/system.HealthCheckResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ipfs/add": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ipfs"
+                ],
+                "summary": "Add a file to IPFS with metadata",
+                "parameters": [
+                    {
+                        "description": "File Path and Metadata",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.AddFileReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.AddIpfsFileRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/ipfs/download/stream/{cidHash}": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "ipfs"
+                ],
+                "summary": "Download a file from IPFS with progress updates as SSE stream",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "cidHash",
+                        "name": "cidHash",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Destination Path",
+                        "name": "dest",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.DownloadProgressEvent"
+                        }
+                    }
+                }
+            }
+        },
+        "/ipfs/download/{cidHash}": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ipfs"
+                ],
+                "summary": "Download a file from IPFS",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "cidHash",
+                        "name": "cidHash",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Destination Path",
+                        "name": "dest",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.ResultResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ipfs/pin": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ipfs"
+                ],
+                "summary": "Get all pinned files metadata",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/proxyapi.PinnedFileRes"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ipfs"
+                ],
+                "summary": "Pin a file to IPFS",
+                "parameters": [
+                    {
+                        "description": "cidHash",
+                        "name": "cidHash",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.CIDReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.ResultResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ipfs/unpin": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ipfs"
+                ],
+                "summary": "Unpin a file from IPFS",
+                "parameters": [
+                    {
+                        "description": "cidHash",
+                        "name": "cidHash",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.CIDReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.ResultResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ipfs/version": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ipfs"
+                ],
+                "summary": "Get IPFS Version",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.IpfsVersionRes"
                         }
                     }
                 }
@@ -2243,7 +2477,7 @@ const docTemplate = `{
                 "allowances": {
                     "type": "object",
                     "additionalProperties": {
-                        "type": "string"
+                        "$ref": "#/definitions/lib.BigInt"
                     }
                 },
                 "isConfirmed": {
@@ -2275,7 +2509,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "allowance": {
-                    "type": "string"
+                    "$ref": "#/definitions/lib.BigInt"
                 },
                 "token": {
                     "type": "string"
@@ -2361,7 +2595,7 @@ const docTemplate = `{
                 "allowances": {
                     "type": "object",
                     "additionalProperties": {
-                        "type": "string"
+                        "$ref": "#/definitions/lib.BigInt"
                     }
                 },
                 "password": {
@@ -2386,7 +2620,7 @@ const docTemplate = `{
             ],
             "properties": {
                 "allowance": {
-                    "type": "string"
+                    "$ref": "#/definitions/lib.BigInt"
                 },
                 "token": {
                     "type": "string"
@@ -2572,6 +2806,14 @@ const docTemplate = `{
                 }
             }
         },
+        "lib.BigInt": {
+            "type": "object",
+            "properties": {
+                "big.Int": {
+                    "type": "string"
+                }
+            }
+        },
         "morrpcmesssage.SessionRes": {
             "type": "object",
             "required": [
@@ -2584,21 +2826,90 @@ const docTemplate = `{
             ],
             "properties": {
                 "approval": {
-                    "type": "string"
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 },
                 "approvalSig": {
-                    "type": "string"
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 },
                 "message": {
-                    "type": "string"
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 },
                 "signature": {
-                    "type": "string"
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 },
                 "timestamp": {
                     "type": "integer"
                 },
                 "user": {
+                    "type": "string"
+                }
+            }
+        },
+        "proxyapi.AddFileReq": {
+            "type": "object",
+            "required": [
+                "filePath"
+            ],
+            "properties": {
+                "filePath": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "modelName": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "proxyapi.AddIpfsFileRes": {
+            "type": "object",
+            "required": [
+                "fileCID",
+                "fileCIDHash",
+                "metadataCID",
+                "metadataCIDHash"
+            ],
+            "properties": {
+                "fileCID": {
+                    "type": "string"
+                },
+                "fileCIDHash": {
+                    "type": "string"
+                },
+                "metadataCID": {
+                    "type": "string"
+                },
+                "metadataCIDHash": {
+                    "type": "string"
+                }
+            }
+        },
+        "proxyapi.CIDReq": {
+            "type": "object",
+            "required": [
+                "cidHash"
+            ],
+            "properties": {
+                "cidHash": {
                     "type": "string"
                 }
             }
@@ -2627,6 +2938,35 @@ const docTemplate = `{
                 }
             }
         },
+        "proxyapi.DownloadProgressEvent": {
+            "type": "object",
+            "properties": {
+                "downloaded": {
+                    "description": "Bytes downloaded so far",
+                    "type": "integer"
+                },
+                "error": {
+                    "description": "Error message, if status is \"error\"",
+                    "type": "string"
+                },
+                "percentage": {
+                    "description": "Percentage complete (0-100)",
+                    "type": "number"
+                },
+                "status": {
+                    "description": "\"downloading\", \"completed\", \"error\"",
+                    "type": "string"
+                },
+                "timeUpdated": {
+                    "description": "Timestamp of the update",
+                    "type": "integer"
+                },
+                "total": {
+                    "description": "Total bytes to download",
+                    "type": "integer"
+                }
+            }
+        },
         "proxyapi.InitiateSessionReq": {
             "type": "object",
             "required": [
@@ -2647,9 +2987,20 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "spend": {
-                    "type": "string"
+                    "$ref": "#/definitions/lib.BigInt"
                 },
                 "user": {
+                    "type": "string"
+                }
+            }
+        },
+        "proxyapi.IpfsVersionRes": {
+            "type": "object",
+            "required": [
+                "version"
+            ],
+            "properties": {
+                "version": {
                     "type": "string"
                 }
             }
@@ -2677,6 +3028,47 @@ const docTemplate = `{
                 }
             }
         },
+        "proxyapi.PinnedFileRes": {
+            "type": "object",
+            "required": [
+                "fileCID",
+                "fileCIDHash",
+                "metadataCID",
+                "metadataCIDHash"
+            ],
+            "properties": {
+                "fileCID": {
+                    "type": "string"
+                },
+                "fileCIDHash": {
+                    "type": "string"
+                },
+                "fileName": {
+                    "type": "string"
+                },
+                "fileSize": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "metadataCID": {
+                    "type": "string"
+                },
+                "metadataCIDHash": {
+                    "type": "string"
+                },
+                "modelName": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "proxyapi.ResultResponse": {
             "type": "object",
             "properties": {
@@ -2700,8 +3092,8 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "allowance": {
-                    "type": "string",
-                    "example": "100000000"
+                    "type": "integer",
+                    "example": 100000000
                 }
             }
         },
@@ -2717,10 +3109,10 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "createdAt": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "deletedAt": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "id": {
                     "type": "string"
@@ -2729,10 +3121,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "nonce": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "pricePerSecond": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "provider": {
                     "type": "string"
@@ -2771,8 +3163,8 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "budget": {
-                    "type": "string",
-                    "example": "100000000"
+                    "type": "integer",
+                    "example": 100000000
                 }
             }
         },
@@ -2807,7 +3199,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "pricePerSecond": {
-                    "type": "string"
+                    "type": "integer"
                 }
             }
         },
@@ -2822,8 +3214,8 @@ const docTemplate = `{
             ],
             "properties": {
                 "fee": {
-                    "type": "string",
-                    "example": "123000000000"
+                    "type": "integer",
+                    "example": 123000000000
                 },
                 "id": {
                     "type": "string",
@@ -2840,8 +3232,8 @@ const docTemplate = `{
                     "example": "Llama 2.0"
                 },
                 "stake": {
-                    "type": "string",
-                    "example": "123000000000"
+                    "type": "integer",
+                    "example": 123000000000
                 },
                 "tags": {
                     "type": "array",
@@ -2865,8 +3257,8 @@ const docTemplate = `{
                     "example": "mycoolmornode.domain.com:3989"
                 },
                 "stake": {
-                    "type": "string",
-                    "example": "123000000000"
+                    "type": "integer",
+                    "example": 123000000000
                 }
             }
         },
@@ -2912,10 +3304,10 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "createdAt": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "fee": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "id": {
                     "type": "string"
@@ -2933,7 +3325,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "stake": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "tags": {
                     "type": "array",
@@ -2963,31 +3355,7 @@ const docTemplate = `{
             }
         },
         "structs.OpenSessionRequest": {
-            "type": "object",
-            "required": [
-                "approval",
-                "approvalSig",
-                "stake"
-            ],
-            "properties": {
-                "approval": {
-                    "type": "string",
-                    "format": "hex",
-                    "example": "0x1234"
-                },
-                "approvalSig": {
-                    "type": "string",
-                    "format": "hex",
-                    "example": "0x1234"
-                },
-                "directPayment": {
-                    "type": "boolean"
-                },
-                "stake": {
-                    "type": "string",
-                    "example": "123000000000"
-                }
-            }
+            "type": "object"
         },
         "structs.OpenSessionRes": {
             "type": "object",
@@ -3002,7 +3370,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "sessionDuration": {
-                    "type": "string"
+                    "type": "integer"
                 }
             }
         },
@@ -3016,7 +3384,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "sessionDuration": {
-                    "type": "string"
+                    "type": "integer"
                 }
             }
         },
@@ -3027,7 +3395,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "createdAt": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "endpoint": {
                     "type": "string"
@@ -3036,7 +3404,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "stake": {
-                    "type": "string"
+                    "type": "integer"
                 }
             }
         },
@@ -3092,7 +3460,7 @@ const docTemplate = `{
             ],
             "properties": {
                 "amount": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "to": {
                     "type": "string"
@@ -3106,16 +3474,16 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "closedAt": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "closeoutReceipt": {
                     "type": "string"
                 },
                 "closeoutType": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "endsAt": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "id": {
                     "type": "string"
@@ -3124,19 +3492,19 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "openedAt": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "pricePerSecond": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "provider": {
                     "type": "string"
                 },
                 "providerWithdrawnAmount": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "stake": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "user": {
                     "type": "string"
@@ -3166,8 +3534,8 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "supply": {
-                    "type": "string",
-                    "example": "100000000"
+                    "type": "integer",
+                    "example": 100000000
                 }
             }
         },
@@ -3175,12 +3543,12 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "eth": {
-                    "type": "string",
-                    "example": "100000000"
+                    "type": "integer",
+                    "example": 100000000
                 },
                 "mor": {
-                    "type": "string",
-                    "example": "100000000"
+                    "type": "integer",
+                    "example": 100000000
                 }
             }
         },

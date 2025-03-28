@@ -13,6 +13,8 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
+	"strconv"
 
 	"github.com/google/shlex"
 )
@@ -233,6 +235,17 @@ func main() {
 			log.Println("### Skipping llama-server command based on startup mode.")
 			log.Println("### If you want a local model server, run the `mor-launch local` command.")
 			log.Println("######################################################")
+			continue
+		}
+
+		if strings.Contains(cmdStr, "sleep") {
+			seconds := strings.Split(cmdStr, " ")[1]
+			secondsInt, err := strconv.Atoi(seconds)
+			if err != nil {
+				log.Printf("Error converting sleep seconds to int: %v", err)
+				continue
+			}
+			time.Sleep(time.Duration(secondsInt) * time.Second)
 			continue
 		}
 

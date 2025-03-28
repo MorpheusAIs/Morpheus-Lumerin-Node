@@ -14,7 +14,7 @@ export const isAddress = (str: string): str is `0x${string}` =>
 export const toBN = (str: string) => utils.toBN(str);
 export const toHex = (bn: BN) => utils.toHex(bn);
 
-export function forwardToMainProcess<T>(eventName: string, timeout = 10000) {
+export function forwardToMainProcess<T>(eventName: string, timeout: number | null = 10000) {
   return function (data: T) {
     return sendToMainProcess<T>(eventName, data, timeout);
   };
@@ -29,7 +29,7 @@ export function forwardToMainProcess<T>(eventName: string, timeout = 10000) {
 export function sendToMainProcess<T = any, K = unknown>(
   eventName: string,
   data: T,
-  timeout = 10000,
+  timeout: number | null = 10000,
   ipcRenderer = window.ipcRenderer,
 ): Promise<K> {
   const id = cuid();
