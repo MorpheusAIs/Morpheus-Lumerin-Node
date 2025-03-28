@@ -1,8 +1,8 @@
 ---
 version: "2.0"
 services:
-  proxy-router:
-    image: ghcr.io/lumerin-protocol/morpheus-lumerin-node:v2.2.50-dev
+  morpheus-lumerin-node:
+    image: ghcr.io/lumerin-protocol/morpheus-lumerin-node:v2.7.0
     expose:
       - port: 8082
         as: 8082
@@ -14,40 +14,47 @@ services:
         to:
           - global: true
     env:
-      - WALLET_PRIVATE_KEY=
-      - COOKIE_CONTENT=admin:password
-      - MODELS_CONFIG_CONTENT={"$schema":"./internal/config/models-config-schema.json","models":[{"modelId":"0x0000000000000000000000000000000000000000000000000000000000000000","modelName":"llama2","apiType":"openai","apiUrl":"http://localhost:8080/v1"},{"modelId":"0x0000000000000000000000000000000000000000000000000000000000000001","modelName":"inference.sdxl.txt2img.v1","apiType":"prodia-v2","apiUrl":"https://inference.prodia.com/v2","apiKey":"FILL_ME_IN"}]}
+      - COOKIE_CONTENT=admin:superpassword
+      - WALLET_PRIVATE_KEY=078935beefb0cf3e03efd494b5263c4bdc6074dd57c52e94bcf1268edde1fb43
+      - WEB_PUBLIC_URL=http://localhost:8082
+      - WEB_ADDRESS=0.0.0.0:8082
+      - PROXY_ADDRESS=0.0.0.0:3333
+      - >-
+        MODELS_CONFIG_CONTENT={
+          "$schema": "https://raw.githubusercontent.com/Lumerin-protocol/Morpheus-Lumerin-Node/v2.7.0/proxy-router/internal/config/models-config-schema.json",
+          "models": [
+            {
+              "modelId": "<MODEL_ID>",
+              "modelName": "Tiny-Llama-Demo",
+              "apiType": "openai",
+              "apiUrl": "http://provider.a100.dsm.hh.akash.pub:30294/v1",
+              "concurrentSlots": 8,
+              "capacityPolicy": "simple"
+            }
+          ]
+        }
       - ETH_NODE_CHAIN_ID=42161
-      - BLOCKSCOUT_API_URL=https://arbitrum.blockscout.com/api/v2
       - DIAMOND_CONTRACT_ADDRESS=0xDE819AaEE474626E3f34Ef0263373357e5a6C71b
       - MOR_TOKEN_ADDRESS=0x092bAaDB7DEf4C3981454dD9c0A0D7FF07bCFc86
-      - PROXY_ADDRESS=0.0.0.0:3333
-      - WEB_ADDRESS=0.0.0.0:8082
-      - WEB_PUBLIC_URL=http://localhost:8082
-      - PROXY_STORE_CHAT_CONTEXT=false
-      - LOG_COLOR=true
-      - LOG_LEVEL_APP=info
-      - LOG_LEVEL_TCP=info
-      - LOG_LEVEL_ETH_RPC=info
-      - LOG_LEVEL_STORAGE=info
+      - BLOCKSCOUT_API_URL=https://arbitrum.blockscout.com/api/v2
 profiles:
   compute:
-    proxy-router:
+    morpheus-lumerin-node:
       resources:
         cpu:
-          units: 1
+          units: 0.5
         memory:
           size: 512Mi
         storage:
           - size: 1Gi
   placement:
-    akash:
+    dcloud:
       pricing:
-        proxy-router:
+        morpheus-lumerin-node:
           denom: uakt
           amount: 10000
 deployment:
-  proxy-router:
-    akash:
-      profile: proxy-router
+  morpheus-lumerin-node:
+    dcloud:
+      profile: morpheus-lumerin-node
       count: 1
