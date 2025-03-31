@@ -30,11 +30,11 @@ on:
   workflow_dispatch:
     inputs:
       create_release:
-        description:  'Create updated Morpheus-Lumerin-Node release'
+        description: "Create updated Morpheus-Lumerin-Node release"
         required: true
         type: boolean
       build_all_os:
-        description:  'Build all OS & container image'
+        description: "Build all OS & container image"
         required: true
         type: boolean
 
@@ -45,29 +45,11 @@ on:
       - dev
       # - cicd/*
 
-    paths:
-      [
-        ".github/workflows/**",
-        "**/Makefile",
-        "**/*.go",
-        "**/*.json",
-        "**/*.yml",
-        "**/*.ts",
-        "**/*.js",
-      ]
+    paths: [".github/workflows/build.yml", "ui-desktop/**"]
 
   pull_request:
     types: [opened, reopened, synchronize]
-    paths:
-      [
-        ".github/workflows/**",
-        "**/Makefile",
-        "**/*.go",
-        "**/*.json",
-        "**/*.yml",
-        "**/*.ts",
-        "**/*.js",
-      ]
+    paths: [".github/workflows/build.yml", "ui-desktop/**"]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -91,7 +73,6 @@ env:
   KUBO_FILE_WIN: kubo_v0.30.0_windows-amd64.zip
   #tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
 
-  
 jobs:
   Generate-Tag:
     runs-on: ubuntu-latest
@@ -177,7 +158,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22.x'
+          go-version: "1.22.x"
           cache-dependency-path: |
             launcher/go.sum
             proxy-router/go.sum
@@ -186,7 +167,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'yarn'
+          cache: "yarn"
           cache-dependency-path: ui-desktop/yarn.lock
 
       - name: Install dependencies
@@ -280,7 +261,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22.x'
+          go-version: "1.22.x"
           cache-dependency-path: |
             launcher/go.sum
             proxy-router/go.sum
@@ -289,7 +270,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'yarn'
+          cache: "yarn"
           cache-dependency-path: ui-desktop/yarn.lock
 
       - name: Install dependencies
@@ -380,7 +361,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22.x'
+          go-version: "1.22.x"
           cache-dependency-path: |
             launcher/go.sum
             proxy-router/go.sum
@@ -389,7 +370,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'yarn'
+          cache: "yarn"
           cache-dependency-path: ui-desktop/yarn.lock
 
       - name: Install dependencies
@@ -483,7 +464,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22.x'
+          go-version: "1.22.x"
           cache-dependency-path: |
             launcher/go.sum
             proxy-router/go.sum
@@ -492,7 +473,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'yarn'
+          cache: "yarn"
           cache-dependency-path: ui-desktop/yarn.lock
 
       - name: Install wget and sed
