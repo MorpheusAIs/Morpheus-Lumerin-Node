@@ -284,14 +284,14 @@ jobs:
             const path = require('path');
             const release_id = '${{ steps.create_release.outputs.id }}';
 
-            for (const file of fs.readdirSync('./executables')) {
+            for (const file of fs.readdirSync('./executables/proxy-router-executables')) {
               console.log('Uploading release asset:', file);
               await github.repos.uploadReleaseAsset({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 release_id: release_id,
                 name: file,
-                data: await fs.readFileSync(`./executables/${file}`)
+                data: await fs.readFileSync(`./executables/proxy-router-executables/${file}`)
               });
             }
 
