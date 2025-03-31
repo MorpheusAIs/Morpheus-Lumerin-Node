@@ -43,7 +43,7 @@ on:
       - main
       - test
       - dev
-      - cicd/*
+      # - cicd/*
 
     paths:
       [
