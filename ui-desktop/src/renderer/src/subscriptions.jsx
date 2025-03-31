@@ -1,4 +1,4 @@
-export const subscribeToMainProcessMessages = function(store) {
+export const subscribeToMainProcessMessages = function (store) {
   const ipcMessages = [
     'indexer-connection-status-changed',
     'lumerin-token-status-changed',
@@ -29,14 +29,15 @@ export const subscribeToMainProcessMessages = function(store) {
     'devices-device-updated',
     'devices-state-updated',
     'proxy-router-type-changed',
-    'allow-send-transaction'
+    'allow-send-transaction',
+    'services-state',
   ];
 
   // Subscribe to every IPC message defined above and dispatch a
   // Redux action of type { type: MSG_NAME, payload: MSG_ARG }
-  ipcMessages.forEach(msgName =>
-    window.ipcRenderer.on(msgName, (_, payload) =>
-      store.dispatch({ type: msgName, payload })
-    )
+  ipcMessages.forEach((msgName) =>
+    window.ipcRenderer.on(msgName, (_, payload) => {
+      store.dispatch({ type: msgName, payload });
+    }),
   );
 };

@@ -1,14 +1,14 @@
-import handlers from '../handlers'
+import { Core } from './core.types'
+import * as handlers from './handlers'
+import { ApplyFnWithFirstArg } from './parial-apply.types'
 import utils from './utils'
 
 const listeners = {
-  logout: handlers.logout,
   'validate-password': handlers.validatePassword,
   'change-password': handlers.changePassword,
   'persist-state': handlers.persistState,
   'clear-cache': handlers.clearCache,
   'handle-client-error': handlers.handleClientSideError,
-  'get-pool-address': handlers.getPoolAddress,
   'save-proxy-router-settings': handlers.saveProxyRouterSettings,
   'get-proxy-router-settings': handlers.getProxyRouterSettings,
   'get-default-currency-settings': handlers.getDefaultCurrency,
@@ -20,6 +20,9 @@ const listeners = {
   'get-contract-hashrate': handlers.getContractHashrate,
   'get-auto-adjust-price': handlers.getAutoAdjustPriceData,
   'set-auto-adjust-price': handlers.setAutoAdjustPriceData,
+  'onboarding-completed': handlers.onboardingCompleted,
+  'suggest-addresses': handlers.suggestAddresses,
+  'login-submit': handlers.onLoginSubmit,
   // Api Gateway
   'get-all-models': handlers.getAllModels,
   'get-transactions': handlers.getTransactions,
@@ -34,19 +37,19 @@ const listeners = {
   'delete-chat-history': handlers.deleteChatHistory,
   'update-chat-history-title': handlers.updateChatHistoryTitle,
   // Failover
-  "get-failover-setting": handlers.isFailoverEnabled,
-  "set-failover-setting": handlers.setFailoverSetting,
-  "check-provider-connectivity": handlers.checkProviderConnectivity,
+  'get-failover-setting': handlers.isFailoverEnabled,
+  'set-failover-setting': handlers.setFailoverSetting,
+  'check-provider-connectivity': handlers.checkProviderConnectivity,
 
   // IPFS
-  "get-ipfs-version": handlers.getIpfsVersion,
-  "get-ipfs-file": handlers.getIpfsFile,
-  "pin-ipfs-file": handlers.pinIpfsFile,
-  "unpin-ipfs-file": handlers.unpinIpfsFile,
-  "add-file-to-ipfs": handlers.addFileToIpfs,
-  "get-ipfs-pinned-files": handlers.getIpfsPinnedFiles,
-  
-  "open-select-folder-dialog": handlers.openSelectFolderDialog,
+  'get-ipfs-version': handlers.getIpfsVersion,
+  'get-ipfs-file': handlers.getIpfsFile,
+  'pin-ipfs-file': handlers.pinIpfsFile,
+  'unpin-ipfs-file': handlers.unpinIpfsFile,
+  'add-file-to-ipfs': handlers.addFileToIpfs,
+  'get-ipfs-pinned-files': handlers.getIpfsPinnedFiles,
+
+  'open-select-folder-dialog': handlers.openSelectFolderDialog,
 
   // Agent
   'get-agent-users': handlers.getAgentUsers,
@@ -55,12 +58,23 @@ const listeners = {
   'get-agent-txs': handlers.getAgentTxs,
   'revoke-agent-allowance': handlers.revokeAgentAllowance,
   'get-agent-allowance-requests': handlers.getAgentAllowanceRequests,
-  'confirm-decline-agent-allowance-request': handlers.confirmDeclineAgentAllowanceRequest
+  'confirm-decline-agent-allowance-request': handlers.confirmDeclineAgentAllowanceRequest,
+  'start-services': handlers.startServices
 }
 
+// Keeps references to wrapped listeners (with core injected) to be able to unsubscribe from them
+const wrappedListeners = {}
+
 // Subscribe to messages where no core has to react
-export const subscribeWithoutCore = () => utils.subscribeTo(listeners, 'none')
+export const subscribe = (core: Core) => {
+  // Inject core into listeners
+  Object.entries(listeners).forEach(function ([event, handler]) {
+    wrappedListeners[event] = (eventData: unknown) => handler(eventData, core)
+  })
+  utils.subscribeTo(wrappedListeners, 'none')
+}
 
-export const unsubscribeWithoutCore = () => utils.unsubscribeTo(listeners)
+export const unsubscribe = () => utils.unsubscribeTo(wrappedListeners)
 
-export default { subscribeWithoutCore, unsubscribeWithoutCore }
+export default { subscribe, unsubscribe }
+export type Client = ApplyFnWithFirstArg<typeof handlers>

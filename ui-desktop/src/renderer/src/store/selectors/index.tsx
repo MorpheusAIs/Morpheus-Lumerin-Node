@@ -6,7 +6,7 @@ import * as session from './session';
 import * as proxyRouter from './proxy-router';
 import * as wallet from './wallet';
 import * as devices from './devices';
-
+import * as services from './services';
 export default {
   ...connectivity,
   ...session,
@@ -16,4 +16,5 @@ export default {
   ...proxyRouter,
   ...contracts,
   ...devices,
+  ...services,
 };
