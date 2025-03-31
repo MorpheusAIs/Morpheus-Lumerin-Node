@@ -1,25 +1,25 @@
 name: CI-CD
-# Intended workflow and validation: 
-# 0. Develop in feature branches and PR to `dev` branch for internal validation, 
+# Intended workflow and validation:
+# 0. Develop in feature branches and PR to `dev` branch for internal validation,
 #    - Once validated in dev, PR/PUSH to `test` - this will create OS Test Release, Test Container image and deploy to DEV environment
 #    - Once validated in test, PR/PUSH to `main` - this will create Latest Release, Latest container image and deploy to LMR environment
 #    - Once validated in main, PR/PUSH to origin main on the MorpheusAI repo (no builds/triggers will happen here, only code updates)
 # 1. PUSH to cicd/* will (special branches that will enable push testing of cicd changes)
-#    - Generate a new tag 
+#    - Generate a new tag
 #    - Build and test the Docker image
 #    - Build and test the macOS-arm64 image
-# 2. PR to dev will 
-#   - Generate a new tag 
+# 2. PR to dev will
+#   - Generate a new tag
 #   - Build and test the Docker image
-# 2 PUSH to dev will 
-#   - Generate a new tag 
+# 2 PUSH to dev will
+#   - Generate a new tag
 #   - Build and test the Docker image
 #   - Build and test the macOS-arm64 image
 # 3. PR to test or main will
-#   - Generate a new tag 
+#   - Generate a new tag
 #   - Build and test the Docker image
 # 4. PUSH to test or main will
-#   - Generate a new tag 
+#   - Generate a new tag
 #   - Build and test the Docker image
 #   - Build all 4 OS Versions
 #   - Create a release and upload the artifacts
@@ -37,7 +37,7 @@ on:
         description:  'Build all OS & container image'
         required: true
         type: boolean
-        
+
   push:
     branches:
       - main
@@ -45,11 +45,29 @@ on:
       - dev
       - cicd/*
 
-    paths: ['.github/workflows/**', '**/Makefile', '**/*.go', '**/*.json', '**/*.yml', '**/*.ts', '**/*.js', 'proxy-router/Dockerfile']
+    paths:
+      [
+        ".github/workflows/**",
+        "**/Makefile",
+        "**/*.go",
+        "**/*.json",
+        "**/*.yml",
+        "**/*.ts",
+        "**/*.js",
+      ]
 
   pull_request:
     types: [opened, reopened, synchronize]
-    paths: ['.github/workflows/**', '**/Makefile', '**/*.go', '**/*.json', '**/*.yml', '**/*.ts', '**/*.js', 'proxy-router/Dockerfile']
+    paths:
+      [
+        ".github/workflows/**",
+        "**/Makefile",
+        "**/*.go",
+        "**/*.json",
+        "**/*.yml",
+        "**/*.ts",
+        "**/*.js",
+      ]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -61,11 +79,11 @@ defaults:
 
 env:
   LLAMA_URL: https://github.com/ggml-org/llama.cpp/releases/download
-  LLAMA_RELEASE: b4406 
+  LLAMA_RELEASE: b4406
   LLAMA_FILEBASE: llama-b4406-bin
   MODEL_URL: https://huggingface.co
   MODEL_OWNER: TheBloke
-  MODEL_REPO: TinyLlama-1.1B-Chat-v1.0-GGUF  
+  MODEL_REPO: TinyLlama-1.1B-Chat-v1.0-GGUF
   MODEL_NAME: tinyllama-1.1b-chat-v1.0.Q2_K.gguf
   KUBO_URL: https://github.com/ipfs/kubo/releases/download/v0.30.0
   KUBO_FILE_LINUX: kubo_v0.30.0_linux-amd64.tar.gz
@@ -75,7 +93,7 @@ env:
 
   
 jobs:
-  Generate-Tag: 
+  Generate-Tag:
     runs-on: ubuntu-latest
     name: Generate Tag Name
     outputs:
@@ -100,7 +118,7 @@ jobs:
           VPAT_NEW=0
           set +o pipefail
           VLAST=$(git describe --tags --abbrev=0 --match='v[1-9]*' refs/remotes/origin/main 2>/dev/null | cut -c2-)
-          
+
           if [ -n "$VLAST" ]; then
               eval $(echo "$VLAST" | awk -F '.' '{print "VMAJ="$1" VMIN="$2" VPAT="$3}')
           else
@@ -137,45 +155,6 @@ jobs:
           echo "✅ New Build Tag: $VTAG" >> $GITHUB_STEP_SUMMARY
           echo "✅ Docker Image: ${IMAGE_NAME}:${VTAG}" >> $GITHUB_STEP_SUMMARY
           echo "❌ Old Major Tag: $VLAST"  >> $GITHUB_STEP_SUMMARY
-        
-  Build-Test:
-    name: Test Docker Image
-    if: |
-      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
-      (
-        (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'test' || github.base_ref == 'dev')) ||
-        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
-        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
-      )
-    runs-on: ubuntu-latest
-    needs: Generate-Tag
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-
-      - name: Build Docker Image to Test
-        run: |
-          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
-          BUILDIMAGE=${{ needs.Generate-Tag.outputs.image_name }}
-          BUILDCOMMIT=${{ github.sha }}
-          docker build \
-            --platform linux/amd64 \
-            --build-arg TAG_NAME=$BUILDTAG \
-            --build-arg COMMIT=$BUILDCOMMIT \
-            --load \
-            -t $BUILDIMAGE:$BUILDTAG \
-            -f proxy-router/Dockerfile \
-            proxy-router || (echo "❌ Failed to build image with tag: $BUILDIMAGE:$BUILDTAG" && exit 1)
-          echo "✅ Morpheus-Router Test Build Successful!"
-
-      - name: Run Docker Tests
-        uses: ./.github/actions/docker_test
-        with:
-          image: "${{ needs.Generate-Tag.outputs.image_name }}:${{ needs.Generate-Tag.outputs.tag_name }}"
-          private_key: ${{ secrets.TEST_PRIVATE_KEY }}     
 
   macOS-14-arm64:
     name: Build macOS-arm64 Image
@@ -186,9 +165,7 @@ jobs:
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
       )
     runs-on: macos-14
-    needs: 
-      - Generate-Tag
-      - Build-Test
+    needs: Generate-Tag
     steps:
       - name: Clone
         id: checkout
@@ -224,7 +201,7 @@ jobs:
 
       - name: Copy Environment Files
         uses: ./.github/actions/copy_env_files
-      
+
       - name: Build
         id: build
         run: |
@@ -281,7 +258,7 @@ jobs:
         with:
           path: mor-launch-${{ needs.Generate-Tag.outputs.tag_name }}-macos-arm64.zip
           name: mor-launch-macos-arm64.zip
-  
+
   Ubuntu-22-x64:
     name: Build Ubuntu Image
     if: |
@@ -291,9 +268,7 @@ jobs:
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
       )
     runs-on: ubuntu-22.04
-    needs: 
-      - Generate-Tag
-      - Build-Test
+    needs: Generate-Tag
     steps:
       - name: Clone
         id: checkout
@@ -393,17 +368,15 @@ jobs:
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
       )
     runs-on: macos-13
-    needs: 
-      - Generate-Tag
-      - Build-Test
+    needs: Generate-Tag
     steps:
       - name: Clone
         id: checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          fetch-tags: true    
-      
+          fetch-tags: true
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -498,9 +471,7 @@ jobs:
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
       )
     runs-on: windows-latest
-    needs: 
-      - Generate-Tag
-      - Build-Test
+    needs: Generate-Tag
     steps:
       - name: Clone
         id: checkout
@@ -540,7 +511,7 @@ jobs:
 
       - name: Copy Environment Files
         uses: ./.github/actions/copy_env_files
-      
+
       - name: Build
         id: build
         run: |
@@ -638,7 +609,7 @@ jobs:
         id: create_release
         uses: anzz1/action-create-release@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ needs.Generate-Tag.outputs.tag_name }}
           prerelease: ${{ github.ref != 'refs/heads/main' }}
@@ -665,60 +636,6 @@ jobs:
               }
             }
 
-  GHCR-Build-and-Push:
-    name: Build & Push Docker Image
-    if: |
-      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
-      (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
-        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
-      )
-    needs: 
-      - Generate-Tag
-      - Build-Test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true    
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and Push Multi-Platform Docker Image
-        run: |
-          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
-          BUILDIMAGE=${{ needs.Generate-Tag.outputs.image_name }}
-          BUILDCOMMIT=${{ github.sha }}
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --build-arg TAG_NAME=$BUILDTAG \
-            --build-arg COMMIT=$BUILDCOMMIT \
-            --push \
-            -t $BUILDIMAGE:$BUILDTAG \
-            -f proxy-router/Dockerfile \
-            proxy-router || (echo "❌ Failed to push image with tag: $BUILDIMAGE:$BUILDTAG" && exit 1)
-          echo "✅ Proxy-Router Build and Push of $BUILDIMAGE:$BUILDTAG Successful!"
-
-      - name: Optionally Push Latest Tag
-        if: ${{ github.ref == 'refs/heads/main' }}
-        run: |
-          BUILDIMAGE=${{ needs.Generate-Tag.outputs.image_name }}
-          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
-          docker pull $BUILDIMAGE:$BUILDTAG || (echo "❌ Failed to pull image: $BUILDIMAGE:$BUILDTAG" && exit 1)
-          docker tag $BUILDIMAGE:$BUILDTAG $BUILDIMAGE:latest || (echo "❌ Failed to tag image as :latest" && exit 1)
-          docker push $BUILDIMAGE:latest || (echo "❌ Failed to push image as :latest" && exit 1)
-          echo "✅ Morpheus-Router Push $BUILDIMAGE:latest Tag Successful!"
-
   GitLab-Deploy:
     name: Deploy to GitLab
     if: |
@@ -726,9 +643,8 @@ jobs:
       (
         (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test'))
       )
-    needs: 
+    needs:
       - Generate-Tag
-      - GHCR-Build-and-Push
     runs-on: ubuntu-latest
     steps:
       - name: Clone
@@ -736,7 +652,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          fetch-tags: true   
+          fetch-tags: true
 
       - name: Install dependencies
         run: |
@@ -766,14 +682,14 @@ jobs:
             --form "variables[SOURCE_BRANCH]=${{ github.ref_name }}" \
             --form "variables[GITHUB_VFULL]=$FULLTAG" \
             --form "variables[GITHUB_TAG]=$BUILDTAG")
-      
+
           # Parse JSON response using jq
           gitlab_status=$(echo "$response" | jq -r '.status // "unknown"')
           gitlab_web_url=$(echo "$response" | jq -r '.web_url // "N/A"')
-      
+
           # Log the response
           echo "GitLab Response: $response"
-      
+
           # Validate the status field
           if [[ "$gitlab_status" =~ ^(created|preparing|success|running|scheduled)$ ]]; then
             echo "✅ GitLab pipeline triggered successfully! Status: $gitlab_status"

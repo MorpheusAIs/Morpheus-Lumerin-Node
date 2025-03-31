@@ -3,8 +3,6 @@ import logger from 'electron-log'
 import stringify from 'json-stringify-safe'
 import config from './config'
 
-logger.transports.file.appName = 'lumerin-wallet-desktop'
-
 export function getColorLevel(level = '') {
   const colors = {
     error: 'red',
@@ -12,11 +10,16 @@ export function getColorLevel(level = '') {
     warn: 'yellow',
     debug: 'magenta',
     silly: 'blue'
+  } as const
+
+  if (level in colors) {
+    return colors[level as keyof typeof colors]
   }
-  return colors[level.toString()] || 'green'
+  // infer typing in the return
+  return 'green'
 }
 
-logger.transports.console = function ({ date, level, data }) {
+logger.transports.console = function ({ date, level, data, scope }) {
   const color = getColorLevel(level)
 
   let meta = ''
@@ -26,7 +29,7 @@ logger.transports.console = function ({ date, level, data }) {
   }
 
   // eslint-disable-next-line no-console
-  console.log(`${date.toISOString()} - ${chalk[color](level)}:\t${meta}`)
+  console.log(`${date.toISOString()} ${chalk[color](level)} ${scope ? `[${scope}]` : ''}: ${meta}`)
 }
 
 if (config.debug) {

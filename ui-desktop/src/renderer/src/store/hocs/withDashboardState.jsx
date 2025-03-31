@@ -6,7 +6,7 @@ import PropTypes from 'prop-types';
 import { ToastsContext } from '../../components/toasts';
 import { getSessionsByUser } from '../utils/apiCallsHelper';
 
-const withDashboardState = WrappedComponent => {
+const withDashboardState = (WrappedComponent) => {
   class Container extends React.Component {
     static propTypes = {
       sendLmrFeatureStatus: PropTypes.oneOf(['offline', 'no-funds', 'ok'])
@@ -16,41 +16,34 @@ const withDashboardState = WrappedComponent => {
       address: PropTypes.string.isRequired,
       client: PropTypes.shape({
         refreshAllTransactions: PropTypes.func.isRequired,
-        copyToClipboard: PropTypes.func.isRequired
-      }).isRequired
+        copyToClipboard: PropTypes.func.isRequired,
+      }).isRequired,
     };
 
     static contextType = ToastsContext;
 
-    static displayName = `withDashboardState(${WrappedComponent.displayName ||
-      WrappedComponent.name})`;
+    static displayName = `withDashboardState(${
+      WrappedComponent.displayName || WrappedComponent.name
+    })`;
 
     state = {
       refreshStatus: 'init',
-      refreshError: null
+      refreshError: null,
     };
 
     onWalletRefresh = () => {
       this.setState({ refreshStatus: 'pending', refreshError: null });
-      this.props.client.getTransactions()
-        .then(() => this.setState({ refreshStatus: 'success' }))
-        .catch(() => {
-          this.context.toast(
-            'error',
-            'We’re experiencing connection problems.  Please wait a few minutes and try again'
-          );
-          this.setState({
-            refreshStatus: 'failure',
-            refreshError: 'Could not refresh'
-          });
-        });
+      this.loadTransactions();
     };
 
     loadTransactions = async (page = 1, pageSize = 15) => {
       this.setState({ refreshStatus: 'pending', refreshError: null });
-      const transactions = await this.props.client.getTransactions({ page, pageSize });
-      this.setState({ refreshStatus: 'success' })
-  
+      const transactions = await this.props.client.getTransactions({
+        page,
+        pageSize,
+      });
+      this.setState({ refreshStatus: 'success' });
+
       // if (page && pageSize) {
       //   const hasNextPage = transactions.length;
       //   this.props.nextPage({
@@ -59,34 +52,38 @@ const withDashboardState = WrappedComponent => {
       //   })
       // }
       return transactions;
-    }
+    };
 
     getStakedFunds = async (user) => {
-      const isClosed = (item) => item.ClosedAt || (new Date().getTime() > item.EndsAt * 1000);
+      const isClosed = (item) =>
+        item.ClosedAt || new Date().getTime() > item.EndsAt * 1000;
 
-      if(!user) {
+      if (!user) {
         return;
       }
 
       const authHeaders = await this.props.client.getAuthHeaders();
-      const sessions = await getSessionsByUser(this.props.config.chain.localProxyRouterUrl, user, authHeaders);
-      
+      const sessions = await getSessionsByUser(
+        this.props.config.chain.localProxyRouterUrl,
+        user,
+        authHeaders,
+      );
+
       try {
-        const openSessions = sessions.filter(s => !isClosed(s));
+        const openSessions = sessions.filter((s) => !isClosed(s));
         const sum = openSessions.reduce((curr, next) => curr + next.Stake, 0);
         return (sum / 10 ** 18).toFixed(2);
-      }
-      catch (e) {
-        console.log("Error", e)
+      } catch (e) {
+        console.log('Error', e);
         return 0;
       }
-    }
+    };
 
     getBalances = async () => {
       const balances = await this.props.client.getBalances();
       const rate = await this.props.client.getRates();
       return { balances, rate };
-    }
+    };
 
     render() {
       const { sendLmrFeatureStatus } = this.props;
@@ -95,8 +92,8 @@ const withDashboardState = WrappedComponent => {
         sendLmrFeatureStatus === 'offline'
           ? "Can't send while offline"
           : sendLmrFeatureStatus === 'no-funds'
-          ? 'You need some funds to send'
-          : null;
+            ? 'You need some funds to send'
+            : null;
 
       return (
         <WrappedComponent
@@ -114,7 +111,7 @@ const withDashboardState = WrappedComponent => {
     }
   }
 
-  const mapStateToProps = state => ({
+  const mapStateToProps = (state) => ({
     config: state.config,
     syncStatus: selectors.getTxSyncStatus(state),
     sendLmrFeatureStatus: selectors.sendLmrFeatureStatus(state),
@@ -126,15 +123,15 @@ const withDashboardState = WrappedComponent => {
     page: selectors.getTransactionPage(state),
     pageSize: selectors.getTransactionPageSize(state),
     hasNextPage: selectors.getHasNextPage(state),
-    explorerUrl: selectors.getContractExplorerUrl(state, { 
-      hash: selectors.getWalletAddress(state)
-    })
+    explorerUrl: selectors.getContractExplorerUrl(state, {
+      hash: selectors.getWalletAddress(state),
+    }),
   });
 
-  const mapDispatchToProps = dispatch => ({
-    nextPage: data => dispatch({ type: 'transactions-next-page', payload: data }),
+  const mapDispatchToProps = (dispatch) => ({
+    nextPage: (data) =>
+      dispatch({ type: 'transactions-next-page', payload: data }),
   });
-
 
   return withClient(connect(mapStateToProps, mapDispatchToProps)(Container));
 };

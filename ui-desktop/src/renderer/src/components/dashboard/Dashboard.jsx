@@ -105,7 +105,7 @@ const Dashboard = ({
   };
 
   const getTransactions = async () => {
-    const pageTransactions = await loadTransactions(0, 0);
+    const pageTransactions = await loadTransactions(1, 15);
     // const hasNextPage = !!pageTransactions.length;
     // setPagging({ ...pagging, page: pagging.page + 1, hasNextPage });
     setTransactions([...pageTransactions]);
