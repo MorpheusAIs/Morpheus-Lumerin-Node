@@ -3,7 +3,8 @@ import { OrchestratorConfig } from './src/main/orchestrator/orchestrator.types'
 
 const configMac = {
   proxyRouter: {
-    downloadUrl: null,
+    downloadUrl:
+      'https://github.com/Lumerin-protocol/Morpheus-Lumerin-Node/releases/download/v3.0.5-startup-orchestration/proxy-router-darwin-arm64' as string,
     fileName: './services/proxy-router' as string,
     runPath: './services/proxy-router' as string,
     runArgs: [
@@ -55,7 +56,9 @@ const configMac = {
 
 const configLinux: typeof configMac = {
   proxyRouter: {
-    ...configMac.proxyRouter
+    ...configMac.proxyRouter,
+    downloadUrl:
+      'https://github.com/Lumerin-protocol/Morpheus-Lumerin-Node/releases/download/v3.0.5-startup-orchestration/proxy-router-linux-amd64' as string
   },
   aiRuntime: {
     ...configMac.aiRuntime,
@@ -75,7 +78,10 @@ const configLinux: typeof configMac = {
 const configWin: typeof configMac = {
   proxyRouter: {
     ...configMac.proxyRouter,
-    runPath: './proxy-router.exe'
+    downloadUrl:
+      'https://github.com/Lumerin-protocol/Morpheus-Lumerin-Node/releases/download/v3.0.5-startup-orchestration/proxy-router-windows-amd64.exe' as string,
+    fileName: './services/proxy-router.exe' as string,
+    runPath: './services/proxy-router.exe' as string
   },
   aiRuntime: {
     ...configMac.aiRuntime,
