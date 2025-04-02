@@ -43,7 +43,7 @@ on:
       - main
       - test
       - dev
-      # - cicd/*
+      - cicd/*
 
     paths: [".github/workflows/build.yml", "ui-desktop/**"]
 
@@ -175,7 +175,7 @@ jobs:
         id: build
         run: |
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
-          cd ../ui-desktop
+          cd ./ui-desktop
           echo "Injecting version $FULLTAG into package.json"
           sed -i "" "s/\"version\": \".*\"/\"version\": \"$FULLTAG\"/" package.json
           cat package.json | grep '"version"'  # Optional: Verify the change
@@ -229,39 +229,6 @@ jobs:
           sed -i "s/\"version\": \".*\"/\"version\": \"$FULLTAG\"/" package.json
           cat package.json | grep '"version"'  # Optional: Verify the change
           yarn build:linux
-
-      - name: Pack artifacts
-        id: pack_artifacts
-        run: |
-          OS_NAME="ubuntu-x64"
-          BIN_NAME="ubuntu-x64"
-          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
-          FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
-          echo "Artifact: mor-launch-$BUILDTAG-$OS_NAME.zip"
-          wget -nv ${{ env.KUBO_URL }}/${{ env.KUBO_FILE_LINUX }}
-          cat <<EOF > mor-launch.json
-          {
-            "llama_url": "${{ env.LLAMA_URL }}",
-            "llama_release": "${{ env.LLAMA_RELEASE }}",
-            "llama_filebase": "${{ env.LLAMA_FILEBASE }}",
-            "model_url": "${{ env.MODEL_URL }}",
-            "model_owner": "${{ env.MODEL_OWNER }}",
-            "model_repo": "${{ env.MODEL_REPO }}",
-            "model_name": "${{ env.MODEL_NAME }}",
-            "run": [
-              "./ipfs daemon --init",
-              "sleep 2",
-              "./llama-server --no-webui -m ./{model_name}",
-              "./proxy-router",
-              "./morpheus-ui-'$FULLTAG'-x86_64-linux.AppImage"
-            ]
-          }
-          EOF
-          echo "############# Contents of mor-launch.json: ############# "
-          cat mor-launch.json
-          mv ./cli/mor-cli mor-cli
-          tar xzf ${{ env.KUBO_FILE_LINUX }} --strip-components=1 kubo/ipfs
-          zip -j mor-launch-$BUILDTAG-$OS_NAME.zip ./LICENSE ./launcher/mor-launch ./proxy-router/proxy-router .env mor-launch.json ./ui-desktop/dist/morpheus-ui-$FULLTAG-x86_64-linux.AppImage models-config.json rating-config.json mor-cli ipfs
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
