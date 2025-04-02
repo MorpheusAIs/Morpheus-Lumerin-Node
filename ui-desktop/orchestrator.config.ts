@@ -32,7 +32,7 @@ const configMac = {
     fileName: './services/llama.zip' as string,
     extractPath: './services/ai-runtime',
     runPath: './services/ai-runtime/build/bin/llama-server' as string,
-    runArgs: ['--no-webui', '--model', '../../../ai-model.gguf', '--port', '3434'],
+    runArgs: ['--no-webui', '--model', '../ai-model.gguf', '--port', '3434'],
     probe: {
       url: 'http://127.0.0.1:3434/health'
     }
