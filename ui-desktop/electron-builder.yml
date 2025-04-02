@@ -12,12 +12,15 @@ files:
   - '!services/*'
 asarUnpack:
   - resources/**
+
 win:
   executableName: morpheus-ui
   target:
     - portable
+
 portable:
   artifactName: ${name}-${version}-${arch}-${os}.${ext}
+
 mac:
   executableName: MorpheusUI
   entitlementsInherit: buildResources/entitlements.mac.plist
@@ -28,15 +31,15 @@ mac:
     - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
   notarize: false
   artifactName: ${name}-${version}-${arch}-${os}.${ext}
+  target:
+    - dmg
+
 linux:
   target:
     - AppImage
-    - deb
   maintainer: mor.org
   category: Utility
   artifactName: ${name}-${version}-${arch}-${os}.${ext}
-# appImage:
-#   artifactName: ${name}-${version}-${arch}-${os}.${ext}
 npmRebuild: false
 publish:
   provider: generic
