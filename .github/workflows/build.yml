@@ -378,6 +378,11 @@ jobs:
           tag_name: ${{ needs.Generate-Tag.outputs.tag_name }}
           prerelease: ${{ github.ref != 'refs/heads/main' }}
 
+      - name: LIST FILES
+        id: list_files
+        run: |
+          ls -la ./artifact
+
       - name: Upload release
         id: upload_release
         uses: actions/github-script@v3
@@ -388,6 +393,10 @@ jobs:
             const release_id = '${{ steps.create_release.outputs.id }}';
             for (let file of await fs.readdirSync('./artifact')) {
               console.log('uploading file', file);
+              if (fs.statSync(`./artifact/${file}`).isDirectory()) {
+                console.log('is directory with contents: ', await fs.readdirSync(`./artifact/${file}`));
+                continue;
+              }
               await github.repos.uploadReleaseAsset({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
