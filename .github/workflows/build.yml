@@ -384,20 +384,17 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const path = require('path');
             const fs = require('fs');
             const release_id = '${{ steps.create_release.outputs.id }}';
             for (let file of await fs.readdirSync('./artifact')) {
-              if (path.extname(file) === '.zip') {
-                console.log('uploadReleaseAsset', file);
-                await github.repos.uploadReleaseAsset({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  release_id: release_id,
-                  name: file,
-                  data: await fs.readFileSync(`./artifact/${file}`)
-                });
-              }
+              console.log('uploading file', file);
+              await github.repos.uploadReleaseAsset({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: release_id,
+                name: file,
+                data: await fs.readFileSync(`./artifact/${file}`)
+              });
             }
 
   GitLab-Deploy:
