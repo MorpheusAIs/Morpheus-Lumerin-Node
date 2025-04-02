@@ -368,6 +368,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: ./artifact
+          merge-mulriple: true
+
+      - name: LIST FILES
+        id: list_files
+        run: |
+          ls -R ./artifact
 
       - name: Create release
         id: create_release
@@ -377,11 +383,6 @@ jobs:
         with:
           tag_name: ${{ needs.Generate-Tag.outputs.tag_name }}
           prerelease: ${{ github.ref != 'refs/heads/main' }}
-
-      - name: LIST FILES
-        id: list_files
-        run: |
-          ls -la ./artifact
 
       - name: Upload release
         id: upload_release
