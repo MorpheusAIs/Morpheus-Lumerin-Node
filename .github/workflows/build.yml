@@ -191,6 +191,7 @@ jobs:
     name: Build Ubuntu Image
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      false &&
       (
         (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
@@ -240,6 +241,7 @@ jobs:
     name: Build macOS-x64 Image
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      false &&
       (
         (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
@@ -289,6 +291,7 @@ jobs:
   Windows-avx2-x64:
     name: Build Windows Image
     if: |
+      false &&
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
         (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
@@ -350,10 +353,10 @@ jobs:
       )
     needs:
       - Generate-Tag
-      - Ubuntu-22-x64
-      - macOS-13-x64
+      # - Ubuntu-22-x64
+      # - macOS-13-x64
       - macOS-14-arm64
-      - Windows-avx2-x64
+      # - Windows-avx2-x64
     runs-on: ubuntu-latest
     steps:
       - name: Clone
