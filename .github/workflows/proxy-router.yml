@@ -2,15 +2,6 @@ name: Proxy-Router CI/CD
 
 on:
   workflow_dispatch:
-    inputs:
-      create_release:
-        description: "Create updated Proxy-Router release"
-        required: true
-        type: boolean
-      build_all_os:
-        description: "Build all OS & container image"
-        required: true
-        type: boolean
 
   push:
     branches:
