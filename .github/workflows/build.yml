@@ -254,27 +254,27 @@ jobs:
           TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=amd64 OUTPUT=proxy-router-darwin-amd64 ./build.sh || (echo "❌ Failed to build macOS Intel executable" && exit 1)
           mv proxy-router proxy-router-darwin-amd64
           # macOS ARM (Apple Silicon)
-          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=arm64 OUTPUT=proxy-router-darwin-arm64 ./build.sh || (echo "❌ Failed to build macOS ARM executable" && exit 1)
+          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=arm64 ./build.sh || (echo "❌ Failed to build macOS ARM executable" && exit 1)
           mv proxy-router proxy-router-darwin-arm64
           # Windows
-          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=windows GOARCH=amd64 OUTPUT=proxy-router-windows-amd64.exe ./build.sh || (echo "❌ Failed to build Windows executable" && exit 1)
+          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=windows GOARCH=amd64 ./build.sh || (echo "❌ Failed to build Windows executable" && exit 1)
           mv proxy-router proxy-router-windows-amd64.exe
           echo "✅ Built executables for all platforms"
 
       - name: Build CLI Executables
         run: |
           cd cli
-          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=linux GOARCH=amd64 OUTPUT=cli-linux-amd64 ./build.sh || (echo "❌ Failed to build Linux executable" && exit 1)
-          mv cli cli-linux-amd64
+          GOOS=linux GOARCH=amd64 make run || (echo "❌ Failed to build Linux executable" && exit 1)
+          mv mor-cli mor-cli-linux-amd64
           # macOS Intel
-          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=amd64 OUTPUT=cli-darwin-amd64 ./build.sh || (echo "❌ Failed to build macOS Intel executable" && exit 1)
-          mv cli cli-darwin-amd64
+          GOOS=darwin GOARCH=amd64 make run || (echo "❌ Failed to build macOS Intel executable" && exit 1)
+          mv mor-cli mor-cli-darwin-amd64
           # macOS ARM (Apple Silicon)
-          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=arm64 OUTPUT=cli-darwin-arm64 ./build.sh || (echo "❌ Failed to build macOS ARM executable" && exit 1)
-          mv cli cli-darwin-arm64
+          GOOS=darwin GOARCH=arm64 make run || (echo "❌ Failed to build macOS ARM executable" && exit 1)
+          mv mor-cli mor-cli-darwin-arm64
           # Windows
-          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=windows GOARCH=amd64 OUTPUT=cli-windows-amd64.exe ./build.sh || (echo "❌ Failed to build Windows executable" && exit 1)
-          mv cli cli-windows-amd64.exe
+          GOOS=windows GOARCH=amd64 make run || (echo "❌ Failed to build Windows executable" && exit 1)
+          mv mor-cli mor-cli-windows-amd64.exe
           echo "✅ Built executables for all platforms"
 
       - name: Upload executables
