@@ -34,7 +34,9 @@ export type OrchestratorConfig = {
     downloadUrl: string | null
     fileName: string
     runPath: string
-    runArgs: string[]
+    runArgs?: string[]
+    env: Record<string, string>
+    modelsConfig: string
     probe: ProbeConfig
   }
   aiRuntime: {

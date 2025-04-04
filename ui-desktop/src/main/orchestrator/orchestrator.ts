@@ -58,6 +58,13 @@ export class Orchestrator {
   }
 
   async startAll() {
+    app.once('window-all-closed', () => {
+      return this.stopAll()
+    })
+    process.on('SIGINT', () => {
+      return this.stopAll()
+    })
+
     this.log.info('Orchestrator started')
     this.emitStateUpdate()
 
@@ -180,9 +187,16 @@ export class Orchestrator {
     await this.aiRuntimeProcess.start()
     this.emitStateUpdate()
 
+    const proxyFolder = path.dirname(resolveAppDataPath(this.cfg.proxyRouter.runPath))
+    await this.writeEnvFile(path.join(proxyFolder, '.env'), this.cfg.proxyRouter.env)
+    await this.writeModelsConfigFile(
+      path.join(proxyFolder, 'models-config.json'),
+      this.cfg.proxyRouter.modelsConfig
+    )
+
     this.proxyRouterProcess = new BackgroundProcess(
       resolveAppDataPath(this.cfg.proxyRouter.runPath),
-      this.cfg.proxyRouter.runArgs,
+      this.cfg.proxyRouter.runArgs || [],
       this.log.scope('Proxy-router'),
       () => this.emitStateUpdate(),
       this.cfg.proxyRouter.probe
@@ -192,6 +206,8 @@ export class Orchestrator {
   }
 
   async stopAll() {
+    this.log.info('Orchestrator shutting down')
+
     await this.proxyRouterProcess?.stop()
     this.emitStateUpdate()
 
@@ -275,6 +291,31 @@ export class Orchestrator {
     }
 
     return 'initializing'
+  }
+
+  private async writeEnvFile(path: string, env: Record<string, string>) {
+    // check if the file exists
+    if (fs.existsSync(path)) {
+      this.log.info(`Env file already exists: ${path}`)
+      return
+    }
+
+    const envString = Object.entries(env)
+      .map(([key, value]) => `${key}=${value}`)
+      .join('\n')
+    await fs.writeFile(path, envString)
+    this.log.info(`Created env file: ${path}`)
+  }
+
+  private async writeModelsConfigFile(path: string, modelsConfig: string) {
+    // check if the file exists
+    if (fs.existsSync(path)) {
+      this.log.info(`Models config file already exists: ${path}`)
+      return
+    }
+
+    await fs.writeFile(path, modelsConfig)
+    this.log.info(`Created models config file: ${path}`)
   }
 }
 

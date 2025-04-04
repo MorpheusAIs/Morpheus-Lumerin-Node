@@ -1,25 +1,25 @@
 import chalk from 'chalk'
 import logger from 'electron-log'
 import stringify from 'json-stringify-safe'
-import config from './config'
+import Logger, { LogMessage } from 'electron-log'
 
-export function getColorLevel(level = '') {
+export function getColorLevel(level: Logger.LogLevel | string) {
   const colors = {
     error: 'red',
-    verbose: 'cyan',
     warn: 'yellow',
+    info: 'green',
+    verbose: 'cyan',
     debug: 'magenta',
     silly: 'blue'
   } as const
 
-  if (level in colors) {
-    return colors[level as keyof typeof colors]
-  }
-  // infer typing in the return
-  return 'green'
+  const key = colors[level] ? (level as Logger.LogLevel) : 'info'
+
+  return colors[key]
 }
 
-logger.transports.console = function ({ date, level, data, scope }) {
+const formatFn = (props: { message: LogMessage }) => {
+  const { level, data, date, scope } = props.message
   const color = getColorLevel(level)
 
   let meta = ''
@@ -28,16 +28,13 @@ logger.transports.console = function ({ date, level, data, scope }) {
     meta += data.map((d) => (typeof d === 'object' ? stringify(d) : d)).join(', ')
   }
 
-  // eslint-disable-next-line no-console
-  console.log(`${date.toISOString()} ${chalk[color](level)} ${scope ? `[${scope}]` : ''}: ${meta}`)
+  return [`${date.toISOString()} ${chalk[color](level)} ${scope ? `[${scope}]` : ''}: ${meta}`]
 }
 
-if (config.debug) {
-  logger.transports.console.level = 'debug'
-  logger.transports.file.level = 'debug'
-} else {
-  logger.transports.console.level = 'warn'
-  logger.transports.file.level = 'warn'
-}
+logger.transports.console.format = formatFn
+logger.transports.file.format = formatFn
+
+logger.transports.console.level = process.env.LOG_LEVEL
+logger.transports.file.level = process.env.LOG_LEVEL
 
 export default logger

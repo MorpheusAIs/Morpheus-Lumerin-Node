@@ -3,28 +3,31 @@ import { defineConfig, externalizeDepsPlugin, loadEnv } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import svgr from 'vite-plugin-svgr'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
+import { Env, EnvSchema } from './env.schema'
+import { newAjv } from './validator'
 
-const envsToInject = [
-  'BYPASS_AUTH',
-  'CHAIN_ID',
-  'DEBUG',
-  'DEFAULT_SELLER_CURRENCY',
-  'DEV_TOOLS',
-  'DIAMOND_ADDRESS',
-  'DISPLAY_NAME',
-  'EXPLORER_URL',
-  'IGNORE_DEBUG_LOGS',
-  'PROXY_WEB_DEFAULT_PORT',
-  'SENTRY_DSN',
-  'SYMBOL_ETH',
-  'SYMBOL_COIN',
-  'TOKEN_ADDRESS',
-  'TRACKING_ID',
-  'FAILOVER_ENABLED'
-] as const
+declare global {
+  namespace NodeJS {
+    interface ProcessEnv extends Env {}
+  }
+}
+
+const envsToInject = Object.keys(EnvSchema.properties)
 
 export default defineConfig(({ /*command,*/ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+
+  const ajv = newAjv()
+  const validate = ajv.compile(EnvSchema)
+
+  if (!validate(env)) {
+    throw new Error(
+      `Invalid environment variables: ${ajv.errorsText(validate.errors, {
+        dataVar: 'ENV',
+        separator: '.'
+      })}`
+    )
+  }
 
   // TODO: migrate to import.meta.env
   // Temporary hack to support process.env way to get env variables
