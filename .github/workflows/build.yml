@@ -546,6 +546,15 @@ jobs:
           choco install wget --no-progress
           choco install sed --no-progress
 
+      - uses: actions/cache@v4
+        if: ${{ !env.ACT }}
+        id: yarn-cache # use this to check for `cache-hit` (`steps.yarn-cache.outputs.cache-hit != 'true'`)
+        with:
+          path: ./ui-desktop/node_modules
+          key: ${{ runner.os }}-modules-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
       - name: Install dependencies
         run: |
           cd ./ui-desktop
@@ -606,7 +615,6 @@ jobs:
           ls -R
           mv ./artifact/proxy-router/* ./artifact
           mv ./artifact/cli/* ./artifact
-          mv ./artifact/ui-desktop/* ./artifact
 
       - name: Create release
         id: create_release
