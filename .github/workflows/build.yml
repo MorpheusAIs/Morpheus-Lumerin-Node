@@ -71,6 +71,7 @@ jobs:
       vtag: ${{ steps.gen_tag_name.outputs.vtag }}
       vfull: ${{ steps.gen_tag_name.outputs.vfull }}
       image_name: ${{ steps.gen_tag_name.outputs.image_name }}
+      artifacts_base_url: ${{ github.server_url }}/${{ github.repository }}/releases/download/${{ steps.gen_tag_name.outputs.tag_name }}
     steps:
       - name: Clone repository
         uses: actions/checkout@v4
@@ -262,25 +263,20 @@ jobs:
       - name: Build CLI Executables
         run: |
           cd cli
-          pwd
           GOOS=linux GOARCH=amd64 make build || (echo "❌ Failed to build Linux executable" && exit 1)
-          ls -la
           mv mor-cli mor-cli-linux-amd64
           # macOS Intel
           GOOS=darwin GOARCH=amd64 make build || (echo "❌ Failed to build macOS Intel executable" && exit 1)
-          ls -la
           mv mor-cli mor-cli-darwin-amd64
           # macOS ARM (Apple Silicon)
           GOOS=darwin GOARCH=arm64 make build || (echo "❌ Failed to build macOS ARM executable" && exit 1)
-          ls -la
           mv mor-cli mor-cli-darwin-arm64
           # Windows
           GOOS=windows GOARCH=amd64 make build || (echo "❌ Failed to build Windows executable" && exit 1)
-          ls -la
           mv mor-cli mor-cli-windows-amd64.exe
           echo "✅ Built executables for all platforms"
 
-      - name: Upload executables
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: proxy-router-executables
@@ -294,55 +290,6 @@ jobs:
             cli/mor-cli-darwin-arm64
             cli/mor-cli-windows-amd64.exe
 
-  Create-Release-Upload-ProxyRouter:
-    name: Create Release & Upload Proxy Router Executables
-    if: |
-      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
-      (
-        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
-      )
-    needs:
-      - Generate-Tag
-      - Build-ProxyRouter-Executables
-    runs-on: ubuntu-latest
-    outputs:
-      release_id: ${{ steps.create_release.outputs.id }}
-      artifacts_base_url: ${{ github.server_url }}/${{ github.repository }}/releases/download/${{ needs.Generate-Tag.outputs.tag_name }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-
-      - name: Download executables
-        uses: actions/download-artifact@v4
-        with:
-          path: ./artifact
-          merge-multiple: true
-
-      - name: Folder structure
-        run: |
-          mv ./artifact/proxy-router/* ./artifact
-          mv ./artifact/cli/* ./artifact
-
-      - name: Create release
-        id: create_release
-        uses: anzz1/action-create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ needs.Generate-Tag.outputs.tag_name }}
-          prerelease: ${{ github.ref != 'refs/heads/main' }}
-
-      - name: Upload release
-        uses: ./.github/actions/upload_release
-        with:
-          path: ./artifact
-          release-id: ${{ steps.create_release.outputs.id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
   GitLab-Deploy-ProxyRouter:
     name: Deploy ProxyRouterto GitLab
     if: |
@@ -353,7 +300,6 @@ jobs:
     needs:
       - Generate-Tag
       - GHCR-Build-and-Push
-      - Create-Release-Upload-ProxyRouter
     runs-on: ubuntu-latest
     steps:
       - name: Clone
@@ -409,7 +355,7 @@ jobs:
             exit 1
           fi
 
-  UI-Desktop-macOS-14-arm64:
+  UI-macOS-14-arm64:
     name: Build Morpheus UI macOS-arm64 Image
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
@@ -420,9 +366,8 @@ jobs:
     runs-on: macos-14
     needs:
       - Generate-Tag
-      - Create-Release-Upload-ProxyRouter
     env:
-      SERVICE_PROXY_DOWNLOAD_URL_MAC_ARM64: ${{ needs.Create-Release-Upload-ProxyRouter.outputs.artifacts_base_url }}/proxy-router-darwin-arm64
+      SERVICE_PROXY_DOWNLOAD_URL_MAC_ARM64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/proxy-router-darwin-arm64
     steps:
       - name: Clone
         id: checkout
@@ -463,7 +408,7 @@ jobs:
           path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-arm64-mac.dmg
           name: morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-arm64-mac.dmg
 
-  UI-Desktop-Ubuntu-22-x64:
+  UI-Ubuntu-22-x64:
     name: Build Morpheus UI Ubuntu Image
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
@@ -474,9 +419,8 @@ jobs:
     runs-on: ubuntu-22.04
     needs:
       - Generate-Tag
-      - Create-Release-Upload-ProxyRouter
     env:
-      SERVICE_PROXY_DOWNLOAD_URL_LINUX_X64: ${{ needs.Create-Release-Upload-ProxyRouter.outputs.artifacts_base_url }}/proxy-router-linux-amd64
+      SERVICE_PROXY_DOWNLOAD_URL_LINUX_X64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/proxy-router-linux-amd64
     steps:
       - name: Clone
         id: checkout
@@ -516,7 +460,7 @@ jobs:
           path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-x86_64-linux.AppImage
           name: morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-x86_64-linux.AppImage
 
-  UI-Desktop-macOS-13-x64:
+  UI-macOS-13-x64:
     name: Build Morpheus UI macOS-x64 Image
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
@@ -527,9 +471,8 @@ jobs:
     runs-on: macos-13
     needs:
       - Generate-Tag
-      - Create-Release-Upload-ProxyRouter
     env:
-      SERVICE_PROXY_DOWNLOAD_URL_MAC_X64: ${{ needs.Create-Release-Upload-ProxyRouter.outputs.artifacts_base_url }}/proxy-router-darwin-amd64
+      SERVICE_PROXY_DOWNLOAD_URL_MAC_X64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/proxy-router-darwin-amd64
     steps:
       - name: Clone
         id: checkout
@@ -570,7 +513,7 @@ jobs:
           path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-x64-mac.dmg
           name: morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-x64-mac.dmg
 
-  UI-Desktop-Windows-avx2-x64:
+  UI-Windows-avx2-x64:
     name: Build Morpheus UI Windows Image
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
@@ -581,9 +524,8 @@ jobs:
     runs-on: windows-latest
     needs:
       - Generate-Tag
-      - Create-Release-Upload-ProxyRouter
     env:
-      SERVICE_PROXY_DOWNLOAD_URL_WINDOWS_X64: ${{ needs.Create-Release-Upload-ProxyRouter.outputs.artifacts_base_url }}/proxy-router-windows-amd64.exe
+      SERVICE_PROXY_DOWNLOAD_URL_WINDOWS_X64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/proxy-router-windows-amd64.exe
     steps:
       - name: Clone
         id: checkout
@@ -628,7 +570,7 @@ jobs:
           path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-x64-win.exe
           name: morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-x64-win.exe
 
-  UI-Desktop-Release:
+  UI-Release:
     name: Upload UI-Desktop Release
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
@@ -639,11 +581,10 @@ jobs:
     needs:
       - Generate-Tag
       - Build-ProxyRouter-Executables
-      - Create-Release-Upload-ProxyRouter
-      - UI-Desktop-Ubuntu-22-x64
-      - UI-Desktop-macOS-13-x64
-      - UI-Desktop-macOS-14-arm64
-      - UI-Desktop-Windows-avx2-x64
+      - UI-Ubuntu-22-x64
+      - UI-macOS-13-x64
+      - UI-macOS-14-arm64
+      - UI-Windows-avx2-x64
     runs-on: ubuntu-latest
     steps:
       - name: Clone
@@ -660,12 +601,27 @@ jobs:
           path: ./artifact
           merge-multiple: true
 
+      - name: Folder structure
+        run: |
+          ls -R
+          mv ./artifact/proxy-router/* ./artifact
+          mv ./artifact/cli/* ./artifact
+          mv ./artifact/ui-desktop/* ./artifact
+
+      - name: Create release
+        id: create_release
+        uses: anzz1/action-create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ needs.Generate-Tag.outputs.tag_name }}
+          prerelease: ${{ github.ref != 'refs/heads/main' }}
+
       - name: Upload release
         uses: ./.github/actions/upload_release
         with:
           path: ./artifact
-          release-id: ${{ needs.Create-Release-Upload-ProxyRouter.outputs.release_id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          release-id: ${{ steps.create_release.outputs.release_id }}
 
   GitLab-Deploy:
     name: Deploy to GitLab
