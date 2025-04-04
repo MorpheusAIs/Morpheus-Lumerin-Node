@@ -262,16 +262,21 @@ jobs:
       - name: Build CLI Executables
         run: |
           cd cli
+          pwd
           GOOS=linux GOARCH=amd64 make build || (echo "❌ Failed to build Linux executable" && exit 1)
+          ls -la
           mv mor-cli mor-cli-linux-amd64
           # macOS Intel
           GOOS=darwin GOARCH=amd64 make build || (echo "❌ Failed to build macOS Intel executable" && exit 1)
+          ls -la
           mv mor-cli mor-cli-darwin-amd64
           # macOS ARM (Apple Silicon)
           GOOS=darwin GOARCH=arm64 make build || (echo "❌ Failed to build macOS ARM executable" && exit 1)
+          ls -la
           mv mor-cli mor-cli-darwin-arm64
           # Windows
           GOOS=windows GOARCH=amd64 make build || (echo "❌ Failed to build Windows executable" && exit 1)
+          ls -la
           mv mor-cli mor-cli-windows-amd64.exe
           echo "✅ Built executables for all platforms"
 
@@ -317,6 +322,11 @@ jobs:
           path: ./artifact
           merge-multiple: true
 
+      - name: Folder structure
+        run: |
+          mv ./artifact/proxy-router/* ./artifact
+          mv ./artifact/cli/* ./artifact
+
       - name: Create release
         id: create_release
         uses: anzz1/action-create-release@v1
@@ -329,7 +339,7 @@ jobs:
       - name: Upload release
         uses: ./.github/actions/upload_release
         with:
-          path: ./artifact/proxy-router
+          path: ./artifact
           release-id: ${{ steps.create_release.outputs.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
