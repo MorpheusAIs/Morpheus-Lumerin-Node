@@ -4,7 +4,9 @@
     "electron.vite.config.*",
     "orchestrator.config.*",
     "src/main/**/*",
-    "src/preload/**/*"
+    "src/preload/**/*",
+    "env.schema.ts",
+    "validator.ts"
   ],
   "compilerOptions": {
     "composite": true,
