@@ -264,16 +264,16 @@ jobs:
       - name: Build CLI Executables
         run: |
           cd cli
-          GOOS=linux GOARCH=amd64 make run || (echo "❌ Failed to build Linux executable" && exit 1)
+          GOOS=linux GOARCH=amd64 make build || (echo "❌ Failed to build Linux executable" && exit 1)
           mv mor-cli mor-cli-linux-amd64
           # macOS Intel
-          GOOS=darwin GOARCH=amd64 make run || (echo "❌ Failed to build macOS Intel executable" && exit 1)
+          GOOS=darwin GOARCH=amd64 make build || (echo "❌ Failed to build macOS Intel executable" && exit 1)
           mv mor-cli mor-cli-darwin-amd64
           # macOS ARM (Apple Silicon)
-          GOOS=darwin GOARCH=arm64 make run || (echo "❌ Failed to build macOS ARM executable" && exit 1)
+          GOOS=darwin GOARCH=arm64 make build || (echo "❌ Failed to build macOS ARM executable" && exit 1)
           mv mor-cli mor-cli-darwin-arm64
           # Windows
-          GOOS=windows GOARCH=amd64 make run || (echo "❌ Failed to build Windows executable" && exit 1)
+          GOOS=windows GOARCH=amd64 make build || (echo "❌ Failed to build Windows executable" && exit 1)
           mv mor-cli mor-cli-windows-amd64.exe
           echo "✅ Built executables for all platforms"
 
