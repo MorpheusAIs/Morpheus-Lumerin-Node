@@ -12,5 +12,34 @@ inputs:
     required: true
 
 runs:
-  using: "node20"
-  main: "index.js"
+  using: "composite"
+  steps:
+    - uses: actions/github-script@v3
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require('fs');
+          const path = require('path');
+
+          const artifactPath = '${{ inputs.path }}';
+          const releaseId = '${{ inputs.release-id }}';
+          const files = await fs.promises.readdir(artifactPath);
+
+          for (const file of files) {
+            const filePath = path.join(artifactPath, file);
+            const stats = await fs.promises.stat(filePath);
+            
+            if (stats.isDirectory()) {
+              console.log(`Skipping directory: ${file}`);
+              continue;
+            }
+            
+            console.log(`Uploading file: ${file}`);
+            await github.repos.uploadReleaseAsset({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: releaseId,
+              name: file,
+              data: await fs.promises.readFile(filePath)
+            });
+          }
