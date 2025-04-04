@@ -316,7 +316,8 @@ jobs:
       - name: Download executables
         uses: actions/download-artifact@v4
         with:
-          path: ./executables
+          path: ./artifact
+          merge-multiple: true
 
       - name: Create release
         id: create_release
@@ -327,25 +328,12 @@ jobs:
           tag_name: ${{ needs.Generate-Tag.outputs.tag_name }}
           prerelease: ${{ github.ref != 'refs/heads/main' }}
 
-      - name: Upload release assets
-        uses: actions/github-script@v3
+      - name: Upload release
+        uses: ./.github/actions/upload_release
         with:
+          path: ./artifact
+          release-id: ${{ steps.create_release.outputs.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const path = require('path');
-            const release_id = '${{ steps.create_release.outputs.id }}';
-
-            for (const file of fs.readdirSync('./executables/proxy-router-executables')) {
-              console.log('Uploading release asset:', file);
-              await github.repos.uploadReleaseAsset({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                release_id: release_id,
-                name: file,
-                data: await fs.readFileSync(`./executables/proxy-router-executables/${file}`)
-              });
-            }
 
   GitLab-Deploy-ProxyRouter:
     name: Deploy ProxyRouterto GitLab
@@ -665,27 +653,11 @@ jobs:
           merge-multiple: true
 
       - name: Upload release
-        id: upload_release
-        uses: actions/github-script@v3
+        uses: ./.github/actions/upload_release
         with:
+          path: ./artifact
+          release-id: ${{ needs.Create-Release-Upload-ProxyRouter.outputs.release_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const release_id = '${{ needs.Create-Release-Upload-ProxyRouter.outputs.release_id }}';
-            for (let file of await fs.readdirSync('./artifact')) {
-              console.log('uploading file', file);
-              if (fs.statSync(`./artifact/${file}`).isDirectory()) {
-                console.log('is directory with contents: ', await fs.readdirSync(`./artifact/${file}`));
-                continue;
-              }
-              await github.repos.uploadReleaseAsset({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                release_id: release_id,
-                name: file,
-                data: await fs.readFileSync(`./artifact/${file}`)
-              });
-            }
 
   GitLab-Deploy:
     name: Deploy to GitLab
