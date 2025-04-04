@@ -621,7 +621,7 @@ jobs:
           name: morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-x64-win.exe
 
   UI-Desktop-Release:
-    name: Create Release
+    name: Upload UI-Desktop Release
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
