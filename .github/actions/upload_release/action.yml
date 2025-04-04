@@ -1,0 +1,52 @@
+name: "Upload Release"
+description: "Upload release assets to GitHub release"
+inputs:
+  github-token:
+    description: "GitHub token for authentication"
+    required: true
+  release-id:
+    description: "ID of the release to upload assets to"
+    required: true
+  artifact-path:
+    description: "Path to the artifact directory containing files to upload"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Upload Release Assets
+      shell: node
+      run: |
+        const fs = require('fs');
+        const path = require('path');
+
+        const releaseId = '${{ inputs.release-id }}';
+        const artifactPath = '${{ inputs.artifact-path }}';
+
+        async function uploadAssets() {
+          const files = await fs.promises.readdir(artifactPath);
+          
+          for (const file of files) {
+            const filePath = path.join(artifactPath, file);
+            const stats = await fs.promises.stat(filePath);
+            
+            if (stats.isDirectory()) {
+              console.log(`Skipping directory: ${file}`);
+              continue;
+            }
+            
+            console.log(`Uploading file: ${file}`);
+            await github.repos.uploadReleaseAsset({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: releaseId,
+              name: file,
+              data: await fs.promises.readFile(filePath)
+            });
+          }
+        }
+
+        uploadAssets().catch(error => {
+          console.error('Error uploading assets:', error);
+          process.exit(1);
+        });
