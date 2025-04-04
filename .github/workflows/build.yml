@@ -45,11 +45,13 @@ on:
       - dev
       - cicd/*
 
-    paths: [".github/workflows/build.yml", "ui-desktop/**"]
+    paths:
+      [".github/workflows/build.yml", "ui-desktop/**", "ui-core/**", "proxy-router/**", "cli/**"]
 
   pull_request:
     types: [opened, reopened, synchronize]
-    paths: [".github/workflows/build.yml", "ui-desktop/**"]
+    paths:
+      [".github/workflows/build.yml", "ui-desktop/**", "ui-core/**", "proxy-router/**", "cli/**"]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -60,18 +62,7 @@ defaults:
     shell: bash
 
 env:
-  LLAMA_URL: https://github.com/ggml-org/llama.cpp/releases/download
-  LLAMA_RELEASE: b4406
-  LLAMA_FILEBASE: llama-b4406-bin
-  MODEL_URL: https://huggingface.co
-  MODEL_OWNER: TheBloke
-  MODEL_REPO: TinyLlama-1.1B-Chat-v1.0-GGUF
-  MODEL_NAME: tinyllama-1.1b-chat-v1.0.Q2_K.gguf
-  KUBO_URL: https://github.com/ipfs/kubo/releases/download/v0.30.0
-  KUBO_FILE_LINUX: kubo_v0.30.0_linux-amd64.tar.gz
-  KUBO_FILE_MAC: kubo_v0.30.0_darwin-amd64.tar.gz
-  KUBO_FILE_WIN: kubo_v0.30.0_windows-amd64.zip
-  #tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
+  TEST_ENV_VAR: "test"
 
 jobs:
   Generate-Tag:
@@ -137,8 +128,293 @@ jobs:
           echo "✅ Docker Image: ${IMAGE_NAME}:${VTAG}" >> $GITHUB_STEP_SUMMARY
           echo "❌ Old Major Tag: $VLAST"  >> $GITHUB_STEP_SUMMARY
 
-  macOS-14-arm64:
-    name: Build macOS-arm64 Image
+  Build-Proxy-Router-Test:
+    name: Test Proxy Router Docker Image
+    if: |
+      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'test' || github.base_ref == 'dev')) ||
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
+        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
+      )
+    runs-on: ubuntu-latest
+    needs: Generate-Tag
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Build Docker Image to Test
+        run: |
+          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          BUILDIMAGE=${{ needs.Generate-Tag.outputs.image_name }}
+          BUILDCOMMIT=${{ github.sha }}
+          docker build \
+            --platform linux/amd64 \
+            --build-arg TAG_NAME=$BUILDTAG \
+            --build-arg COMMIT=$BUILDCOMMIT \
+            --load \
+            -t $BUILDIMAGE:$BUILDTAG \
+            -f proxy-router/Dockerfile \
+            proxy-router || (echo "❌ Failed to build image with tag: $BUILDIMAGE:$BUILDTAG" && exit 1)
+          echo "✅ Proxy-Router Test Build Successful!"
+
+      - name: Run Docker Tests
+        uses: ./.github/actions/docker_test
+        with:
+          image: "${{ needs.Generate-Tag.outputs.image_name }}:${{ needs.Generate-Tag.outputs.tag_name }}"
+          private_key: ${{ secrets.TEST_PRIVATE_KEY }}
+
+  GHCR-Build-and-Push:
+    name: Build & Push Docker Image
+    if: |
+      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
+      )
+    needs:
+      - Generate-Tag
+      - Build-Proxy-Router-Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push Multi-Platform Docker Image
+        run: |
+          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          BUILDIMAGE=${{ needs.Generate-Tag.outputs.image_name }}
+          BUILDCOMMIT=${{ github.sha }}
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --build-arg TAG_NAME=$BUILDTAG \
+            --build-arg COMMIT=$BUILDCOMMIT \
+            --push \
+            -t $BUILDIMAGE:$BUILDTAG \
+            -f proxy-router/Dockerfile \
+            proxy-router || (echo "❌ Failed to push image with tag: $BUILDIMAGE:$BUILDTAG" && exit 1)
+          echo "✅ Proxy-Router Build and Push of $BUILDIMAGE:$BUILDTAG Successful!"
+
+      - name: Optionally Push Latest Tag
+        if: ${{ github.ref == 'refs/heads/main' }}
+        run: |
+          BUILDIMAGE=${{ needs.Generate-Tag.outputs.image_name }}
+          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          docker pull $BUILDIMAGE:$BUILDTAG || (echo "❌ Failed to pull image: $BUILDIMAGE:$BUILDTAG" && exit 1)
+          docker tag $BUILDIMAGE:$BUILDTAG $BUILDIMAGE:latest || (echo "❌ Failed to tag image as :latest" && exit 1)
+          docker push $BUILDIMAGE:latest || (echo "❌ Failed to push image as :latest" && exit 1)
+          echo "✅ Proxy-Router Push $BUILDIMAGE:latest Tag Successful!"
+
+  Build-ProxyRouter-Executables:
+    name: Build ProxyRouter Executables
+    if: |
+      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
+      )
+    needs: Generate-Tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+          cache-dependency-path: proxy-router/go.sum
+
+      - name: Build executables for all platforms
+        run: |
+          cd proxy-router
+          # Linux
+          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=linux GOARCH=amd64 OUTPUT=proxy-router-linux-amd64 ./build.sh || (echo "❌ Failed to build Linux executable" && exit 1)
+          mv proxy-router proxy-router-linux-amd64
+          # macOS Intel
+          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=amd64 OUTPUT=proxy-router-darwin-amd64 ./build.sh || (echo "❌ Failed to build macOS Intel executable" && exit 1)
+          mv proxy-router proxy-router-darwin-amd64
+          # macOS ARM (Apple Silicon)
+          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=arm64 OUTPUT=proxy-router-darwin-arm64 ./build.sh || (echo "❌ Failed to build macOS ARM executable" && exit 1)
+          mv proxy-router proxy-router-darwin-arm64
+          # Windows
+          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=windows GOARCH=amd64 OUTPUT=proxy-router-windows-amd64.exe ./build.sh || (echo "❌ Failed to build Windows executable" && exit 1)
+          mv proxy-router proxy-router-windows-amd64.exe
+          echo "✅ Built executables for all platforms"
+
+      - name: Build CLI Executables
+        run: |
+          cd cli
+          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=linux GOARCH=amd64 OUTPUT=cli-linux-amd64 ./build.sh || (echo "❌ Failed to build Linux executable" && exit 1)
+          mv cli cli-linux-amd64
+          # macOS Intel
+          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=amd64 OUTPUT=cli-darwin-amd64 ./build.sh || (echo "❌ Failed to build macOS Intel executable" && exit 1)
+          mv cli cli-darwin-amd64
+          # macOS ARM (Apple Silicon)
+          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=arm64 OUTPUT=cli-darwin-arm64 ./build.sh || (echo "❌ Failed to build macOS ARM executable" && exit 1)
+          mv cli cli-darwin-arm64
+          # Windows
+          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=windows GOARCH=amd64 OUTPUT=cli-windows-amd64.exe ./build.sh || (echo "❌ Failed to build Windows executable" && exit 1)
+          mv cli cli-windows-amd64.exe
+          echo "✅ Built executables for all platforms"
+
+      - name: Upload executables
+        uses: actions/upload-artifact@v4
+        with:
+          name: proxy-router-executables
+          path: |
+            proxy-router/proxy-router-linux-amd64
+            proxy-router/proxy-router-darwin-amd64
+            proxy-router/proxy-router-darwin-arm64
+            proxy-router/proxy-router-windows-amd64.exe
+            cli/cli-linux-amd64
+            cli/cli-darwin-amd64
+            cli/cli-darwin-arm64
+            cli/cli-windows-amd64.exe
+
+  Create-Release-Upload-ProxyRouter:
+    name: Create Release & Upload Proxy Router Executables
+    if: |
+      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+      )
+    needs:
+      - Generate-Tag
+      - Build-ProxyRouter-Executables
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create_release.outputs.id }}
+      artifacts_base_url: ${{ github.server_url }}/${{ github.repository }}/releases/download/${{ needs.Generate-Tag.outputs.tag_name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Download executables
+        uses: actions/download-artifact@v4
+        with:
+          path: ./executables
+
+      - name: Create release
+        id: create_release
+        uses: anzz1/action-create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ needs.Generate-Tag.outputs.tag_name }}
+          prerelease: ${{ github.ref != 'refs/heads/main' }}
+
+      - name: Upload release assets
+        uses: actions/github-script@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const release_id = '${{ steps.create_release.outputs.id }}';
+
+            for (const file of fs.readdirSync('./executables/proxy-router-executables')) {
+              console.log('Uploading release asset:', file);
+              await github.repos.uploadReleaseAsset({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: release_id,
+                name: file,
+                data: await fs.readFileSync(`./executables/proxy-router-executables/${file}`)
+              });
+            }
+
+  GitLab-Deploy-ProxyRouter:
+    name: Deploy ProxyRouterto GitLab
+    if: |
+      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test'))
+      )
+    needs:
+      - Generate-Tag
+      - GHCR-Build-and-Push
+      - Create-Release-Upload-ProxyRouter
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone
+        id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Trigger GitLab Pipeline
+        run: |
+          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}       
+          echo "Triggering GitLab Deploy for branch ${{ github.ref_name }} with tag $BUILDTAG"
+          # Determine branch
+          if [ "${{ github.ref_name }}" == "test" ]; then
+            GITLABBRANCH="dev"
+          elif [ "${{ github.ref_name }}" == "main" ]; then
+            GITLABBRANCH="main"
+          else
+            echo "❌ This branch is not configured to trigger GitLab pipelines."
+            exit 1
+          fi
+          echo "✅ Sending Request to GitLab branch: $GITLABBRANCH"
+          response=$(curl --silent \
+            --request POST \
+            --url "${{ secrets.GITLAB_TRIGGER_URL }}" \
+            --form "token=${{ secrets.GITLAB_TRIGGER_TOKEN }}" \
+            --form "ref=$GITLABBRANCH" \
+            --form "variables[SOURCE_REPO]=${{ github.repository }}" \
+            --form "variables[SOURCE_BRANCH]=${{ github.ref_name }}" \
+            --form "variables[GITHUB_VFULL]=$FULLTAG" \
+            --form "variables[GITHUB_TAG]=$BUILDTAG")
+
+          # Parse JSON response using jq
+          gitlab_status=$(echo "$response" | jq -r '.status // "unknown"')
+          gitlab_web_url=$(echo "$response" | jq -r '.web_url // "N/A"')
+
+          # Log the response
+          echo "GitLab Response: $response"
+
+          # Validate the status field
+          if [[ "$gitlab_status" =~ ^(created|preparing|success|running|scheduled)$ ]]; then
+            echo "✅ GitLab pipeline triggered successfully! Status: $gitlab_status"
+            echo "Pipeline details: $gitlab_web_url"
+          else
+            echo "❌ GitLab pipeline FAILED. Invalid status: $gitlab_status"
+            echo "Pipeline details: $gitlab_web_url"
+            exit 1
+          fi
+
+  UI-Desktop-macOS-14-arm64:
+    name: Build Morpheus UI macOS-arm64 Image
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
@@ -146,7 +422,11 @@ jobs:
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
       )
     runs-on: macos-14
-    needs: Generate-Tag
+    needs:
+      - Generate-Tag
+      - Create-Release-Upload-ProxyRouter
+    env:
+      SERVICE_PROXY_DOWNLOAD_URL_MAC_ARM64: ${{ needs.Create-Release-Upload-ProxyRouter.outputs.artifacts_base_url }}/proxy-router-darwin-arm64
     steps:
       - name: Clone
         id: checkout
@@ -187,8 +467,8 @@ jobs:
           path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-arm64-mac.dmg
           name: morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-arm64-mac.dmg
 
-  Ubuntu-22-x64:
-    name: Build Ubuntu Image
+  UI-Desktop-Ubuntu-22-x64:
+    name: Build Morpheus UI Ubuntu Image
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
@@ -196,7 +476,11 @@ jobs:
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
       )
     runs-on: ubuntu-22.04
-    needs: Generate-Tag
+    needs:
+      - Generate-Tag
+      - Create-Release-Upload-ProxyRouter
+    env:
+      SERVICE_PROXY_DOWNLOAD_URL_LINUX_X64: ${{ needs.Create-Release-Upload-ProxyRouter.outputs.artifacts_base_url }}/proxy-router-linux-amd64
     steps:
       - name: Clone
         id: checkout
@@ -236,8 +520,8 @@ jobs:
           path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-x86_64-linux.AppImage
           name: morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-x86_64-linux.AppImage
 
-  macOS-13-x64:
-    name: Build macOS-x64 Image
+  UI-Desktop-macOS-13-x64:
+    name: Build Morpheus UI macOS-x64 Image
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
@@ -245,7 +529,11 @@ jobs:
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
       )
     runs-on: macos-13
-    needs: Generate-Tag
+    needs:
+      - Generate-Tag
+      - Create-Release-Upload-ProxyRouter
+    env:
+      SERVICE_PROXY_DOWNLOAD_URL_MAC_X64: ${{ needs.Create-Release-Upload-ProxyRouter.outputs.artifacts_base_url }}/proxy-router-darwin-amd64
     steps:
       - name: Clone
         id: checkout
@@ -286,8 +574,8 @@ jobs:
           path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-x64-mac.dmg
           name: morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-x64-mac.dmg
 
-  Windows-avx2-x64:
-    name: Build Windows Image
+  UI-Desktop-Windows-avx2-x64:
+    name: Build Morpheus UI Windows Image
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
@@ -295,7 +583,11 @@ jobs:
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
       )
     runs-on: windows-latest
-    needs: Generate-Tag
+    needs:
+      - Generate-Tag
+      - Create-Release-Upload-ProxyRouter
+    env:
+      SERVICE_PROXY_DOWNLOAD_URL_WINDOWS_X64: ${{ needs.Create-Release-Upload-ProxyRouter.outputs.artifacts_base_url }}/proxy-router-windows-amd64.exe
     steps:
       - name: Clone
         id: checkout
@@ -340,7 +632,7 @@ jobs:
           path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-x64-win.exe
           name: morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-x64-win.exe
 
-  Release:
+  UI-Desktop-Release:
     name: Create Release
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
@@ -350,10 +642,12 @@ jobs:
       )
     needs:
       - Generate-Tag
-      - Ubuntu-22-x64
-      - macOS-13-x64
-      - macOS-14-arm64
-      - Windows-avx2-x64
+      - Build-ProxyRouter-Executables
+      - Create-Release-Upload-ProxyRouter
+      - UI-Desktop-Ubuntu-22-x64
+      - UI-Desktop-macOS-13-x64
+      - UI-Desktop-macOS-14-arm64
+      - UI-Desktop-Windows-avx2-x64
     runs-on: ubuntu-latest
     steps:
       - name: Clone
@@ -370,15 +664,6 @@ jobs:
           path: ./artifact
           merge-multiple: true
 
-      - name: Create release
-        id: create_release
-        uses: anzz1/action-create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ needs.Generate-Tag.outputs.tag_name }}
-          prerelease: ${{ github.ref != 'refs/heads/main' }}
-
       - name: Upload release
         id: upload_release
         uses: actions/github-script@v3
@@ -386,7 +671,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            const release_id = '${{ steps.create_release.outputs.id }}';
+            const release_id = '${{ needs.Create-Release-Upload-ProxyRouter.outputs.release_id }}';
             for (let file of await fs.readdirSync('./artifact')) {
               console.log('uploading file', file);
               if (fs.statSync(`./artifact/${file}`).isDirectory()) {
