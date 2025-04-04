@@ -284,10 +284,10 @@ jobs:
             proxy-router/proxy-router-darwin-amd64
             proxy-router/proxy-router-darwin-arm64
             proxy-router/proxy-router-windows-amd64.exe
-            cli/cli-linux-amd64
-            cli/cli-darwin-amd64
-            cli/cli-darwin-arm64
-            cli/cli-windows-amd64.exe
+            cli/mor-cli-linux-amd64
+            cli/mor-cli-darwin-amd64
+            cli/mor-cli-darwin-arm64
+            cli/mor-cli-windows-amd64.exe
 
   Create-Release-Upload-ProxyRouter:
     name: Create Release & Upload Proxy Router Executables
@@ -329,7 +329,7 @@ jobs:
       - name: Upload release
         uses: ./.github/actions/upload_release
         with:
-          path: ./artifact
+          path: ./artifact/proxy-router
           release-id: ${{ steps.create_release.outputs.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
