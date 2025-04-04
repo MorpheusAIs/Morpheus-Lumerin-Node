@@ -629,7 +629,7 @@ jobs:
         uses: ./.github/actions/upload_release
         with:
           path: ./artifact
-          release-id: ${{ steps.create_release.outputs.release_id }}
+          release_id: ${{ steps.create_release.outputs.release_id }}
 
   GitLab-Deploy:
     name: Deploy to GitLab

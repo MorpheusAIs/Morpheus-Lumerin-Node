@@ -1,7 +1,7 @@
 name: "Upload Release"
 description: "Upload release assets to GitHub release"
 inputs:
-  release-id:
+  release_id:
     description: "ID of the release to upload assets to"
     required: true
   path:
@@ -13,12 +13,14 @@ runs:
   steps:
     - uses: actions/github-script@v3
       with:
+        path: inputs.path
+        release_id: inputs.release_id
         script: |
           const fs = require('fs');
           const path = require('path');
 
           const artifactPath = '${{ inputs.path }}';
-          const releaseId = '${{ inputs.release-id }}';
+          const releaseId = '${{ inputs.release_id }}';
           const files = await fs.promises.readdir(artifactPath);
 
           for (const file of files) {
