@@ -37,6 +37,7 @@ export type OrchestratorConfig = {
     runArgs?: string[]
     env: Record<string, string>
     modelsConfig: string
+    ratingConfig: string
     probe: ProbeConfig
   }
   aiRuntime: {

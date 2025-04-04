@@ -4,7 +4,7 @@ const config = {
   chain: {
     bypassAuth: process.env.BYPASS_AUTH,
     chainId: process.env.CHAIN_ID,
-    defaultSellerCurrency: process.env.DEFAULT_SELLER_CURRENCY || 'BTC',
+    defaultSellerCurrency: process.env.DEFAULT_SELLER_CURRENCY,
     diamondAddress: process.env.DIAMOND_ADDRESS,
     displayName: process.env.CHAIN_NAME,
     explorerUrl: process.env.EXPLORER_URL,

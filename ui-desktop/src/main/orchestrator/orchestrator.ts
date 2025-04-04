@@ -188,10 +188,16 @@ export class Orchestrator {
     this.emitStateUpdate()
 
     const proxyFolder = path.dirname(resolveAppDataPath(this.cfg.proxyRouter.runPath))
+
+    // writting local config files if not exist
     await this.writeEnvFile(path.join(proxyFolder, '.env'), this.cfg.proxyRouter.env)
-    await this.writeModelsConfigFile(
+    await this.writeLocalConfigFile(
       path.join(proxyFolder, 'models-config.json'),
       this.cfg.proxyRouter.modelsConfig
+    )
+    await this.writeLocalConfigFile(
+      path.join(proxyFolder, 'rating-config.json'),
+      this.cfg.proxyRouter.ratingConfig
     )
 
     this.proxyRouterProcess = new BackgroundProcess(
@@ -307,15 +313,15 @@ export class Orchestrator {
     this.log.info(`Created env file: ${path}`)
   }
 
-  private async writeModelsConfigFile(path: string, modelsConfig: string) {
+  private async writeLocalConfigFile(filepath: string, content: string) {
     // check if the file exists
-    if (fs.existsSync(path)) {
-      this.log.info(`Models config file already exists: ${path}`)
+    if (fs.existsSync(filepath)) {
+      this.log.info(`Config file already exists: ${filepath}`)
       return
     }
 
-    await fs.writeFile(path, modelsConfig)
-    this.log.info(`Created models config file: ${path}`)
+    await fs.writeFile(filepath, content)
+    this.log.info(`Created config file: ${filepath}`)
   }
 }
 

@@ -1,6 +1,9 @@
 import os from 'node:os'
 import { OrchestratorConfig } from './src/main/orchestrator/orchestrator.types'
-import { buildLocalModelsConfig } from './src/main/orchestrator/proxy-config'
+import {
+  buildLocalModelsConfig,
+  buildLocalRatingConfig
+} from './src/main/orchestrator/proxy-config'
 
 const configMacArm = {
   proxyRouter: {
@@ -33,6 +36,7 @@ const configMacArm = {
         `http://localhost:${process.env.SERVICE_AI_API_PORT}/v1`
       )
     ),
+    ratingConfig: JSON.stringify(buildLocalRatingConfig()),
     probe: {
       url: `http://localhost:${process.env.SERVICE_PROXY_API_PORT}/healthcheck`
     }

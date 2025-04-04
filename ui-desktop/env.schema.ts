@@ -11,7 +11,7 @@ export const EnvSchema = Type.Object({
   CHAIN_ID: Type.Number(),
   CHAIN_NAME: Type.String(),
   DEBUG: Type.Boolean({ default: false }),
-  DEFAULT_SELLER_CURRENCY: Type.String(),
+  DEFAULT_SELLER_CURRENCY: Type.String({ default: 'BTC' }),
   DEV_TOOLS: Type.Boolean({ default: false }),
   DIAMOND_ADDRESS: TypeEthAddress,
   EXPLORER_URL: Type.String(),
@@ -26,7 +26,7 @@ export const EnvSchema = Type.Object({
       Type.Literal('debug'),
       Type.Literal('silly')
     ],
-    { default: 'info' }
+    { default: 'warn' }
   ),
   SENTRY_DSN: Type.Optional(Type.String({ format: 'uri' })),
   TOKEN_ADDRESS: TypeEthAddress,
