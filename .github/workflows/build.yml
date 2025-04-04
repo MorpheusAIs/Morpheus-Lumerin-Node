@@ -45,13 +45,11 @@ on:
       - dev
       - cicd/*
 
-    paths:
-      [".github/workflows/build.yml", "ui-desktop/**", "ui-core/**", "proxy-router/**", "cli/**"]
+    paths: [".github/**", "ui-desktop/**", "ui-core/**", "proxy-router/**", "cli/**"]
 
   pull_request:
     types: [opened, reopened, synchronize]
-    paths:
-      [".github/workflows/build.yml", "ui-desktop/**", "ui-core/**", "proxy-router/**", "cli/**"]
+    paths: [".github/**", "ui-desktop/**", "ui-core/**", "proxy-router/**", "cli/**"]
 
 concurrency:
   group: ci-${{ github.ref }}
