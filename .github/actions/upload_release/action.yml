@@ -19,6 +19,7 @@ runs:
 
           const artifactPath = '${{ inputs.path }}';
           const releaseId = '${{ inputs.release_id }}';
+          console.log(`Uploading release assets to release ID: ${releaseId}, artifact path: ${artifactPath}`);
           const files = await fs.promises.readdir(artifactPath);
 
           for (const file of files) {
