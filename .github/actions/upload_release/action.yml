@@ -13,8 +13,6 @@ runs:
   steps:
     - uses: actions/github-script@v3
       with:
-        path: inputs.path
-        release_id: inputs.release_id
         script: |
           const fs = require('fs');
           const path = require('path');
