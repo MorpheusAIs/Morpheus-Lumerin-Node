@@ -411,7 +411,6 @@ jobs:
   UI-Ubuntu-22-x64:
     name: Build Morpheus UI Ubuntu Image
     if: |
-      false ||
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
         (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
@@ -464,7 +463,6 @@ jobs:
   UI-macOS-13-x64:
     name: Build Morpheus UI macOS-x64 Image
     if: |
-      false ||
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
         (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
@@ -518,7 +516,6 @@ jobs:
   UI-Windows-avx2-x64:
     name: Build Morpheus UI Windows Image
     if: |
-      false ||
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
         (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
@@ -548,15 +545,6 @@ jobs:
         run: |
           choco install wget --no-progress
           choco install sed --no-progress
-
-      - uses: actions/cache@v4
-        if: ${{ !env.ACT }}
-        id: yarn-cache # use this to check for `cache-hit` (`steps.yarn-cache.outputs.cache-hit != 'true'`)
-        with:
-          path: ./ui-desktop/node_modules
-          key: ${{ runner.os }}-modules-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-yarn-
 
       - name: Install dependencies
         run: |
@@ -615,7 +603,6 @@ jobs:
 
       - name: Folder structure
         run: |
-          ls -R
           mv ./artifact/proxy-router/* ./artifact
           mv ./artifact/cli/* ./artifact
 
