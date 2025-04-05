@@ -411,6 +411,7 @@ jobs:
   UI-Ubuntu-22-x64:
     name: Build Morpheus UI Ubuntu Image
     if: |
+      false ||
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
         (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
@@ -463,6 +464,7 @@ jobs:
   UI-macOS-13-x64:
     name: Build Morpheus UI macOS-x64 Image
     if: |
+      false ||
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
         (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
@@ -516,6 +518,7 @@ jobs:
   UI-Windows-avx2-x64:
     name: Build Morpheus UI Windows Image
     if: |
+      false ||
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
         (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
@@ -590,10 +593,10 @@ jobs:
     needs:
       - Generate-Tag
       - Build-ProxyRouter-Executables
-      - UI-Ubuntu-22-x64
-      - UI-macOS-13-x64
       - UI-macOS-14-arm64
-      - UI-Windows-avx2-x64
+      # - UI-macOS-13-x64
+      # - UI-Ubuntu-22-x64
+      # - UI-Windows-avx2-x64
     runs-on: ubuntu-latest
     steps:
       - name: Clone
