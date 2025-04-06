@@ -582,9 +582,9 @@ jobs:
       - Generate-Tag
       - Build-ProxyRouter-Executables
       - UI-macOS-14-arm64
-      # - UI-macOS-13-x64
-      # - UI-Ubuntu-22-x64
-      # - UI-Windows-avx2-x64
+      - UI-macOS-13-x64
+      - UI-Ubuntu-22-x64
+      - UI-Windows-avx2-x64
     runs-on: ubuntu-latest
     steps:
       - name: Clone
