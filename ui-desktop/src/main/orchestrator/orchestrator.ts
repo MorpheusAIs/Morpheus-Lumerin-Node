@@ -59,9 +59,11 @@ export class Orchestrator {
 
   async startAll() {
     app.once('window-all-closed', () => {
+      this.log.warn('Window all closed event received')
       return this.stopAll()
     })
     process.on('SIGINT', () => {
+      this.log.warn('SIGINT event received')
       return this.stopAll()
     })
 
@@ -87,32 +89,41 @@ export class Orchestrator {
     this.emitStateUpdate()
 
     if (this.cfg.aiRuntime.downloadUrl) {
-      await downloadFile(
-        this.cfg.aiRuntime.downloadUrl,
-        resolveAppDataPath(this.cfg.aiRuntime.fileName),
-        (progress) => {
-          this.aiRuntimeDownloadState.status = 'downloading'
-          this.aiRuntimeDownloadState.progress = progress.bytesDownloaded / progress.totalBytes!
-          this.aiRuntimeDownloadState.error = progress.error
-          this.emitStateUpdate()
-          this.log.info(`Downloading ai-runtime: ${progress.bytesDownloaded} bytes`)
-        },
-        this.log.scope('Ai-runtime download')
-      )
+      if (fs.existsSync(resolveAppDataPath(this.cfg.aiRuntime.extractPath))) {
+        this.log.info(
+          'AI runtime already exists, skipping download',
+          resolveAppDataPath(this.cfg.aiRuntime.extractPath)
+        )
+        this.aiRuntimeDownloadState.status = 'success'
+        this.emitStateUpdate()
+      } else {
+        await downloadFile(
+          this.cfg.aiRuntime.downloadUrl,
+          resolveAppDataPath(this.cfg.aiRuntime.fileName),
+          (progress) => {
+            this.aiRuntimeDownloadState.status = 'downloading'
+            this.aiRuntimeDownloadState.progress = progress.bytesDownloaded / progress.totalBytes!
+            this.aiRuntimeDownloadState.error = progress.error
+            this.emitStateUpdate()
+            this.log.info(`Downloading ai-runtime: ${progress.bytesDownloaded} bytes`)
+          },
+          this.log.scope('Ai-runtime download')
+        )
 
-      this.log.info(`unzipping ai runtime`)
+        this.log.info(`unzipping ai runtime`)
 
-      await extractFile(
-        resolveAppDataPath(this.cfg.aiRuntime.fileName),
-        resolveAppDataPath(this.cfg.aiRuntime.extractPath),
-        (progress) => {
-          this.aiRuntimeDownloadState.status = progress.status === 'error' ? 'error' : 'unzipping'
-          this.aiRuntimeDownloadState.progress = progress.progress
-          this.aiRuntimeDownloadState.error = progress.error
-          this.emitStateUpdate()
-          this.log.info(`Extracting ai-runtime`, progress)
-        }
-      )
+        await extractFile(
+          resolveAppDataPath(this.cfg.aiRuntime.fileName),
+          resolveAppDataPath(this.cfg.aiRuntime.extractPath),
+          (progress) => {
+            this.aiRuntimeDownloadState.status = progress.status === 'error' ? 'error' : 'unzipping'
+            this.aiRuntimeDownloadState.progress = progress.progress
+            this.aiRuntimeDownloadState.error = progress.error
+            this.emitStateUpdate()
+            this.log.info(`Extracting ai-runtime`, progress)
+          }
+        )
+      }
     }
 
     this.aiRuntimeDownloadState.status = 'success'

@@ -1,5 +1,4 @@
 import chalk from 'chalk'
-import logger from 'electron-log'
 import stringify from 'json-stringify-safe'
 import Logger, { LogMessage } from 'electron-log'
 
@@ -31,10 +30,10 @@ const formatFn = (props: { message: LogMessage }) => {
   return [`${date.toISOString()} ${chalk[color](level)} ${scope ? `[${scope}]` : ''}: ${meta}`]
 }
 
-logger.transports.console.format = formatFn
-logger.transports.file.format = formatFn
+Logger.transports.console.format = formatFn
+Logger.transports.file.format = formatFn
 
-logger.transports.console.level = process.env.LOG_LEVEL
-logger.transports.file.level = process.env.LOG_LEVEL
+Logger.transports.console.level = process.env.LOG_LEVEL
+Logger.transports.file.level = process.env.LOG_LEVEL
 
-export default logger
+export default Logger
