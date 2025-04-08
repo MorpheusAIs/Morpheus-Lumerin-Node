@@ -69,7 +69,12 @@ const configMacArm = {
     fileName: './services/ipfs.tar.gz' as string,
     extractPath: './services/ipfs',
     runPath: './services/ipfs/kubo/ipfs' as string,
-    runArgs: ['daemon', '--init', `--api=/ip4/127.0.0.1/tcp/${process.env.SERVICE_IPFS_API_PORT}`],
+    runArgs: [
+      'daemon',
+      '--init',
+      `--api=/ip4/127.0.0.1/tcp/${process.env.SERVICE_IPFS_API_PORT}`,
+      `--repo-dir=../data`
+    ],
     probe: {
       url: `http://127.0.0.1:${process.env.SERVICE_IPFS_API_PORT}/api/v0/version`,
       method: 'POST'
