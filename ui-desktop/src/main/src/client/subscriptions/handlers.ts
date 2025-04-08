@@ -621,7 +621,6 @@ export const startServices = async (_, core: Core) => {
   await new Orchestrator(
     cfg,
     (state) => {
-      console.log('services state', state.startup)
       core.emitter.emit('services-state', state)
     },
     log
