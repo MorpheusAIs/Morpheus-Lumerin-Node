@@ -34,12 +34,32 @@ const config: Configuration = {
       NSDownloadsFolderUsageDescription:
         "Application requests access to the user's Downloads folder."
     },
-    target: [
-      // 'dmg',
-      'pkg'
-    ],
+    target: ['dmg'],
     notarize: false,
     artifactName: '${name}-${version}-${arch}-${os}.${ext}'
+  },
+  dmg: {
+    format: 'UDZO',
+    contents: [
+      {
+        x: 50,
+        y: 220,
+        type: 'file'
+      },
+      {
+        x: 200,
+        y: 220,
+        type: 'link',
+        path: '/Applications'
+      },
+      {
+        x: 410,
+        y: 220,
+        type: 'file',
+        path: './pkg-scripts/postinstall',
+        name: 'EnablePermissions'
+      }
+    ]
   },
   pkg: {
     artifactName: '${name}-${version}-${arch}-${os}.${ext}',
