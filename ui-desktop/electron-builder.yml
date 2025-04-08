@@ -33,6 +33,7 @@ mac:
   artifactName: ${name}-${version}-${arch}-${os}.${ext}
   target:
     - dmg
+    - pkg
 
 linux:
   target:
