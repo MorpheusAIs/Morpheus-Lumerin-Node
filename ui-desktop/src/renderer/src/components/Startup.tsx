@@ -26,6 +26,12 @@ const Title = styled.div`
   color: ${(p) => p.theme.colors.dark};
 `;
 
+const Subtitle = styled.div`
+  font-size: 0.8em;
+  color: ${(p) => p.theme.colors.dark};
+  margin-bottom: 1rem;
+`;
+
 const EntryGroup = styled(Flex.Column)`
   margin: 2rem 0;
   width: 100%;
@@ -154,8 +160,8 @@ const StderrButton = styled.button`
   }
 `;
 
-const StderrOutput = styled.pre`
-  background: ${(p) => p.theme.colors.morMain};
+const ProcessLogs = styled.pre`
+  background: ${(p) => p.theme.colors.copy};
   padding: 1rem;
   border-radius: 4px;
   margin-top: 0.5rem;
@@ -240,7 +246,7 @@ const StartupItemComponent: FC<{ item: StartupItem }> = ({ item }) => {
             )}
             {showStderr ? 'Hide details' : 'Show details'}
           </StderrButton>
-          {showStderr && <StderrOutput>{item.stderrOutput}</StderrOutput>}
+          {showStderr && <ProcessLogs>{item.stderrOutput}</ProcessLogs>}
         </>
       )}
     </Entry>
@@ -258,6 +264,9 @@ const Loading: FC<LoadingProps> = ({ services, client }) => {
 
       <EntryGroup>
         <Title>Downloading</Title>
+        <Subtitle>
+          This will happen only on the first startup or after updating the app.
+        </Subtitle>
         {services.download.map((item) => (
           <DownloadItemComponent key={item.name} item={item} />
         ))}

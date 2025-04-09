@@ -12,15 +12,13 @@ const getRateKucoin = async () => {
     ['LMR-USDT', 'ETH-USDT', 'BTC-USDC'].map(async (pair) => {
       const res = await axios.get(`${baseUrl}/v1/market/orderbook/level1`, {
         params: {
-          symbol: pair,
-        },
+          symbol: pair
+        }
       })
 
       const price = Number(res?.data?.data?.price)
       if (!price) {
-        throw new Error(
-          `invalid price response for ${pair} from kucoin: ${res.data}`
-        )
+        throw new Error(`invalid price response for ${pair} from kucoin: ${res.data}`)
       }
       return price
     })
@@ -29,4 +27,4 @@ const getRateKucoin = async () => {
   return { LMR, ETH, BTC }
 }
 
-module.exports = { getRateKucoin }
+export { getRateKucoin }

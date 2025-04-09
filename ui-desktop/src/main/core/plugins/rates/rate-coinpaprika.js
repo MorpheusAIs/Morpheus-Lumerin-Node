@@ -13,9 +13,7 @@ const getRateCoinpaprika = async () => {
       const res = await axios.get(`${baseUrl}/v1/tickers/${coin}`)
       const price = res?.data?.quotes?.USD?.price
       if (!price) {
-        throw new Error(
-          `invalid price response for ${coin} from coinpaprika: ${res.data}`
-        )
+        throw new Error(`invalid price response for ${coin} from coinpaprika: ${res.data}`)
       }
       return price
     })
@@ -24,4 +22,4 @@ const getRateCoinpaprika = async () => {
   return { LMR, ETH, BTC }
 }
 
-module.exports = { getRateCoinpaprika }
+export { getRateCoinpaprika }

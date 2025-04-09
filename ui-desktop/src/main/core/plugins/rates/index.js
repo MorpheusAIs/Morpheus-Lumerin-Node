@@ -1,10 +1,10 @@
 'use strict'
 
-const logger = require('../../logger')
+import logger from '../../logger'
 
-const { getNetworkDifficulty } = require('./network-difficulty')
-const { getRate } = require('./rate')
-const createStream = require('./stream')
+import { getNetworkDifficulty } from './network-difficulty'
+import { getRate } from './rate'
+import createStream from './stream'
 
 /**
  * Create a plugin instance.
@@ -38,7 +38,7 @@ function createPlugin() {
           eventBus.emit('coin-price-updated', {
             token: token,
             currency: 'USD',
-            price: price,
+            price: price
           })
         )
       }
@@ -50,7 +50,7 @@ function createPlugin() {
       eventBus.emit('wallet-error', {
         inner: err,
         message: `Could not get exchange rate for ${symbol}`,
-        meta: { plugin: 'rates' },
+        meta: { plugin: 'rates' }
       })
     })
 
@@ -58,7 +58,7 @@ function createPlugin() {
 
     networkDifficultyStream.on('data', function (difficulty) {
       eventBus.emit('network-difficulty-updated', {
-        difficulty,
+        difficulty
       })
     })
 
@@ -66,16 +66,12 @@ function createPlugin() {
       eventBus.emit('wallet-error', {
         inner: err,
         message: `Could not get network difficulty`,
-        meta: { plugin: 'rates' },
+        meta: { plugin: 'rates' }
       })
     })
 
     return {
-      events: [
-        'coin-price-updated',
-        'wallet-error',
-        'network-difficulty-updated',
-      ],
+      events: ['coin-price-updated', 'wallet-error', 'network-difficulty-updated']
     }
   }
 
@@ -91,8 +87,8 @@ function createPlugin() {
 
   return {
     start,
-    stop,
+    stop
   }
 }
 
-module.exports = createPlugin
+export default createPlugin

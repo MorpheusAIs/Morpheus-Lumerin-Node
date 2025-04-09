@@ -21,7 +21,7 @@ export class BackgroundProcess {
   private state: ProcessState = 'stopped'
   private process?: ChildProcess
   private error?: string
-  private output?: string
+  private output: string[] = []
   private log: LogFunctions
   private onStateChange?: (stateInfo: StateInfo) => void
   private healthCheckConfig?: {
@@ -83,28 +83,28 @@ export class BackgroundProcess {
         const child = spawn(this.command, this.args, { stdio: 'pipe', cwd })
         this.process = child
 
-        let outputLines: string[] = []
-
         // log the stdout and stderr
         child.stdout.on('data', (data: Buffer) => {
           const outputLine = data.toString('utf-8').trimEnd()
           this.log.info('\n\t' + outputLine)
-          if (outputLines.length < BackgroundProcess.MAX_OUTPUT_LINES) {
-            outputLines.push(outputLine)
+          this.output.push(outputLine)
+          if (this.output.length > BackgroundProcess.MAX_OUTPUT_LINES) {
+            this.output.shift()
           }
         })
         child.stderr.on('data', (data: Buffer) => {
           const errorLine = data.toString('utf-8').trimEnd()
           this.log.error('\n\t' + errorLine)
-          if (outputLines.length < BackgroundProcess.MAX_OUTPUT_LINES) {
-            outputLines.push(errorLine)
+          this.output.push(errorLine)
+          if (this.output.length > BackgroundProcess.MAX_OUTPUT_LINES) {
+            this.output.shift()
           }
         })
 
         child.on('close', (code) => {
           const errMessage = `Process closed with code ${code}`
           this.log.info(errMessage)
-          this.setState('stopped', errMessage, this.output)
+          this.setState('stopped', errMessage, this.output.join('\n'))
           if (this.state === 'starting') {
             return reject('closed with code ${code}')
           }

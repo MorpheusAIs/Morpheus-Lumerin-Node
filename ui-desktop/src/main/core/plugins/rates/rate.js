@@ -1,7 +1,7 @@
-const logger = require('../../logger');
-const { getRateCoingecko } = require('./rate-coingecko')
-const { getRateCoinpaprika } = require('./rate-coinpaprika')
-const { getRateKucoin } = require('./rate-kucoin')
+import logger from '../../logger'
+import { getRateCoingecko } from './rate-coingecko'
+import { getRateCoinpaprika } from './rate-coinpaprika'
+import { getRateKucoin } from './rate-kucoin'
 
 /**
  * Returns ETH and LMR prices in USD from exchanges api
@@ -20,4 +20,4 @@ const getRate = async () => {
   }
 }
 
-module.exports = { getRate }
+export { getRate }
