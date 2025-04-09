@@ -1,5 +1,0 @@
-#!/bin/sh
-echo "Removing xattr from /Applications/MorpheusUI.app..."
-xattr -c /Applications/MorpheusUI.app &> ~/Desktop/log.txt
-echo "Done"
-exit 0
