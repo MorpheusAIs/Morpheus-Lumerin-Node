@@ -10,13 +10,13 @@ const getRateCoingecko = async () => {
   const res = await axios.get(`${baseUrl}/v3/simple/price`, {
     params: {
       ids: 'ethereum,lumerin,bitcoin',
-      vs_currencies: 'usd',
-    },
+      vs_currencies: 'usd'
+    }
   })
 
   const LMR = res?.data?.lumerin?.usd
   const ETH = res?.data?.ethereum?.usd
-  const BTC = res?.data?.bitcoin?.usd;
+  const BTC = res?.data?.bitcoin?.usd
 
   if (!LMR || !ETH || !BTC) {
     throw new Error(`invalid price response from coingecko: ${res.data}`)
@@ -24,4 +24,4 @@ const getRateCoingecko = async () => {
   return { LMR, ETH, BTC }
 }
 
-module.exports = { getRateCoingecko }
+export { getRateCoingecko }

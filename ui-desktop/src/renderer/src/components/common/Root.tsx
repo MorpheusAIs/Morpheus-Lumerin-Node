@@ -93,7 +93,7 @@ class Root extends React.Component<{ servicesState: LoadingState }> {
       hasEnoughData,
     } = this.props;
 
-    const { onboardingComplete, startupComplete } = this.state;
+    const { onboardingComplete } = this.state;
 
     if (onboardingComplete === null) return null;
 

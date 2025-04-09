@@ -2,9 +2,10 @@
 
 const { merge, union } = require('lodash')
 const EventEmitter = require('events')
-const logger = require('./logger')
+import logger from './logger'
+import rates from './plugins/rates'
 
-const pluginCreators = [require('./plugins/rates')]
+const pluginCreators = [rates]
 
 function createCore() {
   let eventBus
@@ -59,7 +60,7 @@ function createCore() {
     return {
       api: pluginsApi,
       emitter: eventBus,
-      events: coreEvents,
+      events: coreEvents
     }
   }
 
@@ -84,8 +85,8 @@ function createCore() {
 
   return {
     start,
-    stop,
+    stop
   }
 }
 
-module.exports = createCore
+export default createCore
