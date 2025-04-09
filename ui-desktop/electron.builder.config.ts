@@ -38,38 +38,6 @@ const config: Configuration = {
     notarize: false,
     artifactName: '${name}-${version}-${arch}-${os}.${ext}'
   },
-  dmg: {
-    format: 'UDZO',
-    contents: [
-      {
-        x: 50,
-        y: 220,
-        type: 'file'
-      },
-      {
-        x: 200,
-        y: 220,
-        type: 'link',
-        path: '/Applications'
-      },
-      {
-        x: 410,
-        y: 220,
-        type: 'file',
-        path: './pkg-scripts/postinstall',
-        name: 'EnablePermissions'
-      }
-    ]
-  },
-  pkg: {
-    artifactName: '${name}-${version}-${arch}-${os}.${ext}',
-    installLocation: '/Applications',
-    isRelocatable: false
-    // allowAnywhere: false,
-    // allowCurrentUserHome: false,
-    // allowRootDirectory: false,
-    // scripts: './pkg-scripts'
-  },
   linux: {
     target: ['AppImage'],
     maintainer: 'mor.org',

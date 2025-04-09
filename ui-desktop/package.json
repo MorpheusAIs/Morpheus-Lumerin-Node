@@ -26,11 +26,11 @@
     "dev": "electron-vite --inspect --sourcemap dev",
     "build": "npm run typecheck && electron-vite build",
     "postinstall": "patch-package && electron-builder install-app-deps || true",
-    "build:unpack": "npm run build && electron-builder --config electron-builder.config.ts --dir",
-    "build:win": "electron-vite build && electron-builder --config electron-builder.config.ts --win portable",
-    "build:mac": "electron-vite build && electron-builder --config electron-builder.config.ts --mac",
-    "build:linux": "electron-vite build && electron-builder --config electron-builder.config.ts --linux AppImage",
-    "pkg": "electron-builder --config electron-builder.config.ts --mac"
+    "build:unpack": "npm run build && electron-builder --config electron.builder.config.ts --dir",
+    "build:win": "electron-vite build && electron-builder --config electron.builder.config.ts --win portable",
+    "build:mac": "electron-vite build && electron-builder --config electron.builder.config.ts --mac",
+    "build:linux": "electron-vite build && electron-builder --config electron.builder.config.ts --linux AppImage",
+    "pkg": "electron-builder --config electron.builder.config.ts --mac"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.0",
