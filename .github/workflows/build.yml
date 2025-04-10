@@ -733,18 +733,18 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Verify artifact contents
-        run: |
-          echo "🔍 Contents of ./artifact:"
-          ls -lh ./artifact
-      
       - name: Download artifacts
         id: download-artifact
         uses: actions/download-artifact@v4
         with:
           path: ./artifact
           merge-multiple: true
-
+      
+      - name: Verify artifact contents
+        run: |
+          echo "🔍 Contents of ./artifact:"
+          ls -lh ./artifact
+        
       - name: Create release
         id: create_release
         uses: anzz1/action-create-release@v1
