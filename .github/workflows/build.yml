@@ -220,8 +220,8 @@ jobs:
           docker push $BUILDIMAGE:latest || (echo "❌ Failed to push image as :latest" && exit 1)
           echo "✅ Proxy-Router Push $BUILDIMAGE:latest Tag Successful!"
 
-  Build-ProxyRouter-Executables:
-    name: Build ProxyRouter Executables
+  Build-Service-Executables:
+    name: Build Service Executables
     if: |
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
@@ -243,7 +243,7 @@ jobs:
           go-version: "1.22.x"
           cache-dependency-path: proxy-router/go.sum
 
-      - name: Build executables for all platforms
+      - name: Build proxy-router executables for all platforms
         run: |
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}  
           cd proxy-router
@@ -267,7 +267,7 @@ jobs:
           mv proxy-router proxy-router-${FULLTAG}-win-arm64.exe
           echo "✅ Built executables for all platforms"
 
-      - name: Build CLI Executables
+      - name: Build CLI Executables for all platforms
         run: |
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}  
           cd cli
@@ -296,24 +296,24 @@ jobs:
         with:
           name: cli
           path: |
-            cli/mor-cli-${FULLTAG}-linux-x86_64
-            cli/mor-cli-${FULLTAG}-linux-arm64
-            cli/mor-cli-${FULLTAG}-mac-x64
-            cli/mor-cli-${FULLTAG}-mac-arm64
-            cli/mor-cli-${FULLTAG}-win-x64.exe
-            cli/mor-cli-${FULLTAG}-win-arm64.exe
+            cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-linux-x86_64
+            cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-linux-arm64
+            cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-mac-x64
+            cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-mac-arm64
+            cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-win-x64.exe
+            cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-win-arm64.exe
     
       - name: Upload ProxyRouter artifacts
         uses: actions/upload-artifact@v4
         with:
           name: proxy-router
           path: |
-            proxy-router/proxy-router-${FULLTAG}-linux-x86_64
-            proxy-router/proxy-router-${FULLTAG}-linux-arm64
-            proxy-router/proxy-router-${FULLTAG}-mac-x64
-            proxy-router/proxy-router-${FULLTAG}-mac-arm64
-            proxy-router/proxy-router-${FULLTAG}-win-x64.exe
-            proxy-router/proxy-router-${FULLTAG}-win-arm64.exe
+            proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-linux-x86_64
+            proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-linux-arm64
+            proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-mac-x64
+            proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-mac-arm64
+            proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-win-x64.exe
+            proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-win-arm64.exe
 
   GitLab-Deploy-ProxyRouter:
     name: Deploy ProxyRouterto GitLab
@@ -717,7 +717,7 @@ jobs:
       )
     needs:
       - Generate-Tag
-      - Build-ProxyRouter-Executables
+      - Build-Service-Executables
       - UI-macOS-14-arm64
       - UI-macOS-13-x64
       - UI-Ubuntu-22-x64
@@ -759,67 +759,3 @@ jobs:
         with:
           path: ./artifact
           release_id: ${{ steps.create_release.outputs.id }}
-
-  GitLab-Deploy:
-    name: Deploy to GitLab
-    if: |
-      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
-      (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test'))
-      )
-    needs:
-      - Generate-Tag
-    runs-on: ubuntu-latest
-    steps:
-      - name: Clone
-        id: checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update && sudo apt-get install -y jq
-
-      - name: Trigger GitLab Pipeline
-        run: |
-          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
-          FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}       
-          echo "Triggering GitLab Deploy for branch ${{ github.ref_name }} with tag $BUILDTAG"
-          # Determine branch
-          if [ "${{ github.ref_name }}" == "test" ]; then
-            GITLABBRANCH="dev"
-          elif [ "${{ github.ref_name }}" == "main" ]; then
-            GITLABBRANCH="main"
-          else
-            echo "❌ This branch is not configured to trigger GitLab pipelines."
-            exit 1
-          fi
-          echo "✅ Sending Request to GitLab branch: $GITLABBRANCH"
-          response=$(curl --silent \
-            --request POST \
-            --url "${{ secrets.GITLAB_TRIGGER_URL }}" \
-            --form "token=${{ secrets.GITLAB_TRIGGER_TOKEN }}" \
-            --form "ref=$GITLABBRANCH" \
-            --form "variables[SOURCE_REPO]=${{ github.repository }}" \
-            --form "variables[SOURCE_BRANCH]=${{ github.ref_name }}" \
-            --form "variables[GITHUB_VFULL]=$FULLTAG" \
-            --form "variables[GITHUB_TAG]=$BUILDTAG")
-
-          # Parse JSON response using jq
-          gitlab_status=$(echo "$response" | jq -r '.status // "unknown"')
-          gitlab_web_url=$(echo "$response" | jq -r '.web_url // "N/A"')
-
-          # Log the response
-          echo "GitLab Response: $response"
-
-          # Validate the status field
-          if [[ "$gitlab_status" =~ ^(created|preparing|success|running|scheduled)$ ]]; then
-            echo "✅ GitLab pipeline triggered successfully! Status: $gitlab_status"
-            echo "Pipeline details: $gitlab_web_url"
-          else
-            echo "❌ GitLab pipeline FAILED. Invalid status: $gitlab_status"
-            echo "Pipeline details: $gitlab_web_url"
-            exit 1
-          fi
