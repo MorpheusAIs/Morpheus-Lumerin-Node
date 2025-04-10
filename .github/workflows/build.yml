@@ -249,7 +249,7 @@ jobs:
           cd proxy-router
           # Linux X64
           TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=linux GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-linux-amd64 ./build.sh || (echo "❌ Failed to build Linux X64 executable" && exit 1)
-          mv proxy-router proxy-router-${FULLTAG}-linux-x64
+          mv proxy-router proxy-router-${FULLTAG}-linux-x86_64
           # Linux ARM64
           TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=linux GOARCH=arm64 OUTPUT=proxy-router-${FULLTAG}-linux-arm64 ./build.sh || (echo "❌ Failed to build Linux ARM64 executable" && exit 1)
           mv proxy-router proxy-router-${FULLTAG}-linux-arm64
@@ -273,7 +273,7 @@ jobs:
           cd cli
           # Linux X64
           GOOS=linux GOARCH=amd64 make build || (echo "❌ Failed to build Linux X64 executable" && exit 1)
-          mv mor-cli mor-cli-${FULLTAG}-linux-x64
+          mv mor-cli mor-cli-${FULLTAG}-linux-x86_64
           # Linux ARM64
           GOOS=linux GOARCH=arm64 make build || (echo "❌ Failed to build Linux ARM64 executable" && exit 1)
           mv mor-cli mor-cli-${FULLTAG}-linux-arm64
@@ -296,13 +296,13 @@ jobs:
         with:
           name: proxy-router-executables
           path: |
-            proxy-router/proxy-router-${FULLTAG}-linux-x64
+            proxy-router/proxy-router-${FULLTAG}-linux-x86_64
             proxy-router/proxy-router-${FULLTAG}-linux-arm64
             proxy-router/proxy-router-${FULLTAG}-mac-x64
             proxy-router/proxy-router-${FULLTAG}-mac-arm64
             proxy-router/proxy-router-${FULLTAG}-win-x64.exe
             proxy-router/proxy-router-${FULLTAG}-win-arm64.exe
-            cli/mor-cli-${FULLTAG}-linux-x64
+            cli/mor-cli-${FULLTAG}-linux-x86_64
             cli/mor-cli-${FULLTAG}-linux-arm64
             cli/mor-cli-${FULLTAG}-mac-x64
             cli/mor-cli-${FULLTAG}-mac-arm64
@@ -439,7 +439,7 @@ jobs:
     needs:
       - Generate-Tag
     env:
-      SERVICE_PROXY_DOWNLOAD_URL_LINUX_X64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-linux-x64
+      SERVICE_PROXY_DOWNLOAD_URL_LINUX_X64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-linux-x86_64
     steps:
       - name: Clone
         id: checkout
@@ -476,8 +476,8 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-linux-x64.AppImage
-          name: morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-linux-x64.AppImage
+          path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-linux-x86_64.AppImage
+          name: morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-linux-x86_64.AppImage
 
   UI-Ubuntu-22-arm64:
     name: Build Morpheus UI Ubuntu arm64 Image

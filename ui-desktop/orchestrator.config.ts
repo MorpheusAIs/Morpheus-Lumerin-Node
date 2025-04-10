@@ -124,6 +124,26 @@ const configLinux: typeof configMacArm = {
   }
 }
 
+const configLinuxArm: typeof configMacArm = {
+  proxyRouter: {
+    ...configMacArm.proxyRouter,
+    downloadUrl: process.env.SERVICE_PROXY_DOWNLOAD_URL_LINUX_ARM64
+  },
+  aiRuntime: {
+    ...configMacArm.aiRuntime,
+    downloadUrl:
+      'https://github.com/ggml-org/llama.cpp/releases/download/b4406/llama-b4406-bin-ubuntu-arm64.zip'
+  },
+  aiModel: {
+    ...configMacArm.aiModel
+  },
+  ipfs: {
+    ...configMacArm.ipfs,
+    downloadUrl:
+      'https://github.com/ipfs/kubo/releases/download/v0.34.0/kubo_v0.34.0_linux-arm64.tar.gz'
+  }
+}
+
 const configWin: typeof configMacArm = {
   proxyRouter: {
     ...configMacArm.proxyRouter,
@@ -156,16 +176,51 @@ const configWin: typeof configMacArm = {
   }
 }
 
+const configWinArm: typeof configMacArm = {
+  proxyRouter: {
+    ...configMacArm.proxyRouter,
+    downloadUrl: process.env.SERVICE_PROXY_DOWNLOAD_URL_WINDOWS_ARM64,
+    fileName: './services/proxy-router.exe' as string,
+    runPath: './services/proxy-router.exe' as string
+  },
+  aiRuntime: {
+    ...configMacArm.aiRuntime,
+    downloadUrl:
+      'https://github.com/ggml-org/llama.cpp/releases/download/b5002/llama-b5002-bin-win-avx2-arm64.zip',
+    runPath: './services/ai-runtime/llama-server.exe' as string,
+    runArgs: [
+      '--no-webui',
+      '--model',
+      '../ai-model.gguf',
+      '--port',
+      `${process.env.SERVICE_AI_API_PORT}`
+    ]
+  },
+  aiModel: {
+    ...configMacArm.aiModel
+  },
+  ipfs: {
+    ...configMacArm.ipfs,
+    downloadUrl:
+      'https://github.com/ipfs/kubo/releases/download/v0.34.0/kubo_v0.34.0_windows-arm64.zip',
+    fileName: './services/ipfs.zip',
+    runPath: './services/ipfs/kubo/ipfs.exe'
+  }
+}
+
 const cfg = {
   darwin: {
-    arm64: configMacArm,
-    x64: configMacX64
+    x64: configMacX64,
+    arm64: configMacArm
+
   },
   linux: {
-    x64: configLinux
+    x64: configLinux,
+    arm64: configLinuxArm
   },
   win32: {
-    x64: configWin
+    x64: configWin,
+    arm64: configWinArm
   }
 }[os.platform()]?.[os.arch()]
 
