@@ -44,8 +44,9 @@ const configMacArm = {
     }
   },
   aiRuntime: {
+    //original b4406
     downloadUrl:
-      'https://github.com/ggml-org/llama.cpp/releases/download/b4406/llama-b4406-bin-macos-arm64.zip' as string,
+      'https://github.com/ggml-org/llama.cpp/releases/download/b5002/llama-b5002-bin-macos-arm64.zip' as string,
     fileName: './services/llama.zip' as string,
     extractPath: './services/ai-runtime',
     runPath: './services/ai-runtime/build/bin/llama-server' as string,
@@ -68,7 +69,7 @@ const configMacArm = {
   },
   ipfs: {
     downloadUrl:
-      'https://github.com/ipfs/kubo/releases/download/v0.34.0/kubo_v0.34.0_darwin-arm64.tar.gz' as string,
+      'https://github.com/ipfs/kubo/releases/download/v0.34.1/kubo_v0.34.1_darwin-arm64.tar.gz' as string,
     fileName: './services/ipfs.tar.gz' as string,
     extractPath: './services/ipfs',
     runPath: './services/ipfs/kubo/ipfs' as string,
@@ -100,7 +101,7 @@ const configMacX64 = {
   ipfs: {
     ...configMacArm.ipfs,
     downloadUrl:
-      'https://github.com/ipfs/kubo/releases/download/v0.34.0/kubo_v0.34.0_darwin-amd64.tar.gz'
+      'https://github.com/ipfs/kubo/releases/download/v0.34.1/kubo_v0.34.1_darwin-amd64.tar.gz'
   }
 } as const satisfies OrchestratorConfig
 
@@ -109,10 +110,11 @@ const configLinux: typeof configMacArm = {
     ...configMacArm.proxyRouter,
     downloadUrl: process.env.SERVICE_PROXY_DOWNLOAD_URL_LINUX_X64
   },
+  // original b4406
   aiRuntime: {
     ...configMacArm.aiRuntime,
     downloadUrl:
-      'https://github.com/ggml-org/llama.cpp/releases/download/b4406/llama-b4406-bin-ubuntu-x64.zip'
+      'https://github.com/ggml-org/llama.cpp/releases/download/b5002/llama-b5002-bin-ubuntu-x64.zip'
   },
   aiModel: {
     ...configMacArm.aiModel
@@ -120,7 +122,7 @@ const configLinux: typeof configMacArm = {
   ipfs: {
     ...configMacArm.ipfs,
     downloadUrl:
-      'https://github.com/ipfs/kubo/releases/download/v0.34.0/kubo_v0.34.0_linux-amd64.tar.gz'
+      'https://github.com/ipfs/kubo/releases/download/v0.34.1/kubo_v0.34.1_linux-amd64.tar.gz'
   }
 }
 
@@ -132,7 +134,7 @@ const configLinuxArm: typeof configMacArm = {
   aiRuntime: {
     ...configMacArm.aiRuntime,
     downloadUrl:
-      'https://github.com/ggml-org/llama.cpp/releases/download/b4406/llama-b4406-bin-ubuntu-arm64.zip'
+      'https://github.com/ggml-org/llama.cpp/releases/download/b5002/llama-b5002-bin-ubuntu-arm64.zip'
   },
   aiModel: {
     ...configMacArm.aiModel
@@ -140,7 +142,7 @@ const configLinuxArm: typeof configMacArm = {
   ipfs: {
     ...configMacArm.ipfs,
     downloadUrl:
-      'https://github.com/ipfs/kubo/releases/download/v0.34.0/kubo_v0.34.0_linux-arm64.tar.gz'
+      'https://github.com/ipfs/kubo/releases/download/v0.34.1/kubo_v0.34.1_linux-arm64.tar.gz'
   }
 }
 
@@ -170,12 +172,14 @@ const configWin: typeof configMacArm = {
   ipfs: {
     ...configMacArm.ipfs,
     downloadUrl:
-      'https://github.com/ipfs/kubo/releases/download/v0.34.0/kubo_v0.34.0_windows-amd64.zip',
+      'https://github.com/ipfs/kubo/releases/download/v0.34.1/kubo_v0.34.1_windows-amd64.zip',
     fileName: './services/ipfs.zip',
     runPath: './services/ipfs/kubo/ipfs.exe'
   }
 }
-
+// *********************************************************************************  
+// WARNING: LLAMA.CPP DOES NOT SUPPORT ARM64 for GGUF (found one for win-llvm-arm64 so need to change model as well...no idea if it works)
+// *********************************************************************************
 const configWinArm: typeof configMacArm = {
   proxyRouter: {
     ...configMacArm.proxyRouter,
@@ -186,23 +190,26 @@ const configWinArm: typeof configMacArm = {
   aiRuntime: {
     ...configMacArm.aiRuntime,
     downloadUrl:
-      'https://github.com/ggml-org/llama.cpp/releases/download/b5002/llama-b5002-bin-win-avx2-arm64.zip',
+      'https://github.com/ggml-org/llama.cpp/releases/download/b5002/llama-b5002-bin-win-llvm-arm64.zip',
     runPath: './services/ai-runtime/llama-server.exe' as string,
     runArgs: [
       '--no-webui',
       '--model',
-      '../ai-model.gguf',
+      '../ai-model.llvm',
       '--port',
       `${process.env.SERVICE_AI_API_PORT}`
     ]
   },
   aiModel: {
-    ...configMacArm.aiModel
+    ...configMacArm.aiModel,
+    downloadUrl:
+    'https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q2_K.llvm',
+    fileName: './services/ai-model.llvm'
   },
   ipfs: {
     ...configMacArm.ipfs,
     downloadUrl:
-      'https://github.com/ipfs/kubo/releases/download/v0.34.0/kubo_v0.34.0_windows-arm64.zip',
+      'https://github.com/ipfs/kubo/releases/download/v0.34.1/kubo_v0.34.1_windows-arm64.zip',
     fileName: './services/ipfs.zip',
     runPath: './services/ipfs/kubo/ipfs.exe'
   }
