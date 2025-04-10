@@ -36,4 +36,14 @@ Logger.transports.file.format = formatFn
 Logger.transports.console.level = process.env.LOG_LEVEL
 Logger.transports.file.level = process.env.LOG_LEVEL
 
+Logger.silly('test')
+Logger.verbose('test')
+Logger.debug('test')
+Logger.info('test')
+Logger.warn('test')
+Logger.error('test')
+
+console.log('🚀 ~ Logger.ts ~ Logger.transports.console.level:', Logger.transports.console.level)
+console.log('🚀 ~ Logger.ts ~ Logger.transports.file.level:', Logger.transports.file.level)
+
 export default Logger

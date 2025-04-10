@@ -2,7 +2,7 @@ import styled from 'styled-components';
 
 // import 'react-tabs/style/react-tabs.css';
 import './styles.css';
-import { Btn, BaseBtn, TextInput } from '../common';
+import { Btn, TextInput } from '../common';
 
 export const Sublabel = styled.label`
   line-height: 1.4rem;
@@ -24,7 +24,7 @@ export const StyledBtn = styled(Btn)`
   font-size: 1.5rem;
   border-radius: 5px;
   padding: 0 0.6rem;
-  background-color: ${p => p.theme.colors.morMain};
+  background-color: ${(p) => p.theme.colors.morMain};
   color: black;
 
   @media (min-width: 1040px) {
@@ -36,11 +36,11 @@ export const StyledBtn = styled(Btn)`
 `;
 
 export const Subtitle = styled.h3`
-  color: ${p => p.theme.colors.dark};
+  color: ${(p) => p.theme.colors.dark};
 `;
 
 export const StyledParagraph = styled.p`
-  color: ${p => p.theme.colors.dark};
+  color: ${(p) => p.theme.colors.dark};
 
   span {
     font-weight: bold;
@@ -49,7 +49,7 @@ export const StyledParagraph = styled.p`
 
 export const Input = styled(TextInput)`
   outline: 0;
-  border: 1px solid ${p => p.theme.colors.morMain};
+  border: 1px solid ${(p) => p.theme.colors.morMain};
   background: transparent;
   border-radius: 5px;
   padding: 1.2rem 1.2rem;

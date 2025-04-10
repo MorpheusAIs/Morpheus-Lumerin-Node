@@ -67,7 +67,7 @@ export class Orchestrator {
       return this.stopAll()
     })
 
-    this.log.info('Orchestrator started')
+    this.log.info('========================Orchestrator started')
     this.emitStateUpdate()
 
     if (this.cfg.proxyRouter.downloadUrl) {
@@ -235,6 +235,47 @@ export class Orchestrator {
     this.emitStateUpdate()
   }
 
+  public async restartService(service: keyof OrchestratorConfig) {
+    const processMap = {
+      proxyRouter: this.proxyRouterProcess,
+      aiRuntime: this.aiRuntimeProcess,
+      ipfs: this.ipfsProcess
+    }
+    const process: BackgroundProcess | undefined = processMap[service]
+    if (!process) {
+      this.log.error(`Service ${service} not found`)
+      return
+    }
+    await process.stop()
+    this.emitStateUpdate()
+    await process.start()
+    this.emitStateUpdate()
+  }
+
+  async ping(service: keyof OrchestratorConfig): Promise<boolean> {
+    const processMap = {
+      proxyRouter: this.proxyRouterProcess,
+      aiRuntime: this.aiRuntimeProcess,
+      ipfs: this.ipfsProcess
+    }
+
+    const process: BackgroundProcess | undefined = processMap[service]
+    if (!process) {
+      const error = `Service ${service} not found`
+      this.log.error(error)
+      throw new Error(error)
+    }
+    try {
+      await process.ping(3000)
+      this.emitStateUpdate()
+      return true
+    } catch (error) {
+      this.log.error(`Service ${service} ping failed`, error)
+      this.emitStateUpdate()
+      return false
+    }
+  }
+
   private emitStateUpdate() {
     const orchestratorStatus = this.calculateOrchestratorStatus()
     this.onStateUpdate({
@@ -246,22 +287,28 @@ export class Orchestrator {
       ],
       startup: [
         {
+          id: 'ipfs',
           name: 'IPFS',
           status: this.ipfsProcess?.getState() ?? 'pending',
           error: this.ipfsProcess?.getError(),
-          stderrOutput: this.ipfsProcess?.getOutput()
+          stderrOutput: this.ipfsProcess?.getOutput(),
+          ports: this.cfg.ipfs.ports
         },
         {
+          id: 'aiRuntime',
           name: 'AI Runtime',
           status: this.aiRuntimeProcess?.getState() ?? 'pending',
           error: this.aiRuntimeProcess?.getError(),
-          stderrOutput: this.aiRuntimeProcess?.getOutput()
+          stderrOutput: this.aiRuntimeProcess?.getOutput(),
+          ports: this.cfg.aiRuntime.ports
         },
         {
+          id: 'proxyRouter',
           name: 'Proxy Router',
           status: this.proxyRouterProcess?.getState() ?? 'pending',
           error: this.proxyRouterProcess?.getError(),
-          stderrOutput: this.proxyRouterProcess?.getOutput()
+          stderrOutput: this.proxyRouterProcess?.getOutput(),
+          ports: this.cfg.proxyRouter.ports
         }
       ],
       orchestratorStatus

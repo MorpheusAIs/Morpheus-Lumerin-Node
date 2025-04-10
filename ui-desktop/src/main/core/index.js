@@ -19,14 +19,6 @@ function createCore() {
 
     const config = merge({}, givenConfig)
 
-    if (config.debug) {
-      logger.transports.console.level = 'debug'
-      logger.transports.file.level = 'debug'
-    } else {
-      logger.transports.console.level = 'warn'
-      logger.transports.file.level = 'warn'
-    }
-
     eventBus = new EventEmitter()
     eventBus.emit = function (eventName, ...args) {
       logger.debug('[Event] -', eventName)

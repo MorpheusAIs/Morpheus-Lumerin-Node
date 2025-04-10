@@ -14,6 +14,7 @@ import (
 	"github.com/ipfs/go-cid"
 	"github.com/ipfs/kubo/client/rpc"
 	iface "github.com/ipfs/kubo/core/coreiface"
+	"github.com/multiformats/go-multiaddr"
 )
 
 type IpfsManager struct {
@@ -34,13 +35,26 @@ type ProgressReader struct {
 type ProgressCallback func(downloaded, total int64) error
 
 // NewIpfsManager connects to the local Kubo (IPFS) node using the RPC client.
-func NewIpfsManager(log lib.ILogger) *IpfsManager {
-	node, err := rpc.NewLocalApi()
+func NewIpfsManager(ipfsAddress string, log lib.ILogger) *IpfsManager {
+	ma, err := multiaddr.NewMultiaddr(ipfsAddress)
 	if err != nil {
-		log.Error("Error creating IPFS client:", err)
-		return &IpfsManager{node: nil, log: log}
+		log.Error("invalid IPFSmultiaddr:", ipfsAddress, err)
+		return NewIpfsManagerDisabled(log)
 	}
+
+	node, err := rpc.NewApi(ma)
+	if err != nil {
+		log.Error("error connecting to IPFS:", err)
+		return NewIpfsManagerDisabled(log)
+	}
+
+	log.Info("connected to IPFS node")
 	return &IpfsManager{node: node, log: log}
+}
+
+func NewIpfsManagerDisabled(log lib.ILogger) *IpfsManager {
+	log.Warnf("IPFS is disabled")
+	return &IpfsManager{node: nil, log: log}
 }
 
 func (i *IpfsManager) IsNodeReady() error {

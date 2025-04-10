@@ -10,6 +10,7 @@ const configMacArm = {
     downloadUrl: process.env.SERVICE_PROXY_DOWNLOAD_URL_MAC_ARM64,
     fileName: './services/proxy-router/proxy-router' as string,
     runPath: './services/proxy-router/proxy-router' as string,
+    ports: [process.env.SERVICE_PROXY_PORT, process.env.SERVICE_PROXY_API_PORT],
     env: {
       DIAMOND_CONTRACT_ADDRESS: process.env.DIAMOND_ADDRESS,
       MOR_TOKEN_ADDRESS: process.env.TOKEN_ADDRESS,
@@ -27,7 +28,8 @@ const configMacArm = {
       ETH_NODE_ADDRESS: '',
       PROXY_STORE_CHAT_CONTEXT: 'true',
       PROXY_STORAGE_PATH: './data/',
-      LOG_COLOR: 'false'
+      LOG_COLOR: 'false',
+      IPFS_MULTADDR: `/ip4/127.0.0.1/tcp/${process.env.SERVICE_IPFS_API_PORT}`
     },
     modelsConfig: JSON.stringify(
       buildLocalModelsConfig(
@@ -47,6 +49,7 @@ const configMacArm = {
     fileName: './services/llama.zip' as string,
     extractPath: './services/ai-runtime',
     runPath: './services/ai-runtime/build/bin/llama-server' as string,
+    ports: [process.env.SERVICE_AI_API_PORT],
     runArgs: [
       '--no-webui',
       '--model',
@@ -69,6 +72,7 @@ const configMacArm = {
     fileName: './services/ipfs.tar.gz' as string,
     extractPath: './services/ipfs',
     runPath: './services/ipfs/kubo/ipfs' as string,
+    ports: [process.env.SERVICE_IPFS_API_PORT],
     runArgs: [
       'daemon',
       '--init',

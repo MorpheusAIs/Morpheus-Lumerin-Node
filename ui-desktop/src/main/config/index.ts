@@ -21,6 +21,7 @@ const config = {
   trackingId: process.env.TRACKING_ID,
   isFailoverEnabled: process.env.FAILOVER_ENABLED
 }
+
 console.log('🚀 ~ config:', config)
 
 export default config

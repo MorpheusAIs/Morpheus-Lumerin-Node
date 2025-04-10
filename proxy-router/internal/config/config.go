@@ -3,10 +3,10 @@ package config
 import (
 	"fmt"
 	"math/big"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
-	"path/filepath"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/multicall"
@@ -38,6 +38,10 @@ type Config struct {
 		Multicall3Addr     *common.Address `env:"MULTICALL3_ADDR" flag:"multicall3-addr" validate:"omitempty,eth_addr" desc:"multicall3 custom contract address"`
 	}
 	Environment string `env:"ENVIRONMENT" flag:"environment"`
+	IPFS        struct {
+		Disabled bool   `env:"IPFS_DISABLED" flag:"ipfs-disabled" desc:"disable IPFS"`
+		Address  string `env:"IPFS_MULTADDR" flag:"ipfs-multaddr" validate:"omitempty" desc:"IPFS API multiaddress"`
+	}
 	Marketplace struct {
 		DiamondContractAddress *common.Address `env:"DIAMOND_CONTRACT_ADDRESS" flag:"diamond-address"   validate:"omitempty,eth_addr"`
 		MorTokenAddress        *common.Address `env:"MOR_TOKEN_ADDRESS"        flag:"mor-token-address" validate:"omitempty,eth_addr"`
@@ -54,16 +58,16 @@ type Config struct {
 		LevelStorage string `env:"LOG_LEVEL_STORAGE"     flag:"log-level-storage"     validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
 	}
 	Proxy struct {
-		Address            string    `env:"PROXY_ADDRESS" flag:"proxy-address" validate:"required,hostname_port"`
-		StoragePath        string    `env:"PROXY_STORAGE_PATH"    flag:"proxy-storage-path"    validate:"omitempty,dirpath" desc:"enables file storage and sets the folder path"`
-		StoreChatContext   *lib.Bool `env:"PROXY_STORE_CHAT_CONTEXT" flag:"proxy-store-chat-context" desc:"store chat context in the proxy storage"`
-		ForwardChatContext *lib.Bool `env:"PROXY_FORWARD_CHAT_CONTEXT" flag:"proxy-forward-chat-context" desc:"prepend whole stored message history to the prompt"`
-		ModelsConfigPath   string    `env:"MODELS_CONFIG_PATH" flag:"models-config-path" validate:"omitempty"`
+		Address             string    `env:"PROXY_ADDRESS" flag:"proxy-address" validate:"required,hostname_port"`
+		StoragePath         string    `env:"PROXY_STORAGE_PATH"    flag:"proxy-storage-path"    validate:"omitempty,dirpath" desc:"enables file storage and sets the folder path"`
+		StoreChatContext    *lib.Bool `env:"PROXY_STORE_CHAT_CONTEXT" flag:"proxy-store-chat-context" desc:"store chat context in the proxy storage"`
+		ForwardChatContext  *lib.Bool `env:"PROXY_FORWARD_CHAT_CONTEXT" flag:"proxy-forward-chat-context" desc:"prepend whole stored message history to the prompt"`
+		ModelsConfigPath    string    `env:"MODELS_CONFIG_PATH" flag:"models-config-path" validate:"omitempty"`
 		ModelsConfigContent string    `env:"MODELS_CONFIG_CONTENT" flag:"models-config-content" validate:"omitempty" desc:"content of the models config file"`
-		RatingConfigPath   string    `env:"RATING_CONFIG_PATH" flag:"rating-config-path" validate:"omitempty" desc:"path to the rating config file"`
-		CookieFilePath     string    `env:"COOKIE_FILE_PATH" flag:"cookie-file-path" validate:"omitempty" desc:"path to the cookie file"`
-		CookieContent      string    `env:"COOKIE_CONTENT" flag:"cookie-content" validate:"omitempty" desc:"content of the cookie file"`
-		AuthConfigFilePath string    `env:"AUTH_CONFIG_FILE_PATH" flag:"auth-config-file-path" validate:"omitempty"`
+		RatingConfigPath    string    `env:"RATING_CONFIG_PATH" flag:"rating-config-path" validate:"omitempty" desc:"path to the rating config file"`
+		CookieFilePath      string    `env:"COOKIE_FILE_PATH" flag:"cookie-file-path" validate:"omitempty" desc:"path to the cookie file"`
+		CookieContent       string    `env:"COOKIE_CONTENT" flag:"cookie-content" validate:"omitempty" desc:"content of the cookie file"`
+		AuthConfigFilePath  string    `env:"AUTH_CONFIG_FILE_PATH" flag:"auth-config-file-path" validate:"omitempty"`
 	}
 	System struct {
 		Enable           bool   `env:"SYS_ENABLE"              flag:"sys-enable" desc:"enable system level configuration adjustments"`
@@ -179,6 +183,11 @@ func (cfg *Config) SetDefaults() {
 	}
 	if cfg.Proxy.AuthConfigFilePath == "" {
 		cfg.Proxy.AuthConfigFilePath = "./proxy.conf"
+	}
+
+	// IPFS
+	if cfg.IPFS.Address == "" {
+		cfg.IPFS.Address = "localhost:5001"
 	}
 
 	cfg.Log.FolderPath = filepath.FromSlash(cfg.Log.FolderPath)

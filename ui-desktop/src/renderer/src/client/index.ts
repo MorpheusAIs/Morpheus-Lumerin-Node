@@ -232,7 +232,9 @@ const createClient = function (createStore) {
 
     // Startup services
     startServices: utils.forwardToMainProcess('start-services', 750000),
-  } as unknown as NoCoreHandlers;
+    restartService: utils.forwardToMainProcess('restart-service', 750000),
+    pingService: utils.forwardToMainProcess('ping-service', 750000),
+  };
 
   const api = {
     ...utils,

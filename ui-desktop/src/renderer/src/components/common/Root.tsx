@@ -52,6 +52,15 @@ class Root extends React.Component<{ servicesState: LoadingState }> {
       });
   }
 
+  componentDidUpdate(): void {
+    if (
+      this.props.servicesState.orchestratorStatus === 'ready' &&
+      !this.state.startupComplete
+    ) {
+      this.setState({ startupComplete: true });
+    }
+  }
+
   onOnboardingCompleted = (data) => {
     return (
       this.props.client
@@ -93,11 +102,13 @@ class Root extends React.Component<{ servicesState: LoadingState }> {
       hasEnoughData,
     } = this.props;
 
-    const { onboardingComplete } = this.state;
+    const { onboardingComplete, startupComplete } = this.state;
+
+    // return <StartupComponent />;
 
     if (onboardingComplete === null) return null;
 
-    if (this.props.servicesState.orchestratorStatus !== 'ready') {
+    if (!startupComplete) {
       return <StartupComponent />;
     }
 
@@ -126,7 +137,7 @@ const mapStateToProps = (state) => ({
   hasEnoughData: selectors.hasEnoughData(state),
   isAuthBypassed: selectors.getIsAuthBypassed(state),
   sellerDefaultCurrency: selectors.getSellerDefaultCurrency(state),
-  servicesState: selectors.getServicesState(state),
+  servicesState: selectors.getServices(state),
   config: state.config,
 });
 

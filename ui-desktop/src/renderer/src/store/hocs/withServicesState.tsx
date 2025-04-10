@@ -14,7 +14,7 @@ const withServicesState = (WrappedComponent: React.ComponentType<any>) => {
   }
 
   const mapStateToProps = (state) => ({
-    services: selectors.getServicesState(state),
+    services: selectors.getServices(state),
   });
 
   return withClient(connect(mapStateToProps)(Container));
