@@ -291,10 +291,22 @@ jobs:
           mv mor-cli mor-cli-${FULLTAG}-win-arm64.exe
           echo "✅ Built executables for all platforms"
 
-      - name: Upload artifacts
+      - name: Upload CLI artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: proxy-router-executables
+          name: cli
+          path: |
+            cli/mor-cli-${FULLTAG}-linux-x86_64
+            cli/mor-cli-${FULLTAG}-linux-arm64
+            cli/mor-cli-${FULLTAG}-mac-x64
+            cli/mor-cli-${FULLTAG}-mac-arm64
+            cli/mor-cli-${FULLTAG}-win-x64.exe
+            cli/mor-cli-${FULLTAG}-win-arm64.exe
+    
+      - name: Upload ProxyRouter artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: proxy-router
           path: |
             proxy-router/proxy-router-${FULLTAG}-linux-x86_64
             proxy-router/proxy-router-${FULLTAG}-linux-arm64
@@ -302,12 +314,6 @@ jobs:
             proxy-router/proxy-router-${FULLTAG}-mac-arm64
             proxy-router/proxy-router-${FULLTAG}-win-x64.exe
             proxy-router/proxy-router-${FULLTAG}-win-arm64.exe
-            cli/mor-cli-${FULLTAG}-linux-x86_64
-            cli/mor-cli-${FULLTAG}-linux-arm64
-            cli/mor-cli-${FULLTAG}-mac-x64
-            cli/mor-cli-${FULLTAG}-mac-arm64
-            cli/mor-cli-${FULLTAG}-win-x64.exe
-            cli/mor-cli-${FULLTAG}-win-arm64.exe
 
   GitLab-Deploy-ProxyRouter:
     name: Deploy ProxyRouterto GitLab
@@ -727,17 +733,17 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
+      - name: Verify artifact contents
+        run: |
+          echo "🔍 Contents of ./artifact:"
+          ls -lh ./artifact
+      
       - name: Download artifacts
         id: download-artifact
         uses: actions/download-artifact@v4
         with:
           path: ./artifact
           merge-multiple: true
-
-      - name: Folder structure
-        run: |
-          mv ./artifact/proxy-router/* ./artifact
-          mv ./artifact/cli/* ./artifact
 
       - name: Create release
         id: create_release
