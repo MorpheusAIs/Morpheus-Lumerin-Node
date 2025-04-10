@@ -1,5 +1,4 @@
 import { dialog } from 'electron'
-import logger from '../../../logger'
 import restart from '../electron-restart'
 import dbManager from '../database'
 import storage from '../storage'
@@ -32,13 +31,15 @@ import { Core } from './core.types'
 import WalletError from '../../client/WalletError'
 import keys from '../keys'
 import { cfg } from '../../../../../orchestrator.config'
+import { OrchestratorConfig } from '../../../orchestrator/orchestrator.types'
 
 let authentication: Record<string, string> | null = null
+let orchestrator: Orchestrator | null = null
 
 export const validatePassword = (data) => auth.isValidPassword(data)
 
 export const clearCache = () => {
-  logger.verbose('Clearing database cache')
+  log.verbose('Clearing database cache')
   return dbManager.getDb().dropDatabase().then(restart)
 }
 
@@ -65,7 +66,7 @@ export const getProxyRouterSettings = async () => {
 }
 
 export const handleClientSideError = (data) => {
-  logger.error('client-side error', data.message, data.stack)
+  log.error('client-side error', data.message, data.stack)
 }
 
 export const getDefaultCurrency = async () => getDefaultCurrencySetting()
@@ -616,14 +617,35 @@ export const getIpfsPinnedFiles = async (): Promise<{
   }
 }
 
+const getOrchestrator = (core: Core): Orchestrator => {
+  if (!orchestrator) {
+    orchestrator = new Orchestrator(
+      cfg,
+      (state) => {
+        core.emitter.emit('services-state', state)
+      },
+      log
+    )
+  }
+  return orchestrator
+}
+
 export const startServices = async (_, core: Core) => {
-  await new Orchestrator(
-    cfg,
-    (state) => {
-      core.emitter.emit('services-state', state)
-    },
-    log
-  ).startAll()
+  log.silly('startServices')
+  log.verbose('startServices')
+  log.debug('startServices')
+  log.info('startServices')
+  log.warn('startServices')
+  log.error('startServices')
+  await getOrchestrator(core).startAll()
+}
+
+export const restartService = async (data: { service: keyof OrchestratorConfig }, core: Core) => {
+  await getOrchestrator(core).restartService(data.service)
+}
+
+export const pingService = async (data: { service: keyof OrchestratorConfig }, core: Core) => {
+  return await getOrchestrator(core).ping(data.service)
 }
 
 export const onboardingCompleted = async (data, core: Core) => {
@@ -697,7 +719,7 @@ export const onLoginSubmit = ({ password }, core: Core) => {
 
       return isValid
     })
-    .catch((err) => logger.error('onLoginSubmit err', err))
+    .catch((err) => log.error('onLoginSubmit err', err))
 }
 
 export async function openWallet(password: string, { emitter }: Core) {

@@ -1,4 +1,3 @@
-import React from 'react';
 import styled from 'styled-components';
 
 const Container = styled.div`
@@ -6,22 +5,22 @@ const Container = styled.div`
   flex-shrink: 0;
 `;
 
-const Tab = styled.button`
+const Tab = styled.button<{ isDisabled: boolean; isActive: boolean }>`
   font: inherit;
-  cursor: ${p => (p.isDisabled ? 'not-allowed' : 'pointer')};
+  cursor: ${(p) => (p.isDisabled ? 'not-allowed' : 'pointer')};
   flex-grow: 1;
   border: none;
   border-bottom: 2px solid;
-  border-bottom-color: ${p =>
+  border-bottom-color: ${(p) =>
     p.isActive ? p.theme.colors.primary : p.theme.colors.darkShade};
   transition: 0.5s;
   padding: 2rem;
-  color: ${p =>
+  color: ${(p) =>
     p.isActive
       ? p.theme.colors.light
       : `rgba(255,255,255,${p.isDisabled ? '0.2' : '0.5'})`};
   border-radius: 0;
-  background: ${p =>
+  background: ${(p) =>
     p.isActive
       ? 'linear-gradient(253deg, rgba(66, 53, 119, 0.4), rgba(126, 97, 248, 0.1))'
       : 'transparent'};
@@ -37,18 +36,26 @@ const Tab = styled.button`
   }
 `;
 
-export default function Tabs({ onClick, active, items }) {
-  onClick = ({ currentTarget }) => onClick(currentTarget.dataset.tab);
+type Props = {
+  onClick: (tab: string | undefined) => void;
+  active: string;
+  items: { label: string; id: string; disabled?: boolean }[];
+};
 
+export default function Tabs({ onClick, active, items }: Props) {
   return (
     <Container>
       {items.map(({ label, id, disabled, ...other }) => (
         <Tab
           data-testid={`${id}-tab`}
-          isDisabled={disabled}
+          isDisabled={!!disabled}
           isActive={active === id}
           data-tab={id}
-          onClick={disabled ? null : this.onClick}
+          onClick={
+            disabled
+              ? undefined
+              : ({ currentTarget }) => onClick(currentTarget.dataset.tab)
+          }
           key={id}
           {...other}
         >

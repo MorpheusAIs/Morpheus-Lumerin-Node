@@ -50,17 +50,17 @@ export class BackgroundProcess {
     this.healthCheckConfig = healthCheckConfig
   }
 
-  private setState(newState?: ProcessState, error?: string, output?: string) {
+  private setState(newState?: ProcessState, error?: string | null) {
     if (newState !== undefined) {
       this.state = newState
     }
-    if (error !== undefined) {
+    if (error === null) {
+      this.error = undefined
+    } else if (error !== undefined) {
       this.error = error
     }
-    if (output !== undefined) {
-      this.output = output
-    }
-    this.onStateChange?.({ state: this.state, error: this.error, output: this.output })
+
+    this.onStateChange?.({ state: this.state, error: this.error, output: this.output.join('\n') })
   }
 
   async start() {
@@ -68,7 +68,7 @@ export class BackgroundProcess {
       try {
         const cwd = path.resolve(path.dirname(this.command))
 
-        this.setState('starting')
+        this.setState('starting', null)
         this.log.info('process starting')
 
         try {
@@ -104,7 +104,7 @@ export class BackgroundProcess {
         child.on('close', (code) => {
           const errMessage = `Process closed with code ${code}`
           this.log.info(errMessage)
-          this.setState('stopped', errMessage, this.output.join('\n'))
+          this.setState('stopped', errMessage)
           if (this.state === 'starting') {
             return reject('closed with code ${code}')
           }
@@ -116,61 +116,7 @@ export class BackgroundProcess {
         })
 
         // Perform health check if configured
-        if (this.healthCheckConfig) {
-          try {
-            const startTime = Date.now()
-            const pollInterval =
-              this.healthCheckConfig.pollInterval ??
-              BackgroundProcess.DEFAULT_HEALTH_CHECK_POLL_INTERVAL
-            const timeout =
-              this.healthCheckConfig.timeout ?? BackgroundProcess.DEFAULT_HEALTH_CHECK_TIMEOUT
-            let isAvailable = false
-
-            while (!isAvailable && this.state === 'starting' && Date.now() - startTime < timeout) {
-              try {
-                const response = await fetch(this.healthCheckConfig!.url, {
-                  method: this.healthCheckConfig!.method || 'GET'
-                })
-                if (response.ok) {
-                  isAvailable = true
-                  this.log.info('Service health check passed')
-                  this.setState('running')
-                  break
-                }
-                const resBody = await response.text()
-                this.log.info(
-                  `Health check attempt failed with status ${response.status}, body "${resBody}". Retrying...`
-                )
-              } catch (error) {
-                this.log.info(
-                  'Health check attempt failed, retrying...',
-                  this.healthCheckConfig!.url,
-                  error
-                )
-              }
-
-              // Wait before next attempt
-              await new Promise((resolve) => setTimeout(resolve, pollInterval))
-            }
-
-            if (!isAvailable && this.state === 'starting') {
-              throw new Error(
-                `Health check failed after ${timeout}ms - service did not become available`
-              )
-            }
-          } catch (error: any) {
-            this.log.error('Health check failed:', error)
-            // Only set error if there isn't one already
-            if (!this.error) {
-              this.setState('stopped', `Health check failed: ${error?.message}`)
-            }
-            await this.stop()
-            throw error
-          }
-        } else {
-          // If no health check is configured, set state to running immediately
-          this.setState('running')
-        }
+        await this.ping()
 
         resolve(child)
       } catch (err) {
@@ -225,6 +171,66 @@ export class BackgroundProcess {
     })
   }
 
+  async ping(timeoutArg?: number) {
+    if (this.healthCheckConfig) {
+      const timeout =
+        timeoutArg ??
+        this.healthCheckConfig.timeout ??
+        BackgroundProcess.DEFAULT_HEALTH_CHECK_TIMEOUT
+      try {
+        const startTime = Date.now()
+        const pollInterval =
+          this.healthCheckConfig.pollInterval ??
+          BackgroundProcess.DEFAULT_HEALTH_CHECK_POLL_INTERVAL
+        let isAvailable = false
+
+        while (!isAvailable && Date.now() - startTime < timeout) {
+          try {
+            const response = await fetch(this.healthCheckConfig!.url, {
+              method: this.healthCheckConfig!.method || 'GET'
+            })
+            if (response.ok) {
+              isAvailable = true
+              this.log.info('Service health check passed')
+              this.setState('running')
+              break
+            }
+            const resBody = await response.text()
+            this.log.info(
+              `Health check attempt failed with status ${response.status}, body "${resBody}". Retrying...`
+            )
+          } catch (error) {
+            this.log.info(
+              'Health check attempt failed, retrying...',
+              this.healthCheckConfig!.url,
+              error
+            )
+          }
+
+          // Wait before next attempt
+          await new Promise((resolve) => setTimeout(resolve, pollInterval))
+        }
+
+        if (!isAvailable) {
+          throw new Error(
+            `Health check failed after ${timeout}ms - service did not become available`
+          )
+        }
+      } catch (error: any) {
+        this.log.error('Health check failed:', error)
+        // Only set error if there isn't one already
+        if (!this.error) {
+          this.setState('stopped', `Health check failed: ${error?.message}`)
+        }
+        await this.stop()
+        throw error
+      }
+    } else {
+      // If no health check is configured, set state to running immediately
+      this.setState('running')
+    }
+  }
+
   getState() {
     return this.state
   }
@@ -234,6 +240,6 @@ export class BackgroundProcess {
   }
 
   getOutput() {
-    return this.output
+    return this.output.join('\n')
   }
 }

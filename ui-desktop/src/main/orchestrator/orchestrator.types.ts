@@ -10,10 +10,12 @@ export type DownloadItem = {
 }
 
 export interface StartupItem {
+  id: keyof OrchestratorConfig
   name: string
   status: StartupStatus
   error?: string
   stderrOutput?: string
+  ports?: number[]
 }
 
 export type LoadingState = {
@@ -34,6 +36,7 @@ export type OrchestratorConfig = {
     downloadUrl: string | null
     fileName: string
     runPath: string
+    ports: number[] // ports exposed by the service
     runArgs?: string[]
     env: Record<string, string>
     modelsConfig: string
@@ -45,6 +48,7 @@ export type OrchestratorConfig = {
     fileName: string
     extractPath: string
     runPath: string
+    ports: number[] // ports exposed by the service
     runArgs: string[]
     probe: ProbeConfig
   }
@@ -58,6 +62,7 @@ export type OrchestratorConfig = {
     extractPath: string
     runPath: string
     runArgs: string[]
+    ports: number[] // ports exposed by the service
     probe: ProbeConfig
   }
 }
