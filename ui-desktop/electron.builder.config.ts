@@ -21,7 +21,7 @@ const config: Configuration = {
     target: ['portable']
   },
   portable: {
-    artifactName: '${name}-${version}-${arch}-${os}.${ext}'
+    artifactName: '${name}-${version}-${os}-${arch}.${ext}'
   },
   mac: {
     executableName: 'MorpheusUI',
@@ -36,14 +36,14 @@ const config: Configuration = {
     },
     target: ['dmg'],
     notarize: false,
-    artifactName: '${name}-${version}-${arch}-${os}.${ext}'
+    artifactName: '${name}-${version}-${os}-${arch}.${ext}'
   },
   linux: {
     target: ['AppImage'],
     maintainer: 'mor.org',
     category: 'Utility',
     executableName: 'MorpheusUI',
-    artifactName: '${name}-${version}-${arch}-${os}.${ext}'
+    artifactName: '${name}-${version}-${os}-${arch}.${ext}'
   },
   npmRebuild: false,
   publish: {

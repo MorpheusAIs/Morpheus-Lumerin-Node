@@ -28,8 +28,18 @@
     "postinstall": "patch-package && electron-builder install-app-deps || true",
     "build:unpack": "npm run build && electron-builder --config electron.builder.config.ts --dir",
     "build:win": "electron-vite build && electron-builder --config electron.builder.config.ts --win portable",
+    "build:win:x64": "electron-vite build && electron-builder --config electron.builder.config.ts --win portable --x64",
+    "build:win:arm64": "electron-vite build && electron-builder --config electron.builder.config.ts --win portable --arm64",
+    "build:win:arch": "electron-vite build && electron-builder --config electron.builder.config.ts --win portable --$ARCH",
     "build:mac": "electron-vite build && electron-builder --config electron.builder.config.ts --mac",
+    "build:mac:x64": "electron-vite build && electron-builder --config electron.builder.config.ts --mac --x64",
+    "build:mac:arm64": "electron-vite build && electron-builder --config electron.builder.config.ts --mac --arm64",
+    "build:mac:arch": "electron-vite build && electron-builder --config electron.builder.config.ts --mac --$ARCH",
     "build:linux": "electron-vite build && electron-builder --config electron.builder.config.ts --linux AppImage",
+    "build:linux-x64": "electron-vite build && electron-builder --config electron.builder.config.ts --linux AppImage --arm64=false --x64",
+    "build:linux-arm64": "electron-vite build && electron-builder --config electron.builder.config.ts --linux AppImage --arm64",
+    "build:linux:arch": "electron-vite build && electron-builder --config electron.builder.config.ts --linux AppImage --$ARCH",
+  
     "pkg": "electron-builder --config electron.builder.config.ts --mac"
   },
   "dependencies": {
