@@ -517,7 +517,7 @@ jobs:
       - name: Copy Environment Files
         uses: ./.github/actions/copy_env_files
       
-      - name: Build UI (Linux ARM64) in Docker
+      - name: Build Linux ARM64 UI inside Docker
         run: |
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
           docker run --rm --platform linux/arm64 \
@@ -525,12 +525,13 @@ jobs:
             -w /app/ui-desktop \
             -e NODE_ENV=development \
             -e ENV=production \
-            --env-file ui-desktop/.env \
+            --env-file /app/ui-desktop/.env \
             node:20-bullseye bash -c "\
               apt-get update && \
-              apt-get install -y wget curl python3-pip libarchive-tools && \
-              npm install -g yarn && \
-              yarn install --network-timeout 600000 && \
+              apt-get install -y curl wget python3-pip libarchive-tools && \
+              corepack enable && \
+              corepack prepare yarn@stable --activate && \
+              NODE_ENV=development yarn install --network-timeout 600000 && \
               sed -i 's/\"version\": \".*\"/\"version\": \"$FULLTAG\"/' package.json && \
               yarn run patch-package || true && \
               yarn run build:linux-arm64"
