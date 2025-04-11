@@ -520,7 +520,6 @@ jobs:
             node:20-bullseye bash -c "\
               apt-get update && \
               apt-get install -y wget curl python3-pip libarchive-tools && \
-              npm install -g yarn && \
               yarn install --network-timeout 600000 && \
               sed -i 's/\"version\": \".*\"/\"version\": \"$FULLTAG\"/' package.json && \
               yarn build:linux-arm64"
