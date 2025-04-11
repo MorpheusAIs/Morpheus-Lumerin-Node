@@ -523,17 +523,17 @@ jobs:
           docker run --rm --platform linux/arm64 \
             -v $PWD:/app \
             -w /app/ui-desktop \
-            -e NODE_ENV=development \
             -e ENV=production \
-            --env-file /app/ui-desktop/.env \
+            --env-file $PWD/ui-desktop/.env \
             node:20-bullseye bash -c "\
               apt-get update && \
               apt-get install -y curl wget python3-pip libarchive-tools && \
               corepack enable && \
               corepack prepare yarn@stable --activate && \
-              NODE_ENV=development yarn install --network-timeout 600000 && \
-              sed -i 's/\"version\": \".*\"/\"version\": \"$FULLTAG\"/' package.json && \
+              export NODE_ENV=development && \
+              yarn install --network-timeout 600000 && \
               yarn run patch-package || true && \
+              sed -i 's/\"version\": \".*\"/\"version\": \"$FULLTAG\"/' package.json && \
               yarn run build:linux-arm64"
 
       - name: Upload Linux ARM64 UI artifact
