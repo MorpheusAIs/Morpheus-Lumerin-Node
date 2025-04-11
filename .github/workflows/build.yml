@@ -531,6 +531,10 @@ jobs:
               corepack enable && \
               corepack prepare yarn@stable --activate && \
               export NODE_ENV=development && \
+              echo "🔍 🔍 🔍 Dumping ENV and .env contents inside container🔍 🔍 🔍 " && \
+              printenv | sort && \  
+              echo "--- .env file content ---" && \
+              cat .env || echo "⚠️ .env not found" && \
               yarn install --network-timeout 600000 && \
               yarn run patch-package || true && \
               sed -i 's/\"version\": \".*\"/\"version\": \"$FULLTAG\"/' package.json && \
