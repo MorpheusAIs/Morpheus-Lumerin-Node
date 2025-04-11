@@ -220,100 +220,100 @@ jobs:
   #         docker push $BUILDIMAGE:latest || (echo "❌ Failed to push image as :latest" && exit 1)
   #         echo "✅ Proxy-Router Push $BUILDIMAGE:latest Tag Successful!"
 
-  # Build-Service-Executables:
-  #   name: Build Service Executables
-  #   if: |
-  #     github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
-  #     (
-  #       (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
-  #       (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
-  #     )
-  #   needs: Generate-Tag
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Checkout repository
-  #       uses: actions/checkout@v4
-  #       with:
-  #         fetch-depth: 0
-  #         fetch-tags: true
+  Build-Service-Executables:
+    name: Build Service Executables
+    if: |
+      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
+      )
+    needs: Generate-Tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
-  #     - name: Set up Go
-  #       uses: actions/setup-go@v5
-  #       with:
-  #         go-version: "1.22.x"
-  #         cache-dependency-path: proxy-router/go.sum
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+          cache-dependency-path: proxy-router/go.sum
 
-  #     - name: Build proxy-router executables for all platforms
-  #       run: |
-  #         FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}  
-  #         cd proxy-router
-  #         # Linux X64
-  #         TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=linux GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-linux-amd64 ./build.sh || (echo "❌ Failed to build Linux X64 executable" && exit 1)
-  #         mv proxy-router proxy-router-${FULLTAG}-linux-x86_64
-  #         # Linux ARM64
-  #         TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=linux GOARCH=arm64 OUTPUT=proxy-router-${FULLTAG}-linux-arm64 ./build.sh || (echo "❌ Failed to build Linux ARM64 executable" && exit 1)
-  #         mv proxy-router proxy-router-${FULLTAG}-linux-arm64
-  #         # macOS Intel
-  #         TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-mac-amd64 ./build.sh || (echo "❌ Failed to build macOS X64 executable" && exit 1)
-  #         mv proxy-router proxy-router-${FULLTAG}-mac-x64
-  #         # macOS ARM (Apple Silicon)
-  #         TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=arm64 OUTPUT=proxy-router-${FULLTAG}-mac-arm64 ./build.sh || (echo "❌ Failed to build macOS ARM64 executable" && exit 1)
-  #         mv proxy-router proxy-router-${FULLTAG}-mac-arm64
-  #         # Windows X64
-  #         TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=windows GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-win-amd64.exe ./build.sh || (echo "❌ Failed to build Windows X64 executable" && exit 1)
-  #         mv proxy-router proxy-router-${FULLTAG}-win-x64.exe
-  #         # # Windows ARM64
-  #         # TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=windows GOARCH=arm64 OUTPUT=proxy-router-${FULLTAG}-win-arm64.exe ./build.sh || (echo "❌ Failed to build Windows ARM64 executable" && exit 1)
-  #         # mv proxy-router proxy-router-${FULLTAG}-win-arm64.exe
-  #         echo "✅ Built executables for all platforms"
+      - name: Build proxy-router executables for all platforms
+        run: |
+          FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}  
+          cd proxy-router
+          # Linux X64
+          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=linux GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-linux-amd64 ./build.sh || (echo "❌ Failed to build Linux X64 executable" && exit 1)
+          mv proxy-router proxy-router-${FULLTAG}-linux-x86_64
+          # Linux ARM64
+          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=linux GOARCH=arm64 OUTPUT=proxy-router-${FULLTAG}-linux-arm64 ./build.sh || (echo "❌ Failed to build Linux ARM64 executable" && exit 1)
+          mv proxy-router proxy-router-${FULLTAG}-linux-arm64
+          # macOS Intel
+          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-mac-amd64 ./build.sh || (echo "❌ Failed to build macOS X64 executable" && exit 1)
+          mv proxy-router proxy-router-${FULLTAG}-mac-x64
+          # macOS ARM (Apple Silicon)
+          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=arm64 OUTPUT=proxy-router-${FULLTAG}-mac-arm64 ./build.sh || (echo "❌ Failed to build macOS ARM64 executable" && exit 1)
+          mv proxy-router proxy-router-${FULLTAG}-mac-arm64
+          # Windows X64
+          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=windows GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-win-amd64.exe ./build.sh || (echo "❌ Failed to build Windows X64 executable" && exit 1)
+          mv proxy-router proxy-router-${FULLTAG}-win-x64.exe
+          # # Windows ARM64
+          # TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=windows GOARCH=arm64 OUTPUT=proxy-router-${FULLTAG}-win-arm64.exe ./build.sh || (echo "❌ Failed to build Windows ARM64 executable" && exit 1)
+          # mv proxy-router proxy-router-${FULLTAG}-win-arm64.exe
+          echo "✅ Built executables for all platforms"
 
-  #     - name: Build CLI Executables for all platforms
-  #       run: |
-  #         FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}  
-  #         cd cli
-  #         # Linux X64
-  #         GOOS=linux GOARCH=amd64 make build || (echo "❌ Failed to build Linux X64 executable" && exit 1)
-  #         mv mor-cli mor-cli-${FULLTAG}-linux-x86_64
-  #         # Linux ARM64
-  #         GOOS=linux GOARCH=arm64 make build || (echo "❌ Failed to build Linux ARM64 executable" && exit 1)
-  #         mv mor-cli mor-cli-${FULLTAG}-linux-arm64
-  #         # macOS Intel
-  #         GOOS=darwin GOARCH=amd64 make build || (echo "❌ Failed to build macOS X64 executable" && exit 1)
-  #         mv mor-cli mor-cli-${FULLTAG}-mac-x64
-  #         # macOS ARM (Apple Silicon)
-  #         GOOS=darwin GOARCH=arm64 make build || (echo "❌ Failed to build macOS ARM64 executable" && exit 1)
-  #         mv mor-cli mor-cli-${FULLTAG}-mac-arm64
-  #         # Windows X64
-  #         GOOS=windows GOARCH=amd64 make build || (echo "❌ Failed to build Windows X64 executable" && exit 1)
-  #         mv mor-cli mor-cli-${FULLTAG}-win-x64.exe
-  #         # # Windows ARM64
-  #         # GOOS=windows GOARCH=arm64 make build || (echo "❌ Failed to build Windows ARM64 executable" && exit 1)
-  #         # mv mor-cli mor-cli-${FULLTAG}-win-arm64.exe
-  #         echo "✅ Built executables for all platforms"
+      - name: Build CLI Executables for all platforms
+        run: |
+          FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}  
+          cd cli
+          # Linux X64
+          GOOS=linux GOARCH=amd64 make build || (echo "❌ Failed to build Linux X64 executable" && exit 1)
+          mv mor-cli mor-cli-${FULLTAG}-linux-x86_64
+          # Linux ARM64
+          GOOS=linux GOARCH=arm64 make build || (echo "❌ Failed to build Linux ARM64 executable" && exit 1)
+          mv mor-cli mor-cli-${FULLTAG}-linux-arm64
+          # macOS Intel
+          GOOS=darwin GOARCH=amd64 make build || (echo "❌ Failed to build macOS X64 executable" && exit 1)
+          mv mor-cli mor-cli-${FULLTAG}-mac-x64
+          # macOS ARM (Apple Silicon)
+          GOOS=darwin GOARCH=arm64 make build || (echo "❌ Failed to build macOS ARM64 executable" && exit 1)
+          mv mor-cli mor-cli-${FULLTAG}-mac-arm64
+          # Windows X64
+          GOOS=windows GOARCH=amd64 make build || (echo "❌ Failed to build Windows X64 executable" && exit 1)
+          mv mor-cli mor-cli-${FULLTAG}-win-x64.exe
+          # # Windows ARM64
+          # GOOS=windows GOARCH=arm64 make build || (echo "❌ Failed to build Windows ARM64 executable" && exit 1)
+          # mv mor-cli mor-cli-${FULLTAG}-win-arm64.exe
+          echo "✅ Built executables for all platforms"
 
-  #     - name: Upload CLI artifacts
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: cli
-  #         path: |
-  #           cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-linux-x86_64
-  #           cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-linux-arm64
-  #           cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-mac-x64
-  #           cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-mac-arm64
-  #           cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-win-x64.exe
-  #           # cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-win-arm64.exe
+      - name: Upload CLI artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli
+          path: |
+            cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-linux-x86_64
+            cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-linux-arm64
+            cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-mac-x64
+            cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-mac-arm64
+            cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-win-x64.exe
+            # cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-win-arm64.exe
     
-  #     - name: Upload ProxyRouter artifacts
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: proxy-router
-  #         path: |
-  #           proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-linux-x86_64
-  #           proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-linux-arm64
-  #           proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-mac-x64
-  #           proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-mac-arm64
-  #           proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-win-x64.exe
-  #           # proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-win-arm64.exe
+      - name: Upload ProxyRouter artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: proxy-router
+          path: |
+            proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-linux-x86_64
+            proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-linux-arm64
+            proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-mac-x64
+            proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-mac-arm64
+            proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-win-x64.exe
+            # proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-win-arm64.exe
 
   # GitLab-Deploy-ProxyRouter:
   #   name: Deploy ProxyRouterto GitLab
@@ -391,6 +391,7 @@ jobs:
   #   runs-on: macos-14
   #   needs:
   #     - Generate-Tag
+  #     - Build-Service-Executables
   #   env:
   #     SERVICE_PROXY_DOWNLOAD_URL_MAC_ARM64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-mac-arm64
   #   steps:
@@ -444,6 +445,7 @@ jobs:
   #   runs-on: ubuntu-22.04
   #   needs:
   #     - Generate-Tag
+  #     - Build-Service-Executables
   #   env:
   #     SERVICE_PROXY_DOWNLOAD_URL_LINUX_X64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-linux-x86_64
   #   steps:
@@ -496,6 +498,7 @@ jobs:
     runs-on: ubuntu-22.04
     needs:
       - Generate-Tag
+      - Build-Service-Executables
     env:
       SERVICE_PROXY_DOWNLOAD_URL_LINUX_ARM64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-linux-arm64
     steps:
@@ -547,6 +550,7 @@ jobs:
   #   runs-on: macos-13
   #   needs:
   #     - Generate-Tag
+  #     - Build-Service-Executables
   #   env:
   #     SERVICE_PROXY_DOWNLOAD_URL_MAC_X64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-mac-x64
   #   steps:
@@ -657,6 +661,7 @@ jobs:
   #   runs-on: windows-latest
   #   needs:
   #     - Generate-Tag
+  #     - Build-Service-Executables
   #   env:
   #     SERVICE_PROXY_DOWNLOAD_URL_WINDOWS_ARM64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-win-arm64.exe
   #   steps:
@@ -713,11 +718,10 @@ jobs:
   #     )
   #   needs:
   #     - Generate-Tag
-  #     - Build-Service-Executables
   #     - UI-macOS-14-arm64
   #     - UI-macOS-13-x64
   #     - UI-Ubuntu-22-x64
-  #     # - UI-Ubuntu-22-arm64
+  #     - UI-Ubuntu-22-arm64
   #     - UI-Windows-avx2-x64
   #     # - UI-Windows-arm64
   #   runs-on: ubuntu-latest
