@@ -608,6 +608,7 @@ jobs:
     runs-on: windows-latest
     needs:
       - Generate-Tag
+      - Build-Service-Executables
     env:
       SERVICE_PROXY_DOWNLOAD_URL_WINDOWS_X64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-win-x64.exe
     steps:
