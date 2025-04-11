@@ -23,6 +23,7 @@ export class BackgroundProcess {
   private error?: string
   private output: string[] = []
   private log: LogFunctions
+  private redirectProcessOutput: boolean
   private onStateChange?: (stateInfo: StateInfo) => void
   private healthCheckConfig?: {
     url: string
@@ -34,7 +35,10 @@ export class BackgroundProcess {
   constructor(
     command: string,
     args: string[],
-    log: LogFunctions,
+    logConfig: {
+      log: LogFunctions
+      redirectProcessOutput?: boolean
+    },
     onStateChange?: (stateInfo: StateInfo) => void,
     healthCheckConfig?: {
       url: string
@@ -45,7 +49,8 @@ export class BackgroundProcess {
   ) {
     this.command = path.resolve(command)
     this.args = args
-    this.log = log
+    this.log = logConfig.log
+    this.redirectProcessOutput = logConfig.redirectProcessOutput ?? true
     this.onStateChange = onStateChange
     this.healthCheckConfig = healthCheckConfig
   }
@@ -65,6 +70,18 @@ export class BackgroundProcess {
 
   async start() {
     return new Promise(async (resolve, reject) => {
+      if (this.state === 'running') {
+        return resolve(this.process)
+      }
+
+      if (this.state === 'starting') {
+        this.log.info('Starting process exists, stopping it before starting again')
+        await this.stop().catch((err) => {
+          this.log.error('Failed to stop process', err)
+          return reject(err)
+        })
+      }
+
       try {
         const cwd = path.resolve(path.dirname(this.command))
 
@@ -86,7 +103,9 @@ export class BackgroundProcess {
         // log the stdout and stderr
         child.stdout.on('data', (data: Buffer) => {
           const outputLine = data.toString('utf-8').trimEnd()
-          this.log.info('\n\t' + outputLine)
+          if (this.redirectProcessOutput) {
+            this.log.info('\n\t' + outputLine)
+          }
           this.output.push(outputLine)
           if (this.output.length > BackgroundProcess.MAX_OUTPUT_LINES) {
             this.output.shift()
@@ -94,7 +113,10 @@ export class BackgroundProcess {
         })
         child.stderr.on('data', (data: Buffer) => {
           const errorLine = data.toString('utf-8').trimEnd()
-          this.log.error('\n\t' + errorLine)
+
+          if (this.redirectProcessOutput) {
+            this.log.error('\n\t' + errorLine)
+          }
           this.output.push(errorLine)
           if (this.output.length > BackgroundProcess.MAX_OUTPUT_LINES) {
             this.output.shift()
@@ -127,7 +149,9 @@ export class BackgroundProcess {
   }
 
   async stop(): Promise<void> {
+    this.log.info('stopping process started')
     if (!this.process || this.state === 'stopped') {
+      this.log.info('stopping process which already stopped')
       return
     }
 
@@ -135,12 +159,19 @@ export class BackgroundProcess {
 
     return new Promise((resolve, reject) => {
       if (!this.process) {
-        return
+        this.log.info('attempt to stop process which never started')
+        return resolve()
+      }
+
+      if (this.state === 'stopped') {
+        this.log.info('attempt to stop process which already stopped')
+        return resolve()
       }
 
       const timeoutId = setTimeout(() => {
         if (!this.process) {
-          return
+          this.log.info('attempt to stop process which never started')
+          return resolve()
         }
         this.log.warn(`shutdown timed out after ${timeout}ms, killing process`)
         if (!this.process.kill('SIGINT')) {
@@ -156,7 +187,7 @@ export class BackgroundProcess {
 
       this.process.once('close', () => {
         clearTimeout(timeoutId)
-        this.log.info('stopped')
+        this.log.info('process stopped')
         this.setState('stopped')
         resolve()
       })
@@ -168,6 +199,7 @@ export class BackgroundProcess {
         this.setState('stopped', err.message)
         reject(err)
       }
+      resolve()
     })
   }
 

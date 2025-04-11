@@ -58,16 +58,12 @@ export class Orchestrator {
   }
 
   async startAll() {
-    app.once('window-all-closed', () => {
-      this.log.warn('Window all closed event received')
-      return this.stopAll()
-    })
-    process.on('SIGINT', () => {
-      this.log.warn('SIGINT event received')
+    app.on('quit', () => {
+      this.log.warn('Quit event received')
       return this.stopAll()
     })
 
-    this.log.info('========================Orchestrator started')
+    this.log.info('Orchestrator started')
     this.emitStateUpdate()
 
     if (this.cfg.proxyRouter.downloadUrl) {
@@ -178,23 +174,33 @@ export class Orchestrator {
     this.ipfsDownloadState.status = 'success'
     this.emitStateUpdate()
 
-    this.ipfsProcess = new BackgroundProcess(
-      resolveAppDataPath(this.cfg.ipfs.runPath),
-      this.cfg.ipfs.runArgs,
-      this.log.scope('IPFS'),
-      () => this.emitStateUpdate(),
-      this.cfg.ipfs.probe
-    )
+    if (!this.ipfsProcess) {
+      this.ipfsProcess = new BackgroundProcess(
+        resolveAppDataPath(this.cfg.ipfs.runPath),
+        this.cfg.ipfs.runArgs,
+        {
+          log: this.log.scope('IPFS'),
+          redirectProcessOutput: true
+        },
+        () => this.emitStateUpdate(),
+        this.cfg.ipfs.probe
+      )
+    }
     await this.ipfsProcess.start()
     this.emitStateUpdate()
 
-    this.aiRuntimeProcess = new BackgroundProcess(
-      resolveAppDataPath(this.cfg.aiRuntime.runPath),
-      this.cfg.aiRuntime.runArgs,
-      this.log.scope('Ai-runtime'),
-      () => this.emitStateUpdate(),
-      this.cfg.aiRuntime.probe
-    )
+    if (!this.aiRuntimeProcess) {
+      this.aiRuntimeProcess = new BackgroundProcess(
+        resolveAppDataPath(this.cfg.aiRuntime.runPath),
+        this.cfg.aiRuntime.runArgs,
+        {
+          log: this.log.scope('Ai-runtime'),
+          redirectProcessOutput: false
+        },
+        () => this.emitStateUpdate(),
+        this.cfg.aiRuntime.probe
+      )
+    }
     await this.aiRuntimeProcess.start()
     this.emitStateUpdate()
 
@@ -211,13 +217,18 @@ export class Orchestrator {
       this.cfg.proxyRouter.ratingConfig
     )
 
-    this.proxyRouterProcess = new BackgroundProcess(
-      resolveAppDataPath(this.cfg.proxyRouter.runPath),
-      this.cfg.proxyRouter.runArgs || [],
-      this.log.scope('Proxy-router'),
-      () => this.emitStateUpdate(),
-      this.cfg.proxyRouter.probe
-    )
+    if (!this.proxyRouterProcess) {
+      this.proxyRouterProcess = new BackgroundProcess(
+        resolveAppDataPath(this.cfg.proxyRouter.runPath),
+        this.cfg.proxyRouter.runArgs || [],
+        {
+          log: this.log.scope('Proxy-router'),
+          redirectProcessOutput: false
+        },
+        () => this.emitStateUpdate(),
+        this.cfg.proxyRouter.probe
+      )
+    }
     await this.proxyRouterProcess.start()
     this.emitStateUpdate()
   }
