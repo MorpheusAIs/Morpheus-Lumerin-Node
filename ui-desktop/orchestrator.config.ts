@@ -29,6 +29,7 @@ const configMacArm = {
       PROXY_STORE_CHAT_CONTEXT: 'true',
       PROXY_STORAGE_PATH: './data/',
       LOG_COLOR: 'false',
+      LOG_FOLDER_PATH: './logs/',
       IPFS_MULTADDR: `/ip4/127.0.0.1/tcp/${process.env.SERVICE_IPFS_API_PORT}`
     },
     modelsConfig: JSON.stringify(
@@ -56,7 +57,9 @@ const configMacArm = {
       '--model',
       '../../../ai-model.gguf',
       '--port',
-      `${process.env.SERVICE_AI_API_PORT}`
+      `${process.env.SERVICE_AI_API_PORT}`,
+      '--log-file',
+      './llama.log'
     ] as string[],
     probe: {
       url: `http://127.0.0.1:${process.env.SERVICE_AI_API_PORT}/health`
@@ -64,8 +67,8 @@ const configMacArm = {
   },
   aiModel: {
     downloadUrl:
-      'https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q2_K.gguf',
-    fileName: './services/ai-model.gguf'
+      'https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q2_K.gguf' as string,
+    fileName: './services/ai-model.gguf' as string
   },
   ipfs: {
     downloadUrl:
@@ -177,7 +180,7 @@ const configWin: typeof configMacArm = {
     runPath: './services/ipfs/kubo/ipfs.exe'
   }
 }
-// *********************************************************************************  
+// *********************************************************************************
 // WARNING: LLAMA.CPP DOES NOT SUPPORT ARM64 for GGUF (found one for win-llvm-arm64 so need to change model as well...no idea if it works)
 // *********************************************************************************
 const configWinArm: typeof configMacArm = {
@@ -203,7 +206,7 @@ const configWinArm: typeof configMacArm = {
   aiModel: {
     ...configMacArm.aiModel,
     downloadUrl:
-    'https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q2_K.llvm',
+      'https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q2_K.llvm',
     fileName: './services/ai-model.llvm'
   },
   ipfs: {
@@ -219,7 +222,6 @@ const cfg = {
   darwin: {
     x64: configMacX64,
     arm64: configMacArm
-
   },
   linux: {
     x64: configLinux,
