@@ -36,6 +36,11 @@ type PromptHead struct {
 	ChatID    lib.Hash `header:"chat_id"    validate:"hex32"`
 }
 
+type AgentPromptHead struct {
+	SessionID lib.Hash `header:"session_id" validate:"hex32"`
+	AgentId   lib.Hash `header:"agent_id"   validate:"hex32"`
+}
+
 type InferenceRes struct {
 	Signature lib.HexString   `json:"signature,omitempty" validate:"required,hexadecimal"`
 	Message   json.RawMessage `json:"message" validate:"required"`
@@ -103,4 +108,92 @@ type DownloadProgressEvent struct {
 	Percentage  float64 `json:"percentage"`      // Percentage complete (0-100)
 	Error       string  `json:"error,omitempty"` // Error message, if status is "error"
 	TimeUpdated int64   `json:"timeUpdated"`     // Timestamp of the update
+}
+
+// DockerBuildReq defines the request for building a Docker image
+type DockerBuildReq struct {
+	ContextPath string            `json:"contextPath" binding:"required" validate:"required"`
+	Dockerfile  string            `json:"dockerfile" validate:"required"`
+	ImageName   string            `json:"imageName" binding:"required" validate:"required"`
+	ImageTag    string            `json:"imageTag"`
+	BuildArgs   map[string]string `json:"buildArgs"`
+}
+
+// DockerBuildRes defines the response for building a Docker image
+type DockerBuildRes struct {
+	ImageTag string `json:"imageTag" validate:"required"`
+}
+
+// DockerStartContainerReq defines the request for starting a Docker container
+type DockerStartContainerReq struct {
+	ImageName     string            `json:"imageName" binding:"required" validate:"required"`
+	ContainerName string            `json:"containerName"`
+	Env           []string          `json:"env"`
+	Ports         map[string]string `json:"ports"`
+	Volumes       map[string]string `json:"volumes"`
+	NetworkMode   string            `json:"networkMode"`
+}
+
+// DockerStartContainerRes defines the response for starting a Docker container
+type DockerStartContainerRes struct {
+	ContainerID string `json:"containerId" validate:"required"`
+}
+
+// DockerContainerActionReq defines the request for container actions (stop, remove)
+type DockerContainerActionReq struct {
+	ContainerID string `json:"containerId" binding:"required" validate:"required"`
+	Timeout     int    `json:"timeout,omitempty"`
+	Force       bool   `json:"force,omitempty"`
+}
+
+// DockerContainerInfoRes defines the response for container info
+type DockerContainerInfoRes struct {
+	ContainerInfo
+}
+
+// DockerListContainersReq defines the request for listing containers
+type DockerListContainersReq struct {
+	All          bool              `json:"all"`
+	FilterLabels map[string]string `json:"filterLabels"`
+}
+
+// DockerListContainersRes defines the response for listing containers
+type DockerListContainersRes struct {
+	Containers []ContainerInfo `json:"containers"`
+}
+
+// DockerLogsReq defines the request for container logs
+type DockerLogsReq struct {
+	ContainerID string `json:"containerId" binding:"required" validate:"required"`
+	Tail        int    `json:"tail,omitempty"`
+	Follow      bool   `json:"follow,omitempty"`
+}
+
+// DockerStreamBuildEvent defines a stream event for Docker image building
+type DockerStreamBuildEvent struct {
+	Status       string  `json:"status"` // Status message
+	Stream       string  `json:"stream,omitempty"`
+	Progress     string  `json:"progress,omitempty"`
+	ID           string  `json:"id,omitempty"`
+	Current      int64   `json:"current,omitempty"`
+	Total        int64   `json:"total,omitempty"`
+	Percentage   float64 `json:"percentage,omitempty"`
+	Error        string  `json:"error,omitempty"`
+	TimeUpdated  int64   `json:"timeUpdated"`
+	ErrorDetails string  `json:"errorDetails,omitempty"`
+}
+
+// DockerVersionRes defines the response for Docker version
+type DockerVersionRes struct {
+	Version string `json:"version" validate:"required"`
+}
+
+// DockerPruneRes defines the response for Docker pruning operations
+type DockerPruneRes struct {
+	SpaceReclaimed int64 `json:"spaceReclaimed"`
+}
+
+type CallAgentToolReq struct {
+	ToolName string                 `json:"toolName" validate:"required"`
+	Input    map[string]interface{} `json:"input" validate:"required"`
 }

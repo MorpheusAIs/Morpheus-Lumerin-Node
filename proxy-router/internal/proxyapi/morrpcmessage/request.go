@@ -25,6 +25,32 @@ type SessionRes struct {
 	Signature   lib.HexString  `json:"signature,omitempty" validate:"required,hexadecimal"`
 }
 
+type CallAgentToolReq struct {
+	SessionID common.Hash   `json:"sessionid" validate:"required,hex32"`
+	ToolName  string        `json:"toolname" validate:"required"`
+	Message   string        `json:"message" validate:"required"`
+	Signature lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
+	Timestamp uint64        `json:"timestamp" validate:"required,number"`
+}
+
+type CallAgentToolRes struct {
+	Message   string        `json:"message" validate:"required"`
+	Signature lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
+	Timestamp uint64        `json:"timestamp" validate:"required,number"`
+}
+
+type GetAgentToolsReq struct {
+	SessionID common.Hash   `json:"sessionid" validate:"required,hex32"`
+	Signature lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
+	Timestamp uint64        `json:"timestamp" validate:"required,number"`
+}
+
+type GetAgentToolsRes struct {
+	Message   string        `json:"message" validate:"required"`
+	Signature lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
+	Timestamp uint64        `json:"timestamp" validate:"required,number"`
+}
+
 type SessionPromptReq struct {
 	Signature lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
 	SessionID common.Hash   `json:"sessionid" validate:"required,hex32"`
