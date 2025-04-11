@@ -262,9 +262,9 @@ jobs:
           # Windows X64
           TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=windows GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-win-amd64.exe ./build.sh || (echo "❌ Failed to build Windows X64 executable" && exit 1)
           mv proxy-router proxy-router-${FULLTAG}-win-x64.exe
-          # Windows ARM64
-          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=windows GOARCH=arm64 OUTPUT=proxy-router-${FULLTAG}-win-arm64.exe ./build.sh || (echo "❌ Failed to build Windows ARM64 executable" && exit 1)
-          mv proxy-router proxy-router-${FULLTAG}-win-arm64.exe
+          # # Windows ARM64
+          # TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=windows GOARCH=arm64 OUTPUT=proxy-router-${FULLTAG}-win-arm64.exe ./build.sh || (echo "❌ Failed to build Windows ARM64 executable" && exit 1)
+          # mv proxy-router proxy-router-${FULLTAG}-win-arm64.exe
           echo "✅ Built executables for all platforms"
 
       - name: Build CLI Executables for all platforms
@@ -286,9 +286,9 @@ jobs:
           # Windows X64
           GOOS=windows GOARCH=amd64 make build || (echo "❌ Failed to build Windows X64 executable" && exit 1)
           mv mor-cli mor-cli-${FULLTAG}-win-x64.exe
-          # Windows ARM64
-          GOOS=windows GOARCH=arm64 make build || (echo "❌ Failed to build Windows ARM64 executable" && exit 1)
-          mv mor-cli mor-cli-${FULLTAG}-win-arm64.exe
+          # # Windows ARM64
+          # GOOS=windows GOARCH=arm64 make build || (echo "❌ Failed to build Windows ARM64 executable" && exit 1)
+          # mv mor-cli mor-cli-${FULLTAG}-win-arm64.exe
           echo "✅ Built executables for all platforms"
 
       - name: Upload CLI artifacts
@@ -301,7 +301,7 @@ jobs:
             cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-mac-x64
             cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-mac-arm64
             cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-win-x64.exe
-            cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-win-arm64.exe
+            # cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-win-arm64.exe
     
       - name: Upload ProxyRouter artifacts
         uses: actions/upload-artifact@v4
@@ -313,7 +313,7 @@ jobs:
             proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-mac-x64
             proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-mac-arm64
             proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-win-x64.exe
-            proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-win-arm64.exe
+            # proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-win-arm64.exe
 
   GitLab-Deploy-ProxyRouter:
     name: Deploy ProxyRouterto GitLab
@@ -491,7 +491,7 @@ jobs:
       github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
         (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
-        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
+        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true'))
       )
     runs-on: ubuntu-22.04
     needs:
@@ -499,42 +499,33 @@ jobs:
     env:
       SERVICE_PROXY_DOWNLOAD_URL_LINUX_ARM64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-linux-arm64
     steps:
-      - name: Enable QEMU for ARM64 builds
+      - name: Enable QEMU for ARM64 emulation
         uses: docker/setup-qemu-action@v3
 
-      - name: Clone
-        id: checkout
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Setup node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: "yarn"
-          cache-dependency-path: ui-desktop/yarn.lock
+      - name: Prepare build output directory
+        run: mkdir -p ui-desktop/dist
 
-      - name: Install dependencies
-        run: |
-          cd ./ui-desktop
-          yarn install --network-timeout 600000
-
-      - name: Copy Environment Files
-        uses: ./.github/actions/copy_env_files
-
-      - name: Build
-        id: build
+      - name: Run UI build for ARM64 in Docker
         run: |
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
-          cd ./ui-desktop
-          echo "Injecting version $FULLTAG into package.json"
-          sed -i "s/\"version\": \".*\"/\"version\": \"$FULLTAG\"/" package.json
-          cat package.json | grep '"version"'  # Optional: Verify the change
-          yarn build:linux-arm64
+          docker run --rm --platform linux/arm64 \
+            -v $PWD:/app \
+            -w /app/ui-desktop \
+            node:20-bullseye bash -c "\
+              apt-get update && \
+              apt-get install -y wget curl python3-pip libarchive-tools && \
+              npm install -g yarn && \
+              yarn install --network-timeout 600000 && \
+              sed -i 's/\"version\": \".*\"/\"version\": \"$FULLTAG\"/' package.json && \
+              yarn build:linux-arm64"
 
-      - name: Upload artifacts
+      - name: Upload Linux ARM64 UI artifact
         uses: actions/upload-artifact@v4
         with:
           path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-linux-arm64.AppImage
@@ -650,62 +641,62 @@ jobs:
           path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-win-x64.exe
           name: morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-win-x64.exe
 
-  UI-Windows-arm64:
-    name: Build Morpheus UI Windows ARM64 Image
-    if: |
-      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
-      (
-        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
-        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
-      )
-    runs-on: windows-latest
-    needs:
-      - Generate-Tag
-    env:
-      SERVICE_PROXY_DOWNLOAD_URL_WINDOWS_ARM64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-win-arm64.exe
-    steps:
-      - name: Clone
-        id: checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
+  # UI-Windows-arm64:
+  #   name: Build Morpheus UI Windows ARM64 Image
+  #   if: |
+  #     github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+  #     (
+  #       (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
+  #       (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
+  #     )
+  #   runs-on: windows-latest
+  #   needs:
+  #     - Generate-Tag
+  #   env:
+  #     SERVICE_PROXY_DOWNLOAD_URL_WINDOWS_ARM64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-win-arm64.exe
+  #   steps:
+  #     - name: Clone
+  #       id: checkout
+  #       uses: actions/checkout@v4
+  #       with:
+  #         fetch-depth: 0
+  #         fetch-tags: true
 
-      - name: Setup node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: "yarn"
-          cache-dependency-path: ui-desktop/yarn.lock
+  #     - name: Setup node
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: 20
+  #         cache: "yarn"
+  #         cache-dependency-path: ui-desktop/yarn.lock
 
-      - name: Install wget and sed
-        run: |
-          choco install wget --no-progress
-          choco install sed --no-progress
+  #     - name: Install wget and sed
+  #       run: |
+  #         choco install wget --no-progress
+  #         choco install sed --no-progress
 
-      - name: Install dependencies
-        run: |
-          cd ./ui-desktop
-          yarn install --network-timeout 600000
+  #     - name: Install dependencies
+  #       run: |
+  #         cd ./ui-desktop
+  #         yarn install --network-timeout 600000
 
-      - name: Copy Environment Files
-        uses: ./.github/actions/copy_env_files
+  #     - name: Copy Environment Files
+  #       uses: ./.github/actions/copy_env_files
 
-      - name: Build
-        id: build
-        run: |
-          FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
-          cd ./ui-desktop
-          echo "Injecting version $FULLTAG into package.json"
-          sed -i "s/\"version\": \".*\"/\"version\": \"$FULLTAG\"/" package.json
-          cat package.json | grep '"version"'  # Optional: Verify the change
-          yarn build:win-arm64 
+  #     - name: Build
+  #       id: build
+  #       run: |
+  #         FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
+  #         cd ./ui-desktop
+  #         echo "Injecting version $FULLTAG into package.json"
+  #         sed -i "s/\"version\": \".*\"/\"version\": \"$FULLTAG\"/" package.json
+  #         cat package.json | grep '"version"'  # Optional: Verify the change
+  #         yarn build:win-arm64 
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-win-arm64.exe
-          name: morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-win-arm64.exe
+  #     - name: Upload artifacts
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-win-arm64.exe
+  #         name: morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-win-arm64.exe
           
   UI-Release:
     name: Upload UI-Desktop Release
@@ -721,9 +712,9 @@ jobs:
       - UI-macOS-14-arm64
       - UI-macOS-13-x64
       - UI-Ubuntu-22-x64
-      - UI-Ubuntu-22-arm64
+      # - UI-Ubuntu-22-arm64
       - UI-Windows-avx2-x64
-      - UI-Windows-arm64
+      # - UI-Windows-arm64
     runs-on: ubuntu-latest
     steps:
       - name: Clone
