@@ -521,24 +521,21 @@ jobs:
         run: |
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
           docker run --rm --platform linux/arm64 \
-            -v $PWD:/app \
+            -v "$PWD":/app \
             -w /app/ui-desktop \
             -e ENV=production \
-            --env-file $PWD/ui-desktop/.env \
-            node:20-bullseye bash -c "\
-              apt-get update && \
+            --env-file "$PWD/ui-desktop/.env" \
+            node:20-bullseye bash -c 'apt-get update && \
               apt-get install -y curl wget python3-pip libarchive-tools && \
               corepack enable && \
               corepack prepare yarn@stable --activate && \
               export NODE_ENV=development && \
-              echo "🔍 🔍 🔍 Dumping ENV and .env contents inside container🔍 🔍 🔍 " && \
-              printenv | sort && \  
-              echo "--- .env file content ---" && \
-              cat .env || echo "⚠️ .env not found" && \
+              echo "🔍 Dumping ENV 🔍" && printenv | sort && \
+              echo "--- .env file content ---" && cat .env || echo "⚠️ .env not found" && \
+              sed -i "s/\"version\": \".*\"/\"version\": \"'"$FULLTAG"'\"/" package.json && \
               yarn install --network-timeout 600000 && \
               yarn run patch-package || true && \
-              sed -i 's/\"version\": \".*\"/\"version\": \"$FULLTAG\"/' package.json && \
-              yarn run build:linux-arm64"
+              yarn run build:linux-arm64'
 
       - name: Upload Linux ARM64 UI artifact
         uses: actions/upload-artifact@v4
