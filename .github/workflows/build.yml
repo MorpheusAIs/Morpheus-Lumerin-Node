@@ -525,7 +525,7 @@ jobs:
             -w /app/ui-desktop \
             -e NODE_ENV=production \
             -e ENV=production \
-            --env-file /app/ui-desktop/.env \
+            --env-file ui-desktop/.env \
             node:20-bullseye bash -c "\
               apt-get update && \
               apt-get install -y wget curl python3-pip libarchive-tools && \
