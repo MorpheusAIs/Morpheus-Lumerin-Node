@@ -1,98 +1,111 @@
-import debounce from 'lodash/debounce'
-import get from 'lodash/get'
-import pickBy from 'lodash/pickBy'
+import debounce from 'lodash/debounce';
+import get from 'lodash/get';
+import pickBy from 'lodash/pickBy';
 
-import * as utils from './utils'
-import keys from './keys'
-import './sentry'
-import { type NoCoreHandlers } from 'src/main/src/client/handlers/no-core'
+import * as utils from './utils';
+import keys from './keys';
+import './sentry';
 
 const createClient = function (createStore) {
   const reduxDevtoolsOptions = {
     // actionsBlacklist: ['price-updated$'],
-    features: { dispatch: true }
+    features: { dispatch: true },
     // maxAge: 100 // default: 50
-  }
+  };
 
-  const store = createStore(reduxDevtoolsOptions)
+  const store = createStore(reduxDevtoolsOptions);
 
   const onUIReady = (ev, payload) => {
-    const debounceTime = get(payload, 'data.config.statePersistanceDebounce', 0)
+    const debounceTime = get(
+      payload,
+      'data.config.statePersistanceDebounce',
+      0,
+    );
 
     // keysToPersist keys that are passed from global redux state to main process.
     // For now only chain data is used.
     // TODO: subscribe for changes only within listed branch of redux state
-    const keysToPersist = ['chain']
+    const keysToPersist = ['chain'];
 
     store.subscribe(
       debounce(
         function () {
           const passedState = pickBy(store.getState(), function (value, key) {
-            return keysToPersist.includes(key)
-          })
+            return keysToPersist.includes(key);
+          });
 
           utils
             .forwardToMainProcess('persist-state')(passedState)
             .catch((err) =>
               // eslint-disable-next-line no-console
-              console.warn(`Error persisting state: ${err.message}`)
-            )
+              console.warn(`Error persisting state: ${err.message}`),
+            );
         },
         debounceTime,
-        { maxWait: 2 * debounceTime }
-      )
-    )
-  }
+        { maxWait: 2 * debounceTime },
+      ),
+    );
+  };
 
-  window.ipcRenderer.on('ui-ready', onUIReady)
+  window.ipcRenderer.on('ui-ready', onUIReady);
 
-  const onTransactionLinkClick = (txHash) => window.openLink('https://etherscan.io/tx/' + txHash)
+  const onTransactionLinkClick = (txHash) =>
+    window.openLink('https://etherscan.io/tx/' + txHash);
 
   const onTermsLinkClick = () =>
-    window.openLink('https://github.com/Lumerin-protocol/WalletDesktop/blob/main/LICENSE')
+    window.openLink(
+      'https://github.com/Lumerin-protocol/WalletDesktop/blob/main/LICENSE',
+    );
 
-  const onHelpLinkClick = () => window.openLink('https://mor.org/fair-launch')
+  const onHelpLinkClick = () => window.openLink('https://mor.org/fair-launch');
 
-  const onLinkClick = (url) => window.openLink(url)
+  const onLinkClick = (url) => window.openLink(url);
 
-  const copyToClipboard = (text) => Promise.resolve(window.copyToClipboard(text))
+  const copyToClipboard = (text) =>
+    Promise.resolve(window.copyToClipboard(text));
 
   const lockSendTransaction = () => {
     store.dispatch({
       type: 'allow-send-transaction',
-      payload: { allowSendTransaction: false }
-    })
-  }
+      payload: { allowSendTransaction: false },
+    });
+  };
 
   const unlockSendTransaction = () => {
     store.dispatch({
       type: 'allow-send-transaction',
-      payload: { allowSendTransaction: true }
-    })
-  }
+      payload: { allowSendTransaction: true },
+    });
+  };
 
   const onInit = () => {
     window.addEventListener('beforeunload', function () {
-      utils.sendToMainProcess('ui-unload')
-    })
+      utils.sendToMainProcess('ui-unload');
+    });
     window.addEventListener('online', () => {
       store.dispatch({
         type: 'connectivity-state-changed',
-        payload: { ok: true }
-      })
-    })
+        payload: { ok: true },
+      });
+    });
     window.addEventListener('offline', () => {
       store.dispatch({
         type: 'connectivity-state-changed',
-        payload: { ok: false }
-      })
-    })
-    return utils.sendToMainProcess('ui-ready')
-  }
+        payload: { ok: false },
+      });
+    });
+    return utils.sendToMainProcess('ui-ready');
+  };
 
   const forwardedMethods = {
-    refreshAllTransactions: utils.forwardToMainProcess('refresh-all-transactions', 120000),
-    refreshAllContracts: utils.forwardToMainProcess('refresh-all-contracts', 120000),
+    refreshAllTransactions: utils.forwardToMainProcess(
+      'refresh-all-transactions',
+      120000,
+    ),
+    refreshAllContracts: utils.forwardToMainProcess(
+      'refresh-all-contracts',
+      120000,
+    ),
     onOnboardingCompleted: utils.forwardToMainProcess('onboarding-completed'),
     suggestAddresses: utils.forwardToMainProcess('suggest-addresses'),
     getTokenGasLimit: utils.forwardToMainProcess('get-token-gas-limit'),
@@ -103,8 +116,14 @@ const createClient = function (createStore) {
     purchaseContract: utils.forwardToMainProcess('purchase-contract', 750000),
     editContract: utils.forwardToMainProcess('edit-contract', 750000),
     cancelContract: utils.forwardToMainProcess('cancel-contract', 750000),
-    setDeleteContractStatus: utils.forwardToMainProcess('set-delete-contract-status', 750000),
-    getPastTransactions: utils.forwardToMainProcess('get-past-transactions', 750000),
+    setDeleteContractStatus: utils.forwardToMainProcess(
+      'set-delete-contract-status',
+      750000,
+    ),
+    getPastTransactions: utils.forwardToMainProcess(
+      'get-past-transactions',
+      750000,
+    ),
     sendLmr: utils.forwardToMainProcess('send-lmr', 750000),
     sendEth: utils.forwardToMainProcess('send-eth', 750000),
     clearCache: utils.forwardToMainProcess('clear-cache'),
@@ -112,15 +131,25 @@ const createClient = function (createStore) {
     startDiscovery: utils.forwardToMainProcess('start-discovery'),
     stopDiscovery: utils.forwardToMainProcess('stop-discovery'),
     setMinerPool: utils.forwardToMainProcess('set-miner-pool'),
-    getLmrTransferGasLimit: utils.forwardToMainProcess('get-lmr-transfer-gas-limit'),
+    getLmrTransferGasLimit: utils.forwardToMainProcess(
+      'get-lmr-transfer-gas-limit',
+    ),
     logout: utils.forwardToMainProcess('logout'),
     getLocalIp: utils.forwardToMainProcess('get-local-ip'),
     getPoolAddress: utils.forwardToMainProcess('get-pool-address'),
     getPrivateKey: utils.forwardToMainProcess('get-private-key'),
-    getProxyRouterSettings: utils.forwardToMainProcess('get-proxy-router-settings'),
-    getDefaultCurrencySetting: utils.forwardToMainProcess('get-default-currency-settings'),
-    setDefaultCurrencySetting: utils.forwardToMainProcess('set-default-currency-settings'),
-    saveProxyRouterSettings: utils.forwardToMainProcess('save-proxy-router-settings'),
+    getProxyRouterSettings: utils.forwardToMainProcess(
+      'get-proxy-router-settings',
+    ),
+    getDefaultCurrencySetting: utils.forwardToMainProcess(
+      'get-default-currency-settings',
+    ),
+    setDefaultCurrencySetting: utils.forwardToMainProcess(
+      'set-default-currency-settings',
+    ),
+    saveProxyRouterSettings: utils.forwardToMainProcess(
+      'save-proxy-router-settings',
+    ),
     getMarketplaceFee: utils.forwardToMainProcess('get-marketplace-fee'),
     claimFaucet: utils.forwardToMainProcess('claim-faucet', 750000),
     getCustomEnvValues: utils.forwardToMainProcess('get-custom-env-values'),
@@ -142,12 +171,27 @@ const createClient = function (createStore) {
     // Chat History
     getChatHistoryTitles: utils.forwardToMainProcess('get-chat-history-titles'),
     getChatHistory: utils.forwardToMainProcess('get-chat-history', 750000),
-    deleteChatHistory: utils.forwardToMainProcess('delete-chat-history', 750000),
-    updateChatHistoryTitle: utils.forwardToMainProcess('update-chat-history-title', 750000),
+    deleteChatHistory: utils.forwardToMainProcess(
+      'delete-chat-history',
+      750000,
+    ),
+    updateChatHistoryTitle: utils.forwardToMainProcess(
+      'update-chat-history-title',
+      750000,
+    ),
     // Failover
-    getFailoverSetting: utils.forwardToMainProcess('get-failover-setting', 750000),
-    setFailoverSetting: utils.forwardToMainProcess('set-failover-setting', 750000),
-    checkProviderConnectivity: utils.forwardToMainProcess('check-provider-connectivity', 750000),
+    getFailoverSetting: utils.forwardToMainProcess(
+      'get-failover-setting',
+      750000,
+    ),
+    setFailoverSetting: utils.forwardToMainProcess(
+      'set-failover-setting',
+      750000,
+    ),
+    checkProviderConnectivity: utils.forwardToMainProcess(
+      'check-provider-connectivity',
+      750000,
+    ),
 
     // IPFS
     getIpfsVersion: utils.forwardToMainProcess('get-ipfs-version', 750000),
@@ -155,19 +199,42 @@ const createClient = function (createStore) {
     pinIpfsFile: utils.forwardToMainProcess('pin-ipfs-file', 750000),
     unpinIpfsFile: utils.forwardToMainProcess('unpin-ipfs-file', 750000),
     addFileToIpfs: utils.forwardToMainProcess('add-file-to-ipfs', 750000),
-    getIpfsPinnedFiles: utils.forwardToMainProcess('get-ipfs-pinned-files', 750000),
+    getIpfsPinnedFiles: utils.forwardToMainProcess(
+      'get-ipfs-pinned-files',
+      750000,
+    ),
 
-    openSelectFolderDialog: utils.forwardToMainProcess('open-select-folder-dialog', 750000),
+    openSelectFolderDialog: utils.forwardToMainProcess(
+      'open-select-folder-dialog',
+      750000,
+    ),
 
     // Agents
     getAgentUsers: utils.forwardToMainProcess('get-agent-users', 750000),
-    confirmDeclineAgentUser: utils.forwardToMainProcess('confirm-decline-agent-user', 750000),
+    confirmDeclineAgentUser: utils.forwardToMainProcess(
+      'confirm-decline-agent-user',
+      750000,
+    ),
     removeAgentUser: utils.forwardToMainProcess('remove-agent-user', 750000),
     getAgentTxs: utils.forwardToMainProcess('get-agent-txs', 750000),
-    revokeAgentAllowance: utils.forwardToMainProcess('revoke-agent-allowance', 750000),
-    getAgentAllowanceRequests: utils.forwardToMainProcess('get-agent-allowance-requests', 750000),
-    confirmDeclineAgentAllowanceRequest: utils.forwardToMainProcess('confirm-decline-agent-allowance-request', 750000),
-  } as unknown as NoCoreHandlers;
+    revokeAgentAllowance: utils.forwardToMainProcess(
+      'revoke-agent-allowance',
+      750000,
+    ),
+    getAgentAllowanceRequests: utils.forwardToMainProcess(
+      'get-agent-allowance-requests',
+      750000,
+    ),
+    confirmDeclineAgentAllowanceRequest: utils.forwardToMainProcess(
+      'confirm-decline-agent-allowance-request',
+      750000,
+    ),
+
+    // Startup services
+    startServices: utils.forwardToMainProcess('start-services', 750000),
+    restartService: utils.forwardToMainProcess('restart-service', 750000),
+    pingService: utils.forwardToMainProcess('ping-service', 750000),
+  };
 
   const api = {
     ...utils,
@@ -183,11 +250,11 @@ const createClient = function (createStore) {
     onInit,
     store,
     lockSendTransaction,
-    unlockSendTransaction
-  }
+    unlockSendTransaction,
+  };
 
-  return api
-}
+  return api;
+};
 
-export default createClient
-export type Client = ReturnType<typeof createClient>
+export default createClient;
+export type Client = ReturnType<typeof createClient>;

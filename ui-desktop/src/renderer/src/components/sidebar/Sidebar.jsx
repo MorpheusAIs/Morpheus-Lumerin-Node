@@ -1,15 +1,15 @@
-import React, { useState } from 'react'
-import styled from 'styled-components'
+import React, { useState } from 'react';
+import styled from 'styled-components';
 
-import SecondaryNav from './SecondaryNav'
-import PrimaryNav from './PrimaryNav'
+import SecondaryNav from './SecondaryNav';
+import PrimaryNav from './PrimaryNav';
 
-import { LumerinLogoFull } from '../icons/LumerinLogoFull'
-import { AddressHeader } from '../common/AddressHeader'
-import withSidebarState from '../../store/hocs/withSidebarState'
+import { LumerinLogoFull } from '../icons/LumerinLogoFull';
+import { AddressHeader } from '../common/AddressHeader';
+import withSidebarState from '../../store/hocs/withSidebarState';
 
 const Container = styled.div`
-  background: transparent;
+  background: rgba(5, 35, 22, 0.84);
   width: 7rem;
   padding-bottom: 4.5rem;
   display: flex;
@@ -22,14 +22,12 @@ const Container = styled.div`
   bottom: 0;
   z-index: 3;
   border-right: 1px solid rgba(255, 255, 255, 0.16);
-  background: #03160e!important
-
-  .sidebar-address {
+  background: #03160e!important .sidebar-address {
     display: none;
   }
 
   &:hover {
-    width: 210px;
+    width: 250px;
     box-shadow: 0 0 16px 0 rgba(0, 0, 0, 0.2);
 
     .sidebar-address {
@@ -38,8 +36,8 @@ const Container = styled.div`
   }
   @media (min-width: 800px) {
     position: relative;
-    min-width: 210px;
-    width: 210px;
+    min-width: 250px;
+    width: 250px;
 
     .sidebar-address {
       display: block;
@@ -49,7 +47,7 @@ const Container = styled.div`
       box-shadow: none;
     }
   }
-`
+`;
 
 const FullLogoContainer = styled.div`
   padding: 4rem 2.2rem 2.8rem 2.2rem;
@@ -63,7 +61,7 @@ const FullLogoContainer = styled.div`
   @media (min-width: 800px) {
     display: block;
   }
-`
+`;
 
 const IconLogoContainer = styled.div`
   padding: 40px 0.8rem 2rem 0.8rem;
@@ -79,14 +77,14 @@ const IconLogoContainer = styled.div`
   @media (min-width: 800px) {
     display: none;
   }
-`
+`;
 
 const NavContainer = styled.div`
   display: flex;
   justify-content: space-between;
   flex-direction: column;
   height: 100%;
-`
+`;
 
 const PrimaryNavContainer = styled.nav`
   flex-grow: 1;
@@ -95,7 +93,7 @@ const PrimaryNavContainer = styled.nav`
   @media (max-width: 800px) {
     padding-left: 0.5rem;
   }
-`
+`;
 
 function Sidebar(props) {
   const { address, copyToClipboard } = props;
@@ -103,11 +101,11 @@ function Sidebar(props) {
   return (
     <Container>
       <FullLogoContainer parent={Container}>
-        <LumerinLogoFull /> 
+        <LumerinLogoFull />
       </FullLogoContainer>
 
       <IconLogoContainer parent={Container}>
-        <LumerinLogoFull /> 
+        <LumerinLogoFull />
       </IconLogoContainer>
       <NavContainer>
         <PrimaryNavContainer>
@@ -118,7 +116,7 @@ function Sidebar(props) {
           />
         </PrimaryNavContainer>
 
-        <nav style={{ borderTop: '1px solid rgba(255, 255, 255, 0.16)'}}>
+        <nav style={{ borderTop: '1px solid rgba(255, 255, 255, 0.16)' }}>
           <SecondaryNav
             activeIndex={activeIndex}
             setActiveIndex={setActiveIndex}
@@ -128,7 +126,7 @@ function Sidebar(props) {
         <AddressHeader address={address} copyToClipboard={copyToClipboard} />
       </NavContainer>
     </Container>
-  )
+  );
 }
 
-export default withSidebarState(Sidebar)
+export default withSidebarState(Sidebar);

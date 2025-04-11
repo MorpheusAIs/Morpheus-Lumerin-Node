@@ -3,6 +3,7 @@ package ethclient
 import (
 	"context"
 	"encoding/json"
+	"net/url"
 	"sync"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
@@ -128,6 +129,9 @@ func (c *RPCClientMultiple) retriableCall(ctx context.Context, fn func(client *r
 
 func (c *RPCClientMultiple) shouldBeRetried(err error) bool {
 	switch err.(type) {
+	case *url.Error:
+		// host is not reachable errors
+		return true
 	case rpc.HTTPError:
 		// if err.(rpc.HTTPError).StatusCode == 429 {
 		// 	return true
