@@ -4,13 +4,18 @@ import styled from 'styled-components';
 import { IconFileReport, IconMessage } from '@tabler/icons-react';
 import { IconBuildingStore } from '@tabler/icons-react';
 import { IconBrandStackshare } from '@tabler/icons-react';
-import { IconWallet, IconPhoto, IconPackages, IconUsers } from '@tabler/icons-react';
+import {
+  IconWallet,
+  IconPhoto,
+  IconPackages,
+  IconUsers,
+} from '@tabler/icons-react';
 
 const Container = styled.div`
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  
+
   max-height: 10%;
 
   @media (min-width: 800px) {
@@ -27,13 +32,12 @@ const Button = styled(NavLink)`
   padding: 1.6rem;
   border-top: 1px solid transparent;
 
-
   &:focus {
     outline: none;
   }
 
   &.active {
-    color: ${p => p.theme.colors.morMain};
+    color: ${(p) => p.theme.colors.morMain};
     pointer-events: none;
   }
 `;
@@ -81,7 +85,7 @@ export default function PrimaryNav({ parent, activeIndex, setActiveIndex }) {
     <Container>
       <Button
         onClick={() => setActiveIndex(0)}
-        className={(navData) => (navData.isActive ? "active-style" : 'none')}
+        className={(navData) => (navData.isActive ? 'active-style' : 'none')}
         data-testid="wallet-nav-btn"
         to="/wallet"
       >
@@ -93,47 +97,41 @@ export default function PrimaryNav({ parent, activeIndex, setActiveIndex }) {
         </Label>
       </Button>
 
-      <Button
-        onClick={() => setActiveIndex(1)}
-        to="/chat"
-      >
+      <Button onClick={() => setActiveIndex(1)} to="/chat">
         <IconWrapper>
           <IconMessage width={iconSize} />
         </IconWrapper>
-        <Label active={activeIndex === 1} parent={parent}>Chat</Label>
+        <Label active={activeIndex === 1} parent={parent}>
+          Chat
+        </Label>
       </Button>
 
-      <Button
-        onClick={() => setActiveIndex(2)}
-        to="/models"
-      >
+      <Button onClick={() => setActiveIndex(2)} to="/models">
         <IconWrapper>
           <IconPackages width={iconSize} />
         </IconWrapper>
-        <Label active={activeIndex === 2} parent={parent}>Models</Label>
+        <Label active={activeIndex === 2} parent={parent}>
+          Models
+        </Label>
       </Button>
 
-
-      <Button
-        onClick={() => setActiveIndex(3)}
-        to="/agents"
-      >
+      <Button onClick={() => setActiveIndex(3)} to="/agents">
         <IconWrapper>
           <IconUsers width={iconSize} />
         </IconWrapper>
-        <Label active={activeIndex === 3} parent={parent}>Agents</Label>
+        <Label active={activeIndex === 3} parent={parent}>
+          Agents
+        </Label>
       </Button>
 
-      <Button
-        onClick={() => setActiveIndex(4)}
-        to="/providers"
-      >
+      <Button onClick={() => setActiveIndex(4)} to="/providers">
         <IconWrapper>
           <IconBrandStackshare width={iconSize} />
         </IconWrapper>
-        <Label active={activeIndex === 4} parent={parent}>Provider Hub</Label>
+        <Label active={activeIndex === 4} parent={parent}>
+          Provider Hub
+        </Label>
       </Button>
-      
     </Container>
   );
 }

@@ -18,7 +18,6 @@ var publicRPCURLs = map[int][]string{
 		"https://arbitrum-sepolia.public.blastapi.io",
 	},
 	42161: {
-		"https://arbitrum.llamarpc.com",
 		"https://api.zan.top/node/v1/arb/one/public",
 		"https://1rpc.io/arb",
 		"https://arbitrum.blockpi.network/v1/rpc/public",
