@@ -296,6 +296,120 @@ func (p *ProxyServiceSender) GetSessionReportFromUser(ctx context.Context, sessi
 	return typedMsg.Message, typedMsg.SignedReport, nil
 }
 
+func (p *ProxyServiceSender) CallAgentTool(ctx context.Context, sessionID common.Hash, toolName string, input map[string]interface{}) (string, error) {
+	requestID := "1"
+
+	session, err := p.sessionRepo.GetSession(ctx, sessionID)
+	if err != nil {
+		return "", ErrSessionNotFound
+	}
+
+	isExpired := session.EndsAt().Int64()-time.Now().Unix() < 0
+	if isExpired {
+		return "", ErrSessionExpired
+	}
+
+	provider, ok := p.sessionStorage.GetUser(session.ProviderAddr().Hex())
+	if !ok {
+		return "", ErrProviderNotFound
+	}
+
+	prKey, err := p.privateKey.GetPrivateKey()
+	if err != nil {
+		return "", ErrMissingPrKey
+	}
+
+	callAgentToolRequest, err := p.morRPC.CallAgentToolRequest(sessionID, toolName, input, prKey, requestID)
+	if err != nil {
+		return "", lib.WrapError(ErrCreateReq, err)
+	}
+
+	msg, code, err := p.rpcRequest(provider.Url, callAgentToolRequest)
+	if err != nil {
+		return "", lib.WrapError(ErrProvider, fmt.Errorf("code: %d, msg: %v, error: %s", code, msg, err))
+	}
+
+	if msg.Error != nil {
+		return "", lib.WrapError(ErrResponseErr, fmt.Errorf("error: %v, result: %v", msg.Error.Message, msg.Error.Data))
+	}
+	if msg.Result == nil {
+		return "", lib.WrapError(ErrInvalidResponse, ErrEmpty)
+	}
+
+	var typedMsg *msgs.CallAgentToolRes
+	err = json.Unmarshal(*msg.Result, &typedMsg)
+	if err != nil {
+		return "", lib.WrapError(ErrInvalidResponse, fmt.Errorf("expected CallAgentToolRespose, got %s", msg.Result))
+	}
+
+	signature := typedMsg.Signature
+	typedMsg.Signature = lib.HexString{}
+
+	hexPubKey, err := lib.StringToHexString(provider.PubKey)
+	if !p.validateMsgSignature(typedMsg, signature, hexPubKey) {
+		return "", ErrInvalidSig
+	}
+
+	return typedMsg.Message, nil
+}
+
+func (p *ProxyServiceSender) GetAgentTools(ctx context.Context, sessionID common.Hash) (string, error) {
+	requestID := "1"
+
+	prKey, err := p.privateKey.GetPrivateKey()
+	if err != nil {
+		return "", ErrMissingPrKey
+	}
+
+	session, err := p.sessionRepo.GetSession(ctx, sessionID)
+	if err != nil {
+		return "", ErrSessionNotFound
+	}
+
+	isExpired := session.EndsAt().Int64()-time.Now().Unix() < 0
+	if isExpired {
+		return "", ErrSessionExpired
+	}
+
+	provider, ok := p.sessionStorage.GetUser(session.ProviderAddr().Hex())
+	if !ok {
+		return "", ErrProviderNotFound
+	}
+
+	getAgentToolsRequest, err := p.morRPC.CallGetAgentToolsRequest(sessionID, prKey, requestID)
+	if err != nil {
+		return "", lib.WrapError(ErrCreateReq, err)
+	}
+
+	msg, code, err := p.rpcRequest(provider.Url, getAgentToolsRequest)
+	if err != nil {
+		return "", lib.WrapError(ErrProvider, fmt.Errorf("code: %d, msg: %v, error: %s", code, msg, err))
+	}
+
+	if msg.Error != nil {
+		return "", lib.WrapError(ErrResponseErr, fmt.Errorf("error: %v, result: %v", msg.Error.Message, msg.Error.Data))
+	}
+	if msg.Result == nil {
+		return "", lib.WrapError(ErrInvalidResponse, ErrEmpty)
+	}
+
+	var typedMsg *msgs.GetAgentToolsRes
+	err = json.Unmarshal(*msg.Result, &typedMsg)
+	if err != nil {
+		return "", lib.WrapError(ErrInvalidResponse, fmt.Errorf("expected GetAgentToolsRespose, got %s", msg.Result))
+	}
+
+	signature := typedMsg.Signature
+	typedMsg.Signature = lib.HexString{}
+
+	hexPubKey, err := lib.StringToHexString(provider.PubKey)
+	if !p.validateMsgSignature(typedMsg, signature, hexPubKey) {
+		return "", ErrInvalidSig
+	}
+
+	return typedMsg.Message, nil
+}
+
 func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage) (*msgs.RpcResponse, int, error) {
 	// TODO: enable request-response matching by using requestID
 	// TODO: add context cancellation
