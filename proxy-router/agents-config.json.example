@@ -1,0 +1,22 @@
+{
+  "$schema": "./internal/config/agents-config-schema.json",
+  "agents": [
+    {
+      "agentId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "agentName": "Google Maps Agent",
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "-e", "GOOGLE_MAPS_API_KEY", "test-mcp-google-maps:latest"],
+      "env": {
+        "GOOGLE_MAPS_API_KEY": "FILL_ME_IN"
+      },
+      "concurrentSlots": 1,
+      "capacityPolicy": "simple"
+    },
+    {
+      "agentId": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "agentName": "Google Search Agent",
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "test-mcp-google-search:latest"]
+    }
+  ]
+}
