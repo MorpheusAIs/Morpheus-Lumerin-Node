@@ -1,7 +1,10 @@
-node_modules
-dist
-out
+/node_modules/
+/build/
+/dist/
+/out/
+
 .DS_Store
 *.log*
-build
-.env
+/.env
+/services/
+

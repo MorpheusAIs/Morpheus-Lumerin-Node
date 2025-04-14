@@ -32,7 +32,8 @@ export const ignoreChain = (chain, data) =>
   chain !== 'multi' && chain !== 'none' && data.chain && chain !== data.chain
 
 export function onRendererEvent(eventName, handler, chain) {
-  ipcMain.on(eventName, function (event, { id, data }) {
+  ipcMain.on(eventName, function (event, evProps) {
+    const { id, data } = evProps
     if (ignoreChain(chain, data)) {
       return
     }
@@ -67,7 +68,7 @@ export function onRendererEvent(eventName, handler, chain) {
 export const subscribeTo = (types, chain) =>
   Object.keys(types).forEach((type) => {
     onRendererEvent(type, types[type], chain)
-  } )
+  })
 
 export const unsubscribeTo = (types) =>
   Object.keys(types).forEach((type) => ipcMain.removeAllListeners(type, types[type]))

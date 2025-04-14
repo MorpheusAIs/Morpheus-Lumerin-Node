@@ -61,7 +61,6 @@ app
   .whenReady()
   .then(() => new Promise((r) => setTimeout(r, sleepBeforeStart)))
   .then(() => {
-    app.setName('morpheus')
     // Set app user model id for windows
     electronApp.setAppUserModelId('com.electron')
 
