@@ -348,7 +348,8 @@ export class Orchestrator {
           name: 'Container Runtime',
           status: this.containerRuntimeProcess?.getState() ?? 'pending',
           error: this.containerRuntimeProcess?.getError(),
-          stderrOutput: this.containerRuntimeProcess?.getOutput()
+          stderrOutput: this.containerRuntimeProcess?.getOutput(),
+          isExternal: this.containerRuntimeProcess?.isExternal()
         },
         {
           id: 'proxyRouter',
@@ -434,6 +435,11 @@ export class Orchestrator {
   }
 
   private async resetState() {
+    await this.proxyRouterProcess?.reset()
+    await this.aiRuntimeProcess?.reset()
+    await this.ipfsProcess?.reset()
+    await this.containerRuntimeProcess?.reset()
+
     this.proxyDownloadState.error = undefined
     this.aiRuntimeDownloadState.error = undefined
     this.aiModelDownloadState.error = undefined
@@ -443,10 +449,6 @@ export class Orchestrator {
     this.aiRuntimeDownloadState.status = 'pending'
     this.aiModelDownloadState.status = 'pending'
     this.ipfsDownloadState.status = 'pending'
-
-    await this.proxyRouterProcess?.stop()
-    await this.aiRuntimeProcess?.stop()
-    await this.ipfsProcess?.stop()
   }
 }
 

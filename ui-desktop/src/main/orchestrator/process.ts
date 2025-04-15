@@ -9,6 +9,7 @@ export interface ProcessInfo {
 export interface Process {
   start(): Promise<void>
   stop(): Promise<void>
+  reset(): Promise<void>
   ping(timeoutMs?: number): Promise<void>
   getState(): ProcessState
   getError(): string | undefined

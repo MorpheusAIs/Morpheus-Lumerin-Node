@@ -3,7 +3,7 @@ import { ExternalProcess, ExternalProcessParams } from './external-process'
 import { ProbeConfig } from './orchestrator.types'
 import { ManagedProcess, ManagedProcessParams } from './managed-process'
 
-const PING_TIMEOUT = 1000
+const PING_TIMEOUT = 500
 
 export const ProcessFactory = async (
   params: (ManagedProcessParams | ExternalProcessParams) & { probe: ProbeConfig }

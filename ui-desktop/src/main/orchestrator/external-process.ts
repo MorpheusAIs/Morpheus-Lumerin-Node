@@ -69,7 +69,7 @@ export class ExternalProcess implements Process {
       await this.pinger?.ping(timeoutMs)
       this.setState('running', null)
     } catch (err) {
-      this.setState('stopped', (err as Error).message)
+      this.setState('stopped', 'Service is not available')
       throw err
     }
   }
@@ -113,6 +113,11 @@ export class ExternalProcess implements Process {
       this.log?.info('Stopped health checks')
       this.monitoringState = 'stopped'
     }
+  }
+
+  async reset(): Promise<void> {
+    await this.stop()
+    this.setState('pending', null)
   }
 
   getState(): ProcessState {

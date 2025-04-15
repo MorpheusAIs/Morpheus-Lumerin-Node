@@ -30,7 +30,8 @@ const configMacArm = {
       PROXY_STORAGE_PATH: './data/',
       LOG_COLOR: 'false',
       LOG_FOLDER_PATH: './logs/',
-      IPFS_MULTADDR: `/ip4/127.0.0.1/tcp/${process.env.SERVICE_IPFS_API_PORT}`
+      IPFS_MULTADDR: `/ip4/127.0.0.1/tcp/${process.env.SERVICE_IPFS_API_PORT}`,
+      DOCKER_HOST: 'unix:///var/run/docker.sock' as string
     },
     modelsConfig: JSON.stringify(
       buildLocalModelsConfig(
@@ -174,7 +175,11 @@ const configWin: typeof configMacArm = {
     ...configMacArm.proxyRouter,
     downloadUrl: process.env.SERVICE_PROXY_DOWNLOAD_URL_WINDOWS_X64,
     fileName: './services/proxy-router.exe' as string,
-    runPath: './services/proxy-router.exe' as string
+    runPath: './services/proxy-router.exe' as string,
+    env: {
+      ...configMacArm.proxyRouter.env,
+      DOCKER_HOST: 'npipe:////./pipe/docker_engine'
+    }
   },
   aiRuntime: {
     ...configMacArm.aiRuntime,
@@ -212,7 +217,7 @@ const configWin: typeof configMacArm = {
 // *********************************************************************************
 const configWinArm: typeof configMacArm = {
   proxyRouter: {
-    ...configMacArm.proxyRouter,
+    ...configWin.proxyRouter,
     downloadUrl: process.env.SERVICE_PROXY_DOWNLOAD_URL_WINDOWS_ARM64,
     fileName: './services/proxy-router.exe' as string,
     runPath: './services/proxy-router.exe' as string

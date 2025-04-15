@@ -161,29 +161,30 @@ export class ManagedProcess implements Process {
           const err = new Error(`failed to kill process`)
           this.log.error(err)
           this.setState('stopped', err.message)
-          reject(err)
+          return reject(err)
         }
-        this.log.info('process killed')
-        this.setState('stopped')
-        resolve()
       }, timeout)
 
       this.process.once('close', () => {
         clearTimeout(timeoutId)
         this.log.info('process stopped')
-        this.setState('stopped')
-        resolve()
+        this.setState('stopped', 'Process stopped')
+        return resolve()
       })
 
-      const res = this.process.kill('SIGINT')
+      const res = this.process.kill('SIGTERM')
       if (!res) {
-        const err = new Error(`[${name}] failed to stop`)
+        const err = new Error(`process failed to stop`)
         this.log.error(err.message)
         this.setState('stopped', err.message)
-        reject(err)
+        return reject(err)
       }
-      resolve()
     })
+  }
+
+  async reset() {
+    await this.stop()
+    this.setState('pending', null)
   }
 
   async ping(timeoutArg?: number) {
