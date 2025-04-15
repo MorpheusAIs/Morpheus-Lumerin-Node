@@ -132,10 +132,15 @@ const ProgressBarContainer = styled.div`
   border: 2px solid ${(p) => p.theme.colors.morMain};
 `;
 
-const ProgressBar = styled.div<{ progress: number }>`
+const ProgressBar = styled.div.attrs<{ progress: number }>({
+  style: ({ progress }) => {
+    return {
+      width: `${progress * 100}%`,
+    };
+  },
+})`
   background: ${(p) => p.theme.colors.primary};
   height: 3px;
-  width: ${(p) => p.progress * 100}%;
   border-radius: 4px;
   margin: 0;
 `;
@@ -228,6 +233,8 @@ export const StartupItemComponent: FC<{
     setIsPinging(false);
   };
 
+  const isManagedProcess = props.item.isExternal === false;
+
   return (
     <Entry>
       <EntryHeader>
@@ -269,13 +276,15 @@ export const StartupItemComponent: FC<{
                 color={theme.colors.morLight}
               />
             </PingBtn>
-            <RestartBtn onClick={handleRestart}>
-              <IconText
-                icon={<IconRefresh size={14} color={theme.colors.morLight} />}
-                text="Restart"
-                color={theme.colors.morLight}
-              />
-            </RestartBtn>
+            {isManagedProcess && (
+              <RestartBtn onClick={handleRestart}>
+                <IconText
+                  icon={<IconRefresh size={14} color={theme.colors.morLight} />}
+                  text="Restart"
+                  color={theme.colors.morLight}
+                />
+              </RestartBtn>
+            )}
           </Flex.Row>
         ) : null}
       </Flex.Row>

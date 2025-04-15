@@ -1,4 +1,4 @@
-import { dialog } from 'electron'
+import { app, dialog } from 'electron'
 import restart from '../electron-restart'
 import dbManager from '../database'
 import storage from '../storage'
@@ -632,12 +632,6 @@ const getOrchestrator = (core: Core): Orchestrator => {
 }
 
 export const startServices = async (_, core: Core) => {
-  log.silly('startServices')
-  log.verbose('startServices')
-  log.debug('startServices')
-  log.info('startServices')
-  log.warn('startServices')
-  log.error('startServices')
   await getOrchestrator(core).startAll()
 }
 
@@ -743,4 +737,8 @@ export const suggestAddresses = async (mnemonic: string) => {
     results.push(walletAddress)
   }
   return results
+}
+
+export const quitApp = async () => {
+  app.quit()
 }

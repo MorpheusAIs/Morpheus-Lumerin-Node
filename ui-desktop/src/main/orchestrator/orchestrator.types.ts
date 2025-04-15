@@ -16,6 +16,7 @@ export interface StartupItem {
   error?: string
   stderrOutput?: string
   ports?: number[]
+  isExternal?: boolean // undefined if the process management is not determined yet
 }
 
 export type LoadingState = {
@@ -24,45 +25,41 @@ export type LoadingState = {
   orchestratorStatus: OrchestratorStatus
 }
 
-type ProbeConfig = {
+export type ProbeConfig = {
   url: string
   method?: 'GET' | 'POST'
   interval?: number
   timeout?: number
 }
 
+type ExternalServiceConfig = {
+  downloadUrl: string
+  probe: ProbeConfig
+}
+
+type ServiceConfig<T extends {} = {}> = {
+  downloadUrl: string
+  fileName: string
+  extractPath?: string
+  ports: number[] // ports exposed by the service
+  runPath: string
+  runArgs?: string[]
+  env?: Record<string, string>
+  probe: ProbeConfig
+} & T
+
+type ArtifactConfig = {
+  downloadUrl: string
+  fileName: string
+}
+
 export type OrchestratorConfig = {
-  proxyRouter: {
-    downloadUrl: string | null
-    fileName: string
-    runPath: string
-    ports: number[] // ports exposed by the service
-    runArgs?: string[]
-    env: Record<string, string>
+  proxyRouter: ServiceConfig<{
     modelsConfig: string
     ratingConfig: string
-    probe: ProbeConfig
-  }
-  aiRuntime: {
-    downloadUrl: string
-    fileName: string
-    extractPath: string
-    runPath: string
-    ports: number[] // ports exposed by the service
-    runArgs: string[]
-    probe: ProbeConfig
-  }
-  aiModel: {
-    downloadUrl: string
-    fileName: string
-  }
-  ipfs: {
-    downloadUrl: string
-    fileName: string
-    extractPath: string
-    runPath: string
-    runArgs: string[]
-    ports: number[] // ports exposed by the service
-    probe: ProbeConfig
-  }
+  }>
+  aiRuntime: ServiceConfig
+  aiModel: ArtifactConfig
+  ipfs: ServiceConfig
+  containerRuntime: ExternalServiceConfig
 }
