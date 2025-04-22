@@ -435,10 +435,10 @@ export class Orchestrator {
   }
 
   private async resetState() {
-    await this.proxyRouterProcess?.reset()
-    await this.aiRuntimeProcess?.reset()
-    await this.ipfsProcess?.reset()
-    await this.containerRuntimeProcess?.reset()
+    this.proxyRouterProcess?.getState() !== 'running' && (await this.proxyRouterProcess?.reset())
+    this.aiRuntimeProcess?.getState() !== 'running' && (await this.aiRuntimeProcess?.reset())
+    this.ipfsProcess?.getState() !== 'running' && (await this.ipfsProcess?.reset())
+    this.containerRuntimeProcess?.getState() !== 'running' && (await this.containerRuntimeProcess?.reset())
 
     this.proxyDownloadState.error = undefined
     this.aiRuntimeDownloadState.error = undefined

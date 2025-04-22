@@ -86,7 +86,8 @@ const configMacArm = {
     ],
     probe: {
       url: `http://127.0.0.1:${process.env.SERVICE_IPFS_API_PORT}/api/v0/version`,
-      method: 'POST'
+      method: 'POST',
+      timeout: 20000
     }
   },
   containerRuntime: {
