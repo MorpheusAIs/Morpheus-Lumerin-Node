@@ -62,6 +62,8 @@ type Config struct {
 		StoragePath         string    `env:"PROXY_STORAGE_PATH"    flag:"proxy-storage-path"    validate:"omitempty,dirpath" desc:"enables file storage and sets the folder path"`
 		StoreChatContext    *lib.Bool `env:"PROXY_STORE_CHAT_CONTEXT" flag:"proxy-store-chat-context" desc:"store chat context in the proxy storage"`
 		ForwardChatContext  *lib.Bool `env:"PROXY_FORWARD_CHAT_CONTEXT" flag:"proxy-forward-chat-context" desc:"prepend whole stored message history to the prompt"`
+		AgentConfigPath     string    `env:"AGENT_CONFIG_PATH" flag:"agent-config-path" validate:"omitempty"`
+		AgentConfigContent  string    `env:"AGENT_CONFIG_CONTENT" flag:"agent-config-content" validate:"omitempty" desc:"content of the agent config file"`
 		ModelsConfigPath    string    `env:"MODELS_CONFIG_PATH" flag:"models-config-path" validate:"omitempty"`
 		ModelsConfigContent string    `env:"MODELS_CONFIG_CONTENT" flag:"models-config-content" validate:"omitempty" desc:"content of the models config file"`
 		RatingConfigPath    string    `env:"RATING_CONFIG_PATH" flag:"rating-config-path" validate:"omitempty" desc:"path to the rating config file"`

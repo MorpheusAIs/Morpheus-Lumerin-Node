@@ -53,6 +53,10 @@ func (s *MORRPCController) Handle(ctx context.Context, msg m.RPCMessage, sourceL
 		return s.sessionPrompt(ctx, msg, sendResponse, sourceLog)
 	case "session.report":
 		return s.sessionReport(ctx, msg, sendResponse, sourceLog)
+	case "agent.call_tool":
+		return s.callAgentTool(ctx, msg, sendResponse, sourceLog)
+	case "agent.get_tools":
+		return s.getAgentTools(ctx, msg, sendResponse, sourceLog)
 	default:
 		return lib.WrapError(ErrUnknownMethod, fmt.Errorf("unknown method: %s", msg.Method))
 	}
@@ -226,6 +230,106 @@ func (s *MORRPCController) sessionReport(ctx context.Context, msg m.RPCMessage, 
 	if err != nil {
 		sourceLog.Error(err)
 		return ErrGenerateReport
+	}
+
+	return sendResponse(res)
+}
+
+func (s *MORRPCController) callAgentTool(ctx context.Context, msg m.RPCMessage, sendResponse SendResponse, sourceLog lib.ILogger) error {
+	var req m.CallAgentToolReq
+	err := json.Unmarshal(msg.Params, &req)
+	if err != nil {
+		return lib.WrapError(ErrUnmarshal, err)
+	}
+
+	if err := s.validator.Struct(req); err != nil {
+		return lib.WrapError(ErrValidation, err)
+	}
+
+	session, err := s.sessionRepo.GetSession(ctx, req.SessionID)
+	if err != nil {
+		return fmt.Errorf("session cannot be loaded %s", err)
+	}
+
+	isSessionExpired := session.EndsAt().Uint64()*1000 < req.Timestamp
+	if isSessionExpired {
+		return fmt.Errorf("session expired")
+	}
+
+	user, ok := s.sessionStorage.GetUser(session.UserAddr().Hex())
+	if !ok {
+		return fmt.Errorf("user not found")
+	}
+
+	pubKeyHex, err := lib.StringToHexString(user.PubKey)
+	if err != nil {
+		return fmt.Errorf("invalid pubkey %s", err)
+	}
+
+	sig := req.Signature
+	req.Signature = lib.HexString{}
+
+	isValid := s.morRpc.VerifySignature(req, sig, pubKeyHex, sourceLog)
+	if !isValid {
+		err := fmt.Errorf("invalid signature")
+		sourceLog.Error(err)
+		return err
+	}
+
+	res, err := s.service.CallAgentTool(ctx, msg.ID, msg.ID, user.PubKey, &req, sourceLog)
+	if err != nil {
+		sourceLog.Error(err)
+		return err
+	}
+
+	return sendResponse(res)
+}
+
+func (s *MORRPCController) getAgentTools(ctx context.Context, msg m.RPCMessage, sendResponse SendResponse, sourceLog lib.ILogger) error {
+	var req m.GetAgentToolsReq
+	err := json.Unmarshal(msg.Params, &req)
+	if err != nil {
+		return lib.WrapError(ErrUnmarshal, err)
+	}
+
+	if err := s.validator.Struct(req); err != nil {
+		return lib.WrapError(ErrValidation, err)
+	}
+
+	session, err := s.sessionRepo.GetSession(ctx, req.SessionID)
+	if err != nil {
+		return fmt.Errorf("session cannot be loaded %s", err)
+	}
+
+	isSessionExpired := session.EndsAt().Uint64()*1000 < req.Timestamp
+	if isSessionExpired {
+		return fmt.Errorf("session expired")
+	}
+
+	user, ok := s.sessionStorage.GetUser(session.UserAddr().Hex())
+	if !ok {
+		return fmt.Errorf("user not found")
+	}
+
+	pubKeyHex, err := lib.StringToHexString(user.PubKey)
+	if err != nil {
+		return fmt.Errorf("invalid pubkey %s", err)
+	}
+
+	sig := req.Signature
+	req.Signature = lib.HexString{}
+
+	isValid := s.morRpc.VerifySignature(req, sig, pubKeyHex, sourceLog)
+	if !isValid {
+		err := fmt.Errorf("invalid signature")
+		sourceLog.Error(err)
+		return err
+	}
+
+	res, err := s.service.GetAgentTools(ctx, msg.ID, msg.ID, user.PubKey, &req, sourceLog)
+	if err != nil {
+		sourceLog.Error(err)
+		return err
 	}
 
 	return sendResponse(res)

@@ -17,12 +17,38 @@ type SessionReq struct {
 }
 
 type SessionRes struct {
-	PubKey      lib.HexString  `json:"message" validate:"required,hexadecimal"`
-	Approval    lib.HexString  `json:"approval" validate:"required,hexadecimal"`
-	ApprovalSig lib.HexString  `json:"approvalSig" validate:"required,hexadecimal"`
+	PubKey      lib.HexString  `json:"message" validate:"required,hexadecimal" swaggertype:"string"`
+	Approval    lib.HexString  `json:"approval" validate:"required,hexadecimal" swaggertype:"string"`
+	ApprovalSig lib.HexString  `json:"approvalSig" validate:"required,hexadecimal" swaggertype:"string"`
 	User        common.Address `json:"user" validate:"required,eth_addr"`
 	Timestamp   uint64         `json:"timestamp" validate:"required,timestamp"`
-	Signature   lib.HexString  `json:"signature,omitempty" validate:"required,hexadecimal"`
+	Signature   lib.HexString  `json:"signature,omitempty" validate:"required,hexadecimal" swaggertype:"string"`
+}
+
+type CallAgentToolReq struct {
+	SessionID common.Hash   `json:"sessionid" validate:"required,hex32"`
+	ToolName  string        `json:"toolname" validate:"required"`
+	Message   string        `json:"message" validate:"required"`
+	Signature lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
+	Timestamp uint64        `json:"timestamp" validate:"required,number"`
+}
+
+type CallAgentToolRes struct {
+	Message   string        `json:"message" validate:"required"`
+	Signature lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
+	Timestamp uint64        `json:"timestamp" validate:"required,number"`
+}
+
+type GetAgentToolsReq struct {
+	SessionID common.Hash   `json:"sessionid" validate:"required,hex32"`
+	Signature lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
+	Timestamp uint64        `json:"timestamp" validate:"required,number"`
+}
+
+type GetAgentToolsRes struct {
+	Message   string        `json:"message" validate:"required"`
+	Signature lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
+	Timestamp uint64        `json:"timestamp" validate:"required,number"`
 }
 
 type SessionPromptReq struct {

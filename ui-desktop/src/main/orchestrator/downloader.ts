@@ -7,8 +7,9 @@ import path from 'node:path'
 interface DownloadProgress {
   bytesDownloaded: number
   totalBytes: number | null
+  progress: number
   // TODO: Add percent
-  status: 'downloading' | 'complete' | 'error'
+  status: 'downloading' | 'error'
   error?: string
 }
 
@@ -49,7 +50,8 @@ export async function downloadFile(
       throttledOnProgress?.({
         bytesDownloaded: bytesDownloaded,
         totalBytes: totalBytes,
-        status: 'complete'
+        progress: 1,
+        status: 'downloading'
       })
       throttledOnProgress?.flush()
       return
@@ -95,6 +97,7 @@ export async function downloadFile(
       throttledOnProgress?.({
         bytesDownloaded,
         totalBytes,
+        progress: totalBytes ? bytesDownloaded / totalBytes : 0,
         status: 'downloading'
       })
     }
@@ -104,7 +107,8 @@ export async function downloadFile(
     throttledOnProgress?.({
       bytesDownloaded,
       totalBytes,
-      status: 'complete'
+      progress: 1,
+      status: 'downloading'
     })
     throttledOnProgress?.flush()
   } catch (error: any) {
@@ -113,6 +117,7 @@ export async function downloadFile(
     throttledOnProgress?.({
       bytesDownloaded: 0,
       totalBytes: null,
+      progress: 0,
       status: 'error',
       error: error.message
     })

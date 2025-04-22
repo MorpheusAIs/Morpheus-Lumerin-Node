@@ -1,6 +1,6 @@
 import styled from 'styled-components';
-import { LoadingBar, AltLayout, Flex } from './common';
-import { FC, useContext, useEffect } from 'react';
+import { LoadingBar, AltLayout, Flex, Btn } from './common';
+import { FC, useContext, useEffect, useState } from 'react';
 import { withClient } from '../store/hocs/clientContext';
 import type { Client } from 'src/main/src/client/subscriptions';
 import withServicesState from '../store/hocs/withServicesState';
@@ -37,10 +37,30 @@ type LoadingProps = {
 
 const Loading: FC<LoadingProps> = ({ services, client }) => {
   const toast = useContext(ToastsContext);
+  const [isError, setIsError] = useState(false);
 
   useEffect(() => {
-    client.startServices({});
+    startServices();
   }, [client]);
+
+  const onRetry = () => {
+    startServices();
+  };
+
+  const startServices = async () => {
+    try {
+      setIsError(false);
+      await client.startServices({});
+    } catch (err) {
+      toast.toast('error', 'Failed to start services');
+      console.error(err);
+      setIsError(true);
+    }
+  };
+
+  const onExit = () => {
+    client.quitApp();
+  };
 
   return (
     <AltLayout title="Starting services...">
@@ -74,8 +94,32 @@ const Loading: FC<LoadingProps> = ({ services, client }) => {
           />
         ))}
       </EntryGroup>
+
+      <Actions>
+        <RetryBtn onClick={onRetry} disabled={!isError}>
+          Retry
+        </RetryBtn>
+        <ExitBtn onClick={onExit}>Exit</ExitBtn>
+      </Actions>
     </AltLayout>
   );
 };
+
+const Actions = styled(Flex.Row)`
+  gap: 1rem;
+  justify-content: center;
+`;
+
+const RetryBtn = styled(Btn)`
+  padding: 0.5rem 1rem;
+  &:disabled {
+    background-color: ${(p) => p.theme.colors.weak};
+    color: ${(p) => p.theme.colors.primary};
+  }
+`;
+
+const ExitBtn = styled(Btn)`
+  padding: 0.5rem 1rem;
+`;
 
 export default withServicesState(withClient(Loading));

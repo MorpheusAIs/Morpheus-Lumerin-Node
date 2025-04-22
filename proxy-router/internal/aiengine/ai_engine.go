@@ -2,6 +2,7 @@ package aiengine
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"fmt"
@@ -10,13 +11,24 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/ethereum/go-ethereum/common"
+	mcpClient "github.com/mark3labs/mcp-go/client"
+	mcp "github.com/mark3labs/mcp-go/mcp"
 )
 
 type AiEngine struct {
 	modelsConfigLoader *config.ModelConfigLoader
+	agentsConfigLoader *config.AgentConfigLoader
 	service            ProxyService
 	storage            gcs.ChatStorageInterface
 	log                lib.ILogger
+}
+
+type AgentCallToolParams struct {
+	Name      string                 `json:"name"`
+	Arguments map[string]interface{} `json:"arguments,omitempty"`
+	Meta      *struct {
+		ProgressToken mcp.ProgressToken `json:"progressToken,omitempty"`
+	} `json:"_meta,omitempty"`
 }
 
 var (
@@ -27,9 +39,10 @@ var (
 	ErrJobFailed                     = errors.New("job failed")
 )
 
-func NewAiEngine(service ProxyService, storage gcs.ChatStorageInterface, modelsConfigLoader *config.ModelConfigLoader, log lib.ILogger) *AiEngine {
+func NewAiEngine(service ProxyService, storage gcs.ChatStorageInterface, modelsConfigLoader *config.ModelConfigLoader, agentsConfigLoader *config.AgentConfigLoader, log lib.ILogger) *AiEngine {
 	return &AiEngine{
 		modelsConfigLoader: modelsConfigLoader,
+		agentsConfigLoader: agentsConfigLoader,
 		service:            service,
 		storage:            storage,
 		log:                log,
@@ -86,4 +99,143 @@ func (a *AiEngine) GetLocalModels() ([]LocalModel, error) {
 	}
 
 	return models, nil
+}
+
+func (a *AiEngine) GetLocalAgents() ([]LocalAgent, error) {
+	agents := []LocalAgent{}
+
+	IDs, agentsFromConfig := a.agentsConfigLoader.GetAll()
+	for i, agent := range agentsFromConfig {
+		agents = append(agents, LocalAgent{
+			Id:              IDs[i].Hex(),
+			Name:            agent.AgentName,
+			Command:         agent.Command,
+			Args:            agent.Args,
+			ConcurrentSlots: agent.ConcurrentSlots,
+			CapacityPolicy:  agent.CapacityPolicy,
+		})
+	}
+
+	return agents, nil
+}
+
+func (a *AiEngine) GetAgentTools(ctx context.Context, sessionID common.Hash, agentID common.Hash) ([]AgentTool, error) {
+	tools := []AgentTool{}
+
+	if sessionID != (common.Hash{}) {
+		result, err := a.service.GetAgentTools(ctx, sessionID)
+		if err != nil {
+			return nil, err
+		}
+
+		var tools []AgentTool
+		err = json.Unmarshal([]byte(result), &tools)
+		if err != nil {
+			return nil, err
+		}
+		return tools, nil
+	}
+
+	if agentID == (common.Hash{}) {
+		return nil, fmt.Errorf("agent ID is required")
+	}
+
+	agentConfig := a.agentsConfigLoader.AgentConfigFromID(agentID.Hex())
+	if agentConfig == nil {
+		return nil, fmt.Errorf("agent not found: %s", agentID.Hex())
+	}
+
+	envs := []string{}
+	for key, value := range agentConfig.Env {
+		envs = append(envs, fmt.Sprintf("%s=%s", key, value))
+	}
+
+	mcpStdioClient, err := mcpClient.NewStdioMCPClient(agentConfig.Command, envs, agentConfig.Args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create MCP client: %s", err)
+	}
+
+	_, err = mcpStdioClient.Initialize(context.Background(), mcp.InitializeRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize MCP client: %s", err)
+	}
+
+	toolsResponse, err := mcpStdioClient.ListTools(context.Background(), mcp.ListToolsRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list tools: %s", err)
+	}
+
+	for _, tool := range toolsResponse.Tools {
+		tools = append(tools, AgentTool{
+			Name:        tool.Name,
+			Description: tool.Description,
+			InputSchema: ToolInputSchema{
+				Type:       tool.InputSchema.Type,
+				Properties: tool.InputSchema.Properties,
+				Required:   tool.InputSchema.Required,
+			},
+		})
+	}
+
+	mcpStdioClient.Close()
+
+	return tools, nil
+}
+
+func (a *AiEngine) CallAgentTool(ctx context.Context, sessionID common.Hash, agentID common.Hash, toolName string, input map[string]interface{}) (interface{}, error) {
+	if sessionID != (common.Hash{}) {
+		result, err := a.service.CallAgentTool(ctx, sessionID, toolName, input)
+		if err != nil {
+			return nil, err
+		}
+
+		fmt.Println("result", result)
+
+		var toolResult *interface{}
+		err = json.Unmarshal([]byte(result), &toolResult)
+		if err != nil {
+			return nil, err
+		}
+		return toolResult, nil
+	}
+
+	if agentID == (common.Hash{}) {
+		return nil, fmt.Errorf("agent ID is required")
+	}
+
+	agentConfig := a.agentsConfigLoader.AgentConfigFromID(agentID.Hex())
+	if agentConfig == nil {
+		return nil, fmt.Errorf("agent not found: %s", agentID.Hex())
+	}
+
+	envs := []string{}
+	for key, value := range agentConfig.Env {
+		envs = append(envs, fmt.Sprintf("%s=%s", key, value))
+	}
+
+	mcpStdioClient, err := mcpClient.NewStdioMCPClient(agentConfig.Command, envs, agentConfig.Args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create MCP client: %s", err)
+	}
+
+	_, err = mcpStdioClient.Initialize(context.Background(), mcp.InitializeRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize MCP client: %s", err)
+	}
+
+	callToolParams := AgentCallToolParams{
+		Name:      toolName,
+		Arguments: input,
+		Meta:      nil,
+	}
+	callToolResponse, err := mcpStdioClient.CallTool(context.Background(), mcp.CallToolRequest{
+		Params: callToolParams,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to call tool: %s", err)
+	}
+
+	mcpStdioClient.Close()
+
+	return callToolResponse, nil
 }

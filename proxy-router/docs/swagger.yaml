@@ -1,5 +1,31 @@
 basePath: /
 definitions:
+  aiengine.AgentTool:
+    properties:
+      description:
+        type: string
+      inputSchema:
+        $ref: '#/definitions/aiengine.ToolInputSchema'
+      name:
+        type: string
+    type: object
+  aiengine.LocalAgent:
+    properties:
+      args:
+        items:
+          type: string
+        type: array
+      capacityPolicy:
+        type: string
+      command:
+        type: string
+      concurrentSlots:
+        type: integer
+      id:
+        type: string
+      name:
+        type: string
+    type: object
   aiengine.LocalModel:
     properties:
       apiType:
@@ -16,6 +42,18 @@ definitions:
         type: string
       slots:
         type: integer
+    type: object
+  aiengine.ToolInputSchema:
+    properties:
+      properties:
+        additionalProperties: true
+        type: object
+      required:
+        items:
+          type: string
+        type: array
+      type:
+        type: string
     type: object
   authapi.AddUserReq:
     properties:
@@ -68,7 +106,7 @@ definitions:
   authapi.AllowanceRequest:
     properties:
       allowance:
-        $ref: '#/definitions/lib.BigInt'
+        type: string
       token:
         type: string
       username:
@@ -120,7 +158,7 @@ definitions:
     properties:
       allowances:
         additionalProperties:
-          $ref: '#/definitions/lib.BigInt'
+          type: string
         type: object
       password:
         type: string
@@ -139,7 +177,7 @@ definitions:
   authapi.RequestAllowanceReq:
     properties:
       allowance:
-        $ref: '#/definitions/lib.BigInt'
+        type: string
       token:
         type: string
       username:
@@ -287,21 +325,13 @@ definitions:
   morrpcmesssage.SessionRes:
     properties:
       approval:
-        items:
-          type: integer
-        type: array
+        type: string
       approvalSig:
-        items:
-          type: integer
-        type: array
+        type: string
       message:
-        items:
-          type: integer
-        type: array
+        type: string
       signature:
-        items:
-          type: integer
-        type: array
+        type: string
       timestamp:
         type: integer
       user:
@@ -352,6 +382,17 @@ definitions:
     required:
     - cidHash
     type: object
+  proxyapi.CallAgentToolReq:
+    properties:
+      input:
+        additionalProperties: true
+        type: object
+      toolName:
+        type: string
+    required:
+    - input
+    - toolName
+    type: object
   proxyapi.ChatCompletionRequestSwaggerExample:
     properties:
       messages:
@@ -367,6 +408,175 @@ definitions:
         type: array
       stream:
         type: boolean
+    type: object
+  proxyapi.ContainerInfo:
+    properties:
+      createdAt:
+        type: string
+      id:
+        type: string
+      image:
+        type: string
+      labels:
+        additionalProperties:
+          type: string
+        type: object
+      name:
+        type: string
+      networkMode:
+        type: string
+      ports:
+        items:
+          $ref: '#/definitions/proxyapi.PortMapping'
+        type: array
+      state:
+        type: string
+      status:
+        type: string
+    type: object
+  proxyapi.DockerBuildReq:
+    properties:
+      buildArgs:
+        additionalProperties:
+          type: string
+        type: object
+      contextPath:
+        type: string
+      dockerfile:
+        type: string
+      imageName:
+        type: string
+      imageTag:
+        type: string
+    required:
+    - contextPath
+    - dockerfile
+    - imageName
+    type: object
+  proxyapi.DockerBuildRes:
+    properties:
+      imageTag:
+        type: string
+    required:
+    - imageTag
+    type: object
+  proxyapi.DockerContainerActionReq:
+    properties:
+      containerId:
+        type: string
+      force:
+        type: boolean
+      timeout:
+        type: integer
+    required:
+    - containerId
+    type: object
+  proxyapi.DockerContainerInfoRes:
+    properties:
+      createdAt:
+        type: string
+      id:
+        type: string
+      image:
+        type: string
+      labels:
+        additionalProperties:
+          type: string
+        type: object
+      name:
+        type: string
+      networkMode:
+        type: string
+      ports:
+        items:
+          $ref: '#/definitions/proxyapi.PortMapping'
+        type: array
+      state:
+        type: string
+      status:
+        type: string
+    type: object
+  proxyapi.DockerListContainersReq:
+    properties:
+      all:
+        type: boolean
+      filterLabels:
+        additionalProperties:
+          type: string
+        type: object
+    type: object
+  proxyapi.DockerListContainersRes:
+    properties:
+      containers:
+        items:
+          $ref: '#/definitions/proxyapi.ContainerInfo'
+        type: array
+    type: object
+  proxyapi.DockerPruneRes:
+    properties:
+      spaceReclaimed:
+        type: integer
+    type: object
+  proxyapi.DockerStartContainerReq:
+    properties:
+      containerName:
+        type: string
+      env:
+        items:
+          type: string
+        type: array
+      imageName:
+        type: string
+      networkMode:
+        type: string
+      ports:
+        additionalProperties:
+          type: string
+        type: object
+      volumes:
+        additionalProperties:
+          type: string
+        type: object
+    required:
+    - imageName
+    type: object
+  proxyapi.DockerStartContainerRes:
+    properties:
+      containerId:
+        type: string
+    required:
+    - containerId
+    type: object
+  proxyapi.DockerStreamBuildEvent:
+    properties:
+      current:
+        type: integer
+      error:
+        type: string
+      errorDetails:
+        type: string
+      id:
+        type: string
+      percentage:
+        type: number
+      progress:
+        type: string
+      status:
+        description: Status message
+        type: string
+      stream:
+        type: string
+      timeUpdated:
+        type: integer
+      total:
+        type: integer
+    type: object
+  proxyapi.DockerVersionRes:
+    properties:
+      version:
+        type: string
+    required:
+    - version
     type: object
   proxyapi.DownloadProgressEvent:
     properties:
@@ -398,7 +608,7 @@ definitions:
       providerUrl:
         type: string
       spend:
-        $ref: '#/definitions/lib.BigInt'
+        type: string
       user:
         type: string
     required:
@@ -457,6 +667,17 @@ definitions:
     - fileCIDHash
     - metadataCID
     - metadataCIDHash
+    type: object
+  proxyapi.PortMapping:
+    properties:
+      containerPort:
+        type: string
+      hostIp:
+        type: string
+      hostPort:
+        type: string
+      protocol:
+        type: string
     type: object
   proxyapi.ResultResponse:
     properties:
@@ -650,6 +871,24 @@ definitions:
         type: array
     type: object
   structs.OpenSessionRequest:
+    properties:
+      approval:
+        example: "0x1234"
+        format: hex
+        type: string
+      approvalSig:
+        example: "0x1234"
+        format: hex
+        type: string
+      directPayment:
+        type: boolean
+      stake:
+        example: 123000000000
+        type: integer
+    required:
+    - approval
+    - approvalSig
+    - stake
     type: object
   structs.OpenSessionRes:
     properties:
@@ -848,6 +1087,35 @@ definitions:
   system.StatusRes:
     properties:
       status:
+        type: string
+    type: object
+  walletapi.SetupWalletMnemonicReqBody:
+    properties:
+      derivationPath:
+        type: string
+      mnemonic:
+        type: string
+    required:
+    - derivationPath
+    - mnemonic
+    type: object
+  walletapi.SetupWalletPrKeyReqBody:
+    properties:
+      privateKey:
+        type: string
+    required:
+    - privateKey
+    type: object
+  walletapi.StatusRes:
+    properties:
+      status:
+        example: ok
+        type: string
+    type: object
+  walletapi.WalletRes:
+    properties:
+      address:
+        example: "0x1234"
         type: string
     type: object
 externalDocs:
@@ -1879,6 +2147,246 @@ paths:
       summary: Set Eth Node URLs
       tags:
       - system
+  /docker/build:
+    post:
+      parameters:
+      - description: Docker build request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/proxyapi.DockerBuildReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.DockerBuildRes'
+      security:
+      - BasicAuth: []
+      summary: Build a Docker image
+      tags:
+      - docker
+  /docker/build/stream:
+    post:
+      parameters:
+      - description: Docker build request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/proxyapi.DockerBuildReq'
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.DockerStreamBuildEvent'
+      security:
+      - BasicAuth: []
+      summary: Build a Docker image with progress updates as SSE stream
+      tags:
+      - docker
+  /docker/container/{id}:
+    get:
+      parameters:
+      - description: Container ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.DockerContainerInfoRes'
+      security:
+      - BasicAuth: []
+      summary: Get Docker container info
+      tags:
+      - docker
+  /docker/container/{id}/logs:
+    get:
+      parameters:
+      - description: Container ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Number of lines to show from the end
+        in: query
+        name: tail
+        type: integer
+      - description: Follow log output
+        in: query
+        name: follow
+        type: boolean
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: Log output
+          schema:
+            type: string
+      security:
+      - BasicAuth: []
+      summary: Get Docker container logs
+      tags:
+      - docker
+  /docker/container/{id}/logs/stream:
+    get:
+      parameters:
+      - description: Container ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Number of lines to show from the end
+        in: query
+        name: tail
+        type: integer
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: Log output events
+          schema:
+            type: string
+      security:
+      - BasicAuth: []
+      summary: Stream Docker container logs as SSE
+      tags:
+      - docker
+  /docker/container/remove:
+    post:
+      parameters:
+      - description: Docker container remove request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/proxyapi.DockerContainerActionReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.ResultResponse'
+      security:
+      - BasicAuth: []
+      summary: Remove a Docker container
+      tags:
+      - docker
+  /docker/container/start:
+    post:
+      parameters:
+      - description: Docker start container request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/proxyapi.DockerStartContainerReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.DockerStartContainerRes'
+      security:
+      - BasicAuth: []
+      summary: Start a Docker container
+      tags:
+      - docker
+  /docker/container/stop:
+    post:
+      parameters:
+      - description: Docker container stop request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/proxyapi.DockerContainerActionReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.ResultResponse'
+      security:
+      - BasicAuth: []
+      summary: Stop a Docker container
+      tags:
+      - docker
+  /docker/containers:
+    post:
+      parameters:
+      - description: Docker list containers request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/proxyapi.DockerListContainersReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.DockerListContainersRes'
+      security:
+      - BasicAuth: []
+      summary: List Docker containers
+      tags:
+      - docker
+  /docker/prune/containers:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.DockerPruneRes'
+      security:
+      - BasicAuth: []
+      summary: Prune stopped Docker containers
+      tags:
+      - docker
+  /docker/prune/images:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.DockerPruneRes'
+      security:
+      - BasicAuth: []
+      summary: Prune unused Docker images
+      tags:
+      - docker
+  /docker/version:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/proxyapi.DockerVersionRes'
+      security:
+      - BasicAuth: []
+      summary: Get Docker version
+      tags:
+      - docker
   /files:
     get:
       description: Returns opened files
@@ -2135,6 +2643,79 @@ paths:
       summary: Initiate Session with Provider
       tags:
       - chat
+  /v1/agents:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/aiengine.LocalAgent'
+            type: array
+      security:
+      - BasicAuth: []
+      summary: Get local agents
+      tags:
+      - agents
+  /v1/agents/tools:
+    get:
+      parameters:
+      - description: Session ID
+        format: hex32
+        in: header
+        name: session_id
+        type: string
+      - description: Agent ID
+        format: hex32
+        in: header
+        name: agent_id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/aiengine.AgentTool'
+            type: array
+      security:
+      - BasicAuth: []
+      summary: Get agent tools
+      tags:
+      - agents
+    post:
+      parameters:
+      - description: Session ID
+        format: hex32
+        in: header
+        name: session_id
+        type: string
+      - description: Agent ID
+        format: hex32
+        in: header
+        name: agent_id
+        type: string
+      - description: Input
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/proxyapi.CallAgentToolReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      security:
+      - BasicAuth: []
+      summary: Call agent tool
+      tags:
+      - agents
   /v1/chat/completions:
     post:
       description: Send prompt to a local or remote model based on session id in header
@@ -2277,7 +2858,7 @@ paths:
         "200":
           description: OK
           schema:
-            type: statusRes
+            $ref: '#/definitions/walletapi.StatusRes'
       security:
       - BasicAuth: []
       summary: Remove wallet from proxy
@@ -2291,7 +2872,7 @@ paths:
         "200":
           description: OK
           schema:
-            type: WalletRes
+            $ref: '#/definitions/walletapi.WalletRes'
       security:
       - BasicAuth: []
       summary: Get Wallet
@@ -2304,20 +2885,16 @@ paths:
       - description: Mnemonic
         in: body
         name: mnemonic
+        required: true
         schema:
-          type: string
-      - description: Derivation path
-        in: body
-        name: derivationPath
-        schema:
-          type: string
+          $ref: '#/definitions/walletapi.SetupWalletMnemonicReqBody'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            type: WalletRes
+            $ref: '#/definitions/walletapi.WalletRes'
       security:
       - BasicAuth: []
       summary: Setup wallet using mnemonic
@@ -2332,14 +2909,14 @@ paths:
         name: privatekey
         required: true
         schema:
-          type: string
+          $ref: '#/definitions/walletapi.SetupWalletPrKeyReqBody'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            type: WalletRes
+            $ref: '#/definitions/walletapi.WalletRes'
       security:
       - BasicAuth: []
       summary: Setup wallet with private key
