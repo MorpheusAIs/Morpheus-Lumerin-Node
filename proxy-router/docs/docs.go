@@ -3076,7 +3076,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "allowance": {
-                    "$ref": "#/definitions/lib.BigInt"
+                    "type": "string"
                 },
                 "token": {
                     "type": "string"
@@ -3162,7 +3162,7 @@ const docTemplate = `{
                 "allowances": {
                     "type": "object",
                     "additionalProperties": {
-                        "$ref": "#/definitions/lib.BigInt"
+                        "type": "string"
                     }
                 },
                 "password": {
@@ -3187,7 +3187,7 @@ const docTemplate = `{
             ],
             "properties": {
                 "allowance": {
-                    "$ref": "#/definitions/lib.BigInt"
+                    "type": "string"
                 },
                 "token": {
                     "type": "string"
@@ -3393,28 +3393,16 @@ const docTemplate = `{
             ],
             "properties": {
                 "approval": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
+                    "type": "string"
                 },
                 "approvalSig": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
+                    "type": "string"
                 },
                 "message": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
+                    "type": "string"
                 },
                 "signature": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
+                    "type": "string"
                 },
                 "timestamp": {
                     "type": "integer"
@@ -3828,7 +3816,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "spend": {
-                    "$ref": "#/definitions/lib.BigInt"
+                    "type": "string"
                 },
                 "user": {
                     "type": "string"
@@ -4213,7 +4201,31 @@ const docTemplate = `{
             }
         },
         "structs.OpenSessionRequest": {
-            "type": "object"
+            "type": "object",
+            "required": [
+                "approval",
+                "approvalSig",
+                "stake"
+            ],
+            "properties": {
+                "approval": {
+                    "type": "string",
+                    "format": "hex",
+                    "example": "0x1234"
+                },
+                "approvalSig": {
+                    "type": "string",
+                    "format": "hex",
+                    "example": "0x1234"
+                },
+                "directPayment": {
+                    "type": "boolean"
+                },
+                "stake": {
+                    "type": "integer",
+                    "example": 123000000000
+                }
+            }
         },
         "structs.OpenSessionRes": {
             "type": "object",
