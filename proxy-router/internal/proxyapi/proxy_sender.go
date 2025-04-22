@@ -350,7 +350,12 @@ func (p *ProxyServiceSender) CallAgentTool(ctx context.Context, sessionID common
 		return "", ErrInvalidSig
 	}
 
-	return typedMsg.Message, nil
+	decryptedMessage, err := lib.DecryptString(typedMsg.Message, prKey.Hex())
+	if err != nil {
+		return "", lib.WrapError(ErrDecrFailed, err)
+	}
+
+	return string(decryptedMessage), nil
 }
 
 func (p *ProxyServiceSender) GetAgentTools(ctx context.Context, sessionID common.Hash) (string, error) {
@@ -407,7 +412,12 @@ func (p *ProxyServiceSender) GetAgentTools(ctx context.Context, sessionID common
 		return "", ErrInvalidSig
 	}
 
-	return typedMsg.Message, nil
+	decryptedResponse, err := lib.DecryptString(typedMsg.Message, prKey.Hex())
+	if err != nil {
+		return "", lib.WrapError(ErrDecrFailed, err)
+	}
+
+	return string(decryptedResponse), nil
 }
 
 func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage) (*msgs.RpcResponse, int, error) {

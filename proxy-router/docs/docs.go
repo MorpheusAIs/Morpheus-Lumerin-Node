@@ -2812,7 +2812,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "WalletRes"
+                            "$ref": "#/definitions/walletapi.WalletRes"
                         }
                     }
                 }
@@ -2835,7 +2835,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "statusRes"
+                            "$ref": "#/definitions/walletapi.StatusRes"
                         }
                     }
                 }
@@ -2861,16 +2861,9 @@ const docTemplate = `{
                         "description": "Mnemonic",
                         "name": "mnemonic",
                         "in": "body",
+                        "required": true,
                         "schema": {
-                            "type": "string"
-                        }
-                    },
-                    {
-                        "description": "Derivation path",
-                        "name": "derivationPath",
-                        "in": "body",
-                        "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/walletapi.SetupWalletMnemonicReqBody"
                         }
                     }
                 ],
@@ -2878,7 +2871,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "WalletRes"
+                            "$ref": "#/definitions/walletapi.WalletRes"
                         }
                     }
                 }
@@ -2906,7 +2899,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/walletapi.SetupWalletPrKeyReqBody"
                         }
                     }
                 ],
@@ -2914,7 +2907,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "WalletRes"
+                            "$ref": "#/definitions/walletapi.WalletRes"
                         }
                     }
                 }
@@ -4524,6 +4517,50 @@ const docTemplate = `{
             "properties": {
                 "status": {
                     "type": "string"
+                }
+            }
+        },
+        "walletapi.SetupWalletMnemonicReqBody": {
+            "type": "object",
+            "required": [
+                "derivationPath",
+                "mnemonic"
+            ],
+            "properties": {
+                "derivationPath": {
+                    "type": "string"
+                },
+                "mnemonic": {
+                    "type": "string"
+                }
+            }
+        },
+        "walletapi.SetupWalletPrKeyReqBody": {
+            "type": "object",
+            "required": [
+                "privateKey"
+            ],
+            "properties": {
+                "privateKey": {
+                    "type": "string"
+                }
+            }
+        },
+        "walletapi.StatusRes": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        },
+        "walletapi.WalletRes": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string",
+                    "example": "0x1234"
                 }
             }
         }

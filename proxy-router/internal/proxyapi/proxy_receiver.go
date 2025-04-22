@@ -209,7 +209,7 @@ func (s *ProxyReceiver) SessionReport(ctx context.Context, msgID string, reqID s
 	return response, nil
 }
 
-func (s *ProxyReceiver) CallAgentTool(ctx context.Context, msgID string, reqID string, req *m.CallAgentToolReq, sourceLog lib.ILogger) (*msg.RpcResponse, error) {
+func (s *ProxyReceiver) CallAgentTool(ctx context.Context, msgID string, reqID string, userPubKey string, req *m.CallAgentToolReq, sourceLog lib.ILogger) (*msg.RpcResponse, error) {
 	sourceLog.Debugf("received call agent tool request for %s", req.SessionID)
 
 	var input map[string]interface{}
@@ -235,8 +235,6 @@ func (s *ProxyReceiver) CallAgentTool(ctx context.Context, msgID string, reqID s
 		return nil, err
 	}
 
-	fmt.Println("result", result)
-
 	marshalledResult, err := json.Marshal(result)
 	if err != nil {
 		err := lib.WrapError(fmt.Errorf("failed to marshal result"), err)
@@ -244,10 +242,13 @@ func (s *ProxyReceiver) CallAgentTool(ctx context.Context, msgID string, reqID s
 		return nil, err
 	}
 
-	fmt.Println("marshalledResult", string(marshalledResult))
+	encryptedResponse, err := lib.EncryptString(string(marshalledResult), lib.RemoveHexPrefix(userPubKey))
+	if err != nil {
+		return nil, err
+	}
 
 	response, err := s.morRpc.CallAgentToolResponse(
-		string(marshalledResult),
+		string(encryptedResponse),
 		s.privateKeyHex,
 		reqID,
 	)
@@ -260,7 +261,7 @@ func (s *ProxyReceiver) CallAgentTool(ctx context.Context, msgID string, reqID s
 	return response, nil
 }
 
-func (s *ProxyReceiver) GetAgentTools(ctx context.Context, msgID string, reqID string, req *m.GetAgentToolsReq, sourceLog lib.ILogger) (*msg.RpcResponse, error) {
+func (s *ProxyReceiver) GetAgentTools(ctx context.Context, msgID string, reqID string, userPubKey string, req *m.GetAgentToolsReq, sourceLog lib.ILogger) (*msg.RpcResponse, error) {
 	sourceLog.Debugf("received get agent tools request for %s", req.SessionID)
 
 	session, err := s.sessionRepo.GetSession(ctx, req.SessionID)
@@ -283,8 +284,14 @@ func (s *ProxyReceiver) GetAgentTools(ctx context.Context, msgID string, reqID s
 		sourceLog.Error(err)
 		return nil, err
 	}
+
+	encryptedResponse, err := lib.EncryptString(string(marshalledTools), lib.RemoveHexPrefix(userPubKey))
+	if err != nil {
+		return nil, err
+	}
+
 	response, err := s.morRpc.GetAgentToolsResponse(
-		string(marshalledTools),
+		encryptedResponse,
 		s.privateKeyHex,
 		reqID,
 	)
