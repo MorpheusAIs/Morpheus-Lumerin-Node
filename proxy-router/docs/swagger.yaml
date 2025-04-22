@@ -106,7 +106,7 @@ definitions:
   authapi.AllowanceRequest:
     properties:
       allowance:
-        $ref: '#/definitions/lib.BigInt'
+        type: string
       token:
         type: string
       username:
@@ -158,7 +158,7 @@ definitions:
     properties:
       allowances:
         additionalProperties:
-          $ref: '#/definitions/lib.BigInt'
+          type: string
         type: object
       password:
         type: string
@@ -177,7 +177,7 @@ definitions:
   authapi.RequestAllowanceReq:
     properties:
       allowance:
-        $ref: '#/definitions/lib.BigInt'
+        type: string
       token:
         type: string
       username:
@@ -325,21 +325,13 @@ definitions:
   morrpcmesssage.SessionRes:
     properties:
       approval:
-        items:
-          type: integer
-        type: array
+        type: string
       approvalSig:
-        items:
-          type: integer
-        type: array
+        type: string
       message:
-        items:
-          type: integer
-        type: array
+        type: string
       signature:
-        items:
-          type: integer
-        type: array
+        type: string
       timestamp:
         type: integer
       user:
@@ -616,7 +608,7 @@ definitions:
       providerUrl:
         type: string
       spend:
-        $ref: '#/definitions/lib.BigInt'
+        type: string
       user:
         type: string
     required:
@@ -879,6 +871,24 @@ definitions:
         type: array
     type: object
   structs.OpenSessionRequest:
+    properties:
+      approval:
+        example: "0x1234"
+        format: hex
+        type: string
+      approvalSig:
+        example: "0x1234"
+        format: hex
+        type: string
+      directPayment:
+        type: boolean
+      stake:
+        example: 123000000000
+        type: integer
+    required:
+    - approval
+    - approvalSig
+    - stake
     type: object
   structs.OpenSessionRes:
     properties:
