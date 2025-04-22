@@ -1079,6 +1079,35 @@ definitions:
       status:
         type: string
     type: object
+  walletapi.SetupWalletMnemonicReqBody:
+    properties:
+      derivationPath:
+        type: string
+      mnemonic:
+        type: string
+    required:
+    - derivationPath
+    - mnemonic
+    type: object
+  walletapi.SetupWalletPrKeyReqBody:
+    properties:
+      privateKey:
+        type: string
+    required:
+    - privateKey
+    type: object
+  walletapi.StatusRes:
+    properties:
+      status:
+        example: ok
+        type: string
+    type: object
+  walletapi.WalletRes:
+    properties:
+      address:
+        example: "0x1234"
+        type: string
+    type: object
 externalDocs:
   description: OpenAPI
   url: https://swagger.io/resources/open-api/
@@ -2819,7 +2848,7 @@ paths:
         "200":
           description: OK
           schema:
-            type: statusRes
+            $ref: '#/definitions/walletapi.StatusRes'
       security:
       - BasicAuth: []
       summary: Remove wallet from proxy
@@ -2833,7 +2862,7 @@ paths:
         "200":
           description: OK
           schema:
-            type: WalletRes
+            $ref: '#/definitions/walletapi.WalletRes'
       security:
       - BasicAuth: []
       summary: Get Wallet
@@ -2846,20 +2875,16 @@ paths:
       - description: Mnemonic
         in: body
         name: mnemonic
+        required: true
         schema:
-          type: string
-      - description: Derivation path
-        in: body
-        name: derivationPath
-        schema:
-          type: string
+          $ref: '#/definitions/walletapi.SetupWalletMnemonicReqBody'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            type: WalletRes
+            $ref: '#/definitions/walletapi.WalletRes'
       security:
       - BasicAuth: []
       summary: Setup wallet using mnemonic
@@ -2874,14 +2899,14 @@ paths:
         name: privatekey
         required: true
         schema:
-          type: string
+          $ref: '#/definitions/walletapi.SetupWalletPrKeyReqBody'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            type: WalletRes
+            $ref: '#/definitions/walletapi.WalletRes'
       security:
       - BasicAuth: []
       summary: Setup wallet with private key

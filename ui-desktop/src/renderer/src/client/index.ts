@@ -234,6 +234,7 @@ const createClient = function (createStore) {
     startServices: utils.forwardToMainProcess('start-services', 750000),
     restartService: utils.forwardToMainProcess('restart-service', 750000),
     pingService: utils.forwardToMainProcess('ping-service', 750000),
+    quitApp: utils.forwardToMainProcess('quit-app', 750000),
   };
 
   const api = {

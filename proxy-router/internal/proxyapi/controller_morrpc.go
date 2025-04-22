@@ -276,7 +276,7 @@ func (s *MORRPCController) callAgentTool(ctx context.Context, msg m.RPCMessage, 
 		return err
 	}
 
-	res, err := s.service.CallAgentTool(ctx, msg.ID, msg.ID, &req, sourceLog)
+	res, err := s.service.CallAgentTool(ctx, msg.ID, msg.ID, user.PubKey, &req, sourceLog)
 	if err != nil {
 		sourceLog.Error(err)
 		return err
@@ -326,7 +326,7 @@ func (s *MORRPCController) getAgentTools(ctx context.Context, msg m.RPCMessage, 
 		return err
 	}
 
-	res, err := s.service.GetAgentTools(ctx, msg.ID, msg.ID, &req, sourceLog)
+	res, err := s.service.GetAgentTools(ctx, msg.ID, msg.ID, user.PubKey, &req, sourceLog)
 	if err != nil {
 		sourceLog.Error(err)
 		return err

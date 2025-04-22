@@ -132,10 +132,15 @@ const ProgressBarContainer = styled.div`
   border: 2px solid ${(p) => p.theme.colors.morMain};
 `;
 
-const ProgressBar = styled.div<{ progress: number }>`
+const ProgressBar = styled.div.attrs<{ progress: number }>({
+  style: ({ progress }) => {
+    return {
+      width: `${progress * 100}%`,
+    };
+  },
+})`
   background: ${(p) => p.theme.colors.primary};
   height: 3px;
-  width: ${(p) => p.progress * 100}%;
   border-radius: 4px;
   margin: 0;
 `;
@@ -146,7 +151,7 @@ const Error = styled.div`
   font-size: 0.875em;
 `;
 
-const StderrButton = styled.button`
+const LogsButton = styled.button`
   background: none;
   border: none;
   color: ${(p) => p.theme.colors.dark};
@@ -215,7 +220,7 @@ export const StartupItemComponent: FC<{
   onPing: () => Promise<void>;
   alwaysShowPingRestart?: boolean;
 }> = (props) => {
-  const [showStderr, setShowStderr] = useState(false);
+  const [showLogs, setShowLogs] = useState(false);
   const [isPinging, setIsPinging] = useState(false);
 
   const handleRestart = () => {
@@ -227,6 +232,8 @@ export const StartupItemComponent: FC<{
     await props.onPing?.();
     setIsPinging(false);
   };
+
+  const isManagedProcess = props.item.isExternal === false;
 
   return (
     <Entry>
@@ -243,16 +250,18 @@ export const StartupItemComponent: FC<{
       </EntryHeader>
       {props.item.error && <Error>{props.item.error}</Error>}
       <Flex.Row justify="space-between" align="center">
-        <StderrButton onClick={() => setShowStderr(!showStderr)}>
-          {showStderr ? (
-            <IconChevronUp size={16} />
-          ) : (
-            <IconChevronDown size={16} />
-          )}
-          {showStderr ? 'Hide logs' : 'Show logs'}
-        </StderrButton>
+        {isManagedProcess && (
+          <LogsButton onClick={() => setShowLogs(!showLogs)}>
+            {showLogs ? (
+              <IconChevronUp size={16} />
+            ) : (
+              <IconChevronDown size={16} />
+            )}
+            {showLogs ? 'Hide logs' : 'Show logs'}
+          </LogsButton>
+        )}
         {props.alwaysShowPingRestart || props.item.status === 'stopped' ? (
-          <Flex.Row gap="0.5rem">
+          <Flex.Row gap="0.5rem" justify="flex-end" grow="1">
             <PingBtn onClick={handlePing}>
               <IconText
                 icon={
@@ -269,17 +278,19 @@ export const StartupItemComponent: FC<{
                 color={theme.colors.morLight}
               />
             </PingBtn>
-            <RestartBtn onClick={handleRestart}>
-              <IconText
-                icon={<IconRefresh size={14} color={theme.colors.morLight} />}
-                text="Restart"
-                color={theme.colors.morLight}
-              />
-            </RestartBtn>
+            {isManagedProcess && (
+              <RestartBtn onClick={handleRestart}>
+                <IconText
+                  icon={<IconRefresh size={14} color={theme.colors.morLight} />}
+                  text="Restart"
+                  color={theme.colors.morLight}
+                />
+              </RestartBtn>
+            )}
           </Flex.Row>
         ) : null}
       </Flex.Row>
-      {showStderr && <ProcessLogs>{props.item.stderrOutput}</ProcessLogs>}
+      {showLogs && <ProcessLogs>{props.item.stderrOutput}</ProcessLogs>}
     </Entry>
   );
 };
