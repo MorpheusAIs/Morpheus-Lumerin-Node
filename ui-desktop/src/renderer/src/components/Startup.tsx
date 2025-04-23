@@ -33,11 +33,12 @@ const EntryGroup = styled(Flex.Column)`
 type LoadingProps = {
   services: LoadingState;
   client: Client;
+  onSkip: () => void;
 };
 
-const Loading: FC<LoadingProps> = ({ services, client }) => {
+const Loading: FC<LoadingProps> = ({ services, client, onSkip }) => {
   const toast = useContext(ToastsContext);
-  const [isError, setIsError] = useState(false);
+  const [isRestartable, setIsRestartable] = useState(false);
 
   useEffect(() => {
     startServices();
@@ -49,12 +50,13 @@ const Loading: FC<LoadingProps> = ({ services, client }) => {
 
   const startServices = async () => {
     try {
-      setIsError(false);
+      setIsRestartable(false);
       await client.startServices({});
     } catch (err) {
       toast.toast('error', 'Failed to start services');
       console.error(err);
-      setIsError(true);
+    } finally {
+      setIsRestartable(true);
     }
   };
 
@@ -96,10 +98,10 @@ const Loading: FC<LoadingProps> = ({ services, client }) => {
       </EntryGroup>
 
       <Actions>
-        <RetryBtn onClick={onRetry} disabled={!isError}>
+        <RetryBtn onClick={onRetry} disabled={!isRestartable}>
           Retry
         </RetryBtn>
-        <ExitBtn onClick={onExit}>Exit</ExitBtn>
+        <SkipBtn onClick={onSkip}>Skip</SkipBtn>
       </Actions>
     </AltLayout>
   );
@@ -110,16 +112,23 @@ const Actions = styled(Flex.Row)`
   justify-content: center;
 `;
 
-const RetryBtn = styled(Btn)`
+const BaseBtn = styled(Btn)`
   padding: 0.5rem 1rem;
+  font-size: 1.7rem;
+
+  color: ${(p) => p.theme.colors.primary};
   &:disabled {
     background-color: ${(p) => p.theme.colors.weak};
     color: ${(p) => p.theme.colors.primary};
   }
 `;
 
-const ExitBtn = styled(Btn)`
-  padding: 0.5rem 1rem;
+const RetryBtn = styled(BaseBtn)`
+  background-color: ${(p) => p.theme.colors.success};
+`;
+
+const SkipBtn = styled(BaseBtn)`
+  background-color: ${(p) => p.theme.colors.warning};
 `;
 
 export default withServicesState(withClient(Loading));
