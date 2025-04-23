@@ -63,7 +63,8 @@ const listeners = {
   'ping-service': handlers.pingService,
 
   // App
-  'quit-app': handlers.quitApp
+  'quit-app': handlers.quitApp,
+  logout: handlers.resetWallet
 }
 
 // Keeps references to wrapped listeners (with core injected) to be able to unsubscribe from them
