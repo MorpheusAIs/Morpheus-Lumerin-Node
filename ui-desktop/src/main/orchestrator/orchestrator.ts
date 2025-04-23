@@ -1,7 +1,6 @@
 import { app } from 'electron'
 import fs from 'fs-extra'
 import path from 'node:path'
-import { BackgroundProcess } from './runner'
 import { downloadFile } from './downloader'
 import logger from '../logger'
 import { extractFile } from './unzipper'
@@ -11,14 +10,17 @@ import {
   OrchestratorConfig,
   OrchestratorStatus
 } from './orchestrator.types'
+import { Process } from './process'
+import { ProcessFactory } from './process-factory'
 
 console.log('Process cwd', process.cwd())
 console.log('App path', resolveAppDataPath(''))
 
 export class Orchestrator {
-  private proxyRouterProcess?: BackgroundProcess
-  private aiRuntimeProcess?: BackgroundProcess
-  private ipfsProcess?: BackgroundProcess
+  private proxyRouterProcess?: Process
+  private aiRuntimeProcess?: Process
+  private ipfsProcess?: Process
+  private containerRuntimeProcess?: Process
   private onStateUpdate: (state: LoadingState) => void
   private cfg: OrchestratorConfig
   private log: typeof logger
@@ -55,15 +57,15 @@ export class Orchestrator {
     this.cfg = cfg
     this.log = log
     this.onStateUpdate = onStateUpdate
-  }
-
-  async startAll() {
     app.on('quit', () => {
       this.log.warn('Quit event received')
       return this.stopAll()
     })
+  }
 
+  async startAll() {
     this.log.info('Orchestrator started')
+    await this.resetState()
     this.emitStateUpdate()
 
     if (this.cfg.proxyRouter.downloadUrl) {
@@ -71,8 +73,8 @@ export class Orchestrator {
         this.cfg.proxyRouter.downloadUrl,
         resolveAppDataPath(this.cfg.proxyRouter.fileName),
         (progress) => {
-          this.proxyDownloadState.status = 'downloading'
-          this.proxyDownloadState.progress = progress.bytesDownloaded / progress.totalBytes!
+          this.proxyDownloadState.status = progress.status
+          this.proxyDownloadState.progress = progress.progress
           this.proxyDownloadState.error = progress.error
           this.emitStateUpdate()
           this.log.info(`Downloading proxy-router: ${progress.bytesDownloaded} bytes`)
@@ -97,8 +99,8 @@ export class Orchestrator {
           this.cfg.aiRuntime.downloadUrl,
           resolveAppDataPath(this.cfg.aiRuntime.fileName),
           (progress) => {
-            this.aiRuntimeDownloadState.status = 'downloading'
-            this.aiRuntimeDownloadState.progress = progress.bytesDownloaded / progress.totalBytes!
+            this.aiRuntimeDownloadState.status = progress.status
+            this.aiRuntimeDownloadState.progress = progress.progress
             this.aiRuntimeDownloadState.error = progress.error
             this.emitStateUpdate()
             this.log.info(`Downloading ai-runtime: ${progress.bytesDownloaded} bytes`)
@@ -130,8 +132,9 @@ export class Orchestrator {
         this.cfg.aiModel.downloadUrl,
         resolveAppDataPath(this.cfg.aiModel.fileName),
         (progress) => {
-          this.aiModelDownloadState.status = 'downloading'
-          this.aiModelDownloadState.progress = progress.bytesDownloaded / progress.totalBytes! || 0
+          this.aiModelDownloadState.status = progress.status
+          this.aiModelDownloadState.progress = progress.progress
+          this.aiModelDownloadState.error = progress.error
           this.emitStateUpdate()
           this.log.info(`Downloading ai-model: ${progress.bytesDownloaded} bytes`)
         },
@@ -149,8 +152,9 @@ export class Orchestrator {
         this.cfg.ipfs.downloadUrl,
         resolveAppDataPath(this.cfg.ipfs.fileName),
         (progress) => {
-          this.ipfsDownloadState.status = 'downloading'
-          this.ipfsDownloadState.progress = progress.bytesDownloaded / progress.totalBytes! || 0
+          this.ipfsDownloadState.status = progress.status
+          this.ipfsDownloadState.progress = progress.progress
+          this.ipfsDownloadState.error = progress.error
           this.emitStateUpdate()
           this.log.info(`Downloading ipfs: ${progress.bytesDownloaded} bytes`)
         },
@@ -175,34 +179,48 @@ export class Orchestrator {
     this.emitStateUpdate()
 
     if (!this.ipfsProcess) {
-      this.ipfsProcess = new BackgroundProcess(
-        resolveAppDataPath(this.cfg.ipfs.runPath),
-        this.cfg.ipfs.runArgs,
-        {
-          log: this.log.scope('IPFS'),
-          redirectProcessOutput: true
-        },
-        () => this.emitStateUpdate(),
-        this.cfg.ipfs.probe
-      )
+      this.ipfsProcess = await ProcessFactory({
+        command: resolveAppDataPath(this.cfg.ipfs.runPath),
+        args: this.cfg.ipfs.runArgs,
+        log: this.log.scope('IPFS'),
+        redirectProcessOutput: true,
+        probe: this.cfg.ipfs.probe,
+        ports: this.cfg.ipfs.ports,
+        onStateChange: () => this.emitStateUpdate()
+      })
     }
+
     await this.ipfsProcess.start()
     this.emitStateUpdate()
 
     if (!this.aiRuntimeProcess) {
-      this.aiRuntimeProcess = new BackgroundProcess(
-        resolveAppDataPath(this.cfg.aiRuntime.runPath),
-        this.cfg.aiRuntime.runArgs,
-        {
-          log: this.log.scope('Ai-runtime'),
-          redirectProcessOutput: false
-        },
-        () => this.emitStateUpdate(),
-        this.cfg.aiRuntime.probe
-      )
+      this.aiRuntimeProcess = await ProcessFactory({
+        command: resolveAppDataPath(this.cfg.aiRuntime.runPath),
+        args: this.cfg.aiRuntime.runArgs,
+        log: this.log.scope('Ai-runtime'),
+        redirectProcessOutput: false,
+        probe: this.cfg.aiRuntime.probe,
+        ports: this.cfg.aiRuntime.ports,
+        onStateChange: () => this.emitStateUpdate()
+      })
     }
+
     await this.aiRuntimeProcess.start()
     this.emitStateUpdate()
+
+    // Container runtime
+    if (!this.containerRuntimeProcess) {
+      this.containerRuntimeProcess = await ProcessFactory({
+        probe: this.cfg.containerRuntime.probe,
+        onStateChange: () => this.emitStateUpdate(),
+        log: this.log.scope('Container-runtime')
+      })
+    }
+
+    await this.containerRuntimeProcess.start().catch(this.log.error)
+    this.emitStateUpdate()
+
+    // Proxy router
 
     const proxyFolder = path.dirname(resolveAppDataPath(this.cfg.proxyRouter.runPath))
 
@@ -218,17 +236,17 @@ export class Orchestrator {
     )
 
     if (!this.proxyRouterProcess) {
-      this.proxyRouterProcess = new BackgroundProcess(
-        resolveAppDataPath(this.cfg.proxyRouter.runPath),
-        this.cfg.proxyRouter.runArgs || [],
-        {
-          log: this.log.scope('Proxy-router'),
-          redirectProcessOutput: false
-        },
-        () => this.emitStateUpdate(),
-        this.cfg.proxyRouter.probe
-      )
+      this.proxyRouterProcess = await ProcessFactory({
+        command: resolveAppDataPath(this.cfg.proxyRouter.runPath),
+        args: this.cfg.proxyRouter.runArgs || [],
+        log: this.log.scope('Proxy-router'),
+        redirectProcessOutput: false,
+        probe: this.cfg.proxyRouter.probe,
+        ports: this.cfg.proxyRouter.ports,
+        onStateChange: () => this.emitStateUpdate()
+      })
     }
+
     await this.proxyRouterProcess.start()
     this.emitStateUpdate()
   }
@@ -236,6 +254,7 @@ export class Orchestrator {
   async stopAll() {
     this.log.info('Orchestrator shutting down')
 
+    // Only stop managed processes
     await this.proxyRouterProcess?.stop()
     this.emitStateUpdate()
 
@@ -252,13 +271,21 @@ export class Orchestrator {
       aiRuntime: this.aiRuntimeProcess,
       ipfs: this.ipfsProcess
     }
-    const process: BackgroundProcess | undefined = processMap[service]
+    const process: Process | undefined = processMap[service]
     if (!process) {
       this.log.error(`Service ${service} not found`)
       return
     }
+
+    // Only restart managed processes
+    if (process.isExternal()) {
+      this.log.warn(`Cannot restart external service ${service}`)
+      return
+    }
+
     await process.stop()
     this.emitStateUpdate()
+
     await process.start()
     this.emitStateUpdate()
   }
@@ -267,10 +294,11 @@ export class Orchestrator {
     const processMap = {
       proxyRouter: this.proxyRouterProcess,
       aiRuntime: this.aiRuntimeProcess,
-      ipfs: this.ipfsProcess
+      ipfs: this.ipfsProcess,
+      containerRuntime: this.containerRuntimeProcess
     }
 
-    const process: BackgroundProcess | undefined = processMap[service]
+    const process: Process | undefined = processMap[service]
     if (!process) {
       const error = `Service ${service} not found`
       this.log.error(error)
@@ -303,7 +331,8 @@ export class Orchestrator {
           status: this.ipfsProcess?.getState() ?? 'pending',
           error: this.ipfsProcess?.getError(),
           stderrOutput: this.ipfsProcess?.getOutput(),
-          ports: this.cfg.ipfs.ports
+          ports: this.cfg.ipfs.ports,
+          isExternal: this.ipfsProcess?.isExternal()
         },
         {
           id: 'aiRuntime',
@@ -311,7 +340,16 @@ export class Orchestrator {
           status: this.aiRuntimeProcess?.getState() ?? 'pending',
           error: this.aiRuntimeProcess?.getError(),
           stderrOutput: this.aiRuntimeProcess?.getOutput(),
-          ports: this.cfg.aiRuntime.ports
+          ports: this.cfg.aiRuntime.ports,
+          isExternal: this.aiRuntimeProcess?.isExternal()
+        },
+        {
+          id: 'containerRuntime',
+          name: 'Container Runtime',
+          status: this.containerRuntimeProcess?.getState() ?? 'pending',
+          error: this.containerRuntimeProcess?.getError(),
+          stderrOutput: this.containerRuntimeProcess?.getOutput(),
+          isExternal: this.containerRuntimeProcess?.isExternal()
         },
         {
           id: 'proxyRouter',
@@ -319,7 +357,8 @@ export class Orchestrator {
           status: this.proxyRouterProcess?.getState() ?? 'pending',
           error: this.proxyRouterProcess?.getError(),
           stderrOutput: this.proxyRouterProcess?.getOutput(),
-          ports: this.cfg.proxyRouter.ports
+          ports: this.cfg.proxyRouter.ports,
+          isExternal: this.proxyRouterProcess?.isExternal()
         }
       ],
       orchestratorStatus
@@ -339,7 +378,8 @@ export class Orchestrator {
     const hasStartupErrors = [
       this.ipfsProcess,
       this.aiRuntimeProcess,
-      this.proxyRouterProcess
+      this.proxyRouterProcess,
+      this.containerRuntimeProcess
     ].some((process) => process?.getError())
 
     if (hasDownloadErrors || hasStartupErrors) {
@@ -358,7 +398,8 @@ export class Orchestrator {
     const allProcessesRunning = [
       this.ipfsProcess,
       this.aiRuntimeProcess,
-      this.proxyRouterProcess
+      this.proxyRouterProcess,
+      this.containerRuntimeProcess
     ].every((process) => process?.getState() === 'running')
 
     if (allDownloadsComplete && allProcessesRunning) {
@@ -391,6 +432,24 @@ export class Orchestrator {
 
     await fs.writeFile(filepath, content)
     this.log.info(`Created config file: ${filepath}`)
+  }
+
+  private async resetState() {
+    this.proxyRouterProcess?.getState() !== 'running' && (await this.proxyRouterProcess?.reset())
+    this.aiRuntimeProcess?.getState() !== 'running' && (await this.aiRuntimeProcess?.reset())
+    this.ipfsProcess?.getState() !== 'running' && (await this.ipfsProcess?.reset())
+    this.containerRuntimeProcess?.getState() !== 'running' &&
+      (await this.containerRuntimeProcess?.reset())
+
+    this.proxyDownloadState.error = undefined
+    this.aiRuntimeDownloadState.error = undefined
+    this.aiModelDownloadState.error = undefined
+    this.ipfsDownloadState.error = undefined
+
+    this.proxyDownloadState.status = 'pending'
+    this.aiRuntimeDownloadState.status = 'pending'
+    this.aiModelDownloadState.status = 'pending'
+    this.ipfsDownloadState.status = 'pending'
   }
 }
 

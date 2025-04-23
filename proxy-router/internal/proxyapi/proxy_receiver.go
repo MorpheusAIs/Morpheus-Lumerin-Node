@@ -208,3 +208,98 @@ func (s *ProxyReceiver) SessionReport(ctx context.Context, msgID string, reqID s
 
 	return response, nil
 }
+
+func (s *ProxyReceiver) CallAgentTool(ctx context.Context, msgID string, reqID string, userPubKey string, req *m.CallAgentToolReq, sourceLog lib.ILogger) (*msg.RpcResponse, error) {
+	sourceLog.Debugf("received call agent tool request for %s", req.SessionID)
+
+	var input map[string]interface{}
+
+	err := json.Unmarshal([]byte(req.Message), &input)
+	if err != nil {
+		err := lib.WrapError(fmt.Errorf("failed to unmarshal prompt"), err)
+		sourceLog.Error(err)
+		return nil, err
+	}
+
+	session, err := s.sessionRepo.GetSession(ctx, req.SessionID)
+	if err != nil {
+		err := lib.WrapError(fmt.Errorf("failed to get session"), err)
+		sourceLog.Error(err)
+		return nil, err
+	}
+
+	result, err := s.aiEngine.CallAgentTool(ctx, common.Hash{}, session.ModelID(), req.ToolName, input)
+	if err != nil {
+		err := lib.WrapError(fmt.Errorf("failed to call agent tool"), err)
+		sourceLog.Error(err)
+		return nil, err
+	}
+
+	marshalledResult, err := json.Marshal(result)
+	if err != nil {
+		err := lib.WrapError(fmt.Errorf("failed to marshal result"), err)
+		sourceLog.Error(err)
+		return nil, err
+	}
+
+	encryptedResponse, err := lib.EncryptString(string(marshalledResult), lib.RemoveHexPrefix(userPubKey))
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := s.morRpc.CallAgentToolResponse(
+		string(encryptedResponse),
+		s.privateKeyHex,
+		reqID,
+	)
+	if err != nil {
+		err := lib.WrapError(fmt.Errorf("failed to create response"), err)
+		sourceLog.Error(err)
+		return nil, err
+	}
+
+	return response, nil
+}
+
+func (s *ProxyReceiver) GetAgentTools(ctx context.Context, msgID string, reqID string, userPubKey string, req *m.GetAgentToolsReq, sourceLog lib.ILogger) (*msg.RpcResponse, error) {
+	sourceLog.Debugf("received get agent tools request for %s", req.SessionID)
+
+	session, err := s.sessionRepo.GetSession(ctx, req.SessionID)
+	if err != nil {
+		err := lib.WrapError(fmt.Errorf("failed to get session"), err)
+		sourceLog.Error(err)
+		return nil, err
+	}
+
+	tools, err := s.aiEngine.GetAgentTools(ctx, common.Hash{}, session.ModelID())
+	if err != nil {
+		err := lib.WrapError(fmt.Errorf("failed to get agent tools"), err)
+		sourceLog.Error(err)
+		return nil, err
+	}
+
+	marshalledTools, err := json.Marshal(tools)
+	if err != nil {
+		err := lib.WrapError(fmt.Errorf("failed to marshal tools"), err)
+		sourceLog.Error(err)
+		return nil, err
+	}
+
+	encryptedResponse, err := lib.EncryptString(string(marshalledTools), lib.RemoveHexPrefix(userPubKey))
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := s.morRpc.GetAgentToolsResponse(
+		encryptedResponse,
+		s.privateKeyHex,
+		reqID,
+	)
+	if err != nil {
+		err := lib.WrapError(fmt.Errorf("failed to create response"), err)
+		sourceLog.Error(err)
+		return nil, err
+	}
+
+	return response, nil
+}

@@ -1,6 +1,6 @@
 import styled from 'styled-components';
-import { LoadingBar, AltLayout, Flex } from './common';
-import { FC, useContext, useEffect } from 'react';
+import { LoadingBar, AltLayout, Flex, Btn } from './common';
+import { FC, useContext, useEffect, useState } from 'react';
 import { withClient } from '../store/hocs/clientContext';
 import type { Client } from 'src/main/src/client/subscriptions';
 import withServicesState from '../store/hocs/withServicesState';
@@ -33,14 +33,36 @@ const EntryGroup = styled(Flex.Column)`
 type LoadingProps = {
   services: LoadingState;
   client: Client;
+  onSkip: () => void;
 };
 
-const Loading: FC<LoadingProps> = ({ services, client }) => {
+const Loading: FC<LoadingProps> = ({ services, client, onSkip }) => {
   const toast = useContext(ToastsContext);
+  const [isRestartable, setIsRestartable] = useState(false);
 
   useEffect(() => {
-    client.startServices({});
+    startServices();
   }, [client]);
+
+  const onRetry = () => {
+    startServices();
+  };
+
+  const startServices = async () => {
+    try {
+      setIsRestartable(false);
+      await client.startServices({});
+    } catch (err) {
+      toast.toast('error', 'Failed to start services');
+      console.error(err);
+    } finally {
+      setIsRestartable(true);
+    }
+  };
+
+  const onExit = () => {
+    client.quitApp();
+  };
 
   return (
     <AltLayout title="Starting services...">
@@ -74,8 +96,39 @@ const Loading: FC<LoadingProps> = ({ services, client }) => {
           />
         ))}
       </EntryGroup>
+
+      <Actions>
+        <RetryBtn onClick={onRetry} disabled={!isRestartable}>
+          Retry
+        </RetryBtn>
+        <SkipBtn onClick={onSkip}>Skip</SkipBtn>
+      </Actions>
     </AltLayout>
   );
 };
+
+const Actions = styled(Flex.Row)`
+  gap: 1rem;
+  justify-content: center;
+`;
+
+const BaseBtn = styled(Btn)`
+  padding: 0.5rem 1rem;
+  font-size: 1.7rem;
+
+  color: ${(p) => p.theme.colors.primary};
+  &:disabled {
+    background-color: ${(p) => p.theme.colors.weak};
+    color: ${(p) => p.theme.colors.primary};
+  }
+`;
+
+const RetryBtn = styled(BaseBtn)`
+  background-color: ${(p) => p.theme.colors.success};
+`;
+
+const SkipBtn = styled(BaseBtn)`
+  background-color: ${(p) => p.theme.colors.warning};
+`;
 
 export default withServicesState(withClient(Loading));

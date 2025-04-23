@@ -60,7 +60,10 @@ const listeners = {
   'confirm-decline-agent-allowance-request': handlers.confirmDeclineAgentAllowanceRequest,
   'start-services': handlers.startServices,
   'restart-service': handlers.restartService,
-  'ping-service': handlers.pingService
+  'ping-service': handlers.pingService,
+
+  // App
+  'quit-app': handlers.quitApp
 }
 
 // Keeps references to wrapped listeners (with core injected) to be able to unsubscribe from them

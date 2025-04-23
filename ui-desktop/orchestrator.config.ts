@@ -30,7 +30,8 @@ const configMacArm = {
       PROXY_STORAGE_PATH: './data/',
       LOG_COLOR: 'false',
       LOG_FOLDER_PATH: './logs/',
-      IPFS_MULTADDR: `/ip4/127.0.0.1/tcp/${process.env.SERVICE_IPFS_API_PORT}`
+      IPFS_MULTADDR: `/ip4/127.0.0.1/tcp/${process.env.SERVICE_IPFS_API_PORT}`,
+      DOCKER_HOST: 'unix:///var/run/docker.sock' as string
     },
     modelsConfig: JSON.stringify(
       buildLocalModelsConfig(
@@ -85,13 +86,19 @@ const configMacArm = {
     ],
     probe: {
       url: `http://127.0.0.1:${process.env.SERVICE_IPFS_API_PORT}/api/v0/version`,
-      method: 'POST'
+      method: 'POST',
+      timeout: 20000
+    }
+  },
+  containerRuntime: {
+    downloadUrl: 'https://desktop.docker.com/mac/main/arm64/Docker.dmg' as string,
+    probe: {
+      url: 'unix:///var/run/docker.sock:/version' as string
     }
   }
 } as const satisfies OrchestratorConfig
 
 const configMacX64 = {
-  ...configMacArm,
   proxyRouter: {
     ...configMacArm.proxyRouter,
     downloadUrl: process.env.SERVICE_PROXY_DOWNLOAD_URL_MAC_X64
@@ -101,10 +108,17 @@ const configMacX64 = {
     downloadUrl:
       'https://github.com/ggml-org/llama.cpp/releases/download/b4406/llama-b4406-bin-macos-x64.zip'
   },
+  aiModel: {
+    ...configMacArm.aiModel
+  },
   ipfs: {
     ...configMacArm.ipfs,
     downloadUrl:
       'https://github.com/ipfs/kubo/releases/download/v0.34.1/kubo_v0.34.1_darwin-amd64.tar.gz'
+  },
+  containerRuntime: {
+    ...configMacArm.containerRuntime,
+    downloadUrl: 'https://desktop.docker.com/mac/main/amd64/Docker.dmg' as string
   }
 } as const satisfies OrchestratorConfig
 
@@ -126,6 +140,10 @@ const configLinux: typeof configMacArm = {
     ...configMacArm.ipfs,
     downloadUrl:
       'https://github.com/ipfs/kubo/releases/download/v0.34.1/kubo_v0.34.1_linux-amd64.tar.gz'
+  },
+  containerRuntime: {
+    ...configMacArm.containerRuntime,
+    downloadUrl: 'https://desktop.docker.com/linux/main/amd64/docker-desktop-amd64.deb' as string
   }
 }
 
@@ -146,6 +164,10 @@ const configLinuxArm: typeof configMacArm = {
     ...configMacArm.ipfs,
     downloadUrl:
       'https://github.com/ipfs/kubo/releases/download/v0.34.1/kubo_v0.34.1_linux-arm64.tar.gz'
+  },
+  containerRuntime: {
+    ...configMacArm.containerRuntime,
+    downloadUrl: 'https://docs.docker.com/desktop/setup/install/linux/' as string
   }
 }
 
@@ -154,7 +176,11 @@ const configWin: typeof configMacArm = {
     ...configMacArm.proxyRouter,
     downloadUrl: process.env.SERVICE_PROXY_DOWNLOAD_URL_WINDOWS_X64,
     fileName: './services/proxy-router.exe' as string,
-    runPath: './services/proxy-router.exe' as string
+    runPath: './services/proxy-router.exe' as string,
+    env: {
+      ...configMacArm.proxyRouter.env,
+      DOCKER_HOST: 'npipe:////./pipe/docker_engine'
+    }
   },
   aiRuntime: {
     ...configMacArm.aiRuntime,
@@ -178,6 +204,13 @@ const configWin: typeof configMacArm = {
       'https://github.com/ipfs/kubo/releases/download/v0.34.1/kubo_v0.34.1_windows-amd64.zip',
     fileName: './services/ipfs.zip',
     runPath: './services/ipfs/kubo/ipfs.exe'
+  },
+  containerRuntime: {
+    probe: {
+      url: 'npipe:////./pipe/docker_engine:/version'
+    },
+    downloadUrl:
+      'https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe' as string
   }
 }
 // *********************************************************************************
@@ -185,7 +218,7 @@ const configWin: typeof configMacArm = {
 // *********************************************************************************
 const configWinArm: typeof configMacArm = {
   proxyRouter: {
-    ...configMacArm.proxyRouter,
+    ...configWin.proxyRouter,
     downloadUrl: process.env.SERVICE_PROXY_DOWNLOAD_URL_WINDOWS_ARM64,
     fileName: './services/proxy-router.exe' as string,
     runPath: './services/proxy-router.exe' as string
@@ -215,6 +248,11 @@ const configWinArm: typeof configMacArm = {
       'https://github.com/ipfs/kubo/releases/download/v0.34.1/kubo_v0.34.1_windows-arm64.zip',
     fileName: './services/ipfs.zip',
     runPath: './services/ipfs/kubo/ipfs.exe'
+  },
+  containerRuntime: {
+    ...configWin.containerRuntime,
+    downloadUrl:
+      'https://desktop.docker.com/win/main/arm64/Docker%20Desktop%20Installer.exe' as string
   }
 }
 

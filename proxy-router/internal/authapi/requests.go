@@ -19,16 +19,16 @@ type AuthRes struct {
 }
 
 type RequestAgentUserReq struct {
-	Username   string                `json:"username" validate:"required"`
-	Password   string                `json:"password" validate:"required"`
-	Perms      []string              `json:"perms" validate:"required"`
-	Allowances map[string]lib.BigInt `json:"allowances" validate:"required"`
+	Username   string            `json:"username" validate:"required"`
+	Password   string            `json:"password" validate:"required"`
+	Perms      []string          `json:"perms" validate:"required"`
+	Allowances map[string]string `json:"allowances" validate:"required"`
 }
 
 type RequestAllowanceReq struct {
 	Username  string     `json:"username" validate:"required"`
 	Token     string     `json:"token" validate:"required"`
-	Allowance lib.BigInt `json:"allowance"`
+	Allowance lib.BigInt `json:"allowance" swaggertype:"string"`
 }
 
 type ConfirmAgentReq struct {
@@ -50,18 +50,11 @@ type ConfirmAllowanceReq struct {
 type AllowanceRequest struct {
 	Username  string     `json:"username"`
 	Token     string     `json:"token"`
-	Allowance lib.BigInt `json:"allowance"`
+	Allowance lib.BigInt `json:"allowance" swaggertype:"string"`
 }
 
 type AllowanceRequestsRes struct {
 	Requests []AllowanceRequest `json:"requests"`
-}
-
-type AgentUsersReq struct {
-	Username    string                `json:"username"`
-	Perms       []string              `json:"perms"`
-	IsConfirmed bool                  `json:"isConfirmed"`
-	Allowances  map[string]lib.BigInt `json:"allowances"`
 }
 
 type AgentUsersRes struct {
