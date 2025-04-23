@@ -27,19 +27,15 @@
     "build": "npm run typecheck && electron-vite build",
     "postinstall": "patch-package && electron-builder install-app-deps || true",
     "build:unpack": "npm run build && electron-builder --config electron.builder.config.ts --dir",
-    
     "build:win": "electron-vite build && electron-builder --config electron.builder.config.ts --win portable",
     "build:win-x64": "electron-vite build && electron-builder --config electron.builder.config.ts --win portable --x64",
     "build:win-arm64": "electron-vite build && electron-builder --config electron.builder.config.ts --win portable --arm64",
-    
     "build:mac": "electron-vite build && electron-builder --config electron.builder.config.ts --mac",
     "build:mac-x64": "electron-vite build && electron-builder --config electron.builder.config.ts --mac --x64",
     "build:mac-arm64": "electron-vite build && electron-builder --config electron.builder.config.ts --mac --arm64",
-    
     "build:linux": "electron-vite build && electron-builder --config electron.builder.config.ts --linux AppImage",
     "build:linux-x64": "electron-vite build && electron-builder --config electron.builder.config.ts --linux AppImage --x64",
-    "build:linux-arm64": "electron-vite build && electron-builder --config electron.builder.config.ts --linux AppImage --arm64",  
-    
+    "build:linux-arm64": "electron-vite build && electron-builder --config electron.builder.config.ts --linux AppImage --arm64",
     "pkg": "electron-builder --config electron.builder.config.ts --mac"
   },
   "dependencies": {
@@ -98,7 +94,7 @@
     "styled-components": "4.1.2",
     "tar-stream": "^3.1.7",
     "universal-analytics": "^0.5.3",
-    "web3-utils": "^4.3.3",
+    "web3-utils": "1.10.4",
     "yauzl": "^3.2.0",
     "zxcvbn3": "^0.1.1"
   },

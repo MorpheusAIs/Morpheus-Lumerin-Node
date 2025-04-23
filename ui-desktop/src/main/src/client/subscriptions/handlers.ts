@@ -12,7 +12,8 @@ import {
   getKey,
   setKey,
   getFailoverSetting,
-  setFailoverSetting as setFailoverSettingMain
+  setFailoverSetting as setFailoverSettingMain,
+  setPasswordHash
 } from '../settings'
 import config from '../../../config'
 import os from 'node:os'
@@ -41,6 +42,11 @@ export const validatePassword = (data) => auth.isValidPassword(data)
 export const clearCache = () => {
   log.verbose('Clearing database cache')
   return dbManager.getDb().dropDatabase().then(restart)
+}
+
+export const clearCacheV2 = () => {
+  log.verbose('Clearing database cache')
+  return dbManager.getDb().dropDatabase()
 }
 
 export const persistState = (data) => storage.persistState(data).then(() => true)
@@ -394,6 +400,15 @@ export const clearWallet = async () => {
   }
 }
 
+export const resetWallet = async () => {
+  await clearWallet()
+  await clearEthNodeEnv()
+  await clearCacheV2()
+  setPasswordHash('')
+  app.relaunch()
+  app.quit()
+}
+
 export const getAgentUsers = async (): Promise<AgentUserRes | null> => {
   try {
     const path = `${config.chain.localProxyRouterUrl}/auth/users`
@@ -671,6 +686,9 @@ export const onboardingCompleted = async (data, core: Core) => {
         }),
         headers: await getAuthHeaders()
       })
+      if (!mnemonicRes.ok) {
+        throw new Error(await mnemonicRes.text())
+      }
 
       console.log('Set Mnemonic To Wallet', await mnemonicRes.json())
     } else {
@@ -679,6 +697,9 @@ export const onboardingCompleted = async (data, core: Core) => {
         body: JSON.stringify({ PrivateKey: String(data.privateKey) }),
         headers: await getAuthHeaders()
       })
+      if (!pKeyResp.ok) {
+        throw new Error(await pKeyResp.text())
+      }
       console.log('Set Private Key To Wallet', await pKeyResp.json())
     }
 

@@ -1,33 +1,33 @@
-'use strict'
-
-const settings = require('electron-settings')
-// const utils = require("web3-utils");
-const { merge } = require('lodash')
+import settings from 'electron-settings'
+import merge from 'lodash/merge'
 
 import logger from '../../../logger'
 import restart from '../electron-restart'
 import { getDb } from '../database'
-import defaultSettings from './defaultSettings'
+import defaultSettings from './defaultSettings.json'
 
-const FAILOVER_KEY = "user.failover";
+const FAILOVER_KEY = 'user.failover'
 
-//TODO: make sure default settings works as a static import.  it was getting imported every time 
+//TODO: make sure default settings works as a static import.  it was getting imported every time
 //      it was accessed.  if that's necessary, we have to use the async method
 //      import() instead of require() with the new version of node
-export const getKey = (key) => settings.getSync(key)
+export const getKey = (key: string): any => settings.getSync(key)
 
-export function setKey(key, value) {
+export function setKey(key: string, value: any) {
   settings.setSync(key, value)
   logger.verbose('Settings changed', key)
 }
 
-export const getPasswordHash = () => getKey('user.passwordHash')
+export const getPasswordHash = () => {
+  return getKey('user.passwordHash')
+}
 
 export function setPasswordHash(hash) {
   setKey('user.passwordHash', hash)
 }
 
-export const setProxyRouterConfig = (config) => setKey('user.proxyRouterConfig', JSON.stringify(config))
+export const setProxyRouterConfig = (config) =>
+  setKey('user.proxyRouterConfig', JSON.stringify(config))
 
 export const getProxyRouterConfig = () => {
   try {
@@ -95,6 +95,10 @@ export function cleanupDb() {
   restart(1)
 }
 
+export const resetSettings = () => {
+  return settings.reset()
+}
+
 export const getDefaultCurrencySetting = () => getKey('selectedCurrency')
 
 export const setDefaultCurrencySetting = (currency) => setKey('selectedCurrency', currency)
@@ -103,23 +107,6 @@ export const getAppVersion = () => getKey('app.version')
 
 export const setAppVersion = (value) => setKey('app.version', value)
 
-export const getFailoverSetting = async() => getKey(FAILOVER_KEY)
+export const getFailoverSetting = async () => getKey(FAILOVER_KEY)
 
 export const setFailoverSetting = async (isEnabled) => setKey(FAILOVER_KEY, { isEnabled })
-
-export default {
-  getPasswordHash,
-  setPasswordHash,
-  presetDefaults,
-  setProxyRouterConfig,
-  getProxyRouterConfig,
-  cleanupDb,
-  getDefaultCurrencySetting,
-  setDefaultCurrencySetting,
-  getKey,
-  setKey,
-  getAppVersion,
-  setAppVersion,
-  getFailoverSetting,
-  setFailoverSetting
-}
