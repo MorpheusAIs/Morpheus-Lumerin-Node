@@ -1,9 +1,8 @@
-const { ipcMain, app } = require('electron')
-// const createCore = require('@lumerin/wallet-core')
+const { ipcMain } = require('electron')
 import createCore from '../../core'
 import logger from '../../logger'
 import subscriptions from './subscriptions'
-import settings from './settings'
+import * as settings from './settings'
 import storage from './storage'
 
 export function startCore({ chain, core, config: coreConfig }, webContent) {

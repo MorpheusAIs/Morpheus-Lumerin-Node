@@ -1,12 +1,7 @@
-'use strict'
-
 import { setSessionPassword, getSessionPassword } from './secure.js'
 import logger from '../../logger'
 import { getPasswordHash, setPasswordHash } from './settings'
-import {
-  pbkdf2,
-  sha256
-} from './crypto'
+import { pbkdf2 } from './crypto'
 
 const { hash, verify } = pbkdf2
 
@@ -57,5 +52,3 @@ const exportedMembers = {
 }
 
 export default exportedMembers
-
-
