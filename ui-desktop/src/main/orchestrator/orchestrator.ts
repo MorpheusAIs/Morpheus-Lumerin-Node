@@ -217,7 +217,7 @@ export class Orchestrator {
       })
     }
 
-    await this.containerRuntimeProcess.start()
+    await this.containerRuntimeProcess.start().catch(this.log.error)
     this.emitStateUpdate()
 
     // Proxy router
@@ -438,7 +438,8 @@ export class Orchestrator {
     this.proxyRouterProcess?.getState() !== 'running' && (await this.proxyRouterProcess?.reset())
     this.aiRuntimeProcess?.getState() !== 'running' && (await this.aiRuntimeProcess?.reset())
     this.ipfsProcess?.getState() !== 'running' && (await this.ipfsProcess?.reset())
-    this.containerRuntimeProcess?.getState() !== 'running' && (await this.containerRuntimeProcess?.reset())
+    this.containerRuntimeProcess?.getState() !== 'running' &&
+      (await this.containerRuntimeProcess?.reset())
 
     this.proxyDownloadState.error = undefined
     this.aiRuntimeDownloadState.error = undefined
