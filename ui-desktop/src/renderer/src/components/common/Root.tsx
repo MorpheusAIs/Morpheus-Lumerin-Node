@@ -109,7 +109,11 @@ class Root extends React.Component<{ servicesState: LoadingState }> {
     if (onboardingComplete === null) return null;
 
     if (!startupComplete) {
-      return <StartupComponent />;
+      return (
+        <StartupComponent
+          onSkip={() => this.setState({ startupComplete: true })}
+        />
+      );
     }
 
     if (!onboardingComplete) {
