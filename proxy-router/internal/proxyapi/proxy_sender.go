@@ -654,8 +654,8 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 					return nil, ttftMs, totalTokens, fmt.Errorf("read timed out after %d retries: %w", retryCount, err)
 				}
 			} else if err == io.EOF {
-				p.log.Warnf("Connection closed by provider")
-				return nil, ttftMs, totalTokens, fmt.Errorf("connection closed by provider")
+				p.log.Debugf("Connection closed by provider")
+				break
 			} else {
 				p.log.Warnf("Failed to decode response: %v", err)
 				return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
@@ -702,7 +702,18 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 		err = json.Unmarshal(aiResponse, &payload)
 		var stop = true
 		var chunk gcs.Chunk
-		if err == nil && len(payload.Choices) > 0 {
+		if err == nil && payload.Usage != nil {
+			var payload openai.ChatCompletionResponse
+			err = json.Unmarshal(aiResponse, &payload)
+			if err == nil {
+				totalTokens = payload.Usage.TotalTokens
+				responses = append(responses, payload)
+				chunk = gcs.NewChunkText(&payload)
+				stop = true
+			} else {
+				return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
+			}
+		} else if err == nil && len(payload.Choices) > 0 {
 			stop = false
 			choices := payload.Choices
 			for _, choice := range choices {
