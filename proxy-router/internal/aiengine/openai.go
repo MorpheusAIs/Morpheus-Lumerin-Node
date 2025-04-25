@@ -89,11 +89,6 @@ func (a *OpenAI) readResponse(ctx context.Context, body io.Reader, cb gcs.Comple
 		return fmt.Errorf("failed to decode response: %v", err)
 	}
 
-	text := make([]string, len(compl.Choices))
-	for i, choice := range compl.Choices {
-		text[i] = choice.Message.Content
-	}
-
 	chunk := gcs.NewChunkText(&compl)
 	err := cb(ctx, chunk)
 	if err != nil {

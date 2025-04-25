@@ -210,7 +210,12 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 			return err
 		}
 
-		_, err = ctx.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", marshalledResponse)))
+		if body.Stream {
+			_, err = ctx.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", marshalledResponse)))
+		} else {
+			_, err = ctx.Writer.Write(marshalledResponse)
+		}
+
 		if err != nil {
 			return err
 		}
