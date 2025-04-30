@@ -521,7 +521,7 @@ func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.
 			return nil, err
 		}
 
-		err = cb(ctx, gcs.NewChunkControl("provider failed, failover enabled"))
+		err = cb(ctx, gcs.NewChunkControl("provider failed, failover enabled"), nil)
 		if err != nil {
 			return nil, err
 		}
@@ -542,7 +542,7 @@ func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.
 		}
 
 		msg := fmt.Sprintf("new session opened: %s", newSessionID.Hex())
-		err = cb(ctx, gcs.NewChunkControl(msg))
+		err = cb(ctx, gcs.NewChunkControl(msg), nil)
 		if err != nil {
 			return nil, err
 		}
@@ -663,7 +663,26 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 		}
 
 		if msg.Error != nil {
-			return nil, ttftMs, totalTokens, lib.WrapError(ErrResponseErr, fmt.Errorf("error: %v, data: %v", msg.Error.Message, msg.Error.Data))
+			sig := msg.Error.Data.Signature
+			msg.Error.Data.Signature = []byte{}
+
+			if !p.validateMsgSignature(msg.Error, sig, providerPublicKey) {
+				return nil, ttftMs, totalTokens, ErrInvalidSig
+			}
+
+			errorMessage, err := lib.DecryptString(msg.Error.Message, prKey.Hex())
+			if err != nil {
+				return nil, ttftMs, totalTokens, lib.WrapError(ErrDecrFailed, err)
+			}
+
+			var aiEngineErrorResponse gcs.AiEngineErrorResponse
+			err = json.Unmarshal([]byte(errorMessage), &aiEngineErrorResponse)
+			if err != nil {
+				return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
+			}
+
+			cb(ctx, nil, &aiEngineErrorResponse)
+			return nil, ttftMs, totalTokens, nil
 		}
 
 		if msg.Result == nil {
@@ -744,7 +763,7 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 		if ctx.Err() != nil {
 			return nil, ttftMs, totalTokens, ctx.Err()
 		}
-		err = cb(ctx, chunk)
+		err = cb(ctx, chunk, nil)
 		if err != nil {
 			return nil, ttftMs, totalTokens, lib.WrapError(ErrResponseErr, err)
 		}

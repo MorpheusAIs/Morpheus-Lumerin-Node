@@ -100,8 +100,8 @@ func mapProvider(addr common.Address, provider pr.IProviderStorageProvider) *str
 }
 
 func mapOrder(order string) registries.Order {
-	if order == "desc" {
-		return registries.OrderDESC
+	if order == "ASC" {
+		return registries.OrderASC
 	}
-	return registries.OrderASC
+	return registries.OrderDESC
 }
