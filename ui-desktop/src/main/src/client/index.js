@@ -1,18 +1,14 @@
-'use strict'
-
-const { ipcMain, app } = require('electron')
-const createCore = require('@lumerin/wallet-core')
-
+const { ipcMain } = require('electron')
+import createCore from '../../core'
 import logger from '../../logger'
 import subscriptions from './subscriptions'
-import settings from './settings'
+import * as settings from './settings'
 import storage from './storage'
 
 export function startCore({ chain, core, config: coreConfig }, webContent) {
   logger.verbose(`Starting core ${chain}`)
   const { emitter, events, api } = core.start(coreConfig)
 
-  // emitter.setMaxListeners(30);
   emitter.setMaxListeners(50)
 
   events.push(
@@ -22,7 +18,8 @@ export function startCore({ chain, core, config: coreConfig }, webContent) {
     'transactions-scan-finished',
     'contracts-scan-started',
     'contracts-scan-finished',
-    'contract-updated'
+    'contract-updated',
+    'services-state'
   )
 
   function send(eventName, data) {

@@ -51,7 +51,7 @@ export const AgentRowComp: React.FC<{
       <AgentAllowance>
         <Field title="Allowances" ref={allowancesRef}>
           {isOverflow ||
-            Object.entries(agent.allowances).map(([token, val]) => {
+            Object.entries(agent?.allowances || {}).map(([token, val]) => {
               const { name, value } = formatTokenNameValue(token, val, props);
               return (
                 <div key={token}>

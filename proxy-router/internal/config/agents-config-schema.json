@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema",
+  "type": "object",
+  "properties": {
+    "agents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "title": "Agent ID",
+            "description": "The agent ID from blockchain",
+            "type": "string",
+            "pattern": "^(0x)?[0-9a-fA-F]{64}$",
+            "examples": ["0x0000000000000000000000000000000000000000000000000000000000000001"]
+          },
+          "agentName": {
+            "title": "Agent Name",
+            "description": "The name of the agent to be used from this provider",
+            "type": "string",
+            "minLength": 1
+          },
+          "command": {
+            "title": "Command",
+            "description": "The command to be to start the agent",
+            "type": "string",
+            "minLength": 1
+          },
+          "args": {
+            "title": "Arguments",
+            "description": "The arguments to be passed to the command",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "env": {
+            "title": "Environment variables",
+            "description": "Optional environment variables to be passed to the agent",
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          },
+          "concurrentSlots": {
+            "title": "Concurrent Slots",
+            "description": "The number of concurrent slots to be used with this model",
+            "type": "integer",
+            "minimum": 1
+          },
+          "capacityPolicy": {
+            "title": "Capacity Policy",
+            "description": "The policy to be used for capacity management",
+            "type": "string",
+            "enum": ["simple", "idle_timeout"]
+          }
+        },
+        "required": ["agentId", "agentName", "command"]
+      }
+    }
+  }
+}

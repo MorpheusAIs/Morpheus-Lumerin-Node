@@ -435,7 +435,7 @@ func (cfg *HTTPAuthConfig) IsAllowanceEnough(username string, token string, amou
 	return true, nil
 }
 
-func (cfg *HTTPAuthConfig) RequestAgentUser(username, password string, perms []string, allowances map[string]lib.BigInt) error {
+func (cfg *HTTPAuthConfig) RequestAgentUser(username, password string, perms []string, allowances map[string]string) error {
 	if username == "admin" {
 		return fmt.Errorf("admin is a reserved username")
 	}
@@ -445,11 +445,20 @@ func (cfg *HTTPAuthConfig) RequestAgentUser(username, password string, perms []s
 		return fmt.Errorf("username %s already has an active request", username)
 	}
 
+	mappedAllowances := make(map[string]lib.BigInt)
+	for token, allowanceStr := range allowances {
+		allowance, ok := new(big.Int).SetString(allowanceStr, 10)
+		if !ok {
+			return fmt.Errorf("invalid allowance value for token %s", token)
+		}
+		mappedAllowances[token] = lib.BigInt{*allowance}
+	}
+
 	err := cfg.AuthStorage.AddAuthRequest(&storages.AgentUser{
 		Username:    username,
 		Password:    password,
 		Perms:       perms,
-		Allowances:  allowances,
+		Allowances:  mappedAllowances,
 		IsConfirmed: false,
 	})
 	if err != nil {

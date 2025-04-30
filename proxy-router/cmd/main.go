@@ -285,7 +285,13 @@ func start() error {
 		appLog.Warnf("failed to load model config, running with empty: %s", err)
 	}
 
-	aiEngine := aiengine.NewAiEngine(proxyRouterApi, chatStorage, modelConfigLoader, appLog)
+	agentConfigLoader := config.NewAgentConfigLoader(cfg.Proxy.AgentConfigPath, cfg.Proxy.AgentConfigContent, valid, blockchainApi, appLog)
+	err = agentConfigLoader.Init()
+	if err != nil {
+		appLog.Warnf("failed to load agent config, running with empty: %s", err)
+	}
+
+	aiEngine := aiengine.NewAiEngine(proxyRouterApi, chatStorage, modelConfigLoader, agentConfigLoader, appLog)
 
 	eventListener := blockchainapi.NewEventsListener(sessionRepo, sessionRouter, wallet, logWatcher, appLog)
 
@@ -293,7 +299,13 @@ func start() error {
 	blockchainController := blockchainapi.NewBlockchainController(blockchainApi, *authCfg, appLog)
 
 	ethConnectionValidator := system.NewEthConnectionValidator(*big.NewInt(int64(cfg.Blockchain.ChainID)))
-	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine, chatStorage, *cfg.Proxy.StoreChatContext.Bool, *cfg.Proxy.ForwardChatContext.Bool, *authCfg, appLog)
+	var ipfsManager *proxyapi.IpfsManager
+	if cfg.IPFS.Disabled {
+		ipfsManager = proxyapi.NewIpfsManagerDisabled(appLog)
+	} else {
+		ipfsManager = proxyapi.NewIpfsManager(cfg.IPFS.Address, appLog)
+	}
+	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine, chatStorage, *cfg.Proxy.StoreChatContext.Bool, *cfg.Proxy.ForwardChatContext.Bool, *authCfg, ipfsManager, log)
 	walletController := walletapi.NewWalletController(wallet, *authCfg)
 	systemController := system.NewSystemController(&cfg, wallet, rpcClientStore, sysConfig, appStartTime, chainID, appLog, ethConnectionValidator, *authCfg)
 	authController := authapi.NewAuthController(authCfg, cfg.Environment, appLog)

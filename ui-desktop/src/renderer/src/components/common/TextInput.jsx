@@ -29,7 +29,7 @@ const TextInput = ({
         cols={cols}
         value={value || ''}
         type={type}
-        onChange={e => onChange({ id: id, value: e.target.value })}
+        onChange={(e) => onChange({ id: id, value: e.target.value })}
         hasErrors={hasErrors}
         disabled={disabled}
         {...rest}
@@ -50,15 +50,15 @@ TextInput.propTypes = {
   onChange: PropTypes.func.isRequired,
   error: PropTypes.oneOfType([
     PropTypes.arrayOf(PropTypes.string),
-    PropTypes.string
+    PropTypes.string,
   ]),
-  label: PropTypes.string.isRequired,
+  label: PropTypes.string,
   value: PropTypes.string,
   type: PropTypes.oneOf(['text', 'number', 'password', 'url']),
   rows: PropTypes.number,
   cols: PropTypes.number,
   id: PropTypes.string.isRequired,
-  disabled: PropTypes.bool
+  disabled: PropTypes.bool,
 };
 
 export default TextInput;

@@ -642,9 +642,9 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "minLength": 0,
-                        "type": "string",
-                        "example": "0",
+                        "minimum": 0,
+                        "type": "integer",
+                        "example": 0,
                         "name": "offset",
                         "in": "query"
                     },
@@ -770,9 +770,9 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "minLength": 0,
-                        "type": "string",
-                        "example": "0",
+                        "minimum": 0,
+                        "type": "integer",
+                        "example": 0,
                         "name": "offset",
                         "in": "query"
                     },
@@ -901,9 +901,9 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "minLength": 0,
-                        "type": "string",
-                        "example": "0",
+                        "minimum": 0,
+                        "type": "integer",
+                        "example": 0,
                         "name": "offset",
                         "in": "query"
                     },
@@ -1028,9 +1028,9 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "minLength": 0,
-                        "type": "string",
-                        "example": "0",
+                        "minimum": 0,
+                        "type": "integer",
+                        "example": 0,
                         "name": "offset",
                         "in": "query"
                     },
@@ -1086,9 +1086,9 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "minLength": 0,
-                        "type": "string",
-                        "example": "0",
+                        "minimum": 0,
+                        "type": "integer",
+                        "example": 0,
                         "name": "offset",
                         "in": "query"
                     },
@@ -1273,9 +1273,9 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "minLength": 0,
-                        "type": "string",
-                        "example": "0",
+                        "minimum": 0,
+                        "type": "integer",
+                        "example": 0,
                         "name": "offset",
                         "in": "query"
                     },
@@ -1338,9 +1338,9 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "minLength": 0,
-                        "type": "string",
-                        "example": "0",
+                        "minimum": 0,
+                        "type": "integer",
+                        "example": 0,
                         "name": "offset",
                         "in": "query"
                     },
@@ -1396,9 +1396,9 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "minLength": 0,
-                        "type": "string",
-                        "example": "0",
+                        "minimum": 0,
+                        "type": "integer",
+                        "example": 0,
                         "name": "offset",
                         "in": "query"
                     },
@@ -1645,6 +1645,405 @@ const docTemplate = `{
                 }
             }
         },
+        "/docker/build": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "docker"
+                ],
+                "summary": "Build a Docker image",
+                "parameters": [
+                    {
+                        "description": "Docker build request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.DockerBuildReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.DockerBuildRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/docker/build/stream": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "docker"
+                ],
+                "summary": "Build a Docker image with progress updates as SSE stream",
+                "parameters": [
+                    {
+                        "description": "Docker build request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.DockerBuildReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.DockerStreamBuildEvent"
+                        }
+                    }
+                }
+            }
+        },
+        "/docker/container/remove": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "docker"
+                ],
+                "summary": "Remove a Docker container",
+                "parameters": [
+                    {
+                        "description": "Docker container remove request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.DockerContainerActionReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.ResultResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/docker/container/start": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "docker"
+                ],
+                "summary": "Start a Docker container",
+                "parameters": [
+                    {
+                        "description": "Docker start container request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.DockerStartContainerReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.DockerStartContainerRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/docker/container/stop": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "docker"
+                ],
+                "summary": "Stop a Docker container",
+                "parameters": [
+                    {
+                        "description": "Docker container stop request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.DockerContainerActionReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.ResultResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/docker/container/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "docker"
+                ],
+                "summary": "Get Docker container info",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Container ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.DockerContainerInfoRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/docker/container/{id}/logs": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "docker"
+                ],
+                "summary": "Get Docker container logs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Container ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Number of lines to show from the end",
+                        "name": "tail",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Follow log output",
+                        "name": "follow",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Log output",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/docker/container/{id}/logs/stream": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "docker"
+                ],
+                "summary": "Stream Docker container logs as SSE",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Container ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Number of lines to show from the end",
+                        "name": "tail",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Log output events",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/docker/containers": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "docker"
+                ],
+                "summary": "List Docker containers",
+                "parameters": [
+                    {
+                        "description": "Docker list containers request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.DockerListContainersReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.DockerListContainersRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/docker/prune/containers": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "docker"
+                ],
+                "summary": "Prune stopped Docker containers",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.DockerPruneRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/docker/prune/images": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "docker"
+                ],
+                "summary": "Prune unused Docker images",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.DockerPruneRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/docker/version": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "docker"
+                ],
+                "summary": "Get Docker version",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.DockerVersionRes"
+                        }
+                    }
+                }
+            }
+        },
         "/files": {
             "get": {
                 "security": [
@@ -1688,6 +2087,240 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/system.HealthCheckResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ipfs/add": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ipfs"
+                ],
+                "summary": "Add a file to IPFS with metadata",
+                "parameters": [
+                    {
+                        "description": "File Path and Metadata",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.AddFileReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.AddIpfsFileRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/ipfs/download/stream/{cidHash}": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "ipfs"
+                ],
+                "summary": "Download a file from IPFS with progress updates as SSE stream",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "cidHash",
+                        "name": "cidHash",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Destination Path",
+                        "name": "dest",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.DownloadProgressEvent"
+                        }
+                    }
+                }
+            }
+        },
+        "/ipfs/download/{cidHash}": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ipfs"
+                ],
+                "summary": "Download a file from IPFS",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "cidHash",
+                        "name": "cidHash",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Destination Path",
+                        "name": "dest",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.ResultResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ipfs/pin": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ipfs"
+                ],
+                "summary": "Get all pinned files metadata",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/proxyapi.PinnedFileRes"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ipfs"
+                ],
+                "summary": "Pin a file to IPFS",
+                "parameters": [
+                    {
+                        "description": "cidHash",
+                        "name": "cidHash",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.CIDReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.ResultResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ipfs/unpin": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ipfs"
+                ],
+                "summary": "Unpin a file from IPFS",
+                "parameters": [
+                    {
+                        "description": "cidHash",
+                        "name": "cidHash",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.CIDReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.ResultResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ipfs/version": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ipfs"
+                ],
+                "summary": "Get IPFS Version",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.IpfsVersionRes"
                         }
                     }
                 }
@@ -1823,6 +2456,123 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/structs.BalanceRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/agents": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "agents"
+                ],
+                "summary": "Get local agents",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/aiengine.LocalAgent"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/agents/tools": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "agents"
+                ],
+                "summary": "Get agent tools",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "hex32",
+                        "description": "Session ID",
+                        "name": "session_id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "hex32",
+                        "description": "Agent ID",
+                        "name": "agent_id",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/aiengine.AgentTool"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "agents"
+                ],
+                "summary": "Call agent tool",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "hex32",
+                        "description": "Session ID",
+                        "name": "session_id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "hex32",
+                        "description": "Agent ID",
+                        "name": "agent_id",
+                        "in": "header"
+                    },
+                    {
+                        "description": "Input",
+                        "name": "input",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.CallAgentToolReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object"
                         }
                     }
                 }
@@ -2062,7 +2812,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "WalletRes"
+                            "$ref": "#/definitions/walletapi.WalletRes"
                         }
                     }
                 }
@@ -2085,7 +2835,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "statusRes"
+                            "$ref": "#/definitions/walletapi.StatusRes"
                         }
                     }
                 }
@@ -2111,16 +2861,9 @@ const docTemplate = `{
                         "description": "Mnemonic",
                         "name": "mnemonic",
                         "in": "body",
+                        "required": true,
                         "schema": {
-                            "type": "string"
-                        }
-                    },
-                    {
-                        "description": "Derivation path",
-                        "name": "derivationPath",
-                        "in": "body",
-                        "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/walletapi.SetupWalletMnemonicReqBody"
                         }
                     }
                 ],
@@ -2128,7 +2871,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "WalletRes"
+                            "$ref": "#/definitions/walletapi.WalletRes"
                         }
                     }
                 }
@@ -2156,7 +2899,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/walletapi.SetupWalletPrKeyReqBody"
                         }
                     }
                 ],
@@ -2164,7 +2907,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "WalletRes"
+                            "$ref": "#/definitions/walletapi.WalletRes"
                         }
                     }
                 }
@@ -2172,6 +2915,46 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "aiengine.AgentTool": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "inputSchema": {
+                    "$ref": "#/definitions/aiengine.ToolInputSchema"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "aiengine.LocalAgent": {
+            "type": "object",
+            "properties": {
+                "args": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "capacityPolicy": {
+                    "type": "string"
+                },
+                "command": {
+                    "type": "string"
+                },
+                "concurrentSlots": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "aiengine.LocalModel": {
             "type": "object",
             "properties": {
@@ -2195,6 +2978,24 @@ const docTemplate = `{
                 },
                 "slots": {
                     "type": "integer"
+                }
+            }
+        },
+        "aiengine.ToolInputSchema": {
+            "type": "object",
+            "properties": {
+                "properties": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "required": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "type": {
+                    "type": "string"
                 }
             }
         },
@@ -2243,7 +3044,7 @@ const docTemplate = `{
                 "allowances": {
                     "type": "object",
                     "additionalProperties": {
-                        "type": "string"
+                        "$ref": "#/definitions/lib.BigInt"
                     }
                 },
                 "isConfirmed": {
@@ -2572,6 +3373,14 @@ const docTemplate = `{
                 }
             }
         },
+        "lib.BigInt": {
+            "type": "object",
+            "properties": {
+                "big.Int": {
+                    "type": "string"
+                }
+            }
+        },
         "morrpcmesssage.SessionRes": {
             "type": "object",
             "required": [
@@ -2603,6 +3412,79 @@ const docTemplate = `{
                 }
             }
         },
+        "proxyapi.AddFileReq": {
+            "type": "object",
+            "required": [
+                "filePath"
+            ],
+            "properties": {
+                "filePath": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "modelName": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "proxyapi.AddIpfsFileRes": {
+            "type": "object",
+            "required": [
+                "fileCID",
+                "fileCIDHash",
+                "metadataCID",
+                "metadataCIDHash"
+            ],
+            "properties": {
+                "fileCID": {
+                    "type": "string"
+                },
+                "fileCIDHash": {
+                    "type": "string"
+                },
+                "metadataCID": {
+                    "type": "string"
+                },
+                "metadataCIDHash": {
+                    "type": "string"
+                }
+            }
+        },
+        "proxyapi.CIDReq": {
+            "type": "object",
+            "required": [
+                "cidHash"
+            ],
+            "properties": {
+                "cidHash": {
+                    "type": "string"
+                }
+            }
+        },
+        "proxyapi.CallAgentToolReq": {
+            "type": "object",
+            "required": [
+                "input",
+                "toolName"
+            ],
+            "properties": {
+                "input": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "toolName": {
+                    "type": "string"
+                }
+            }
+        },
         "proxyapi.ChatCompletionRequestSwaggerExample": {
             "type": "object",
             "properties": {
@@ -2624,6 +3506,293 @@ const docTemplate = `{
                 },
                 "stream": {
                     "type": "boolean"
+                }
+            }
+        },
+        "proxyapi.ContainerInfo": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "image": {
+                    "type": "string"
+                },
+                "labels": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "networkMode": {
+                    "type": "string"
+                },
+                "ports": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/proxyapi.PortMapping"
+                    }
+                },
+                "state": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "proxyapi.DockerBuildReq": {
+            "type": "object",
+            "required": [
+                "contextPath",
+                "dockerfile",
+                "imageName"
+            ],
+            "properties": {
+                "buildArgs": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "contextPath": {
+                    "type": "string"
+                },
+                "dockerfile": {
+                    "type": "string"
+                },
+                "imageName": {
+                    "type": "string"
+                },
+                "imageTag": {
+                    "type": "string"
+                }
+            }
+        },
+        "proxyapi.DockerBuildRes": {
+            "type": "object",
+            "required": [
+                "imageTag"
+            ],
+            "properties": {
+                "imageTag": {
+                    "type": "string"
+                }
+            }
+        },
+        "proxyapi.DockerContainerActionReq": {
+            "type": "object",
+            "required": [
+                "containerId"
+            ],
+            "properties": {
+                "containerId": {
+                    "type": "string"
+                },
+                "force": {
+                    "type": "boolean"
+                },
+                "timeout": {
+                    "type": "integer"
+                }
+            }
+        },
+        "proxyapi.DockerContainerInfoRes": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "image": {
+                    "type": "string"
+                },
+                "labels": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "networkMode": {
+                    "type": "string"
+                },
+                "ports": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/proxyapi.PortMapping"
+                    }
+                },
+                "state": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "proxyapi.DockerListContainersReq": {
+            "type": "object",
+            "properties": {
+                "all": {
+                    "type": "boolean"
+                },
+                "filterLabels": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "proxyapi.DockerListContainersRes": {
+            "type": "object",
+            "properties": {
+                "containers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/proxyapi.ContainerInfo"
+                    }
+                }
+            }
+        },
+        "proxyapi.DockerPruneRes": {
+            "type": "object",
+            "properties": {
+                "spaceReclaimed": {
+                    "type": "integer"
+                }
+            }
+        },
+        "proxyapi.DockerStartContainerReq": {
+            "type": "object",
+            "required": [
+                "imageName"
+            ],
+            "properties": {
+                "containerName": {
+                    "type": "string"
+                },
+                "env": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "imageName": {
+                    "type": "string"
+                },
+                "networkMode": {
+                    "type": "string"
+                },
+                "ports": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "volumes": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "proxyapi.DockerStartContainerRes": {
+            "type": "object",
+            "required": [
+                "containerId"
+            ],
+            "properties": {
+                "containerId": {
+                    "type": "string"
+                }
+            }
+        },
+        "proxyapi.DockerStreamBuildEvent": {
+            "type": "object",
+            "properties": {
+                "current": {
+                    "type": "integer"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "errorDetails": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "percentage": {
+                    "type": "number"
+                },
+                "progress": {
+                    "type": "string"
+                },
+                "status": {
+                    "description": "Status message",
+                    "type": "string"
+                },
+                "stream": {
+                    "type": "string"
+                },
+                "timeUpdated": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "proxyapi.DockerVersionRes": {
+            "type": "object",
+            "required": [
+                "version"
+            ],
+            "properties": {
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "proxyapi.DownloadProgressEvent": {
+            "type": "object",
+            "properties": {
+                "downloaded": {
+                    "description": "Bytes downloaded so far",
+                    "type": "integer"
+                },
+                "error": {
+                    "description": "Error message, if status is \"error\"",
+                    "type": "string"
+                },
+                "percentage": {
+                    "description": "Percentage complete (0-100)",
+                    "type": "number"
+                },
+                "status": {
+                    "description": "\"downloading\", \"completed\", \"error\"",
+                    "type": "string"
+                },
+                "timeUpdated": {
+                    "description": "Timestamp of the update",
+                    "type": "integer"
+                },
+                "total": {
+                    "description": "Total bytes to download",
+                    "type": "integer"
                 }
             }
         },
@@ -2654,6 +3823,17 @@ const docTemplate = `{
                 }
             }
         },
+        "proxyapi.IpfsVersionRes": {
+            "type": "object",
+            "required": [
+                "version"
+            ],
+            "properties": {
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
         "proxyapi.PingReq": {
             "type": "object",
             "required": [
@@ -2674,6 +3854,64 @@ const docTemplate = `{
             "properties": {
                 "ping": {
                     "type": "integer"
+                }
+            }
+        },
+        "proxyapi.PinnedFileRes": {
+            "type": "object",
+            "required": [
+                "fileCID",
+                "fileCIDHash",
+                "metadataCID",
+                "metadataCIDHash"
+            ],
+            "properties": {
+                "fileCID": {
+                    "type": "string"
+                },
+                "fileCIDHash": {
+                    "type": "string"
+                },
+                "fileName": {
+                    "type": "string"
+                },
+                "fileSize": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "metadataCID": {
+                    "type": "string"
+                },
+                "metadataCIDHash": {
+                    "type": "string"
+                },
+                "modelName": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "proxyapi.PortMapping": {
+            "type": "object",
+            "properties": {
+                "containerPort": {
+                    "type": "string"
+                },
+                "hostIp": {
+                    "type": "string"
+                },
+                "hostPort": {
+                    "type": "string"
+                },
+                "protocol": {
+                    "type": "string"
                 }
             }
         },
@@ -2700,8 +3938,8 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "allowance": {
-                    "type": "string",
-                    "example": "100000000"
+                    "type": "integer",
+                    "example": 100000000
                 }
             }
         },
@@ -2717,10 +3955,10 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "createdAt": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "deletedAt": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "id": {
                     "type": "string"
@@ -2729,10 +3967,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "nonce": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "pricePerSecond": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "provider": {
                     "type": "string"
@@ -2771,8 +4009,8 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "budget": {
-                    "type": "string",
-                    "example": "100000000"
+                    "type": "integer",
+                    "example": 100000000
                 }
             }
         },
@@ -2807,7 +4045,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "pricePerSecond": {
-                    "type": "string"
+                    "type": "integer"
                 }
             }
         },
@@ -2822,8 +4060,8 @@ const docTemplate = `{
             ],
             "properties": {
                 "fee": {
-                    "type": "string",
-                    "example": "123000000000"
+                    "type": "integer",
+                    "example": 123000000000
                 },
                 "id": {
                     "type": "string",
@@ -2840,8 +4078,8 @@ const docTemplate = `{
                     "example": "Llama 2.0"
                 },
                 "stake": {
-                    "type": "string",
-                    "example": "123000000000"
+                    "type": "integer",
+                    "example": 123000000000
                 },
                 "tags": {
                     "type": "array",
@@ -2865,8 +4103,8 @@ const docTemplate = `{
                     "example": "mycoolmornode.domain.com:3989"
                 },
                 "stake": {
-                    "type": "string",
-                    "example": "123000000000"
+                    "type": "integer",
+                    "example": 123000000000
                 }
             }
         },
@@ -2912,10 +4150,10 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "createdAt": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "fee": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "id": {
                     "type": "string"
@@ -2933,7 +4171,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "stake": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "tags": {
                     "type": "array",
@@ -2984,8 +4222,8 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "stake": {
-                    "type": "string",
-                    "example": "123000000000"
+                    "type": "integer",
+                    "example": 123000000000
                 }
             }
         },
@@ -3002,7 +4240,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "sessionDuration": {
-                    "type": "string"
+                    "type": "integer"
                 }
             }
         },
@@ -3016,7 +4254,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "sessionDuration": {
-                    "type": "string"
+                    "type": "integer"
                 }
             }
         },
@@ -3027,7 +4265,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "createdAt": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "endpoint": {
                     "type": "string"
@@ -3036,7 +4274,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "stake": {
-                    "type": "string"
+                    "type": "integer"
                 }
             }
         },
@@ -3092,7 +4330,7 @@ const docTemplate = `{
             ],
             "properties": {
                 "amount": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "to": {
                     "type": "string"
@@ -3106,16 +4344,16 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "closedAt": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "closeoutReceipt": {
                     "type": "string"
                 },
                 "closeoutType": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "endsAt": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "id": {
                     "type": "string"
@@ -3124,19 +4362,19 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "openedAt": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "pricePerSecond": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "provider": {
                     "type": "string"
                 },
                 "providerWithdrawnAmount": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "stake": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "user": {
                     "type": "string"
@@ -3166,8 +4404,8 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "supply": {
-                    "type": "string",
-                    "example": "100000000"
+                    "type": "integer",
+                    "example": 100000000
                 }
             }
         },
@@ -3175,12 +4413,12 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "eth": {
-                    "type": "string",
-                    "example": "100000000"
+                    "type": "integer",
+                    "example": 100000000
                 },
                 "mor": {
-                    "type": "string",
-                    "example": "100000000"
+                    "type": "integer",
+                    "example": 100000000
                 }
             }
         },
@@ -3291,6 +4529,50 @@ const docTemplate = `{
             "properties": {
                 "status": {
                     "type": "string"
+                }
+            }
+        },
+        "walletapi.SetupWalletMnemonicReqBody": {
+            "type": "object",
+            "required": [
+                "derivationPath",
+                "mnemonic"
+            ],
+            "properties": {
+                "derivationPath": {
+                    "type": "string"
+                },
+                "mnemonic": {
+                    "type": "string"
+                }
+            }
+        },
+        "walletapi.SetupWalletPrKeyReqBody": {
+            "type": "object",
+            "required": [
+                "privateKey"
+            ],
+            "properties": {
+                "privateKey": {
+                    "type": "string"
+                }
+            }
+        },
+        "walletapi.StatusRes": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        },
+        "walletapi.WalletRes": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string",
+                    "example": "0x1234"
                 }
             }
         }

@@ -228,21 +228,21 @@ type TransactionsRes struct {
 }
 
 type Transaction struct {
-	Confirmations   int         `json:"confirmations"`
-	Result          string      `json:"result"`        // "Error: (Awaiting internal transactions for reason)"
-	Hash            string      `json:"hash"`          // "0x5d90a9da2b8da402b11bc92c8011ec8a62a2d59da5c7ac4ae0f73ec51bb73368"
-	RevertReason    string      `json:"revert_reason"` // "Error: (Awaiting internal transactions for reason)"
-	Type            int         `json:"type"`
-	CreatedContract interface{} `json:"created_contract"`
-	Value           string      `json:"value"`
-	From            Address     `json:"from"`
-	To              Address     `json:"to"`
-	Status          string      `json:"status"`
-	Method          string      `json:"method"`
-	Timestamp       string      `json:"timestamp"`
-	ExchangeRate    string      `json:"exchange_rate"`
-	BlockNumber     int         `json:"block_number"`
-	RawInput        string      `json:"raw_input"`
+	Confirmations   int     `json:"confirmations"`
+	Result          string  `json:"result"`        // "Error: (Awaiting internal transactions for reason)"
+	Hash            string  `json:"hash"`          // "0x5d90a9da2b8da402b11bc92c8011ec8a62a2d59da5c7ac4ae0f73ec51bb73368"
+	RevertReason    any     `json:"revert_reason"` // "Error: (Awaiting internal transactions for reason)"
+	Type            int     `json:"type"`
+	CreatedContract any     `json:"created_contract"`
+	Value           string  `json:"value"`
+	From            Address `json:"from"`
+	To              Address `json:"to"`
+	Status          string  `json:"status"`
+	Method          string  `json:"method"`
+	Timestamp       string  `json:"timestamp"`
+	ExchangeRate    string  `json:"exchange_rate"`
+	BlockNumber     int     `json:"block_number"`
+	RawInput        string  `json:"raw_input"`
 	// GasUsed                        string        `json:"gas_used"`
 	// GasLimit                       string        `json:"gas_limit"`
 	// GasPrice                       string        `json:"gas_price"`

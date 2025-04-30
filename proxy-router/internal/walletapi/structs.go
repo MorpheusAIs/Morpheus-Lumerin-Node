@@ -6,7 +6,7 @@ import (
 )
 
 type SetupWalletPrKeyReqBody struct {
-	PrivateKey lib.HexString `json:"privateKey" binding:"required" validate:"required"`
+	PrivateKey lib.HexString `json:"privateKey" binding:"required" validate:"required" swaggertype:"string"`
 }
 
 type SetupWalletMnemonicReqBody struct {
@@ -18,12 +18,12 @@ type WalletRes struct {
 	Address common.Address `json:"address" example:"0x1234"`
 }
 
-type statusRes struct {
+type StatusRes struct {
 	Status string `json:"status" example:"ok"`
 }
 
-func OkRes() statusRes {
-	return statusRes{
+func OkRes() StatusRes {
+	return StatusRes{
 		Status: "ok",
 	}
 }

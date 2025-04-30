@@ -36,7 +36,7 @@ func (s *WalletController) RegisterRoutes(r interfaces.Router) {
 //	@Description	Get wallet address
 //	@Tags			wallet
 //	@Produce		json
-//	@Success		200	{WalletRes}	WalletRes
+//	@Success		200	{object}	WalletRes
 //	@Security		BasicAuth
 //	@Router			/wallet [get]
 func (s *WalletController) GetWallet(ctx *gin.Context) {
@@ -59,8 +59,8 @@ func (s *WalletController) GetWallet(ctx *gin.Context) {
 //	@Description	Setup wallet with private key
 //	@Tags			wallet
 //	@Produce		json
-//	@Param			privatekey	body		string	true	"Private key"
-//	@Success		200			{WalletRes}	walletRes
+//	@Param			privatekey	body		SetupWalletPrKeyReqBody	true	"Private key"
+//	@Success		200			{object}	WalletRes
 //	@Security		BasicAuth
 //	@Router			/wallet/privateKey [post]
 func (s *WalletController) SetupWalletPrivateKey(ctx *gin.Context) {
@@ -97,9 +97,8 @@ func (s *WalletController) SetupWalletPrivateKey(ctx *gin.Context) {
 //	@Description	Setup wallet using mnemonic
 //	@Tags			wallet
 //	@Produce		json
-//	@Param			mnemonic		body		string	false	"Mnemonic"
-//	@Param			derivationPath	body		string	false	"Derivation path"
-//	@Success		200				{WalletRes}	walletRes
+//	@Param			mnemonic	body		SetupWalletMnemonicReqBody	true	"Mnemonic"
+//	@Success		200			{object}	WalletRes
 //	@Security		BasicAuth
 //	@Router			/wallet/mnemonic [post]
 func (s *WalletController) SetupWalletMnemonic(ctx *gin.Context) {
@@ -136,7 +135,7 @@ func (s *WalletController) SetupWalletMnemonic(ctx *gin.Context) {
 //	@Description	Remove wallet from proxy storage
 //	@Tags			wallet
 //	@Produce		json
-//	@Success		200	{statusRes}	res
+//	@Success		200	{object}	StatusRes
 //	@Security		BasicAuth
 //	@Router			/wallet [delete]
 func (s *WalletController) DeleteWallet(ctx *gin.Context) {

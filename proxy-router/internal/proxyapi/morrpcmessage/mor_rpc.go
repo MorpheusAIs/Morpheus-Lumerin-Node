@@ -178,6 +178,56 @@ func (m *MORRPCMessage) SessionReport(sessionID string, start uint, end uint, pr
 	}, nil
 }
 
+func (m *MORRPCMessage) CallAgentToolResponse(message string, providerPrivateKeyHex lib.HexString, requestId string) (*RpcResponse, error) {
+	params := CallAgentToolRes{
+		Message:   message,
+		Timestamp: m.generateTimestamp(),
+	}
+
+	signature, err := m.generateSignature(params, providerPrivateKeyHex)
+	if err != nil {
+		return &RpcResponse{}, err
+	}
+	params.Signature = signature
+
+	paramsBytes, err := json.Marshal(params)
+	if err != nil {
+		return &RpcResponse{}, err
+	}
+
+	paramsJSON := json.RawMessage(paramsBytes)
+
+	return &RpcResponse{
+		ID:     requestId,
+		Result: &paramsJSON,
+	}, nil
+}
+
+func (m *MORRPCMessage) GetAgentToolsResponse(message string, providerPrivateKeyHex lib.HexString, requestId string) (*RpcResponse, error) {
+	params := GetAgentToolsRes{
+		Message:   message,
+		Timestamp: m.generateTimestamp(),
+	}
+
+	signature, err := m.generateSignature(params, providerPrivateKeyHex)
+	if err != nil {
+		return &RpcResponse{}, err
+	}
+	params.Signature = signature
+
+	paramsBytes, err := json.Marshal(params)
+	if err != nil {
+		return &RpcResponse{}, err
+	}
+
+	paramsJSON := json.RawMessage(paramsBytes)
+
+	return &RpcResponse{
+		ID:     requestId,
+		Result: &paramsJSON,
+	}, nil
+}
+
 // ERRORS
 
 func (m *MORRPCMessage) ResponseError(message string, privateKeyHex lib.HexString, requestId string) (*RpcResponse, error) {
@@ -237,6 +287,65 @@ func (m *MORRPCMessage) PingRequest(requestId string, userPrivateKeyHex lib.HexS
 	return &RPCMessage{
 		ID:     requestId,
 		Method: "network.ping",
+		Params: serializedParams,
+	}, nil
+}
+
+func (m *MORRPCMessage) CallAgentToolRequest(sessionID common.Hash, toolName string, input map[string]interface{}, userPrivateKeyHex lib.HexString, requestId string) (*RPCMessage, error) {
+	method := "agent.call_tool"
+
+	message, err := json.Marshal(input)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
+
+	params := CallAgentToolReq{
+		SessionID: sessionID,
+		Message:   string(message),
+		ToolName:  toolName,
+		Timestamp: m.generateTimestamp(),
+	}
+
+	signature, err := m.generateSignature(params, userPrivateKeyHex)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
+	params.Signature = signature
+
+	serializedParams, err := json.Marshal(params)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
+
+	return &RPCMessage{
+		ID:     requestId,
+		Method: method,
+		Params: serializedParams,
+	}, nil
+}
+
+func (m *MORRPCMessage) CallGetAgentToolsRequest(sessionID common.Hash, userPrivateKeyHex lib.HexString, requestId string) (*RPCMessage, error) {
+	method := "agent.get_tools"
+
+	params := GetAgentToolsReq{
+		SessionID: sessionID,
+		Timestamp: m.generateTimestamp(),
+	}
+
+	signature, err := m.generateSignature(params, userPrivateKeyHex)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
+	params.Signature = signature
+
+	serializedParams, err := json.Marshal(params)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
+
+	return &RPCMessage{
+		ID:     requestId,
+		Method: method,
 		Params: serializedParams,
 	}, nil
 }

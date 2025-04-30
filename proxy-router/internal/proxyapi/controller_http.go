@@ -1,10 +1,15 @@
 package proxyapi
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"strconv"
+	"time"
 
 	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
@@ -20,6 +25,9 @@ import (
 
 type AIEngine interface {
 	GetLocalModels() ([]aiengine.LocalModel, error)
+	GetLocalAgents() ([]aiengine.LocalAgent, error)
+	CallAgentTool(ctx context.Context, sessionID, agentID common.Hash, toolName string, input map[string]interface{}) (interface{}, error)
+	GetAgentTools(ctx context.Context, sessionID, agentID common.Hash) ([]aiengine.AgentTool, error)
 	GetAdapter(ctx context.Context, chatID, modelID, sessionID common.Hash, storeContext, forwardContext bool) (aiengine.AIEngineStream, error)
 }
 
@@ -31,9 +39,13 @@ type ProxyController struct {
 	forwardChatContext bool
 	log                lib.ILogger
 	authConfig         system.HTTPAuthConfig
+	ipfsManager        *IpfsManager
+	dockerManager      *DockerManager
 }
 
-func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStorage genericchatstorage.ChatStorageInterface, storeChatContext, forwardChatContext bool, authConfig system.HTTPAuthConfig, log lib.ILogger) *ProxyController {
+func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStorage genericchatstorage.ChatStorageInterface, storeChatContext, forwardChatContext bool, authConfig system.HTTPAuthConfig, ipfsManager *IpfsManager, log lib.ILogger) *ProxyController {
+	dockerManager := NewDockerManager(log)
+
 	c := &ProxyController{
 		service:            service,
 		aiEngine:           aiEngine,
@@ -42,6 +54,8 @@ func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStor
 		forwardChatContext: forwardChatContext,
 		log:                log,
 		authConfig:         authConfig,
+		ipfsManager:        ipfsManager,
+		dockerManager:      dockerManager,
 	}
 
 	return c
@@ -52,10 +66,35 @@ func (s *ProxyController) RegisterRoutes(r interfaces.Router) {
 	r.POST("/proxy/sessions/initiate", s.authConfig.CheckAuth("initiate_session"), s.InitiateSession)
 	r.POST("/v1/chat/completions", s.authConfig.CheckAuth("chat"), s.Prompt)
 	r.GET("/v1/models", s.authConfig.CheckAuth("get_local_models"), s.Models)
+	r.GET("/v1/agents", s.authConfig.CheckAuth("get_local_agents"), s.Agents)
+	r.GET("/v1/agents/tools", s.authConfig.CheckAuth("get_agent_tools"), s.GetAgentTools)
+	r.POST("/v1/agents/tools", s.authConfig.CheckAuth("call_agent_tool"), s.CallAgentTool)
 	r.GET("/v1/chats", s.authConfig.CheckAuth("get_chat_history"), s.GetChats)
 	r.GET("/v1/chats/:id", s.authConfig.CheckAuth("get_chat_history"), s.GetChat)
 	r.DELETE("/v1/chats/:id", s.authConfig.CheckAuth("edit_chat_history"), s.DeleteChat)
 	r.POST("/v1/chats/:id", s.authConfig.CheckAuth("edit_chat_history"), s.UpdateChatTitle)
+
+	r.POST("/ipfs/pin", s.authConfig.CheckAuth("ipfs_pin"), s.Pin)
+	r.POST("/ipfs/unpin", s.authConfig.CheckAuth("ipfs_unpin"), s.Unpin)
+	r.GET("/ipfs/download/:cidHash", s.authConfig.CheckAuth("ipfs_get"), s.DownloadFile)
+	r.GET("/ipfs/download/stream/:cidHash", s.authConfig.CheckAuth("ipfs_get"), s.StreamDownloadFile)
+	r.POST("/ipfs/add", s.authConfig.CheckAuth("ipfs_add"), s.AddFile)
+	r.GET("/ipfs/version", s.authConfig.CheckAuth("ipfs_version"), s.GetIpfsVersion)
+	r.GET("/ipfs/pin", s.authConfig.CheckAuth("ipfs_pinned"), s.GetPinnedFiles)
+
+	// Docker management routes
+	r.POST("/docker/build", s.authConfig.CheckAuth("docker_build"), s.BuildDockerImage)
+	r.POST("/docker/build/stream", s.authConfig.CheckAuth("docker_build"), s.StreamBuildDockerImage)
+	r.POST("/docker/container/start", s.authConfig.CheckAuth("docker_manage"), s.StartContainer)
+	r.POST("/docker/container/stop", s.authConfig.CheckAuth("docker_manage"), s.StopContainer)
+	r.POST("/docker/container/remove", s.authConfig.CheckAuth("docker_manage"), s.RemoveContainer)
+	r.GET("/docker/container/:id", s.authConfig.CheckAuth("docker_manage"), s.GetContainer)
+	r.POST("/docker/containers", s.authConfig.CheckAuth("docker_manage"), s.ListContainers)
+	r.GET("/docker/container/:id/logs", s.authConfig.CheckAuth("docker_manage"), s.GetContainerLogs)
+	r.GET("/docker/container/:id/logs/stream", s.authConfig.CheckAuth("docker_manage"), s.StreamContainerLogs)
+	r.GET("/docker/version", s.authConfig.CheckAuth("docker_version"), s.GetDockerVersion)
+	r.POST("/docker/prune/images", s.authConfig.CheckAuth("docker_manage"), s.PruneImages)
+	r.POST("/docker/prune/containers", s.authConfig.CheckAuth("docker_manage"), s.PruneContainers)
 }
 
 // Ping godoc
@@ -204,6 +243,52 @@ func (c *ProxyController) Models(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, models)
 }
 
+// GetLocalAgents godoc
+//
+//	@Summary	Get local agents
+//	@Tags		agents
+//	@Produce	json
+//	@Success	200	{object}	[]aiengine.LocalAgent
+//	@Security	BasicAuth
+//	@Router		/v1/agents [get]
+func (c *ProxyController) Agents(ctx *gin.Context) {
+	agents, err := c.aiEngine.GetLocalAgents()
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, agents)
+}
+
+// GetAgentTools godoc
+//
+//	@Summary	Get agent tools
+//	@Tags		agents
+//	@Produce	json
+//	@Param		session_id	header		string	false	"Session ID"	format(hex32)
+//	@Param		agent_id	header		string	false	"Agent ID"		format(hex32)
+//	@Success	200			{object}	[]aiengine.AgentTool
+//	@Security	BasicAuth
+//	@Router		/v1/agents/tools [get]
+func (c *ProxyController) GetAgentTools(ctx *gin.Context) {
+	var head AgentPromptHead
+	err := ctx.ShouldBindHeader(&head)
+
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	tools, err := c.aiEngine.GetAgentTools(ctx, head.SessionID.Hash, head.AgentId.Hash)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, tools)
+	return
+}
+
 // GetChats godoc
 //
 //	@Summary	Get all chats stored in the system
@@ -221,6 +306,42 @@ func (c *ProxyController) GetChats(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, chats)
+}
+
+// CallAgentTool godoc
+//
+//	@Summary	Call agent tool
+//	@Tags		agents
+//	@Produce	json
+//	@Param		session_id	header		string						false	"Session ID"	format(hex32)
+//	@Param		agent_id	header		string						false	"Agent ID"		format(hex32)
+//	@Param		input		body		proxyapi.CallAgentToolReq	true	"Input"
+//	@Success	200			{object}	interface{}
+//	@Security	BasicAuth
+//	@Router		/v1/agents/tools [post]
+func (c *ProxyController) CallAgentTool(ctx *gin.Context) {
+	var head AgentPromptHead
+	err := ctx.ShouldBindHeader(&head)
+
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	var req CallAgentToolReq
+	err = ctx.ShouldBindJSON(&req)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	result, err := c.aiEngine.CallAgentTool(ctx, head.SessionID.Hash, head.AgentId.Hash, req.ToolName, req.Input)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, result)
 }
 
 // GetChat godoc
@@ -305,4 +426,886 @@ func (c *ProxyController) UpdateChatTitle(ctx *gin.Context) {
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"result": true})
+}
+
+// Pin godoc
+//
+//	@Summary	Pin a file to IPFS
+//	@Tags		ipfs
+//	@Produce	json
+//	@Param		cidHash	body		proxyapi.CIDReq	true	"cidHash"
+//	@Success	200		{object}	proxyapi.ResultResponse
+//	@Security	BasicAuth
+//	@Router		/ipfs/pin [post]
+func (c *ProxyController) Pin(ctx *gin.Context) {
+	var req CIDReq
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	CID, err := lib.ManualBytes32ToCID(req.CID.Bytes())
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	err = c.ipfsManager.Pin(ctx, CID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"result": true})
+}
+
+// Unpin godoc
+//
+//	@Summary	Unpin a file from IPFS
+//	@Tags		ipfs
+//	@Produce	json
+//	@Param		cidHash	body		proxyapi.CIDReq	true	"cidHash"
+//	@Success	200		{object}	proxyapi.ResultResponse
+//	@Security	BasicAuth
+//	@Router		/ipfs/unpin [post]
+func (c *ProxyController) Unpin(ctx *gin.Context) {
+	var req CIDReq
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	CID, err := lib.ManualBytes32ToCID(req.CID.Bytes())
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err = c.ipfsManager.Unpin(ctx, CID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"result": true})
+}
+
+// DownloadFile godoc
+//
+//	@Summary	Download a file from IPFS
+//	@Tags		ipfs
+//	@Produce	json
+//	@Param		cidHash	path		string	true	"cidHash"
+//	@Param		dest	query		string	true	"Destination Path"
+//	@Success	200		{object}	proxyapi.ResultResponse
+//	@Security	BasicAuth
+//	@Router		/ipfs/download/{cidHash} [get]
+func (c *ProxyController) DownloadFile(ctx *gin.Context) {
+	var params struct {
+		CID lib.Hash `uri:"cidHash" binding:"required"`
+	}
+
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	destinationPath := ctx.Query("dest")
+	if destinationPath == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "destination path is required"})
+		return
+	}
+
+	CID, err := lib.ManualBytes32ToCID(params.CID.Bytes())
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err = c.ipfsManager.GetFile(ctx, CID, destinationPath)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"result": true})
+}
+
+// StreamDownloadFile godoc
+//
+//	@Summary	Download a file from IPFS with progress updates as SSE stream
+//	@Tags		ipfs
+//	@Produce	text/event-stream
+//	@Param		cidHash	path		string	true	"cidHash"
+//	@Param		dest	query		string	true	"Destination Path"
+//	@Success	200		{object}	proxyapi.DownloadProgressEvent
+//	@Security	BasicAuth
+//	@Router		/ipfs/download/stream/{cidHash} [get]
+func (c *ProxyController) StreamDownloadFile(ctx *gin.Context) {
+	var params struct {
+		CID lib.Hash `uri:"cidHash" binding:"required"`
+	}
+
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	destinationPath := ctx.Query("dest")
+	if destinationPath == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "destination path is required"})
+		return
+	}
+
+	CID, err := lib.ManualBytes32ToCID(params.CID.Bytes())
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if ctx.Request.Method == "OPTIONS" {
+		ctx.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		ctx.Writer.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		ctx.Writer.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+		ctx.Writer.Header().Set("Access-Control-Max-Age", "86400")
+		ctx.Writer.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	if ctx.Request.Method == "HEAD" {
+		ctx.Writer.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Set headers for SSE
+	ctx.Writer.Header().Set("Content-Type", "text/event-stream")
+	ctx.Writer.Header().Set("Cache-Control", "no-cache")
+	ctx.Writer.Header().Set("Connection", "keep-alive")
+	ctx.Writer.Header().Set("X-Accel-Buffering", "no") // For Nginx
+	ctx.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+	ctx.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+
+	// Create a cancelable context that will be used to stop the download when client disconnects
+	downloadCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Setup client disconnection detection
+	// Use a done channel to signal when the client disconnects
+	clientGone := ctx.Request.Context().Done()
+
+	// Monitor for client disconnection in a separate goroutine
+	go func() {
+		select {
+		case <-clientGone:
+			c.log.Info("Client disconnected, canceling download operation")
+			cancel() // Cancel the download context when client disconnects
+		case <-downloadCtx.Done():
+			// Context canceled elsewhere, just return
+		}
+	}()
+
+	progressCallback := func(downloaded, total int64) error {
+		select {
+		case <-downloadCtx.Done():
+			return fmt.Errorf("download canceled: client disconnected or context canceled")
+		default:
+		}
+
+		var percentage float64
+		if total > 0 {
+			percentage = float64(downloaded) / float64(total) * 100
+		}
+
+		event := DownloadProgressEvent{
+			Status:      "downloading",
+			Downloaded:  downloaded,
+			Total:       total,
+			Percentage:  percentage,
+			TimeUpdated: time.Now().UnixMilli(),
+		}
+
+		data, err := json.Marshal(event)
+		if err != nil {
+			return err
+		}
+
+		// Check context again before writing to avoid writing to closed connection
+		select {
+		case <-downloadCtx.Done():
+			return fmt.Errorf("download canceled: client disconnected or context canceled")
+		default:
+			if _, err = fmt.Fprintf(ctx.Writer, "data: %s\n\n", data); err != nil {
+				cancel() // Cancel if we can't write to the client
+				return err
+			}
+
+			ctx.Writer.Flush()
+
+			// Don't spam too many updates
+			if downloaded < total && downloaded%1048576 != 0 { // Send at least every 1MB
+				// Skip some updates for better performance
+				return nil
+			}
+
+			return nil
+		}
+	}
+
+	// Start the download with progress tracking
+	err = c.ipfsManager.GetFileWithProgress(downloadCtx, CID, destinationPath, progressCallback)
+	if err != nil {
+		// Check if this is a cancellation error, which is expected when client disconnects
+		if downloadCtx.Err() != nil {
+			c.log.Info("Download canceled: %v", err)
+			return // Just return without sending an error event since client is gone
+		}
+
+		event := DownloadProgressEvent{
+			Status:      "error",
+			Error:       err.Error(),
+			TimeUpdated: time.Now().UnixMilli(),
+		}
+		data, _ := json.Marshal(event)
+
+		select {
+		case <-downloadCtx.Done():
+			return // Client is gone, no need to write
+		default:
+			fmt.Fprintf(ctx.Writer, "data: %s\n\n", data)
+			ctx.Writer.Flush()
+		}
+		return
+	}
+
+	// Only send completion event if the client is still connected
+	select {
+	case <-downloadCtx.Done():
+		return // Client is gone, no need to send completion
+	default:
+		event := DownloadProgressEvent{
+			Status:      "completed",
+			Downloaded:  100,
+			Total:       100,
+			Percentage:  100,
+			TimeUpdated: time.Now().UnixMilli(),
+		}
+		data, _ := json.Marshal(event)
+		fmt.Fprintf(ctx.Writer, "data: %s\n\n", data)
+		ctx.Writer.Flush()
+	}
+}
+
+// AddFile godoc
+//
+//	@Summary	Add a file to IPFS with metadata
+//	@Tags		ipfs
+//	@Produce	json
+//	@Param		request	body		proxyapi.AddFileReq	true	"File Path and Metadata"
+//	@Success	200		{object}	proxyapi.AddIpfsFileRes
+//	@Security	BasicAuth
+//	@Router		/ipfs/add [post]
+func (c *ProxyController) AddFile(ctx *gin.Context) {
+	var req AddFileReq
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	result, err := c.ipfsManager.AddFile(ctx, req.FilePath, req.Tags, req.ID.Hex(), req.ModelName)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	fileCIDHash, err := lib.CIDToBytes32(result.FileCID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	fileHash := lib.HexString(fileCIDHash)
+
+	metadataCIDHash, err := lib.CIDToBytes32(result.MetadataCID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	metadataHash := lib.HexString(metadataCIDHash)
+
+	ctx.JSON(http.StatusOK, AddIpfsFileRes{
+		FileCID:         result.FileCID,
+		MetadataCID:     result.MetadataCID,
+		FileCIDHash:     fileHash,
+		MetadataCIDHash: metadataHash,
+	})
+}
+
+// GetIpfsVersion godoc
+//
+//	@Summary	Get IPFS Version
+//	@Tags		ipfs
+//	@Produce	json
+//	@Success	200	{object}	proxyapi.IpfsVersionRes
+//	@Security	BasicAuth
+//	@Router		/ipfs/version [get]
+func (c *ProxyController) GetIpfsVersion(ctx *gin.Context) {
+	version, err := c.ipfsManager.GetVersion(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, IpfsVersionRes{Version: version})
+}
+
+// GetPinnedFiles godoc
+//
+//	@Summary	Get all pinned files metadata
+//	@Tags		ipfs
+//	@Produce	json
+//	@Success	200	{array}	proxyapi.PinnedFileRes
+//	@Security	BasicAuth
+//	@Router		/ipfs/pin [get]
+func (c *ProxyController) GetPinnedFiles(ctx *gin.Context) {
+	metadata, err := c.ipfsManager.GetPinnedFiles(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	responses := make([]PinnedFileRes, 0, len(metadata))
+	for _, item := range metadata {
+		fileCIDBytes, err := lib.CIDToBytes32(item.FileCID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		fileCIDHash := lib.HexString(fileCIDBytes)
+
+		metadataCIDBytes, err := lib.CIDToBytes32(item.MetadataCID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		metadataCIDHash := lib.HexString(metadataCIDBytes)
+
+		// Create response object
+		response := PinnedFileRes{
+			FileName:        item.FileName,
+			FileSize:        item.FileSize,
+			FileCID:         item.FileCID,
+			FileCIDHash:     fileCIDHash,
+			Tags:            item.Tags,
+			ID:              item.ID,
+			ModelName:       item.ModelName,
+			MetadataCID:     item.MetadataCID,
+			MetadataCIDHash: metadataCIDHash,
+		}
+
+		responses = append(responses, response)
+	}
+
+	ctx.JSON(http.StatusOK, responses)
+}
+
+// BuildDockerImage godoc
+//
+//	@Summary	Build a Docker image
+//	@Tags		docker
+//	@Produce	json
+//	@Param		request	body		proxyapi.DockerBuildReq	true	"Docker build request"
+//	@Success	200		{object}	proxyapi.DockerBuildRes
+//	@Security	BasicAuth
+//	@Router		/docker/build [post]
+func (c *ProxyController) BuildDockerImage(ctx *gin.Context) {
+	var req DockerBuildReq
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	tag, err := c.dockerManager.BuildImage(ctx, req.ContextPath, req.Dockerfile, req.ImageName, req.ImageTag, req.BuildArgs, nil)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, DockerBuildRes{ImageTag: tag})
+}
+
+// StreamBuildDockerImage godoc
+//
+//	@Summary	Build a Docker image with progress updates as SSE stream
+//	@Tags		docker
+//	@Produce	text/event-stream
+//	@Param		request	body		proxyapi.DockerBuildReq	true	"Docker build request"
+//	@Success	200		{object}	proxyapi.DockerStreamBuildEvent
+//	@Security	BasicAuth
+//	@Router		/docker/build/stream [post]
+func (c *ProxyController) StreamBuildDockerImage(ctx *gin.Context) {
+	var req DockerBuildReq
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if ctx.Request.Method == "OPTIONS" {
+		ctx.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		ctx.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		ctx.Writer.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+		ctx.Writer.Header().Set("Access-Control-Max-Age", "86400")
+		ctx.Writer.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	// Set headers for SSE
+	ctx.Writer.Header().Set("Content-Type", "text/event-stream")
+	ctx.Writer.Header().Set("Cache-Control", "no-cache")
+	ctx.Writer.Header().Set("Connection", "keep-alive")
+	ctx.Writer.Header().Set("X-Accel-Buffering", "no") // For Nginx
+	ctx.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+	ctx.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+
+	// Create a cancelable context that will be used to stop the build when client disconnects
+	buildCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Setup client disconnection detection
+	clientGone := ctx.Request.Context().Done()
+
+	// Monitor for client disconnection in a separate goroutine
+	go func() {
+		select {
+		case <-clientGone:
+			c.log.Info("Client disconnected, canceling build operation")
+			cancel() // Cancel the build context when client disconnects
+		case <-buildCtx.Done():
+			// Context canceled elsewhere, just return
+		}
+	}()
+
+	progressCallback := func(progress BuildProgress) error {
+		select {
+		case <-buildCtx.Done():
+			return fmt.Errorf("build canceled: client disconnected or context canceled")
+		default:
+		}
+
+		data, err := json.Marshal(progress)
+		if err != nil {
+			return err
+		}
+
+		// Check context again before writing to avoid writing to closed connection
+		select {
+		case <-buildCtx.Done():
+			return fmt.Errorf("build canceled: client disconnected or context canceled")
+		default:
+			if _, err = fmt.Fprintf(ctx.Writer, "data: %s\n\n", data); err != nil {
+				cancel() // Cancel if we can't write to the client
+				return err
+			}
+
+			ctx.Writer.Flush()
+			return nil
+		}
+	}
+
+	tag, err := c.dockerManager.BuildImage(buildCtx, req.ContextPath, req.Dockerfile, req.ImageName, req.ImageTag, req.BuildArgs, progressCallback)
+	if err != nil {
+		// Check if this is a cancellation error, which is expected when client disconnects
+		if buildCtx.Err() != nil {
+			c.log.Info("Build canceled: %v", err)
+			return // Just return without sending an error event since client is gone
+		}
+
+		event := BuildProgress{
+			Status:       "error",
+			Error:        err.Error(),
+			ErrorDetails: err.Error(),
+			TimeUpdated:  time.Now().UnixMilli(),
+		}
+		data, _ := json.Marshal(event)
+
+		select {
+		case <-buildCtx.Done():
+			return // Client is gone, no need to write
+		default:
+			fmt.Fprintf(ctx.Writer, "data: %s\n\n", data)
+			ctx.Writer.Flush()
+		}
+		return
+	}
+
+	// Only send completion event if the client is still connected
+	select {
+	case <-buildCtx.Done():
+		return // Client is gone, no need to send completion
+	default:
+		event := BuildProgress{
+			Status:      "completed",
+			Stream:      fmt.Sprintf("Successfully built image: %s\n", tag),
+			TimeUpdated: time.Now().UnixMilli(),
+		}
+		data, _ := json.Marshal(event)
+		fmt.Fprintf(ctx.Writer, "data: %s\n\n", data)
+		ctx.Writer.Flush()
+	}
+}
+
+// StartContainer godoc
+//
+//	@Summary	Start a Docker container
+//	@Tags		docker
+//	@Produce	json
+//	@Param		request	body		proxyapi.DockerStartContainerReq	true	"Docker start container request"
+//	@Success	200		{object}	proxyapi.DockerStartContainerRes
+//	@Security	BasicAuth
+//	@Router		/docker/container/start [post]
+func (c *ProxyController) StartContainer(ctx *gin.Context) {
+	var req DockerStartContainerReq
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	containerID, err := c.dockerManager.StartContainer(ctx, req.ImageName, req.ContainerName, req.Env, req.Ports, req.Volumes, req.NetworkMode)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, DockerStartContainerRes{ContainerID: containerID})
+}
+
+// StopContainer godoc
+//
+//	@Summary	Stop a Docker container
+//	@Tags		docker
+//	@Produce	json
+//	@Param		request	body		proxyapi.DockerContainerActionReq	true	"Docker container stop request"
+//	@Success	200		{object}	proxyapi.ResultResponse
+//	@Security	BasicAuth
+//	@Router		/docker/container/stop [post]
+func (c *ProxyController) StopContainer(ctx *gin.Context) {
+	var req DockerContainerActionReq
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err := c.dockerManager.StopContainer(ctx, req.ContainerID, req.Timeout)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"result": true})
+}
+
+// RemoveContainer godoc
+//
+//	@Summary	Remove a Docker container
+//	@Tags		docker
+//	@Produce	json
+//	@Param		request	body		proxyapi.DockerContainerActionReq	true	"Docker container remove request"
+//	@Success	200		{object}	proxyapi.ResultResponse
+//	@Security	BasicAuth
+//	@Router		/docker/container/remove [post]
+func (c *ProxyController) RemoveContainer(ctx *gin.Context) {
+	var req DockerContainerActionReq
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err := c.dockerManager.RemoveContainer(ctx, req.ContainerID, req.Force)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"result": true})
+}
+
+// GetContainer godoc
+//
+//	@Summary	Get Docker container info
+//	@Tags		docker
+//	@Produce	json
+//	@Param		id	path		string	true	"Container ID"
+//	@Success	200	{object}	proxyapi.DockerContainerInfoRes
+//	@Security	BasicAuth
+//	@Router		/docker/container/{id} [get]
+func (c *ProxyController) GetContainer(ctx *gin.Context) {
+	containerID := ctx.Param("id")
+	if containerID == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "container ID is required"})
+		return
+	}
+
+	info, err := c.dockerManager.GetContainerInfo(ctx, containerID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, DockerContainerInfoRes{ContainerInfo: *info})
+}
+
+// ListContainers godoc
+//
+//	@Summary	List Docker containers
+//	@Tags		docker
+//	@Produce	json
+//	@Param		request	body		proxyapi.DockerListContainersReq	true	"Docker list containers request"
+//	@Success	200		{object}	proxyapi.DockerListContainersRes
+//	@Security	BasicAuth
+//	@Router		/docker/containers [post]
+func (c *ProxyController) ListContainers(ctx *gin.Context) {
+	var req DockerListContainersReq
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	containers, err := c.dockerManager.ListContainers(ctx, req.All, req.FilterLabels)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, DockerListContainersRes{Containers: containers})
+}
+
+// GetContainerLogs godoc
+//
+//	@Summary	Get Docker container logs
+//	@Tags		docker
+//	@Produce	text/plain
+//	@Param		id		path		string	true	"Container ID"
+//	@Param		tail	query		integer	false	"Number of lines to show from the end"
+//	@Param		follow	query		boolean	false	"Follow log output"
+//	@Success	200		{string}	string	"Log output"
+//	@Security	BasicAuth
+//	@Router		/docker/container/{id}/logs [get]
+func (c *ProxyController) GetContainerLogs(ctx *gin.Context) {
+	containerID := ctx.Param("id")
+	if containerID == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "container ID is required"})
+		return
+	}
+
+	tail, _ := ctx.GetQuery("tail")
+	tailLines := 100 // default
+	if tail != "" {
+		var err error
+		tailLines, err = strconv.Atoi(tail)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid tail parameter"})
+			return
+		}
+	}
+
+	follow := false
+	followStr, _ := ctx.GetQuery("follow")
+	if followStr == "true" {
+		follow = true
+	}
+
+	// For non-streaming logs, set a reasonable timeout
+	logsCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	reader, err := c.dockerManager.GetContainerLogs(logsCtx, containerID, tailLines, follow)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer reader.Close()
+
+	// Set content type
+	ctx.Header("Content-Type", "text/plain")
+
+	// Copy logs to response
+	_, err = io.Copy(ctx.Writer, reader)
+	if err != nil {
+		c.log.Errorf("Error copying container logs: %v", err)
+	}
+}
+
+// StreamContainerLogs godoc
+//
+//	@Summary	Stream Docker container logs as SSE
+//	@Tags		docker
+//	@Produce	text/event-stream
+//	@Param		id		path		string	true	"Container ID"
+//	@Param		tail	query		integer	false	"Number of lines to show from the end"
+//	@Success	200		{string}	string	"Log output events"
+//	@Security	BasicAuth
+//	@Router		/docker/container/{id}/logs/stream [get]
+func (c *ProxyController) StreamContainerLogs(ctx *gin.Context) {
+	containerID := ctx.Param("id")
+	if containerID == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "container ID is required"})
+		return
+	}
+
+	tail, _ := ctx.GetQuery("tail")
+	tailLines := 100 // default
+	if tail != "" {
+		var err error
+		tailLines, err = strconv.Atoi(tail)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid tail parameter"})
+			return
+		}
+	}
+
+	if ctx.Request.Method == "OPTIONS" {
+		ctx.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		ctx.Writer.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		ctx.Writer.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+		ctx.Writer.Header().Set("Access-Control-Max-Age", "86400")
+		ctx.Writer.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	// Set headers for SSE
+	ctx.Writer.Header().Set("Content-Type", "text/event-stream")
+	ctx.Writer.Header().Set("Cache-Control", "no-cache")
+	ctx.Writer.Header().Set("Connection", "keep-alive")
+	ctx.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+	ctx.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+
+	// Create a cancelable context that will be used to stop the logs stream when client disconnects
+	logsCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Setup client disconnection detection
+	clientGone := ctx.Request.Context().Done()
+
+	// Monitor for client disconnection in a separate goroutine
+	go func() {
+		select {
+		case <-clientGone:
+			c.log.Info("Client disconnected, canceling logs stream")
+			cancel() // Cancel the logs context when client disconnects
+		case <-logsCtx.Done():
+			// Context canceled elsewhere, just return
+		}
+	}()
+
+	// Get container logs with follow mode
+	reader, err := c.dockerManager.GetContainerLogs(logsCtx, containerID, tailLines, true)
+	if err != nil {
+		event := struct {
+			Status string `json:"status"`
+			Error  string `json:"error"`
+		}{
+			Status: "error",
+			Error:  err.Error(),
+		}
+		data, _ := json.Marshal(event)
+		fmt.Fprintf(ctx.Writer, "data: %s\n\n", data)
+		ctx.Writer.Flush()
+		return
+	}
+	defer reader.Close()
+
+	scanner := bufio.NewScanner(reader)
+	for scanner.Scan() {
+		select {
+		case <-logsCtx.Done():
+			return // Stop if context is canceled
+		default:
+			line := scanner.Text()
+			// Create a log event
+			event := struct {
+				Status    string `json:"status"`
+				Line      string `json:"line"`
+				Timestamp int64  `json:"timestamp"`
+			}{
+				Status:    "log",
+				Line:      line,
+				Timestamp: time.Now().UnixMilli(),
+			}
+			data, err := json.Marshal(event)
+			if err != nil {
+				c.log.Errorf("Error marshaling log event: %v", err)
+				continue
+			}
+
+			// Send the event
+			_, err = fmt.Fprintf(ctx.Writer, "data: %s\n\n", data)
+			if err != nil {
+				c.log.Errorf("Error writing log event: %v", err)
+				return // Stop on write error
+			}
+			ctx.Writer.Flush()
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			c.log.Errorf("Error scanning container logs: %v", err)
+		}
+	}
+}
+
+// GetDockerVersion godoc
+//
+//	@Summary	Get Docker version
+//	@Tags		docker
+//	@Produce	json
+//	@Success	200	{object}	proxyapi.DockerVersionRes
+//	@Security	BasicAuth
+//	@Router		/docker/version [get]
+func (c *ProxyController) GetDockerVersion(ctx *gin.Context) {
+	version, err := c.dockerManager.GetDockerVersion(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, DockerVersionRes{Version: version})
+}
+
+// PruneImages godoc
+//
+//	@Summary	Prune unused Docker images
+//	@Tags		docker
+//	@Produce	json
+//	@Success	200	{object}	proxyapi.DockerPruneRes
+//	@Security	BasicAuth
+//	@Router		/docker/prune/images [post]
+func (c *ProxyController) PruneImages(ctx *gin.Context) {
+	spaceReclaimed, err := c.dockerManager.PruneImages(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, DockerPruneRes{SpaceReclaimed: spaceReclaimed})
+}
+
+// PruneContainers godoc
+//
+//	@Summary	Prune stopped Docker containers
+//	@Tags		docker
+//	@Produce	json
+//	@Success	200	{object}	proxyapi.DockerPruneRes
+//	@Security	BasicAuth
+//	@Router		/docker/prune/containers [post]
+func (c *ProxyController) PruneContainers(ctx *gin.Context) {
+	spaceReclaimed, err := c.dockerManager.PruneContainers(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, DockerPruneRes{SpaceReclaimed: spaceReclaimed})
 }
