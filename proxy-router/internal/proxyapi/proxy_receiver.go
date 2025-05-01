@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
+	gsc "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	m "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi/morrpcmessage"
@@ -73,7 +73,29 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 		return 0, 0, err
 	}
 
-	err = adapter.Prompt(ctx, req, func(ctx context.Context, completion genericchatstorage.Chunk) error {
+	err = adapter.Prompt(ctx, req, func(ctx context.Context, completion gsc.Chunk, aiEngineErrorResponse *gsc.AiEngineErrorResponse) error {
+		if aiEngineErrorResponse != nil {
+			marshalledResponse, err := json.Marshal(aiEngineErrorResponse)
+			if err != nil {
+				return err
+			}
+			encryptedResponse, err := lib.EncryptString(string(marshalledResponse), lib.RemoveHexPrefix(userPubKey))
+			if err != nil {
+				return err
+			}
+
+			r, err := s.morRpc.ResponseError(
+				encryptedResponse,
+				s.privateKeyHex,
+				requestID,
+			)
+			if err != nil {
+				err := lib.WrapError(fmt.Errorf("failed to create response"), err)
+				sourceLog.Error(err)
+				return err
+			}
+			return sendResponse(r)
+		}
 		totalTokens += completion.Tokens()
 
 		if ttftMs == 0 {

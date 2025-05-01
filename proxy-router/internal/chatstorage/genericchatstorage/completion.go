@@ -6,7 +6,7 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
-type CompletionCallback func(ctx context.Context, completion Chunk) error
+type CompletionCallback func(ctx context.Context, completion Chunk, aiEngineErrorResponse *AiEngineErrorResponse) error
 
 type ChunkType string
 
@@ -213,3 +213,13 @@ var _ Chunk = &ChunkControl{}
 var _ Chunk = &ChunkStreaming{}
 var _ Chunk = &ChunkVideo{}
 var _ Chunk = &ChunkImageRawContent{}
+
+type AiEngineErrorResponse struct {
+	ProviderModelError interface{} `json:"providerModelError"`
+}
+
+func NewAiEngineErrorResponse(ProviderModelError interface{}) *AiEngineErrorResponse {
+	return &AiEngineErrorResponse{
+		ProviderModelError: ProviderModelError,
+	}
+}
