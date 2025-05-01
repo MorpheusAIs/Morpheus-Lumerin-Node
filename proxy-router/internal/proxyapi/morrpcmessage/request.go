@@ -90,8 +90,8 @@ type RpcError struct {
 }
 
 type RPCErrorData struct {
-	Timestamp uint64         `json:"timestamp" validate:"required,number"`
-	Signature *lib.HexString `json:"signature" validate:"required,hexadecimal"`
+	Timestamp uint64        `json:"timestamp" validate:"required,number"`
+	Signature lib.HexString `json:"signature" validate:"required,hexadecimal"`
 }
 
 type RPCMessage struct {

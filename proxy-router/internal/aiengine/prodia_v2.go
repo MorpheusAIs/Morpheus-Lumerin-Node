@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	c "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
 	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
@@ -37,6 +38,7 @@ func NewProdiaV2Engine(modelName, apiURL, apiKey string, log lib.ILogger) *Prodi
 	if apiURL == "" {
 		apiURL = PRODIA_V2_DEFAULT_BASE_URL
 	}
+	apiURL = strings.TrimSuffix(apiURL, "/")
 	return &ProdiaV2{
 		modelName: modelName,
 		apiURL:    apiURL,
@@ -80,7 +82,16 @@ func (s *ProdiaV2) Prompt(ctx context.Context, prompt *openai.ChatCompletionRequ
 	if res.StatusCode == http.StatusTooManyRequests {
 		return ErrCapacity
 	} else if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
-		return lib.WrapError(ErrBadResponse, fmt.Errorf("status code: %d", res.StatusCode))
+		var aiEngineErrorResponse interface{}
+		if err := json.NewDecoder(res.Body).Decode(&aiEngineErrorResponse); err != nil {
+			return fmt.Errorf("failed to decode response: %v", err)
+		}
+
+		err := cb(ctx, nil, gcs.NewAiEngineErrorResponse(aiEngineErrorResponse))
+		if err != nil {
+			return fmt.Errorf("callback failed: %v", err)
+		}
+		return nil
 	}
 
 	contentType := res.Header.Get(c.HEADER_CONTENT_TYPE)
@@ -105,7 +116,7 @@ func (s *ProdiaV2) Prompt(ctx context.Context, prompt *openai.ChatCompletionRequ
 		})
 	}
 
-	return cb(ctx, chunk)
+	return cb(ctx, chunk, nil)
 }
 
 func (s *ProdiaV2) ApiType() string {

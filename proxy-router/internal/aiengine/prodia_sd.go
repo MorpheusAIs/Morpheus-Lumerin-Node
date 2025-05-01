@@ -101,7 +101,7 @@ func (s *ProdiaSD) Prompt(ctx context.Context, prompt *openai.ChatCompletionRequ
 		Status:   job.Status,
 	})
 
-	return cb(ctx, chunk)
+	return cb(ctx, chunk, nil)
 }
 
 func (s *ProdiaSD) ApiType() string {
