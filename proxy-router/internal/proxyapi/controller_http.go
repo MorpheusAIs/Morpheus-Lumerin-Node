@@ -14,7 +14,7 @@ import (
 	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi/structs"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
+	gsc "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
@@ -34,7 +34,7 @@ type AIEngine interface {
 type ProxyController struct {
 	service            *ProxyServiceSender
 	aiEngine           AIEngine
-	chatStorage        genericchatstorage.ChatStorageInterface
+	chatStorage        gsc.ChatStorageInterface
 	storeChatContext   bool
 	forwardChatContext bool
 	log                lib.ILogger
@@ -43,7 +43,7 @@ type ProxyController struct {
 	dockerManager      *DockerManager
 }
 
-func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStorage genericchatstorage.ChatStorageInterface, storeChatContext, forwardChatContext bool, authConfig system.HTTPAuthConfig, ipfsManager *IpfsManager, log lib.ILogger) *ProxyController {
+func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStorage gsc.ChatStorageInterface, storeChatContext, forwardChatContext bool, authConfig system.HTTPAuthConfig, ipfsManager *IpfsManager, log lib.ILogger) *ProxyController {
 	dockerManager := NewDockerManager(log)
 
 	c := &ProxyController{
@@ -204,13 +204,24 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 
 	ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, contentType)
 
-	err = adapter.Prompt(ctx, &body, func(cbctx context.Context, completion genericchatstorage.Chunk) error {
+	err = adapter.Prompt(ctx, &body, func(cbctx context.Context, completion gsc.Chunk, aiResponseError *gsc.AiEngineErrorResponse) error {
+		if aiResponseError != nil {
+			ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_JSON)
+			ctx.JSON(http.StatusBadRequest, aiResponseError)
+			return nil
+		}
+
 		marshalledResponse, err := json.Marshal(completion.Data())
 		if err != nil {
 			return err
 		}
 
-		_, err = ctx.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", marshalledResponse)))
+		if body.Stream {
+			_, err = ctx.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", marshalledResponse)))
+		} else {
+			_, err = ctx.Writer.Write(marshalledResponse)
+		}
+
 		if err != nil {
 			return err
 		}

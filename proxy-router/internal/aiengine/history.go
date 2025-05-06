@@ -45,9 +45,11 @@ func (h *History) Prompt(ctx context.Context, prompt *openai.ChatCompletionReque
 		adjustedPrompt = history.AppendChatHistory(prompt)
 	}
 
-	err = h.engine.Prompt(ctx, adjustedPrompt, func(ctx context.Context, completion gcs.Chunk) error {
-		completions = append(completions, completion)
-		return cb(ctx, completion)
+	err = h.engine.Prompt(ctx, adjustedPrompt, func(ctx context.Context, completion gcs.Chunk, errorBody *gcs.AiEngineErrorResponse) error {
+		if errorBody != nil {
+			completions = append(completions, completion)
+		}
+		return cb(ctx, completion, errorBody)
 	})
 	if err != nil {
 		return err

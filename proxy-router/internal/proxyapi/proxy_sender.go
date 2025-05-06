@@ -521,7 +521,7 @@ func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.
 			return nil, err
 		}
 
-		err = cb(ctx, gcs.NewChunkControl("provider failed, failover enabled"))
+		err = cb(ctx, gcs.NewChunkControl("provider failed, failover enabled"), nil)
 		if err != nil {
 			return nil, err
 		}
@@ -542,7 +542,7 @@ func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.
 		}
 
 		msg := fmt.Sprintf("new session opened: %s", newSessionID.Hex())
-		err = cb(ctx, gcs.NewChunkControl(msg))
+		err = cb(ctx, gcs.NewChunkControl(msg), nil)
 		if err != nil {
 			return nil, err
 		}
@@ -654,8 +654,8 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 					return nil, ttftMs, totalTokens, fmt.Errorf("read timed out after %d retries: %w", retryCount, err)
 				}
 			} else if err == io.EOF {
-				p.log.Warnf("Connection closed by provider")
-				return nil, ttftMs, totalTokens, fmt.Errorf("connection closed by provider")
+				p.log.Debugf("Connection closed by provider")
+				break
 			} else {
 				p.log.Warnf("Failed to decode response: %v", err)
 				return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
@@ -663,7 +663,26 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 		}
 
 		if msg.Error != nil {
-			return nil, ttftMs, totalTokens, lib.WrapError(ErrResponseErr, fmt.Errorf("error: %v, data: %v", msg.Error.Message, msg.Error.Data))
+			sig := msg.Error.Data.Signature
+			msg.Error.Data.Signature = []byte{}
+
+			if !p.validateMsgSignature(msg.Error, sig, providerPublicKey) {
+				return nil, ttftMs, totalTokens, ErrInvalidSig
+			}
+
+			errorMessage, err := lib.DecryptString(msg.Error.Message, prKey.Hex())
+			if err != nil {
+				return nil, ttftMs, totalTokens, lib.WrapError(ErrDecrFailed, err)
+			}
+
+			var aiEngineErrorResponse gcs.AiEngineErrorResponse
+			err = json.Unmarshal([]byte(errorMessage), &aiEngineErrorResponse)
+			if err != nil {
+				return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
+			}
+
+			cb(ctx, nil, &aiEngineErrorResponse)
+			return nil, ttftMs, totalTokens, nil
 		}
 
 		if msg.Result == nil {
@@ -702,7 +721,18 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 		err = json.Unmarshal(aiResponse, &payload)
 		var stop = true
 		var chunk gcs.Chunk
-		if err == nil && len(payload.Choices) > 0 {
+		if err == nil && payload.Usage != nil {
+			var payload openai.ChatCompletionResponse
+			err = json.Unmarshal(aiResponse, &payload)
+			if err == nil {
+				totalTokens = payload.Usage.TotalTokens
+				responses = append(responses, payload)
+				chunk = gcs.NewChunkText(&payload)
+				stop = true
+			} else {
+				return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
+			}
+		} else if err == nil && len(payload.Choices) > 0 {
 			stop = false
 			choices := payload.Choices
 			for _, choice := range choices {
@@ -744,7 +774,7 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 		if ctx.Err() != nil {
 			return nil, ttftMs, totalTokens, ctx.Err()
 		}
-		err = cb(ctx, chunk)
+		err = cb(ctx, chunk, nil)
 		if err != nil {
 			return nil, ttftMs, totalTokens, lib.WrapError(ErrResponseErr, err)
 		}
