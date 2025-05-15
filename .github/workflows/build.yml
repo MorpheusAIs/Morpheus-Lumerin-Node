@@ -428,6 +428,10 @@ jobs:
           cat package.json | grep '"version"'  # Optional: Verify the change
           yarn build:mac-arm64
 
+      - name: Sign app with ad hoc identity
+        run: |
+          cd ./ui-desktop && codesign --deep --force --sign - ./dist/mac-arm64/MorpheusUI.app
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -481,11 +485,46 @@ jobs:
           cat package.json | grep '"version"'  # Optional: Verify the change
           yarn build:linux-x64
 
+      - name: Sign Linux AppImage
+        run: |
+          # Install required tools
+          sudo apt-get update && sudo apt-get install -y gnupg2
+          
+          # Generate a GPG key for signing (non-interactive)
+          cat >key-gen-info <<EOF
+          %echo Generating a GPG key for AppImage signing
+          Key-Type: RSA
+          Key-Length: 4096
+          Name-Real: MorpheusUI Build
+          Name-Email: build@morpheus.local
+          Expire-Date: 0
+          %no-protection
+          %commit
+          %echo Key generation completed
+          EOF
+          
+          # Generate the key
+          gpg --batch --gen-key key-gen-info
+          export KEYID=$(gpg --list-keys --with-colons build@morpheus.local | awk -F: '/^pub:/ {print $5}')
+          
+          # Download appimagetool (tool used to sign)
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
+          chmod +x appimagetool
+          
+          # Sign the AppImage
+          export APPIMAGE_PATH="./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-linux-x86_64.AppImage"
+          gpg --armor --detach-sign --default-key "$KEYID" "$APPIMAGE_PATH"
+          
+          # Verify signature (optional)
+          gpg --verify "$APPIMAGE_PATH.asc" "$APPIMAGE_PATH" || echo "Verification failed but continuing"
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-linux-x86_64.AppImage
-          name: morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-linux-x86_64.AppImage
+          path: |
+            ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-linux-x86_64.AppImage
+            ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-linux-x86_64.AppImage.asc
+          name: morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-linux-x86_64
 
   UI-Ubuntu-22-arm64:
     name: Build Morpheus UI Ubuntu arm64 Image
@@ -537,11 +576,42 @@ jobs:
               yarn run patch-package || true && \
               yarn run build:linux-arm64'
 
+      - name: Sign Linux ARM64 AppImage
+        run: |
+          # Install required tools
+          sudo apt-get update && sudo apt-get install -y gnupg2
+          
+          # Generate a GPG key for signing (non-interactive)
+          cat >key-gen-info <<EOF
+          %echo Generating a GPG key for AppImage signing
+          Key-Type: RSA
+          Key-Length: 4096
+          Name-Real: MorpheusUI Build
+          Name-Email: build@morpheus.local
+          Expire-Date: 0
+          %no-protection
+          %commit
+          %echo Key generation completed
+          EOF
+          
+          # Generate the key
+          gpg --batch --gen-key key-gen-info
+          export KEYID=$(gpg --list-keys --with-colons build@morpheus.local | awk -F: '/^pub:/ {print $5}')
+          
+          # Sign the AppImage
+          export APPIMAGE_PATH="./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-linux-arm64.AppImage"
+          gpg --armor --detach-sign --default-key "$KEYID" "$APPIMAGE_PATH"
+          
+          # Verify signature (optional)
+          gpg --verify "$APPIMAGE_PATH.asc" "$APPIMAGE_PATH" || echo "Verification failed but continuing"
+
       - name: Upload Linux ARM64 UI artifact
         uses: actions/upload-artifact@v4
         with:
-          path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-linux-arm64.AppImage
-          name: morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-linux-arm64.AppImage
+          path: |
+            ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-linux-arm64.AppImage
+            ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-linux-arm64.AppImage.asc
+          name: morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-linux-arm64
 
   UI-macOS-13-x64:
     name: Build Morpheus UI macOS-x64 Image
@@ -590,6 +660,10 @@ jobs:
           sed -i "" "s/\"version\": \".*\"/\"version\": \"$FULLTAG\"/" package.json
           cat package.json | grep '"version"'  # Optional: Verify the change
           yarn build:mac-x64
+
+      - name: Sign app with ad hoc identity
+        run: |
+          cd ./ui-desktop && codesign --deep --force --sign - ./dist/mac/MorpheusUI.app
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -648,6 +722,22 @@ jobs:
           sed -i "s/\"version\": \".*\"/\"version\": \"$FULLTAG\"/" package.json
           cat package.json | grep '"version"'  # Optional: Verify the change
           yarn build:win-x64
+
+      - name: Install SignTool
+        run: |
+          choco install windows-sdk-10-version-2004-all -y
+
+      - name: Sign Windows executable with self-signed certificate
+        run: |
+          # Create a temporary certificate for signing
+          $cert = New-SelfSignedCertificate -DnsName "MorpheusUI" -Type CodeSigning -CertStoreLocation "Cert:\CurrentUser\My"
+          $pwd = ConvertTo-SecureString -String "password" -Force -AsPlainText
+          Export-PfxCertificate -Cert "cert:\CurrentUser\My\$($cert.Thumbprint)" -FilePath cert.pfx -Password $pwd
+          
+          # Sign the executable using the Windows SDK signtool
+          $env:PATH += ";C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64"
+          & "C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64\signtool.exe" sign /f cert.pfx /p password /tr http://timestamp.digicert.com /td sha256 /fd sha256 ".\ui-desktop\dist\morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-win-x64.exe"
+        shell: powershell
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
