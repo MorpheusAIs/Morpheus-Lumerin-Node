@@ -157,7 +157,7 @@ func (a *OpenAI) AudioTranscription(ctx context.Context, audioRequest *gcs.Audio
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return a.handleErrorResponse(resp)
+		return a.readError(ctx, resp.Body, cb)
 	}
 
 	// Process the response
@@ -282,18 +282,6 @@ func (a *OpenAI) addFilePart(writer *multipart.Writer, file *os.File) error {
 	return nil
 }
 
-func (a *OpenAI) handleErrorResponse(resp *http.Response) error {
-	var errorBody interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&errorBody); err != nil {
-		return fmt.Errorf("failed to decode error response: %w", err)
-	}
-	jsonBytes, err := json.MarshalIndent(errorBody, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to format error response: %w", err)
-	}
-	return fmt.Errorf("transcription request failed with status %d: %s", resp.StatusCode, string(jsonBytes))
-}
-
 func (a *OpenAI) processTranscriptionResponse(ctx context.Context, responseBody []byte, format openai.AudioResponseFormat, cb gcs.CompletionCallback) error {
 	a.log.Debugf("Transcription response: %s", string(responseBody))
 
@@ -308,13 +296,13 @@ func (a *OpenAI) processTranscriptionResponse(ctx context.Context, responseBody 
 		chunk := gcs.NewChunkAudioTranscriptionJson(transcriptionResponse)
 
 		// Call the callback with the transcription result
-		if err := cb(ctx, chunk); err != nil {
+		if err := cb(ctx, chunk, nil); err != nil {
 			return fmt.Errorf("callback failed: %w", err)
 		}
 		return nil
 	} else {
 		chunk := gcs.NewChunkAudioTranscriptionText(string(responseBody))
-		if err := cb(ctx, chunk); err != nil {
+		if err := cb(ctx, chunk, nil); err != nil {
 			return fmt.Errorf("callback failed: %w", err)
 		}
 

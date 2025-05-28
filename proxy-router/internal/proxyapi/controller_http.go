@@ -17,6 +17,7 @@ import (
 	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi/structs"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
 	gsc "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
@@ -1378,7 +1379,7 @@ func (c *ProxyController) AudioTranscription(ctx *gin.Context) {
 	}
 
 	// Prepare transcription request
-	transcriptionRequest := &genericchatstorage.AudioTranscriptionRequest{
+	transcriptionRequest := &gsc.AudioTranscriptionRequest{
 		FilePath:               tempFilePath,
 		Language:               params.language,
 		Prompt:                 params.prompt,
@@ -1514,8 +1515,14 @@ func (c *ProxyController) processAudioFile(ctx *gin.Context, sessionID lib.Hash)
 	return tempFilePath, base64Audio, nil
 }
 
-func (c *ProxyController) executeTranscription(ctx *gin.Context, adapter aiengine.AIEngineStream, request *genericchatstorage.AudioTranscriptionRequest, base64Audio string, stream bool) error {
-	return adapter.AudioTranscription(ctx, request, base64Audio, func(cbctx context.Context, completion genericchatstorage.Chunk) error {
+func (c *ProxyController) executeTranscription(ctx *gin.Context, adapter aiengine.AIEngineStream, request *gsc.AudioTranscriptionRequest, base64Audio string, stream bool) error {
+	return adapter.AudioTranscription(ctx, request, base64Audio, func(cbctx context.Context, completion gsc.Chunk, aiResponseError *gsc.AiEngineErrorResponse) error {
+		if aiResponseError != nil {
+			ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_JSON)
+			ctx.JSON(http.StatusBadRequest, aiResponseError)
+			return nil
+		}
+
 		var response []byte
 
 		// Determine response type and format accordingly

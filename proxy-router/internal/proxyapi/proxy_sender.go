@@ -531,7 +531,7 @@ func (p *ProxyServiceSender) handleFailover(ctx context.Context, session session
 		return common.Hash{}, err
 	}
 
-	if err = cb(ctx, gcs.NewChunkControl("provider failed, failover enabled")); err != nil {
+	if err = cb(ctx, gcs.NewChunkControl("provider failed, failover enabled"), nil); err != nil {
 		return common.Hash{}, err
 	}
 
@@ -554,7 +554,7 @@ func (p *ProxyServiceSender) handleFailover(ctx context.Context, session session
 
 	// Notify about new session
 	msg := fmt.Sprintf("new session opened: %s", newSessionID.Hex())
-	if err = cb(ctx, gcs.NewChunkControl(msg)); err != nil {
+	if err = cb(ctx, gcs.NewChunkControl(msg), nil); err != nil {
 		return common.Hash{}, err
 	}
 
@@ -865,7 +865,7 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 		if ctx.Err() != nil {
 			return nil, ttftMs, totalTokens, ctx.Err()
 		}
-		err = cb(ctx, chunk, nil)
+		err = cb(ctx, result, nil)
 		if err != nil {
 			return nil, ttftMs, totalTokens, lib.WrapError(ErrResponseErr, err)
 		}
