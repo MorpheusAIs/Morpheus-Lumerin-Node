@@ -29,6 +29,9 @@ type OpenAI struct {
 }
 
 func NewOpenAIEngine(modelName, baseURL, apiKey string, log lib.ILogger) *OpenAI {
+	if baseURL != "" {
+		baseURL = strings.TrimSuffix(baseURL, "/")
+	}
 	return &OpenAI{
 		baseURL:   baseURL,
 		modelName: modelName,
@@ -67,15 +70,8 @@ func (a *OpenAI) Prompt(ctx context.Context, compl *openai.ChatCompletionRequest
 	a.log.Debugf("AI Model responded with status code: %d", resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK {
-		var errorBody interface{}
-		if err := json.NewDecoder(resp.Body).Decode(&errorBody); err != nil {
-			return fmt.Errorf("failed to decode response: %v", err)
-		}
-		json, err := json.MarshalIndent(errorBody, "", "  ")
-		if err != nil {
-			return fmt.Errorf("failed to decode error response: %v", err)
-		}
-		return fmt.Errorf("AI Model responded with error: %s", string(json))
+		a.log.Warnf("AI Model responded with error: %s", resp.StatusCode)
+		return a.readError(ctx, resp.Body, cb)
 	}
 
 	if isContentTypeStream(resp.Header) {
@@ -92,11 +88,24 @@ func (a *OpenAI) readResponse(ctx context.Context, body io.Reader, cb gcs.Comple
 	}
 
 	chunk := gcs.NewChunkText(&compl)
-	err := cb(ctx, chunk)
+	err := cb(ctx, chunk, nil)
 	if err != nil {
 		return fmt.Errorf("callback failed: %v", err)
 	}
 
+	return nil
+}
+
+func (a *OpenAI) readError(ctx context.Context, body io.Reader, cb gcs.CompletionCallback) error {
+	var aiEngineErrorResponse interface{}
+	if err := json.NewDecoder(body).Decode(&aiEngineErrorResponse); err != nil {
+		return fmt.Errorf("failed to decode response: %v", err)
+	}
+
+	err := cb(ctx, nil, gcs.NewAiEngineErrorResponse(aiEngineErrorResponse))
+	if err != nil {
+		return fmt.Errorf("callback failed: %v", err)
+	}
 	return nil
 }
 
@@ -117,7 +126,7 @@ func (a *OpenAI) readStream(ctx context.Context, body io.Reader, cb gcs.Completi
 			}
 			// Call the callback function with the unmarshalled completion
 			chunk := gcs.NewChunkStreaming(&compl)
-			err := cb(ctx, chunk)
+			err := cb(ctx, chunk, nil)
 			if err != nil {
 				return fmt.Errorf("callback failed: %v", err)
 			}

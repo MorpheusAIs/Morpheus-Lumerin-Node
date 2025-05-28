@@ -243,7 +243,7 @@ func (m *MORRPCMessage) ResponseError(message string, privateKeyHex lib.HexStrin
 	if err != nil {
 		return &RpcResponse{}, err
 	}
-	params2.Data.Signature = &signature
+	params2.Data.Signature = signature
 
 	return &RpcResponse{
 		ID:    requestId,

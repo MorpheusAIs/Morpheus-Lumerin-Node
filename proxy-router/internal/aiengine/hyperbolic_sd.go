@@ -92,6 +92,19 @@ func (s *HyperbolicSD) Prompt(ctx context.Context, prompt *openai.ChatCompletion
 		return err
 	}
 
+	if res.StatusCode != http.StatusOK {
+		var aiEngineErrorResponse interface{}
+		if err := json.NewDecoder(res.Body).Decode(&aiEngineErrorResponse); err != nil {
+			return fmt.Errorf("failed to decode response: %v", err)
+		}
+
+		err := cb(ctx, nil, gcs.NewAiEngineErrorResponse(aiEngineErrorResponse))
+		if err != nil {
+			return fmt.Errorf("callback failed: %v", err)
+		}
+		return nil
+	}
+
 	result := HyperbolicImageGenerationResult{}
 	err = json.Unmarshal(response, &result)
 	if err != nil {
@@ -105,7 +118,7 @@ func (s *HyperbolicSD) Prompt(ctx context.Context, prompt *openai.ChatCompletion
 		ImageRawContent: dataPrefix + result.Images[0].Image,
 	})
 
-	return cb(ctx, chunk)
+	return cb(ctx, chunk, nil)
 }
 
 func (s *HyperbolicSD) AudioTranscription(ctx context.Context, prompt *gcs.AudioTranscriptionRequest, base64Audio string, cb gcs.CompletionCallback) error {

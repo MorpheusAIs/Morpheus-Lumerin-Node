@@ -75,6 +75,9 @@ type ClaudeAI struct {
 }
 
 func NewClaudeAIEngine(modelName, baseURL, apiKey string, log lib.ILogger) *ClaudeAI {
+	if baseURL != "" {
+		baseURL = strings.TrimSuffix(baseURL, "/")
+	}
 	return &ClaudeAI{
 		baseURL:   baseURL,
 		modelName: modelName,
@@ -111,6 +114,12 @@ func (a *ClaudeAI) Prompt(ctx context.Context, compl *openai.ChatCompletionReque
 		return fmt.Errorf("failed to send request: %v", err)
 	}
 	defer resp.Body.Close()
+
+	a.log.Debugf("AI Model responded with status code: %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		return a.readError(ctx, resp.Body, cb)
+	}
+
 	if isContentTypeStream(resp.Header) {
 		return a.readStream(ctx, resp.Body, cb)
 	}
@@ -137,11 +146,24 @@ func (a *ClaudeAI) readResponse(ctx context.Context, body io.Reader, cb gcs.Comp
 	openaiCompl.Usage.TotalTokens = compl.Usage.InputTokens + compl.Usage.OutputTokens
 
 	chunk := gcs.NewChunkText(&openaiCompl)
-	err := cb(ctx, chunk)
+	err := cb(ctx, chunk, nil)
 	if err != nil {
 		return fmt.Errorf("callback failed: %v", err)
 	}
 
+	return nil
+}
+
+func (a *ClaudeAI) readError(ctx context.Context, body io.Reader, cb gcs.CompletionCallback) error {
+	var aiEngineErrorResponse interface{}
+	if err := json.NewDecoder(body).Decode(&aiEngineErrorResponse); err != nil {
+		return fmt.Errorf("failed to decode response: %v", err)
+	}
+
+	err := cb(ctx, nil, gcs.NewAiEngineErrorResponse(aiEngineErrorResponse))
+	if err != nil {
+		return fmt.Errorf("callback failed: %v", err)
+	}
 	return nil
 }
 
@@ -185,7 +207,7 @@ func (a *ClaudeAI) readStream(ctx context.Context, body io.Reader, cb gcs.Comple
 
 				// Call the callback function with the unmarshalled completion
 				chunk := gcs.NewChunkStreaming(&openaiCompl)
-				err := cb(ctx, chunk)
+				err := cb(ctx, chunk, nil)
 				if err != nil {
 					return fmt.Errorf("callback failed: %v", err)
 				}

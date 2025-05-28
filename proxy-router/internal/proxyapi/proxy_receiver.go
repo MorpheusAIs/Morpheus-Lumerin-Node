@@ -124,7 +124,30 @@ func (s *ProxyReceiver) createCompletionCallback(
 	ttftMs *int,
 	totalTokens *int,
 ) genericchatstorage.CompletionCallback {
-	return func(ctx context.Context, completion genericchatstorage.Chunk) error {
+	return func(ctx context.Context, completion genericchatstorage.Chunk, aiEngineErrorResponse *genericchatstorage.AiEngineErrorResponse) error {
+		if aiEngineErrorResponse != nil {
+			marshalledResponse, err := json.Marshal(aiEngineErrorResponse)
+			if err != nil {
+				return err
+			}
+			encryptedResponse, err := lib.EncryptString(string(marshalledResponse), lib.RemoveHexPrefix(userPubKey))
+			if err != nil {
+				return err
+			}
+
+			r, err := s.morRpc.ResponseError(
+				encryptedResponse,
+				s.privateKeyHex,
+				requestID,
+			)
+			if err != nil {
+				err := lib.WrapError(fmt.Errorf("failed to create response"), err)
+				sourceLog.Error(err)
+				return err
+			}
+			return s.sendResponse(r)
+		}
+
 		*totalTokens += completion.Tokens()
 
 		if *ttftMs == 0 {
