@@ -2,9 +2,12 @@ package proxyapi
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
@@ -29,6 +32,7 @@ type ProxyReceiver struct {
 	modelConfigLoader *config.ModelConfigLoader
 	service           BidGetter
 	sessionRepo       *sessionrepo.SessionRepositoryCached
+	sendResponse      SendResponse
 }
 
 func NewProxyReceiver(privateKeyHex, publicKeyHex lib.HexString, sessionStorage *storages.SessionStorage, aiEngine *aiengine.AiEngine, chainID *big.Int, modelConfigLoader *config.ModelConfigLoader, blockchainService BidGetter, sessionRepo *sessionrepo.SessionRepositoryCached) *ProxyReceiver {
@@ -45,39 +49,86 @@ func NewProxyReceiver(privateKeyHex, publicKeyHex lib.HexString, sessionStorage 
 	}
 }
 
-func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, userPubKey string, rq *m.SessionPromptReq, sendResponse SendResponse, sourceLog lib.ILogger) (int, int, error) {
-	var req *openai.ChatCompletionRequest
+// handleSessionError is a helper function to log errors and return consistent output
+func handleError(err error, message string, sourceLog lib.ILogger) (int, int, error) {
+	wrappedErr := lib.WrapError(fmt.Errorf(message), err)
+	sourceLog.Error(wrappedErr)
+	return 0, 0, wrappedErr
+}
 
-	err := json.Unmarshal([]byte(rq.Message), &req)
-	if err != nil {
-		err := lib.WrapError(fmt.Errorf("failed to unmarshal prompt"), err)
-		sourceLog.Error(err)
-		return 0, 0, err
+// processAudioTranscription handles audio transcription request processing
+func processAudioTranscription(message []byte, sourceLog lib.ILogger) (*genericchatstorage.AudioTranscriptionRequest, error) {
+	var unknownReq map[string]interface{}
+	if err := json.Unmarshal(message, &unknownReq); err != nil {
+		return nil, lib.WrapError(fmt.Errorf("failed to unmarshal request"), err)
 	}
 
-	session, err := s.sessionRepo.GetSession(ctx, rq.SessionID)
-	if err != nil {
-		err := lib.WrapError(fmt.Errorf("failed to get session"), err)
-		sourceLog.Error(err)
-		return 0, 0, err
+	if unknownReq["type"] != "audio_transcription" {
+		return nil, nil // Not an audio transcription request
 	}
 
-	ttftMs := 0
-	totalTokens := 0
-	now := time.Now().UnixMilli()
-
-	adapter, err := s.aiEngine.GetAdapter(ctx, common.Hash{}, session.ModelID(), common.Hash{}, false, false)
-	if err != nil {
-		err := lib.WrapError(fmt.Errorf("failed to get adapter"), err)
-		sourceLog.Error(err)
-		return 0, 0, err
+	var audioRequest *genericchatstorage.AudioTranscriptionRequest
+	if err := json.Unmarshal(message, &audioRequest); err != nil {
+		return nil, lib.WrapError(fmt.Errorf("failed to unmarshal audio request"), err)
 	}
 
-	err = adapter.Prompt(ctx, req, func(ctx context.Context, completion genericchatstorage.Chunk) error {
-		totalTokens += completion.Tokens()
+	// Create a temporary file for audio
+	tempFilePath, err := createAudioTempFile(unknownReq["base64Audio"].(string), sourceLog)
+	if err != nil {
+		return nil, err
+	}
 
-		if ttftMs == 0 {
-			ttftMs = int(time.Now().UnixMilli() - now)
+	audioRequest.FilePath = tempFilePath
+	return audioRequest, nil
+}
+
+// createAudioTempFile creates a temporary file with decoded audio data
+func createAudioTempFile(base64Audio string, sourceLog lib.ILogger) (string, error) {
+	tempDir := os.TempDir()
+	tempFilePath := filepath.Join(tempDir, fmt.Sprintf("%d", time.Now().UnixNano()))
+	tempFile, err := os.Create(tempFilePath)
+	if err != nil {
+		return "", lib.WrapError(fmt.Errorf("failed to create temp file"), err)
+	}
+	defer tempFile.Close()
+
+	// Decode and write audio
+	audioBytes, err := base64.StdEncoding.DecodeString(base64Audio)
+	if err != nil {
+		return "", lib.WrapError(fmt.Errorf("failed to decode base64 audio"), err)
+	}
+
+	if _, err = tempFile.Write(audioBytes); err != nil {
+		return "", lib.WrapError(fmt.Errorf("failed to write audio to temp file"), err)
+	}
+
+	return tempFilePath, nil
+}
+
+// processChatRequest handles chat completion request processing
+func processChatRequest(message []byte, sourceLog lib.ILogger) (*openai.ChatCompletionRequest, error) {
+	var chatRequest *openai.ChatCompletionRequest
+	if err := json.Unmarshal(message, &chatRequest); err != nil {
+		return nil, lib.WrapError(fmt.Errorf("failed to unmarshal chat request"), err)
+	}
+	return chatRequest, nil
+}
+
+// createCompletionCallback creates a callback function for handling completion chunks
+func (s *ProxyReceiver) createCompletionCallback(
+	ctx context.Context,
+	startTime int64,
+	userPubKey string,
+	requestID string,
+	sourceLog lib.ILogger,
+	ttftMs *int,
+	totalTokens *int,
+) genericchatstorage.CompletionCallback {
+	return func(ctx context.Context, completion genericchatstorage.Chunk) error {
+		*totalTokens += completion.Tokens()
+
+		if *ttftMs == 0 {
+			*ttftMs = int(time.Now().UnixMilli() - startTime)
 		}
 
 		marshalledResponse, err := json.Marshal(completion.Data())
@@ -97,27 +148,85 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 			requestID,
 		)
 		if err != nil {
-			err := lib.WrapError(fmt.Errorf("failed to create response"), err)
-			sourceLog.Error(err)
-			return err
+			wrappedErr := lib.WrapError(fmt.Errorf("failed to create response"), err)
+			sourceLog.Error(wrappedErr)
+			return wrappedErr
 		}
-		return sendResponse(r)
-	})
-	if err != nil {
-		err := lib.WrapError(fmt.Errorf("failed to prompt"), err)
-		sourceLog.Error(err)
-		return 0, 0, err
-	}
 
+		return s.sendResponse(r)
+	}
+}
+
+// recordActivity records the session activity
+func (s *ProxyReceiver) recordActivity(ctx context.Context, session *sessionrepo.SessionModel, startTime int64, sourceLog lib.ILogger) {
 	activity := storages.PromptActivity{
 		SessionID: session.ID().Hex(),
-		StartTime: now,
+		StartTime: startTime,
 		EndTime:   time.Now().Unix(),
 	}
-	err = s.sessionStorage.AddActivity(session.ModelID().Hex(), &activity)
-	if err != nil {
+
+	if err := s.sessionStorage.AddActivity(session.ModelID().Hex(), &activity); err != nil {
 		sourceLog.Warnf("failed to store activity: %s", err)
 	}
+}
+
+func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, userPubKey string, rq *m.SessionPromptReq, sendResponse SendResponse, sourceLog lib.ILogger) (int, int, error) {
+	// Store sendResponse function for later use in callback
+	s.sendResponse = sendResponse
+
+	// Get session
+	session, err := s.sessionRepo.GetSession(ctx, rq.SessionID)
+	if err != nil {
+		return handleError(err, "failed to get session", sourceLog)
+	}
+
+	// Process request based on type
+	var audioTranscriptionReq *genericchatstorage.AudioTranscriptionRequest
+	var chatReq *openai.ChatCompletionRequest
+
+	// Try to process as audio transcription first
+	audioTranscriptionReq, err = processAudioTranscription([]byte(rq.Message), sourceLog)
+	if err != nil {
+		return handleError(err, "failed to process audio transcription", sourceLog)
+	}
+
+	// If not audio, process as chat completion
+	if audioTranscriptionReq == nil {
+		chatReq, err = processChatRequest([]byte(rq.Message), sourceLog)
+		if err != nil {
+			return handleError(err, "failed to process chat request", sourceLog)
+		}
+	} else {
+		defer os.Remove(audioTranscriptionReq.FilePath)
+	}
+
+	// Start timing and get adapter
+	startTime := time.Now().UnixMilli()
+	ttftMs, totalTokens := 0, 0
+
+	adapter, err := s.aiEngine.GetAdapter(ctx, common.Hash{}, session.ModelID(), common.Hash{}, false, false)
+	if err != nil {
+		return handleError(err, "failed to get adapter", sourceLog)
+	}
+
+	// Create completion callback
+	cb := s.createCompletionCallback(ctx, startTime, userPubKey, requestID, sourceLog, &ttftMs, &totalTokens)
+
+	// Process request with appropriate adapter method
+	if audioTranscriptionReq != nil && audioTranscriptionReq.FilePath != "" {
+		sourceLog.Debugf("Processing audio transcription request")
+		err = adapter.AudioTranscription(ctx, audioTranscriptionReq, "", cb)
+	} else {
+		sourceLog.Debugf("Processing chat completion request")
+		err = adapter.Prompt(ctx, chatReq, cb)
+	}
+
+	if err != nil {
+		return handleError(err, "failed to prompt", sourceLog)
+	}
+
+	// Record activity
+	s.recordActivity(ctx, session, startTime, sourceLog)
 
 	return ttftMs, totalTokens, nil
 }

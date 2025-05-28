@@ -2,6 +2,7 @@ package genericchatstorage
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/sashabaranov/go-openai"
 )
@@ -11,10 +12,12 @@ type CompletionCallback func(ctx context.Context, completion Chunk) error
 type ChunkType string
 
 const (
-	ChunkTypeText    ChunkType = "text"
-	ChunkTypeImage   ChunkType = "image"
-	ChunkTypeVideo   ChunkType = "video"
-	ChunkTypeControl ChunkType = "control-message"
+	ChunkTypeText                   ChunkType = "text"
+	ChunkTypeImage                  ChunkType = "image"
+	ChunkTypeVideo                  ChunkType = "video"
+	ChunkTypeControl                ChunkType = "control-message"
+	ChunkTypeAudioTranscriptionText ChunkType = "audio-transcription-text"
+	ChunkTypeAudioTranscriptionJson ChunkType = "audio-transcription-json"
 )
 
 type ChunkText struct {
@@ -213,3 +216,76 @@ var _ Chunk = &ChunkControl{}
 var _ Chunk = &ChunkStreaming{}
 var _ Chunk = &ChunkVideo{}
 var _ Chunk = &ChunkImageRawContent{}
+
+type ChunkAudioTranscriptionText struct {
+	data string
+}
+
+func NewChunkAudioTranscriptionText(data string) *ChunkAudioTranscriptionText {
+	return &ChunkAudioTranscriptionText{
+		data: data,
+	}
+}
+
+func (c *ChunkAudioTranscriptionText) IsStreaming() bool {
+	return false
+}
+
+func (c *ChunkAudioTranscriptionText) Tokens() int {
+	return len(c.data)
+}
+
+func (c *ChunkAudioTranscriptionText) Type() ChunkType {
+	return ChunkTypeAudioTranscriptionText
+}
+
+func (c *ChunkAudioTranscriptionText) String() string {
+	return c.data
+}
+
+func (c *ChunkAudioTranscriptionText) Data() interface{} {
+	return c.data
+}
+
+var _ Chunk = &ChunkAudioTranscriptionText{}
+
+type ChunkAudioTranscriptionJson struct {
+	data interface{}
+}
+
+func NewChunkAudioTranscriptionJson(data interface{}) *ChunkAudioTranscriptionJson {
+	return &ChunkAudioTranscriptionJson{
+		data: data,
+	}
+}
+
+func (c *ChunkAudioTranscriptionJson) IsStreaming() bool {
+	return false
+}
+
+func (c *ChunkAudioTranscriptionJson) Tokens() int {
+	jsonData, err := json.Marshal(c.data)
+	if err != nil {
+		return 0
+	}
+
+	return len(jsonData)
+}
+
+func (c *ChunkAudioTranscriptionJson) Type() ChunkType {
+	return ChunkTypeAudioTranscriptionJson
+}
+
+func (c *ChunkAudioTranscriptionJson) String() string {
+	jsonData, err := json.Marshal(c.data)
+	if err != nil {
+		return ""
+	}
+	return string(jsonData)
+}
+
+func (c *ChunkAudioTranscriptionJson) Data() interface{} {
+	return c.data
+}
+
+var _ Chunk = &ChunkAudioTranscriptionJson{}

@@ -2716,6 +2716,63 @@ paths:
       summary: Call agent tool
       tags:
       - agents
+  /v1/audio/transcriptions:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Transcribes audio files to text using AI models
+      parameters:
+      - description: Session ID
+        format: hex32
+        in: header
+        name: session_id
+        type: string
+      - description: Model ID
+        format: hex32
+        in: header
+        name: model_id
+        type: string
+      - description: Audio file to transcribe
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: Language of the audio
+        in: formData
+        name: language
+        type: string
+      - description: Optional prompt to guide transcription
+        in: formData
+        name: prompt
+        type: string
+      - description: 'Response format: json, text, srt, verbose_json, vtt'
+        in: formData
+        name: response_format
+        type: string
+      - description: Temperature for sampling
+        in: formData
+        name: temperature
+        type: number
+      - description: 'Timestamp granularity: word or segment'
+        in: formData
+        name: timestamp_granularities[]
+        type: string
+      - description: 'Timestamp granularity: word or segment (default is segment)'
+        in: formData
+        name: timestamp_granularity
+        type: string
+      - description: Whether to stream the results or not
+        in: formData
+        name: stream
+        type: boolean
+      produces:
+      - application/json
+      responses: {}
+      security:
+      - BasicAuth: []
+      summary: Transcribe audio file
+      tags:
+      - audio
   /v1/chat/completions:
     post:
       description: Send prompt to a local or remote model based on session id in header

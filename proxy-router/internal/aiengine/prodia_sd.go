@@ -104,6 +104,10 @@ func (s *ProdiaSD) Prompt(ctx context.Context, prompt *openai.ChatCompletionRequ
 	return cb(ctx, chunk)
 }
 
+func (s *ProdiaSD) AudioTranscription(ctx context.Context, prompt *gcs.AudioTranscriptionRequest, base64Audio string, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("audio transcription not supported")
+}
+
 func (s *ProdiaSD) ApiType() string {
 	return API_TYPE_PRODIA_SD
 }

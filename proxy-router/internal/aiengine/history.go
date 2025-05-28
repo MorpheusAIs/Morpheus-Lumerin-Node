@@ -2,6 +2,7 @@ package aiengine
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
@@ -60,6 +61,10 @@ func (h *History) Prompt(ctx context.Context, prompt *openai.ChatCompletionReque
 	}
 
 	return err
+}
+
+func (h *History) AudioTranscription(ctx context.Context, prompt *gcs.AudioTranscriptionRequest, base64Audio string, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("audio transcription is not supported for history models")
 }
 
 func (h *History) ApiType() string {
