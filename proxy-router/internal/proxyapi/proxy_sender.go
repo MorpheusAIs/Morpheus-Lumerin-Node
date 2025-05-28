@@ -478,97 +478,234 @@ func (p *ProxyServiceSender) validateMsgSignatureAddr(result any, signature lib.
 	return p.morRPC.VerifySignatureAddr(result, signature, providerAddr, p.log)
 }
 
-func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.Hash, prompt *openai.ChatCompletionRequest, cb gcs.CompletionCallback) (interface{}, error) {
+// validateSession checks if a session is valid and returns session and provider information
+func (p *ProxyServiceSender) validateSession(ctx context.Context, sessionID common.Hash) (*sessionrepo.SessionModel, *storages.User, error) {
+	// Get session and verify it exists
 	session, err := p.sessionRepo.GetSession(ctx, sessionID)
 	if err != nil {
-		return nil, ErrSessionNotFound
+		return nil, nil, ErrSessionNotFound
 	}
 
-	isExpired := session.EndsAt().Int64()-time.Now().Unix() < 0
-	if isExpired {
-		return nil, ErrSessionExpired
+	// Check if session is expired
+	if session.EndsAt().Int64() < time.Now().Unix() {
+		return nil, nil, ErrSessionExpired
 	}
 
+	// Get provider information
 	provider, ok := p.sessionStorage.GetUser(session.ProviderAddr().Hex())
 	if !ok {
-		return nil, ErrProviderNotFound
+		return nil, nil, ErrProviderNotFound
 	}
 
+	return session, provider, nil
+}
+
+// prepareRequest creates and prepares an RPC request for the provider
+func (p *ProxyServiceSender) prepareRequest(sessionID common.Hash, payload interface{}, providerPubKey string) (*msgs.RPCMessage, lib.HexString, error) {
+	// Get private key for encryption
 	prKey, err := p.privateKey.GetPrivateKey()
 	if err != nil {
-		return nil, ErrMissingPrKey
+		return nil, nil, ErrMissingPrKey
 	}
 
-	requestID := "1"
-	pubKey, err := lib.StringToHexString(provider.PubKey)
+	// Convert provider public key to hex string
+	pubKey, err := lib.StringToHexString(providerPubKey)
 	if err != nil {
-		return nil, lib.WrapError(ErrCreateReq, err)
-	}
-	promptRequest, err := p.morRPC.SessionPromptRequest(sessionID, prompt, pubKey, prKey, requestID)
-	if err != nil {
-		return nil, lib.WrapError(ErrCreateReq, err)
+		return nil, nil, lib.WrapError(ErrCreateReq, err)
 	}
 
-	now := time.Now().Unix()
-	result, ttftMs, totalTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, promptRequest, pubKey)
+	// Create RPC request
+	promptRequest, err := p.morRPC.SessionPromptRequest(sessionID, payload, pubKey, prKey, "1")
+	if err != nil {
+		return nil, nil, lib.WrapError(ErrCreateReq, err)
+	}
+
+	return promptRequest, pubKey, nil
+}
+
+// handleFailover manages the failover process when a request fails
+func (p *ProxyServiceSender) handleFailover(ctx context.Context, session sessionrepo.SessionModel, cb gcs.CompletionCallback) (common.Hash, error) {
+	// Close current session
+	_, err := p.sessionService.CloseSession(ctx, session.ID())
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	if err = cb(ctx, gcs.NewChunkControl("provider failed, failover enabled"), nil); err != nil {
+		return common.Hash{}, err
+	}
+
+	// Calculate remaining session duration
+	duration := session.EndsAt().Int64() - time.Now().Unix()
+
+	// Open new session with same parameters
+	newSessionID, err := p.sessionService.OpenSessionByModelId(
+		ctx,
+		session.ModelID(),
+		big.NewInt(duration),
+		session.DirectPayment(),
+		session.FailoverEnabled(),
+		session.ProviderAddr(),
+		session.AgentUsername(),
+	)
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	// Notify about new session
+	msg := fmt.Sprintf("new session opened: %s", newSessionID.Hex())
+	if err = cb(ctx, gcs.NewChunkControl(msg), nil); err != nil {
+		return common.Hash{}, err
+	}
+
+	return newSessionID, nil
+}
+
+// createAudioRequestMap builds a map from audio request parameters for RPC transmission
+func (p *ProxyServiceSender) createAudioRequestMap(audioRequest *gcs.AudioTranscriptionRequest, base64Audio string) map[string]interface{} {
+	requestMap := map[string]interface{}{
+		"base64Audio": base64Audio,
+		"type":        "audio_transcription",
+	}
+
+	if audioRequest.Language != "" {
+		requestMap["Language"] = audioRequest.Language
+	}
+	if audioRequest.Prompt != "" {
+		requestMap["Prompt"] = audioRequest.Prompt
+	}
+	if audioRequest.Format != "" {
+		requestMap["Format"] = string(audioRequest.Format)
+	}
+	if audioRequest.Temperature != 0 {
+		requestMap["Temperature"] = audioRequest.Temperature
+	}
+	if audioRequest.TimestampGranularity != "" {
+		requestMap["TimestampGranularity"] = string(audioRequest.TimestampGranularity)
+	}
+	if len(audioRequest.TimestampGranularities) != 0 {
+		timestamps := make([]string, len(audioRequest.TimestampGranularities))
+		for i, granularity := range audioRequest.TimestampGranularities {
+			timestamps[i] = string(granularity)
+		}
+		requestMap["TimestampGranularities"] = timestamps
+	}
+
+	return requestMap
+}
+
+// updateSessionStats updates session statistics after request completion
+func (p *ProxyServiceSender) updateSessionStats(ctx context.Context, session sessionrepo.SessionModel, startTime int64, ttftMs, totalTokens int) error {
+	requestDuration := int(time.Now().Unix() - startTime)
+	if requestDuration == 0 {
+		requestDuration = 1
+	}
+
+	session.AddStats(totalTokens*1000/requestDuration, ttftMs)
+
+	err := p.sessionRepo.SaveSession(ctx, &session)
+	if err != nil {
+		p.log.Error(`failed to update session report stats`, err)
+		return err
+	}
+
+	return nil
+}
+
+func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.Hash, prompt *openai.ChatCompletionRequest, cb gcs.CompletionCallback) (interface{}, error) {
+	// Validate session and get provider
+	session, provider, err := p.validateSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Prepare request
+	promptRequest, pubKey, err := p.prepareRequest(sessionID, prompt, provider.PubKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// Send request and process response
+	startTime := time.Now().Unix()
+	result, ttftMs, totalTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, promptRequest, pubKey, "chat_completion")
+
+	// Handle errors with failover if enabled
 	if err != nil {
 		if !session.FailoverEnabled() {
 			return nil, lib.WrapError(ErrProvider, err)
 		}
 
-		_, err := p.sessionService.CloseSession(ctx, sessionID)
-		if err != nil {
-			return nil, err
+		// Handle failover
+		newSessionID, failoverErr := p.handleFailover(ctx, *session, cb)
+		if failoverErr != nil {
+			return nil, failoverErr
 		}
 
-		err = cb(ctx, gcs.NewChunkControl("provider failed, failover enabled"), nil)
-		if err != nil {
-			return nil, err
-		}
-
-		duration := session.EndsAt().Int64() - time.Now().Unix()
-
-		newSessionID, err := p.sessionService.OpenSessionByModelId(
-			ctx,
-			session.ModelID(),
-			big.NewInt(duration),
-			session.DirectPayment(),
-			session.FailoverEnabled(),
-			session.ProviderAddr(),
-			session.AgentUsername(),
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		msg := fmt.Sprintf("new session opened: %s", newSessionID.Hex())
-		err = cb(ctx, gcs.NewChunkControl(msg), nil)
-		if err != nil {
-			return nil, err
-		}
-
+		// Retry with new session
 		return p.SendPromptV2(ctx, newSessionID, prompt, cb)
 	}
 
-	requestDuration := int(time.Now().Unix() - now)
-	if requestDuration == 0 {
-		requestDuration = 1
-	}
-	session.AddStats(totalTokens*1000/requestDuration, ttftMs)
-
-	err = p.sessionRepo.SaveSession(ctx, session)
-	if err != nil {
-		p.log.Error(`failed to update session report stats`, err)
+	// Update session statistics
+	if updateErr := p.updateSessionStats(ctx, *session, startTime, ttftMs, totalTokens); updateErr != nil {
+		// Log error but don't fail the request
+		p.log.Error("Failed to update session stats", updateErr)
 	}
 
 	return result, nil
 }
+
+func (p *ProxyServiceSender) SendAudioTranscriptionV2(ctx context.Context, sessionID common.Hash, audioRequest *gcs.AudioTranscriptionRequest, base64Audio string, cb gcs.CompletionCallback) (interface{}, error) {
+	// Validate session and get provider
+	session, provider, err := p.validateSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create request map from audio parameters
+	audioRequestMap := p.createAudioRequestMap(audioRequest, base64Audio)
+
+	// Prepare request
+	promptRequest, pubKey, err := p.prepareRequest(sessionID, audioRequestMap, provider.PubKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// Send request and process response
+	startTime := time.Now().Unix()
+	result, ttftMs, totalTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, promptRequest, pubKey, "audio_transcription")
+
+	// Handle errors with failover if enabled
+	if err != nil {
+		if !session.FailoverEnabled() {
+			return nil, lib.WrapError(ErrProvider, err)
+		}
+
+		// Handle failover
+		newSessionID, failoverErr := p.handleFailover(ctx, *session, cb)
+		if failoverErr != nil {
+			return nil, failoverErr
+		}
+
+		// Retry with new session
+		return p.SendAudioTranscriptionV2(ctx, newSessionID, audioRequest, base64Audio, cb)
+	}
+
+	// Update session statistics
+	if updateErr := p.updateSessionStats(ctx, *session, startTime, ttftMs, totalTokens); updateErr != nil {
+		// Log error but don't fail the request
+		p.log.Error("Failed to update session stats", updateErr)
+	}
+
+	return result, nil
+}
+
 func (p *ProxyServiceSender) rpcRequestStreamV2(
 	ctx context.Context,
 	cb gcs.CompletionCallback,
 	url string,
 	rpcMessage *msgs.RPCMessage,
 	providerPublicKey lib.HexString,
+	requestType string,
 ) (interface{}, int, int, error) {
 	const (
 		TIMEOUT_TO_ESTABLISH_CONNECTION   = time.Second * 3
@@ -717,73 +854,134 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 			return nil, ttftMs, totalTokens, lib.WrapError(ErrDecrFailed, err)
 		}
 
-		var payload openai.ChatCompletionStreamResponse
-		err = json.Unmarshal(aiResponse, &payload)
-		var stop = true
-		var chunk gcs.Chunk
-		if err == nil && payload.Usage != nil {
-			var payload openai.ChatCompletionResponse
-			err = json.Unmarshal(aiResponse, &payload)
-			if err == nil {
-				totalTokens = payload.Usage.TotalTokens
-				responses = append(responses, payload)
-				chunk = gcs.NewChunkText(&payload)
-				stop = true
-			} else {
-				return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
-			}
-		} else if err == nil && len(payload.Choices) > 0 {
-			stop = false
-			choices := payload.Choices
-			for _, choice := range choices {
-				if choice.FinishReason == openai.FinishReasonStop {
-					stop = true
-				}
-			}
-			totalTokens += len(choices)
-			responses = append(responses, payload)
-			chunk = gcs.NewChunkStreaming(&payload)
-		} else {
-			var imageGenerationResult gcs.ImageGenerationResult
-			err = json.Unmarshal(aiResponse, &imageGenerationResult)
-			if err == nil && imageGenerationResult.ImageUrl != "" {
-				totalTokens += 1
-				responses = append(responses, imageGenerationResult)
-				chunk = gcs.NewChunkImage(&imageGenerationResult)
-			} else {
-				var videoGenerationResult gcs.VideoGenerationResult
-				err = json.Unmarshal(aiResponse, &videoGenerationResult)
-				if err == nil && videoGenerationResult.VideoRawContent != "" {
-					totalTokens += 1
-					responses = append(responses, videoGenerationResult)
-					chunk = gcs.NewChunkVideo(&videoGenerationResult)
-				} else {
-					var imageGenerationResult gcs.ImageRawContentResult
-					err = json.Unmarshal(aiResponse, &imageGenerationResult)
-					if err == nil && imageGenerationResult.ImageRawContent != "" {
-						totalTokens += 1
-						responses = append(responses, imageGenerationResult)
-						chunk = gcs.NewChunkImageRawContent(&imageGenerationResult)
-					} else {
-						return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
-					}
-				}
-			}
+		// Process the AI response based on the request type
+		result, tokens, shouldStop, err := p.processAIResponse(requestType, aiResponse, responses)
+		if err != nil {
+			return nil, ttftMs, totalTokens, err
 		}
+
+		totalTokens += tokens
 
 		if ctx.Err() != nil {
 			return nil, ttftMs, totalTokens, ctx.Err()
 		}
-		err = cb(ctx, chunk, nil)
+		err = cb(ctx, result, nil)
 		if err != nil {
 			return nil, ttftMs, totalTokens, lib.WrapError(ErrResponseErr, err)
 		}
-		if stop {
+
+		if shouldStop {
 			break
 		}
 	}
 
 	return responses, ttftMs, totalTokens, nil
+}
+
+// processAIResponse handles different response types and returns the appropriate chunk
+func (p *ProxyServiceSender) processAIResponse(requestType string, aiResponse []byte, responses []interface{}) (gcs.Chunk, int, bool, error) {
+	switch requestType {
+	case "audio_transcription":
+		return p.handleAudioTranscription(aiResponse, responses)
+	case "chat_completion":
+		return p.handleChatCompletion(aiResponse, responses)
+	default:
+		return p.handleMediaGeneration(aiResponse, responses)
+	}
+}
+
+// handleAudioTranscription processes audio transcription responses
+func (p *ProxyServiceSender) handleAudioTranscription(aiResponse []byte, responses []interface{}) (gcs.Chunk, int, bool, error) {
+	if aiResponse == nil || len(aiResponse) == 0 {
+		return nil, 0, false, lib.WrapError(ErrInvalidResponse, fmt.Errorf("empty audio response"))
+	}
+
+	// Try to parse as JSON response first
+	var jsonResponse openai.AudioResponse
+	err := json.Unmarshal(aiResponse, &jsonResponse)
+	if err == nil {
+		chunk := gcs.NewChunkAudioTranscriptionJson(jsonResponse)
+		responses = append(responses, jsonResponse)
+		return chunk, chunk.Tokens(), true, nil
+	}
+
+	// Fall back to string response
+	var responseString string
+	err = json.Unmarshal(aiResponse, &responseString)
+	if err != nil {
+		return nil, 0, false, lib.WrapError(ErrInvalidResponse, err)
+	}
+
+	chunk := gcs.NewChunkAudioTranscriptionText(responseString)
+	responses = append(responses, responseString)
+	return chunk, chunk.Tokens(), true, nil
+}
+
+// handleChatCompletion processes chat completion responses
+func (p *ProxyServiceSender) handleChatCompletion(aiResponse []byte, responses []interface{}) (gcs.Chunk, int, bool, error) {
+	// Try to parse as streaming response
+	var streamResponse openai.ChatCompletionStreamResponse
+	err := json.Unmarshal(aiResponse, &streamResponse)
+	if err == nil && streamResponse.Usage == nil && len(streamResponse.Choices) > 0 {
+		choices := streamResponse.Choices
+		shouldStop := false
+
+		for _, choice := range choices {
+			if choice.FinishReason == openai.FinishReasonStop {
+				shouldStop = true
+				break
+			}
+		}
+
+		chunk := gcs.NewChunkStreaming(&streamResponse)
+		responses = append(responses, streamResponse)
+		return chunk, len(choices), shouldStop, nil
+	}
+
+	// Try to parse as full completion response
+	var chatResponse openai.ChatCompletionResponse
+	err = json.Unmarshal(aiResponse, &chatResponse)
+	if err == nil && len(chatResponse.Choices) > 0 {
+		chunk := gcs.NewChunkText(&chatResponse)
+		responses = append(responses, chatResponse)
+		return chunk, chatResponse.Usage.TotalTokens, true, nil
+	}
+
+	// If not a chat completion, try media generation handlers
+	return p.handleMediaGeneration(aiResponse, responses)
+}
+
+// handleMediaGeneration processes image and video generation responses
+func (p *ProxyServiceSender) handleMediaGeneration(aiResponse []byte, responses []interface{}) (gcs.Chunk, int, bool, error) {
+	// Try image URL response
+	var imageResult gcs.ImageGenerationResult
+	err := json.Unmarshal(aiResponse, &imageResult)
+	if err == nil && imageResult.ImageUrl != "" {
+		chunk := gcs.NewChunkImage(&imageResult)
+		responses = append(responses, imageResult)
+		return chunk, 1, true, nil
+	}
+
+	// Try video response
+	var videoResult gcs.VideoGenerationResult
+	err = json.Unmarshal(aiResponse, &videoResult)
+	if err == nil && videoResult.VideoRawContent != "" {
+		chunk := gcs.NewChunkVideo(&videoResult)
+		responses = append(responses, videoResult)
+		return chunk, 1, true, nil
+	}
+
+	// Try raw image content response
+	var rawImageResult gcs.ImageRawContentResult
+	err = json.Unmarshal(aiResponse, &rawImageResult)
+	if err == nil && rawImageResult.ImageRawContent != "" {
+		chunk := gcs.NewChunkImageRawContent(&rawImageResult)
+		responses = append(responses, rawImageResult)
+		return chunk, 1, true, nil
+	}
+
+	// If we got here, we couldn't parse the response
+	return nil, 0, false, lib.WrapError(ErrInvalidResponse, fmt.Errorf("unknown response format"))
 }
 
 // checkProviderAvailability checks if the provider is alive using portchecker.io API

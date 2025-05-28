@@ -6,6 +6,7 @@ const (
 	CONTENT_TYPE_JSON         = "application/json"
 	CONTENT_TYPE_EVENT_STREAM = "text/event-stream"
 	CONTENT_TYPE_VIDEO_MP4    = "video/mp4"
+	CONTENT_TYPE_TEXT_PLAIN   = "text/plain"
 
 	CONNECTION_KEEP_ALIVE = "keep-alive"
 

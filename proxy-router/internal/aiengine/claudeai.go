@@ -222,6 +222,10 @@ func (a *ClaudeAI) readStream(ctx context.Context, body io.Reader, cb gcs.Comple
 	return nil
 }
 
+func (a *ClaudeAI) AudioTranscription(ctx context.Context, prompt *gcs.AudioTranscriptionRequest, base64Audio string, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("audio transcription is not supported")
+}
+
 func (a *ClaudeAI) ApiType() string {
 	return API_TYPE_CLAUDEAI
 }

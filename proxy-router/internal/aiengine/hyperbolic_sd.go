@@ -121,6 +121,10 @@ func (s *HyperbolicSD) Prompt(ctx context.Context, prompt *openai.ChatCompletion
 	return cb(ctx, chunk, nil)
 }
 
+func (s *HyperbolicSD) AudioTranscription(ctx context.Context, prompt *gcs.AudioTranscriptionRequest, base64Audio string, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("audio transcription not supported")
+}
+
 func (s *HyperbolicSD) ApiType() string {
 	return API_TYPE_HYPERBOLIC_SD
 }

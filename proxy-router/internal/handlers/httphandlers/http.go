@@ -57,7 +57,7 @@ func CreateHTTPServer(log lib.ILogger, authConfig system.HTTPAuthConfig, control
 
 	r.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"*"},
-		AllowHeaders: []string{"session_id", "model_id", "chat_id", "Authorization"},
+		AllowHeaders: []string{"session_id", "model_id", "chat_id", "Authorization", "content-type"},
 	}))
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
