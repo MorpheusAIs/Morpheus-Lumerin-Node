@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"os"
 	"strings"
 
 	c "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
@@ -136,6 +138,176 @@ func (a *OpenAI) readStream(ctx context.Context, body io.Reader, cb gcs.Completi
 	}
 
 	return nil
+}
+
+func (a *OpenAI) AudioTranscription(ctx context.Context, audioRequest *gcs.AudioTranscriptionRequest, base64Audio string, cb gcs.CompletionCallback) error {
+	audioRequest.Model = a.modelName
+
+	// Prepare the request
+	req, err := a.prepareTranscriptionRequest(ctx, audioRequest)
+	if err != nil {
+		return fmt.Errorf("failed to prepare transcription request: %w", err)
+	}
+
+	// Send the request
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send transcription request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return a.readError(ctx, resp.Body, cb)
+	}
+
+	// Process the response
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	return a.processTranscriptionResponse(ctx, responseBody, audioRequest.Format, cb)
+}
+
+func (a *OpenAI) prepareTranscriptionRequest(ctx context.Context, audioRequest *gcs.AudioTranscriptionRequest) (*http.Request, error) {
+	// Open the audio file
+	file, err := os.Open(audioRequest.FilePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open audio file: %w", err)
+	}
+	defer file.Close()
+
+	// Create multipart form data
+	body, contentType, err := a.createMultipartForm(file, audioRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the request
+	req, err := http.NewRequestWithContext(ctx, "POST", a.baseURL, body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", contentType)
+	req.Header.Set(c.HEADER_CONNECTION, c.CONNECTION_KEEP_ALIVE)
+	if a.apiKey != "" {
+		req.Header.Set(c.HEADER_AUTHORIZATION, fmt.Sprintf("%s %s", c.BEARER, a.apiKey))
+	}
+
+	return req, nil
+}
+
+func (a *OpenAI) createMultipartForm(file *os.File, audioRequest *gcs.AudioTranscriptionRequest) (*bytes.Buffer, string, error) {
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	// Add the model parameter
+	if err := writer.WriteField("model", audioRequest.Model); err != nil {
+		return nil, "", fmt.Errorf("failed to add model field: %w", err)
+	}
+
+	// Add optional parameters if provided
+	if err := a.addOptionalFields(writer, audioRequest); err != nil {
+		return nil, "", err
+	}
+
+	// Add the file part
+	if err := a.addFilePart(writer, file); err != nil {
+		return nil, "", err
+	}
+
+	// Close the multipart writer
+	if err := writer.Close(); err != nil {
+		return nil, "", fmt.Errorf("failed to close multipart writer: %w", err)
+	}
+
+	return body, writer.FormDataContentType(), nil
+}
+
+func (a *OpenAI) addOptionalFields(writer *multipart.Writer, audioRequest *gcs.AudioTranscriptionRequest) error {
+	// Add optional parameters if provided
+	if audioRequest.Language != "" {
+		if err := writer.WriteField("language", audioRequest.Language); err != nil {
+			return fmt.Errorf("failed to add language field: %w", err)
+		}
+	}
+	if audioRequest.Prompt != "" {
+		if err := writer.WriteField("prompt", audioRequest.Prompt); err != nil {
+			return fmt.Errorf("failed to add prompt field: %w", err)
+		}
+	}
+	if audioRequest.Format != "" {
+		if err := writer.WriteField("response_format", string(audioRequest.Format)); err != nil {
+			return fmt.Errorf("failed to add response_format field: %w", err)
+		}
+	}
+	if audioRequest.Temperature != 0 {
+		if err := writer.WriteField("temperature", fmt.Sprintf("%f", audioRequest.Temperature)); err != nil {
+			return fmt.Errorf("failed to add temperature field: %w", err)
+		}
+	}
+	if audioRequest.TimestampGranularity != "" {
+		fmt.Println("Adding timestamp_granularity:", audioRequest.TimestampGranularity)
+		if err := writer.WriteField("timestamp_granularity", string(audioRequest.TimestampGranularity)); err != nil {
+			return fmt.Errorf("failed to add timestamp_granularity field: %w", err)
+		}
+	}
+	if len(audioRequest.TimestampGranularities) > 0 {
+		for _, granularity := range audioRequest.TimestampGranularities {
+			if err := writer.WriteField("timestamp_granularities[]", string(granularity)); err != nil {
+				return fmt.Errorf("failed to add timestamp_granularity field: %w", err)
+			}
+		}
+	}
+	return nil
+}
+
+func (a *OpenAI) addFilePart(writer *multipart.Writer, file *os.File) error {
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return fmt.Errorf("failed to get file info: %w", err)
+	}
+
+	filePart, err := writer.CreateFormFile("file", fileInfo.Name())
+	if err != nil {
+		return fmt.Errorf("failed to create form file: %w", err)
+	}
+
+	if _, err := io.Copy(filePart, file); err != nil {
+		return fmt.Errorf("failed to copy file data: %w", err)
+	}
+
+	return nil
+}
+
+func (a *OpenAI) processTranscriptionResponse(ctx context.Context, responseBody []byte, format openai.AudioResponseFormat, cb gcs.CompletionCallback) error {
+	a.log.Debugf("Transcription response: %s", string(responseBody))
+
+	if format == openai.AudioResponseFormatJSON || format == openai.AudioResponseFormatVerboseJSON {
+		// Create a transcription response wrapper since we don't have a direct openai.AudioResponse struct
+		var transcriptionResponse openai.AudioResponse
+		if err := json.Unmarshal(responseBody, &transcriptionResponse); err != nil {
+			return fmt.Errorf("failed to parse transcription response: %w", err)
+		}
+
+		// Create a proper response chunk
+		chunk := gcs.NewChunkAudioTranscriptionJson(transcriptionResponse)
+
+		// Call the callback with the transcription result
+		if err := cb(ctx, chunk, nil); err != nil {
+			return fmt.Errorf("callback failed: %w", err)
+		}
+		return nil
+	} else {
+		chunk := gcs.NewChunkAudioTranscriptionText(string(responseBody))
+		if err := cb(ctx, chunk, nil); err != nil {
+			return fmt.Errorf("callback failed: %w", err)
+		}
+
+		return nil
+	}
 }
 
 func (a *OpenAI) ApiType() string {

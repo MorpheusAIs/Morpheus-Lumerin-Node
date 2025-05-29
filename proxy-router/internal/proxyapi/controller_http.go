@@ -3,17 +3,21 @@ package proxyapi
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
 	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi/structs"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
 	gsc "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
@@ -73,6 +77,7 @@ func (s *ProxyController) RegisterRoutes(r interfaces.Router) {
 	r.GET("/v1/chats/:id", s.authConfig.CheckAuth("get_chat_history"), s.GetChat)
 	r.DELETE("/v1/chats/:id", s.authConfig.CheckAuth("edit_chat_history"), s.DeleteChat)
 	r.POST("/v1/chats/:id", s.authConfig.CheckAuth("edit_chat_history"), s.UpdateChatTitle)
+	r.POST("/v1/audio/transcriptions", s.authConfig.CheckAuth("audio_transcription"), s.AudioTranscription)
 
 	r.POST("/ipfs/pin", s.authConfig.CheckAuth("ipfs_pin"), s.Pin)
 	r.POST("/ipfs/unpin", s.authConfig.CheckAuth("ipfs_unpin"), s.Unpin)
@@ -1319,4 +1324,233 @@ func (c *ProxyController) PruneContainers(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, DockerPruneRes{SpaceReclaimed: spaceReclaimed})
+}
+
+// AudioTranscription godoc
+//
+//	@Summary		Transcribe audio file
+//	@Description	Transcribes audio files to text using AI models
+//	@Tags			audio
+//	@Accept			multipart/form-data
+//	@Produce		json
+//	@Param			session_id					header		string	false	"Session ID"	format(hex32)
+//	@Param			model_id					header		string	false	"Model ID"		format(hex32)
+//	@Param			file						formData	file	true	"Audio file to transcribe"
+//	@Param			language					formData	string	false	"Language of the audio"
+//	@Param			prompt						formData	string	false	"Optional prompt to guide transcription"
+//	@Param			response_format				formData	string	false	"Response format: json, text, srt, verbose_json, vtt"
+//	@Param			temperature					formData	number	false	"Temperature for sampling"
+//	@Param			timestamp_granularities[]	formData	string	false	"Timestamp granularity: word or segment"
+//	@Param			timestamp_granularity		formData	string	false	"Timestamp granularity: word or segment (default is segment)"
+//	@Param			stream						formData	boolean	false	"Whether to stream the results or not"
+//	@Security		BasicAuth
+//	@Router			/v1/audio/transcriptions [post]
+func (c *ProxyController) AudioTranscription(ctx *gin.Context) {
+	// Parse request
+	params, err := c.parseAudioTranscriptionParams(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Process audio file
+	tempFilePath, base64Audio, err := c.processAudioFile(ctx, params.head.SessionID)
+	if err != nil {
+		statusCode := http.StatusInternalServerError
+		if err.Error() == "Failed to get file" {
+			statusCode = http.StatusBadRequest
+		}
+		ctx.JSON(statusCode, gin.H{"error": err.Error()})
+		return
+	}
+	defer os.Remove(tempFilePath) // Clean up temp file
+
+	// Get AI adapter
+	chatID, err := lib.GetRandomHash()
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	adapter, err := c.aiEngine.GetAdapter(ctx, chatID.Hash, params.head.ModelID.Hash, params.head.SessionID.Hash, c.storeChatContext, c.forwardChatContext)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Prepare transcription request
+	transcriptionRequest := &gsc.AudioTranscriptionRequest{
+		FilePath:               tempFilePath,
+		Language:               params.language,
+		Prompt:                 params.prompt,
+		Format:                 openai.AudioResponseFormat(params.responseFormat),
+		Temperature:            params.temperature,
+		TimestampGranularities: params.timestampGranularities,
+		TimestampGranularity:   params.timestampGranularity,
+	}
+
+	// Process transcription with callback
+	if err := c.executeTranscription(ctx, adapter, transcriptionRequest, base64Audio, params.stream); err != nil {
+		c.log.Errorf("error sending transcription request: %s", err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
+type audioTranscriptionParams struct {
+	head                   PromptHead
+	language               string
+	prompt                 string
+	responseFormat         string
+	temperature            float32
+	timestampGranularities []openai.TranscriptionTimestampGranularity
+	timestampGranularity   openai.TranscriptionTimestampGranularity
+	stream                 bool
+}
+
+func (c *ProxyController) parseAudioTranscriptionParams(ctx *gin.Context) (*audioTranscriptionParams, error) {
+	var head PromptHead
+	if err := ctx.ShouldBindHeader(&head); err != nil {
+		return nil, err
+	}
+
+	// Parse form parameters
+	params := &audioTranscriptionParams{
+		head:           head,
+		language:       ctx.Request.FormValue("language"),
+		prompt:         ctx.Request.FormValue("prompt"),
+		responseFormat: ctx.Request.FormValue("response_format"),
+	}
+
+	// Parse temperature
+	temperatureStr := ctx.Request.FormValue("temperature")
+	if temperatureStr != "" {
+		temp, err := strconv.ParseFloat(temperatureStr, 32)
+		if err != nil {
+			return nil, fmt.Errorf("invalid temperature value: %v", err)
+		}
+		params.temperature = float32(temp)
+	}
+
+	// Parse stream flag
+	streamStr := ctx.Request.FormValue("stream")
+	if streamStr != "" {
+		stream, err := strconv.ParseBool(streamStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid stream value: %v", err)
+		}
+		params.stream = stream
+	}
+
+	timestampGranularityStr := ctx.Request.FormValue("timestamp_granularity")
+	fmt.Println("timestampGranularityStr:", timestampGranularityStr)
+	// Parse timestamp granularity
+	if timestampGranularityStr != "" {
+		switch timestampGranularityStr {
+		case "word":
+			fmt.Println("Setting timestamp granularity to word")
+			params.timestampGranularity = openai.TranscriptionTimestampGranularityWord
+		case "segment", "":
+			fmt.Println("Setting timestamp granularity to segment")
+			params.timestampGranularity = openai.TranscriptionTimestampGranularitySegment
+		default:
+			return nil, fmt.Errorf("invalid timestamp granularity: %s", timestampGranularityStr)
+		}
+	}
+
+	// Parse timestamp granularities
+	if ctx.Request.MultipartForm != nil && ctx.Request.MultipartForm.Value != nil {
+		timestampGranularitiesRaw := ctx.Request.MultipartForm.Value["timestamp_granularities[]"]
+		if len(timestampGranularitiesRaw) > 0 {
+			for _, granularity := range timestampGranularitiesRaw {
+				switch granularity {
+				case "word":
+					params.timestampGranularities = append(params.timestampGranularities, openai.TranscriptionTimestampGranularityWord)
+				case "segment", "":
+					params.timestampGranularities = append(params.timestampGranularities, openai.TranscriptionTimestampGranularitySegment)
+				default:
+					params.timestampGranularities = append(params.timestampGranularities, openai.TranscriptionTimestampGranularitySegment)
+				}
+			}
+		}
+	}
+
+	return params, nil
+}
+
+func (c *ProxyController) processAudioFile(ctx *gin.Context, sessionID lib.Hash) (string, string, error) {
+	// Get the file from form data
+	file, fileHeader, err := ctx.Request.FormFile("file")
+	if err != nil {
+		return "", "", fmt.Errorf("Failed to get file: %v", err)
+	}
+	defer file.Close()
+
+	// Create a temporary file to save the uploaded audio
+	tempDir := os.TempDir()
+	tempFilePath := filepath.Join(tempDir, fileHeader.Filename)
+	tempFile, err := os.Create(tempFilePath)
+	if err != nil {
+		return "", "", fmt.Errorf("Failed to create temp file: %v", err)
+	}
+	defer tempFile.Close()
+
+	// Process based on session status
+	base64Audio := ""
+	if sessionID != (lib.Hash{}) {
+		audioBytes, err := io.ReadAll(file)
+		if err != nil {
+			return "", "", fmt.Errorf("Failed to read audio file: %v", err)
+		}
+		base64Audio = base64.StdEncoding.EncodeToString(audioBytes)
+	} else {
+		// Copy the uploaded file to the temporary file
+		if _, err = io.Copy(tempFile, file); err != nil {
+			return "", "", fmt.Errorf("Failed to save audio file: %v", err)
+		}
+	}
+
+	// Close the file before returning
+	tempFile.Close()
+
+	return tempFilePath, base64Audio, nil
+}
+
+func (c *ProxyController) executeTranscription(ctx *gin.Context, adapter aiengine.AIEngineStream, request *gsc.AudioTranscriptionRequest, base64Audio string, stream bool) error {
+	return adapter.AudioTranscription(ctx, request, base64Audio, func(cbctx context.Context, completion gsc.Chunk, aiResponseError *gsc.AiEngineErrorResponse) error {
+		if aiResponseError != nil {
+			ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_JSON)
+			ctx.JSON(http.StatusBadRequest, aiResponseError)
+			return nil
+		}
+
+		var response []byte
+
+		// Determine response type and format accordingly
+		if completion.Type() == genericchatstorage.ChunkTypeAudioTranscriptionText {
+			ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_TEXT_PLAIN)
+			response = []byte(completion.Data().(string))
+		} else {
+			ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_JSON)
+			marshalledResponse, err := json.Marshal(completion.Data())
+			if err != nil {
+				return err
+			}
+			response = marshalledResponse
+		}
+
+		// Write response based on stream mode
+		var err error
+		if stream {
+			_, err = ctx.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", response)))
+		} else {
+			_, err = ctx.Writer.Write(response)
+		}
+
+		if err != nil {
+			return err
+		}
+
+		ctx.Writer.Flush()
+		return nil
+	})
 }
