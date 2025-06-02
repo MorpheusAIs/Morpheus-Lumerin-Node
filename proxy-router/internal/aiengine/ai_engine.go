@@ -75,6 +75,8 @@ func (a *AiEngine) GetAdapter(ctx context.Context, chatID, modelID, sessionID co
 				return nil, err
 			}
 			actualModelID = modelID
+		} else {
+			actualModelID = modelID
 		}
 		engine = NewHistory(engine, a.storage, chatID, actualModelID, forwardChatContext, a.log)
 	}

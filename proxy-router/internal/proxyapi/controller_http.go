@@ -1366,10 +1366,14 @@ func (c *ProxyController) AudioTranscription(ctx *gin.Context) {
 	defer os.Remove(tempFilePath) // Clean up temp file
 
 	// Get AI adapter
-	chatID, err := lib.GetRandomHash()
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+	chatID := params.head.ChatID
+	if chatID == (lib.Hash{}) {
+		var err error
+		chatID, err = lib.GetRandomHash()
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
 	adapter, err := c.aiEngine.GetAdapter(ctx, chatID.Hash, params.head.ModelID.Hash, params.head.SessionID.Hash, c.storeChatContext, c.forwardChatContext)
