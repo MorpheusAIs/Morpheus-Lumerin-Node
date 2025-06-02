@@ -99,7 +99,7 @@ func (a *OpenAI) readResponse(ctx context.Context, body io.Reader, cb gcs.Comple
 func (a *OpenAI) readError(ctx context.Context, body io.Reader, cb gcs.CompletionCallback) error {
 	var aiEngineErrorResponse interface{}
 	if err := json.NewDecoder(body).Decode(&aiEngineErrorResponse); err != nil {
-		return fmt.Errorf("failed to decode response: %v", err)
+		return fmt.Errorf("failed to decode error response: %v", err)
 	}
 
 	err := cb(ctx, nil, gcs.NewAiEngineErrorResponse(aiEngineErrorResponse))
