@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -84,25 +85,95 @@ func processAudioTranscription(message []byte, sourceLog lib.ILogger) (*genericc
 
 // createAudioTempFile creates a temporary file with decoded audio data
 func createAudioTempFile(base64Audio string, sourceLog lib.ILogger) (string, error) {
-	tempDir := os.TempDir()
-	tempFilePath := filepath.Join(tempDir, fmt.Sprintf("%d", time.Now().UnixNano()))
-	tempFile, err := os.Create(tempFilePath)
-	if err != nil {
-		return "", lib.WrapError(fmt.Errorf("failed to create temp file"), err)
-	}
-	defer tempFile.Close()
-
 	// Decode and write audio
 	audioBytes, err := base64.StdEncoding.DecodeString(base64Audio)
 	if err != nil {
 		return "", lib.WrapError(fmt.Errorf("failed to decode base64 audio"), err)
 	}
 
+	tempDir := os.TempDir()
+	contentType := http.DetectContentType(audioBytes)
+	
+	audioExtensions := map[string]string{
+		"audio/mpeg":       ".mp3",
+		"audio/mp3":        ".mp3",
+		"audio/wav":        ".wav",
+		"audio/wave":       ".wav",
+		"audio/x-wav":      ".wav",
+		"audio/vnd.wave":   ".wav",
+		"audio/ogg":        ".ogg",
+		"audio/flac":       ".flac",
+		"audio/aac":        ".aac",
+		"audio/mp4":        ".m4a",
+		"audio/x-m4a":      ".m4a",
+		"audio/webm":       ".webm",
+		"audio/opus":       ".opus",
+		"audio/x-ms-wma":   ".wma",
+		"audio/amr":        ".amr",
+		"audio/3gpp":       ".3gp",
+		"audio/x-aiff":     ".aiff",
+		"audio/aiff":       ".aiff",
+	}
+	
+	extension, exists := audioExtensions[contentType]
+	if !exists {
+		extension = detectAudioExtensionBySignature(audioBytes)
+		fmt.Println("Detected extension by signature:", extension)
+		if extension == "" {
+			extension = ".mp3"
+		}
+	}
+	
+	fmt.Println("Detected content type:", contentType)
+	fmt.Println("Using extension:", extension)
+	
+	tempFilePath := filepath.Join(tempDir, fmt.Sprintf("%d%s", time.Now().UnixNano(), extension))
+	tempFile, err := os.Create(tempFilePath)
+	if err != nil {
+		return "", lib.WrapError(fmt.Errorf("failed to create temp file"), err)
+	}
+	defer tempFile.Close()
+
 	if _, err = tempFile.Write(audioBytes); err != nil {
 		return "", lib.WrapError(fmt.Errorf("failed to write audio to temp file"), err)
 	}
 
 	return tempFilePath, nil
+}
+
+// detectAudioExtensionBySignature detects audio file extension by examining file signature (magic bytes)
+func detectAudioExtensionBySignature(data []byte) string {
+	if len(data) < 12 {
+		return ""
+	}
+	
+	// Check for various audio file signatures
+	switch {
+	case len(data) >= 4 && string(data[0:3]) == "ID3": // MP3 with ID3 tag
+		return ".mp3"
+	case len(data) >= 4 && data[0] == 0xFF && (data[1]&0xE0) == 0xE0: // MP3 frame header
+		return ".mp3"
+	case len(data) >= 12 && string(data[0:4]) == "RIFF" && string(data[8:12]) == "WAVE": // WAV
+		return ".wav"
+	case len(data) >= 4 && string(data[0:4]) == "OggS": // OGG
+		return ".ogg"
+	case len(data) >= 4 && string(data[0:4]) == "fLaC": // FLAC
+		return ".flac"
+	case len(data) >= 8 && string(data[4:8]) == "ftyp": // MP4/M4A container
+		if len(data) >= 12 {
+			subtype := string(data[8:12])
+			if subtype == "M4A " || subtype == "mp41" || subtype == "mp42" {
+				return ".m4a"
+			}
+		}
+		return ".mp4"
+	case len(data) >= 12 && string(data[0:4]) == "FORM" && string(data[8:12]) == "AIFF": // AIFF
+		return ".aiff"
+	case len(data) >= 6 && string(data[0:6]) == "#!AMR\n": // AMR
+		return ".amr"
+	}
+	
+	return ""
 }
 
 // processChatRequest handles chat completion request processing

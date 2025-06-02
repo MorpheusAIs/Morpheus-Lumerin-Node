@@ -2,7 +2,6 @@ package aiengine
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
@@ -47,7 +46,7 @@ func (h *History) Prompt(ctx context.Context, prompt *openai.ChatCompletionReque
 	}
 
 	err = h.engine.Prompt(ctx, adjustedPrompt, func(ctx context.Context, completion gcs.Chunk, errorBody *gcs.AiEngineErrorResponse) error {
-		if errorBody != nil {
+		if completion != nil {
 			completions = append(completions, completion)
 		}
 		return cb(ctx, completion, errorBody)
@@ -66,7 +65,27 @@ func (h *History) Prompt(ctx context.Context, prompt *openai.ChatCompletionReque
 }
 
 func (h *History) AudioTranscription(ctx context.Context, prompt *gcs.AudioTranscriptionRequest, base64Audio string, cb gcs.CompletionCallback) error {
-	return fmt.Errorf("audio transcription is not supported for history models")
+	isLocal := h.engine.ApiType() != "remote"
+	completions := make([]gcs.Chunk, 0)
+	startTime := time.Now()
+
+	err := h.engine.AudioTranscription(ctx, prompt, base64Audio, func(ctx context.Context, completion gcs.Chunk, errorBody *gcs.AiEngineErrorResponse) error {
+		if completion != nil {
+			completions = append(completions, completion)
+		}
+		return cb(ctx, completion, errorBody)
+	})
+	if err != nil {
+		return err
+	}
+	endTime := time.Now()
+
+	err = h.storage.StorePromptResponseToFile(h.chatID.Hex(), isLocal, h.modelID.Hex(), prompt, completions, startTime, endTime)
+	if err != nil {
+		h.log.Errorf("failed to store prompt response: %v", err)
+	}
+
+	return err
 }
 
 func (h *History) ApiType() string {
