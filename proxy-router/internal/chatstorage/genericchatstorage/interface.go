@@ -134,4 +134,5 @@ type AudioTranscriptionRequest struct {
 	Format                 openai.AudioResponseFormat
 	TimestampGranularities []openai.TranscriptionTimestampGranularity // Only for transcription.
 	TimestampGranularity   openai.TranscriptionTimestampGranularity
+	Stream                 bool // Whether to stream the transcription results
 }

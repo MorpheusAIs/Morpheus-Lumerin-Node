@@ -140,6 +140,67 @@ func (a *OpenAI) readStream(ctx context.Context, body io.Reader, cb gcs.Completi
 	return nil
 }
 
+// readTranscriptionStream handles streaming audio transcription responses
+func (a *OpenAI) readTranscriptionStream(ctx context.Context, body io.Reader, cb gcs.CompletionCallback) error {
+	scanner := bufio.NewScanner(body)
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		if strings.HasPrefix(line, StreamDataPrefix) {
+			data := line[len(StreamDataPrefix):] // Skip the "data: " prefix
+
+			if isStreamFinished(data) {
+				return nil
+			}
+
+			var event map[string]interface{}
+			if err := json.Unmarshal([]byte(data), &event); err != nil {
+				return fmt.Errorf("error decoding transcription stream response: %s\n%s", err, line)
+			}
+
+			eventType, ok := event["type"].(string)
+			if !ok {
+				continue
+			}
+			switch eventType {
+			case "transcript.text.delta":
+				dataStruct := gcs.AudioTranscriptionDelta{
+					Delta: event["delta"].(string),
+					Type:  eventType,
+				}
+				chunk := gcs.NewChunkAudioTranscriptionDelta(dataStruct)
+				if err := cb(ctx, chunk, nil); err != nil {
+					return fmt.Errorf("callback failed: %v", err)
+				}
+
+			case "transcript.text.done":
+				dataStruct := gcs.AudioTranscriptionDelta{
+					Type: eventType,
+					Text: event["text"].(string),
+				}
+				chunk := gcs.NewChunkAudioTranscriptionDelta(dataStruct)
+				if err := cb(ctx, chunk, nil); err != nil {
+					return fmt.Errorf("callback failed: %v", err)
+				}
+				return nil
+
+			case "error":
+				errorMsg, _ := event["error"].(map[string]interface{})
+				return fmt.Errorf("transcription error: %v", errorMsg)
+
+			default:
+				a.log.Debugf("Received transcription event: %s", eventType)
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("error reading transcription stream: %v", err)
+	}
+
+	return nil
+}
+
 func (a *OpenAI) AudioTranscription(ctx context.Context, audioRequest *gcs.AudioTranscriptionRequest, base64Audio string, cb gcs.CompletionCallback) error {
 	audioRequest.Model = a.modelName
 
@@ -147,6 +208,10 @@ func (a *OpenAI) AudioTranscription(ctx context.Context, audioRequest *gcs.Audio
 	req, err := a.prepareTranscriptionRequest(ctx, audioRequest)
 	if err != nil {
 		return fmt.Errorf("failed to prepare transcription request: %w", err)
+	}
+
+	if audioRequest.Stream {
+		req.Header.Set(c.HEADER_ACCEPT, c.CONTENT_TYPE_EVENT_STREAM)
 	}
 
 	// Send the request
@@ -158,6 +223,11 @@ func (a *OpenAI) AudioTranscription(ctx context.Context, audioRequest *gcs.Audio
 
 	if resp.StatusCode != http.StatusOK {
 		return a.readError(ctx, resp.Body, cb)
+	}
+
+	// Check if response is streaming
+	if audioRequest.Stream && isContentTypeStream(resp.Header) {
+		return a.readTranscriptionStream(ctx, resp.Body, cb)
 	}
 
 	// Process the response
@@ -259,6 +329,11 @@ func (a *OpenAI) addOptionalFields(writer *multipart.Writer, audioRequest *gcs.A
 			if err := writer.WriteField("timestamp_granularities[]", string(granularity)); err != nil {
 				return fmt.Errorf("failed to add timestamp_granularity field: %w", err)
 			}
+		}
+	}
+	if audioRequest.Stream {
+		if err := writer.WriteField("stream", "true"); err != nil {
+			return fmt.Errorf("failed to add stream field: %w", err)
 		}
 	}
 	return nil
