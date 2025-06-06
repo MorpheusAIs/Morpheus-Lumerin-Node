@@ -63,7 +63,9 @@ func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool
 	if len(responses) > 0 {
 		isImageContent = responses[0].Type() == gcs.ChunkTypeImage
 		isVideoRawContent = responses[0].Type() == gcs.ChunkTypeVideo
-		isAudioContent = responses[0].Type() == gcs.ChunkTypeAudioTranscriptionText || responses[0].Type() == gcs.ChunkTypeAudioTranscriptionJson
+		isAudioContent = responses[0].Type() == gcs.ChunkTypeAudioTranscriptionText || 
+			responses[0].Type() == gcs.ChunkTypeAudioTranscriptionJson ||
+			responses[0].Type() == gcs.ChunkTypeAudioTranscriptionDelta
 	}
 
 	var newEntry gcs.ChatMessage

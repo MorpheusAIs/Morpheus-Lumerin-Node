@@ -1391,6 +1391,7 @@ func (c *ProxyController) AudioTranscription(ctx *gin.Context) {
 		Temperature:            params.temperature,
 		TimestampGranularities: params.timestampGranularities,
 		TimestampGranularity:   params.timestampGranularity,
+		Stream:                 params.stream,
 	}
 
 	// Process transcription with callback
@@ -1530,10 +1531,18 @@ func (c *ProxyController) executeTranscription(ctx *gin.Context, adapter aiengin
 		var response []byte
 
 		// Determine response type and format accordingly
-		if completion.Type() == genericchatstorage.ChunkTypeAudioTranscriptionText {
+		switch completion.Type() {
+		case genericchatstorage.ChunkTypeAudioTranscriptionText:
 			ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_TEXT_PLAIN)
 			response = []byte(completion.Data().(string))
-		} else {
+		case genericchatstorage.ChunkTypeAudioTranscriptionDelta:
+			ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_EVENT_STREAM)
+			marshalledResponse, err := json.Marshal(completion.Data())
+			if err != nil {
+				return err
+			}
+			response = marshalledResponse
+		default:
 			ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_JSON)
 			marshalledResponse, err := json.Marshal(completion.Data())
 			if err != nil {
@@ -1544,7 +1553,7 @@ func (c *ProxyController) executeTranscription(ctx *gin.Context, adapter aiengin
 
 		// Write response based on stream mode
 		var err error
-		if stream {
+		if stream || completion.IsStreaming() {
 			_, err = ctx.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", response)))
 		} else {
 			_, err = ctx.Writer.Write(response)
