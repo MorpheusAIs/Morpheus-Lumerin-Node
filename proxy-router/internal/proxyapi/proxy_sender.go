@@ -590,6 +590,9 @@ func (p *ProxyServiceSender) createAudioRequestMap(audioRequest *gcs.AudioTransc
 		}
 		requestMap["TimestampGranularities"] = timestamps
 	}
+	if audioRequest.Stream {
+		requestMap["Stream"] = audioRequest.Stream
+	}
 
 	return requestMap
 }
@@ -896,9 +899,18 @@ func (p *ProxyServiceSender) handleAudioTranscription(aiResponse []byte, respons
 		return nil, 0, false, lib.WrapError(ErrInvalidResponse, fmt.Errorf("empty audio response"))
 	}
 
+	// Check if this is a streaming delta response
+	var deltaResponse gcs.AudioTranscriptionDelta
+	err := json.Unmarshal(aiResponse, &deltaResponse)
+	if err == nil && deltaResponse.Type != "" {
+		chunk := gcs.NewChunkAudioTranscriptionDelta(deltaResponse)
+		responses = append(responses, deltaResponse)
+		return chunk, 0, false, nil // Don't stop for delta responses
+	}
+
 	// Try to parse as JSON response first
 	var jsonResponse openai.AudioResponse
-	err := json.Unmarshal(aiResponse, &jsonResponse)
+	err = json.Unmarshal(aiResponse, &jsonResponse)
 	if err == nil {
 		chunk := gcs.NewChunkAudioTranscriptionJson(jsonResponse)
 		responses = append(responses, jsonResponse)

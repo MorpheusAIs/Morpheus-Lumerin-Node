@@ -12,12 +12,13 @@ type CompletionCallback func(ctx context.Context, completion Chunk, aiEngineErro
 type ChunkType string
 
 const (
-	ChunkTypeText                   ChunkType = "text"
-	ChunkTypeImage                  ChunkType = "image"
-	ChunkTypeVideo                  ChunkType = "video"
-	ChunkTypeControl                ChunkType = "control-message"
-	ChunkTypeAudioTranscriptionText ChunkType = "audio-transcription-text"
-	ChunkTypeAudioTranscriptionJson ChunkType = "audio-transcription-json"
+	ChunkTypeText                    ChunkType = "text"
+	ChunkTypeImage                   ChunkType = "image"
+	ChunkTypeVideo                   ChunkType = "video"
+	ChunkTypeControl                 ChunkType = "control-message"
+	ChunkTypeAudioTranscriptionText  ChunkType = "audio-transcription-text"
+	ChunkTypeAudioTranscriptionJson  ChunkType = "audio-transcription-json"
+	ChunkTypeAudioTranscriptionDelta ChunkType = "audio-transcription-delta"
 )
 
 type ChunkText struct {
@@ -289,6 +290,56 @@ func (c *ChunkAudioTranscriptionJson) Data() interface{} {
 }
 
 var _ Chunk = &ChunkAudioTranscriptionJson{}
+
+// ChunkAudioTranscriptionDelta represents a streaming delta chunk for audio transcription
+type ChunkAudioTranscriptionDelta struct {
+	data AudioTranscriptionDelta
+}
+
+// AudioTranscriptionDelta represents the delta data structure for streaming transcription
+type AudioTranscriptionDelta struct {
+	Type  string `json:"type"`
+	Text  string `json:"text"`
+	Delta string `json:"delta"`
+}
+
+func NewChunkAudioTranscriptionDelta(data AudioTranscriptionDelta) *ChunkAudioTranscriptionDelta {
+	return &ChunkAudioTranscriptionDelta{
+		data: AudioTranscriptionDelta{
+			Delta: data.Delta,
+			Type:  data.Type,
+			Text:  data.Text,
+		},
+	}
+}
+
+func (c *ChunkAudioTranscriptionDelta) IsStreaming() bool {
+	return true
+}
+
+func (c *ChunkAudioTranscriptionDelta) Tokens() int {
+	if c.data.Type == "transcript.text.delta" {
+		return len(c.data.Delta)
+	}
+	return len(c.data.Text)
+}
+
+func (c *ChunkAudioTranscriptionDelta) Type() ChunkType {
+	return ChunkTypeAudioTranscriptionDelta
+}
+
+func (c *ChunkAudioTranscriptionDelta) String() string {
+	if c.data.Type == "transcript.text.delta" {
+		return c.data.Delta
+	}
+	return c.data.Text
+}
+
+func (c *ChunkAudioTranscriptionDelta) Data() interface{} {
+	return c.data
+}
+
+var _ Chunk = &ChunkAudioTranscriptionDelta{}
 
 type AiEngineErrorResponse struct {
 	ProviderModelError interface{} `json:"providerModelError"`
