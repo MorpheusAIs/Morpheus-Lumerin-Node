@@ -961,7 +961,6 @@ func (p *ProxyServiceSender) handleMediaGeneration(aiResponse []byte, responses 
 
 // checkProviderAvailability checks if the provider is alive using portchecker.io API
 func checkProviderAvailability(url string) (bool, error) {
-	return true, nil
 	host, port, err := net.SplitHostPort(url)
 	if err != nil {
 		return false, err
