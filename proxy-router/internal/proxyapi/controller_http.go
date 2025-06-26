@@ -3,7 +3,6 @@ package proxyapi
 import (
 	"bufio"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,6 +24,13 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
 	"github.com/sashabaranov/go-openai"
+)
+
+const (
+	// Memory optimization constants for audio processing
+	BASE64_ENCODING_CHUNK_SIZE  = 1024 * 1024 // 1MB chunks for base64 encoding
+	BASE64_DECODING_CHUNK_SIZE  = 64 * 1024   // 64KB chunks for base64 decoding
+	CONTENT_TYPE_DETECTION_SIZE = 512         // 512 bytes for content type detection
 )
 
 type AIEngine interface {
@@ -1354,7 +1360,7 @@ func (c *ProxyController) AudioTranscription(ctx *gin.Context) {
 	}
 
 	// Process audio file
-	tempFilePath, base64Audio, err := c.processAudioFile(ctx, params.head.SessionID)
+	tempFilePath, err := c.createTempFile(ctx)
 	if err != nil {
 		statusCode := http.StatusInternalServerError
 		if err.Error() == "Failed to get file" {
@@ -1395,7 +1401,7 @@ func (c *ProxyController) AudioTranscription(ctx *gin.Context) {
 	}
 
 	// Process transcription with callback
-	if err := c.executeTranscription(ctx, adapter, transcriptionRequest, base64Audio, params.stream); err != nil {
+	if err := c.executeTranscription(ctx, adapter, transcriptionRequest, params.stream); err != nil {
 		c.log.Errorf("error sending transcription request: %s", err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 	}
@@ -1482,11 +1488,11 @@ func (c *ProxyController) parseAudioTranscriptionParams(ctx *gin.Context) (*audi
 	return params, nil
 }
 
-func (c *ProxyController) processAudioFile(ctx *gin.Context, sessionID lib.Hash) (string, string, error) {
+func (c *ProxyController) createTempFile(ctx *gin.Context) (string, error) {
 	// Get the file from form data
 	file, fileHeader, err := ctx.Request.FormFile("file")
 	if err != nil {
-		return "", "", fmt.Errorf("Failed to get file: %v", err)
+		return "", fmt.Errorf("Failed to get file: %v", err)
 	}
 	defer file.Close()
 
@@ -1495,33 +1501,23 @@ func (c *ProxyController) processAudioFile(ctx *gin.Context, sessionID lib.Hash)
 	tempFilePath := filepath.Join(tempDir, fileHeader.Filename)
 	tempFile, err := os.Create(tempFilePath)
 	if err != nil {
-		return "", "", fmt.Errorf("Failed to create temp file: %v", err)
+		return "", fmt.Errorf("Failed to create temp file: %v", err)
 	}
 	defer tempFile.Close()
 
-	// Process based on session status
-	base64Audio := ""
-	if sessionID != (lib.Hash{}) {
-		audioBytes, err := io.ReadAll(file)
-		if err != nil {
-			return "", "", fmt.Errorf("Failed to read audio file: %v", err)
-		}
-		base64Audio = base64.StdEncoding.EncodeToString(audioBytes)
-	} else {
-		// Copy the uploaded file to the temporary file
-		if _, err = io.Copy(tempFile, file); err != nil {
-			return "", "", fmt.Errorf("Failed to save audio file: %v", err)
-		}
+	// Copy the uploaded file to the temporary file
+	if _, err = io.Copy(tempFile, file); err != nil {
+		return "", fmt.Errorf("Failed to save audio file: %v", err)
 	}
 
 	// Close the file before returning
 	tempFile.Close()
 
-	return tempFilePath, base64Audio, nil
+	return tempFilePath, nil
 }
 
-func (c *ProxyController) executeTranscription(ctx *gin.Context, adapter aiengine.AIEngineStream, request *gsc.AudioTranscriptionRequest, base64Audio string, stream bool) error {
-	return adapter.AudioTranscription(ctx, request, base64Audio, func(cbctx context.Context, completion gsc.Chunk, aiResponseError *gsc.AiEngineErrorResponse) error {
+func (c *ProxyController) executeTranscription(ctx *gin.Context, adapter aiengine.AIEngineStream, request *gsc.AudioTranscriptionRequest, stream bool) error {
+	return adapter.AudioTranscription(ctx, request, func(cbctx context.Context, completion gsc.Chunk, aiResponseError *gsc.AiEngineErrorResponse) error {
 		if aiResponseError != nil {
 			ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_JSON)
 			ctx.JSON(http.StatusBadRequest, aiResponseError)

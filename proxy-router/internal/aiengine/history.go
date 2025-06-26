@@ -64,12 +64,12 @@ func (h *History) Prompt(ctx context.Context, prompt *openai.ChatCompletionReque
 	return err
 }
 
-func (h *History) AudioTranscription(ctx context.Context, prompt *gcs.AudioTranscriptionRequest, base64Audio string, cb gcs.CompletionCallback) error {
+func (h *History) AudioTranscription(ctx context.Context, prompt *gcs.AudioTranscriptionRequest, cb gcs.CompletionCallback) error {
 	isLocal := h.engine.ApiType() != "remote"
 	completions := make([]gcs.Chunk, 0)
 	startTime := time.Now()
 
-	err := h.engine.AudioTranscription(ctx, prompt, base64Audio, func(ctx context.Context, completion gcs.Chunk, errorBody *gcs.AiEngineErrorResponse) error {
+	err := h.engine.AudioTranscription(ctx, prompt, func(ctx context.Context, completion gcs.Chunk, errorBody *gcs.AiEngineErrorResponse) error {
 		if completion != nil {
 			completions = append(completions, completion)
 		}
