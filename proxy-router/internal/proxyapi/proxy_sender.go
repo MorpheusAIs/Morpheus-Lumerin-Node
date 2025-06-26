@@ -11,7 +11,10 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
@@ -46,6 +49,8 @@ var (
 
 const (
 	TimeoutPingDefault = 5 * time.Second
+
+	SENDER_AUDIO_STREAM_CHUNK_SIZE = 1 * 1024 * 1024 // 1mb chunks for audio streaming
 )
 
 type ProxyServiceSender struct {
@@ -562,10 +567,9 @@ func (p *ProxyServiceSender) handleFailover(ctx context.Context, session session
 }
 
 // createAudioRequestMap builds a map from audio request parameters for RPC transmission
-func (p *ProxyServiceSender) createAudioRequestMap(audioRequest *gcs.AudioTranscriptionRequest, base64Audio string) map[string]interface{} {
+func (p *ProxyServiceSender) createAudioRequestMap(audioRequest *gcs.AudioTranscriptionRequest) map[string]interface{} {
 	requestMap := map[string]interface{}{
-		"base64Audio": base64Audio,
-		"type":        "audio_transcription",
+		"type": "audio_transcription",
 	}
 
 	if audioRequest.Language != "" {
@@ -657,51 +661,6 @@ func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.
 	return result, nil
 }
 
-func (p *ProxyServiceSender) SendAudioTranscriptionV2(ctx context.Context, sessionID common.Hash, audioRequest *gcs.AudioTranscriptionRequest, base64Audio string, cb gcs.CompletionCallback) (interface{}, error) {
-	// Validate session and get provider
-	session, provider, err := p.validateSession(ctx, sessionID)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create request map from audio parameters
-	audioRequestMap := p.createAudioRequestMap(audioRequest, base64Audio)
-
-	// Prepare request
-	promptRequest, pubKey, err := p.prepareRequest(sessionID, audioRequestMap, provider.PubKey)
-	if err != nil {
-		return nil, err
-	}
-
-	// Send request and process response
-	startTime := time.Now().Unix()
-	result, ttftMs, totalTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, promptRequest, pubKey, "audio_transcription")
-
-	// Handle errors with failover if enabled
-	if err != nil {
-		if !session.FailoverEnabled() {
-			return nil, lib.WrapError(ErrProvider, err)
-		}
-
-		// Handle failover
-		newSessionID, failoverErr := p.handleFailover(ctx, *session, cb)
-		if failoverErr != nil {
-			return nil, failoverErr
-		}
-
-		// Retry with new session
-		return p.SendAudioTranscriptionV2(ctx, newSessionID, audioRequest, base64Audio, cb)
-	}
-
-	// Update session statistics
-	if updateErr := p.updateSessionStats(ctx, *session, startTime, ttftMs, totalTokens); updateErr != nil {
-		// Log error but don't fail the request
-		p.log.Error("Failed to update session stats", updateErr)
-	}
-
-	return result, nil
-}
-
 func (p *ProxyServiceSender) rpcRequestStreamV2(
 	ctx context.Context,
 	cb gcs.CompletionCallback,
@@ -713,8 +672,11 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 	const (
 		TIMEOUT_TO_ESTABLISH_CONNECTION   = time.Second * 3
 		TIMEOUT_TO_RECEIVE_FIRST_RESPONSE = time.Second * 30
-		MAX_RETRIES                       = 5
 	)
+	var MAX_RETRIES = 5
+	if requestType == "audio_transcription" {
+		MAX_RETRIES = 20 // Increase retries for audio transcription
+	}
 
 	dialer := net.Dialer{Timeout: TIMEOUT_TO_ESTABLISH_CONNECTION}
 
@@ -771,6 +733,7 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 		if err != nil {
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 				p.log.Warnf("Read operation timed out: %v", err)
+				p.log.Infof("Retry count: %d, max retries: %d", retryCount, MAX_RETRIES)
 				if retryCount < MAX_RETRIES {
 					alive, availErr := checkProviderAvailability(url)
 					if availErr != nil {
@@ -998,6 +961,7 @@ func (p *ProxyServiceSender) handleMediaGeneration(aiResponse []byte, responses 
 
 // checkProviderAvailability checks if the provider is alive using portchecker.io API
 func checkProviderAvailability(url string) (bool, error) {
+	return true, nil
 	host, port, err := net.SplitHostPort(url)
 	if err != nil {
 		return false, err
@@ -1052,4 +1016,230 @@ func checkProviderAvailability(url string) (bool, error) {
 	}
 
 	return false, fmt.Errorf("port status not found in response")
+}
+
+// SendAudioTranscriptionStreamV2 sends audio transcription using streaming chunks to avoid memory issues with large files
+func (p *ProxyServiceSender) SendAudioTranscriptionV2(ctx context.Context, sessionID common.Hash, audioRequest *gcs.AudioTranscriptionRequest, cb gcs.CompletionCallback) (interface{}, error) {
+	// Validate session and get provider
+	session, provider, err := p.validateSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get private key for signing
+	prKey, err := p.privateKey.GetPrivateKey()
+	if err != nil {
+		return nil, ErrMissingPrKey
+	}
+
+	// Open audio file
+	audioFilePath := audioRequest.FilePath
+	file, err := os.Open(audioFilePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open audio file: %w", err)
+	}
+	defer file.Close()
+
+	// Get file info
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get file info: %w", err)
+	}
+
+	fileSize := uint64(fileInfo.Size())
+	totalChunks := uint32((fileSize + SENDER_AUDIO_STREAM_CHUNK_SIZE - 1) / SENDER_AUDIO_STREAM_CHUNK_SIZE) // Ceiling division
+
+	// Generate unique stream ID
+	streamIDBytes := make([]byte, 16)
+	_, err = rand.Read(streamIDBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate stream ID: %w", err)
+	}
+	streamID := fmt.Sprintf("%x", streamIDBytes)
+
+	// Detect content type
+	contentType := detectAudioContentType(audioFilePath)
+
+	p.log.Debugf("Starting audio streaming for file %s, size: %d bytes, chunks: %d", audioFilePath, fileSize, totalChunks)
+
+	// Record start time for session stats
+	startTime := time.Now().Unix()
+
+	// Step 1: Start streaming session
+	err = p.sendStreamStart(provider, sessionID, streamID, totalChunks, fileSize, contentType, prKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start streaming session: %w", err)
+	}
+
+	// Step 2: Send chunks
+	err = p.sendStreamChunks(ctx, provider, sessionID, streamID, file, totalChunks, prKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send streaming chunks: %w", err)
+	}
+
+	// Step 3: End streaming and get results
+	result, ttftMs, totalTokens, err := p.sendStreamEnd(ctx, provider, sessionID, streamID, audioRequest, prKey, cb)
+	if err != nil {
+		return nil, fmt.Errorf("failed to end streaming session: %w", err)
+	}
+
+	// Update session statistics
+	if updateErr := p.updateSessionStats(ctx, *session, startTime, ttftMs, totalTokens); updateErr != nil {
+		// Log error but don't fail the request
+		p.log.Error("Failed to update session stats", updateErr)
+	}
+
+	return result, nil
+}
+
+// sendStreamStart initiates the streaming session
+func (p *ProxyServiceSender) sendStreamStart(provider *storages.User, sessionID common.Hash, streamID string, totalChunks uint32, fileSize uint64, contentType string, prKey lib.HexString) error {
+	requestID := "1"
+	message, err := p.morRPC.SessionPromptStreamStartRequest(sessionID, streamID, totalChunks, contentType, fileSize, prKey, requestID)
+	if err != nil {
+		return fmt.Errorf("failed to create stream start request: %w", err)
+	}
+
+	response, _, err := p.rpcRequest(provider.Url, message)
+	if err != nil {
+		return fmt.Errorf("failed to send stream start request: %w", err)
+	}
+
+	var typedMsg msgs.SessionPromptStreamStartRes
+	err = json.Unmarshal(*response.Result, &typedMsg)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal stream start response: %w", err)
+	}
+
+	signature := typedMsg.Signature
+	typedMsg.Signature = lib.HexString{}
+
+	hexPubKey, err := lib.StringToHexString(provider.PubKey)
+	if !p.validateMsgSignature(typedMsg, signature, hexPubKey) {
+		return fmt.Errorf("invalid signature for stream start response")
+	}
+
+	if response.Error != nil {
+		return fmt.Errorf("stream start failed: %s", response.Error.Message)
+	}
+
+	p.log.Debugf("Stream start successful for stream ID: %s", streamID)
+	return nil
+}
+
+// sendStreamChunks sends the audio file in chunks
+func (p *ProxyServiceSender) sendStreamChunks(ctx context.Context, provider *storages.User, sessionID common.Hash, streamID string, file *os.File, totalChunks uint32, prKey lib.HexString) error {
+	buffer := make([]byte, SENDER_AUDIO_STREAM_CHUNK_SIZE)
+	var chunkIndex uint32 = 0
+
+	for chunkIndex < totalChunks {
+		// Check context cancellation
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		// Read chunk
+		n, err := file.Read(buffer)
+		if err != nil && err != io.EOF {
+			return fmt.Errorf("failed to read chunk %d: %w", chunkIndex, err)
+		}
+
+		if n == 0 {
+			break
+		}
+
+		chunkData := buffer[:n]
+		requestID := "1"
+
+		message, err := p.morRPC.SessionPromptStreamChunkRequest(sessionID, streamID, chunkIndex, chunkData, prKey, requestID)
+		if err != nil {
+			return fmt.Errorf("failed to create chunk request for chunk %d: %w", chunkIndex, err)
+		}
+
+		response, _, err := p.rpcRequest(provider.Url, message)
+		if err != nil {
+			return fmt.Errorf("failed to send chunk %d: %w", chunkIndex, err)
+		}
+
+		var typedMsg *msgs.SessionPromptStreamChunkRes
+		err = json.Unmarshal(*response.Result, &typedMsg)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal stream start response: %w", err)
+		}
+
+		signature := typedMsg.Signature
+		typedMsg.Signature = lib.HexString{}
+
+		hexPubKey, err := lib.StringToHexString(provider.PubKey)
+		if !p.validateMsgSignature(typedMsg, signature, hexPubKey) {
+			return fmt.Errorf("invalid signature for stream chunk response")
+		}
+
+		if response.Error != nil {
+			return fmt.Errorf("chunk %d failed: %s", chunkIndex, response.Error.Message)
+		}
+
+		p.log.Debugf("Successfully sent chunk %d/%d for stream %s", chunkIndex+1, totalChunks, streamID)
+		chunkIndex++
+	}
+
+	return nil
+}
+
+// sendStreamEnd finalizes the streaming session and gets the transcription result with session statistics
+func (p *ProxyServiceSender) sendStreamEnd(ctx context.Context, provider *storages.User, sessionID common.Hash, streamID string, audioRequest *gcs.AudioTranscriptionRequest, prKey lib.HexString, cb gcs.CompletionCallback) (interface{}, int, int, error) {
+	// Create audio request parameters
+	audioParams := p.createAudioRequestMap(audioRequest)
+
+	// Marshal audio parameters
+	audioParamsJSON, err := json.Marshal(audioParams)
+	if err != nil {
+		return nil, 0, 0, fmt.Errorf("failed to marshal audio parameters: %w", err)
+	}
+
+	pubKey, err := lib.StringToHexString(provider.PubKey)
+	if err != nil {
+		return nil, 0, 0, lib.WrapError(ErrCreateReq, err)
+	}
+
+	requestID := "1"
+	message, err := p.morRPC.SessionPromptStreamEndRequest(sessionID, streamID, string(audioParamsJSON), prKey, requestID)
+	if err != nil {
+		return nil, 0, 0, fmt.Errorf("failed to create stream end request: %w", err)
+	}
+
+	// Send request and handle streaming response
+	result, ttftMs, totalTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, message, pubKey, "audio_transcription")
+	if err != nil {
+		return nil, 0, 0, fmt.Errorf("failed to process stream end request: %w", err)
+	}
+
+	p.log.Debugf("Successfully completed streaming session %s with TTFT: %dms, tokens: %d", streamID, ttftMs, totalTokens)
+	return result, ttftMs, totalTokens, nil
+}
+
+// detectAudioContentType detects the content type of an audio file based on its extension
+func detectAudioContentType(filePath string) string {
+	ext := strings.ToLower(filepath.Ext(filePath))
+
+	contentTypes := map[string]string{
+		".mp3":  "audio/mpeg",
+		".wav":  "audio/wav",
+		".wave": "audio/wav",
+		".ogg":  "audio/ogg",
+		".flac": "audio/flac",
+		".aac":  "audio/aac",
+		".m4a":  "audio/mp4",
+		".webm": "audio/webm",
+		".opus": "audio/opus",
+		".wma":  "audio/x-ms-wma",
+		".amr":  "audio/amr",
+		".3gp":  "audio/3gpp",
+		".aiff": "audio/aiff",
+	}
+
+	if contentType, exists := contentTypes[ext]; exists {
+		return contentType
+	}
+	return "audio/mpeg" // default
 }
