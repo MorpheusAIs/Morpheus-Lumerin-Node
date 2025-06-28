@@ -59,7 +59,7 @@ func (w *LogWatcherPolling) Watch(ctx context.Context, contractAddr common.Addre
 
 func (w *LogWatcherPolling) pollReconnect(ctx context.Context, quit <-chan struct{}, nextFromBlock *big.Int, contractAddr common.Address, mapper EventMapper, sink chan interface{}) (*big.Int, error) {
 	var lastErr error
-	for i := 0; i < w.maxReconnects || w.maxReconnects == 0; i++ {
+	for i := 0; i < w.maxReconnects || w.maxReconnects == -1; i++ {
 		// for any of those cases, we should stop retrying
 		select {
 		case <-quit:
@@ -73,7 +73,7 @@ func (w *LogWatcherPolling) pollReconnect(ctx context.Context, quit <-chan struc
 			return newNextFromBlock, nil
 		}
 		maxReconnects := fmt.Sprintf("%d", w.maxReconnects)
-		if w.maxReconnects == 0 {
+		if w.maxReconnects == -1 {
 			maxReconnects = "∞"
 		}
 		w.log.Warnf("request error, retrying (%d/%s): %s", i, maxReconnects, err)
@@ -125,6 +125,8 @@ func (w *LogWatcherPolling) pollChanges(ctx context.Context, nextFromBlock *big.
 
 	w.log.Debugf("requesting changes from %s to %s block", query.FromBlock.String(), query.ToBlock.String())
 	sub, err := w.client.FilterLogs(ctx, query)
+	nextFromBlock.Add(currentBlock.Number, big.NewInt(1))
+
 	if err != nil {
 		return nextFromBlock, err
 	}
@@ -147,8 +149,6 @@ func (w *LogWatcherPolling) pollChanges(ctx context.Context, nextFromBlock *big.
 		case sink <- event:
 		}
 	}
-
-	nextFromBlock.Add(currentBlock.Number, big.NewInt(1))
 
 	select {
 	case <-quit:

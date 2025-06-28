@@ -90,11 +90,11 @@ func (w *LogWatcherSubscription) Watch(ctx context.Context, contractAddr common.
 func (w *LogWatcherSubscription) subscribeFilterLogsRetry(ctx context.Context, query ethereum.FilterQuery, ch chan<- types.Log) (ethereum.Subscription, error) {
 	var lastErr error
 
-	for attempts := 0; attempts < w.maxReconnects || w.maxReconnects == 0; attempts++ {
+	for attempts := 0; attempts < w.maxReconnects || w.maxReconnects == -1; attempts++ {
 		sub, err := w.client.SubscribeFilterLogs(ctx, query, ch)
 		if err != nil {
 			maxReconnects := fmt.Sprintf("%d", w.maxReconnects)
-			if w.maxReconnects == 0 {
+			if w.maxReconnects == -1 {
 				maxReconnects = "∞"
 			}
 			w.log.Warnf("subscription error, retrying (%d/%s): %s", attempts, maxReconnects, err)
