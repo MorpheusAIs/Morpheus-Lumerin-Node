@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	c "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
@@ -201,7 +202,7 @@ func (a *OpenAI) readTranscriptionStream(ctx context.Context, body io.Reader, cb
 	return nil
 }
 
-func (a *OpenAI) AudioTranscription(ctx context.Context, audioRequest *gcs.AudioTranscriptionRequest, base64Audio string, cb gcs.CompletionCallback) error {
+func (a *OpenAI) AudioTranscription(ctx context.Context, audioRequest *gcs.AudioTranscriptionRequest, cb gcs.CompletionCallback) error {
 	audioRequest.Model = a.modelName
 
 	// Prepare the request
@@ -245,16 +246,15 @@ func (a *OpenAI) prepareTranscriptionRequest(ctx context.Context, audioRequest *
 	if err != nil {
 		return nil, fmt.Errorf("failed to open audio file: %w", err)
 	}
-	defer file.Close()
 
 	// Create multipart form data
-	body, contentType, err := a.createMultipartForm(file, audioRequest)
+	pr, contentType, err := a.createMultipartForm(file, audioRequest)
 	if err != nil {
 		return nil, err
 	}
 
 	// Create the request
-	req, err := http.NewRequestWithContext(ctx, "POST", a.baseURL, body)
+	req, err := http.NewRequestWithContext(ctx, "POST", a.baseURL, pr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -269,31 +269,30 @@ func (a *OpenAI) prepareTranscriptionRequest(ctx context.Context, audioRequest *
 	return req, nil
 }
 
-func (a *OpenAI) createMultipartForm(file *os.File, audioRequest *gcs.AudioTranscriptionRequest) (*bytes.Buffer, string, error) {
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
+func (a *OpenAI) createMultipartForm(
+	file *os.File,
+	audioReq *gcs.AudioTranscriptionRequest,
+) (*io.PipeReader, string, error) {
+	pr, pw := io.Pipe()
+	mw := multipart.NewWriter(pw)
 
-	// Add the model parameter
-	if err := writer.WriteField("model", audioRequest.Model); err != nil {
-		return nil, "", fmt.Errorf("failed to add model field: %w", err)
-	}
+	go func() {
+		defer pw.Close()
+		defer mw.Close()
+		defer file.Close()
 
-	// Add optional parameters if provided
-	if err := a.addOptionalFields(writer, audioRequest); err != nil {
-		return nil, "", err
-	}
+		_ = mw.WriteField("model", audioReq.Model)
+		_ = a.addOptionalFields(mw, audioReq)
 
-	// Add the file part
-	if err := a.addFilePart(writer, file); err != nil {
-		return nil, "", err
-	}
+		// file part
+		part, _ := mw.CreateFormFile("file", filepath.Base(file.Name()))
+		_, err := io.Copy(part, file) // streamed, no big buffer
+		if err != nil {
+			pw.CloseWithError(err) // propagate errors
+		}
+	}()
 
-	// Close the multipart writer
-	if err := writer.Close(); err != nil {
-		return nil, "", fmt.Errorf("failed to close multipart writer: %w", err)
-	}
-
-	return body, writer.FormDataContentType(), nil
+	return pr, mw.FormDataContentType(), nil
 }
 
 func (a *OpenAI) addOptionalFields(writer *multipart.Writer, audioRequest *gcs.AudioTranscriptionRequest) error {
@@ -358,8 +357,6 @@ func (a *OpenAI) addFilePart(writer *multipart.Writer, file *os.File) error {
 }
 
 func (a *OpenAI) processTranscriptionResponse(ctx context.Context, responseBody []byte, format openai.AudioResponseFormat, cb gcs.CompletionCallback) error {
-	a.log.Debugf("Transcription response: %s", string(responseBody))
-
 	if format == openai.AudioResponseFormatJSON || format == openai.AudioResponseFormatVerboseJSON {
 		// Create a transcription response wrapper since we don't have a direct openai.AudioResponse struct
 		var transcriptionResponse openai.AudioResponse

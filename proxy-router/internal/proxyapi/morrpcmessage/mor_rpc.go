@@ -5,6 +5,8 @@ import (
 	"math/big"
 	"time"
 
+	"encoding/base64"
+
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -228,6 +230,86 @@ func (m *MORRPCMessage) GetAgentToolsResponse(message string, providerPrivateKey
 	}, nil
 }
 
+// Audio streaming response methods
+func (m *MORRPCMessage) SessionPromptStreamStartResponse(streamID string, status string, providerPrivateKeyHex lib.HexString, requestId string) (*RpcResponse, error) {
+	params := SessionPromptStreamStartRes{
+		StreamID:  streamID,
+		Status:    status,
+		Timestamp: m.generateTimestamp(),
+	}
+
+	signature, err := m.generateSignature(params, providerPrivateKeyHex)
+	if err != nil {
+		return &RpcResponse{}, err
+	}
+	params.Signature = signature
+
+	paramsBytes, err := json.Marshal(params)
+	if err != nil {
+		return &RpcResponse{}, err
+	}
+
+	paramsJSON := json.RawMessage(paramsBytes)
+
+	return &RpcResponse{
+		ID:     requestId,
+		Result: &paramsJSON,
+	}, nil
+}
+
+func (m *MORRPCMessage) SessionPromptStreamChunkResponse(streamID string, chunkIndex uint32, status string, providerPrivateKeyHex lib.HexString, requestId string) (*RpcResponse, error) {
+	params := SessionPromptStreamChunkRes{
+		StreamID:   streamID,
+		ChunkIndex: chunkIndex,
+		Status:     status,
+		Timestamp:  m.generateTimestamp(),
+	}
+
+	signature, err := m.generateSignature(params, providerPrivateKeyHex)
+	if err != nil {
+		return &RpcResponse{}, err
+	}
+	params.Signature = signature
+
+	paramsBytes, err := json.Marshal(params)
+	if err != nil {
+		return &RpcResponse{}, err
+	}
+
+	paramsJSON := json.RawMessage(paramsBytes)
+
+	return &RpcResponse{
+		ID:     requestId,
+		Result: &paramsJSON,
+	}, nil
+}
+
+func (m *MORRPCMessage) SessionPromptStreamEndResponse(streamID string, message string, providerPrivateKeyHex lib.HexString, requestId string) (*RpcResponse, error) {
+	params := SessionPromptStreamEndRes{
+		StreamID:  streamID,
+		Message:   message,
+		Timestamp: m.generateTimestamp(),
+	}
+
+	signature, err := m.generateSignature(params, providerPrivateKeyHex)
+	if err != nil {
+		return &RpcResponse{}, err
+	}
+	params.Signature = signature
+
+	paramsBytes, err := json.Marshal(params)
+	if err != nil {
+		return &RpcResponse{}, err
+	}
+
+	paramsJSON := json.RawMessage(paramsBytes)
+
+	return &RpcResponse{
+		ID:     requestId,
+		Result: &paramsJSON,
+	}, nil
+}
+
 // ERRORS
 
 func (m *MORRPCMessage) ResponseError(message string, privateKeyHex lib.HexString, requestId string) (*RpcResponse, error) {
@@ -426,6 +508,96 @@ func (m *MORRPCMessage) SessionReportRequest(sessionID common.Hash, userPrivateK
 	if err != nil {
 		return &RPCMessage{}, err
 	}
+	return &RPCMessage{
+		ID:     requestId,
+		Method: method,
+		Params: serializedParams,
+	}, nil
+}
+
+func (m *MORRPCMessage) SessionPromptStreamStartRequest(sessionID common.Hash, streamID string, totalChunks uint32, contentType string, fileSize uint64, userPrivateKeyHex lib.HexString, requestId string) (*RPCMessage, error) {
+	method := "session.prompt.stream.start"
+
+	params := SessionPromptStreamStartReq{
+		SessionID:   sessionID,
+		StreamID:    streamID,
+		TotalChunks: totalChunks,
+		FileSize:    fileSize,
+		ContentType: contentType,
+		Timestamp:   m.generateTimestamp(),
+	}
+
+	signature, err := m.generateSignature(params, userPrivateKeyHex)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
+	params.Signature = signature
+
+	serializedParams, err := json.Marshal(params)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
+
+	return &RPCMessage{
+		ID:     requestId,
+		Method: method,
+		Params: serializedParams,
+	}, nil
+}
+
+func (m *MORRPCMessage) SessionPromptStreamChunkRequest(sessionID common.Hash, streamID string, chunkIndex uint32, data []byte, userPrivateKeyHex lib.HexString, requestId string) (*RPCMessage, error) {
+	method := "session.prompt.stream.chunk"
+
+	// Encode data as base64 string
+	chunkData := base64.StdEncoding.EncodeToString(data)
+
+	params := SessionPromptStreamChunkReq{
+		SessionID:  sessionID,
+		StreamID:   streamID,
+		ChunkIndex: chunkIndex,
+		ChunkData:  chunkData,
+		Timestamp:  m.generateTimestamp(),
+	}
+
+	signature, err := m.generateSignature(params, userPrivateKeyHex)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
+	params.Signature = signature
+
+	serializedParams, err := json.Marshal(params)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
+
+	return &RPCMessage{
+		ID:     requestId,
+		Method: method,
+		Params: serializedParams,
+	}, nil
+}
+
+func (m *MORRPCMessage) SessionPromptStreamEndRequest(sessionID common.Hash, streamID string, audioRequestParam string, userPrivateKeyHex lib.HexString, requestId string) (*RPCMessage, error) {
+	method := "session.prompt.stream.end"
+
+	params := SessionPromptStreamEndReq{
+		SessionID:         sessionID,
+		StreamID:          streamID,
+		AudioRequestParam: audioRequestParam,
+		Timestamp:         m.generateTimestamp(),
+	}
+
+	signature, err := m.generateSignature(params, userPrivateKeyHex)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
+	params.Signature = signature
+
+	serializedParams, err := json.Marshal(params)
+	if err != nil {
+		return &RPCMessage{}, err
+	}
+
 	return &RPCMessage{
 		ID:     requestId,
 		Method: method,

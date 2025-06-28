@@ -9,7 +9,7 @@ import (
 
 type AIEngineStream interface {
 	Prompt(ctx context.Context, prompt *openai.ChatCompletionRequest, cb genericchatstorage.CompletionCallback) error
-	AudioTranscription(ctx context.Context, prompt *genericchatstorage.AudioTranscriptionRequest, base64Audio string, cb genericchatstorage.CompletionCallback) error
+	AudioTranscription(ctx context.Context, prompt *genericchatstorage.AudioTranscriptionRequest, cb genericchatstorage.CompletionCallback) error
 	ApiType() string
 }
 
