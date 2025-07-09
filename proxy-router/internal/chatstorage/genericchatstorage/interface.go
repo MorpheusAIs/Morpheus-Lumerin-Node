@@ -136,3 +136,11 @@ type AudioTranscriptionRequest struct {
 	TimestampGranularity   openai.TranscriptionTimestampGranularity
 	Stream                 bool // Whether to stream the transcription results
 }
+
+type AudioSpeechRequest struct {
+	Model          string
+	Input          string
+	Voice          string
+	ResponseFormat string
+	Speed          float64
+}
