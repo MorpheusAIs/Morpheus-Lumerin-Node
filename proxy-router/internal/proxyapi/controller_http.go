@@ -1572,11 +1572,11 @@ func (c *ProxyController) executeTranscription(ctx *gin.Context, adapter aiengin
 //	@Tags			audio
 //	@Accept			json
 //	@Produce		audio/mpeg
-//	@Param			session_id	header		string											false	"Session ID"	format(hex32)
-//	@Param			model_id	header		string											false	"Model ID"		format(hex32)
-//	@Param			chat_id		header		string											false	"Chat ID"		format(hex32)
-//	@Param			request		body		gsc.AudioSpeechRequest							true	"Audio Speech Request"
-//	@Success		200			{file}		binary
+//	@Param			session_id	header	string					false	"Session ID"	format(hex32)
+//	@Param			model_id	header	string					false	"Model ID"		format(hex32)
+//	@Param			chat_id		header	string					false	"Chat ID"		format(hex32)
+//	@Param			request		body	gsc.AudioSpeechRequest	true	"Audio Speech Request"
+//	@Success		200			{file}	binary
 //	@Security		BasicAuth
 //	@Router			/v1/audio/speech [post]
 func (c *ProxyController) AudioSpeech(ctx *gin.Context) {
