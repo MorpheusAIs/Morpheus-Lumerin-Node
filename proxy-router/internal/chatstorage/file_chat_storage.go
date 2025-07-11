@@ -63,7 +63,7 @@ func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool
 	if len(responses) > 0 {
 		isImageContent = responses[0].Type() == gcs.ChunkTypeImage
 		isVideoRawContent = responses[0].Type() == gcs.ChunkTypeVideo
-		isAudioContent = responses[0].Type() == gcs.ChunkTypeAudioTranscriptionText || 
+		isAudioContent = responses[0].Type() == gcs.ChunkTypeAudioTranscriptionText ||
 			responses[0].Type() == gcs.ChunkTypeAudioTranscriptionJson ||
 			responses[0].Type() == gcs.ChunkTypeAudioTranscriptionDelta
 	}
@@ -101,6 +101,17 @@ func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool
 			title = "Audio Transcription: " + p.Prompt
 		} else {
 			title = "Audio Transcription"
+		}
+	case *gcs.AudioSpeechRequest:
+		// Store audio speech request directly
+		newEntry = gcs.ChatMessage{
+			Prompt:            p,
+			Response:          strings.Join(resps, ""),
+			PromptAt:          promptAt.Unix(),
+			ResponseAt:        responseAt.Unix(),
+			IsImageContent:    isImageContent,
+			IsVideoRawContent: isVideoRawContent,
+			IsAudioContent:    isAudioContent,
 		}
 	default:
 		return fmt.Errorf("unsupported prompt type: %T", prompt)
