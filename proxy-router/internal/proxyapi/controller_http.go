@@ -84,6 +84,7 @@ func (s *ProxyController) RegisterRoutes(r interfaces.Router) {
 	r.DELETE("/v1/chats/:id", s.authConfig.CheckAuth("edit_chat_history"), s.DeleteChat)
 	r.POST("/v1/chats/:id", s.authConfig.CheckAuth("edit_chat_history"), s.UpdateChatTitle)
 	r.POST("/v1/audio/transcriptions", s.authConfig.CheckAuth("audio_transcription"), s.AudioTranscription)
+	r.POST("/v1/audio/speech", s.authConfig.CheckAuth("audio_speech"), s.AudioSpeech)
 
 	r.POST("/ipfs/pin", s.authConfig.CheckAuth("ipfs_pin"), s.Pin)
 	r.POST("/ipfs/unpin", s.authConfig.CheckAuth("ipfs_unpin"), s.Unpin)
@@ -1557,6 +1558,188 @@ func (c *ProxyController) executeTranscription(ctx *gin.Context, adapter aiengin
 
 		if err != nil {
 			return err
+		}
+
+		ctx.Writer.Flush()
+		return nil
+	})
+}
+
+// AudioSpeech godoc
+//
+//	@Summary		Generate Audio Speech
+//	@Description	Convert text to speech using TTS model
+//	@Tags			audio
+//	@Accept			json
+//	@Produce		audio/mpeg
+//	@Param			session_id	header	string					false	"Session ID"	format(hex32)
+//	@Param			model_id	header	string					false	"Model ID"		format(hex32)
+//	@Param			chat_id		header	string					false	"Chat ID"		format(hex32)
+//	@Param			request		body	gsc.AudioSpeechRequest	true	"Audio Speech Request"
+//	@Success		200			{file}	binary
+//	@Security		BasicAuth
+//	@Router			/v1/audio/speech [post]
+func (c *ProxyController) AudioSpeech(ctx *gin.Context) {
+	// Parse request
+	params, err := c.parseAudioSpeechParams(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Get AI adapter
+	chatID := params.head.ChatID
+	if chatID == (lib.Hash{}) {
+		var err error
+		chatID, err = lib.GetRandomHash()
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	adapter, err := c.aiEngine.GetAdapter(ctx, chatID.Hash, params.head.ModelID.Hash, params.head.SessionID.Hash, c.storeChatContext, c.forwardChatContext)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Prepare speech request
+	speechRequest := &gsc.AudioSpeechRequest{
+		Input:          params.input,
+		Voice:          params.voice,
+		ResponseFormat: params.responseFormat,
+		Speed:          params.speed,
+	}
+
+	// Process speech generation with callback
+	if err := c.executeSpeechGeneration(ctx, adapter, speechRequest); err != nil {
+		c.log.Errorf("error sending speech generation request: %s", err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
+type audioSpeechParams struct {
+	head           PromptHead
+	input          string
+	voice          string
+	responseFormat string
+	speed          float64
+}
+
+func (c *ProxyController) parseAudioSpeechParams(ctx *gin.Context) (*audioSpeechParams, error) {
+	var head PromptHead
+	if err := ctx.ShouldBindHeader(&head); err != nil {
+		return nil, err
+	}
+
+	var requestBody struct {
+		Input          string  `json:"input" binding:"required"`
+		Voice          string  `json:"voice" binding:"required"`
+		ResponseFormat string  `json:"response_format,omitempty"`
+		Speed          float64 `json:"speed,omitempty"`
+	}
+
+	if err := ctx.ShouldBindJSON(&requestBody); err != nil {
+		return nil, err
+	}
+
+	// Set defaults if not provided
+	if requestBody.ResponseFormat == "" {
+		requestBody.ResponseFormat = "mp3"
+	}
+	if requestBody.Speed == 0 {
+		requestBody.Speed = 1.0
+	}
+
+	// Validate voice parameter
+	validVoices := []string{"alloy", "echo", "fable", "onyx", "nova", "shimmer"}
+	isValidVoice := false
+	for _, validVoice := range validVoices {
+		if requestBody.Voice == validVoice {
+			isValidVoice = true
+			break
+		}
+	}
+	if !isValidVoice {
+		return nil, fmt.Errorf("invalid voice: %s. Valid voices are: %v", requestBody.Voice, validVoices)
+	}
+
+	// Validate response format
+	validFormats := []string{"mp3", "opus", "aac", "flac", "wav", "pcm"}
+	isValidFormat := false
+	for _, validFormat := range validFormats {
+		if requestBody.ResponseFormat == validFormat {
+			isValidFormat = true
+			break
+		}
+	}
+	if !isValidFormat {
+		return nil, fmt.Errorf("invalid response_format: %s. Valid formats are: %v", requestBody.ResponseFormat, validFormats)
+	}
+
+	// Validate speed
+	if requestBody.Speed < 0.25 || requestBody.Speed > 4.0 {
+		return nil, fmt.Errorf("invalid speed: %f. Speed must be between 0.25 and 4.0", requestBody.Speed)
+	}
+
+	params := &audioSpeechParams{
+		head:           head,
+		input:          requestBody.Input,
+		voice:          requestBody.Voice,
+		responseFormat: requestBody.ResponseFormat,
+		speed:          requestBody.Speed,
+	}
+
+	return params, nil
+}
+
+func (c *ProxyController) executeSpeechGeneration(ctx *gin.Context, adapter aiengine.AIEngineStream, request *gsc.AudioSpeechRequest) error {
+	return adapter.AudioSpeech(ctx, request, func(cbctx context.Context, completion gsc.Chunk, aiResponseError *gsc.AiEngineErrorResponse) error {
+		if aiResponseError != nil {
+			ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_JSON)
+			ctx.JSON(http.StatusBadRequest, aiResponseError)
+			return nil
+		}
+
+		// Set appropriate content type based on response format
+		contentType := "audio/mpeg" // default
+		switch request.ResponseFormat {
+		case "mp3":
+			contentType = "audio/mpeg"
+		case "opus":
+			contentType = "audio/opus"
+		case "aac":
+			contentType = "audio/aac"
+		case "flac":
+			contentType = "audio/flac"
+		case "wav":
+			contentType = "audio/wav"
+		case "pcm":
+			contentType = "audio/pcm"
+		}
+
+		ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, contentType)
+
+		// Handle audio speech response
+		switch completion.Type() {
+		case genericchatstorage.ChunkTypeAudioSpeech:
+			// Write binary audio data directly
+			audioData := completion.Data().([]byte)
+			_, err := ctx.Writer.Write(audioData)
+			if err != nil {
+				return err
+			}
+		default:
+			// Fallback for other response types
+			marshalledResponse, err := json.Marshal(completion.Data())
+			if err != nil {
+				return err
+			}
+			_, err = ctx.Writer.Write(marshalledResponse)
+			if err != nil {
+				return err
+			}
 		}
 
 		ctx.Writer.Flush()

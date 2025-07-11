@@ -19,6 +19,7 @@ const (
 	ChunkTypeAudioTranscriptionText  ChunkType = "audio-transcription-text"
 	ChunkTypeAudioTranscriptionJson  ChunkType = "audio-transcription-json"
 	ChunkTypeAudioTranscriptionDelta ChunkType = "audio-transcription-delta"
+	ChunkTypeAudioSpeech             ChunkType = "audio-speech"
 )
 
 type ChunkText struct {
@@ -340,6 +341,38 @@ func (c *ChunkAudioTranscriptionDelta) Data() interface{} {
 }
 
 var _ Chunk = &ChunkAudioTranscriptionDelta{}
+
+type ChunkAudioSpeech struct {
+	data []byte
+}
+
+func NewChunkAudioSpeech(data []byte) *ChunkAudioSpeech {
+	return &ChunkAudioSpeech{
+		data: data,
+	}
+}
+
+func (c *ChunkAudioSpeech) IsStreaming() bool {
+	return false
+}
+
+func (c *ChunkAudioSpeech) Tokens() int {
+	return len(c.data)
+}
+
+func (c *ChunkAudioSpeech) Type() ChunkType {
+	return ChunkTypeAudioSpeech
+}
+
+func (c *ChunkAudioSpeech) String() string {
+	return string(c.data)
+}
+
+func (c *ChunkAudioSpeech) Data() interface{} {
+	return c.data
+}
+
+var _ Chunk = &ChunkAudioSpeech{}
 
 type AiEngineErrorResponse struct {
 	ProviderModelError interface{} `json:"providerModelError"`

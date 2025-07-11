@@ -108,6 +108,10 @@ func (s *ProdiaSDXL) AudioTranscription(ctx context.Context, prompt *gcs.AudioTr
 	return fmt.Errorf("audio transcription not supported")
 }
 
+func (s *ProdiaSDXL) AudioSpeech(ctx context.Context, prompt *gcs.AudioSpeechRequest, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("audio speech not supported")
+}
+
 func (s *ProdiaSDXL) ApiType() string {
 	return API_TYPE_PRODIA_SDXL
 }

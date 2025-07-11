@@ -125,6 +125,10 @@ func (s *HyperbolicSD) AudioTranscription(ctx context.Context, prompt *gcs.Audio
 	return fmt.Errorf("audio transcription not supported")
 }
 
+func (s *HyperbolicSD) AudioSpeech(ctx context.Context, prompt *gcs.AudioSpeechRequest, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("audio speech not supported")
+}
+
 func (s *HyperbolicSD) ApiType() string {
 	return API_TYPE_HYPERBOLIC_SD
 }

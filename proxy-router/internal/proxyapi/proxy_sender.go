@@ -601,6 +601,24 @@ func (p *ProxyServiceSender) createAudioRequestMap(audioRequest *gcs.AudioTransc
 	return requestMap
 }
 
+// createAudioSpeechRequestMap builds a map from audio speech request parameters for RPC transmission
+func (p *ProxyServiceSender) createAudioSpeechRequestMap(audioRequest *gcs.AudioSpeechRequest) map[string]interface{} {
+	requestMap := map[string]interface{}{
+		"type":  "audio_speech",
+		"Input": audioRequest.Input,
+		"Voice": audioRequest.Voice,
+	}
+
+	if audioRequest.ResponseFormat != "" {
+		requestMap["ResponseFormat"] = audioRequest.ResponseFormat
+	}
+	if audioRequest.Speed != 0 {
+		requestMap["Speed"] = audioRequest.Speed
+	}
+
+	return requestMap
+}
+
 // updateSessionStats updates session statistics after request completion
 func (p *ProxyServiceSender) updateSessionStats(ctx context.Context, session sessionrepo.SessionModel, startTime int64, ttftMs, totalTokens int) error {
 	requestDuration := int(time.Now().Unix() - startTime)
@@ -674,7 +692,7 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 		TIMEOUT_TO_RECEIVE_FIRST_RESPONSE = time.Second * 30
 	)
 	var MAX_RETRIES = 5
-	if requestType == "audio_transcription" {
+	if requestType == "audio_transcription" || requestType == "audio_speech" {
 		MAX_RETRIES = 20 // Increase retries for audio transcription
 	}
 
@@ -849,6 +867,8 @@ func (p *ProxyServiceSender) processAIResponse(requestType string, aiResponse []
 	switch requestType {
 	case "audio_transcription":
 		return p.handleAudioTranscription(aiResponse, responses)
+	case "audio_speech":
+		return p.handleAudioSpeech(aiResponse, responses)
 	case "chat_completion":
 		return p.handleChatCompletion(aiResponse, responses)
 	default:
@@ -890,6 +910,30 @@ func (p *ProxyServiceSender) handleAudioTranscription(aiResponse []byte, respons
 	chunk := gcs.NewChunkAudioTranscriptionText(responseString)
 	responses = append(responses, responseString)
 	return chunk, chunk.Tokens(), true, nil
+}
+
+// handleAudioSpeech processes audio speech responses
+func (p *ProxyServiceSender) handleAudioSpeech(aiResponse []byte, responses []interface{}) (gcs.Chunk, int, bool, error) {
+	if aiResponse == nil || len(aiResponse) == 0 {
+		return nil, 0, false, lib.WrapError(ErrInvalidResponse, fmt.Errorf("empty audio speech response"))
+	}
+
+	var data []byte
+	err := json.Unmarshal(aiResponse, &data)
+	if err != nil {
+		return nil, 0, false, lib.WrapError(ErrInvalidResponse, fmt.Errorf("failed to parse audio speech response: %w", err))
+	}
+
+	if len(data) == 0 {
+		// Indicate end of speech response
+		chunk := gcs.NewChunkAudioSpeech([]byte{})
+		return chunk, 0, true, nil
+	}
+
+	// Audio speech responses are typically binary audio data
+	chunk := gcs.NewChunkAudioSpeech(data)
+	responses = append(responses, data)
+	return chunk, len(data), false, nil
 }
 
 // handleChatCompletion processes chat completion responses
@@ -1241,4 +1285,64 @@ func detectAudioContentType(filePath string) string {
 		return contentType
 	}
 	return "audio/mpeg" // default
+}
+
+// SendAudioSpeech sends audio speech generation request
+func (p *ProxyServiceSender) SendAudioSpeech(ctx context.Context, sessionID common.Hash, audioRequest *gcs.AudioSpeechRequest, cb gcs.CompletionCallback) (interface{}, error) {
+	// Validate session and get provider
+	session, provider, err := p.validateSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get private key for signing
+	prKey, err := p.privateKey.GetPrivateKey()
+	if err != nil {
+		return nil, ErrMissingPrKey
+	}
+
+	// Create audio speech request parameters
+	audioParams := p.createAudioSpeechRequestMap(audioRequest)
+
+	pubKey, err := lib.StringToHexString(provider.PubKey)
+	if err != nil {
+		return nil, lib.WrapError(ErrCreateReq, err)
+	}
+
+	requestID := "1"
+	message, err := p.morRPC.SessionPromptRequest(sessionID, audioParams, pubKey, prKey, requestID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create audio speech request: %w", err)
+	}
+
+	// Record start time for session stats
+	startTime := time.Now().Unix()
+
+	// Send request and handle response
+	result, ttftMs, totalTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, message, pubKey, "audio_speech")
+
+	// Handle errors with failover if enabled
+	if err != nil {
+		if !session.FailoverEnabled() {
+			return nil, lib.WrapError(ErrProvider, err)
+		}
+
+		// Handle failover
+		newSessionID, failoverErr := p.handleFailover(ctx, *session, cb)
+		if failoverErr != nil {
+			return nil, failoverErr
+		}
+
+		// Retry with new session
+		return p.SendAudioSpeech(ctx, newSessionID, audioRequest, cb)
+	}
+
+	// Update session statistics
+	if updateErr := p.updateSessionStats(ctx, *session, startTime, ttftMs, totalTokens); updateErr != nil {
+		// Log error but don't fail the request
+		p.log.Error("Failed to update session stats", updateErr)
+	}
+
+	p.log.Debugf("Successfully completed audio speech generation for session %s with TTFT: %dms, tokens: %d", sessionID.Hex(), ttftMs, totalTokens)
+	return result, nil
 }

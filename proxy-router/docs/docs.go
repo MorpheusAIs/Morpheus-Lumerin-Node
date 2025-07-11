@@ -2578,6 +2578,66 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/audio/speech": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Convert text to speech using TTS model",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "audio/mpeg"
+                ],
+                "tags": [
+                    "audio"
+                ],
+                "summary": "Generate Audio Speech",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "hex32",
+                        "description": "Session ID",
+                        "name": "session_id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "hex32",
+                        "description": "Model ID",
+                        "name": "model_id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "hex32",
+                        "description": "Chat ID",
+                        "name": "chat_id",
+                        "in": "header"
+                    },
+                    {
+                        "description": "Audio Speech Request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/genericchatstorage.AudioSpeechRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/audio/transcriptions": {
             "post": {
                 "security": [
@@ -3298,6 +3358,26 @@ const docTemplate = `{
                 }
             }
         },
+        "genericchatstorage.AudioSpeechRequest": {
+            "type": "object",
+            "properties": {
+                "input": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "responseFormat": {
+                    "type": "string"
+                },
+                "speed": {
+                    "type": "number"
+                },
+                "voice": {
+                    "type": "string"
+                }
+            }
+        },
         "genericchatstorage.Chat": {
             "type": "object",
             "properties": {
@@ -3314,33 +3394,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "title": {
-                    "type": "string"
-                }
-            }
-        },
-        "genericchatstorage.ChatCompletionMessage": {
-            "type": "object",
-            "properties": {
-                "content": {
-                    "type": "string"
-                },
-                "name": {
-                    "description": "This property isn't in the official documentation, but it's in\nthe documentation for the official library for python:\n- https://github.com/openai/openai-python/blob/main/chatml.md\n- https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb",
-                    "type": "string"
-                },
-                "role": {
-                    "type": "string"
-                },
-                "tool_call_id": {
-                    "description": "For Role=tool prompts this should be set to the ID given in the assistant's prior request to call a tool.",
-                    "type": "string"
-                }
-            }
-        },
-        "genericchatstorage.ChatCompletionResponseFormat": {
-            "type": "object",
-            "properties": {
-                "type": {
                     "type": "string"
                 }
             }
@@ -3368,15 +3421,16 @@ const docTemplate = `{
         "genericchatstorage.ChatMessage": {
             "type": "object",
             "properties": {
+                "isAudioContent": {
+                    "type": "boolean"
+                },
                 "isImageContent": {
                     "type": "boolean"
                 },
                 "isVideoRawContent": {
                     "type": "boolean"
                 },
-                "prompt": {
-                    "$ref": "#/definitions/genericchatstorage.OpenAiCompletionRequest"
-                },
+                "prompt": {},
                 "promptAt": {
                     "type": "integer"
                 },
@@ -3385,77 +3439,6 @@ const docTemplate = `{
                 },
                 "responseAt": {
                     "type": "integer"
-                }
-            }
-        },
-        "genericchatstorage.OpenAiCompletionRequest": {
-            "type": "object",
-            "properties": {
-                "frequency_penalty": {
-                    "type": "number"
-                },
-                "function_call": {
-                    "description": "Deprecated: use ToolChoice instead."
-                },
-                "logit_bias": {
-                    "description": "LogitBias is must be a token id string (specified by their token ID in the tokenizer), not a word string.\nincorrect: ` + "`" + `\"logit_bias\":{\"You\": 6}` + "`" + `, correct: ` + "`" + `\"logit_bias\":{\"1639\": 6}` + "`" + `\nrefs: https://platform.openai.com/docs/api-reference/chat/create#chat/create-logit_bias",
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "integer"
-                    }
-                },
-                "logprobs": {
-                    "description": "LogProbs indicates whether to return log probabilities of the output tokens or not.\nIf true, returns the log probabilities of each output token returned in the content of message.\nThis option is currently not available on the gpt-4-vision-preview model.",
-                    "type": "boolean"
-                },
-                "max_tokens": {
-                    "type": "integer"
-                },
-                "messages": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/genericchatstorage.ChatCompletionMessage"
-                    }
-                },
-                "model": {
-                    "type": "string"
-                },
-                "n": {
-                    "type": "integer"
-                },
-                "presence_penalty": {
-                    "type": "number"
-                },
-                "response_format": {
-                    "$ref": "#/definitions/genericchatstorage.ChatCompletionResponseFormat"
-                },
-                "seed": {
-                    "type": "integer"
-                },
-                "stop": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "stream": {
-                    "type": "boolean"
-                },
-                "temperature": {
-                    "type": "number"
-                },
-                "tool_choice": {
-                    "description": "This can be either a string or an ToolChoice object."
-                },
-                "top_logprobs": {
-                    "description": "TopLogProbs is an integer between 0 and 5 specifying the number of most likely tokens to return at each\ntoken position, each with an associated log probability.\nlogprobs must be set to true if this parameter is used.",
-                    "type": "integer"
-                },
-                "top_p": {
-                    "type": "number"
-                },
-                "user": {
-                    "type": "string"
                 }
             }
         },
