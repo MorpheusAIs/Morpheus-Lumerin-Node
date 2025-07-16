@@ -1652,37 +1652,6 @@ func (c *ProxyController) parseAudioSpeechParams(ctx *gin.Context) (*audioSpeech
 		requestBody.Speed = 1.0
 	}
 
-	// Validate voice parameter
-	validVoices := []string{"alloy", "echo", "fable", "onyx", "nova", "shimmer"}
-	isValidVoice := false
-	for _, validVoice := range validVoices {
-		if requestBody.Voice == validVoice {
-			isValidVoice = true
-			break
-		}
-	}
-	if !isValidVoice {
-		return nil, fmt.Errorf("invalid voice: %s. Valid voices are: %v", requestBody.Voice, validVoices)
-	}
-
-	// Validate response format
-	validFormats := []string{"mp3", "opus", "aac", "flac", "wav", "pcm"}
-	isValidFormat := false
-	for _, validFormat := range validFormats {
-		if requestBody.ResponseFormat == validFormat {
-			isValidFormat = true
-			break
-		}
-	}
-	if !isValidFormat {
-		return nil, fmt.Errorf("invalid response_format: %s. Valid formats are: %v", requestBody.ResponseFormat, validFormats)
-	}
-
-	// Validate speed
-	if requestBody.Speed < 0.25 || requestBody.Speed > 4.0 {
-		return nil, fmt.Errorf("invalid speed: %f. Speed must be between 0.25 and 4.0", requestBody.Speed)
-	}
-
 	params := &audioSpeechParams{
 		head:           head,
 		input:          requestBody.Input,
