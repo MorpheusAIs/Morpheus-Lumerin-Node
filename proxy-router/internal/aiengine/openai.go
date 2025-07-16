@@ -83,7 +83,7 @@ func (a *OpenAI) Prompt(ctx context.Context, compl *openai.ChatCompletionRequest
 }
 
 func (a *OpenAI) readResponse(ctx context.Context, body io.Reader, cb gcs.CompletionCallback) error {
-	var compl openai.ChatCompletionResponse
+	var compl gcs.ChatCompletionResponseExtra
 	if err := json.NewDecoder(body).Decode(&compl); err != nil {
 		return fmt.Errorf("failed to decode response: %v", err)
 	}
@@ -117,7 +117,7 @@ func (a *OpenAI) readStream(ctx context.Context, body io.Reader, cb gcs.Completi
 
 		if strings.HasPrefix(line, StreamDataPrefix) {
 			data := line[len(StreamDataPrefix):] // Skip the "data: " prefix
-			var compl openai.ChatCompletionStreamResponse
+			var compl gcs.ChatCompletionStreamResponseExtra
 			if err := json.Unmarshal([]byte(data), &compl); err != nil {
 				if isStreamFinished(data) {
 					return nil
@@ -359,7 +359,7 @@ func (a *OpenAI) addFilePart(writer *multipart.Writer, file *os.File) error {
 func (a *OpenAI) processTranscriptionResponse(ctx context.Context, responseBody []byte, format openai.AudioResponseFormat, cb gcs.CompletionCallback) error {
 	if format == openai.AudioResponseFormatJSON || format == openai.AudioResponseFormatVerboseJSON {
 		// Create a transcription response wrapper since we don't have a direct openai.AudioResponse struct
-		var transcriptionResponse openai.AudioResponse
+		var transcriptionResponse gcs.AudioResponseExtra
 		if err := json.Unmarshal(responseBody, &transcriptionResponse); err != nil {
 			return fmt.Errorf("failed to parse transcription response: %w", err)
 		}

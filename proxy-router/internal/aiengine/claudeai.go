@@ -133,7 +133,7 @@ func (a *ClaudeAI) readResponse(ctx context.Context, body io.Reader, cb gcs.Comp
 		return fmt.Errorf("failed to decode response: %v", err)
 	}
 
-	var openaiCompl openai.ChatCompletionResponse
+	var openaiCompl gcs.ChatCompletionResponseExtra
 	openaiCompl.ID = compl.ID
 	openaiCompl.Model = compl.Model
 	openaiCompl.Choices = make([]openai.ChatCompletionChoice, len(compl.Content))
@@ -197,7 +197,7 @@ func (a *ClaudeAI) readStream(ctx context.Context, body io.Reader, cb gcs.Comple
 				model = compl.Message.Model
 			}
 			if compl.Delta.Text != "" || compl.ContentBlock.Text != "" {
-				openaiCompl := openai.ChatCompletionStreamResponse{}
+				openaiCompl := gcs.ChatCompletionStreamResponseExtra{}
 				openaiCompl.Choices = make([]openai.ChatCompletionStreamChoice, 1)
 				openaiCompl.Choices[0].Delta.Content = compl.Delta.Text
 				openaiCompl.Choices[0].Delta.Role = role

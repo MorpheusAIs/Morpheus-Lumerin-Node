@@ -872,7 +872,7 @@ func (p *ProxyServiceSender) handleAudioTranscription(aiResponse []byte, respons
 	}
 
 	// Try to parse as JSON response first
-	var jsonResponse openai.AudioResponse
+	var jsonResponse gcs.AudioResponseExtra
 	err = json.Unmarshal(aiResponse, &jsonResponse)
 	if err == nil {
 		chunk := gcs.NewChunkAudioTranscriptionJson(jsonResponse)
@@ -895,7 +895,7 @@ func (p *ProxyServiceSender) handleAudioTranscription(aiResponse []byte, respons
 // handleChatCompletion processes chat completion responses
 func (p *ProxyServiceSender) handleChatCompletion(aiResponse []byte, responses []interface{}) (gcs.Chunk, int, bool, error) {
 	// Try to parse as streaming response
-	var streamResponse openai.ChatCompletionStreamResponse
+	var streamResponse gcs.ChatCompletionStreamResponseExtra
 	err := json.Unmarshal(aiResponse, &streamResponse)
 	if err == nil && streamResponse.Usage == nil && len(streamResponse.Choices) > 0 {
 		choices := streamResponse.Choices
@@ -914,7 +914,7 @@ func (p *ProxyServiceSender) handleChatCompletion(aiResponse []byte, responses [
 	}
 
 	// Try to parse as full completion response
-	var chatResponse openai.ChatCompletionResponse
+	var chatResponse gcs.ChatCompletionResponseExtra
 	err = json.Unmarshal(aiResponse, &chatResponse)
 	if err == nil && len(chatResponse.Choices) > 0 {
 		chunk := gcs.NewChunkText(&chatResponse)

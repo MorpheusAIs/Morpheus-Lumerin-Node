@@ -3,8 +3,6 @@ package genericchatstorage
 import (
 	"context"
 	"encoding/json"
-
-	"github.com/sashabaranov/go-openai"
 )
 
 type CompletionCallback func(ctx context.Context, completion Chunk, aiEngineErrorResponse *AiEngineErrorResponse) error
@@ -22,12 +20,12 @@ const (
 )
 
 type ChunkText struct {
-	data        *openai.ChatCompletionResponse
+	data        *ChatCompletionResponseExtra
 	isStreaming bool
 	tokenCount  int
 }
 
-func NewChunkText(data *openai.ChatCompletionResponse) *ChunkText {
+func NewChunkText(data *ChatCompletionResponseExtra) *ChunkText {
 	return &ChunkText{
 		data: data,
 	}
@@ -54,10 +52,10 @@ func (c *ChunkText) Data() interface{} {
 }
 
 type ChunkStreaming struct {
-	data *openai.ChatCompletionStreamResponse
+	data *ChatCompletionStreamResponseExtra
 }
 
-func NewChunkStreaming(data *openai.ChatCompletionStreamResponse) *ChunkStreaming {
+func NewChunkStreaming(data *ChatCompletionStreamResponseExtra) *ChunkStreaming {
 	return &ChunkStreaming{
 		data: data,
 	}
