@@ -619,7 +619,7 @@ func (p *ProxyServiceSender) updateSessionStats(ctx context.Context, session ses
 	return nil
 }
 
-func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.Hash, prompt *openai.ChatCompletionRequest, cb gcs.CompletionCallback) (interface{}, error) {
+func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.Hash, prompt *gcs.OpenAICompletionRequestExtra, cb gcs.CompletionCallback) (interface{}, error) {
 	// Validate session and get provider
 	session, provider, err := p.validateSession(ctx, sessionID)
 	if err != nil {

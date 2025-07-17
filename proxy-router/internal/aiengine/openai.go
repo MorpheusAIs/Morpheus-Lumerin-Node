@@ -42,7 +42,7 @@ func NewOpenAIEngine(modelName, baseURL, apiKey string, log lib.ILogger) *OpenAI
 	}
 }
 
-func (a *OpenAI) Prompt(ctx context.Context, compl *openai.ChatCompletionRequest, cb gcs.CompletionCallback) error {
+func (a *OpenAI) Prompt(ctx context.Context, compl *gcs.OpenAICompletionRequestExtra, cb gcs.CompletionCallback) error {
 	compl.Model = a.modelName
 	requestBody, err := json.Marshal(compl)
 	if err != nil {

@@ -17,7 +17,6 @@ import (
 	sessionrepo "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/session"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/sashabaranov/go-openai"
 )
 
 type ProxyReceiver struct {
@@ -74,8 +73,8 @@ func processAudioTranscription(message []byte, sourceLog lib.ILogger) (*genericc
 }
 
 // processChatRequest handles chat completion request processing
-func processChatRequest(message []byte, sourceLog lib.ILogger) (*openai.ChatCompletionRequest, error) {
-	var chatRequest *openai.ChatCompletionRequest
+func processChatRequest(message []byte, sourceLog lib.ILogger) (*genericchatstorage.OpenAICompletionRequestExtra, error) {
+	var chatRequest *genericchatstorage.OpenAICompletionRequestExtra
 	if err := json.Unmarshal(message, &chatRequest); err != nil {
 		return nil, lib.WrapError(fmt.Errorf("failed to unmarshal chat request"), err)
 	}
@@ -173,7 +172,7 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 
 	// Process request based on type
 	var audioTranscriptionReq *genericchatstorage.AudioTranscriptionRequest
-	var chatReq *openai.ChatCompletionRequest
+	var chatReq *genericchatstorage.OpenAICompletionRequestExtra
 
 	// Try to process as audio transcription first
 	audioTranscriptionReq, err = processAudioTranscription(payload, sourceLog)

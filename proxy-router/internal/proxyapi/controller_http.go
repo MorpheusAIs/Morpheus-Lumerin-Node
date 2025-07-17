@@ -177,7 +177,7 @@ func (s *ProxyController) InitiateSession(ctx *gin.Context) {
 //	@Router			/v1/chat/completions [post]
 func (c *ProxyController) Prompt(ctx *gin.Context) {
 	var (
-		body openai.ChatCompletionRequest
+		body gsc.OpenAICompletionRequestExtra
 		head PromptHead
 	)
 

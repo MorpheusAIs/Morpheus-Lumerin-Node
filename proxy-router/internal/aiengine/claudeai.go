@@ -87,7 +87,7 @@ func NewClaudeAIEngine(modelName, baseURL, apiKey string, log lib.ILogger) *Clau
 	}
 }
 
-func (a *ClaudeAI) Prompt(ctx context.Context, compl *openai.ChatCompletionRequest, cb gcs.CompletionCallback) error {
+func (a *ClaudeAI) Prompt(ctx context.Context, compl *gcs.OpenAICompletionRequestExtra, cb gcs.CompletionCallback) error {
 	compl.Model = a.modelName
 	compl.MaxTokens = 1024
 	requestBody, err := json.Marshal(compl)

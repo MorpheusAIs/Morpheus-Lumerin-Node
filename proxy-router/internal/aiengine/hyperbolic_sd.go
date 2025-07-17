@@ -11,7 +11,6 @@ import (
 	c "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
 	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
-	"github.com/sashabaranov/go-openai"
 )
 
 const API_TYPE_HYPERBOLIC_SD = "hyperbolic-sd"
@@ -47,7 +46,7 @@ func NewHyperbolicSDEngine(modelName, apiURL, apiKey string, parameters ModelPar
 	}
 }
 
-func (s *HyperbolicSD) Prompt(ctx context.Context, prompt *openai.ChatCompletionRequest, cb gcs.CompletionCallback) error {
+func (s *HyperbolicSD) Prompt(ctx context.Context, prompt *gcs.OpenAICompletionRequestExtra, cb gcs.CompletionCallback) error {
 	body := map[string]string{
 		"model_name": s.modelName,
 		"prompt":     prompt.Messages[len(prompt.Messages)-1].Content,

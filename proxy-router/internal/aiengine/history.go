@@ -7,7 +7,6 @@ import (
 	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/sashabaranov/go-openai"
 )
 
 type History struct {
@@ -30,7 +29,7 @@ func NewHistory(engine AIEngineStream, storage gcs.ChatStorageInterface, chatID,
 	}
 }
 
-func (h *History) Prompt(ctx context.Context, prompt *openai.ChatCompletionRequest, cb gcs.CompletionCallback) error {
+func (h *History) Prompt(ctx context.Context, prompt *gcs.OpenAICompletionRequestExtra, cb gcs.CompletionCallback) error {
 	isLocal := h.engine.ApiType() != "remote"
 	completions := make([]gcs.Chunk, 0)
 	startTime := time.Now()

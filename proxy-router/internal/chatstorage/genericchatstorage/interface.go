@@ -1,6 +1,8 @@
 package genericchatstorage
 
 import (
+	"encoding/json"
+	"reflect"
 	"time"
 
 	"github.com/sashabaranov/go-openai"
@@ -21,7 +23,7 @@ type ChatHistory struct {
 	Messages []ChatMessage `json:"messages"`
 }
 
-func (h *ChatHistory) AppendChatHistory(req *openai.ChatCompletionRequest) *openai.ChatCompletionRequest {
+func (h *ChatHistory) AppendChatHistory(req *OpenAICompletionRequestExtra) *OpenAICompletionRequestExtra {
 	if h == nil {
 		return req
 	}
@@ -135,4 +137,43 @@ type AudioTranscriptionRequest struct {
 	TimestampGranularities []openai.TranscriptionTimestampGranularity // Only for transcription.
 	TimestampGranularity   openai.TranscriptionTimestampGranularity
 	Stream                 bool // Whether to stream the transcription results
+}
+
+type OpenAICompletionRequestExtra struct {
+	openai.ChatCompletionRequest
+	Extra map[string]json.RawMessage `json:"-"`
+}
+
+func (c *OpenAICompletionRequestExtra) UnmarshalJSON(data []byte) error {
+	type base openai.ChatCompletionRequest
+	var known base
+	if err := json.Unmarshal(data, &known); err != nil {
+		return err
+	}
+	c.ChatCompletionRequest = openai.ChatCompletionRequest(known)
+
+	var all map[string]json.RawMessage
+	if err := json.Unmarshal(data, &all); err != nil {
+		return err
+	}
+	stripKnownKeys(all, reflect.TypeOf(known))
+	c.Extra = all
+	return nil
+}
+
+func (c OpenAICompletionRequestExtra) MarshalJSON() ([]byte, error) {
+	type base openai.ChatCompletionRequest
+	b, err := json.Marshal(base(c.ChatCompletionRequest))
+	if err != nil {
+		return nil, err
+	}
+
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, err
+	}
+	for k, v := range c.Extra {
+		m[k] = v
+	}
+	return json.Marshal(m)
 }

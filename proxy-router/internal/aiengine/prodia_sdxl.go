@@ -12,7 +12,6 @@ import (
 	c "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
 	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
-	"github.com/sashabaranov/go-openai"
 )
 
 const API_TYPE_PRODIA_SDXL = "prodia-sdxl"
@@ -37,7 +36,7 @@ func NewProdiaSDXLEngine(modelName, apiURL, apiKey string, log lib.ILogger) *Pro
 	}
 }
 
-func (s *ProdiaSDXL) Prompt(ctx context.Context, prompt *openai.ChatCompletionRequest, cb gcs.CompletionCallback) error {
+func (s *ProdiaSDXL) Prompt(ctx context.Context, prompt *gcs.OpenAICompletionRequestExtra, cb gcs.CompletionCallback) error {
 	body := map[string]string{
 		"model":  s.modelName,
 		"prompt": prompt.Messages[len(prompt.Messages)-1].Content,
