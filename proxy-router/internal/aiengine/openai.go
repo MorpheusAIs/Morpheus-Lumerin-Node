@@ -382,6 +382,109 @@ func (a *OpenAI) processTranscriptionResponse(ctx context.Context, responseBody 
 	}
 }
 
+func (a *OpenAI) AudioSpeech(ctx context.Context, audioRequest *gcs.AudioSpeechRequest, cb gcs.CompletionCallback) error {
+	audioRequest.Model = a.modelName
+
+	// Prepare the speech request
+	req, err := a.prepareSpeechRequest(ctx, audioRequest)
+	if err != nil {
+		return fmt.Errorf("failed to prepare speech request: %w", err)
+	}
+
+	// Send the request
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send speech request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return a.readError(ctx, resp.Body, cb)
+	}
+
+	// Stream the audio response in chunks
+	return a.streamAudioResponse(ctx, resp.Body, cb)
+}
+
+func (a *OpenAI) prepareSpeechRequest(ctx context.Context, audioRequest *gcs.AudioSpeechRequest) (*http.Request, error) {
+	// Create JSON request body
+	requestBody := map[string]interface{}{
+		"model": audioRequest.Model,
+		"input": audioRequest.Input,
+		"voice": audioRequest.Voice,
+	}
+
+	// Add optional parameters
+	if audioRequest.ResponseFormat != "" {
+		requestBody["response_format"] = audioRequest.ResponseFormat
+	}
+	if audioRequest.Speed != 0 {
+		requestBody["speed"] = audioRequest.Speed
+	}
+
+	jsonBody, err := json.Marshal(requestBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request body: %w", err)
+	}
+
+	// Create the request
+	req, err := http.NewRequestWithContext(ctx, "POST", a.baseURL, bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(c.HEADER_CONNECTION, c.CONNECTION_KEEP_ALIVE)
+	if a.apiKey != "" {
+		req.Header.Set(c.HEADER_AUTHORIZATION, fmt.Sprintf("%s %s", c.BEARER, a.apiKey))
+	}
+
+	return req, nil
+}
+
+func (a *OpenAI) streamAudioResponse(ctx context.Context, body io.Reader, cb gcs.CompletionCallback) error {
+	const chunkSize = 8192 // 8KB chunks
+	buffer := make([]byte, chunkSize)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		n, err := body.Read(buffer)
+		if n > 0 {
+			// Create a copy of the data to avoid buffer reuse issues
+			chunkData := make([]byte, n)
+			copy(chunkData, buffer[:n])
+
+			// Create audio speech chunk
+			chunk := gcs.NewChunkAudioSpeech(chunkData)
+
+			// Call the callback with the audio chunk
+			if cbErr := cb(ctx, chunk, nil); cbErr != nil {
+				return fmt.Errorf("callback failed: %w", cbErr)
+			}
+		}
+
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("failed to read response body: %w", err)
+		}
+	}
+
+	chunk := gcs.NewChunkAudioSpeech(nil) // Final chunk to indicate end of stream
+	if err := cb(ctx, chunk, nil); err != nil {
+		return fmt.Errorf("callback failed for final chunk: %w", err)
+	}
+
+	return nil
+}
+
 func (a *OpenAI) ApiType() string {
 	return API_TYPE_OPENAI
 }

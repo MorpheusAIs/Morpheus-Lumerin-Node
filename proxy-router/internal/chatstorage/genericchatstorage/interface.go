@@ -177,3 +177,11 @@ func (c OpenAICompletionRequestExtra) MarshalJSON() ([]byte, error) {
 	}
 	return json.Marshal(m)
 }
+
+type AudioSpeechRequest struct {
+	Model          string
+	Input          string
+	Voice          string
+	ResponseFormat string
+	Speed          float64
+}

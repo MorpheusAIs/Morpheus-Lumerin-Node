@@ -72,6 +72,24 @@ func processAudioTranscription(message []byte, sourceLog lib.ILogger) (*genericc
 	return audioRequest, nil
 }
 
+func processAudioSpeech(message []byte, sourceLog lib.ILogger) (*genericchatstorage.AudioSpeechRequest, error) {
+	var unknownReq map[string]interface{}
+	if err := json.Unmarshal(message, &unknownReq); err != nil {
+		return nil, lib.WrapError(fmt.Errorf("failed to unmarshal request"), err)
+	}
+
+	if unknownReq["type"] != "audio_speech" {
+		return nil, nil
+	}
+
+	var audioRequest *genericchatstorage.AudioSpeechRequest
+	if err := json.Unmarshal(message, &audioRequest); err != nil {
+		return nil, lib.WrapError(fmt.Errorf("failed to unmarshal audio speech request"), err)
+	}
+
+	return audioRequest, nil
+}
+
 // processChatRequest handles chat completion request processing
 func processChatRequest(message []byte, sourceLog lib.ILogger) (*genericchatstorage.OpenAICompletionRequestExtra, error) {
 	var chatRequest *genericchatstorage.OpenAICompletionRequestExtra
@@ -173,6 +191,7 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 	// Process request based on type
 	var audioTranscriptionReq *genericchatstorage.AudioTranscriptionRequest
 	var chatReq *genericchatstorage.OpenAICompletionRequestExtra
+	var audioSpeechReq *genericchatstorage.AudioSpeechRequest
 
 	// Try to process as audio transcription first
 	audioTranscriptionReq, err = processAudioTranscription(payload, sourceLog)
@@ -180,13 +199,21 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 		return handleError(err, "failed to process audio transcription", sourceLog)
 	}
 
-	// If not audio, process as chat completion
+	// If not audio transcription, try audio speech
 	if audioTranscriptionReq == nil {
+		audioSpeechReq, err = processAudioSpeech(payload, sourceLog)
+		if err != nil {
+			return handleError(err, "failed to process audio speech", sourceLog)
+		}
+	}
+
+	// If not audio, process as chat completion
+	if audioTranscriptionReq == nil && audioSpeechReq == nil {
 		chatReq, err = processChatRequest(payload, sourceLog)
 		if err != nil {
 			return handleError(err, "failed to process chat request", sourceLog)
 		}
-	} else {
+	} else if audioTranscriptionReq != nil {
 		defer os.Remove(audioTranscriptionReq.FilePath)
 	}
 
@@ -206,6 +233,9 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 	if audioTranscriptionReq != nil && audioTranscriptionReq.FilePath != "" {
 		sourceLog.Debugf("Processing audio transcription request")
 		err = adapter.AudioTranscription(ctx, audioTranscriptionReq, cb)
+	} else if audioSpeechReq != nil {
+		sourceLog.Debugf("Processing audio speech request")
+		err = adapter.AudioSpeech(ctx, audioSpeechReq, cb)
 	} else {
 		sourceLog.Debugf("Processing chat completion request")
 		err = adapter.Prompt(ctx, chatReq, cb)

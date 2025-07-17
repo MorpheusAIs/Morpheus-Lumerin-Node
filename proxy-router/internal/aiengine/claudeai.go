@@ -223,7 +223,11 @@ func (a *ClaudeAI) readStream(ctx context.Context, body io.Reader, cb gcs.Comple
 }
 
 func (a *ClaudeAI) AudioTranscription(ctx context.Context, prompt *gcs.AudioTranscriptionRequest, cb gcs.CompletionCallback) error {
-	return fmt.Errorf("audio transcription is not supported")
+	return fmt.Errorf("audio transcription not supported")
+}
+
+func (a *ClaudeAI) AudioSpeech(ctx context.Context, prompt *gcs.AudioSpeechRequest, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("audio speech not supported")
 }
 
 func (a *ClaudeAI) ApiType() string {
