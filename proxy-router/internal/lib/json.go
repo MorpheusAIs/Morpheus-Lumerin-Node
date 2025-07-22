@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
+	"strconv"
+	"strings"
 )
 
 // NormalizeJson returns normalized json message, without spaces and newlines
@@ -47,4 +50,41 @@ func ReadJSONFile(filePath string) (string, error) {
 	}
 
 	return string(fileContents), nil
+}
+
+func StripKnownKeys(m map[string]json.RawMessage, t reflect.Type) {
+	for i := 0; i < t.NumField(); i++ {
+		tag := t.Field(i).Tag.Get("json")
+		if tag == "" || tag == "-" {
+			continue
+		}
+		if comma := strings.Index(tag, ","); comma != -1 {
+			tag = tag[:comma]
+		}
+		delete(m, tag)
+	}
+}
+
+func ToJSONFragment(s string) json.RawMessage {
+	// If it already parses as JSON (number, bool, object, array, null) keep it.
+	if json.Valid([]byte(s)) {
+		return json.RawMessage(s)
+	}
+	// Otherwise treat it as a string.
+	return json.RawMessage(strconv.Quote(s))
+}
+
+// helper: build set of keys defined in struct tags
+func FormTagSet(t reflect.Type) map[string]struct{} {
+	set := make(map[string]struct{})
+	for i := 0; i < t.NumField(); i++ {
+		if tag, ok := t.Field(i).Tag.Lookup("form"); ok && tag != "-" {
+			name, _, _ := strings.Cut(tag, ",")
+			if name == "" {
+				name = t.Field(i).Name
+			}
+			set[name] = struct{}{}
+		}
+	}
+	return set
 }

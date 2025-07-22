@@ -566,59 +566,6 @@ func (p *ProxyServiceSender) handleFailover(ctx context.Context, session session
 	return newSessionID, nil
 }
 
-// createAudioRequestMap builds a map from audio request parameters for RPC transmission
-func (p *ProxyServiceSender) createAudioRequestMap(audioRequest *gcs.AudioTranscriptionRequest) map[string]interface{} {
-	requestMap := map[string]interface{}{
-		"type": "audio_transcription",
-	}
-
-	if audioRequest.Language != "" {
-		requestMap["Language"] = audioRequest.Language
-	}
-	if audioRequest.Prompt != "" {
-		requestMap["Prompt"] = audioRequest.Prompt
-	}
-	if audioRequest.Format != "" {
-		requestMap["Format"] = string(audioRequest.Format)
-	}
-	if audioRequest.Temperature != 0 {
-		requestMap["Temperature"] = audioRequest.Temperature
-	}
-	if audioRequest.TimestampGranularity != "" {
-		requestMap["TimestampGranularity"] = string(audioRequest.TimestampGranularity)
-	}
-	if len(audioRequest.TimestampGranularities) != 0 {
-		timestamps := make([]string, len(audioRequest.TimestampGranularities))
-		for i, granularity := range audioRequest.TimestampGranularities {
-			timestamps[i] = string(granularity)
-		}
-		requestMap["TimestampGranularities"] = timestamps
-	}
-	if audioRequest.Stream {
-		requestMap["Stream"] = audioRequest.Stream
-	}
-
-	return requestMap
-}
-
-// createAudioSpeechRequestMap builds a map from audio speech request parameters for RPC transmission
-func (p *ProxyServiceSender) createAudioSpeechRequestMap(audioRequest *gcs.AudioSpeechRequest) map[string]interface{} {
-	requestMap := map[string]interface{}{
-		"type":  "audio_speech",
-		"Input": audioRequest.Input,
-		"Voice": audioRequest.Voice,
-	}
-
-	if audioRequest.ResponseFormat != "" {
-		requestMap["ResponseFormat"] = audioRequest.ResponseFormat
-	}
-	if audioRequest.Speed != 0 {
-		requestMap["Speed"] = audioRequest.Speed
-	}
-
-	return requestMap
-}
-
 // updateSessionStats updates session statistics after request completion
 func (p *ProxyServiceSender) updateSessionStats(ctx context.Context, session sessionrepo.SessionModel, startTime int64, ttftMs, totalTokens int) error {
 	requestDuration := int(time.Now().Unix() - startTime)
@@ -1231,11 +1178,9 @@ func (p *ProxyServiceSender) sendStreamChunks(ctx context.Context, provider *sto
 
 // sendStreamEnd finalizes the streaming session and gets the transcription result with session statistics
 func (p *ProxyServiceSender) sendStreamEnd(ctx context.Context, provider *storages.User, sessionID common.Hash, streamID string, audioRequest *gcs.AudioTranscriptionRequest, prKey lib.HexString, cb gcs.CompletionCallback) (interface{}, int, int, error) {
-	// Create audio request parameters
-	audioParams := p.createAudioRequestMap(audioRequest)
-
 	// Marshal audio parameters
-	audioParamsJSON, err := json.Marshal(audioParams)
+	audioRequest.Extra["type"] = json.RawMessage(`"audio_transcription"`)
+	audioParamsJSON, err := json.Marshal(audioRequest)
 	if err != nil {
 		return nil, 0, 0, fmt.Errorf("failed to marshal audio parameters: %w", err)
 	}
@@ -1301,16 +1246,14 @@ func (p *ProxyServiceSender) SendAudioSpeech(ctx context.Context, sessionID comm
 		return nil, ErrMissingPrKey
 	}
 
-	// Create audio speech request parameters
-	audioParams := p.createAudioSpeechRequestMap(audioRequest)
-
 	pubKey, err := lib.StringToHexString(provider.PubKey)
 	if err != nil {
 		return nil, lib.WrapError(ErrCreateReq, err)
 	}
 
 	requestID := "1"
-	message, err := p.morRPC.SessionPromptRequest(sessionID, audioParams, pubKey, prKey, requestID)
+	audioRequest.Extra["type"] = json.RawMessage(`"audio_speech"`)
+	message, err := p.morRPC.SessionPromptRequest(sessionID, audioRequest, pubKey, prKey, requestID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create audio speech request: %w", err)
 	}

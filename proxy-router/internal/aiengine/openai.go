@@ -237,7 +237,7 @@ func (a *OpenAI) AudioTranscription(ctx context.Context, audioRequest *gcs.Audio
 		return fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	return a.processTranscriptionResponse(ctx, responseBody, audioRequest.Format, cb)
+	return a.processTranscriptionResponse(ctx, responseBody, string(audioRequest.Format), cb)
 }
 
 func (a *OpenAI) prepareTranscriptionRequest(ctx context.Context, audioRequest *gcs.AudioTranscriptionRequest) (*http.Request, error) {
@@ -281,83 +281,28 @@ func (a *OpenAI) createMultipartForm(
 		defer mw.Close()
 		defer file.Close()
 
-		_ = mw.WriteField("model", audioReq.Model)
-		_ = a.addOptionalFields(mw, audioReq)
+		audioReq.FilePath = ""
+		if err := lib.WriteForm(mw, audioReq); err != nil {
+			_ = pw.CloseWithError(err)
+			return
+		}
 
-		// file part
-		part, _ := mw.CreateFormFile("file", filepath.Base(file.Name()))
-		_, err := io.Copy(part, file) // streamed, no big buffer
+		part, err := mw.CreateFormFile("file", filepath.Base(file.Name()))
 		if err != nil {
-			pw.CloseWithError(err) // propagate errors
+			_ = pw.CloseWithError(err)
+			return
+		}
+		if _, err := io.Copy(part, file); err != nil {
+			_ = pw.CloseWithError(err)
+			return
 		}
 	}()
 
 	return pr, mw.FormDataContentType(), nil
 }
 
-func (a *OpenAI) addOptionalFields(writer *multipart.Writer, audioRequest *gcs.AudioTranscriptionRequest) error {
-	// Add optional parameters if provided
-	if audioRequest.Language != "" {
-		if err := writer.WriteField("language", audioRequest.Language); err != nil {
-			return fmt.Errorf("failed to add language field: %w", err)
-		}
-	}
-	if audioRequest.Prompt != "" {
-		if err := writer.WriteField("prompt", audioRequest.Prompt); err != nil {
-			return fmt.Errorf("failed to add prompt field: %w", err)
-		}
-	}
-	if audioRequest.Format != "" {
-		if err := writer.WriteField("response_format", string(audioRequest.Format)); err != nil {
-			return fmt.Errorf("failed to add response_format field: %w", err)
-		}
-	}
-	if audioRequest.Temperature != 0 {
-		if err := writer.WriteField("temperature", fmt.Sprintf("%f", audioRequest.Temperature)); err != nil {
-			return fmt.Errorf("failed to add temperature field: %w", err)
-		}
-	}
-	if audioRequest.TimestampGranularity != "" {
-		fmt.Println("Adding timestamp_granularity:", audioRequest.TimestampGranularity)
-		if err := writer.WriteField("timestamp_granularity", string(audioRequest.TimestampGranularity)); err != nil {
-			return fmt.Errorf("failed to add timestamp_granularity field: %w", err)
-		}
-	}
-	if len(audioRequest.TimestampGranularities) > 0 {
-		for _, granularity := range audioRequest.TimestampGranularities {
-			if err := writer.WriteField("timestamp_granularities[]", string(granularity)); err != nil {
-				return fmt.Errorf("failed to add timestamp_granularity field: %w", err)
-			}
-		}
-	}
-	if audioRequest.Stream {
-		if err := writer.WriteField("stream", "true"); err != nil {
-			return fmt.Errorf("failed to add stream field: %w", err)
-		}
-	}
-	return nil
-}
-
-func (a *OpenAI) addFilePart(writer *multipart.Writer, file *os.File) error {
-	fileInfo, err := file.Stat()
-	if err != nil {
-		return fmt.Errorf("failed to get file info: %w", err)
-	}
-
-	filePart, err := writer.CreateFormFile("file", fileInfo.Name())
-	if err != nil {
-		return fmt.Errorf("failed to create form file: %w", err)
-	}
-
-	if _, err := io.Copy(filePart, file); err != nil {
-		return fmt.Errorf("failed to copy file data: %w", err)
-	}
-
-	return nil
-}
-
-func (a *OpenAI) processTranscriptionResponse(ctx context.Context, responseBody []byte, format openai.AudioResponseFormat, cb gcs.CompletionCallback) error {
-	if format == openai.AudioResponseFormatJSON || format == openai.AudioResponseFormatVerboseJSON {
+func (a *OpenAI) processTranscriptionResponse(ctx context.Context, responseBody []byte, format string, cb gcs.CompletionCallback) error {
+	if format == "json" || format == "verbose_json" {
 		// Create a transcription response wrapper since we don't have a direct openai.AudioResponse struct
 		var transcriptionResponse gcs.AudioResponseExtra
 		if err := json.Unmarshal(responseBody, &transcriptionResponse); err != nil {
@@ -383,7 +328,7 @@ func (a *OpenAI) processTranscriptionResponse(ctx context.Context, responseBody 
 }
 
 func (a *OpenAI) AudioSpeech(ctx context.Context, audioRequest *gcs.AudioSpeechRequest, cb gcs.CompletionCallback) error {
-	audioRequest.Model = a.modelName
+	audioRequest.Model = openai.SpeechModel(a.modelName)
 
 	// Prepare the speech request
 	req, err := a.prepareSpeechRequest(ctx, audioRequest)
@@ -407,22 +352,7 @@ func (a *OpenAI) AudioSpeech(ctx context.Context, audioRequest *gcs.AudioSpeechR
 }
 
 func (a *OpenAI) prepareSpeechRequest(ctx context.Context, audioRequest *gcs.AudioSpeechRequest) (*http.Request, error) {
-	// Create JSON request body
-	requestBody := map[string]interface{}{
-		"model": audioRequest.Model,
-		"input": audioRequest.Input,
-		"voice": audioRequest.Voice,
-	}
-
-	// Add optional parameters
-	if audioRequest.ResponseFormat != "" {
-		requestBody["response_format"] = audioRequest.ResponseFormat
-	}
-	if audioRequest.Speed != 0 {
-		requestBody["speed"] = audioRequest.Speed
-	}
-
-	jsonBody, err := json.Marshal(requestBody)
+	jsonBody, err := json.Marshal(audioRequest)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request body: %w", err)
 	}

@@ -1,8 +1,6 @@
 package genericchatstorage
 
 import (
-	"encoding/json"
-	"reflect"
 	"time"
 
 	"github.com/sashabaranov/go-openai"
@@ -122,66 +120,4 @@ type OpenAiCompletionRequest struct {
 	FunctionCall any `json:"function_call,omitempty"`
 	// This can be either a string or an ToolChoice object.
 	ToolChoice any `json:"tool_choice,omitempty"`
-}
-
-type AudioTranscriptionRequest struct {
-	Model string
-
-	// FilePath is either an existing file in your filesystem
-	FilePath string
-
-	Prompt                 string
-	Temperature            float32
-	Language               string // Only for transcription.
-	Format                 openai.AudioResponseFormat
-	TimestampGranularities []openai.TranscriptionTimestampGranularity // Only for transcription.
-	TimestampGranularity   openai.TranscriptionTimestampGranularity
-	Stream                 bool // Whether to stream the transcription results
-}
-
-type OpenAICompletionRequestExtra struct {
-	openai.ChatCompletionRequest
-	Extra map[string]json.RawMessage `json:"-"`
-}
-
-func (c *OpenAICompletionRequestExtra) UnmarshalJSON(data []byte) error {
-	type base openai.ChatCompletionRequest
-	var known base
-	if err := json.Unmarshal(data, &known); err != nil {
-		return err
-	}
-	c.ChatCompletionRequest = openai.ChatCompletionRequest(known)
-
-	var all map[string]json.RawMessage
-	if err := json.Unmarshal(data, &all); err != nil {
-		return err
-	}
-	stripKnownKeys(all, reflect.TypeOf(known))
-	c.Extra = all
-	return nil
-}
-
-func (c OpenAICompletionRequestExtra) MarshalJSON() ([]byte, error) {
-	type base openai.ChatCompletionRequest
-	b, err := json.Marshal(base(c.ChatCompletionRequest))
-	if err != nil {
-		return nil, err
-	}
-
-	var m map[string]json.RawMessage
-	if err := json.Unmarshal(b, &m); err != nil {
-		return nil, err
-	}
-	for k, v := range c.Extra {
-		m[k] = v
-	}
-	return json.Marshal(m)
-}
-
-type AudioSpeechRequest struct {
-	Model          string
-	Input          string
-	Voice          string
-	ResponseFormat string
-	Speed          float64
 }

@@ -68,6 +68,7 @@ func processAudioTranscription(message []byte, sourceLog lib.ILogger) (*genericc
 	if err := json.Unmarshal(message, &audioRequest); err != nil {
 		return nil, lib.WrapError(fmt.Errorf("failed to unmarshal audio request"), err)
 	}
+	delete(audioRequest.Extra, "type")
 
 	return audioRequest, nil
 }
@@ -86,6 +87,7 @@ func processAudioSpeech(message []byte, sourceLog lib.ILogger) (*genericchatstor
 	if err := json.Unmarshal(message, &audioRequest); err != nil {
 		return nil, lib.WrapError(fmt.Errorf("failed to unmarshal audio speech request"), err)
 	}
+	delete(audioRequest.Extra, "type")
 
 	return audioRequest, nil
 }
