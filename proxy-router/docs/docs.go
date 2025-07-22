@@ -2709,12 +2709,6 @@ const docTemplate = `{
                         "in": "formData"
                     },
                     {
-                        "type": "string",
-                        "description": "Timestamp granularity: word or segment (default is segment)",
-                        "name": "timestamp_granularity",
-                        "in": "formData"
-                    },
-                    {
                         "type": "boolean",
                         "description": "Whether to stream the results or not",
                         "name": "stream",
@@ -3359,24 +3353,7 @@ const docTemplate = `{
             }
         },
         "genericchatstorage.AudioSpeechRequest": {
-            "type": "object",
-            "properties": {
-                "input": {
-                    "type": "string"
-                },
-                "model": {
-                    "type": "string"
-                },
-                "responseFormat": {
-                    "type": "string"
-                },
-                "speed": {
-                    "type": "number"
-                },
-                "voice": {
-                    "type": "string"
-                }
-            }
+            "type": "object"
         },
         "genericchatstorage.Chat": {
             "type": "object",

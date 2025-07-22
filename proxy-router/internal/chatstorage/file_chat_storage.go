@@ -10,7 +10,6 @@ import (
 	"time"
 
 	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
-	"github.com/sashabaranov/go-openai"
 )
 
 // ChatStorage handles storing conversations to files.
@@ -72,11 +71,9 @@ func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool
 	var title string
 
 	switch p := prompt.(type) {
-	case *openai.ChatCompletionRequest:
-		// Convert to our internal format
-		convertedPrompt := gcs.ConvertChatCompletionRequest(p)
+	case *gcs.OpenAICompletionRequestExtra:
 		newEntry = gcs.ChatMessage{
-			Prompt:            convertedPrompt,
+			Prompt:            prompt,
 			Response:          strings.Join(resps, ""),
 			PromptAt:          promptAt.Unix(),
 			ResponseAt:        responseAt.Unix(),
