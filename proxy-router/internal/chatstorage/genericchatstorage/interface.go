@@ -21,7 +21,7 @@ type ChatHistory struct {
 	Messages []ChatMessage `json:"messages"`
 }
 
-func (h *ChatHistory) AppendChatHistory(req *openai.ChatCompletionRequest) *openai.ChatCompletionRequest {
+func (h *ChatHistory) AppendChatHistory(req *OpenAICompletionRequestExtra) *OpenAICompletionRequestExtra {
 	if h == nil {
 		return req
 	}
@@ -120,27 +120,4 @@ type OpenAiCompletionRequest struct {
 	FunctionCall any `json:"function_call,omitempty"`
 	// This can be either a string or an ToolChoice object.
 	ToolChoice any `json:"tool_choice,omitempty"`
-}
-
-type AudioTranscriptionRequest struct {
-	Model string
-
-	// FilePath is either an existing file in your filesystem
-	FilePath string
-
-	Prompt                 string
-	Temperature            float32
-	Language               string // Only for transcription.
-	Format                 openai.AudioResponseFormat
-	TimestampGranularities []openai.TranscriptionTimestampGranularity // Only for transcription.
-	TimestampGranularity   openai.TranscriptionTimestampGranularity
-	Stream                 bool // Whether to stream the transcription results
-}
-
-type AudioSpeechRequest struct {
-	Model          string
-	Input          string
-	Voice          string
-	ResponseFormat string
-	Speed          float64
 }

@@ -197,17 +197,6 @@ definitions:
     - username
     type: object
   genericchatstorage.AudioSpeechRequest:
-    properties:
-      input:
-        type: string
-      model:
-        type: string
-      responseFormat:
-        type: string
-      speed:
-        type: number
-      voice:
-        type: string
     type: object
   genericchatstorage.Chat:
     properties:
@@ -2729,10 +2718,6 @@ paths:
       - description: 'Timestamp granularity: word or segment'
         in: formData
         name: timestamp_granularities[]
-        type: string
-      - description: 'Timestamp granularity: word or segment (default is segment)'
-        in: formData
-        name: timestamp_granularity
         type: string
       - description: Whether to stream the results or not
         in: formData
