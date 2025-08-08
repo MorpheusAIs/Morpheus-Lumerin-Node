@@ -351,6 +351,45 @@ func (a *OpenAI) AudioSpeech(ctx context.Context, audioRequest *gcs.AudioSpeechR
 	return a.streamAudioResponse(ctx, resp.Body, cb)
 }
 
+// Embeddings handles vector embedding generation requests
+func (a *OpenAI) Embeddings(ctx context.Context, embedRequest *gcs.EmbeddingsRequest, cb gcs.CompletionCallback) error {
+	embedRequest.Model = openai.EmbeddingModel(a.modelName)
+
+	requestBody, err := json.Marshal(embedRequest)
+	if err != nil {
+		return fmt.Errorf("failed to encode request: %v", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", a.baseURL, bytes.NewReader(requestBody))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %v", err)
+	}
+
+	if a.apiKey != "" {
+		req.Header.Set(c.HEADER_AUTHORIZATION, fmt.Sprintf("%s %s", c.BEARER, a.apiKey))
+	}
+	req.Header.Set(c.HEADER_CONTENT_TYPE, c.CONTENT_TYPE_JSON)
+	req.Header.Set(c.HEADER_CONNECTION, c.CONNECTION_KEEP_ALIVE)
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return a.readError(ctx, resp.Body, cb)
+	}
+
+	var embResp gcs.EmbeddingsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&embResp); err != nil {
+		return fmt.Errorf("failed to decode response: %v", err)
+	}
+
+	chunk := gcs.NewChunkEmbedding(embResp)
+	return cb(ctx, chunk, nil)
+}
+
 func (a *OpenAI) prepareSpeechRequest(ctx context.Context, audioRequest *gcs.AudioSpeechRequest) (*http.Request, error) {
 	jsonBody, err := json.Marshal(audioRequest)
 	if err != nil {

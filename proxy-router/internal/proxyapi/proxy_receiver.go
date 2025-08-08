@@ -92,6 +92,25 @@ func processAudioSpeech(message []byte, sourceLog lib.ILogger) (*genericchatstor
 	return audioRequest, nil
 }
 
+func processEmbeddings(message []byte, sourceLog lib.ILogger) (*genericchatstorage.EmbeddingsRequest, error) {
+	var unknownReq map[string]interface{}
+	if err := json.Unmarshal(message, &unknownReq); err != nil {
+		return nil, lib.WrapError(fmt.Errorf("failed to unmarshal request"), err)
+	}
+
+	if unknownReq["type"] != "embeddings" {
+		return nil, nil // Not an embeddings request
+	}
+
+	var embedRequest *genericchatstorage.EmbeddingsRequest
+	if err := json.Unmarshal(message, &embedRequest); err != nil {
+		return nil, lib.WrapError(fmt.Errorf("failed to unmarshal embeddings request"), err)
+	}
+	delete(embedRequest.Extra, "type")
+
+	return embedRequest, nil
+}
+
 // processChatRequest handles chat completion request processing
 func processChatRequest(message []byte, sourceLog lib.ILogger) (*genericchatstorage.OpenAICompletionRequestExtra, error) {
 	var chatRequest *genericchatstorage.OpenAICompletionRequestExtra
@@ -194,6 +213,7 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 	var audioTranscriptionReq *genericchatstorage.AudioTranscriptionRequest
 	var chatReq *genericchatstorage.OpenAICompletionRequestExtra
 	var audioSpeechReq *genericchatstorage.AudioSpeechRequest
+	var embeddingsReq *genericchatstorage.EmbeddingsRequest
 
 	// Try to process as audio transcription first
 	audioTranscriptionReq, err = processAudioTranscription(payload, sourceLog)
@@ -209,8 +229,16 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 		}
 	}
 
-	// If not audio, process as chat completion
+	// If not audio nor speech, try embeddings
 	if audioTranscriptionReq == nil && audioSpeechReq == nil {
+		embeddingsReq, err = processEmbeddings(payload, sourceLog)
+		if err != nil {
+			return handleError(err, "failed to process embeddings", sourceLog)
+		}
+	}
+
+	// If not audio, process as chat completion
+	if audioTranscriptionReq == nil && audioSpeechReq == nil && embeddingsReq == nil {
 		chatReq, err = processChatRequest(payload, sourceLog)
 		if err != nil {
 			return handleError(err, "failed to process chat request", sourceLog)
@@ -238,6 +266,9 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 	} else if audioSpeechReq != nil {
 		sourceLog.Debugf("Processing audio speech request")
 		err = adapter.AudioSpeech(ctx, audioSpeechReq, cb)
+	} else if embeddingsReq != nil {
+		sourceLog.Debugf("Processing embeddings request")
+		err = adapter.Embeddings(ctx, embeddingsReq, cb)
 	} else {
 		sourceLog.Debugf("Processing chat completion request")
 		err = adapter.Prompt(ctx, chatReq, cb)

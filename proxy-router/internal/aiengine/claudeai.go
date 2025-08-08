@@ -230,8 +230,12 @@ func (a *ClaudeAI) AudioSpeech(ctx context.Context, prompt *gcs.AudioSpeechReque
 	return fmt.Errorf("audio speech not supported")
 }
 
+func (a *ClaudeAI) Embeddings(ctx context.Context, prompt *gcs.EmbeddingsRequest, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("embeddings not supported")
+}
+
 func (a *ClaudeAI) ApiType() string {
 	return API_TYPE_CLAUDEAI
 }
 
-var _ AIEngineStream = &OpenAI{}
+var _ AIEngineStream = &ClaudeAI{}
