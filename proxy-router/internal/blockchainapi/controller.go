@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"math/big"
 	"net/http"
+	"slices"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi/structs"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
@@ -1042,6 +1043,20 @@ func (c *BlockchainController) createNewModel(ctx *gin.Context) {
 	if err := ctx.ShouldBindJSON(&model); err != nil {
 		c.log.Error(err)
 		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	var hasModelTypeTag bool
+	modelTypes := []string{"LLM", "TTS", "STT", "EMBEDDINGS"}
+	for _, tag := range model.Tags {
+		if slices.Contains(modelTypes, tag) {
+			hasModelTypeTag = true
+			break
+		}
+	}
+	if !hasModelTypeTag {
+		c.log.Error("Model tags must include at least one of: LLM, TTS, STT, EMBEDDINGS")
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: "Model tags must include at least one of: LLM, TTS, STT, EMBEDDINGS"})
 		return
 	}
 

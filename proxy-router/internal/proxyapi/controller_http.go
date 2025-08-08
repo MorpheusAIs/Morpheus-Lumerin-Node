@@ -86,6 +86,7 @@ func (s *ProxyController) RegisterRoutes(r interfaces.Router) {
 	r.POST("/v1/chats/:id", s.authConfig.CheckAuth("edit_chat_history"), s.UpdateChatTitle)
 	r.POST("/v1/audio/transcriptions", s.authConfig.CheckAuth("audio_transcription"), s.AudioTranscription)
 	r.POST("/v1/audio/speech", s.authConfig.CheckAuth("audio_speech"), s.AudioSpeech)
+	r.POST("/v1/embeddings", s.authConfig.CheckAuth("embeddings"), s.Embeddings)
 
 	r.POST("/ipfs/pin", s.authConfig.CheckAuth("ipfs_pin"), s.Pin)
 	r.POST("/ipfs/unpin", s.authConfig.CheckAuth("ipfs_unpin"), s.Unpin)
@@ -1514,12 +1515,11 @@ func (c *ProxyController) executeTranscription(ctx *gin.Context, adapter aiengin
 //	@Summary		Generate Audio Speech
 //	@Description	Convert text to speech using TTS model
 //	@Tags			audio
-//	@Accept			json
 //	@Produce		audio/mpeg
-//	@Param			session_id	header	string					false	"Session ID"	format(hex32)
-//	@Param			model_id	header	string					false	"Model ID"		format(hex32)
-//	@Param			chat_id		header	string					false	"Chat ID"		format(hex32)
-//	@Param			request		body	gsc.AudioSpeechRequest	true	"Audio Speech Request"
+//	@Param			session_id	header	string								false	"Session ID"	format(hex32)
+//	@Param			model_id	header	string								false	"Model ID"		format(hex32)
+//	@Param			chat_id		header	string								false	"Chat ID"		format(hex32)
+//	@Param			request		body	proxyapi.AudioSpeechRequestExample	true	"Audio speech request parameters"
 //	@Success		200			{file}	binary
 //	@Security		BasicAuth
 //	@Router			/v1/audio/speech [post]
@@ -1563,13 +1563,13 @@ type audioSpeechParams struct {
 	speed          float64
 }
 
-func (c *ProxyController) parseAudioSpeechParams(ctx *gin.Context) (*PromptHead, *gcs.AudioSpeechRequest, error) {
+func (c *ProxyController) parseAudioSpeechParams(ctx *gin.Context) (*PromptHead, *gsc.AudioSpeechRequest, error) {
 	var head PromptHead
 	if err := ctx.ShouldBindHeader(&head); err != nil {
 		return nil, nil, err
 	}
 
-	var requestBody gcs.AudioSpeechRequest
+	var requestBody gsc.AudioSpeechRequest
 
 	if err := ctx.ShouldBindJSON(&requestBody); err != nil {
 		return nil, nil, err
@@ -1632,6 +1632,90 @@ func (c *ProxyController) executeSpeechGeneration(ctx *gin.Context, adapter aien
 			if err != nil {
 				return err
 			}
+		}
+
+		ctx.Writer.Flush()
+		return nil
+	})
+}
+
+// Embeddings godoc
+//
+//	@Summary		Generate embeddings
+//	@Description	Generate vector embeddings for the provided input
+//	@Tags			audio
+//	@Produce		json
+//	@Param			session_id	header		string								false	"Session ID"	format(hex32)
+//	@Param			model_id	header		string								false	"Model ID"		format(hex32)
+//	@Param			chat_id		header		string								false	"Chat ID"		format(hex32)
+//	@Param			request		body		proxyapi.EmbeddingsRequestExample	true	"Embeddings request parameters"
+//	@Success		200			{object}	string
+//	@Security		BasicAuth
+//	@Router			/v1/embeddings [post]
+func (c *ProxyController) Embeddings(ctx *gin.Context) {
+	// Parse request headers and body
+	head, params, err := c.parseEmbeddingsParams(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Get AI adapter based on session/model
+	chatID := head.ChatID
+	if chatID == (lib.Hash{}) {
+		var err error
+		chatID, err = lib.GetRandomHash()
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	adapter, err := c.aiEngine.GetAdapter(ctx, chatID.Hash, head.ModelID.Hash, head.SessionID.Hash, c.storeChatContext, c.forwardChatContext)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Process embeddings generation
+	if err := c.executeEmbeddings(ctx, adapter, params); err != nil {
+		c.log.Errorf("error sending embeddings request: %s", err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
+func (c *ProxyController) parseEmbeddingsParams(ctx *gin.Context) (*PromptHead, *gsc.EmbeddingsRequest, error) {
+	var head PromptHead
+	if err := ctx.ShouldBindHeader(&head); err != nil {
+		return nil, nil, err
+	}
+
+	var requestBody gsc.EmbeddingsRequest
+	if err := ctx.ShouldBindJSON(&requestBody); err != nil {
+		return nil, nil, err
+	}
+
+	return &head, &requestBody, nil
+}
+
+func (c *ProxyController) executeEmbeddings(ctx *gin.Context, adapter aiengine.AIEngineStream, request *gsc.EmbeddingsRequest) error {
+	// Default content type
+	ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_JSON)
+
+	return adapter.Embeddings(ctx, request, func(cbctx context.Context, completion gsc.Chunk, aiResponseError *gsc.AiEngineErrorResponse) error {
+		if aiResponseError != nil {
+			ctx.JSON(http.StatusBadRequest, aiResponseError)
+			return nil
+		}
+
+		responseBytes, err := json.Marshal(completion.Data())
+		if err != nil {
+			return err
+		}
+
+		_, err = ctx.Writer.Write(responseBytes)
+		if err != nil {
+			return err
 		}
 
 		ctx.Writer.Flush()

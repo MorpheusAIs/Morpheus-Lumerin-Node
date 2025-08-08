@@ -2586,9 +2586,6 @@ const docTemplate = `{
                     }
                 ],
                 "description": "Convert text to speech using TTS model",
-                "consumes": [
-                    "application/json"
-                ],
                 "produces": [
                     "audio/mpeg"
                 ],
@@ -2619,12 +2616,12 @@ const docTemplate = `{
                         "in": "header"
                     },
                     {
-                        "description": "Audio Speech Request",
+                        "description": "Audio speech request parameters",
                         "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/genericchatstorage.AudioSpeechRequest"
+                            "$ref": "#/definitions/proxyapi.AudioSpeechRequestExample"
                         }
                     }
                 ],
@@ -2901,6 +2898,63 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/proxyapi.ResultResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/embeddings": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Generate vector embeddings for the provided input",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "audio"
+                ],
+                "summary": "Generate embeddings",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "hex32",
+                        "description": "Session ID",
+                        "name": "session_id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "hex32",
+                        "description": "Model ID",
+                        "name": "model_id",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "format": "hex32",
+                        "description": "Chat ID",
+                        "name": "chat_id",
+                        "in": "header"
+                    },
+                    {
+                        "description": "Embeddings request parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/proxyapi.EmbeddingsRequestExample"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
                         }
                     }
                 }
@@ -3352,9 +3406,6 @@ const docTemplate = `{
                 }
             }
         },
-        "genericchatstorage.AudioSpeechRequest": {
-            "type": "object"
-        },
         "genericchatstorage.Chat": {
             "type": "object",
             "properties": {
@@ -3501,6 +3552,27 @@ const docTemplate = `{
                 },
                 "metadataCIDHash": {
                     "type": "string"
+                }
+            }
+        },
+        "proxyapi.AudioSpeechRequestExample": {
+            "type": "object",
+            "properties": {
+                "input": {
+                    "type": "string",
+                    "example": "This is a text to speech generation prompt."
+                },
+                "response_format": {
+                    "type": "string",
+                    "example": "mp3"
+                },
+                "speed": {
+                    "type": "number",
+                    "example": 0.5
+                },
+                "voice": {
+                    "type": "string",
+                    "example": "af_bella"
                 }
             }
         },
@@ -3842,6 +3914,26 @@ const docTemplate = `{
                 }
             }
         },
+        "proxyapi.EmbeddingsRequestExample": {
+            "type": "object",
+            "properties": {
+                "dimensions": {
+                    "type": "integer",
+                    "example": 1024
+                },
+                "encoding_format": {
+                    "type": "string",
+                    "example": "float"
+                },
+                "input": {
+                    "type": "string",
+                    "example": "This is a text to generate embeddings for."
+                },
+                "user": {
+                    "type": "string"
+                }
+            }
+        },
         "proxyapi.InitiateSessionReq": {
             "type": "object",
             "required": [
@@ -4133,7 +4225,10 @@ const docTemplate = `{
                     "minItems": 1,
                     "items": {
                         "type": "string"
-                    }
+                    },
+                    "example": [
+                        "LLM"
+                    ]
                 }
             }
         },
@@ -4210,6 +4305,14 @@ const docTemplate = `{
                 "isDeleted": {
                     "type": "boolean"
                 },
+                "modelType": {
+                    "description": "Type of the model (LLM, STT, TTS, EMBEDDING)",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/structs.ModelType"
+                        }
+                    ]
+                },
                 "name": {
                     "type": "string"
                 },
@@ -4234,6 +4337,26 @@ const docTemplate = `{
                     "$ref": "#/definitions/structs.Model"
                 }
             }
+        },
+        "structs.ModelType": {
+            "type": "string",
+            "enum": [
+                "LLM",
+                "STT",
+                "TTS",
+                "EMBEDDING",
+                "UNKNOWN"
+            ],
+            "x-enum-comments": {
+                "ModelTypeUnknown": "Default type for unknown models"
+            },
+            "x-enum-varnames": [
+                "ModelTypeLLM",
+                "ModelTypeSTT",
+                "ModelTypeTTS",
+                "ModelTypeEMBEDDING",
+                "ModelTypeUnknown"
+            ]
         },
         "structs.ModelsRes": {
             "type": "object",

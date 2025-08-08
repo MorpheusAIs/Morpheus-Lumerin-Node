@@ -111,6 +111,10 @@ func (s *ProdiaSD) AudioSpeech(ctx context.Context, prompt *gcs.AudioSpeechReque
 	return fmt.Errorf("audio speech not supported")
 }
 
+func (s *ProdiaSD) Embeddings(ctx context.Context, prompt *gcs.EmbeddingsRequest, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("embeddings not supported")
+}
+
 func (s *ProdiaSD) ApiType() string {
 	return API_TYPE_PRODIA_SD
 }
