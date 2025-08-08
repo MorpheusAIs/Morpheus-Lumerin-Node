@@ -128,6 +128,10 @@ func (s *HyperbolicSD) AudioSpeech(ctx context.Context, prompt *gcs.AudioSpeechR
 	return fmt.Errorf("audio speech not supported")
 }
 
+func (s *HyperbolicSD) Embeddings(ctx context.Context, prompt *gcs.EmbeddingsRequest, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("embeddings not supported")
+}
+
 func (s *HyperbolicSD) ApiType() string {
 	return API_TYPE_HYPERBOLIC_SD
 }

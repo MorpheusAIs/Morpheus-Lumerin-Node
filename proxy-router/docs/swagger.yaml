@@ -196,8 +196,6 @@ definitions:
     - token
     - username
     type: object
-  genericchatstorage.AudioSpeechRequest:
-    type: object
   genericchatstorage.Chat:
     properties:
       chatId:
@@ -297,6 +295,21 @@ definitions:
     - fileCIDHash
     - metadataCID
     - metadataCIDHash
+    type: object
+  proxyapi.AudioSpeechRequestExample:
+    properties:
+      input:
+        example: This is a text to speech generation prompt.
+        type: string
+      response_format:
+        example: mp3
+        type: string
+      speed:
+        example: 0.5
+        type: number
+      voice:
+        example: af_bella
+        type: string
     type: object
   proxyapi.CIDReq:
     properties:
@@ -522,6 +535,20 @@ definitions:
         description: Total bytes to download
         type: integer
     type: object
+  proxyapi.EmbeddingsRequestExample:
+    properties:
+      dimensions:
+        example: 1024
+        type: integer
+      encoding_format:
+        example: float
+        type: string
+      input:
+        example: This is a text to generate embeddings for.
+        type: string
+      user:
+        type: string
+    type: object
   proxyapi.InitiateSessionReq:
     properties:
       bidId:
@@ -709,6 +736,8 @@ definitions:
         example: 123000000000
         type: integer
       tags:
+        example:
+        - LLM
         items:
           type: string
         maxItems: 64
@@ -770,6 +799,10 @@ definitions:
         type: string
       isDeleted:
         type: boolean
+      modelType:
+        allOf:
+        - $ref: '#/definitions/structs.ModelType'
+        description: Type of the model (LLM, STT, TTS, EMBEDDING)
       name:
         type: string
       owner:
@@ -786,6 +819,22 @@ definitions:
       model:
         $ref: '#/definitions/structs.Model'
     type: object
+  structs.ModelType:
+    enum:
+    - LLM
+    - STT
+    - TTS
+    - EMBEDDING
+    - UNKNOWN
+    type: string
+    x-enum-comments:
+      ModelTypeUnknown: Default type for unknown models
+    x-enum-varnames:
+    - ModelTypeLLM
+    - ModelTypeSTT
+    - ModelTypeTTS
+    - ModelTypeEMBEDDING
+    - ModelTypeUnknown
   structs.ModelsRes:
     properties:
       models:
@@ -2641,8 +2690,6 @@ paths:
       - agents
   /v1/audio/speech:
     post:
-      consumes:
-      - application/json
       description: Convert text to speech using TTS model
       parameters:
       - description: Session ID
@@ -2660,12 +2707,12 @@ paths:
         in: header
         name: chat_id
         type: string
-      - description: Audio Speech Request
+      - description: Audio speech request parameters
         in: body
         name: request
         required: true
         schema:
-          $ref: '#/definitions/genericchatstorage.AudioSpeechRequest'
+          $ref: '#/definitions/proxyapi.AudioSpeechRequestExample'
       produces:
       - audio/mpeg
       responses:
@@ -2848,6 +2895,43 @@ paths:
       summary: Update chat title by id
       tags:
       - chat
+  /v1/embeddings:
+    post:
+      description: Generate vector embeddings for the provided input
+      parameters:
+      - description: Session ID
+        format: hex32
+        in: header
+        name: session_id
+        type: string
+      - description: Model ID
+        format: hex32
+        in: header
+        name: model_id
+        type: string
+      - description: Chat ID
+        format: hex32
+        in: header
+        name: chat_id
+        type: string
+      - description: Embeddings request parameters
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/proxyapi.EmbeddingsRequestExample'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+      security:
+      - BasicAuth: []
+      summary: Generate embeddings
+      tags:
+      - audio
   /v1/models:
     get:
       produces:

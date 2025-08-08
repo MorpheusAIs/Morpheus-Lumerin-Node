@@ -818,6 +818,8 @@ func (p *ProxyServiceSender) processAIResponse(requestType string, aiResponse []
 		return p.handleAudioSpeech(aiResponse, responses)
 	case "chat_completion":
 		return p.handleChatCompletion(aiResponse, responses)
+	case "embeddings":
+		return p.handleEmbeddings(aiResponse, responses)
 	default:
 		return p.handleMediaGeneration(aiResponse, responses)
 	}
@@ -948,6 +950,22 @@ func (p *ProxyServiceSender) handleMediaGeneration(aiResponse []byte, responses 
 
 	// If we got here, we couldn't parse the response
 	return nil, 0, false, lib.WrapError(ErrInvalidResponse, fmt.Errorf("unknown response format"))
+}
+
+// handleEmbeddings processes embeddings generation responses
+func (p *ProxyServiceSender) handleEmbeddings(aiResponse []byte, responses []interface{}) (gcs.Chunk, int, bool, error) {
+	if aiResponse == nil || len(aiResponse) == 0 {
+		return nil, 0, false, lib.WrapError(ErrInvalidResponse, fmt.Errorf("empty embeddings response"))
+	}
+
+	var embeddingResp gcs.EmbeddingsResponse
+	if err := json.Unmarshal(aiResponse, &embeddingResp); err == nil && len(embeddingResp.Data) > 0 {
+		chunk := gcs.NewChunkEmbedding(embeddingResp)
+		responses = append(responses, embeddingResp)
+		return chunk, 0, true, nil
+	}
+
+	return nil, 0, false, lib.WrapError(ErrInvalidResponse, fmt.Errorf("unknown embeddings response format"))
 }
 
 // checkProviderAvailability checks if the provider is alive using portchecker.io API
@@ -1287,5 +1305,64 @@ func (p *ProxyServiceSender) SendAudioSpeech(ctx context.Context, sessionID comm
 	}
 
 	p.log.Debugf("Successfully completed audio speech generation for session %s with TTFT: %dms, tokens: %d", sessionID.Hex(), ttftMs, totalTokens)
+	return result, nil
+}
+
+// SendEmbeddings sends an embeddings generation request
+func (p *ProxyServiceSender) SendEmbeddings(ctx context.Context, sessionID common.Hash, embedRequest *gcs.EmbeddingsRequest, cb gcs.CompletionCallback) (interface{}, error) {
+	// Validate session and get provider
+	session, provider, err := p.validateSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get private key for signing
+	prKey, err := p.privateKey.GetPrivateKey()
+	if err != nil {
+		return nil, ErrMissingPrKey
+	}
+
+	// Mark request type for provider side parsing
+	if embedRequest.Extra == nil {
+		embedRequest.Extra = make(map[string]json.RawMessage)
+	}
+	embedRequest.Extra["type"] = json.RawMessage(`"embeddings"`)
+
+	pubKey, err := lib.StringToHexString(provider.PubKey)
+	if err != nil {
+		return nil, lib.WrapError(ErrCreateReq, err)
+	}
+
+	requestID := "1"
+	message, err := p.morRPC.SessionPromptRequest(sessionID, embedRequest, pubKey, prKey, requestID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create embeddings request: %w", err)
+	}
+
+	startTime := time.Now().Unix()
+
+	result, ttftMs, totalTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, message, pubKey, "embeddings")
+
+	// Handle errors with failover if enabled
+	if err != nil {
+		if !session.FailoverEnabled() {
+			return nil, lib.WrapError(ErrProvider, err)
+		}
+
+		// Handle failover
+		newSessionID, failoverErr := p.handleFailover(ctx, *session, cb)
+		if failoverErr != nil {
+			return nil, failoverErr
+		}
+
+		// Retry with new session
+		return p.SendEmbeddings(ctx, newSessionID, embedRequest, cb)
+	}
+
+	if updateErr := p.updateSessionStats(ctx, *session, startTime, ttftMs, totalTokens); updateErr != nil {
+		p.log.Error("Failed to update session stats", updateErr)
+	}
+
+	p.log.Debugf("Successfully completed embeddings generation for session %s with TTFT: %dms, tokens: %d", sessionID.Hex(), ttftMs, totalTokens)
 	return result, nil
 }

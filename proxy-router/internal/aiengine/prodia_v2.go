@@ -126,6 +126,10 @@ func (s *ProdiaV2) AudioSpeech(ctx context.Context, prompt *gcs.AudioSpeechReque
 	return fmt.Errorf("audio speech not supported")
 }
 
+func (s *ProdiaV2) Embeddings(ctx context.Context, prompt *gcs.EmbeddingsRequest, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("embeddings not supported")
+}
+
 func (s *ProdiaV2) ApiType() string {
 	return API_TYPE_PRODIA_V2
 }

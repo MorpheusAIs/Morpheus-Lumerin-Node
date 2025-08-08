@@ -18,6 +18,7 @@ const (
 	ChunkTypeAudioTranscriptionJson  ChunkType = "audio-transcription-json"
 	ChunkTypeAudioTranscriptionDelta ChunkType = "audio-transcription-delta"
 	ChunkTypeAudioSpeech             ChunkType = "audio-speech"
+	ChunkTypeEmbedding               ChunkType = "embedding"
 )
 
 type ChunkText struct {
@@ -371,6 +372,39 @@ func (c *ChunkAudioSpeech) Data() interface{} {
 }
 
 var _ Chunk = &ChunkAudioSpeech{}
+
+// ChunkEmbedding represents an embedding vector response
+type ChunkEmbedding struct {
+	data interface{}
+}
+
+// NewChunkEmbedding creates a new embedding chunk
+func NewChunkEmbedding(data EmbeddingsResponse) *ChunkEmbedding {
+	return &ChunkEmbedding{data: data}
+}
+
+func (c *ChunkEmbedding) IsStreaming() bool {
+	return false
+}
+
+func (c *ChunkEmbedding) Tokens() int {
+	return c.data.(EmbeddingsResponse).Usage.TotalTokens
+}
+
+func (c *ChunkEmbedding) Type() ChunkType {
+	return ChunkTypeEmbedding
+}
+
+func (c *ChunkEmbedding) String() string {
+	b, _ := json.Marshal(c.data)
+	return string(b)
+}
+
+func (c *ChunkEmbedding) Data() interface{} {
+	return c.data
+}
+
+var _ Chunk = &ChunkEmbedding{}
 
 type AiEngineErrorResponse struct {
 	ProviderModelError interface{} `json:"providerModelError"`

@@ -99,6 +99,16 @@ func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool
 		} else {
 			title = "Audio Transcription"
 		}
+	case *gcs.EmbeddingsRequest:
+		newEntry = gcs.ChatMessage{
+			Prompt:            p,
+			Response:          strings.Join(resps, ""),
+			PromptAt:          promptAt.Unix(),
+			ResponseAt:        responseAt.Unix(),
+			IsImageContent:    isImageContent,
+			IsVideoRawContent: isVideoRawContent,
+			IsAudioContent:    isAudioContent,
+		}
 	case *gcs.AudioSpeechRequest:
 		// Store audio speech request directly
 		newEntry = gcs.ChatMessage{

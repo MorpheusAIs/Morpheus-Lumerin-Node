@@ -63,6 +63,20 @@ type ChatCompletionRequestSwaggerExample struct {
 	} `json:"messages"`
 }
 
+type AudioSpeechRequestExample struct {
+	Input string `json:"input" example:"This is a text to speech generation prompt."`
+	Voice string `json:"voice" example:"af_bella"`
+	ResponseFormat string `json:"response_format" example:"mp3"`
+	Speed float64 `json:"speed" example:"0.5"`
+}	
+
+type EmbeddingsRequestExample struct {
+	Input string `json:"input" example:"This is a text to generate embeddings for."`
+	Dimensions int `json:"dimensions" example:"1024"`
+	EncodingFormat string `json:"encoding_format" example:"float"`
+	User string `json:"user"`
+}
+
 type CIDReq struct {
 	CID lib.Hash `json:"cidHash" validate:"required,hex32" swaggertype:"string"`
 }

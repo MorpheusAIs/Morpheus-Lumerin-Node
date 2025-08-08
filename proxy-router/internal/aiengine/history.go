@@ -111,6 +111,30 @@ func (h *History) AudioSpeech(ctx context.Context, prompt *gcs.AudioSpeechReques
 	return err
 }
 
+func (h *History) Embeddings(ctx context.Context, prompt *gcs.EmbeddingsRequest, cb gcs.CompletionCallback) error {
+	isLocal := h.engine.ApiType() != "remote"
+	completions := make([]gcs.Chunk, 0)
+	startTime := time.Now()
+
+	err := h.engine.Embeddings(ctx, prompt, func(ctx context.Context, completion gcs.Chunk, errorBody *gcs.AiEngineErrorResponse) error {
+		if completion != nil {
+			completions = append(completions, completion)
+		}
+		return cb(ctx, completion, errorBody)
+	})
+	if err != nil {
+		return err
+	}
+	endTime := time.Now()
+
+	err = h.storage.StorePromptResponseToFile(h.chatID.Hex(), isLocal, h.modelID.Hex(), prompt, completions, startTime, endTime)
+	if err != nil {
+		h.log.Errorf("failed to store prompt response: %v", err)
+	}
+
+	return err
+}
+
 func (h *History) ApiType() string {
 	return h.engine.ApiType()
 }
