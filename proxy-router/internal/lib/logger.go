@@ -88,7 +88,7 @@ func newLogger(levelStr string, color bool, isProd bool, isJSON bool, filepath s
 	var file *os.File
 
 	if filepath != "" {
-		fileCore, fd, err := newFileCore(zapcore.DebugLevel, isProd, isJSON, filepath)
+		fileCore, fd, err := newFileCore(level, isProd, isJSON, filepath)
 		if err != nil {
 			return nil, nil, err
 		}
