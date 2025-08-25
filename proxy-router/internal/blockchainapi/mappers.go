@@ -67,23 +67,9 @@ func mapModels(ids [][32]byte, models []modelregistry.IModelStorageModel) []*str
 	return result
 }
 
+
 func mapModel(id [32]byte, model modelregistry.IModelStorageModel) *structs.Model {
-	var modelType structs.ModelType = "UNKNOWN" // Default type
-	for _, tag := range model.Tags {
-		if tag == "STT" {
-			modelType = structs.ModelTypeSTT
-			break
-		} else if tag == "TTS" {
-			modelType = structs.ModelTypeTTS
-			break
-		} else if tag == "EMBEDDING" {
-			modelType = structs.ModelTypeEMBEDDING
-			break
-		} else if tag == "LLM" {
-			modelType = structs.ModelTypeLLM
-			break
-		}
-	}
+	modelType := DetectModelType(model.Tags)
 	return &structs.Model{
 		Id:        id,
 		IpfsCID:   model.IpfsCID,

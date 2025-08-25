@@ -2,6 +2,7 @@ package storages
 
 import (
 	"os"
+	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	badger "github.com/dgraph-io/badger/v4"
@@ -9,6 +10,8 @@ import (
 
 type Storage struct {
 	db *badger.DB
+	stopGC chan struct{}
+	gcDone chan struct{}
 }
 
 func NewStorage(log lib.ILogger, path string) *Storage {
@@ -24,7 +27,25 @@ func NewStorage(log lib.ILogger, path string) *Storage {
 		log.Fatal(err)
 	}
 
-	return &Storage{db}
+	s := &Storage{db: db, stopGC: make(chan struct{}), gcDone: make(chan struct{})}
+	go func() {
+		defer close(s.gcDone)
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-s.stopGC:
+				return
+			case <-ticker.C:
+				for {
+					if err := db.RunValueLogGC(0.7); err != nil {
+						break
+					}
+				}
+			}
+		}
+	}()
+	return s
 }
 
 func NewTestStorage() *Storage {
@@ -34,10 +55,16 @@ func NewTestStorage() *Storage {
 	if err != nil {
 		panic(err)
 	}
-	return &Storage{db}
+	return &Storage{db: db, stopGC: make(chan struct{}), gcDone: make(chan struct{})}
 }
 
 func (s *Storage) Close() {
+	if s.stopGC != nil {
+		close(s.stopGC)
+		if s.gcDone != nil {
+			<-s.gcDone
+		}
+	}
 	s.db.Close()
 }
 
