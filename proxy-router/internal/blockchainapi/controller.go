@@ -1045,7 +1045,6 @@ func (c *BlockchainController) createNewModel(ctx *gin.Context) {
 		return
 	}
 
-	// Validate tags using case-insensitive synonyms. If none provided, default to Chat/LLM.
 	modelType := DetectModelType(model.Tags)
 	if modelType == structs.ModelTypeUnknown {
 		c.log.Error("Model tags must include a supported type tag (chat, embedding, tts, stt)")
