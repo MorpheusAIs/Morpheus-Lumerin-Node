@@ -83,7 +83,7 @@ jobs:
         id: gen_tag_name
         shell: bash
         run: |
-          IMAGE_NAME="ghcr.io/lumerin-protocol/morpheus-lumerin-node"
+          IMAGE_NAME="ghcr.io/morpheusais/morpheus-lumerin-node"
           VMAJ_NEW=4
           VMIN_NEW=0
           VPAT_NEW=0
@@ -130,7 +130,7 @@ jobs:
   Build-Proxy-Router-Test:
     name: Test Proxy Router Docker Image
     if: |
-      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
         (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'test' || github.base_ref == 'dev')) ||
         (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
@@ -169,7 +169,7 @@ jobs:
   GHCR-Build-and-Push:
     name: Build & Push Docker Image
     if: |
-      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
         (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
@@ -223,7 +223,7 @@ jobs:
   Build-Service-Executables:
     name: Build Service Executables
     if: |
-      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
         (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
@@ -318,7 +318,7 @@ jobs:
   GitLab-Deploy-ProxyRouter:
     name: Deploy ProxyRouterto GitLab
     if: |
-      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
         (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test'))
       )
@@ -383,7 +383,7 @@ jobs:
   UI-macOS-14-arm64:
     name: Build Morpheus UI macOS-arm64 Image
     if: |
-      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
         (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
@@ -437,7 +437,7 @@ jobs:
   UI-Ubuntu-22-x64:
     name: Build Morpheus UI Ubuntu x64 Image
     if: |
-      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
         (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
@@ -490,7 +490,7 @@ jobs:
   UI-Ubuntu-22-arm64:
     name: Build Morpheus UI Ubuntu arm64 Image
     if: |
-      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
         (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true'))
@@ -546,7 +546,7 @@ jobs:
   UI-macOS-13-x64:
     name: Build Morpheus UI macOS-x64 Image
     if: |
-      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
         (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
@@ -600,7 +600,7 @@ jobs:
   UI-Windows-avx2-x64:
     name: Build Morpheus UI Windows Image
     if: |
-      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
         (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
@@ -658,7 +658,7 @@ jobs:
   # UI-Windows-arm64:
   #   name: Build Morpheus UI Windows ARM64 Image
   #   if: |
-  #     github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+  #     github.repository = 'MorpheusAIs/Morpheus-Lumerin-Node' &&
   #     (
   #       (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
   #       (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
@@ -716,7 +716,7 @@ jobs:
   UI-Release:
     name: Upload UI-Desktop Release
     if: |
-      github.repository != 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
         (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
