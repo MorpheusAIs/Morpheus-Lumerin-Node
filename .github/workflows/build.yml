@@ -84,7 +84,7 @@ jobs:
         shell: bash
         run: |
           IMAGE_NAME="ghcr.io/morpheusais/morpheus-lumerin-node"
-          VMAJ_NEW=4
+          VMAJ_NEW=5
           VMIN_NEW=0
           VPAT_NEW=0
           set +o pipefail
