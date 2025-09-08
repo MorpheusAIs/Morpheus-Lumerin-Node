@@ -9,7 +9,7 @@ It will run 3 different pieces of software on your local machine:
 
 ## Installation Steps:
 1. Obtain the software: 
-    * Package: Download latest release for your operating system: https://github.com/Lumerin-protocol/Morpheus-Lumerin-Node/releases
+    * Package: Download latest release for your operating system: https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/releases
         - Mainnet releases will have no suffix (eg: `v2.3.0`)
         - Testnet releases will be suffixed with `*-test` (eg: `v2.2.56-test`) 
 

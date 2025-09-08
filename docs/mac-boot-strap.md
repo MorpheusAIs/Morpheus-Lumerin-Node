@@ -91,7 +91,7 @@ tail -f nohup.out
   * TCP port that you want the API to listen on (8082 in this example)
 
 **1.  Clone repo from either the Lumerin Team fork or the Origin on Morpheus' Github**  
-- Lumerin Team Development Github: `git clone https://github.com/Lumerin-protocol/Morpheus-Lumerin-Node.git`
+- MorpheusAIs Team Development Github: `git clone https://github.com/MorpheusAIs/Morpheus-Lumerin-Node.git`
 - Origin from Morpheus Github: (`git clone https://github.com/MorpheusAIs/Morpheus-Lumerin-Node.git`)
 - **NOTE:** if you have already cloned and configured your .env, and want to update to the lastest revision, you can `git pull` from within the Morpheus-Lumerin-Node directory and then skip to step 4 below to build and run the updated proxy-router
 
