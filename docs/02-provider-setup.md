@@ -12,11 +12,11 @@
 
 ## Installation & Configuration Steps:
 1. Obtain the software: 
-    1. Package: Download latest release for your operating system: https://github.com/Lumerin-protocol/Morpheus-Lumerin-Node/releases
+    1. Package: Download latest release for your operating system: https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/releases
         * Mainnet releases will be prefixed with `main-*`
         * Testnet releases will be prefixed with `test-*` 
     2. Source Code: 
-        * Clone the repository: `git clone -b branch https://github.com/Lumerin-protocol/Morpheus-Lumerin-Node.git` 
+        * Clone the repository: `git clone -b branch https://github.com/MorpheusAIs/Morpheus-Lumerin-Node.git` 
         * Mainnet Branch = `main` 
         * Testnet Branch = `test`
         * Development Branch = `dev`(not recommended unless directed by the development team)

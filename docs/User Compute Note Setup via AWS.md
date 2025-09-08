@@ -86,7 +86,7 @@ Now that your instance is running, you will need to do some configuration to ens
 2.	 `sudo yum install git -y`
 3.	 `sudo yum install golang-go -y`
 4.	`sudo yum groupinstall "Development Tools" -y`
-5.	`git clone https://github.com/Lumerin-protocol/Morpheus-Lumerin-Node.git`
+5.	`git clone https://github.com/MorpheusAIs/Morpheus-Lumerin-Node.git`
 6.	 `cd Morpheus-Lumerin-Node/proxy-router`
 7.	 `cp .env.example .env`
 8.	 `vi .env`
@@ -104,5 +104,5 @@ OPENAI_BASE_URL from the LLM model instance DNS
 make run`
 13.	Go to a web browser and type: http://<web_public_url>/swagger/index.html and you will be brought to the proxy-router UI
 
-Congratulations, you have now setup your LLM and Proxy Router. There are more steps to conduct transactions within proxy router and setup your LLM as a provider, which are within this guide https://github.com/Lumerin-protocol/Morpheus-Lumerin-Node/blob/consumer-readme/docs/proxy-router-api-direct.md
+Congratulations, you have now setup your LLM and Proxy Router. There are more steps to conduct transactions within proxy router and setup your LLM as a provider, which are within this guide https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/consumer-readme/docs/proxy-router-api-direct.md
 

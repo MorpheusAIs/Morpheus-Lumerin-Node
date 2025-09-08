@@ -20,7 +20,7 @@ This document provides a step-by-step guide to setting up a Consumer Node for th
 
 #### 2. Clone & Navigate to the Repository
 ```bash
-git clone https://github.com/Lumerin-protocol/Morpheus-Lumerin-Node.git #this will get you the DEV branch (daily updates)
+git clone https://github.com/MorpheusAIs/Morpheus-Lumerin-Node.git #this will get you the DEV branch (daily updates)
 cd Morpheus-Lumerin-Node/proxy-router
 ```
 #### 3. Edit the .env configuration file

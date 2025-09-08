@@ -84,7 +84,7 @@ jobs:
         shell: bash
         run: |
           IMAGE_NAME="ghcr.io/morpheusais/morpheus-lumerin-node"
-          VMAJ_NEW=4
+          VMAJ_NEW=5
           VMIN_NEW=0
           VPAT_NEW=0
           set +o pipefail
@@ -249,19 +249,19 @@ jobs:
           cd proxy-router
           # Linux X64
           TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=linux GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-linux-amd64 ./build.sh || (echo "❌ Failed to build Linux X64 executable" && exit 1)
-          mv proxy-router proxy-router-${FULLTAG}-linux-x86_64
+          mv proxy-router linux-x86_64-morpheus-router-${FULLTAG}
           # Linux ARM64
           TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=linux GOARCH=arm64 OUTPUT=proxy-router-${FULLTAG}-linux-arm64 ./build.sh || (echo "❌ Failed to build Linux ARM64 executable" && exit 1)
-          mv proxy-router proxy-router-${FULLTAG}-linux-arm64
+          mv proxy-router linux-arm64-morpheus-router-${FULLTAG}
           # macOS Intel
           TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-mac-amd64 ./build.sh || (echo "❌ Failed to build macOS X64 executable" && exit 1)
-          mv proxy-router proxy-router-${FULLTAG}-mac-x64
+          mv proxy-router mac-x64-morpheus-router-${FULLTAG}
           # macOS ARM (Apple Silicon)
           TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=arm64 OUTPUT=proxy-router-${FULLTAG}-mac-arm64 ./build.sh || (echo "❌ Failed to build macOS ARM64 executable" && exit 1)
-          mv proxy-router proxy-router-${FULLTAG}-mac-arm64
+          mv proxy-router mac-arm64-morpheus-router-${FULLTAG}
           # Windows X64
           TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=windows GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-win-amd64.exe ./build.sh || (echo "❌ Failed to build Windows X64 executable" && exit 1)
-          mv proxy-router proxy-router-${FULLTAG}-win-x64.exe
+          mv proxy-router win-x64-morpheus-router-${FULLTAG}.exe
           # # Windows ARM64
           # TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=windows GOARCH=arm64 OUTPUT=proxy-router-${FULLTAG}-win-arm64.exe ./build.sh || (echo "❌ Failed to build Windows ARM64 executable" && exit 1)
           # mv proxy-router proxy-router-${FULLTAG}-win-arm64.exe
@@ -273,19 +273,19 @@ jobs:
           cd cli
           # Linux X64
           GOOS=linux GOARCH=amd64 make build || (echo "❌ Failed to build Linux X64 executable" && exit 1)
-          mv mor-cli mor-cli-${FULLTAG}-linux-x86_64
+          mv mor-cli linux-x86_64-morpheus-cli-${FULLTAG}
           # Linux ARM64
           GOOS=linux GOARCH=arm64 make build || (echo "❌ Failed to build Linux ARM64 executable" && exit 1)
-          mv mor-cli mor-cli-${FULLTAG}-linux-arm64
+          mv mor-cli linux-arm64-morpheus-cli-${FULLTAG}
           # macOS Intel
           GOOS=darwin GOARCH=amd64 make build || (echo "❌ Failed to build macOS X64 executable" && exit 1)
-          mv mor-cli mor-cli-${FULLTAG}-mac-x64
+          mv mor-cli mac-x64-morpheus-cli-${FULLTAG}
           # macOS ARM (Apple Silicon)
           GOOS=darwin GOARCH=arm64 make build || (echo "❌ Failed to build macOS ARM64 executable" && exit 1)
-          mv mor-cli mor-cli-${FULLTAG}-mac-arm64
+          mv mor-cli mac-arm64-morpheus-cli-${FULLTAG}
           # Windows X64
           GOOS=windows GOARCH=amd64 make build || (echo "❌ Failed to build Windows X64 executable" && exit 1)
-          mv mor-cli mor-cli-${FULLTAG}-win-x64.exe
+          mv mor-cli win-x64-morpheus-cli-${FULLTAG}.exe
           # # Windows ARM64
           # GOOS=windows GOARCH=arm64 make build || (echo "❌ Failed to build Windows ARM64 executable" && exit 1)
           # mv mor-cli mor-cli-${FULLTAG}-win-arm64.exe
@@ -296,11 +296,11 @@ jobs:
         with:
           name: cli
           path: |
-            cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-linux-x86_64
-            cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-linux-arm64
-            cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-mac-x64
-            cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-mac-arm64
-            cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-win-x64.exe
+            cli/linux-x86_64-morpheus-cli-${{ needs.Generate-Tag.outputs.vfull }}
+            cli/linux-arm64-morpheus-cli-${{ needs.Generate-Tag.outputs.vfull }}
+            cli/mac-x64-morpheus-cli-${{ needs.Generate-Tag.outputs.vfull }}
+            cli/mac-arm64-morpheus-cli-${{ needs.Generate-Tag.outputs.vfull }}
+            cli/win-x64-morpheus-cli-${{ needs.Generate-Tag.outputs.vfull }}.exe
             # cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-win-arm64.exe
     
       - name: Upload ProxyRouter artifacts
@@ -308,11 +308,11 @@ jobs:
         with:
           name: proxy-router
           path: |
-            proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-linux-x86_64
-            proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-linux-arm64
-            proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-mac-x64
-            proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-mac-arm64
-            proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-win-x64.exe
+            proxy-router/linux-x86_64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
+            proxy-router/linux-arm64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
+            proxy-router/mac-x64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
+            proxy-router/mac-arm64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
+            proxy-router/win-x64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}.exe
             # proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-win-arm64.exe
 
   GitLab-Deploy-ProxyRouter:
@@ -393,7 +393,7 @@ jobs:
       - Generate-Tag
       - Build-Service-Executables
     env:
-      SERVICE_PROXY_DOWNLOAD_URL_MAC_ARM64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-mac-arm64
+      SERVICE_PROXY_DOWNLOAD_URL_MAC_ARM64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/mac-arm64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
     steps:
       - name: Clone
         id: checkout
@@ -432,7 +432,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-mac-arm64.dmg
-          name: morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-mac-arm64.dmg
+          name: mac-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.dmg
 
   UI-Ubuntu-22-x64:
     name: Build Morpheus UI Ubuntu x64 Image
@@ -447,7 +447,7 @@ jobs:
       - Generate-Tag
       - Build-Service-Executables
     env:
-      SERVICE_PROXY_DOWNLOAD_URL_LINUX_X64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-linux-x86_64
+      SERVICE_PROXY_DOWNLOAD_URL_LINUX_X64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/linux-x86_64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
     steps:
       - name: Clone
         id: checkout
@@ -485,7 +485,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-linux-x86_64.AppImage
-          name: morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-linux-x86_64.AppImage
+          name: linux-x86_64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
 
   UI-Ubuntu-22-arm64:
     name: Build Morpheus UI Ubuntu arm64 Image
@@ -500,7 +500,7 @@ jobs:
       - Generate-Tag
       - Build-Service-Executables
     env:
-      SERVICE_PROXY_DOWNLOAD_URL_LINUX_ARM64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-linux-arm64
+      SERVICE_PROXY_DOWNLOAD_URL_LINUX_ARM64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/linux-arm64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
     steps:
       - name: Enable QEMU for ARM64 emulation
         uses: docker/setup-qemu-action@v3
@@ -541,7 +541,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-linux-arm64.AppImage
-          name: morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-linux-arm64.AppImage
+          name: linux-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
 
   UI-macOS-13-x64:
     name: Build Morpheus UI macOS-x64 Image
@@ -556,7 +556,7 @@ jobs:
       - Generate-Tag
       - Build-Service-Executables
     env:
-      SERVICE_PROXY_DOWNLOAD_URL_MAC_X64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-mac-x64
+      SERVICE_PROXY_DOWNLOAD_URL_MAC_X64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/mac-x64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
     steps:
       - name: Clone
         id: checkout
@@ -595,7 +595,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-mac-x64.dmg
-          name: morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-mac-x64.dmg
+          name: mac-x64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.dmg
 
   UI-Windows-avx2-x64:
     name: Build Morpheus UI Windows Image
@@ -610,7 +610,7 @@ jobs:
       - Generate-Tag
       - Build-Service-Executables
     env:
-      SERVICE_PROXY_DOWNLOAD_URL_WINDOWS_X64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-win-x64.exe
+      SERVICE_PROXY_DOWNLOAD_URL_WINDOWS_X64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/win-x64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}.exe
     steps:
       - name: Clone
         id: checkout
@@ -653,7 +653,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-win-x64.exe
-          name: morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-win-x64.exe
+          name: win-x64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.exe
 
   # UI-Windows-arm64:
   #   name: Build Morpheus UI Windows ARM64 Image
@@ -668,7 +668,7 @@ jobs:
   #     - Generate-Tag
   #     - Build-Service-Executables
   #   env:
-  #     SERVICE_PROXY_DOWNLOAD_URL_WINDOWS_ARM64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-win-arm64.exe
+  #     SERVICE_PROXY_DOWNLOAD_URL_WINDOWS_ARM64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/win-arm64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}.exe
   #   steps:
   #     - name: Clone
   #       id: checkout
