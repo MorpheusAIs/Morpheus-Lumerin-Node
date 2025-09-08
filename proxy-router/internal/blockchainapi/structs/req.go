@@ -89,5 +89,5 @@ type CreateModelRequest struct {
 	Fee    *lib.BigInt `json:"fee" binding:"required" validate:"number" example:"123000000000" swaggertype:"integer"`
 	Stake  *lib.BigInt `json:"stake" binding:"required" validate:"number" example:"123000000000" swaggertype:"integer"`
 	Name   string      `json:"name" binding:"required" validate:"min=1,max=64" example:"Llama 2.0"`
-	Tags   []string    `json:"tags" binding:"required" validate:"min=1,max=64,dive,min=1,max=64"`
+	Tags   []string    `json:"tags" binding:"required" validate:"min=1,max=64,dive,min=1,max=64" example:"LLM"`
 }

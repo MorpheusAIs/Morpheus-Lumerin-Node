@@ -2,12 +2,10 @@ package proxyapi
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"math/big"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
@@ -19,7 +17,6 @@ import (
 	sessionrepo "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/session"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/sashabaranov/go-openai"
 )
 
 type ProxyReceiver struct {
@@ -71,43 +68,52 @@ func processAudioTranscription(message []byte, sourceLog lib.ILogger) (*genericc
 	if err := json.Unmarshal(message, &audioRequest); err != nil {
 		return nil, lib.WrapError(fmt.Errorf("failed to unmarshal audio request"), err)
 	}
+	delete(audioRequest.Extra, "type")
 
-	// Create a temporary file for audio
-	tempFilePath, err := createAudioTempFile(unknownReq["base64Audio"].(string), sourceLog)
-	if err != nil {
-		return nil, err
-	}
-
-	audioRequest.FilePath = tempFilePath
 	return audioRequest, nil
 }
 
-// createAudioTempFile creates a temporary file with decoded audio data
-func createAudioTempFile(base64Audio string, sourceLog lib.ILogger) (string, error) {
-	tempDir := os.TempDir()
-	tempFilePath := filepath.Join(tempDir, fmt.Sprintf("%d", time.Now().UnixNano()))
-	tempFile, err := os.Create(tempFilePath)
-	if err != nil {
-		return "", lib.WrapError(fmt.Errorf("failed to create temp file"), err)
-	}
-	defer tempFile.Close()
-
-	// Decode and write audio
-	audioBytes, err := base64.StdEncoding.DecodeString(base64Audio)
-	if err != nil {
-		return "", lib.WrapError(fmt.Errorf("failed to decode base64 audio"), err)
+func processAudioSpeech(message []byte, sourceLog lib.ILogger) (*genericchatstorage.AudioSpeechRequest, error) {
+	var unknownReq map[string]interface{}
+	if err := json.Unmarshal(message, &unknownReq); err != nil {
+		return nil, lib.WrapError(fmt.Errorf("failed to unmarshal request"), err)
 	}
 
-	if _, err = tempFile.Write(audioBytes); err != nil {
-		return "", lib.WrapError(fmt.Errorf("failed to write audio to temp file"), err)
+	if unknownReq["type"] != "audio_speech" {
+		return nil, nil
 	}
 
-	return tempFilePath, nil
+	var audioRequest *genericchatstorage.AudioSpeechRequest
+	if err := json.Unmarshal(message, &audioRequest); err != nil {
+		return nil, lib.WrapError(fmt.Errorf("failed to unmarshal audio speech request"), err)
+	}
+	delete(audioRequest.Extra, "type")
+
+	return audioRequest, nil
+}
+
+func processEmbeddings(message []byte, sourceLog lib.ILogger) (*genericchatstorage.EmbeddingsRequest, error) {
+	var unknownReq map[string]interface{}
+	if err := json.Unmarshal(message, &unknownReq); err != nil {
+		return nil, lib.WrapError(fmt.Errorf("failed to unmarshal request"), err)
+	}
+
+	if unknownReq["type"] != "embeddings" {
+		return nil, nil // Not an embeddings request
+	}
+
+	var embedRequest *genericchatstorage.EmbeddingsRequest
+	if err := json.Unmarshal(message, &embedRequest); err != nil {
+		return nil, lib.WrapError(fmt.Errorf("failed to unmarshal embeddings request"), err)
+	}
+	delete(embedRequest.Extra, "type")
+
+	return embedRequest, nil
 }
 
 // processChatRequest handles chat completion request processing
-func processChatRequest(message []byte, sourceLog lib.ILogger) (*openai.ChatCompletionRequest, error) {
-	var chatRequest *openai.ChatCompletionRequest
+func processChatRequest(message []byte, sourceLog lib.ILogger) (*genericchatstorage.OpenAICompletionRequestExtra, error) {
+	var chatRequest *genericchatstorage.OpenAICompletionRequestExtra
 	if err := json.Unmarshal(message, &chatRequest); err != nil {
 		return nil, lib.WrapError(fmt.Errorf("failed to unmarshal chat request"), err)
 	}
@@ -193,33 +199,51 @@ func (s *ProxyReceiver) recordActivity(ctx context.Context, session *sessionrepo
 	}
 }
 
-func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, userPubKey string, rq *m.SessionPromptReq, sendResponse SendResponse, sourceLog lib.ILogger) (int, int, error) {
+func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, userPubKey string, payload []byte, sessionID common.Hash, sendResponse SendResponse, sourceLog lib.ILogger) (int, int, error) {
 	// Store sendResponse function for later use in callback
 	s.sendResponse = sendResponse
 
 	// Get session
-	session, err := s.sessionRepo.GetSession(ctx, rq.SessionID)
+	session, err := s.sessionRepo.GetSession(ctx, sessionID)
 	if err != nil {
 		return handleError(err, "failed to get session", sourceLog)
 	}
 
 	// Process request based on type
 	var audioTranscriptionReq *genericchatstorage.AudioTranscriptionRequest
-	var chatReq *openai.ChatCompletionRequest
+	var chatReq *genericchatstorage.OpenAICompletionRequestExtra
+	var audioSpeechReq *genericchatstorage.AudioSpeechRequest
+	var embeddingsReq *genericchatstorage.EmbeddingsRequest
 
 	// Try to process as audio transcription first
-	audioTranscriptionReq, err = processAudioTranscription([]byte(rq.Message), sourceLog)
+	audioTranscriptionReq, err = processAudioTranscription(payload, sourceLog)
 	if err != nil {
 		return handleError(err, "failed to process audio transcription", sourceLog)
 	}
 
-	// If not audio, process as chat completion
+	// If not audio transcription, try audio speech
 	if audioTranscriptionReq == nil {
-		chatReq, err = processChatRequest([]byte(rq.Message), sourceLog)
+		audioSpeechReq, err = processAudioSpeech(payload, sourceLog)
+		if err != nil {
+			return handleError(err, "failed to process audio speech", sourceLog)
+		}
+	}
+
+	// If not audio nor speech, try embeddings
+	if audioTranscriptionReq == nil && audioSpeechReq == nil {
+		embeddingsReq, err = processEmbeddings(payload, sourceLog)
+		if err != nil {
+			return handleError(err, "failed to process embeddings", sourceLog)
+		}
+	}
+
+	// If not audio, process as chat completion
+	if audioTranscriptionReq == nil && audioSpeechReq == nil && embeddingsReq == nil {
+		chatReq, err = processChatRequest(payload, sourceLog)
 		if err != nil {
 			return handleError(err, "failed to process chat request", sourceLog)
 		}
-	} else {
+	} else if audioTranscriptionReq != nil {
 		defer os.Remove(audioTranscriptionReq.FilePath)
 	}
 
@@ -238,7 +262,13 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 	// Process request with appropriate adapter method
 	if audioTranscriptionReq != nil && audioTranscriptionReq.FilePath != "" {
 		sourceLog.Debugf("Processing audio transcription request")
-		err = adapter.AudioTranscription(ctx, audioTranscriptionReq, "", cb)
+		err = adapter.AudioTranscription(ctx, audioTranscriptionReq, cb)
+	} else if audioSpeechReq != nil {
+		sourceLog.Debugf("Processing audio speech request")
+		err = adapter.AudioSpeech(ctx, audioSpeechReq, cb)
+	} else if embeddingsReq != nil {
+		sourceLog.Debugf("Processing embeddings request")
+		err = adapter.Embeddings(ctx, embeddingsReq, cb)
 	} else {
 		sourceLog.Debugf("Processing chat completion request")
 		err = adapter.Prompt(ctx, chatReq, cb)

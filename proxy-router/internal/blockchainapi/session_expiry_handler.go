@@ -61,7 +61,6 @@ func (s *SessionExpiryHandler) Run(ctx context.Context) error {
 				s.log.Error(err)
 				continue
 			}
-			continue
 			for _, session := range sessions {
 				if session.UserAddr == addr && session.EndsAt != nil && session.EndsAt.Int64() < time.Now().Unix() {
 					sessionId, err := lib.HexToHash(session.Id)

@@ -3,7 +3,6 @@ package proxyapi
 import (
 	"bufio"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"time"
 
@@ -18,13 +18,20 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi/structs"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
+	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
 	gsc "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
-	"github.com/sashabaranov/go-openai"
+)
+
+const (
+	// Memory optimization constants for audio processing
+	BASE64_ENCODING_CHUNK_SIZE  = 1024 * 1024 // 1MB chunks for base64 encoding
+	BASE64_DECODING_CHUNK_SIZE  = 64 * 1024   // 64KB chunks for base64 decoding
+	CONTENT_TYPE_DETECTION_SIZE = 512         // 512 bytes for content type detection
 )
 
 type AIEngine interface {
@@ -78,6 +85,8 @@ func (s *ProxyController) RegisterRoutes(r interfaces.Router) {
 	r.DELETE("/v1/chats/:id", s.authConfig.CheckAuth("edit_chat_history"), s.DeleteChat)
 	r.POST("/v1/chats/:id", s.authConfig.CheckAuth("edit_chat_history"), s.UpdateChatTitle)
 	r.POST("/v1/audio/transcriptions", s.authConfig.CheckAuth("audio_transcription"), s.AudioTranscription)
+	r.POST("/v1/audio/speech", s.authConfig.CheckAuth("audio_speech"), s.AudioSpeech)
+	r.POST("/v1/embeddings", s.authConfig.CheckAuth("embeddings"), s.Embeddings)
 
 	r.POST("/ipfs/pin", s.authConfig.CheckAuth("ipfs_pin"), s.Pin)
 	r.POST("/ipfs/unpin", s.authConfig.CheckAuth("ipfs_unpin"), s.Unpin)
@@ -171,7 +180,7 @@ func (s *ProxyController) InitiateSession(ctx *gin.Context) {
 //	@Router			/v1/chat/completions [post]
 func (c *ProxyController) Prompt(ctx *gin.Context) {
 	var (
-		body openai.ChatCompletionRequest
+		body gsc.OpenAICompletionRequestExtra
 		head PromptHead
 	)
 
@@ -1341,20 +1350,18 @@ func (c *ProxyController) PruneContainers(ctx *gin.Context) {
 //	@Param			response_format				formData	string	false	"Response format: json, text, srt, verbose_json, vtt"
 //	@Param			temperature					formData	number	false	"Temperature for sampling"
 //	@Param			timestamp_granularities[]	formData	string	false	"Timestamp granularity: word or segment"
-//	@Param			timestamp_granularity		formData	string	false	"Timestamp granularity: word or segment (default is segment)"
 //	@Param			stream						formData	boolean	false	"Whether to stream the results or not"
 //	@Security		BasicAuth
 //	@Router			/v1/audio/transcriptions [post]
 func (c *ProxyController) AudioTranscription(ctx *gin.Context) {
-	// Parse request
-	params, err := c.parseAudioTranscriptionParams(ctx)
+	transcriptionRequest, head, err := c.parseAudioTranscriptionParams(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	// Process audio file
-	tempFilePath, base64Audio, err := c.processAudioFile(ctx, params.head.SessionID)
+	tempFilePath, err := c.createTempFile(ctx)
 	if err != nil {
 		statusCode := http.StatusInternalServerError
 		if err.Error() == "Failed to get file" {
@@ -1364,124 +1371,74 @@ func (c *ProxyController) AudioTranscription(ctx *gin.Context) {
 		return
 	}
 	defer os.Remove(tempFilePath) // Clean up temp file
+	transcriptionRequest.FilePath = tempFilePath
 
 	// Get AI adapter
-	chatID, err := lib.GetRandomHash()
+	chatID := head.ChatID
+	if chatID == (lib.Hash{}) {
+		var err error
+		chatID, err = lib.GetRandomHash()
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	adapter, err := c.aiEngine.GetAdapter(ctx, chatID.Hash, head.ModelID.Hash, head.SessionID.Hash, c.storeChatContext, c.forwardChatContext)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
-	}
-
-	adapter, err := c.aiEngine.GetAdapter(ctx, chatID.Hash, params.head.ModelID.Hash, params.head.SessionID.Hash, c.storeChatContext, c.forwardChatContext)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	// Prepare transcription request
-	transcriptionRequest := &gsc.AudioTranscriptionRequest{
-		FilePath:               tempFilePath,
-		Language:               params.language,
-		Prompt:                 params.prompt,
-		Format:                 openai.AudioResponseFormat(params.responseFormat),
-		Temperature:            params.temperature,
-		TimestampGranularities: params.timestampGranularities,
-		TimestampGranularity:   params.timestampGranularity,
 	}
 
 	// Process transcription with callback
-	if err := c.executeTranscription(ctx, adapter, transcriptionRequest, base64Audio, params.stream); err != nil {
+	if err := c.executeTranscription(ctx, adapter, transcriptionRequest, transcriptionRequest.Stream); err != nil {
 		c.log.Errorf("error sending transcription request: %s", err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 	}
 }
 
-type audioTranscriptionParams struct {
-	head                   PromptHead
-	language               string
-	prompt                 string
-	responseFormat         string
-	temperature            float32
-	timestampGranularities []openai.TranscriptionTimestampGranularity
-	timestampGranularity   openai.TranscriptionTimestampGranularity
-	stream                 bool
-}
-
-func (c *ProxyController) parseAudioTranscriptionParams(ctx *gin.Context) (*audioTranscriptionParams, error) {
+func (c *ProxyController) parseAudioTranscriptionParams(
+	ctx *gin.Context,
+) (*gcs.AudioTranscriptionRequest, *PromptHead, error) {
 	var head PromptHead
 	if err := ctx.ShouldBindHeader(&head); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	// Parse form parameters
-	params := &audioTranscriptionParams{
-		head:           head,
-		language:       ctx.Request.FormValue("language"),
-		prompt:         ctx.Request.FormValue("prompt"),
-		responseFormat: ctx.Request.FormValue("response_format"),
+	// ---- Bind all tagged form fields in one call ----
+	var req gcs.AudioTranscriptionRequest
+	if err := ctx.ShouldBind(&req); err != nil {
+		return nil, nil, err
 	}
 
-	// Parse temperature
-	temperatureStr := ctx.Request.FormValue("temperature")
-	if temperatureStr != "" {
-		temp, err := strconv.ParseFloat(temperatureStr, 32)
-		if err != nil {
-			return nil, fmt.Errorf("invalid temperature value: %v", err)
+	// ---- Capture extras -----------------------------
+	if err := ctx.Request.ParseMultipartForm(32 << 20); err != nil {
+		return nil, nil, err
+	}
+
+	req.Extra = make(map[string]json.RawMessage)
+	tagged := lib.FormTagSet(reflect.TypeOf(req))
+	for k, v := range ctx.Request.MultipartForm.Value {
+		if _, known := tagged[k]; known {
+			continue
 		}
-		params.temperature = float32(temp)
-	}
-
-	// Parse stream flag
-	streamStr := ctx.Request.FormValue("stream")
-	if streamStr != "" {
-		stream, err := strconv.ParseBool(streamStr)
-		if err != nil {
-			return nil, fmt.Errorf("invalid stream value: %v", err)
-		}
-		params.stream = stream
-	}
-
-	timestampGranularityStr := ctx.Request.FormValue("timestamp_granularity")
-	fmt.Println("timestampGranularityStr:", timestampGranularityStr)
-	// Parse timestamp granularity
-	if timestampGranularityStr != "" {
-		switch timestampGranularityStr {
-		case "word":
-			fmt.Println("Setting timestamp granularity to word")
-			params.timestampGranularity = openai.TranscriptionTimestampGranularityWord
-		case "segment", "":
-			fmt.Println("Setting timestamp granularity to segment")
-			params.timestampGranularity = openai.TranscriptionTimestampGranularitySegment
-		default:
-			return nil, fmt.Errorf("invalid timestamp granularity: %s", timestampGranularityStr)
+		if len(v) == 1 {
+			req.Extra[k] = lib.ToJSONFragment(v[0])
+		} else {
+			// multiple values -> JSON array
+			b, _ := json.Marshal(v)
+			req.Extra[k] = b
 		}
 	}
 
-	// Parse timestamp granularities
-	if ctx.Request.MultipartForm != nil && ctx.Request.MultipartForm.Value != nil {
-		timestampGranularitiesRaw := ctx.Request.MultipartForm.Value["timestamp_granularities[]"]
-		if len(timestampGranularitiesRaw) > 0 {
-			for _, granularity := range timestampGranularitiesRaw {
-				switch granularity {
-				case "word":
-					params.timestampGranularities = append(params.timestampGranularities, openai.TranscriptionTimestampGranularityWord)
-				case "segment", "":
-					params.timestampGranularities = append(params.timestampGranularities, openai.TranscriptionTimestampGranularitySegment)
-				default:
-					params.timestampGranularities = append(params.timestampGranularities, openai.TranscriptionTimestampGranularitySegment)
-				}
-			}
-		}
-	}
-
-	return params, nil
+	return &req, &head, nil
 }
 
-func (c *ProxyController) processAudioFile(ctx *gin.Context, sessionID lib.Hash) (string, string, error) {
+func (c *ProxyController) createTempFile(ctx *gin.Context) (string, error) {
 	// Get the file from form data
 	file, fileHeader, err := ctx.Request.FormFile("file")
 	if err != nil {
-		return "", "", fmt.Errorf("Failed to get file: %v", err)
+		return "", fmt.Errorf("Failed to get file: %v", err)
 	}
 	defer file.Close()
 
@@ -1490,33 +1447,23 @@ func (c *ProxyController) processAudioFile(ctx *gin.Context, sessionID lib.Hash)
 	tempFilePath := filepath.Join(tempDir, fileHeader.Filename)
 	tempFile, err := os.Create(tempFilePath)
 	if err != nil {
-		return "", "", fmt.Errorf("Failed to create temp file: %v", err)
+		return "", fmt.Errorf("Failed to create temp file: %v", err)
 	}
 	defer tempFile.Close()
 
-	// Process based on session status
-	base64Audio := ""
-	if sessionID != (lib.Hash{}) {
-		audioBytes, err := io.ReadAll(file)
-		if err != nil {
-			return "", "", fmt.Errorf("Failed to read audio file: %v", err)
-		}
-		base64Audio = base64.StdEncoding.EncodeToString(audioBytes)
-	} else {
-		// Copy the uploaded file to the temporary file
-		if _, err = io.Copy(tempFile, file); err != nil {
-			return "", "", fmt.Errorf("Failed to save audio file: %v", err)
-		}
+	// Copy the uploaded file to the temporary file
+	if _, err = io.Copy(tempFile, file); err != nil {
+		return "", fmt.Errorf("Failed to save audio file: %v", err)
 	}
 
 	// Close the file before returning
 	tempFile.Close()
 
-	return tempFilePath, base64Audio, nil
+	return tempFilePath, nil
 }
 
-func (c *ProxyController) executeTranscription(ctx *gin.Context, adapter aiengine.AIEngineStream, request *gsc.AudioTranscriptionRequest, base64Audio string, stream bool) error {
-	return adapter.AudioTranscription(ctx, request, base64Audio, func(cbctx context.Context, completion gsc.Chunk, aiResponseError *gsc.AiEngineErrorResponse) error {
+func (c *ProxyController) executeTranscription(ctx *gin.Context, adapter aiengine.AIEngineStream, request *gsc.AudioTranscriptionRequest, stream bool) error {
+	return adapter.AudioTranscription(ctx, request, func(cbctx context.Context, completion gsc.Chunk, aiResponseError *gsc.AiEngineErrorResponse) error {
 		if aiResponseError != nil {
 			ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_JSON)
 			ctx.JSON(http.StatusBadRequest, aiResponseError)
@@ -1526,10 +1473,18 @@ func (c *ProxyController) executeTranscription(ctx *gin.Context, adapter aiengin
 		var response []byte
 
 		// Determine response type and format accordingly
-		if completion.Type() == genericchatstorage.ChunkTypeAudioTranscriptionText {
+		switch completion.Type() {
+		case genericchatstorage.ChunkTypeAudioTranscriptionText:
 			ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_TEXT_PLAIN)
 			response = []byte(completion.Data().(string))
-		} else {
+		case genericchatstorage.ChunkTypeAudioTranscriptionDelta:
+			ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_EVENT_STREAM)
+			marshalledResponse, err := json.Marshal(completion.Data())
+			if err != nil {
+				return err
+			}
+			response = marshalledResponse
+		default:
 			ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_JSON)
 			marshalledResponse, err := json.Marshal(completion.Data())
 			if err != nil {
@@ -1540,12 +1495,225 @@ func (c *ProxyController) executeTranscription(ctx *gin.Context, adapter aiengin
 
 		// Write response based on stream mode
 		var err error
-		if stream {
+		if stream || completion.IsStreaming() {
 			_, err = ctx.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", response)))
 		} else {
 			_, err = ctx.Writer.Write(response)
 		}
 
+		if err != nil {
+			return err
+		}
+
+		ctx.Writer.Flush()
+		return nil
+	})
+}
+
+// AudioSpeech godoc
+//
+//	@Summary		Generate Audio Speech
+//	@Description	Convert text to speech using TTS model
+//	@Tags			audio
+//	@Produce		audio/mpeg
+//	@Param			session_id	header	string								false	"Session ID"	format(hex32)
+//	@Param			model_id	header	string								false	"Model ID"		format(hex32)
+//	@Param			chat_id		header	string								false	"Chat ID"		format(hex32)
+//	@Param			request		body	proxyapi.AudioSpeechRequestExample	true	"Audio speech request parameters"
+//	@Success		200			{file}	binary
+//	@Security		BasicAuth
+//	@Router			/v1/audio/speech [post]
+func (c *ProxyController) AudioSpeech(ctx *gin.Context) {
+	// Parse request
+	head, params, err := c.parseAudioSpeechParams(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Get AI adapter
+	chatID := head.ChatID
+	if chatID == (lib.Hash{}) {
+		var err error
+		chatID, err = lib.GetRandomHash()
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	adapter, err := c.aiEngine.GetAdapter(ctx, chatID.Hash, head.ModelID.Hash, head.SessionID.Hash, c.storeChatContext, c.forwardChatContext)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Process speech generation with callback
+	if err := c.executeSpeechGeneration(ctx, adapter, params); err != nil {
+		c.log.Errorf("error sending speech generation request: %s", err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
+type audioSpeechParams struct {
+	head           PromptHead
+	input          string
+	voice          string
+	responseFormat string
+	speed          float64
+}
+
+func (c *ProxyController) parseAudioSpeechParams(ctx *gin.Context) (*PromptHead, *gsc.AudioSpeechRequest, error) {
+	var head PromptHead
+	if err := ctx.ShouldBindHeader(&head); err != nil {
+		return nil, nil, err
+	}
+
+	var requestBody gsc.AudioSpeechRequest
+
+	if err := ctx.ShouldBindJSON(&requestBody); err != nil {
+		return nil, nil, err
+	}
+
+	// Set defaults if not provided
+	if requestBody.ResponseFormat == "" {
+		requestBody.ResponseFormat = "mp3"
+	}
+	if requestBody.Speed == 0 {
+		requestBody.Speed = 1.0
+	}
+
+	return &head, &requestBody, nil
+}
+
+func (c *ProxyController) executeSpeechGeneration(ctx *gin.Context, adapter aiengine.AIEngineStream, request *gsc.AudioSpeechRequest) error {
+	return adapter.AudioSpeech(ctx, request, func(cbctx context.Context, completion gsc.Chunk, aiResponseError *gsc.AiEngineErrorResponse) error {
+		if aiResponseError != nil {
+			ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_JSON)
+			ctx.JSON(http.StatusBadRequest, aiResponseError)
+			return nil
+		}
+
+		// Set appropriate content type based on response format
+		contentType := "audio/mpeg" // default
+		switch request.ResponseFormat {
+		case "mp3":
+			contentType = "audio/mpeg"
+		case "opus":
+			contentType = "audio/opus"
+		case "aac":
+			contentType = "audio/aac"
+		case "flac":
+			contentType = "audio/flac"
+		case "wav":
+			contentType = "audio/wav"
+		case "pcm":
+			contentType = "audio/pcm"
+		}
+
+		ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, contentType)
+
+		// Handle audio speech response
+		switch completion.Type() {
+		case genericchatstorage.ChunkTypeAudioSpeech:
+			// Write binary audio data directly
+			audioData := completion.Data().([]byte)
+			_, err := ctx.Writer.Write(audioData)
+			if err != nil {
+				return err
+			}
+		default:
+			// Fallback for other response types
+			marshalledResponse, err := json.Marshal(completion.Data())
+			if err != nil {
+				return err
+			}
+			_, err = ctx.Writer.Write(marshalledResponse)
+			if err != nil {
+				return err
+			}
+		}
+
+		ctx.Writer.Flush()
+		return nil
+	})
+}
+
+// Embeddings godoc
+//
+//	@Summary		Generate embeddings
+//	@Description	Generate vector embeddings for the provided input
+//	@Tags			audio
+//	@Produce		json
+//	@Param			session_id	header		string								false	"Session ID"	format(hex32)
+//	@Param			model_id	header		string								false	"Model ID"		format(hex32)
+//	@Param			chat_id		header		string								false	"Chat ID"		format(hex32)
+//	@Param			request		body		proxyapi.EmbeddingsRequestExample	true	"Embeddings request parameters"
+//	@Success		200			{object}	string
+//	@Security		BasicAuth
+//	@Router			/v1/embeddings [post]
+func (c *ProxyController) Embeddings(ctx *gin.Context) {
+	// Parse request headers and body
+	head, params, err := c.parseEmbeddingsParams(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Get AI adapter based on session/model
+	chatID := head.ChatID
+	if chatID == (lib.Hash{}) {
+		var err error
+		chatID, err = lib.GetRandomHash()
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	adapter, err := c.aiEngine.GetAdapter(ctx, chatID.Hash, head.ModelID.Hash, head.SessionID.Hash, c.storeChatContext, c.forwardChatContext)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Process embeddings generation
+	if err := c.executeEmbeddings(ctx, adapter, params); err != nil {
+		c.log.Errorf("error sending embeddings request: %s", err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
+func (c *ProxyController) parseEmbeddingsParams(ctx *gin.Context) (*PromptHead, *gsc.EmbeddingsRequest, error) {
+	var head PromptHead
+	if err := ctx.ShouldBindHeader(&head); err != nil {
+		return nil, nil, err
+	}
+
+	var requestBody gsc.EmbeddingsRequest
+	if err := ctx.ShouldBindJSON(&requestBody); err != nil {
+		return nil, nil, err
+	}
+
+	return &head, &requestBody, nil
+}
+
+func (c *ProxyController) executeEmbeddings(ctx *gin.Context, adapter aiengine.AIEngineStream, request *gsc.EmbeddingsRequest) error {
+	// Default content type
+	ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_JSON)
+
+	return adapter.Embeddings(ctx, request, func(cbctx context.Context, completion gsc.Chunk, aiResponseError *gsc.AiEngineErrorResponse) error {
+		if aiResponseError != nil {
+			ctx.JSON(http.StatusBadRequest, aiResponseError)
+			return nil
+		}
+
+		responseBytes, err := json.Marshal(completion.Data())
+		if err != nil {
+			return err
+		}
+
+		_, err = ctx.Writer.Write(responseBytes)
 		if err != nil {
 			return err
 		}

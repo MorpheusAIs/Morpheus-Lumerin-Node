@@ -8,7 +8,7 @@ import (
 
 type ChatStorageInterface interface {
 	LoadChatFromFile(chatID string) (*ChatHistory, error)
-	StorePromptResponseToFile(chatID string, isLocal bool, modelID string, prompt *openai.ChatCompletionRequest, responses []Chunk, promptAt time.Time, responseAt time.Time) error
+	StorePromptResponseToFile(chatID string, isLocal bool, modelID string, prompt interface{}, responses []Chunk, promptAt time.Time, responseAt time.Time) error
 	GetChats() []Chat
 	DeleteChat(chatID string) error
 	UpdateChatTitle(chatID string, title string) error
@@ -21,21 +21,24 @@ type ChatHistory struct {
 	Messages []ChatMessage `json:"messages"`
 }
 
-func (h *ChatHistory) AppendChatHistory(req *openai.ChatCompletionRequest) *openai.ChatCompletionRequest {
+func (h *ChatHistory) AppendChatHistory(req *OpenAICompletionRequestExtra) *OpenAICompletionRequestExtra {
 	if h == nil {
 		return req
 	}
 
 	messagesWithHistory := make([]openai.ChatCompletionMessage, 0)
 	for _, chat := range h.Messages {
-		messagesWithHistory = append(messagesWithHistory, openai.ChatCompletionMessage{
-			Role:    chat.Prompt.Messages[0].Role,
-			Content: chat.Prompt.Messages[0].Content,
-		})
-		messagesWithHistory = append(messagesWithHistory, openai.ChatCompletionMessage{
-			Role:    "assistant",
-			Content: chat.Response,
-		})
+		// Only append chat completion messages to history, skip audio transcriptions
+		if chatReq, ok := chat.Prompt.(OpenAiCompletionRequest); ok {
+			messagesWithHistory = append(messagesWithHistory, openai.ChatCompletionMessage{
+				Role:    chatReq.Messages[0].Role,
+				Content: chatReq.Messages[0].Content,
+			})
+			messagesWithHistory = append(messagesWithHistory, openai.ChatCompletionMessage{
+				Role:    "assistant",
+				Content: chat.Response,
+			})
+		}
 	}
 
 	messagesWithHistory = append(messagesWithHistory, req.Messages...)
@@ -46,13 +49,36 @@ func (h *ChatHistory) AppendChatHistory(req *openai.ChatCompletionRequest) *open
 	return &newReq
 }
 
+// Helper method to convert openai.ChatCompletionRequest to OpenAiCompletionRequest
+func ConvertChatCompletionRequest(prompt *openai.ChatCompletionRequest) OpenAiCompletionRequest {
+	messages := make([]ChatCompletionMessage, 0)
+	for _, r := range prompt.Messages {
+		messages = append(messages, ChatCompletionMessage{
+			Content: r.Content,
+			Role:    r.Role,
+		})
+	}
+
+	return OpenAiCompletionRequest{
+		Messages:         messages,
+		Model:            prompt.Model,
+		MaxTokens:        prompt.MaxTokens,
+		Temperature:      prompt.Temperature,
+		TopP:             prompt.TopP,
+		FrequencyPenalty: prompt.FrequencyPenalty,
+		PresencePenalty:  prompt.PresencePenalty,
+		Stop:             prompt.Stop,
+	}
+}
+
 type ChatMessage struct {
-	Prompt            OpenAiCompletionRequest `json:"prompt"`
-	Response          string                  `json:"response"`
-	PromptAt          int64                   `json:"promptAt"`
-	ResponseAt        int64                   `json:"responseAt"`
-	IsImageContent    bool                    `json:"isImageContent"`
-	IsVideoRawContent bool                    `json:"isVideoRawContent"`
+	Prompt            interface{} `json:"prompt"`
+	Response          string      `json:"response"`
+	PromptAt          int64       `json:"promptAt"`
+	ResponseAt        int64       `json:"responseAt"`
+	IsImageContent    bool        `json:"isImageContent"`
+	IsVideoRawContent bool        `json:"isVideoRawContent"`
+	IsAudioContent    bool        `json:"isAudioContent"`
 }
 
 type Chat struct {
@@ -94,18 +120,4 @@ type OpenAiCompletionRequest struct {
 	FunctionCall any `json:"function_call,omitempty"`
 	// This can be either a string or an ToolChoice object.
 	ToolChoice any `json:"tool_choice,omitempty"`
-}
-
-type AudioTranscriptionRequest struct {
-	Model string
-
-	// FilePath is either an existing file in your filesystem
-	FilePath string
-
-	Prompt                 string
-	Temperature            float32
-	Language               string // Only for transcription.
-	Format                 openai.AudioResponseFormat
-	TimestampGranularities []openai.TranscriptionTimestampGranularity // Only for transcription.
-	TimestampGranularity   openai.TranscriptionTimestampGranularity
 }

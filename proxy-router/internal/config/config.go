@@ -34,7 +34,7 @@ type Config struct {
 		ExplorerMaxRetries uint8           `env:"EXPLORER_MAX_RETRIES" flag:"explorer-max-retries" validate:"omitempty,gte=0" desc:"max retries for explorer requests"`
 		UseSubscriptions   bool            `env:"ETH_NODE_USE_SUBSCRIPTIONS"  flag:"eth-node-use-subscriptions"  desc:"set it to true to enable subscriptions for blockchain events, otherwise default polling will be used"`
 		PollingInterval    time.Duration   `env:"ETH_NODE_POLLING_INTERVAL" flag:"eth-node-polling-interval" validate:"omitempty,duration" desc:"interval for polling eth node for new events"`
-		MaxReconnects      int             `env:"ETH_NODE_MAX_RECONNECTS" flag:"eth-node-max-reconnects" validate:"omitempty,gte=0" desc:"max reconnects to eth node"`
+		MaxReconnects      int             `env:"ETH_NODE_MAX_RECONNECTS" flag:"eth-node-max-reconnects" validate:"omitempty,gte=-1" desc:"max reconnects to eth node"`
 		Multicall3Addr     *common.Address `env:"MULTICALL3_ADDR" flag:"multicall3-addr" validate:"omitempty,eth_addr" desc:"multicall3 custom contract address"`
 	}
 	Environment string `env:"ENVIRONMENT" flag:"environment"`

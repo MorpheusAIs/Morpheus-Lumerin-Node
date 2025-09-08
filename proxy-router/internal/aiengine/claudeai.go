@@ -87,7 +87,7 @@ func NewClaudeAIEngine(modelName, baseURL, apiKey string, log lib.ILogger) *Clau
 	}
 }
 
-func (a *ClaudeAI) Prompt(ctx context.Context, compl *openai.ChatCompletionRequest, cb gcs.CompletionCallback) error {
+func (a *ClaudeAI) Prompt(ctx context.Context, compl *gcs.OpenAICompletionRequestExtra, cb gcs.CompletionCallback) error {
 	compl.Model = a.modelName
 	compl.MaxTokens = 1024
 	requestBody, err := json.Marshal(compl)
@@ -133,7 +133,7 @@ func (a *ClaudeAI) readResponse(ctx context.Context, body io.Reader, cb gcs.Comp
 		return fmt.Errorf("failed to decode response: %v", err)
 	}
 
-	var openaiCompl openai.ChatCompletionResponse
+	var openaiCompl gcs.ChatCompletionResponseExtra
 	openaiCompl.ID = compl.ID
 	openaiCompl.Model = compl.Model
 	openaiCompl.Choices = make([]openai.ChatCompletionChoice, len(compl.Content))
@@ -197,7 +197,7 @@ func (a *ClaudeAI) readStream(ctx context.Context, body io.Reader, cb gcs.Comple
 				model = compl.Message.Model
 			}
 			if compl.Delta.Text != "" || compl.ContentBlock.Text != "" {
-				openaiCompl := openai.ChatCompletionStreamResponse{}
+				openaiCompl := gcs.ChatCompletionStreamResponseExtra{}
 				openaiCompl.Choices = make([]openai.ChatCompletionStreamChoice, 1)
 				openaiCompl.Choices[0].Delta.Content = compl.Delta.Text
 				openaiCompl.Choices[0].Delta.Role = role
@@ -222,12 +222,20 @@ func (a *ClaudeAI) readStream(ctx context.Context, body io.Reader, cb gcs.Comple
 	return nil
 }
 
-func (a *ClaudeAI) AudioTranscription(ctx context.Context, prompt *gcs.AudioTranscriptionRequest, base64Audio string, cb gcs.CompletionCallback) error {
-	return fmt.Errorf("audio transcription is not supported")
+func (a *ClaudeAI) AudioTranscription(ctx context.Context, prompt *gcs.AudioTranscriptionRequest, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("audio transcription not supported")
+}
+
+func (a *ClaudeAI) AudioSpeech(ctx context.Context, prompt *gcs.AudioSpeechRequest, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("audio speech not supported")
+}
+
+func (a *ClaudeAI) Embeddings(ctx context.Context, prompt *gcs.EmbeddingsRequest, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("embeddings not supported")
 }
 
 func (a *ClaudeAI) ApiType() string {
 	return API_TYPE_CLAUDEAI
 }
 
-var _ AIEngineStream = &OpenAI{}
+var _ AIEngineStream = &ClaudeAI{}

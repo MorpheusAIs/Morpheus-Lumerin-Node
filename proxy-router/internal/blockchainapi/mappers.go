@@ -67,7 +67,9 @@ func mapModels(ids [][32]byte, models []modelregistry.IModelStorageModel) []*str
 	return result
 }
 
+
 func mapModel(id [32]byte, model modelregistry.IModelStorageModel) *structs.Model {
+	modelType := DetectModelType(model.Tags)
 	return &structs.Model{
 		Id:        id,
 		IpfsCID:   model.IpfsCID,
@@ -78,6 +80,7 @@ func mapModel(id [32]byte, model modelregistry.IModelStorageModel) *structs.Mode
 		Tags:      model.Tags,
 		CreatedAt: model.CreatedAt,
 		IsDeleted: model.IsDeleted,
+		ModelType: modelType,
 	}
 }
 
