@@ -431,7 +431,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-mac-arm64.dmg
+          path: ./ui-desktop/dist/mac-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.dmg
           name: mac-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.dmg
 
   UI-Ubuntu-22-x64:
@@ -484,7 +484,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-linux-x86_64.AppImage
+          path: ./ui-desktop/dist/linux-x86_64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
           name: linux-x86_64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
 
   UI-Ubuntu-22-arm64:
@@ -540,7 +540,7 @@ jobs:
       - name: Upload Linux ARM64 UI artifact
         uses: actions/upload-artifact@v4
         with:
-          path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-linux-arm64.AppImage
+          path: ./ui-desktop/dist/linux-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
           name: linux-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
 
   UI-macOS-13-x64:
@@ -594,7 +594,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-mac-x64.dmg
+          path: ./ui-desktop/dist/mac-x64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.dmg
           name: mac-x64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.dmg
 
   UI-Windows-avx2-x64:
@@ -652,7 +652,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-win-x64.exe
+          path: ./ui-desktop/dist/win-x64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.exe
           name: win-x64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.exe
 
   # UI-Windows-arm64:
@@ -710,8 +710,8 @@ jobs:
   #     - name: Upload artifacts
   #       uses: actions/upload-artifact@v4
   #       with:
-  #         path: ./ui-desktop/dist/morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-win-arm64.exe
-  #         name: morpheus-ui-${{ needs.Generate-Tag.outputs.vfull }}-win-arm64.exe
+  #         path: ./ui-desktop/dist/win-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.exe
+  #         name: win-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.exe
           
   UI-Release:
     name: Upload UI-Desktop Release
