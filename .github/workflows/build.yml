@@ -368,7 +368,7 @@ jobs:
           gitlab_web_url=$(echo "$response" | jq -r '.web_url // "N/A"')
 
           # Log the response
-          echo "GitLab Response: $response"
+          # echo "GitLab Response: $response"
 
           # Validate the status field
           if [[ "$gitlab_status" =~ ^(created|preparing|success|running|scheduled)$ ]]; then
