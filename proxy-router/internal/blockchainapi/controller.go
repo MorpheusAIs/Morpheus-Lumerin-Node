@@ -1045,6 +1045,13 @@ func (c *BlockchainController) createNewModel(ctx *gin.Context) {
 		return
 	}
 
+	modelType := DetectModelType(model.Tags)
+	if modelType == structs.ModelTypeUnknown {
+		c.log.Error("Model tags must include a supported type tag (chat, embedding, tts, stt)")
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: "Model tags must include a supported type tag (chat, embedding, tts, stt)"})
+		return 
+	}
+
 	var modelId common.Hash
 	if model.ID == "" {
 		var hash common.Hash

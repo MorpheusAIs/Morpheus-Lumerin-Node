@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"os"
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
-	gsc "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	m "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi/morrpcmessage"
@@ -16,7 +17,6 @@ import (
 	sessionrepo "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/session"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/sashabaranov/go-openai"
 )
 
 type ProxyReceiver struct {
@@ -29,6 +29,7 @@ type ProxyReceiver struct {
 	modelConfigLoader *config.ModelConfigLoader
 	service           BidGetter
 	sessionRepo       *sessionrepo.SessionRepositoryCached
+	sendResponse      SendResponse
 }
 
 func NewProxyReceiver(privateKeyHex, publicKeyHex lib.HexString, sessionStorage *storages.SessionStorage, aiEngine *aiengine.AiEngine, chainID *big.Int, modelConfigLoader *config.ModelConfigLoader, blockchainService BidGetter, sessionRepo *sessionrepo.SessionRepositoryCached) *ProxyReceiver {
@@ -45,35 +46,91 @@ func NewProxyReceiver(privateKeyHex, publicKeyHex lib.HexString, sessionStorage 
 	}
 }
 
-func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, userPubKey string, rq *m.SessionPromptReq, sendResponse SendResponse, sourceLog lib.ILogger) (int, int, error) {
-	var req *openai.ChatCompletionRequest
+// handleSessionError is a helper function to log errors and return consistent output
+func handleError(err error, message string, sourceLog lib.ILogger) (int, int, error) {
+	wrappedErr := lib.WrapError(fmt.Errorf(message), err)
+	sourceLog.Error(wrappedErr)
+	return 0, 0, wrappedErr
+}
 
-	err := json.Unmarshal([]byte(rq.Message), &req)
-	if err != nil {
-		err := lib.WrapError(fmt.Errorf("failed to unmarshal prompt"), err)
-		sourceLog.Error(err)
-		return 0, 0, err
+// processAudioTranscription handles audio transcription request processing
+func processAudioTranscription(message []byte, sourceLog lib.ILogger) (*genericchatstorage.AudioTranscriptionRequest, error) {
+	var unknownReq map[string]interface{}
+	if err := json.Unmarshal(message, &unknownReq); err != nil {
+		return nil, lib.WrapError(fmt.Errorf("failed to unmarshal request"), err)
 	}
 
-	session, err := s.sessionRepo.GetSession(ctx, rq.SessionID)
-	if err != nil {
-		err := lib.WrapError(fmt.Errorf("failed to get session"), err)
-		sourceLog.Error(err)
-		return 0, 0, err
+	if unknownReq["type"] != "audio_transcription" {
+		return nil, nil // Not an audio transcription request
 	}
 
-	ttftMs := 0
-	totalTokens := 0
-	now := time.Now().UnixMilli()
+	var audioRequest *genericchatstorage.AudioTranscriptionRequest
+	if err := json.Unmarshal(message, &audioRequest); err != nil {
+		return nil, lib.WrapError(fmt.Errorf("failed to unmarshal audio request"), err)
+	}
+	delete(audioRequest.Extra, "type")
 
-	adapter, err := s.aiEngine.GetAdapter(ctx, common.Hash{}, session.ModelID(), common.Hash{}, false, false)
-	if err != nil {
-		err := lib.WrapError(fmt.Errorf("failed to get adapter"), err)
-		sourceLog.Error(err)
-		return 0, 0, err
+	return audioRequest, nil
+}
+
+func processAudioSpeech(message []byte, sourceLog lib.ILogger) (*genericchatstorage.AudioSpeechRequest, error) {
+	var unknownReq map[string]interface{}
+	if err := json.Unmarshal(message, &unknownReq); err != nil {
+		return nil, lib.WrapError(fmt.Errorf("failed to unmarshal request"), err)
 	}
 
-	err = adapter.Prompt(ctx, req, func(ctx context.Context, completion gsc.Chunk, aiEngineErrorResponse *gsc.AiEngineErrorResponse) error {
+	if unknownReq["type"] != "audio_speech" {
+		return nil, nil
+	}
+
+	var audioRequest *genericchatstorage.AudioSpeechRequest
+	if err := json.Unmarshal(message, &audioRequest); err != nil {
+		return nil, lib.WrapError(fmt.Errorf("failed to unmarshal audio speech request"), err)
+	}
+	delete(audioRequest.Extra, "type")
+
+	return audioRequest, nil
+}
+
+func processEmbeddings(message []byte, sourceLog lib.ILogger) (*genericchatstorage.EmbeddingsRequest, error) {
+	var unknownReq map[string]interface{}
+	if err := json.Unmarshal(message, &unknownReq); err != nil {
+		return nil, lib.WrapError(fmt.Errorf("failed to unmarshal request"), err)
+	}
+
+	if unknownReq["type"] != "embeddings" {
+		return nil, nil // Not an embeddings request
+	}
+
+	var embedRequest *genericchatstorage.EmbeddingsRequest
+	if err := json.Unmarshal(message, &embedRequest); err != nil {
+		return nil, lib.WrapError(fmt.Errorf("failed to unmarshal embeddings request"), err)
+	}
+	delete(embedRequest.Extra, "type")
+
+	return embedRequest, nil
+}
+
+// processChatRequest handles chat completion request processing
+func processChatRequest(message []byte, sourceLog lib.ILogger) (*genericchatstorage.OpenAICompletionRequestExtra, error) {
+	var chatRequest *genericchatstorage.OpenAICompletionRequestExtra
+	if err := json.Unmarshal(message, &chatRequest); err != nil {
+		return nil, lib.WrapError(fmt.Errorf("failed to unmarshal chat request"), err)
+	}
+	return chatRequest, nil
+}
+
+// createCompletionCallback creates a callback function for handling completion chunks
+func (s *ProxyReceiver) createCompletionCallback(
+	ctx context.Context,
+	startTime int64,
+	userPubKey string,
+	requestID string,
+	sourceLog lib.ILogger,
+	ttftMs *int,
+	totalTokens *int,
+) genericchatstorage.CompletionCallback {
+	return func(ctx context.Context, completion genericchatstorage.Chunk, aiEngineErrorResponse *genericchatstorage.AiEngineErrorResponse) error {
 		if aiEngineErrorResponse != nil {
 			marshalledResponse, err := json.Marshal(aiEngineErrorResponse)
 			if err != nil {
@@ -94,12 +151,13 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 				sourceLog.Error(err)
 				return err
 			}
-			return sendResponse(r)
+			return s.sendResponse(r)
 		}
-		totalTokens += completion.Tokens()
 
-		if ttftMs == 0 {
-			ttftMs = int(time.Now().UnixMilli() - now)
+		*totalTokens += completion.Tokens()
+
+		if *ttftMs == 0 {
+			*ttftMs = int(time.Now().UnixMilli() - startTime)
 		}
 
 		marshalledResponse, err := json.Marshal(completion.Data())
@@ -119,27 +177,109 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 			requestID,
 		)
 		if err != nil {
-			err := lib.WrapError(fmt.Errorf("failed to create response"), err)
-			sourceLog.Error(err)
-			return err
+			wrappedErr := lib.WrapError(fmt.Errorf("failed to create response"), err)
+			sourceLog.Error(wrappedErr)
+			return wrappedErr
 		}
-		return sendResponse(r)
-	})
-	if err != nil {
-		err := lib.WrapError(fmt.Errorf("failed to prompt"), err)
-		sourceLog.Error(err)
-		return 0, 0, err
-	}
 
+		return s.sendResponse(r)
+	}
+}
+
+// recordActivity records the session activity
+func (s *ProxyReceiver) recordActivity(ctx context.Context, session *sessionrepo.SessionModel, startTime int64, sourceLog lib.ILogger) {
 	activity := storages.PromptActivity{
 		SessionID: session.ID().Hex(),
-		StartTime: now,
+		StartTime: startTime,
 		EndTime:   time.Now().Unix(),
 	}
-	err = s.sessionStorage.AddActivity(session.ModelID().Hex(), &activity)
-	if err != nil {
+
+	if err := s.sessionStorage.AddActivity(session.ModelID().Hex(), &activity); err != nil {
 		sourceLog.Warnf("failed to store activity: %s", err)
 	}
+}
+
+func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, userPubKey string, payload []byte, sessionID common.Hash, sendResponse SendResponse, sourceLog lib.ILogger) (int, int, error) {
+	// Store sendResponse function for later use in callback
+	s.sendResponse = sendResponse
+
+	// Get session
+	session, err := s.sessionRepo.GetSession(ctx, sessionID)
+	if err != nil {
+		return handleError(err, "failed to get session", sourceLog)
+	}
+
+	// Process request based on type
+	var audioTranscriptionReq *genericchatstorage.AudioTranscriptionRequest
+	var chatReq *genericchatstorage.OpenAICompletionRequestExtra
+	var audioSpeechReq *genericchatstorage.AudioSpeechRequest
+	var embeddingsReq *genericchatstorage.EmbeddingsRequest
+
+	// Try to process as audio transcription first
+	audioTranscriptionReq, err = processAudioTranscription(payload, sourceLog)
+	if err != nil {
+		return handleError(err, "failed to process audio transcription", sourceLog)
+	}
+
+	// If not audio transcription, try audio speech
+	if audioTranscriptionReq == nil {
+		audioSpeechReq, err = processAudioSpeech(payload, sourceLog)
+		if err != nil {
+			return handleError(err, "failed to process audio speech", sourceLog)
+		}
+	}
+
+	// If not audio nor speech, try embeddings
+	if audioTranscriptionReq == nil && audioSpeechReq == nil {
+		embeddingsReq, err = processEmbeddings(payload, sourceLog)
+		if err != nil {
+			return handleError(err, "failed to process embeddings", sourceLog)
+		}
+	}
+
+	// If not audio, process as chat completion
+	if audioTranscriptionReq == nil && audioSpeechReq == nil && embeddingsReq == nil {
+		chatReq, err = processChatRequest(payload, sourceLog)
+		if err != nil {
+			return handleError(err, "failed to process chat request", sourceLog)
+		}
+	} else if audioTranscriptionReq != nil {
+		defer os.Remove(audioTranscriptionReq.FilePath)
+	}
+
+	// Start timing and get adapter
+	startTime := time.Now().UnixMilli()
+	ttftMs, totalTokens := 0, 0
+
+	adapter, err := s.aiEngine.GetAdapter(ctx, common.Hash{}, session.ModelID(), common.Hash{}, false, false)
+	if err != nil {
+		return handleError(err, "failed to get adapter", sourceLog)
+	}
+
+	// Create completion callback
+	cb := s.createCompletionCallback(ctx, startTime, userPubKey, requestID, sourceLog, &ttftMs, &totalTokens)
+
+	// Process request with appropriate adapter method
+	if audioTranscriptionReq != nil && audioTranscriptionReq.FilePath != "" {
+		sourceLog.Debugf("Processing audio transcription request")
+		err = adapter.AudioTranscription(ctx, audioTranscriptionReq, cb)
+	} else if audioSpeechReq != nil {
+		sourceLog.Debugf("Processing audio speech request")
+		err = adapter.AudioSpeech(ctx, audioSpeechReq, cb)
+	} else if embeddingsReq != nil {
+		sourceLog.Debugf("Processing embeddings request")
+		err = adapter.Embeddings(ctx, embeddingsReq, cb)
+	} else {
+		sourceLog.Debugf("Processing chat completion request")
+		err = adapter.Prompt(ctx, chatReq, cb)
+	}
+
+	if err != nil {
+		return handleError(err, "failed to prompt", sourceLog)
+	}
+
+	// Record activity
+	s.recordActivity(ctx, session, startTime, sourceLog)
 
 	return ttftMs, totalTokens, nil
 }

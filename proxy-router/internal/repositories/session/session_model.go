@@ -6,7 +6,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-type sessionModel struct {
+type SessionModel struct {
 	id            common.Hash
 	userAddr      common.Address
 	providerAddr  common.Address
@@ -20,52 +20,52 @@ type sessionModel struct {
 	directPayment    bool
 }
 
-func (s *sessionModel) ID() common.Hash {
+func (s *SessionModel) ID() common.Hash {
 	return s.id
 }
 
-func (s *sessionModel) UserAddr() common.Address {
+func (s *SessionModel) UserAddr() common.Address {
 	return s.userAddr
 }
 
-func (s *sessionModel) ProviderAddr() common.Address {
+func (s *SessionModel) ProviderAddr() common.Address {
 	return s.providerAddr
 }
 
-func (s *sessionModel) AgentUsername() string {
+func (s *SessionModel) AgentUsername() string {
 	return s.agentUsername
 }
 
-func (s *sessionModel) EndsAt() *big.Int {
+func (s *SessionModel) EndsAt() *big.Int {
 	// copy big.Int so that the original value is not modified
 	return new(big.Int).Set(s.endsAt)
 }
 
-func (s *sessionModel) GetStats() (tpsScaled1000Arr []int, ttftMsArr []int) {
+func (s *SessionModel) GetStats() (tpsScaled1000Arr []int, ttftMsArr []int) {
 	return s.tpsScaled1000Arr, s.ttftMsArr
 }
 
-func (s *sessionModel) ModelID() common.Hash {
+func (s *SessionModel) ModelID() common.Hash {
 	return s.modelID
 }
 
-func (s *sessionModel) FailoverEnabled() bool {
+func (s *SessionModel) FailoverEnabled() bool {
 	return s.failoverEnabled
 }
 
-func (s *sessionModel) DirectPayment() bool {
+func (s *SessionModel) DirectPayment() bool {
 	return s.directPayment
 }
 
-func (s *sessionModel) AddStats(tpsScaled1000 int, ttftMs int) {
+func (s *SessionModel) AddStats(tpsScaled1000 int, ttftMs int) {
 	s.tpsScaled1000Arr = append(s.tpsScaled1000Arr, tpsScaled1000)
 	s.ttftMsArr = append(s.ttftMsArr, ttftMs)
 }
 
-func (s *sessionModel) SetFailoverEnabled(enabled bool) {
+func (s *SessionModel) SetFailoverEnabled(enabled bool) {
 	s.failoverEnabled = enabled
 }
 
-func (s *sessionModel) SetAgentUsername(username string) {
+func (s *SessionModel) SetAgentUsername(username string) {
 	s.agentUsername = username
 }

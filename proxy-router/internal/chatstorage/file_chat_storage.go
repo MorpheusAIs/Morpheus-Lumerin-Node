@@ -2,6 +2,7 @@ package chatstorage
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,7 +10,6 @@ import (
 	"time"
 
 	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
-	"github.com/sashabaranov/go-openai"
 )
 
 // ChatStorage handles storing conversations to files.
@@ -28,7 +28,7 @@ func NewChatStorage(dirPath string) *ChatStorage {
 }
 
 // StorePromptResponseToFile stores the prompt and response to a file.
-func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool, modelId string, prompt *openai.ChatCompletionRequest, responses []gcs.Chunk, promptAt time.Time, responseAt time.Time) error {
+func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool, modelId string, prompt interface{}, responses []gcs.Chunk, promptAt time.Time, responseAt time.Time) error {
 	if err := os.MkdirAll(cs.dirPath, os.ModePerm); err != nil {
 		return err
 	}
@@ -51,25 +51,6 @@ func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool
 		}
 	}
 
-	messages := make([]gcs.ChatCompletionMessage, 0)
-	for _, r := range prompt.Messages {
-		messages = append(messages, gcs.ChatCompletionMessage{
-			Content: r.Content,
-			Role:    r.Role,
-		})
-	}
-
-	p := gcs.OpenAiCompletionRequest{
-		Messages:         messages,
-		Model:            prompt.Model,
-		MaxTokens:        prompt.MaxTokens,
-		Temperature:      prompt.Temperature,
-		TopP:             prompt.TopP,
-		FrequencyPenalty: prompt.FrequencyPenalty,
-		PresencePenalty:  prompt.PresencePenalty,
-		Stop:             prompt.Stop,
-	}
-
 	resps := make([]string, len(responses))
 	for i, r := range responses {
 		resps[i] = r.String()
@@ -77,23 +58,75 @@ func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool
 
 	isImageContent := false
 	isVideoRawContent := false
+	isAudioContent := false
 	if len(responses) > 0 {
 		isImageContent = responses[0].Type() == gcs.ChunkTypeImage
 		isVideoRawContent = responses[0].Type() == gcs.ChunkTypeVideo
+		isAudioContent = responses[0].Type() == gcs.ChunkTypeAudioTranscriptionText ||
+			responses[0].Type() == gcs.ChunkTypeAudioTranscriptionJson ||
+			responses[0].Type() == gcs.ChunkTypeAudioTranscriptionDelta
 	}
 
-	newEntry := gcs.ChatMessage{
-		Prompt:            p,
-		Response:          strings.Join(resps, ""),
-		PromptAt:          promptAt.Unix(),
-		ResponseAt:        responseAt.Unix(),
-		IsImageContent:    isImageContent,
-		IsVideoRawContent: isVideoRawContent,
+	var newEntry gcs.ChatMessage
+	var title string
+
+	switch p := prompt.(type) {
+	case *gcs.OpenAICompletionRequestExtra:
+		newEntry = gcs.ChatMessage{
+			Prompt:            prompt,
+			Response:          strings.Join(resps, ""),
+			PromptAt:          promptAt.Unix(),
+			ResponseAt:        responseAt.Unix(),
+			IsImageContent:    isImageContent,
+			IsVideoRawContent: isVideoRawContent,
+			IsAudioContent:    isAudioContent,
+		}
+		title = p.Messages[0].Content
+	case *gcs.AudioTranscriptionRequest:
+		// Store audio transcription request directly
+		newEntry = gcs.ChatMessage{
+			Prompt:            p,
+			Response:          strings.Join(resps, ""),
+			PromptAt:          promptAt.Unix(),
+			ResponseAt:        responseAt.Unix(),
+			IsImageContent:    isImageContent,
+			IsVideoRawContent: isVideoRawContent,
+			IsAudioContent:    isAudioContent,
+		}
+		// Use a default title for audio transcription or the prompt if available
+		if p.Prompt != "" {
+			title = "Audio Transcription: " + p.Prompt
+		} else {
+			title = "Audio Transcription"
+		}
+	case *gcs.EmbeddingsRequest:
+		newEntry = gcs.ChatMessage{
+			Prompt:            p,
+			Response:          strings.Join(resps, ""),
+			PromptAt:          promptAt.Unix(),
+			ResponseAt:        responseAt.Unix(),
+			IsImageContent:    isImageContent,
+			IsVideoRawContent: isVideoRawContent,
+			IsAudioContent:    isAudioContent,
+		}
+	case *gcs.AudioSpeechRequest:
+		// Store audio speech request directly
+		newEntry = gcs.ChatMessage{
+			Prompt:            p,
+			Response:          strings.Join(resps, ""),
+			PromptAt:          promptAt.Unix(),
+			ResponseAt:        responseAt.Unix(),
+			IsImageContent:    isImageContent,
+			IsVideoRawContent: isVideoRawContent,
+			IsAudioContent:    isAudioContent,
+		}
+	default:
+		return fmt.Errorf("unsupported prompt type: %T", prompt)
 	}
 
 	if chatHistory.Messages == nil && len(chatHistory.Messages) == 0 {
 		chatHistory.ModelId = modelId
-		chatHistory.Title = prompt.Messages[0].Content
+		chatHistory.Title = title
 		chatHistory.IsLocal = isLocal
 	}
 

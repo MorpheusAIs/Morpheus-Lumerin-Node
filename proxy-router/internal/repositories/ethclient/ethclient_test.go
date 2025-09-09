@@ -2,6 +2,7 @@ package ethclient
 
 import (
 	"fmt"
+	"math/big"
 	"sync"
 	"testing"
 
@@ -27,7 +28,7 @@ func TestEthClient(t *testing.T) {
 	for i := 0; i < 500; i++ {
 		wg.Add(1)
 		go func() {
-			ids, _, err := mr.ModelGetAll(nil)
+			ids, _, err := mr.GetModelIds(nil, big.NewInt(0), big.NewInt(100))
 			defer wg.Done()
 			if err != nil {
 				fmt.Printf("Error: %s\n", err)

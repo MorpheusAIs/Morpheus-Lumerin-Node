@@ -12,7 +12,6 @@ import (
 	c "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
 	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
-	"github.com/sashabaranov/go-openai"
 )
 
 const API_TYPE_PRODIA_SDXL = "prodia-sdxl"
@@ -37,7 +36,7 @@ func NewProdiaSDXLEngine(modelName, apiURL, apiKey string, log lib.ILogger) *Pro
 	}
 }
 
-func (s *ProdiaSDXL) Prompt(ctx context.Context, prompt *openai.ChatCompletionRequest, cb gcs.CompletionCallback) error {
+func (s *ProdiaSDXL) Prompt(ctx context.Context, prompt *gcs.OpenAICompletionRequestExtra, cb gcs.CompletionCallback) error {
 	body := map[string]string{
 		"model":  s.modelName,
 		"prompt": prompt.Messages[len(prompt.Messages)-1].Content,
@@ -102,6 +101,18 @@ func (s *ProdiaSDXL) Prompt(ctx context.Context, prompt *openai.ChatCompletionRe
 	})
 
 	return cb(ctx, chunk, nil)
+}
+
+func (s *ProdiaSDXL) AudioTranscription(ctx context.Context, prompt *gcs.AudioTranscriptionRequest, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("audio transcription not supported")
+}
+
+func (s *ProdiaSDXL) AudioSpeech(ctx context.Context, prompt *gcs.AudioSpeechRequest, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("audio speech not supported")
+}
+
+func (s *ProdiaSDXL) Embeddings(ctx context.Context, prompt *gcs.EmbeddingsRequest, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("embeddings not supported")
 }
 
 func (s *ProdiaSDXL) ApiType() string {

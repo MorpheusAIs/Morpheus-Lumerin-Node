@@ -2,8 +2,10 @@ package proxyapi
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
@@ -11,6 +13,7 @@ import (
 	msg "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi/morrpcmessage"
 	sessionrepo "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/session"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/go-playground/validator/v10"
 )
 
@@ -21,6 +24,7 @@ type MORRPCController struct {
 	sessionStorage *storages.SessionStorage
 	morRpc         *m.MORRPCMessage
 	prKey          lib.HexString
+	streamManager  *StreamingSessionManager
 }
 
 type SendResponse func(*msg.RpcResponse) error
@@ -37,6 +41,7 @@ func NewMORRPCController(service *ProxyReceiver, validator *validator.Validate, 
 		sessionRepo:    sessionRepo,
 		morRpc:         m.NewMorRpc(),
 		prKey:          prKey,
+		streamManager:  NewStreamingSessionManager(),
 	}
 
 	return c
@@ -57,6 +62,12 @@ func (s *MORRPCController) Handle(ctx context.Context, msg m.RPCMessage, sourceL
 		return s.callAgentTool(ctx, msg, sendResponse, sourceLog)
 	case "agent.get_tools":
 		return s.getAgentTools(ctx, msg, sendResponse, sourceLog)
+	case "session.prompt.stream.start":
+		return s.sessionPromptStreamStart(ctx, msg, sendResponse, sourceLog)
+	case "session.prompt.stream.chunk":
+		return s.sessionPromptStreamChunk(ctx, msg, sendResponse, sourceLog)
+	case "session.prompt.stream.end":
+		return s.sessionPromptStreamEnd(ctx, msg, sendResponse, sourceLog)
 	default:
 		return lib.WrapError(ErrUnknownMethod, fmt.Errorf("unknown method: %s", msg.Method))
 	}
@@ -128,14 +139,11 @@ func (s *MORRPCController) sessionPrompt(ctx context.Context, msg m.RPCMessage, 
 	}
 
 	sourceLog.Debugf("received prompt from session %s, timestamp: %d", req.SessionID, req.Timestamp)
-	session, err := s.sessionRepo.GetSession(ctx, req.SessionID)
-	if err != nil {
-		return fmt.Errorf("session cannot be loaded %s", err)
-	}
 
-	isSessionExpired := session.EndsAt().Uint64()*1000 < req.Timestamp
-	if isSessionExpired {
-		return fmt.Errorf("session expired")
+	// Validate session exists and is not expired
+	session, err := s.isSessionValid(ctx, req.SessionID, req.Timestamp)
+	if err != nil {
+		return err
 	}
 
 	user, ok := s.sessionStorage.GetUser(session.UserAddr().Hex())
@@ -159,7 +167,7 @@ func (s *MORRPCController) sessionPrompt(ctx context.Context, msg m.RPCMessage, 
 	}
 
 	now := time.Now().Unix()
-	ttftMs, totalTokens, err := s.service.SessionPrompt(ctx, msg.ID, user.PubKey, &req, sendResponse, sourceLog)
+	ttftMs, totalTokens, err := s.service.SessionPrompt(ctx, msg.ID, user.PubKey, []byte(req.Message), req.SessionID, sendResponse, sourceLog)
 	if err != nil {
 		sourceLog.Error(err)
 		return err
@@ -246,14 +254,10 @@ func (s *MORRPCController) callAgentTool(ctx context.Context, msg m.RPCMessage, 
 		return lib.WrapError(ErrValidation, err)
 	}
 
-	session, err := s.sessionRepo.GetSession(ctx, req.SessionID)
+	// Validate session exists and is not expired
+	session, err := s.isSessionValid(ctx, req.SessionID, req.Timestamp)
 	if err != nil {
-		return fmt.Errorf("session cannot be loaded %s", err)
-	}
-
-	isSessionExpired := session.EndsAt().Uint64()*1000 < req.Timestamp
-	if isSessionExpired {
-		return fmt.Errorf("session expired")
+		return err
 	}
 
 	user, ok := s.sessionStorage.GetUser(session.UserAddr().Hex())
@@ -296,14 +300,10 @@ func (s *MORRPCController) getAgentTools(ctx context.Context, msg m.RPCMessage, 
 		return lib.WrapError(ErrValidation, err)
 	}
 
-	session, err := s.sessionRepo.GetSession(ctx, req.SessionID)
+	// Validate session exists and is not expired
+	session, err := s.isSessionValid(ctx, req.SessionID, req.Timestamp)
 	if err != nil {
-		return fmt.Errorf("session cannot be loaded %s", err)
-	}
-
-	isSessionExpired := session.EndsAt().Uint64()*1000 < req.Timestamp
-	if isSessionExpired {
-		return fmt.Errorf("session expired")
+		return err
 	}
 
 	user, ok := s.sessionStorage.GetUser(session.UserAddr().Hex())
@@ -333,4 +333,273 @@ func (s *MORRPCController) getAgentTools(ctx context.Context, msg m.RPCMessage, 
 	}
 
 	return sendResponse(res)
+}
+
+func (s *MORRPCController) sessionPromptStreamStart(ctx context.Context, msg m.RPCMessage, sendResponse SendResponse, sourceLog lib.ILogger) error {
+	var req m.SessionPromptStreamStartReq
+	err := json.Unmarshal(msg.Params, &req)
+	if err != nil {
+		return lib.WrapError(ErrUnmarshal, err)
+	}
+
+	if err := s.validator.Struct(req); err != nil {
+		return lib.WrapError(ErrValidation, err)
+	}
+
+	// Validate session exists and is not expired
+	session, err := s.isSessionValid(ctx, req.SessionID, req.Timestamp)
+	if err != nil {
+		return err
+	}
+
+	// Verify user signature
+	user, ok := s.sessionStorage.GetUser(session.UserAddr().Hex())
+	if !ok {
+		return fmt.Errorf("user not found")
+	}
+
+	pubKeyHex, err := lib.StringToHexString(user.PubKey)
+	if err != nil {
+		return fmt.Errorf("invalid pubkey %s", err)
+	}
+
+	sig := req.Signature
+	req.Signature = lib.HexString{}
+
+	isValid := s.morRpc.VerifySignature(req, sig, pubKeyHex, sourceLog)
+	if !isValid {
+		err := fmt.Errorf("invalid signature")
+		sourceLog.Error(err)
+		return err
+	}
+
+	// Clean up expired sessions
+	s.streamManager.CleanupExpiredSessions()
+
+	// Check if stream already exists
+	if _, exists := s.streamManager.GetSession(req.StreamID); exists {
+		return fmt.Errorf("stream with ID %s already exists", req.StreamID)
+	}
+
+	// Create streaming session
+	_, err = s.streamManager.CreateSession(req.StreamID, req.SessionID.Hex(), req.TotalChunks, req.FileSize, req.ContentType)
+	if err != nil {
+		return fmt.Errorf("failed to create streaming session: %s", err)
+	}
+
+	sourceLog.Debugf("started audio streaming session %s for session %s, total chunks: %d, file size: %d",
+		req.StreamID, req.SessionID.Hex(), req.TotalChunks, req.FileSize)
+
+	// Send success response
+	res, err := s.morRpc.SessionPromptStreamStartResponse(req.StreamID, "started", s.prKey, msg.ID)
+	if err != nil {
+		sourceLog.Error(err)
+		return err
+	}
+
+	return sendResponse(res)
+}
+
+func (s *MORRPCController) sessionPromptStreamChunk(ctx context.Context, msg m.RPCMessage, sendResponse SendResponse, sourceLog lib.ILogger) error {
+	var req m.SessionPromptStreamChunkReq
+	err := json.Unmarshal(msg.Params, &req)
+	if err != nil {
+		return lib.WrapError(ErrUnmarshal, err)
+	}
+
+	if err := s.validator.Struct(req); err != nil {
+		return lib.WrapError(ErrValidation, err)
+	}
+
+	// Validate session exists and is not expired
+	session, err := s.isSessionValid(ctx, req.SessionID, req.Timestamp)
+	if err != nil {
+		return err
+	}
+
+	// Verify user signature
+	user, ok := s.sessionStorage.GetUser(session.UserAddr().Hex())
+	if !ok {
+		return fmt.Errorf("user not found")
+	}
+
+	pubKeyHex, err := lib.StringToHexString(user.PubKey)
+	if err != nil {
+		return fmt.Errorf("invalid pubkey %s", err)
+	}
+
+	sig := req.Signature
+	req.Signature = lib.HexString{}
+
+	isValid := s.morRpc.VerifySignature(req, sig, pubKeyHex, sourceLog)
+	if !isValid {
+		err := fmt.Errorf("invalid signature")
+		sourceLog.Error(err)
+		return err
+	}
+
+	// Get streaming session
+	streamSession, exists := s.streamManager.GetSession(req.StreamID)
+	if !exists {
+		return fmt.Errorf("streaming session %s not found", req.StreamID)
+	}
+
+	// Validate chunk index
+	if req.ChunkIndex != streamSession.ChunkCount {
+		return fmt.Errorf("expected chunk index %d, got %d", streamSession.ChunkCount, req.ChunkIndex)
+	}
+
+	// Decode and append chunk data
+	chunkData, err := base64.StdEncoding.DecodeString(req.ChunkData)
+	if err != nil {
+		return fmt.Errorf("failed to decode chunk data: %s", err)
+	}
+
+	// Append chunk data to temp file
+	file, err := os.OpenFile(streamSession.TempFilePath, os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open temp file for writing: %s", err)
+	}
+	defer file.Close()
+
+	_, err = file.Write(chunkData)
+	if err != nil {
+		return fmt.Errorf("failed to write chunk data to temp file: %s", err)
+	}
+
+	streamSession.ChunkCount++
+	streamSession.LastActivity = time.Now()
+
+	sourceLog.Debugf("received chunk %d/%d for stream %s, size: %d bytes",
+		req.ChunkIndex+1, streamSession.TotalChunks, req.StreamID, len(chunkData))
+
+	// Send success response
+	res, err := s.morRpc.SessionPromptStreamChunkResponse(req.StreamID, req.ChunkIndex, "received", s.prKey, msg.ID)
+	if err != nil {
+		sourceLog.Error(err)
+		return err
+	}
+
+	return sendResponse(res)
+}
+
+func (s *MORRPCController) sessionPromptStreamEnd(ctx context.Context, msg m.RPCMessage, sendResponse SendResponse, sourceLog lib.ILogger) error {
+	var req m.SessionPromptStreamEndReq
+	err := json.Unmarshal(msg.Params, &req)
+	if err != nil {
+		return lib.WrapError(ErrUnmarshal, err)
+	}
+
+	if err := s.validator.Struct(req); err != nil {
+		return lib.WrapError(ErrValidation, err)
+	}
+
+	// Validate session exists and is not expired
+	session, err := s.isSessionValid(ctx, req.SessionID, req.Timestamp)
+	if err != nil {
+		return err
+	}
+
+	// Verify user signature
+	user, ok := s.sessionStorage.GetUser(session.UserAddr().Hex())
+	if !ok {
+		return fmt.Errorf("user not found")
+	}
+
+	pubKeyHex, err := lib.StringToHexString(user.PubKey)
+	if err != nil {
+		return fmt.Errorf("invalid pubkey %s", err)
+	}
+
+	sig := req.Signature
+	req.Signature = lib.HexString{}
+
+	isValid := s.morRpc.VerifySignature(req, sig, pubKeyHex, sourceLog)
+	if !isValid {
+		err := fmt.Errorf("invalid signature")
+		sourceLog.Error(err)
+		return err
+	}
+
+	// Get streaming session
+	streamSession, exists := s.streamManager.GetSession(req.StreamID)
+	if !exists {
+		return fmt.Errorf("streaming session %s not found", req.StreamID)
+	}
+
+	// Validate all chunks received
+	if streamSession.ChunkCount != streamSession.TotalChunks {
+		return fmt.Errorf("incomplete stream: received %d chunks, expected %d", streamSession.ChunkCount, streamSession.TotalChunks)
+	}
+
+	sourceLog.Debugf("completed audio streaming session %s, temp file: %s", req.StreamID, streamSession.TempFilePath)
+
+	// Process the complete audio file
+	err = s.processStreamedAudioFile(ctx, session, streamSession.TempFilePath, req.AudioRequestParam, msg.ID, user.PubKey, req.SessionID, sendResponse, sourceLog)
+	if err != nil {
+		// Clean up streaming session on error
+		s.streamManager.RemoveSession(req.StreamID)
+		sourceLog.Errorf("failed to process streamed audio file: %s", err)
+		return err
+	}
+
+	// Clean up streaming session after successful processing
+	s.streamManager.RemoveSession(req.StreamID)
+
+	sourceLog.Debugf("processed streamed audio file for session %s", req.SessionID.Hex())
+
+	// The response is sent by the streaming callback, so we don't send one here
+	return nil
+}
+
+func (s *MORRPCController) processStreamedAudioFile(ctx context.Context, session *sessionrepo.SessionModel, tempFilePath string, audioRequestParam string, requestID string, userPubKey string, sessionID common.Hash, sendResponse SendResponse, sourceLog lib.ILogger) error {
+	// Parse the audio request parameters
+	var audioParams map[string]interface{}
+	err := json.Unmarshal([]byte(audioRequestParam), &audioParams)
+	if err != nil {
+		return fmt.Errorf("failed to parse audio request parameters: %s", err)
+	}
+
+	// Add the file path to the parameters
+	audioParams["FilePath"] = tempFilePath
+
+	payload, err := json.Marshal(audioParams)
+	if err != nil {
+		return fmt.Errorf("failed to serialize audio request parameters: %s", err)
+	}
+
+	now := time.Now().Unix()
+	ttftMs, totalTokens, err := s.service.SessionPrompt(ctx, requestID, userPubKey, payload, sessionID, sendResponse, sourceLog)
+	if err != nil {
+		sourceLog.Error(err)
+		return err
+	}
+
+	requestDuration := int(time.Now().Unix() - now)
+	if requestDuration == 0 {
+		requestDuration = 1
+	}
+
+	tpsScaled1000 := totalTokens * 1000 / requestDuration
+	session.AddStats(tpsScaled1000, ttftMs)
+
+	err = s.sessionRepo.SaveSession(ctx, session)
+	if err != nil {
+		return fmt.Errorf("failed to save session %s", err)
+	}
+	return nil
+}
+
+// Validate session exists and is not expired
+func (s *MORRPCController) isSessionValid(ctx context.Context, sessionID common.Hash, reqTimestamp uint64) (*sessionrepo.SessionModel, error) {
+	session, err := s.sessionRepo.GetSession(ctx, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("session cannot be loaded %s", err)
+	}
+
+	isSessionExpired := session.EndsAt().Uint64()*1000 < uint64(reqTimestamp)
+	if isSessionExpired {
+		return nil, fmt.Errorf("session expired")
+	}
+	return session, nil
 }

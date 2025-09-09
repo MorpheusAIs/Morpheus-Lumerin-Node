@@ -132,3 +132,54 @@ type PongRes struct {
 	Nonce     lib.HexString `json:"nonce"     validate:"required,hexadecimal"`
 	Signature lib.HexString `json:"signature" validate:"required,hexadecimal"`
 }
+
+// Audio streaming message types
+type SessionPromptStreamStartReq struct {
+	SessionID   common.Hash   `json:"sessionid" validate:"required,hex32"`
+	StreamID    string        `json:"streamid" validate:"required"`
+	TotalChunks uint32        `json:"totalchunks" validate:"required,number"`
+	FileSize    uint64        `json:"filesize" validate:"required,number"`
+	ContentType string        `json:"contenttype" validate:"required"`
+	Signature   lib.HexString `json:"signature" validate:"required,hexadecimal"`
+	Timestamp   uint64        `json:"timestamp" validate:"required,number"`
+}
+
+type SessionPromptStreamStartRes struct {
+	StreamID  string        `json:"streamid" validate:"required"`
+	Status    string        `json:"status" validate:"required"`
+	Signature lib.HexString `json:"signature" validate:"required,hexadecimal"`
+	Timestamp uint64        `json:"timestamp" validate:"required,number"`
+}
+
+type SessionPromptStreamChunkReq struct {
+	SessionID   common.Hash   `json:"sessionid" validate:"required,hex32"`
+	StreamID    string        `json:"streamid" validate:"required"`
+	ChunkIndex  uint32        `json:"chunkindex" validate:"number"`
+	ChunkData   string        `json:"chunkdata" validate:"required"`
+	IsLastChunk bool          `json:"islastchunk"`
+	Signature   lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
+	Timestamp   uint64        `json:"timestamp" validate:"required,number"`
+}
+
+type SessionPromptStreamChunkRes struct {
+	StreamID   string        `json:"streamid" validate:"required"`
+	ChunkIndex uint32        `json:"chunkindex" validate:"required,number"`
+	Status     string        `json:"status" validate:"required"`
+	Signature  lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
+	Timestamp  uint64        `json:"timestamp" validate:"required,number"`
+}
+
+type SessionPromptStreamEndReq struct {
+	SessionID         common.Hash   `json:"sessionid" validate:"required,hex32"`
+	StreamID          string        `json:"streamid" validate:"required"`
+	AudioRequestParam string        `json:"audiorequestparam" validate:"required"`
+	Signature         lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
+	Timestamp         uint64        `json:"timestamp" validate:"required,number"`
+}
+
+type SessionPromptStreamEndRes struct {
+	StreamID  string        `json:"streamid" validate:"required"`
+	Message   string        `json:"message" validate:"required"`
+	Signature lib.HexString `json:"signature,omitempty" validate:"required,hexadecimal"`
+	Timestamp uint64        `json:"timestamp" validate:"required,number"`
+}

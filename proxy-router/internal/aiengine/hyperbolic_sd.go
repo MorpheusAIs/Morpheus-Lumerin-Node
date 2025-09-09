@@ -11,7 +11,6 @@ import (
 	c "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
 	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
-	"github.com/sashabaranov/go-openai"
 )
 
 const API_TYPE_HYPERBOLIC_SD = "hyperbolic-sd"
@@ -47,7 +46,7 @@ func NewHyperbolicSDEngine(modelName, apiURL, apiKey string, parameters ModelPar
 	}
 }
 
-func (s *HyperbolicSD) Prompt(ctx context.Context, prompt *openai.ChatCompletionRequest, cb gcs.CompletionCallback) error {
+func (s *HyperbolicSD) Prompt(ctx context.Context, prompt *gcs.OpenAICompletionRequestExtra, cb gcs.CompletionCallback) error {
 	body := map[string]string{
 		"model_name": s.modelName,
 		"prompt":     prompt.Messages[len(prompt.Messages)-1].Content,
@@ -119,6 +118,18 @@ func (s *HyperbolicSD) Prompt(ctx context.Context, prompt *openai.ChatCompletion
 	})
 
 	return cb(ctx, chunk, nil)
+}
+
+func (s *HyperbolicSD) AudioTranscription(ctx context.Context, prompt *gcs.AudioTranscriptionRequest, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("audio transcription not supported")
+}
+
+func (s *HyperbolicSD) AudioSpeech(ctx context.Context, prompt *gcs.AudioSpeechRequest, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("audio speech not supported")
+}
+
+func (s *HyperbolicSD) Embeddings(ctx context.Context, prompt *gcs.EmbeddingsRequest, cb gcs.CompletionCallback) error {
+	return fmt.Errorf("embeddings not supported")
 }
 
 func (s *HyperbolicSD) ApiType() string {

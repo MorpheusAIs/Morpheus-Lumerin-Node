@@ -23,7 +23,7 @@ func NewSessionRepositoryCached(storage *storages.SessionStorage, reg *registrie
 }
 
 // GetSession returns a session by its ID from the read-through cache
-func (r *SessionRepositoryCached) GetSession(ctx context.Context, id common.Hash) (*sessionModel, error) {
+func (r *SessionRepositoryCached) GetSession(ctx context.Context, id common.Hash) (*SessionModel, error) {
 	ses, ok := r.getSessionFromCache(id)
 	if ok {
 		return ses, nil
@@ -43,7 +43,7 @@ func (r *SessionRepositoryCached) GetSession(ctx context.Context, id common.Hash
 }
 
 // SaveSession saves a session to the cache. Before saving it to cache you have to call GetSession
-func (r *SessionRepositoryCached) SaveSession(ctx context.Context, ses *sessionModel) error {
+func (r *SessionRepositoryCached) SaveSession(ctx context.Context, ses *SessionModel) error {
 	return r.saveSessionToCache(ses)
 }
 
@@ -60,7 +60,7 @@ func (r *SessionRepositoryCached) RefreshSession(ctx context.Context, id common.
 	return err
 }
 
-func (r *SessionRepositoryCached) getSessionFromBlockchain(ctx context.Context, id common.Hash) (*sessionModel, error) {
+func (r *SessionRepositoryCached) getSessionFromBlockchain(ctx context.Context, id common.Hash) (*SessionModel, error) {
 	session, err := r.reg.GetSession(ctx, id)
 	if err != nil {
 		return nil, err
@@ -71,7 +71,7 @@ func (r *SessionRepositoryCached) getSessionFromBlockchain(ctx context.Context, 
 		return nil, err
 	}
 
-	return &sessionModel{
+	return &SessionModel{
 		id:               id,
 		userAddr:         session.User,
 		providerAddr:     bid.Provider,
@@ -85,12 +85,12 @@ func (r *SessionRepositoryCached) getSessionFromBlockchain(ctx context.Context, 
 	}, nil
 }
 
-func (r *SessionRepositoryCached) getSessionFromCache(id common.Hash) (*sessionModel, bool) {
+func (r *SessionRepositoryCached) getSessionFromCache(id common.Hash) (*SessionModel, bool) {
 	ses, ok := r.storage.GetSession(id.Hex())
 	if !ok {
 		return nil, false
 	}
-	return &sessionModel{
+	return &SessionModel{
 		id:               common.HexToHash(ses.Id),
 		userAddr:         common.HexToAddress(ses.UserAddr),
 		providerAddr:     common.HexToAddress(ses.ProviderAddr),
@@ -103,7 +103,7 @@ func (r *SessionRepositoryCached) getSessionFromCache(id common.Hash) (*sessionM
 	}, true
 }
 
-func (r *SessionRepositoryCached) saveSessionToCache(ses *sessionModel) error {
+func (r *SessionRepositoryCached) saveSessionToCache(ses *SessionModel) error {
 	return r.storage.AddSession(&storages.Session{
 		Id:               ses.id.Hex(),
 		UserAddr:         ses.userAddr.Hex(),

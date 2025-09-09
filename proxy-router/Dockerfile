@@ -1,6 +1,9 @@
 # Stage 1: Build
 FROM golang:1.23-bullseye AS builder
 
+# Create and set permissions for /tmp directory
+RUN mkdir -p /tmp && chmod 1777 /tmp
+
 # Capture the Git tag, commit hash, and architecture
 ARG TAG_NAME
 ARG COMMIT
@@ -29,7 +32,10 @@ COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /app/proxy-router /usr/bin/
 # COPY --from=builder /usr/bin/dbus-launch /usr/bin/
 
+# Copy /tmp directory from builder
+COPY --from=builder /tmp /tmp
+
 SHELL ["/bin/sh", "-c"]
 EXPOSE 3333 8082
 
-ENTRYPOINT ["proxy-router"]
+ENTRYPOINT ["proxy-router"] 

@@ -436,6 +436,8 @@ func (s *BlockchainService) CreateNewModel(ctx context.Context, modelID common.H
 		return nil, lib.WrapError(ErrModel, err)
 	}
 
+	modelType := DetectModelType(model.Tags)
+
 	return &structs.Model{
 		Id:        ID,
 		IpfsCID:   model.IpfsCID,
@@ -446,6 +448,7 @@ func (s *BlockchainService) CreateNewModel(ctx context.Context, modelID common.H
 		Tags:      model.Tags,
 		CreatedAt: model.CreatedAt,
 		IsDeleted: model.IsDeleted,
+		ModelType: modelType,
 	}, nil
 }
 

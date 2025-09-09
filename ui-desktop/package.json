@@ -1,8 +1,8 @@
 {
-  "name": "morpheus-ui",
+  "name": "morpheus-app",
   "version": "1.0.0",
   "description": "The Morpheus Decentralized AI Desktop App",
-  "repository": "https://github.com/lumerin-protocol/morpheus-lumerin-node.git//ui-desktop",
+  "repository": "https://github.com/MorpheusAIs/morpheus-lumerin-node.git//ui-desktop",
   "main": "./out/main/index.mjs",
   "author": {
     "name": "Lumerin",

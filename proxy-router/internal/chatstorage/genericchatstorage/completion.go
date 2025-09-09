@@ -2,8 +2,7 @@ package genericchatstorage
 
 import (
 	"context"
-
-	"github.com/sashabaranov/go-openai"
+	"encoding/json"
 )
 
 type CompletionCallback func(ctx context.Context, completion Chunk, aiEngineErrorResponse *AiEngineErrorResponse) error
@@ -11,19 +10,24 @@ type CompletionCallback func(ctx context.Context, completion Chunk, aiEngineErro
 type ChunkType string
 
 const (
-	ChunkTypeText    ChunkType = "text"
-	ChunkTypeImage   ChunkType = "image"
-	ChunkTypeVideo   ChunkType = "video"
-	ChunkTypeControl ChunkType = "control-message"
+	ChunkTypeText                    ChunkType = "text"
+	ChunkTypeImage                   ChunkType = "image"
+	ChunkTypeVideo                   ChunkType = "video"
+	ChunkTypeControl                 ChunkType = "control-message"
+	ChunkTypeAudioTranscriptionText  ChunkType = "audio-transcription-text"
+	ChunkTypeAudioTranscriptionJson  ChunkType = "audio-transcription-json"
+	ChunkTypeAudioTranscriptionDelta ChunkType = "audio-transcription-delta"
+	ChunkTypeAudioSpeech             ChunkType = "audio-speech"
+	ChunkTypeEmbedding               ChunkType = "embedding"
 )
 
 type ChunkText struct {
-	data        *openai.ChatCompletionResponse
+	data        *ChatCompletionResponseExtra
 	isStreaming bool
 	tokenCount  int
 }
 
-func NewChunkText(data *openai.ChatCompletionResponse) *ChunkText {
+func NewChunkText(data *ChatCompletionResponseExtra) *ChunkText {
 	return &ChunkText{
 		data: data,
 	}
@@ -50,10 +54,10 @@ func (c *ChunkText) Data() interface{} {
 }
 
 type ChunkStreaming struct {
-	data *openai.ChatCompletionStreamResponse
+	data *ChatCompletionStreamResponseExtra
 }
 
-func NewChunkStreaming(data *openai.ChatCompletionStreamResponse) *ChunkStreaming {
+func NewChunkStreaming(data *ChatCompletionStreamResponseExtra) *ChunkStreaming {
 	return &ChunkStreaming{
 		data: data,
 	}
@@ -213,6 +217,194 @@ var _ Chunk = &ChunkControl{}
 var _ Chunk = &ChunkStreaming{}
 var _ Chunk = &ChunkVideo{}
 var _ Chunk = &ChunkImageRawContent{}
+
+type ChunkAudioTranscriptionText struct {
+	data string
+}
+
+func NewChunkAudioTranscriptionText(data string) *ChunkAudioTranscriptionText {
+	return &ChunkAudioTranscriptionText{
+		data: data,
+	}
+}
+
+func (c *ChunkAudioTranscriptionText) IsStreaming() bool {
+	return false
+}
+
+func (c *ChunkAudioTranscriptionText) Tokens() int {
+	return len(c.data)
+}
+
+func (c *ChunkAudioTranscriptionText) Type() ChunkType {
+	return ChunkTypeAudioTranscriptionText
+}
+
+func (c *ChunkAudioTranscriptionText) String() string {
+	return c.data
+}
+
+func (c *ChunkAudioTranscriptionText) Data() interface{} {
+	return c.data
+}
+
+var _ Chunk = &ChunkAudioTranscriptionText{}
+
+type ChunkAudioTranscriptionJson struct {
+	data interface{}
+}
+
+func NewChunkAudioTranscriptionJson(data interface{}) *ChunkAudioTranscriptionJson {
+	return &ChunkAudioTranscriptionJson{
+		data: data,
+	}
+}
+
+func (c *ChunkAudioTranscriptionJson) IsStreaming() bool {
+	return false
+}
+
+func (c *ChunkAudioTranscriptionJson) Tokens() int {
+	jsonData, err := json.Marshal(c.data)
+	if err != nil {
+		return 0
+	}
+
+	return len(jsonData)
+}
+
+func (c *ChunkAudioTranscriptionJson) Type() ChunkType {
+	return ChunkTypeAudioTranscriptionJson
+}
+
+func (c *ChunkAudioTranscriptionJson) String() string {
+	jsonData, err := json.Marshal(c.data)
+	if err != nil {
+		return ""
+	}
+	return string(jsonData)
+}
+
+func (c *ChunkAudioTranscriptionJson) Data() interface{} {
+	return c.data
+}
+
+var _ Chunk = &ChunkAudioTranscriptionJson{}
+
+// ChunkAudioTranscriptionDelta represents a streaming delta chunk for audio transcription
+type ChunkAudioTranscriptionDelta struct {
+	data AudioTranscriptionDelta
+}
+
+// AudioTranscriptionDelta represents the delta data structure for streaming transcription
+type AudioTranscriptionDelta struct {
+	Type  string `json:"type"`
+	Text  string `json:"text"`
+	Delta string `json:"delta"`
+}
+
+func NewChunkAudioTranscriptionDelta(data AudioTranscriptionDelta) *ChunkAudioTranscriptionDelta {
+	return &ChunkAudioTranscriptionDelta{
+		data: AudioTranscriptionDelta{
+			Delta: data.Delta,
+			Type:  data.Type,
+			Text:  data.Text,
+		},
+	}
+}
+
+func (c *ChunkAudioTranscriptionDelta) IsStreaming() bool {
+	return true
+}
+
+func (c *ChunkAudioTranscriptionDelta) Tokens() int {
+	if c.data.Type == "transcript.text.delta" {
+		return len(c.data.Delta)
+	}
+	return len(c.data.Text)
+}
+
+func (c *ChunkAudioTranscriptionDelta) Type() ChunkType {
+	return ChunkTypeAudioTranscriptionDelta
+}
+
+func (c *ChunkAudioTranscriptionDelta) String() string {
+	if c.data.Type == "transcript.text.delta" {
+		return c.data.Delta
+	}
+	return c.data.Text
+}
+
+func (c *ChunkAudioTranscriptionDelta) Data() interface{} {
+	return c.data
+}
+
+var _ Chunk = &ChunkAudioTranscriptionDelta{}
+
+type ChunkAudioSpeech struct {
+	data []byte
+}
+
+func NewChunkAudioSpeech(data []byte) *ChunkAudioSpeech {
+	return &ChunkAudioSpeech{
+		data: data,
+	}
+}
+
+func (c *ChunkAudioSpeech) IsStreaming() bool {
+	return false
+}
+
+func (c *ChunkAudioSpeech) Tokens() int {
+	return len(c.data)
+}
+
+func (c *ChunkAudioSpeech) Type() ChunkType {
+	return ChunkTypeAudioSpeech
+}
+
+func (c *ChunkAudioSpeech) String() string {
+	return string(c.data)
+}
+
+func (c *ChunkAudioSpeech) Data() interface{} {
+	return c.data
+}
+
+var _ Chunk = &ChunkAudioSpeech{}
+
+// ChunkEmbedding represents an embedding vector response
+type ChunkEmbedding struct {
+	data interface{}
+}
+
+// NewChunkEmbedding creates a new embedding chunk
+func NewChunkEmbedding(data EmbeddingsResponse) *ChunkEmbedding {
+	return &ChunkEmbedding{data: data}
+}
+
+func (c *ChunkEmbedding) IsStreaming() bool {
+	return false
+}
+
+func (c *ChunkEmbedding) Tokens() int {
+	return c.data.(EmbeddingsResponse).Usage.TotalTokens
+}
+
+func (c *ChunkEmbedding) Type() ChunkType {
+	return ChunkTypeEmbedding
+}
+
+func (c *ChunkEmbedding) String() string {
+	b, _ := json.Marshal(c.data)
+	return string(b)
+}
+
+func (c *ChunkEmbedding) Data() interface{} {
+	return c.data
+}
+
+var _ Chunk = &ChunkEmbedding{}
 
 type AiEngineErrorResponse struct {
 	ProviderModelError interface{} `json:"providerModelError"`

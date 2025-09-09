@@ -7,7 +7,6 @@ import (
 	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/sashabaranov/go-openai"
 )
 
 type History struct {
@@ -30,7 +29,7 @@ func NewHistory(engine AIEngineStream, storage gcs.ChatStorageInterface, chatID,
 	}
 }
 
-func (h *History) Prompt(ctx context.Context, prompt *openai.ChatCompletionRequest, cb gcs.CompletionCallback) error {
+func (h *History) Prompt(ctx context.Context, prompt *gcs.OpenAICompletionRequestExtra, cb gcs.CompletionCallback) error {
 	isLocal := h.engine.ApiType() != "remote"
 	completions := make([]gcs.Chunk, 0)
 	startTime := time.Now()
@@ -46,7 +45,79 @@ func (h *History) Prompt(ctx context.Context, prompt *openai.ChatCompletionReque
 	}
 
 	err = h.engine.Prompt(ctx, adjustedPrompt, func(ctx context.Context, completion gcs.Chunk, errorBody *gcs.AiEngineErrorResponse) error {
-		if errorBody != nil {
+		if completion != nil {
+			completions = append(completions, completion)
+		}
+		return cb(ctx, completion, errorBody)
+	})
+	if err != nil {
+		return err
+	}
+	endTime := time.Now()
+
+	err = h.storage.StorePromptResponseToFile(h.chatID.Hex(), isLocal, h.modelID.Hex(), prompt, completions, startTime, endTime)
+	if err != nil {
+		h.log.Errorf("failed to store prompt response: %v", err)
+	}
+
+	return err
+}
+
+func (h *History) AudioTranscription(ctx context.Context, prompt *gcs.AudioTranscriptionRequest, cb gcs.CompletionCallback) error {
+	isLocal := h.engine.ApiType() != "remote"
+	completions := make([]gcs.Chunk, 0)
+	startTime := time.Now()
+
+	err := h.engine.AudioTranscription(ctx, prompt, func(ctx context.Context, completion gcs.Chunk, errorBody *gcs.AiEngineErrorResponse) error {
+		if completion != nil {
+			completions = append(completions, completion)
+		}
+		return cb(ctx, completion, errorBody)
+	})
+	if err != nil {
+		return err
+	}
+	endTime := time.Now()
+
+	err = h.storage.StorePromptResponseToFile(h.chatID.Hex(), isLocal, h.modelID.Hex(), prompt, completions, startTime, endTime)
+	if err != nil {
+		h.log.Errorf("failed to store prompt response: %v", err)
+	}
+
+	return err
+}
+
+func (h *History) AudioSpeech(ctx context.Context, prompt *gcs.AudioSpeechRequest, cb gcs.CompletionCallback) error {
+	isLocal := h.engine.ApiType() != "remote"
+	completions := make([]gcs.Chunk, 0)
+	startTime := time.Now()
+
+	err := h.engine.AudioSpeech(ctx, prompt, func(ctx context.Context, completion gcs.Chunk, errorBody *gcs.AiEngineErrorResponse) error {
+		if completion != nil {
+			completions = append(completions, completion)
+		}
+		return cb(ctx, completion, errorBody)
+	})
+	if err != nil {
+		return err
+	}
+	endTime := time.Now()
+
+	err = h.storage.StorePromptResponseToFile(h.chatID.Hex(), isLocal, h.modelID.Hex(), prompt, completions, startTime, endTime)
+	if err != nil {
+		h.log.Errorf("failed to store prompt response: %v", err)
+	}
+
+	return err
+}
+
+func (h *History) Embeddings(ctx context.Context, prompt *gcs.EmbeddingsRequest, cb gcs.CompletionCallback) error {
+	isLocal := h.engine.ApiType() != "remote"
+	completions := make([]gcs.Chunk, 0)
+	startTime := time.Now()
+
+	err := h.engine.Embeddings(ctx, prompt, func(ctx context.Context, completion gcs.Chunk, errorBody *gcs.AiEngineErrorResponse) error {
+		if completion != nil {
 			completions = append(completions, completion)
 		}
 		return cb(ctx, completion, errorBody)
