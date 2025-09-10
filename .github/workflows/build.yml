@@ -1,30 +1,17 @@
 name: CI-CD
-# Intended workflow and validation:
-# 0. Develop in feature branches and PR to `dev` branch for internal validation,
-#    - Once validated in dev, PR/PUSH to `test` - this will create OS Test Release, Test Container image and deploy to DEV environment
-#    - Once validated in test, PR/PUSH to `main` - this will create Latest Release, Latest container image and deploy to LMR environment
-#    - Once validated in main, PR/PUSH to origin main on the MorpheusAI repo (no builds/triggers will happen here, only code updates)
-# 1. PUSH to cicd/* will (special branches that will enable push testing of cicd changes)
-#    - Generate a new tag
-#    - Build and test the Docker image
-#    - Build and test the macOS-arm64 image
-# 2. PR to dev will
-#   - Generate a new tag
-#   - Build and test the Docker image
-# 2 PUSH to dev will
-#   - Generate a new tag
-#   - Build and test the Docker image
-#   - Build and test the macOS-arm64 image
-# 3. PR to test or main will
-#   - Generate a new tag
-#   - Build and test the Docker image
-# 4. PUSH to test or main will
-#   - Generate a new tag
-#   - Build and test the Docker image
-#   - Build all 4 OS Versions
-#   - Create a release and upload the artifacts
-#   - Build and push the Docker image to GitHub Container Registry
-#   - Deploy to GitLab
+# CI/CD Pipeline for Morpheus Lumerin Node
+# 
+# Branch Strategy:
+#   • dev: Build and test only (no deployment)
+#   • test: Build, test, and deploy to AWS DEV environment
+#   • main: Build, test, create release, and deploy to AWS PRD environment
+#
+# Key Features:
+#   • Optimized Docker builds with GitHub Actions caching
+#   • Multi-platform container images (linux/amd64, linux/arm64)
+#   • Cross-platform executables (Linux, macOS, Windows)
+#   • Automated deployments to AWS Environments in both GitLab (Titan) and GitHub (Morpheus)
+#   • Health check verification with version matching
 
 on:
   workflow_dispatch:
@@ -44,7 +31,6 @@ on:
       - test
       - dev
       - cicd/*
-      - feat/downstream-refactor
 
     paths: [".github/**", "ui-desktop/**", "ui-core/**", "proxy-router/**", "cli/**"]
 
@@ -134,7 +120,7 @@ jobs:
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
         (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'test' || github.base_ref == 'dev')) ||
-        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/feat/downstream-refactor')) ||
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
       )
     runs-on: ubuntu-latest
@@ -177,7 +163,7 @@ jobs:
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/feat/downstream-refactor')) ||
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
       )
     needs:
@@ -207,8 +193,8 @@ jobs:
           BUILDIMAGE=${{ needs.Generate-Tag.outputs.image_name }}
           BUILDCOMMIT=${{ github.sha }}
           
-          # Use single platform for test builds, multi-platform for main
-          if [ "${{ github.ref_name }}" == "test" ]; then
+          # Use single platform for test builds and feature branches, multi-platform for main
+          if [ "${{ github.ref_name }}" == "test" ] || [[ "${{ github.ref_name }}" == feat/* ]]; then
             PLATFORMS="linux/amd64"
             echo "🚀 Building single platform (amd64) for faster test deployment"
           else
@@ -338,7 +324,7 @@ jobs:
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/feat/downstream-refactor'))
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test'))
       )
     needs:
       - Generate-Tag
@@ -403,13 +389,13 @@ jobs:
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/feat/downstream-refactor'))
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test'))
       )
     needs:
       - Generate-Tag
       - GHCR-Build-and-Push  # Temporarily skip for deployment testing
     runs-on: ubuntu-latest
-    environment: ${{ github.ref_name == 'feat/downstream-refactor' && 'test' || github.ref_name }}
+    environment: ${{ github.ref_name }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -435,8 +421,6 @@ jobs:
             ENV="dev"
           elif [ "${{ github.ref_name }}" == "main" ]; then
             ENV="prd"
-          elif [ "${{ github.ref_name }}" == "feat/downstream-refactor" ]; then
-            ENV="dev"  # Deploy feature branch to dev environment for testing
           else
             echo "❌ Unsupported branch for deployment: ${{ github.ref_name }}"
             exit 1
