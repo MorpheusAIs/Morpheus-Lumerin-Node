@@ -44,6 +44,7 @@ on:
       - test
       - dev
       - cicd/*
+      - feat/downstream-refactor
 
     paths: [".github/**", "ui-desktop/**", "ui-core/**", "proxy-router/**", "cli/**"]
 
