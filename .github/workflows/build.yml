@@ -24,6 +24,10 @@ on:
         description: "Build all OS & container image"
         required: true
         type: boolean
+      create_deployment:
+        description: "Deploy to hosted environments"
+        required: true
+        type: boolean
 
   push:
     branches:
@@ -53,6 +57,12 @@ jobs:
   Generate-Tag:
     runs-on: ubuntu-latest
     name: Generate Tag Name
+    if: |
+      github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
+        (github.event_name == 'workflow_dispatch') 
+      )
     outputs:
       tag_name: ${{ steps.gen_tag_name.outputs.tag_name }}
       vtag: ${{ steps.gen_tag_name.outputs.vtag }}
@@ -106,10 +116,10 @@ jobs:
           fi
 
           # Output variables for use in subsequent jobs environment
-          echo "::set-output name=tag_name::${VTAG}"
-          echo "::set-output name=vtag::${VTAG}"
-          echo "::set-output name=vfull::${VFULL}"
-          echo "::set-output name=image_name::${IMAGE_NAME}"
+          echo "tag_name=${VTAG}" >> $GITHUB_OUTPUT
+          echo "vtag=${VTAG}" >> $GITHUB_OUTPUT
+          echo "vfull=${VFULL}" >> $GITHUB_OUTPUT
+          echo "image_name=${IMAGE_NAME}" >> $GITHUB_OUTPUT
           echo "✅ New Build Tag: $VTAG" >> $GITHUB_STEP_SUMMARY
           echo "✅ Docker Image: ${IMAGE_NAME}:${VTAG}" >> $GITHUB_STEP_SUMMARY
           echo "❌ Old Major Tag: $VLAST"  >> $GITHUB_STEP_SUMMARY
@@ -119,9 +129,8 @@ jobs:
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'test' || github.base_ref == 'dev')) ||
-        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
-        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/dev')) ||
+        (github.event_name == 'workflow_dispatch') 
       )
     runs-on: ubuntu-latest
     needs: Generate-Tag
@@ -163,12 +172,11 @@ jobs:
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
-        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/')|| github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true') 
       )
     needs:
       - Generate-Tag
-      - Build-Proxy-Router-Test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -230,7 +238,7 @@ jobs:
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
         (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
-        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true') 
       )
     needs: Generate-Tag
     runs-on: ubuntu-latest
@@ -245,55 +253,99 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.22.x"
-          cache-dependency-path: proxy-router/go.sum
+          cache-dependency-path: |
+            proxy-router/go.sum
+            cli/go.sum
 
-      - name: Build proxy-router executables for all platforms
+      - name: Cache Go build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-build-
+
+      - name: Build proxy-router executables for all platforms (parallel)
         run: |
-          FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}  
+          FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
           cd proxy-router
+          
+          # Pre-download dependencies once
+          go mod download
+          
+          # Build all platforms in parallel using background jobs
+          echo "🚀 Building proxy-router executables in parallel..."
+          
           # Linux X64
-          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=linux GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-linux-amd64 ./build.sh || (echo "❌ Failed to build Linux X64 executable" && exit 1)
-          mv proxy-router linux-x86_64-morpheus-router-${FULLTAG}
-          # Linux ARM64
-          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=linux GOARCH=arm64 OUTPUT=proxy-router-${FULLTAG}-linux-arm64 ./build.sh || (echo "❌ Failed to build Linux ARM64 executable" && exit 1)
-          mv proxy-router linux-arm64-morpheus-router-${FULLTAG}
+          (TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=linux GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-linux-amd64 ./build.sh && mv proxy-router linux-x86_64-morpheus-router-${FULLTAG}) &
+          PID1=$!
+          
+          # Linux ARM64  
+          (TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=linux GOARCH=arm64 OUTPUT=proxy-router-${FULLTAG}-linux-arm64 ./build.sh && mv proxy-router linux-arm64-morpheus-router-${FULLTAG}) &
+          PID2=$!
+          
           # macOS Intel
-          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-mac-amd64 ./build.sh || (echo "❌ Failed to build macOS X64 executable" && exit 1)
-          mv proxy-router mac-x64-morpheus-router-${FULLTAG}
-          # macOS ARM (Apple Silicon)
-          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=arm64 OUTPUT=proxy-router-${FULLTAG}-mac-arm64 ./build.sh || (echo "❌ Failed to build macOS ARM64 executable" && exit 1)
-          mv proxy-router mac-arm64-morpheus-router-${FULLTAG}
+          (TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-mac-amd64 ./build.sh && mv proxy-router mac-x64-morpheus-router-${FULLTAG}) &
+          PID3=$!
+          
+          # macOS ARM
+          (TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=arm64 OUTPUT=proxy-router-${FULLTAG}-mac-arm64 ./build.sh && mv proxy-router mac-arm64-morpheus-router-${FULLTAG}) &
+          PID4=$!
+          
           # Windows X64
-          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=windows GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-win-amd64.exe ./build.sh || (echo "❌ Failed to build Windows X64 executable" && exit 1)
-          mv proxy-router win-x64-morpheus-router-${FULLTAG}.exe
-          # # Windows ARM64
-          # TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=windows GOARCH=arm64 OUTPUT=proxy-router-${FULLTAG}-win-arm64.exe ./build.sh || (echo "❌ Failed to build Windows ARM64 executable" && exit 1)
-          # mv proxy-router proxy-router-${FULLTAG}-win-arm64.exe
-          echo "✅ Built executables for all platforms"
+          (TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=windows GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-win-amd64.exe ./build.sh && mv proxy-router win-x64-morpheus-router-${FULLTAG}.exe) &
+          PID5=$!
+          
+          # Wait for all builds to complete
+          wait $PID1 && echo "✅ Linux X64 complete" || (echo "❌ Linux X64 failed" && exit 1)
+          wait $PID2 && echo "✅ Linux ARM64 complete" || (echo "❌ Linux ARM64 failed" && exit 1) 
+          wait $PID3 && echo "✅ macOS Intel complete" || (echo "❌ macOS Intel failed" && exit 1)
+          wait $PID4 && echo "✅ macOS ARM complete" || (echo "❌ macOS ARM failed" && exit 1)
+          wait $PID5 && echo "✅ Windows X64 complete" || (echo "❌ Windows X64 failed" && exit 1)
+          
+          echo "✅ All proxy-router executables built successfully in parallel!"
 
-      - name: Build CLI Executables for all platforms
+      - name: Build CLI Executables for all platforms (parallel)
         run: |
-          FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}  
+          FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
           cd cli
+          
+          # Pre-download dependencies once
+          go mod download
+          
+          # Build all platforms in parallel
+          echo "🚀 Building CLI executables in parallel..."
+          
           # Linux X64
-          GOOS=linux GOARCH=amd64 make build || (echo "❌ Failed to build Linux X64 executable" && exit 1)
-          mv mor-cli linux-x86_64-morpheus-cli-${FULLTAG}
+          (GOOS=linux GOARCH=amd64 make build && mv mor-cli linux-x86_64-morpheus-cli-${FULLTAG}) &
+          PID1=$!
+          
           # Linux ARM64
-          GOOS=linux GOARCH=arm64 make build || (echo "❌ Failed to build Linux ARM64 executable" && exit 1)
-          mv mor-cli linux-arm64-morpheus-cli-${FULLTAG}
-          # macOS Intel
-          GOOS=darwin GOARCH=amd64 make build || (echo "❌ Failed to build macOS X64 executable" && exit 1)
-          mv mor-cli mac-x64-morpheus-cli-${FULLTAG}
-          # macOS ARM (Apple Silicon)
-          GOOS=darwin GOARCH=arm64 make build || (echo "❌ Failed to build macOS ARM64 executable" && exit 1)
-          mv mor-cli mac-arm64-morpheus-cli-${FULLTAG}
+          (GOOS=linux GOARCH=arm64 make build && mv mor-cli linux-arm64-morpheus-cli-${FULLTAG}) &
+          PID2=$!
+          
+          # macOS Intel  
+          (GOOS=darwin GOARCH=amd64 make build && mv mor-cli mac-x64-morpheus-cli-${FULLTAG}) &
+          PID3=$!
+          
+          # macOS ARM
+          (GOOS=darwin GOARCH=arm64 make build && mv mor-cli mac-arm64-morpheus-cli-${FULLTAG}) &
+          PID4=$!
+          
           # Windows X64
-          GOOS=windows GOARCH=amd64 make build || (echo "❌ Failed to build Windows X64 executable" && exit 1)
-          mv mor-cli win-x64-morpheus-cli-${FULLTAG}.exe
-          # # Windows ARM64
-          # GOOS=windows GOARCH=arm64 make build || (echo "❌ Failed to build Windows ARM64 executable" && exit 1)
-          # mv mor-cli mor-cli-${FULLTAG}-win-arm64.exe
-          echo "✅ Built executables for all platforms"
+          (GOOS=windows GOARCH=amd64 make build && mv mor-cli win-x64-morpheus-cli-${FULLTAG}.exe) &
+          PID5=$!
+          
+          # Wait for all builds to complete
+          wait $PID1 && echo "✅ CLI Linux X64 complete" || (echo "❌ CLI Linux X64 failed" && exit 1)
+          wait $PID2 && echo "✅ CLI Linux ARM64 complete" || (echo "❌ CLI Linux ARM64 failed" && exit 1)
+          wait $PID3 && echo "✅ CLI macOS Intel complete" || (echo "❌ CLI macOS Intel failed" && exit 1) 
+          wait $PID4 && echo "✅ CLI macOS ARM complete" || (echo "❌ CLI macOS ARM failed" && exit 1)
+          wait $PID5 && echo "✅ CLI Windows X64 complete" || (echo "❌ CLI Windows X64 failed" && exit 1)
+          
+          echo "✅ All CLI executables built successfully in parallel!"
 
       - name: Upload CLI artifacts
         uses: actions/upload-artifact@v4
@@ -324,7 +376,8 @@ jobs:
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test'))
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true' && github.event.inputs.create_deployment == 'true')
       )
     needs:
       - Generate-Tag
@@ -389,11 +442,12 @@ jobs:
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test'))
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test'))||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true' && github.event.inputs.create_deployment == 'true')
       )
     needs:
       - Generate-Tag
-      - GHCR-Build-and-Push  # Temporarily skip for deployment testing
+      - GHCR-Build-and-Push  
     runs-on: ubuntu-latest
     environment: ${{ github.ref_name }}
     steps:
@@ -639,8 +693,8 @@ jobs:
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
-        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true')
       )
     runs-on: macos-14
     needs:
@@ -663,11 +717,21 @@ jobs:
           cache: "yarn"
           cache-dependency-path: ui-desktop/yarn.lock
 
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: ${{ runner.os }}-electron-${{ hashFiles('ui-desktop/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
       - name: Install dependencies
         run: |
           cd ./ui-desktop
           brew install python-setuptools
-          yarn install --network-timeout 600000
+          yarn install --network-timeout 600000 --frozen-lockfile
 
       - name: Copy Environment Files
         uses: ./.github/actions/copy_env_files
@@ -693,8 +757,8 @@ jobs:
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
-        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true')
       )
     runs-on: ubuntu-22.04
     needs:
@@ -717,10 +781,20 @@ jobs:
           cache: "yarn"
           cache-dependency-path: ui-desktop/yarn.lock
 
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: ${{ runner.os }}-electron-${{ hashFiles('ui-desktop/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
       - name: Install dependencies
         run: |
           cd ./ui-desktop
-          yarn install --network-timeout 600000
+          yarn install --network-timeout 600000 --frozen-lockfile
 
       - name: Copy Environment Files
         uses: ./.github/actions/copy_env_files
@@ -741,69 +815,120 @@ jobs:
           path: ./ui-desktop/dist/linux-x86_64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
           name: linux-x86_64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
 
-  UI-Ubuntu-22-arm64:
-    name: Build Morpheus UI Ubuntu arm64 Image
-    if: |
-      github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
-      (
-        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
-        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true'))
-      )
-    runs-on: ubuntu-22.04
-    needs:
-      - Generate-Tag
-      - Build-Service-Executables
-    env:
-      SERVICE_PROXY_DOWNLOAD_URL_LINUX_ARM64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/linux-arm64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
-    steps:
-      - name: Enable QEMU for ARM64 emulation
-        uses: docker/setup-qemu-action@v3
+  # UI-Ubuntu-22-arm64:
+  #   name: Build Morpheus UI Ubuntu arm64 Image
+  #   if: |
+  #     github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+  #     (
+  #       (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+  #       (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true')
+  #     )
+  #   runs-on: ubuntu-22.04
+  #   needs:
+  #     - Generate-Tag
+  #     - Build-Service-Executables
+  #   env:
+  #     SERVICE_PROXY_DOWNLOAD_URL_LINUX_ARM64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/linux-arm64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
+  #   steps:
+  #     - name: Enable QEMU for ARM64 emulation
+  #       uses: docker/setup-qemu-action@v3
 
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+  #       with:
+  #         fetch-depth: 0
+  #         fetch-tags: true
 
-      - name: Prepare build output directory
-        run: mkdir -p ui-desktop/dist
+  #     - name: Cache Docker layers for ARM64 build
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: /tmp/.buildx-cache-arm64
+  #         key: ${{ runner.os }}-buildx-arm64-${{ hashFiles('ui-desktop/package.json', 'ui-desktop/yarn.lock') }}
+  #         restore-keys: |
+  #           ${{ runner.os }}-buildx-arm64-
 
-      - name: Copy Environment Files
-        uses: ./.github/actions/copy_env_files
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v3
+  #       with:
+  #         driver-opts: |
+  #           image=moby/buildkit:v0.12.0
+  #           network=host
+
+  #     - name: Prepare build output directory
+  #       run: mkdir -p ui-desktop/dist
+
+  #     - name: Copy Environment Files
+  #       uses: ./.github/actions/copy_env_files
       
-      - name: Build Linux ARM64 UI inside Docker
-        run: |
-          FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
-          docker run --rm --platform linux/arm64 \
-            -v "$PWD":/app \
-            -w /app/ui-desktop \
-            -e ENV=production \
-            --env-file "$PWD/ui-desktop/.env" \
-            node:20-bullseye bash -c 'apt-get update && \
-              apt-get install -y curl wget python3-pip libarchive-tools && \
-              corepack enable && \
-              corepack prepare yarn@stable --activate && \
-              export NODE_ENV=development && \
-              echo "🔍 Dumping ENV 🔍" && printenv | sort && \
-              echo "--- .env file content ---" && cat .env || echo "⚠️ .env not found" && \
-              sed -i "s/\"version\": \".*\"/\"version\": \"'"$FULLTAG"'\"/" package.json && \
-              yarn install --network-timeout 600000 && \
-              yarn run patch-package || true && \
-              yarn run build:linux-arm64'
+  #     - name: Build Linux ARM64 UI inside Docker (optimized)
+  #       run: |
+  #         FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
+          
+  #         # Create optimized Dockerfile for ARM64 build
+  #         cat > ui-desktop/Dockerfile.arm64 << 'EOF'
+  #         FROM --platform=linux/arm64 node:20-bullseye
+          
+  #         # Install system dependencies in a single layer
+  #         RUN apt-get update && apt-get install -y \
+  #             curl wget python3-pip libarchive-tools \
+  #             && apt-get clean && rm -rf /var/lib/apt/lists/*
+          
+  #         # Enable corepack and prepare yarn
+  #         RUN corepack enable && corepack prepare yarn@stable --activate
+          
+  #         WORKDIR /app
+          
+  #         # Copy package files first for better caching
+  #         COPY package.json yarn.lock ./
+          
+  #         # Install dependencies with caching
+  #         RUN yarn install --network-timeout 600000 --frozen-lockfile
+          
+  #         # Copy source code
+  #         COPY . .
+          
+  #         # Set environment and build
+  #         ENV NODE_ENV=development
+  #         ENV ENV=production
+          
+  #         # Run patch-package and build
+  #         RUN yarn run patch-package || true
+  #         CMD ["yarn", "run", "build:linux-arm64"]
+  #         EOF
+          
+  #         # Build using Docker with better caching
+  #         docker buildx build \
+  #           --platform linux/arm64 \
+  #           --cache-from type=local,src=/tmp/.buildx-cache-arm64 \
+  #           --cache-to type=local,dest=/tmp/.buildx-cache-arm64-new,mode=max \
+  #           --build-arg FULLTAG="$FULLTAG" \
+  #           -f ui-desktop/Dockerfile.arm64 \
+  #           -t morpheus-ui-arm64:$FULLTAG \
+  #           ui-desktop
+          
+  #         # Run the build and extract artifacts
+  #         docker run --rm \
+  #           -v "$PWD/ui-desktop/dist":/app/dist \
+  #           morpheus-ui-arm64:$FULLTAG \
+  #           bash -c "sed -i \"s/\\\"version\\\": \\\".*\\\"/\\\"version\\\": \\\"$FULLTAG\\\"/\" package.json && yarn run build:linux-arm64"
+          
+  #         # Move cache to replace old cache
+  #         rm -rf /tmp/.buildx-cache-arm64
+  #         mv /tmp/.buildx-cache-arm64-new /tmp/.buildx-cache-arm64 || true
 
-      - name: Upload Linux ARM64 UI artifact
-        uses: actions/upload-artifact@v4
-        with:
-          path: ./ui-desktop/dist/linux-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
-          name: linux-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
+  #     - name: Upload Linux ARM64 UI artifact
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         path: ./ui-desktop/dist/linux-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
+  #         name: linux-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
 
   UI-macOS-13-x64:
     name: Build Morpheus UI macOS-x64 Image
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
-        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true')
       )
     runs-on: macos-13
     needs:
@@ -826,11 +951,21 @@ jobs:
           cache: "yarn"
           cache-dependency-path: ui-desktop/yarn.lock
 
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: ${{ runner.os }}-electron-${{ hashFiles('ui-desktop/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
       - name: Install dependencies
         run: |
           cd ./ui-desktop
           python3 -m pip install setuptools
-          yarn install --network-timeout 600000
+          yarn install --network-timeout 600000 --frozen-lockfile
 
       - name: Copy Environment Files
         uses: ./.github/actions/copy_env_files
@@ -856,8 +991,8 @@ jobs:
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
-        (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true')
       )
     runs-on: windows-latest
     needs:
@@ -880,15 +1015,46 @@ jobs:
           cache: "yarn"
           cache-dependency-path: ui-desktop/yarn.lock
 
-      - name: Install wget and sed
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\electron
+            ~\AppData\Local\electron-builder
+          key: ${{ runner.os }}-electron-${{ hashFiles('ui-desktop/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
+      - name: Cache Chocolatey packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            C:\ProgramData\chocolatey\lib
+            C:\ProgramData\chocolatey\bin
+          key: ${{ runner.os }}-choco-${{ hashFiles('.github/workflows/build.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-choco-
+
+      - name: Install system tools (optimized)
         run: |
-          choco install wget --no-progress
-          choco install sed --no-progress
+          # Install tools in parallel and with no-progress for speed
+          Start-Job -ScriptBlock { choco install wget --no-progress --force }
+          Start-Job -ScriptBlock { choco install sed --no-progress --force }
+          
+          # Wait for both jobs to complete
+          Get-Job | Wait-Job
+          Get-Job | Receive-Job
+          Get-Job | Remove-Job
+          
+          # Verify installations
+          wget --version
+          sed --version
+        shell: powershell
 
       - name: Install dependencies
         run: |
           cd ./ui-desktop
-          yarn install --network-timeout 600000
+          yarn install --network-timeout 600000 --frozen-lockfile
 
       - name: Copy Environment Files
         uses: ./.github/actions/copy_env_files
@@ -909,70 +1075,12 @@ jobs:
           path: ./ui-desktop/dist/win-x64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.exe
           name: win-x64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.exe
 
-  # UI-Windows-arm64:
-  #   name: Build Morpheus UI Windows ARM64 Image
-  #   if: |
-  #     github.repository = 'MorpheusAIs/Morpheus-Lumerin-Node' &&
-  #     (
-  #       (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
-  #       (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
-  #     )
-  #   runs-on: windows-latest
-  #   needs:
-  #     - Generate-Tag
-  #     - Build-Service-Executables
-  #   env:
-  #     SERVICE_PROXY_DOWNLOAD_URL_WINDOWS_ARM64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/win-arm64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}.exe
-  #   steps:
-  #     - name: Clone
-  #       id: checkout
-  #       uses: actions/checkout@v4
-  #       with:
-  #         fetch-depth: 0
-  #         fetch-tags: true
-
-  #     - name: Setup node
-  #       uses: actions/setup-node@v4
-  #       with:
-  #         node-version: 20
-  #         cache: "yarn"
-  #         cache-dependency-path: ui-desktop/yarn.lock
-
-  #     - name: Install wget and sed
-  #       run: |
-  #         choco install wget --no-progress
-  #         choco install sed --no-progress
-
-  #     - name: Install dependencies
-  #       run: |
-  #         cd ./ui-desktop
-  #         yarn install --network-timeout 600000
-
-  #     - name: Copy Environment Files
-  #       uses: ./.github/actions/copy_env_files
-
-  #     - name: Build
-  #       id: build
-  #       run: |
-  #         FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
-  #         cd ./ui-desktop
-  #         echo "Injecting version $FULLTAG into package.json"
-  #         sed -i "s/\"version\": \".*\"/\"version\": \"$FULLTAG\"/" package.json
-  #         cat package.json | grep '"version"'  # Optional: Verify the change
-  #         yarn build:win-arm64 
-
-  #     - name: Upload artifacts
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         path: ./ui-desktop/dist/win-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.exe
-  #         name: win-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.exe
-          
   UI-Release:
     name: Upload UI-Desktop Release
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
       )
     needs:
@@ -980,9 +1088,9 @@ jobs:
       - UI-macOS-14-arm64
       - UI-macOS-13-x64
       - UI-Ubuntu-22-x64
-      - UI-Ubuntu-22-arm64
+      # - UI-Ubuntu-22-arm64
       - UI-Windows-avx2-x64
-      # - UI-Windows-arm64
+
     runs-on: ubuntu-latest
     steps:
       - name: Clone
