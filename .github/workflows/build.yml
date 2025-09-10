@@ -385,13 +385,13 @@ jobs:
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test'))
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/feat/downstream-refactor'))
       )
     needs:
       - Generate-Tag
-      - GHCR-Build-and-Push
+      # - GHCR-Build-and-Push  # Temporarily skip for deployment testing
     runs-on: ubuntu-latest
-    environment: ${{ github.ref_name }}
+    environment: ${{ github.ref_name == 'feat/downstream-refactor' && 'test' || github.ref_name }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -408,7 +408,8 @@ jobs:
 
       - name: Deploy to Morpheus ECS
         run: |
-          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          # For deployment testing, use existing image instead of newly built one
+          BUILDTAG="v5.0.4-test"  # Use latest existing image for testing
           BUILDIMAGE=${{ needs.Generate-Tag.outputs.image_name }}
           
           # Determine environment based on branch
@@ -416,6 +417,8 @@ jobs:
             ENV="dev"
           elif [ "${{ github.ref_name }}" == "main" ]; then
             ENV="prd"
+          elif [ "${{ github.ref_name }}" == "feat/downstream-refactor" ]; then
+            ENV="dev"  # Deploy feature branch to dev environment for testing
           else
             echo "❌ Unsupported branch for deployment: ${{ github.ref_name }}"
             exit 1
