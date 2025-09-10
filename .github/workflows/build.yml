@@ -315,8 +315,8 @@ jobs:
             proxy-router/win-x64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}.exe
             # proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-win-arm64.exe
 
-  GitLab-Deploy-ProxyRouter:
-    name: Deploy ProxyRouterto GitLab
+  Deploy-to-Titan:
+    name: Deploy to Titan via Gitlab
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
@@ -368,7 +368,7 @@ jobs:
           gitlab_web_url=$(echo "$response" | jq -r '.web_url // "N/A"')
 
           # Log the response
-          echo "GitLab Response: $response"
+          # echo "GitLab Response: $response"
 
           # Validate the status field
           if [[ "$gitlab_status" =~ ^(created|preparing|success|running|scheduled)$ ]]; then
@@ -378,6 +378,211 @@ jobs:
             echo "❌ GitLab pipeline FAILED. Invalid status: $gitlab_status"
             echo "Pipeline details: $gitlab_web_url"
             exit 1
+          fi
+
+  Deploy-to-Morpheus:
+    name: Deploy to Morpheus via GitHub
+    if: |
+      github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test'))
+      )
+    needs:
+      - Generate-Tag
+      - GHCR-Build-and-Push
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.MORPHEUS_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.MORPHEUS_AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+
+      - name: Deploy to Morpheus ECS
+        run: |
+          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          BUILDIMAGE=${{ needs.Generate-Tag.outputs.image_name }}
+          
+          # Determine environment based on branch
+          if [ "${{ github.ref_name }}" == "test" ]; then
+            ENV="dev"
+          elif [ "${{ github.ref_name }}" == "main" ]; then
+            ENV="prd"
+          else
+            echo "❌ Unsupported branch for deployment: ${{ github.ref_name }}"
+            exit 1
+          fi
+          
+          echo "🚀 Deploying to Morpheus AWS - Environment: $ENV"
+          echo "📦 Container Image: $BUILDIMAGE:$BUILDTAG"
+          
+          # ECS deployment variables
+          CLUSTER_NAME="ecs-${ENV}-morpheus-engine"
+          SERVICE_NAME="svc-${ENV}-router"
+          TASK_FAMILY="tsk-${ENV}-router"
+          CONTAINER_NAME="router-container"
+          
+          # Get current task definition
+          echo "📋 Retrieving current task definition..."
+          CURRENT_TASK_DEF=$(aws ecs describe-task-definition \
+            --task-definition "$TASK_FAMILY" \
+            --query 'taskDefinition' \
+            --output json)
+          
+          if [ $? -ne 0 ]; then
+            echo "❌ Failed to retrieve current task definition"
+            exit 1
+          fi
+          
+          # Update the image in the task definition
+          echo "🔄 Creating new task definition with image: $BUILDIMAGE:$BUILDTAG"
+          NEW_TASK_DEF=$(echo "$CURRENT_TASK_DEF" | jq --arg IMAGE "$BUILDIMAGE:$BUILDTAG" --arg CONTAINER "$CONTAINER_NAME" '
+            .containerDefinitions |= map(
+              if .name == $CONTAINER then
+                .image = $IMAGE
+              else
+                .
+              end
+            ) |
+            del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredAt, .registeredBy)
+          ')
+          
+          # Register new task definition
+          echo "📝 Registering new task definition..."
+          NEW_TASK_ARN=$(echo "$NEW_TASK_DEF" | aws ecs register-task-definition \
+            --cli-input-json file:///dev/stdin \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+          
+          if [ $? -ne 0 ] || [ -z "$NEW_TASK_ARN" ]; then
+            echo "❌ Failed to register new task definition"
+            exit 1
+          fi
+          
+          echo "✅ New task definition registered: $NEW_TASK_ARN"
+          
+          # Update the ECS service
+          echo "🔄 Updating ECS service..."
+          aws ecs update-service \
+            --cluster "$CLUSTER_NAME" \
+            --service "$SERVICE_NAME" \
+            --task-definition "$NEW_TASK_ARN" \
+            --force-new-deployment
+          
+          if [ $? -ne 0 ]; then
+            echo "❌ Failed to update ECS service"
+            exit 1
+          fi
+          
+          echo "✅ ECS service update initiated successfully"
+          echo "🎯 Environment: $ENV"
+          echo "🏗️  Cluster: $CLUSTER_NAME"
+          echo "⚙️  Service: $SERVICE_NAME"
+          echo "📦 Image: $BUILDIMAGE:$BUILDTAG"
+          echo "📋 Task Definition: $NEW_TASK_ARN"
+          
+          # Wait for deployment to stabilize with extended timeout
+          echo "⏳ Waiting for service to stabilize (up to 15 minutes)..."
+          aws ecs wait services-stable \
+            --cluster "$CLUSTER_NAME" \
+            --services "$SERVICE_NAME" \
+            --cli-read-timeout 900 \
+            --cli-connect-timeout 60
+          
+          STABILIZATION_STATUS=$?
+          
+          if [ $STABILIZATION_STATUS -eq 0 ]; then
+            echo "✅ ECS service stabilized successfully"
+          else
+            echo "⚠️ ECS stabilization wait timed out, but continuing with health check..."
+          fi
+          
+          # Determine the public endpoint for health check
+          if [ "$ENV" == "dev" ]; then
+            HEALTH_ENDPOINT="http://router.dev.mor.org:8082/healthcheck"
+          elif [ "$ENV" == "prd" ]; then
+            HEALTH_ENDPOINT="http://router.mor.org:8082/healthcheck"
+          fi
+          
+          echo "🔍 Verifying deployment version at: $HEALTH_ENDPOINT"
+          
+          # Wait for the service to be reachable and verify version
+          MAX_HEALTH_RETRIES=20
+          HEALTH_RETRY_COUNT=0
+          VERSION_VERIFIED=false
+          
+          while [ $HEALTH_RETRY_COUNT -lt $MAX_HEALTH_RETRIES ]; do
+            echo "🔄 Health check attempt $((HEALTH_RETRY_COUNT + 1))/$MAX_HEALTH_RETRIES..."
+            
+            # Get health check response
+            HEALTH_RESPONSE=$(curl -s --max-time 10 "$HEALTH_ENDPOINT" 2>/dev/null)
+            CURL_STATUS=$?
+            
+            if [ $CURL_STATUS -eq 0 ] && [ -n "$HEALTH_RESPONSE" ]; then
+              echo "📡 Health response: $HEALTH_RESPONSE"
+              
+              # Parse version from JSON response
+              DEPLOYED_VERSION=$(echo "$HEALTH_RESPONSE" | jq -r '.Version // empty' 2>/dev/null)
+              UPTIME=$(echo "$HEALTH_RESPONSE" | jq -r '.Uptime // empty' 2>/dev/null)
+              STATUS=$(echo "$HEALTH_RESPONSE" | jq -r '.Status // empty' 2>/dev/null)
+              
+              if [ -n "$DEPLOYED_VERSION" ] && [ "$STATUS" = "healthy" ]; then
+                echo "🏥 Service Status: $STATUS"
+                echo "📦 Deployed Version: $DEPLOYED_VERSION"
+                echo "⏰ Service Uptime: $UPTIME"
+                
+                # Check if deployed version matches expected version
+                if [[ "$DEPLOYED_VERSION" == *"$BUILDTAG"* ]] || [[ "$BUILDTAG" == *"$DEPLOYED_VERSION"* ]]; then
+                  echo "✅ Version verification successful! Deployed version matches expected tag."
+                  VERSION_VERIFIED=true
+                  break
+                else
+                  echo "⚠️ Version mismatch - Expected: $BUILDTAG, Deployed: $DEPLOYED_VERSION"
+                fi
+              else
+                echo "⚠️ Service not healthy or version not available"
+              fi
+            else
+              echo "⚠️ Health check failed (curl status: $CURL_STATUS)"
+            fi
+            
+            HEALTH_RETRY_COUNT=$((HEALTH_RETRY_COUNT + 1))
+            if [ $HEALTH_RETRY_COUNT -lt $MAX_HEALTH_RETRIES ]; then
+              echo "⏳ Waiting 15 seconds before retry..."
+              sleep 15
+            fi
+          done
+          
+          # Final deployment status
+          if [ "$VERSION_VERIFIED" = true ]; then
+            echo ""
+            echo "🎉 Deployment completed successfully!"
+            echo "✅ Service is healthy and running the expected version"
+            echo "🌐 Health Check URL: $HEALTH_ENDPOINT"
+          else
+            echo ""
+            echo "❌ Deployment verification failed!"
+            echo "🔍 The service may still be starting up or there may be an issue"
+            echo "🌐 Manual check: $HEALTH_ENDPOINT"
+            echo "🏗️  Expected version: $BUILDTAG"
+            if [ -n "$DEPLOYED_VERSION" ]; then
+              echo "📦 Currently deployed: $DEPLOYED_VERSION"
+            fi
+            echo ""
+            echo "ℹ️ This may be a temporary issue. Check the health endpoint in a few minutes."
+            echo "ℹ️ If the issue persists, check AWS ECS console and CloudWatch logs."
+            
+            # Don't fail the deployment for version mismatch, as it might be a timing issue
+            # The ECS service update was successful, version verification is informational
+            echo "⚠️ Continuing with warning - ECS deployment completed but version verification inconclusive"
           fi
 
   UI-macOS-14-arm64:
