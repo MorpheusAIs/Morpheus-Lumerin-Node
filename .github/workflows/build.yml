@@ -452,8 +452,18 @@ jobs:
                 .
               end
             ) |
-            del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredAt, .registeredBy)
+            del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredAt, .registeredBy, .tags)
           ')
+          
+          # Debug: Check if JSON is valid
+          echo "🔍 Validating JSON structure..."
+          echo "$NEW_TASK_DEF" | jq empty
+          if [ $? -ne 0 ]; then
+            echo "❌ Generated JSON is invalid"
+            echo "Generated JSON:"
+            echo "$NEW_TASK_DEF"
+            exit 1
+          fi
           
           # Register new task definition
           echo "📝 Registering new task definition..."
