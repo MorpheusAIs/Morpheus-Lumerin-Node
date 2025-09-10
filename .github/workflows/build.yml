@@ -172,7 +172,7 @@ jobs:
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/feat/downstream-refactor')) ||
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == 'true' || github.event.inputs.build_all_os == 'true')) 
       )
     needs:
@@ -201,10 +201,22 @@ jobs:
           BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
           BUILDIMAGE=${{ needs.Generate-Tag.outputs.image_name }}
           BUILDCOMMIT=${{ github.sha }}
+          
+          # Use single platform for test builds, multi-platform for main
+          if [ "${{ github.ref_name }}" == "test" ]; then
+            PLATFORMS="linux/amd64"
+            echo "🚀 Building single platform (amd64) for faster test deployment"
+          else
+            PLATFORMS="linux/amd64,linux/arm64"
+            echo "🚀 Building multi-platform for production release"
+          fi
+          
           docker buildx build \
-            --platform linux/amd64,linux/arm64 \
+            --platform $PLATFORMS \
             --build-arg TAG_NAME=$BUILDTAG \
             --build-arg COMMIT=$BUILDCOMMIT \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
             --push \
             -t $BUILDIMAGE:$BUILDTAG \
             -f proxy-router/Dockerfile \
@@ -321,7 +333,7 @@ jobs:
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test'))
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/feat/downstream-refactor'))
       )
     needs:
       - Generate-Tag
@@ -390,7 +402,7 @@ jobs:
       )
     needs:
       - Generate-Tag
-      # - GHCR-Build-and-Push  # Temporarily skip for deployment testing
+      - GHCR-Build-and-Push  # Temporarily skip for deployment testing
     runs-on: ubuntu-latest
     environment: ${{ github.ref_name == 'feat/downstream-refactor' && 'test' || github.ref_name }}
     steps:
@@ -410,7 +422,7 @@ jobs:
       - name: Deploy to Morpheus ECS
         run: |
           # For deployment testing, use existing image instead of newly built one
-          BUILDTAG="v5.0.4-test"  # Use latest existing image for testing
+          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
           BUILDIMAGE=${{ needs.Generate-Tag.outputs.image_name }}
           
           # Determine environment based on branch

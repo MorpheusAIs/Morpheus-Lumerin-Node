@@ -16,7 +16,7 @@ if [ -z "$COMMIT" ]; then
   COMMIT=$(git rev-parse HEAD)
 fi
 echo COMMIT=$COMMIT
-go mod tidy 
+# go mod tidy already handled in Dockerfile via go mod download
 go build \
   -tags docker \
   -ldflags="-s -w \
