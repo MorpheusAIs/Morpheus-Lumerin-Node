@@ -283,8 +283,8 @@ jobs:
           PID1=$!
           
           # Linux ARM64  
-          (TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=linux GOARCH=arm64 OUTPUT=proxy-router-${FULLTAG}-linux-arm64 ./build.sh && mv proxy-router linux-arm64-morpheus-router-${FULLTAG}) &
-          PID2=$!
+          # (TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=linux GOARCH=arm64 OUTPUT=proxy-router-${FULLTAG}-linux-arm64 ./build.sh && mv proxy-router linux-arm64-morpheus-router-${FULLTAG}) &
+          # PID2=$!
           
           # macOS Intel
           (TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-mac-amd64 ./build.sh && mv proxy-router mac-x64-morpheus-router-${FULLTAG}) &
@@ -300,7 +300,7 @@ jobs:
           
           # Wait for all builds to complete
           wait $PID1 && echo "✅ Linux X64 complete" || (echo "❌ Linux X64 failed" && exit 1)
-          wait $PID2 && echo "✅ Linux ARM64 complete" || (echo "❌ Linux ARM64 failed" && exit 1) 
+          # wait $PID2 && echo "✅ Linux ARM64 complete" || (echo "❌ Linux ARM64 failed" && exit 1) 
           wait $PID3 && echo "✅ macOS Intel complete" || (echo "❌ macOS Intel failed" && exit 1)
           wait $PID4 && echo "✅ macOS ARM complete" || (echo "❌ macOS ARM failed" && exit 1)
           wait $PID5 && echo "✅ Windows X64 complete" || (echo "❌ Windows X64 failed" && exit 1)
@@ -323,8 +323,8 @@ jobs:
           PID1=$!
           
           # Linux ARM64
-          (GOOS=linux GOARCH=arm64 make build && mv mor-cli linux-arm64-morpheus-cli-${FULLTAG}) &
-          PID2=$!
+          # (GOOS=linux GOARCH=arm64 make build && mv mor-cli linux-arm64-morpheus-cli-${FULLTAG}) &
+          # PID2=$!
           
           # macOS Intel  
           (GOOS=darwin GOARCH=amd64 make build && mv mor-cli mac-x64-morpheus-cli-${FULLTAG}) &
@@ -340,7 +340,7 @@ jobs:
           
           # Wait for all builds to complete
           wait $PID1 && echo "✅ CLI Linux X64 complete" || (echo "❌ CLI Linux X64 failed" && exit 1)
-          wait $PID2 && echo "✅ CLI Linux ARM64 complete" || (echo "❌ CLI Linux ARM64 failed" && exit 1)
+          # wait $PID2 && echo "✅ CLI Linux ARM64 complete" || (echo "❌ CLI Linux ARM64 failed" && exit 1)
           wait $PID3 && echo "✅ CLI macOS Intel complete" || (echo "❌ CLI macOS Intel failed" && exit 1) 
           wait $PID4 && echo "✅ CLI macOS ARM complete" || (echo "❌ CLI macOS ARM failed" && exit 1)
           wait $PID5 && echo "✅ CLI Windows X64 complete" || (echo "❌ CLI Windows X64 failed" && exit 1)
@@ -353,7 +353,7 @@ jobs:
           name: cli
           path: |
             cli/linux-x86_64-morpheus-cli-${{ needs.Generate-Tag.outputs.vfull }}
-            cli/linux-arm64-morpheus-cli-${{ needs.Generate-Tag.outputs.vfull }}
+            # cli/linux-arm64-morpheus-cli-${{ needs.Generate-Tag.outputs.vfull }}
             cli/mac-x64-morpheus-cli-${{ needs.Generate-Tag.outputs.vfull }}
             cli/mac-arm64-morpheus-cli-${{ needs.Generate-Tag.outputs.vfull }}
             cli/win-x64-morpheus-cli-${{ needs.Generate-Tag.outputs.vfull }}.exe
@@ -365,7 +365,7 @@ jobs:
           name: proxy-router
           path: |
             proxy-router/linux-x86_64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
-            proxy-router/linux-arm64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
+            # proxy-router/linux-arm64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
             proxy-router/mac-x64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
             proxy-router/mac-arm64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
             proxy-router/win-x64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}.exe
