@@ -154,7 +154,7 @@ jobs:
             --build-arg TAG_NAME=$BUILDTAG \
             --build-arg COMMIT=$BUILDCOMMIT \
             --cache-from type=gha \
-            --cache-to type=gha,mode=max \
+            --cache-to type=gha,mode=min \
             --load \
             -t $BUILDIMAGE:$BUILDTAG \
             -f proxy-router/Dockerfile \
@@ -177,6 +177,7 @@ jobs:
       )
     needs:
       - Generate-Tag
+      - Build-Proxy-Router-Test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -215,7 +216,7 @@ jobs:
             --build-arg TAG_NAME=$BUILDTAG \
             --build-arg COMMIT=$BUILDCOMMIT \
             --cache-from type=gha \
-            --cache-to type=gha,mode=max \
+            --cache-to type=gha,mode=min \
             --push \
             -t $BUILDIMAGE:$BUILDTAG \
             -f proxy-router/Dockerfile \
@@ -267,7 +268,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-build-
 
-      - name: Build proxy-router executables for all platforms (parallel)
+      - name: Build proxy-router executables for all platforms 
         run: |
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
           cd proxy-router
@@ -276,38 +277,31 @@ jobs:
           go mod download
           
           # Build all platforms in parallel using background jobs
-          echo "🚀 Building proxy-router executables in parallel..."
-          
+          echo "🚀 Building proxy-router executables..."
+
           # Linux X64
-          (TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=linux GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-linux-amd64 ./build.sh && mv proxy-router linux-x86_64-morpheus-router-${FULLTAG}) &
-          PID1=$!
-          
-          # Linux ARM64  
-          (TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=linux GOARCH=arm64 OUTPUT=proxy-router-${FULLTAG}-linux-arm64 ./build.sh && mv proxy-router linux-arm64-morpheus-router-${FULLTAG}) &
-          PID2=$!
+          echo "🚀 Building Linux X64 executable..."
+          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=linux GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-linux-amd64 ./build.sh || (echo "❌ Failed to build Linux X64 executable" && exit 1)
+          mv proxy-router linux-x86_64-morpheus-router-${FULLTAG}
           
           # macOS Intel
-          (TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-mac-amd64 ./build.sh && mv proxy-router mac-x64-morpheus-router-${FULLTAG}) &
-          PID3=$!
+          echo "🚀 Building macOS X64 executable..."
+          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-mac-amd64 ./build.sh || (echo "❌ Failed to build macOS X64 executable" && exit 1)
+          mv proxy-router mac-x64-morpheus-router-${FULLTAG}
           
-          # macOS ARM
-          (TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=arm64 OUTPUT=proxy-router-${FULLTAG}-mac-arm64 ./build.sh && mv proxy-router mac-arm64-morpheus-router-${FULLTAG}) &
-          PID4=$!
+          # macOS ARM (Apple Silicon)
+          echo "🚀 Building macOS ARM64 executable..."
+          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=arm64 OUTPUT=proxy-router-${FULLTAG}-mac-arm64 ./build.sh || (echo "❌ Failed to build macOS ARM64 executable" && exit 1)
+          mv proxy-router mac-arm64-morpheus-router-${FULLTAG}
           
           # Windows X64
-          (TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=windows GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-win-amd64.exe ./build.sh && mv proxy-router win-x64-morpheus-router-${FULLTAG}.exe) &
-          PID5=$!
+          echo "🚀 Building Windows X64 executable..."
+          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=windows GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-win-amd64.exe ./build.sh || (echo "❌ Failed to build Windows X64 executable" && exit 1)
+          mv proxy-router win-x64-morpheus-router-${FULLTAG}.exe
           
-          # Wait for all builds to complete
-          wait $PID1 && echo "✅ Linux X64 complete" || (echo "❌ Linux X64 failed" && exit 1)
-          wait $PID2 && echo "✅ Linux ARM64 complete" || (echo "❌ Linux ARM64 failed" && exit 1) 
-          wait $PID3 && echo "✅ macOS Intel complete" || (echo "❌ macOS Intel failed" && exit 1)
-          wait $PID4 && echo "✅ macOS ARM complete" || (echo "❌ macOS ARM failed" && exit 1)
-          wait $PID5 && echo "✅ Windows X64 complete" || (echo "❌ Windows X64 failed" && exit 1)
-          
-          echo "✅ All proxy-router executables built successfully in parallel!"
+          echo "✅ Built Proxy Router executables for all platforms"
 
-      - name: Build CLI Executables for all platforms (parallel)
+      - name: Build CLI Executables for all platforms
         run: |
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
           cd cli
@@ -316,36 +310,30 @@ jobs:
           go mod download
           
           # Build all platforms in parallel
-          echo "🚀 Building CLI executables in parallel..."
+          echo "🚀 Building CLI executables..."
           
           # Linux X64
-          (GOOS=linux GOARCH=amd64 make build && mv mor-cli linux-x86_64-morpheus-cli-${FULLTAG}) &
-          PID1=$!
+          echo "🚀 Building Linux X64 CLI executable..."
+          GOOS=linux GOARCH=amd64 make build || (echo "❌ Failed to build Linux X64 executable" && exit 1)
+          mv mor-cli linux-x86_64-morpheus-cli-${FULLTAG}
           
-          # Linux ARM64
-          (GOOS=linux GOARCH=arm64 make build && mv mor-cli linux-arm64-morpheus-cli-${FULLTAG}) &
-          PID2=$!
+          # macOS Intel
+          echo "🚀 Building macOS X64 CLI executable..."
+          GOOS=darwin GOARCH=amd64 make build || (echo "❌ Failed to build macOS X64 executable" && exit 1)
+          mv mor-cli mac-x64-morpheus-cli-${FULLTAG}
           
-          # macOS Intel  
-          (GOOS=darwin GOARCH=amd64 make build && mv mor-cli mac-x64-morpheus-cli-${FULLTAG}) &
-          PID3=$!
-          
-          # macOS ARM
-          (GOOS=darwin GOARCH=arm64 make build && mv mor-cli mac-arm64-morpheus-cli-${FULLTAG}) &
-          PID4=$!
+          # macOS ARM (Apple Silicon)
+          echo "🚀 Building macOS ARM64 CLI executable..."
+          GOOS=darwin GOARCH=arm64 make build || (echo "❌ Failed to build macOS ARM64 executable" && exit 1)
+          mv mor-cli mac-arm64-morpheus-cli-${FULLTAG}
           
           # Windows X64
-          (GOOS=windows GOARCH=amd64 make build && mv mor-cli win-x64-morpheus-cli-${FULLTAG}.exe) &
-          PID5=$!
+          echo "🚀 Building Windows X64 CLI executable..."
+          GOOS=windows GOARCH=amd64 make build || (echo "❌ Failed to build Windows X64 executable" && exit 1)
+          mv mor-cli win-x64-morpheus-cli-${FULLTAG}.exe
           
-          # Wait for all builds to complete
-          wait $PID1 && echo "✅ CLI Linux X64 complete" || (echo "❌ CLI Linux X64 failed" && exit 1)
-          wait $PID2 && echo "✅ CLI Linux ARM64 complete" || (echo "❌ CLI Linux ARM64 failed" && exit 1)
-          wait $PID3 && echo "✅ CLI macOS Intel complete" || (echo "❌ CLI macOS Intel failed" && exit 1) 
-          wait $PID4 && echo "✅ CLI macOS ARM complete" || (echo "❌ CLI macOS ARM failed" && exit 1)
-          wait $PID5 && echo "✅ CLI Windows X64 complete" || (echo "❌ CLI Windows X64 failed" && exit 1)
-          
-          echo "✅ All CLI executables built successfully in parallel!"
+          echo "✅ Built CLI executables for all platforms"
+
 
       - name: Upload CLI artifacts
         uses: actions/upload-artifact@v4
@@ -353,11 +341,9 @@ jobs:
           name: cli
           path: |
             cli/linux-x86_64-morpheus-cli-${{ needs.Generate-Tag.outputs.vfull }}
-            cli/linux-arm64-morpheus-cli-${{ needs.Generate-Tag.outputs.vfull }}
             cli/mac-x64-morpheus-cli-${{ needs.Generate-Tag.outputs.vfull }}
             cli/mac-arm64-morpheus-cli-${{ needs.Generate-Tag.outputs.vfull }}
             cli/win-x64-morpheus-cli-${{ needs.Generate-Tag.outputs.vfull }}.exe
-            # cli/mor-cli-${{ needs.Generate-Tag.outputs.vfull }}-win-arm64.exe
     
       - name: Upload ProxyRouter artifacts
         uses: actions/upload-artifact@v4
@@ -365,11 +351,9 @@ jobs:
           name: proxy-router
           path: |
             proxy-router/linux-x86_64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
-            proxy-router/linux-arm64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
             proxy-router/mac-x64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
             proxy-router/mac-arm64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
             proxy-router/win-x64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}.exe
-            # proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-win-arm64.exe
 
   Deploy-to-Titan:
     name: Deploy to Titan via Gitlab
@@ -815,113 +799,6 @@ jobs:
           path: ./ui-desktop/dist/linux-x86_64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
           name: linux-x86_64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
 
-  # UI-Ubuntu-22-arm64:
-  #   name: Build Morpheus UI Ubuntu arm64 Image
-  #   if: |
-  #     github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
-  #     (
-  #       (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
-  #       (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true')
-  #     )
-  #   runs-on: ubuntu-22.04
-  #   needs:
-  #     - Generate-Tag
-  #     - Build-Service-Executables
-  #   env:
-  #     SERVICE_PROXY_DOWNLOAD_URL_LINUX_ARM64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/linux-arm64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
-  #   steps:
-  #     - name: Enable QEMU for ARM64 emulation
-  #       uses: docker/setup-qemu-action@v3
-
-  #     - name: Checkout code
-  #       uses: actions/checkout@v4
-  #       with:
-  #         fetch-depth: 0
-  #         fetch-tags: true
-
-  #     - name: Cache Docker layers for ARM64 build
-  #       uses: actions/cache@v4
-  #       with:
-  #         path: /tmp/.buildx-cache-arm64
-  #         key: ${{ runner.os }}-buildx-arm64-${{ hashFiles('ui-desktop/package.json', 'ui-desktop/yarn.lock') }}
-  #         restore-keys: |
-  #           ${{ runner.os }}-buildx-arm64-
-
-  #     - name: Set up Docker Buildx
-  #       uses: docker/setup-buildx-action@v3
-  #       with:
-  #         driver-opts: |
-  #           image=moby/buildkit:v0.12.0
-  #           network=host
-
-  #     - name: Prepare build output directory
-  #       run: mkdir -p ui-desktop/dist
-
-  #     - name: Copy Environment Files
-  #       uses: ./.github/actions/copy_env_files
-      
-  #     - name: Build Linux ARM64 UI inside Docker (optimized)
-  #       run: |
-  #         FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
-          
-  #         # Create optimized Dockerfile for ARM64 build
-  #         cat > ui-desktop/Dockerfile.arm64 << 'EOF'
-  #         FROM --platform=linux/arm64 node:20-bullseye
-          
-  #         # Install system dependencies in a single layer
-  #         RUN apt-get update && apt-get install -y \
-  #             curl wget python3-pip libarchive-tools \
-  #             && apt-get clean && rm -rf /var/lib/apt/lists/*
-          
-  #         # Enable corepack and prepare yarn
-  #         RUN corepack enable && corepack prepare yarn@stable --activate
-          
-  #         WORKDIR /app
-          
-  #         # Copy package files first for better caching
-  #         COPY package.json yarn.lock ./
-          
-  #         # Install dependencies with caching
-  #         RUN yarn install --network-timeout 600000 --frozen-lockfile
-          
-  #         # Copy source code
-  #         COPY . .
-          
-  #         # Set environment and build
-  #         ENV NODE_ENV=development
-  #         ENV ENV=production
-          
-  #         # Run patch-package and build
-  #         RUN yarn run patch-package || true
-  #         CMD ["yarn", "run", "build:linux-arm64"]
-  #         EOF
-          
-  #         # Build using Docker with better caching
-  #         docker buildx build \
-  #           --platform linux/arm64 \
-  #           --cache-from type=local,src=/tmp/.buildx-cache-arm64 \
-  #           --cache-to type=local,dest=/tmp/.buildx-cache-arm64-new,mode=max \
-  #           --build-arg FULLTAG="$FULLTAG" \
-  #           -f ui-desktop/Dockerfile.arm64 \
-  #           -t morpheus-ui-arm64:$FULLTAG \
-  #           ui-desktop
-          
-  #         # Run the build and extract artifacts
-  #         docker run --rm \
-  #           -v "$PWD/ui-desktop/dist":/app/dist \
-  #           morpheus-ui-arm64:$FULLTAG \
-  #           bash -c "sed -i \"s/\\\"version\\\": \\\".*\\\"/\\\"version\\\": \\\"$FULLTAG\\\"/\" package.json && yarn run build:linux-arm64"
-          
-  #         # Move cache to replace old cache
-  #         rm -rf /tmp/.buildx-cache-arm64
-  #         mv /tmp/.buildx-cache-arm64-new /tmp/.buildx-cache-arm64 || true
-
-  #     - name: Upload Linux ARM64 UI artifact
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         path: ./ui-desktop/dist/linux-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
-  #         name: linux-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
-
   UI-macOS-13-x64:
     name: Build Morpheus UI macOS-x64 Image
     if: |
@@ -1045,10 +922,6 @@ jobs:
           Get-Job | Wait-Job
           Get-Job | Receive-Job
           Get-Job | Remove-Job
-          
-          # Verify installations
-          wget --version
-          sed --version
         shell: powershell
 
       - name: Install dependencies
@@ -1088,7 +961,6 @@ jobs:
       - UI-macOS-14-arm64
       - UI-macOS-13-x64
       - UI-Ubuntu-22-x64
-      # - UI-Ubuntu-22-arm64
       - UI-Windows-avx2-x64
 
     runs-on: ubuntu-latest
