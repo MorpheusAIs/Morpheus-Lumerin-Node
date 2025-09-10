@@ -478,16 +478,9 @@ jobs:
             exit 1
           fi
           
-          # Debug: Show the JSON being sent to AWS (truncated for security)
-          echo "🔍 Task definition JSON being sent to AWS:"
+          # Debug: Show task definition summary
+          echo "🔍 Task definition summary:"
           echo "$NEW_TASK_DEF" | jq '.family, .cpu, .memory, .networkMode, .requiresCompatibilities, (.containerDefinitions | length)'
-          
-          # Debug: Show first few lines of actual JSON for troubleshooting
-          echo "🔍 First 20 lines of JSON being sent:"
-          echo "$NEW_TASK_DEF" | head -20
-          
-          # Debug: Check JSON size
-          echo "🔍 JSON size: $(echo "$NEW_TASK_DEF" | wc -c) characters"
           
           # Register new task definition
           echo "📝 Registering new task definition..."
@@ -497,11 +490,9 @@ jobs:
           echo "$NEW_TASK_DEF" > "$TEMP_JSON_FILE"
           
           # Validate the temp file
-          echo "🔍 Validating temporary file..."
           jq empty "$TEMP_JSON_FILE"
           if [ $? -ne 0 ]; then
             echo "❌ Temporary file contains invalid JSON"
-            cat "$TEMP_JSON_FILE"
             rm -f "$TEMP_JSON_FILE"
             exit 1
           fi
@@ -523,11 +514,16 @@ jobs:
           
           # Update the ECS service
           echo "🔄 Updating ECS service..."
-          aws ecs update-service \
+          UPDATE_RESULT=$(aws ecs update-service \
             --cluster "$CLUSTER_NAME" \
             --service "$SERVICE_NAME" \
             --task-definition "$NEW_TASK_ARN" \
-            --force-new-deployment
+            --force-new-deployment \
+            --query 'service.{serviceName:serviceName,taskDefinition:taskDefinition,desiredCount:desiredCount,runningCount:runningCount,pendingCount:pendingCount}' \
+            --output json)
+          
+          echo "📊 Service Update Summary:"
+          echo "$UPDATE_RESULT" | jq .
           
           if [ $? -ne 0 ]; then
             echo "❌ Failed to update ECS service"
