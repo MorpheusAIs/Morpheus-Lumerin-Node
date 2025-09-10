@@ -13,6 +13,12 @@ ENV TAG_NAME=$TAG_NAME
 ENV COMMIT=$COMMIT
 
 WORKDIR /app
+
+# Copy go mod files first for better caching
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code after dependencies are cached
 COPY . .
 
 # Install dbus

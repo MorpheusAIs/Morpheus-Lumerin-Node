@@ -1,30 +1,17 @@
 name: CI-CD
-# Intended workflow and validation:
-# 0. Develop in feature branches and PR to `dev` branch for internal validation,
-#    - Once validated in dev, PR/PUSH to `test` - this will create OS Test Release, Test Container image and deploy to DEV environment
-#    - Once validated in test, PR/PUSH to `main` - this will create Latest Release, Latest container image and deploy to LMR environment
-#    - Once validated in main, PR/PUSH to origin main on the MorpheusAI repo (no builds/triggers will happen here, only code updates)
-# 1. PUSH to cicd/* will (special branches that will enable push testing of cicd changes)
-#    - Generate a new tag
-#    - Build and test the Docker image
-#    - Build and test the macOS-arm64 image
-# 2. PR to dev will
-#   - Generate a new tag
-#   - Build and test the Docker image
-# 2 PUSH to dev will
-#   - Generate a new tag
-#   - Build and test the Docker image
-#   - Build and test the macOS-arm64 image
-# 3. PR to test or main will
-#   - Generate a new tag
-#   - Build and test the Docker image
-# 4. PUSH to test or main will
-#   - Generate a new tag
-#   - Build and test the Docker image
-#   - Build all 4 OS Versions
-#   - Create a release and upload the artifacts
-#   - Build and push the Docker image to GitHub Container Registry
-#   - Deploy to GitLab
+# CI/CD Pipeline for Morpheus Lumerin Node
+# 
+# Branch Strategy:
+#   • dev: Build and test only (no deployment)
+#   • test: Build, test, and deploy to AWS DEV environment
+#   • main: Build, test, create release, and deploy to AWS PRD environment
+#
+# Key Features:
+#   • Optimized Docker builds with GitHub Actions caching
+#   • Multi-platform container images (linux/amd64, linux/arm64)
+#   • Cross-platform executables (Linux, macOS, Windows)
+#   • Automated deployments to AWS Environments in both GitLab (Titan) and GitHub (Morpheus)
+#   • Health check verification with version matching
 
 on:
   workflow_dispatch:
@@ -145,15 +132,20 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
       - name: Build Docker Image to Test
         run: |
           BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
           BUILDIMAGE=${{ needs.Generate-Tag.outputs.image_name }}
           BUILDCOMMIT=${{ github.sha }}
-          docker build \
+          docker buildx build \
             --platform linux/amd64 \
             --build-arg TAG_NAME=$BUILDTAG \
             --build-arg COMMIT=$BUILDCOMMIT \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
             --load \
             -t $BUILDIMAGE:$BUILDTAG \
             -f proxy-router/Dockerfile \
@@ -200,10 +192,22 @@ jobs:
           BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
           BUILDIMAGE=${{ needs.Generate-Tag.outputs.image_name }}
           BUILDCOMMIT=${{ github.sha }}
+          
+          # Use single platform for test builds and feature branches, multi-platform for main
+          if [ "${{ github.ref_name }}" == "test" ] || [[ "${{ github.ref_name }}" == feat/* ]]; then
+            PLATFORMS="linux/amd64"
+            echo "🚀 Building single platform (amd64) for faster test deployment"
+          else
+            PLATFORMS="linux/amd64,linux/arm64"
+            echo "🚀 Building multi-platform for production release"
+          fi
+          
           docker buildx build \
-            --platform linux/amd64,linux/arm64 \
+            --platform $PLATFORMS \
             --build-arg TAG_NAME=$BUILDTAG \
             --build-arg COMMIT=$BUILDCOMMIT \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
             --push \
             -t $BUILDIMAGE:$BUILDTAG \
             -f proxy-router/Dockerfile \
@@ -389,7 +393,7 @@ jobs:
       )
     needs:
       - Generate-Tag
-      - GHCR-Build-and-Push
+      - GHCR-Build-and-Push  # Temporarily skip for deployment testing
     runs-on: ubuntu-latest
     environment: ${{ github.ref_name }}
     steps:
@@ -408,6 +412,7 @@ jobs:
 
       - name: Deploy to Morpheus ECS
         run: |
+          # For deployment testing, use existing image instead of newly built one
           BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
           BUILDIMAGE=${{ needs.Generate-Tag.outputs.image_name }}
           
@@ -445,14 +450,23 @@ jobs:
           # Update the image in the task definition
           echo "🔄 Creating new task definition with image: $BUILDIMAGE:$BUILDTAG"
           NEW_TASK_DEF=$(echo "$CURRENT_TASK_DEF" | jq --arg IMAGE "$BUILDIMAGE:$BUILDTAG" --arg CONTAINER "$CONTAINER_NAME" '
-            .containerDefinitions |= map(
-              if .name == $CONTAINER then
-                .image = $IMAGE
-              else
-                .
-              end
-            ) |
-            del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredAt, .registeredBy, .tags)
+            {
+              family: .family,
+              networkMode: .networkMode,
+              requiresCompatibilities: .requiresCompatibilities,
+              cpu: .cpu,
+              memory: .memory,
+              taskRoleArn: .taskRoleArn,
+              executionRoleArn: .executionRoleArn,
+              volumes: .volumes,
+              containerDefinitions: (.containerDefinitions | map(
+                if .name == $CONTAINER then
+                  .image = $IMAGE
+                else
+                  .
+                end
+              ))
+            }
           ')
           
           # Debug: Check if JSON is valid
@@ -465,12 +479,32 @@ jobs:
             exit 1
           fi
           
+          # Debug: Show task definition summary
+          echo "🔍 Task definition summary:"
+          echo "$NEW_TASK_DEF" | jq '.family, .cpu, .memory, .networkMode, .requiresCompatibilities, (.containerDefinitions | length)'
+          
           # Register new task definition
           echo "📝 Registering new task definition..."
-          NEW_TASK_ARN=$(echo "$NEW_TASK_DEF" | aws ecs register-task-definition \
-            --cli-input-json file:///dev/stdin \
+          
+          # Save JSON to temporary file to avoid stdin issues
+          TEMP_JSON_FILE="/tmp/task_definition_$$.json"
+          echo "$NEW_TASK_DEF" > "$TEMP_JSON_FILE"
+          
+          # Validate the temp file
+          jq empty "$TEMP_JSON_FILE"
+          if [ $? -ne 0 ]; then
+            echo "❌ Temporary file contains invalid JSON"
+            rm -f "$TEMP_JSON_FILE"
+            exit 1
+          fi
+          
+          NEW_TASK_ARN=$(aws ecs register-task-definition \
+            --cli-input-json "file://$TEMP_JSON_FILE" \
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
+          
+          # Clean up temp file
+          rm -f "$TEMP_JSON_FILE"
           
           if [ $? -ne 0 ] || [ -z "$NEW_TASK_ARN" ]; then
             echo "❌ Failed to register new task definition"
@@ -481,11 +515,16 @@ jobs:
           
           # Update the ECS service
           echo "🔄 Updating ECS service..."
-          aws ecs update-service \
+          UPDATE_RESULT=$(aws ecs update-service \
             --cluster "$CLUSTER_NAME" \
             --service "$SERVICE_NAME" \
             --task-definition "$NEW_TASK_ARN" \
-            --force-new-deployment
+            --force-new-deployment \
+            --query 'service.{serviceName:serviceName,taskDefinition:taskDefinition,desiredCount:desiredCount,runningCount:runningCount,pendingCount:pendingCount}' \
+            --output json)
+          
+          echo "📊 Service Update Summary:"
+          echo "$UPDATE_RESULT" | jq .
           
           if [ $? -ne 0 ]; then
             echo "❌ Failed to update ECS service"
