@@ -315,8 +315,8 @@ jobs:
             proxy-router/win-x64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}.exe
             # proxy-router/proxy-router-${{ needs.Generate-Tag.outputs.vfull }}-win-arm64.exe
 
-  GitLab-Deploy-ProxyRouter:
-    name: Deploy ProxyRouterto GitLab
+  Deploy-to-Titan:
+    name: Deploy to Titan via Gitlab
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
@@ -380,8 +380,8 @@ jobs:
             exit 1
           fi
 
-  Morpheus-AWS-Deploy:
-    name: Deploy to Morpheus AWS ECS
+  Deploy-to-Morpheus:
+    name: Deploy to Morpheus via GitHub
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
