@@ -445,14 +445,23 @@ jobs:
           # Update the image in the task definition
           echo "🔄 Creating new task definition with image: $BUILDIMAGE:$BUILDTAG"
           NEW_TASK_DEF=$(echo "$CURRENT_TASK_DEF" | jq --arg IMAGE "$BUILDIMAGE:$BUILDTAG" --arg CONTAINER "$CONTAINER_NAME" '
-            .containerDefinitions |= map(
-              if .name == $CONTAINER then
-                .image = $IMAGE
-              else
-                .
-              end
-            ) |
-            del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredAt, .registeredBy, .tags)
+            {
+              family: .family,
+              networkMode: .networkMode,
+              requiresCompatibilities: .requiresCompatibilities,
+              cpu: .cpu,
+              memory: .memory,
+              taskRoleArn: .taskRoleArn,
+              executionRoleArn: .executionRoleArn,
+              volumes: .volumes,
+              containerDefinitions: (.containerDefinitions | map(
+                if .name == $CONTAINER then
+                  .image = $IMAGE
+                else
+                  .
+                end
+              ))
+            }
           ')
           
           # Debug: Check if JSON is valid
@@ -464,6 +473,10 @@ jobs:
             echo "$NEW_TASK_DEF"
             exit 1
           fi
+          
+          # Debug: Show the JSON being sent to AWS (truncated for security)
+          echo "🔍 Task definition JSON being sent to AWS:"
+          echo "$NEW_TASK_DEF" | jq '.family, .cpu, .memory, .networkMode, .requiresCompatibilities, (.containerDefinitions | length)'
           
           # Register new task definition
           echo "📝 Registering new task definition..."
