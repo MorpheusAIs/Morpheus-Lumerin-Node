@@ -268,7 +268,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-build-
 
-      - name: Build proxy-router executables for all platforms (parallel)
+      - name: Build proxy-router executables for all platforms 
         run: |
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
           cd proxy-router
@@ -277,33 +277,31 @@ jobs:
           go mod download
           
           # Build all platforms in parallel using background jobs
-          echo "🚀 Building proxy-router executables in parallel..."
-          
+          echo "🚀 Building proxy-router executables..."
+
           # Linux X64
-          (TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=linux GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-linux-amd64 ./build.sh && mv proxy-router linux-x86_64-morpheus-router-${FULLTAG}) &
-          PID1=$!
+          echo "🚀 Building Linux X64 executable..."
+          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=linux GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-linux-amd64 ./build.sh || (echo "❌ Failed to build Linux X64 executable" && exit 1)
+          mv proxy-router linux-x86_64-morpheus-router-${FULLTAG}
           
           # macOS Intel
-          (TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-mac-amd64 ./build.sh && mv proxy-router mac-x64-morpheus-router-${FULLTAG}) &
-          PID2=$!
+          echo "🚀 Building macOS X64 executable..."
+          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-mac-amd64 ./build.sh || (echo "❌ Failed to build macOS X64 executable" && exit 1)
+          mv proxy-router mac-x64-morpheus-router-${FULLTAG}
           
-          # macOS ARM
-          (TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=arm64 OUTPUT=proxy-router-${FULLTAG}-mac-arm64 ./build.sh && mv proxy-router mac-arm64-morpheus-router-${FULLTAG}) &
-          PID3=$!
+          # macOS ARM (Apple Silicon)
+          echo "🚀 Building macOS ARM64 executable..."
+          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=arm64 OUTPUT=proxy-router-${FULLTAG}-mac-arm64 ./build.sh || (echo "❌ Failed to build macOS ARM64 executable" && exit 1)
+          mv proxy-router mac-arm64-morpheus-router-${FULLTAG}
           
           # Windows X64
-          (TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=windows GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-win-amd64.exe ./build.sh && mv proxy-router win-x64-morpheus-router-${FULLTAG}.exe) &
-          PID4=$!
+          echo "🚀 Building Windows X64 executable..."
+          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=windows GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-win-amd64.exe ./build.sh || (echo "❌ Failed to build Windows X64 executable" && exit 1)
+          mv proxy-router win-x64-morpheus-router-${FULLTAG}.exe
           
-          # Wait for all builds to complete
-          wait $PID1 && echo "✅ Linux X64 complete" || (echo "❌ Linux X64 failed" && exit 1)
-          wait $PID2 && echo "✅ macOS Intel complete" || (echo "❌ macOS Intel failed" && exit 1)
-          wait $PID3 && echo "✅ macOS ARM complete" || (echo "❌ macOS ARM failed" && exit 1)
-          wait $PID4 && echo "✅ Windows X64 complete" || (echo "❌ Windows X64 failed" && exit 1)
-          
-          echo "✅ All proxy-router executables built successfully in parallel!"
+          echo "✅ Built Proxy Router executables for all platforms"
 
-      - name: Build CLI Executables for all platforms (parallel)
+      - name: Build CLI Executables for all platforms
         run: |
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
           cd cli
@@ -312,31 +310,30 @@ jobs:
           go mod download
           
           # Build all platforms in parallel
-          echo "🚀 Building CLI executables in parallel..."
+          echo "🚀 Building CLI executables..."
           
           # Linux X64
-          (GOOS=linux GOARCH=amd64 make build && mv mor-cli linux-x86_64-morpheus-cli-${FULLTAG}) &
-          PID1=$!
+          echo "🚀 Building Linux X64 CLI executable..."
+          GOOS=linux GOARCH=amd64 make build || (echo "❌ Failed to build Linux X64 executable" && exit 1)
+          mv mor-cli linux-x86_64-morpheus-cli-${FULLTAG}
           
-          # macOS Intel  
-          (GOOS=darwin GOARCH=amd64 make build && mv mor-cli mac-x64-morpheus-cli-${FULLTAG}) &
-          PID2=$!
+          # macOS Intel
+          echo "🚀 Building macOS X64 CLI executable..."
+          GOOS=darwin GOARCH=amd64 make build || (echo "❌ Failed to build macOS X64 executable" && exit 1)
+          mv mor-cli mac-x64-morpheus-cli-${FULLTAG}
           
-          # macOS ARM
-          (GOOS=darwin GOARCH=arm64 make build && mv mor-cli mac-arm64-morpheus-cli-${FULLTAG}) &
-          PID3=$!
+          # macOS ARM (Apple Silicon)
+          echo "🚀 Building macOS ARM64 CLI executable..."
+          GOOS=darwin GOARCH=arm64 make build || (echo "❌ Failed to build macOS ARM64 executable" && exit 1)
+          mv mor-cli mac-arm64-morpheus-cli-${FULLTAG}
           
           # Windows X64
-          (GOOS=windows GOARCH=amd64 make build && mv mor-cli win-x64-morpheus-cli-${FULLTAG}.exe) &
-          PID4=$!
+          echo "🚀 Building Windows X64 CLI executable..."
+          GOOS=windows GOARCH=amd64 make build || (echo "❌ Failed to build Windows X64 executable" && exit 1)
+          mv mor-cli win-x64-morpheus-cli-${FULLTAG}.exe
           
-          # Wait for all builds to complete
-          wait $PID1 && echo "✅ CLI Linux X64 complete" || (echo "❌ CLI Linux X64 failed" && exit 1)
-          wait $PID2 && echo "✅ CLI macOS Intel complete" || (echo "❌ CLI macOS Intel failed" && exit 1) 
-          wait $PID3 && echo "✅ CLI macOS ARM complete" || (echo "❌ CLI macOS ARM failed" && exit 1)
-          wait $PID4 && echo "✅ CLI Windows X64 complete" || (echo "❌ CLI Windows X64 failed" && exit 1)
-          
-          echo "✅ All CLI executables built successfully in parallel!"
+          echo "✅ Built CLI executables for all platforms"
+
 
       - name: Upload CLI artifacts
         uses: actions/upload-artifact@v4
