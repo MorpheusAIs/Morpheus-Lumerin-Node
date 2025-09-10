@@ -38,9 +38,9 @@ on:
 
     paths: [".github/**", "ui-desktop/**", "ui-core/**", "proxy-router/**", "cli/**"]
 
-  pull_request:
-    types: [opened, reopened, synchronize]
-    paths: [".github/**", "ui-desktop/**", "ui-core/**", "proxy-router/**", "cli/**"]
+  # pull_request:
+  #   types: [opened, reopened, synchronize]
+  #   paths: [".github/**", "ui-desktop/**", "ui-core/**", "proxy-router/**", "cli/**"]
 
 concurrency:
   group: ci-${{ github.ref }}
