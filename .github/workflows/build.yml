@@ -154,7 +154,7 @@ jobs:
             --build-arg TAG_NAME=$BUILDTAG \
             --build-arg COMMIT=$BUILDCOMMIT \
             --cache-from type=gha \
-            --cache-to type=gha,mode=max \
+            --cache-to type=gha,mode=min \
             --load \
             -t $BUILDIMAGE:$BUILDTAG \
             -f proxy-router/Dockerfile \
@@ -216,7 +216,7 @@ jobs:
             --build-arg TAG_NAME=$BUILDTAG \
             --build-arg COMMIT=$BUILDCOMMIT \
             --cache-from type=gha \
-            --cache-to type=gha,mode=max \
+            --cache-to type=gha,mode=min \
             --push \
             -t $BUILDIMAGE:$BUILDTAG \
             -f proxy-router/Dockerfile \
@@ -922,10 +922,6 @@ jobs:
           Get-Job | Wait-Job
           Get-Job | Receive-Job
           Get-Job | Remove-Job
-          
-          # Verify installations
-          wget --version
-          sed --version
         shell: powershell
 
       - name: Install dependencies
