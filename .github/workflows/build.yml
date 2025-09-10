@@ -116,10 +116,10 @@ jobs:
           fi
 
           # Output variables for use in subsequent jobs environment
-          echo "::set-output name=tag_name::${VTAG}"
-          echo "::set-output name=vtag::${VTAG}"
-          echo "::set-output name=vfull::${VFULL}"
-          echo "::set-output name=image_name::${IMAGE_NAME}"
+          echo "tag_name=${VTAG}" >> $GITHUB_OUTPUT
+          echo "vtag=${VTAG}" >> $GITHUB_OUTPUT
+          echo "vfull=${VFULL}" >> $GITHUB_OUTPUT
+          echo "image_name=${IMAGE_NAME}" >> $GITHUB_OUTPUT
           echo "✅ New Build Tag: $VTAG" >> $GITHUB_STEP_SUMMARY
           echo "✅ Docker Image: ${IMAGE_NAME}:${VTAG}" >> $GITHUB_STEP_SUMMARY
           echo "❌ Old Major Tag: $VLAST"  >> $GITHUB_STEP_SUMMARY
@@ -951,11 +951,21 @@ jobs:
           cache: "yarn"
           cache-dependency-path: ui-desktop/yarn.lock
 
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: ${{ runner.os }}-electron-${{ hashFiles('ui-desktop/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
       - name: Install dependencies
         run: |
           cd ./ui-desktop
           python3 -m pip install setuptools
-          yarn install --network-timeout 600000
+          yarn install --network-timeout 600000 --frozen-lockfile
 
       - name: Copy Environment Files
         uses: ./.github/actions/copy_env_files
@@ -981,7 +991,7 @@ jobs:
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true')
       )
     runs-on: windows-latest
