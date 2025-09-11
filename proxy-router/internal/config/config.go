@@ -44,6 +44,7 @@ type Config struct {
 	}
 	Marketplace struct {
 		DiamondContractAddress *common.Address `env:"DIAMOND_CONTRACT_ADDRESS" flag:"diamond-address"   validate:"omitempty,eth_addr"`
+		DelegatorAddress       *common.Address `env:"DELEGATOR_ADDRESS"        flag:"delegator-address" validate:"omitempty,eth_addr"`
 		MorTokenAddress        *common.Address `env:"MOR_TOKEN_ADDRESS"        flag:"mor-token-address" validate:"omitempty,eth_addr"`
 		WalletPrivateKey       *lib.HexString  `env:"WALLET_PRIVATE_KEY"       flag:"wallet-private-key"     desc:"if set, will use this private key to sign transactions, otherwise it will be retrieved from the system keychain"`
 	}
@@ -216,6 +217,7 @@ func (cfg *Config) GetSanitized() interface{} {
 
 	publicCfg.Marketplace.DiamondContractAddress = cfg.Marketplace.DiamondContractAddress
 	publicCfg.Marketplace.MorTokenAddress = cfg.Marketplace.MorTokenAddress
+	publicCfg.Marketplace.DelegatorAddress = cfg.Marketplace.DelegatorAddress
 
 	publicCfg.Log.Color = cfg.Log.Color
 	publicCfg.Log.FolderPath = cfg.Log.FolderPath

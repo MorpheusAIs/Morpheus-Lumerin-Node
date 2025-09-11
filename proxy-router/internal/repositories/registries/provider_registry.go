@@ -87,8 +87,8 @@ func (g *ProviderRegistry) GetProviders(ctx context.Context, offset *big.Int, li
 	return g.getMultipleProviders(ctx, ids)
 }
 
-func (g *ProviderRegistry) CreateNewProvider(opts *bind.TransactOpts, addStake *lib.BigInt, endpoint string) error {
-	providerTx, err := g.providerRegistry.ProviderRegister(opts, opts.From, &addStake.Int, endpoint)
+func (g *ProviderRegistry) CreateNewProvider(opts *bind.TransactOpts, addres common.Address, addStake *lib.BigInt, endpoint string) error {
+	providerTx, err := g.providerRegistry.ProviderRegister(opts, addres, &addStake.Int, endpoint)
 
 	if err != nil {
 		return lib.TryConvertGethError(err)

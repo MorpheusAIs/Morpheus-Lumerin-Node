@@ -45,6 +45,7 @@ type BlockchainService struct {
 	sessionRouter      *r.SessionRouter
 	morToken           *r.MorToken
 	morTokenAddr       common.Address
+	delegatorAddress   common.Address
 	explorerClient     ExplorerClientInterface
 	sessionRepo        *sessionrepo.SessionRepositoryCached
 	proxyService       *proxyapi.ProxyServiceSender
@@ -96,6 +97,7 @@ func NewBlockchainService(
 	morTokenAddr common.Address,
 	explorer ExplorerClientInterface,
 	privateKey i.PrKeyProvider,
+	delegatorAddress common.Address,
 	proxyService *proxyapi.ProxyServiceSender,
 	sessionRepo *sessionrepo.SessionRepositoryCached,
 	scorerAlgo *rating.Rating,
@@ -127,6 +129,7 @@ func NewBlockchainService(
 		rating:             scorerAlgo,
 		log:                log,
 		authConfig:         authConfig,
+		delegatorAddress:   delegatorAddress,
 	}
 }
 
@@ -386,18 +389,23 @@ func (s *BlockchainService) CreateNewProvider(ctx context.Context, stake *lib.Bi
 		return nil, lib.WrapError(ErrApprove, err)
 	}
 
-	err = s.providerRegistry.CreateNewProvider(transactOpt, stake, endpoint)
+	addres := transactOpt.From
+	if s.delegatorAddress != (common.Address{}) {
+		addres = s.delegatorAddress
+	}
+
+	err = s.providerRegistry.CreateNewProvider(transactOpt, addres, stake, endpoint)
 	if err != nil {
 		return nil, lib.WrapError(ErrSendTx, err)
 	}
 
-	provider, err := s.providerRegistry.GetProviderById(ctx, transactOpt.From)
+	provider, err := s.providerRegistry.GetProviderById(ctx, addres)
 	if err != nil {
 		return nil, lib.WrapError(ErrProvider, err)
 	}
 
 	return &structs.Provider{
-		Address:   transactOpt.From,
+		Address:   addres,
 		Endpoint:  provider.Endpoint,
 		Stake:     &lib.BigInt{Int: *provider.Stake},
 		IsDeleted: provider.IsDeleted,
