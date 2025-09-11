@@ -242,7 +242,13 @@ func (a *OpenAI) AudioTranscription(ctx context.Context, audioRequest *gcs.Audio
 
 func (a *OpenAI) prepareTranscriptionRequest(ctx context.Context, audioRequest *gcs.AudioTranscriptionRequest) (*http.Request, error) {
 	// Open the audio file
-	file, err := os.Open(audioRequest.FilePath)
+	var file *os.File
+	var err error = nil
+	if audioRequest.FilePath != "" {
+		file, err = os.Open(audioRequest.FilePath)
+	} else {
+		file, err = nil, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to open audio file: %w", err)
 	}
@@ -279,7 +285,9 @@ func (a *OpenAI) createMultipartForm(
 	go func() {
 		defer pw.Close()
 		defer mw.Close()
-		defer file.Close()
+		if file != nil {
+			defer file.Close()
+		}
 
 		audioReq.FilePath = ""
 		if err := lib.WriteForm(mw, audioReq); err != nil {
@@ -287,14 +295,16 @@ func (a *OpenAI) createMultipartForm(
 			return
 		}
 
-		part, err := mw.CreateFormFile("file", filepath.Base(file.Name()))
-		if err != nil {
-			_ = pw.CloseWithError(err)
-			return
-		}
-		if _, err := io.Copy(part, file); err != nil {
-			_ = pw.CloseWithError(err)
-			return
+		if file != nil {
+			part, err := mw.CreateFormFile("file", filepath.Base(file.Name()))
+			if err != nil {
+				_ = pw.CloseWithError(err)
+				return
+			}
+			if _, err := io.Copy(part, file); err != nil {
+				_ = pw.CloseWithError(err)
+				return
+			}
 		}
 	}()
 

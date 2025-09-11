@@ -2672,8 +2672,19 @@ const docTemplate = `{
                         "type": "file",
                         "description": "Audio file to transcribe",
                         "name": "file",
-                        "in": "formData",
-                        "required": true
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Pre-signed URL for secure file acces",
+                        "name": "s3_presigned_url",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Reference to existing file in configured storage bucket",
+                        "name": "storage_key",
+                        "in": "formData"
                     },
                     {
                         "type": "string",
