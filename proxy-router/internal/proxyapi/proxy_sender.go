@@ -37,7 +37,7 @@ var (
 	ErrInvalidResponse  = fmt.Errorf("invalid response")
 	ErrResponseErr      = fmt.Errorf("response error")
 	ErrDecrFailed       = fmt.Errorf("failed to decrypt ai response chunk")
-	ErrMasrshalFailed   = fmt.Errorf("failed to marshal response")
+	ErrMarshalFailed    = fmt.Errorf("failed to marshal response")
 	ErrDecode           = fmt.Errorf("failed to decode response")
 	ErrSessionNotFound  = fmt.Errorf("session not found")
 	ErrSessionExpired   = fmt.Errorf("session expired")
@@ -442,7 +442,7 @@ func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage)
 
 	msgJSON, err := json.Marshal(rpcMessage)
 	if err != nil {
-		err = lib.WrapError(ErrMasrshalFailed, err)
+		err = lib.WrapError(ErrMarshalFailed, err)
 		p.log.Errorf("%s", err)
 		return nil, http.StatusInternalServerError, err
 	}
@@ -663,7 +663,7 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 
 	msgJSON, err := json.Marshal(rpcMessage)
 	if err != nil {
-		return nil, 0, 0, lib.WrapError(ErrMasrshalFailed, err)
+		return nil, 0, 0, lib.WrapError(ErrMarshalFailed, err)
 	}
 
 	ttftMs := 0
@@ -1040,55 +1040,85 @@ func (p *ProxyServiceSender) SendAudioTranscriptionV2(ctx context.Context, sessi
 		return nil, ErrMissingPrKey
 	}
 
-	// Open audio file
+	// Common tracking
+	var (
+		result      interface{}
+		ttftMs      int
+		totalTokens int
+		startTime   = time.Now().Unix()
+	)
+
 	audioFilePath := audioRequest.FilePath
-	file, err := os.Open(audioFilePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open audio file: %w", err)
-	}
-	defer file.Close()
+	if audioFilePath != "" {
+		file, err := os.Open(audioFilePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open audio file: %w", err)
+		}
+		defer file.Close()
 
-	// Get file info
-	fileInfo, err := file.Stat()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get file info: %w", err)
-	}
+		// Get file info
+		fileInfo, err := file.Stat()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get file info: %w", err)
+		}
 
-	fileSize := uint64(fileInfo.Size())
-	totalChunks := uint32((fileSize + SENDER_AUDIO_STREAM_CHUNK_SIZE - 1) / SENDER_AUDIO_STREAM_CHUNK_SIZE) // Ceiling division
+		fileSize := uint64(fileInfo.Size())
+		totalChunks := uint32((fileSize + SENDER_AUDIO_STREAM_CHUNK_SIZE - 1) / SENDER_AUDIO_STREAM_CHUNK_SIZE) // Ceiling division
 
-	// Generate unique stream ID
-	streamIDBytes := make([]byte, 16)
-	_, err = rand.Read(streamIDBytes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate stream ID: %w", err)
-	}
-	streamID := fmt.Sprintf("%x", streamIDBytes)
+		// Generate unique stream ID
+		streamIDBytes := make([]byte, 16)
+		_, err = rand.Read(streamIDBytes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate stream ID: %w", err)
+		}
+		streamID := fmt.Sprintf("%x", streamIDBytes)
 
-	// Detect content type
-	contentType := detectAudioContentType(audioFilePath)
+		// Detect content type
+		contentType := detectAudioContentType(audioFilePath)
 
-	p.log.Debugf("Starting audio streaming for file %s, size: %d bytes, chunks: %d", audioFilePath, fileSize, totalChunks)
+		p.log.Debugf("Starting audio streaming for file %s, size: %d bytes, chunks: %d", audioFilePath, fileSize, totalChunks)
 
-	// Record start time for session stats
-	startTime := time.Now().Unix()
+		// Record start time for session stats
+		startTime = time.Now().Unix()
 
-	// Step 1: Start streaming session
-	err = p.sendStreamStart(provider, sessionID, streamID, totalChunks, fileSize, contentType, prKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to start streaming session: %w", err)
-	}
+		// Step 1: Start streaming session
+		err = p.sendStreamStart(provider, sessionID, streamID, totalChunks, fileSize, contentType, prKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to start streaming session: %w", err)
+		}
 
-	// Step 2: Send chunks
-	err = p.sendStreamChunks(ctx, provider, sessionID, streamID, file, totalChunks, prKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send streaming chunks: %w", err)
-	}
+		// Step 2: Send chunks
+		err = p.sendStreamChunks(ctx, provider, sessionID, streamID, file, totalChunks, prKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to send streaming chunks: %w", err)
+		}
 
-	// Step 3: End streaming and get results
-	result, ttftMs, totalTokens, err := p.sendStreamEnd(ctx, provider, sessionID, streamID, audioRequest, prKey, cb)
-	if err != nil {
-		return nil, fmt.Errorf("failed to end streaming session: %w", err)
+		// Step 3: End streaming and get results
+		result, ttftMs, totalTokens, err = p.sendStreamEnd(ctx, provider, sessionID, streamID, audioRequest, prKey, cb)
+		if err != nil {
+			return nil, fmt.Errorf("failed to end streaming session: %w", err)
+		}
+	} else {
+		pubKey, err := lib.StringToHexString(provider.PubKey)
+		if err != nil {
+			return nil, lib.WrapError(ErrCreateReq, err)
+		}
+
+		requestID := "1"
+		audioRequest.Extra["type"] = json.RawMessage(`"audio_transcription"`)
+		message, err := p.morRPC.SessionPromptRequest(sessionID, audioRequest, pubKey, prKey, requestID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create audio transcription request: %w", err)
+		}
+	
+		// Record start time for session stats
+		startTime = time.Now().Unix()
+	
+		// Send request and handle response
+		result, ttftMs, totalTokens, err = p.rpcRequestStreamV2(ctx, cb, provider.Url, message, pubKey, "audio_transcription")
+		if err != nil {
+			return nil, fmt.Errorf("failed to send audio transcription request: %w", err)
+		}
 	}
 
 	// Update session statistics
@@ -1172,13 +1202,16 @@ func (p *ProxyServiceSender) sendStreamChunks(ctx context.Context, provider *sto
 		var typedMsg *msgs.SessionPromptStreamChunkRes
 		err = json.Unmarshal(*response.Result, &typedMsg)
 		if err != nil {
-			return fmt.Errorf("failed to unmarshal stream start response: %w", err)
+			return fmt.Errorf("failed to unmarshal stream chunk response: %w", err)
 		}
 
 		signature := typedMsg.Signature
 		typedMsg.Signature = lib.HexString{}
 
 		hexPubKey, err := lib.StringToHexString(provider.PubKey)
+		if err != nil {
+			return fmt.Errorf("invalid provider pubkey: %w", err)
+		}
 		if !p.validateMsgSignature(typedMsg, signature, hexPubKey) {
 			return fmt.Errorf("invalid signature for stream chunk response")
 		}

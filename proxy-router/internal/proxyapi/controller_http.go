@@ -1344,7 +1344,9 @@ func (c *ProxyController) PruneContainers(ctx *gin.Context) {
 //	@Produce		json
 //	@Param			session_id					header		string	false	"Session ID"	format(hex32)
 //	@Param			model_id					header		string	false	"Model ID"		format(hex32)
-//	@Param			file						formData	file	true	"Audio file to transcribe"
+//	@Param			file						formData	file	false	"Audio file to transcribe"
+//	@Param			s3_presigned_url			formData	string	false	"Pre-signed URL for secure file acces"
+//	@Param			storage_key					formData	string	false	"Reference to existing file in configured storage bucket"
 //	@Param			language					formData	string	false	"Language of the audio"
 //	@Param			prompt						formData	string	false	"Optional prompt to guide transcription"
 //	@Param			response_format				formData	string	false	"Response format: json, text, srt, verbose_json, vtt"
@@ -1361,17 +1363,19 @@ func (c *ProxyController) AudioTranscription(ctx *gin.Context) {
 	}
 
 	// Process audio file
-	tempFilePath, err := c.createTempFile(ctx)
-	if err != nil {
-		statusCode := http.StatusInternalServerError
-		if err.Error() == "Failed to get file" {
-			statusCode = http.StatusBadRequest
+	if transcriptionRequest.S3PresignedURL == "" {
+		tempFilePath, err := c.createTempFile(ctx)
+		if err != nil {
+			statusCode := http.StatusInternalServerError
+			if err.Error() == "Failed to get file" {
+				statusCode = http.StatusBadRequest
+			}
+			ctx.JSON(statusCode, gin.H{"error": err.Error()})
+			return
 		}
-		ctx.JSON(statusCode, gin.H{"error": err.Error()})
-		return
+		defer os.Remove(tempFilePath) // Clean up temp file
+		transcriptionRequest.FilePath = tempFilePath
 	}
-	defer os.Remove(tempFilePath) // Clean up temp file
-	transcriptionRequest.FilePath = tempFilePath
 
 	// Get AI adapter
 	chatID := head.ChatID

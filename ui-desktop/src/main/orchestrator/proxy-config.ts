@@ -1,7 +1,7 @@
 export const buildLocalModelsConfig = (modelName: string, apiType: string, apiUrl: string) => {
   return {
     $schema:
-      'https://raw.githubusercontent.com/Lumerin-protocol/Morpheus-Lumerin-Node/a719073670adb17de6282b12d1852d39d629cb6e/proxy-router/internal/config/models-config-schema.json',
+      'https://raw.githubusercontent.com/MorpheusAIs/Morpheus-Lumerin-Node/a719073670adb17de6282b12d1852d39d629cb6e/proxy-router/internal/config/models-config-schema.json',
     models: [
       {
         modelId: '0x0000000000000000000000000000000000000000000000000000000000000000',
@@ -16,7 +16,7 @@ export const buildLocalModelsConfig = (modelName: string, apiType: string, apiUr
 export const buildLocalRatingConfig = () => {
   return {
     $schema:
-      'https://raw.githubusercontent.com/Lumerin-protocol/Morpheus-Lumerin-Node/a719073670adb17de6282b12d1852d39d629cb6e/proxy-router/internal/rating/rating-config-schema.json',
+      'https://raw.githubusercontent.com/MorpheusAIs/Morpheus-Lumerin-Node/a719073670adb17de6282b12d1852d39d629cb6e/proxy-router/internal/rating/rating-config-schema.json',
     algorithm: 'default',
     providerAllowlist: [],
     params: {

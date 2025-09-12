@@ -4,3 +4,4 @@
 ***/.env
 ***/.$*drawio.bkp
 ***/.$*drawio.dtmp
+*.internal.*
