@@ -273,7 +273,7 @@ func start() error {
 	multicallBackend := multicall.NewMulticall3Custom(ethClient, *cfg.Blockchain.Multicall3Addr)
 	sessionRouter := registries.NewSessionRouter(*cfg.Marketplace.DiamondContractAddress, ethClient, multicallBackend, rpcLog)
 	marketplace := registries.NewMarketplace(*cfg.Marketplace.DiamondContractAddress, ethClient, multicallBackend, rpcLog)
-	sessionRepo := sessionrepo.NewSessionRepositoryCached(sessionStorage, sessionRouter, marketplace)
+	sessionRepo := sessionrepo.NewSessionRepositoryCached(sessionStorage, sessionRouter, marketplace, appLog)
 	proxyRouterApi := proxyapi.NewProxySender(chainID, wallet, contractLogStorage, sessionStorage, sessionRepo, appLog)
 	explorer := blockchainapi.NewBlockscoutApiV2Client(cfg.Blockchain.BlockscoutApiUrl, log.Named("INDEXER"))
 	blockchainApi := blockchainapi.NewBlockchainService(ethClient, multicallBackend, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, explorer, wallet, proxyRouterApi, sessionRepo, scorer, authCfg, appLog, rpcLog, cfg.Blockchain.EthLegacyTx)
