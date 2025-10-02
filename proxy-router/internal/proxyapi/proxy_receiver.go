@@ -243,7 +243,7 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 		if err != nil {
 			return handleError(err, "failed to process chat request", sourceLog)
 		}
-	} else if audioTranscriptionReq != nil {
+	} else if audioTranscriptionReq != nil && audioTranscriptionReq.FilePath != "" {
 		defer os.Remove(audioTranscriptionReq.FilePath)
 	}
 
@@ -260,7 +260,7 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 	cb := s.createCompletionCallback(ctx, startTime, userPubKey, requestID, sourceLog, &ttftMs, &totalTokens)
 
 	// Process request with appropriate adapter method
-	if audioTranscriptionReq != nil && audioTranscriptionReq.FilePath != "" {
+	if audioTranscriptionReq != nil {
 		sourceLog.Debugf("Processing audio transcription request")
 		err = adapter.AudioTranscription(ctx, audioTranscriptionReq, cb)
 	} else if audioSpeechReq != nil {

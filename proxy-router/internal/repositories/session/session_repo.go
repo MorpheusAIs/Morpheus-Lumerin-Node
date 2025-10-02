@@ -6,19 +6,22 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 )
 
 type SessionRepositoryCached struct {
 	storage *storages.SessionStorage
 	reg     *registries.SessionRouter
 	mkt     *registries.Marketplace
+	log     lib.ILogger
 }
 
-func NewSessionRepositoryCached(storage *storages.SessionStorage, reg *registries.SessionRouter, mkt *registries.Marketplace) *SessionRepositoryCached {
+func NewSessionRepositoryCached(storage *storages.SessionStorage, reg *registries.SessionRouter, mkt *registries.Marketplace, log lib.ILogger) *SessionRepositoryCached {
 	return &SessionRepositoryCached{
 		storage: storage,
 		reg:     reg,
 		mkt:     mkt,
+		log:     log,
 	}
 }
 
@@ -26,19 +29,24 @@ func NewSessionRepositoryCached(storage *storages.SessionStorage, reg *registrie
 func (r *SessionRepositoryCached) GetSession(ctx context.Context, id common.Hash) (*SessionModel, error) {
 	ses, ok := r.getSessionFromCache(id)
 	if ok {
+		r.log.Debugf("Session found in cache id: %s, endsAt: %v", ses.id.Hex(), ses.endsAt)
 		return ses, nil
 	}
 
 	session, err := r.getSessionFromBlockchain(ctx, id)
 	if err != nil {
+		r.log.Debugf("Error getting session from blockchain: %v", err)
 		return nil, err
 	}
+	r.log.Debugf("Session found in blockchain id: %s, endsAt: %v", session.id.Hex(), session.endsAt)
 
 	err = r.saveSessionToCache(session)
 	if err != nil {
+		r.log.Debugf("Error saving session to cache: %v", err)
 		return nil, err
 	}
 
+	r.log.Debugf("Session saved to cache id: %s, endsAt: %v", session.id.Hex(), session.endsAt)
 	return session, nil
 }
 
@@ -88,8 +96,10 @@ func (r *SessionRepositoryCached) getSessionFromBlockchain(ctx context.Context, 
 func (r *SessionRepositoryCached) getSessionFromCache(id common.Hash) (*SessionModel, bool) {
 	ses, ok := r.storage.GetSession(id.Hex())
 	if !ok {
+		r.log.Debugf("Session not found in cache: %v", id)
 		return nil, false
 	}
+	r.log.Debugf("getSessionFromCache: Session found in cache id: %s, endsAt: %v", ses.Id, ses.EndsAt)
 	return &SessionModel{
 		id:               common.HexToHash(ses.Id),
 		userAddr:         common.HexToAddress(ses.UserAddr),
