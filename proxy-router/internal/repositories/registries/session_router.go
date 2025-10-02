@@ -78,6 +78,10 @@ func (g *SessionRouter) OpenSession(opts *bind.TransactOpts, approval []byte, ap
 		// Check if the log belongs to the OpenSession event
 		event, err := g.sessionRouter.ParseSessionOpened(*log)
 		if err == nil {
+			err = g.waitForConfirmations(opts.Context, receipt, 1)
+			if err != nil {
+				return receipt.TxHash, common.Address{}, common.Address{}, receipt, fmt.Errorf("failed to wait for confirmations %s", err)
+			}
 			return event.SessionId, event.ProviderId, event.User, receipt, nil
 		}
 	}
@@ -89,6 +93,10 @@ func (g *SessionRouter) GetSession(ctx context.Context, sessionID common.Hash) (
 	session, err := g.sessionRouter.GetSession(&bind.CallOpts{Context: ctx}, sessionID)
 	if err != nil {
 		return nil, err
+	}
+
+	if session.User == (common.Address{}) && session.EndsAt.Uint64() == 0 && session.OpenedAt.Uint64() == 0 {
+		return nil, fmt.Errorf("session not found")
 	}
 
 	return &session, nil
@@ -260,4 +268,26 @@ func (g *SessionRouter) getMultipleSessions(ctx context.Context, IDs [][32]byte)
 		return nil, nil, err
 	}
 	return IDs, sessions, nil
+}
+
+func (g *SessionRouter) waitForConfirmations(ctx context.Context, receipt *types.Receipt, confirmations uint64) error {    
+    targetBlock := receipt.BlockNumber.Uint64() + confirmations
+    
+    ticker := time.NewTicker(200 * time.Millisecond)
+    defer ticker.Stop()
+    
+    for {
+        select {
+        case <-ctx.Done():
+            return ctx.Err()
+        case <-ticker.C:
+            header, err := g.client.HeaderByNumber(ctx, nil)
+            if err != nil {
+                return err
+            }
+            if header.Number.Uint64() >= targetBlock {
+                return nil
+            }
+        }
+    }
 }
