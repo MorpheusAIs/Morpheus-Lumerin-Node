@@ -493,6 +493,8 @@ func (p *ProxyServiceSender) validateSession(ctx context.Context, sessionID comm
 
 	// Check if session is expired
 	if session.EndsAt().Int64() < time.Now().Unix() {
+		p.log.Debugf("Expired session object endsAt: %v", session.EndsAt().Int64())
+		p.log.Debugf("Now: %v", time.Now().Unix())
 		return nil, nil, ErrSessionExpired
 	}
 
