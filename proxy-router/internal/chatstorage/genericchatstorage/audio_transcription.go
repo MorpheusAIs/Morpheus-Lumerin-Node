@@ -12,6 +12,7 @@ type AudioTranscriptionRequest struct {
 	Model string `form:"model"`
 
 	FilePath string `form:"file_path,omitempty"` // not usually sent; omit if empty
+	S3PresignedURL string `form:"s3_presigned_url,omitempty"`
 
 	Prompt      string                     `form:"prompt,omitempty"`
 	Temperature float32                    `form:"temperature,omitempty"`
@@ -34,6 +35,7 @@ func (c *AudioTranscriptionRequest) UnmarshalJSON(data []byte) error {
 	}
 	c.Model = known.Model
 	c.FilePath = known.FilePath
+	c.S3PresignedURL = known.S3PresignedURL
 	c.Prompt = known.Prompt
 	c.Temperature = known.Temperature
 	c.Language = known.Language
