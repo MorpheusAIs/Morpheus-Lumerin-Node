@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"net"
+	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi"
@@ -42,6 +43,20 @@ func NewTCPHandler(
 		})
 		if err != nil {
 			sourceLog.Errorf("Error handling message: %s\nMessage: %s\n", err, msg)
+			// Send unencrypted error response for infrastructure errors
+			// Empty/nil signature indicates this error is not encrypted
+			errorResp := &morrpc.RpcResponse{
+				ID: msg.ID,
+				Error: &morrpc.RpcError{
+					Code:    400,
+					Message: err.Error(),
+					Data: morrpc.RPCErrorData{
+						Timestamp: uint64(time.Now().UnixMilli()),
+						Signature: lib.MustStringToHexString("0x0"),
+					},
+				},
+			}
+			sendMsg(conn, errorResp)
 			return
 		}
 	}
