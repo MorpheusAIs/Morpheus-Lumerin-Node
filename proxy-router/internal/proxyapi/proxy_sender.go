@@ -491,8 +491,9 @@ func (p *ProxyServiceSender) validateSession(ctx context.Context, sessionID comm
 		return nil, nil, ErrSessionNotFound
 	}
 
+	SESSION_EXPIRY_THRESHOLD := time.Second * 5
 	// Check if session is expired
-	if session.EndsAt().Int64() < time.Now().Unix() {
+	if session.EndsAt().Int64() + int64(SESSION_EXPIRY_THRESHOLD) < time.Now().Unix() {
 		p.log.Debugf("Expired session object endsAt: %v", session.EndsAt().Int64())
 		p.log.Debugf("Now: %v", time.Now().Unix())
 		return nil, nil, ErrSessionExpired
@@ -682,6 +683,7 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 	var d *json.Decoder
 
 	responses := make([]interface{}, 0)
+	callbackCalled := false
 
 	retryCount := 0
 
@@ -725,6 +727,9 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 				}
 			} else if err == io.EOF {
 				p.log.Debugf("Connection closed by provider")
+				if !callbackCalled {
+					return nil, ttftMs, totalTokens, fmt.Errorf("provider closed connection without sending any data")
+				}
 				break
 			} else {
 				p.log.Warnf("Failed to decode response: %v", err)
@@ -734,6 +739,17 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 
 		if msg.Error != nil {
 			sig := msg.Error.Data.Signature
+			
+			// Check if this is an unencrypted infrastructure error
+			// Empty signature marshals as "0x00" (hex prefix with no data)
+			sigStr := sig.String()
+			if sig == nil || len(sig) == 0 || sigStr == "0x00" {
+				// Unencrypted error - return as plain error without callback
+				p.log.Warnf("Received unencrypted provider error: %s (code: %d)", msg.Error.Message, msg.Error.Code)
+				return nil, ttftMs, totalTokens, fmt.Errorf("provider error: %s", msg.Error.Message)
+			}
+			
+			// Encrypted error - validate signature and decrypt
 			msg.Error.Data.Signature = []byte{}
 
 			if !p.validateMsgSignature(msg.Error, sig, providerPublicKey) {
@@ -799,6 +815,7 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 			return nil, ttftMs, totalTokens, ctx.Err()
 		}
 		err = cb(ctx, result, nil)
+		callbackCalled = true
 		if err != nil {
 			return nil, ttftMs, totalTokens, lib.WrapError(ErrResponseErr, err)
 		}
