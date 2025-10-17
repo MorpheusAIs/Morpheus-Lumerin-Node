@@ -204,6 +204,7 @@ func (a *OpenAI) readTranscriptionStream(ctx context.Context, body io.Reader, cb
 
 func (a *OpenAI) AudioTranscription(ctx context.Context, audioRequest *gcs.AudioTranscriptionRequest, cb gcs.CompletionCallback) error {
 	audioRequest.Model = a.modelName
+	stream := audioRequest.Stream
 
 	// Prepare the request
 	req, err := a.prepareTranscriptionRequest(ctx, audioRequest)
@@ -211,7 +212,7 @@ func (a *OpenAI) AudioTranscription(ctx context.Context, audioRequest *gcs.Audio
 		return fmt.Errorf("failed to prepare transcription request: %w", err)
 	}
 
-	if audioRequest.Stream {
+	if stream {
 		req.Header.Set(c.HEADER_ACCEPT, c.CONTENT_TYPE_EVENT_STREAM)
 	}
 
@@ -227,7 +228,7 @@ func (a *OpenAI) AudioTranscription(ctx context.Context, audioRequest *gcs.Audio
 	}
 
 	// Check if response is streaming
-	if audioRequest.Stream && isContentTypeStream(resp.Header) {
+	if stream && isContentTypeStream(resp.Header) {
 		return a.readTranscriptionStream(ctx, resp.Body, cb)
 	}
 
