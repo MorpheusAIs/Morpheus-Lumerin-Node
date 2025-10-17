@@ -2668,14 +2668,8 @@
                     },
                     {
                         "type": "string",
-                        "description": "Pre-signed URL for secure file acces",
+                        "description": "Pre-signed URL for secure file access",
                         "name": "s3_presigned_url",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Reference to existing file in configured storage bucket",
-                        "name": "storage_key",
                         "in": "formData"
                     },
                     {
@@ -2686,20 +2680,8 @@
                     },
                     {
                         "type": "string",
-                        "description": "Optional prompt to guide transcription",
-                        "name": "prompt",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "string",
                         "description": "Response format: json, text, srt, verbose_json, vtt",
                         "name": "response_format",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "number",
-                        "description": "Temperature for sampling",
-                        "name": "temperature",
                         "in": "formData"
                     },
                     {
@@ -2709,9 +2691,15 @@
                         "in": "formData"
                     },
                     {
+                        "type": "string",
+                        "description": "Output content type (e.g., both, text_only)",
+                        "name": "output_content",
+                        "in": "formData"
+                    },
+                    {
                         "type": "boolean",
-                        "description": "Whether to stream the results or not",
-                        "name": "stream",
+                        "description": "Enable speaker diarization",
+                        "name": "enable_diarization",
                         "in": "formData"
                     }
                 ],

@@ -2745,37 +2745,29 @@ paths:
         in: formData
         name: file
         type: file
-      - description: Pre-signed URL for secure file acces
+      - description: Pre-signed URL for secure file access
         in: formData
         name: s3_presigned_url
-        type: string
-      - description: Reference to existing file in configured storage bucket
-        in: formData
-        name: storage_key
         type: string
       - description: Language of the audio
         in: formData
         name: language
         type: string
-      - description: Optional prompt to guide transcription
-        in: formData
-        name: prompt
-        type: string
       - description: 'Response format: json, text, srt, verbose_json, vtt'
         in: formData
         name: response_format
         type: string
-      - description: Temperature for sampling
-        in: formData
-        name: temperature
-        type: number
       - description: 'Timestamp granularity: word or segment'
         in: formData
         name: timestamp_granularities[]
         type: string
-      - description: Whether to stream the results or not
+      - description: Output content type (e.g., both, text_only)
         in: formData
-        name: stream
+        name: output_content
+        type: string
+      - description: Enable speaker diarization
+        in: formData
+        name: enable_diarization
         type: boolean
       produces:
       - application/json

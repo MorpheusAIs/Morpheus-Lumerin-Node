@@ -1345,14 +1345,12 @@ func (c *ProxyController) PruneContainers(ctx *gin.Context) {
 //	@Param			session_id					header		string	false	"Session ID"	format(hex32)
 //	@Param			model_id					header		string	false	"Model ID"		format(hex32)
 //	@Param			file						formData	file	false	"Audio file to transcribe"
-//	@Param			s3_presigned_url			formData	string	false	"Pre-signed URL for secure file acces"
-//	@Param			storage_key					formData	string	false	"Reference to existing file in configured storage bucket"
+//	@Param			s3_presigned_url			formData	string	false	"Pre-signed URL for secure file access"
 //	@Param			language					formData	string	false	"Language of the audio"
-//	@Param			prompt						formData	string	false	"Optional prompt to guide transcription"
 //	@Param			response_format				formData	string	false	"Response format: json, text, srt, verbose_json, vtt"
-//	@Param			temperature					formData	number	false	"Temperature for sampling"
 //	@Param			timestamp_granularities[]	formData	string	false	"Timestamp granularity: word or segment"
-//	@Param			stream						formData	boolean	false	"Whether to stream the results or not"
+//	@Param			output_content				formData	string	false	"Output content type (e.g., both, text_only)"
+//	@Param			enable_diarization			formData	boolean	false	"Enable speaker diarization"
 //	@Security		BasicAuth
 //	@Router			/v1/audio/transcriptions [post]
 func (c *ProxyController) AudioTranscription(ctx *gin.Context) {
