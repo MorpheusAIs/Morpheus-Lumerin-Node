@@ -43,7 +43,7 @@ var publicRPCURLs = map[int][]string{
 		"https://sepolia.base.org",
 		"https://base-sepolia-rpc.publicnode.com",
 		"https://base-sepolia.therpc.io",
-		"https://base-sepolia.blockpi.network/v1/rpc/public"
+		"https://base-sepolia.blockpi.network/v1/rpc/public",
 	},
 	8453: {
 		"https://base.llamarpc.com",
@@ -52,8 +52,8 @@ var publicRPCURLs = map[int][]string{
 		"https://base.lava.build", 
 		"https://1rpc.io/base",
 		"https://base-rpc.publicnode.com",
-		"https://mainnet.base.org"
-	}
+		"https://mainnet.base.org",
+	},
 }
 
 var ErrNotSupportedChain = fmt.Errorf("chain is not supported")
