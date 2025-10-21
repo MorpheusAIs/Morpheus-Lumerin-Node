@@ -42,7 +42,7 @@ func NewTCPHandler(
 			return nil
 		})
 		if err != nil {
-			sourceLog.Errorf("Error handling message: %s\nMessage: %s\n", err, msg)
+			sourceLog.Errorf("Error handling message with method: %s: %s", msg.Method, err)
 			// Send unencrypted error response for infrastructure errors
 			// Empty/nil signature indicates this error is not encrypted
 			errorResp := &morrpc.RpcResponse{
