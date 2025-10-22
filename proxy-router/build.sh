@@ -1,11 +1,46 @@
 #!/bin/sh
-# Check if TAG_NAME is set; if not, use the latest Git tag or fallback to 0.1.0
+# Check if TAG_NAME is set; if not, look up the existing tag from the repository
+# This is READ-ONLY: finds tags created by CI/CD, does NOT calculate new versions
 if [ -z "$TAG_NAME" ]; then
-  TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.1.0")
-  if [ "$TAG_NAME" = "0.1.0" ]; then
-    echo "Warning: No Git tags found. Defaulting to TAG_NAME=$TAG_NAME"
+  # Get current branch name
+  CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+  
+  # Try to find exact tag for current commit first
+  TAG_NAME=$(git describe --exact-match --tags HEAD 2>/dev/null)
+  
+  if [ -n "$TAG_NAME" ]; then
+    echo "✅ Found exact tag for current commit: $TAG_NAME"
   else
-    echo "Using latest Git tag: $TAG_NAME"
+    # No exact tag, find the most recent tag for this branch
+    case "$CURRENT_BRANCH" in
+      main)
+        # MAIN branch: Find latest production tag (no suffix, format: v*.*.*)
+        # Looks for tags on this branch that match the pattern v[1-9]*.*.*
+        TAG_NAME=$(git describe --tags --abbrev=0 --match='v[1-9]*' HEAD 2>/dev/null | grep -v '\-' | head -1)
+        if [ -n "$TAG_NAME" ]; then
+          echo "✅ MAIN branch - Using latest production tag: $TAG_NAME"
+        else
+          TAG_NAME="v0.1.0"
+          echo "⚠️  MAIN branch - No production tags found, defaulting to: $TAG_NAME"
+        fi
+        ;;
+      test)
+        # TEST branch: Find latest test tag (format: v*.*.*-test)
+        TAG_NAME=$(git describe --tags --abbrev=0 --match='v[1-9]*-test' HEAD 2>/dev/null)
+        if [ -n "$TAG_NAME" ]; then
+          echo "✅ TEST branch - Using latest test tag: $TAG_NAME"
+        else
+          TAG_NAME="v0.1.0-test"
+          echo "⚠️  TEST branch - No test tags found, defaulting to: $TAG_NAME"
+        fi
+        ;;
+      *)
+        # Other branches: Use commit hash as version (no guessing at tags)
+        COMMIT_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+        TAG_NAME="dev-${COMMIT_HASH}"
+        echo "ℹ️  Branch '$CURRENT_BRANCH' - Using commit-based version: $TAG_NAME"
+        ;;
+    esac
   fi
 fi
 
