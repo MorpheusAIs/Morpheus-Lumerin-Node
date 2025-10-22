@@ -191,8 +191,6 @@ func (a *AiEngine) CallAgentTool(ctx context.Context, sessionID common.Hash, age
 			return nil, err
 		}
 
-		fmt.Println("result", result)
-
 		var toolResult *interface{}
 		err = json.Unmarshal([]byte(result), &toolResult)
 		if err != nil {
