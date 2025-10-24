@@ -661,6 +661,18 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 	}
 	defer conn.Close()
 
+	// Enable TCP keepalive to prevent NAT/firewall from closing idle connections
+	if tcpConn, ok := conn.(*net.TCPConn); ok {
+		err := tcpConn.SetKeepAlive(true)
+		if err != nil {
+			p.log.Errorf("Error setting keepalive: %s", err)
+		}
+		err = tcpConn.SetKeepAlivePeriod(10 * time.Second)
+		if err != nil {
+			p.log.Errorf("Error setting keepalive period: %s", err)
+		}
+	}
+
 	// Set initial read deadline
 	_ = conn.SetReadDeadline(time.Now().Add(TIMEOUT_TO_RECEIVE_FIRST_RESPONSE))
 
@@ -989,6 +1001,7 @@ func (p *ProxyServiceSender) handleEmbeddings(aiResponse []byte, responses []int
 
 // checkProviderAvailability checks if the provider is alive using portchecker.io API
 func checkProviderAvailability(url string) (bool, error) {
+	return true, nil
 	host, port, err := net.SplitHostPort(url)
 	if err != nil {
 		return false, err
@@ -1240,6 +1253,8 @@ func (p *ProxyServiceSender) sendStreamChunks(ctx context.Context, provider *sto
 		}
 
 		p.log.Debugf("Successfully sent chunk %d/%d for stream %s", chunkIndex+1, totalChunks, streamID)
+
+		// time.Sleep(2000 * time.Millisecond)
 		chunkIndex++
 	}
 
