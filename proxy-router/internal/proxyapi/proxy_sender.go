@@ -661,6 +661,12 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 	}
 	defer conn.Close()
 
+	// Enable TCP keepalive to prevent NAT/firewall from closing idle connections
+	if tcpConn, ok := conn.(*net.TCPConn); ok {
+		tcpConn.SetKeepAlive(true)
+		tcpConn.SetKeepAlivePeriod(10 * time.Second)
+	}
+
 	// Set initial read deadline
 	_ = conn.SetReadDeadline(time.Now().Add(TIMEOUT_TO_RECEIVE_FIRST_RESPONSE))
 

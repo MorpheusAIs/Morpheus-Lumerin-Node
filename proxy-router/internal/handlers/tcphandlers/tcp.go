@@ -18,6 +18,11 @@ func NewTCPHandler(
 	morRpcHandler *proxyapi.MORRPCController,
 ) transport.Handler {
 	return func(ctx context.Context, conn net.Conn) {
+		if tcp, ok := conn.(*net.TCPConn); ok {
+			_ = tcp.SetKeepAlive(true)
+			_ = tcp.SetKeepAlivePeriod(10 * time.Second)
+		}
+
 		addr := conn.RemoteAddr().String()
 		sourceLog := tcpLog.Named("TCP").With("SrcAddr", addr)
 
