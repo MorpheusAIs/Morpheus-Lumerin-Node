@@ -28,10 +28,10 @@
           },
           "apiUrl": {
             "title": "API URL",
-            "description": "The URL of the API to be used with this model",
+            "description": "The URL of the API to be used with this model. Full url including endpoint.",
             "type": "string",
             "format": "uri",
-            "examples": ["http://localhost:11434/v1"]
+            "examples": ["http://localhost:11434/v1/chat/completions"]
           },
           "apiKey": {
             "title": "API Key",

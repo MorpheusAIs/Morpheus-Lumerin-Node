@@ -1645,7 +1645,7 @@ func (c *ProxyController) executeSpeechGeneration(ctx *gin.Context, adapter aien
 //
 //	@Summary		Generate embeddings
 //	@Description	Generate vector embeddings for the provided input
-//	@Tags			audio
+//	@Tags			embeddings
 //	@Produce		json
 //	@Param			session_id	header		string								false	"Session ID"	format(hex32)
 //	@Param			model_id	header		string								false	"Model ID"		format(hex32)
