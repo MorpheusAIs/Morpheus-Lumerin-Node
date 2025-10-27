@@ -2914,7 +2914,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "audio"
+                    "embeddings"
                 ],
                 "summary": "Generate embeddings",
                 "parameters": [

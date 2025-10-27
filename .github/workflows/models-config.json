@@ -5,7 +5,7 @@
       "modelId": "0x0000000000000000000000000000000000000000000000000000000000000000",
       "modelName": "llama2",
       "apiType": "openai",
-      "apiUrl": "http://localhost:8080/v1"
+      "apiUrl": "http://localhost:8080/v1/chat/completions"
     }
   ]
 }
