@@ -17,7 +17,7 @@ import (
 )
 
 const API_TYPE_PRODIA_V2 = "prodia-v2"
-const PRODIA_V2_DEFAULT_BASE_URL = "https://inference.prodia.com/v2"
+const PRODIA_V2_DEFAULT_BASE_URL = "https://inference.prodia.com/v2/job"
 
 var (
 	ErrCapacity               = errors.New("unable to schedule job with current token")
@@ -61,7 +61,7 @@ func (s *ProdiaV2) Prompt(ctx context.Context, prompt *gcs.OpenAICompletionReque
 		return err
 	}
 
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/job", s.apiURL), bytes.NewReader(payload))
+	req, err := http.NewRequest("POST", s.apiURL, bytes.NewReader(payload))
 	if err != nil {
 		err = lib.WrapError(ErrImageGenerationRequest, err)
 		s.log.Error(err)

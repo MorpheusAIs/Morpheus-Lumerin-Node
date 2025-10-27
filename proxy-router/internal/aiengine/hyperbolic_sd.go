@@ -14,7 +14,7 @@ import (
 )
 
 const API_TYPE_HYPERBOLIC_SD = "hyperbolic-sd"
-const HYPERBOLIC_DEFAULT_BASE_URL = "https://api.hyperbolic.xyz/v1"
+const HYPERBOLIC_DEFAULT_BASE_URL = "https://api.hyperbolic.xyz/v1/image/generation"
 
 type HyperbolicSD struct {
 	modelName  string
@@ -66,7 +66,7 @@ func (s *HyperbolicSD) Prompt(ctx context.Context, prompt *gcs.OpenAICompletionR
 		return err
 	}
 
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/image/generation", s.apiURL), bytes.NewReader(payload))
+	req, err := http.NewRequest("POST", s.apiURL, bytes.NewReader(payload))
 	if err != nil {
 		err = lib.WrapError(ErrImageGenerationRequest, err)
 		s.log.Error(err)
