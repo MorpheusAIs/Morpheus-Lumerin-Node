@@ -29,7 +29,6 @@ type ProxyReceiver struct {
 	modelConfigLoader *config.ModelConfigLoader
 	service           BidGetter
 	sessionRepo       *sessionrepo.SessionRepositoryCached
-	sendResponse      SendResponse
 }
 
 func NewProxyReceiver(privateKeyHex, publicKeyHex lib.HexString, sessionStorage *storages.SessionStorage, aiEngine *aiengine.AiEngine, chainID *big.Int, modelConfigLoader *config.ModelConfigLoader, blockchainService BidGetter, sessionRepo *sessionrepo.SessionRepositoryCached) *ProxyReceiver {
@@ -129,6 +128,7 @@ func (s *ProxyReceiver) createCompletionCallback(
 	sourceLog lib.ILogger,
 	ttftMs *int,
 	totalTokens *int,
+	sendResponse SendResponse,
 ) genericchatstorage.CompletionCallback {
 	return func(ctx context.Context, completion genericchatstorage.Chunk, aiEngineErrorResponse *genericchatstorage.AiEngineErrorResponse) error {
 		if aiEngineErrorResponse != nil {
@@ -151,7 +151,7 @@ func (s *ProxyReceiver) createCompletionCallback(
 				sourceLog.Error(err)
 				return err
 			}
-			return s.sendResponse(r)
+			return sendResponse(r)
 		}
 
 		*totalTokens += completion.Tokens()
@@ -182,7 +182,7 @@ func (s *ProxyReceiver) createCompletionCallback(
 			return wrappedErr
 		}
 
-		return s.sendResponse(r)
+		return sendResponse(r)
 	}
 }
 
@@ -200,9 +200,6 @@ func (s *ProxyReceiver) recordActivity(ctx context.Context, session *sessionrepo
 }
 
 func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, userPubKey string, payload []byte, sessionID common.Hash, sendResponse SendResponse, sourceLog lib.ILogger) (int, int, error) {
-	// Store sendResponse function for later use in callback
-	s.sendResponse = sendResponse
-
 	// Get session
 	session, err := s.sessionRepo.GetSession(ctx, sessionID)
 	if err != nil {
@@ -257,7 +254,7 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 	}
 
 	// Create completion callback
-	cb := s.createCompletionCallback(ctx, startTime, userPubKey, requestID, sourceLog, &ttftMs, &totalTokens)
+	cb := s.createCompletionCallback(ctx, startTime, userPubKey, requestID, sourceLog, &ttftMs, &totalTokens, sendResponse)
 
 	// Process request with appropriate adapter method
 	if audioTranscriptionReq != nil {
