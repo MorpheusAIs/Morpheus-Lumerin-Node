@@ -49,7 +49,7 @@ func (s *ProdiaSD) Prompt(ctx context.Context, prompt *gcs.OpenAICompletionReque
 		return err
 	}
 
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/sd/generate", s.apiURL), bytes.NewReader(payload))
+	req, err := http.NewRequest("POST", s.apiURL, bytes.NewReader(payload))
 	if err != nil {
 		err = lib.WrapError(ErrImageGenerationRequest, err)
 		s.log.Error(err)

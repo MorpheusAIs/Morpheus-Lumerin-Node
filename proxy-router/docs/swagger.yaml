@@ -2930,7 +2930,7 @@ paths:
       - BasicAuth: []
       summary: Generate embeddings
       tags:
-      - audio
+      - embeddings
   /v1/models:
     get:
       produces:

@@ -49,7 +49,7 @@ func (a *OpenAI) Prompt(ctx context.Context, compl *gcs.OpenAICompletionRequestE
 		return fmt.Errorf("failed to encode request: %v", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", a.baseURL+"/chat/completions", bytes.NewReader(requestBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", a.baseURL, bytes.NewReader(requestBody))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %v", err)
 	}
