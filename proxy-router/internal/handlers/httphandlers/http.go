@@ -57,6 +57,7 @@ func CreateHTTPServer(log lib.ILogger, authConfig system.HTTPAuthConfig, control
 
 	r.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"*"},
+		AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders: []string{"session_id", "model_id", "chat_id", "Authorization", "content-type"},
 	}))
 
