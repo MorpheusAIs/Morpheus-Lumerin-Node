@@ -543,8 +543,12 @@ jobs:
           while [ $HEALTH_RETRY_COUNT -lt $MAX_HEALTH_RETRIES ]; do
             echo "🔄 Health check attempt $((HEALTH_RETRY_COUNT + 1))/$MAX_HEALTH_RETRIES..."
             
-            # Get health check response
-            HEALTH_RESPONSE=$(curl -s --max-time 10 "$HEALTH_ENDPOINT" 2>/dev/null)
+            # Get health check response with browser-like headers to bypass WAF
+            HEALTH_RESPONSE=$(curl -s --max-time 10 \
+              -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36" \
+              -H "Accept: application/json, text/plain, */*" \
+              -H "Accept-Language: en-US,en;q=0.9" \
+              "$HEALTH_ENDPOINT" 2>/dev/null)
             CURL_STATUS=$?
             
             if [ $CURL_STATUS -eq 0 ] && [ -n "$HEALTH_RESPONSE" ]; then
@@ -794,8 +798,12 @@ jobs:
           while [ $HEALTH_RETRY_COUNT -lt $MAX_HEALTH_RETRIES ]; do
             echo "🔄 Health check attempt $((HEALTH_RETRY_COUNT + 1))/$MAX_HEALTH_RETRIES..."
             
-            # Get health check response
-            HEALTH_RESPONSE=$(curl -s --max-time 10 "$HEALTH_ENDPOINT" 2>/dev/null)
+            # Get health check response with browser-like headers to bypass WAF
+            HEALTH_RESPONSE=$(curl -s --max-time 10 \
+              -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36" \
+              -H "Accept: application/json, text/plain, */*" \
+              -H "Accept-Language: en-US,en;q=0.9" \
+              "$HEALTH_ENDPOINT" 2>/dev/null)
             CURL_STATUS=$?
             
             if [ $CURL_STATUS -eq 0 ] && [ -n "$HEALTH_RESPONSE" ]; then
@@ -1034,8 +1042,12 @@ jobs:
           while [ $HEALTH_RETRY_COUNT -lt $MAX_HEALTH_RETRIES ]; do
             echo "🔄 Health check attempt $((HEALTH_RETRY_COUNT + 1))/$MAX_HEALTH_RETRIES..."
             
-            # Get health check response
-            HEALTH_RESPONSE=$(curl -s --max-time 10 "$HEALTH_ENDPOINT" 2>/dev/null)
+            # Get health check response with browser-like headers to bypass WAF
+            HEALTH_RESPONSE=$(curl -s --max-time 10 \
+              -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36" \
+              -H "Accept: application/json, text/plain, */*" \
+              -H "Accept-Language: en-US,en;q=0.9" \
+              "$HEALTH_ENDPOINT" 2>/dev/null)
             CURL_STATUS=$?
             
             if [ $CURL_STATUS -eq 0 ] && [ -n "$HEALTH_RESPONSE" ]; then
