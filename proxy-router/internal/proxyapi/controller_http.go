@@ -225,6 +225,16 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 			return nil
 		}
 
+		if body.Stream && completion.Type() == gsc.ChunkTypeControl {
+			controlMsg := completion.Data().(string)
+			_, err := ctx.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", controlMsg)))
+			if err != nil {
+				return err
+			}
+			ctx.Writer.Flush()
+			return nil
+		}
+
 		marshalledResponse, err := json.Marshal(completion.Data())
 		if err != nil {
 			return err

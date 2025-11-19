@@ -117,14 +117,19 @@ func (a *OpenAI) readStream(ctx context.Context, body io.Reader, cb gcs.Completi
 
 		if strings.HasPrefix(line, StreamDataPrefix) {
 			data := line[len(StreamDataPrefix):] // Skip the "data: " prefix
+			if isStreamFinished(data) {
+				doneChunk := gcs.NewChunkControl(StreamDone)
+				if err := cb(ctx, doneChunk, nil); err != nil {
+					return fmt.Errorf("callback failed for done marker: %v", err)
+				}
+				return nil
+			}
+			
 			var compl gcs.ChatCompletionStreamResponseExtra
 			if err := json.Unmarshal([]byte(data), &compl); err != nil {
-				if isStreamFinished(data) {
-					return nil
-				} else {
-					return fmt.Errorf("error decoding response: %s\n%s", err, line)
-				}
+				return fmt.Errorf("error decoding response: %s\n%s", err, line)
 			}
+			
 			// Call the callback function with the unmarshalled completion
 			chunk := gcs.NewChunkStreaming(&compl)
 			err := cb(ctx, chunk, nil)
