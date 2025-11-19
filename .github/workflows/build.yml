@@ -528,9 +528,9 @@ jobs:
           
           # Determine the public endpoint for health check
           if [ "$ENV" == "dev" ]; then
-            HEALTH_ENDPOINT="http://morpheusapi.dev.titan.io:8082/healthcheck"
+            HEALTH_ENDPOINT="https://morpheusapi.dev.lumerin.io:8082/healthcheck"
           elif [ "$ENV" == "lmn" ]; then
-            HEALTH_ENDPOINT="http://morpheusapi.titan.io:8082/healthcheck"
+            HEALTH_ENDPOINT="https://morpheusapi.lmn.lumerin.io:8082/healthcheck"
           fi
           
           echo "🔍 Verifying deployment version at: $HEALTH_ENDPOINT"
