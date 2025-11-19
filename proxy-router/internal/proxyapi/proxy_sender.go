@@ -25,7 +25,6 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin/binding"
-	"github.com/sashabaranov/go-openai"
 )
 
 var (
@@ -918,26 +917,26 @@ func (p *ProxyServiceSender) handleAudioSpeech(aiResponse []byte, responses []in
 
 // handleChatCompletion processes chat completion responses
 func (p *ProxyServiceSender) handleChatCompletion(aiResponse []byte, responses []interface{}) (gcs.Chunk, int, bool, error) {
+	var controlMsg string
+	if err := json.Unmarshal(aiResponse, &controlMsg); err == nil && controlMsg == "[DONE]" {
+		chunk := gcs.NewChunkControl(controlMsg)
+		return chunk, 0, true, nil
+	}
+	
 	// Try to parse as streaming response
 	var streamResponse gcs.ChatCompletionStreamResponseExtra
 	err := json.Unmarshal(aiResponse, &streamResponse)
-	if err == nil && streamResponse.Usage == nil && len(streamResponse.Choices) > 0 {
-		choices := streamResponse.Choices
-		shouldStop := false
 
-		for _, choice := range choices {
-			if choice.FinishReason == openai.FinishReasonStop {
-				shouldStop = true
-				break
-			}
-		}
-
+	isStreamingChunk := (len(streamResponse.Choices) > 0 && streamResponse.Usage == nil)
+	isUsageChunk := (len(streamResponse.Choices) == 0 && streamResponse.Usage != nil)
+	
+	if err == nil && (isStreamingChunk || isUsageChunk) {
 		chunk := gcs.NewChunkStreaming(&streamResponse)
 		responses = append(responses, streamResponse)
-		return chunk, len(choices), shouldStop, nil
+		return chunk, len(streamResponse.Choices), false, nil
 	}
 
-	// Try to parse as full completion response
+	// Try to parse as full completion response (has both choices and usage)
 	var chatResponse gcs.ChatCompletionResponseExtra
 	err = json.Unmarshal(aiResponse, &chatResponse)
 	if err == nil && len(chatResponse.Choices) > 0 {
