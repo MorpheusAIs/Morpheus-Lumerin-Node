@@ -71,6 +71,7 @@ func (s *SessionExpiryHandler) Run(ctx context.Context) error {
 					sessionData, err := s.blockchainService.GetSession(ctx, sessionId)
 					if err != nil {
 						s.log.Error(err)
+						s.sessionStorage.RemoveSession(session.Id)
 						continue
 					}
 					if sessionData.ClosedAt.Int64() != 0 {
