@@ -51,6 +51,7 @@ func (c OpenAICompletionRequestExtra) MarshalJSON() ([]byte, error) {
 type ChatCompletionResponseExtra struct {
 	openai.ChatCompletionResponse                            // typed, known part
 	Extra                         map[string]json.RawMessage `json:"-"` // unknown bits
+	originalJSON                  map[string]json.RawMessage // preserve original structure
 }
 
 func (c *ChatCompletionResponseExtra) UnmarshalJSON(data []byte) error {
@@ -68,6 +69,12 @@ func (c *ChatCompletionResponseExtra) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
+	// Store the original JSON structure to preserve exact formatting
+	c.originalJSON = make(map[string]json.RawMessage)
+	for k, v := range all {
+		c.originalJSON[k] = v
+	}
+
 	// 3) Delete the keys we already mapped into the typed struct
 	lib.StripKnownKeys(all, reflect.TypeOf(known))
 
@@ -77,32 +84,45 @@ func (c *ChatCompletionResponseExtra) UnmarshalJSON(data []byte) error {
 }
 
 func (c ChatCompletionResponseExtra) MarshalJSON() ([]byte, error) {
-	// 1) Marshal the embedded OpenAI part on its own.
-	type base openai.ChatCompletionResponse // avoid recursion
+	// Use the original JSON structure if available (preserves original fields and omits defaults)
+	if c.originalJSON != nil {
+		m := make(map[string]json.RawMessage)
+		for k, v := range c.originalJSON {
+			m[k] = v
+		}
+		
+		// Merge vendor-specific keys from Extra if they were modified
+		for k, v := range c.Extra {
+			m[k] = v
+		}
+		
+		return json.Marshal(m)
+	}
+
+	// Fallback to the old method if originalJSON is not available
+	// (e.g., if the struct was created programmatically)
+	type base openai.ChatCompletionResponse
 	b, err := json.Marshal(base(c.ChatCompletionResponse))
 	if err != nil {
 		return nil, err
 	}
 
-	// 2) Turn that JSON into a map we can extend.
 	var m map[string]json.RawMessage
 	if err := json.Unmarshal(b, &m); err != nil {
 		return nil, err
 	}
 
-	// 3) Merge vendor-specific keys.  Extra wins if names collide;
-	// comment out the assignment if you want the opposite.
 	for k, v := range c.Extra {
 		m[k] = v
 	}
 
-	// 4) Re-encode the combined map.
 	return json.Marshal(m)
 }
 
 type ChatCompletionStreamResponseExtra struct {
 	openai.ChatCompletionStreamResponse                            // typed, known part
 	Extra                               map[string]json.RawMessage `json:"-"` // unknown bits
+	originalJSON                        map[string]json.RawMessage // preserve original structure
 }
 
 func (c *ChatCompletionStreamResponseExtra) UnmarshalJSON(data []byte) error {
@@ -120,6 +140,12 @@ func (c *ChatCompletionStreamResponseExtra) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
+	// Store the original JSON structure to preserve exact formatting
+	c.originalJSON = make(map[string]json.RawMessage)
+	for k, v := range all {
+		c.originalJSON[k] = v
+	}
+
 	// 3) Delete the keys we already mapped into the typed struct
 	lib.StripKnownKeys(all, reflect.TypeOf(known))
 
@@ -129,25 +155,37 @@ func (c *ChatCompletionStreamResponseExtra) UnmarshalJSON(data []byte) error {
 }
 
 func (c ChatCompletionStreamResponseExtra) MarshalJSON() ([]byte, error) {
-	// 1) Marshal the embedded OpenAI part on its own.
-	type base openai.ChatCompletionStreamResponse // avoid recursion
+	// Use the original JSON structure if available (preserves original fields and omits defaults)
+	if c.originalJSON != nil {
+		m := make(map[string]json.RawMessage)
+		for k, v := range c.originalJSON {
+			m[k] = v
+		}
+		
+		// Merge vendor-specific keys from Extra if they were modified
+		for k, v := range c.Extra {
+			m[k] = v
+		}
+		
+		return json.Marshal(m)
+	}
+
+	// Fallback to the old method if originalJSON is not available
+	// (e.g., if the struct was created programmatically)
+	type base openai.ChatCompletionStreamResponse
 	b, err := json.Marshal(base(c.ChatCompletionStreamResponse))
 	if err != nil {
 		return nil, err
 	}
 
-	// 2) Turn that JSON into a map we can extend.
 	var m map[string]json.RawMessage
 	if err := json.Unmarshal(b, &m); err != nil {
 		return nil, err
 	}
 
-	// 3) Merge vendor-specific keys.  Extra wins if names collide;
-	// comment out the assignment if you want the opposite.
 	for k, v := range c.Extra {
 		m[k] = v
 	}
 
-	// 4) Re-encode the combined map.
 	return json.Marshal(m)
 }
