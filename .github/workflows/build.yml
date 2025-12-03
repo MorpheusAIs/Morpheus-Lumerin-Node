@@ -1616,6 +1616,17 @@ jobs:
           sed -i "s/LATEST_TAG/${LATEST_TAG}/g" release_notes.md
           sed -i "s/TAG/${TAG}/g" release_notes.md
           
+          # Append commit/PR information to release notes
+          echo "" >> release_notes.md
+          echo "---" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## 📝 Release Notes" >> release_notes.md
+          echo "" >> release_notes.md
+          
+          # Get the commit message (which includes PR title/description if merged via PR)
+          COMMIT_MSG=$(git log -1 --pretty=format:"%B" ${{ github.sha }})
+          echo "$COMMIT_MSG" >> release_notes.md
+          
           # Output for GitHub Actions
           echo "Generated release notes:"
           cat release_notes.md
@@ -1636,7 +1647,7 @@ jobs:
           path: ./artifact
           release_id: ${{ steps.create_release.outputs.id }}
 
-      - name: Update latest-test release (test branch only)
+      - name: Update latest-test tag (test branch only)
         if: ${{ github.ref == 'refs/heads/test' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1644,43 +1655,16 @@ jobs:
           VERSION=${{ needs.Generate-Tag.outputs.vfull }}
           TAG=${{ needs.Generate-Tag.outputs.tag_name }}
           
-          echo "🔄 Updating latest-test release to point to $TAG..."
+          echo "🔄 Updating 'latest-test' tag to point to $TAG..."
           
-          # Check if latest-test release exists
-          LATEST_TEST_RELEASE=$(gh release view latest-test --json id 2>/dev/null || echo "")
+          # Delete existing latest-test tag if it exists (but keep any release)
+          git push origin :refs/tags/latest-test 2>/dev/null || true
           
-          if [ -n "$LATEST_TEST_RELEASE" ]; then
-            echo "📦 Deleting existing latest-test release..."
-            gh release delete latest-test --yes || true
-            git push origin :refs/tags/latest-test || true
-          fi
+          # Create new latest-test tag pointing to current commit
+          git tag -f latest-test
+          git push origin latest-test
           
-          # Create new latest-test release pointing to same commit
-          echo "📦 Creating latest-test release..."
-          
-          # Update release notes for latest-test
-          cat << EOF > latest_test_notes.md
-          ## 🧪 Latest Test Release
-          
-          This is a rolling release that always points to the most recent test build.
-          
-          **Current Version:** $TAG ($VERSION)
-          
-          > ⚠️ **Note:** This is a pre-release for testing purposes. For production use, please use the [latest stable release](../../releases/latest).
-          
-          ---
-          
-          $(cat release_notes.md)
-          EOF
-          
-          # Create the latest-test release
-          gh release create latest-test \
-            --title "Latest Test Release ($VERSION)" \
-            --notes-file latest_test_notes.md \
-            --prerelease \
-            ./artifact/*
-          
-          echo "✅ latest-test release updated successfully!"
+          echo "✅ 'latest-test' git tag updated successfully!"
           echo "📌 Users can now: git clone --branch latest-test <repo>"
 
       - name: Update latest tag (main branch only)
