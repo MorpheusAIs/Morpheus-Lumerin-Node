@@ -1631,21 +1631,32 @@ jobs:
           echo "Generated release notes:"
           cat release_notes.md
         
-      - name: Create release
-        id: create_release
-        uses: anzz1/action-create-release@v1
+      - name: Create release and upload assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ needs.Generate-Tag.outputs.tag_name }}
-          prerelease: ${{ github.ref != 'refs/heads/main' }}
-          body_path: release_notes.md
-
-      - name: Upload release
-        uses: ./.github/actions/upload_release
-        with:
-          path: ./artifact
-          release_id: ${{ steps.create_release.outputs.id }}
+        run: |
+          TAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          VERSION=${{ needs.Generate-Tag.outputs.vfull }}
+          
+          # Determine if this is a prerelease
+          if [ "${{ github.ref_name }}" == "main" ]; then
+            PRERELEASE_FLAG=""
+            TITLE="Release $TAG"
+          else
+            PRERELEASE_FLAG="--prerelease"
+            TITLE="Pre-release $TAG"
+          fi
+          
+          echo "📦 Creating release $TAG..."
+          
+          # Create release with notes and upload all artifacts
+          gh release create "$TAG" \
+            --title "$TITLE" \
+            --notes-file release_notes.md \
+            $PRERELEASE_FLAG \
+            ./artifact/*
+          
+          echo "✅ Release $TAG created successfully with $(ls -1 ./artifact | wc -l) assets"
 
       - name: Update latest-test tag (test branch only)
         if: ${{ github.ref == 'refs/heads/test' }}
