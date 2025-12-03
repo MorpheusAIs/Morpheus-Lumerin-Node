@@ -202,13 +202,16 @@ jobs:
           BUILDIMAGE=${{ needs.Generate-Tag.outputs.image_name }}
           BUILDCOMMIT=${{ github.sha }}
           
-          # Use single platform for test builds and feature branches, multi-platform for main
-          if [ "${{ github.ref_name }}" == "test" ] || [[ "${{ github.ref_name }}" == feat/* ]]; then
+          # Build multi-platform for main and test branches to support all architectures:
+          # - linux/amd64: Linux x64 servers, Mac Intel (via Docker VM)
+          # - linux/arm64: Raspberry Pi, AWS Graviton, Mac Apple Silicon (via Docker VM)
+          # Feature branches stay single-platform for faster iteration
+          if [[ "${{ github.ref_name }}" == feat/* ]]; then
             PLATFORMS="linux/amd64"
-            echo "🚀 Building single platform (amd64) for faster test deployment"
+            echo "🚀 Building single platform (amd64) for faster feature branch builds"
           else
             PLATFORMS="linux/amd64,linux/arm64"
-            echo "🚀 Building multi-platform for production release"
+            echo "🚀 Building multi-platform container image for: $PLATFORMS"
           fi
           
           docker buildx build \
@@ -223,15 +226,22 @@ jobs:
             proxy-router || (echo "❌ Failed to push image with tag: $BUILDIMAGE:$BUILDTAG" && exit 1)
           echo "✅ Proxy-Router Build and Push of $BUILDIMAGE:$BUILDTAG Successful!"
 
-      - name: Optionally Push Latest Tag
-        if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Push Latest Tags
+        if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' }}
         run: |
           BUILDIMAGE=${{ needs.Generate-Tag.outputs.image_name }}
           BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
-          docker pull $BUILDIMAGE:$BUILDTAG || (echo "❌ Failed to pull image: $BUILDIMAGE:$BUILDTAG" && exit 1)
-          docker tag $BUILDIMAGE:$BUILDTAG $BUILDIMAGE:latest || (echo "❌ Failed to tag image as :latest" && exit 1)
-          docker push $BUILDIMAGE:latest || (echo "❌ Failed to push image as :latest" && exit 1)
-          echo "✅ Proxy-Router Push $BUILDIMAGE:latest Tag Successful!"
+          
+          # Use imagetools to create latest tags as aliases to the multi-arch manifest
+          # This preserves all architectures (unlike docker pull/tag/push which only gets the runner's arch)
+          if [ "${{ github.ref_name }}" == "main" ]; then
+            LATEST_TAG="latest"
+          else
+            LATEST_TAG="latest-test"
+          fi
+          
+          docker buildx imagetools create -t $BUILDIMAGE:$LATEST_TAG $BUILDIMAGE:$BUILDTAG || (echo "❌ Failed to create :$LATEST_TAG tag" && exit 1)
+          echo "✅ Proxy-Router Push $BUILDIMAGE:$LATEST_TAG Tag Successful!"
 
   Build-Service-Executables:
     name: Build Service Executables
@@ -284,6 +294,11 @@ jobs:
           TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=linux GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-linux-amd64 ./build.sh || (echo "❌ Failed to build Linux X64 executable" && exit 1)
           mv proxy-router linux-x86_64-morpheus-router-${FULLTAG}
           
+          # Linux ARM64 (Raspberry Pi, AWS Graviton)
+          echo "🚀 Building Linux ARM64 executable..."
+          TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=linux GOARCH=arm64 OUTPUT=proxy-router-${FULLTAG}-linux-arm64 ./build.sh || (echo "❌ Failed to build Linux ARM64 executable" && exit 1)
+          mv proxy-router linux-arm64-morpheus-router-${FULLTAG}
+          
           # macOS Intel
           echo "🚀 Building macOS X64 executable..."
           TAG_NAME=${{ needs.Generate-Tag.outputs.tag_name }} GOOS=darwin GOARCH=amd64 OUTPUT=proxy-router-${FULLTAG}-mac-amd64 ./build.sh || (echo "❌ Failed to build macOS X64 executable" && exit 1)
@@ -317,6 +332,11 @@ jobs:
           GOOS=linux GOARCH=amd64 make build || (echo "❌ Failed to build Linux X64 executable" && exit 1)
           mv mor-cli linux-x86_64-morpheus-cli-${FULLTAG}
           
+          # Linux ARM64 (Raspberry Pi, AWS Graviton)
+          echo "🚀 Building Linux ARM64 CLI executable..."
+          GOOS=linux GOARCH=arm64 make build || (echo "❌ Failed to build Linux ARM64 executable" && exit 1)
+          mv mor-cli linux-arm64-morpheus-cli-${FULLTAG}
+          
           # macOS Intel
           echo "🚀 Building macOS X64 CLI executable..."
           GOOS=darwin GOARCH=amd64 make build || (echo "❌ Failed to build macOS X64 executable" && exit 1)
@@ -341,6 +361,7 @@ jobs:
           name: cli
           path: |
             cli/linux-x86_64-morpheus-cli-${{ needs.Generate-Tag.outputs.vfull }}
+            cli/linux-arm64-morpheus-cli-${{ needs.Generate-Tag.outputs.vfull }}
             cli/mac-x64-morpheus-cli-${{ needs.Generate-Tag.outputs.vfull }}
             cli/mac-arm64-morpheus-cli-${{ needs.Generate-Tag.outputs.vfull }}
             cli/win-x64-morpheus-cli-${{ needs.Generate-Tag.outputs.vfull }}.exe
@@ -351,6 +372,7 @@ jobs:
           name: proxy-router
           path: |
             proxy-router/linux-x86_64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
+            proxy-router/linux-arm64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
             proxy-router/mac-x64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
             proxy-router/mac-arm64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
             proxy-router/win-x64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}.exe
@@ -1236,6 +1258,69 @@ jobs:
           path: ./ui-desktop/dist/linux-x86_64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
           name: linux-x86_64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
 
+  UI-Ubuntu-22-arm64:
+    name: Build Morpheus UI Ubuntu arm64 Image
+    if: |
+      github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true')
+      )
+    runs-on: ubuntu-22.04
+    needs:
+      - Generate-Tag
+      - Build-Service-Executables
+    env:
+      SERVICE_PROXY_DOWNLOAD_URL_LINUX_ARM64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/linux-arm64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
+    steps:
+      - name: Clone
+        id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "yarn"
+          cache-dependency-path: ui-desktop/yarn.lock
+
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: ${{ runner.os }}-electron-arm64-${{ hashFiles('ui-desktop/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-arm64-
+
+      - name: Install dependencies
+        run: |
+          cd ./ui-desktop
+          yarn install --network-timeout 600000 --frozen-lockfile
+
+      - name: Copy Environment Files
+        uses: ./.github/actions/copy_env_files
+
+      - name: Build
+        id: build
+        run: |
+          FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
+          cd ./ui-desktop
+          echo "Injecting version $FULLTAG into package.json"
+          sed -i "s/\"version\": \".*\"/\"version\": \"$FULLTAG\"/" package.json
+          cat package.json | grep '"version"'  # Optional: Verify the change
+          yarn build:linux-arm64
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          path: ./ui-desktop/dist/linux-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
+          name: linux-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
+
   UI-macOS-13-x64:
     name: Build Morpheus UI macOS-x64 Image
     if: |
@@ -1398,6 +1483,7 @@ jobs:
       - UI-macOS-14-arm64
       - UI-macOS-13-x64
       - UI-Ubuntu-22-x64
+      - UI-Ubuntu-22-arm64
       - UI-Windows-avx2-x64
 
     runs-on: ubuntu-latest
@@ -1420,6 +1506,119 @@ jobs:
         run: |
           echo "🔍 Contents of ./artifact:"
           ls -lh ./artifact
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          VERSION=${{ needs.Generate-Tag.outputs.vfull }}
+          TAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          
+          # Create release notes with organized download sections
+          cat << 'RELEASE_NOTES' > release_notes.md
+          ## 📦 Download by Platform
+          
+          Choose the appropriate download for your operating system and use case:
+          
+          ### 🖥️ Desktop Application (Full GUI)
+          *Recommended for most users - includes wallet, chat interface, and built-in proxy router*
+          
+          | Platform | Download |
+          |----------|----------|
+          | **Windows** (x64) | [`win-x64-morpheus-app-VERSION.exe`](../../releases/download/TAG/win-x64-morpheus-app-VERSION.exe) |
+          | **macOS** (Apple Silicon M1/M2/M3) | [`mac-arm64-morpheus-app-VERSION.dmg`](../../releases/download/TAG/mac-arm64-morpheus-app-VERSION.dmg) |
+          | **macOS** (Intel) | [`mac-x64-morpheus-app-VERSION.dmg`](../../releases/download/TAG/mac-x64-morpheus-app-VERSION.dmg) |
+          | **Linux** (x64) | [`linux-x86_64-morpheus-app-VERSION.AppImage`](../../releases/download/TAG/linux-x86_64-morpheus-app-VERSION.AppImage) |
+          | **Linux** (ARM64/Raspberry Pi) | [`linux-arm64-morpheus-app-VERSION.AppImage`](../../releases/download/TAG/linux-arm64-morpheus-app-VERSION.AppImage) |
+          
+          ---
+          
+          ### 🔧 Proxy Router (Headless Service)
+          *For servers, providers, and advanced users running without GUI*
+          
+          | Platform | Download |
+          |----------|----------|
+          | **Linux** (x64) | [`linux-x86_64-morpheus-router-VERSION`](../../releases/download/TAG/linux-x86_64-morpheus-router-VERSION) |
+          | **Linux** (ARM64/Raspberry Pi) | [`linux-arm64-morpheus-router-VERSION`](../../releases/download/TAG/linux-arm64-morpheus-router-VERSION) |
+          | **macOS** (Apple Silicon) | [`mac-arm64-morpheus-router-VERSION`](../../releases/download/TAG/mac-arm64-morpheus-router-VERSION) |
+          | **macOS** (Intel) | [`mac-x64-morpheus-router-VERSION`](../../releases/download/TAG/mac-x64-morpheus-router-VERSION) |
+          | **Windows** (x64) | [`win-x64-morpheus-router-VERSION.exe`](../../releases/download/TAG/win-x64-morpheus-router-VERSION.exe) |
+          
+          ---
+          
+          ### 💻 CLI Tool
+          *Command-line interface for scripting and automation*
+          
+          | Platform | Download |
+          |----------|----------|
+          | **Linux** (x64) | [`linux-x86_64-morpheus-cli-VERSION`](../../releases/download/TAG/linux-x86_64-morpheus-cli-VERSION) |
+          | **Linux** (ARM64/Raspberry Pi) | [`linux-arm64-morpheus-cli-VERSION`](../../releases/download/TAG/linux-arm64-morpheus-cli-VERSION) |
+          | **macOS** (Apple Silicon) | [`mac-arm64-morpheus-cli-VERSION`](../../releases/download/TAG/mac-arm64-morpheus-cli-VERSION) |
+          | **macOS** (Intel) | [`mac-x64-morpheus-cli-VERSION`](../../releases/download/TAG/mac-x64-morpheus-cli-VERSION) |
+          | **Windows** (x64) | [`win-x64-morpheus-cli-VERSION.exe`](../../releases/download/TAG/win-x64-morpheus-cli-VERSION.exe) |
+          
+          ---
+          
+          ### 🐳 Docker (Multi-Architecture)
+          *Container image for servers and cloud deployment - supports linux/amd64 and linux/arm64*
+          
+          ```bash
+          # Pull this specific version
+          docker pull ghcr.io/morpheusais/morpheus-lumerin-node:TAG
+          
+          # Or use the rolling tag (always points to latest release)
+          docker pull ghcr.io/morpheusais/morpheus-lumerin-node:LATEST_TAG
+          ```
+          
+          | Tag | Description |
+          |-----|-------------|
+          | `TAG` | This specific release |
+          | `LATEST_TAG` | Rolling tag (auto-updates with new releases) |
+          
+          ---
+          
+          ### 🔗 Stable Download Links (for Documentation)
+          *These URLs always point to the latest release - useful for documentation and scripts*
+          
+          **Desktop App:**
+          - Windows: `RELEASES_BASE_URL/RELEASES_TAG/download/win-x64-morpheus-app-VERSION.exe`
+          - macOS (Apple Silicon): `RELEASES_BASE_URL/RELEASES_TAG/download/mac-arm64-morpheus-app-VERSION.dmg`
+          - macOS (Intel): `RELEASES_BASE_URL/RELEASES_TAG/download/mac-x64-morpheus-app-VERSION.dmg`
+          - Linux (x64): `RELEASES_BASE_URL/RELEASES_TAG/download/linux-x86_64-morpheus-app-VERSION.AppImage`
+          - Linux (ARM64): `RELEASES_BASE_URL/RELEASES_TAG/download/linux-arm64-morpheus-app-VERSION.AppImage`
+          
+          **Proxy Router:**
+          - Linux (x64): `RELEASES_BASE_URL/RELEASES_TAG/download/linux-x86_64-morpheus-router-VERSION`
+          - Linux (ARM64): `RELEASES_BASE_URL/RELEASES_TAG/download/linux-arm64-morpheus-router-VERSION`
+          
+          **CLI:**
+          - Linux (x64): `RELEASES_BASE_URL/RELEASES_TAG/download/linux-x86_64-morpheus-cli-VERSION`
+          - Linux (ARM64): `RELEASES_BASE_URL/RELEASES_TAG/download/linux-arm64-morpheus-cli-VERSION`
+          
+          > 💡 **Tip:** Replace `RELEASES_TAG` with `TAG` to pin to this specific version.
+          
+          RELEASE_NOTES
+          
+          # Determine the latest tag and release URL based on branch
+          if [ "${{ github.ref_name }}" == "main" ]; then
+            LATEST_TAG="latest"
+            RELEASES_TAG="latest"
+            RELEASES_BASE_URL="https://github.com/${{ github.repository }}/releases"
+          else
+            LATEST_TAG="latest-test"
+            RELEASES_TAG="latest-test"
+            RELEASES_BASE_URL="https://github.com/${{ github.repository }}/releases"
+          fi
+          
+          # Replace placeholders (order matters - longer patterns first)
+          sed -i "s|RELEASES_BASE_URL|${RELEASES_BASE_URL}|g" release_notes.md
+          sed -i "s/RELEASES_TAG/${RELEASES_TAG}/g" release_notes.md
+          sed -i "s/VERSION/${VERSION}/g" release_notes.md
+          sed -i "s/LATEST_TAG/${LATEST_TAG}/g" release_notes.md
+          sed -i "s/TAG/${TAG}/g" release_notes.md
+          
+          # Output for GitHub Actions
+          echo "Generated release notes:"
+          cat release_notes.md
         
       - name: Create release
         id: create_release
@@ -1429,9 +1628,77 @@ jobs:
         with:
           tag_name: ${{ needs.Generate-Tag.outputs.tag_name }}
           prerelease: ${{ github.ref != 'refs/heads/main' }}
+          body_path: release_notes.md
 
       - name: Upload release
         uses: ./.github/actions/upload_release
         with:
           path: ./artifact
           release_id: ${{ steps.create_release.outputs.id }}
+
+      - name: Update latest-test release (test branch only)
+        if: ${{ github.ref == 'refs/heads/test' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=${{ needs.Generate-Tag.outputs.vfull }}
+          TAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          
+          echo "🔄 Updating latest-test release to point to $TAG..."
+          
+          # Check if latest-test release exists
+          LATEST_TEST_RELEASE=$(gh release view latest-test --json id 2>/dev/null || echo "")
+          
+          if [ -n "$LATEST_TEST_RELEASE" ]; then
+            echo "📦 Deleting existing latest-test release..."
+            gh release delete latest-test --yes || true
+            git push origin :refs/tags/latest-test || true
+          fi
+          
+          # Create new latest-test release pointing to same commit
+          echo "📦 Creating latest-test release..."
+          
+          # Update release notes for latest-test
+          cat << EOF > latest_test_notes.md
+          ## 🧪 Latest Test Release
+          
+          This is a rolling release that always points to the most recent test build.
+          
+          **Current Version:** $TAG ($VERSION)
+          
+          > ⚠️ **Note:** This is a pre-release for testing purposes. For production use, please use the [latest stable release](../../releases/latest).
+          
+          ---
+          
+          $(cat release_notes.md)
+          EOF
+          
+          # Create the latest-test release
+          gh release create latest-test \
+            --title "Latest Test Release ($VERSION)" \
+            --notes-file latest_test_notes.md \
+            --prerelease \
+            ./artifact/*
+          
+          echo "✅ latest-test release updated successfully!"
+          echo "📌 Users can now: git clone --branch latest-test <repo>"
+
+      - name: Update latest tag (main branch only)
+        if: ${{ github.ref == 'refs/heads/main' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=${{ needs.Generate-Tag.outputs.vfull }}
+          TAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          
+          echo "🔄 Updating 'latest' tag to point to $TAG..."
+          
+          # Delete existing latest tag if it exists
+          git push origin :refs/tags/latest 2>/dev/null || true
+          
+          # Create new latest tag pointing to current commit
+          git tag -f latest
+          git push origin latest
+          
+          echo "✅ 'latest' git tag updated successfully!"
+          echo "📌 Users can now: git clone --branch latest <repo>"
