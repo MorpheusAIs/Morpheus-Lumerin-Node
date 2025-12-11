@@ -119,6 +119,14 @@ func (c ChatCompletionResponseExtra) MarshalJSON() ([]byte, error) {
 	return json.Marshal(m)
 }
 
+// SetOriginalJSONUsage updates the usage field in originalJSON
+func (c *ChatCompletionResponseExtra) SetOriginalJSONUsage(usageBytes []byte) {
+	if c.originalJSON == nil {
+		c.originalJSON = make(map[string]json.RawMessage)
+	}
+	c.originalJSON["usage"] = usageBytes
+}
+
 type ChatCompletionStreamResponseExtra struct {
 	openai.ChatCompletionStreamResponse                            // typed, known part
 	Extra                               map[string]json.RawMessage `json:"-"` // unknown bits
@@ -188,4 +196,12 @@ func (c ChatCompletionStreamResponseExtra) MarshalJSON() ([]byte, error) {
 	}
 
 	return json.Marshal(m)
+}
+
+// SetOriginalJSONUsage updates the usage field in originalJSON
+func (c *ChatCompletionStreamResponseExtra) SetOriginalJSONUsage(usageBytes []byte) {
+	if c.originalJSON == nil {
+		c.originalJSON = make(map[string]json.RawMessage)
+	}
+	c.originalJSON["usage"] = usageBytes
 }

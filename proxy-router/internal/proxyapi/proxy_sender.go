@@ -25,6 +25,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin/binding"
+	"github.com/sashabaranov/go-openai"
 )
 
 var (
@@ -599,9 +600,12 @@ func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.
 		return nil, err
 	}
 
+	// Calculate prompt tokens from the request
+	promptTokens := lib.CountPromptTokens(prompt.Messages)
+
 	// Send request and process response
 	startTime := time.Now().Unix()
-	result, ttftMs, totalTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, promptRequest, pubKey, "chat_completion")
+	result, ttftMs, totalTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, promptRequest, pubKey, "chat_completion", promptTokens)
 
 	// Handle errors with failover if enabled
 	if err != nil {
@@ -635,6 +639,7 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 	rpcMessage *msgs.RPCMessage,
 	providerPublicKey lib.HexString,
 	requestType string,
+	promptTokens int,
 ) (interface{}, int, int, error) {
 	const (
 		TIMEOUT_TO_ESTABLISH_CONNECTION   = time.Second * 3
@@ -697,6 +702,9 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 	callbackCalled := false
 
 	retryCount := 0
+
+	// Track accumulated content for streaming token calculation
+	var accumulatedContent strings.Builder
 
 	for {
 		if ctx.Err() != nil {
@@ -815,12 +823,12 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 		}
 
 		// Process the AI response based on the request type
-		result, tokens, shouldStop, err := p.processAIResponse(requestType, aiResponse, responses)
+		result, tokens, shouldStop, err := p.processAIResponse(requestType, aiResponse, responses, promptTokens, &accumulatedContent)
 		if err != nil {
 			return nil, ttftMs, totalTokens, err
 		}
 
-		totalTokens += tokens
+		totalTokens = tokens
 
 		if ctx.Err() != nil {
 			return nil, ttftMs, totalTokens, ctx.Err()
@@ -840,14 +848,14 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 }
 
 // processAIResponse handles different response types and returns the appropriate chunk
-func (p *ProxyServiceSender) processAIResponse(requestType string, aiResponse []byte, responses []interface{}) (gcs.Chunk, int, bool, error) {
+func (p *ProxyServiceSender) processAIResponse(requestType string, aiResponse []byte, responses []interface{}, promptTokens int, accumulatedContent *strings.Builder) (gcs.Chunk, int, bool, error) {
 	switch requestType {
 	case "audio_transcription":
 		return p.handleAudioTranscription(aiResponse, responses)
 	case "audio_speech":
 		return p.handleAudioSpeech(aiResponse, responses)
 	case "chat_completion":
-		return p.handleChatCompletion(aiResponse, responses)
+		return p.handleChatCompletion(aiResponse, responses, promptTokens, accumulatedContent)
 	case "embeddings":
 		return p.handleEmbeddings(aiResponse, responses)
 	default:
@@ -916,7 +924,7 @@ func (p *ProxyServiceSender) handleAudioSpeech(aiResponse []byte, responses []in
 }
 
 // handleChatCompletion processes chat completion responses
-func (p *ProxyServiceSender) handleChatCompletion(aiResponse []byte, responses []interface{}) (gcs.Chunk, int, bool, error) {
+func (p *ProxyServiceSender) handleChatCompletion(aiResponse []byte, responses []interface{}, promptTokens int, accumulatedContent *strings.Builder) (gcs.Chunk, int, bool, error) {
 	var controlMsg string
 	if err := json.Unmarshal(aiResponse, &controlMsg); err == nil && controlMsg == "[DONE]" {
 		chunk := gcs.NewChunkControl(controlMsg)
@@ -927,22 +935,63 @@ func (p *ProxyServiceSender) handleChatCompletion(aiResponse []byte, responses [
 	var streamResponse gcs.ChatCompletionStreamResponseExtra
 	err := json.Unmarshal(aiResponse, &streamResponse)
 
-	isStreamingChunk := (len(streamResponse.Choices) > 0 && streamResponse.Usage == nil)
-	isUsageChunk := (len(streamResponse.Choices) == 0 && streamResponse.Usage != nil)
-	
-	if err == nil && (isStreamingChunk || isUsageChunk) {
+	// Streaming chunk detection:
+	// - Object field is "chat.completion.chunk" (most reliable)
+	// - OR has choices with delta content (streaming format)
+	// - OR has usage only (final usage chunk from some providers)
+	// Streaming chunks can now have BOTH choices AND usage (final chunk with finish_reason)
+	isStreamingObject := streamResponse.Object == "chat.completion.chunk"
+	hasChoices := len(streamResponse.Choices) > 0
+	hasUsageOnly := streamResponse.Usage != nil && !hasChoices
+	isStreamingChunk := isStreamingObject || hasUsageOnly
+
+	if err == nil && isStreamingChunk {
+		// Accumulate delta content for token calculation
+		if hasChoices {
+			accumulatedContent.WriteString(streamResponse.Choices[0].Delta.Content)
+		}
+
+		// Check if this is the final chunk (has finish_reason or Usage data)
+		isFinalChunk := false
+		if hasChoices && streamResponse.Choices[0].FinishReason != "" {
+			isFinalChunk = true
+		}
+		if streamResponse.Usage != nil {
+			isFinalChunk = true
+		}
+
+		// On final chunk, calculate and update usage
+		totalTokens := 0
+		if isFinalChunk {
+			completionTokens := lib.CountTokens(accumulatedContent.String())
+			if streamResponse.Usage == nil {
+				streamResponse.Usage = &openai.Usage{}
+			}
+			lib.UpdateUsage(streamResponse.Usage, promptTokens, completionTokens, &streamResponse)
+			totalTokens = promptTokens + completionTokens
+		}
+
 		chunk := gcs.NewChunkStreaming(&streamResponse)
 		responses = append(responses, streamResponse)
-		return chunk, len(streamResponse.Choices), false, nil
+		return chunk, totalTokens, false, nil
 	}
 
-	// Try to parse as full completion response (has both choices and usage)
+	// Try to parse as full completion response (non-streaming)
+	// Non-streaming has object "chat.completion" and message content (not delta)
 	var chatResponse gcs.ChatCompletionResponseExtra
 	err = json.Unmarshal(aiResponse, &chatResponse)
-	if err == nil && len(chatResponse.Choices) > 0 {
+	if err == nil && len(chatResponse.Choices) > 0 && chatResponse.Object == "chat.completion" {
+		// Calculate completion tokens from the full response content
+		completionContent := ""
+		if len(chatResponse.Choices) > 0 {
+			completionContent = chatResponse.Choices[0].Message.Content
+		}
+		completionTokens := lib.CountTokens(completionContent)
+		lib.UpdateUsage(&chatResponse.Usage, promptTokens, completionTokens, &chatResponse)
+		
 		chunk := gcs.NewChunkText(&chatResponse)
 		responses = append(responses, chatResponse)
-		return chunk, chatResponse.Usage.TotalTokens, true, nil
+		return chunk, promptTokens + completionTokens, true, nil
 	}
 
 	// If not a chat completion, try media generation handlers
@@ -1146,7 +1195,7 @@ func (p *ProxyServiceSender) SendAudioTranscriptionV2(ctx context.Context, sessi
 		startTime = time.Now().Unix()
 	
 		// Send request and handle response
-		result, ttftMs, totalTokens, err = p.rpcRequestStreamV2(ctx, cb, provider.Url, message, pubKey, "audio_transcription")
+		result, ttftMs, totalTokens, err = p.rpcRequestStreamV2(ctx, cb, provider.Url, message, pubKey, "audio_transcription", 0)
 		if err != nil {
 			return nil, fmt.Errorf("failed to send audio transcription request: %w", err)
 		}
@@ -1281,7 +1330,7 @@ func (p *ProxyServiceSender) sendStreamEnd(ctx context.Context, provider *storag
 	}
 
 	// Send request and handle streaming response
-	result, ttftMs, totalTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, message, pubKey, "audio_transcription")
+	result, ttftMs, totalTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, message, pubKey, "audio_transcription", 0)
 	if err != nil {
 		return nil, 0, 0, fmt.Errorf("failed to process stream end request: %w", err)
 	}
@@ -1346,7 +1395,7 @@ func (p *ProxyServiceSender) SendAudioSpeech(ctx context.Context, sessionID comm
 	startTime := time.Now().Unix()
 
 	// Send request and handle response
-	result, ttftMs, totalTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, message, pubKey, "audio_speech")
+	result, ttftMs, totalTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, message, pubKey, "audio_speech", 0)
 
 	// Handle errors with failover if enabled
 	if err != nil {
@@ -1407,7 +1456,7 @@ func (p *ProxyServiceSender) SendEmbeddings(ctx context.Context, sessionID commo
 
 	startTime := time.Now().Unix()
 
-	result, ttftMs, totalTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, message, pubKey, "embeddings")
+	result, ttftMs, totalTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, message, pubKey, "embeddings", 0)
 
 	// Handle errors with failover if enabled
 	if err != nil {

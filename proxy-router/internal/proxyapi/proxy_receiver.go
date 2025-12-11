@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
@@ -17,6 +18,7 @@ import (
 	sessionrepo "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/session"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/sashabaranov/go-openai"
 )
 
 type ProxyReceiver struct {
@@ -50,6 +52,19 @@ func handleError(err error, message string, sourceLog lib.ILogger) (int, int, er
 	wrappedErr := lib.WrapError(fmt.Errorf(message), err)
 	sourceLog.Error(wrappedErr)
 	return 0, 0, wrappedErr
+}
+
+// updateUsageInResponse updates the usage field in a ChatCompletionResponseExtra
+func updateUsageInResponse(data *genericchatstorage.ChatCompletionResponseExtra, promptTokens, completionTokens int) {
+	lib.UpdateUsage(&data.Usage, 0, 0, data)
+}
+
+// updateUsageInStreamResponse updates the usage field in the final streaming chunk
+func updateUsageInStreamResponse(data *genericchatstorage.ChatCompletionStreamResponseExtra, promptTokens, completionTokens int) {
+	if data.Usage == nil {
+		data.Usage = &openai.Usage{}
+	}
+	lib.UpdateUsage(data.Usage, 0, 0, data)
 }
 
 // processAudioTranscription handles audio transcription request processing
@@ -128,8 +143,12 @@ func (s *ProxyReceiver) createCompletionCallback(
 	sourceLog lib.ILogger,
 	ttftMs *int,
 	totalTokens *int,
+	promptTokens int,
 	sendResponse SendResponse,
 ) genericchatstorage.CompletionCallback {
+	// Track accumulated content for streaming responses
+	var accumulatedContent strings.Builder
+
 	return func(ctx context.Context, completion genericchatstorage.Chunk, aiEngineErrorResponse *genericchatstorage.AiEngineErrorResponse) error {
 		if aiEngineErrorResponse != nil {
 			marshalledResponse, err := json.Marshal(aiEngineErrorResponse)
@@ -154,10 +173,55 @@ func (s *ProxyReceiver) createCompletionCallback(
 			return sendResponse(r)
 		}
 
-		*totalTokens += completion.Tokens()
-
 		if *ttftMs == 0 {
 			*ttftMs = int(time.Now().UnixMilli() - startTime)
+		}
+
+		isChunkControl := false
+		if completion.Type() == genericchatstorage.ChunkTypeControl {
+			isChunkControl = true
+		}
+
+		// Handle streaming vs non-streaming responses
+		if completion.IsStreaming() && !isChunkControl {
+			if streamChunk, ok := completion.(*genericchatstorage.ChunkStreaming); ok {
+				if data, ok := streamChunk.Data().(*genericchatstorage.ChatCompletionStreamResponseExtra); ok {
+					// Accumulate delta content
+					if len(data.Choices) > 0 {
+						accumulatedContent.WriteString(data.Choices[0].Delta.Content)
+					}
+
+					// Check if this is the final chunk (has finish_reason or Usage data)
+					isFinalChunk := false
+					if len(data.Choices) > 0 && data.Choices[0].FinishReason != "" {
+						isFinalChunk = true
+					}
+					if data.Usage != nil {
+						isFinalChunk = true
+					}
+
+					// On final chunk, calculate and update usage
+					if isFinalChunk {
+						completionTokens := lib.CountTokens(accumulatedContent.String())
+						updateUsageInStreamResponse(data, promptTokens, completionTokens)
+						*totalTokens = promptTokens + completionTokens
+					}
+				}
+			}
+		} else if !isChunkControl {
+			// Non-streaming: handle full response
+			if textChunk, ok := completion.(*genericchatstorage.ChunkText); ok {
+				if data, ok := textChunk.Data().(*genericchatstorage.ChatCompletionResponseExtra); ok {
+					// Calculate completion tokens from the full response content
+					completionContent := ""
+					if len(data.Choices) > 0 {
+						completionContent = data.Choices[0].Message.Content
+					}
+					completionTokens := lib.CountTokens(completionContent)
+					updateUsageInResponse(data, promptTokens, completionTokens)
+					*totalTokens = promptTokens + completionTokens
+				}
+			}
 		}
 
 		marshalledResponse, err := json.Marshal(completion.Data())
@@ -253,8 +317,14 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 		return handleError(err, "failed to get adapter", sourceLog)
 	}
 
+	// Calculate prompt tokens from the request
+	promptTokens := 0
+	if chatReq != nil {
+		promptTokens = lib.CountPromptTokens(chatReq.Messages)
+	}
+
 	// Create completion callback
-	cb := s.createCompletionCallback(ctx, startTime, userPubKey, requestID, sourceLog, &ttftMs, &totalTokens, sendResponse)
+	cb := s.createCompletionCallback(ctx, startTime, userPubKey, requestID, sourceLog, &ttftMs, &totalTokens, promptTokens, sendResponse)
 
 	// Process request with appropriate adapter method
 	if audioTranscriptionReq != nil {
