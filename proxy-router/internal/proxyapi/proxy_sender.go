@@ -25,7 +25,6 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin/binding"
-	"github.com/sashabaranov/go-openai"
 )
 
 var (
@@ -493,7 +492,7 @@ func (p *ProxyServiceSender) validateSession(ctx context.Context, sessionID comm
 
 	SESSION_EXPIRY_THRESHOLD := time.Second * 5
 	// Check if session is expired
-	if session.EndsAt().Int64() + int64(SESSION_EXPIRY_THRESHOLD) < time.Now().Unix() {
+	if session.EndsAt().Int64()+int64(SESSION_EXPIRY_THRESHOLD) < time.Now().Unix() {
 		p.log.Debugf("Expired session object endsAt: %v", session.EndsAt().Int64())
 		p.log.Debugf("Now: %v", time.Now().Unix())
 		return nil, nil, ErrSessionExpired
@@ -758,7 +757,7 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 
 		if msg.Error != nil {
 			sig := msg.Error.Data.Signature
-			
+
 			// Check if this is an unencrypted infrastructure error
 			// Empty signature marshals as "0x00" (hex prefix with no data)
 			sigStr := sig.String()
@@ -767,7 +766,7 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 				p.log.Warnf("Received unencrypted provider error: %s (code: %d)", msg.Error.Message, msg.Error.Code)
 				return nil, ttftMs, totalTokens, fmt.Errorf("provider error: %s", msg.Error.Message)
 			}
-			
+
 			// Encrypted error - validate signature and decrypt
 			msg.Error.Data.Signature = []byte{}
 
@@ -930,7 +929,7 @@ func (p *ProxyServiceSender) handleChatCompletion(aiResponse []byte, responses [
 		chunk := gcs.NewChunkControl(controlMsg)
 		return chunk, 0, true, nil
 	}
-	
+
 	// Try to parse as streaming response
 	var streamResponse gcs.ChatCompletionStreamResponseExtra
 	err := json.Unmarshal(aiResponse, &streamResponse)
@@ -960,20 +959,17 @@ func (p *ProxyServiceSender) handleChatCompletion(aiResponse []byte, responses [
 			isFinalChunk = true
 		}
 
-		// On final chunk, calculate and update usage
-		totalTokens := 0
+		// On final chunk, calculate and add usage_from_consumer
+		usageTokens := 0
 		if isFinalChunk {
 			completionTokens := lib.CountTokens(accumulatedContent.String())
-			if streamResponse.Usage == nil {
-				streamResponse.Usage = &openai.Usage{}
-			}
-			lib.UpdateUsage(streamResponse.Usage, promptTokens, completionTokens, &streamResponse)
-			totalTokens = promptTokens + completionTokens
+			lib.SetUsageFromConsumer(&streamResponse, promptTokens, completionTokens)
+			usageTokens = completionTokens
 		}
 
 		chunk := gcs.NewChunkStreaming(&streamResponse)
 		responses = append(responses, streamResponse)
-		return chunk, totalTokens, false, nil
+		return chunk, usageTokens, false, nil
 	}
 
 	// Try to parse as full completion response (non-streaming)
@@ -987,11 +983,11 @@ func (p *ProxyServiceSender) handleChatCompletion(aiResponse []byte, responses [
 			completionContent = chatResponse.Choices[0].Message.Content
 		}
 		completionTokens := lib.CountTokens(completionContent)
-		lib.UpdateUsage(&chatResponse.Usage, promptTokens, completionTokens, &chatResponse)
-		
+		lib.SetUsageFromConsumer(&chatResponse, promptTokens, completionTokens)
+
 		chunk := gcs.NewChunkText(&chatResponse)
 		responses = append(responses, chatResponse)
-		return chunk, promptTokens + completionTokens, true, nil
+		return chunk, completionTokens, true, nil
 	}
 
 	// If not a chat completion, try media generation handlers
@@ -1190,10 +1186,10 @@ func (p *ProxyServiceSender) SendAudioTranscriptionV2(ctx context.Context, sessi
 		if err != nil {
 			return nil, fmt.Errorf("failed to create audio transcription request: %w", err)
 		}
-	
+
 		// Record start time for session stats
 		startTime = time.Now().Unix()
-	
+
 		// Send request and handle response
 		result, ttftMs, totalTokens, err = p.rpcRequestStreamV2(ctx, cb, provider.Url, message, pubKey, "audio_transcription", 0)
 		if err != nil {

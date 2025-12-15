@@ -127,6 +127,23 @@ func (c *ChatCompletionResponseExtra) SetOriginalJSONUsage(usageBytes []byte) {
 	c.originalJSON["usage"] = usageBytes
 }
 
+// SetCustomUsage sets a custom usage field (usage_from_provider or usage_from_consumer) in Extra map
+// Does NOT modify the original "usage" field from the LLM
+func (c *ChatCompletionResponseExtra) SetCustomUsage(fieldName string, promptTokens, completionTokens int) {
+	if c.Extra == nil {
+		c.Extra = make(map[string]json.RawMessage)
+	}
+	usage := map[string]int{
+		"prompt_tokens":     promptTokens,
+		"completion_tokens": completionTokens,
+		"total_tokens":      promptTokens + completionTokens,
+	}
+	usageBytes, err := json.Marshal(usage)
+	if err == nil {
+		c.Extra[fieldName] = usageBytes
+	}
+}
+
 type ChatCompletionStreamResponseExtra struct {
 	openai.ChatCompletionStreamResponse                            // typed, known part
 	Extra                               map[string]json.RawMessage `json:"-"` // unknown bits
@@ -204,4 +221,21 @@ func (c *ChatCompletionStreamResponseExtra) SetOriginalJSONUsage(usageBytes []by
 		c.originalJSON = make(map[string]json.RawMessage)
 	}
 	c.originalJSON["usage"] = usageBytes
+}
+
+// SetCustomUsage sets a custom usage field (usage_from_provider or usage_from_consumer) in Extra map
+// Does NOT modify the original "usage" field from the LLM
+func (c *ChatCompletionStreamResponseExtra) SetCustomUsage(fieldName string, promptTokens, completionTokens int) {
+	if c.Extra == nil {
+		c.Extra = make(map[string]json.RawMessage)
+	}
+	usage := map[string]int{
+		"prompt_tokens":     promptTokens,
+		"completion_tokens": completionTokens,
+		"total_tokens":      promptTokens + completionTokens,
+	}
+	usageBytes, err := json.Marshal(usage)
+	if err == nil {
+		c.Extra[fieldName] = usageBytes
+	}
 }

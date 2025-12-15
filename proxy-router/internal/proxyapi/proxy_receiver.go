@@ -18,7 +18,6 @@ import (
 	sessionrepo "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/session"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/sashabaranov/go-openai"
 )
 
 type ProxyReceiver struct {
@@ -54,17 +53,16 @@ func handleError(err error, message string, sourceLog lib.ILogger) (int, int, er
 	return 0, 0, wrappedErr
 }
 
-// updateUsageInResponse updates the usage field in a ChatCompletionResponseExtra
+// updateUsageInResponse adds usage_from_provider field with calculated tokens
+// Does NOT modify the original "usage" field from the LLM
 func updateUsageInResponse(data *genericchatstorage.ChatCompletionResponseExtra, promptTokens, completionTokens int) {
-	lib.UpdateUsage(&data.Usage, 0, 0, data)
+	lib.SetUsageFromProvider(data, promptTokens, completionTokens)
 }
 
-// updateUsageInStreamResponse updates the usage field in the final streaming chunk
+// updateUsageInStreamResponse adds usage_from_provider field with calculated tokens
+// Does NOT modify the original "usage" field from the LLM
 func updateUsageInStreamResponse(data *genericchatstorage.ChatCompletionStreamResponseExtra, promptTokens, completionTokens int) {
-	if data.Usage == nil {
-		data.Usage = &openai.Usage{}
-	}
-	lib.UpdateUsage(data.Usage, 0, 0, data)
+	lib.SetUsageFromProvider(data, promptTokens, completionTokens)
 }
 
 // processAudioTranscription handles audio transcription request processing
@@ -204,7 +202,7 @@ func (s *ProxyReceiver) createCompletionCallback(
 					if isFinalChunk {
 						completionTokens := lib.CountTokens(accumulatedContent.String())
 						updateUsageInStreamResponse(data, promptTokens, completionTokens)
-						*totalTokens = promptTokens + completionTokens
+						*totalTokens = completionTokens
 					}
 				}
 			}
@@ -219,7 +217,7 @@ func (s *ProxyReceiver) createCompletionCallback(
 					}
 					completionTokens := lib.CountTokens(completionContent)
 					updateUsageInResponse(data, promptTokens, completionTokens)
-					*totalTokens = promptTokens + completionTokens
+					*totalTokens = completionTokens
 				}
 			}
 		}

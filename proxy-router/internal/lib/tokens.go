@@ -5,7 +5,6 @@ import (
 
 	"github.com/sashabaranov/go-openai"
 	"github.com/tiktoken-go/tokenizer"
-	"fmt"
 )
 
 // CountTokens counts the number of tokens in a text string using tiktoken
@@ -13,7 +12,6 @@ func CountTokens(text string) int {
 	enc, err := tokenizer.Get(tokenizer.Cl100kBase)
 	if err != nil {
 		// Fallback to rough estimation if tokenizer fails
-		fmt.Println("Error getting tokenizer: ", err)
 		return (len(text) + 3) / 4
 	}
 	ids, _, _ := enc.Encode(text)
@@ -91,4 +89,27 @@ func UpdateUsage(usage *openai.Usage, promptTokens, completionTokens int, setter
 			setter.SetOriginalJSONUsage(usageBytes)
 		}
 	}
+}
+
+// CustomUsageSetter is an interface for types that can set custom usage fields in Extra map
+type CustomUsageSetter interface {
+	SetCustomUsage(fieldName string, promptTokens, completionTokens int)
+}
+
+// SetUsageFromProvider sets the usage_from_provider field with calculated tokens
+// Does NOT modify the original "usage" field from the LLM
+func SetUsageFromProvider(setter CustomUsageSetter, promptTokens, completionTokens int) {
+	if setter == nil {
+		return
+	}
+	setter.SetCustomUsage("usage_from_provider", promptTokens, completionTokens)
+}
+
+// SetUsageFromConsumer sets the usage_from_consumer field with calculated tokens
+// Does NOT modify the original "usage" field from the LLM
+func SetUsageFromConsumer(setter CustomUsageSetter, promptTokens, completionTokens int) {
+	if setter == nil {
+		return
+	}
+	setter.SetCustomUsage("usage_from_consumer", promptTokens, completionTokens)
 }
