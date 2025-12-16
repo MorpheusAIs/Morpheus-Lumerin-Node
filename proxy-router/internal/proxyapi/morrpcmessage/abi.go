@@ -15,4 +15,6 @@ var sessionReportAbi = []lib.AbiParameter{
 	{Type: "uint128"}, // timestamp
 	{Type: "uint32"},  // tpsScaled1000
 	{Type: "uint32"},  // ttftMs
+	{Type: "uint32"},  // inputTokens
+	{Type: "uint32"},  // outputTokens
 }
