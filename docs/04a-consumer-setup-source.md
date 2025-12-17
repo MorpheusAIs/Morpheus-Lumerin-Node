@@ -2,7 +2,7 @@
 This document provides a step-by-step guide to setting up a Consumer Node for the Morepheus Network so that you can setup session and interact with the remote providers.
 
 ## Pre-requisites:
-* Create or use an existing ERC-20 wallet that has MOR and ETH (Sepolia Arbitrum) tokens - you can use Metamask (new wallet..not derived) or any other ERC-20 wallet.  You will need to have access to the wallet's private key **NEVER SHARE THIS WITH ANYONE** for steps below to authorize the contract to spend on your behalf.
+* Create or use an existing ERC-20 wallet that has MOR and ETH on BASE - you can use Metamask (new wallet..not derived) or any other ERC-20 wallet.  You will need to have access to the wallet's private key **NEVER SHARE THIS WITH ANYONE** for steps below to authorize the contract to spend on your behalf.
 
 ## TL;DR
 * Install and Configure the proxy-router node (once)
@@ -47,7 +47,7 @@ You can also test http://localhost:8082/swagger/index.html to confirm the API is
 ```
 Loaded config: {AIEngine:{OpenAIBaseURL: OpenAIKey:} Blockchain:{EthNodeAddress: EthLegacyTx:false ExplorerApiUrl:} Environment:development Marketplace:{DiamondContractAddress:0xb8C55cD613af947E73E262F0d3C54b7211Af16CF MorTokenAddress:0x34a285a1b1c166420df5b6630132542923b5b27e WalletPrivateKey:<nil>} Log:{Color:true FolderPath: IsProd:false JSON:false LevelApp:info LevelConnection:info LevelProxy:info LevelScheduler:info LevelContract:} Proxy:{Address:0.0.0.0:3333 MaxCachedDests:5 StoragePath:} System:{Enable:false LocalPortRange:1024 65535 NetdevMaxBacklog:100000 RlimitHard:524288 RlimitSoft:524288 Somaxconn:100000 TcpMaxSynBacklog:100000} Web:{Address:0.0.0.0:8082 PublicUrl:localhost:8082}}
 2024-07-23T12:58:04.560735	INFO	APP	proxy-router TO BE SET AT BUILD TIME
-2024-07-23T12:58:08.249559	INFO	APP	connected to ethereum node: wss://arb-sepolia.g.alchemy.com/v2/<masked>, chainID: 421614
+2024-07-23T12:58:08.249559	INFO	APP	connected to ethereum node: wss://base-mainnet.g.alchemy.com/v2/<masked>, chainID: 8453
 2024-07-23T12:58:08.278792	INFO	BADGER	All 0 tables opened in 0s
 2024-07-23T12:58:08.28444	INFO	BADGER	Discard stats nextEmptySlot: 0
 2024-07-23T12:58:08.284515	INFO	BADGER	Set nextTxnTs to 0
@@ -120,7 +120,7 @@ curl -s -X 'POST' 'http://localhost:8082/blockchain/models/<Id_from_model_query_
 -d '{"sessionDuration": 600}'
 ```
 Now that the session is open, you can send inference queries to the provider and process responses in usual OpenAI format. 
-Your Wallet (on https://sepolia.arbiscan.io/address/<wallet_id>) should show the transaction for the session creation.
+Your Wallet (on https://base.blockscout.com/address/<wallet_id>) should show the transaction for the session creation.
 
 ### E. Interact with the provider
 * Send the prompt (Standard OpenAI format) with session_id in the header to interact.  

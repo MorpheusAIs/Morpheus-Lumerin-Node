@@ -2,7 +2,7 @@
 This document provides a step-by-step flow to query your local proxy router and interact with a remote model using only the API. This is useful for developers or users who want to interact with the model directly without using the MorpheusUI.
 
 ## Pre-requisites:
-* Create or use an existing ERC-20 wallet that has MOR and ETH (Sepolia Arbitrum) tokens - you can use Metamask (new wallet..not derived) or any other ERC-20 wallet.  
+* Create or use an existing ERC-20 wallet that has MOR and ETH on BASE - you can use Metamask (new wallet..not derived) or any other ERC-20 wallet.  
 * You will need to have access to the wallet's private key **NEVER SHARE THIS WITH ANYONE** for steps below to authorize the contract to spend on your behalf.
 * Install and launch the local llama.cpp and proxy-router from source (see [/docs/mac-boot-strap.md](/docs/mac-boot-strap.md) for instructions)
 
@@ -87,7 +87,7 @@ curl -s -X 'POST' 'http://localhost:8082/blockchain/models/<Id_from_model_query_
 -d '{"sessionDuration": 600}'
 ```
 Now that the session is open, you can send inference queries to the provider and process responses in usual OpenAI format. 
-Your Wallet (on https://arbitrum-sepolia.blockscan.com/address/<wallet_id>) should show the transaction for the session creation.
+Your Wallet (on https://base.blockscout.com/address/<wallet_id>) should show the transaction for the session creation.
 
 ### E. Interact with the provider
 * Send the prompt (Standard OpenAI format) with session_id in the header to interact.  

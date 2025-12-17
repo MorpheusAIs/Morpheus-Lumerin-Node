@@ -244,8 +244,8 @@ export const getMorRate = async (payload?: {
   tokenAddress: string
   network: string
 }): Promise<number | null> => {
-  const tokenAddress = payload?.tokenAddress || '0x092baadb7def4c3981454dd9c0a0d7ff07bcfc86'
-  const network = payload?.network || 'arbitrum'
+  const tokenAddress = payload?.tokenAddress || '0x7431ada8a591c955a994a21710752ef9b882b8e3'
+  const network = payload?.network || 'base'
   try {
     const path = `https://api.geckoterminal.com/api/v2/simple/networks/${network}/token_price/${tokenAddress}`
     const response = await fetch(path)

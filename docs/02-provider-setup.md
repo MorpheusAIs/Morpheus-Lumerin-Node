@@ -7,7 +7,7 @@
         * You can use the provided `llama.cpp` and `tinyllama` model to test locally
         * If your local model is listening on a different port locally, you will need to modify the `models-config.json` file to match the correct port
 * You have an existing funded wallet with MOR and ETH and also have the `private key` for the wallet (this will be needed for the .env file configuration)
-* You have created an Alchemy or Infura free account and have a private API key for the Arbitrum Sepolia testnet (wss://arb-sepolia.g.alchemy.com/v2/<your_private_alchemy_api_key>)
+* You have created an Alchemy or Infura free account and have a private API key for BASE (wss://base-mainnet.g.alchemy.com/v2/<your_private_alchemy_api_key>)
 * Your proxy-router must have a **publicly accessible endpoint** for the provider (ip:port or fqdn:port no protocol) eg: `mycoolmornode.domain.com:3333` - this will be used when creating the provider on the blockchain
 
 ## Installation & Configuration Steps:
@@ -33,8 +33,8 @@
         * Linux/Mac: `env.example`  or `env.example.win` for Windows
         * Change the name of the desired file to `.env` 
         * Edit values within the file (Wallet_Private_Key, for example) as desired
-    2. Choose the **blockchain** you'd like to work on...**Arbitrum MAINNET is the default** 
-        * To operate on the Sepolia Arbitrum TESTNET,  
+    2. Choose the **blockchain** you'd like to work on...**BASE MAINNET is the default** 
+        * To operate on the BASE Sepolia TESTNET,  
         * Edit the .env file and 
         * Uncomment the `TESTNET VALUES` and comment the `MAINNET VALUES` lines & save the file
 
