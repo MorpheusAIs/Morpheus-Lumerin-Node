@@ -3,10 +3,10 @@ package sessionrepo
 import (
 	"context"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 )
 
 type SessionRepositoryCached struct {
@@ -108,6 +108,8 @@ func (r *SessionRepositoryCached) getSessionFromCache(id common.Hash) (*SessionM
 		endsAt:           ses.EndsAt,
 		tpsScaled1000Arr: ses.TPSScaled1000Arr,
 		ttftMsArr:        ses.TTFTMsArr,
+		inputTokens:      ses.InputTokens,
+		outputTokens:     ses.OutputTokens,
 		failoverEnabled:  ses.FailoverEnabled,
 		agentUsername:    ses.AgentUsername,
 	}, true
@@ -122,6 +124,8 @@ func (r *SessionRepositoryCached) saveSessionToCache(ses *SessionModel) error {
 		ModelID:          ses.modelID.Hex(),
 		TPSScaled1000Arr: ses.tpsScaled1000Arr,
 		TTFTMsArr:        ses.ttftMsArr,
+		InputTokens:      ses.inputTokens,
+		OutputTokens:     ses.outputTokens,
 		FailoverEnabled:  ses.failoverEnabled,
 		DirectPayment:    ses.directPayment,
 		AgentUsername:    ses.agentUsername,

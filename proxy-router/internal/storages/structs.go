@@ -16,6 +16,8 @@ type Session struct {
 
 	TPSScaled1000Arr []int
 	TTFTMsArr        []int
+	InputTokens      int
+	OutputTokens     int
 	FailoverEnabled  bool
 	DirectPayment    bool
 }

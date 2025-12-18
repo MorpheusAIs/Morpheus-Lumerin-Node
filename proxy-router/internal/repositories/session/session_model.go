@@ -16,6 +16,8 @@ type SessionModel struct {
 
 	tpsScaled1000Arr []int
 	ttftMsArr        []int
+	inputTokens      int
+	outputTokens     int
 	failoverEnabled  bool
 	directPayment    bool
 }
@@ -57,9 +59,19 @@ func (s *SessionModel) DirectPayment() bool {
 	return s.directPayment
 }
 
-func (s *SessionModel) AddStats(tpsScaled1000 int, ttftMs int) {
+func (s *SessionModel) AddStats(tpsScaled1000 int, ttftMs int, inputTokens int, outputTokens int) {
 	s.tpsScaled1000Arr = append(s.tpsScaled1000Arr, tpsScaled1000)
 	s.ttftMsArr = append(s.ttftMsArr, ttftMs)
+	s.inputTokens += inputTokens
+	s.outputTokens += outputTokens
+}
+
+func (s *SessionModel) InputTokens() int {
+	return s.inputTokens
+}
+
+func (s *SessionModel) OutputTokens() int {
+	return s.outputTokens
 }
 
 func (s *SessionModel) SetFailoverEnabled(enabled bool) {

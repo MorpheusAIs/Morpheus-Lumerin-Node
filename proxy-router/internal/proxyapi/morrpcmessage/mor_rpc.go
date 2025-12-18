@@ -84,10 +84,10 @@ func (m *MORRPCMessage) InitiateSessionResponse(providerPubKey lib.HexString, us
 	}, nil
 }
 
-func (m *MORRPCMessage) SessionReportResponse(tps uint32, ttfp uint32, sessionID common.Hash, providerPrivateKeyHex lib.HexString, requestID string, chainID *big.Int) (*RpcResponse, error) {
+func (m *MORRPCMessage) SessionReportResponse(tps uint32, ttfp uint32, inputTokens uint32, outputTokens uint32, sessionID common.Hash, providerPrivateKeyHex lib.HexString, requestID string, chainID *big.Int) (*RpcResponse, error) {
 	timestamp := m.generateTimestamp()
 
-	report, err := lib.EncodeAbiParameters(sessionReportAbi, []interface{}{sessionID, chainID, big.NewInt(int64(timestamp)), tps, ttfp})
+	report, err := lib.EncodeAbiParameters(sessionReportAbi, []interface{}{sessionID, chainID, big.NewInt(int64(timestamp)), tps, ttfp, inputTokens, outputTokens})
 	if err != nil {
 		return &RpcResponse{}, err
 	}

@@ -167,7 +167,7 @@ func (s *MORRPCController) sessionPrompt(ctx context.Context, msg m.RPCMessage, 
 	}
 
 	now := time.Now().Unix()
-	ttftMs, totalTokens, err := s.service.SessionPrompt(ctx, msg.ID, user.PubKey, []byte(req.Message), req.SessionID, sendResponse, sourceLog)
+	ttftMs, inputTokens, outputTokens, err := s.service.SessionPrompt(ctx, msg.ID, user.PubKey, []byte(req.Message), req.SessionID, sendResponse, sourceLog)
 	if err != nil {
 		sourceLog.Error(err)
 		return err
@@ -178,8 +178,8 @@ func (s *MORRPCController) sessionPrompt(ctx context.Context, msg m.RPCMessage, 
 		requestDuration = 1
 	}
 
-	tpsScaled1000 := totalTokens * 1000 / requestDuration
-	session.AddStats(tpsScaled1000, ttftMs)
+	tpsScaled1000 := outputTokens * 1000 / requestDuration
+	session.AddStats(tpsScaled1000, ttftMs, inputTokens, outputTokens)
 
 	err = s.sessionRepo.SaveSession(ctx, session)
 	if err != nil {
@@ -569,7 +569,7 @@ func (s *MORRPCController) processStreamedAudioFile(ctx context.Context, session
 	}
 
 	now := time.Now().Unix()
-	ttftMs, totalTokens, err := s.service.SessionPrompt(ctx, requestID, userPubKey, payload, sessionID, sendResponse, sourceLog)
+	ttftMs, inputTokens, outputTokens, err := s.service.SessionPrompt(ctx, requestID, userPubKey, payload, sessionID, sendResponse, sourceLog)
 	if err != nil {
 		sourceLog.Error(err)
 		return err
@@ -580,8 +580,8 @@ func (s *MORRPCController) processStreamedAudioFile(ctx context.Context, session
 		requestDuration = 1
 	}
 
-	tpsScaled1000 := totalTokens * 1000 / requestDuration
-	session.AddStats(tpsScaled1000, ttftMs)
+	tpsScaled1000 := outputTokens * 1000 / requestDuration
+	session.AddStats(tpsScaled1000, ttftMs, inputTokens, outputTokens)
 
 	err = s.sessionRepo.SaveSession(ctx, session)
 	if err != nil {
