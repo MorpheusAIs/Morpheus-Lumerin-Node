@@ -64,7 +64,8 @@ const getChainLogo = (chainId) => {
   if(chainId === 42161 || chainId === 421614) {
     return arbLogo;
   }
-  // Handle other icons (ETH, Base, etc.)
+  // BASE chain (8453 mainnet, 84532 testnet) - use default logo for now
+  // TODO: Add BaseLogo component when available
 
   return arbLogo;
 }
@@ -75,8 +76,8 @@ export const ChainHeader = ({ title, children, chain }) => (
         <Title>
           <div>{title}</div>
           <ChainContainer>
-            {getChainLogo(Number(chain?.chainId || 42161))}
-            <div>{chain?.displayName || "Arbitrum"}</div>
+            {getChainLogo(Number(chain?.chainId || 8453))}
+            <div>{chain?.displayName || "Base"}</div>
           </ChainContainer>
         </Title>
         {children}

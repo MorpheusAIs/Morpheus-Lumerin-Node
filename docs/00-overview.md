@@ -4,7 +4,7 @@
 
 This document is intended to provide a high level overview of the major architectural components between model compute-providers and consumers in the Morpheus-Lumerin environment.
 
-The ultimate goal is to show how configuration of the compute-provider environment and the consumer nodes can enable prompts and inference from the consumer to the hosted models by the provider.  The key enablers being the Arbitrum blockchain, Morpheus token for staking and bidding (transactions to pay for use) and the Lumerin proxy-router to anonymously route traffic based on smart contract governance.
+The ultimate goal is to show how configuration of the compute-provider environment and the consumer nodes can enable prompts and inference from the consumer to the hosted models by the provider.  The key enablers being the BASE blockchain, Morpheus token for staking and bidding (transactions to pay for use) and the Lumerin proxy-router to anonymously route traffic based on smart contract governance.
 
 In other words, referring to the overview model...how do we get to conversation **6** where prompts and inference are happening? 
 
@@ -12,7 +12,7 @@ Numbers below reference the circled elements in the diagram above.
 
 ## 0. Existing Foundation Elements 
 - [Readme](../readme.md) - for more details
-- Arbitrum Ethereum Layer 2 blockchain
+- BASE Layer 2 blockchain
 - Morpheus Token (MOR) for staking and bidding
 - Lumerin Smart Contract for governance and routing
 
@@ -33,7 +33,7 @@ Numbers below reference the circled elements in the diagram above.
 - The `models-config.json` file is particularly important as it directs the proxy-router to the provider's model(s) and the endpoint(s) for the model(s) 
     - This file should be copied from the `./proxy-router/models-config.example.json` to `./proxy-router/models-config.json` and edited with the appropriate values
     - Please see [proxy-router models-config.json](proxy-router.models-config.json.md) for more information on the key values needed in the models-config.json file
-- The proxy-router needs to be on both the provider and consumer environment and have access to an Arbitrum Ethereum node (default) public ethernet nodes or via web sockets (WSS) for listening to and posting elements on the blockchain
+- The proxy-router needs to be on both the provider and consumer environment and have access to a BASE Ethereum node (default) public ethernet nodes or via web sockets (WSS) for listening to and posting elements on the blockchain
 
 ## 2.5 API Authentication 
 - As of main release version 2.0.0 (and starting with dev & test 1.6.1) and greater, API access will require authentication as well as network access to function
