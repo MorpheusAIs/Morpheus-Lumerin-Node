@@ -25,6 +25,7 @@ type MORRPCController struct {
 	morRpc         *m.MORRPCMessage
 	prKey          lib.HexString
 	streamManager  *StreamingSessionManager
+	sessionSema    *SessionSemaphore // Limits to 1 concurrent request per session
 }
 
 type SendResponse func(*msg.RpcResponse) error
@@ -42,6 +43,7 @@ func NewMORRPCController(service *ProxyReceiver, validator *validator.Validate, 
 		morRpc:         m.NewMorRpc(),
 		prKey:          prKey,
 		streamManager:  NewStreamingSessionManager(),
+		sessionSema:    NewSessionSemaphore(),
 	}
 
 	return c
@@ -165,6 +167,15 @@ func (s *MORRPCController) sessionPrompt(ctx context.Context, msg m.RPCMessage, 
 		sourceLog.Error(err)
 		return err
 	}
+
+	// Acquire session semaphore to ensure only 1 concurrent request per session
+	// This will block if another request is already being processed for this session
+	sourceLog.Debugf("acquiring session semaphore for session %s", req.SessionID.Hex())
+	if err := s.sessionSema.Acquire(ctx, req.SessionID); err != nil {
+		return fmt.Errorf("request cancelled while waiting in queue: %w", err)
+	}
+	defer s.sessionSema.Release(req.SessionID)
+	sourceLog.Debugf("acquired session semaphore for session %s", req.SessionID.Hex())
 
 	now := time.Now().Unix()
 	ttftMs, inputTokens, outputTokens, err := s.service.SessionPrompt(ctx, msg.ID, user.PubKey, []byte(req.Message), req.SessionID, sendResponse, sourceLog)
@@ -533,6 +544,14 @@ func (s *MORRPCController) sessionPromptStreamEnd(ctx context.Context, msg m.RPC
 	}
 
 	sourceLog.Debugf("completed audio streaming session %s, temp file: %s", req.StreamID, streamSession.TempFilePath)
+
+	// Acquire session semaphore to ensure only 1 concurrent request per session
+	sourceLog.Debugf("acquiring session semaphore for session %s (stream end)", req.SessionID.Hex())
+	if err := s.sessionSema.Acquire(ctx, req.SessionID); err != nil {
+		return fmt.Errorf("request cancelled while waiting in queue: %w", err)
+	}
+	defer s.sessionSema.Release(req.SessionID)
+	sourceLog.Debugf("acquired session semaphore for session %s (stream end)", req.SessionID.Hex())
 
 	// Process the complete audio file
 	err = s.processStreamedAudioFile(ctx, session, streamSession.TempFilePath, req.AudioRequestParam, msg.ID, user.PubKey, req.SessionID, sendResponse, sourceLog)

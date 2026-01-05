@@ -60,6 +60,7 @@ type ProxyServiceSender struct {
 	sessionRepo    *sessionrepo.SessionRepositoryCached
 	morRPC         *msgs.MORRPCMessage
 	sessionService SessionService
+	sessionSema    *SessionSemaphore // Limits to 1 concurrent request per session
 	log            lib.ILogger
 }
 
@@ -71,6 +72,7 @@ func NewProxySender(chainID *big.Int, privateKey interfaces.PrKeyProvider, logSt
 		sessionStorage: sessionStorage,
 		sessionRepo:    sessionRepo,
 		morRPC:         msgs.NewMorRpc(),
+		sessionSema:    NewSessionSemaphore(),
 		log:            log,
 	}
 }
@@ -595,6 +597,15 @@ func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.
 		return nil, err
 	}
 
+	// Acquire session semaphore to ensure only 1 concurrent request per session
+	// This will block if another request is already being processed for this session
+	p.log.Debugf("acquiring session semaphore for session %s", sessionID.Hex())
+	if err := p.sessionSema.Acquire(ctx, sessionID); err != nil {
+		return nil, fmt.Errorf("request cancelled while waiting in queue: %w", err)
+	}
+	defer p.sessionSema.Release(sessionID)
+	p.log.Debugf("acquired session semaphore for session %s", sessionID.Hex())
+
 	// Prepare request
 	promptRequest, pubKey, err := p.prepareRequest(sessionID, prompt, provider.PubKey)
 	if err != nil {
@@ -1113,6 +1124,14 @@ func (p *ProxyServiceSender) SendAudioTranscriptionV2(ctx context.Context, sessi
 		return nil, err
 	}
 
+	// Acquire session semaphore to ensure only 1 concurrent request per session
+	p.log.Debugf("acquiring session semaphore for session %s (audio transcription)", sessionID.Hex())
+	if err := p.sessionSema.Acquire(ctx, sessionID); err != nil {
+		return nil, fmt.Errorf("request cancelled while waiting in queue: %w", err)
+	}
+	defer p.sessionSema.Release(sessionID)
+	p.log.Debugf("acquired session semaphore for session %s (audio transcription)", sessionID.Hex())
+
 	// Get private key for signing
 	prKey, err := p.privateKey.GetPrivateKey()
 	if err != nil {
@@ -1373,6 +1392,14 @@ func (p *ProxyServiceSender) SendAudioSpeech(ctx context.Context, sessionID comm
 		return nil, err
 	}
 
+	// Acquire session semaphore to ensure only 1 concurrent request per session
+	p.log.Debugf("acquiring session semaphore for session %s (audio speech)", sessionID.Hex())
+	if err := p.sessionSema.Acquire(ctx, sessionID); err != nil {
+		return nil, fmt.Errorf("request cancelled while waiting in queue: %w", err)
+	}
+	defer p.sessionSema.Release(sessionID)
+	p.log.Debugf("acquired session semaphore for session %s (audio speech)", sessionID.Hex())
+
 	// Get private key for signing
 	prKey, err := p.privateKey.GetPrivateKey()
 	if err != nil {
@@ -1430,6 +1457,14 @@ func (p *ProxyServiceSender) SendEmbeddings(ctx context.Context, sessionID commo
 	if err != nil {
 		return nil, err
 	}
+
+	// Acquire session semaphore to ensure only 1 concurrent request per session
+	p.log.Debugf("acquiring session semaphore for session %s (embeddings)", sessionID.Hex())
+	if err := p.sessionSema.Acquire(ctx, sessionID); err != nil {
+		return nil, fmt.Errorf("request cancelled while waiting in queue: %w", err)
+	}
+	defer p.sessionSema.Release(sessionID)
+	p.log.Debugf("acquired session semaphore for session %s (embeddings)", sessionID.Hex())
 
 	// Get private key for signing
 	prKey, err := p.privateKey.GetPrivateKey()
