@@ -283,7 +283,8 @@ jobs:
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
           cd proxy-router
           
-          # Pre-download dependencies once
+          # Ensure go.sum is up to date and download dependencies
+          go mod tidy
           go mod download
           
           # Build all platforms in parallel using background jobs
@@ -321,7 +322,8 @@ jobs:
           FULLTAG=${{ needs.Generate-Tag.outputs.vfull }}
           cd cli
           
-          # Pre-download dependencies once
+          # Ensure go.sum is up to date and download dependencies
+          go mod tidy
           go mod download
           
           # Build all platforms in parallel
