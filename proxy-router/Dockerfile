@@ -21,8 +21,8 @@ RUN go mod download
 # Copy source code after dependencies are cached
 COPY . .
 
-# Install dbus
-# RUN apt-get update && apt-get install -y dbus-x11 && apt-get clean
+# Ensure go.sum is up to date (handles cases where new deps were added but go.sum wasn't updated)
+RUN go mod tidy
 
 # Build the Go binary for the target platform
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=0 \
