@@ -1365,7 +1365,7 @@ jobs:
       - name: Install dependencies
         run: |
           cd ./ui-desktop
-          python3 -m pip install setuptools
+          brew install python-setuptools
           yarn install --network-timeout 600000 --frozen-lockfile
 
       - name: Copy Environment Files
