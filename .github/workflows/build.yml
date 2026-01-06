@@ -1133,7 +1133,7 @@ jobs:
             echo "⚠️ Continuing with warning - ECS deployment completed but version verification inconclusive"
           fi
 
-  UI-macOS-14-arm64:
+  UI-macOS-latest-arm64:
     name: Build Morpheus UI macOS-arm64 Image
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
@@ -1141,7 +1141,7 @@ jobs:
         (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true')
       )
-    runs-on: macos-14
+    runs-on: macos-latest
     needs:
       - Generate-Tag
       - Build-Service-Executables
@@ -1323,7 +1323,7 @@ jobs:
           path: ./ui-desktop/dist/linux-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
           name: linux-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
 
-  UI-macOS-13-x64:
+  UI-macOS-15-intel-x64:
     name: Build Morpheus UI macOS-x64 Image
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
@@ -1331,7 +1331,7 @@ jobs:
         (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true')
       )
-    runs-on: macos-13
+    runs-on: macos-15-intel
     needs:
       - Generate-Tag
       - Build-Service-Executables
@@ -1482,8 +1482,8 @@ jobs:
       )
     needs:
       - Generate-Tag
-      - UI-macOS-14-arm64
-      - UI-macOS-13-x64
+      - UI-macOS-latest-arm64
+      - UI-macOS-15-intel-x64
       - UI-Ubuntu-22-x64
       - UI-Ubuntu-22-arm64
       - UI-Windows-avx2-x64
