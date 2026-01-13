@@ -320,14 +320,9 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
 	}
 
-	tx, err := s.morToken.Approve(transactOpt, s.diamonContractAddr, stake)
+	tx, receipt, err := s.morToken.Approve(transactOpt, s.diamonContractAddr, stake)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrSendTx, err)
-	}
-
-	receipt, err := bind.WaitMined(ctx, s.ethClient, tx)
-	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrWaitMined, err)
 	}
 
 	if isAgent {
@@ -810,7 +805,7 @@ func (s *BlockchainService) Approve(ctx context.Context, spender common.Address,
 		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
 	}
 
-	tx, err := s.morToken.Approve(transactOpt, spender, amount)
+	tx, _, err := s.morToken.Approve(transactOpt, spender, amount)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrSendTx, err)
 	}
