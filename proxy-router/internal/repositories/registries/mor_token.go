@@ -2,7 +2,9 @@ package registries
 
 import (
 	"context"
+	"fmt"
 	"math/big"
+	"time"
 
 	i "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
@@ -48,17 +50,27 @@ func (g *MorToken) GetAllowance(ctx context.Context, owner common.Address, spend
 	return g.mor.Allowance(&bind.CallOpts{Context: ctx}, owner, spender)
 }
 
-func (g *MorToken) Approve(ctx *bind.TransactOpts, spender common.Address, amount *big.Int) (*types.Transaction, error) {
+func (g *MorToken) Approve(ctx *bind.TransactOpts, spender common.Address, amount *big.Int) (*types.Transaction, *types.Receipt, error) {
 	tx, err := g.mor.Approve(ctx, spender, amount)
 	if err != nil {
-		return nil, lib.TryConvertGethError(err)
+		return nil, nil, lib.TryConvertGethError(err)
 	}
 	// Wait for the transaction receipt
-	_, err = bind.WaitMined(ctx.Context, g.client, tx)
+	receipt, err := bind.WaitMined(ctx.Context, g.client, tx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return tx, nil
+
+	if receipt.Status != 1 {
+		return nil, nil, fmt.Errorf("transaction failed with status %d", receipt.Status)
+	}
+
+	err = g.waitForConfirmations(ctx.Context, receipt, 1)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to wait for confirmations %s", err)
+	}
+
+	return tx, receipt, nil
 }
 
 func (g *MorToken) GetTotalSupply(ctx context.Context) (*big.Int, error) {
@@ -81,4 +93,25 @@ func (g *MorToken) Transfer(ctx *bind.TransactOpts, to common.Address, value *bi
 		return nil, err
 	}
 	return tx, nil
+}
+
+func (g *MorToken) waitForConfirmations(ctx context.Context, receipt *types.Receipt, confirmations uint64) error {
+	targetBlock := receipt.BlockNumber.Uint64() + confirmations
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			header, err := g.client.HeaderByNumber(ctx, nil)
+			if err != nil {
+				return err
+			}
+			if header.Number.Uint64() >= targetBlock {
+				return nil
+			}
+		}
+	}
 }
