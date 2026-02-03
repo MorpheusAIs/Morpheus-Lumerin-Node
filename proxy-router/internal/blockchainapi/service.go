@@ -53,9 +53,10 @@ type BlockchainService struct {
 	rating             *rating.Rating
 	minStake           *big.Int
 
-	legacyTx   bool
-	privateKey i.PrKeyProvider
-	log        lib.ILogger
+	legacyTx    bool
+	privateKey  i.PrKeyProvider
+	log         lib.ILogger
+	txEscalator *lib.TransactionEscalator
 }
 
 type ExplorerClientInterface interface {
@@ -110,6 +111,9 @@ func NewBlockchainService(
 	sessionRouter := r.NewSessionRouter(diamonContractAddr, ethClient, mc, logEthRpc)
 	morToken := r.NewMorToken(morTokenAddr, ethClient, logEthRpc)
 
+	// Create transaction escalator for RBF support
+	txEscalator := lib.NewTransactionEscalator(ethClient, log, lib.DefaultEscalationConfig())
+
 	return &BlockchainService{
 		ethClient:          ethClient,
 		providerRegistry:   providerRegistry,
@@ -127,6 +131,7 @@ func NewBlockchainService(
 		rating:             scorerAlgo,
 		log:                log,
 		authConfig:         authConfig,
+		txEscalator:        txEscalator,
 	}
 }
 
@@ -315,26 +320,65 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 		return common.Hash{}, lib.WrapError(ErrPrKey, err)
 	}
 
-	transactOpt, err := s.getTransactOpts(ctx, prKey)
+	addr, err := lib.PrivKeyBytesToAddr(prKey)
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	// Step 1: Approve MOR tokens with escalation
+	approveBaseOpts, err := s.getTransactOpts(ctx, prKey)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
 	}
 
-	tx, receipt, err := s.morToken.Approve(transactOpt, s.diamonContractAddr, stake)
+	approveReceipt, err := s.txEscalator.SendWithEscalation(
+		ctx,
+		approveBaseOpts,
+		func(opts *bind.TransactOpts) (*types.Transaction, error) {
+			return s.morToken.ApproveTx(opts, s.diamonContractAddr, stake)
+		},
+		s.legacyTx,
+	)
 	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrSendTx, err)
+		s.handleTxError(ctx, addr, err)
+		return common.Hash{}, lib.WrapError(ErrSendTx, fmt.Errorf("approve failed: %w", err))
+	}
+
+	// Check approval succeeded (escalator already waited for mining)
+	if approveReceipt.Status != 1 {
+		return common.Hash{}, lib.WrapError(ErrSendTx, fmt.Errorf("approve tx failed with status %d", approveReceipt.Status))
 	}
 
 	if isAgent {
-		err = s.authConfig.AuthStorage.SetAgentTx(tx.Hash().Hex(), agentUsername, receipt.BlockNumber)
+		err = s.authConfig.AuthStorage.SetAgentTx(approveReceipt.TxHash.Hex(), agentUsername, approveReceipt.BlockNumber)
 		if err != nil {
 			s.log.Errorf("failed to set agent tx: %s", err)
 		}
 	}
 
-	sessionID, _, _, receipt, err := s.sessionRouter.OpenSession(transactOpt, approval, approvalSig, stake, directPayment, prKey)
+	// Step 2: Open session with escalation
+	sessionBaseOpts, err := s.getTransactOpts(ctx, prKey)
 	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrSendTx, err)
+		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
+	}
+
+	sessionReceipt, err := s.txEscalator.SendWithEscalation(
+		ctx,
+		sessionBaseOpts,
+		func(opts *bind.TransactOpts) (*types.Transaction, error) {
+			return s.sessionRouter.OpenSessionTx(opts, approval, approvalSig, stake, directPayment)
+		},
+		s.legacyTx,
+	)
+	if err != nil {
+		s.handleTxError(ctx, addr, err)
+		return common.Hash{}, lib.WrapError(ErrSendTx, fmt.Errorf("open session failed: %w", err))
+	}
+
+	// Parse session info from receipt
+	sessionID, _, _, err := s.sessionRouter.ParseOpenSessionReceipt(ctx, sessionReceipt)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrSendTx, fmt.Errorf("parse session receipt failed: %w", err))
 	}
 
 	if isAgent {
@@ -344,7 +388,7 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 			s.log.Errorf("failed to decrease allowance: %s", err)
 			return common.Hash{}, err
 		}
-		err = s.authConfig.AuthStorage.SetAgentTx(receipt.TxHash.Hex(), agentUsername, receipt.BlockNumber)
+		err = s.authConfig.AuthStorage.SetAgentTx(sessionReceipt.TxHash.Hex(), agentUsername, sessionReceipt.BlockNumber)
 		if err != nil {
 			s.log.Errorf("failed to set agent tx: %s", err)
 		}
@@ -376,6 +420,7 @@ func (s *BlockchainService) CreateNewProvider(ctx context.Context, stake *lib.Bi
 		return nil, lib.WrapError(ErrTxOpts, err)
 	}
 
+	// First approve the stake
 	_, err = s.Approve(ctx, s.diamonContractAddr, &stake.Int)
 	if err != nil {
 		return nil, lib.WrapError(ErrApprove, err)
@@ -383,6 +428,7 @@ func (s *BlockchainService) CreateNewProvider(ctx context.Context, stake *lib.Bi
 
 	err = s.providerRegistry.CreateNewProvider(transactOpt, stake, endpoint)
 	if err != nil {
+		s.handleTxError(ctx, transactOpt.From, err)
 		return nil, lib.WrapError(ErrSendTx, err)
 	}
 
@@ -411,6 +457,7 @@ func (s *BlockchainService) CreateNewModel(ctx context.Context, modelID common.H
 		return nil, lib.WrapError(ErrTxOpts, err)
 	}
 
+	// First approve the stake
 	_, err = s.Approve(ctx, s.diamonContractAddr, &stake.Int)
 	if err != nil {
 		return nil, lib.WrapError(ErrApprove, err)
@@ -565,6 +612,11 @@ func (s *BlockchainService) CloseSession(ctx context.Context, sessionID common.H
 		return common.Hash{}, lib.WrapError(ErrPrKey, err)
 	}
 
+	addr, err := lib.PrivKeyBytesToAddr(prKey)
+	if err != nil {
+		return common.Hash{}, err
+	}
+
 	var reportMessage []byte
 	var signedReport []byte
 
@@ -582,17 +634,29 @@ func (s *BlockchainService) CloseSession(ctx context.Context, sessionID common.H
 		signedReport = report.SignedReport
 	}
 
-	transactOpt, err := s.getTransactOpts(ctx, prKey)
+	baseOpts, err := s.getTransactOpts(ctx, prKey)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
 	}
 
-	tx, err := s.sessionRouter.CloseSession(transactOpt, sessionID, reportMessage, signedReport, prKey)
+	receipt, err := s.txEscalator.SendWithEscalation(
+		ctx,
+		baseOpts,
+		func(opts *bind.TransactOpts) (*types.Transaction, error) {
+			return s.sessionRouter.CloseSessionTx(opts, reportMessage, signedReport)
+		},
+		s.legacyTx,
+	)
 	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrSendTx, err)
+		s.handleTxError(ctx, addr, err)
+		return common.Hash{}, lib.WrapError(ErrSendTx, fmt.Errorf("close session failed: %w", err))
 	}
 
-	return tx, nil
+	if receipt.Status != 1 {
+		return receipt.TxHash, lib.WrapError(ErrSendTx, fmt.Errorf("close session tx failed with status %d", receipt.Status))
+	}
+
+	return receipt.TxHash, nil
 }
 
 func (s *BlockchainService) GetSession(ctx context.Context, sessionID common.Hash) (*structs.Session, error) {
@@ -645,13 +709,17 @@ func (s *BlockchainService) SendETH(ctx context.Context, to common.Address, amou
 		To:    &to,
 		Value: amount,
 	})
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrSendTx, err)
+	}
 
 	err = s.ethClient.SendTransaction(ctx, signedTx)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrSendTx, err)
 	}
 
-	tx, err := bind.WaitMined(ctx, s.ethClient, signedTx)
+	// Wait for tx to be mined with timeout
+	receipt, err := lib.WaitMinedWithTimeout(ctx, s.ethClient, signedTx, lib.DefaultTxMineTimeout)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrWaitMined, err)
 	}
@@ -663,7 +731,7 @@ func (s *BlockchainService) SendETH(ctx context.Context, to common.Address, amou
 			s.log.Errorf("failed to decrease allowance: %s", err)
 			return common.Hash{}, err
 		}
-		s.authConfig.AuthStorage.SetAgentTx(signedTx.Hash().Hex(), agentUsername, tx.BlockNumber)
+		s.authConfig.AuthStorage.SetAgentTx(signedTx.Hash().Hex(), agentUsername, receipt.BlockNumber)
 	}
 
 	return signedTx.Hash(), nil
@@ -689,9 +757,10 @@ func (s *BlockchainService) createSignedTransaction(ctx context.Context, txdata 
 		return nil, err
 	}
 
+	// Get the pending nonce from the chain
 	nonce, err := s.ethClient.PendingNonceAt(ctx, addr)
 	if err != nil {
-		return nil, err
+		return nil, lib.WrapError(ErrNonce, err)
 	}
 
 	gasFeeCap := new(big.Int).Add(
@@ -749,14 +818,9 @@ func (s *BlockchainService) SendMOR(ctx context.Context, to common.Address, amou
 		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
 	}
 
-	tx, err := s.morToken.Transfer(transactOpt, to, amount)
+	tx, receipt, err := s.morToken.Transfer(transactOpt, to, amount)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrSendTx, err)
-	}
-
-	receipt, err := bind.WaitMined(ctx, s.ethClient, tx)
-	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrWaitMined, err)
 	}
 
 	if shouldDecrease {
@@ -1173,7 +1237,10 @@ func (s *BlockchainService) getTransactOpts(ctx context.Context, privKey lib.Hex
 		return nil, err
 	}
 
-	// TODO: deal with likely gasPrice issue so our transaction processes before another pending nonce.
+	// NOTE: We intentionally don't set Nonce here. When Nonce is nil,
+	// go-ethereum's bind library will automatically fetch the pending nonce
+	// at transaction submission time, which handles most cases correctly.
+
 	if s.legacyTx {
 		gasPrice, err := s.ethClient.SuggestGasPrice(ctx)
 		if err != nil {
@@ -1213,4 +1280,11 @@ func (s *BlockchainService) getMinStakeCached(ctx context.Context) (*big.Int, er
 	}
 	s.minStake = minStake
 	return minStake, nil
+}
+
+// handleTxError logs transaction errors for debugging.
+func (s *BlockchainService) handleTxError(ctx context.Context, addr common.Address, err error) {
+	if lib.IsNonceError(err) {
+		s.log.Warnf("Nonce error for %s: %v", addr.Hex(), err)
+	}
 }

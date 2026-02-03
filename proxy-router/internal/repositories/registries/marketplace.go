@@ -71,8 +71,8 @@ func (g *Marketplace) PostModelBid(opts *bind.TransactOpts, model common.Hash, p
 		return common.Hash{}, lib.TryConvertGethError(err)
 	}
 
-	// Wait for the transaction receipt
-	receipt, err := bind.WaitMined(opts.Context, g.client, tx)
+	// Wait for the transaction receipt with timeout
+	receipt, err := lib.WaitMinedWithTimeout(opts.Context, g.client, tx, lib.DefaultTxMineTimeout)
 	if err != nil {
 		return common.Hash{}, lib.TryConvertGethError(err)
 	}
@@ -96,8 +96,8 @@ func (g *Marketplace) DeleteBid(opts *bind.TransactOpts, bidID common.Hash) (com
 		return common.Hash{}, lib.TryConvertGethError(err)
 	}
 
-	// Wait for the transaction receipt
-	receipt, err := bind.WaitMined(opts.Context, g.client, tx)
+	// Wait for the transaction receipt with timeout
+	receipt, err := lib.WaitMinedWithTimeout(opts.Context, g.client, tx, lib.DefaultTxMineTimeout)
 	if err != nil {
 		return common.Hash{}, lib.TryConvertGethError(err)
 	}
