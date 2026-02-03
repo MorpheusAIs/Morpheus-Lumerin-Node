@@ -63,12 +63,32 @@ func (g *SessionRouter) OpenSession(opts *bind.TransactOpts, approval []byte, ap
 		return common.Hash{}, common.Address{}, common.Address{}, receipt, lib.TryConvertGethError(err)
 	}
 
-	// Wait for the transaction receipt
-	receipt, err = bind.WaitMined(opts.Context, g.client, sessionTx)
+	// Wait for the transaction receipt with timeout to prevent infinite polling
+	receipt, err = lib.WaitMinedWithTimeout(opts.Context, g.client, sessionTx, lib.DefaultTxMineTimeout)
 	if err != nil {
 		return common.Hash{}, common.Address{}, common.Address{}, receipt, lib.TryConvertGethError(err)
 	}
 
+	return g.parseOpenSessionReceipt(opts.Context, receipt)
+}
+
+// OpenSessionTx builds an OpenSession transaction without sending it.
+// Use with opts.NoSend = true for escalation support.
+func (g *SessionRouter) OpenSessionTx(opts *bind.TransactOpts, approval []byte, approvalSig []byte, stake *big.Int, directPayment bool) (*types.Transaction, error) {
+	tx, err := g.sessionRouter.OpenSession(opts, opts.From, stake, directPayment, approval, approvalSig)
+	if err != nil {
+		return nil, lib.TryConvertGethError(err)
+	}
+	return tx, nil
+}
+
+// ParseOpenSessionReceipt parses an OpenSession receipt and extracts session info
+func (g *SessionRouter) ParseOpenSessionReceipt(ctx context.Context, receipt *types.Receipt) (sessionID common.Hash, providerID common.Address, userID common.Address, err error) {
+	sessionID, providerID, userID, _, err = g.parseOpenSessionReceipt(ctx, receipt)
+	return
+}
+
+func (g *SessionRouter) parseOpenSessionReceipt(ctx context.Context, receipt *types.Receipt) (sessionID common.Hash, providerID common.Address, userID common.Address, rcpt *types.Receipt, err error) {
 	if receipt.Status != 1 {
 		return receipt.TxHash, common.Address{}, common.Address{}, receipt, fmt.Errorf("Transaction failed with status %d", receipt.Status)
 	}
@@ -78,7 +98,7 @@ func (g *SessionRouter) OpenSession(opts *bind.TransactOpts, approval []byte, ap
 		// Check if the log belongs to the OpenSession event
 		event, err := g.sessionRouter.ParseSessionOpened(*log)
 		if err == nil {
-			err = g.waitForConfirmations(opts.Context, receipt, 1)
+			err = g.waitForConfirmations(ctx, receipt, 1)
 			if err != nil {
 				return receipt.TxHash, common.Address{}, common.Address{}, receipt, fmt.Errorf("failed to wait for confirmations %s", err)
 			}
@@ -165,8 +185,8 @@ func (g *SessionRouter) CloseSession(opts *bind.TransactOpts, sessionID common.H
 		return common.Hash{}, lib.TryConvertGethError(err)
 	}
 
-	// Wait for the transaction receipt
-	receipt, err := bind.WaitMined(opts.Context, g.client, sessionTx)
+	// Wait for the transaction receipt with timeout
+	receipt, err := lib.WaitMinedWithTimeout(opts.Context, g.client, sessionTx, lib.DefaultTxMineTimeout)
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -176,6 +196,16 @@ func (g *SessionRouter) CloseSession(opts *bind.TransactOpts, sessionID common.H
 	}
 
 	return sessionTx.Hash(), nil
+}
+
+// CloseSessionTx builds a CloseSession transaction without sending it.
+// Use with opts.NoSend = true for escalation support.
+func (g *SessionRouter) CloseSessionTx(opts *bind.TransactOpts, report []byte, signedReport []byte) (*types.Transaction, error) {
+	tx, err := g.sessionRouter.CloseSession(opts, report, signedReport)
+	if err != nil {
+		return nil, lib.TryConvertGethError(err)
+	}
+	return tx, nil
 }
 
 func (g *SessionRouter) GetProviderClaimableBalance(ctx context.Context, sessionId [32]byte) (*big.Int, error) {
@@ -213,8 +243,8 @@ func (g *SessionRouter) ClaimProviderBalance(opts *bind.TransactOpts, sessionId 
 		return common.Hash{}, lib.TryConvertGethError(err)
 	}
 
-	// Wait for the transaction receipt
-	_, err = bind.WaitMined(opts.Context, g.client, tx)
+	// Wait for the transaction receipt with timeout
+	_, err = lib.WaitMinedWithTimeout(opts.Context, g.client, tx, lib.DefaultTxMineTimeout)
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -270,24 +300,24 @@ func (g *SessionRouter) getMultipleSessions(ctx context.Context, IDs [][32]byte)
 	return IDs, sessions, nil
 }
 
-func (g *SessionRouter) waitForConfirmations(ctx context.Context, receipt *types.Receipt, confirmations uint64) error {    
-    targetBlock := receipt.BlockNumber.Uint64() + confirmations
-    
-    ticker := time.NewTicker(200 * time.Millisecond)
-    defer ticker.Stop()
-    
-    for {
-        select {
-        case <-ctx.Done():
-            return ctx.Err()
-        case <-ticker.C:
-            header, err := g.client.HeaderByNumber(ctx, nil)
-            if err != nil {
-                return err
-            }
-            if header.Number.Uint64() >= targetBlock {
-                return nil
-            }
-        }
-    }
+func (g *SessionRouter) waitForConfirmations(ctx context.Context, receipt *types.Receipt, confirmations uint64) error {
+	targetBlock := receipt.BlockNumber.Uint64() + confirmations
+
+	ticker := time.NewTicker(400 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			header, err := g.client.HeaderByNumber(ctx, nil)
+			if err != nil {
+				return err
+			}
+			if header.Number.Uint64() >= targetBlock {
+				return nil
+			}
+		}
+	}
 }

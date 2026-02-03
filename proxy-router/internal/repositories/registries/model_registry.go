@@ -91,8 +91,8 @@ func (g *ModelRegistry) CreateNewModel(opts *bind.TransactOpts, modelId common.H
 		return lib.TryConvertGethError(err)
 	}
 
-	// Wait for the transaction receipt
-	receipt, err := bind.WaitMined(opts.Context, g.client, tx)
+	// Wait for the transaction receipt with timeout
+	receipt, err := lib.WaitMinedWithTimeout(opts.Context, g.client, tx, lib.DefaultTxMineTimeout)
 	if err != nil {
 		return lib.TryConvertGethError(err)
 	}
@@ -118,8 +118,8 @@ func (g *ModelRegistry) DeregisterModel(opts *bind.TransactOpts, modelId common.
 		return common.Hash{}, lib.TryConvertGethError(err)
 	}
 
-	// Wait for the transaction receipt
-	receipt, err := bind.WaitMined(opts.Context, g.client, tx)
+	// Wait for the transaction receipt with timeout
+	receipt, err := lib.WaitMinedWithTimeout(opts.Context, g.client, tx, lib.DefaultTxMineTimeout)
 	if err != nil {
 		return common.Hash{}, lib.TryConvertGethError(err)
 	}
