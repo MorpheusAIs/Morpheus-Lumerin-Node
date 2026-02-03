@@ -94,8 +94,8 @@ func (g *ProviderRegistry) CreateNewProvider(opts *bind.TransactOpts, addStake *
 		return lib.TryConvertGethError(err)
 	}
 
-	// Wait for the transaction receipt
-	receipt, err := bind.WaitMined(opts.Context, g.client, providerTx)
+	// Wait for the transaction receipt with timeout
+	receipt, err := lib.WaitMinedWithTimeout(opts.Context, g.client, providerTx, lib.DefaultTxMineTimeout)
 	if err != nil {
 		return lib.TryConvertGethError(err)
 	}
@@ -114,8 +114,8 @@ func (g *ProviderRegistry) DeregisterProvider(opts *bind.TransactOpts) (common.H
 		return common.Hash{}, lib.TryConvertGethError(err)
 	}
 
-	// Wait for the transaction receipt
-	receipt, err := bind.WaitMined(opts.Context, g.client, providerTx)
+	// Wait for the transaction receipt with timeout
+	receipt, err := lib.WaitMinedWithTimeout(opts.Context, g.client, providerTx, lib.DefaultTxMineTimeout)
 	if err != nil {
 		return common.Hash{}, lib.TryConvertGethError(err)
 	}

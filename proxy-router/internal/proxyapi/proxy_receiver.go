@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
@@ -46,10 +47,22 @@ func NewProxyReceiver(privateKeyHex, publicKeyHex lib.HexString, sessionStorage 
 }
 
 // handleSessionError is a helper function to log errors and return consistent output
-func handleError(err error, message string, sourceLog lib.ILogger) (int, int, error) {
+func handleError(err error, message string, sourceLog lib.ILogger) (int, int, int, error) {
 	wrappedErr := lib.WrapError(fmt.Errorf(message), err)
 	sourceLog.Error(wrappedErr)
-	return 0, 0, wrappedErr
+	return 0, 0, 0, wrappedErr
+}
+
+// updateUsageInResponse adds usage_from_provider field with calculated tokens
+// Does NOT modify the original "usage" field from the LLM
+func updateUsageInResponse(data *genericchatstorage.ChatCompletionResponseExtra, promptTokens, completionTokens int) {
+	lib.SetUsageFromProvider(data, promptTokens, completionTokens)
+}
+
+// updateUsageInStreamResponse adds usage_from_provider field with calculated tokens
+// Does NOT modify the original "usage" field from the LLM
+func updateUsageInStreamResponse(data *genericchatstorage.ChatCompletionStreamResponseExtra, promptTokens, completionTokens int) {
+	lib.SetUsageFromProvider(data, promptTokens, completionTokens)
 }
 
 // processAudioTranscription handles audio transcription request processing
@@ -127,9 +140,14 @@ func (s *ProxyReceiver) createCompletionCallback(
 	requestID string,
 	sourceLog lib.ILogger,
 	ttftMs *int,
-	totalTokens *int,
+	inputTokens *int,
+	outputTokens *int,
+	promptTokens int,
 	sendResponse SendResponse,
 ) genericchatstorage.CompletionCallback {
+	// Track accumulated content for streaming responses
+	var accumulatedContent strings.Builder
+
 	return func(ctx context.Context, completion genericchatstorage.Chunk, aiEngineErrorResponse *genericchatstorage.AiEngineErrorResponse) error {
 		if aiEngineErrorResponse != nil {
 			marshalledResponse, err := json.Marshal(aiEngineErrorResponse)
@@ -154,10 +172,57 @@ func (s *ProxyReceiver) createCompletionCallback(
 			return sendResponse(r)
 		}
 
-		*totalTokens += completion.Tokens()
-
 		if *ttftMs == 0 {
 			*ttftMs = int(time.Now().UnixMilli() - startTime)
+		}
+
+		isChunkControl := false
+		if completion.Type() == genericchatstorage.ChunkTypeControl {
+			isChunkControl = true
+		}
+
+		// Handle streaming vs non-streaming responses
+		if completion.IsStreaming() && !isChunkControl {
+			if streamChunk, ok := completion.(*genericchatstorage.ChunkStreaming); ok {
+				if data, ok := streamChunk.Data().(*genericchatstorage.ChatCompletionStreamResponseExtra); ok {
+					// Accumulate delta content
+					if len(data.Choices) > 0 {
+						accumulatedContent.WriteString(data.Choices[0].Delta.Content)
+					}
+
+					// Check if this is the final chunk (has finish_reason or Usage data)
+					isFinalChunk := false
+					if len(data.Choices) > 0 && data.Choices[0].FinishReason != "" {
+						isFinalChunk = true
+					}
+					if data.Usage != nil {
+						isFinalChunk = true
+					}
+
+					// On final chunk, calculate and update usage
+					if isFinalChunk {
+						completionTokens := lib.CountTokens(accumulatedContent.String())
+						updateUsageInStreamResponse(data, promptTokens, completionTokens)
+						*inputTokens = promptTokens
+						*outputTokens = completionTokens
+					}
+				}
+			}
+		} else if !isChunkControl {
+			// Non-streaming: handle full response
+			if textChunk, ok := completion.(*genericchatstorage.ChunkText); ok {
+				if data, ok := textChunk.Data().(*genericchatstorage.ChatCompletionResponseExtra); ok {
+					// Calculate completion tokens from the full response content
+					completionContent := ""
+					if len(data.Choices) > 0 {
+						completionContent = data.Choices[0].Message.Content
+					}
+					completionTokens := lib.CountTokens(completionContent)
+					updateUsageInResponse(data, promptTokens, completionTokens)
+					*inputTokens = promptTokens
+					*outputTokens = completionTokens
+				}
+			}
 		}
 
 		marshalledResponse, err := json.Marshal(completion.Data())
@@ -199,7 +264,7 @@ func (s *ProxyReceiver) recordActivity(ctx context.Context, session *sessionrepo
 	}
 }
 
-func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, userPubKey string, payload []byte, sessionID common.Hash, sendResponse SendResponse, sourceLog lib.ILogger) (int, int, error) {
+func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, userPubKey string, payload []byte, sessionID common.Hash, sendResponse SendResponse, sourceLog lib.ILogger) (int, int, int, error) {
 	// Get session
 	session, err := s.sessionRepo.GetSession(ctx, sessionID)
 	if err != nil {
@@ -246,15 +311,21 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 
 	// Start timing and get adapter
 	startTime := time.Now().UnixMilli()
-	ttftMs, totalTokens := 0, 0
+	ttftMs, inputTokens, outputTokens := 0, 0, 0
 
 	adapter, err := s.aiEngine.GetAdapter(ctx, common.Hash{}, session.ModelID(), common.Hash{}, false, false)
 	if err != nil {
 		return handleError(err, "failed to get adapter", sourceLog)
 	}
 
+	// Calculate prompt tokens from the request
+	promptTokens := 0
+	if chatReq != nil {
+		promptTokens = lib.CountPromptTokens(chatReq.Messages)
+	}
+
 	// Create completion callback
-	cb := s.createCompletionCallback(ctx, startTime, userPubKey, requestID, sourceLog, &ttftMs, &totalTokens, sendResponse)
+	cb := s.createCompletionCallback(ctx, startTime, userPubKey, requestID, sourceLog, &ttftMs, &inputTokens, &outputTokens, promptTokens, sendResponse)
 
 	// Process request with appropriate adapter method
 	if audioTranscriptionReq != nil {
@@ -278,7 +349,7 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 	// Record activity
 	s.recordActivity(ctx, session, startTime, sourceLog)
 
-	return ttftMs, totalTokens, nil
+	return ttftMs, inputTokens, outputTokens, nil
 }
 
 func (s *ProxyReceiver) SessionRequest(ctx context.Context, msgID string, reqID string, req *m.SessionReq, log lib.ILogger) (*msg.RpcResponse, error) {
@@ -354,6 +425,8 @@ func (s *ProxyReceiver) SessionReport(ctx context.Context, msgID string, reqID s
 	response, err := s.morRpc.SessionReportResponse(
 		uint32(tps),
 		uint32(ttft),
+		uint32(session.InputTokens),
+		uint32(session.OutputTokens),
 		common.HexToHash(session.Id),
 		s.privateKeyHex,
 		reqID,

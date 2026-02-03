@@ -3,7 +3,7 @@
 ![Simple-Overview](docs/images/simple.png)
 The purpose of this software is to enable interaction with distributed, decentralized LLMs on the Morpheus network through a desktop chat experience.
 
-0. PreRequisites: Arbitrum Layer 2 Blockchain, Arbitrum MOR and Arbitrum ETH for staking and bidding
+0. PreRequisites: BASE Layer 2 Blockchain, MOR and ETH on BASE for staking and bidding
 1. Existing, Hosted AI model that is available for inference via the Morpheus network
 2. The proxy-router talks to and listens to the blockchain, routes prompts and inference between the providers’ models and the consumers that purchase and use the models
 3. Providers register their models via bids on the blockchain
@@ -20,19 +20,19 @@ manages secure sessions between consumers and providers and routes prompts and r
 * Lumerin `cli` is the cli client to interact with LLMs and the Morpheus network via the proxy-router as a consumer
 * Kubo `ipfs` is the ipfs client to interact with the ipfs network to store and retrieve model/agent files
 
-## Tokens and Contract Information (update 11/15/2024)
+## Tokens and Contract Information (updated 12/17/2025)
 ### MainNet: (MAIN Branch and MAIN-* Releases)
-* Blockchain: Arbitrum One (ChainID: `42161`)
-* Morpheus MOR Token: `0x092bAaDB7DEf4C3981454dD9c0A0D7FF07bCFc86` 
-* Diamond MarketPlace Contract: `0xDE819AaEE474626E3f34Ef0263373357e5a6C71b` 
-* Blockchain Explorer: `https://arbiscan.io/`
+* Blockchain: BASE Mainnet (ChainID: `8453`)
+* Morpheus MOR Token: `0x7431aDa8a591C955a994a21710752EF9b882b8e3` 
+* Diamond MarketPlace Contract: `0x6aBE1d282f72B474E54527D93b979A4f64d3030a` 
+* Blockchain Explorer: `https://base.blockscout.com/`
 * GitHub Source: https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/tree/main
 
 ### TestNet (TEST Branch and TEST-* Releases)
-* Blockchain: Sepolia Arbitrum (ChainID: `421614`)
-* Morpheus MOR Token: `0x34a285a1b1c166420df5b6630132542923b5b27e` 
-* Diamond MarketPlace Contract: `0xb8C55cD613af947E73E262F0d3C54b7211Af16CF`
-* Blockchain Explorer: `https://sepolia.arbiscan.io/`
+* Blockchain: BASE Sepolia (ChainID: `84532`)
+* Morpheus MOR Token: `0x5C80Ddd187054E1E4aBBfFCD750498e81d34FfA3` 
+* Diamond MarketPlace Contract: `0x6e4d0B775E3C3b02683A6F277Ac80240C4aFF930`
+* Blockchain Explorer: `https://base-sepolia.blockscout.com/`
 * GitHub Source: https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/tree/test 
 
 ## Funds

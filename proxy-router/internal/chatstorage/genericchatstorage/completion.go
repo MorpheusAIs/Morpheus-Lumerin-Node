@@ -38,7 +38,31 @@ func (c *ChunkText) IsStreaming() bool {
 }
 
 func (c *ChunkText) Tokens() int {
-	return c.data.Usage.CompletionTokens
+	// Return ONLY completion tokens from our own calculation (usage_from_provider or usage_from_consumer)
+	// Try usage_from_consumer first (sender side)
+	if usageBytes, ok := c.data.Extra["usage_from_consumer"]; ok {
+		var usage map[string]int
+		if err := json.Unmarshal(usageBytes, &usage); err == nil {
+			if completionTokens, exists := usage["completion_tokens"]; exists {
+				return completionTokens
+			}
+		}
+	}
+
+	// Try usage_from_provider (receiver side)
+	if usageBytes, ok := c.data.Extra["usage_from_provider"]; ok {
+		var usage map[string]int
+		if err := json.Unmarshal(usageBytes, &usage); err == nil {
+			if completionTokens, exists := usage["completion_tokens"]; exists {
+				return completionTokens
+			}
+		}
+	}
+	// Fallback: return completion tokens from LLM usage if available
+	if c.data.Usage.CompletionTokens > 0 {
+		return c.data.Usage.CompletionTokens
+	}
+	return 0
 }
 
 func (c *ChunkText) Type() ChunkType {
@@ -46,7 +70,10 @@ func (c *ChunkText) Type() ChunkType {
 }
 
 func (c *ChunkText) String() string {
-	return c.data.Choices[0].Message.Content
+	if len(c.data.Choices) > 0 {
+		return c.data.Choices[0].Message.Content
+	}
+	return ""
 }
 
 func (c *ChunkText) Data() interface{} {
@@ -68,7 +95,30 @@ func (c *ChunkStreaming) IsStreaming() bool {
 }
 
 func (c *ChunkStreaming) Tokens() int {
-	return len(c.data.Choices)
+	// Return ONLY completion tokens from our own calculation (usage_from_provider or usage_from_consumer)
+	// Try usage_from_provider first (receiver side)
+	if usageBytes, ok := c.data.Extra["usage_from_provider"]; ok {
+		var usage map[string]int
+		if err := json.Unmarshal(usageBytes, &usage); err == nil {
+			if completionTokens, exists := usage["completion_tokens"]; exists {
+				return completionTokens
+			}
+		}
+	}
+	// Try usage_from_consumer (sender side)
+	if usageBytes, ok := c.data.Extra["usage_from_consumer"]; ok {
+		var usage map[string]int
+		if err := json.Unmarshal(usageBytes, &usage); err == nil {
+			if completionTokens, exists := usage["completion_tokens"]; exists {
+				return completionTokens
+			}
+		}
+	}
+	// Fallback: return completion tokens from LLM usage if available
+	if c.data.Usage != nil && c.data.Usage.CompletionTokens > 0 {
+		return c.data.Usage.CompletionTokens
+	}
+	return 0
 }
 
 func (c *ChunkStreaming) Type() ChunkType {

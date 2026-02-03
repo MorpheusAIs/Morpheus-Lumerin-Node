@@ -60,6 +60,7 @@ type ProxyServiceSender struct {
 	sessionRepo    *sessionrepo.SessionRepositoryCached
 	morRPC         *msgs.MORRPCMessage
 	sessionService SessionService
+	sessionSema    *SessionSemaphore // Limits to 1 concurrent request per session
 	log            lib.ILogger
 }
 
@@ -71,6 +72,7 @@ func NewProxySender(chainID *big.Int, privateKey interfaces.PrKeyProvider, logSt
 		sessionStorage: sessionStorage,
 		sessionRepo:    sessionRepo,
 		morRPC:         msgs.NewMorRpc(),
+		sessionSema:    NewSessionSemaphore(),
 		log:            log,
 	}
 }
@@ -281,6 +283,8 @@ func (p *ProxyServiceSender) GetSessionReportFromUser(ctx context.Context, sessi
 	response, err := p.morRPC.SessionReportResponse(
 		uint32(tps),
 		uint32(ttft),
+		uint32(session.InputTokens()),
+		uint32(session.OutputTokens()),
 		sessionID,
 		prKey,
 		"1",
@@ -492,7 +496,7 @@ func (p *ProxyServiceSender) validateSession(ctx context.Context, sessionID comm
 
 	SESSION_EXPIRY_THRESHOLD := time.Second * 5
 	// Check if session is expired
-	if session.EndsAt().Int64() + int64(SESSION_EXPIRY_THRESHOLD) < time.Now().Unix() {
+	if session.EndsAt().Int64()+int64(SESSION_EXPIRY_THRESHOLD) < time.Now().Unix() {
 		p.log.Debugf("Expired session object endsAt: %v", session.EndsAt().Int64())
 		p.log.Debugf("Now: %v", time.Now().Unix())
 		return nil, nil, ErrSessionExpired
@@ -569,13 +573,13 @@ func (p *ProxyServiceSender) handleFailover(ctx context.Context, session session
 }
 
 // updateSessionStats updates session statistics after request completion
-func (p *ProxyServiceSender) updateSessionStats(ctx context.Context, session sessionrepo.SessionModel, startTime int64, ttftMs, totalTokens int) error {
+func (p *ProxyServiceSender) updateSessionStats(ctx context.Context, session sessionrepo.SessionModel, startTime int64, ttftMs, inputTokens, outputTokens int) error {
 	requestDuration := int(time.Now().Unix() - startTime)
 	if requestDuration == 0 {
 		requestDuration = 1
 	}
 
-	session.AddStats(totalTokens*1000/requestDuration, ttftMs)
+	session.AddStats(outputTokens*1000/requestDuration, ttftMs, inputTokens, outputTokens)
 
 	err := p.sessionRepo.SaveSession(ctx, &session)
 	if err != nil {
@@ -593,15 +597,27 @@ func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.
 		return nil, err
 	}
 
+	// Acquire session semaphore to ensure only 1 concurrent request per session
+	// This will block if another request is already being processed for this session
+	p.log.Debugf("acquiring session semaphore for session %s", sessionID.Hex())
+	if err := p.sessionSema.Acquire(ctx, sessionID); err != nil {
+		return nil, fmt.Errorf("request cancelled while waiting in queue: %w", err)
+	}
+	defer p.sessionSema.Release(sessionID)
+	p.log.Debugf("acquired session semaphore for session %s", sessionID.Hex())
+
 	// Prepare request
 	promptRequest, pubKey, err := p.prepareRequest(sessionID, prompt, provider.PubKey)
 	if err != nil {
 		return nil, err
 	}
 
+	// Calculate prompt tokens from the request
+	promptTokens := lib.CountPromptTokens(prompt.Messages)
+
 	// Send request and process response
 	startTime := time.Now().Unix()
-	result, ttftMs, totalTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, promptRequest, pubKey, "chat_completion")
+	result, ttftMs, inputTokens, outputTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, promptRequest, pubKey, "chat_completion", promptTokens)
 
 	// Handle errors with failover if enabled
 	if err != nil {
@@ -620,7 +636,7 @@ func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.
 	}
 
 	// Update session statistics
-	if updateErr := p.updateSessionStats(ctx, *session, startTime, ttftMs, totalTokens); updateErr != nil {
+	if updateErr := p.updateSessionStats(ctx, *session, startTime, ttftMs, inputTokens, outputTokens); updateErr != nil {
 		// Log error but don't fail the request
 		p.log.Error("Failed to update session stats", updateErr)
 	}
@@ -635,7 +651,8 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 	rpcMessage *msgs.RPCMessage,
 	providerPublicKey lib.HexString,
 	requestType string,
-) (interface{}, int, int, error) {
+	promptTokens int,
+) (interface{}, int, int, int, error) {
 	const (
 		TIMEOUT_TO_ESTABLISH_CONNECTION   = time.Second * 3
 		TIMEOUT_TO_RECEIVE_FIRST_RESPONSE = time.Second * 30
@@ -649,14 +666,14 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 
 	prKey, err := p.privateKey.GetPrivateKey()
 	if err != nil {
-		return nil, 0, 0, ErrMissingPrKey
+		return nil, 0, 0, 0, ErrMissingPrKey
 	}
 
 	conn, err := dialer.Dial("tcp", url)
 	if err != nil {
 		err = lib.WrapError(ErrConnectProvider, err)
 		p.log.Warnf(err.Error())
-		return nil, 0, 0, err
+		return nil, 0, 0, 0, err
 	}
 	defer conn.Close()
 
@@ -677,16 +694,17 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 
 	msgJSON, err := json.Marshal(rpcMessage)
 	if err != nil {
-		return nil, 0, 0, lib.WrapError(ErrMarshalFailed, err)
+		return nil, 0, 0, 0, lib.WrapError(ErrMarshalFailed, err)
 	}
 
 	ttftMs := 0
-	totalTokens := 0
+	inputTokens := promptTokens
+	outputTokens := 0
 	now := time.Now().UnixMilli()
 
 	_, err = conn.Write(msgJSON)
 	if err != nil {
-		return nil, ttftMs, totalTokens, err
+		return nil, ttftMs, inputTokens, outputTokens, err
 	}
 
 	reader := bufio.NewReader(conn)
@@ -698,9 +716,12 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 
 	retryCount := 0
 
+	// Track accumulated content for streaming token calculation
+	var accumulatedContent strings.Builder
+
 	for {
 		if ctx.Err() != nil {
-			return nil, ttftMs, totalTokens, ctx.Err()
+			return nil, ttftMs, inputTokens, outputTokens, ctx.Err()
 		}
 
 		// Initialize or reset the decoder
@@ -718,7 +739,7 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 					alive, availErr := checkProviderAvailability(url)
 					if availErr != nil {
 						p.log.Warnf("Provider availability check failed: %v", availErr)
-						return nil, ttftMs, totalTokens, fmt.Errorf("provider availability check failed: %w", availErr)
+						return nil, ttftMs, inputTokens, outputTokens, fmt.Errorf("provider availability check failed: %w", availErr)
 					}
 					if alive {
 						retryCount++
@@ -731,59 +752,59 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 						d = nil
 						continue
 					} else {
-						return nil, ttftMs, totalTokens, fmt.Errorf("provider is not available")
+						return nil, ttftMs, inputTokens, outputTokens, fmt.Errorf("provider is not available")
 					}
 				} else {
-					return nil, ttftMs, totalTokens, fmt.Errorf("read timed out after %d retries: %w", retryCount, err)
+					return nil, ttftMs, inputTokens, outputTokens, fmt.Errorf("read timed out after %d retries: %w", retryCount, err)
 				}
 			} else if err == io.EOF {
 				p.log.Debugf("Connection closed by provider")
 				if !callbackCalled {
-					return nil, ttftMs, totalTokens, fmt.Errorf("provider closed connection without sending any data")
+					return nil, ttftMs, inputTokens, outputTokens, fmt.Errorf("provider closed connection without sending any data")
 				}
 				break
 			} else {
 				p.log.Warnf("Failed to decode response: %v", err)
-				return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
+				return nil, ttftMs, inputTokens, outputTokens, lib.WrapError(ErrInvalidResponse, err)
 			}
 		}
 
 		if msg.Error != nil {
 			sig := msg.Error.Data.Signature
-			
+
 			// Check if this is an unencrypted infrastructure error
 			// Empty signature marshals as "0x00" (hex prefix with no data)
 			sigStr := sig.String()
 			if sig == nil || len(sig) == 0 || sigStr == "0x00" {
 				// Unencrypted error - return as plain error without callback
 				p.log.Warnf("Received unencrypted provider error: %s (code: %d)", msg.Error.Message, msg.Error.Code)
-				return nil, ttftMs, totalTokens, fmt.Errorf("provider error: %s", msg.Error.Message)
+				return nil, ttftMs, inputTokens, outputTokens, fmt.Errorf("provider error: %s", msg.Error.Message)
 			}
-			
+
 			// Encrypted error - validate signature and decrypt
 			msg.Error.Data.Signature = []byte{}
 
 			if !p.validateMsgSignature(msg.Error, sig, providerPublicKey) {
-				return nil, ttftMs, totalTokens, ErrInvalidSig
+				return nil, ttftMs, inputTokens, outputTokens, ErrInvalidSig
 			}
 
 			errorMessage, err := lib.DecryptString(msg.Error.Message, prKey.Hex())
 			if err != nil {
-				return nil, ttftMs, totalTokens, lib.WrapError(ErrDecrFailed, err)
+				return nil, ttftMs, inputTokens, outputTokens, lib.WrapError(ErrDecrFailed, err)
 			}
 
 			var aiEngineErrorResponse gcs.AiEngineErrorResponse
 			err = json.Unmarshal([]byte(errorMessage), &aiEngineErrorResponse)
 			if err != nil {
-				return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
+				return nil, ttftMs, inputTokens, outputTokens, lib.WrapError(ErrInvalidResponse, err)
 			}
 
 			cb(ctx, nil, &aiEngineErrorResponse)
-			return nil, ttftMs, totalTokens, nil
+			return nil, ttftMs, inputTokens, outputTokens, nil
 		}
 
 		if msg.Result == nil {
-			return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, ErrEmpty)
+			return nil, ttftMs, inputTokens, outputTokens, lib.WrapError(ErrInvalidResponse, ErrEmpty)
 		}
 
 		if ttftMs == 0 {
@@ -794,41 +815,41 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 		var inferenceRes InferenceRes
 		err = json.Unmarshal(*msg.Result, &inferenceRes)
 		if err != nil {
-			return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
+			return nil, ttftMs, inputTokens, outputTokens, lib.WrapError(ErrInvalidResponse, err)
 		}
 		sig := inferenceRes.Signature
 		inferenceRes.Signature = []byte{}
 
 		if !p.validateMsgSignature(inferenceRes, sig, providerPublicKey) {
-			return nil, ttftMs, totalTokens, ErrInvalidSig
+			return nil, ttftMs, inputTokens, outputTokens, ErrInvalidSig
 		}
 
 		var message lib.HexString
 		err = json.Unmarshal(inferenceRes.Message, &message)
 		if err != nil {
-			return nil, ttftMs, totalTokens, lib.WrapError(ErrInvalidResponse, err)
+			return nil, ttftMs, inputTokens, outputTokens, lib.WrapError(ErrInvalidResponse, err)
 		}
 
 		aiResponse, err := lib.DecryptBytes(message, prKey)
 		if err != nil {
-			return nil, ttftMs, totalTokens, lib.WrapError(ErrDecrFailed, err)
+			return nil, ttftMs, inputTokens, outputTokens, lib.WrapError(ErrDecrFailed, err)
 		}
 
 		// Process the AI response based on the request type
-		result, tokens, shouldStop, err := p.processAIResponse(requestType, aiResponse, responses)
+		result, tokens, shouldStop, err := p.processAIResponse(requestType, aiResponse, responses, promptTokens, &accumulatedContent)
 		if err != nil {
-			return nil, ttftMs, totalTokens, err
+			return nil, ttftMs, inputTokens, outputTokens, err
 		}
 
-		totalTokens += tokens
+		outputTokens = tokens
 
 		if ctx.Err() != nil {
-			return nil, ttftMs, totalTokens, ctx.Err()
+			return nil, ttftMs, inputTokens, outputTokens, ctx.Err()
 		}
 		err = cb(ctx, result, nil)
 		callbackCalled = true
 		if err != nil {
-			return nil, ttftMs, totalTokens, lib.WrapError(ErrResponseErr, err)
+			return nil, ttftMs, inputTokens, outputTokens, lib.WrapError(ErrResponseErr, err)
 		}
 
 		if shouldStop {
@@ -836,18 +857,18 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 		}
 	}
 
-	return responses, ttftMs, totalTokens, nil
+	return responses, ttftMs, inputTokens, outputTokens, nil
 }
 
 // processAIResponse handles different response types and returns the appropriate chunk
-func (p *ProxyServiceSender) processAIResponse(requestType string, aiResponse []byte, responses []interface{}) (gcs.Chunk, int, bool, error) {
+func (p *ProxyServiceSender) processAIResponse(requestType string, aiResponse []byte, responses []interface{}, promptTokens int, accumulatedContent *strings.Builder) (gcs.Chunk, int, bool, error) {
 	switch requestType {
 	case "audio_transcription":
 		return p.handleAudioTranscription(aiResponse, responses)
 	case "audio_speech":
 		return p.handleAudioSpeech(aiResponse, responses)
 	case "chat_completion":
-		return p.handleChatCompletion(aiResponse, responses)
+		return p.handleChatCompletion(aiResponse, responses, promptTokens, accumulatedContent)
 	case "embeddings":
 		return p.handleEmbeddings(aiResponse, responses)
 	default:
@@ -916,33 +937,71 @@ func (p *ProxyServiceSender) handleAudioSpeech(aiResponse []byte, responses []in
 }
 
 // handleChatCompletion processes chat completion responses
-func (p *ProxyServiceSender) handleChatCompletion(aiResponse []byte, responses []interface{}) (gcs.Chunk, int, bool, error) {
+func (p *ProxyServiceSender) handleChatCompletion(aiResponse []byte, responses []interface{}, promptTokens int, accumulatedContent *strings.Builder) (gcs.Chunk, int, bool, error) {
 	var controlMsg string
 	if err := json.Unmarshal(aiResponse, &controlMsg); err == nil && controlMsg == "[DONE]" {
 		chunk := gcs.NewChunkControl(controlMsg)
 		return chunk, 0, true, nil
 	}
-	
+
 	// Try to parse as streaming response
 	var streamResponse gcs.ChatCompletionStreamResponseExtra
 	err := json.Unmarshal(aiResponse, &streamResponse)
 
-	isStreamingChunk := (len(streamResponse.Choices) > 0 && streamResponse.Usage == nil)
-	isUsageChunk := (len(streamResponse.Choices) == 0 && streamResponse.Usage != nil)
-	
-	if err == nil && (isStreamingChunk || isUsageChunk) {
+	// Streaming chunk detection:
+	// - Object field is "chat.completion.chunk" (most reliable)
+	// - OR has choices with delta content (streaming format)
+	// - OR has usage only (final usage chunk from some providers)
+	// Streaming chunks can now have BOTH choices AND usage (final chunk with finish_reason)
+	isStreamingObject := streamResponse.Object == "chat.completion.chunk"
+	hasChoices := len(streamResponse.Choices) > 0
+	hasUsageOnly := streamResponse.Usage != nil && !hasChoices
+	isStreamingChunk := isStreamingObject || hasUsageOnly
+
+	if err == nil && isStreamingChunk {
+		// Accumulate delta content for token calculation
+		if hasChoices {
+			accumulatedContent.WriteString(streamResponse.Choices[0].Delta.Content)
+		}
+
+		// Check if this is the final chunk (has finish_reason or Usage data)
+		isFinalChunk := false
+		if hasChoices && streamResponse.Choices[0].FinishReason != "" {
+			isFinalChunk = true
+		}
+		if streamResponse.Usage != nil {
+			isFinalChunk = true
+		}
+
+		// On final chunk, calculate and add usage_from_consumer
+		usageTokens := 0
+		if isFinalChunk {
+			completionTokens := lib.CountTokens(accumulatedContent.String())
+			lib.SetUsageFromConsumer(&streamResponse, promptTokens, completionTokens)
+			usageTokens = completionTokens
+		}
+
 		chunk := gcs.NewChunkStreaming(&streamResponse)
 		responses = append(responses, streamResponse)
-		return chunk, len(streamResponse.Choices), false, nil
+		return chunk, usageTokens, false, nil
 	}
 
-	// Try to parse as full completion response (has both choices and usage)
+	// Try to parse as full completion response (non-streaming)
+	// Non-streaming has object "chat.completion" and message content (not delta)
 	var chatResponse gcs.ChatCompletionResponseExtra
 	err = json.Unmarshal(aiResponse, &chatResponse)
-	if err == nil && len(chatResponse.Choices) > 0 {
+	if err == nil && len(chatResponse.Choices) > 0 && chatResponse.Object == "chat.completion" {
+		// Calculate completion tokens from the full response content
+		completionContent := ""
+		if len(chatResponse.Choices) > 0 {
+			completionContent = chatResponse.Choices[0].Message.Content
+		}
+		completionTokens := lib.CountTokens(completionContent)
+		lib.SetUsageFromConsumer(&chatResponse, promptTokens, completionTokens)
+
 		chunk := gcs.NewChunkText(&chatResponse)
 		responses = append(responses, chatResponse)
-		return chunk, chatResponse.Usage.TotalTokens, true, nil
+		return chunk, completionTokens, true, nil
 	}
 
 	// If not a chat completion, try media generation handlers
@@ -1065,6 +1124,14 @@ func (p *ProxyServiceSender) SendAudioTranscriptionV2(ctx context.Context, sessi
 		return nil, err
 	}
 
+	// Acquire session semaphore to ensure only 1 concurrent request per session
+	p.log.Debugf("acquiring session semaphore for session %s (audio transcription)", sessionID.Hex())
+	if err := p.sessionSema.Acquire(ctx, sessionID); err != nil {
+		return nil, fmt.Errorf("request cancelled while waiting in queue: %w", err)
+	}
+	defer p.sessionSema.Release(sessionID)
+	p.log.Debugf("acquired session semaphore for session %s (audio transcription)", sessionID.Hex())
+
 	// Get private key for signing
 	prKey, err := p.privateKey.GetPrivateKey()
 	if err != nil {
@@ -1073,10 +1140,11 @@ func (p *ProxyServiceSender) SendAudioTranscriptionV2(ctx context.Context, sessi
 
 	// Common tracking
 	var (
-		result      interface{}
-		ttftMs      int
-		totalTokens int
-		startTime   = time.Now().Unix()
+		result       interface{}
+		ttftMs       int
+		inputTokens  int
+		outputTokens int
+		startTime    = time.Now().Unix()
 	)
 
 	audioFilePath := audioRequest.FilePath
@@ -1125,7 +1193,7 @@ func (p *ProxyServiceSender) SendAudioTranscriptionV2(ctx context.Context, sessi
 		}
 
 		// Step 3: End streaming and get results
-		result, ttftMs, totalTokens, err = p.sendStreamEnd(ctx, provider, sessionID, streamID, audioRequest, prKey, cb)
+		result, ttftMs, inputTokens, outputTokens, err = p.sendStreamEnd(ctx, provider, sessionID, streamID, audioRequest, prKey, cb)
 		if err != nil {
 			return nil, fmt.Errorf("failed to end streaming session: %w", err)
 		}
@@ -1141,19 +1209,19 @@ func (p *ProxyServiceSender) SendAudioTranscriptionV2(ctx context.Context, sessi
 		if err != nil {
 			return nil, fmt.Errorf("failed to create audio transcription request: %w", err)
 		}
-	
+
 		// Record start time for session stats
 		startTime = time.Now().Unix()
-	
+
 		// Send request and handle response
-		result, ttftMs, totalTokens, err = p.rpcRequestStreamV2(ctx, cb, provider.Url, message, pubKey, "audio_transcription")
+		result, ttftMs, inputTokens, outputTokens, err = p.rpcRequestStreamV2(ctx, cb, provider.Url, message, pubKey, "audio_transcription", 0)
 		if err != nil {
 			return nil, fmt.Errorf("failed to send audio transcription request: %w", err)
 		}
 	}
 
 	// Update session statistics
-	if updateErr := p.updateSessionStats(ctx, *session, startTime, ttftMs, totalTokens); updateErr != nil {
+	if updateErr := p.updateSessionStats(ctx, *session, startTime, ttftMs, inputTokens, outputTokens); updateErr != nil {
 		// Log error but don't fail the request
 		p.log.Error("Failed to update session stats", updateErr)
 	}
@@ -1261,33 +1329,33 @@ func (p *ProxyServiceSender) sendStreamChunks(ctx context.Context, provider *sto
 }
 
 // sendStreamEnd finalizes the streaming session and gets the transcription result with session statistics
-func (p *ProxyServiceSender) sendStreamEnd(ctx context.Context, provider *storages.User, sessionID common.Hash, streamID string, audioRequest *gcs.AudioTranscriptionRequest, prKey lib.HexString, cb gcs.CompletionCallback) (interface{}, int, int, error) {
+func (p *ProxyServiceSender) sendStreamEnd(ctx context.Context, provider *storages.User, sessionID common.Hash, streamID string, audioRequest *gcs.AudioTranscriptionRequest, prKey lib.HexString, cb gcs.CompletionCallback) (interface{}, int, int, int, error) {
 	// Marshal audio parameters
 	audioRequest.Extra["type"] = json.RawMessage(`"audio_transcription"`)
 	audioParamsJSON, err := json.Marshal(audioRequest)
 	if err != nil {
-		return nil, 0, 0, fmt.Errorf("failed to marshal audio parameters: %w", err)
+		return nil, 0, 0, 0, fmt.Errorf("failed to marshal audio parameters: %w", err)
 	}
 
 	pubKey, err := lib.StringToHexString(provider.PubKey)
 	if err != nil {
-		return nil, 0, 0, lib.WrapError(ErrCreateReq, err)
+		return nil, 0, 0, 0, lib.WrapError(ErrCreateReq, err)
 	}
 
 	requestID := "1"
 	message, err := p.morRPC.SessionPromptStreamEndRequest(sessionID, streamID, string(audioParamsJSON), prKey, requestID)
 	if err != nil {
-		return nil, 0, 0, fmt.Errorf("failed to create stream end request: %w", err)
+		return nil, 0, 0, 0, fmt.Errorf("failed to create stream end request: %w", err)
 	}
 
 	// Send request and handle streaming response
-	result, ttftMs, totalTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, message, pubKey, "audio_transcription")
+	result, ttftMs, inputTokens, outputTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, message, pubKey, "audio_transcription", 0)
 	if err != nil {
-		return nil, 0, 0, fmt.Errorf("failed to process stream end request: %w", err)
+		return nil, 0, 0, 0, fmt.Errorf("failed to process stream end request: %w", err)
 	}
 
-	p.log.Debugf("Successfully completed streaming session %s with TTFT: %dms, tokens: %d", streamID, ttftMs, totalTokens)
-	return result, ttftMs, totalTokens, nil
+	p.log.Debugf("Successfully completed streaming session %s with TTFT: %dms, inputTokens: %d, outputTokens: %d", streamID, ttftMs, inputTokens, outputTokens)
+	return result, ttftMs, inputTokens, outputTokens, nil
 }
 
 // detectAudioContentType detects the content type of an audio file based on its extension
@@ -1324,6 +1392,14 @@ func (p *ProxyServiceSender) SendAudioSpeech(ctx context.Context, sessionID comm
 		return nil, err
 	}
 
+	// Acquire session semaphore to ensure only 1 concurrent request per session
+	p.log.Debugf("acquiring session semaphore for session %s (audio speech)", sessionID.Hex())
+	if err := p.sessionSema.Acquire(ctx, sessionID); err != nil {
+		return nil, fmt.Errorf("request cancelled while waiting in queue: %w", err)
+	}
+	defer p.sessionSema.Release(sessionID)
+	p.log.Debugf("acquired session semaphore for session %s (audio speech)", sessionID.Hex())
+
 	// Get private key for signing
 	prKey, err := p.privateKey.GetPrivateKey()
 	if err != nil {
@@ -1346,7 +1422,7 @@ func (p *ProxyServiceSender) SendAudioSpeech(ctx context.Context, sessionID comm
 	startTime := time.Now().Unix()
 
 	// Send request and handle response
-	result, ttftMs, totalTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, message, pubKey, "audio_speech")
+	result, ttftMs, inputTokens, outputTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, message, pubKey, "audio_speech", 0)
 
 	// Handle errors with failover if enabled
 	if err != nil {
@@ -1365,12 +1441,12 @@ func (p *ProxyServiceSender) SendAudioSpeech(ctx context.Context, sessionID comm
 	}
 
 	// Update session statistics
-	if updateErr := p.updateSessionStats(ctx, *session, startTime, ttftMs, totalTokens); updateErr != nil {
+	if updateErr := p.updateSessionStats(ctx, *session, startTime, ttftMs, inputTokens, outputTokens); updateErr != nil {
 		// Log error but don't fail the request
 		p.log.Error("Failed to update session stats", updateErr)
 	}
 
-	p.log.Debugf("Successfully completed audio speech generation for session %s with TTFT: %dms, tokens: %d", sessionID.Hex(), ttftMs, totalTokens)
+	p.log.Debugf("Successfully completed audio speech generation for session %s with TTFT: %dms, inputTokens: %d, outputTokens: %d", sessionID.Hex(), ttftMs, inputTokens, outputTokens)
 	return result, nil
 }
 
@@ -1381,6 +1457,14 @@ func (p *ProxyServiceSender) SendEmbeddings(ctx context.Context, sessionID commo
 	if err != nil {
 		return nil, err
 	}
+
+	// Acquire session semaphore to ensure only 1 concurrent request per session
+	p.log.Debugf("acquiring session semaphore for session %s (embeddings)", sessionID.Hex())
+	if err := p.sessionSema.Acquire(ctx, sessionID); err != nil {
+		return nil, fmt.Errorf("request cancelled while waiting in queue: %w", err)
+	}
+	defer p.sessionSema.Release(sessionID)
+	p.log.Debugf("acquired session semaphore for session %s (embeddings)", sessionID.Hex())
 
 	// Get private key for signing
 	prKey, err := p.privateKey.GetPrivateKey()
@@ -1407,7 +1491,7 @@ func (p *ProxyServiceSender) SendEmbeddings(ctx context.Context, sessionID commo
 
 	startTime := time.Now().Unix()
 
-	result, ttftMs, totalTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, message, pubKey, "embeddings")
+	result, ttftMs, inputTokens, outputTokens, err := p.rpcRequestStreamV2(ctx, cb, provider.Url, message, pubKey, "embeddings", 0)
 
 	// Handle errors with failover if enabled
 	if err != nil {
@@ -1425,10 +1509,10 @@ func (p *ProxyServiceSender) SendEmbeddings(ctx context.Context, sessionID commo
 		return p.SendEmbeddings(ctx, newSessionID, embedRequest, cb)
 	}
 
-	if updateErr := p.updateSessionStats(ctx, *session, startTime, ttftMs, totalTokens); updateErr != nil {
+	if updateErr := p.updateSessionStats(ctx, *session, startTime, ttftMs, inputTokens, outputTokens); updateErr != nil {
 		p.log.Error("Failed to update session stats", updateErr)
 	}
 
-	p.log.Debugf("Successfully completed embeddings generation for session %s with TTFT: %dms, tokens: %d", sessionID.Hex(), ttftMs, totalTokens)
+	p.log.Debugf("Successfully completed embeddings generation for session %s with TTFT: %dms, inputTokens: %d, outputTokens: %d", sessionID.Hex(), ttftMs, inputTokens, outputTokens)
 	return result, nil
 }

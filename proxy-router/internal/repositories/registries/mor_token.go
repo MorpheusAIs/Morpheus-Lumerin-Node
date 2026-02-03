@@ -55,8 +55,8 @@ func (g *MorToken) Approve(ctx *bind.TransactOpts, spender common.Address, amoun
 	if err != nil {
 		return nil, nil, lib.TryConvertGethError(err)
 	}
-	// Wait for the transaction receipt
-	receipt, err := bind.WaitMined(ctx.Context, g.client, tx)
+	// Wait for the transaction receipt with timeout to prevent infinite polling
+	receipt, err := lib.WaitMinedWithTimeout(ctx.Context, g.client, tx, lib.DefaultTxMineTimeout)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -73,6 +73,16 @@ func (g *MorToken) Approve(ctx *bind.TransactOpts, spender common.Address, amoun
 	return tx, receipt, nil
 }
 
+// ApproveTx builds an approval transaction without sending it.
+// Use with opts.NoSend = true for escalation support.
+func (g *MorToken) ApproveTx(opts *bind.TransactOpts, spender common.Address, amount *big.Int) (*types.Transaction, error) {
+	tx, err := g.mor.Approve(opts, spender, amount)
+	if err != nil {
+		return nil, lib.TryConvertGethError(err)
+	}
+	return tx, nil
+}
+
 func (g *MorToken) GetTotalSupply(ctx context.Context) (*big.Int, error) {
 	supply, err := g.mor.TotalSupply(&bind.CallOpts{Context: ctx})
 	if err != nil {
@@ -81,23 +91,23 @@ func (g *MorToken) GetTotalSupply(ctx context.Context) (*big.Int, error) {
 	return supply, nil
 }
 
-func (g *MorToken) Transfer(ctx *bind.TransactOpts, to common.Address, value *big.Int) (*types.Transaction, error) {
+func (g *MorToken) Transfer(ctx *bind.TransactOpts, to common.Address, value *big.Int) (*types.Transaction, *types.Receipt, error) {
 	tx, err := g.mor.Transfer(ctx, to, value)
 	if err != nil {
-		return nil, lib.TryConvertGethError(err)
+		return nil, nil, lib.TryConvertGethError(err)
 	}
 
-	// Wait for the transaction receipt
-	_, err = bind.WaitMined(ctx.Context, g.client, tx)
+	// Wait for the transaction receipt with timeout
+	receipt, err := lib.WaitMinedWithTimeout(ctx.Context, g.client, tx, lib.DefaultTxMineTimeout)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return tx, nil
+	return tx, receipt, nil
 }
 
 func (g *MorToken) waitForConfirmations(ctx context.Context, receipt *types.Receipt, confirmations uint64) error {
 	targetBlock := receipt.BlockNumber.Uint64() + confirmations
-	ticker := time.NewTicker(200 * time.Millisecond)
+	ticker := time.NewTicker(400 * time.Millisecond)
 	defer ticker.Stop()
 
 	for {

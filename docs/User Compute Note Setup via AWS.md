@@ -80,7 +80,7 @@ wget -O models/${model_file_name} ${model_url}/${model_collection}/resolve/main/
 3.	Launch the instance and connect through EC2 Instance Connect
 
 ### Configuring your Instance
-Now that your instance is running, you will need to do some configuration to ensure it connects properly to the LLM instance, and can interact on behalf of your arbitrum wallet. From your instance, you will need the model_host and model_port. From your wallet you will need your private key. You will also need an ETH node WSS address, which can be obtained through Alchemy or a similar website (for testing we will use Arbitrum Sepolia node in wss format). Lastly, you will need to choose the port for the proxy-router to run on. 
+Now that your instance is running, you will need to do some configuration to ensure it connects properly to the LLM instance, and can interact on behalf of your BASE wallet. From your instance, you will need the model_host and model_port. From your wallet you will need your private key. You will also need an ETH node WSS address, which can be obtained through Alchemy or a similar website (for testing we will use BASE Sepolia node in wss format). Lastly, you will need to choose the port for the proxy-router to run on. 
 
 1.	Once the terminal windows opens, you will need to complete some configuration to run the model. Run the following commands, one at a time
 2.	 `sudo yum install git -y`
