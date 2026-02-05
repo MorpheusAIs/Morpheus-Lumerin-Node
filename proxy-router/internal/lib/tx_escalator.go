@@ -158,17 +158,20 @@ func (e *TransactionEscalator) SendWithEscalation(
 		return nil, fmt.Errorf("failed to get initial gas prices: %w", err)
 	}
 
-	// Get nonce once - will be reused for all escalation attempts
-	nonce, err := e.client.PendingNonceAt(ctx, baseOpts.From)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get nonce: %w", err)
-	}
-
 	// Track all submitted transactions (any of them could get mined)
 	var submittedTxs []*types.Transaction
 	var lastErr error
+	var nonceRefreshCount int
+	const maxNonceRefreshes = 3 // Max times to refresh nonce on conflicts
 
 	for attempt := 0; attempt < e.config.MaxAttempts; attempt++ {
+		// Get fresh nonce for this attempt
+		// We fetch nonce inside the loop to handle concurrent request conflicts
+		nonce, err := e.client.PendingNonceAt(ctx, baseOpts.From)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get nonce: %w", err)
+		}
+
 		// Check max gas limit
 		if e.config.MaxGasPrice != nil && gasPrices.MaxPrice().Cmp(e.config.MaxGasPrice) > 0 {
 			e.log.Warnf("Gas price %v exceeds max limit %v, stopping escalation",
@@ -189,14 +192,25 @@ func (e *TransactionEscalator) SendWithEscalation(
 		// Send transaction
 		err = e.client.SendTransaction(ctx, tx)
 		if err != nil {
-			// Check if this is a "nonce too low" error - previous tx may have been mined
-			if IsNonceTooLowError(err) && len(submittedTxs) > 0 {
-				e.log.Infof("Nonce too low - checking if previous tx was mined")
-				// Check if any of our submitted txs got mined
-				if receipt := e.checkSubmittedTxs(ctx, submittedTxs); receipt != nil {
-					e.log.Infof("Previous tx was mined: %s", receipt.TxHash.Hex())
-					return receipt, nil
+			// Check if this is a "nonce too low" error
+			if IsNonceTooLowError(err) {
+				// If we have previously submitted txs, check if one was mined
+				if len(submittedTxs) > 0 {
+					e.log.Infof("Nonce too low - checking if previous tx was mined")
+					if receipt := e.checkSubmittedTxs(ctx, submittedTxs); receipt != nil {
+						e.log.Infof("Previous tx was mined: %s", receipt.TxHash.Hex())
+						return receipt, nil
+					}
 				}
+				// Nonce conflict from concurrent request - refresh and retry
+				if nonceRefreshCount < maxNonceRefreshes {
+					nonceRefreshCount++
+					e.log.Warnf("Nonce conflict (attempt %d), refreshing nonce and retrying: %v", attempt+1, err)
+					// Don't count this as an escalation attempt, just retry with fresh nonce
+					attempt--
+					continue
+				}
+				e.log.Errorf("Max nonce refreshes exceeded, giving up")
 			}
 			// Check if this is a replacement issue (need to bump more)
 			if IsReplacementError(err) && attempt < e.config.MaxAttempts-1 {
@@ -207,6 +221,9 @@ func (e *TransactionEscalator) SendWithEscalation(
 			// For other errors, fail immediately
 			return nil, fmt.Errorf("failed to send transaction: %w", err)
 		}
+
+		// Reset nonce refresh count on successful send
+		nonceRefreshCount = 0
 
 		submittedTxs = append(submittedTxs, tx)
 		e.log.Infof("Tx submitted (attempt %d/%d): %s, gasPrice: %v",
