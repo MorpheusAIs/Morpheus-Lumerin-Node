@@ -335,7 +335,7 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 		ctx,
 		approveBaseOpts,
 		func(opts *bind.TransactOpts) (*types.Transaction, error) {
-			return s.morToken.ApproveTx(opts, s.diamonContractAddr, stake)
+			return s.morToken.IncreaseAllowanceTx(opts, s.diamonContractAddr, stake)
 		},
 		s.legacyTx,
 	)
@@ -420,8 +420,8 @@ func (s *BlockchainService) CreateNewProvider(ctx context.Context, stake *lib.Bi
 		return nil, lib.WrapError(ErrTxOpts, err)
 	}
 
-	// First approve the stake
-	_, err = s.Approve(ctx, s.diamonContractAddr, &stake.Int)
+	// First increase allowance for the stake (safe for concurrent use)
+	_, err = s.increaseAllowance(ctx, s.diamonContractAddr, &stake.Int)
 	if err != nil {
 		return nil, lib.WrapError(ErrApprove, err)
 	}
@@ -457,8 +457,8 @@ func (s *BlockchainService) CreateNewModel(ctx context.Context, modelID common.H
 		return nil, lib.WrapError(ErrTxOpts, err)
 	}
 
-	// First approve the stake
-	_, err = s.Approve(ctx, s.diamonContractAddr, &stake.Int)
+	// First increase allowance for the stake (safe for concurrent use)
+	_, err = s.increaseAllowance(ctx, s.diamonContractAddr, &stake.Int)
 	if err != nil {
 		return nil, lib.WrapError(ErrApprove, err)
 	}
@@ -550,7 +550,8 @@ func (s *BlockchainService) CreateNewBid(ctx context.Context, modelID common.Has
 		return nil, lib.WrapError(ErrTxOpts, err)
 	}
 
-	_, err = s.Approve(ctx, s.diamonContractAddr, fee)
+	// Increase allowance for the fee (safe for concurrent use)
+	_, err = s.increaseAllowance(ctx, s.diamonContractAddr, fee)
 	if err != nil {
 		return nil, lib.WrapError(ErrApprove, err)
 	}
@@ -858,6 +859,8 @@ func (s *BlockchainService) GetAllowance(ctx context.Context, spender common.Add
 	return allowance, nil
 }
 
+// Approve sets the allowance for a spender to the given amount.
+// For public API use only. Internal operations should use increaseAllowance.
 func (s *BlockchainService) Approve(ctx context.Context, spender common.Address, amount *big.Int) (common.Hash, error) {
 	prKey, err := s.privateKey.GetPrivateKey()
 	if err != nil {
@@ -870,6 +873,27 @@ func (s *BlockchainService) Approve(ctx context.Context, spender common.Address,
 	}
 
 	tx, _, err := s.morToken.Approve(transactOpt, spender, amount)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrSendTx, err)
+	}
+
+	return tx.Hash(), nil
+}
+
+// increaseAllowance adds to the allowance for a spender.
+// Safe for concurrent use - each call adds to existing allowance.
+func (s *BlockchainService) increaseAllowance(ctx context.Context, spender common.Address, amount *big.Int) (common.Hash, error) {
+	prKey, err := s.privateKey.GetPrivateKey()
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrPrKey, err)
+	}
+
+	transactOpt, err := s.getTransactOpts(ctx, prKey)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
+	}
+
+	tx, _, err := s.morToken.IncreaseAllowance(transactOpt, spender, amount)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrSendTx, err)
 	}
