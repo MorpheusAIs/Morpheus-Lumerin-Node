@@ -288,7 +288,12 @@ func InitializeApiBus(t *testing.T) *apibus.APIBus {
 
 	contractLogStorage := lib.NewCollection[*interfaces.LogStorage]()
 
-	storage := storages.NewStorage(log, "data/test/")
+	storage, err := storages.NewStorage(log, "data/test/")
+	if err != nil {
+		t.Fatalf("failed to initialize storage: %s", err)
+		return nil
+	}
+	defer storage.Close()
 	sessionStorage := storages.NewSessionStorage(storage)
 
 	wlt := wallet.NewEnvWallet(WALLET_PRIVATE_KEY)

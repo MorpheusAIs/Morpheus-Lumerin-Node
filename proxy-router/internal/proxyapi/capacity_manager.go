@@ -39,8 +39,12 @@ func (scm *SimpleCapacityManager) HasCapacity(modelID string) bool {
 
 	activeSessions := 0
 	for _, session := range sessions {
-		s, ok := scm.storage.GetSession(session)
-		if !ok {
+		s, err := scm.storage.GetSession(session)
+		if err != nil {
+			scm.log.Warnf("error reading session %s: %s", session, err)
+			continue
+		}
+		if s == nil {
 			continue
 		}
 		if s.EndsAt.Int64() > time.Now().Unix() {
@@ -80,8 +84,12 @@ func (idcm *IdleTimeoutCapacityManager) HasCapacity(modelID string) bool {
 
 	activeSessions := 0
 	for _, activity := range activities {
-		session, ok := idcm.storage.GetSession(activity.SessionID)
-		if !ok {
+		session, err := idcm.storage.GetSession(activity.SessionID)
+		if err != nil {
+			idcm.log.Warnf("error reading session %s: %s", activity.SessionID, err)
+			continue
+		}
+		if session == nil {
 			continue
 		}
 		if session.EndsAt.Int64() < time.Now().Unix() {

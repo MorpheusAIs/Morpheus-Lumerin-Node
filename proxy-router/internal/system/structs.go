@@ -17,9 +17,10 @@ type ConfigResponse struct {
 }
 
 type HealthCheckResponse struct {
-	Status  string
-	Version string
-	Uptime  string
+	Status     string            `json:"status"`
+	Version    string            `json:"version"`
+	Uptime     string            `json:"uptime"`
+	Components map[string]string `json:"components,omitempty"`
 }
 
 type StatusRes struct {

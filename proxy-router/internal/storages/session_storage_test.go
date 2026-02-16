@@ -25,8 +25,9 @@ func TestAddSession(t *testing.T) {
 	err := sessionStorage.AddSession(session)
 	require.NoError(t, err)
 
-	s, ok := sessionStorage.GetSession(session.Id)
-	require.True(t, ok)
+	s, err := sessionStorage.GetSession(session.Id)
+	require.NoError(t, err)
+	require.NotNil(t, s)
 	require.Equal(t, session, s)
 
 	sessionIds, err := sessionStorage.GetSessionsForModel(session.ModelID)
@@ -55,8 +56,9 @@ func TestRemoveSession(t *testing.T) {
 	err = sessionStorage.RemoveSession(session.Id)
 	require.NoError(t, err)
 
-	_, ok := sessionStorage.GetSession(session.Id)
-	require.False(t, ok)
+	s, err := sessionStorage.GetSession(session.Id)
+	require.NoError(t, err)
+	require.Nil(t, s)
 
 	sessionIds, err := sessionStorage.GetSessionsForModel(session.ModelID)
 	require.NoError(t, err)

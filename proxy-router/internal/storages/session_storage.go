@@ -1,9 +1,20 @@
 package storages
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
+
+	badger "github.com/dgraph-io/badger/v4"
+)
+
+// Default TTL values for stored data
+const (
+	ActivityTTL = 24 * time.Hour
+	SessionTTL  = 30 * 24 * time.Hour // 30 days; sessions are also cleaned by expiry handler
 )
 
 type SessionStorage struct {
@@ -16,21 +27,25 @@ func NewSessionStorage(storage *Storage) *SessionStorage {
 	}
 }
 
-func (s *SessionStorage) GetUser(addr string) (*User, bool) {
+// GetUser retrieves a user by address. Returns (nil, nil) if not found.
+// Returns a non-nil error only on actual storage or deserialization failures.
+func (s *SessionStorage) GetUser(addr string) (*User, error) {
 	addr = strings.ToLower(addr)
 	key := fmt.Sprintf("user:%s", addr)
 	userJson, err := s.db.Get([]byte(key))
 	if err != nil {
-		return nil, false
+		if errors.Is(err, badger.ErrKeyNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("error reading user %s: %w", addr, err)
 	}
 
 	user := &User{}
-	err = json.Unmarshal(userJson, user)
-	if err != nil {
-		return nil, false
+	if err := json.Unmarshal(userJson, user); err != nil {
+		return nil, fmt.Errorf("error unmarshaling user %s: %w", addr, err)
 	}
 
-	return user, true
+	return user, nil
 }
 
 func (s *SessionStorage) AddUser(user *User) error {
@@ -41,92 +56,92 @@ func (s *SessionStorage) AddUser(user *User) error {
 		return err
 	}
 
-	err = s.db.Set([]byte(key), userJson)
-	if err != nil {
-		return err
-	}
-	return nil
+	return s.db.Set([]byte(key), userJson)
 }
 
-func (s *SessionStorage) GetSession(id string) (*Session, bool) {
+// GetSession retrieves a session by ID. Returns (nil, nil) if not found.
+// Returns a non-nil error only on actual storage or deserialization failures.
+func (s *SessionStorage) GetSession(id string) (*Session, error) {
 	sessionJson, err := s.db.Get(formatSessionKey(id))
 	if err != nil {
-		return nil, false
+		if errors.Is(err, badger.ErrKeyNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("error reading session %s: %w", id, err)
 	}
 
 	session := &Session{}
-	err = json.Unmarshal(sessionJson, session)
-	if err != nil {
-		return nil, false
+	if err := json.Unmarshal(sessionJson, session); err != nil {
+		return nil, fmt.Errorf("error unmarshaling session %s: %w", id, err)
 	}
 
-	return session, true
+	return session, nil
 }
 
+// AddSession atomically stores a session and its model-session index in a single transaction.
 func (s *SessionStorage) AddSession(session *Session) error {
 	sessionJson, err := json.Marshal(session)
 	if err != nil {
 		return err
 	}
 
-	// TODO: do in a single transaction
-	err = s.db.Set(formatSessionKey(session.Id), sessionJson)
-	if err != nil {
-		return err
-	}
-	err = s.addSessionToModel(session.ModelID, session.Id)
-	if err != nil {
-		return err
-	}
-	return nil
+	return s.db.RunInTransaction(func(txn *badger.Txn) error {
+		sessionEntry := badger.NewEntry(formatSessionKey(session.Id), sessionJson).WithTTL(SessionTTL)
+		if err := txn.SetEntry(sessionEntry); err != nil {
+			return fmt.Errorf("error storing session %s: %w", session.Id, err)
+		}
+
+		indexEntry := badger.NewEntry(formatModelSessionKey(session.ModelID, session.Id), []byte{}).WithTTL(SessionTTL)
+		if err := txn.SetEntry(indexEntry); err != nil {
+			return fmt.Errorf("error storing model-session index for %s: %w", session.Id, err)
+		}
+
+		return nil
+	})
 }
 
+// RemoveSession atomically removes a session and its model-session index.
 func (s *SessionStorage) RemoveSession(id string) error {
-	ses, ok := s.GetSession(id)
-	if !ok {
+	ses, err := s.GetSession(id)
+	if err != nil {
+		return fmt.Errorf("error looking up session %s for removal: %w", id, err)
+	}
+	if ses == nil {
 		return nil
 	}
+
 	sessionId := strings.ToLower(id)
-	key := fmt.Sprintf("session:%s", sessionId)
-
-	err := s.db.Delete([]byte(key))
-	if err != nil {
-		return err
-	}
-
-	return s.removeSessionFromModel(ses.ModelID, sessionId)
-}
-
-func (s *SessionStorage) addSessionToModel(modelID string, sessionID string) error {
-	err := s.db.Set(formatModelSessionKey(modelID, sessionID), []byte{})
-	if err != nil {
-		return fmt.Errorf("error adding session to model: %s", err)
-	}
-	return nil
-}
-
-func (s *SessionStorage) removeSessionFromModel(modelID string, sessionID string) error {
-	err := s.db.Delete(formatModelSessionKey(modelID, sessionID))
-	if err != nil {
-		return fmt.Errorf("error removing session from model: %s", err)
-	}
-	return nil
-}
-
-func (s *SessionStorage) GetSessions() ([]Session, error) {
-	keys, err := s.db.GetPrefix(formatSessionKey(""))
-	if err != nil {
-		return []Session{}, err
-	}
-
-	sessions := make([]Session, len(keys))
-	for i, key := range keys {
-		_, sessionID := parseSessionKey(key)
-		session, ok := s.GetSession(sessionID)
-		if !ok {
-			return nil, fmt.Errorf("error getting session: %s", sessionID)
+	return s.db.RunInTransaction(func(txn *badger.Txn) error {
+		sessionKey := fmt.Sprintf("session:%s", sessionId)
+		if err := txn.Delete([]byte(sessionKey)); err != nil {
+			return fmt.Errorf("error deleting session %s: %w", sessionId, err)
 		}
-		sessions[i] = *session
+
+		modelSessionKey := formatModelSessionKey(ses.ModelID, sessionId)
+		if err := txn.Delete(modelSessionKey); err != nil {
+			return fmt.Errorf("error deleting model-session index for %s: %w", sessionId, err)
+		}
+
+		return nil
+	})
+}
+
+// GetSessions returns all sessions using a single transaction to fetch keys and values.
+// Accepts an optional context for cancellation during large scans.
+func (s *SessionStorage) GetSessions(ctxOpts ...context.Context) ([]Session, error) {
+	prefix := formatSessionKey("")
+	_, values, err := s.db.GetPrefixWithValues(prefix, ctxOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("error reading sessions: %w", err)
+	}
+
+	sessions := make([]Session, 0, len(values))
+	for _, val := range values {
+		session := Session{}
+		if err := json.Unmarshal(val, &session); err != nil {
+			return nil, fmt.Errorf("error unmarshaling session: %w", err)
+		}
+		sessions = append(sessions, session)
 	}
 
 	return sessions, nil
@@ -147,32 +162,39 @@ func (s *SessionStorage) GetSessionsForModel(modelID string) ([]string, error) {
 	return sessionIDs, nil
 }
 
+// AddActivity atomically reads the existing activities, appends the new one, and writes back
+// in a single BadgerDB transaction to prevent race conditions.
 func (s *SessionStorage) AddActivity(modelID string, activity *PromptActivity) error {
 	modelID = strings.ToLower(modelID)
-	key := fmt.Sprintf("activity:%s", modelID)
+	key := []byte(fmt.Sprintf("activity:%s", modelID))
 
-	var activities []*PromptActivity
-	activitiesJson, err := s.db.Get([]byte(key))
-	if err == nil {
-		err = json.Unmarshal(activitiesJson, &activities)
+	return s.db.RunInTransaction(func(txn *badger.Txn) error {
+		var activities []*PromptActivity
+
+		item, err := txn.Get(key)
+		if err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
+			return fmt.Errorf("error reading activities for model %s: %w", modelID, err)
+		}
+		if err == nil {
+			var existingJson []byte
+			existingJson, err = item.ValueCopy(nil)
+			if err != nil {
+				return fmt.Errorf("error copying activity value for model %s: %w", modelID, err)
+			}
+			if err := json.Unmarshal(existingJson, &activities); err != nil {
+				return fmt.Errorf("error unmarshaling activities for model %s: %w", modelID, err)
+			}
+		}
+
+		activities = append(activities, activity)
+		activitiesJson, err := json.Marshal(activities)
 		if err != nil {
 			return err
 		}
-	} else {
-		activities = []*PromptActivity{}
-	}
 
-	activities = append(activities, activity)
-	activitiesJson, err = json.Marshal(activities)
-	if err != nil {
-		return err
-	}
-
-	err = s.db.Set([]byte(key), activitiesJson)
-	if err != nil {
-		return err
-	}
-	return nil
+		entry := badger.NewEntry(key, activitiesJson).WithTTL(ActivityTTL)
+		return txn.SetEntry(entry)
+	})
 }
 
 func (s *SessionStorage) GetActivities(modelID string) ([]*PromptActivity, error) {
@@ -181,53 +203,59 @@ func (s *SessionStorage) GetActivities(modelID string) ([]*PromptActivity, error
 
 	activitiesJson, err := s.db.Get([]byte(key))
 	if err != nil {
-		return []*PromptActivity{}, nil
+		if errors.Is(err, badger.ErrKeyNotFound) {
+			return []*PromptActivity{}, nil
+		}
+		return nil, fmt.Errorf("error reading activities for model %s: %w", modelID, err)
 	}
 
 	var activities []*PromptActivity
-	err = json.Unmarshal(activitiesJson, &activities)
-	if err != nil {
-		return nil, err
+	if err := json.Unmarshal(activitiesJson, &activities); err != nil {
+		return nil, fmt.Errorf("error unmarshaling activities for model %s: %w", modelID, err)
 	}
 
 	return activities, nil
 }
 
-// // New method to remove activities older than a certain time
+// RemoveOldActivities atomically reads, filters, and writes back activities in a single transaction.
 func (s *SessionStorage) RemoveOldActivities(modelID string, beforeTime int64) error {
 	modelID = strings.ToLower(modelID)
-	key := fmt.Sprintf("activity:%s", modelID)
+	key := []byte(fmt.Sprintf("activity:%s", modelID))
 
-	activitiesJson, err := s.db.Get([]byte(key))
-	if err != nil {
-		return nil
-	}
-
-	var activities []*PromptActivity
-	err = json.Unmarshal(activitiesJson, &activities)
-	if err != nil {
-		return err
-	}
-
-	// Filter activities, keep only those after beforeTime
-	var updatedActivities []*PromptActivity
-	for _, activity := range activities {
-		if activity.EndTime > beforeTime {
-			updatedActivities = append(updatedActivities, activity)
+	return s.db.RunInTransaction(func(txn *badger.Txn) error {
+		item, err := txn.Get(key)
+		if err != nil {
+			if errors.Is(err, badger.ErrKeyNotFound) {
+				return nil
+			}
+			return fmt.Errorf("error reading activities for model %s: %w", modelID, err)
 		}
-	}
 
-	activitiesJson, err = json.Marshal(updatedActivities)
-	if err != nil {
-		return err
-	}
+		existingJson, err := item.ValueCopy(nil)
+		if err != nil {
+			return fmt.Errorf("error copying activity value for model %s: %w", modelID, err)
+		}
 
-	err = s.db.Set([]byte(key), activitiesJson)
-	if err != nil {
-		return err
-	}
+		var activities []*PromptActivity
+		if err := json.Unmarshal(existingJson, &activities); err != nil {
+			return fmt.Errorf("error unmarshaling activities for model %s: %w", modelID, err)
+		}
 
-	return nil
+		var updatedActivities []*PromptActivity
+		for _, activity := range activities {
+			if activity.EndTime > beforeTime {
+				updatedActivities = append(updatedActivities, activity)
+			}
+		}
+
+		activitiesJson, err := json.Marshal(updatedActivities)
+		if err != nil {
+			return err
+		}
+
+		entry := badger.NewEntry(key, activitiesJson).WithTTL(ActivityTTL)
+		return txn.SetEntry(entry)
+	})
 }
 
 func formatModelSessionKey(modelID string, sessionID string) []byte {

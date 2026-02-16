@@ -16,6 +16,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// StorageHealthChecker provides health check and metrics for storage backends.
+type StorageHealthChecker interface {
+	HealthCheck() error
+	DBSize() (lsmSize int64, vlogSize int64)
+}
+
 type SystemController struct {
 	config                 *config.Config
 	wallet                 i.Wallet
@@ -26,9 +32,10 @@ type SystemController struct {
 	log                    lib.ILogger
 	ethConnectionValidator IEthConnectionValidator
 	authConfig             HTTPAuthConfig
+	storage                StorageHealthChecker
 }
 
-func NewSystemController(config *config.Config, wallet i.Wallet, ethRPC i.RPCEndpoints, sysConfig *SystemConfigurator, appStartTime time.Time, chainID *big.Int, log lib.ILogger, ethConnectionValidator IEthConnectionValidator, authConfig HTTPAuthConfig) *SystemController {
+func NewSystemController(config *config.Config, wallet i.Wallet, ethRPC i.RPCEndpoints, sysConfig *SystemConfigurator, appStartTime time.Time, chainID *big.Int, log lib.ILogger, ethConnectionValidator IEthConnectionValidator, authConfig HTTPAuthConfig, storage StorageHealthChecker) *SystemController {
 	c := &SystemController{
 		config:                 config,
 		wallet:                 wallet,
@@ -39,6 +46,7 @@ func NewSystemController(config *config.Config, wallet i.Wallet, ethRPC i.RPCEnd
 		log:                    log,
 		ethConnectionValidator: ethConnectionValidator,
 		authConfig:             authConfig,
+		storage:                storage,
 	}
 
 	return c
@@ -62,10 +70,31 @@ func (s *SystemController) RegisterRoutes(r i.Router) {
 //	@Success		200	{object}	HealthCheckResponse
 //	@Router			/healthcheck [get]
 func (s *SystemController) HealthCheck(ctx *gin.Context) {
-	ctx.JSON(http.StatusOK, HealthCheckResponse{
-		Status:  "healthy",
-		Version: config.BuildVersion,
-		Uptime:  time.Since(s.appStartTime).Round(time.Second).String(),
+	status := "healthy"
+	components := make(map[string]string)
+
+	if s.storage != nil {
+		if err := s.storage.HealthCheck(); err != nil {
+			status = "degraded"
+			components["badgerdb"] = fmt.Sprintf("unhealthy: %s", err)
+			s.log.Errorf("health check: badgerdb is unhealthy: %s", err)
+		} else {
+			lsmSize, vlogSize := s.storage.DBSize()
+			totalMB := float64(lsmSize+vlogSize) / (1024 * 1024)
+			components["badgerdb"] = fmt.Sprintf("healthy, size=%.1fMB", totalMB)
+		}
+	}
+
+	httpStatus := http.StatusOK
+	if status != "healthy" {
+		httpStatus = http.StatusServiceUnavailable
+	}
+
+	ctx.JSON(httpStatus, HealthCheckResponse{
+		Status:     status,
+		Version:    config.BuildVersion,
+		Uptime:     time.Since(s.appStartTime).Round(time.Second).String(),
+		Components: components,
 	})
 }
 
