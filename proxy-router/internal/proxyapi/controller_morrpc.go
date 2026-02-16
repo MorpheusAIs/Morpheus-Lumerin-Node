@@ -148,8 +148,11 @@ func (s *MORRPCController) sessionPrompt(ctx context.Context, msg m.RPCMessage, 
 		return err
 	}
 
-	user, ok := s.sessionStorage.GetUser(session.UserAddr().Hex())
-	if !ok {
+	user, err := s.sessionStorage.GetUser(session.UserAddr().Hex())
+	if err != nil {
+		return fmt.Errorf("error reading user: %w", err)
+	}
+	if user == nil {
 		return fmt.Errorf("user not found")
 	}
 
@@ -216,15 +219,23 @@ func (s *MORRPCController) sessionReport(ctx context.Context, msg m.RPCMessage, 
 
 	sessionID := req.Message
 	sourceLog.Debugf("Requested report from session %s, timestamp: %s", sessionID, req.Timestamp)
-	session, ok := s.sessionStorage.GetSession(sessionID)
-	if !ok {
+	session, err := s.sessionStorage.GetSession(sessionID)
+	if err != nil {
+		sourceLog.Errorf("error reading session: %s", err)
+		return fmt.Errorf("error reading session: %w", err)
+	}
+	if session == nil {
 		err := fmt.Errorf("session not found")
 		sourceLog.Error(err)
 		return err
 	}
 
-	user, ok := s.sessionStorage.GetUser(session.UserAddr)
-	if !ok {
+	user, err := s.sessionStorage.GetUser(session.UserAddr)
+	if err != nil {
+		sourceLog.Errorf("error reading user: %s", err)
+		return fmt.Errorf("error reading user: %w", err)
+	}
+	if user == nil {
 		err := fmt.Errorf("user not found")
 		sourceLog.Error(err)
 		return err
@@ -271,8 +282,11 @@ func (s *MORRPCController) callAgentTool(ctx context.Context, msg m.RPCMessage, 
 		return err
 	}
 
-	user, ok := s.sessionStorage.GetUser(session.UserAddr().Hex())
-	if !ok {
+	user, err := s.sessionStorage.GetUser(session.UserAddr().Hex())
+	if err != nil {
+		return fmt.Errorf("error reading user: %w", err)
+	}
+	if user == nil {
 		return fmt.Errorf("user not found")
 	}
 
@@ -317,8 +331,11 @@ func (s *MORRPCController) getAgentTools(ctx context.Context, msg m.RPCMessage, 
 		return err
 	}
 
-	user, ok := s.sessionStorage.GetUser(session.UserAddr().Hex())
-	if !ok {
+	user, err := s.sessionStorage.GetUser(session.UserAddr().Hex())
+	if err != nil {
+		return fmt.Errorf("error reading user: %w", err)
+	}
+	if user == nil {
 		return fmt.Errorf("user not found")
 	}
 
@@ -364,8 +381,11 @@ func (s *MORRPCController) sessionPromptStreamStart(ctx context.Context, msg m.R
 	}
 
 	// Verify user signature
-	user, ok := s.sessionStorage.GetUser(session.UserAddr().Hex())
-	if !ok {
+	user, err := s.sessionStorage.GetUser(session.UserAddr().Hex())
+	if err != nil {
+		return fmt.Errorf("error reading user: %w", err)
+	}
+	if user == nil {
 		return fmt.Errorf("user not found")
 	}
 
@@ -429,8 +449,11 @@ func (s *MORRPCController) sessionPromptStreamChunk(ctx context.Context, msg m.R
 	}
 
 	// Verify user signature
-	user, ok := s.sessionStorage.GetUser(session.UserAddr().Hex())
-	if !ok {
+	user, err := s.sessionStorage.GetUser(session.UserAddr().Hex())
+	if err != nil {
+		return fmt.Errorf("error reading user: %w", err)
+	}
+	if user == nil {
 		return fmt.Errorf("user not found")
 	}
 
@@ -512,8 +535,11 @@ func (s *MORRPCController) sessionPromptStreamEnd(ctx context.Context, msg m.RPC
 	}
 
 	// Verify user signature
-	user, ok := s.sessionStorage.GetUser(session.UserAddr().Hex())
-	if !ok {
+	user, err := s.sessionStorage.GetUser(session.UserAddr().Hex())
+	if err != nil {
+		return fmt.Errorf("error reading user: %w", err)
+	}
+	if user == nil {
 		return fmt.Errorf("user not found")
 	}
 

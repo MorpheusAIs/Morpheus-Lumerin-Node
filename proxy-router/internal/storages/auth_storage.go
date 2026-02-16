@@ -3,6 +3,7 @@ package storages
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
+	badger "github.com/dgraph-io/badger/v4"
 )
 
 const (
@@ -35,43 +37,41 @@ func (s *AuthStorage) AddAuthRequest(request *AgentUser) error {
 	}
 
 	key := formatKey(authRequestPrefix, request.Username)
-	err = s.db.Set(key, requestJson)
-	if err != nil {
-		return err
-	}
-	return nil
+	return s.db.Set(key, requestJson)
 }
 
-func (s *AuthStorage) GetAgentUser(username string) (*AgentUser, bool) {
+// GetAgentUser retrieves an agent user by username. Returns (nil, nil) if not found.
+// Returns a non-nil error only on actual storage or deserialization failures.
+func (s *AuthStorage) GetAgentUser(username string) (*AgentUser, error) {
 	key := formatKey(authRequestPrefix, username)
 	requestJson, err := s.db.Get(key)
 	if err != nil {
-		return nil, false
+		if errors.Is(err, badger.ErrKeyNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("error reading agent user %s: %w", username, err)
 	}
 
 	request := &AgentUser{}
-	err = json.Unmarshal(requestJson, request)
-	if err != nil {
-		return nil, false
+	if err := json.Unmarshal(requestJson, request); err != nil {
+		return nil, fmt.Errorf("error unmarshaling agent user %s: %w", username, err)
 	}
 
-	return request, true
+	return request, nil
 }
 
 func (s *AuthStorage) GetAgentUsers() ([]*AgentUser, error) {
-	var requests []*AgentUser
-
 	prefix := formatPrefix(authRequestPrefix)
-	keys, err := s.db.GetPrefix(prefix)
+	_, values, err := s.db.GetPrefixWithValues(prefix)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error reading agent users: %w", err)
 	}
 
-	for _, key := range keys {
-		username := trimPrefix(key, prefix)
-		request, ok := s.GetAgentUser(string(username))
-		if !ok {
-			return nil, fmt.Errorf("error getting auth request: %s", string(key))
+	requests := make([]*AgentUser, 0, len(values))
+	for _, val := range values {
+		request := &AgentUser{}
+		if err := json.Unmarshal(val, request); err != nil {
+			return nil, fmt.Errorf("error unmarshaling agent user: %w", err)
 		}
 		requests = append(requests, request)
 	}
@@ -93,45 +93,46 @@ func (s *AuthStorage) AddAllowanceRequest(request *AllowanceRequest) error {
 	return s.db.Set(key, requestJson)
 }
 
-func (s *AuthStorage) GetAllowanceRequest(username string, token string) (*AllowanceRequest, bool) {
+// GetAllowanceRequest retrieves an allowance request. Returns (nil, nil) if not found.
+// Returns a non-nil error only on actual storage or deserialization failures.
+func (s *AuthStorage) GetAllowanceRequest(username string, token string) (*AllowanceRequest, error) {
 	token = strings.ToLower(token)
 	key := formatKey(allowanceRequestPrefix, username, token)
 	requestJson, err := s.db.Get(key)
 	if err != nil {
-		return nil, false
+		if errors.Is(err, badger.ErrKeyNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("error reading allowance request for %s/%s: %w", username, token, err)
 	}
 
 	request := &AllowanceRequest{}
-	err = json.Unmarshal(requestJson, request)
-	if err != nil {
-		return nil, false
+	if err := json.Unmarshal(requestJson, request); err != nil {
+		return nil, fmt.Errorf("error unmarshaling allowance request for %s/%s: %w", username, token, err)
 	}
 
-	return request, true
+	return request, nil
 }
 
 func (s *AuthStorage) GetAllowanceRequests() ([]*AllowanceRequest, error) {
-	var requests []*AllowanceRequest
-
 	prefix := formatPrefix(allowanceRequestPrefix)
-	keys, err := s.db.GetPrefix(prefix)
+	keys, values, err := s.db.GetPrefixWithValues(prefix)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error reading allowance requests: %w", err)
 	}
 
-	for _, key := range keys {
-		// Split key into username and token
-		parts := bytes.Split(trimPrefix(key, prefix), []byte(":"))
+	requests := make([]*AllowanceRequest, 0, len(values))
+	for i, val := range values {
+		// Validate key structure
+		parts := bytes.Split(trimPrefix(keys[i], prefix), []byte(":"))
 		if len(parts) != 2 {
 			continue
 		}
 
-		username, token := string(parts[0]), string(parts[1])
-		request, ok := s.GetAllowanceRequest(username, token)
-		if !ok {
-			return nil, fmt.Errorf("error getting allowance request: %s", string(key))
+		request := &AllowanceRequest{}
+		if err := json.Unmarshal(val, request); err != nil {
+			return nil, fmt.Errorf("error unmarshaling allowance request %s: %w", string(keys[i]), err)
 		}
-
 		requests = append(requests, request)
 	}
 	return requests, nil
@@ -139,51 +140,60 @@ func (s *AuthStorage) GetAllowanceRequests() ([]*AllowanceRequest, error) {
 
 func (s *AuthStorage) ConfirmOrDeclineAllowanceRequest(username string, token string, isConfirmed bool) error {
 	token = strings.ToLower(token)
-	request, ok := s.GetAllowanceRequest(username, token)
-	if !ok {
+	request, err := s.GetAllowanceRequest(username, token)
+	if err != nil {
+		return fmt.Errorf("error looking up allowance request: %w", err)
+	}
+	if request == nil {
 		return fmt.Errorf("allowance request not found for user %s and token %s", username, token)
 	}
 
 	if isConfirmed {
-		err := s.SetAllowance(username, token, request.Allowance)
-		if err != nil {
+		if err := s.SetAllowance(username, token, request.Allowance); err != nil {
 			return err
 		}
 	}
 
-	// Delete the request after processing (whether confirmed or declined)
 	key := formatKey(allowanceRequestPrefix, username, token)
 	return s.db.Delete(key)
 }
 
+// SetAllowance atomically reads the agent user, updates the allowance, and writes back
+// in a single BadgerDB transaction to prevent race conditions.
 func (s *AuthStorage) SetAllowance(username string, token string, amount lib.BigInt) error {
 	key := formatKey(authRequestPrefix, username)
-	requestJson, err := s.db.Get(key)
-	if err != nil {
-		return err
-	}
 
-	request := &AgentUser{}
-	err = json.Unmarshal(requestJson, request)
-	if err != nil {
-		return err
-	}
+	return s.db.RunInTransaction(func(txn *badger.Txn) error {
+		item, err := txn.Get(key)
+		if err != nil {
+			return fmt.Errorf("error reading agent user %s for allowance update: %w", username, err)
+		}
 
-	if request.Allowances == nil {
-		request.Allowances = make(map[string]lib.BigInt)
-	}
+		requestJson, err := item.ValueCopy(nil)
+		if err != nil {
+			return fmt.Errorf("error copying agent user value for %s: %w", username, err)
+		}
 
-	request.Allowances[token] = amount
-	updatedJson, err := json.Marshal(request)
-	if err != nil {
-		return err
-	}
+		request := &AgentUser{}
+		if err := json.Unmarshal(requestJson, request); err != nil {
+			return fmt.Errorf("error unmarshaling agent user %s: %w", username, err)
+		}
 
-	return s.db.Set(key, updatedJson)
+		if request.Allowances == nil {
+			request.Allowances = make(map[string]lib.BigInt)
+		}
+
+		request.Allowances[token] = amount
+		updatedJson, err := json.Marshal(request)
+		if err != nil {
+			return err
+		}
+
+		return txn.Set(key, updatedJson)
+	})
 }
 
 func (s *AuthStorage) SetAgentTx(txHash string, username string, blockNumber *big.Int) error {
-	// reversing to maintain reverse order of indexing
 	reversedBlockNumber := math.MaxUint64 - blockNumber.Uint64()
 	key := formatKey(agentTxPrefix, username, strconv.FormatUint(reversedBlockNumber, 10))
 	return s.db.Set(key, []byte(txHash))
@@ -201,19 +211,17 @@ func (s *AuthStorage) GetAgentTxs(username string, cursor []byte, limit uint) ([
 	for _, key := range keys {
 		txhash, err := s.db.Get(key)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, fmt.Errorf("error reading tx for key %s: %w", string(key), err)
 		}
 		txs = append(txs, string(txhash))
 	}
 	return txs, nextCursor, nil
 }
 
-// formatKey formats a key by joining the path components with a colon
 func formatKey(path ...string) []byte {
 	return []byte(strings.Join(path, ":"))
 }
 
-// formatPrefix formats a prefix by joining the path components with a colon and adding a trailing colon
 func formatPrefix(path ...string) []byte {
 	return []byte(strings.Join(path, ":") + ":")
 }
