@@ -419,11 +419,14 @@ func (cfg *HTTPAuthConfig) CheckAuth(method string) gin.HandlerFunc {
 }
 
 func (cfg *HTTPAuthConfig) IsAllowanceEnough(username string, token string, amount *big.Int) (bool, error) {
-	agentUser, ok := cfg.AuthStorage.GetAgentUser(username)
 	if username == "admin" {
 		return false, nil
 	}
-	if !ok {
+	agentUser, err := cfg.AuthStorage.GetAgentUser(username)
+	if err != nil {
+		return false, fmt.Errorf("error reading agent user: %w", err)
+	}
+	if agentUser == nil {
 		return false, fmt.Errorf("user not found")
 	}
 
@@ -440,8 +443,11 @@ func (cfg *HTTPAuthConfig) RequestAgentUser(username, password string, perms []s
 		return fmt.Errorf("admin is a reserved username")
 	}
 
-	_, ok := cfg.AuthStorage.GetAgentUser(username)
-	if ok {
+	existingUser, err := cfg.AuthStorage.GetAgentUser(username)
+	if err != nil {
+		return fmt.Errorf("error checking existing user: %w", err)
+	}
+	if existingUser != nil {
 		return fmt.Errorf("username %s already has an active request", username)
 	}
 
@@ -454,7 +460,7 @@ func (cfg *HTTPAuthConfig) RequestAgentUser(username, password string, perms []s
 		mappedAllowances[token] = lib.BigInt{*allowance}
 	}
 
-	err := cfg.AuthStorage.AddAuthRequest(&storages.AgentUser{
+	err = cfg.AuthStorage.AddAuthRequest(&storages.AgentUser{
 		Username:    username,
 		Password:    password,
 		Perms:       perms,
@@ -468,12 +474,15 @@ func (cfg *HTTPAuthConfig) RequestAgentUser(username, password string, perms []s
 }
 
 func (cfg *HTTPAuthConfig) ConfirmAgentUser(username string) error {
-	request, ok := cfg.AuthStorage.GetAgentUser(username)
-	if !ok {
+	request, err := cfg.AuthStorage.GetAgentUser(username)
+	if err != nil {
+		return fmt.Errorf("error reading agent user: %w", err)
+	}
+	if request == nil {
 		return fmt.Errorf("auth request not found")
 	}
 
-	err := cfg.AddUser(request.Username, request.Password, request.Perms)
+	err = cfg.AddUser(request.Username, request.Password, request.Perms)
 	if err != nil {
 		return err
 	}
@@ -512,8 +521,11 @@ func (cfg *HTTPAuthConfig) RemoveAgentUser(username string) error {
 		return err
 	}
 
-	_, ok := cfg.AuthStorage.GetAgentUser(username)
-	if !ok {
+	existingUser, err := cfg.AuthStorage.GetAgentUser(username)
+	if err != nil {
+		return fmt.Errorf("error reading agent user for removal: %w", err)
+	}
+	if existingUser == nil {
 		return nil
 	}
 
@@ -551,14 +563,17 @@ func (cfg *HTTPAuthConfig) RevokeAllowance(username string, token string) error 
 }
 
 func (cfg *HTTPAuthConfig) DecreaseAllowance(username string, token string, amount lib.BigInt) error {
-	agentUser, ok := cfg.AuthStorage.GetAgentUser(username)
-	if !ok {
+	agentUser, err := cfg.AuthStorage.GetAgentUser(username)
+	if err != nil {
+		return fmt.Errorf("error reading agent user: %w", err)
+	}
+	if agentUser == nil {
 		return fmt.Errorf("allowance not found")
 	}
 
 	token = strings.ToLower(token)
-	allowance, ok := agentUser.Allowances[token]
-	if !ok {
+	allowance, exists := agentUser.Allowances[token]
+	if !exists {
 		return fmt.Errorf("allowance not found")
 	}
 

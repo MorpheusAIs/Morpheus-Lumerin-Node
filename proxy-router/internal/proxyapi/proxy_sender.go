@@ -202,8 +202,11 @@ func (p *ProxyServiceSender) GetSessionReportFromProvider(ctx context.Context, s
 	if err != nil {
 		return nil, ErrSessionNotFound
 	}
-	provider, ok := p.sessionStorage.GetUser(session.ProviderAddr().Hex())
-	if !ok {
+	provider, err := p.sessionStorage.GetUser(session.ProviderAddr().Hex())
+	if err != nil {
+		return nil, fmt.Errorf("error reading provider: %w", err)
+	}
+	if provider == nil {
 		return nil, ErrProviderNotFound
 	}
 
@@ -317,8 +320,11 @@ func (p *ProxyServiceSender) CallAgentTool(ctx context.Context, sessionID common
 		return "", ErrSessionExpired
 	}
 
-	provider, ok := p.sessionStorage.GetUser(session.ProviderAddr().Hex())
-	if !ok {
+	provider, err := p.sessionStorage.GetUser(session.ProviderAddr().Hex())
+	if err != nil {
+		return "", fmt.Errorf("error reading provider: %w", err)
+	}
+	if provider == nil {
 		return "", ErrProviderNotFound
 	}
 
@@ -384,8 +390,11 @@ func (p *ProxyServiceSender) GetAgentTools(ctx context.Context, sessionID common
 		return "", ErrSessionExpired
 	}
 
-	provider, ok := p.sessionStorage.GetUser(session.ProviderAddr().Hex())
-	if !ok {
+	provider, err := p.sessionStorage.GetUser(session.ProviderAddr().Hex())
+	if err != nil {
+		return "", fmt.Errorf("error reading provider: %w", err)
+	}
+	if provider == nil {
 		return "", ErrProviderNotFound
 	}
 
@@ -503,8 +512,11 @@ func (p *ProxyServiceSender) validateSession(ctx context.Context, sessionID comm
 	}
 
 	// Get provider information
-	provider, ok := p.sessionStorage.GetUser(session.ProviderAddr().Hex())
-	if !ok {
+	provider, err := p.sessionStorage.GetUser(session.ProviderAddr().Hex())
+	if err != nil {
+		return nil, nil, fmt.Errorf("error reading provider: %w", err)
+	}
+	if provider == nil {
 		return nil, nil, ErrProviderNotFound
 	}
 
