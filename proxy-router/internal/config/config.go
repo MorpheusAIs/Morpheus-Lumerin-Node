@@ -69,7 +69,11 @@ type Config struct {
 		RatingConfigPath    string    `env:"RATING_CONFIG_PATH" flag:"rating-config-path" validate:"omitempty" desc:"path to the rating config file"`
 		CookieFilePath      string    `env:"COOKIE_FILE_PATH" flag:"cookie-file-path" validate:"omitempty" desc:"path to the cookie file"`
 		CookieContent       string    `env:"COOKIE_CONTENT" flag:"cookie-content" validate:"omitempty" desc:"content of the cookie file"`
-		AuthConfigFilePath  string    `env:"AUTH_CONFIG_FILE_PATH" flag:"auth-config-file-path" validate:"omitempty"`
+		AuthConfigFilePath   string        `env:"AUTH_CONFIG_FILE_PATH" flag:"auth-config-file-path" validate:"omitempty"`
+		LLMTimeout           time.Duration `env:"LLM_TIMEOUT" flag:"llm-timeout" validate:"omitempty" desc:"timeout for PNode to LLM requests, applies to both streaming and non-streaming"`
+		CNodePNodeTimeout         time.Duration `env:"CNODE_PNODE_TIMEOUT" flag:"cnode-pnode-timeout" validate:"omitempty" desc:"per-attempt timeout for CNode waiting for PNode first response"`
+		CNodePNodeMaxRetries      int           `env:"CNODE_PNODE_MAX_RETRIES" flag:"cnode-pnode-max-retries" validate:"omitempty,gte=0" desc:"max retries for CNode to PNode read timeout (chat/embeddings)"`
+		CNodePNodeAudioMaxRetries int           `env:"CNODE_PNODE_AUDIO_MAX_RETRIES" flag:"cnode-pnode-audio-max-retries" validate:"omitempty,gte=0" desc:"max retries for CNode to PNode read timeout (audio transcription/speech)"`
 	}
 	System struct {
 		Enable           bool   `env:"SYS_ENABLE"              flag:"sys-enable" desc:"enable system level configuration adjustments"`
@@ -186,6 +190,18 @@ func (cfg *Config) SetDefaults() {
 	if cfg.Proxy.AuthConfigFilePath == "" {
 		cfg.Proxy.AuthConfigFilePath = "./proxy.conf"
 	}
+	if cfg.Proxy.LLMTimeout == 0 {
+		cfg.Proxy.LLMTimeout = 240 * time.Second
+	}
+	if cfg.Proxy.CNodePNodeTimeout == 0 {
+		cfg.Proxy.CNodePNodeTimeout = 90 * time.Second
+	}
+	if cfg.Proxy.CNodePNodeMaxRetries == 0 {
+		cfg.Proxy.CNodePNodeMaxRetries = 3
+	}
+	if cfg.Proxy.CNodePNodeAudioMaxRetries == 0 {
+		cfg.Proxy.CNodePNodeAudioMaxRetries = 20
+	}
 
 	// IPFS
 	if cfg.IPFS.Address == "" {
@@ -231,6 +247,10 @@ func (cfg *Config) GetSanitized() interface{} {
 	publicCfg.Proxy.StoreChatContext = cfg.Proxy.StoreChatContext
 	publicCfg.Proxy.ForwardChatContext = cfg.Proxy.ForwardChatContext
 	publicCfg.Proxy.RatingConfigPath = cfg.Proxy.RatingConfigPath
+	publicCfg.Proxy.LLMTimeout = cfg.Proxy.LLMTimeout
+	publicCfg.Proxy.CNodePNodeTimeout = cfg.Proxy.CNodePNodeTimeout
+	publicCfg.Proxy.CNodePNodeMaxRetries = cfg.Proxy.CNodePNodeMaxRetries
+	publicCfg.Proxy.CNodePNodeAudioMaxRetries = cfg.Proxy.CNodePNodeAudioMaxRetries
 
 	publicCfg.System.Enable = cfg.System.Enable
 	publicCfg.System.LocalPortRange = cfg.System.LocalPortRange
