@@ -53,27 +53,33 @@ const (
 )
 
 type ProxyServiceSender struct {
-	chainID        *big.Int
-	privateKey     interfaces.PrKeyProvider
-	logStorage     *lib.Collection[*interfaces.LogStorage]
-	sessionStorage *storages.SessionStorage
-	sessionRepo    *sessionrepo.SessionRepositoryCached
-	morRPC         *msgs.MORRPCMessage
-	sessionService SessionService
-	sessionSema    *SessionSemaphore // Limits to 1 concurrent request per session
-	log            lib.ILogger
+	chainID              *big.Int
+	privateKey           interfaces.PrKeyProvider
+	logStorage           *lib.Collection[*interfaces.LogStorage]
+	sessionStorage       *storages.SessionStorage
+	sessionRepo          *sessionrepo.SessionRepositoryCached
+	morRPC               *msgs.MORRPCMessage
+	sessionService       SessionService
+	sessionSema          *SessionSemaphore // Limits to 1 concurrent request per session
+	cnodePnodeTimeout         time.Duration // Per-attempt timeout waiting for PNode first response
+	cnodePnodeMaxRetries      int           // Max retries on read timeout from PNode (chat/embeddings)
+	cnodePnodeAudioMaxRetries int           // Max retries on read timeout from PNode (audio)
+	log                       lib.ILogger
 }
 
-func NewProxySender(chainID *big.Int, privateKey interfaces.PrKeyProvider, logStorage *lib.Collection[*interfaces.LogStorage], sessionStorage *storages.SessionStorage, sessionRepo *sessionrepo.SessionRepositoryCached, log lib.ILogger) *ProxyServiceSender {
+func NewProxySender(chainID *big.Int, privateKey interfaces.PrKeyProvider, logStorage *lib.Collection[*interfaces.LogStorage], sessionStorage *storages.SessionStorage, sessionRepo *sessionrepo.SessionRepositoryCached, cnodePnodeTimeout time.Duration, cnodePnodeMaxRetries int, cnodePnodeAudioMaxRetries int, log lib.ILogger) *ProxyServiceSender {
 	return &ProxyServiceSender{
-		chainID:        chainID,
-		privateKey:     privateKey,
-		logStorage:     logStorage,
-		sessionStorage: sessionStorage,
-		sessionRepo:    sessionRepo,
-		morRPC:         msgs.NewMorRpc(),
-		sessionSema:    NewSessionSemaphore(),
-		log:            log,
+		chainID:                   chainID,
+		privateKey:                privateKey,
+		logStorage:                logStorage,
+		sessionStorage:            sessionStorage,
+		sessionRepo:               sessionRepo,
+		morRPC:                    msgs.NewMorRpc(),
+		sessionSema:               NewSessionSemaphore(),
+		cnodePnodeTimeout:         cnodePnodeTimeout,
+		cnodePnodeMaxRetries:      cnodePnodeMaxRetries,
+		cnodePnodeAudioMaxRetries: cnodePnodeAudioMaxRetries,
+		log:                       log,
 	}
 }
 
@@ -665,13 +671,12 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 	requestType string,
 	promptTokens int,
 ) (interface{}, int, int, int, error) {
-	const (
-		TIMEOUT_TO_ESTABLISH_CONNECTION   = time.Second * 3
-		TIMEOUT_TO_RECEIVE_FIRST_RESPONSE = time.Second * 30
-	)
-	var MAX_RETRIES = 5
+	const TIMEOUT_TO_ESTABLISH_CONNECTION = time.Second * 3
+
+	timeoutPerAttempt := p.cnodePnodeTimeout
+	maxRetries := p.cnodePnodeMaxRetries
 	if requestType == "audio_transcription" || requestType == "audio_speech" {
-		MAX_RETRIES = 20 // Increase retries for audio transcription
+		maxRetries = p.cnodePnodeAudioMaxRetries
 	}
 
 	dialer := net.Dialer{Timeout: TIMEOUT_TO_ESTABLISH_CONNECTION}
@@ -702,7 +707,7 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 	}
 
 	// Set initial read deadline
-	_ = conn.SetReadDeadline(time.Now().Add(TIMEOUT_TO_RECEIVE_FIRST_RESPONSE))
+	_ = conn.SetReadDeadline(time.Now().Add(timeoutPerAttempt))
 
 	msgJSON, err := json.Marshal(rpcMessage)
 	if err != nil {
@@ -746,8 +751,8 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 		if err != nil {
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 				p.log.Warnf("Read operation timed out: %v", err)
-				p.log.Infof("Retry count: %d, max retries: %d", retryCount, MAX_RETRIES)
-				if retryCount < MAX_RETRIES {
+				p.log.Infof("Retry count: %d, max retries: %d", retryCount, maxRetries)
+				if retryCount < maxRetries {
 					alive, availErr := checkProviderAvailability(url)
 					if availErr != nil {
 						p.log.Warnf("Provider availability check failed: %v", availErr)
@@ -755,9 +760,9 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 					}
 					if alive {
 						retryCount++
-						p.log.Infof("Provider is alive, retrying (%d/%d)...", retryCount, MAX_RETRIES)
+						p.log.Infof("Provider is alive, retrying (%d/%d)...", retryCount, maxRetries)
 						// Reset the read deadline
-						conn.SetReadDeadline(time.Now().Add(TIMEOUT_TO_RECEIVE_FIRST_RESPONSE))
+						conn.SetReadDeadline(time.Now().Add(timeoutPerAttempt))
 						// Clear the error state by reading any remaining data
 						reader.Discard(reader.Buffered())
 						// Reset the decoder
