@@ -198,7 +198,16 @@ func start() error {
 	appLog.Infof("Auth config file: %s", cfg.Proxy.AuthConfigFilePath)
 	appLog.Infof("Cookie file: %s", cfg.Proxy.CookieFilePath)
 
-	storage := storages.NewStorage(storageLog, cfg.Proxy.StoragePath)
+	storage, err := storages.NewStorage(storageLog, cfg.Proxy.StoragePath)
+	if err != nil {
+		return fmt.Errorf("failed to initialize storage: %w", err)
+	}
+	defer func() {
+		if err := storage.Close(); err != nil {
+			appLog.Errorf("error closing storage: %s", err)
+		}
+	}()
+
 	authStorage := storages.NewAuthStorage(storage)
 	authCfg := system.NewAuthConfig(cfg.Proxy.AuthConfigFilePath, cfg.Proxy.CookieFilePath, cfg.Proxy.CookieContent, authStorage)
 
@@ -274,7 +283,7 @@ func start() error {
 	sessionRouter := registries.NewSessionRouter(*cfg.Marketplace.DiamondContractAddress, ethClient, multicallBackend, rpcLog)
 	marketplace := registries.NewMarketplace(*cfg.Marketplace.DiamondContractAddress, ethClient, multicallBackend, rpcLog)
 	sessionRepo := sessionrepo.NewSessionRepositoryCached(sessionStorage, sessionRouter, marketplace, appLog)
-	proxyRouterApi := proxyapi.NewProxySender(chainID, wallet, contractLogStorage, sessionStorage, sessionRepo, appLog)
+	proxyRouterApi := proxyapi.NewProxySender(chainID, wallet, contractLogStorage, sessionStorage, sessionRepo, cfg.Proxy.CNodePNodeTimeout, cfg.Proxy.CNodePNodeMaxRetries, cfg.Proxy.CNodePNodeAudioMaxRetries, appLog)
 	explorer := blockchainapi.NewBlockscoutApiV2Client(cfg.Blockchain.BlockscoutApiUrl, log.Named("INDEXER"))
 	blockchainApi := blockchainapi.NewBlockchainService(ethClient, multicallBackend, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, explorer, wallet, proxyRouterApi, sessionRepo, scorer, authCfg, appLog, rpcLog, cfg.Blockchain.EthLegacyTx)
 	proxyRouterApi.SetSessionService(blockchainApi)
@@ -291,7 +300,7 @@ func start() error {
 		appLog.Warnf("failed to load agent config, running with empty: %s", err)
 	}
 
-	aiEngine := aiengine.NewAiEngine(proxyRouterApi, chatStorage, modelConfigLoader, agentConfigLoader, appLog)
+	aiEngine := aiengine.NewAiEngine(proxyRouterApi, chatStorage, modelConfigLoader, agentConfigLoader, cfg.Proxy.LLMTimeout, appLog)
 
 	eventListener := blockchainapi.NewEventsListener(sessionRepo, sessionRouter, wallet, logWatcher, appLog)
 
@@ -307,7 +316,7 @@ func start() error {
 	}
 	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine, chatStorage, *cfg.Proxy.StoreChatContext.Bool, *cfg.Proxy.ForwardChatContext.Bool, *authCfg, ipfsManager, log)
 	walletController := walletapi.NewWalletController(wallet, *authCfg)
-	systemController := system.NewSystemController(&cfg, wallet, rpcClientStore, sysConfig, appStartTime, chainID, appLog, ethConnectionValidator, *authCfg)
+	systemController := system.NewSystemController(&cfg, wallet, rpcClientStore, sysConfig, appStartTime, chainID, appLog, ethConnectionValidator, *authCfg, storage)
 	authController := authapi.NewAuthController(authCfg, cfg.Environment, appLog)
 
 	apiBus := apibus.NewApiBus(blockchainController, proxyController, walletController, systemController, authController)

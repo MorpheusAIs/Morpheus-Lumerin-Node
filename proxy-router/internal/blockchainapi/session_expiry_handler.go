@@ -50,9 +50,9 @@ func (s *SessionExpiryHandler) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			sessions, err := s.sessionStorage.GetSessions()
+			sessions, err := s.sessionStorage.GetSessions(ctx)
 			if err != nil {
-				s.log.Error(err)
+				s.log.Errorf("error reading sessions for expiry check: %s", err)
 				continue
 			}
 
@@ -71,12 +71,16 @@ func (s *SessionExpiryHandler) Run(ctx context.Context) error {
 					sessionData, err := s.blockchainService.GetSession(ctx, sessionId)
 					if err != nil {
 						s.log.Error(err)
-						s.sessionStorage.RemoveSession(session.Id)
+						if err := s.sessionStorage.RemoveSession(session.Id); err != nil {
+							s.log.Warnf("error removing session %s from cache: %s", session.Id, err)
+						}
 						continue
 					}
 					if sessionData.ClosedAt.Int64() != 0 {
 						s.log.Infof("Session %s already closed", session.Id)
-						s.sessionStorage.RemoveSession(session.Id)
+						if err := s.sessionStorage.RemoveSession(session.Id); err != nil {
+							s.log.Warnf("error removing session %s from cache: %s", session.Id, err)
+						}
 						continue
 					}
 
@@ -86,7 +90,9 @@ func (s *SessionExpiryHandler) Run(ctx context.Context) error {
 						s.log.Warnf("cannot close session: %s", err.Error())
 						continue
 					}
-					s.sessionStorage.RemoveSession(session.Id)
+					if err := s.sessionStorage.RemoveSession(session.Id); err != nil {
+						s.log.Warnf("error removing session %s from cache: %s", session.Id, err)
+					}
 				}
 			}
 		}

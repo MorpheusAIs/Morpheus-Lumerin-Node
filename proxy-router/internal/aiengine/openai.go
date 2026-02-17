@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	c "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
 	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
@@ -22,27 +23,35 @@ import (
 const API_TYPE_OPENAI = "openai"
 
 type OpenAI struct {
-	baseURL   string
-	apiKey    string
-	modelName string
-	client    *http.Client
-	log       lib.ILogger
+	baseURL    string
+	apiKey     string
+	modelName  string
+	client     *http.Client
+	llmTimeout time.Duration
+	log        lib.ILogger
 }
 
-func NewOpenAIEngine(modelName, baseURL, apiKey string, log lib.ILogger) *OpenAI {
+func NewOpenAIEngine(modelName, baseURL, apiKey string, llmTimeout time.Duration, log lib.ILogger) *OpenAI {
 	if baseURL != "" {
 		baseURL = strings.TrimSuffix(baseURL, "/")
 	}
 	return &OpenAI{
-		baseURL:   baseURL,
-		modelName: modelName,
-		apiKey:    apiKey,
-		client:    &http.Client{},
-		log:       log,
+		baseURL:    baseURL,
+		modelName:  modelName,
+		apiKey:     apiKey,
+		client:     &http.Client{},
+		llmTimeout: llmTimeout,
+		log:        log,
 	}
 }
 
 func (a *OpenAI) Prompt(ctx context.Context, compl *gcs.OpenAICompletionRequestExtra, cb gcs.CompletionCallback) error {
+	if a.llmTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, a.llmTimeout)
+		defer cancel()
+	}
+
 	compl.Model = a.modelName
 	requestBody, err := json.Marshal(compl)
 	if err != nil {
@@ -124,12 +133,12 @@ func (a *OpenAI) readStream(ctx context.Context, body io.Reader, cb gcs.Completi
 				}
 				return nil
 			}
-			
+
 			var compl gcs.ChatCompletionStreamResponseExtra
 			if err := json.Unmarshal([]byte(data), &compl); err != nil {
 				return fmt.Errorf("error decoding response: %s\n%s", err, line)
 			}
-			
+
 			// Call the callback function with the unmarshalled completion
 			chunk := gcs.NewChunkStreaming(&compl)
 			err := cb(ctx, chunk, nil)
@@ -369,6 +378,12 @@ func (a *OpenAI) AudioSpeech(ctx context.Context, audioRequest *gcs.AudioSpeechR
 
 // Embeddings handles vector embedding generation requests
 func (a *OpenAI) Embeddings(ctx context.Context, embedRequest *gcs.EmbeddingsRequest, cb gcs.CompletionCallback) error {
+	if a.llmTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, a.llmTimeout)
+		defer cancel()
+	}
+
 	embedRequest.Model = openai.EmbeddingModel(a.modelName)
 
 	requestBody, err := json.Marshal(embedRequest)

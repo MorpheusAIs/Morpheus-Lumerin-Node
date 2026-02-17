@@ -27,8 +27,11 @@ func NewSessionRepositoryCached(storage *storages.SessionStorage, reg *registrie
 
 // GetSession returns a session by its ID from the read-through cache
 func (r *SessionRepositoryCached) GetSession(ctx context.Context, id common.Hash) (*SessionModel, error) {
-	ses, ok := r.getSessionFromCache(id)
-	if ok {
+	ses, err := r.getSessionFromCache(id)
+	if err != nil {
+		r.log.Warnf("Error reading session from cache: %v", err)
+	}
+	if ses != nil {
 		r.log.Debugf("Session found in cache id: %s, endsAt: %v", ses.id.Hex(), ses.endsAt)
 		return ses, nil
 	}
@@ -93,11 +96,14 @@ func (r *SessionRepositoryCached) getSessionFromBlockchain(ctx context.Context, 
 	}, nil
 }
 
-func (r *SessionRepositoryCached) getSessionFromCache(id common.Hash) (*SessionModel, bool) {
-	ses, ok := r.storage.GetSession(id.Hex())
-	if !ok {
+func (r *SessionRepositoryCached) getSessionFromCache(id common.Hash) (*SessionModel, error) {
+	ses, err := r.storage.GetSession(id.Hex())
+	if err != nil {
+		return nil, err
+	}
+	if ses == nil {
 		r.log.Debugf("Session not found in cache: %v", id)
-		return nil, false
+		return nil, nil
 	}
 	r.log.Debugf("getSessionFromCache: Session found in cache id: %s, endsAt: %v", ses.Id, ses.EndsAt)
 	return &SessionModel{
@@ -112,7 +118,7 @@ func (r *SessionRepositoryCached) getSessionFromCache(id common.Hash) (*SessionM
 		outputTokens:     ses.OutputTokens,
 		failoverEnabled:  ses.FailoverEnabled,
 		agentUsername:    ses.AgentUsername,
-	}, true
+	}, nil
 }
 
 func (r *SessionRepositoryCached) saveSessionToCache(ses *SessionModel) error {
