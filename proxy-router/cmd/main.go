@@ -283,7 +283,7 @@ func start() error {
 	sessionRouter := registries.NewSessionRouter(*cfg.Marketplace.DiamondContractAddress, ethClient, multicallBackend, rpcLog)
 	marketplace := registries.NewMarketplace(*cfg.Marketplace.DiamondContractAddress, ethClient, multicallBackend, rpcLog)
 	sessionRepo := sessionrepo.NewSessionRepositoryCached(sessionStorage, sessionRouter, marketplace, appLog)
-	proxyRouterApi := proxyapi.NewProxySender(chainID, wallet, contractLogStorage, sessionStorage, sessionRepo, appLog)
+	proxyRouterApi := proxyapi.NewProxySender(chainID, wallet, contractLogStorage, sessionStorage, sessionRepo, cfg.Proxy.CNodePNodeTimeout, cfg.Proxy.CNodePNodeMaxRetries, cfg.Proxy.CNodePNodeAudioMaxRetries, appLog)
 	explorer := blockchainapi.NewBlockscoutApiV2Client(cfg.Blockchain.BlockscoutApiUrl, log.Named("INDEXER"))
 	blockchainApi := blockchainapi.NewBlockchainService(ethClient, multicallBackend, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, explorer, wallet, proxyRouterApi, sessionRepo, scorer, authCfg, appLog, rpcLog, cfg.Blockchain.EthLegacyTx)
 	proxyRouterApi.SetSessionService(blockchainApi)
@@ -300,7 +300,7 @@ func start() error {
 		appLog.Warnf("failed to load agent config, running with empty: %s", err)
 	}
 
-	aiEngine := aiengine.NewAiEngine(proxyRouterApi, chatStorage, modelConfigLoader, agentConfigLoader, appLog)
+	aiEngine := aiengine.NewAiEngine(proxyRouterApi, chatStorage, modelConfigLoader, agentConfigLoader, cfg.Proxy.LLMTimeout, appLog)
 
 	eventListener := blockchainapi.NewEventsListener(sessionRepo, sessionRouter, wallet, logWatcher, appLog)
 
