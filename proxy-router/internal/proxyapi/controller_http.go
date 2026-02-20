@@ -193,6 +193,14 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 		return
 	}
 
+	requestID := head.RequestID
+	if requestID == "" {
+		requestID = "1"
+	}
+	ctx.Set("request_id", requestID)
+	ctx.Request = ctx.Request.WithContext(lib.ContextWithRequestID(ctx.Request.Context(), requestID))
+	log := c.log.With("request_id", requestID, "session_id", head.SessionID.Hash.Hex())
+
 	chatID := head.ChatID
 	if chatID == (lib.Hash{}) {
 		var err error
@@ -217,6 +225,7 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 	}
 
 	ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, contentType)
+	ctx.Writer.Header().Set("X-Request-Id", requestID)
 
 	err = adapter.Prompt(ctx, &body, func(cbctx context.Context, completion gsc.Chunk, aiResponseError *gsc.AiEngineErrorResponse) error {
 		if aiResponseError != nil {
@@ -255,7 +264,7 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		c.log.Errorf("error sending prompt: %s", err)
+		log.Errorf("error sending prompt: %s", err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -1370,6 +1379,14 @@ func (c *ProxyController) AudioTranscription(ctx *gin.Context) {
 		return
 	}
 
+	requestID := head.RequestID
+	if requestID == "" {
+		requestID = "1"
+	}
+	ctx.Set("request_id", requestID)
+	ctx.Request = ctx.Request.WithContext(lib.ContextWithRequestID(ctx.Request.Context(), requestID))
+	ctx.Writer.Header().Set("X-Request-Id", requestID)
+
 	// Process audio file
 	if transcriptionRequest.S3PresignedURL == "" {
 		tempFilePath, err := c.createTempFile(ctx)
@@ -1543,6 +1560,14 @@ func (c *ProxyController) AudioSpeech(ctx *gin.Context) {
 		return
 	}
 
+	requestID := head.RequestID
+	if requestID == "" {
+		requestID = "1"
+	}
+	ctx.Set("request_id", requestID)
+	ctx.Request = ctx.Request.WithContext(lib.ContextWithRequestID(ctx.Request.Context(), requestID))
+	ctx.Writer.Header().Set("X-Request-Id", requestID)
+
 	// Get AI adapter
 	chatID := head.ChatID
 	if chatID == (lib.Hash{}) {
@@ -1671,6 +1696,14 @@ func (c *ProxyController) Embeddings(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	requestID := head.RequestID
+	if requestID == "" {
+		requestID = "1"
+	}
+	ctx.Set("request_id", requestID)
+	ctx.Request = ctx.Request.WithContext(lib.ContextWithRequestID(ctx.Request.Context(), requestID))
+	ctx.Writer.Header().Set("X-Request-Id", requestID)
 
 	// Get AI adapter based on session/model
 	chatID := head.ChatID

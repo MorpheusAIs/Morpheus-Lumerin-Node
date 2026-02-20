@@ -31,9 +31,10 @@ type PromptReq struct {
 }
 
 type PromptHead struct {
-	SessionID lib.Hash `header:"session_id" validate:"hex32"`
-	ModelID   lib.Hash `header:"model_id"   validate:"hex32"`
-	ChatID    lib.Hash `header:"chat_id"    validate:"hex32"`
+	SessionID lib.Hash `header:"session_id"   validate:"hex32"`
+	ModelID   lib.Hash `header:"model_id"     validate:"hex32"`
+	ChatID    lib.Hash `header:"chat_id"      validate:"hex32"`
+	RequestID string   `header:"x-request-id"`
 }
 
 type AgentPromptHead struct {
