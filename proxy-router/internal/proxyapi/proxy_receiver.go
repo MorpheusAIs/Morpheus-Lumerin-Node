@@ -265,6 +265,8 @@ func (s *ProxyReceiver) recordActivity(ctx context.Context, session *sessionrepo
 }
 
 func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, userPubKey string, payload []byte, sessionID common.Hash, sendResponse SendResponse, sourceLog lib.ILogger) (int, int, int, error) {
+	ctx = lib.ContextWithRequestID(ctx, requestID)
+
 	// Get session
 	session, err := s.sessionRepo.GetSession(ctx, sessionID)
 	if err != nil {

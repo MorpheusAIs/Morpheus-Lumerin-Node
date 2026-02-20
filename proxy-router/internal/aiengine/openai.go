@@ -77,10 +77,11 @@ func (a *OpenAI) Prompt(ctx context.Context, compl *gcs.OpenAICompletionRequestE
 	}
 	defer resp.Body.Close()
 
-	a.log.Debugf("AI Model responded with status code: %d", resp.StatusCode)
+	log := a.log.With("request_id", lib.RequestIDFromContext(ctx))
+	log.Debugf("AI Model responded with status code: %d", resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK {
-		a.log.Warnf("AI Model responded with error: %s", resp.StatusCode)
+		log.Warnf("AI Model responded with error: %s", resp.StatusCode)
 		return a.readError(ctx, resp.Body, cb)
 	}
 
@@ -107,14 +108,27 @@ func (a *OpenAI) readResponse(ctx context.Context, body io.Reader, cb gcs.Comple
 }
 
 func (a *OpenAI) readError(ctx context.Context, body io.Reader, cb gcs.CompletionCallback) error {
-	var aiEngineErrorResponse interface{}
-	if err := json.NewDecoder(body).Decode(&aiEngineErrorResponse); err != nil {
-		return fmt.Errorf("failed to decode error response: %v", err)
+	raw, err := io.ReadAll(body)
+	if err != nil {
+		return fmt.Errorf("failed to read error response body: %v", err)
 	}
 
-	err := cb(ctx, nil, gcs.NewAiEngineErrorResponse(aiEngineErrorResponse))
-	if err != nil {
-		return fmt.Errorf("callback failed: %v", err)
+	var parsed interface{}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		log := a.log.With("request_id", lib.RequestIDFromContext(ctx))
+		response := strings.TrimSpace(string(raw))
+		log.Errorf("No JSON found in error response from model: %v", response)
+		parsed = map[string]interface{}{
+			"error": map[string]interface{}{
+				"message": response,
+				"type":    "upstream_error",
+			},
+		}
+		return cb(ctx, nil, gcs.NewAiEngineErrorResponse(parsed))
+	}
+
+	if cbErr := cb(ctx, nil, gcs.NewAiEngineErrorResponse(parsed)); cbErr != nil {
+		return fmt.Errorf("callback failed: %v", cbErr)
 	}
 	return nil
 }
@@ -204,7 +218,7 @@ func (a *OpenAI) readTranscriptionStream(ctx context.Context, body io.Reader, cb
 				return fmt.Errorf("transcription error: %v", errorMsg)
 
 			default:
-				a.log.Debugf("Received transcription event: %s", eventType)
+				a.log.With("request_id", lib.RequestIDFromContext(ctx)).Debugf("Received transcription event: %s", eventType)
 			}
 		}
 	}
