@@ -124,7 +124,7 @@ func (a *ClaudeAI) Prompt(ctx context.Context, compl *gcs.OpenAICompletionReques
 	defer resp.Body.Close()
 
 	log := a.log.With("request_id", lib.RequestIDFromContext(ctx))
-	log.Debugf("AI Model responded with status code: %d", resp.StatusCode)
+	log.Infof("AI Model responded with status code: %d", resp.StatusCode)
 	if resp.StatusCode != http.StatusOK {
 		return a.readError(ctx, resp.Body, cb)
 	}
