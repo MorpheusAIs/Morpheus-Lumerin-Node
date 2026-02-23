@@ -32,7 +32,11 @@ func normRange(input float64, normRange float64) float64 {
 
 // getSD calculates the standard deviation from the standard deviation struct
 func getSD(sd s.LibSDSD, obsNum int64) float64 {
-	return math.Sqrt(getVariance(sd, obsNum))
+	variance := getVariance(sd, obsNum)
+	if variance <= 0 {
+		return 0
+	}
+	return math.Sqrt(variance)
 }
 
 // getVariance calculates the variance from the standard deviation struct
