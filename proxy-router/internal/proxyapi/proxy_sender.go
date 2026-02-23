@@ -514,8 +514,8 @@ func (p *ProxyServiceSender) validateSession(ctx context.Context, sessionID comm
 	SESSION_EXPIRY_THRESHOLD := time.Second * 5
 	// Check if session is expired
 	if session.EndsAt().Int64()+int64(SESSION_EXPIRY_THRESHOLD) < time.Now().Unix() {
-		log.Debugf("Expired session object endsAt: %v", session.EndsAt().Int64())
-		log.Debugf("Now: %v", time.Now().Unix())
+		log.Infof("Expired session object endsAt: %v", session.EndsAt().Int64())
+		log.Infof("Now: %v", time.Now().Unix())
 		return nil, nil, ErrSessionExpired
 	}
 
@@ -535,7 +535,7 @@ func (p *ProxyServiceSender) validateSession(ctx context.Context, sessionID comm
 func (p *ProxyServiceSender) prepareRequest(ctx context.Context, sessionID common.Hash, payload interface{}, providerPubKey string) (*msgs.RPCMessage, lib.HexString, error) {
 	requestID := lib.RequestIDFromContext(ctx)
 	if requestID == "" {
-		requestID = "1"
+		requestID = lib.GenerateRequestID()
 	}
 
 	prKey, err := p.privateKey.GetPrivateKey()
@@ -624,12 +624,12 @@ func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.
 	}
 
 	// Acquire session semaphore to ensure only 1 concurrent request per session
-	log.Debugf("acquiring session semaphore for session %s", sessionID.Hex())
+	log.Infof("acquiring session semaphore for session %s", sessionID.Hex())
 	if err := p.sessionSema.Acquire(ctx, sessionID); err != nil {
 		return nil, fmt.Errorf("request cancelled while waiting in queue: %w", err)
 	}
 	defer p.sessionSema.Release(sessionID)
-	log.Debugf("acquired session semaphore for session %s", sessionID.Hex())
+	log.Infof("acquired session semaphore for session %s", sessionID.Hex())
 
 	// Prepare request
 	promptRequest, pubKey, err := p.prepareRequest(ctx, sessionID, prompt, provider.PubKey)
@@ -783,7 +783,7 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 					return nil, ttftMs, inputTokens, outputTokens, fmt.Errorf("read timed out after %d retries: %w", retryCount, err)
 				}
 			} else if err == io.EOF {
-				log.Debugf("Connection closed by provider")
+				log.Infof("Connection closed by provider")
 				if !callbackCalled {
 					return nil, ttftMs, inputTokens, outputTokens, fmt.Errorf("provider closed connection without sending any data")
 				}
@@ -1153,12 +1153,12 @@ func (p *ProxyServiceSender) SendAudioTranscriptionV2(ctx context.Context, sessi
 	}
 
 	// Acquire session semaphore to ensure only 1 concurrent request per session
-	log.Debugf("acquiring session semaphore for session %s (audio transcription)", sessionID.Hex())
+	log.Infof("acquiring session semaphore for session %s (audio transcription)", sessionID.Hex())
 	if err := p.sessionSema.Acquire(ctx, sessionID); err != nil {
 		return nil, fmt.Errorf("request cancelled while waiting in queue: %w", err)
 	}
 	defer p.sessionSema.Release(sessionID)
-	log.Debugf("acquired session semaphore for session %s (audio transcription)", sessionID.Hex())
+	log.Infof("acquired session semaphore for session %s (audio transcription)", sessionID.Hex())
 
 	// Get private key for signing
 	prKey, err := p.privateKey.GetPrivateKey()
@@ -1203,7 +1203,7 @@ func (p *ProxyServiceSender) SendAudioTranscriptionV2(ctx context.Context, sessi
 		// Detect content type
 		contentType := detectAudioContentType(audioFilePath)
 
-		log.Debugf("Starting audio streaming for file %s, size: %d bytes, chunks: %d", audioFilePath, fileSize, totalChunks)
+		log.Infof("Starting audio streaming for file %s, size: %d bytes, chunks: %d", audioFilePath, fileSize, totalChunks)
 
 		// Record start time for session stats
 		startTime = time.Now().Unix()
@@ -1259,7 +1259,7 @@ func (p *ProxyServiceSender) SendAudioTranscriptionV2(ctx context.Context, sessi
 func (p *ProxyServiceSender) sendStreamStart(ctx context.Context, provider *storages.User, sessionID common.Hash, streamID string, totalChunks uint32, fileSize uint64, contentType string, prKey lib.HexString) error {
 	requestID := lib.RequestIDFromContext(ctx)
 	if requestID == "" {
-		requestID = "1"
+		requestID = lib.GenerateRequestID()
 	}
 	message, err := p.morRPC.SessionPromptStreamStartRequest(sessionID, streamID, totalChunks, contentType, fileSize, prKey, requestID)
 	if err != nil {
@@ -1289,7 +1289,7 @@ func (p *ProxyServiceSender) sendStreamStart(ctx context.Context, provider *stor
 		return fmt.Errorf("stream start failed: %s", response.Error.Message)
 	}
 
-	p.log.With("request_id", requestID).Debugf("Stream start successful for stream ID: %s", streamID)
+	p.log.With("request_id", requestID).Infof("Stream start successful for stream ID: %s", streamID)
 	return nil
 }
 
@@ -1317,7 +1317,7 @@ func (p *ProxyServiceSender) sendStreamChunks(ctx context.Context, provider *sto
 		chunkData := buffer[:n]
 		chunkRequestID := lib.RequestIDFromContext(ctx)
 		if chunkRequestID == "" {
-			chunkRequestID = "1"
+			chunkRequestID = lib.GenerateRequestID()
 		}
 
 		message, err := p.morRPC.SessionPromptStreamChunkRequest(sessionID, streamID, chunkIndex, chunkData, prKey, chunkRequestID)
@@ -1351,7 +1351,7 @@ func (p *ProxyServiceSender) sendStreamChunks(ctx context.Context, provider *sto
 			return fmt.Errorf("chunk %d failed: %s", chunkIndex, response.Error.Message)
 		}
 
-		p.log.With("request_id", lib.RequestIDFromContext(ctx)).Debugf("Successfully sent chunk %d/%d for stream %s", chunkIndex+1, totalChunks, streamID)
+		p.log.With("request_id", lib.RequestIDFromContext(ctx)).Infof("Successfully sent chunk %d/%d for stream %s", chunkIndex+1, totalChunks, streamID)
 
 		// time.Sleep(2000 * time.Millisecond)
 		chunkIndex++
@@ -1376,7 +1376,7 @@ func (p *ProxyServiceSender) sendStreamEnd(ctx context.Context, provider *storag
 
 	requestID := lib.RequestIDFromContext(ctx)
 	if requestID == "" {
-		requestID = "1"
+		requestID = lib.GenerateRequestID()
 	}
 	message, err := p.morRPC.SessionPromptStreamEndRequest(sessionID, streamID, string(audioParamsJSON), prKey, requestID)
 	if err != nil {
@@ -1389,7 +1389,7 @@ func (p *ProxyServiceSender) sendStreamEnd(ctx context.Context, provider *storag
 		return nil, 0, 0, 0, fmt.Errorf("failed to process stream end request: %w", err)
 	}
 
-	p.log.With("request_id", requestID).Debugf("Successfully completed streaming session %s with TTFT: %dms, inputTokens: %d, outputTokens: %d", streamID, ttftMs, inputTokens, outputTokens)
+	p.log.With("request_id", requestID).Infof("Successfully completed streaming session %s with TTFT: %dms, inputTokens: %d, outputTokens: %d", streamID, ttftMs, inputTokens, outputTokens)
 	return result, ttftMs, inputTokens, outputTokens, nil
 }
 
@@ -1423,7 +1423,7 @@ func detectAudioContentType(filePath string) string {
 func (p *ProxyServiceSender) SendAudioSpeech(ctx context.Context, sessionID common.Hash, audioRequest *gcs.AudioSpeechRequest, cb gcs.CompletionCallback) (interface{}, error) {
 	requestID := lib.RequestIDFromContext(ctx)
 	if requestID == "" {
-		requestID = "1"
+		requestID = lib.GenerateRequestID()
 	}
 	log := p.log.With("request_id", requestID, "session_id", sessionID.Hex())
 
@@ -1434,12 +1434,12 @@ func (p *ProxyServiceSender) SendAudioSpeech(ctx context.Context, sessionID comm
 	}
 
 	// Acquire session semaphore to ensure only 1 concurrent request per session
-	log.Debugf("acquiring session semaphore for session %s (audio speech)", sessionID.Hex())
+	log.Infof("acquiring session semaphore for session %s (audio speech)", sessionID.Hex())
 	if err := p.sessionSema.Acquire(ctx, sessionID); err != nil {
 		return nil, fmt.Errorf("request cancelled while waiting in queue: %w", err)
 	}
 	defer p.sessionSema.Release(sessionID)
-	log.Debugf("acquired session semaphore for session %s (audio speech)", sessionID.Hex())
+	log.Infof("acquired session semaphore for session %s (audio speech)", sessionID.Hex())
 
 	// Get private key for signing
 	prKey, err := p.privateKey.GetPrivateKey()
@@ -1485,7 +1485,7 @@ func (p *ProxyServiceSender) SendAudioSpeech(ctx context.Context, sessionID comm
 		log.Error("Failed to update session stats", updateErr)
 	}
 
-	log.Debugf("Successfully completed audio speech generation for session %s with TTFT: %dms, inputTokens: %d, outputTokens: %d", sessionID.Hex(), ttftMs, inputTokens, outputTokens)
+	log.Infof("Successfully completed audio speech generation for session %s with TTFT: %dms, inputTokens: %d, outputTokens: %d", sessionID.Hex(), ttftMs, inputTokens, outputTokens)
 	return result, nil
 }
 
@@ -1493,7 +1493,7 @@ func (p *ProxyServiceSender) SendAudioSpeech(ctx context.Context, sessionID comm
 func (p *ProxyServiceSender) SendEmbeddings(ctx context.Context, sessionID common.Hash, embedRequest *gcs.EmbeddingsRequest, cb gcs.CompletionCallback) (interface{}, error) {
 	requestID := lib.RequestIDFromContext(ctx)
 	if requestID == "" {
-		requestID = "1"
+		requestID = lib.GenerateRequestID()
 	}
 	log := p.log.With("request_id", requestID, "session_id", sessionID.Hex())
 
@@ -1504,12 +1504,12 @@ func (p *ProxyServiceSender) SendEmbeddings(ctx context.Context, sessionID commo
 	}
 
 	// Acquire session semaphore to ensure only 1 concurrent request per session
-	log.Debugf("acquiring session semaphore for session %s (embeddings)", sessionID.Hex())
+	log.Infof("acquiring session semaphore for session %s (embeddings)", sessionID.Hex())
 	if err := p.sessionSema.Acquire(ctx, sessionID); err != nil {
 		return nil, fmt.Errorf("request cancelled while waiting in queue: %w", err)
 	}
 	defer p.sessionSema.Release(sessionID)
-	log.Debugf("acquired session semaphore for session %s (embeddings)", sessionID.Hex())
+	log.Infof("acquired session semaphore for session %s (embeddings)", sessionID.Hex())
 
 	// Get private key for signing
 	prKey, err := p.privateKey.GetPrivateKey()
@@ -1557,6 +1557,6 @@ func (p *ProxyServiceSender) SendEmbeddings(ctx context.Context, sessionID commo
 		log.Error("Failed to update session stats", updateErr)
 	}
 
-	log.Debugf("Successfully completed embeddings generation for session %s with TTFT: %dms, inputTokens: %d, outputTokens: %d", sessionID.Hex(), ttftMs, inputTokens, outputTokens)
+	log.Infof("Successfully completed embeddings generation for session %s with TTFT: %dms, inputTokens: %d, outputTokens: %d", sessionID.Hex(), ttftMs, inputTokens, outputTokens)
 	return result, nil
 }

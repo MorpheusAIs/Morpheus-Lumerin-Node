@@ -1,6 +1,17 @@
 package lib
 
-import "context"
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+)
+
+// GenerateRequestID returns a random 8-character hex string for use as a request ID.
+func GenerateRequestID() string {
+	b := make([]byte, 4)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
 
 type contextKey string
 

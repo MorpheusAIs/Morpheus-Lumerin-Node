@@ -331,16 +331,16 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 
 	// Process request with appropriate adapter method
 	if audioTranscriptionReq != nil {
-		sourceLog.Debugf("Processing audio transcription request")
+		sourceLog.Infof("Processing audio transcription request")
 		err = adapter.AudioTranscription(ctx, audioTranscriptionReq, cb)
 	} else if audioSpeechReq != nil {
-		sourceLog.Debugf("Processing audio speech request")
+		sourceLog.Infof("Processing audio speech request")
 		err = adapter.AudioSpeech(ctx, audioSpeechReq, cb)
 	} else if embeddingsReq != nil {
-		sourceLog.Debugf("Processing embeddings request")
+		sourceLog.Infof("Processing embeddings request")
 		err = adapter.Embeddings(ctx, embeddingsReq, cb)
 	} else {
-		sourceLog.Debugf("Processing chat completion request")
+		sourceLog.Infof("Processing chat completion request")
 		err = adapter.Prompt(ctx, chatReq, cb)
 	}
 
@@ -355,7 +355,7 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 }
 
 func (s *ProxyReceiver) SessionRequest(ctx context.Context, msgID string, reqID string, req *m.SessionReq, log lib.ILogger) (*msg.RpcResponse, error) {
-	log.Debugf("Received session request from %s, timestamp: %s", req.User, req.Timestamp)
+	log.Infof("Received session request from %s, timestamp: %s", req.User, req.Timestamp)
 
 	bid, err := s.service.GetBidByID(ctx, req.BidID)
 	if err != nil {
@@ -406,7 +406,7 @@ func (s *ProxyReceiver) SessionRequest(ctx context.Context, msgID string, reqID 
 }
 
 func (s *ProxyReceiver) SessionReport(ctx context.Context, msgID string, reqID string, session *storages.Session, sourceLog lib.ILogger) (*msg.RpcResponse, error) {
-	sourceLog.Debugf("received session report request for %s", session.Id)
+	sourceLog.Infof("received session report request for %s", session.Id)
 
 	tps := 0
 	ttft := 0
@@ -444,7 +444,7 @@ func (s *ProxyReceiver) SessionReport(ctx context.Context, msgID string, reqID s
 }
 
 func (s *ProxyReceiver) CallAgentTool(ctx context.Context, msgID string, reqID string, userPubKey string, req *m.CallAgentToolReq, sourceLog lib.ILogger) (*msg.RpcResponse, error) {
-	sourceLog.Debugf("received call agent tool request for %s", req.SessionID)
+	sourceLog.Infof("received call agent tool request for %s", req.SessionID)
 
 	var input map[string]interface{}
 
@@ -496,7 +496,7 @@ func (s *ProxyReceiver) CallAgentTool(ctx context.Context, msgID string, reqID s
 }
 
 func (s *ProxyReceiver) GetAgentTools(ctx context.Context, msgID string, reqID string, userPubKey string, req *m.GetAgentToolsReq, sourceLog lib.ILogger) (*msg.RpcResponse, error) {
-	sourceLog.Debugf("received get agent tools request for %s", req.SessionID)
+	sourceLog.Infof("received get agent tools request for %s", req.SessionID)
 
 	session, err := s.sessionRepo.GetSession(ctx, req.SessionID)
 	if err != nil {

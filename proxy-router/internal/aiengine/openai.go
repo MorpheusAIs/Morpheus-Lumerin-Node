@@ -78,7 +78,7 @@ func (a *OpenAI) Prompt(ctx context.Context, compl *gcs.OpenAICompletionRequestE
 	defer resp.Body.Close()
 
 	log := a.log.With("request_id", lib.RequestIDFromContext(ctx))
-	log.Debugf("AI Model responded with status code: %d", resp.StatusCode)
+	log.Infof("AI Model responded with status code: %d", resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK {
 		log.Warnf("AI Model responded with error: %s", resp.StatusCode)
@@ -218,7 +218,7 @@ func (a *OpenAI) readTranscriptionStream(ctx context.Context, body io.Reader, cb
 				return fmt.Errorf("transcription error: %v", errorMsg)
 
 			default:
-				a.log.With("request_id", lib.RequestIDFromContext(ctx)).Debugf("Received transcription event: %s", eventType)
+				a.log.With("request_id", lib.RequestIDFromContext(ctx)).Infof("Received transcription event: %s", eventType)
 			}
 		}
 	}
