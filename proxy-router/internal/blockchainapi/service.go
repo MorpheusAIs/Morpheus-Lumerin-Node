@@ -37,6 +37,12 @@ import (
 // basefeeWiggleMultiplier is a multiplier for the basefee to set the maxFeePerGas
 const basefeeWiggleMultiplier = 2
 
+// allowanceReserveMultiplier — skip increaseAllowance when the on-chain
+// allowance already exceeds stake * this factor (avoids unnecessary tx).
+const allowanceReserveMultiplier = 3
+
+var maxUint256 = new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(1))
+
 type BlockchainService struct {
 	ethClient          i.EthClient
 	providerRegistry   *r.ProviderRegistry
@@ -325,34 +331,49 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 		return common.Hash{}, err
 	}
 
-	// Step 1: Approve MOR tokens with escalation
-	approveBaseOpts, err := s.getTransactOpts(ctx, prKey)
+	// Step 1: Approve MOR tokens with escalation (skip if allowance is already sufficient)
+	currentAllowance, err := s.morToken.GetAllowance(ctx, addr, s.diamonContractAddr)
 	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
+		return common.Hash{}, fmt.Errorf("failed to get current MOR allowance: %w", err)
 	}
 
-	approveReceipt, err := s.txEscalator.SendWithEscalation(
-		ctx,
-		approveBaseOpts,
-		func(opts *bind.TransactOpts) (*types.Transaction, error) {
-			return s.morToken.IncreaseAllowanceTx(opts, s.diamonContractAddr, stake)
-		},
-		s.legacyTx,
-	)
-	if err != nil {
-		s.handleTxError(ctx, addr, err)
-		return common.Hash{}, lib.WrapError(ErrSendTx, fmt.Errorf("approve failed: %w", err))
+	stakeReserve := new(big.Int).Mul(stake, big.NewInt(allowanceReserveMultiplier))
+	needsApproval := currentAllowance.Cmp(stakeReserve) < 0
+	wouldOverflow := new(big.Int).Sub(maxUint256, currentAllowance).Cmp(stake) < 0
+
+	if wouldOverflow {
+		s.log.Warnf("skipping increaseAllowance: current allowance %s + stake %s would overflow uint256", currentAllowance.String(), stake.String())
+		needsApproval = false
 	}
 
-	// Check approval succeeded (escalator already waited for mining)
-	if approveReceipt.Status != 1 {
-		return common.Hash{}, lib.WrapError(ErrSendTx, fmt.Errorf("approve tx failed with status %d", approveReceipt.Status))
-	}
-
-	if isAgent {
-		err = s.authConfig.AuthStorage.SetAgentTx(approveReceipt.TxHash.Hex(), agentUsername, approveReceipt.BlockNumber)
+	if needsApproval {
+		approveBaseOpts, err := s.getTransactOpts(ctx, prKey)
 		if err != nil {
-			s.log.Errorf("failed to set agent tx: %s", err)
+			return common.Hash{}, lib.WrapError(ErrTxOpts, err)
+		}
+
+		approveReceipt, err := s.txEscalator.SendWithEscalation(
+			ctx,
+			approveBaseOpts,
+			func(opts *bind.TransactOpts) (*types.Transaction, error) {
+				return s.morToken.IncreaseAllowanceTx(opts, s.diamonContractAddr, stake)
+			},
+			s.legacyTx,
+		)
+		if err != nil {
+			s.handleTxError(ctx, addr, err)
+			return common.Hash{}, lib.WrapError(ErrSendTx, fmt.Errorf("approve failed: %w", err))
+		}
+
+		if approveReceipt.Status != 1 {
+			return common.Hash{}, lib.WrapError(ErrSendTx, fmt.Errorf("approve tx failed with status %d", approveReceipt.Status))
+		}
+
+		if isAgent {
+			err = s.authConfig.AuthStorage.SetAgentTx(approveReceipt.TxHash.Hex(), agentUsername, approveReceipt.BlockNumber)
+			if err != nil {
+				s.log.Errorf("failed to set agent tx: %s", err)
+			}
 		}
 	}
 
