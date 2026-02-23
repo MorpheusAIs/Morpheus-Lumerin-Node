@@ -195,7 +195,7 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 
 	requestID := head.RequestID
 	if requestID == "" {
-		requestID = "1"
+		requestID = lib.GenerateRequestID()
 	}
 	ctx.Set("request_id", requestID)
 	ctx.Request = ctx.Request.WithContext(lib.ContextWithRequestID(ctx.Request.Context(), requestID))
@@ -1381,7 +1381,7 @@ func (c *ProxyController) AudioTranscription(ctx *gin.Context) {
 
 	requestID := head.RequestID
 	if requestID == "" {
-		requestID = "1"
+		requestID = lib.GenerateRequestID()
 	}
 	ctx.Set("request_id", requestID)
 	ctx.Request = ctx.Request.WithContext(lib.ContextWithRequestID(ctx.Request.Context(), requestID))
@@ -1562,7 +1562,7 @@ func (c *ProxyController) AudioSpeech(ctx *gin.Context) {
 
 	requestID := head.RequestID
 	if requestID == "" {
-		requestID = "1"
+		requestID = lib.GenerateRequestID()
 	}
 	ctx.Set("request_id", requestID)
 	ctx.Request = ctx.Request.WithContext(lib.ContextWithRequestID(ctx.Request.Context(), requestID))
@@ -1699,7 +1699,7 @@ func (c *ProxyController) Embeddings(ctx *gin.Context) {
 
 	requestID := head.RequestID
 	if requestID == "" {
-		requestID = "1"
+		requestID = lib.GenerateRequestID()
 	}
 	ctx.Set("request_id", requestID)
 	ctx.Request = ctx.Request.WithContext(lib.ContextWithRequestID(ctx.Request.Context(), requestID))

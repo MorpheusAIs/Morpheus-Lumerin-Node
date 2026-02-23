@@ -46,7 +46,7 @@ func NewTCPHandler(
 		sourceLog = sourceLog.With("request_id", msg.ID)
 
 		err = morRpcHandler.Handle(ctx, *msg, sourceLog, func(resp *morrpc.RpcResponse) error {
-			sourceLog.Debugf("sending TCP response for method: %s", msg.Method)
+			sourceLog.Infof("sending TCP response for method: %s", msg.Method)
 			_, err := sendMsg(conn, resp)
 			if err != nil {
 				sourceLog.Errorf("Error sending message: %s", err)
