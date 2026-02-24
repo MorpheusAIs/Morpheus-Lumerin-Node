@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
@@ -26,7 +27,7 @@ type Storage struct {
 }
 
 // NewStorage opens a BadgerDB at the given path and starts background GC.
-// Returns an error instead of calling log.Fatal so callers can handle failures gracefully.
+// If the database is corrupted, it automatically wipes the data directory and retries once.
 func NewStorage(log lib.ILogger, path string) (*Storage, error) {
 	storageLogger := NewStorageLogger(log)
 	if err := os.MkdirAll(path, os.ModePerm); err != nil {
@@ -40,7 +41,27 @@ func NewStorage(log lib.ILogger, path string) (*Storage, error) {
 
 	db, err := badger.Open(opts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open badger db at %s: %w", path, err)
+		if !isBadgerCorruptionError(err) {
+			return nil, fmt.Errorf("failed to open badger db at %s: %w", path, err)
+		}
+
+		log.Warnf("detected corrupted badger db at %s: %s — wiping data and recreating", path, err)
+
+		if removeErr := os.RemoveAll(path); removeErr != nil {
+			return nil, fmt.Errorf("failed to remove corrupted badger db at %s: %w (original error: %s)", path, removeErr, err)
+		}
+		if mkdirErr := os.MkdirAll(path, os.ModePerm); mkdirErr != nil {
+			return nil, fmt.Errorf("failed to recreate storage directory %s after corruption recovery: %w", path, mkdirErr)
+		}
+
+		opts.Dir = path
+		opts.ValueDir = path
+		db, err = badger.Open(opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open badger db at %s after corruption recovery: %w", path, err)
+		}
+
+		log.Warnf("badger db at %s recovered successfully — all previous data was lost", path)
 	}
 
 	s := &Storage{
@@ -53,6 +74,31 @@ func NewStorage(log lib.ILogger, path string) (*Storage, error) {
 	s.startMetrics(DefaultMetricsInterval)
 
 	return s, nil
+}
+
+// isBadgerCorruptionError returns true if the error indicates a corrupted database
+// that can be resolved by wiping the data directory.
+func isBadgerCorruptionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	corruptionPatterns := []string{
+		"file does not exist",
+		"file with ID",
+		"MANIFEST",
+		"checksum mismatch",
+		"could not open",
+		"has file id",
+		"Table file corruption",
+		"Value log truncate",
+	}
+	for _, pattern := range corruptionPatterns {
+		if strings.Contains(msg, pattern) {
+			return true
+		}
+	}
+	return false
 }
 
 // NewTestStorage creates an in-memory storage for testing.

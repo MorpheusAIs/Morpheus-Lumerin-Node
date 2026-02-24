@@ -25,7 +25,7 @@ func (r *Rating) RateBids(scoreInputs []RatingInput, log lib.ILogger) []RatingRe
 		}
 
 		if math.IsNaN(score) || math.IsInf(score, 0) {
-			log.Warnf("provider score is not valid %d for %+v), skipping", score, input)
+			log.Warnf("provider score is not valid %f for %+v), skipping", score, input)
 			continue
 		}
 
