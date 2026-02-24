@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -47,11 +48,8 @@ func NewStorage(log lib.ILogger, path string) (*Storage, error) {
 
 		log.Warnf("detected corrupted badger db at %s: %s — wiping data and recreating", path, err)
 
-		if removeErr := os.RemoveAll(path); removeErr != nil {
-			return nil, fmt.Errorf("failed to remove corrupted badger db at %s: %w (original error: %s)", path, removeErr, err)
-		}
-		if mkdirErr := os.MkdirAll(path, os.ModePerm); mkdirErr != nil {
-			return nil, fmt.Errorf("failed to recreate storage directory %s after corruption recovery: %w", path, mkdirErr)
+		if clearErr := clearDirectory(path); clearErr != nil {
+			return nil, fmt.Errorf("failed to clear corrupted badger db at %s: %w (original error: %s)", path, clearErr, err)
 		}
 
 		opts.Dir = path
@@ -99,6 +97,23 @@ func isBadgerCorruptionError(err error) bool {
 		}
 	}
 	return false
+}
+
+// clearDirectory removes all files and subdirectories inside dir without
+// removing dir itself. This is necessary when dir is a mount point (Docker
+// volume, EFS, PVC) since the mount point directory cannot be deleted.
+func clearDirectory(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("failed to read directory %s: %w", dir, err)
+	}
+	for _, entry := range entries {
+		entryPath := filepath.Join(dir, entry.Name())
+		if err := os.RemoveAll(entryPath); err != nil {
+			return fmt.Errorf("failed to remove %s: %w", entryPath, err)
+		}
+	}
+	return nil
 }
 
 // NewTestStorage creates an in-memory storage for testing.
