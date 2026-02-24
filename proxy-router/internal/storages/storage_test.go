@@ -33,6 +33,10 @@ func TestNewStorage_CorruptionRecovery(t *testing.T) {
 
 	require.NoError(t, db.Close())
 
+	// Place a non-BadgerDB file in the data directory
+	foreignFile := filepath.Join(dbPath, "config.json")
+	require.NoError(t, os.WriteFile(foreignFile, []byte(`{"keep":"me"}`), 0644))
+
 	sstFiles, err := filepath.Glob(filepath.Join(dbPath, "*.sst"))
 	require.NoError(t, err)
 	require.NotEmpty(t, sstFiles, "expected SST files after writing data")
@@ -51,6 +55,11 @@ func TestNewStorage_CorruptionRecovery(t *testing.T) {
 
 	_, err = storage.Get([]byte("key-000001"))
 	require.ErrorIs(t, err, badger.ErrKeyNotFound, "old data should be gone after recovery")
+
+	// Non-BadgerDB file must survive the recovery
+	content, err := os.ReadFile(foreignFile)
+	require.NoError(t, err, "non-BadgerDB file should not be deleted during recovery")
+	require.Equal(t, `{"keep":"me"}`, string(content))
 }
 
 func TestNewStorage_NormalOpen(t *testing.T) {
@@ -71,6 +80,18 @@ func TestNewStorage_NormalOpen(t *testing.T) {
 	val, err := storage2.Get([]byte("hello"))
 	require.NoError(t, err)
 	require.Equal(t, "world", string(val))
+}
+
+func TestIsBadgerFile(t *testing.T) {
+	badger := []string{"MANIFEST", "KEYREGISTRY", "DISCARD", "LOCK", "000001.sst", "000002.vlog", "00001.mem"}
+	for _, name := range badger {
+		require.True(t, isBadgerFile(name), "expected %q to be recognized as a BadgerDB file", name)
+	}
+
+	nonBadger := []string{"config.json", ".env", "readme.md", "data.db", "notes.txt"}
+	for _, name := range nonBadger {
+		require.False(t, isBadgerFile(name), "expected %q to NOT be recognized as a BadgerDB file", name)
+	}
 }
 
 func TestIsBadgerCorruptionError(t *testing.T) {

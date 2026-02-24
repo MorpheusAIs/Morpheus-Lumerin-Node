@@ -48,7 +48,7 @@ func NewStorage(log lib.ILogger, path string) (*Storage, error) {
 
 		log.Warnf("detected corrupted badger db at %s: %s — wiping data and recreating", path, err)
 
-		if clearErr := clearDirectory(path); clearErr != nil {
+		if clearErr := clearBadgerFiles(path); clearErr != nil {
 			return nil, fmt.Errorf("failed to clear corrupted badger db at %s: %w (original error: %s)", path, clearErr, err)
 		}
 
@@ -99,15 +99,41 @@ func isBadgerCorruptionError(err error) bool {
 	return false
 }
 
-// clearDirectory removes all files and subdirectories inside dir without
-// removing dir itself. This is necessary when dir is a mount point (Docker
-// volume, EFS, PVC) since the mount point directory cannot be deleted.
-func clearDirectory(dir string) error {
+// badgerFileNames contains the exact filenames BadgerDB creates.
+var badgerFileNames = map[string]bool{
+	"MANIFEST":    true,
+	"KEYREGISTRY": true,
+	"DISCARD":     true,
+	"LOCK":        true,
+}
+
+// badgerFileExtensions contains the file extensions BadgerDB uses for data files.
+var badgerFileExtensions = map[string]bool{
+	".sst":  true,
+	".vlog": true,
+	".mem":  true,
+}
+
+// isBadgerFile returns true if the filename belongs to BadgerDB.
+func isBadgerFile(name string) bool {
+	if badgerFileNames[name] {
+		return true
+	}
+	return badgerFileExtensions[filepath.Ext(name)]
+}
+
+// clearBadgerFiles removes only BadgerDB files from dir, leaving any
+// non-BadgerDB files intact. The directory itself is never removed, so
+// this is safe to use on mount points (Docker volumes, EFS, PVCs).
+func clearBadgerFiles(dir string) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return fmt.Errorf("failed to read directory %s: %w", dir, err)
 	}
 	for _, entry := range entries {
+		if !isBadgerFile(entry.Name()) {
+			continue
+		}
 		entryPath := filepath.Join(dir, entry.Name())
 		if err := os.RemoveAll(entryPath); err != nil {
 			return fmt.Errorf("failed to remove %s: %w", entryPath, err)
