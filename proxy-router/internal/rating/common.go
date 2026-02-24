@@ -40,7 +40,13 @@ func getVariance(sd s.LibSDSD, obsNum int64) float64 {
 	if obsNum <= 1 {
 		return 0
 	}
-	return float64(sd.SqSum) / float64(obsNum-1)
+	v := float64(sd.SqSum) / float64(obsNum-1)
+	if v < 0 {
+		// SqSum should never be negative (sum of squares), but can happen
+		// due to integer overflow in on-chain computation or ABI truncation
+		return 0
+	}
+	return v
 }
 
 // cutRange01 cuts the value to the range [0, 1]
