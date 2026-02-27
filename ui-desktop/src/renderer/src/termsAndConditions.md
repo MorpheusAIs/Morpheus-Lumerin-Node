@@ -1,9 +1,9 @@
 # Morpheus Terms of Use
 
-Last Reviewed Date: February 26, 2025
+Last Reviewed Date: February 27, 2026
 MIT License
 
-Copyright (c) 2025 Morpheus
+Copyright (c) 2026 Morpheus
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
