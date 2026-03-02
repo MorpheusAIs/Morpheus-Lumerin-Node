@@ -53,6 +53,12 @@ func CreateHTTPServer(log lib.ILogger, authConfig system.HTTPAuthConfig, control
 	gin.SetMode(gin.ReleaseMode)
 
 	r := gin.New()
+
+	// Add concurrency limiter to prevent resource exhaustion under load.
+	// Default: 100 concurrent requests. Override via PROXY_MAX_CONCURRENT env var.
+	concurrencyLimiter := NewConcurrencyLimiter(0)
+	r.Use(concurrencyLimiter.Middleware())
+
 	r.Use(RequestLogger(log))
 
 	r.Use(cors.New(cors.Config{
