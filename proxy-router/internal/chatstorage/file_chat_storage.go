@@ -16,6 +16,7 @@ import (
 type ChatStorage struct {
 	dirPath            string                 // Directory path to store the files
 	fileMutexes        map[string]*sync.Mutex // Map to store mutexes for each file
+	fileMutexesLock    sync.Mutex             // Protects concurrent access to fileMutexes map
 	forwardChatContext bool
 }
 
@@ -124,7 +125,8 @@ func (cs *ChatStorage) StorePromptResponseToFile(identifier string, isLocal bool
 		return fmt.Errorf("unsupported prompt type: %T", prompt)
 	}
 
-	if chatHistory.Messages == nil && len(chatHistory.Messages) == 0 {
+	// Set metadata only on first message (new chat)
+	if chatHistory.Messages == nil || len(chatHistory.Messages) == 0 {
 		chatHistory.ModelId = modelId
 		chatHistory.Title = title
 		chatHistory.IsLocal = isLocal
@@ -164,6 +166,12 @@ func (cs *ChatStorage) GetChats() []gcs.Chat {
 		if err != nil {
 			continue
 		}
+
+		// Skip chats with no messages (corrupted/empty files)
+		if len(fileContent.Messages) == 0 {
+			continue
+		}
+
 		chats = append(chats, gcs.Chat{
 			ChatID:    chatID,
 			Title:     fileContent.Title,
@@ -235,7 +243,10 @@ func (cs *ChatStorage) LoadChatFromFile(identifier string) (*gcs.ChatHistory, er
 }
 
 // initFileMutex initializes a mutex for the file if not already present.
+// Thread-safe: uses fileMutexesLock to protect concurrent map access.
 func (cs *ChatStorage) initFileMutex(filePath string) {
+	cs.fileMutexesLock.Lock()
+	defer cs.fileMutexesLock.Unlock()
 	if _, exists := cs.fileMutexes[filePath]; !exists {
 		cs.fileMutexes[filePath] = &sync.Mutex{}
 	}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -27,6 +28,7 @@ type StreamingSession struct {
 // StreamingSessionManager manages active streaming sessions
 type StreamingSessionManager struct {
 	sessions map[string]*StreamingSession
+	mu       sync.RWMutex // Protects concurrent access to sessions map
 }
 
 func NewStreamingSessionManager() *StreamingSessionManager {
@@ -53,7 +55,11 @@ func (sm *StreamingSessionManager) CreateSession(streamID, sessionID string, tot
 		StartTime:    time.Now(),
 		LastActivity: time.Now(),
 	}
+
+	sm.mu.Lock()
 	sm.sessions[streamID] = session
+	sm.mu.Unlock()
+
 	return session, nil
 }
 
@@ -79,11 +85,15 @@ func (sm *StreamingSessionManager) createTempFile(streamID, contentType string) 
 }
 
 func (sm *StreamingSessionManager) GetSession(streamID string) (*StreamingSession, bool) {
+	sm.mu.RLock()
 	session, exists := sm.sessions[streamID]
+	sm.mu.RUnlock()
 	return session, exists
 }
 
 func (sm *StreamingSessionManager) RemoveSession(streamID string) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
 	if session, exists := sm.sessions[streamID]; exists {
 		// Clean up temporary file
 		if session.TempFilePath != "" {
@@ -94,6 +104,8 @@ func (sm *StreamingSessionManager) RemoveSession(streamID string) {
 }
 
 func (sm *StreamingSessionManager) CleanupExpiredSessions() {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
 	now := time.Now()
 	for streamID, session := range sm.sessions {
 		if now.Sub(session.LastActivity).Seconds() > AUDIO_STREAM_TIMEOUT_SECONDS {
