@@ -9,10 +9,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// DefaultMaxConcurrent is the default maximum concurrent requests.
+// DefaultMaxConcurrent is the default maximum concurrent HTTP requests.
 // Can be overridden via PROXY_MAX_CONCURRENT environment variable.
-// Tested stable at 500 concurrent on M-series Mac; 100 is conservative default.
-const DefaultMaxConcurrent = 100
+//
+// Philosophy: The REAL concurrency limit is stake-based (1 lane per stake).
+// This is just server protection against resource exhaustion.
+// Session semaphores enforce the true limit - this is a safety net.
+// Set high so session-based "no open lane" is the normal rejection path.
+const DefaultMaxConcurrent = 10000
 
 // ConcurrencyLimiter provides bounded concurrency control for HTTP handlers.
 // When the limit is reached, new requests receive 503 Service Unavailable
@@ -55,11 +59,11 @@ func (cl *ConcurrencyLimiter) Middleware() gin.HandlerFunc {
 			c.Header("X-Concurrency-Current", strconv.FormatInt(current-1, 10))
 			c.Header("Retry-After", "1")
 			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
-				"error":   "Server at capacity",
-				"code":    "concurrency_limit_exceeded",
+				"error":   "[lumerin_router] HTTP connection limit reached",
+				"code":    "http_concurrency_limit_exceeded",
 				"limit":   cl.maxConcurrent,
 				"current": current - 1,
-				"message": "Too many concurrent requests. Please retry.",
+				"message": "HTTP connection limit reached (not stake-based). This should rarely happen.",
 			})
 			return
 		}
