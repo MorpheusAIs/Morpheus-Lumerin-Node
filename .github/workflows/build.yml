@@ -54,6 +54,51 @@ env:
   TEST_ENV_VAR: "test"
 
 jobs:
+  Go-Module-Verify:
+    name: Verify Go Modules
+    if: |
+      github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
+        (github.event_name == 'workflow_dispatch') 
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+          cache-dependency-path: |
+            proxy-router/go.sum
+            cli/go.sum
+
+      - name: Verify proxy-router go.mod/go.sum are in sync
+        working-directory: proxy-router
+        run: |
+          go mod tidy
+          if ! git diff --exit-code go.mod go.sum; then
+            echo ""
+            echo "❌ proxy-router/go.mod or go.sum is out of date!"
+            echo "Run 'cd proxy-router && go mod tidy' locally and commit the changes."
+            exit 1
+          fi
+          echo "✅ proxy-router go.mod/go.sum are in sync"
+
+      - name: Verify cli go.mod/go.sum are in sync
+        working-directory: cli
+        run: |
+          go mod tidy
+          if ! git diff --exit-code go.mod go.sum; then
+            echo ""
+            echo "❌ cli/go.mod or go.sum is out of date!"
+            echo "Run 'cd cli && go mod tidy' locally and commit the changes."
+            exit 1
+          fi
+          echo "✅ cli go.mod/go.sum are in sync"
+
   Generate-Tag:
     runs-on: ubuntu-latest
     name: Generate Tag Name
@@ -133,7 +178,9 @@ jobs:
         (github.event_name == 'workflow_dispatch') 
       )
     runs-on: ubuntu-latest
-    needs: Generate-Tag
+    needs:
+      - Generate-Tag
+      - Go-Module-Verify
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -251,7 +298,9 @@ jobs:
         (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true') 
       )
-    needs: Generate-Tag
+    needs:
+      - Generate-Tag
+      - Go-Module-Verify
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -917,6 +966,14 @@ jobs:
           aws-secret-access-key: ${{ secrets.MORPHEUS_AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-2
 
+      - name: Pause Active Models refresh
+        run: |
+          ENV="prd"
+          RULE_NAME="${ENV}-morpheus-active-models-updater"
+          echo "⏸️ Disabling Active Models EventBridge rule: $RULE_NAME"
+          aws events disable-rule --name "$RULE_NAME" --region us-east-2
+          echo "✅ Active Models refresh paused — prevents stale data during provider rolling deploy"
+
       - name: Deploy to Morpheus Provider ECS
         run: |
           BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
@@ -1131,6 +1188,36 @@ jobs:
             # Don't fail the deployment for version mismatch, as it might be a timing issue
             # The ECS service update was successful, version verification is informational
             echo "⚠️ Continuing with warning - ECS deployment completed but version verification inconclusive"
+          fi
+
+      - name: Resume Active Models refresh
+        if: always()
+        run: |
+          ENV="prd"
+          RULE_NAME="${ENV}-morpheus-active-models-updater"
+          FUNCTION_NAME="${ENV}-morpheus-active-models-updater"
+          
+          echo "▶️ Re-enabling Active Models EventBridge rule: $RULE_NAME"
+          aws events enable-rule --name "$RULE_NAME" --region us-east-2
+          echo "✅ Active Models refresh re-enabled"
+          
+          echo "🔄 Invoking Active Models Lambda to refresh immediately..."
+          INVOKE_RESULT=$(aws lambda invoke \
+            --function-name "$FUNCTION_NAME" \
+            --region us-east-2 \
+            --log-type Tail \
+            --payload '{}' \
+            /tmp/lambda-response.json 2>&1)
+          
+          INVOKE_STATUS=$?
+          if [ $INVOKE_STATUS -eq 0 ]; then
+            echo "✅ Active Models Lambda invoked successfully"
+            echo "📋 Response:"
+            cat /tmp/lambda-response.json | jq . 2>/dev/null || cat /tmp/lambda-response.json
+          else
+            echo "⚠️ Active Models Lambda invocation failed (status: $INVOKE_STATUS)"
+            echo "$INVOKE_RESULT"
+            echo "ℹ️ The EventBridge schedule will pick it up on the next cycle"
           fi
 
   UI-macOS-latest-arm64:
