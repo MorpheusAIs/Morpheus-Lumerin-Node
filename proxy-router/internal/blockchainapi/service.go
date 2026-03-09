@@ -978,6 +978,45 @@ func (s *BlockchainService) GetSessions(ctx context.Context, user, provider comm
 	return mapSessions(ids, sessions, bids), nil
 }
 
+// GetUnclosedUserSessions fetches a page of sessions for a user and returns
+// only those that are still open on-chain (ClosedAt == 0). Bids are fetched
+// only for the unclosed subset, avoiding unnecessary RPC calls for the
+// (typically much larger) set of already-closed sessions.
+func (s *BlockchainService) GetUnclosedUserSessions(ctx context.Context, user common.Address, offset *big.Int, limit uint8, order r.Order) (unclosed []*structs.Session, closedCount int, totalFetched int, err error) {
+	ids, sessions, err := s.sessionRouter.GetSessionsByUser(ctx, user, offset, limit, order)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+
+	totalFetched = len(sessions)
+
+	var unclosedIDs [][32]byte
+	var unclosedSes []sr.ISessionStorageSession
+	for i, ses := range sessions {
+		if ses.ClosedAt.Int64() == 0 {
+			unclosedIDs = append(unclosedIDs, ids[i])
+			unclosedSes = append(unclosedSes, ses)
+		} else {
+			closedCount++
+		}
+	}
+
+	if len(unclosedIDs) == 0 {
+		return nil, closedCount, totalFetched, nil
+	}
+
+	bidIDs := make([][32]byte, len(unclosedSes))
+	for i, ses := range unclosedSes {
+		bidIDs[i] = ses.BidId
+	}
+	_, bids, err := s.marketplace.GetMultipleBids(ctx, bidIDs)
+	if err != nil {
+		return nil, closedCount, totalFetched, err
+	}
+
+	return mapSessions(unclosedIDs, unclosedSes, bids), closedCount, totalFetched, nil
+}
+
 func (s *BlockchainService) GetSessionsIds(ctx context.Context, user, provider common.Address, offset *big.Int, limit uint8, order r.Order) ([]common.Hash, error) {
 	ids, err := s.sessionRouter.GetSessionsIdsByUser(ctx, user, offset, limit, order)
 
