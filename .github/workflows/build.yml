@@ -628,9 +628,9 @@ jobs:
               echo "📡 Health response: $HEALTH_RESPONSE"
               
               # Parse version from JSON response
-              DEPLOYED_VERSION=$(echo "$HEALTH_RESPONSE" | jq -r '.Version // empty' 2>/dev/null)
-              UPTIME=$(echo "$HEALTH_RESPONSE" | jq -r '.Uptime // empty' 2>/dev/null)
-              STATUS=$(echo "$HEALTH_RESPONSE" | jq -r '.Status // empty' 2>/dev/null)
+              DEPLOYED_VERSION=$(echo "$HEALTH_RESPONSE" | jq -r '(.version // .Version // empty)' 2>/dev/null)
+              UPTIME=$(echo "$HEALTH_RESPONSE" | jq -r '(.uptime // .Uptime // empty)' 2>/dev/null)
+              STATUS=$(echo "$HEALTH_RESPONSE" | jq -r '(.status // .Status // empty)' 2>/dev/null)
               
               if [ -n "$DEPLOYED_VERSION" ] && [ "$STATUS" = "healthy" ]; then
                 echo "🏥 Service Status: $STATUS"
@@ -883,9 +883,9 @@ jobs:
               echo "📡 Health response: $HEALTH_RESPONSE"
               
               # Parse version from JSON response
-              DEPLOYED_VERSION=$(echo "$HEALTH_RESPONSE" | jq -r '.Version // empty' 2>/dev/null)
-              UPTIME=$(echo "$HEALTH_RESPONSE" | jq -r '.Uptime // empty' 2>/dev/null)
-              STATUS=$(echo "$HEALTH_RESPONSE" | jq -r '.Status // empty' 2>/dev/null)
+              DEPLOYED_VERSION=$(echo "$HEALTH_RESPONSE" | jq -r '(.version // .Version // empty)' 2>/dev/null)
+              UPTIME=$(echo "$HEALTH_RESPONSE" | jq -r '(.uptime // .Uptime // empty)' 2>/dev/null)
+              STATUS=$(echo "$HEALTH_RESPONSE" | jq -r '(.status // .Status // empty)' 2>/dev/null)
               
               if [ -n "$DEPLOYED_VERSION" ] && [ "$STATUS" = "healthy" ]; then
                 echo "🏥 Service Status: $STATUS"
@@ -1135,9 +1135,9 @@ jobs:
               echo "📡 Health response: $HEALTH_RESPONSE"
               
               # Parse version from JSON response
-              DEPLOYED_VERSION=$(echo "$HEALTH_RESPONSE" | jq -r '.Version // empty' 2>/dev/null)
-              UPTIME=$(echo "$HEALTH_RESPONSE" | jq -r '.Uptime // empty' 2>/dev/null)
-              STATUS=$(echo "$HEALTH_RESPONSE" | jq -r '.Status // empty' 2>/dev/null)
+              DEPLOYED_VERSION=$(echo "$HEALTH_RESPONSE" | jq -r '(.version // .Version // empty)' 2>/dev/null)
+              UPTIME=$(echo "$HEALTH_RESPONSE" | jq -r '(.uptime // .Uptime // empty)' 2>/dev/null)
+              STATUS=$(echo "$HEALTH_RESPONSE" | jq -r '(.status // .Status // empty)' 2>/dev/null)
               
               if [ -n "$DEPLOYED_VERSION" ] && [ "$STATUS" = "healthy" ]; then
                 echo "🏥 Service Status: $STATUS"
