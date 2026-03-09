@@ -113,6 +113,7 @@ jobs:
       vtag: ${{ steps.gen_tag_name.outputs.vtag }}
       vfull: ${{ steps.gen_tag_name.outputs.vfull }}
       image_name: ${{ steps.gen_tag_name.outputs.image_name }}
+      tee_image_name: ${{ steps.gen_tag_name.outputs.tee_image_name }}
       artifacts_base_url: ${{ github.server_url }}/${{ github.repository }}/releases/download/${{ steps.gen_tag_name.outputs.tag_name }}
     steps:
       - name: Clone repository
@@ -165,8 +166,10 @@ jobs:
           echo "vtag=${VTAG}" >> $GITHUB_OUTPUT
           echo "vfull=${VFULL}" >> $GITHUB_OUTPUT
           echo "image_name=${IMAGE_NAME}" >> $GITHUB_OUTPUT
+          echo "tee_image_name=${IMAGE_NAME}-tee" >> $GITHUB_OUTPUT
           echo "✅ New Build Tag: $VTAG" >> $GITHUB_STEP_SUMMARY
           echo "✅ Docker Image: ${IMAGE_NAME}:${VTAG}" >> $GITHUB_STEP_SUMMARY
+          echo "✅ TEE Image: ${IMAGE_NAME}-tee:${VTAG}" >> $GITHUB_STEP_SUMMARY
           echo "❌ Old Major Tag: $VLAST"  >> $GITHUB_STEP_SUMMARY
 
   Build-Proxy-Router-Test:
@@ -289,6 +292,65 @@ jobs:
           
           docker buildx imagetools create -t $BUILDIMAGE:$LATEST_TAG $BUILDIMAGE:$BUILDTAG || (echo "❌ Failed to create :$LATEST_TAG tag" && exit 1)
           echo "✅ Proxy-Router Push $BUILDIMAGE:$LATEST_TAG Tag Successful!"
+
+  GHCR-Build-and-Push-TEE:
+    name: Build & Push TEE Docker Image
+    if: |
+      github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/')|| github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true') 
+      )
+    needs:
+      - Generate-Tag
+      - GHCR-Build-and-Push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push TEE Docker Image
+        run: |
+          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          BASE_IMAGE=${{ needs.Generate-Tag.outputs.image_name }}:$BUILDTAG
+          TEE_IMAGE="${{ needs.Generate-Tag.outputs.image_name }}-tee"
+          
+          echo "🔒 Building TEE-hardened image from base: $BASE_IMAGE"
+          
+          # TEE image is amd64-only (Intel TDX and AMD SEV are both x86_64)
+          docker buildx build \
+            --platform linux/amd64 \
+            --build-arg BASE_IMAGE=$BASE_IMAGE \
+            --push \
+            -t $TEE_IMAGE:$BUILDTAG \
+            -f proxy-router/Dockerfile.tee \
+            proxy-router || (echo "❌ Failed to push TEE image" && exit 1)
+          echo "✅ TEE Image pushed: $TEE_IMAGE:$BUILDTAG"
+
+      - name: Push TEE Latest Tags
+        if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' }}
+        run: |
+          TEE_IMAGE="${{ needs.Generate-Tag.outputs.image_name }}-tee"
+          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          
+          if [ "${{ github.ref_name }}" == "main" ]; then
+            LATEST_TAG="latest"
+          else
+            LATEST_TAG="latest-test"
+          fi
+          
+          docker buildx imagetools create -t $TEE_IMAGE:$LATEST_TAG $TEE_IMAGE:$BUILDTAG || (echo "❌ Failed to create TEE :$LATEST_TAG tag" && exit 1)
+          echo "✅ TEE Image tag pushed: $TEE_IMAGE:$LATEST_TAG"
 
   Build-Service-Executables:
     name: Build Service Executables
