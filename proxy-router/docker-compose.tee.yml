@@ -1,20 +1,19 @@
 services:
   proxy-router:
-    image: ghcr.io/morpheusais/morpheus-lumerin-node-tee:v5.14.0
+    image: ghcr.io/morpheusais/morpheus-lumerin-node-tee:v5.14.6-test
     restart: unless-stopped
     ports:
-      - "8082:8082"
-      - "3333:3333"
+      - 8082:8082
+      - 3333:3333
     volumes:
       - proxy_data:/app/data
     environment:
-      # All non-secret config is baked into the -tee image (Dockerfile.tee).
-      # Only runtime secrets below — inject via your TEE platform's encrypted secrets.
       - WALLET_PRIVATE_KEY=${WALLET_PRIVATE_KEY}
       - ETH_NODE_ADDRESS=${ETH_NODE_ADDRESS}
       - MODELS_CONFIG_CONTENT=${MODELS_CONFIG_CONTENT}
       - WEB_PUBLIC_URL=${WEB_PUBLIC_URL:-http://localhost:8082}
       - COOKIE_CONTENT=${COOKIE_CONTENT:-admin:admin}
-
+    env_file:
+      - usr/.env
 volumes:
-  proxy_data:
+  proxy_data: null
