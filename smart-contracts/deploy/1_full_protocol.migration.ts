@@ -126,8 +126,8 @@ module.exports = async function (deployer: Deployer) {
 
 // npx hardhat migrate --only 1
 
-// npx hardhat migrate --network arbitrum_sepolia --only 1 --verify
-// npx hardhat migrate --network arbitrum_sepolia --only 1 --verify --continue
+// npx hardhat migrate --network base_sepolia --only 1 --verify
+// npx hardhat migrate --network base_sepolia --only 1 --verify --continue
 
-// npx hardhat migrate --network arbitrum --only 1 --verify
-// npx hardhat migrate --network arbitrum --only 1 --verify --continue
+// npx hardhat migrate --network base --only 1 --verify
+// npx hardhat migrate --network base --only 1 --verify --continue

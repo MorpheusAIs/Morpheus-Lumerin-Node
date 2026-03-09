@@ -30,11 +30,11 @@ import (
 
 var WALLET_PRIVATE_KEY = lib.MustStringToHexString("") // Set this to a valid private key to run the test.
 
-var DIAMOND_CONTRACT_ADDR = lib.MustStringToAddress("0x70768f0ff919e194e11abfc3a2edf43213359dc1")
-var MOR_CONTRACT_ADDR = lib.MustStringToAddress("0x34a285a1b1c166420df5b6630132542923b5b27e")
-var BLOCKSCOUT_API_URL = "https://arbitrum-sepolia.blockscout.com/api/v2"
+var DIAMOND_CONTRACT_ADDR = lib.MustStringToAddress("0x6e4d0B775E3C3b02683A6F277Ac80240C4aFF930")
+var MOR_CONTRACT_ADDR = lib.MustStringToAddress("0x5C80Ddd187054E1E4aBBfFCD750498e81d34FfA3")
+var BLOCKSCOUT_API_URL = "https://base-sepolia.blockscout.com/api/v2"
 var ETH_LEGACY_TX = false
-var ETH_NODE_ADDRESS = "wss://arb-sepolia.g.alchemy.com/v2/Ken3T8xkvWUxtpKvb3yDedzF-sNsQDlZ"
+var ETH_NODE_ADDRESS = "wss://base-sepolia.g.alchemy.com/v2/YOUR_API_KEY"
 
 var PROVIDER_ADDR = lib.MustStringToAddress("0x65bBb982d9B0AfE9AED13E999B79c56dDF9e04fC")
 var PROVIDER_URL = "thehulk1.stg.lumerin.io:3333"
