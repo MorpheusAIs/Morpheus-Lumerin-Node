@@ -1,0 +1,44 @@
+{
+  "MOR": "0x7431ada8a591c955a994a21710752ef9b882b8e3",
+  "fundingAccount": "0x1FE04BC15Cf2c5A2d41a0b3a96725596676eBa1E",
+  "providerMinStake": "100000000000000000",
+  "modelMinStake": "100000000000000000",
+  "marketplaceBidFee": "100000000000000000",
+  "marketplaceMinBidPricePerSecond": "10000000000000",
+  "marketplaceMaxBidPricePerSecond": "10000000000000000",
+  "delegateRegistry": "0x00000000000000447e69651d841bD8D104Bed493",
+  "owner": "0x1FE04BC15Cf2c5A2d41a0b3a96725596676eBa1E",
+  "lumerinProtocol": "0x6aBE1d282f72B474E54527D93b979A4f64d3030a",
+  "pools": [
+    {
+      "payoutStart": 1707393600,
+      "decreaseInterval": 86400,
+      "initialReward": "3456000000000000000000",
+      "rewardDecrease": "592558728240000000"
+    },
+    {
+      "payoutStart": 1707393600,
+      "decreaseInterval": 86400,
+      "initialReward": "3456000000000000000000",
+      "rewardDecrease": "592558728240000000"
+    },
+    {
+      "payoutStart": 1707393600,
+      "decreaseInterval": 86400,
+      "initialReward": "3456000000000000000000",
+      "rewardDecrease": "592558728240000000"
+    },
+    {
+      "payoutStart": 1707393600,
+      "decreaseInterval": 86400,
+      "initialReward": "3456000000000000000000",
+      "rewardDecrease": "592558728240000000"
+    },
+    {
+      "payoutStart": 1707393600,
+      "decreaseInterval": 86400,
+      "initialReward": "576000000000000000000",
+      "rewardDecrease": "98759788040000000"
+    }
+  ]
+}
