@@ -229,12 +229,21 @@ jobs:
       - Generate-Tag
       - Build-Proxy-Router-Test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    outputs:
+      digest: ${{ steps.capture-digest.outputs.digest }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           fetch-tags: true
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -270,11 +279,26 @@ jobs:
             --build-arg COMMIT=$BUILDCOMMIT \
             --cache-from type=gha \
             --cache-to type=gha,mode=min \
+            --metadata-file /tmp/build-metadata.json \
             --push \
             -t $BUILDIMAGE:$BUILDTAG \
             -f proxy-router/Dockerfile \
             proxy-router || (echo "❌ Failed to push image with tag: $BUILDIMAGE:$BUILDTAG" && exit 1)
           echo "✅ Proxy-Router Build and Push of $BUILDIMAGE:$BUILDTAG Successful!"
+
+      - name: Capture image digest
+        id: capture-digest
+        run: |
+          DIGEST=$(jq -r '.["containerimage.digest"]' /tmp/build-metadata.json)
+          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+          echo "📋 Image digest: \`$DIGEST\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Sign image with cosign (keyless)
+        run: |
+          BUILDIMAGE=${{ needs.Generate-Tag.outputs.image_name }}
+          DIGEST=${{ steps.capture-digest.outputs.digest }}
+          cosign sign --yes "$BUILDIMAGE@$DIGEST"
+          echo "🔏 Image signed: \`$BUILDIMAGE@$DIGEST\`" >> $GITHUB_STEP_SUMMARY
 
       - name: Push Latest Tags
         if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' }}
@@ -305,9 +329,21 @@ jobs:
       - Generate-Tag
       - GHCR-Build-and-Push
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    outputs:
+      digest: ${{ steps.capture-digest.outputs.digest }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -331,11 +367,114 @@ jobs:
           docker buildx build \
             --platform linux/amd64 \
             --build-arg BASE_IMAGE=$BASE_IMAGE \
+            --metadata-file /tmp/tee-build-metadata.json \
             --push \
             -t $TEE_IMAGE:$BUILDTAG \
             -f proxy-router/Dockerfile.tee \
             proxy-router || (echo "❌ Failed to push TEE image" && exit 1)
           echo "✅ TEE Image pushed: $TEE_IMAGE:$BUILDTAG"
+
+      - name: Capture TEE image digest
+        id: capture-digest
+        run: |
+          DIGEST=$(jq -r '.["containerimage.digest"]' /tmp/tee-build-metadata.json)
+          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+          echo "📋 TEE image digest: \`$DIGEST\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Sign TEE image with cosign (keyless)
+        run: |
+          TEE_IMAGE="${{ needs.Generate-Tag.outputs.image_name }}-tee"
+          DIGEST=${{ steps.capture-digest.outputs.digest }}
+          cosign sign --yes "$TEE_IMAGE@$DIGEST"
+          echo "🔏 TEE image signed: \`$TEE_IMAGE@$DIGEST\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Generate and attach SBOM
+        run: |
+          TEE_IMAGE="${{ needs.Generate-Tag.outputs.image_name }}-tee"
+          DIGEST=${{ steps.capture-digest.outputs.digest }}
+          
+          syft "$TEE_IMAGE@$DIGEST" -o spdx-json=sbom-tee.spdx.json
+          cosign attach sbom --sbom sbom-tee.spdx.json "$TEE_IMAGE@$DIGEST"
+          echo "📦 SBOM generated and attached to TEE image" >> $GITHUB_STEP_SUMMARY
+
+      - name: Generate TEE attestation manifest
+        run: |
+          TEE_IMAGE="${{ needs.Generate-Tag.outputs.image_name }}-tee"
+          TEE_DIGEST=${{ steps.capture-digest.outputs.digest }}
+          BASE_IMAGE=${{ needs.Generate-Tag.outputs.image_name }}
+          BASE_DIGEST=${{ needs.GHCR-Build-and-Push.outputs.digest }}
+          BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          
+          COMPOSE_SHA="sha256:$(sha256sum proxy-router/docker-compose.tee.yml | cut -d' ' -f1)"
+          DOCKERFILE_SHA="sha256:$(sha256sum proxy-router/Dockerfile.tee | cut -d' ' -f1)"
+          TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          
+          jq -n \
+            --arg tee_image "${TEE_IMAGE}:${BUILDTAG}" \
+            --arg tee_digest "$TEE_DIGEST" \
+            --arg base_image "${BASE_IMAGE}:${BUILDTAG}" \
+            --arg base_digest "$BASE_DIGEST" \
+            --arg compose_sha "$COMPOSE_SHA" \
+            --arg dockerfile_sha "$DOCKERFILE_SHA" \
+            --arg commit "${{ github.sha }}" \
+            --arg ref "${{ github.ref }}" \
+            --arg run_id "${{ github.run_id }}" \
+            --arg run_url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --arg timestamp "$TIMESTAMP" \
+            '{
+              tee_image: $tee_image,
+              tee_image_digest: $tee_digest,
+              base_image: $base_image,
+              base_image_digest: $base_digest,
+              compose_file: "proxy-router/docker-compose.tee.yml",
+              compose_sha256: $compose_sha,
+              dockerfile_tee_sha256: $dockerfile_sha,
+              build: {
+                commit: $commit,
+                ref: $ref,
+                workflow: "build.yml",
+                run_id: $run_id,
+                run_url: $run_url,
+                timestamp: $timestamp
+              },
+              tee_platforms: ["intel-tdx", "amd-sev-snp"],
+              runtime_secrets_only: [
+                "WALLET_PRIVATE_KEY",
+                "ETH_NODE_ADDRESS",
+                "MODELS_CONFIG_CONTENT",
+                "WEB_PUBLIC_URL",
+                "COOKIE_CONTENT"
+              ],
+              baked_env: {
+                DIAMOND_CONTRACT_ADDRESS: "0x6aBE1d282f72B474E54527D93b979A4f64d3030a",
+                MOR_TOKEN_ADDRESS: "0x7431ada8a591c955a994a21710752ef9b882b8e3",
+                BLOCKSCOUT_API_URL: "https://base.blockscout.com/api/v2",
+                ETH_NODE_CHAIN_ID: "8453",
+                PROXY_STORE_CHAT_CONTEXT: "false",
+                LOG_COLOR: "false",
+                LOG_JSON: "true",
+                LOG_IS_PROD: "true",
+                ENVIRONMENT: "production"
+              },
+              measurements: {
+                note: "RTMR/SEV values will be populated when reproduce-mr is integrated (Phase 1b)"
+              }
+            }' > tee-attestation-manifest.json
+          
+          echo "📋 TEE attestation manifest:" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          cat tee-attestation-manifest.json >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Sign and attach TEE attestation manifest
+        run: |
+          TEE_IMAGE="${{ needs.Generate-Tag.outputs.image_name }}-tee"
+          DIGEST=${{ steps.capture-digest.outputs.digest }}
+          cosign attest --yes \
+            --predicate tee-attestation-manifest.json \
+            --type https://morpheusais.github.io/tee-attestation/v1 \
+            "$TEE_IMAGE@$DIGEST"
+          echo "🔏 TEE attestation manifest signed and attached to \`$TEE_IMAGE@$DIGEST\`" >> $GITHUB_STEP_SUMMARY
 
       - name: Push TEE Latest Tags
         if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' }}
