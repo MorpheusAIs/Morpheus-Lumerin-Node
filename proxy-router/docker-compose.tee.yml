@@ -1,9 +1,8 @@
 services:
   proxy-router:
-    image: ghcr.io/morpheusais/morpheus-lumerin-node-tee:v5.14.6-test
+    image: ghcr.io/morpheusais/morpheus-lumerin-node-tee:latest
     restart: unless-stopped
     ports:
-      - 8082:8082
       - 3333:3333
     volumes:
       - proxy_data:/app/data
@@ -11,9 +10,54 @@ services:
       - WALLET_PRIVATE_KEY=${WALLET_PRIVATE_KEY}
       - ETH_NODE_ADDRESS=${ETH_NODE_ADDRESS}
       - MODELS_CONFIG_CONTENT=${MODELS_CONFIG_CONTENT}
-      - WEB_PUBLIC_URL=${WEB_PUBLIC_URL:-http://localhost:8082}
+      - WEB_PUBLIC_URL=${WEB_PUBLIC_URL:-https://localhost}
       - COOKIE_CONTENT=${COOKIE_CONTENT:-admin:admin}
+    env_file:
+      - usr/.env
+    networks:
+      - traefik
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.proxy-router.rule=PathPrefix(`/`)
+      - traefik.http.routers.proxy-router.entrypoints=websecure
+      - traefik.http.routers.proxy-router.tls=true
+      - traefik.http.services.proxy-router.loadbalancer.server.port=8082
+  traefik:
+    image: traefik:v2.10
+    command:
+      - --api.insecure=false
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.websecure.http.tls.options=default@file
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
+    ports:
+      - 443:443
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /mnt/secure/cert:/certs:ro
+    networks:
+      - traefik
+    configs:
+      - source: tls_config
+        target: /etc/traefik/dynamic/tls.yml
     env_file:
       - usr/.env
 volumes:
   proxy_data: null
+networks:
+  traefik:
+    driver: bridge
+configs:
+  tls_config:
+    content: |-
+      tls:
+        certificates:
+          - certFile: /certs/secret_vm_fullchain.pem
+            keyFile: /certs/secret_vm_private.pem
+        stores:
+          default:
+            defaultCertificate:
+              certFile: /certs/secret_vm_fullchain.pem
+              keyFile: /certs/secret_vm_private.pem
