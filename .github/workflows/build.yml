@@ -388,6 +388,54 @@ jobs:
           cosign sign --yes "$TEE_IMAGE@$DIGEST"
           echo "🔏 TEE image signed: \`$TEE_IMAGE@$DIGEST\`" >> $GITHUB_STEP_SUMMARY
 
+      - name: Load SecretVM artifact config
+        id: secretvm-config
+        run: |
+          source .github/tee/secretvm.env
+          echo "release=$SECRETVM_RELEASE" >> $GITHUB_OUTPUT
+          echo "rootfs_url=$SECRETVM_ROOTFS_TDX_URL" >> $GITHUB_OUTPUT
+          echo "rootfs_sha256=$SECRETVM_ROOTFS_TDX_SHA256" >> $GITHUB_OUTPUT
+
+      - name: Cache SecretVM rootfs
+        id: cache-rootfs
+        uses: actions/cache@v4
+        with:
+          path: /tmp/secretvm-artifacts
+          key: secretvm-${{ steps.secretvm-config.outputs.release }}-rootfs-dev-tdx
+
+      - name: Download SecretVM rootfs
+        if: steps.cache-rootfs.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p /tmp/secretvm-artifacts
+          echo "⬇️  Downloading SecretVM rootfs (${{ steps.secretvm-config.outputs.release }})..."
+          curl -L --retry 3 --retry-delay 5 -o /tmp/secretvm-artifacts/rootfs-dev-tdx.iso \
+            "${{ steps.secretvm-config.outputs.rootfs_url }}"
+          echo "${{ steps.secretvm-config.outputs.rootfs_sha256 }}  /tmp/secretvm-artifacts/rootfs-dev-tdx.iso" | sha256sum -c -
+          echo "✅ SecretVM rootfs downloaded and verified" >> $GITHUB_STEP_SUMMARY
+
+      - name: Generate deployed compose with immutable digest
+        id: generate-compose
+        run: |
+          TEE_IMAGE="${{ needs.Generate-Tag.outputs.image_name }}-tee"
+          DIGEST=${{ steps.capture-digest.outputs.digest }}
+          
+          sed "s|image: .*|image: ${TEE_IMAGE}@${DIGEST}|" \
+            proxy-router/docker-compose.tee.yml > /tmp/docker-compose.tee.deployed.yml
+          
+          echo "📋 Generated deployed compose (digest-pinned):" >> $GITHUB_STEP_SUMMARY
+          echo '```yaml' >> $GITHUB_STEP_SUMMARY
+          cat /tmp/docker-compose.tee.deployed.yml >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Compute RTMR3 (Intel TDX)
+        id: compute-rtmr3
+        run: |
+          RTMR3=$(python3 proxy-router/scripts/compute-rtmr3.py \
+            /tmp/docker-compose.tee.deployed.yml \
+            /tmp/secretvm-artifacts/rootfs-dev-tdx.iso)
+          echo "rtmr3=$RTMR3" >> $GITHUB_OUTPUT
+          echo "🔐 Expected RTMR3: \`$RTMR3\`" >> $GITHUB_STEP_SUMMARY
+
       - name: Generate and attach SBOM
         run: |
           TEE_IMAGE="${{ needs.Generate-Tag.outputs.image_name }}-tee"
@@ -404,30 +452,39 @@ jobs:
           BASE_IMAGE=${{ needs.Generate-Tag.outputs.image_name }}
           BASE_DIGEST=${{ needs.GHCR-Build-and-Push.outputs.digest }}
           BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          RTMR3=${{ steps.compute-rtmr3.outputs.rtmr3 }}
+          SECRETVM_RELEASE=${{ steps.secretvm-config.outputs.release }}
+          ROOTFS_SHA256=${{ steps.secretvm-config.outputs.rootfs_sha256 }}
           
-          COMPOSE_SHA="sha256:$(sha256sum proxy-router/docker-compose.tee.yml | cut -d' ' -f1)"
+          COMPOSE_SHA="sha256:$(sha256sum /tmp/docker-compose.tee.deployed.yml | cut -d' ' -f1)"
           DOCKERFILE_SHA="sha256:$(sha256sum proxy-router/Dockerfile.tee | cut -d' ' -f1)"
           TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           
           jq -n \
-            --arg tee_image "${TEE_IMAGE}:${BUILDTAG}" \
+            --arg tee_image "${TEE_IMAGE}@${TEE_DIGEST}" \
+            --arg tee_image_tag "${TEE_IMAGE}:${BUILDTAG}" \
             --arg tee_digest "$TEE_DIGEST" \
             --arg base_image "${BASE_IMAGE}:${BUILDTAG}" \
             --arg base_digest "$BASE_DIGEST" \
             --arg compose_sha "$COMPOSE_SHA" \
+            --arg compose_image_ref "${TEE_IMAGE}@${TEE_DIGEST}" \
             --arg dockerfile_sha "$DOCKERFILE_SHA" \
             --arg commit "${{ github.sha }}" \
             --arg ref "${{ github.ref }}" \
             --arg run_id "${{ github.run_id }}" \
             --arg run_url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             --arg timestamp "$TIMESTAMP" \
+            --arg rtmr3 "$RTMR3" \
+            --arg secretvm_release "$SECRETVM_RELEASE" \
+            --arg rootfs_sha256 "$ROOTFS_SHA256" \
             '{
               tee_image: $tee_image,
+              tee_image_tag: $tee_image_tag,
               tee_image_digest: $tee_digest,
               base_image: $base_image,
               base_image_digest: $base_digest,
-              compose_file: "proxy-router/docker-compose.tee.yml",
               compose_sha256: $compose_sha,
+              compose_image_reference: $compose_image_ref,
               dockerfile_tee_sha256: $dockerfile_sha,
               build: {
                 commit: $commit,
@@ -457,7 +514,16 @@ jobs:
                 ENVIRONMENT: "production"
               },
               measurements: {
-                note: "RTMR/SEV values will be populated when reproduce-mr is integrated (Phase 1b)"
+                intel_tdx: {
+                  rtmr3: $rtmr3,
+                  secretvm_release: $secretvm_release,
+                  rootfs_variant: "rootfs-dev-tdx",
+                  rootfs_sha256: $rootfs_sha256,
+                  note: "RTMR0-2 require full reproduce-mr with firmware/kernel/templates (Phase 1b follow-up)"
+                },
+                amd_sev_snp: {
+                  note: "SEV measurement computation not yet integrated"
+                }
               }
             }' > tee-attestation-manifest.json
           
@@ -475,6 +541,12 @@ jobs:
             --type https://morpheusais.github.io/tee-attestation/v1 \
             "$TEE_IMAGE@$DIGEST"
           echo "🔏 TEE attestation manifest signed and attached to \`$TEE_IMAGE@$DIGEST\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload deployed compose as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-compose-tee-deployed-${{ needs.Generate-Tag.outputs.tag_name }}
+          path: /tmp/docker-compose.tee.deployed.yml
 
       - name: Push TEE Latest Tags
         if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' }}
