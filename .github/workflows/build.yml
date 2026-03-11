@@ -335,6 +335,7 @@ jobs:
       id-token: write
     outputs:
       digest: ${{ steps.capture-digest.outputs.digest }}
+      rtmr3: ${{ steps.compute-rtmr3.outputs.rtmr3 }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -591,13 +592,32 @@ jobs:
           docker buildx imagetools create -t $TEE_IMAGE:$LATEST_TAG $TEE_IMAGE:$BUILDTAG || (echo "❌ Failed to create TEE :$LATEST_TAG tag" && exit 1)
           echo "✅ TEE Image tag pushed: $TEE_IMAGE:$LATEST_TAG"
 
+  Deploy-SecretVM-Test:
+    name: Deploy TEE Image to SecretVM (test)
+    if: github.ref == 'refs/heads/test'
+    needs:
+      - Generate-Tag
+      - GHCR-Build-and-Push-TEE
+    runs-on: ubuntu-latest
+    environment: test
+    steps:
+      - name: Download deployed compose artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: docker-compose-tee-deployed-${{ needs.Generate-Tag.outputs.tag_name }}
+          path: /tmp
+
       - name: Deploy to SecretVM test instance
-        if: ${{ secrets.SECRETVM_API_KEY != '' && secrets.SECRETVM_TEST_VM_UUID != '' && secrets.SECRETVM_TEST_ENV != '' }}
         env:
           SECRETVM_API_KEY: ${{ secrets.SECRETVM_API_KEY }}
           SECRETVM_TEST_VM_UUID: ${{ secrets.SECRETVM_TEST_VM_UUID }}
           SECRETVM_TEST_ENV_B64: ${{ secrets.SECRETVM_TEST_ENV }}
         run: |
+          if [ -z "$SECRETVM_API_KEY" ] || [ -z "$SECRETVM_TEST_VM_UUID" ] || [ -z "$SECRETVM_TEST_ENV_B64" ]; then
+            echo "⏭️  SecretVM secrets not configured — skipping deploy" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
           npm install --global secretvm-cli
 
           echo "$SECRETVM_TEST_ENV_B64" | base64 -d > /tmp/secretvm-test.env
@@ -612,7 +632,7 @@ jobs:
 
           echo "✅ SecretVM test instance updated with new TEE image" >> $GITHUB_STEP_SUMMARY
           echo "   Compose: \`docker-compose-tee-deployed-${{ needs.Generate-Tag.outputs.tag_name }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "   Expected RTMR3: \`${{ steps.compute-rtmr3.outputs.rtmr3 }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "   Expected RTMR3: \`${{ needs.GHCR-Build-and-Push-TEE.outputs.rtmr3 }}\`" >> $GITHUB_STEP_SUMMARY
 
   Build-Service-Executables:
     name: Build Service Executables
