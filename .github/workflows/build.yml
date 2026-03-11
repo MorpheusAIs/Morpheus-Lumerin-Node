@@ -591,6 +591,29 @@ jobs:
           docker buildx imagetools create -t $TEE_IMAGE:$LATEST_TAG $TEE_IMAGE:$BUILDTAG || (echo "❌ Failed to create TEE :$LATEST_TAG tag" && exit 1)
           echo "✅ TEE Image tag pushed: $TEE_IMAGE:$LATEST_TAG"
 
+      - name: Deploy to SecretVM test instance
+        if: ${{ secrets.SECRETVM_API_KEY != '' && secrets.SECRETVM_TEST_VM_UUID != '' && secrets.SECRETVM_TEST_ENV != '' }}
+        env:
+          SECRETVM_API_KEY: ${{ secrets.SECRETVM_API_KEY }}
+          SECRETVM_TEST_VM_UUID: ${{ secrets.SECRETVM_TEST_VM_UUID }}
+          SECRETVM_TEST_ENV_B64: ${{ secrets.SECRETVM_TEST_ENV }}
+        run: |
+          npm install --global secretvm-cli
+
+          echo "$SECRETVM_TEST_ENV_B64" | base64 -d > /tmp/secretvm-test.env
+
+          echo "🚀 Updating SecretVM test instance ${SECRETVM_TEST_VM_UUID:0:8}..." >> $GITHUB_STEP_SUMMARY
+
+          secretvm-cli -k "$SECRETVM_API_KEY" vm edit "$SECRETVM_TEST_VM_UUID" \
+            --docker-compose /tmp/docker-compose.tee.deployed.yml \
+            --env /tmp/secretvm-test.env
+
+          rm -f /tmp/secretvm-test.env
+
+          echo "✅ SecretVM test instance updated with new TEE image" >> $GITHUB_STEP_SUMMARY
+          echo "   Compose: \`docker-compose-tee-deployed-${{ needs.Generate-Tag.outputs.tag_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "   Expected RTMR3: \`${{ steps.compute-rtmr3.outputs.rtmr3 }}\`" >> $GITHUB_STEP_SUMMARY
+
   Build-Service-Executables:
     name: Build Service Executables
     if: |
