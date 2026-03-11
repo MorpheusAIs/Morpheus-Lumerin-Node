@@ -634,6 +634,80 @@ jobs:
           echo "   Compose: \`docker-compose-tee-deployed-${{ needs.Generate-Tag.outputs.tag_name }}\`" >> $GITHUB_STEP_SUMMARY
           echo "   Expected RTMR3: \`${{ needs.GHCR-Build-and-Push-TEE.outputs.rtmr3 }}\`" >> $GITHUB_STEP_SUMMARY
 
+      - name: Verify attestation after deploy
+        env:
+          SECRETVM_API_KEY: ${{ secrets.SECRETVM_API_KEY }}
+          SECRETVM_TEST_VM_UUID: ${{ secrets.SECRETVM_TEST_VM_UUID }}
+          EXPECTED_RTMR3: ${{ needs.GHCR-Build-and-Push-TEE.outputs.rtmr3 }}
+        run: |
+          if [ -z "$SECRETVM_API_KEY" ] || [ -z "$SECRETVM_TEST_VM_UUID" ] || [ -z "$EXPECTED_RTMR3" ]; then
+            echo "⏭️  Skipping attestation verify (missing secrets or RTMR3)" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          echo "⏳ Waiting for VM to reboot with new image..." >> $GITHUB_STEP_SUMMARY
+
+          # vm attestation returns raw TDX quote hex; extract RTMR3 from known offset
+          # TDX Quote v4: 48-byte header + TD Report Body
+          # RTMR3 at body offset 472 bytes (48 bytes long)
+          RTMR3_HEX_START=$(( (48 + 472) * 2 ))
+          RTMR3_HEX_LEN=96
+
+          MAX_ATTEMPTS=12
+          SLEEP_SECS=30
+          MATCHED=false
+
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            echo "  Attestation poll attempt $i/$MAX_ATTEMPTS..."
+
+            RAW_QUOTE=$(secretvm-cli -k "$SECRETVM_API_KEY" vm attestation "$SECRETVM_TEST_VM_UUID" 2>/dev/null) || true
+
+            LIVE_RTMR3=$(echo "$RAW_QUOTE" | python3 -c "
+          import sys, json
+          try:
+              data = json.load(sys.stdin)
+              raw = data.get('result', '')
+              rtmr3 = raw[$RTMR3_HEX_START:$RTMR3_HEX_START+$RTMR3_HEX_LEN]
+              if len(rtmr3) == $RTMR3_HEX_LEN:
+                  print(rtmr3)
+              else:
+                  print('')
+          except:
+              print('')
+          " 2>/dev/null)
+
+            if [ -n "$LIVE_RTMR3" ]; then
+              echo "  Got RTMR3: ${LIVE_RTMR3:0:16}..."
+
+              if [ "$LIVE_RTMR3" = "$EXPECTED_RTMR3" ]; then
+                MATCHED=true
+                echo "🎉 **RTMR3 MATCH** — attestation verified!" >> $GITHUB_STEP_SUMMARY
+                echo "   Live RTMR3:     \`$LIVE_RTMR3\`" >> $GITHUB_STEP_SUMMARY
+                echo "   Expected RTMR3: \`$EXPECTED_RTMR3\`" >> $GITHUB_STEP_SUMMARY
+                break
+              else
+                echo "  RTMR3 mismatch (VM may still be rebooting)"
+                echo "    live:     $LIVE_RTMR3"
+                echo "    expected: $EXPECTED_RTMR3"
+              fi
+            else
+              echo "  No attestation data yet (VM may still be starting)"
+            fi
+
+            if [ "$i" -lt "$MAX_ATTEMPTS" ]; then
+              sleep $SLEEP_SECS
+            fi
+          done
+
+          if [ "$MATCHED" = false ]; then
+            echo "⚠️ **RTMR3 mismatch after ${MAX_ATTEMPTS} attempts** (${SLEEP_SECS}s × ${MAX_ATTEMPTS} = $(( SLEEP_SECS * MAX_ATTEMPTS ))s)" >> $GITHUB_STEP_SUMMARY
+            echo "   Live RTMR3:     \`${LIVE_RTMR3:-unavailable}\`" >> $GITHUB_STEP_SUMMARY
+            echo "   Expected RTMR3: \`$EXPECTED_RTMR3\`" >> $GITHUB_STEP_SUMMARY
+            echo "   This may indicate the VM is still rebooting, or there is a genuine mismatch." >> $GITHUB_STEP_SUMMARY
+            echo "   Check manually: \`secretvm-cli vm attestation $SECRETVM_TEST_VM_UUID\`" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
   Build-Service-Executables:
     name: Build Service Executables
     # TEMPORARILY DISABLED — re-enable when merging to main/test
