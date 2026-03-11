@@ -49,35 +49,39 @@ def replay_rtmr(entries: list[str]) -> str:
 
 
 def main() -> None:
-    if len(sys.argv) < 3:
+    json_output = "--json" in sys.argv
+    positional = [a for a in sys.argv[1:] if not a.startswith("--")]
+
+    if len(positional) < 2:
         print(
-            f"Usage: {sys.argv[0]} <docker-compose.yaml> <rootfs.iso> [docker-files]",
+            f"Usage: {sys.argv[0]} <docker-compose.yaml> <rootfs.iso> [docker-files] [--json]",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    compose_path = sys.argv[1]
-    rootfs_path = sys.argv[2]
+    compose_path = positional[0]
+    rootfs_path = positional[1]
 
     compose_hash = sha256_file(compose_path)
     rootfs_hash = sha256_file(rootfs_path)
 
     entries = [compose_hash, rootfs_hash]
 
-    if len(sys.argv) > 3:
-        docker_files_hash = sha256_file(sys.argv[3])
+    docker_files_hash = None
+    if len(positional) > 2:
+        docker_files_hash = sha256_file(positional[2])
         entries.append(docker_files_hash)
 
     rtmr3 = replay_rtmr(entries)
 
-    if "--json" in sys.argv:
+    if json_output:
         result = {
             "rtmr3": rtmr3,
             "compose_sha256": compose_hash,
             "rootfs_sha256": rootfs_hash,
         }
-        if len(sys.argv) > 3 and sys.argv[3] != "--json":
-            result["docker_files_sha256"] = sha256_file(sys.argv[3])
+        if docker_files_hash:
+            result["docker_files_sha256"] = docker_files_hash
         json.dump(result, sys.stdout, indent=2)
         print()
     else:
