@@ -1,9 +1,8 @@
 # CI/CD Supply-Chain Hardening for Morpheus Docker Images
 
-**Date:** 2026-03-10  
-**Branch:** `cicd/tee-supply-chain`  
-**PR target:** `dev`  
-**First successful run:** [#22920492249](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/actions/runs/22920492249)
+**Last updated:** 2026-03-11  
+**First successful run (Phase 1a — signing):** [#22920492249](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/actions/runs/22920492249)  
+**First end-to-end run (Phase 1b — deploy + verify):** [#22969993910](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/actions/runs/22969993910)
 
 ---
 
@@ -128,7 +127,12 @@ This is the most important new artifact. It's a signed JSON document that record
     "ENVIRONMENT": "production"
   },
   "measurements": {
-    "note": "RTMR/SEV values will be populated when reproduce-mr is integrated"
+    "intel_tdx": {
+      "rtmr3": "<96-char-hex — computed from sha256(compose) + sha256(rootfs)>",
+      "secretvm_release": "v0.0.25",
+      "rootfs_variant": "rootfs-prod-tdx",
+      "rootfs_sha256": "<sha256 of rootfs-prod-v0.0.25-tdx.iso>"
+    }
   }
 }
 ```
@@ -192,46 +196,46 @@ This shows all attached artifacts — signature, attestation, and SBOM — in a 
 
 ---
 
-## What This Enables Next
+## What This Enables — The Full Loop
 
-This CI/CD hardening is the **foundation layer** for the full TEE attestation loop. Here's how each artifact feeds into the bigger picture:
+This CI/CD hardening is the **foundation layer** for the full TEE attestation loop. As of Phase 1b, the pipeline is fully automated end-to-end:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    CI/CD Pipeline (done)                     │
-│                                                             │
-│  Source Code ──► Build ──► Sign ──► Publish to GHCR         │
-│                    │         │         │                     │
-│                    │     cosign sig    ├── image + digest    │
-│                    │     (Sigstore)    ├── SBOM              │
-│                    │                   └── attestation       │
-│                    │                       manifest          │
-└────────────────────┼────────────────────────┼───────────────┘
-                     │                        │
-                     ▼                        ▼
-┌─────────────────────────┐    ┌──────────────────────────────┐
-│  TEE VM Deployment      │    │  Consumer Verification       │
-│  (SecretVM / TDX / SEV) │    │  (proxy-router code, later)  │
-│                         │    │                              │
-│  Image + compose are    │    │  1. Check provider version   │
-│  measured into RTMR3    │    │  2. Fetch attestation from   │
-│  at boot time by the    │    │     GHCR (cosign verify)     │
-│  hardware TEE           │    │  3. Compare compose hash     │
-│                         │    │  4. Query TEE hardware quote │
-│  compose_sha256 from    │    │  5. Match RTMR3 measurement  │
-│  the manifest lets us   │    │  6. If all pass → session    │
-│  predict what RTMR3     │    │     If any fail → reject     │
-│  should be              │    │                              │
-└─────────────────────────┘    └──────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                         CI/CD Pipeline (done)                         │
+│                                                                      │
+│  Source Code ──► Build ──► Sign ──► Compute RTMR3 ──► Publish GHCR   │
+│                    │         │           │               │            │
+│                    │     cosign sig    RTMR3 in       ├── image      │
+│                    │     (Sigstore)    manifest        ├── SBOM      │
+│                    │                                   └── manifest  │
+│                    ▼                                                  │
+│                  Deploy to SecretVM ──► Verify live RTMR3 matches     │
+│                  (secretvm-cli)         (polls attestation quote)     │
+└──────────────────────────────────────────────────────────────────────┘
+                                              │
+                                              ▼
+                              ┌──────────────────────────────┐
+                              │  Consumer Verification       │
+                              │  (proxy-router code, next)   │
+                              │                              │
+                              │  1. Detect "tee" model tag   │
+                              │  2. Fetch manifest from GHCR │
+                              │  3. Fetch quote from :29343  │
+                              │  4. Compare RTMR3            │
+                              │  5. If match → session       │
+                              │     If fail → reject         │
+                              └──────────────────────────────┘
 ```
 
-**Specifically:**
+**How each artifact feeds the trust chain:**
 
 1. **Image signing** → Consumers can verify a provider is running an official image, not a modified fork
 2. **Digest pinning** → The attestation manifest references immutable digests, not mutable tags — so a tag-swap attack is detectable
-3. **Compose hash** → When combined with SCRT Labs' `reproduce-mr` tool, the compose hash allows us to precompute the expected RTMR3 measurement for the TEE VM, which is the software-layer check in the hardware attestation
-4. **Baked ENV record** → A verifier can confirm that chat logging is disabled and the correct chain contracts are configured — without trusting the provider to self-report
-5. **SBOM** → Enables vulnerability scanning and dependency auditing of the exact binary running inside the TEE
+3. **RTMR3 computation** → The compose hash + rootfs hash produce a predictable RTMR3 that can be compared against live hardware attestation
+4. **Auto-deploy + verify** → Every CI/CD push automatically deploys to a test VM and verifies the live RTMR3 matches — catching measurement mismatches before they reach providers
+5. **Baked ENV record** → A verifier can confirm that chat logging is disabled and the correct chain contracts are configured — without trusting the provider to self-report
+6. **SBOM** → Enables vulnerability scanning and dependency auditing of the exact binary running inside the TEE
 
 ---
 
@@ -239,18 +243,39 @@ This CI/CD hardening is the **foundation layer** for the full TEE attestation lo
 
 | File | Change |
 |---|---|
-| `.github/workflows/build.yml` | Added cosign signing, digest capture, SBOM, and attestation manifest to both GHCR build jobs |
-| `proxy-router/Dockerfile.tee` | Unchanged (created in prior PR) — bakes immutable ENV config into the TEE image |
-| `proxy-router/docker-compose.tee.yml` | Unchanged (created in prior PR) — canonical compose for TEE deployment with 5 runtime secrets |
+| `.github/workflows/build.yml` | Cosign signing, digest capture, SBOM, attestation manifest, RTMR3 computation, auto-deploy, and post-deploy verification. Also: GitHub Actions upgraded to Node 24-compatible versions, Go version updated to 1.23.x. |
+| `.github/tee/secretvm.env` | Pins SecretVM release version, rootfs variant, URL, and SHA-256. All pipeline rootfs references derive from this file. |
+| `proxy-router/scripts/compute-rtmr3.py` | Standalone RTMR3 computation script matching the `reproduce-mr` algorithm. Can be run locally for independent verification. |
+| `proxy-router/Dockerfile.tee` | Bakes immutable ENV config into the TEE image |
+| `proxy-router/docker-compose.tee.yml` | Canonical compose template for TEE deployment with 5 runtime secrets |
+| `docs/02.3-proxy-router-tee.md` | Provider setup and consumer verification guide |
 
 ---
 
-## Next Steps
+## Current Status and Next Steps
+
+### Completed (Phase 1a + 1b)
 
 | Step | Description | Status |
 |---|---|---|
-| **RTMR computation** | Integrate SCRT Labs' `reproduce-mr` into CI/CD to compute expected Intel TDX RTMR3 values and populate the attestation manifest `measurements` field | Next |
-| **AMD SEV measurement** | Integrate `sev-snp-measure` for AMD platform measurement computation | Next |
-| **Healthcheck extension** | Add TEE metadata (platform, image digest, attestation URL) to the proxy-router `/healthcheck` endpoint | Proxy-router code change |
-| **Attestation proxy endpoint** | New `/attestation/quote` endpoint on the proxy-router that relays the hardware attestation quote from the TEE platform | Proxy-router code change |
-| **Consumer verification** | Implement the full verification loop in the consumer node's session creation flow | Proxy-router code change |
+| **Cosign signing + SBOM** | Keyless signing, digest capture, SPDX SBOM for TEE image | **Done** |
+| **TEE attestation manifest** | Signed JSON with digests, hashes, baked env, build provenance | **Done** |
+| **RTMR3 computation** | Computed in CI/CD from deployed compose + SecretVM rootfs; embedded in signed manifest | **Done** |
+| **Auto-deploy to SecretVM** | `Deploy-SecretVM-Test` job deploys digest-pinned compose to test VM via `secretvm-cli` | **Done** |
+| **Post-deploy verification** | Polls live VM attestation, extracts RTMR3 from raw TDX quote, compares against CI-computed value | **Done** |
+
+### Remaining (Developer Work — Proxy-Router Code)
+
+| Step | Description | Status |
+|---|---|---|
+| **`IsTEEModel()` helper** | Detect `"tee"` tag on blockchain-registered models | TODO |
+| **Consumer-side verification** | Fetch attestation from `:29343`, verify RTMR3 against signed manifest before opening session | TODO |
+| **Consumer UI TEE badge** | Visual indicator for TEE-verified models | TODO |
+
+### Lower Priority (CI/CD)
+
+| Step | Description | Status |
+|---|---|---|
+| **Full RTMR0-2** | Integrate `reproduce-mr` for firmware/kernel layers (blocked on ACPI templates) | TODO |
+| **AMD SEV measurement** | Integrate `sev-snp-measure` for AMD platform | TODO |
+| **CVE scanning** | Trivy/Grype scan as advisory step, then gating | TODO |
