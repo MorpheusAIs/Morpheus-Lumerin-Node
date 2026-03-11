@@ -65,12 +65,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: "1.22.x"
+          go-version: "1.23.x"
           cache-dependency-path: |
             proxy-router/go.sum
             cli/go.sum
@@ -117,7 +117,7 @@ jobs:
       artifacts_base_url: ${{ github.server_url }}/${{ github.repository }}/releases/download/${{ steps.gen_tag_name.outputs.tag_name }}
     steps:
       - name: Clone repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -186,13 +186,13 @@ jobs:
       - Go-Module-Verify
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           fetch-tags: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v4
 
       - name: Build Docker Image to Test
         run: |
@@ -237,19 +237,19 @@ jobs:
       digest: ${{ steps.capture-digest.outputs.digest }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           fetch-tags: true
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@v4.1.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -335,21 +335,22 @@ jobs:
       id-token: write
     outputs:
       digest: ${{ steps.capture-digest.outputs.digest }}
+      rtmr3: ${{ steps.compute-rtmr3.outputs.rtmr3 }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@v4.1.0
 
       - name: Install syft
         uses: anchore/sbom-action/download-syft@v0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -388,6 +389,80 @@ jobs:
           cosign sign --yes "$TEE_IMAGE@$DIGEST"
           echo "🔏 TEE image signed: \`$TEE_IMAGE@$DIGEST\`" >> $GITHUB_STEP_SUMMARY
 
+      - name: Load SecretVM artifact config
+        id: secretvm-config
+        run: |
+          source .github/tee/secretvm.env
+          echo "release=$SECRETVM_RELEASE" >> $GITHUB_OUTPUT
+          echo "rootfs_variant=$SECRETVM_ROOTFS_VARIANT" >> $GITHUB_OUTPUT
+          echo "rootfs_url=$SECRETVM_ROOTFS_TDX_URL" >> $GITHUB_OUTPUT
+          echo "rootfs_sha256=$SECRETVM_ROOTFS_TDX_SHA256" >> $GITHUB_OUTPUT
+
+      - name: Cache SecretVM rootfs
+        id: cache-rootfs
+        uses: actions/cache@v5
+        with:
+          path: /tmp/secretvm-artifacts
+          key: secretvm-${{ steps.secretvm-config.outputs.release }}-${{ steps.secretvm-config.outputs.rootfs_variant }}
+
+      - name: Download SecretVM rootfs
+        if: steps.cache-rootfs.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p /tmp/secretvm-artifacts
+          echo "⬇️  Downloading SecretVM rootfs (${{ steps.secretvm-config.outputs.release }})..."
+          ROOTFS_FILE="/tmp/secretvm-artifacts/${{ steps.secretvm-config.outputs.rootfs_variant }}.iso"
+          curl -L --retry 3 --retry-delay 5 -o "$ROOTFS_FILE" \
+            "${{ steps.secretvm-config.outputs.rootfs_url }}"
+          
+          ACTUAL_SHA=$(sha256sum "$ROOTFS_FILE" | cut -d' ' -f1)
+          EXPECTED_SHA="${{ steps.secretvm-config.outputs.rootfs_sha256 }}"
+          
+          if [ -n "$EXPECTED_SHA" ]; then
+            echo "$EXPECTED_SHA  $ROOTFS_FILE" | sha256sum -c -
+            echo "✅ SecretVM rootfs downloaded and verified" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️  No expected SHA256 configured — rootfs hash: \`$ACTUAL_SHA\`" >> $GITHUB_STEP_SUMMARY
+            echo "   PIN THIS in .github/tee/secretvm.env as SECRETVM_ROOTFS_TDX_SHA256" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "   rootfs sha256: \`$ACTUAL_SHA\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Generate deployed compose with immutable digest
+        id: generate-compose
+        run: |
+          TEE_IMAGE="${{ needs.Generate-Tag.outputs.image_name }}-tee"
+          DIGEST=${{ steps.capture-digest.outputs.digest }}
+          
+          sed "s|image: .*|image: ${TEE_IMAGE}@${DIGEST}|" \
+            proxy-router/docker-compose.tee.yml > /tmp/docker-compose.tee.deployed.yml
+          
+          COMPOSE_BYTES=$(wc -c < /tmp/docker-compose.tee.deployed.yml | tr -d ' ')
+          COMPOSE_SHA=$(sha256sum /tmp/docker-compose.tee.deployed.yml | cut -d' ' -f1)
+          echo "compose_sha256=$COMPOSE_SHA" >> $GITHUB_OUTPUT
+          
+          echo "📋 Generated deployed compose (digest-pinned):" >> $GITHUB_STEP_SUMMARY
+          echo "   SHA-256: \`$COMPOSE_SHA\`  (${COMPOSE_BYTES} bytes)" >> $GITHUB_STEP_SUMMARY
+          echo '```yaml' >> $GITHUB_STEP_SUMMARY
+          cat /tmp/docker-compose.tee.deployed.yml >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Compute RTMR3 (Intel TDX)
+        id: compute-rtmr3
+        run: |
+          ROOTFS_FILE="/tmp/secretvm-artifacts/${{ steps.secretvm-config.outputs.rootfs_variant }}.iso"
+          RTMR3=$(python3 proxy-router/scripts/compute-rtmr3.py \
+            /tmp/docker-compose.tee.deployed.yml \
+            "$ROOTFS_FILE" \
+            --json)
+          
+          RTMR3_HEX=$(echo "$RTMR3" | python3 -c "import sys,json; print(json.load(sys.stdin)['rtmr3'])")
+          COMPOSE_HASH=$(echo "$RTMR3" | python3 -c "import sys,json; print(json.load(sys.stdin)['compose_sha256'])")
+          ROOTFS_HASH=$(echo "$RTMR3" | python3 -c "import sys,json; print(json.load(sys.stdin)['rootfs_sha256'])")
+          
+          echo "rtmr3=$RTMR3_HEX" >> $GITHUB_OUTPUT
+          echo "🔐 Expected RTMR3: \`$RTMR3_HEX\`" >> $GITHUB_STEP_SUMMARY
+          echo "   compose sha256: \`$COMPOSE_HASH\`" >> $GITHUB_STEP_SUMMARY
+          echo "   rootfs sha256:  \`$ROOTFS_HASH\`" >> $GITHUB_STEP_SUMMARY
+
       - name: Generate and attach SBOM
         run: |
           TEE_IMAGE="${{ needs.Generate-Tag.outputs.image_name }}-tee"
@@ -404,30 +479,41 @@ jobs:
           BASE_IMAGE=${{ needs.Generate-Tag.outputs.image_name }}
           BASE_DIGEST=${{ needs.GHCR-Build-and-Push.outputs.digest }}
           BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          RTMR3=${{ steps.compute-rtmr3.outputs.rtmr3 }}
+          SECRETVM_RELEASE=${{ steps.secretvm-config.outputs.release }}
+          ROOTFS_VARIANT=${{ steps.secretvm-config.outputs.rootfs_variant }}
+          ROOTFS_SHA256=${{ steps.secretvm-config.outputs.rootfs_sha256 }}
           
-          COMPOSE_SHA="sha256:$(sha256sum proxy-router/docker-compose.tee.yml | cut -d' ' -f1)"
+          COMPOSE_SHA="sha256:$(sha256sum /tmp/docker-compose.tee.deployed.yml | cut -d' ' -f1)"
           DOCKERFILE_SHA="sha256:$(sha256sum proxy-router/Dockerfile.tee | cut -d' ' -f1)"
           TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           
           jq -n \
-            --arg tee_image "${TEE_IMAGE}:${BUILDTAG}" \
+            --arg tee_image "${TEE_IMAGE}@${TEE_DIGEST}" \
+            --arg tee_image_tag "${TEE_IMAGE}:${BUILDTAG}" \
             --arg tee_digest "$TEE_DIGEST" \
             --arg base_image "${BASE_IMAGE}:${BUILDTAG}" \
             --arg base_digest "$BASE_DIGEST" \
             --arg compose_sha "$COMPOSE_SHA" \
+            --arg compose_image_ref "${TEE_IMAGE}@${TEE_DIGEST}" \
             --arg dockerfile_sha "$DOCKERFILE_SHA" \
             --arg commit "${{ github.sha }}" \
             --arg ref "${{ github.ref }}" \
             --arg run_id "${{ github.run_id }}" \
             --arg run_url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             --arg timestamp "$TIMESTAMP" \
+            --arg rtmr3 "$RTMR3" \
+            --arg secretvm_release "$SECRETVM_RELEASE" \
+            --arg rootfs_variant "$ROOTFS_VARIANT" \
+            --arg rootfs_sha256 "$ROOTFS_SHA256" \
             '{
               tee_image: $tee_image,
+              tee_image_tag: $tee_image_tag,
               tee_image_digest: $tee_digest,
               base_image: $base_image,
               base_image_digest: $base_digest,
-              compose_file: "proxy-router/docker-compose.tee.yml",
               compose_sha256: $compose_sha,
+              compose_image_reference: $compose_image_ref,
               dockerfile_tee_sha256: $dockerfile_sha,
               build: {
                 commit: $commit,
@@ -457,7 +543,16 @@ jobs:
                 ENVIRONMENT: "production"
               },
               measurements: {
-                note: "RTMR/SEV values will be populated when reproduce-mr is integrated (Phase 1b)"
+                intel_tdx: {
+                  rtmr3: $rtmr3,
+                  secretvm_release: $secretvm_release,
+                  rootfs_variant: $rootfs_variant,
+                  rootfs_sha256: $rootfs_sha256,
+                  note: "RTMR0-2 require full reproduce-mr with firmware/kernel/templates (Phase 1b follow-up)"
+                },
+                amd_sev_snp: {
+                  note: "SEV measurement computation not yet integrated"
+                }
               }
             }' > tee-attestation-manifest.json
           
@@ -476,6 +571,12 @@ jobs:
             "$TEE_IMAGE@$DIGEST"
           echo "🔏 TEE attestation manifest signed and attached to \`$TEE_IMAGE@$DIGEST\`" >> $GITHUB_STEP_SUMMARY
 
+      - name: Upload deployed compose as artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: docker-compose-tee-deployed-${{ needs.Generate-Tag.outputs.tag_name }}
+          path: /tmp/docker-compose.tee.deployed.yml
+
       - name: Push TEE Latest Tags
         if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' }}
         run: |
@@ -491,35 +592,154 @@ jobs:
           docker buildx imagetools create -t $TEE_IMAGE:$LATEST_TAG $TEE_IMAGE:$BUILDTAG || (echo "❌ Failed to create TEE :$LATEST_TAG tag" && exit 1)
           echo "✅ TEE Image tag pushed: $TEE_IMAGE:$LATEST_TAG"
 
+  Deploy-SecretVM-Test:
+    name: Deploy TEE Image to SecretVM (test)
+    if: github.ref == 'refs/heads/test' || startsWith(github.ref, 'refs/heads/cicd/')
+    needs:
+      - Generate-Tag
+      - GHCR-Build-and-Push-TEE
+    runs-on: ubuntu-latest
+    environment: test
+    steps:
+      - name: Download deployed compose artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: docker-compose-tee-deployed-${{ needs.Generate-Tag.outputs.tag_name }}
+          path: /tmp
+
+      - name: Deploy to SecretVM test instance
+        env:
+          SECRETVM_API_KEY: ${{ secrets.SECRETVM_API_KEY }}
+          SECRETVM_TEST_VM_UUID: ${{ secrets.SECRETVM_TEST_VM_UUID }}
+          SECRETVM_TEST_ENV_B64: ${{ secrets.SECRETVM_TEST_ENV }}
+        run: |
+          if [ -z "$SECRETVM_API_KEY" ] || [ -z "$SECRETVM_TEST_VM_UUID" ] || [ -z "$SECRETVM_TEST_ENV_B64" ]; then
+            echo "⏭️  SecretVM secrets not configured — skipping deploy" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          npm install --global secretvm-cli
+
+          echo "$SECRETVM_TEST_ENV_B64" | base64 -d > /tmp/secretvm-test.env
+
+          echo "🚀 Updating SecretVM test instance ${SECRETVM_TEST_VM_UUID:0:8}..." >> $GITHUB_STEP_SUMMARY
+
+          secretvm-cli -k "$SECRETVM_API_KEY" vm edit "$SECRETVM_TEST_VM_UUID" \
+            --docker-compose /tmp/docker-compose.tee.deployed.yml \
+            --env /tmp/secretvm-test.env
+
+          rm -f /tmp/secretvm-test.env
+
+          echo "✅ SecretVM test instance updated with new TEE image" >> $GITHUB_STEP_SUMMARY
+          echo "   Compose: \`docker-compose-tee-deployed-${{ needs.Generate-Tag.outputs.tag_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "   Expected RTMR3: \`${{ needs.GHCR-Build-and-Push-TEE.outputs.rtmr3 }}\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Verify attestation after deploy
+        env:
+          SECRETVM_API_KEY: ${{ secrets.SECRETVM_API_KEY }}
+          SECRETVM_TEST_VM_UUID: ${{ secrets.SECRETVM_TEST_VM_UUID }}
+          EXPECTED_RTMR3: ${{ needs.GHCR-Build-and-Push-TEE.outputs.rtmr3 }}
+        run: |
+          if [ -z "$SECRETVM_API_KEY" ] || [ -z "$SECRETVM_TEST_VM_UUID" ] || [ -z "$EXPECTED_RTMR3" ]; then
+            echo "⏭️  Skipping attestation verify (missing secrets or RTMR3)" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          echo "⏳ Waiting for VM to reboot with new image..." >> $GITHUB_STEP_SUMMARY
+
+          # vm attestation returns raw TDX quote hex; extract RTMR3 from known offset
+          # TDX Quote v4: 48-byte header + TD Report Body
+          # RTMR3 at body offset 472 bytes (48 bytes long)
+          RTMR3_HEX_START=$(( (48 + 472) * 2 ))
+          RTMR3_HEX_LEN=96
+
+          MAX_ATTEMPTS=12
+          SLEEP_SECS=30
+          MATCHED=false
+
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            echo "  Attestation poll attempt $i/$MAX_ATTEMPTS..."
+
+            RAW_QUOTE=$(secretvm-cli -k "$SECRETVM_API_KEY" vm attestation "$SECRETVM_TEST_VM_UUID" 2>/dev/null) || true
+
+            LIVE_RTMR3=$(echo "$RAW_QUOTE" | python3 -c "
+          import sys, json
+          try:
+              data = json.load(sys.stdin)
+              raw = data.get('result', '')
+              rtmr3 = raw[$RTMR3_HEX_START:$RTMR3_HEX_START+$RTMR3_HEX_LEN]
+              if len(rtmr3) == $RTMR3_HEX_LEN:
+                  print(rtmr3)
+              else:
+                  print('')
+          except:
+              print('')
+          " 2>/dev/null)
+
+            if [ -n "$LIVE_RTMR3" ]; then
+              echo "  Got RTMR3: ${LIVE_RTMR3:0:16}..."
+
+              if [ "$LIVE_RTMR3" = "$EXPECTED_RTMR3" ]; then
+                MATCHED=true
+                echo "🎉 **RTMR3 MATCH** — attestation verified!" >> $GITHUB_STEP_SUMMARY
+                echo "   Live RTMR3:     \`$LIVE_RTMR3\`" >> $GITHUB_STEP_SUMMARY
+                echo "   Expected RTMR3: \`$EXPECTED_RTMR3\`" >> $GITHUB_STEP_SUMMARY
+                break
+              else
+                echo "  RTMR3 mismatch (VM may still be rebooting)"
+                echo "    live:     $LIVE_RTMR3"
+                echo "    expected: $EXPECTED_RTMR3"
+              fi
+            else
+              echo "  No attestation data yet (VM may still be starting)"
+            fi
+
+            if [ "$i" -lt "$MAX_ATTEMPTS" ]; then
+              sleep $SLEEP_SECS
+            fi
+          done
+
+          if [ "$MATCHED" = false ]; then
+            echo "⚠️ **RTMR3 mismatch after ${MAX_ATTEMPTS} attempts** (${SLEEP_SECS}s × ${MAX_ATTEMPTS} = $(( SLEEP_SECS * MAX_ATTEMPTS ))s)" >> $GITHUB_STEP_SUMMARY
+            echo "   Live RTMR3:     \`${LIVE_RTMR3:-unavailable}\`" >> $GITHUB_STEP_SUMMARY
+            echo "   Expected RTMR3: \`$EXPECTED_RTMR3\`" >> $GITHUB_STEP_SUMMARY
+            echo "   This may indicate the VM is still rebooting, or there is a genuine mismatch." >> $GITHUB_STEP_SUMMARY
+            echo "   Check manually: \`secretvm-cli vm attestation $SECRETVM_TEST_VM_UUID\`" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
   Build-Service-Executables:
     name: Build Service Executables
-    if: |
-      github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
-      (
-        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true') 
-      )
+    # TEMPORARILY DISABLED — re-enable when merging to main/test
+    # Disabling this cascades: all UI-* build jobs and UI-Release are skipped.
+    if: false
+    # if: |
+    #   github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+    #   (
+    #     (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+    #     (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true') 
+    #   )
     needs:
       - Generate-Tag
       - Go-Module-Verify
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           fetch-tags: true
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: "1.22.x"
+          go-version: "1.23.x"
           cache-dependency-path: |
             proxy-router/go.sum
             cli/go.sum
 
       - name: Cache Go build artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cache/go-build
@@ -608,7 +828,7 @@ jobs:
 
 
       - name: Upload CLI artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: cli
           path: |
@@ -619,7 +839,7 @@ jobs:
             cli/win-x64-morpheus-cli-${{ needs.Generate-Tag.outputs.vfull }}.exe
     
       - name: Upload ProxyRouter artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: proxy-router
           path: |
@@ -644,13 +864,13 @@ jobs:
     environment: ${{ github.ref_name }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           fetch-tags: true
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ secrets.TITAN_AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.TITAN_AWS_SECRET_ACCESS_KEY }}
@@ -899,13 +1119,13 @@ jobs:
     environment: ${{ github.ref_name }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           fetch-tags: true
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ secrets.MORPHEUS_AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.MORPHEUS_AWS_SECRET_ACCESS_KEY }}
@@ -1155,13 +1375,13 @@ jobs:
     environment: ${{ github.ref_name }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           fetch-tags: true
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ secrets.MORPHEUS_AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.MORPHEUS_AWS_SECRET_ACCESS_KEY }}
@@ -1438,20 +1658,20 @@ jobs:
     steps:
       - name: Clone
         id: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           fetch-tags: true
 
       - name: Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: "yarn"
           cache-dependency-path: ui-desktop/yarn.lock
 
       - name: Cache Electron binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cache/electron
@@ -1480,7 +1700,7 @@ jobs:
           yarn build:mac-arm64
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           path: ./ui-desktop/dist/mac-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.dmg
           name: mac-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.dmg
@@ -1502,20 +1722,20 @@ jobs:
     steps:
       - name: Clone
         id: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           fetch-tags: true
 
       - name: Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: "yarn"
           cache-dependency-path: ui-desktop/yarn.lock
 
       - name: Cache Electron binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cache/electron
@@ -1543,7 +1763,7 @@ jobs:
           yarn build:linux-x64
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           path: ./ui-desktop/dist/linux-x86_64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
           name: linux-x86_64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
@@ -1565,20 +1785,20 @@ jobs:
     steps:
       - name: Clone
         id: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           fetch-tags: true
 
       - name: Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: "yarn"
           cache-dependency-path: ui-desktop/yarn.lock
 
       - name: Cache Electron binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cache/electron
@@ -1606,7 +1826,7 @@ jobs:
           yarn build:linux-arm64
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           path: ./ui-desktop/dist/linux-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
           name: linux-arm64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.AppImage
@@ -1628,20 +1848,20 @@ jobs:
     steps:
       - name: Clone
         id: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           fetch-tags: true
 
       - name: Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: "yarn"
           cache-dependency-path: ui-desktop/yarn.lock
 
       - name: Cache Electron binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cache/electron
@@ -1670,7 +1890,7 @@ jobs:
           yarn build:mac-x64
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           path: ./ui-desktop/dist/mac-x64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.dmg
           name: mac-x64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.dmg
@@ -1692,20 +1912,20 @@ jobs:
     steps:
       - name: Clone
         id: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           fetch-tags: true
 
       - name: Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: "yarn"
           cache-dependency-path: ui-desktop/yarn.lock
 
       - name: Cache Electron binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~\AppData\Local\electron
@@ -1715,7 +1935,7 @@ jobs:
             ${{ runner.os }}-electron-
 
       - name: Cache Chocolatey packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             C:\ProgramData\chocolatey\lib
@@ -1755,7 +1975,7 @@ jobs:
           yarn build:win-x64
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           path: ./ui-desktop/dist/win-x64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.exe
           name: win-x64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.exe
@@ -1780,14 +2000,14 @@ jobs:
     steps:
       - name: Clone
         id: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           fetch-tags: true
 
       - name: Download artifacts
         id: download-artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: ./artifact
           merge-multiple: true
