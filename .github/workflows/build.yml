@@ -594,7 +594,7 @@ jobs:
 
   Deploy-SecretVM-Test:
     name: Deploy TEE Image to SecretVM (test)
-    if: github.ref == 'refs/heads/test'
+    if: github.ref == 'refs/heads/test' || startsWith(github.ref, 'refs/heads/cicd/')
     needs:
       - Generate-Tag
       - GHCR-Build-and-Push-TEE
@@ -636,12 +636,15 @@ jobs:
 
   Build-Service-Executables:
     name: Build Service Executables
-    if: |
-      github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
-      (
-        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true') 
-      )
+    # TEMPORARILY DISABLED — re-enable when merging to main/test
+    # Disabling this cascades: all UI-* build jobs and UI-Release are skipped.
+    if: false
+    # if: |
+    #   github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+    #   (
+    #     (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+    #     (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true') 
+    #   )
     needs:
       - Generate-Tag
       - Go-Module-Verify
