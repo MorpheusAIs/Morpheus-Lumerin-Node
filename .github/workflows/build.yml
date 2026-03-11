@@ -432,7 +432,7 @@ jobs:
           TEE_IMAGE="${{ needs.Generate-Tag.outputs.image_name }}-tee"
           DIGEST=${{ steps.capture-digest.outputs.digest }}
           
-          sed "s|image: .*|image: ${TEE_IMAGE}@${DIGEST}|" \
+          sed "s|image: ghcr.io/morpheusais/morpheus-lumerin-node-tee:.*|image: ${TEE_IMAGE}@${DIGEST}|" \
             proxy-router/docker-compose.tee.yml > /tmp/docker-compose.tee.deployed.yml
           
           COMPOSE_BYTES=$(wc -c < /tmp/docker-compose.tee.deployed.yml | tr -d ' ')
