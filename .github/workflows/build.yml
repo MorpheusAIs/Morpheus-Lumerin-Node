@@ -393,6 +393,7 @@ jobs:
         run: |
           source .github/tee/secretvm.env
           echo "release=$SECRETVM_RELEASE" >> $GITHUB_OUTPUT
+          echo "rootfs_variant=$SECRETVM_ROOTFS_VARIANT" >> $GITHUB_OUTPUT
           echo "rootfs_url=$SECRETVM_ROOTFS_TDX_URL" >> $GITHUB_OUTPUT
           echo "rootfs_sha256=$SECRETVM_ROOTFS_TDX_SHA256" >> $GITHUB_OUTPUT
 
@@ -401,17 +402,28 @@ jobs:
         uses: actions/cache@v5
         with:
           path: /tmp/secretvm-artifacts
-          key: secretvm-${{ steps.secretvm-config.outputs.release }}-rootfs-dev-tdx
+          key: secretvm-${{ steps.secretvm-config.outputs.release }}-${{ steps.secretvm-config.outputs.rootfs_variant }}
 
       - name: Download SecretVM rootfs
         if: steps.cache-rootfs.outputs.cache-hit != 'true'
         run: |
           mkdir -p /tmp/secretvm-artifacts
           echo "⬇️  Downloading SecretVM rootfs (${{ steps.secretvm-config.outputs.release }})..."
-          curl -L --retry 3 --retry-delay 5 -o /tmp/secretvm-artifacts/rootfs-dev-tdx.iso \
+          ROOTFS_FILE="/tmp/secretvm-artifacts/${{ steps.secretvm-config.outputs.rootfs_variant }}.iso"
+          curl -L --retry 3 --retry-delay 5 -o "$ROOTFS_FILE" \
             "${{ steps.secretvm-config.outputs.rootfs_url }}"
-          echo "${{ steps.secretvm-config.outputs.rootfs_sha256 }}  /tmp/secretvm-artifacts/rootfs-dev-tdx.iso" | sha256sum -c -
-          echo "✅ SecretVM rootfs downloaded and verified" >> $GITHUB_STEP_SUMMARY
+          
+          ACTUAL_SHA=$(sha256sum "$ROOTFS_FILE" | cut -d' ' -f1)
+          EXPECTED_SHA="${{ steps.secretvm-config.outputs.rootfs_sha256 }}"
+          
+          if [ -n "$EXPECTED_SHA" ]; then
+            echo "$EXPECTED_SHA  $ROOTFS_FILE" | sha256sum -c -
+            echo "✅ SecretVM rootfs downloaded and verified" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️  No expected SHA256 configured — rootfs hash: \`$ACTUAL_SHA\`" >> $GITHUB_STEP_SUMMARY
+            echo "   PIN THIS in .github/tee/secretvm.env as SECRETVM_ROOTFS_TDX_SHA256" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "   rootfs sha256: \`$ACTUAL_SHA\`" >> $GITHUB_STEP_SUMMARY
 
       - name: Generate deployed compose with immutable digest
         id: generate-compose
@@ -441,9 +453,10 @@ jobs:
       - name: Compute RTMR3 (Intel TDX)
         id: compute-rtmr3
         run: |
+          ROOTFS_FILE="/tmp/secretvm-artifacts/${{ steps.secretvm-config.outputs.rootfs_variant }}.iso"
           RTMR3=$(python3 proxy-router/scripts/compute-rtmr3.py \
             /tmp/docker-compose.tee.deployed.yml \
-            /tmp/secretvm-artifacts/rootfs-dev-tdx.iso \
+            "$ROOTFS_FILE" \
             --json)
           
           RTMR3_HEX=$(echo "$RTMR3" | python3 -c "import sys,json; print(json.load(sys.stdin)['rtmr3'])")
@@ -473,6 +486,7 @@ jobs:
           BUILDTAG=${{ needs.Generate-Tag.outputs.tag_name }}
           RTMR3=${{ steps.compute-rtmr3.outputs.rtmr3 }}
           SECRETVM_RELEASE=${{ steps.secretvm-config.outputs.release }}
+          ROOTFS_VARIANT=${{ steps.secretvm-config.outputs.rootfs_variant }}
           ROOTFS_SHA256=${{ steps.secretvm-config.outputs.rootfs_sha256 }}
           
           COMPOSE_SHA="sha256:$(sha256sum /tmp/docker-compose.tee.deployed.yml | cut -d' ' -f1)"
@@ -495,6 +509,7 @@ jobs:
             --arg timestamp "$TIMESTAMP" \
             --arg rtmr3 "$RTMR3" \
             --arg secretvm_release "$SECRETVM_RELEASE" \
+            --arg rootfs_variant "$ROOTFS_VARIANT" \
             --arg rootfs_sha256 "$ROOTFS_SHA256" \
             '{
               tee_image: $tee_image,
@@ -536,7 +551,7 @@ jobs:
                 intel_tdx: {
                   rtmr3: $rtmr3,
                   secretvm_release: $secretvm_release,
-                  rootfs_variant: "rootfs-dev-tdx",
+                  rootfs_variant: $rootfs_variant,
                   rootfs_sha256: $rootfs_sha256,
                   note: "RTMR0-2 require full reproduce-mr with firmware/kernel/templates (Phase 1b follow-up)"
                 },
