@@ -17,4 +17,3 @@ services:
       - usr/.env
 volumes:
   proxy_data: null
-

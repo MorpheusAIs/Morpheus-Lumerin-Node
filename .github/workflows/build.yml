@@ -434,12 +434,6 @@ jobs:
           sed "s|image: .*|image: ${TEE_IMAGE}@${DIGEST}|" \
             proxy-router/docker-compose.tee.yml > /tmp/docker-compose.tee.deployed.yml
           
-          # SecretVM appends a trailing newline to compose content — ensure ours matches
-          if [ "$(tail -c1 /tmp/docker-compose.tee.deployed.yml | xxd -p)" != "0a" ] || \
-             [ "$(tail -c2 /tmp/docker-compose.tee.deployed.yml | xxd -p)" != "0a0a" ]; then
-            echo "" >> /tmp/docker-compose.tee.deployed.yml
-          fi
-          
           COMPOSE_BYTES=$(wc -c < /tmp/docker-compose.tee.deployed.yml | tr -d ' ')
           COMPOSE_SHA=$(sha256sum /tmp/docker-compose.tee.deployed.yml | cut -d' ' -f1)
           echo "compose_sha256=$COMPOSE_SHA" >> $GITHUB_OUTPUT
