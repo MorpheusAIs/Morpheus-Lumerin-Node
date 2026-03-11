@@ -422,7 +422,18 @@ jobs:
           sed "s|image: .*|image: ${TEE_IMAGE}@${DIGEST}|" \
             proxy-router/docker-compose.tee.yml > /tmp/docker-compose.tee.deployed.yml
           
+          # SecretVM appends a trailing newline to compose content — ensure ours matches
+          if [ "$(tail -c1 /tmp/docker-compose.tee.deployed.yml | xxd -p)" != "0a" ] || \
+             [ "$(tail -c2 /tmp/docker-compose.tee.deployed.yml | xxd -p)" != "0a0a" ]; then
+            echo "" >> /tmp/docker-compose.tee.deployed.yml
+          fi
+          
+          COMPOSE_BYTES=$(wc -c < /tmp/docker-compose.tee.deployed.yml | tr -d ' ')
+          COMPOSE_SHA=$(sha256sum /tmp/docker-compose.tee.deployed.yml | cut -d' ' -f1)
+          echo "compose_sha256=$COMPOSE_SHA" >> $GITHUB_OUTPUT
+          
           echo "📋 Generated deployed compose (digest-pinned):" >> $GITHUB_STEP_SUMMARY
+          echo "   SHA-256: \`$COMPOSE_SHA\`  (${COMPOSE_BYTES} bytes)" >> $GITHUB_STEP_SUMMARY
           echo '```yaml' >> $GITHUB_STEP_SUMMARY
           cat /tmp/docker-compose.tee.deployed.yml >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
@@ -432,9 +443,17 @@ jobs:
         run: |
           RTMR3=$(python3 proxy-router/scripts/compute-rtmr3.py \
             /tmp/docker-compose.tee.deployed.yml \
-            /tmp/secretvm-artifacts/rootfs-dev-tdx.iso)
-          echo "rtmr3=$RTMR3" >> $GITHUB_OUTPUT
-          echo "🔐 Expected RTMR3: \`$RTMR3\`" >> $GITHUB_STEP_SUMMARY
+            /tmp/secretvm-artifacts/rootfs-dev-tdx.iso \
+            --json)
+          
+          RTMR3_HEX=$(echo "$RTMR3" | python3 -c "import sys,json; print(json.load(sys.stdin)['rtmr3'])")
+          COMPOSE_HASH=$(echo "$RTMR3" | python3 -c "import sys,json; print(json.load(sys.stdin)['compose_sha256'])")
+          ROOTFS_HASH=$(echo "$RTMR3" | python3 -c "import sys,json; print(json.load(sys.stdin)['rootfs_sha256'])")
+          
+          echo "rtmr3=$RTMR3_HEX" >> $GITHUB_OUTPUT
+          echo "🔐 Expected RTMR3: \`$RTMR3_HEX\`" >> $GITHUB_STEP_SUMMARY
+          echo "   compose sha256: \`$COMPOSE_HASH\`" >> $GITHUB_STEP_SUMMARY
+          echo "   rootfs sha256:  \`$ROOTFS_HASH\`" >> $GITHUB_STEP_SUMMARY
 
       - name: Generate and attach SBOM
         run: |
