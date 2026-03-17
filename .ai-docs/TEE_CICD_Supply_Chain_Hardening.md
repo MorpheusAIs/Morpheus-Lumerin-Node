@@ -116,6 +116,7 @@ This is the most important new artifact. It's a signed JSON document that record
     "COOKIE_CONTENT"
   ],
   "baked_env": {
+    "network": "mainnet",
     "DIAMOND_CONTRACT_ADDRESS": "0x6aBE1d282f72B474E54527D93b979A4f64d3030a",
     "MOR_TOKEN_ADDRESS": "0x7431ada8a591c955a994a21710752ef9b882b8e3",
     "BLOCKSCOUT_API_URL": "https://base.blockscout.com/api/v2",
@@ -144,7 +145,7 @@ This manifest is signed with cosign and attached to the image using `cosign atte
 - **Image provenance**: Which commit, branch, workflow run, and timestamp produced this image. You can trace back to the exact source code.
 - **Image chain**: The TEE image's digest AND the base image's digest. You can verify both independently.
 - **Config integrity**: SHA256 hashes of `docker-compose.tee.yml` and `Dockerfile.tee`. If either file was modified between the build and a deployment, the hashes won't match.
-- **Baked configuration**: The exact environment variables frozen into the image. A verifier can confirm that `PROXY_STORE_CHAT_CONTEXT=false` (no chat logging) and `ENVIRONMENT=production` are immutable — not overridable at runtime.
+- **Baked configuration**: The exact environment variables frozen into the image. A verifier can confirm that `PROXY_STORE_CHAT_CONTEXT=false` (no chat logging) and `ENVIRONMENT=production` are immutable — not overridable at runtime. The `network` field ("mainnet" or "testnet") and corresponding blockchain values (contract addresses, chain ID, blockscout URL) are set at build time based on the branch: `main` → mainnet (Base Mainnet 8453), `test` → testnet (Base Sepolia 84532). All other hardened settings are identical across networks.
 - **Runtime secret boundary**: Explicitly lists the 5 variables that ARE injectable at runtime. Everything else is sealed.
 - **Platform targets**: Confirms the image is built for both Intel TDX and AMD SEV-SNP TEE platforms.
 
@@ -246,7 +247,7 @@ This CI/CD hardening is the **foundation layer** for the full TEE attestation lo
 | `.github/workflows/build.yml` | Cosign signing, digest capture, SBOM, attestation manifest, RTMR3 computation, auto-deploy, and post-deploy verification. Also: GitHub Actions upgraded to Node 24-compatible versions, Go version updated to 1.23.x. |
 | `.github/tee/secretvm.env` | Pins SecretVM release version, rootfs variant, URL, and SHA-256. All pipeline rootfs references derive from this file. |
 | `proxy-router/scripts/compute-rtmr3.py` | Standalone RTMR3 computation script matching the `reproduce-mr` algorithm. Can be run locally for independent verification. |
-| `proxy-router/Dockerfile.tee` | Bakes immutable ENV config into the TEE image |
+| `proxy-router/Dockerfile.tee` | Bakes immutable ENV config into the TEE image. Blockchain values (diamond, token, blockscout, chain ID) are parameterized via `ARG` with mainnet defaults; overridden via `--build-arg` for testnet builds. |
 | `proxy-router/docker-compose.tee.yml` | Canonical compose template for TEE deployment with 5 runtime secrets |
 | `docs/02.3-proxy-router-tee.md` | Provider setup and consumer verification guide |
 

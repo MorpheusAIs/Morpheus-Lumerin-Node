@@ -340,6 +340,31 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Load network configuration
+        id: network-config
+        run: |
+          if [ "${{ github.ref_name }}" == "main" ]; then
+            ENV_FILE=".github/workflows/main.env"
+            NETWORK="mainnet"
+          else
+            ENV_FILE=".github/workflows/test.env"
+            NETWORK="testnet"
+          fi
+
+          source "$ENV_FILE"
+
+          echo "diamond_contract_address=$DIAMOND_ADDRESS" >> $GITHUB_OUTPUT
+          echo "mor_token_address=$TOKEN_ADDRESS" >> $GITHUB_OUTPUT
+          echo "blockscout_api_url=$BLOCKSCOUT_API_URL" >> $GITHUB_OUTPUT
+          echo "eth_node_chain_id=$CHAIN_ID" >> $GITHUB_OUTPUT
+          echo "network=$NETWORK" >> $GITHUB_OUTPUT
+
+          echo "🔗 Network: **$NETWORK** (from $ENV_FILE)" >> $GITHUB_STEP_SUMMARY
+          echo "   Chain ID: $CHAIN_ID" >> $GITHUB_STEP_SUMMARY
+          echo "   Diamond: $DIAMOND_ADDRESS" >> $GITHUB_STEP_SUMMARY
+          echo "   Token: $TOKEN_ADDRESS" >> $GITHUB_STEP_SUMMARY
+          echo "   Blockscout: $BLOCKSCOUT_API_URL" >> $GITHUB_STEP_SUMMARY
+
       - name: Install cosign
         uses: sigstore/cosign-installer@v4.1.0
 
@@ -362,12 +387,16 @@ jobs:
           BASE_IMAGE=${{ needs.Generate-Tag.outputs.image_name }}:$BUILDTAG
           TEE_IMAGE="${{ needs.Generate-Tag.outputs.image_name }}-tee"
           
-          echo "🔒 Building TEE-hardened image from base: $BASE_IMAGE"
+          echo "🔒 Building TEE-hardened image (${{ steps.network-config.outputs.network }}) from base: $BASE_IMAGE"
           
           # TEE image is amd64-only (Intel TDX and AMD SEV are both x86_64)
           docker buildx build \
             --platform linux/amd64 \
             --build-arg BASE_IMAGE=$BASE_IMAGE \
+            --build-arg DIAMOND_CONTRACT_ADDRESS=${{ steps.network-config.outputs.diamond_contract_address }} \
+            --build-arg MOR_TOKEN_ADDRESS=${{ steps.network-config.outputs.mor_token_address }} \
+            --build-arg BLOCKSCOUT_API_URL=${{ steps.network-config.outputs.blockscout_api_url }} \
+            --build-arg ETH_NODE_CHAIN_ID=${{ steps.network-config.outputs.eth_node_chain_id }} \
             --metadata-file /tmp/tee-build-metadata.json \
             --push \
             -t $TEE_IMAGE:$BUILDTAG \
@@ -506,6 +535,11 @@ jobs:
             --arg secretvm_release "$SECRETVM_RELEASE" \
             --arg rootfs_variant "$ROOTFS_VARIANT" \
             --arg rootfs_sha256 "$ROOTFS_SHA256" \
+            --arg baked_network "${{ steps.network-config.outputs.network }}" \
+            --arg baked_diamond "${{ steps.network-config.outputs.diamond_contract_address }}" \
+            --arg baked_mor_token "${{ steps.network-config.outputs.mor_token_address }}" \
+            --arg baked_blockscout "${{ steps.network-config.outputs.blockscout_api_url }}" \
+            --arg baked_chain_id "${{ steps.network-config.outputs.eth_node_chain_id }}" \
             '{
               tee_image: $tee_image,
               tee_image_tag: $tee_image_tag,
@@ -532,10 +566,11 @@ jobs:
                 "COOKIE_CONTENT"
               ],
               baked_env: {
-                DIAMOND_CONTRACT_ADDRESS: "0x6aBE1d282f72B474E54527D93b979A4f64d3030a",
-                MOR_TOKEN_ADDRESS: "0x7431ada8a591c955a994a21710752ef9b882b8e3",
-                BLOCKSCOUT_API_URL: "https://base.blockscout.com/api/v2",
-                ETH_NODE_CHAIN_ID: "8453",
+                network: $baked_network,
+                DIAMOND_CONTRACT_ADDRESS: $baked_diamond,
+                MOR_TOKEN_ADDRESS: $baked_mor_token,
+                BLOCKSCOUT_API_URL: $baked_blockscout,
+                ETH_NODE_CHAIN_ID: $baked_chain_id,
                 PROXY_STORE_CHAT_CONTEXT: "false",
                 LOG_COLOR: "false",
                 LOG_JSON: "true",
