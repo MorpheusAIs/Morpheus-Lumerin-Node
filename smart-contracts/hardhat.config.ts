@@ -37,13 +37,10 @@ const config: HardhatUserConfig = {
       //   interval: 10_000,
       // },
       // forking: {
-      //   url: `https://arbitrum-sepolia.infura.io/v3/${process.env.INFURA_KEY}`,
+      //   url: `https://base-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_KEY}`,
       // },
       // forking: {
-      //   url: `https://arb-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_KEY}`,
-      // },
-      // forking: {
-      //   url: `https://arbitrum-mainnet.infura.io/v3/${process.env.INFURA_KEY}`,
+      //   url: `https://mainnet.base.org`,
       // },
     },
     localhost: {
@@ -52,13 +49,13 @@ const config: HardhatUserConfig = {
       gasMultiplier: 1.2,
       timeout: 1000000000000000,
     },
-    arbitrum: {
-      url: `https://arbitrum-mainnet.infura.io/v3/${process.env.INFURA_KEY}`,
+    base: {
+      url: `https://mainnet.base.org`,
       accounts: privateKey(),
       gasMultiplier: 1.1,
     },
-    arbitrum_sepolia: {
-      url: 'https://arb-sepolia.g.alchemy.com/v2/yigo5wrDsGyTjHq1fMeeLlH36FCYuyAr',
+    base_sepolia: {
+      url: `https://base-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_KEY}`,
       accounts: privateKey(),
       gasMultiplier: 1.1,
     },
@@ -104,8 +101,8 @@ const config: HardhatUserConfig = {
   etherscan: {
     apiKey: {
       mainnet: `${process.env.ETHERSCAN_API_KEY}`,
-      arbitrumSepolia: `${process.env.ARBITRUM_API_KEY}`,
-      arbitrumOne: `${process.env.ARBITRUM_API_KEY}`,
+      baseSepolia: `${process.env.BASESCAN_API_KEY}`,
+      base: `${process.env.BASESCAN_API_KEY}`,
     },
   },
   sourcify: {

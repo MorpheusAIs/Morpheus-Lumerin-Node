@@ -22,9 +22,8 @@ func TestZeroObservations(t *testing.T) {
 
 	score := sc.GetScore(args)
 
-	require.NotEqual(t, math.NaN(), score)
-	require.NotEqual(t, math.Inf(0), score)
-	require.NotEqual(t, math.Inf(-1), score)
+	require.False(t, math.IsNaN(score), "score should not be NaN")
+	require.False(t, math.IsInf(score, 0), "score should not be Inf")
 }
 
 func TestPriceIncrease(t *testing.T) {
@@ -166,4 +165,26 @@ func TestPriceImpact(t *testing.T) {
 	score2 := sc.GetScore(args)
 
 	require.Greater(t, score1, score2)
+}
+
+func TestNegativeSqSumDoesNotProduceNaN(t *testing.T) {
+	sc := NewScorerDefault(ScorerDefaultParamsMock())
+	args := NewScoreArgs()
+	args.PricePerSecond.SetUint64(10000000000)
+
+	args.Model.Count = 5
+	args.Model.TpsScaled1000.Mean = 500
+	args.Model.TpsScaled1000.SqSum = -100000 // overflow from on-chain computation
+	args.Model.TtftMs.Mean = 200
+	args.Model.TtftMs.SqSum = -50000
+
+	args.ProviderModel.TpsScaled1000.Mean = 0
+	args.ProviderModel.TtftMs.Mean = 0
+	args.ProviderModel.TotalCount = 0
+	args.ProviderModel.SuccessCount = 0
+
+	score := sc.GetScore(args)
+
+	require.False(t, math.IsNaN(score), "negative SqSum should not produce NaN")
+	require.False(t, math.IsInf(score, 0), "negative SqSum should not produce Inf")
 }

@@ -38,6 +38,12 @@ import (
 // basefeeWiggleMultiplier is a multiplier for the basefee to set the maxFeePerGas
 const basefeeWiggleMultiplier = 2
 
+// allowanceReserveMultiplier — skip increaseAllowance when the on-chain
+// allowance already exceeds stake * this factor (avoids unnecessary tx).
+const allowanceReserveMultiplier = 3
+
+var maxUint256 = new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(1))
+
 type BlockchainService struct {
 	ethClient           i.EthClient
 	providerRegistry    *r.ProviderRegistry
@@ -328,34 +334,49 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 		return common.Hash{}, err
 	}
 
-	// Step 1: Approve MOR tokens with escalation
-	approveBaseOpts, err := s.getTransactOpts(ctx, prKey)
+	// Step 1: Approve MOR tokens with escalation (skip if allowance is already sufficient)
+	currentAllowance, err := s.morToken.GetAllowance(ctx, addr, s.diamonContractAddr)
 	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
+		return common.Hash{}, fmt.Errorf("failed to get current MOR allowance: %w", err)
 	}
 
-	approveReceipt, err := s.txEscalator.SendWithEscalation(
-		ctx,
-		approveBaseOpts,
-		func(opts *bind.TransactOpts) (*types.Transaction, error) {
-			return s.morToken.IncreaseAllowanceTx(opts, s.diamonContractAddr, stake)
-		},
-		s.legacyTx,
-	)
-	if err != nil {
-		s.handleTxError(ctx, addr, err)
-		return common.Hash{}, lib.WrapError(ErrSendTx, fmt.Errorf("approve failed: %w", err))
+	stakeReserve := new(big.Int).Mul(stake, big.NewInt(allowanceReserveMultiplier))
+	needsApproval := currentAllowance.Cmp(stakeReserve) < 0
+	wouldOverflow := new(big.Int).Sub(maxUint256, currentAllowance).Cmp(stake) < 0
+
+	if wouldOverflow {
+		s.log.Warnf("skipping increaseAllowance: current allowance %s + stake %s would overflow uint256", currentAllowance.String(), stake.String())
+		needsApproval = false
 	}
 
-	// Check approval succeeded (escalator already waited for mining)
-	if approveReceipt.Status != 1 {
-		return common.Hash{}, lib.WrapError(ErrSendTx, fmt.Errorf("approve tx failed with status %d", approveReceipt.Status))
-	}
-
-	if isAgent {
-		err = s.authConfig.AuthStorage.SetAgentTx(approveReceipt.TxHash.Hex(), agentUsername, approveReceipt.BlockNumber)
+	if needsApproval {
+		approveBaseOpts, err := s.getTransactOpts(ctx, prKey)
 		if err != nil {
-			s.log.Errorf("failed to set agent tx: %s", err)
+			return common.Hash{}, lib.WrapError(ErrTxOpts, err)
+		}
+
+		approveReceipt, err := s.txEscalator.SendWithEscalation(
+			ctx,
+			approveBaseOpts,
+			func(opts *bind.TransactOpts) (*types.Transaction, error) {
+				return s.morToken.IncreaseAllowanceTx(opts, s.diamonContractAddr, stake)
+			},
+			s.legacyTx,
+		)
+		if err != nil {
+			s.handleTxError(ctx, addr, err)
+			return common.Hash{}, lib.WrapError(ErrSendTx, fmt.Errorf("approve failed: %w", err))
+		}
+
+		if approveReceipt.Status != 1 {
+			return common.Hash{}, lib.WrapError(ErrSendTx, fmt.Errorf("approve tx failed with status %d", approveReceipt.Status))
+		}
+
+		if isAgent {
+			err = s.authConfig.AuthStorage.SetAgentTx(approveReceipt.TxHash.Hex(), agentUsername, approveReceipt.BlockNumber)
+			if err != nil {
+				s.log.Errorf("failed to set agent tx: %s", err)
+			}
 		}
 	}
 
@@ -958,6 +979,45 @@ func (s *BlockchainService) GetSessions(ctx context.Context, user, provider comm
 	}
 
 	return mapSessions(ids, sessions, bids), nil
+}
+
+// GetUnclosedUserSessions fetches a page of sessions for a user and returns
+// only those that are still open on-chain (ClosedAt == 0). Bids are fetched
+// only for the unclosed subset, avoiding unnecessary RPC calls for the
+// (typically much larger) set of already-closed sessions.
+func (s *BlockchainService) GetUnclosedUserSessions(ctx context.Context, user common.Address, offset *big.Int, limit uint8, order r.Order) (unclosed []*structs.Session, closedCount int, totalFetched int, err error) {
+	ids, sessions, err := s.sessionRouter.GetSessionsByUser(ctx, user, offset, limit, order)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+
+	totalFetched = len(sessions)
+
+	var unclosedIDs [][32]byte
+	var unclosedSes []sr.ISessionStorageSession
+	for i, ses := range sessions {
+		if ses.ClosedAt.Int64() == 0 {
+			unclosedIDs = append(unclosedIDs, ids[i])
+			unclosedSes = append(unclosedSes, ses)
+		} else {
+			closedCount++
+		}
+	}
+
+	if len(unclosedIDs) == 0 {
+		return nil, closedCount, totalFetched, nil
+	}
+
+	bidIDs := make([][32]byte, len(unclosedSes))
+	for i, ses := range unclosedSes {
+		bidIDs[i] = ses.BidId
+	}
+	_, bids, err := s.marketplace.GetMultipleBids(ctx, bidIDs)
+	if err != nil {
+		return nil, closedCount, totalFetched, err
+	}
+
+	return mapSessions(unclosedIDs, unclosedSes, bids), closedCount, totalFetched, nil
 }
 
 func (s *BlockchainService) GetSessionsIds(ctx context.Context, user, provider common.Address, offset *big.Int, limit uint8, order r.Order) ([]common.Hash, error) {

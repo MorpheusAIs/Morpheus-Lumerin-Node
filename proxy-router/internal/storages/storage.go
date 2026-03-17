@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
@@ -26,7 +28,7 @@ type Storage struct {
 }
 
 // NewStorage opens a BadgerDB at the given path and starts background GC.
-// Returns an error instead of calling log.Fatal so callers can handle failures gracefully.
+// If the database is corrupted, it automatically wipes the data directory and retries once.
 func NewStorage(log lib.ILogger, path string) (*Storage, error) {
 	storageLogger := NewStorageLogger(log)
 	if err := os.MkdirAll(path, os.ModePerm); err != nil {
@@ -40,7 +42,24 @@ func NewStorage(log lib.ILogger, path string) (*Storage, error) {
 
 	db, err := badger.Open(opts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open badger db at %s: %w", path, err)
+		if !isBadgerCorruptionError(err) {
+			return nil, fmt.Errorf("failed to open badger db at %s: %w", path, err)
+		}
+
+		log.Warnf("detected corrupted badger db at %s: %s — wiping data and recreating", path, err)
+
+		if clearErr := clearBadgerFiles(path); clearErr != nil {
+			return nil, fmt.Errorf("failed to clear corrupted badger db at %s: %w (original error: %s)", path, clearErr, err)
+		}
+
+		opts.Dir = path
+		opts.ValueDir = path
+		db, err = badger.Open(opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open badger db at %s after corruption recovery: %w", path, err)
+		}
+
+		log.Warnf("badger db at %s recovered successfully — all previous data was lost", path)
 	}
 
 	s := &Storage{
@@ -53,6 +72,74 @@ func NewStorage(log lib.ILogger, path string) (*Storage, error) {
 	s.startMetrics(DefaultMetricsInterval)
 
 	return s, nil
+}
+
+// isBadgerCorruptionError returns true if the error indicates a corrupted database
+// that can be resolved by wiping the data directory.
+func isBadgerCorruptionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	corruptionPatterns := []string{
+		"file does not exist",
+		"file with ID",
+		"MANIFEST",
+		"checksum mismatch",
+		"could not open",
+		"has file id",
+		"Table file corruption",
+		"Value log truncate",
+	}
+	for _, pattern := range corruptionPatterns {
+		if strings.Contains(msg, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+// badgerFileNames contains the exact filenames BadgerDB creates.
+var badgerFileNames = map[string]bool{
+	"MANIFEST":    true,
+	"KEYREGISTRY": true,
+	"DISCARD":     true,
+	"LOCK":        true,
+}
+
+// badgerFileExtensions contains the file extensions BadgerDB uses for data files.
+var badgerFileExtensions = map[string]bool{
+	".sst":  true,
+	".vlog": true,
+	".mem":  true,
+}
+
+// isBadgerFile returns true if the filename belongs to BadgerDB.
+func isBadgerFile(name string) bool {
+	if badgerFileNames[name] {
+		return true
+	}
+	return badgerFileExtensions[filepath.Ext(name)]
+}
+
+// clearBadgerFiles removes only BadgerDB files from dir, leaving any
+// non-BadgerDB files intact. The directory itself is never removed, so
+// this is safe to use on mount points (Docker volumes, EFS, PVCs).
+func clearBadgerFiles(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("failed to read directory %s: %w", dir, err)
+	}
+	for _, entry := range entries {
+		if !isBadgerFile(entry.Name()) {
+			continue
+		}
+		entryPath := filepath.Join(dir, entry.Name())
+		if err := os.RemoveAll(entryPath); err != nil {
+			return fmt.Errorf("failed to remove %s: %w", entryPath, err)
+		}
+	}
+	return nil
 }
 
 // NewTestStorage creates an in-memory storage for testing.

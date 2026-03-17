@@ -13,7 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-type ArbiscanApiV2Client struct {
+type BlockscoutApiV2Client struct {
 	baseURL string
 	apiKey  string
 	client  *http.Client
@@ -21,15 +21,15 @@ type ArbiscanApiV2Client struct {
 }
 
 const (
-	BaseURL = "https://arbitrum.blockscout.com/api/v2"
+	BaseURL = "https://base.blockscout.com/api/v2"
 )
 
-func NewBlockscoutApiV2Client(baseURL string, log lib.ILogger) *ArbiscanApiV2Client {
+func NewBlockscoutApiV2Client(baseURL string, log lib.ILogger) *BlockscoutApiV2Client {
 	return NewBlockscoutApiV2ClientWithApiKey(baseURL, "", log)
 }
 
-func NewBlockscoutApiV2ClientWithApiKey(baseURL, apiKey string, log lib.ILogger) *ArbiscanApiV2Client {
-	return &ArbiscanApiV2Client{
+func NewBlockscoutApiV2ClientWithApiKey(baseURL, apiKey string, log lib.ILogger) *BlockscoutApiV2Client {
+	return &BlockscoutApiV2Client{
 		baseURL: baseURL,
 		apiKey:  apiKey,
 		client:  &http.Client{},
@@ -37,7 +37,7 @@ func NewBlockscoutApiV2ClientWithApiKey(baseURL, apiKey string, log lib.ILogger)
 	}
 }
 
-func (a *ArbiscanApiV2Client) GetLastTransactions(ctx context.Context, address common.Address) ([]structs.MappedTransaction, error) {
+func (a *BlockscoutApiV2Client) GetLastTransactions(ctx context.Context, address common.Address) ([]structs.MappedTransaction, error) {
 	transactions, err := a.getLastTransactions(ctx, address)
 	if err != nil {
 		return nil, err
@@ -72,7 +72,7 @@ func mergeTx(txs []structs.MappedTransaction, tr []structs.MappedTransaction) []
 	return txs
 }
 
-func (a *ArbiscanApiV2Client) getLastTransactions(ctx context.Context, address common.Address) ([]structs.MappedTransaction, error) {
+func (a *BlockscoutApiV2Client) getLastTransactions(ctx context.Context, address common.Address) ([]structs.MappedTransaction, error) {
 	url := fmt.Sprintf("%s/addresses/%s/transactions", a.baseURL, address.Hex())
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -146,7 +146,7 @@ func (a *ArbiscanApiV2Client) getLastTransactions(ctx context.Context, address c
 	return txs, nil
 }
 
-func (a *ArbiscanApiV2Client) getLastTransfers(ctx context.Context, address common.Address) ([]structs.MappedTransaction, error) {
+func (a *BlockscoutApiV2Client) getLastTransfers(ctx context.Context, address common.Address) ([]structs.MappedTransaction, error) {
 	url := fmt.Sprintf("%s/addresses/%s/token-transfers", a.baseURL, address.Hex())
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -221,7 +221,7 @@ func mapInput(input []lib.InputEntry) []structs.InputEntry {
 }
 
 // Example response
-// https://arbitrum.blockscout.com/api-docs#operations-default-get_address_txs
+// https://base.blockscout.com/api-docs#operations-default-get_address_txs
 
 type TransactionsRes struct {
 	Items []Transaction `json:"items"`

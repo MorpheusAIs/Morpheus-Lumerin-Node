@@ -45,7 +45,7 @@ After the iniial setup, you can execute `git pull` to get the latest updates and
 You can also test http://localhost:8082/swagger/index.html to confirm the API is running and accessible.
 
 ```
-Loaded config: {AIEngine:{OpenAIBaseURL: OpenAIKey:} Blockchain:{EthNodeAddress: EthLegacyTx:false ExplorerApiUrl:} Environment:development Marketplace:{DiamondContractAddress:0xb8C55cD613af947E73E262F0d3C54b7211Af16CF MorTokenAddress:0x34a285a1b1c166420df5b6630132542923b5b27e WalletPrivateKey:<nil>} Log:{Color:true FolderPath: IsProd:false JSON:false LevelApp:info LevelConnection:info LevelProxy:info LevelScheduler:info LevelContract:} Proxy:{Address:0.0.0.0:3333 MaxCachedDests:5 StoragePath:} System:{Enable:false LocalPortRange:1024 65535 NetdevMaxBacklog:100000 RlimitHard:524288 RlimitSoft:524288 Somaxconn:100000 TcpMaxSynBacklog:100000} Web:{Address:0.0.0.0:8082 PublicUrl:localhost:8082}}
+Loaded config: {AIEngine:{OpenAIBaseURL: OpenAIKey:} Blockchain:{EthNodeAddress: EthLegacyTx:false ExplorerApiUrl:} Environment:development Marketplace:{DiamondContractAddress:0x6aBE1d282f72B474E54527D93b979A4f64d3030a MorTokenAddress:0x7431ada8a591c955a994a21710752ef9b882b8e3 WalletPrivateKey:<nil>} Log:{Color:true FolderPath: IsProd:false JSON:false LevelApp:info LevelConnection:info LevelProxy:info LevelScheduler:info LevelContract:} Proxy:{Address:0.0.0.0:3333 MaxCachedDests:5 StoragePath:} System:{Enable:false LocalPortRange:1024 65535 NetdevMaxBacklog:100000 RlimitHard:524288 RlimitSoft:524288 Somaxconn:100000 TcpMaxSynBacklog:100000} Web:{Address:0.0.0.0:8082 PublicUrl:localhost:8082}}
 2024-07-23T12:58:04.560735	INFO	APP	proxy-router TO BE SET AT BUILD TIME
 2024-07-23T12:58:08.249559	INFO	APP	connected to ethereum node: wss://base-mainnet.g.alchemy.com/v2/<masked>, chainID: 8453
 2024-07-23T12:58:08.278792	INFO	BADGER	All 0 tables opened in 0s
@@ -55,14 +55,14 @@ Loaded config: {AIEngine:{OpenAIBaseURL: OpenAIKey:} Blockchain:{EthNodeAddress:
 2024-07-23T12:58:08.290268	INFO	proxy state: running
 2024-07-23T12:58:08.290507	INFO	HTTP	http server is listening: 0.0.0.0:8082
 2024-07-23T12:58:08.290631	INFO	Wallet address: <masked>
-2024-07-23T12:58:08.290841	INFO	started watching events, address 0xb8C55cD613af947E73E262F0d3C54b7211Af16CF
+2024-07-23T12:58:08.290841	INFO	started watching events, address 0x6aBE1d282f72B474E54527D93b979A4f64d3030a
 2024-07-23T12:58:08.290866	INFO	TCP	tcp server is listening: 0.0.0.0:3333
 ```
 ==================================
 ### B. Authorize the contract to spend on your behalf
 Either via the swagger interface http://localhost:8082/swagger/index.html#/wallet/post_blockchain_allowance or following CLI, you can authorize the contract to spend on your behalf. **This only needs to be done once per wallet, or when funds have been depleted.**
 
-`curl -X 'POST' 'http://localhost:8082/blockchain/approve?spender=0xb8C55cD613af947E73E262F0d3C54b7211Af16CF&amount=3' -H 'accept: application/json' -d ''` # Approve the contract to spend 3 MOR tokens on your behalf
+`curl -X 'POST' 'http://localhost:8082/blockchain/approve?spender=0x6aBE1d282f72B474E54527D93b979A4f64d3030a&amount=3' -H 'accept: application/json' -d ''` # Approve the contract to spend 3 MOR tokens on your behalf
 
 ### C. Query the blockchain for various models / providers (Get ModelID)
 You can query the blockchain for various models and providers to get the ModelID. This can be done via the swagger interface http://localhost:8082/swagger/index.html#/marketplace/get_marketplace_models or following CLI:
@@ -144,8 +144,8 @@ curl -X 'POST' \
 
 
 ### Quick and Dirty Sample:
-`curl -X 'POST' 'http://localhost:8082/blockchain/approve?spender=0xb8C55cD613af947E73E262F0d3C54b7211Af16CF&amount=3' -H 'accept: application/json' -d ''`
-    # approves the smart contract `0x8e19...dE45` to spend 3 MOR tokens on your behalf
+`curl -X 'POST' 'http://localhost:8082/blockchain/approve?spender=0x6aBE1d282f72B474E54527D93b979A4f64d3030a&amount=3' -H 'accept: application/json' -d ''`
+    # approves the smart contract to spend 3 MOR tokens on your behalf
 
 `curl -s -X 'GET' 'http://localhost:8082/wallet' -H 'accept: application/json' | jq .address` 
     # returns the wallet ID (confirm that it matches your wallet)
