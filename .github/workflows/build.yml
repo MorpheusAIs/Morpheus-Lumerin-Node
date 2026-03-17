@@ -351,7 +351,10 @@ jobs:
             NETWORK="testnet"
           fi
 
-          source "$ENV_FILE"
+          DIAMOND_ADDRESS=$(grep '^DIAMOND_ADDRESS=' "$ENV_FILE" | cut -d= -f2-)
+          TOKEN_ADDRESS=$(grep '^TOKEN_ADDRESS=' "$ENV_FILE" | cut -d= -f2-)
+          BLOCKSCOUT_API_URL=$(grep '^BLOCKSCOUT_API_URL=' "$ENV_FILE" | cut -d= -f2-)
+          CHAIN_ID=$(grep '^CHAIN_ID=' "$ENV_FILE" | cut -d= -f2-)
 
           echo "diamond_contract_address=$DIAMOND_ADDRESS" >> $GITHUB_OUTPUT
           echo "mor_token_address=$TOKEN_ADDRESS" >> $GITHUB_OUTPUT
