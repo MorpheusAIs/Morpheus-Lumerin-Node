@@ -67,27 +67,35 @@ type ClaudeAIStreamContentBlock struct {
 const API_TYPE_CLAUDEAI = "claudeai"
 
 type ClaudeAI struct {
-	baseURL   string
-	apiKey    string
-	modelName string
-	client    *http.Client
-	log       lib.ILogger
+	baseURL    string
+	apiKey     string
+	modelName  string
+	client     *http.Client
+	llmTimeout time.Duration
+	log        lib.ILogger
 }
 
-func NewClaudeAIEngine(modelName, baseURL, apiKey string, log lib.ILogger) *ClaudeAI {
+func NewClaudeAIEngine(modelName, baseURL, apiKey string, llmTimeout time.Duration, log lib.ILogger) *ClaudeAI {
 	if baseURL != "" {
 		baseURL = strings.TrimSuffix(baseURL, "/")
 	}
 	return &ClaudeAI{
-		baseURL:   baseURL,
-		modelName: modelName,
-		apiKey:    apiKey,
-		client:    &http.Client{},
-		log:       log,
+		baseURL:    baseURL,
+		modelName:  modelName,
+		apiKey:     apiKey,
+		client:     &http.Client{},
+		llmTimeout: llmTimeout,
+		log:        log,
 	}
 }
 
 func (a *ClaudeAI) Prompt(ctx context.Context, compl *gcs.OpenAICompletionRequestExtra, cb gcs.CompletionCallback) error {
+	if a.llmTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, a.llmTimeout)
+		defer cancel()
+	}
+
 	compl.Model = a.modelName
 	compl.MaxTokens = 1024
 	requestBody, err := json.Marshal(compl)
@@ -115,7 +123,8 @@ func (a *ClaudeAI) Prompt(ctx context.Context, compl *gcs.OpenAICompletionReques
 	}
 	defer resp.Body.Close()
 
-	a.log.Debugf("AI Model responded with status code: %d", resp.StatusCode)
+	log := a.log.With("request_id", lib.RequestIDFromContext(ctx))
+	log.Infof("AI Model responded with status code: %d", resp.StatusCode)
 	if resp.StatusCode != http.StatusOK {
 		return a.readError(ctx, resp.Body, cb)
 	}

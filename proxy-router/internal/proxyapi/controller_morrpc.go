@@ -51,6 +51,7 @@ func NewMORRPCController(service *ProxyReceiver, validator *validator.Validate, 
 }
 
 func (s *MORRPCController) Handle(ctx context.Context, msg m.RPCMessage, sourceLog lib.ILogger, sendResponse SendResponse) error {
+	sourceLog = sourceLog.With("request_id", msg.ID)
 	sourceLog.Debugf("received TCP message with method %s", msg.Method)
 	switch msg.Method {
 	case "network.ping":
@@ -141,6 +142,7 @@ func (s *MORRPCController) sessionPrompt(ctx context.Context, msg m.RPCMessage, 
 		return lib.WrapError(ErrValidation, err)
 	}
 
+	sourceLog = sourceLog.With("session_id", req.SessionID.Hex())
 	sourceLog.Debugf("received prompt from session %s, timestamp: %d", req.SessionID, req.Timestamp)
 
 	// Validate session exists and is not expired

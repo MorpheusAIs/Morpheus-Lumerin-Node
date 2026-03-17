@@ -15,7 +15,7 @@ func RequestLogger(logger lib.ILogger) gin.HandlerFunc {
 		raw := c.Request.URL.RawQuery
 
 		start := time.Now()
-		logger.Debugf("[HTTP-REQ] %s %s",
+		logger.Infof("[HTTP-REQ] %s %s",
 			c.Request.Method,
 			path,
 		)
@@ -30,11 +30,13 @@ func RequestLogger(logger lib.ILogger) gin.HandlerFunc {
 		// Log details
 		status := c.Writer.Status()
 		latency := time.Since(start).Round(time.Millisecond)
-		logger.Debugf("[HTTP-RES] %s %s [%d] %v",
+		requestID, _ := c.Get("request_id")
+		logger.Infof("[HTTP-RES] %s %s [%d] %v request_id=%v",
 			c.Request.Method,
 			path,
 			status,
 			latency,
+			requestID,
 		)
 	}
 }
