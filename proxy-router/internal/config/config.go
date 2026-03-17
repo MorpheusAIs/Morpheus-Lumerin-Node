@@ -80,6 +80,10 @@ type Config struct {
 		Somaxconn        string `env:"SYS_SOMAXCONN"           flag:"sys-somaxconn"           desc:""`
 		TcpMaxSynBacklog string `env:"SYS_TCP_MAX_SYN_BACKLOG" flag:"sys-tcp-max-syn-backlog" desc:""`
 	}
+	TEE struct {
+		PortalURL string `env:"TEE_PORTAL_URL"  flag:"tee-portal-url"  validate:"omitempty,url" desc:"SecretAI Portal API URL for TEE attestation quote parsing"`
+		ImageRepo string `env:"TEE_IMAGE_REPO"  flag:"tee-image-repo"  validate:"omitempty"     desc:"GHCR image repo for cosign attestation verification (e.g. ghcr.io/morpheusais/morpheus-lumerin-node-tee)"`
+	}
 	Web struct {
 		Address   string `env:"WEB_ADDRESS"    flag:"web-address"    validate:"required,hostname_port" desc:"http server address host:port"`
 		PublicUrl string `env:"WEB_PUBLIC_URL" flag:"web-public-url" validate:"omitempty,url"          desc:"public url of the proxyrouter, falls back to web-address if empty" `
@@ -190,6 +194,14 @@ func (cfg *Config) SetDefaults() {
 	// IPFS
 	if cfg.IPFS.Address == "" {
 		cfg.IPFS.Address = "localhost:5001"
+	}
+
+	// TEE
+	if cfg.TEE.PortalURL == "" {
+		cfg.TEE.PortalURL = "https://secretai.scrtlabs.com/api/quote-parse"
+	}
+	if cfg.TEE.ImageRepo == "" {
+		cfg.TEE.ImageRepo = "ghcr.io/morpheusais/morpheus-lumerin-node-tee"
 	}
 
 	cfg.Log.FolderPath = filepath.FromSlash(cfg.Log.FolderPath)

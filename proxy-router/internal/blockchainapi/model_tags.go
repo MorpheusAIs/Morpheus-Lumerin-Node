@@ -6,6 +6,15 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi/structs"
 )
 
+func IsTeeModel(tags []string) bool {
+	for _, raw := range tags {
+		if strings.ToLower(raw) == "tee" {
+			return true
+		}
+	}
+	return false
+}
+
 func DetectModelType(tags []string) structs.ModelType {
 	for _, raw := range tags {
 		tag := strings.ToLower(raw)

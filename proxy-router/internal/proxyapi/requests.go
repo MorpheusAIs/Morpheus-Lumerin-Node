@@ -13,7 +13,8 @@ type PingReq struct {
 }
 
 type PingRes struct {
-	PingMs int64 `json:"ping,omitempty"`
+	PingMs  int64  `json:"ping,omitempty"`
+	Version string `json:"version,omitempty"`
 }
 
 type InitiateSessionReq struct {
