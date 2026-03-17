@@ -258,9 +258,13 @@ cosign tree ghcr.io/morpheusais/morpheus-lumerin-node-tee:v5.14.7-tee-supply-cha
     "timestamp": "2026-03-10T19:46:38Z"
   },
   "baked_env": {
+    "network": "mainnet",
+    "DIAMOND_CONTRACT_ADDRESS": "0x6aBE1d282f72B474E54527D93b979A4f64d3030a",
+    "MOR_TOKEN_ADDRESS": "0x7431ada8a591c955a994a21710752ef9b882b8e3",
+    "BLOCKSCOUT_API_URL": "https://base.blockscout.com/api/v2",
+    "ETH_NODE_CHAIN_ID": "8453",
     "PROXY_STORE_CHAT_CONTEXT": "false",
     "ENVIRONMENT": "production",
-    "ETH_NODE_CHAIN_ID": "8453",
     "LOG_JSON": "true",
     "LOG_IS_PROD": "true"
   },
@@ -314,11 +318,12 @@ This is a **release cadence** concern, not a clock-based TTL. A version doesn't 
 
 4. **Pipeline flow (in `GHCR-Build-and-Push-TEE` job):**
    ```
-   Build TEE image → capture digest → sign image
+   Load network config (main.env or test.env based on branch)
+     → Build TEE image with network-specific build args → capture digest → sign image
      → load secretvm.env → download rootfs (cached)
      → generate compose with @sha256:DIGEST
      → compute RTMR3 from compose + rootfs
-     → generate attestation manifest (now with RTMR3)
+     → generate attestation manifest (with RTMR3 + network-specific baked_env)
      → sign and attach manifest → upload deployed compose
    ```
 
@@ -329,6 +334,15 @@ This is a **release cadence** concern, not a clock-based TTL. A version doesn't 
      "tee_image_tag": "ghcr.io/.../morpheus-lumerin-node-tee:vX.Y.Z-branch",
      "compose_sha256": "sha256:...",
      "compose_image_reference": "ghcr.io/.../morpheus-lumerin-node-tee@sha256:DIGEST",
+     "baked_env": {
+       "network": "mainnet | testnet",
+       "DIAMOND_CONTRACT_ADDRESS": "...",
+       "MOR_TOKEN_ADDRESS": "...",
+       "BLOCKSCOUT_API_URL": "...",
+       "ETH_NODE_CHAIN_ID": "8453 | 84532",
+       "PROXY_STORE_CHAT_CONTEXT": "false",
+       "ENVIRONMENT": "production"
+     },
      "measurements": {
        "intel_tdx": {
          "rtmr3": "96-char-hex-value",
@@ -383,6 +397,8 @@ This is a **release cadence** concern, not a clock-based TTL. A version doesn't 
 **Goal:** Close the automation loop: push code → build TEE image → compute RTMR3 → sign → auto-update running test VM on SecretVM.
 
 **Implementation:** A dedicated `Deploy-SecretVM-Test` job runs after `GHCR-Build-and-Push-TEE`, scoped to the `test` branch and bound to the GitHub Actions **`test` environment**. This ensures the three required secrets are environment-scoped (not repo-wide), allowing separate `production` secrets later for `main` branch deployments.
+
+**Network-aware builds:** The TEE image built for the `test` branch uses **testnet** values (Base Sepolia — chain ID 84532, testnet contracts) sourced from `.github/workflows/test.env`. The `main` branch uses **mainnet** values (Base Mainnet — chain ID 8453) from `.github/workflows/main.env`. The `Dockerfile.tee` blockchain values are parameterized via `ARG` with mainnet defaults, overridden via `--build-arg` at build time. All other hardened settings (logging, timeouts, proxy config) are identical. The attestation manifest `baked_env` section reflects the actual network used, including a `network` field ("mainnet" or "testnet").
 
 The job downloads the deployed compose artifact from the build job, then calls `secretvm-cli vm edit` to update the running test VM.
 
@@ -608,6 +624,7 @@ if IsTEEModel(model.Tags):
 | 1.18 | Auto-deploy to SecretVM test instance via CLI | S | **DONE** | Separate `Deploy-SecretVM-Test` job; `environment: test`; `test` + `cicd/*` branches |
 | 1.19 | Post-deploy attestation verification | S | **DONE** | Extracts RTMR3 from raw TDX quote at byte offset 520; polls 12×30s; fails job on mismatch |
 | 1.20 | Temporarily disable service/UI builds on cicd/* branches | S | **DONE** | `Build-Service-Executables` set to `if: false`; cascades to all UI jobs. Re-enable before merge to main |
+| 1.21 | Testnet/mainnet TEE image split | S | **DONE** | `Dockerfile.tee` parameterized via ARG; pipeline sources `test.env` or `main.env` per branch — PR #669 |
 
 ### Phase 1c — Proxy-Router Code (Developer Work)
 
@@ -642,6 +659,7 @@ if IsTEEModel(model.Tags):
 | PR #648 — Compose canonical format | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/648 |
 | PR #650 — User-facing TEE docs | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/650 |
 | PR #652 — SecretVM CLI instructions (from SCRT Labs) | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/652 |
+| PR #669 — Testnet/mainnet TEE image split | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/669 |
 | First verified pipeline run (build + sign) | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/actions/runs/22920492249 |
 | First end-to-end run (build → sign → deploy → verify attestation) | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/actions/runs/22969993910 |
 | **SCRT Labs / TEE platform** | |
