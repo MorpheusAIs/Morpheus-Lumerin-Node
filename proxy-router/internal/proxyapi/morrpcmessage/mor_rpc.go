@@ -20,9 +20,10 @@ func NewMorRpc() *MORRPCMessage {
 
 // RESPONSES
 
-func (m *MORRPCMessage) PongResponce(requestId string, providerPrKey lib.HexString, nonce lib.HexString) (*RpcResponse, error) {
+func (m *MORRPCMessage) PongResponce(requestId string, providerPrKey lib.HexString, nonce lib.HexString, version string) (*RpcResponse, error) {
 	params := PongRes{
-		Nonce: nonce,
+		Nonce:   nonce,
+		Version: version,
 	}
 	signature, err := m.generateSignature(params, providerPrKey)
 	if err != nil {

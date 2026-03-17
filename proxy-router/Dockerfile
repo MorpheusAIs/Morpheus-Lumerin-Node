@@ -1,5 +1,5 @@
 # Stage 1: Build
-FROM golang:1.23-bullseye AS builder
+FROM golang:1.25-bookworm AS builder
 
 # Create and set permissions for /tmp directory
 RUN mkdir -p /tmp && chmod 1777 /tmp

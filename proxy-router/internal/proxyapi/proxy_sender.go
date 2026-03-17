@@ -87,10 +87,10 @@ func (p *ProxyServiceSender) SetSessionService(service SessionService) {
 	p.sessionService = service
 }
 
-func (p *ProxyServiceSender) Ping(ctx context.Context, providerURL string, providerAddr common.Address) (time.Duration, error) {
+func (p *ProxyServiceSender) Ping(ctx context.Context, providerURL string, providerAddr common.Address) (time.Duration, string, error) {
 	prKey, err := p.privateKey.GetPrivateKey()
 	if err != nil {
-		return 0, ErrMissingPrKey
+		return 0, "", ErrMissingPrKey
 	}
 
 	// check if context has timeout set
@@ -103,40 +103,40 @@ func (p *ProxyServiceSender) Ping(ctx context.Context, providerURL string, provi
 	nonce := make([]byte, 8)
 	_, err = rand.Read(nonce)
 	if err != nil {
-		return 0, lib.WrapError(ErrCreateReq, err)
+		return 0, "", lib.WrapError(ErrCreateReq, err)
 	}
 
 	msg, err := p.morRPC.PingRequest("0", prKey, nonce)
 	if err != nil {
-		return 0, lib.WrapError(ErrCreateReq, err)
+		return 0, "", lib.WrapError(ErrCreateReq, err)
 	}
 
 	reqStartTime := time.Now()
 	res, code, err := p.rpcRequest(providerURL, msg)
 	if err != nil {
-		return 0, lib.WrapError(ErrProvider, fmt.Errorf("code: %d, msg: %v, error: %s", code, res, err))
+		return 0, "", lib.WrapError(ErrProvider, fmt.Errorf("code: %d, msg: %v, error: %s", code, res, err))
 	}
 	pingDuration := time.Since(reqStartTime)
 
 	var typedMsg *msgs.PongRes
 	err = json.Unmarshal(*res.Result, &typedMsg)
 	if err != nil {
-		return pingDuration, lib.WrapError(ErrInvalidResponse, fmt.Errorf("expected PongRes, got %s", res.Result))
+		return pingDuration, "", lib.WrapError(ErrInvalidResponse, fmt.Errorf("expected PongRes, got %s", res.Result))
 	}
 
 	err = binding.Validator.ValidateStruct(typedMsg)
 	if err != nil {
-		return pingDuration, lib.WrapError(ErrInvalidResponse, err)
+		return pingDuration, "", lib.WrapError(ErrInvalidResponse, err)
 	}
 
 	signature := typedMsg.Signature
 	typedMsg.Signature = lib.HexString{}
 
 	if !p.morRPC.VerifySignatureAddr(typedMsg, signature, providerAddr, p.log) {
-		return pingDuration, ErrInvalidSig
+		return pingDuration, "", ErrInvalidSig
 	}
 
-	return pingDuration, nil
+	return pingDuration, typedMsg.Version, nil
 }
 
 func (p *ProxyServiceSender) InitiateSession(ctx context.Context, user common.Address, provider common.Address, spend *big.Int, bidID common.Hash, providerURL string) (*msgs.SessionRes, error) {
