@@ -1136,11 +1136,18 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 		return common.Hash{}, fmt.Errorf("failed to get min stake: %w", err)
 	}
 
+	type providerFailure struct {
+		Provider string `json:"provider"`
+		Reason   string `json:"reason"`
+	}
+	var failures []providerFailure
+
 	scoredBids := s.rateBids(bidIDs, bids, providerStats, providers, modelStats, minStake, s.log)
 	for i, bid := range scoredBids {
 		providerAddr := bid.Bid.Provider
 		if providerAddr == omitProvider {
 			s.log.Infof("skipping provider #%d %s", i, providerAddr.String())
+			failures = append(failures, providerFailure{Provider: providerAddr.String(), Reason: "skipped: omitted provider"})
 			continue
 		}
 
@@ -1155,6 +1162,7 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 		hash, tryNext, err := s.tryOpenSession(ctx, &bid.Bid, durationCopy, supply, budget, userAddr, directPayment, isFailoverEnabled, agentUsername, isTee)
 		if err != nil {
 			s.log.Errorf("failed to open session with provider %s: %s", bid.Bid.Provider.String(), err.Error())
+			failures = append(failures, providerFailure{Provider: providerAddr.String(), Reason: err.Error()})
 			if tryNext {
 				continue
 			} else {
@@ -1165,7 +1173,8 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 		return hash, nil
 	}
 
-	return common.Hash{}, fmt.Errorf("no provider accepting session")
+	failuresJSON, _ := json.Marshal(failures)
+	return common.Hash{}, fmt.Errorf("no provider accepting session: %s", string(failuresJSON))
 }
 
 func (s *BlockchainService) GetAllBidsWithRating(ctx context.Context, modelAgentID [32]byte) ([][32]byte, []m.IBidStorageBid, []sr.IStatsStorageProviderModelStats, []pr.IProviderStorageProvider, error) {

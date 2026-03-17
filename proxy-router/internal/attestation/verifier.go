@@ -161,8 +161,7 @@ func (v *Verifier) VerifyProvider(ctx context.Context, providerEndpoint string, 
 
 	golden, err := v.goldenSrc.FetchGoldenValues(ctx, version)
 	if err != nil {
-		v.log.Warnf("failed to fetch golden values for version %s, skipping register comparison: %s", version, err)
-		return nil
+		return fmt.Errorf("failed to fetch golden values for version %s: %w", version, err)
 	}
 
 	v.log.Infof("Got golden values: %+v", golden)
