@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	m "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi/morrpcmessage"
 	msg "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/proxyapi/morrpcmessage"
@@ -93,7 +94,7 @@ func (s *MORRPCController) networkPing(_ context.Context, msg m.RPCMessage, send
 		return lib.WrapError(ErrValidation, err)
 	}
 
-	res, err := s.morRpc.PongResponce(msg.ID, s.prKey, req.Nonce)
+	res, err := s.morRpc.PongResponce(msg.ID, s.prKey, req.Nonce, config.BuildVersion)
 	if err != nil {
 		sourceLog.Error(err)
 		return err
