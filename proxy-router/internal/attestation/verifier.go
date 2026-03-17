@@ -148,11 +148,7 @@ func (v *Verifier) VerifyProvider(ctx context.Context, providerEndpoint string, 
 
 	result, err := v.verifyQuote(ctx, hexQuote)
 	if err != nil {
-		v.log.Warnf("portal API verification failed, falling back to local quote parsing: %s", err)
-		result, err = v.parseQuoteLocally(hexQuote)
-		if err != nil {
-			return fmt.Errorf("attestation quote verification failed (portal and local): %w", err)
-		}
+		return fmt.Errorf("attestation quote verification failed: %w", err)
 	}
 
 	v.log.Infof("Got attestation result: %+v", result)
@@ -366,19 +362,6 @@ func qf(q *QuoteFields, field string) string {
 	default:
 		return ""
 	}
-}
-
-// parseQuoteLocally extracts TDX register values directly from the raw quote
-// binary without calling the SecretAI Portal API. This is used as a fallback
-// when the portal is unreachable. Note: this does NOT perform cryptographic
-// verification of the quote signature chain.
-func (v *Verifier) parseQuoteLocally(hexQuote string) (*AttestationResult, error) {
-	tdx, err := parseTDXQuoteHex(hexQuote)
-	if err != nil {
-		return nil, fmt.Errorf("local TDX quote parsing failed: %w", err)
-	}
-	v.log.Infof("parsed TDX quote locally (version=%d, tee_type=0x%08x)", tdx.Version, tdx.TEEType)
-	return tdx.toAttestationResult(), nil
 }
 
 // deriveAttestationURL constructs the SecretVM attestation base URL from a provider endpoint.
