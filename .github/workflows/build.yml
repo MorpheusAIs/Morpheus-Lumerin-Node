@@ -2025,6 +2025,7 @@ jobs:
       )
     needs:
       - Generate-Tag
+      - GHCR-Build-and-Push-TEE
       - UI-macOS-latest-arm64
       - UI-macOS-15-intel-x64
       - UI-Ubuntu-22-x64
@@ -2118,6 +2119,27 @@ jobs:
           |-----|-------------|
           | `TAG` | This specific release |
           | `LATEST_TAG` | Rolling tag (auto-updates with new releases) |
+          
+          ---
+          
+          ### 🔒 TEE Provider (Confidential VM Deployment)
+          *For providers running inside a Trusted Execution Environment (Intel TDX / SecretVM)*
+          
+          The deployed compose file below is digest-pinned to this exact TEE image build. Download it and paste directly into the SecretVM portal or use with `secretvm-cli`:
+          
+          | File | Description |
+          |------|-------------|
+          | [`docker-compose.tee.deployed.yml`](../../releases/download/TAG/docker-compose.tee.deployed.yml) | Ready-to-use compose with immutable `@sha256:` image digest |
+          
+          ```bash
+          # Deploy with secretvm-cli
+          secretvm-cli -k <your_api_key> vm create \
+            --name morpheus-provider \
+            --docker-compose docker-compose.tee.deployed.yml \
+            --env .env --platform tdx --persistence --upgradeability
+          ```
+          
+          See the [TEE Quick-Start Guide](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/docs/02.4-proxy-router-secretvm-quickstart.md) for full setup instructions.
           
           ---
           
