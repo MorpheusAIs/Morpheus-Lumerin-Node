@@ -17,7 +17,7 @@ export type Config = {
 };
 
 export function parseConfig(): Config {
-  const configPath = `deploy/data/config_arbitrum_sepolia.json`;
+  const configPath = `deploy/data/config_base_sepolia.json`;
 
   return JSON.parse(readFileSync(configPath, 'utf-8')) as Config;
 }

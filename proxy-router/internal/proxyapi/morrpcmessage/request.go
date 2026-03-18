@@ -130,6 +130,7 @@ type PingReq struct {
 
 type PongRes struct {
 	Nonce     lib.HexString `json:"nonce"     validate:"required,hexadecimal"`
+	Version   string        `json:"version,omitempty"   validate:"omitempty"`
 	Signature lib.HexString `json:"signature" validate:"required,hexadecimal"`
 }
 

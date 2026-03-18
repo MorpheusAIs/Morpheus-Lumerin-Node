@@ -1,0 +1,45 @@
+# TEE-hardened image for Confidential VM deployment (Intel TDX / AMD SEV)
+# Layers immutable environment defaults on top of the standard proxy-router image.
+# Only runtime secrets (wallet key, RPC URL, models config) need to be injected.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+# Blockchain — configurable per network (defaults: Base Mainnet)
+# Override via --build-arg for testnet builds (Base Sepolia)
+ARG DIAMOND_CONTRACT_ADDRESS=0x6aBE1d282f72B474E54527D93b979A4f64d3030a
+ARG MOR_TOKEN_ADDRESS=0x7431ada8a591c955a994a21710752ef9b882b8e3
+ARG BLOCKSCOUT_API_URL=https://base.blockscout.com/api/v2
+ARG ETH_NODE_CHAIN_ID=8453
+ENV DIAMOND_CONTRACT_ADDRESS=${DIAMOND_CONTRACT_ADDRESS}
+ENV MOR_TOKEN_ADDRESS=${MOR_TOKEN_ADDRESS}
+ENV BLOCKSCOUT_API_URL=${BLOCKSCOUT_API_URL}
+ENV ETH_NODE_CHAIN_ID=${ETH_NODE_CHAIN_ID}
+ENV ETH_NODE_USE_SUBSCRIPTIONS=false
+ENV ETH_NODE_LEGACY_TX=false
+ENV ENVIRONMENT=production
+
+# Proxy
+ENV PROXY_ADDRESS=0.0.0.0:3333
+ENV PROXY_STORE_CHAT_CONTEXT=false
+ENV PROXY_STORAGE_PATH=/app/data/
+
+# Web / API
+ENV WEB_ADDRESS=0.0.0.0:8082
+
+# Logging — TEE-hardened: JSON, no color, production mode, minimal verbosity
+ENV LOG_COLOR=false
+ENV LOG_JSON=true
+ENV LOG_IS_PROD=true
+ENV LOG_LEVEL_APP=info
+ENV LOG_LEVEL_TCP=warn
+ENV LOG_LEVEL_ETH_RPC=warn
+ENV LOG_LEVEL_STORAGE=warn
+
+# Timeouts
+ENV LLM_TIMEOUT=4m
+ENV CNODE_PNODE_TIMEOUT=90s
+ENV CNODE_PNODE_MAX_RETRIES=3
+ENV CNODE_PNODE_AUDIO_MAX_RETRIES=20
+
+EXPOSE 3333 8082
+ENTRYPOINT ["proxy-router"]

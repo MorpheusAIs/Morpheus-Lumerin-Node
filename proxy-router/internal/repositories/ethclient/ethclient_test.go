@@ -15,7 +15,7 @@ import (
 func TestEthClient(t *testing.T) {
 	t.SkipNow()
 	rpcClient, err := NewRPCClientMultiple([]string{
-		"https://arbitrum.blockpi.network/v1/rpc/public",
+		"https://base.llamarpc.com",
 	}, &lib.LoggerMock{})
 	require.NoError(t, err)
 	client := NewClient(rpcClient)

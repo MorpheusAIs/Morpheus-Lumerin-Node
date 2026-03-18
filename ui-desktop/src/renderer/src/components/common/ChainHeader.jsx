@@ -1,7 +1,7 @@
 
 import styled from 'styled-components';
 
-import ArbLogo from '../icons/ArbLogo';
+import BaseLogo from '../icons/BaseLogo';
 
 const Container = styled.div`
   display: flex;
@@ -38,7 +38,6 @@ const Title = styled.div`
   color: ${p => p.theme.colors.morMain};
   margin-right: 2.4rem;
   cursor: default;
-  /* width: 100%; */
 
   @media (min-width: 1140px) {
   }
@@ -60,14 +59,7 @@ const ChainContainer = styled.div`
 `
 
 const getChainLogo = (chainId) => {
-  const arbLogo = (<ArbLogo style={{ width: '20px'}} />);
-  if(chainId === 42161 || chainId === 421614) {
-    return arbLogo;
-  }
-  // BASE chain (8453 mainnet, 84532 testnet) - use default logo for now
-  // TODO: Add BaseLogo component when available
-
-  return arbLogo;
+  return (<BaseLogo style={{ width: '20px'}} />);
 }
 
 export const ChainHeader = ({ title, children, chain }) => (
