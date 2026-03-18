@@ -153,6 +153,10 @@ jobs:
               VFULL=${VMAJ}.${VMIN}.${VPAT}
               VTAG=v$VFULL
           else
+              if [ "$VMAJ_NEW" -gt "$VMAJ" ]; then
+                  VMAJ=$VMAJ_NEW
+                  VMIN=$VMIN_NEW
+              fi
               MB=$(git merge-base refs/remotes/origin/main HEAD)
               VPAT=$(git rev-list --count --no-merges ${MB}..HEAD)
               VFULL=${VMAJ}.${VMIN}.${VPAT}
