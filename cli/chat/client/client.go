@@ -230,8 +230,11 @@ func (c *ApiGatewayClient) PromptStream(ctx context.Context, message string, mes
 }
 
 func (c *ApiGatewayClient) GetLatestBlock(ctx context.Context) (result uint64, err error) {
-	err = c.getRequest(ctx, "/blockchain/latestBlock", &result)
-	return result, err
+	var response struct {
+		Block uint64 `json:"block"`
+	}
+	err = c.getRequest(ctx, "/blockchain/latestBlock", &response)
+	return response.Block, err
 }
 
 func (c *ApiGatewayClient) GetAllProviders(ctx context.Context) (result map[string]interface{}, err error) {
@@ -260,11 +263,11 @@ func (c *ApiGatewayClient) CreateNewProvider(ctx context.Context, addStake uint6
 
 func (c *ApiGatewayClient) CreateNewModel(ctx context.Context, name string, ipfsID string, stake uint64, fee uint64, tags []string) (result map[string]interface{}, err error) {
 	request := struct {
-		Stake  uint64
-		IpfsID string
-		Name   string
-		Fee    uint64
-		Tags   []string
+		Stake  uint64   `json:"stake"`
+		IpfsID string   `json:"ipfsID"`
+		Name   string   `json:"name"`
+		Fee    uint64   `json:"fee"`
+		Tags   []string `json:"tags"`
 	}{stake, ipfsID, name, fee, tags}
 
 	err = c.postRequest(ctx, "/blockchain/models", &request, &result)
@@ -278,7 +281,7 @@ func (c *ApiGatewayClient) CreateNewModel(ctx context.Context, name string, ipfs
 
 func (c *ApiGatewayClient) CreateNewProviderBid(ctx context.Context, model string, pricePerSecond uint64) (result map[string]interface{}, err error) {
 	request := struct {
-		Model          string `json:"modelId"`
+		Model          string `json:"modelID"`
 		PricePerSecond uint64 `json:"pricePerSecond"`
 	}{model, pricePerSecond}
 
@@ -395,7 +398,7 @@ func (c *ApiGatewayClient) ApproveAllowance(ctx context.Context, spender string,
 }
 
 func (c *ApiGatewayClient) CreateWallet(ctx context.Context, privateKey string) error {
-	return c.postRequest(ctx, "/wallet", &WalletRequest{PrivateKey: privateKey}, nil)
+	return c.postRequest(ctx, "/wallet/privateKey", &WalletRequest{PrivateKey: privateKey}, nil)
 }
 
 type WalletResponse struct {
