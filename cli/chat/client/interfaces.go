@@ -18,7 +18,7 @@ type SessionStakeRequest struct {
 }
 
 type Session struct {
-	SessionId string `json:"sessionId"`
+	SessionId string `json:"sessionID"`
 }
 
 type CloseSessionRequest struct {
@@ -26,8 +26,8 @@ type CloseSessionRequest struct {
 }
 
 type SessionListItem struct {
-	Bid             string `json:"BidId"`
-	Sesssion        string `json:"Id"`
+	Bid             string `json:"BidID"`
+	Session         string `json:"Id"`
 	ModelORAgent    string `json:"ModelAgentId"`
 	PricePerSecond  uint64 `json:"PricePerSecond"`
 	Provider        string `json:"Provider"`

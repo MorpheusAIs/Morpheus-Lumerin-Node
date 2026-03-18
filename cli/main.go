@@ -639,7 +639,7 @@ func (a *actions) listBlockchainSessions(cCtx *cli.Context) error {
 			isActive = true
 		}
 
-		fmt.Println("\n", "Session: ", item.Sesssion)
+		fmt.Println("\n", "Session: ", item.Session)
 		fmt.Println("\t- provider: ", item.ModelORAgent)
 		fmt.Println("\t- price per second: ", item.PricePerSecond)
 		fmt.Println("\t- closed: ", !isActive)

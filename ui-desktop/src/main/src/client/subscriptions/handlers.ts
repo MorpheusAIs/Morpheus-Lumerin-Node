@@ -194,7 +194,7 @@ export const sendEth = async (payload: {
       headers: await getAuthHeaders()
     })
     const data = await response.json()
-    return data.txHash
+    return data.tx
   } catch (e) {
     console.log('Error', e)
     return undefined
@@ -216,7 +216,7 @@ export const sendMor = async (payload: {
       headers: await getAuthHeaders()
     })
     const data = await response.json()
-    return data.txHash
+    return data.tx
   } catch (e) {
     console.log('Error', e)
     return undefined
@@ -545,18 +545,17 @@ export const getIpfsVersion = async (): Promise<{ version: string } | null> => {
 }
 
 export const getIpfsFile = async ({
-  cid,
+  cidHash,
   destinationPath
 }: {
-  cid: string
+  cidHash: string
   destinationPath: string
 }): Promise<ResultResponse | null> => {
   try {
-    const path = `${config.chain.localProxyRouterUrl}/ipfs/download/${cid}`
+    const path = `${config.chain.localProxyRouterUrl}/ipfs/download/${cidHash}?dest=${encodeURIComponent(destinationPath)}`
     const response = await fetch(path, {
       headers: await getAuthHeaders(),
-      method: 'POST',
-      body: JSON.stringify({ destinationPath })
+      method: 'GET'
     })
     const body = await response.json()
     return body
@@ -566,13 +565,13 @@ export const getIpfsFile = async ({
   }
 }
 
-export const pinIpfsFile = async ({ cid }: { cid: string }): Promise<ResultResponse | null> => {
+export const pinIpfsFile = async ({ cidHash }: { cidHash: string }): Promise<ResultResponse | null> => {
   try {
     const path = `${config.chain.localProxyRouterUrl}/ipfs/pin`
     const response = await fetch(path, {
       method: 'POST',
       headers: await getAuthHeaders(),
-      body: JSON.stringify({ cid })
+      body: JSON.stringify({ cidHash })
     })
     const body = await response.json()
     return body
@@ -582,13 +581,13 @@ export const pinIpfsFile = async ({ cid }: { cid: string }): Promise<ResultRespo
   }
 }
 
-export const unpinIpfsFile = async ({ cid }: { cid: string }): Promise<ResultResponse | null> => {
+export const unpinIpfsFile = async ({ cidHash }: { cidHash: string }): Promise<ResultResponse | null> => {
   try {
-    const path = `${config.chain.localProxyRouterUrl}/ipfs/unpin    `
+    const path = `${config.chain.localProxyRouterUrl}/ipfs/unpin`
     const response = await fetch(path, {
       method: 'POST',
       headers: await getAuthHeaders(),
-      body: JSON.stringify({ cid })
+      body: JSON.stringify({ cidHash })
     })
     const body = await response.json()
     return body
@@ -602,14 +601,19 @@ export const addFileToIpfs = async ({
   filePath
 }: {
   filePath: string
-}): Promise<{ hash: string; cid: string } | null> => {
+}): Promise<{
+  fileCID: string
+  metadataCID: string
+  fileCIDHash: string
+  metadataCIDHash: string
+} | null> => {
   try {
     const path = `${config.chain.localProxyRouterUrl}/ipfs/add`
     const response = await fetch(path, {
       method: 'POST',
       headers: await getAuthHeaders(),
       body: JSON.stringify({ filePath }),
-      signal: AbortSignal.timeout(10 * 60 * 1000) // 10 minutes timeout, because ipfs add can take a long time
+      signal: AbortSignal.timeout(10 * 60 * 1000)
     })
     const body = await response.json()
     return body
@@ -619,9 +623,19 @@ export const addFileToIpfs = async ({
   }
 }
 
-export const getIpfsPinnedFiles = async (): Promise<{
-  files: { cid: string; hash: string }[]
-} | null> => {
+export const getIpfsPinnedFiles = async (): Promise<
+  {
+    fileName: string
+    fileSize: number
+    fileCID: string
+    fileCIDHash: string
+    tags: string[]
+    id: string
+    modelName: string
+    metadataCID: string
+    metadataCIDHash: string
+  }[] | null
+> => {
   try {
     const path = `${config.chain.localProxyRouterUrl}/ipfs/pin`
     const response = await fetch(path, { headers: await getAuthHeaders() })
@@ -694,7 +708,7 @@ export const onboardingCompleted = async (data, core: Core) => {
     } else {
       const pKeyResp = await fetch(`${proxyUrl}/wallet/privateKey`, {
         method: 'POST',
-        body: JSON.stringify({ PrivateKey: String(data.privateKey) }),
+        body: JSON.stringify({ privateKey: String(data.privateKey) }),
         headers: await getAuthHeaders()
       })
       if (!pKeyResp.ok) {

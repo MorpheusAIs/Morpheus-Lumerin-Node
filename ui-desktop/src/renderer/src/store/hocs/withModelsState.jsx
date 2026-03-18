@@ -56,13 +56,13 @@ const withModelsState = WrappedComponent => {
       return response;
     }
 
-    pinFile = async (cid) => {
-      const response = await this.props.client.pinIpfsFile({ cid });
+    pinFile = async (cidHash) => {
+      const response = await this.props.client.pinIpfsFile({ cidHash });
       return response;
     }
 
-    unpinFile = async (cid) => {
-      const response = await this.props.client.unpinIpfsFile({ cid });
+    unpinFile = async (cidHash) => {
+      const response = await this.props.client.unpinIpfsFile({ cidHash });
       return response;
     }
 
