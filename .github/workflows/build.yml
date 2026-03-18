@@ -131,7 +131,12 @@ jobs:
           VMIN_NEW=0
           VPAT_NEW=0
           set +o pipefail
-          VLAST=$(git describe --tags --abbrev=0 --match='v[1-9]*' refs/remotes/origin/main 2>/dev/null | cut -c2-)
+
+          # Find the last production tag (clean semver only, no -test/-dev suffix).
+          # Uses git tag -l + version sort instead of git describe, which can
+          # pick a wrong tag when multiple tags (e.g. v6.0.0 and v5.14.30-test)
+          # sit on the same commit.
+          VLAST=$(git tag -l "v[0-9]*" | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+$" | sort -V | tail -n 1 | cut -c2-)
 
           if [ -n "$VLAST" ]; then
               eval $(echo "$VLAST" | awk -F '.' '{print "VMAJ="$1" VMIN="$2" VPAT="$3}')
