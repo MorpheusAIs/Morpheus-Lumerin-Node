@@ -207,7 +207,6 @@ func (g *GoldenSource) verifyAndExtract(ctx context.Context, version string) (*G
 	for _, refDesc := range indexManifest.Manifests {
 		values, err := g.processReferrer(ctx, ref.Context(), refDesc.Digest, sev, certID)
 		if err != nil {
-			g.log.Debugf("skipping referrer %s: %s", refDesc.Digest, err)
 			continue
 		}
 		if values != nil {
@@ -297,7 +296,6 @@ func (g *GoldenSource) verifyBundleLayer(
 	}
 
 	if stmt.GetPredicateType() != teePredicateType {
-		g.log.Debugf("skipping attestation with predicate type %s", stmt.GetPredicateType())
 		return nil, nil
 	}
 

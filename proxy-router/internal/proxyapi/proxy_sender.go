@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/attestation"
 	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/interfaces"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
@@ -64,6 +65,7 @@ type ProxyServiceSender struct {
 	cnodePnodeTimeout         time.Duration     // Per-attempt timeout waiting for PNode first response
 	cnodePnodeMaxRetries      int               // Max retries on read timeout from PNode (chat/embeddings)
 	cnodePnodeAudioMaxRetries int               // Max retries on read timeout from PNode (audio)
+	attestationVerifier       *attestation.Verifier
 	log                       lib.ILogger
 }
 
@@ -85,6 +87,10 @@ func NewProxySender(chainID *big.Int, privateKey interfaces.PrKeyProvider, logSt
 
 func (p *ProxyServiceSender) SetSessionService(service SessionService) {
 	p.sessionService = service
+}
+
+func (p *ProxyServiceSender) SetAttestationVerifier(v *attestation.Verifier) {
+	p.attestationVerifier = v
 }
 
 func (p *ProxyServiceSender) Ping(ctx context.Context, providerURL string, providerAddr common.Address) (time.Duration, string, error) {
@@ -531,6 +537,13 @@ func (p *ProxyServiceSender) validateSession(ctx context.Context, sessionID comm
 	return session, provider, nil
 }
 
+func (p *ProxyServiceSender) verifyTEEAttestation(ctx context.Context, providerURL string, providerAddr string, isTee bool) error {
+	if p.attestationVerifier == nil {
+		return nil
+	}
+	return p.attestationVerifier.VerifyProviderQuick(ctx, providerURL, providerAddr, isTee)
+}
+
 // prepareRequest creates and prepares an RPC request for the provider
 func (p *ProxyServiceSender) prepareRequest(ctx context.Context, sessionID common.Hash, payload interface{}, providerPubKey string) (*msgs.RPCMessage, lib.HexString, error) {
 	requestID := lib.RequestIDFromContext(ctx)
@@ -621,6 +634,11 @@ func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.
 	session, provider, err := p.validateSession(ctx, sessionID)
 	if err != nil {
 		return nil, err
+	}
+
+	if err := p.verifyTEEAttestation(ctx, provider.Url, provider.Addr, session.IsTee()); err != nil {
+		log.Warnf("TEE attestation check failed: %s", err)
+		return nil, lib.WrapError(ErrProvider, err)
 	}
 
 	// Acquire session semaphore to ensure only 1 concurrent request per session
@@ -1152,6 +1170,11 @@ func (p *ProxyServiceSender) SendAudioTranscriptionV2(ctx context.Context, sessi
 		return nil, err
 	}
 
+	if err := p.verifyTEEAttestation(ctx, provider.Url, provider.Addr, session.IsTee()); err != nil {
+		log.Warnf("TEE attestation check failed: %s", err)
+		return nil, lib.WrapError(ErrProvider, err)
+	}
+
 	// Acquire session semaphore to ensure only 1 concurrent request per session
 	log.Infof("acquiring session semaphore for session %s (audio transcription)", sessionID.Hex())
 	if err := p.sessionSema.Acquire(ctx, sessionID); err != nil {
@@ -1433,6 +1456,11 @@ func (p *ProxyServiceSender) SendAudioSpeech(ctx context.Context, sessionID comm
 		return nil, err
 	}
 
+	if err := p.verifyTEEAttestation(ctx, provider.Url, provider.Addr, session.IsTee()); err != nil {
+		log.Warnf("TEE attestation check failed: %s", err)
+		return nil, lib.WrapError(ErrProvider, err)
+	}
+
 	// Acquire session semaphore to ensure only 1 concurrent request per session
 	log.Infof("acquiring session semaphore for session %s (audio speech)", sessionID.Hex())
 	if err := p.sessionSema.Acquire(ctx, sessionID); err != nil {
@@ -1501,6 +1529,11 @@ func (p *ProxyServiceSender) SendEmbeddings(ctx context.Context, sessionID commo
 	session, provider, err := p.validateSession(ctx, sessionID)
 	if err != nil {
 		return nil, err
+	}
+
+	if err := p.verifyTEEAttestation(ctx, provider.Url, provider.Addr, session.IsTee()); err != nil {
+		log.Warnf("TEE attestation check failed: %s", err)
+		return nil, lib.WrapError(ErrProvider, err)
 	}
 
 	// Acquire session semaphore to ensure only 1 concurrent request per session

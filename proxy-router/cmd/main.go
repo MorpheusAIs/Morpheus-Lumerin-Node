@@ -36,6 +36,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/walletapi"
 
 	docs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/docs"
+	"github.com/ethereum/go-ethereum/common"
 )
 
 var (
@@ -293,6 +294,13 @@ func start() error {
 
 	blockchainApi := blockchainapi.NewBlockchainService(ethClient, multicallBackend, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, explorer, wallet, proxyRouterApi, sessionRepo, scorer, authCfg, appLog, rpcLog, cfg.Blockchain.EthLegacyTx, teeVerifier)
 	proxyRouterApi.SetSessionService(blockchainApi)
+	proxyRouterApi.SetAttestationVerifier(teeVerifier)
+	if teeVerifier != nil {
+		teeVerifier.SetPingFunc(func(ctx context.Context, providerEndpoint string, providerAddr string) (string, error) {
+			_, version, err := proxyRouterApi.Ping(ctx, providerEndpoint, common.HexToAddress(providerAddr))
+			return version, err
+		})
+	}
 
 	modelConfigLoader := config.NewModelConfigLoader(cfg.Proxy.ModelsConfigPath, cfg.Proxy.ModelsConfigContent, valid, blockchainApi, &aiengine.ConnectionChecker{}, appLog)
 	err = modelConfigLoader.Init()
