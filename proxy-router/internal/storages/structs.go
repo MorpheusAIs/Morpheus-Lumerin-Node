@@ -20,6 +20,7 @@ type Session struct {
 	OutputTokens     int
 	FailoverEnabled  bool
 	DirectPayment    bool
+	IsTee            bool
 }
 
 type User struct {

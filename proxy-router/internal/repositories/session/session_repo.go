@@ -118,6 +118,7 @@ func (r *SessionRepositoryCached) getSessionFromCache(id common.Hash) (*SessionM
 		outputTokens:     ses.OutputTokens,
 		failoverEnabled:  ses.FailoverEnabled,
 		agentUsername:    ses.AgentUsername,
+		isTee:           ses.IsTee,
 	}, nil
 }
 
@@ -135,5 +136,6 @@ func (r *SessionRepositoryCached) saveSessionToCache(ses *SessionModel) error {
 		FailoverEnabled:  ses.failoverEnabled,
 		DirectPayment:    ses.directPayment,
 		AgentUsername:    ses.agentUsername,
+		IsTee:           ses.isTee,
 	})
 }
