@@ -14,12 +14,14 @@ type Balance struct {
 
 // Model represents a registered AI model on the Morpheus network.
 type Model struct {
-	ID    string   `json:"id"`
-	Name  string   `json:"name"`
-	Tags  []string `json:"tags"`
-	Fee   string   `json:"fee"`
-	Stake string   `json:"stake"`
-	Owner string   `json:"owner"`
+	ID        string   `json:"id"`
+	Name      string   `json:"name"`
+	Tags      []string `json:"tags"`
+	Fee       string   `json:"fee"`
+	Stake     string   `json:"stake"`
+	Owner     string   `json:"owner"`
+	ModelType string   `json:"model_type,omitempty"` // LLM, TTS, STT, EMBEDDING
+	CreatedAt int64    `json:"created_at,omitempty"`
 }
 
 // ScoredBid represents a provider bid with its quality score.
