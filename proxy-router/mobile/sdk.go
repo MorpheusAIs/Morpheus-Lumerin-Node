@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/attestation"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage"
 	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
@@ -51,6 +52,10 @@ type Config struct {
 	BlockscoutURL   string // Blockscout API v2 base URL
 	ActiveModelsURL string // pre-built active models JSON (production: https://active.mor.org/active_models.json)
 	LogLevel        string // "debug", "info", "warn", "error" (default: "info")
+	// TEEPortalURL is the SecretAI (or compatible) quote-parse API. Empty uses the default production URL.
+	TEEPortalURL string
+	// TEEImageRepo is the GHCR image used to load cosign golden TEE measurements (e.g. ghcr.io/.../morpheus-lumerin-node-tee). Empty uses the Morpheus default repo.
+	TEEImageRepo string
 }
 
 // SDK is the main entry point for mobile applications.
@@ -176,6 +181,9 @@ func NewSDK(cfg Config) (*SDK, error) {
 		return nil, fmt.Errorf("create rating: %w", err)
 	}
 
+	// TEE attestation (register match vs cosign golden manifest) — required for Secure models; same path as proxy-router daemon.
+	teeVerifier := attestation.NewVerifier(cfg.TEEPortalURL, cfg.TEEImageRepo, log.Named("TEE"))
+
 	// Blockchain service — the main orchestrator for on-chain operations
 	blockchainSvc := blockchainapi.NewBlockchainService(
 		ethClient, mc, diamondAddr, morTokenAddr,
@@ -183,7 +191,7 @@ func NewSDK(cfg Config) (*SDK, error) {
 		nil,   // authConfig — not needed for direct SDK calls
 		log, rpcLog,
 		false, // legacyTx
-		nil,   // attestation verifier — can add later for TEE
+		teeVerifier,
 	)
 
 	// Wire the circular dependency: proxy sender needs session service for failover
@@ -584,6 +592,22 @@ func (s *SDK) GetRatedBidsJSON(ctx context.Context, modelID string) (string, err
 	return toJSON(bids)
 }
 
+// EstimateOpenSessionStakeJSON returns stake + formula inputs as JSON (for FFI / UI).
+// Uses the top-scored bid (same as the first provider tried when opening a session).
+func (s *SDK) EstimateOpenSessionStakeJSON(ctx context.Context, modelID string, durationSec int64, directPayment bool) (string, error) {
+	id := common.HexToHash(modelID)
+	dur := big.NewInt(durationSec)
+	est, err := s.blockchain.EstimateOpenSessionStake(ctx, id, dur, directPayment)
+	if err != nil {
+		return "", err
+	}
+	b, err := json.Marshal(est)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
 // --- Sessions ---
 
 // OpenSession opens a session with the best-rated provider for a model.
@@ -657,6 +681,10 @@ func (s *SDK) GetUnclosedUserSessions(ctx context.Context) ([]Session, error) {
 		}
 		offset = new(big.Int).Add(offset, big.NewInt(int64(totalFetched)))
 	}
+	// JSON null vs []: encoding/json marshals nil slice as null; FFI/Flutter expect [].
+	if out == nil {
+		out = []Session{}
+	}
 	return out, nil
 }
 
@@ -679,13 +707,22 @@ type StreamCallback func(text string, isLast bool) error
 // If stream is true, the provider may return SSE chunks; otherwise a single JSON completion.
 // In both cases, deltas are delivered through cb until the response is complete.
 func (s *SDK) SendPrompt(ctx context.Context, sessionID string, prompt string, stream bool, cb StreamCallback) error {
+	return s.SendPromptWithMessages(ctx, sessionID, []openai.ChatCompletionMessage{
+		{Role: openai.ChatMessageRoleUser, Content: prompt},
+	}, stream, cb)
+}
+
+// SendPromptWithMessages sends a full chat transcript (OpenAI roles) over an active session.
+// Use this when the app persists history locally and must re-supply prior turns after restart.
+func (s *SDK) SendPromptWithMessages(ctx context.Context, sessionID string, messages []openai.ChatCompletionMessage, stream bool, cb StreamCallback) error {
 	id := common.HexToHash(sessionID)
+	if err := s.ensureProviderForSession(ctx, id); err != nil {
+		return err
+	}
 
 	req := &gcs.OpenAICompletionRequestExtra{}
 	req.Model = sessionID
-	req.Messages = []openai.ChatCompletionMessage{
-		{Role: "user", Content: prompt},
-	}
+	req.Messages = messages
 	req.Stream = stream
 
 	internalCB := func(ctx context.Context, chunk gcs.Chunk, errResp *gcs.AiEngineErrorResponse) error {
@@ -703,6 +740,30 @@ func (s *SDK) SendPrompt(ctx context.Context, sessionID string, prompt string, s
 
 	_, err := s.proxySender.SendPromptV2(ctx, id, req, internalCB)
 	return err
+}
+
+// ensureProviderForSession repopulates in-memory provider URL + pubkey after SDK restart (mobile).
+func (s *SDK) ensureProviderForSession(ctx context.Context, sessionID common.Hash) error {
+	sess, err := s.sessionRepo.GetSession(ctx, sessionID)
+	if err != nil {
+		return fmt.Errorf("session: %w", err)
+	}
+	provAddr := sess.ProviderAddr()
+	u, err := s.sessionStorage.GetUser(provAddr.Hex())
+	if err != nil {
+		return fmt.Errorf("provider cache: %w", err)
+	}
+	if u != nil {
+		return nil
+	}
+	p, err := s.blockchain.GetProvider(ctx, provAddr)
+	if err != nil {
+		return fmt.Errorf("provider registry: %w", err)
+	}
+	if p == nil || p.Endpoint == "" {
+		return fmt.Errorf("provider endpoint not found for %s", provAddr.Hex())
+	}
+	return s.proxySender.EnsureProviderRegistered(ctx, provAddr, p.Endpoint)
 }
 
 // --- Helpers ---
