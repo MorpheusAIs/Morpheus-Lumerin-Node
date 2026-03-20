@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/attestation"
@@ -42,6 +43,9 @@ const basefeeWiggleMultiplier = 2
 // allowance already exceeds stake * this factor (avoids unnecessary tx).
 const allowanceReserveMultiplier = 3
 
+// supplyBudgetCacheTTL bounds duplicate contract reads during session open / model flows.
+const supplyBudgetCacheTTL = 55 * time.Second
+
 var maxUint256 = new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(1))
 
 type BlockchainService struct {
@@ -60,6 +64,12 @@ type BlockchainService struct {
 	rating              *rating.Rating
 	minStake            *big.Int
 	attestationVerifier *attestation.Verifier
+
+	supplyBudgetMu   sync.Mutex
+	cachedSupply     *big.Int
+	cachedSupplyAt   time.Time
+	cachedBudget     *big.Int
+	cachedBudgetAt   time.Time
 
 	legacyTx    bool
 	privateKey  i.PrKeyProvider
@@ -319,9 +329,13 @@ func (s *BlockchainService) rateBids(bidIds [][32]byte, bids []m.IBidStorageBid,
 }
 
 func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalSig []byte, stake *big.Int, directPayment bool, agentUsername string) (common.Hash, error) {
-	isAgent, err := s.authConfig.IsAllowanceEnough(agentUsername, s.morTokenAddr.Hex(), stake)
-	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrAgentUserAllowance, err)
+	var isAgent bool
+	if s.authConfig != nil {
+		var err error
+		isAgent, err = s.authConfig.IsAllowanceEnough(agentUsername, s.morTokenAddr.Hex(), stake)
+		if err != nil {
+			return common.Hash{}, lib.WrapError(ErrAgentUserAllowance, err)
+		}
 	}
 
 	prKey, err := s.privateKey.GetPrivateKey()
@@ -372,7 +386,7 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 			return common.Hash{}, lib.WrapError(ErrSendTx, fmt.Errorf("approve tx failed with status %d", approveReceipt.Status))
 		}
 
-		if isAgent {
+		if isAgent && s.authConfig != nil {
 			err = s.authConfig.AuthStorage.SetAgentTx(approveReceipt.TxHash.Hex(), agentUsername, approveReceipt.BlockNumber)
 			if err != nil {
 				s.log.Errorf("failed to set agent tx: %s", err)
@@ -405,7 +419,7 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 		return common.Hash{}, lib.WrapError(ErrSendTx, fmt.Errorf("parse session receipt failed: %w", err))
 	}
 
-	if isAgent {
+	if isAgent && s.authConfig != nil {
 		amountBigInt := lib.BigInt{Int: *stake}
 		err = s.authConfig.DecreaseAllowance(agentUsername, s.morTokenAddr.Hex(), amountBigInt)
 		if err != nil {
@@ -725,9 +739,13 @@ func (s *BlockchainService) GetBalance(ctx context.Context) (eth *big.Int, mor *
 }
 
 func (s *BlockchainService) SendETH(ctx context.Context, to common.Address, amount *big.Int, agentUsername string) (common.Hash, error) {
-	shouldDecrease, err := s.authConfig.IsAllowanceEnough(agentUsername, "eth", amount)
-	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrAgentUserAllowance, err)
+	var shouldDecrease bool
+	if s.authConfig != nil {
+		var err error
+		shouldDecrease, err = s.authConfig.IsAllowanceEnough(agentUsername, "eth", amount)
+		if err != nil {
+			return common.Hash{}, lib.WrapError(ErrAgentUserAllowance, err)
+		}
 	}
 
 	signedTx, err := s.createSignedTransaction(ctx, &types.DynamicFeeTx{
@@ -749,7 +767,7 @@ func (s *BlockchainService) SendETH(ctx context.Context, to common.Address, amou
 		return common.Hash{}, lib.WrapError(ErrWaitMined, err)
 	}
 
-	if shouldDecrease {
+	if shouldDecrease && s.authConfig != nil {
 		amountBigInt := lib.BigInt{Int: *amount}
 		err = s.authConfig.DecreaseAllowance(agentUsername, "eth", amountBigInt)
 		if err != nil {
@@ -828,9 +846,13 @@ func (s *BlockchainService) createSignedTransaction(ctx context.Context, txdata 
 }
 
 func (s *BlockchainService) SendMOR(ctx context.Context, to common.Address, amount *big.Int, agentUsername string) (common.Hash, error) {
-	shouldDecrease, err := s.authConfig.IsAllowanceEnough(agentUsername, s.morTokenAddr.Hex(), amount)
-	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrAgentUserAllowance, err)
+	var shouldDecrease bool
+	if s.authConfig != nil {
+		var err error
+		shouldDecrease, err = s.authConfig.IsAllowanceEnough(agentUsername, s.morTokenAddr.Hex(), amount)
+		if err != nil {
+			return common.Hash{}, lib.WrapError(ErrAgentUserAllowance, err)
+		}
 	}
 
 	prKey, err := s.privateKey.GetPrivateKey()
@@ -848,7 +870,7 @@ func (s *BlockchainService) SendMOR(ctx context.Context, to common.Address, amou
 		return common.Hash{}, lib.WrapError(ErrSendTx, err)
 	}
 
-	if shouldDecrease {
+	if shouldDecrease && s.authConfig != nil {
 		amountBigInt := lib.BigInt{Int: *amount}
 		err = s.authConfig.DecreaseAllowance(agentUsername, s.morTokenAddr.Hex(), amountBigInt)
 		if err != nil {
@@ -945,11 +967,47 @@ func (s *BlockchainService) ClaimProviderBalance(ctx context.Context, sessionID 
 }
 
 func (s *BlockchainService) GetTokenSupply(ctx context.Context) (*big.Int, error) {
-	return s.sessionRouter.GetTotalMORSupply(ctx, big.NewInt(time.Now().Unix()))
+	now := time.Now()
+	s.supplyBudgetMu.Lock()
+	if s.cachedSupply != nil && now.Sub(s.cachedSupplyAt) < supplyBudgetCacheTTL {
+		v := new(big.Int).Set(s.cachedSupply)
+		s.supplyBudgetMu.Unlock()
+		return v, nil
+	}
+	s.supplyBudgetMu.Unlock()
+
+	supply, err := s.sessionRouter.GetTotalMORSupply(ctx, big.NewInt(now.Unix()))
+	if err != nil {
+		return nil, err
+	}
+
+	s.supplyBudgetMu.Lock()
+	s.cachedSupply = new(big.Int).Set(supply)
+	s.cachedSupplyAt = now
+	s.supplyBudgetMu.Unlock()
+	return supply, nil
 }
 
 func (s *BlockchainService) GetTodaysBudget(ctx context.Context) (*big.Int, error) {
-	return s.sessionRouter.GetTodaysBudget(ctx, big.NewInt(time.Now().Unix()))
+	now := time.Now()
+	s.supplyBudgetMu.Lock()
+	if s.cachedBudget != nil && now.Sub(s.cachedBudgetAt) < supplyBudgetCacheTTL {
+		v := new(big.Int).Set(s.cachedBudget)
+		s.supplyBudgetMu.Unlock()
+		return v, nil
+	}
+	s.supplyBudgetMu.Unlock()
+
+	budget, err := s.sessionRouter.GetTodaysBudget(ctx, big.NewInt(now.Unix()))
+	if err != nil {
+		return nil, err
+	}
+
+	s.supplyBudgetMu.Lock()
+	s.cachedBudget = new(big.Int).Set(budget)
+	s.cachedBudgetAt = now
+	s.supplyBudgetMu.Unlock()
+	return budget, nil
 }
 
 func (s *BlockchainService) GetSessions(ctx context.Context, user, provider common.Address, offset *big.Int, limit uint8, order r.Order) ([]*structs.Session, error) {

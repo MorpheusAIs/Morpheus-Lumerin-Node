@@ -29,7 +29,6 @@ import (
 	wallet "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/wallet"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/rpc"
 	openai "github.com/sashabaranov/go-openai"
 	"github.com/tyler-smith/go-bip39"
 )
@@ -45,12 +44,12 @@ const (
 // Config holds the minimal configuration needed for the mobile SDK.
 type Config struct {
 	DataDir         string // persistent storage root (chat history, etc.)
-	EthNodeURL      string // Ethereum JSON-RPC endpoint
+	EthNodeURL      string // Ethereum JSON-RPC endpoint(s): comma/semicolon/|/newline-separated for failover
 	ChainID         int64  // e.g. 8453 (Base), 84532 (Base Sepolia)
 	DiamondAddr     string // diamond proxy contract (hex with 0x prefix)
 	MorTokenAddr    string // MOR token contract (hex with 0x prefix)
 	BlockscoutURL   string // Blockscout API v2 base URL
-	ActiveModelsURL string // pre-built active models JSON (e.g. https://active.dev.mor.org/active_models.json)
+	ActiveModelsURL string // pre-built active models JSON (production: https://active.mor.org/active_models.json)
 	LogLevel        string // "debug", "info", "warn", "error" (default: "info")
 }
 
@@ -59,7 +58,6 @@ type Config struct {
 type SDK struct {
 	cfg            Config
 	log            lib.ILogger
-	rpcClient      *rpc.Client
 	ethClient      *ethclient.Client
 	wallet         *wallet.KeychainWallet
 	walletStorage  *MemoryKeyValueStorage
@@ -104,13 +102,29 @@ func NewSDK(cfg Config) (*SDK, error) {
 	}
 	log := baseLog.Named("MOBILE")
 
-	// Dial Ethereum RPC
-	rpcClient, err := rpc.Dial(cfg.EthNodeURL)
-	if err != nil {
-		return nil, fmt.Errorf("dial eth node: %w", err)
+	urls := parseEthNodeURLs(cfg.EthNodeURL)
+	if len(urls) == 0 {
+		return nil, fmt.Errorf("EthNodeURL is required")
 	}
 
-	ethClient := ethclient.NewClient(rpcClient)
+	var rpcBackend ethclient.RPCClient
+	if len(urls) == 1 {
+		rc, derr := ethclient.DialRPC(urls[0])
+		if derr != nil {
+			return nil, fmt.Errorf("dial eth node: %w", derr)
+		}
+		rpcBackend = rc
+		log.Infof("single RPC endpoint: %s", urls[0])
+	} else {
+		multi, derr := ethclient.NewRPCClientMultiple(urls, log)
+		if derr != nil {
+			return nil, fmt.Errorf("dial eth nodes: %w", derr)
+		}
+		rpcBackend = multi
+		log.Infof("using %d RPC endpoints with round-robin + backoff failover", len(multi.GetURLs()))
+	}
+
+	ethClient := ethclient.NewClient(rpcBackend)
 
 	// Verify chain ID
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -118,11 +132,11 @@ func NewSDK(cfg Config) (*SDK, error) {
 
 	chainID, err := ethClient.ChainID(ctx)
 	if err != nil {
-		rpcClient.Close()
+		ethClient.Close()
 		return nil, fmt.Errorf("get chain ID: %w", err)
 	}
 	if cfg.ChainID != 0 && chainID.Int64() != cfg.ChainID {
-		rpcClient.Close()
+		ethClient.Close()
 		return nil, fmt.Errorf("chain ID mismatch: config=%d, node=%d", cfg.ChainID, chainID.Int64())
 	}
 	log.Infof("connected to eth node, chainID=%d", chainID.Int64())
@@ -158,7 +172,7 @@ func NewSDK(cfg Config) (*SDK, error) {
 	// Rating with default config
 	scorer, err := rating.NewRatingFromConfig([]byte(config.RatingConfigDefault), log.Named("RATING"))
 	if err != nil {
-		rpcClient.Close()
+		ethClient.Close()
 		return nil, fmt.Errorf("create rating: %w", err)
 	}
 
@@ -185,7 +199,6 @@ func NewSDK(cfg Config) (*SDK, error) {
 	sdk := &SDK{
 		cfg:            cfg,
 		log:            log,
-		rpcClient:      rpcClient,
 		ethClient:      ethClient,
 		wallet:         w,
 		walletStorage:  walletKV,
@@ -206,10 +219,36 @@ func NewSDK(cfg Config) (*SDK, error) {
 
 // Shutdown releases all resources held by the SDK.
 func (s *SDK) Shutdown() {
-	if s.rpcClient != nil {
-		s.rpcClient.Close()
+	if s.ethClient != nil {
+		s.ethClient.Close()
+		s.ethClient = nil
 	}
 	s.log.Info("SDK shut down")
+}
+
+// parseEthNodeURLs splits a config string into deduplicated RPC URLs (order preserved).
+func parseEthNodeURLs(s string) []string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	parts := strings.FieldsFunc(s, func(r rune) bool {
+		return r == ',' || r == ';' || r == '|' || r == '\n' || r == '\t'
+	})
+	seen := make(map[string]struct{}, len(parts))
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		u := strings.TrimSpace(p)
+		if u == "" {
+			continue
+		}
+		if _, ok := seen[u]; ok {
+			continue
+		}
+		seen[u] = struct{}{}
+		out = append(out, u)
+	}
+	return out
 }
 
 // --- Wallet Operations ---
@@ -309,6 +348,40 @@ func (s *SDK) GetBalanceJSON(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return toJSON(b)
+}
+
+// SendETH sends native ETH (amount in wei, decimal string) to an 0x address. Waits for mining.
+func (s *SDK) SendETH(ctx context.Context, toHex string, amountWei string) (txHash string, err error) {
+	if !common.IsHexAddress(toHex) {
+		return "", fmt.Errorf("invalid recipient address")
+	}
+	to := common.HexToAddress(toHex)
+	amt, ok := new(big.Int).SetString(amountWei, 10)
+	if !ok || amt.Sign() <= 0 {
+		return "", fmt.Errorf("invalid amount: use wei as a decimal string")
+	}
+	h, err := s.blockchain.SendETH(ctx, to, amt, "")
+	if err != nil {
+		return "", err
+	}
+	return h.Hex(), nil
+}
+
+// SendMOR sends MOR ERC-20 (amount in token wei, 18 decimals, decimal string) to an 0x address.
+func (s *SDK) SendMOR(ctx context.Context, toHex string, amountWei string) (txHash string, err error) {
+	if !common.IsHexAddress(toHex) {
+		return "", fmt.Errorf("invalid recipient address")
+	}
+	to := common.HexToAddress(toHex)
+	amt, ok := new(big.Int).SetString(amountWei, 10)
+	if !ok || amt.Sign() <= 0 {
+		return "", fmt.Errorf("invalid amount: use wei as a decimal string")
+	}
+	h, err := s.blockchain.SendMOR(ctx, to, amt, "")
+	if err != nil {
+		return "", err
+	}
+	return h.Hex(), nil
 }
 
 // --- Models ---
@@ -554,6 +627,48 @@ func (s *SDK) GetSessionJSON(ctx context.Context, sessionID string) (string, err
 	return toJSON(sess)
 }
 
+// GetUnclosedUserSessions returns on-chain sessions for the wallet where ClosedAt == 0.
+// Paginates newest-first until a short page or maxPages.
+func (s *SDK) GetUnclosedUserSessions(ctx context.Context) ([]Session, error) {
+	addr, err := s.getAddress()
+	if err != nil {
+		return nil, err
+	}
+	user := common.HexToAddress(addr)
+	var out []Session
+	offset := big.NewInt(0)
+	const limit uint8 = 50
+	const maxPages = 40
+	order := registries.OrderDESC
+
+	for page := 0; page < maxPages; page++ {
+		unclosed, _, totalFetched, err := s.blockchain.GetUnclosedUserSessions(ctx, user, offset, limit, order)
+		if err != nil {
+			return nil, err
+		}
+		for _, ses := range unclosed {
+			if ses == nil {
+				continue
+			}
+			out = append(out, *sessionFromInternal(ses))
+		}
+		if totalFetched < int(limit) {
+			break
+		}
+		offset = new(big.Int).Add(offset, big.NewInt(int64(totalFetched)))
+	}
+	return out, nil
+}
+
+// GetUnclosedUserSessionsJSON is for FFI / JSON consumers.
+func (s *SDK) GetUnclosedUserSessionsJSON(ctx context.Context) (string, error) {
+	list, err := s.GetUnclosedUserSessions(ctx)
+	if err != nil {
+		return "", err
+	}
+	return toJSON(list)
+}
+
 // --- Chat ---
 
 // StreamCallback receives streaming chunks from a chat completion.
@@ -561,8 +676,9 @@ func (s *SDK) GetSessionJSON(ctx context.Context, sessionID string) (string, err
 type StreamCallback func(text string, isLast bool) error
 
 // SendPrompt sends a chat completion request over an active session.
-// Responses stream back through the callback.
-func (s *SDK) SendPrompt(ctx context.Context, sessionID string, prompt string, cb StreamCallback) error {
+// If stream is true, the provider may return SSE chunks; otherwise a single JSON completion.
+// In both cases, deltas are delivered through cb until the response is complete.
+func (s *SDK) SendPrompt(ctx context.Context, sessionID string, prompt string, stream bool, cb StreamCallback) error {
 	id := common.HexToHash(sessionID)
 
 	req := &gcs.OpenAICompletionRequestExtra{}
@@ -570,11 +686,15 @@ func (s *SDK) SendPrompt(ctx context.Context, sessionID string, prompt string, c
 	req.Messages = []openai.ChatCompletionMessage{
 		{Role: "user", Content: prompt},
 	}
-	req.Stream = true
+	req.Stream = stream
 
 	internalCB := func(ctx context.Context, chunk gcs.Chunk, errResp *gcs.AiEngineErrorResponse) error {
 		if errResp != nil {
 			return fmt.Errorf("provider error: %v", errResp.ProviderModelError)
+		}
+		// Match HTTP /v1/chat/completions: [DONE] is ChunkTypeControl (still "streaming" on the chunk).
+		if chunk.Type() == gcs.ChunkTypeControl {
+			return cb("", true)
 		}
 		text := chunk.String()
 		isLast := !chunk.IsStreaming()
