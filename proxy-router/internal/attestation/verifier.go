@@ -311,7 +311,7 @@ func (v *Verifier) VerifyProviderQuick(ctx context.Context, providerEndpoint str
 
 	if currentHash != cached.quoteHash {
 		v.log.Warnf("quick attestation: quote hash MISMATCH for %s (cached=%s, live=%s)", providerEndpoint, cached.quoteHash, currentHash)
-		return fmt.Errorf("TEE attestation quote changed since session was opened (provider %s)", providerEndpoint)
+		return v.fullVerifyWithPing(ctx, providerEndpoint, providerAddr)
 	}
 
 	v.log.Infof("quick attestation: quote hash matches cached value for %s", providerEndpoint)
