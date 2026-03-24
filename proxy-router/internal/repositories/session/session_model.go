@@ -20,6 +20,7 @@ type SessionModel struct {
 	outputTokens     int
 	failoverEnabled  bool
 	directPayment    bool
+	isTee            bool
 }
 
 func (s *SessionModel) ID() common.Hash {
@@ -80,4 +81,12 @@ func (s *SessionModel) SetFailoverEnabled(enabled bool) {
 
 func (s *SessionModel) SetAgentUsername(username string) {
 	s.agentUsername = username
+}
+
+func (s *SessionModel) IsTee() bool {
+	return s.isTee
+}
+
+func (s *SessionModel) SetIsTee(v bool) {
+	s.isTee = v
 }

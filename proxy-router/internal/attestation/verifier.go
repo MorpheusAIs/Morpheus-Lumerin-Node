@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
@@ -107,12 +108,26 @@ type AttestationResult struct {
 	ReportData string
 }
 
+type verifiedQuoteEntry struct {
+	quoteHash      string
+	tlsFingerprint string
+}
+
+// PingFunc obtains the provider's software version by pinging its endpoint.
+// providerAddr is the hex-encoded provider address required for signature verification.
+// Used by VerifyProviderQuick on cache miss to perform a full verification.
+type PingFunc func(ctx context.Context, providerEndpoint string, providerAddr string) (version string, err error)
+
 type Verifier struct {
 	portalClient      *http.Client
 	attestationClient *http.Client
 	portalURL         string
 	goldenSrc         *GoldenSource
 	log               lib.ILogger
+	pingFunc          PingFunc
+
+	mu         sync.RWMutex
+	quoteCache map[string]*verifiedQuoteEntry
 }
 
 func NewVerifier(portalURL string, imageRepo string, log lib.ILogger) *Verifier {
@@ -142,16 +157,21 @@ func NewVerifier(portalURL string, imageRepo string, log lib.ILogger) *Verifier 
 		portalURL:         portalURL,
 		goldenSrc:         NewGoldenSource(imageRepo, log),
 		log:               log,
+		quoteCache:        make(map[string]*verifiedQuoteEntry),
 	}
 }
 
+func (v *Verifier) SetPingFunc(f PingFunc) {
+	v.pingFunc = f
+}
+
 // VerifyProvider performs TEE attestation verification for a provider.
-// 1. Fetches the raw attestation quote from the provider's :29343/cpu endpoint
-//    and captures the TLS certificate fingerprint of the connection
-// 2. Sends it to the SecretAI Portal parse-quote API for cryptographic verification
-// 3. Verifies that the TLS certificate fingerprint matches the reportdata field
-//    in the quote (anti-spoofing: proves the quote belongs to this server)
-// 4. Compares all available registers from the parsed quote against golden values
+//  1. Fetches the raw attestation quote from the provider's :29343/cpu endpoint
+//     and captures the TLS certificate fingerprint of the connection
+//  2. Sends it to the SecretAI Portal parse-quote API for cryptographic verification
+//  3. Verifies that the TLS certificate fingerprint matches the reportdata field
+//     in the quote (anti-spoofing: proves the quote belongs to this server)
+//  4. Compares all available registers from the parsed quote against golden values
 func (v *Verifier) VerifyProvider(ctx context.Context, providerEndpoint string, version string) error {
 	attestationURL, err := deriveAttestationURL(providerEndpoint)
 	if err != nil {
@@ -197,6 +217,16 @@ func (v *Verifier) VerifyProvider(ctx context.Context, providerEndpoint string, 
 	}
 
 	v.log.Infof("all TEE register values match golden values for version %s", version)
+
+	quoteHash := fmt.Sprintf("%x", sha256.Sum256([]byte(hexQuote)))
+	v.mu.Lock()
+	v.quoteCache[attestationURL] = &verifiedQuoteEntry{
+		quoteHash:      quoteHash,
+		tlsFingerprint: tlsFingerprint,
+	}
+	v.mu.Unlock()
+	v.log.Infof("cached verified quote for %s", attestationURL)
+
 	return nil
 }
 
@@ -234,6 +264,89 @@ func (v *Verifier) verifyTLSBinding(tlsFingerprint string, reportData string) er
 	return nil
 }
 
+// VerifyProviderQuick performs a fast per-request attestation check.
+//
+// Cache hit: fetches the quote from :29343/cpu (~50-150ms TLS handshake),
+// computes sha256(quote) and compares it (plus the TLS fingerprint) against
+// the cached values from the last full verification. If both match the
+// provider is the same TEE -- return nil.
+//
+// Cache miss (e.g. after process restart): performs a full VerifyProvider
+// (ping for version + portal verification + golden values) and populates
+// the cache. This is slower (~250-650ms) but only happens once per provider.
+//
+// If isTee is false the check is a no-op.
+func (v *Verifier) VerifyProviderQuick(ctx context.Context, providerEndpoint string, providerAddr string, isTee bool) error {
+	if !isTee {
+		v.log.Debugf("quick attestation: skipping non-TEE session for %s", providerEndpoint)
+		return nil
+	}
+
+	v.log.Infof("quick attestation: starting check for provider %s", providerEndpoint)
+
+	attestationURL, err := deriveAttestationURL(providerEndpoint)
+	if err != nil {
+		return fmt.Errorf("failed to derive attestation URL: %w", err)
+	}
+
+	v.mu.RLock()
+	cached, hasCached := v.quoteCache[attestationURL]
+	v.mu.RUnlock()
+
+	if !hasCached {
+		v.log.Infof("quick attestation: no cached quote for %s, falling back to full verification", attestationURL)
+		return v.fullVerifyWithPing(ctx, providerEndpoint, providerAddr)
+	}
+
+	v.log.Infof("quick attestation: cache hit for %s, fetching live quote", attestationURL)
+
+	hexQuote, tlsFingerprint, err := v.loadAttestationQuote(ctx, attestationURL)
+	if err != nil {
+		return fmt.Errorf("quick attestation check failed: %w", err)
+	}
+
+	v.log.Infof("quick attestation: fetched live quote from %s, TLS fingerprint: %s", attestationURL, tlsFingerprint)
+
+	currentHash := fmt.Sprintf("%x", sha256.Sum256([]byte(hexQuote)))
+
+	if currentHash != cached.quoteHash {
+		v.log.Warnf("quick attestation: quote hash MISMATCH for %s (cached=%s, live=%s)", providerEndpoint, cached.quoteHash, currentHash)
+		return v.fullVerifyWithPing(ctx, providerEndpoint, providerAddr)
+	}
+
+	v.log.Infof("quick attestation: quote hash matches cached value for %s", providerEndpoint)
+
+	if !strings.EqualFold(tlsFingerprint, cached.tlsFingerprint) {
+		v.log.Warnf("quick attestation: TLS fingerprint MISMATCH for %s (cached=%s, live=%s)", providerEndpoint, cached.tlsFingerprint, tlsFingerprint)
+		return fmt.Errorf("TLS certificate changed since session was opened (provider %s)", providerEndpoint)
+	}
+
+	v.log.Infof("quick attestation: TLS fingerprint matches cached value for %s — provider verified", providerEndpoint)
+	return nil
+}
+
+// fullVerifyWithPing pings the provider to obtain its version, then performs
+// a full VerifyProvider which populates the quote cache on success.
+func (v *Verifier) fullVerifyWithPing(ctx context.Context, providerEndpoint string, providerAddr string) error {
+	if v.pingFunc == nil {
+		return fmt.Errorf("cannot perform full verification: no ping function configured")
+	}
+
+	v.log.Infof("full verification: pinging provider %s (addr %s) for version", providerEndpoint, providerAddr)
+
+	version, err := v.pingFunc(ctx, providerEndpoint, providerAddr)
+	if err != nil {
+		return fmt.Errorf("TEE ping failed for provider %s: %w", providerEndpoint, err)
+	}
+	if version == "" {
+		return fmt.Errorf("TEE provider %s did not report a version", providerEndpoint)
+	}
+
+	v.log.Infof("full verification: provider %s reported version %s, proceeding with full attestation", providerEndpoint, version)
+
+	return v.VerifyProvider(ctx, providerEndpoint, version)
+}
+
 // compareRegisters checks every register present in the golden values against
 // the values extracted from the provider's attestation quote.
 func (v *Verifier) compareRegisters(result *AttestationResult, golden *GoldenValues) error {
@@ -263,6 +376,7 @@ func (v *Verifier) compareRegisters(result *AttestationResult, golden *GoldenVal
 	var mismatches []string
 	for _, p := range pairs {
 		if p.golden == "" {
+			v.log.Debugf("register %s: golden value empty, skipping", p.name)
 			continue
 		}
 		if p.actual == "" {
@@ -271,6 +385,8 @@ func (v *Verifier) compareRegisters(result *AttestationResult, golden *GoldenVal
 		}
 		if !strings.EqualFold(p.golden, p.actual) {
 			mismatches = append(mismatches, fmt.Sprintf("%s: expected %s, got %s", p.name, p.golden, p.actual))
+		} else {
+			v.log.Infof("register %s: matches golden value", p.name)
 		}
 	}
 
@@ -278,6 +394,7 @@ func (v *Verifier) compareRegisters(result *AttestationResult, golden *GoldenVal
 		return fmt.Errorf("register mismatch: %s", strings.Join(mismatches, "; "))
 	}
 
+	v.log.Infof("all checked registers match golden values")
 	return nil
 }
 
@@ -285,6 +402,8 @@ func (v *Verifier) compareRegisters(result *AttestationResult, golden *GoldenVal
 // provider and returns the SHA-256 fingerprint of the peer's TLS certificate.
 func (v *Verifier) loadAttestationQuote(ctx context.Context, attestationBaseURL string) (hexQuote string, tlsFingerprint string, err error) {
 	cpuURL := attestationBaseURL + "/cpu"
+
+	v.log.Infof("fetching attestation quote from %s", cpuURL)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cpuURL, nil)
 	if err != nil {
@@ -304,6 +423,8 @@ func (v *Verifier) loadAttestationQuote(ctx context.Context, attestationBaseURL 
 	if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
 		hash := sha256.Sum256(resp.TLS.PeerCertificates[0].Raw)
 		tlsFingerprint = hex.EncodeToString(hash[:])
+	} else {
+		v.log.Warnf("no TLS peer certificate received from %s", cpuURL)
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -316,12 +437,16 @@ func (v *Verifier) loadAttestationQuote(ctx context.Context, attestationBaseURL 
 		return "", "", fmt.Errorf("empty attestation quote from provider")
 	}
 
+	v.log.Infof("received attestation quote from %s (%d bytes)", cpuURL, len(hexQuote))
+
 	return hexQuote, tlsFingerprint, nil
 }
 
 // verifyQuote sends the hex attestation quote to the SecretAI Portal parse-quote API
 // for cryptographic verification and field extraction.
 func (v *Verifier) verifyQuote(ctx context.Context, hexQuote string) (*AttestationResult, error) {
+	v.log.Infof("sending quote to SecretAI portal for cryptographic verification (%s)", v.portalURL)
+
 	reqBody := ParseQuoteRequest{Quote: hexQuote}
 	body, err := json.Marshal(reqBody)
 	if err != nil {
@@ -355,8 +480,11 @@ func (v *Verifier) verifyQuote(ctx context.Context, hexQuote string) (*Attestati
 	}
 
 	if parsed.Error != "" {
+		v.log.Warnf("portal returned error: %s", parsed.Error)
 		return &AttestationResult{Valid: false, Error: parsed.Error}, nil
 	}
+
+	v.log.Infof("portal verified quote successfully, parsing fields")
 
 	q := parsed.Quote
 	mrtd := qf(q, "mr_td")
