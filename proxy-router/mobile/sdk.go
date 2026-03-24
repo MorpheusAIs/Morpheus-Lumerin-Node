@@ -29,6 +29,7 @@ import (
 	sessionrepo "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/session"
 	wallet "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/wallet"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
+	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	openai "github.com/sashabaranov/go-openai"
 	"github.com/tyler-smith/go-bip39"
@@ -307,6 +308,52 @@ func (s *SDK) ImportPrivateKey(hexKey string) (address string, err error) {
 		return "", fmt.Errorf("set private key: %w", err)
 	}
 	return s.getAddress()
+}
+
+// VerifyMnemonicMatchesCurrent returns true if the mnemonic derives the same address as the loaded wallet (no mutation).
+func (s *SDK) VerifyMnemonicMatchesCurrent(mnemonic string) (bool, error) {
+	mnemonic = strings.TrimSpace(mnemonic)
+	if !bip39.IsMnemonicValid(mnemonic) {
+		return false, fmt.Errorf("invalid mnemonic")
+	}
+	current, err := s.getAddress()
+	if err != nil {
+		return false, err
+	}
+	w, err := wallet.NewFromMnemonic(mnemonic)
+	if err != nil {
+		return false, err
+	}
+	path, err := accounts.ParseDerivationPath(DefaultDerivationPath)
+	if err != nil {
+		return false, err
+	}
+	pk, err := w.DerivePrivateKey(path)
+	if err != nil {
+		return false, err
+	}
+	addr, err := lib.PrivKeyToAddr(pk)
+	if err != nil {
+		return false, err
+	}
+	return strings.EqualFold(addr.Hex(), current), nil
+}
+
+// VerifyPrivateKeyMatchesCurrent returns true if the hex private key matches the loaded wallet (no mutation).
+func (s *SDK) VerifyPrivateKeyMatchesCurrent(hexKey string) (bool, error) {
+	current, err := s.getAddress()
+	if err != nil {
+		return false, err
+	}
+	pk, err := lib.StringToHexString(hexKey)
+	if err != nil {
+		return false, err
+	}
+	addr, err := lib.PrivKeyBytesToAddr(pk)
+	if err != nil {
+		return false, err
+	}
+	return strings.EqualFold(addr.Hex(), current), nil
 }
 
 // ExportPrivateKey returns the private key as a hex string.
