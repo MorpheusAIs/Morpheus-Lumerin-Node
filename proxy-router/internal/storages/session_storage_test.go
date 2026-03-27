@@ -1,8 +1,10 @@
 package storages
 
 import (
+	"encoding/json"
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -63,4 +65,65 @@ func TestRemoveSession(t *testing.T) {
 	sessionIds, err := sessionStorage.GetSessionsForModel(session.ModelID)
 	require.NoError(t, err)
 	require.Empty(t, sessionIds)
+}
+
+func TestActivityStorage_AddAndGetActivities(t *testing.T) {
+	storage := NewTestStorage()
+	sessionStorage := NewSessionStorage(storage)
+
+	modelID := "0xabc"
+	a1 := &PromptActivity{SessionID: "0x1", StartTime: 100, EndTime: 101}
+	a2 := &PromptActivity{SessionID: "0x2", StartTime: 200, EndTime: 201}
+
+	require.NoError(t, sessionStorage.AddActivity(modelID, a1))
+	require.NoError(t, sessionStorage.AddActivity(modelID, a2))
+
+	activities, err := sessionStorage.GetActivities(modelID)
+	require.NoError(t, err)
+	require.Len(t, activities, 2)
+
+	got := map[string]PromptActivity{}
+	for _, a := range activities {
+		got[a.SessionID] = *a
+	}
+	require.Equal(t, *a1, got[a1.SessionID])
+	require.Equal(t, *a2, got[a2.SessionID])
+}
+
+func TestActivityStorage_RemoveOldActivities(t *testing.T) {
+	storage := NewTestStorage()
+	sessionStorage := NewSessionStorage(storage)
+
+	modelID := "0xdef"
+	oldActivity := &PromptActivity{SessionID: "0xold", StartTime: 100, EndTime: 110}
+	newActivity := &PromptActivity{SessionID: "0xnew", StartTime: 200, EndTime: 210}
+
+	require.NoError(t, sessionStorage.AddActivity(modelID, oldActivity))
+	require.NoError(t, sessionStorage.AddActivity(modelID, newActivity))
+
+	require.NoError(t, sessionStorage.RemoveOldActivities(modelID, 150))
+
+	activities, err := sessionStorage.GetActivities(modelID)
+	require.NoError(t, err)
+	require.Len(t, activities, 1)
+	require.Equal(t, newActivity.SessionID, activities[0].SessionID)
+	require.Equal(t, newActivity.EndTime, activities[0].EndTime)
+}
+
+func TestActivityStorage_IgnoresLegacyArrayKey(t *testing.T) {
+	storage := NewTestStorage()
+	sessionStorage := NewSessionStorage(storage)
+
+	modelID := "0xlegacy"
+	legacyValue, err := json.Marshal([]*PromptActivity{
+		{SessionID: "0xlegacy", StartTime: 1, EndTime: 2},
+	})
+	require.NoError(t, err)
+
+	legacyKey := []byte("activity:" + modelID)
+	require.NoError(t, storage.SetWithTTL(legacyKey, legacyValue, time.Hour))
+
+	activities, err := sessionStorage.GetActivities(modelID)
+	require.NoError(t, err)
+	require.Empty(t, activities)
 }
