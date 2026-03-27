@@ -1048,15 +1048,17 @@ jobs:
           echo "📦 Image: $BUILDIMAGE:$BUILDTAG"
           echo "📋 Task Definition: $NEW_TASK_ARN"
           
-          # Wait for deployment to stabilize with extended timeout
-          echo "⏳ Waiting for service to stabilize (up to 15 minutes)..."
+          # Wait for deployment to stabilize (set +e: bash -e would exit before capturing $? on waiter timeout 255)
+          echo "⏳ Waiting for service to stabilize (up to ~12.5 min at 50×15s)..."
+          set +e
           aws ecs wait services-stable \
             --cluster "$CLUSTER_NAME" \
             --services "$SERVICE_NAME" \
+            --max-attempts 50 \
             --cli-read-timeout 900 \
             --cli-connect-timeout 60
-          
           STABILIZATION_STATUS=$?
+          set -e
           
           if [ $STABILIZATION_STATUS -eq 0 ]; then
             echo "✅ ECS service stabilized successfully"
@@ -1303,15 +1305,17 @@ jobs:
           echo "📦 Image: $BUILDIMAGE:$BUILDTAG"
           echo "📋 Task Definition: $NEW_TASK_ARN"
           
-          # Wait for deployment to stabilize with extended timeout
-          echo "⏳ Waiting for service to stabilize (up to 15 minutes)..."
+          # Wait for deployment to stabilize (set +e: bash -e would exit before capturing $? on waiter timeout 255)
+          echo "⏳ Waiting for service to stabilize (up to ~12.5 min at 50×15s)..."
+          set +e
           aws ecs wait services-stable \
             --cluster "$CLUSTER_NAME" \
             --services "$SERVICE_NAME" \
+            --max-attempts 50 \
             --cli-read-timeout 900 \
             --cli-connect-timeout 60
-          
           STABILIZATION_STATUS=$?
+          set -e
           
           if [ $STABILIZATION_STATUS -eq 0 ]; then
             echo "✅ ECS service stabilized successfully"
@@ -1430,14 +1434,6 @@ jobs:
           aws-access-key-id: ${{ secrets.MORPHEUS_AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.MORPHEUS_AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-2
-
-      - name: Pause Active Models refresh
-        run: |
-          ENV="prd"
-          RULE_NAME="${ENV}-morpheus-active-models-updater"
-          echo "⏸️ Disabling Active Models EventBridge rule: $RULE_NAME"
-          aws events disable-rule --name "$RULE_NAME" --region us-east-2
-          echo "✅ Active Models refresh paused — prevents stale data during provider rolling deploy"
 
       - name: Deploy to Morpheus Provider ECS
         run: |
@@ -1559,15 +1555,17 @@ jobs:
           echo "📦 Image: $BUILDIMAGE:$BUILDTAG"
           echo "📋 Task Definition: $NEW_TASK_ARN"
           
-          # Wait for deployment to stabilize with extended timeout
-          echo "⏳ Waiting for service to stabilize (up to 15 minutes)..."
+          # Wait for deployment to stabilize (P-Node: ALB drain + health checks can exceed default 40×15s; set +e preserves $? under bash -e)
+          echo "⏳ Waiting for service to stabilize (up to ~12.5 min at 50×15s)..."
+          set +e
           aws ecs wait services-stable \
             --cluster "$CLUSTER_NAME" \
             --services "$SERVICE_NAME" \
+            --max-attempts 50 \
             --cli-read-timeout 900 \
             --cli-connect-timeout 60
-          
           STABILIZATION_STATUS=$?
+          set -e
           
           if [ $STABILIZATION_STATUS -eq 0 ]; then
             echo "✅ ECS service stabilized successfully"
@@ -1653,36 +1651,6 @@ jobs:
             # Don't fail the deployment for version mismatch, as it might be a timing issue
             # The ECS service update was successful, version verification is informational
             echo "⚠️ Continuing with warning - ECS deployment completed but version verification inconclusive"
-          fi
-
-      - name: Resume Active Models refresh
-        if: always()
-        run: |
-          ENV="prd"
-          RULE_NAME="${ENV}-morpheus-active-models-updater"
-          FUNCTION_NAME="${ENV}-morpheus-active-models-updater"
-          
-          echo "▶️ Re-enabling Active Models EventBridge rule: $RULE_NAME"
-          aws events enable-rule --name "$RULE_NAME" --region us-east-2
-          echo "✅ Active Models refresh re-enabled"
-          
-          echo "🔄 Invoking Active Models Lambda to refresh immediately..."
-          INVOKE_RESULT=$(aws lambda invoke \
-            --function-name "$FUNCTION_NAME" \
-            --region us-east-2 \
-            --log-type Tail \
-            --payload '{}' \
-            /tmp/lambda-response.json 2>&1)
-          
-          INVOKE_STATUS=$?
-          if [ $INVOKE_STATUS -eq 0 ]; then
-            echo "✅ Active Models Lambda invoked successfully"
-            echo "📋 Response:"
-            cat /tmp/lambda-response.json | jq . 2>/dev/null || cat /tmp/lambda-response.json
-          else
-            echo "⚠️ Active Models Lambda invocation failed (status: $INVOKE_STATUS)"
-            echo "$INVOKE_RESULT"
-            echo "ℹ️ The EventBridge schedule will pick it up on the next cycle"
           fi
 
   UI-macOS-latest-arm64:
