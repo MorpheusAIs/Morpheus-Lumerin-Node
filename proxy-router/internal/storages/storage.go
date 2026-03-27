@@ -16,7 +16,7 @@ import (
 // Default configuration values for BadgerDB
 const (
 	DefaultGCInterval      = 5 * time.Minute
-	DefaultGCRatio         = 0.5
+	DefaultGCRatio         = 0.3
 	DefaultMetricsInterval = 5 * time.Minute
 )
 
@@ -39,6 +39,7 @@ func NewStorage(log lib.ILogger, path string) (*Storage, error) {
 	opts.Logger = storageLogger
 	opts.NumVersionsToKeep = 1
 	opts.CompactL0OnClose = true
+	opts.ValueLogFileSize = 128 << 20
 
 	db, err := badger.Open(opts)
 	if err != nil {
