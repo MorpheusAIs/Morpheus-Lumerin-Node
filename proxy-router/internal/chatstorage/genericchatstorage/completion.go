@@ -126,6 +126,10 @@ func (c *ChunkStreaming) Type() ChunkType {
 }
 
 func (c *ChunkStreaming) String() string {
+	// Usage-only stream chunks (e.g. final usage from OpenAI-compatible APIs) have no choices.
+	if c.data == nil || len(c.data.Choices) == 0 {
+		return ""
+	}
 	return c.data.Choices[0].Delta.Content
 }
 

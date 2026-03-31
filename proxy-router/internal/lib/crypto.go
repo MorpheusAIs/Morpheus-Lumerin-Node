@@ -172,3 +172,25 @@ func VerifySignatureAddr(params []byte, signature []byte, addr common.Address) b
 	recoveredAddress := crypto.PubkeyToAddress(*pubKey)
 	return recoveredAddress == addr
 }
+
+// ProviderPubKeyHexFromAddrSignedJSON recovers the signing public key from a JSON payload
+// (must match what [VerifySignatureAddr] hashes: typically the struct with signature zeroed)
+// and returns the same 0x-prefixed hex form as [BytesToString] for MOR-RPC user storage.
+func ProviderPubKeyHexFromAddrSignedJSON(paramsJSON []byte, signature []byte, expectedAddr common.Address) (string, error) {
+	if len(signature) == 0 {
+		return "", fmt.Errorf("empty signature")
+	}
+	hash := crypto.Keccak256Hash(paramsJSON)
+	recovered, err := crypto.Ecrecover(hash.Bytes(), signature)
+	if err != nil {
+		return "", err
+	}
+	pubKey, err := crypto.UnmarshalPubkey(recovered)
+	if err != nil {
+		return "", err
+	}
+	if crypto.PubkeyToAddress(*pubKey) != expectedAddr {
+		return "", fmt.Errorf("recovered address mismatch")
+	}
+	return BytesToString(crypto.FromECDSAPub(pubKey)), nil
+}

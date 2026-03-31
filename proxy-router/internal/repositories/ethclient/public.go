@@ -16,13 +16,15 @@ var publicRPCURLs = map[int][]string{
 		"https://base-sepolia.blockpi.network/v1/rpc/public",
 	},
 	8453: {
-		"https://base.llamarpc.com",
-		"https://base-mainnet.public.blastapi.io",
-		"https://base.public.blockpi.network/v1/rpc/public",
-		"https://base.lava.build", 
-		"https://1rpc.io/base",
-		"https://base-rpc.publicnode.com",
 		"https://mainnet.base.org",
+		"https://base.publicnode.com",
+		"https://base-rpc.publicnode.com",
+		"https://1rpc.io/base",
+		"https://base.drpc.org",
+		"https://base.therpc.io",
+		"https://base.public.blockpi.network/v1/rpc/public",
+		"https://base-mainnet.public.blastapi.io",
+		"https://base.lava.build",
 	},
 }
 

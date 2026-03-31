@@ -81,3 +81,18 @@ type SupplyRes struct {
 type BlockRes struct {
 	Block uint64 `json:"block" example:"1234"`
 }
+
+// OpenSessionStakeEstimate is the MOR amount and inputs used when opening a session
+// with the top-scored bid (same ordering as GetRatedBids / first OpenSession attempt).
+type OpenSessionStakeEstimate struct {
+	StakeWei           string  `json:"stake_wei"`
+	SessionCostWei     string  `json:"session_cost_wei"`
+	MorSupplyWei       string  `json:"mor_supply_wei"`
+	EmissionsBudgetWei string  `json:"emissions_budget_wei"`
+	PricePerSecondWei  string  `json:"price_per_second_wei"`
+	DurationSeconds    string  `json:"duration_seconds"`
+	DirectPayment      bool    `json:"direct_payment"`
+	TopBidProvider     string  `json:"top_bid_provider"`
+	TopBidScore        float64 `json:"top_bid_score"`
+	Explanation        string  `json:"explanation"`
+}
