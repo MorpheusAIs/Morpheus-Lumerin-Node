@@ -74,6 +74,7 @@ type Config struct {
 		CNodePNodeTimeout         time.Duration `env:"CNODE_PNODE_TIMEOUT" flag:"cnode-pnode-timeout" validate:"omitempty" desc:"per-attempt timeout for CNode waiting for PNode first response"`
 		CNodePNodeMaxRetries      int           `env:"CNODE_PNODE_MAX_RETRIES" flag:"cnode-pnode-max-retries" validate:"omitempty,gte=0" desc:"max retries for CNode to PNode read timeout (chat/embeddings)"`
 		CNodePNodeAudioMaxRetries int           `env:"CNODE_PNODE_AUDIO_MAX_RETRIES" flag:"cnode-pnode-audio-max-retries" validate:"omitempty,gte=0" desc:"max retries for CNode to PNode read timeout (audio transcription/speech)"`
+		LLMMaxConnsPerHost        int           `env:"LLM_MAX_CONNS_PER_HOST" flag:"llm-max-conns-per-host" validate:"omitempty,gte=0" desc:"max concurrent HTTP connections per downstream LLM host (0 = unlimited)"`
 	}
 	System struct {
 		Enable           bool   `env:"SYS_ENABLE"              flag:"sys-enable" desc:"enable system level configuration adjustments"`
@@ -206,6 +207,9 @@ func (cfg *Config) SetDefaults() {
 	if cfg.Proxy.CNodePNodeAudioMaxRetries == 0 {
 		cfg.Proxy.CNodePNodeAudioMaxRetries = 20
 	}
+	if cfg.Proxy.LLMMaxConnsPerHost == 0 {
+		cfg.Proxy.LLMMaxConnsPerHost = 64
+	}
 
 	// IPFS
 	if cfg.IPFS.Address == "" {
@@ -263,6 +267,7 @@ func (cfg *Config) GetSanitized() interface{} {
 	publicCfg.Proxy.CNodePNodeTimeout = cfg.Proxy.CNodePNodeTimeout
 	publicCfg.Proxy.CNodePNodeMaxRetries = cfg.Proxy.CNodePNodeMaxRetries
 	publicCfg.Proxy.CNodePNodeAudioMaxRetries = cfg.Proxy.CNodePNodeAudioMaxRetries
+	publicCfg.Proxy.LLMMaxConnsPerHost = cfg.Proxy.LLMMaxConnsPerHost
 
 	publicCfg.System.Enable = cfg.System.Enable
 	publicCfg.System.LocalPortRange = cfg.System.LocalPortRange

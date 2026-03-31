@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
@@ -21,6 +22,7 @@ type AiEngine struct {
 	service            ProxyService
 	storage            gcs.ChatStorageInterface
 	llmTimeout         time.Duration
+	httpClient         *http.Client
 	log                lib.ILogger
 }
 
@@ -40,13 +42,19 @@ var (
 	ErrJobFailed                     = errors.New("job failed")
 )
 
-func NewAiEngine(service ProxyService, storage gcs.ChatStorageInterface, modelsConfigLoader *config.ModelConfigLoader, agentsConfigLoader *config.AgentConfigLoader, llmTimeout time.Duration, log lib.ILogger) *AiEngine {
+func NewAiEngine(service ProxyService, storage gcs.ChatStorageInterface, modelsConfigLoader *config.ModelConfigLoader, agentsConfigLoader *config.AgentConfigLoader, llmTimeout time.Duration, maxConnsPerHost int, log lib.ILogger) *AiEngine {
+	transport := &http.Transport{
+		MaxIdleConnsPerHost: maxConnsPerHost,
+		MaxConnsPerHost:     0,
+		IdleConnTimeout:     120 * time.Second,
+	}
 	return &AiEngine{
 		modelsConfigLoader: modelsConfigLoader,
 		agentsConfigLoader: agentsConfigLoader,
 		service:            service,
 		storage:            storage,
 		llmTimeout:         llmTimeout,
+		httpClient:         &http.Client{Transport: transport},
 		log:                log,
 	}
 }
@@ -60,7 +68,7 @@ func (a *AiEngine) GetAdapter(ctx context.Context, chatID, modelID, sessionID co
 			return nil, fmt.Errorf("model not found: %s", modelID.Hex())
 		}
 		var ok bool
-		engine, ok = ApiAdapterFactory(modelConfig.ApiType, modelConfig.ModelName, modelConfig.ApiURL, modelConfig.ApiKey, modelConfig.Parameters, a.llmTimeout, a.log)
+		engine, ok = ApiAdapterFactory(modelConfig.ApiType, modelConfig.ModelName, modelConfig.ApiURL, modelConfig.ApiKey, modelConfig.Parameters, a.llmTimeout, a.httpClient, a.log)
 		if !ok {
 			return nil, fmt.Errorf("api adapter not found: %s", modelConfig.ApiType)
 		}

@@ -314,7 +314,7 @@ func start() error {
 		appLog.Warnf("failed to load agent config, running with empty: %s", err)
 	}
 
-	aiEngine := aiengine.NewAiEngine(proxyRouterApi, chatStorage, modelConfigLoader, agentConfigLoader, cfg.Proxy.LLMTimeout, appLog)
+	aiEngine := aiengine.NewAiEngine(proxyRouterApi, chatStorage, modelConfigLoader, agentConfigLoader, cfg.Proxy.LLMTimeout, cfg.Proxy.LLMMaxConnsPerHost, appLog)
 
 	eventListener := blockchainapi.NewEventsListener(sessionRepo, sessionRouter, wallet, logWatcher, appLog)
 
