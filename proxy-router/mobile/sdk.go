@@ -82,6 +82,11 @@ type SDK struct {
 	modelsCacheAt time.Time
 	modelsHash    string
 	httpClient    *http.Client
+
+	// Expert mode HTTP server (native proxy-router swagger API)
+	httpSrvMu     sync.Mutex
+	httpSrvCancel context.CancelFunc
+	httpSrvAddr   string
 }
 
 // NewSDK creates and initializes the SDK. Call Shutdown() when done.
@@ -228,6 +233,7 @@ func NewSDK(cfg Config) (*SDK, error) {
 
 // Shutdown releases all resources held by the SDK.
 func (s *SDK) Shutdown() {
+	s.StopHTTPServer()
 	if s.ethClient != nil {
 		s.ethClient.Close()
 		s.ethClient = nil
