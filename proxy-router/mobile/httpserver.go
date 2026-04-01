@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"net/url"
 	"time"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/docs"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apibus"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/authapi"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi"
@@ -22,13 +24,26 @@ import (
 
 // StartHTTPServer starts the native proxy-router HTTP API + Swagger UI.
 // address is "host:port", e.g. "127.0.0.1:8082" or "0.0.0.0:8082".
+// publicURL sets the Swagger "Try it out" host for CORS (e.g. "http://192.168.1.42:8082").
+// If empty, defaults to "http://<address>".
 // Call StopHTTPServer to shut it down.
-func (s *SDK) StartHTTPServer(address string) error {
+func (s *SDK) StartHTTPServer(address, publicURL string) error {
 	s.httpSrvMu.Lock()
 	defer s.httpSrvMu.Unlock()
 
 	if s.httpSrvCancel != nil {
 		return fmt.Errorf("HTTP server already running")
+	}
+
+	// Set swagger host for CORS / "Try it out" — same as WEB_PUBLIC_URL in the daemon.
+	if publicURL != "" {
+		if u, err := url.Parse(publicURL); err == nil && u.Host != "" {
+			docs.SwaggerInfo.Host = u.Host
+		} else {
+			docs.SwaggerInfo.Host = publicURL
+		}
+	} else {
+		docs.SwaggerInfo.Host = address
 	}
 
 	authCfg := &system.HTTPAuthConfig{
