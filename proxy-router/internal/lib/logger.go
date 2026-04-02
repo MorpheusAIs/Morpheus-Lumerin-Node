@@ -45,7 +45,7 @@ type ILogger interface {
 const timeLayout = "2006-01-02T15:04:05.999999999"
 
 func NewLogger(level string, color, isProd bool, isJSON bool, filepath string) (*Logger, error) {
-	log, file, err := newLogger(level, color, isProd, isJSON, filepath, nil)
+	log, file, al, err := newLogger(level, color, isProd, isJSON, filepath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -53,11 +53,12 @@ func NewLogger(level string, color, isProd bool, isJSON bool, filepath string) (
 	return &Logger{
 		SugaredLogger: log.Sugar(),
 		file:          file,
+		atomicLevel:   al,
 	}, nil
 }
 
 func NewLoggerMemory(level string, color, isProd bool, isJSON bool, filepath string, wr io.Writer) (*Logger, error) {
-	log, file, err := newLogger(level, color, isProd, isJSON, filepath, wr)
+	log, file, al, err := newLogger(level, color, isProd, isJSON, filepath, wr)
 
 	if err != nil {
 		return nil, err
@@ -66,41 +67,45 @@ func NewLoggerMemory(level string, color, isProd bool, isJSON bool, filepath str
 	return &Logger{
 		SugaredLogger: log.Sugar(),
 		file:          file,
+		atomicLevel:   al,
 	}, nil
 }
 
 // NewTestLogger logs only to stdout
 func NewTestLogger() *Logger {
-	log, file, _ := newLogger("debug", false, false, false, "", nil)
+	log, file, al, _ := newLogger("debug", false, false, false, "", nil)
 	return &Logger{
 		SugaredLogger: log.Sugar(),
 		file:          file,
+		atomicLevel:   al,
 	}
 }
 
-func newLogger(levelStr string, color bool, isProd bool, isJSON bool, filepath string, extraWriter io.Writer) (*zap.Logger, *os.File, error) {
+func newLogger(levelStr string, color bool, isProd bool, isJSON bool, filepath string, extraWriter io.Writer) (*zap.Logger, *os.File, zap.AtomicLevel, error) {
 	level, err := zapcore.ParseLevel(levelStr)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, zap.AtomicLevel{}, err
 	}
+
+	atomicLevel := zap.NewAtomicLevelAt(level)
 
 	var cores []zapcore.Core
 	var file *os.File
 
 	if filepath != "" {
-		fileCore, fd, err := newFileCore(level, isProd, isJSON, filepath)
+		fileCore, fd, err := newFileCore(atomicLevel, isProd, isJSON, filepath)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, zap.AtomicLevel{}, err
 		}
 		file = fd
 		cores = append(cores, fileCore)
 	}
 	if extraWriter != nil {
-		memoryCore := zapcore.NewCore(zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig()), zapcore.AddSync(extraWriter), level)
+		memoryCore := zapcore.NewCore(zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig()), zapcore.AddSync(extraWriter), atomicLevel)
 		cores = append(cores, memoryCore)
 	}
 
-	consoleCore := newConsoleCore(level, color, isProd, isJSON)
+	consoleCore := newConsoleCore(atomicLevel, color, isProd, isJSON)
 	cores = append(cores, consoleCore)
 
 	var core zapcore.Core
@@ -117,10 +122,10 @@ func newLogger(levelStr string, color bool, isProd bool, isJSON bool, filepath s
 		opts = append(opts, zap.Development())
 	}
 
-	return zap.New(core, opts...), file, nil
+	return zap.New(core, opts...), file, atomicLevel, nil
 }
 
-func newConsoleCore(level zapcore.Level, color bool, isProd bool, isJSON bool) zapcore.Core {
+func newConsoleCore(level zapcore.LevelEnabler, color bool, isProd bool, isJSON bool) zapcore.Core {
 	encoderCfg := newEncoderCfg(isProd, color, isJSON)
 
 	var encoder zapcore.Encoder
@@ -147,7 +152,7 @@ func newEncoderCfg(isProd bool, color bool, isJSON bool) zapcore.EncoderConfig {
 	return encoderCfg
 }
 
-func newFileCore(level zapcore.Level, isProd bool, isJSON bool, path string) (zapcore.Core, *os.File, error) {
+func newFileCore(level zapcore.LevelEnabler, isProd bool, isJSON bool, path string) (zapcore.Core, *os.File, error) {
 	encoderCfg := newEncoderCfg(isProd, false, isJSON)
 	if !isJSON {
 		encoderCfg.EncodeTime = zapcore.TimeEncoderOfLayout(timeLayout)
@@ -170,18 +175,36 @@ func newFileCore(level zapcore.Level, isProd bool, isJSON bool, path string) (za
 
 type Logger struct {
 	*zap.SugaredLogger
-	file *os.File
+	file        *os.File
+	atomicLevel zap.AtomicLevel
+}
+
+// SetLevel changes the log level at runtime for all cores sharing this logger's AtomicLevel.
+func (l *Logger) SetLevel(levelStr string) error {
+	lvl, err := zapcore.ParseLevel(levelStr)
+	if err != nil {
+		return err
+	}
+	l.atomicLevel.SetLevel(lvl)
+	return nil
+}
+
+// GetLevel returns the current log level string.
+func (l *Logger) GetLevel() string {
+	return l.atomicLevel.Level().String()
 }
 
 func (l *Logger) Named(name string) ILogger {
 	return &Logger{
 		SugaredLogger: l.SugaredLogger.Named(name),
+		atomicLevel:   l.atomicLevel,
 	}
 }
 
 func (l *Logger) With(args ...interface{}) ILogger {
 	return &Logger{
 		SugaredLogger: l.SugaredLogger.With(args...),
+		atomicLevel:   l.atomicLevel,
 	}
 }
 

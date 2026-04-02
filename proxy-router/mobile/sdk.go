@@ -53,6 +53,9 @@ type Config struct {
 	BlockscoutURL   string // Blockscout API v2 base URL
 	ActiveModelsURL string // pre-built active models JSON (production: https://active.mor.org/active_models.json)
 	LogLevel        string // "debug", "info", "warn", "error" (default: "info")
+	// LogWriter, when non-nil, receives a copy of every SDK log line (tee'd alongside stdout).
+	// Use this to pipe internal proxy-router logs into the caller's own rotating log file.
+	LogWriter io.Writer
 	// TEEPortalURL is the SecretAI (or compatible) quote-parse API. Empty uses the default production URL.
 	TEEPortalURL string
 	// TEEImageRepo is the GHCR image used to load cosign golden TEE measurements (e.g. ghcr.io/.../morpheus-lumerin-node-tee). Empty uses the Morpheus default repo.
@@ -64,6 +67,7 @@ type Config struct {
 type SDK struct {
 	cfg            Config
 	log            lib.ILogger
+	baseLog        *lib.Logger
 	ethClient      *ethclient.Client
 	wallet         *wallet.KeychainWallet
 	walletStorage  *MemoryKeyValueStorage
@@ -107,7 +111,15 @@ func NewSDK(cfg Config) (*SDK, error) {
 		cfg.LogLevel = "info"
 	}
 
-	baseLog, err := lib.NewLogger(cfg.LogLevel, false, true, false, "")
+	var (
+		baseLog *lib.Logger
+		err     error
+	)
+	if cfg.LogWriter != nil {
+		baseLog, err = lib.NewLoggerMemory(cfg.LogLevel, false, true, false, "", cfg.LogWriter)
+	} else {
+		baseLog, err = lib.NewLogger(cfg.LogLevel, false, true, false, "")
+	}
 	if err != nil {
 		return nil, fmt.Errorf("create logger: %w", err)
 	}
@@ -213,6 +225,7 @@ func NewSDK(cfg Config) (*SDK, error) {
 	sdk := &SDK{
 		cfg:            cfg,
 		log:            log,
+		baseLog:        baseLog,
 		ethClient:      ethClient,
 		wallet:         w,
 		walletStorage:  walletKV,
@@ -229,6 +242,17 @@ func NewSDK(cfg Config) (*SDK, error) {
 
 	log.Info("SDK initialized")
 	return sdk, nil
+}
+
+// SetLogLevel changes the SDK's internal log level at runtime.
+// All cores (stdout, file, memory tee) switch together because they share an AtomicLevel.
+func (s *SDK) SetLogLevel(level string) error {
+	return s.baseLog.SetLevel(level)
+}
+
+// GetLogLevel returns the SDK's current log level string.
+func (s *SDK) GetLogLevel() string {
+	return s.baseLog.GetLevel()
 }
 
 // Shutdown releases all resources held by the SDK.
