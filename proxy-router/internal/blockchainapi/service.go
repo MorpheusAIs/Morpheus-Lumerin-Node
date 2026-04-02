@@ -432,9 +432,22 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 		}
 	}
 
-	session, err := s.sessionRepo.GetSession(ctx, sessionID)
+	// Poll until the session is visible on-chain (handles RPC propagation lag).
+	var session *sessionrepo.SessionModel
+	for attempt := 0; attempt < 10; attempt++ {
+		session, err = s.sessionRepo.GetSession(ctx, sessionID)
+		if err == nil {
+			break
+		}
+		s.log.Warnf("session %s not yet visible (attempt %d/10): %s", sessionID.Hex(), attempt+1, err)
+		select {
+		case <-ctx.Done():
+			return sessionID, fmt.Errorf("context cancelled waiting for session visibility: %w", ctx.Err())
+		case <-time.After(2 * time.Second):
+		}
+	}
 	if err != nil {
-		return sessionID, fmt.Errorf("failed to get session: %s", err.Error())
+		return sessionID, fmt.Errorf("session created on-chain (tx mined) but not yet visible after retries: %s", err.Error())
 	}
 
 	session.SetAgentUsername(agentUsername)
