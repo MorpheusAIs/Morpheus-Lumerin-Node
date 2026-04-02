@@ -255,6 +255,17 @@ func (s *SDK) GetLogLevel() string {
 	return s.baseLog.GetLevel()
 }
 
+// ProxyRouterVersion returns the proxy-router build version baked in at compile time.
+// Populated via -ldflags: -X config.BuildVersion=...
+func ProxyRouterVersion() string {
+	return config.BuildVersion
+}
+
+// ProxyRouterCommit returns the proxy-router git commit baked in at compile time.
+func ProxyRouterCommit() string {
+	return config.Commit
+}
+
 // Shutdown releases all resources held by the SDK.
 func (s *SDK) Shutdown() {
 	s.StopHTTPServer()
