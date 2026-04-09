@@ -127,21 +127,21 @@ func TestVerifyTLSBinding_EmptyReportData(t *testing.T) {
 // --- BackendVerifier cache and status ---
 
 func TestBackendVerifier_GetStatus_Unknown(t *testing.T) {
-	bv := NewBackendVerifier("http://unused", nil, "", nil, testLog())
+	bv := NewBackendVerifier("http://unused", nil, nil, testLog())
 	if status := bv.GetStatus("nonexistent"); status != nil {
 		t.Fatalf("expected nil, got: %+v", status)
 	}
 }
 
 func TestBackendVerifier_GetAllStatuses_Empty(t *testing.T) {
-	bv := NewBackendVerifier("http://unused", nil, "", nil, testLog())
+	bv := NewBackendVerifier("http://unused", nil, nil, testLog())
 	if statuses := bv.GetAllStatuses(); len(statuses) != 0 {
 		t.Fatalf("expected 0 statuses, got %d", len(statuses))
 	}
 }
 
 func TestBackendVerifier_StoreFailure(t *testing.T) {
-	bv := NewBackendVerifier("http://unused", nil, "", nil, testLog())
+	bv := NewBackendVerifier("http://unused", nil, nil, testLog())
 	bv.storeFailure("model-1", "https://test:29343", "test error")
 
 	status := bv.GetStatus("model-1")
@@ -159,7 +159,7 @@ func TestBackendVerifier_StoreFailure(t *testing.T) {
 // --- FastVerifyBackend ---
 
 func TestBackendVerifier_FastVerify_NoCache(t *testing.T) {
-	bv := NewBackendVerifier("http://unused", nil, "", nil, testLog())
+	bv := NewBackendVerifier("http://unused", nil, nil, testLog())
 	err := bv.FastVerifyBackend(context.Background(), "no-such-model")
 	if err == nil {
 		t.Fatal("expected error")
@@ -170,7 +170,7 @@ func TestBackendVerifier_FastVerify_NoCache(t *testing.T) {
 }
 
 func TestBackendVerifier_FastVerify_FailedStatus(t *testing.T) {
-	bv := NewBackendVerifier("http://unused", nil, "", nil, testLog())
+	bv := NewBackendVerifier("http://unused", nil, nil, testLog())
 	bv.storeFailure("model-1", "https://test:29343", "prev failure")
 
 	err := bv.FastVerifyBackend(context.Background(), "model-1")
@@ -195,7 +195,7 @@ func TestBackendVerifier_FastVerify_CacheHit(t *testing.T) {
 
 	_, fingerprint := selfSignedCert(t)
 
-	bv := NewBackendVerifier("http://unused", nil, "", nil, testLog())
+	bv := NewBackendVerifier("http://unused", nil, nil, testLog())
 	bv.attestationClient = attestServer.Client()
 
 	bv.mu.Lock()
@@ -270,7 +270,7 @@ func TestBackendVerifier_AttestBackend_FullFlow(t *testing.T) {
 	portalServer := httptest.NewServer(portalMux)
 	defer portalServer.Close()
 
-	bv := NewBackendVerifier(portalServer.URL+"/api/quote-parse", nil, "", nil, testLog())
+	bv := NewBackendVerifier(portalServer.URL+"/api/quote-parse", nil, nil, testLog())
 	bv.attestationClient = NewAttestationHTTPClient()
 
 	err := bv.AttestBackend(context.Background(), "test-model", attestServer.URL)
@@ -335,8 +335,8 @@ func TestBackendVerifier_AttestBackend_WithNRAS(t *testing.T) {
 
 	// Mock NRAS server
 	nrasMux := http.NewServeMux()
-	nrasMux.HandleFunc("/v2/attest/gpu", func(w http.ResponseWriter, r *http.Request) {
-		var req NRASRequest
+	nrasMux.HandleFunc("/v4/attest/gpu", func(w http.ResponseWriter, r *http.Request) {
+		var req GPUAttestationData
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Errorf("NRAS: failed to decode request: %s", err)
 			w.WriteHeader(http.StatusBadRequest)
@@ -345,8 +345,8 @@ func TestBackendVerifier_AttestBackend_WithNRAS(t *testing.T) {
 		if req.Arch != "HOPPER" {
 			t.Errorf("NRAS: expected arch HOPPER, got %s", req.Arch)
 		}
-		if len(req.Evidences) != 1 {
-			t.Errorf("NRAS: expected 1 evidence, got %d", len(req.Evidences))
+		if len(req.EvidenceList) != 1 {
+			t.Errorf("NRAS: expected 1 evidence, got %d", len(req.EvidenceList))
 		}
 
 		resp := []json.RawMessage{
@@ -359,8 +359,9 @@ func TestBackendVerifier_AttestBackend_WithNRAS(t *testing.T) {
 	nrasServer := httptest.NewServer(nrasMux)
 	defer nrasServer.Close()
 
-	bv := NewBackendVerifier(portalServer.URL+"/api/quote-parse", nil, nrasServer.URL, nil, testLog())
+	bv := NewBackendVerifier(portalServer.URL+"/api/quote-parse", nil, nil, testLog())
 	bv.attestationClient = NewAttestationHTTPClient()
+	bv.nrasVerifier.baseURL = nrasServer.URL
 
 	err := bv.AttestBackend(context.Background(), "test-model-nras", attestServer.URL)
 	if err != nil {
@@ -379,7 +380,7 @@ func TestBackendVerifier_AttestBackend_WithNRAS(t *testing.T) {
 // --- PinnedHTTPClient ---
 
 func TestBackendVerifier_PinnedHTTPClient_NoModel(t *testing.T) {
-	bv := NewBackendVerifier("http://unused", nil, "", nil, testLog())
+	bv := NewBackendVerifier("http://unused", nil, nil, testLog())
 	_, err := bv.PinnedHTTPClient("no-model")
 	if err == nil {
 		t.Fatal("expected error")
@@ -387,7 +388,7 @@ func TestBackendVerifier_PinnedHTTPClient_NoModel(t *testing.T) {
 }
 
 func TestBackendVerifier_PinnedHTTPClient_Success(t *testing.T) {
-	bv := NewBackendVerifier("http://unused", nil, "", nil, testLog())
+	bv := NewBackendVerifier("http://unused", nil, nil, testLog())
 
 	bv.mu.Lock()
 	bv.cache["model-1"] = &BackendAttestationSnapshot{
@@ -407,7 +408,7 @@ func TestBackendVerifier_PinnedHTTPClient_Success(t *testing.T) {
 }
 
 func TestBackendVerifier_PinnedHTTPClient_FailedStatus(t *testing.T) {
-	bv := NewBackendVerifier("http://unused", nil, "", nil, testLog())
+	bv := NewBackendVerifier("http://unused", nil, nil, testLog())
 	bv.storeFailure("model-1", "https://test:29343", "broken")
 
 	_, err := bv.PinnedHTTPClient("model-1")

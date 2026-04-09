@@ -330,8 +330,6 @@ func start() error {
 		artifactRegistry,
 		appLog.Named("BACKEND_TEE"),
 	)
-	aiEngine.SetBackendVerifier(backendVerifier)
-
 	// Startup pre-flight: attest all isTee models
 	modelIDs, modelConfigs := modelConfigLoader.GetAll()
 	for i, mc := range modelConfigs {
