@@ -55,6 +55,51 @@ definitions:
       type:
         type: string
     type: object
+  attestation.BackendAttestationSnapshot:
+    properties:
+      artifactsVersion:
+        type: string
+      attestationUrl:
+        type: string
+      dockerComposeHash:
+        type: string
+      error:
+        type: string
+      expiresAt:
+        type: string
+      modelId:
+        type: string
+      status:
+        $ref: '#/definitions/attestation.BackendAttestationStatus'
+      teeType:
+        $ref: '#/definitions/attestation.TEEType'
+      verifiedAt:
+        type: string
+      vmTemplateName:
+        type: string
+      workloadStatus:
+        type: string
+    type: object
+  attestation.BackendAttestationStatus:
+    enum:
+    - passed
+    - failed
+    - unknown
+    - expired
+    type: string
+    x-enum-varnames:
+    - StatusPassed
+    - StatusFailed
+    - StatusUnknown
+    - StatusExpired
+  attestation.TEEType:
+    enum:
+    - TDX
+    - SEV
+    type: string
+    x-enum-varnames:
+    - TEETypeTDX
+    - TEETypeSEV
   authapi.AddUserReq:
     properties:
       password:
@@ -589,6 +634,8 @@ definitions:
     properties:
       ping:
         type: integer
+      version:
+        type: string
     type: object
   proxyapi.PinnedFileRes:
     properties:
@@ -1040,6 +1087,10 @@ definitions:
     type: object
   system.HealthCheckResponse:
     properties:
+      components:
+        additionalProperties:
+          type: string
+        type: object
       status:
         type: string
       uptime:
@@ -2945,6 +2996,22 @@ paths:
       security:
       - BasicAuth: []
       summary: Get local models
+      tags:
+      - system
+  /v1/models/attestation:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/attestation.BackendAttestationSnapshot'
+            type: array
+      security:
+      - BasicAuth: []
+      summary: Get backend TEE attestation status for all configured models
       tags:
       - system
   /wallet:

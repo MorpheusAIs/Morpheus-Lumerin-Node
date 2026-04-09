@@ -20,6 +20,12 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
+// BackendTEEVerifier is used by ProxyReceiver to fast-verify LLM backend TEE
+// attestation before forwarding inference requests.
+type BackendTEEVerifier interface {
+	FastVerifyBackend(ctx context.Context, modelID string) error
+}
+
 type ProxyReceiver struct {
 	privateKeyHex     lib.HexString
 	publicKeyHex      lib.HexString
@@ -30,6 +36,7 @@ type ProxyReceiver struct {
 	modelConfigLoader *config.ModelConfigLoader
 	service           BidGetter
 	sessionRepo       *sessionrepo.SessionRepositoryCached
+	backendVerifier   BackendTEEVerifier
 }
 
 func NewProxyReceiver(privateKeyHex, publicKeyHex lib.HexString, sessionStorage *storages.SessionStorage, aiEngine *aiengine.AiEngine, chainID *big.Int, modelConfigLoader *config.ModelConfigLoader, blockchainService BidGetter, sessionRepo *sessionrepo.SessionRepositoryCached) *ProxyReceiver {
@@ -44,6 +51,11 @@ func NewProxyReceiver(privateKeyHex, publicKeyHex lib.HexString, sessionStorage 
 		sessionStorage:    sessionStorage,
 		sessionRepo:       sessionRepo,
 	}
+}
+
+// SetBackendVerifier sets the backend TEE verifier for per-prompt attestation checks.
+func (s *ProxyReceiver) SetBackendVerifier(bv BackendTEEVerifier) {
+	s.backendVerifier = bv
 }
 
 // handleSessionError is a helper function to log errors and return consistent output
@@ -309,6 +321,16 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 		}
 	} else if audioTranscriptionReq != nil && audioTranscriptionReq.FilePath != "" {
 		defer os.Remove(audioTranscriptionReq.FilePath)
+	}
+
+	// Verify backend LLM TEE attestation before forwarding (Phase 2)
+	if s.backendVerifier != nil {
+		modelCfg := s.modelConfigLoader.ModelConfigFromID(session.ModelID().Hex())
+		if modelCfg.IsTee {
+			if verifyErr := s.backendVerifier.FastVerifyBackend(ctx, session.ModelID().Hex()); verifyErr != nil {
+				return handleError(verifyErr, "backend TEE verification failed", sourceLog)
+			}
+		}
 	}
 
 	// Start timing and get adapter

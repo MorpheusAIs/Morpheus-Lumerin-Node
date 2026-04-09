@@ -71,6 +71,7 @@ type Proxy struct {
 	modelConfigLoader    *config.ModelConfigLoader
 	blockchainService    *blockchainapi.BlockchainService
 	sessionExpiryHandler *blockchainapi.SessionExpiryHandler
+	backendVerifier      proxyapi.BackendTEEVerifier
 
 	state         lib.AtomicValue[ProxyState]
 	tsk           *lib.Task
@@ -78,7 +79,7 @@ type Proxy struct {
 }
 
 // NewProxyCtl creates a new Proxy controller instance
-func NewProxyCtl(eventListerer *blockchainapi.EventsListener, wallet interfaces.PrKeyProvider, chainID *big.Int, log lib.ILogger, tcpLog *lib.Logger, proxyAddr string, sessionStorage *storages.SessionStorage, modelConfigLoader *config.ModelConfigLoader, valid *validator.Validate, aiEngine *aiengine.AiEngine, blockchainService *blockchainapi.BlockchainService, sessionRepo *sessionrepo.SessionRepositoryCached, sessionExpiryHandler *blockchainapi.SessionExpiryHandler) *Proxy {
+func NewProxyCtl(eventListerer *blockchainapi.EventsListener, wallet interfaces.PrKeyProvider, chainID *big.Int, log lib.ILogger, tcpLog *lib.Logger, proxyAddr string, sessionStorage *storages.SessionStorage, modelConfigLoader *config.ModelConfigLoader, valid *validator.Validate, aiEngine *aiengine.AiEngine, blockchainService *blockchainapi.BlockchainService, sessionRepo *sessionrepo.SessionRepositoryCached, sessionExpiryHandler *blockchainapi.SessionExpiryHandler, backendVerifier proxyapi.BackendTEEVerifier) *Proxy {
 	return &Proxy{
 		eventListener:        eventListerer,
 		chainID:              chainID,
@@ -93,6 +94,7 @@ func NewProxyCtl(eventListerer *blockchainapi.EventsListener, wallet interfaces.
 		blockchainService:    blockchainService,
 		sessionRepo:          sessionRepo,
 		sessionExpiryHandler: sessionExpiryHandler,
+		backendVerifier:      backendVerifier,
 		serverStarted:        make(chan struct{}),
 	}
 }
@@ -187,6 +189,9 @@ func (p *Proxy) run(ctx context.Context, prKey lib.HexString) error {
 	}
 
 	proxyReceiver := proxyapi.NewProxyReceiver(prKey, pubKey, p.sessionStorage, p.aiEngine, p.chainID, p.modelConfigLoader, p.blockchainService, p.sessionRepo)
+	if p.backendVerifier != nil {
+		proxyReceiver.SetBackendVerifier(p.backendVerifier)
+	}
 	morTcpHandler := proxyapi.NewMORRPCController(proxyReceiver, p.validator, p.sessionRepo, p.sessionStorage, prKey)
 	tcpHandler := tcphandlers.NewTCPHandler(
 		p.tcpLog, morTcpHandler,

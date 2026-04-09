@@ -316,6 +316,38 @@ func start() error {
 
 	aiEngine := aiengine.NewAiEngine(proxyRouterApi, chatStorage, modelConfigLoader, agentConfigLoader, cfg.Proxy.LLMTimeout, appLog)
 
+	// Phase 2 TEE: create artifact registry and backend verifier
+	artifactRegistry := attestation.NewArtifactRegistry(
+		cfg.TEE.ArtifactRegistryURL,
+		cfg.TEE.ArtifactRegistryRefreshInterval,
+		appLog.Named("ARTIFACT_REGISTRY"),
+	)
+	artifactRegistry.Start(context.Background())
+
+	backendVerifier := attestation.NewBackendVerifier(
+		cfg.TEE.PortalURL,
+		&attestation.NoopGoldenSource{},
+		artifactRegistry,
+		appLog.Named("BACKEND_TEE"),
+	)
+	aiEngine.SetBackendVerifier(backendVerifier)
+
+	// Startup pre-flight: attest all isTee models
+	modelIDs, modelConfigs := modelConfigLoader.GetAll()
+	for i, mc := range modelConfigs {
+		if !mc.IsTee {
+			continue
+		}
+		attestURL, err := attestation.DeriveAttestationURL(mc.ApiURL)
+		if err != nil {
+			appLog.Warnf("cannot derive attestation URL for model %s: %s", modelIDs[i].Hex(), err)
+			continue
+		}
+		if err := backendVerifier.AttestBackend(context.Background(), modelIDs[i].Hex(), attestURL); err != nil {
+			appLog.Warnf("startup backend attestation failed for model %s (%s): %s", modelIDs[i].Hex(), mc.ModelName, err)
+		}
+	}
+
 	eventListener := blockchainapi.NewEventsListener(sessionRepo, sessionRouter, wallet, logWatcher, appLog)
 
 	sessionExpiryHandler := blockchainapi.NewSessionExpiryHandler(blockchainApi, sessionStorage, wallet, appLog)
@@ -329,6 +361,7 @@ func start() error {
 		ipfsManager = proxyapi.NewIpfsManager(cfg.IPFS.Address, appLog)
 	}
 	proxyController := proxyapi.NewProxyController(proxyRouterApi, aiEngine, chatStorage, *cfg.Proxy.StoreChatContext.Bool, *cfg.Proxy.ForwardChatContext.Bool, *authCfg, ipfsManager, log)
+	proxyController.SetBackendAttestationStatus(backendVerifier)
 	walletController := walletapi.NewWalletController(wallet, *authCfg)
 	systemController := system.NewSystemController(&cfg, wallet, rpcClientStore, sysConfig, appStartTime, chainID, appLog, ethConnectionValidator, *authCfg, storage)
 	authController := authapi.NewAuthController(authCfg, cfg.Environment, appLog)
@@ -347,7 +380,7 @@ func start() error {
 
 	appLog.Infof("API docs available at %s/swagger/index.html", cfg.Web.PublicUrl)
 
-	proxy := proxyctl.NewProxyCtl(eventListener, wallet, chainID, appLog, tcpLog, cfg.Proxy.Address, sessionStorage, modelConfigLoader, valid, aiEngine, blockchainApi, sessionRepo, sessionExpiryHandler)
+	proxy := proxyctl.NewProxyCtl(eventListener, wallet, chainID, appLog, tcpLog, cfg.Proxy.Address, sessionStorage, modelConfigLoader, valid, aiEngine, blockchainApi, sessionRepo, sessionExpiryHandler, backendVerifier)
 	err = proxy.Run(ctx)
 
 	cancelServer()

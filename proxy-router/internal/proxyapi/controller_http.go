@@ -16,6 +16,7 @@ import (
 
 	constants "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/attestation"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi/structs"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
 	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
@@ -42,16 +43,22 @@ type AIEngine interface {
 	GetAdapter(ctx context.Context, chatID, modelID, sessionID common.Hash, storeContext, forwardContext bool) (aiengine.AIEngineStream, error)
 }
 
+// BackendAttestationStatusProvider exposes per-model backend attestation snapshots.
+type BackendAttestationStatusProvider interface {
+	GetAllStatuses() map[string]*attestation.BackendAttestationSnapshot
+}
+
 type ProxyController struct {
-	service            *ProxyServiceSender
-	aiEngine           AIEngine
-	chatStorage        gsc.ChatStorageInterface
-	storeChatContext   bool
-	forwardChatContext bool
-	log                lib.ILogger
-	authConfig         system.HTTPAuthConfig
-	ipfsManager        *IpfsManager
-	dockerManager      *DockerManager
+	service                   *ProxyServiceSender
+	aiEngine                  AIEngine
+	chatStorage               gsc.ChatStorageInterface
+	storeChatContext          bool
+	forwardChatContext        bool
+	log                       lib.ILogger
+	authConfig                system.HTTPAuthConfig
+	ipfsManager               *IpfsManager
+	dockerManager             *DockerManager
+	backendAttestationStatus  BackendAttestationStatusProvider
 }
 
 func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStorage gsc.ChatStorageInterface, storeChatContext, forwardChatContext bool, authConfig system.HTTPAuthConfig, ipfsManager *IpfsManager, log lib.ILogger) *ProxyController {
@@ -72,11 +79,17 @@ func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStor
 	return c
 }
 
+// SetBackendAttestationStatus sets the provider for backend attestation status queries.
+func (c *ProxyController) SetBackendAttestationStatus(provider BackendAttestationStatusProvider) {
+	c.backendAttestationStatus = provider
+}
+
 func (s *ProxyController) RegisterRoutes(r interfaces.Router) {
 	r.POST("/proxy/provider/ping", s.Ping)
 	r.POST("/proxy/sessions/initiate", s.authConfig.CheckAuth("initiate_session"), s.InitiateSession)
 	r.POST("/v1/chat/completions", s.authConfig.CheckAuth("chat"), s.Prompt)
 	r.GET("/v1/models", s.authConfig.CheckAuth("get_local_models"), s.Models)
+	r.GET("/v1/models/attestation", s.authConfig.CheckAuth("get_local_models"), s.ModelsAttestation)
 	r.GET("/v1/agents", s.authConfig.CheckAuth("get_local_agents"), s.Agents)
 	r.GET("/v1/agents/tools", s.authConfig.CheckAuth("get_agent_tools"), s.GetAgentTools)
 	r.POST("/v1/agents/tools", s.authConfig.CheckAuth("call_agent_tool"), s.CallAgentTool)
@@ -285,6 +298,28 @@ func (c *ProxyController) Models(ctx *gin.Context) {
 		return
 	}
 	ctx.JSON(http.StatusOK, models)
+}
+
+// ModelsAttestation godoc
+//
+//	@Summary	Get backend TEE attestation status for all configured models
+//	@Tags		system
+//	@Produce	json
+//	@Success	200	{array}	attestation.BackendAttestationSnapshot
+//	@Security	BasicAuth
+//	@Router		/v1/models/attestation [get]
+func (c *ProxyController) ModelsAttestation(ctx *gin.Context) {
+	if c.backendAttestationStatus == nil {
+		ctx.JSON(http.StatusOK, []struct{}{})
+		return
+	}
+
+	statuses := c.backendAttestationStatus.GetAllStatuses()
+	result := make([]*attestation.BackendAttestationSnapshot, 0, len(statuses))
+	for _, s := range statuses {
+		result = append(result, s)
+	}
+	ctx.JSON(http.StatusOK, result)
 }
 
 // GetLocalAgents godoc

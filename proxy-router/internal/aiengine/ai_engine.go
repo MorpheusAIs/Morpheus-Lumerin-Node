@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	gcs "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/chatstorage/genericchatstorage"
@@ -15,11 +16,17 @@ import (
 	mcp "github.com/mark3labs/mcp-go/mcp"
 )
 
+// BackendVerifier provides TLS-pinned HTTP clients for TEE-attested backends.
+type BackendVerifier interface {
+	PinnedHTTPClient(modelID string) (*http.Client, error)
+}
+
 type AiEngine struct {
 	modelsConfigLoader *config.ModelConfigLoader
 	agentsConfigLoader *config.AgentConfigLoader
 	service            ProxyService
 	storage            gcs.ChatStorageInterface
+	backendVerifier    BackendVerifier
 	llmTimeout         time.Duration
 	log                lib.ILogger
 }
@@ -51,6 +58,11 @@ func NewAiEngine(service ProxyService, storage gcs.ChatStorageInterface, modelsC
 	}
 }
 
+// SetBackendVerifier sets the backend TEE verifier for TLS-pinned connections.
+func (a *AiEngine) SetBackendVerifier(bv BackendVerifier) {
+	a.backendVerifier = bv
+}
+
 func (a *AiEngine) GetAdapter(ctx context.Context, chatID, modelID, sessionID common.Hash, storeChatContext, forwardChatContext bool) (AIEngineStream, error) {
 	var engine AIEngineStream
 	if sessionID == (common.Hash{}) {
@@ -59,8 +71,18 @@ func (a *AiEngine) GetAdapter(ctx context.Context, chatID, modelID, sessionID co
 		if modelConfig == nil {
 			return nil, fmt.Errorf("model not found: %s", modelID.Hex())
 		}
+
+		var httpClient *http.Client
+		if modelConfig.IsTee && a.backendVerifier != nil {
+			var err error
+			httpClient, err = a.backendVerifier.PinnedHTTPClient(modelID.Hex())
+			if err != nil {
+				a.log.Warnf("failed to get pinned HTTP client for TEE model %s, using default: %s", modelID.Hex(), err)
+			}
+		}
+
 		var ok bool
-		engine, ok = ApiAdapterFactory(modelConfig.ApiType, modelConfig.ModelName, modelConfig.ApiURL, modelConfig.ApiKey, modelConfig.Parameters, a.llmTimeout, a.log)
+		engine, ok = ApiAdapterFactory(modelConfig.ApiType, modelConfig.ModelName, modelConfig.ApiURL, modelConfig.ApiKey, modelConfig.Parameters, a.llmTimeout, a.log, httpClient)
 		if !ok {
 			return nil, fmt.Errorf("api adapter not found: %s", modelConfig.ApiType)
 		}
