@@ -47,7 +47,6 @@ type ModelConfig struct {
 	ConcurrentSlots int               `json:"concurrentSlots" validate:"number"`
 	CapacityPolicy  string            `json:"capacityPolicy"`
 	Parameters      map[string]string `json:"parameters"`
-	IsTee           bool              `json:"isTee"`
 }
 
 type ModelConfigs map[string]ModelConfig

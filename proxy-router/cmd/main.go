@@ -293,6 +293,7 @@ func start() error {
 	}
 
 	blockchainApi := blockchainapi.NewBlockchainService(ethClient, multicallBackend, *cfg.Marketplace.DiamondContractAddress, *cfg.Marketplace.MorTokenAddress, explorer, wallet, proxyRouterApi, sessionRepo, scorer, authCfg, appLog, rpcLog, cfg.Blockchain.EthLegacyTx, teeVerifier)
+	sessionRepo.SetModelTagsProvider(blockchainApi)
 	proxyRouterApi.SetSessionService(blockchainApi)
 	proxyRouterApi.SetAttestationVerifier(teeVerifier)
 	if teeVerifier != nil {
@@ -330,10 +331,15 @@ func start() error {
 		artifactRegistry,
 		appLog.Named("BACKEND_TEE"),
 	)
-	// Startup pre-flight: attest all isTee models
+	// Startup pre-flight: attest models that have "tee-gpu" tag on-chain
 	modelIDs, modelConfigs := modelConfigLoader.GetAll()
 	for i, mc := range modelConfigs {
-		if !mc.IsTee {
+		tags, err := blockchainApi.GetModelTags(context.Background(), modelIDs[i])
+		if err != nil {
+			appLog.Debugf("cannot fetch model %s tags from blockchain: %s", modelIDs[i].Hex(), err)
+			continue
+		}
+		if !blockchainapi.IsTeeGPUModel(tags) {
 			continue
 		}
 		attestURL, err := attestation.DeriveAttestationURL(mc.ApiURL)

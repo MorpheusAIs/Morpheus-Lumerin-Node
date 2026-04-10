@@ -56,12 +56,6 @@
             "description": "The policy to be used for capacity management",
             "type": "string",
             "enum": ["simple", "idle_timeout"]
-          },
-          "isTee": {
-            "title": "Is TEE",
-            "description": "Whether this model's backend requires TEE attestation verification. The attestation URL is always derived from the apiUrl host with port 29343.",
-            "type": "boolean",
-            "default": false
           }
         },
         "required": ["modelId", "modelName", "apiType", "apiUrl"]

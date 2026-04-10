@@ -192,6 +192,7 @@ func (p *Proxy) run(ctx context.Context, prKey lib.HexString) error {
 	if p.backendVerifier != nil {
 		proxyReceiver.SetBackendVerifier(p.backendVerifier)
 	}
+	proxyReceiver.SetModelTagsProvider(p.blockchainService)
 	morTcpHandler := proxyapi.NewMORRPCController(proxyReceiver, p.validator, p.sessionRepo, p.sessionStorage, prKey)
 	tcpHandler := tcphandlers.NewTCPHandler(
 		p.tcpLog, morTcpHandler,

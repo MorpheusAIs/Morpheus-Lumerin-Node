@@ -250,37 +250,41 @@ func (bv *BackendVerifier) FastVerifyBackend(ctx context.Context, modelID string
 	bv.mu.RUnlock()
 
 	if !exists {
-		bv.log.Infof("backend fast-verify: no cache for model %s, skipping (not attested)", modelID)
 		return fmt.Errorf("no attestation snapshot for model %s", modelID)
 	}
 
 	if snapshot.Status != StatusPassed {
-		return fmt.Errorf("backend attestation status is %s for model %s: %s", snapshot.Status, modelID, snapshot.Error)
+		bv.log.Infof("LLM attestation status is %s for model %s (%s), retrying full attestation", snapshot.Status, modelID, snapshot.Error)
+		return bv.AttestBackend(ctx, modelID, snapshot.AttestationURL)
 	}
 
 	cpuURL := snapshot.AttestationURL + "/cpu"
 	cpuQuote, tlsFingerprint, err := LoadAttestationQuote(ctx, bv.attestationClient, cpuURL)
 	if err != nil {
-		return fmt.Errorf("backend fast-verify failed for model %s: %w", modelID, err)
+		return fmt.Errorf("LLM fast-verify failed for model %s: %w", modelID, err)
 	}
 
 	currentHash := fmt.Sprintf("%x", sha256.Sum256([]byte(cpuQuote)))
 
 	if currentHash != snapshot.CPUQuoteHash {
-		bv.log.Warnf("backend fast-verify: CPU quote hash mismatch for model %s, performing full re-attestation", modelID)
+		bv.log.Warnf("LLM fast-verify: CPU quote hash mismatch for model %s, performing full re-attestation", modelID)
 		return bv.AttestBackend(ctx, modelID, snapshot.AttestationURL)
 	}
 
 	if !strings.EqualFold(tlsFingerprint, snapshot.TLSFingerprint) {
-		bv.log.Warnf("backend fast-verify: TLS fingerprint mismatch for model %s (cached=%s, live=%s)", modelID, snapshot.TLSFingerprint, tlsFingerprint)
-		return fmt.Errorf("backend TLS certificate changed for model %s (possible MITM)", modelID)
+		bv.log.Warnf("LLM fast-verify: TLS fingerprint mismatch for model %s (cached=%s, live=%s)", modelID, snapshot.TLSFingerprint, tlsFingerprint)
+		return fmt.Errorf("LLM TLS certificate changed for model %s (possible MITM)", modelID)
 	}
 
-	bv.log.Debugf("backend fast-verify: model %s verified", modelID)
+	bv.log.Debugf("LLM fast-verify: model %s verified", modelID)
 	return nil
 }
 
 // GetStatus returns the attestation snapshot for a model, or nil if not attested.
+func (bv *BackendVerifier) GetBackendStatus(modelID string) *BackendAttestationSnapshot {
+	return bv.GetStatus(modelID)
+}
+
 func (bv *BackendVerifier) GetStatus(modelID string) *BackendAttestationSnapshot {
 	bv.mu.RLock()
 	defer bv.mu.RUnlock()

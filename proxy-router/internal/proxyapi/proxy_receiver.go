@@ -20,10 +20,14 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-// BackendTEEVerifier is used by ProxyReceiver to fast-verify LLM backend TEE
-// attestation before forwarding inference requests.
+// BackendTEEVerifier is used by ProxyReceiver for Phase 2 LLM TEE attestation.
 type BackendTEEVerifier interface {
 	FastVerifyBackend(ctx context.Context, modelID string) error
+}
+
+// ModelTagsProvider fetches blockchain model tags for TEE tag detection.
+type ModelTagsProvider interface {
+	GetModelTags(ctx context.Context, modelID common.Hash) ([]string, error)
 }
 
 type ProxyReceiver struct {
@@ -37,6 +41,7 @@ type ProxyReceiver struct {
 	service           BidGetter
 	sessionRepo       *sessionrepo.SessionRepositoryCached
 	backendVerifier   BackendTEEVerifier
+	modelTagsProvider ModelTagsProvider
 }
 
 func NewProxyReceiver(privateKeyHex, publicKeyHex lib.HexString, sessionStorage *storages.SessionStorage, aiEngine *aiengine.AiEngine, chainID *big.Int, modelConfigLoader *config.ModelConfigLoader, blockchainService BidGetter, sessionRepo *sessionrepo.SessionRepositoryCached) *ProxyReceiver {
@@ -53,9 +58,28 @@ func NewProxyReceiver(privateKeyHex, publicKeyHex lib.HexString, sessionStorage 
 	}
 }
 
-// SetBackendVerifier sets the backend TEE verifier for per-prompt attestation checks.
 func (s *ProxyReceiver) SetBackendVerifier(bv BackendTEEVerifier) {
 	s.backendVerifier = bv
+}
+
+func (s *ProxyReceiver) SetModelTagsProvider(p ModelTagsProvider) {
+	s.modelTagsProvider = p
+}
+
+func (s *ProxyReceiver) isTeeGpuModel(ctx context.Context, modelID common.Hash) bool {
+	if s.modelTagsProvider == nil {
+		return false
+	}
+	tags, err := s.modelTagsProvider.GetModelTags(ctx, modelID)
+	if err != nil {
+		return false
+	}
+	for _, t := range tags {
+		if strings.ToLower(t) == "tee-gpu" {
+			return true
+		}
+	}
+	return false
 }
 
 // handleSessionError is a helper function to log errors and return consistent output
@@ -323,13 +347,11 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 		defer os.Remove(audioTranscriptionReq.FilePath)
 	}
 
-	// Verify backend LLM TEE attestation before forwarding (Phase 2)
-	if s.backendVerifier != nil {
-		modelCfg := s.modelConfigLoader.ModelConfigFromID(session.ModelID().Hex())
-		if modelCfg.IsTee {
-			if verifyErr := s.backendVerifier.FastVerifyBackend(ctx, session.ModelID().Hex()); verifyErr != nil {
-				return handleError(verifyErr, "backend TEE verification failed", sourceLog)
-			}
+	// Phase 2: verify LLM TEE attestation for "tee-gpu" tagged models.
+	// isTeeGpu is set from blockchain tags when the session is loaded.
+	if s.backendVerifier != nil && session.IsTeeGpu() {
+		if verifyErr := s.backendVerifier.FastVerifyBackend(ctx, session.ModelID().Hex()); verifyErr != nil {
+			return handleError(verifyErr, "LLM TEE verification failed", sourceLog)
 		}
 	}
 
@@ -387,6 +409,15 @@ func (s *ProxyReceiver) SessionRequest(ctx context.Context, msgID string, reqID 
 	}
 
 	modelID := bid.ModelAgentId.String()
+
+	// Phase 2: verify LLM TEE attestation before accepting session
+	if s.backendVerifier != nil && s.isTeeGpuModel(ctx, bid.ModelAgentId) {
+		if err := s.backendVerifier.FastVerifyBackend(ctx, modelID); err != nil {
+			log.Errorf("LLM TEE verification failed for model %s: %s", modelID, err)
+			return nil, fmt.Errorf("LLM TEE verification failed: %w", err)
+		}
+	}
+
 	modelConfig := s.modelConfigLoader.ModelConfigFromID(modelID)
 	capacityManager := CreateCapacityManager(modelConfig, s.sessionStorage, log)
 
