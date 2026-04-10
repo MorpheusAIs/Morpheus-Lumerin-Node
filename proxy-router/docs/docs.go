@@ -2986,6 +2986,33 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/models/attestation": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Get backend TEE attestation status for all configured models",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/attestation.BackendAttestationSnapshot"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/wallet": {
             "get": {
                 "security": [
@@ -3191,6 +3218,70 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
+        },
+        "attestation.BackendAttestationSnapshot": {
+            "type": "object",
+            "properties": {
+                "artifactsVersion": {
+                    "type": "string"
+                },
+                "attestationUrl": {
+                    "type": "string"
+                },
+                "dockerComposeHash": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "expiresAt": {
+                    "type": "string"
+                },
+                "modelId": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/attestation.BackendAttestationStatus"
+                },
+                "teeType": {
+                    "$ref": "#/definitions/attestation.TEEType"
+                },
+                "verifiedAt": {
+                    "type": "string"
+                },
+                "vmTemplateName": {
+                    "type": "string"
+                },
+                "workloadStatus": {
+                    "type": "string"
+                }
+            }
+        },
+        "attestation.BackendAttestationStatus": {
+            "type": "string",
+            "enum": [
+                "passed",
+                "failed",
+                "unknown",
+                "expired"
+            ],
+            "x-enum-varnames": [
+                "StatusPassed",
+                "StatusFailed",
+                "StatusUnknown",
+                "StatusExpired"
+            ]
+        },
+        "attestation.TEEType": {
+            "type": "string",
+            "enum": [
+                "TDX",
+                "SEV"
+            ],
+            "x-enum-varnames": [
+                "TEETypeTDX",
+                "TEETypeSEV"
+            ]
         },
         "authapi.AddUserReq": {
             "type": "object",
@@ -3991,6 +4082,9 @@ const docTemplate = `{
             "properties": {
                 "ping": {
                     "type": "integer"
+                },
+                "version": {
+                    "type": "string"
                 }
             }
         },
@@ -4667,6 +4761,12 @@ const docTemplate = `{
         "system.HealthCheckResponse": {
             "type": "object",
             "properties": {
+                "components": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
                 "status": {
                     "type": "string"
                 },

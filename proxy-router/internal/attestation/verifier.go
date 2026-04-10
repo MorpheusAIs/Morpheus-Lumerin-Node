@@ -44,9 +44,9 @@ func (c *collateralField) UnmarshalJSON(data []byte) error {
 }
 
 const (
-	attestationPort  = "29343"
-	defaultPortalURL = "https://secretai.scrtlabs.com/api/quote-parse"
-	verifyTimeout    = 30 * time.Second
+	AttestationPort  = "29343"
+	DefaultPortalURL = "https://secretai.scrtlabs.com/api/quote-parse"
+	VerifyTimeout    = 30 * time.Second
 )
 
 // ParseQuoteRequest is the POST body for the SecretAI Portal quote-parse API.
@@ -130,30 +130,38 @@ type Verifier struct {
 	quoteCache map[string]*verifiedQuoteEntry
 }
 
+// NewPortalHTTPClient creates an HTTP client for the SecretAI Portal API.
+func NewPortalHTTPClient() *http.Client {
+	return &http.Client{
+		Timeout: VerifyTimeout,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
+		},
+	}
+}
+
+// NewAttestationHTTPClient creates an HTTP client for TEE attestation endpoints.
+// Uses InsecureSkipVerify because the self-signed cert is verified via reportdata binding.
+func NewAttestationHTTPClient() *http.Client {
+	return &http.Client{
+		Timeout: VerifyTimeout,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				MinVersion:         tls.VersionTLS12,
+				InsecureSkipVerify: true, //nolint:gosec // verified via reportdata
+			},
+		},
+	}
+}
+
 func NewVerifier(portalURL string, imageRepo string, log lib.ILogger) *Verifier {
 	if portalURL == "" {
-		portalURL = defaultPortalURL
-	}
-
-	portalTransport := &http.Transport{
-		TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
-	}
-
-	// The attestation endpoint on :29343 uses a self-signed TLS certificate
-	// generated inside the TEE. We skip standard CA verification here because
-	// the certificate is verified via reportdata binding instead -- a stronger
-	// guarantee than CA trust, since the cert fingerprint is embedded in the
-	// hardware-signed attestation quote.
-	attestationTransport := &http.Transport{
-		TLSClientConfig: &tls.Config{
-			MinVersion:         tls.VersionTLS12,
-			InsecureSkipVerify: true, //nolint:gosec // verified via reportdata
-		},
+		portalURL = DefaultPortalURL
 	}
 
 	return &Verifier{
-		portalClient:      &http.Client{Timeout: verifyTimeout, Transport: portalTransport},
-		attestationClient: &http.Client{Timeout: verifyTimeout, Transport: attestationTransport},
+		portalClient:      NewPortalHTTPClient(),
+		attestationClient: NewAttestationHTTPClient(),
 		portalURL:         portalURL,
 		goldenSrc:         NewGoldenSource(imageRepo, log),
 		log:               log,
@@ -200,9 +208,11 @@ func (v *Verifier) VerifyProvider(ctx context.Context, providerEndpoint string, 
 
 	v.log.Infof("attestation quote is valid (type: %s) for provider %s", result.Type, providerEndpoint)
 
-	if err := v.verifyTLSBinding(tlsFingerprint, result.ReportData); err != nil {
+	if err := VerifyTLSBinding(tlsFingerprint, result.ReportData); err != nil {
 		return fmt.Errorf("TLS binding verification failed (possible spoofing): %w", err)
 	}
+
+	v.log.Infof("TLS certificate fingerprint matches reportdata (anti-spoofing check passed)")
 
 	golden, err := v.goldenSrc.FetchGoldenValues(ctx, version)
 	if err != nil {
@@ -211,7 +221,7 @@ func (v *Verifier) VerifyProvider(ctx context.Context, providerEndpoint string, 
 
 	v.log.Infof("Got golden values: %+v", golden)
 
-	if err := v.compareRegisters(result, golden); err != nil {
+	if err := CompareRegisters(result, golden, v.log); err != nil {
 		v.log.Warnf("failed to compare registers: %s", err)
 		return err
 	}
@@ -230,7 +240,7 @@ func (v *Verifier) VerifyProvider(ctx context.Context, providerEndpoint string, 
 	return nil
 }
 
-// verifyTLSBinding checks that the SHA-256 fingerprint of the TLS certificate
+// VerifyTLSBinding checks that the SHA-256 fingerprint of the TLS certificate
 // presented by the attestation endpoint matches the reportdata field in the
 // hardware-signed attestation quote.
 //
@@ -238,7 +248,7 @@ func (v *Verifier) VerifyProvider(ctx context.Context, providerEndpoint string, 
 // fingerprint in the first 32 bytes (64 hex chars) of reportdata. Because the
 // TLS private key never leaves the TEE, a spoofed server cannot present a
 // certificate whose fingerprint matches a stolen quote's reportdata.
-func (v *Verifier) verifyTLSBinding(tlsFingerprint string, reportData string) error {
+func VerifyTLSBinding(tlsFingerprint string, reportData string) error {
 	if tlsFingerprint == "" {
 		return fmt.Errorf("no TLS certificate fingerprint captured from attestation endpoint")
 	}
@@ -260,7 +270,6 @@ func (v *Verifier) verifyTLSBinding(tlsFingerprint string, reportData string) er
 			tlsFingerprint, reportPrefix)
 	}
 
-	v.log.Infof("TLS certificate fingerprint matches reportdata (anti-spoofing check passed)")
 	return nil
 }
 
@@ -347,9 +356,9 @@ func (v *Verifier) fullVerifyWithPing(ctx context.Context, providerEndpoint stri
 	return v.VerifyProvider(ctx, providerEndpoint, version)
 }
 
-// compareRegisters checks every register present in the golden values against
-// the values extracted from the provider's attestation quote.
-func (v *Verifier) compareRegisters(result *AttestationResult, golden *GoldenValues) error {
+// CompareRegisters checks every register present in the golden values against
+// the values extracted from the attestation quote.
+func CompareRegisters(result *AttestationResult, golden *GoldenValues, log lib.ILogger) error {
 	type regPair struct {
 		name   string
 		golden string
@@ -376,7 +385,9 @@ func (v *Verifier) compareRegisters(result *AttestationResult, golden *GoldenVal
 	var mismatches []string
 	for _, p := range pairs {
 		if p.golden == "" {
-			v.log.Debugf("register %s: golden value empty, skipping", p.name)
+			if log != nil {
+				log.Debugf("register %s: golden value empty, skipping", p.name)
+			}
 			continue
 		}
 		if p.actual == "" {
@@ -385,8 +396,8 @@ func (v *Verifier) compareRegisters(result *AttestationResult, golden *GoldenVal
 		}
 		if !strings.EqualFold(p.golden, p.actual) {
 			mismatches = append(mismatches, fmt.Sprintf("%s: expected %s, got %s", p.name, p.golden, p.actual))
-		} else {
-			v.log.Infof("register %s: matches golden value", p.name)
+		} else if log != nil {
+			log.Infof("register %s: matches golden value", p.name)
 		}
 	}
 
@@ -394,23 +405,21 @@ func (v *Verifier) compareRegisters(result *AttestationResult, golden *GoldenVal
 		return fmt.Errorf("register mismatch: %s", strings.Join(mismatches, "; "))
 	}
 
-	v.log.Infof("all checked registers match golden values")
+	if log != nil {
+		log.Infof("all checked registers match golden values")
+	}
 	return nil
 }
 
-// loadAttestationQuote fetches the raw hex-encoded attestation quote from the
-// provider and returns the SHA-256 fingerprint of the peer's TLS certificate.
-func (v *Verifier) loadAttestationQuote(ctx context.Context, attestationBaseURL string) (hexQuote string, tlsFingerprint string, err error) {
-	cpuURL := attestationBaseURL + "/cpu"
-
-	v.log.Infof("fetching attestation quote from %s", cpuURL)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cpuURL, nil)
+// LoadAttestationQuote fetches a raw hex-encoded attestation quote from the
+// given URL path and returns the SHA-256 fingerprint of the peer's TLS certificate.
+func LoadAttestationQuote(ctx context.Context, client *http.Client, quoteURL string) (hexQuote string, tlsFingerprint string, err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, quoteURL, nil)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to create request: %w", err)
 	}
 
-	resp, err := v.attestationClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to fetch attestation quote: %w", err)
 	}
@@ -423,8 +432,6 @@ func (v *Verifier) loadAttestationQuote(ctx context.Context, attestationBaseURL 
 	if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
 		hash := sha256.Sum256(resp.TLS.PeerCertificates[0].Raw)
 		tlsFingerprint = hex.EncodeToString(hash[:])
-	} else {
-		v.log.Warnf("no TLS peer certificate received from %s", cpuURL)
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -434,32 +441,46 @@ func (v *Verifier) loadAttestationQuote(ctx context.Context, attestationBaseURL 
 
 	hexQuote = strings.TrimSpace(string(body))
 	if hexQuote == "" {
-		return "", "", fmt.Errorf("empty attestation quote from provider")
+		return "", "", fmt.Errorf("empty attestation quote")
 	}
-
-	v.log.Infof("received attestation quote from %s (%d bytes)", cpuURL, len(hexQuote))
 
 	return hexQuote, tlsFingerprint, nil
 }
 
-// verifyQuote sends the hex attestation quote to the SecretAI Portal parse-quote API
-// for cryptographic verification and field extraction.
-func (v *Verifier) verifyQuote(ctx context.Context, hexQuote string) (*AttestationResult, error) {
-	v.log.Infof("sending quote to SecretAI portal for cryptographic verification (%s)", v.portalURL)
+// loadAttestationQuote is the instance method that delegates to the package-level function.
+func (v *Verifier) loadAttestationQuote(ctx context.Context, attestationBaseURL string) (hexQuote string, tlsFingerprint string, err error) {
+	cpuURL := attestationBaseURL + "/cpu"
+	v.log.Infof("fetching attestation quote from %s", cpuURL)
 
+	hexQuote, tlsFingerprint, err = LoadAttestationQuote(ctx, v.attestationClient, cpuURL)
+	if err != nil {
+		return "", "", err
+	}
+
+	if tlsFingerprint == "" {
+		v.log.Warnf("no TLS peer certificate received from %s", cpuURL)
+	}
+
+	v.log.Infof("received attestation quote from %s (%d bytes)", cpuURL, len(hexQuote))
+	return hexQuote, tlsFingerprint, nil
+}
+
+// VerifyQuote sends the hex attestation quote to the SecretAI Portal parse-quote API
+// for cryptographic verification and field extraction.
+func VerifyQuote(ctx context.Context, portalClient *http.Client, portalURL string, hexQuote string) (*AttestationResult, error) {
 	reqBody := ParseQuoteRequest{Quote: hexQuote}
 	body, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, v.portalURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, portalURL, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := v.portalClient.Do(req)
+	resp, err := portalClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("portal request failed: %w", err)
 	}
@@ -480,11 +501,8 @@ func (v *Verifier) verifyQuote(ctx context.Context, hexQuote string) (*Attestati
 	}
 
 	if parsed.Error != "" {
-		v.log.Warnf("portal returned error: %s", parsed.Error)
 		return &AttestationResult{Valid: false, Error: parsed.Error}, nil
 	}
-
-	v.log.Infof("portal verified quote successfully, parsing fields")
 
 	q := parsed.Quote
 	mrtd := qf(q, "mr_td")
@@ -498,7 +516,6 @@ func (v *Verifier) verifyQuote(ctx context.Context, hexQuote string) (*Attestati
 	hasTDX := mrtd != "" && rtmr0 != "" && rtmr1 != "" && rtmr2 != ""
 	hasSEV := measurement != "" || reportData != ""
 
-	// status.attestation_type can also indicate TDX/SEV
 	if !hasTDX && parsed.Status != nil && strings.EqualFold(parsed.Status.AttestationType, "tdx") {
 		hasTDX = true
 	}
@@ -533,6 +550,21 @@ func (v *Verifier) verifyQuote(ctx context.Context, hexQuote string) (*Attestati
 	}, nil
 }
 
+// verifyQuote is the instance method that delegates to the package-level function.
+func (v *Verifier) verifyQuote(ctx context.Context, hexQuote string) (*AttestationResult, error) {
+	v.log.Infof("sending quote to SecretAI portal for cryptographic verification (%s)", v.portalURL)
+	result, err := VerifyQuote(ctx, v.portalClient, v.portalURL, hexQuote)
+	if err != nil {
+		return nil, err
+	}
+	if result.Error != "" {
+		v.log.Warnf("portal returned error: %s", result.Error)
+	} else {
+		v.log.Infof("portal verified quote successfully")
+	}
+	return result, nil
+}
+
 func qf(q *QuoteFields, field string) string {
 	if q == nil {
 		return ""
@@ -557,22 +589,27 @@ func qf(q *QuoteFields, field string) string {
 	}
 }
 
-// deriveAttestationURL constructs the SecretVM attestation base URL from a provider endpoint.
-// Provider endpoint format: "host:port" (e.g., "morpheus.dev.lumerin.io:3333")
-// Attestation URL format: "https://host:29343" (standard SecretVM attestation port)
-func deriveAttestationURL(providerEndpoint string) (string, error) {
-	if strings.Contains(providerEndpoint, "://") {
-		parsed, err := url.Parse(providerEndpoint)
+// DeriveAttestationURL constructs the SecretVM attestation base URL from an endpoint.
+// Input format: "host:port" or "https://host:port/path"
+// Output format: "https://host:29343"
+func DeriveAttestationURL(endpoint string) (string, error) {
+	if strings.Contains(endpoint, "://") {
+		parsed, err := url.Parse(endpoint)
 		if err != nil {
-			return "", fmt.Errorf("invalid provider endpoint URL: %w", err)
+			return "", fmt.Errorf("invalid endpoint URL: %w", err)
 		}
 		host := parsed.Hostname()
-		return fmt.Sprintf("https://%s:%s", host, attestationPort), nil
+		return fmt.Sprintf("https://%s:%s", host, AttestationPort), nil
 	}
 
-	host, _, err := net.SplitHostPort(providerEndpoint)
+	host, _, err := net.SplitHostPort(endpoint)
 	if err != nil {
-		host = providerEndpoint
+		host = endpoint
 	}
-	return fmt.Sprintf("https://%s:%s", host, attestationPort), nil
+	return fmt.Sprintf("https://%s:%s", host, AttestationPort), nil
+}
+
+// deriveAttestationURL is the old unexported alias kept for internal compatibility.
+func deriveAttestationURL(providerEndpoint string) (string, error) {
+	return DeriveAttestationURL(providerEndpoint)
 }
