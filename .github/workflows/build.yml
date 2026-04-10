@@ -1048,22 +1048,33 @@ jobs:
           echo "📦 Image: $BUILDIMAGE:$BUILDTAG"
           echo "📋 Task Definition: $NEW_TASK_ARN"
           
-          # Wait for deployment to stabilize (set +e: bash -e would exit before capturing $? on waiter timeout 255)
-          echo "⏳ Waiting for service to stabilize (up to ~12.5 min at 50×15s)..."
+          # Wait for deployment to stabilize
+          # ECS lifecycle: stopTimeout=120s (SIGTERM→SIGKILL) + deregistration_delay ≤30s
+          #   + new task image pull/start + ALB health checks (healthy_threshold×interval ≈90s)
+          # Worst-case ~4 min; enforce a 180s floor so health-check retries aren't wasted on the old task.
+          DEPLOY_WAIT_FLOOR_SECS=180
+          echo "⏳ Waiting for ECS service to stabilize (default waiter: up to 10 min at 40×15s)..."
+          WAIT_START=$(date +%s)
           set +e
           aws ecs wait services-stable \
             --cluster "$CLUSTER_NAME" \
             --services "$SERVICE_NAME" \
-            --max-attempts 50 \
             --cli-read-timeout 900 \
             --cli-connect-timeout 60
           STABILIZATION_STATUS=$?
+          WAIT_ELAPSED=$(( $(date +%s) - WAIT_START ))
           set -e
           
           if [ $STABILIZATION_STATUS -eq 0 ]; then
-            echo "✅ ECS service stabilized successfully"
+            echo "✅ ECS service stabilized after ${WAIT_ELAPSED}s"
           else
-            echo "⚠️ ECS stabilization wait timed out, but continuing with health check..."
+            echo "⚠️ ECS wait returned status $STABILIZATION_STATUS after ${WAIT_ELAPSED}s, continuing with health check..."
+          fi
+          
+          REMAINING=$(( DEPLOY_WAIT_FLOOR_SECS - WAIT_ELAPSED ))
+          if [ $REMAINING -gt 0 ]; then
+            echo "⏳ Ensuring minimum ${DEPLOY_WAIT_FLOOR_SECS}s deploy wait (sleeping ${REMAINING}s more)..."
+            sleep $REMAINING
           fi
           
           # Determine the public endpoint for health check
@@ -1080,6 +1091,8 @@ jobs:
           HEALTH_RETRY_COUNT=0
           VERSION_VERIFIED=false
           
+          # Disable errexit for the health-check loop so curl timeouts (exit 28) don't kill the script
+          set +e
           while [ $HEALTH_RETRY_COUNT -lt $MAX_HEALTH_RETRIES ]; do
             echo "🔄 Health check attempt $((HEALTH_RETRY_COUNT + 1))/$MAX_HEALTH_RETRIES..."
             
@@ -1125,6 +1138,7 @@ jobs:
               sleep 15
             fi
           done
+          set -e
           
           # Final deployment status
           if [ "$VERSION_VERIFIED" = true ]; then
@@ -1305,22 +1319,37 @@ jobs:
           echo "📦 Image: $BUILDIMAGE:$BUILDTAG"
           echo "📋 Task Definition: $NEW_TASK_ARN"
           
-          # Wait for deployment to stabilize (set +e: bash -e would exit before capturing $? on waiter timeout 255)
-          echo "⏳ Waiting for service to stabilize (up to ~12.5 min at 50×15s)..."
+          # Wait for deployment to stabilize
+          # C-Node ECS lifecycle (from Terraform 02_mor_router_svc.tf):
+          #   - deployment_minimum_healthy_percent=0, deployment_maximum_percent=100
+          #     → ECS stops old task FIRST, then starts new one (single-writer BadgerDB)
+          #   - stopTimeout=120s (SIGTERM→SIGKILL)
+          #   - deregistration_delay=0 (svc TG) / 30s (API TG)
+          #   - ALB health_check: healthy_threshold=3, interval=30s → ~90s to register healthy
+          # Worst case: ~120s + ~30s + ~90s ≈ 4 min; enforce 180s floor before health-check polling.
+          DEPLOY_WAIT_FLOOR_SECS=180
+          echo "⏳ Waiting for ECS service to stabilize (default waiter: up to 10 min at 40×15s)..."
+          WAIT_START=$(date +%s)
           set +e
           aws ecs wait services-stable \
             --cluster "$CLUSTER_NAME" \
             --services "$SERVICE_NAME" \
-            --max-attempts 50 \
             --cli-read-timeout 900 \
             --cli-connect-timeout 60
           STABILIZATION_STATUS=$?
+          WAIT_ELAPSED=$(( $(date +%s) - WAIT_START ))
           set -e
           
           if [ $STABILIZATION_STATUS -eq 0 ]; then
-            echo "✅ ECS service stabilized successfully"
+            echo "✅ ECS service stabilized after ${WAIT_ELAPSED}s"
           else
-            echo "⚠️ ECS stabilization wait timed out, but continuing with health check..."
+            echo "⚠️ ECS wait returned status $STABILIZATION_STATUS after ${WAIT_ELAPSED}s, continuing with health check..."
+          fi
+          
+          REMAINING=$(( DEPLOY_WAIT_FLOOR_SECS - WAIT_ELAPSED ))
+          if [ $REMAINING -gt 0 ]; then
+            echo "⏳ Ensuring minimum ${DEPLOY_WAIT_FLOOR_SECS}s deploy wait (sleeping ${REMAINING}s more)..."
+            sleep $REMAINING
           fi
           
           # Determine the public endpoint for health check
@@ -1337,6 +1366,8 @@ jobs:
           HEALTH_RETRY_COUNT=0
           VERSION_VERIFIED=false
           
+          # Disable errexit for the health-check loop so curl timeouts (exit 28) don't kill the script
+          set +e
           while [ $HEALTH_RETRY_COUNT -lt $MAX_HEALTH_RETRIES ]; do
             echo "🔄 Health check attempt $((HEALTH_RETRY_COUNT + 1))/$MAX_HEALTH_RETRIES..."
             
@@ -1382,6 +1413,7 @@ jobs:
               sleep 15
             fi
           done
+          set -e
           
           # Final deployment status
           if [ "$VERSION_VERIFIED" = true ]; then
@@ -1555,22 +1587,32 @@ jobs:
           echo "📦 Image: $BUILDIMAGE:$BUILDTAG"
           echo "📋 Task Definition: $NEW_TASK_ARN"
           
-          # Wait for deployment to stabilize (P-Node: ALB drain + health checks can exceed default 40×15s; set +e preserves $? under bash -e)
-          echo "⏳ Waiting for service to stabilize (up to ~12.5 min at 50×15s)..."
+          # Wait for deployment to stabilize
+          # P-Node ECS lifecycle: stopTimeout + ALB drain + health checks can take several minutes.
+          # Enforce a 180s floor so health-check retries aren't wasted on the old task.
+          DEPLOY_WAIT_FLOOR_SECS=180
+          echo "⏳ Waiting for ECS service to stabilize (default waiter: up to 10 min at 40×15s)..."
+          WAIT_START=$(date +%s)
           set +e
           aws ecs wait services-stable \
             --cluster "$CLUSTER_NAME" \
             --services "$SERVICE_NAME" \
-            --max-attempts 50 \
             --cli-read-timeout 900 \
             --cli-connect-timeout 60
           STABILIZATION_STATUS=$?
+          WAIT_ELAPSED=$(( $(date +%s) - WAIT_START ))
           set -e
           
           if [ $STABILIZATION_STATUS -eq 0 ]; then
-            echo "✅ ECS service stabilized successfully"
+            echo "✅ ECS service stabilized after ${WAIT_ELAPSED}s"
           else
-            echo "⚠️ ECS stabilization wait timed out, but continuing with health check..."
+            echo "⚠️ ECS wait returned status $STABILIZATION_STATUS after ${WAIT_ELAPSED}s, continuing with health check..."
+          fi
+          
+          REMAINING=$(( DEPLOY_WAIT_FLOOR_SECS - WAIT_ELAPSED ))
+          if [ $REMAINING -gt 0 ]; then
+            echo "⏳ Ensuring minimum ${DEPLOY_WAIT_FLOOR_SECS}s deploy wait (sleeping ${REMAINING}s more)..."
+            sleep $REMAINING
           fi
           
           # Provider node health endpoint
@@ -1583,6 +1625,8 @@ jobs:
           HEALTH_RETRY_COUNT=0
           VERSION_VERIFIED=false
           
+          # Disable errexit for the health-check loop so curl timeouts (exit 28) don't kill the script
+          set +e
           while [ $HEALTH_RETRY_COUNT -lt $MAX_HEALTH_RETRIES ]; do
             echo "🔄 Health check attempt $((HEALTH_RETRY_COUNT + 1))/$MAX_HEALTH_RETRIES..."
             
@@ -1628,6 +1672,7 @@ jobs:
               sleep 15
             fi
           done
+          set -e
           
           # Final deployment status
           if [ "$VERSION_VERIFIED" = true ]; then
