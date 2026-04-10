@@ -538,6 +538,14 @@ func (s *BlockchainService) DeregisterModel(ctx context.Context, modelId common.
 	return tx, nil
 }
 
+func (s *BlockchainService) GetModelTags(ctx context.Context, modelID common.Hash) ([]string, error) {
+	m, err := s.modelRegistry.GetModelById(ctx, modelID)
+	if err != nil {
+		return nil, err
+	}
+	return m.Tags, nil
+}
+
 func (s *BlockchainService) ModelExists(ctx context.Context, modelID common.Hash) (bool, error) {
 	m, err := s.modelRegistry.GetModelById(ctx, modelID)
 

@@ -31,15 +31,18 @@ type OpenAI struct {
 	log        lib.ILogger
 }
 
-func NewOpenAIEngine(modelName, baseURL, apiKey string, llmTimeout time.Duration, log lib.ILogger) *OpenAI {
+func NewOpenAIEngine(modelName, baseURL, apiKey string, llmTimeout time.Duration, log lib.ILogger, httpClient *http.Client) *OpenAI {
 	if baseURL != "" {
 		baseURL = strings.TrimSuffix(baseURL, "/")
+	}
+	if httpClient == nil {
+		httpClient = &http.Client{}
 	}
 	return &OpenAI{
 		baseURL:    baseURL,
 		modelName:  modelName,
 		apiKey:     apiKey,
-		client:     &http.Client{},
+		client:     httpClient,
 		llmTimeout: llmTimeout,
 		log:        log,
 	}

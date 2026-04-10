@@ -6,9 +6,23 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi/structs"
 )
 
+// IsTeeModel returns true if the model has any TEE tag ("tee" or "tee-gpu").
+// Used for Phase 1 P-node attestation on the consumer side.
 func IsTeeModel(tags []string) bool {
 	for _, raw := range tags {
-		if strings.ToLower(raw) == "tee" {
+		tag := strings.ToLower(raw)
+		if tag == "tee" || tag == "tee-gpu" {
+			return true
+		}
+	}
+	return false
+}
+
+// IsTeeGPUModel returns true if the model has the "tee-gpu" tag.
+// Used for Phase 2 backend LLM attestation on the provider side.
+func IsTeeGPUModel(tags []string) bool {
+	for _, raw := range tags {
+		if strings.ToLower(raw) == "tee-gpu" {
 			return true
 		}
 	}
