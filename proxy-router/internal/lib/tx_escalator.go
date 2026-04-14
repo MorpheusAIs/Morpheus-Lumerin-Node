@@ -148,6 +148,11 @@ func (e *TransactionEscalator) SendWithEscalation(
 	builder TxBuilder,
 	isLegacy bool,
 ) (*types.Receipt, error) {
+	log := e.log
+	if id := RequestIDFromContext(ctx); id != "" {
+		log = log.With("request_id", id)
+	}
+
 	// Create timeout context for the entire escalation process
 	timeoutCtx, cancel := context.WithTimeout(ctx, e.config.MaxTotalTime)
 	defer cancel()
@@ -174,7 +179,7 @@ func (e *TransactionEscalator) SendWithEscalation(
 
 		// Check max gas limit
 		if e.config.MaxGasPrice != nil && gasPrices.MaxPrice().Cmp(e.config.MaxGasPrice) > 0 {
-			e.log.Warnf("Gas price %v exceeds max limit %v, stopping escalation",
+			log.Warnf("Gas price %v exceeds max limit %v, stopping escalation",
 				gasPrices.MaxPrice(), e.config.MaxGasPrice)
 			return nil, WrapError(ErrMaxGasExceeded, lastErr)
 		}
@@ -196,25 +201,25 @@ func (e *TransactionEscalator) SendWithEscalation(
 			if IsNonceTooLowError(err) {
 				// If we have previously submitted txs, check if one was mined
 				if len(submittedTxs) > 0 {
-					e.log.Infof("Nonce too low - checking if previous tx was mined")
+					log.Infof("Nonce too low - checking if previous tx was mined")
 					if receipt := e.checkSubmittedTxs(ctx, submittedTxs); receipt != nil {
-						e.log.Infof("Previous tx was mined: %s", receipt.TxHash.Hex())
+						log.Infof("Previous tx was mined: %s", receipt.TxHash.Hex())
 						return receipt, nil
 					}
 				}
 				// Nonce conflict from concurrent request - refresh and retry
 				if nonceRefreshCount < maxNonceRefreshes {
 					nonceRefreshCount++
-					e.log.Warnf("Nonce conflict (attempt %d), refreshing nonce and retrying: %v", attempt+1, err)
+					log.Warnf("Nonce conflict (attempt %d), refreshing nonce and retrying: %v", attempt+1, err)
 					// Don't count this as an escalation attempt, just retry with fresh nonce
 					attempt--
 					continue
 				}
-				e.log.Errorf("Max nonce refreshes exceeded, giving up")
+				log.Errorf("Max nonce refreshes exceeded, giving up")
 			}
 			// Check if this is a replacement issue (need to bump more)
 			if IsReplacementError(err) && attempt < e.config.MaxAttempts-1 {
-				e.log.Warnf("Tx rejected (replacement underpriced), bumping gas: %v", err)
+				log.Warnf("Tx rejected (replacement underpriced), bumping gas: %v", err)
 				gasPrices.Bump(e.config.BumpPercent)
 				continue
 			}
@@ -226,13 +231,13 @@ func (e *TransactionEscalator) SendWithEscalation(
 		nonceRefreshCount = 0
 
 		submittedTxs = append(submittedTxs, tx)
-		e.log.Infof("Tx submitted (attempt %d/%d): %s, gasPrice: %v",
+		log.Infof("Tx submitted (attempt %d/%d): %s, gasPrice: %v",
 			attempt+1, e.config.MaxAttempts, tx.Hash().Hex(), gasPrices.MaxPrice())
 
 		// Wait for mining with check interval
 		receipt, err := e.waitForMining(timeoutCtx, tx, e.config.CheckInterval)
 		if err == nil {
-			e.log.Infof("Tx mined successfully: %s (attempt %d)", tx.Hash().Hex(), attempt+1)
+			log.Infof("Tx mined successfully: %s (attempt %d)", tx.Hash().Hex(), attempt+1)
 			return receipt, nil
 		}
 
@@ -245,13 +250,13 @@ func (e *TransactionEscalator) SendWithEscalation(
 
 		// Before escalating, check if any previous tx got mined in the meantime
 		if receipt := e.checkSubmittedTxs(ctx, submittedTxs); receipt != nil {
-			e.log.Infof("Previous tx was mined during escalation: %s", receipt.TxHash.Hex())
+			log.Infof("Previous tx was mined during escalation: %s", receipt.TxHash.Hex())
 			return receipt, nil
 		}
 
 		// Not mined yet, escalate if we have attempts left
 		if attempt < e.config.MaxAttempts-1 {
-			e.log.Warnf("Tx %s not mined after %v, escalating gas (attempt %d/%d)",
+			log.Warnf("Tx %s not mined after %v, escalating gas (attempt %d/%d)",
 				tx.Hash().Hex(), e.config.CheckInterval, attempt+1, e.config.MaxAttempts)
 			gasPrices.Bump(e.config.BumpPercent)
 		}
@@ -259,7 +264,7 @@ func (e *TransactionEscalator) SendWithEscalation(
 
 	// Final check - maybe a tx got mined while we were processing
 	if receipt := e.checkSubmittedTxs(ctx, submittedTxs); receipt != nil {
-		e.log.Infof("Tx was mined on final check: %s", receipt.TxHash.Hex())
+		log.Infof("Tx was mined on final check: %s", receipt.TxHash.Hex())
 		return receipt, nil
 	}
 

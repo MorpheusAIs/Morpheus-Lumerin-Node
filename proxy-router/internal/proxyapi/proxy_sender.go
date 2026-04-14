@@ -147,7 +147,10 @@ func (p *ProxyServiceSender) Ping(ctx context.Context, providerURL string, provi
 }
 
 func (p *ProxyServiceSender) InitiateSession(ctx context.Context, user common.Address, provider common.Address, spend *big.Int, bidID common.Hash, providerURL string) (*msgs.SessionRes, error) {
-	requestID := "1"
+	requestID := lib.RequestIDFromContext(ctx)
+	if requestID == "" {
+		requestID = lib.GenerateRequestID()
+	}
 
 	prKey, err := p.privateKey.GetPrivateKey()
 	if err != nil {
@@ -204,7 +207,10 @@ func (p *ProxyServiceSender) InitiateSession(ctx context.Context, user common.Ad
 }
 
 func (p *ProxyServiceSender) GetSessionReportFromProvider(ctx context.Context, sessionID common.Hash) (*msgs.SessionReportRes, error) {
-	requestID := "1"
+	requestID := lib.RequestIDFromContext(ctx)
+	if requestID == "" {
+		requestID = lib.GenerateRequestID()
+	}
 
 	prKey, err := p.privateKey.GetPrivateKey()
 	if err != nil {
@@ -296,6 +302,11 @@ func (p *ProxyServiceSender) GetSessionReportFromUser(ctx context.Context, sessi
 		return nil, nil, ErrMissingPrKey
 	}
 
+	requestID := lib.RequestIDFromContext(ctx)
+	if requestID == "" {
+		requestID = lib.GenerateRequestID()
+	}
+
 	response, err := p.morRPC.SessionReportResponse(
 		uint32(tps),
 		uint32(ttft),
@@ -303,7 +314,7 @@ func (p *ProxyServiceSender) GetSessionReportFromUser(ctx context.Context, sessi
 		uint32(session.OutputTokens()),
 		sessionID,
 		prKey,
-		"1",
+		requestID,
 		p.chainID,
 	)
 
@@ -321,7 +332,10 @@ func (p *ProxyServiceSender) GetSessionReportFromUser(ctx context.Context, sessi
 }
 
 func (p *ProxyServiceSender) CallAgentTool(ctx context.Context, sessionID common.Hash, toolName string, input map[string]interface{}) (string, error) {
-	requestID := "1"
+	requestID := lib.RequestIDFromContext(ctx)
+	if requestID == "" {
+		requestID = lib.GenerateRequestID()
+	}
 
 	session, err := p.sessionRepo.GetSession(ctx, sessionID)
 	if err != nil {
@@ -386,7 +400,10 @@ func (p *ProxyServiceSender) CallAgentTool(ctx context.Context, sessionID common
 }
 
 func (p *ProxyServiceSender) GetAgentTools(ctx context.Context, sessionID common.Hash) (string, error) {
-	requestID := "1"
+	requestID := lib.RequestIDFromContext(ctx)
+	if requestID == "" {
+		requestID = lib.GenerateRequestID()
+	}
 
 	prKey, err := p.privateKey.GetPrivateKey()
 	if err != nil {

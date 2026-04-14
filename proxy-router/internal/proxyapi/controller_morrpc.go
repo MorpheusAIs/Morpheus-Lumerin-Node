@@ -51,7 +51,6 @@ func NewMORRPCController(service *ProxyReceiver, validator *validator.Validate, 
 }
 
 func (s *MORRPCController) Handle(ctx context.Context, msg m.RPCMessage, sourceLog lib.ILogger, sendResponse SendResponse) error {
-	sourceLog = sourceLog.With("request_id", msg.ID)
 	sourceLog.Debugf("received TCP message with method %s", msg.Method)
 	switch msg.Method {
 	case "network.ping":
