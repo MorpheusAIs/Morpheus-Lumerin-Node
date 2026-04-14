@@ -32,6 +32,7 @@ var (
 	ErrMissingPrKey     = fmt.Errorf("missing private key")
 	ErrCreateReq        = fmt.Errorf("failed to create request")
 	ErrProvider         = fmt.Errorf("provider request failed")
+	ErrTeeAttestation   = fmt.Errorf("p-node tee attestation failed")
 	ErrInvalidSig       = fmt.Errorf("received invalid signature from provider")
 	ErrFailedStore      = fmt.Errorf("failed store user")
 	ErrInvalidResponse  = fmt.Errorf("invalid response")
@@ -638,7 +639,7 @@ func (p *ProxyServiceSender) SendPromptV2(ctx context.Context, sessionID common.
 
 	if err := p.verifyTEEAttestation(ctx, provider.Url, provider.Addr, session.IsTee()); err != nil {
 		log.Warnf("TEE attestation check failed: %s", err)
-		return nil, lib.WrapError(ErrProvider, err)
+		return nil, lib.WrapError(ErrTeeAttestation, err)
 	}
 
 	// Acquire session semaphore to ensure only 1 concurrent request per session
