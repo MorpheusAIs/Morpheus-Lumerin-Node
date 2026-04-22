@@ -47,7 +47,12 @@
         1. addStake: "modelMinStake": `100000000000000000`, (0.1 MOR) 
         1. Owner: Provider Wallet Address 
         1. name: Human Readable model like "Llama 2.0" or "Mistral 2.5" or "Collective Cognition 1.1" 
-        1. tags: array of tag strings for the model 
+        1. tags: array of tag strings for the model
+            - **TEE providers:** include the tag `"tee"` (case-insensitive) to opt this model into the full two-hop TEE trust chain. The tag turns on two independent verifications, one at each hop:
+                - **Phase 1 (consumer → your P-Node):** any v6.0.0+ consumer proxy-router will automatically verify your P-Node's TDX attestation (CPU quote, TLS cert pinning, RTMR3 of the `-tee` image) at session open and on every prompt before forwarding any inference.
+                - **Phase 2 (your P-Node → your backend LLM):** your v7.0.0+ P-Node will itself verify the backend LLM pointed to by the model's `apiUrl` — CPU TDX quote, TLS pinning, RTMR3 replay of the backend's `docker-compose.yaml`, CPU-GPU nonce binding, and NVIDIA NRAS GPU attestation — at startup and on every prompt. A v6+ consumer benefits from Phase 2 automatically by trusting your attested v7+ P-Node; the consumer itself does not talk to the backend.
+            - Models without the `tee` tag are treated as standard (non-TEE) providers — neither hop of the chain runs. See [02.3-proxy-router-tee.md](02.3-proxy-router-tee.md) and [02.4-proxy-router-secretvm-quickstart.md](02.4-proxy-router-secretvm-quickstart.md) for the full story.
+            - Other common tags include model-type hints: `llm`, `embedding`, `stt`, `tts`.
         1. Capture the `modelID` from the JSON response 
             **NOTE** The returned `modelID` is a combination of your requested modelID and your providerID and will be required to update your models-config.json file AND when offering bids
 

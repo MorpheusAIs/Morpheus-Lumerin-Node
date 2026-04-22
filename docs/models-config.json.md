@@ -9,6 +9,8 @@
 - `capacityPolicy` (optional) can be one of the following: "idle_timeout", "simple"
 - There maybe other variables that should be included in the model configuration. Please refer to the json-schema for descriptions and list of required and optional fields.
 
+> **TEE models:** there is **no `isTee` field in this file**. TEE verification is enabled per-model on the blockchain by adding the `"tee"` tag when the model is registered in the Diamond contract. Any v7+ proxy-router will automatically derive the backend attestation endpoints from the model's `apiUrl` host (port `29343`) and perform full Phase 1 + Phase 2 attestation whenever a `tee`-tagged model is used. See [03-provider-offer.md](03-provider-offer.md) for how to set the tag and [02.3-proxy-router-tee.md](02.3-proxy-router-tee.md) / [proxy-router/docs/tee-backend-verification.md](../proxy-router/docs/tee-backend-verification.md) for the full verification flow.
+
 ## Examples of models-config.json entries
 
 This file enables the morpheus-proxy-router to route requests to the correct model API. The model API can be hosted on the same server as the morpheus-proxy-router or on an external server. Please refer to the json-schema for descriptions and list of required and optional fields.
