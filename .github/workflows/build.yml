@@ -1297,18 +1297,32 @@ jobs:
 
   Deploy-to-Morpheus-C-Node:
     name: Deploy to Morpheus Consumer via GitHub
+    # NOTE on `needs` + skipped dependencies:
+    # GitHub Actions' default job condition is implicit `success()`, which returns
+    # false when ANY needed job was skipped. P-Node is main-only (see its own `if`),
+    # so on a `test` deploy `Deploy-to-Morpheus-P-Node` is always skipped. Without
+    # an explicit `if` that tolerates that skip, the C-Node deploy gets skipped
+    # too — which is exactly what bit us on the first v7 test run: the drain job
+    # ran and deregistered the C-Node, then the actual deploy silently skipped,
+    # leaving dev without a replacement task.
+    #
+    # This `if` explicitly allows the skipped P-Node outcome, while still gating
+    # on drain + GHCR success and requiring we're on a deploy-eligible branch.
+    # `!cancelled()` keeps the guard working if a user cancels mid-run.
     if: |
+      !cancelled() &&
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      needs.GHCR-Build-and-Push.result == 'success' &&
+      needs.Drain-Morpheus-C-Node.result == 'success' &&
+      (needs.Deploy-to-Morpheus-P-Node.result == 'success' || needs.Deploy-to-Morpheus-P-Node.result == 'skipped') &&
       (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test'))||
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true' && github.event.inputs.create_deployment == 'true')
       )
     needs:
       - Generate-Tag
       - GHCR-Build-and-Push
       - Drain-Morpheus-C-Node
-      # P-Node is main-only; on test this job is skipped and the `needs` is still
-      # satisfied (skipped jobs are treated as successful for dependency resolution).
       - Deploy-to-Morpheus-P-Node
     runs-on: ubuntu-latest
     environment: ${{ github.ref_name }}
