@@ -92,13 +92,13 @@ func (r *SessionRepositoryCached) getSessionFromBlockchain(ctx context.Context, 
 		return nil, err
 	}
 
-	isTeeGpu := false
+	isTee := false
 	if r.modelTags != nil {
 		tags, err := r.modelTags.GetModelTags(ctx, bid.ModelId)
 		if err == nil {
 			for _, t := range tags {
-				if strings.ToLower(t) == "tee-gpu" {
-					isTeeGpu = true
+				if strings.ToLower(t) == "tee" {
+					isTee = true
 					break
 				}
 			}
@@ -116,7 +116,7 @@ func (r *SessionRepositoryCached) getSessionFromBlockchain(ctx context.Context, 
 		failoverEnabled:  false,
 		directPayment:    session.IsDirectPaymentFromUser,
 		agentUsername:    "admin",
-		isTeeGpu:        isTeeGpu,
+		isTee:           isTee,
 	}, nil
 }
 
@@ -143,7 +143,6 @@ func (r *SessionRepositoryCached) getSessionFromCache(id common.Hash) (*SessionM
 		failoverEnabled:  ses.FailoverEnabled,
 		agentUsername:    ses.AgentUsername,
 		isTee:           ses.IsTee,
-		isTeeGpu:        ses.IsTeeGpu,
 	}, nil
 }
 
@@ -162,6 +161,5 @@ func (r *SessionRepositoryCached) saveSessionToCache(ses *SessionModel) error {
 		DirectPayment:    ses.directPayment,
 		AgentUsername:    ses.agentUsername,
 		IsTee:           ses.isTee,
-		IsTeeGpu:        ses.isTeeGpu,
 	})
 }
