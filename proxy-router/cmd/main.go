@@ -317,7 +317,7 @@ func start() error {
 
 	aiEngine := aiengine.NewAiEngine(proxyRouterApi, chatStorage, modelConfigLoader, agentConfigLoader, cfg.Proxy.LLMTimeout, appLog)
 
-	// Phase 2 TEE: create artifact registry and backend verifier
+	// TEE: create artifact registry and backend verifier
 	artifactRegistry := attestation.NewArtifactRegistry(
 		cfg.TEE.ArtifactRegistryURL,
 		cfg.TEE.ArtifactRegistryRefreshInterval,
@@ -331,7 +331,7 @@ func start() error {
 		artifactRegistry,
 		appLog.Named("BACKEND_TEE"),
 	)
-	// Startup pre-flight: attest models that have "tee-gpu" tag on-chain
+	// Startup pre-flight: attest models that have "tee" tag on-chain
 	modelIDs, modelConfigs := modelConfigLoader.GetAll()
 	for i, mc := range modelConfigs {
 		tags, err := blockchainApi.GetModelTags(context.Background(), modelIDs[i])
@@ -339,7 +339,7 @@ func start() error {
 			appLog.Debugf("cannot fetch model %s tags from blockchain: %s", modelIDs[i].Hex(), err)
 			continue
 		}
-		if !blockchainapi.IsTeeGPUModel(tags) {
+		if !blockchainapi.IsTeeModel(tags) {
 			continue
 		}
 		attestURL, err := attestation.DeriveAttestationURL(mc.ApiURL)

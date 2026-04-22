@@ -21,7 +21,6 @@ type Session struct {
 	FailoverEnabled  bool
 	DirectPayment    bool
 	IsTee            bool
-	IsTeeGpu         bool
 }
 
 type User struct {

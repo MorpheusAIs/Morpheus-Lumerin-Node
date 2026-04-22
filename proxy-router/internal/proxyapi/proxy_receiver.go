@@ -20,7 +20,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-// BackendTEEVerifier is used by ProxyReceiver for Phase 2 LLM TEE attestation.
+// BackendTEEVerifier is used by ProxyReceiver for backend LLM TEE attestation.
 type BackendTEEVerifier interface {
 	FastVerifyBackend(ctx context.Context, modelID string) error
 }
@@ -66,7 +66,7 @@ func (s *ProxyReceiver) SetModelTagsProvider(p ModelTagsProvider) {
 	s.modelTagsProvider = p
 }
 
-func (s *ProxyReceiver) isTeeGpuModel(ctx context.Context, modelID common.Hash) bool {
+func (s *ProxyReceiver) isTeeModel(ctx context.Context, modelID common.Hash) bool {
 	if s.modelTagsProvider == nil {
 		return false
 	}
@@ -75,7 +75,7 @@ func (s *ProxyReceiver) isTeeGpuModel(ctx context.Context, modelID common.Hash) 
 		return false
 	}
 	for _, t := range tags {
-		if strings.ToLower(t) == "tee-gpu" {
+		if strings.ToLower(t) == "tee" {
 			return true
 		}
 	}
@@ -347,9 +347,7 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 		defer os.Remove(audioTranscriptionReq.FilePath)
 	}
 
-	// Phase 2: verify LLM TEE attestation for "tee-gpu" tagged models.
-	// isTeeGpu is set from blockchain tags when the session is loaded.
-	if s.backendVerifier != nil && session.IsTeeGpu() {
+	if s.backendVerifier != nil && session.IsTee() {
 		if verifyErr := s.backendVerifier.FastVerifyBackend(ctx, session.ModelID().Hex()); verifyErr != nil {
 			return handleError(verifyErr, "LLM TEE verification failed", sourceLog)
 		}
@@ -410,8 +408,7 @@ func (s *ProxyReceiver) SessionRequest(ctx context.Context, msgID string, reqID 
 
 	modelID := bid.ModelAgentId.String()
 
-	// Phase 2: verify LLM TEE attestation before accepting session
-	if s.backendVerifier != nil && s.isTeeGpuModel(ctx, bid.ModelAgentId) {
+	if s.backendVerifier != nil && s.isTeeModel(ctx, bid.ModelAgentId) {
 		if err := s.backendVerifier.FastVerifyBackend(ctx, modelID); err != nil {
 			log.Errorf("LLM TEE verification failed for model %s: %s", modelID, err)
 			return nil, fmt.Errorf("LLM TEE verification failed: %w", err)
