@@ -21,7 +21,6 @@ type SessionModel struct {
 	failoverEnabled  bool
 	directPayment    bool
 	isTee            bool
-	isTeeGpu         bool
 }
 
 func (s *SessionModel) ID() common.Hash {
@@ -92,10 +91,3 @@ func (s *SessionModel) SetIsTee(v bool) {
 	s.isTee = v
 }
 
-func (s *SessionModel) IsTeeGpu() bool {
-	return s.isTeeGpu
-}
-
-func (s *SessionModel) SetIsTeeGpu(v bool) {
-	s.isTeeGpu = v
-}
