@@ -1,7 +1,16 @@
 # TEE Attestation Architecture — Verifiable Provider Compute
 
-**Status:** v1.0 — Full automated loop: build → sign → deploy → verify attestation  
-**Last updated:** 2026-03-11
+**Status:** v2.0 — Full two-hop trust chain shipped. Phase 1 (consumer → P-Node) in v6.0.0+; Phase 2 (P-Node → backend LLM) in v7.0.0+.
+**Last updated:** 2026-04-22
+
+> **Shipping summary (as of v7.0.0):**
+> - **Phase 1a (CI/CD supply-chain hardening)** — DONE (v6.0.0)
+> - **Phase 1b (RTMR3 computation + automated deployment + post-deploy attestation)** — DONE (v6.0.0)
+> - **Phase 1c (proxy-router code: consumer verifies P-Node)** — DONE (v6.0.0, refined through v6.2.x)
+> - **Phase 2a (P-Node verifies backend LLM: CPU quote, TLS pinning, RTMR3 replay, CPU-GPU binding, NRAS)** — DONE (v7.0.0, PR #699 and follow-ups #700, #703/#704, #705, #708/#709)
+> - **Phase 2b (verifiable per-message signing, local quote verification, co-located CPU+GPU TDX VM)** — still future work
+>
+> The `tee` on-chain model tag is the single switch that turns on **both** hops: consumer-side P-Node verification (Phase 1) and P-Node-side backend verification (Phase 2). A v6.0.0+ consumer paired with a v7.0.0+ provider gets the full chain transparently with no client-side upgrade.
 
 ---
 
@@ -16,25 +25,52 @@ A consumer node should be able to **cryptographically verify**, before sending a
 
 ---
 
-## 2. Scope — What We're Doing Now (Phase 1)
+## 2. Scope — What Shipped
 
-**In scope (CI/CD supply-chain hardening — our work):**
-- Cosign keyless image signing (both standard and TEE images)
-- Image digest capture and export
-- SBOM generation and attachment (syft)
-- Signed TEE attestation manifest (Option 5B — stored in GHCR as OCI artifact)
-- Support both Intel TDX and AMD SEV-SNP from day one
+### Phase 1 — DONE (v6.0.0)
 
-**In scope (proxy-router code — developer work, later):**
-- `IsTEEModel()` helper for on-chain tag detection
-- Consumer-side attestation verification before session creation (fetches quote from SecretVM host endpoint at `:29343`)
-- Consumer UI: TEE badge and verification status
+**CI/CD supply-chain hardening:**
+- Cosign keyless image signing (both standard and TEE images) — **DONE**
+- Image digest capture and export — **DONE**
+- SBOM generation and attachment (syft) — **DONE**
+- Signed TEE attestation manifest (Option 5B — stored in GHCR as OCI artifact) — **DONE**
+- Intel TDX RTMR3 computed in CI and published in the signed manifest — **DONE**
+- Auto-deploy to SecretVM test instance + post-deploy RTMR3 verification gate — **DONE**
+- AMD SEV-SNP measurement path — still TODO (blocked on upstream tooling)
 
-**Out of scope for Phase 1:**
-- On-chain oracle / DAO governance for measurements
-- Model backend (LLM) attestation (accepted gap — later phases co-locate proxy + LLM in same TEE)
+**Proxy-router code (consumer verifies P-Node):**
+- `IsTeeModel()` helper for on-chain tag detection — **DONE** (`blockchainapi/model_tags.go`)
+- Consumer-side attestation verification before session creation (fetches quote from SecretVM host endpoint at `:29343`, verifies via SecretAI portal, compares to manifest) — **DONE** (`attestation/verifier.go`, called from `blockchainapi/service.go` and `proxyapi/proxy_sender.go`)
+- Per-prompt `VerifyProviderQuick` fast-path re-check — **DONE** (hash + TLS fingerprint compare)
+- Consumer UI: TEE badge and verification status — **DONE**
+
+### Phase 2 — DONE (v7.0.0, PR #699 + #700)
+
+**P-Node verifies its own backend LLM** (the gap previously "accepted" for Phase 1 is now closed without co-locating):
+
+- `BackendVerifier.AttestBackend` at startup — **DONE**
+  - Fetch backend CPU quote from `:29343/cpu`; verify via SecretAI portal
+  - TLS binding: compare TLS cert SHA-256 with CPU quote `reportData[0:32]`
+  - Workload verification: parse TDX quote, look up MRTD + RTMR0-2 in the published SecretVM TDX artifact registry CSV, replay RTMR3 using SHA-384 extend chain over `SHA-256(docker-compose)` + rootfs data
+  - GPU attestation: fetch from `:29343/gpu`, verify CPU-GPU binding via `reportData[32:64] == GPU nonce`
+  - NVIDIA NRAS v4 API: submit GPU evidence for independent hardware validation (non-fatal if unreachable)
+- `BackendVerifier.FastVerifyBackend` on every prompt — **DONE**
+  - Always re-fetches CPU quote (~50 ms), compares hash + TLS fingerprint against cached snapshot
+  - Mismatch on hash → trigger full re-attestation
+  - Mismatch on TLS fingerprint → immediate hard fail (MITM signal)
+- Pinned-cert HTTP client for onward inference traffic (`PinnedHTTPClient`) — **DONE**
+  - Custom `VerifyPeerCertificate` refuses any TLS cert whose SHA-256 doesn't match the attested fingerprint
+- Artifact registry auto-refresh (`ArtifactRegistry`) — **DONE** (configurable via `ARTIFACT_REGISTRY_URL`, `ARTIFACT_REGISTRY_REFRESH_INTERVAL`)
+- Health endpoint `GET /v1/models/attestation` — **DONE**
+
+### Still out of scope (future)
+
+- On-chain oracle / DAO governance for golden-measurement updates (cosign keyless via GHA OIDC remains the signer)
+- Verifiable per-message signing using a TEE-bound key (§7.6) — slipped to Phase 2b
+- Local quote verification in Go (today we still call SCRT Labs `quote-parse`)
+- Co-located proxy-router + LLM in a single TDX VM (would collapse both hops into one RTMR3)
 - Rating system integration
-- CVE scanning gate (later)
+- CVE scanning gate
 
 ### Design Decisions (from review)
 
@@ -43,7 +79,7 @@ A consumer node should be able to **cryptographically verify**, before sending a
 | 1 | Oracle governance | **Automated by CI/CD** — cosign keyless signing via GitHub Actions OIDC. No multi-sig/DAO for now. |
 | 2 | SCRT Labs coupling | **Yes, couple** — use their quote-parse API and `reproduce-mr` tool. They control the VM layer; we need their artifacts. See §3. |
 | 3 | AMD SEV support | **Both platforms from day one** if feasible; if `reproduce-mr` only handles TDX, compute what we can and extend for SEV in a fast follow. |
-| 4 | Model backend trust | **Gap accepted for Phase 1.** Later phases co-locate proxy-router + LLM on the same TEE VM (CPU for proxy, GPU for inference), making RTMR3 cover both. |
+| 4 | Model backend trust | **Closed in Phase 2 (v7.0.0).** Instead of co-locating, the P-Node actively verifies the backend LLM over the network: CPU quote + TLS pinning + RTMR3 replay of the backend's `docker-compose.yaml` + CPU-GPU nonce binding + NVIDIA NRAS. See §7.7. Co-location (single TDX VM for proxy-router + LLM) remains a future simplification that would collapse both hops into one measurement chain. |
 | 5 | RTMR computation in CI/CD | **Attempt to integrate** `reproduce-mr` using SCRT Labs release artifacts from GitHub. If not available in CI, publish all inputs so it can be run independently. |
 | 6 | Attestation freshness | **Version-based, not clock-based.** Support current version and N-2 prior versions. When a new version publishes, the oldest attestation manifest becomes stale. This is a release-cadence policy. |
 | 7 | Consumer opt-out | **No opt-out.** If a consumer selects a TEE-tagged model, verification is mandatory. Failure = hard error, no prompt sent. |
@@ -491,15 +527,15 @@ The `secretvm-cli vm attestation <uuid>` command also returns the same data (use
 
 The attestation endpoint at `:29343` is served by the TEE host, not the proxy-router container. Even a compromised application cannot fake or suppress it — strong separation of concerns.
 
-### 7.3 `IsTEEModel()` helper and model tag convention
+### 7.3 `IsTeeModel()` helper and model tag convention — DONE
 
 **File:** `proxy-router/internal/blockchainapi/model_tags.go`
 
-**What:** Add a helper function to detect TEE models from their on-chain tags. The `ModelRegistry` contract already has `string[] tags` — providers registering TEE models add `"tee"` as a tag.
+**What shipped:** Helper function that detects the `tee` tag on an on-chain model's `tags` array. The `ModelRegistry` contract already has `string[] tags` — providers registering TEE models add `"tee"` as a tag. This single tag drives **both** hops of the trust chain: the consumer uses it to decide whether to verify the P-Node (Phase 1), and the P-Node uses it to decide whether to verify its own backend on every prompt (Phase 2).
 
-**Implementation:**
+**Implementation (current):**
 ```go
-func IsTEEModel(tags []string) bool {
+func IsTeeModel(tags []string) bool {
     for _, raw := range tags {
         if strings.ToLower(raw) == "tee" {
             return true
@@ -509,68 +545,166 @@ func IsTEEModel(tags []string) bool {
 }
 ```
 
-**Convention:** The canonical tag string is `"tee"` (lowercase). Document this for providers in the model registration guide.
+**Convention:** The canonical tag string is `"tee"` (matched case-insensitively). The v7 "tee tag for everything" refactor (PR #708, #709) removed the local `isTee` field from `models-config.json` entirely — the on-chain tag is now the sole source of truth.
 
-**Effort:** S
+**Effort:** S — **DONE**
 
-### 7.4 Consumer-side attestation verification in session flow
+### 7.4 Consumer-side attestation verification in session flow — DONE (v6.0.0, refined v6.2.x)
 
-**File:** `proxy-router/internal/blockchainapi/service.go` (`OpenSessionByModelId`, `tryOpenSession`)
+**Files:**
+- `proxy-router/internal/attestation/verifier.go` — core `Verifier`, `VerifyProvider` (full), `VerifyProviderQuick` (fast path)
+- `proxy-router/internal/blockchainapi/service.go` — calls `VerifyProvider` from `tryOpenSession` when `IsTeeSession` is true
+- `proxy-router/internal/proxyapi/proxy_sender.go` — calls `verifyTEEAttestation` (→ `VerifyProviderQuick`) before every `SendPrompt`, `SendTranscription`, `SendSpeech`, and session-init handshake
 
-**What:** Before creating a session with a TEE-tagged model, verify the provider's image and hardware attestation. This is the core of the trust loop.
+**What shipped:** When the consumer's C-Node picks a bid whose model carries the `tee` tag, it verifies the provider's P-Node attestation before opening the session and re-verifies on every prompt. Failure means fail-over to the next bid at session open, or a hard prompt-level error once a session is live.
 
-**Flow (inserted into the existing bid-ranking loop in `tryOpenSession`):**
+**Actual flow in `tryOpenSession` (v6+):**
 ```
-if IsTEEModel(model.Tags):
-    1. cosign.VerifyImageAttestations() → fetch signed manifest from GHCR
-       - Verify signature chain (OIDC issuer = GitHub Actions)
-       - Extract predicate: compose_sha256, baked_env, measurements
-    2. Confirm baked_env.PROXY_STORE_CHAT_CONTEXT == "false"
-    3. Confirm baked_env.ENVIRONMENT == "production"
-    4. GET provider attestation endpoint (https://{vm-domain}:29343/cpu.html)
-       → get raw TDX quote hex
-    5. Extract RTMR3 from TDX quote at byte offset 520 (48 bytes)
-       (same extraction logic used in CI/CD verification step)
-    6. Compare RTMR3 against expected value from signed manifest
-    7. Optionally: verify reportdata contains TLS certificate fingerprint (anti-MITM)
-    8. If all pass → proceed with InitiateSession
-    9. If any fail → log reason, skip this provider, try next bid
-   10. If all providers fail → hard error to user: "No verified TEE providers available"
+if IsTeeSession && attestationVerifier != nil:
+    1. Derive attestation VM domain from provider's Url
+    2. Verifier.VerifyProvider(vmDomain, providerAddr):
+       a. Fetch cosign-signed attestation manifest from GHCR for the `-tee` image
+          (cosign Go library, GitHub-Actions OIDC identity pattern,
+           type https://morpheusais.github.io/tee-attestation/v1)
+       b. Extract expected RTMR3 + baked_env from manifest predicate
+       c. Confirm baked_env.PROXY_STORE_CHAT_CONTEXT == "false",
+          ENVIRONMENT == "production", correct ETH_NODE_CHAIN_ID for network
+       d. GET https://{vm-domain}:29343/cpu → raw TDX quote hex
+       e. POST quote to TEE_PORTAL_URL (SecretAI quote-parse) — confirms genuine TDX
+       f. Extract RTMR3 from quote at byte offset 520 (48 bytes), compare to manifest
+       g. Extract reportData[0:32], compare to SHA-256 of the connection's
+          peer TLS certificate — anti-MITM
+       h. Cache snapshot (quote hash, TLS fingerprint, expiry-free)
+    3. If pass → InitiateSession / continue
+       If fail → skip this provider, try next bid; all fail → hard error
 ```
 
-**Note:** The attestation endpoint is provided by the SecretVM host (port 29343), not the proxy-router container. The consumer needs to derive the VM domain from the provider's public URL to reach it.
+**Per-prompt fast path (`VerifyProviderQuick`, called from `proxy_sender.go` before every forwarded prompt):**
+```
+1. Look up cached snapshot for providerAddr; no cache → re-run full VerifyProvider
+2. Re-fetch :29343/cpu, compute SHA-256 of the quote
+3. If quote hash == cached hash AND TLS fingerprint == cached fingerprint → pass
+4. If quote hash changed → trigger full re-attestation
+5. If TLS fingerprint changed → hard fail (MITM signal), refuse to forward
+```
 
-**Dependencies:**
-- `github.com/sigstore/cosign/v2/pkg/cosign` Go library for programmatic verification
-- Need to confirm compatibility with Go 1.23.x and impact on binary size (`FROM scratch` image)
-- Alternative: shell out to `cosign` binary (simpler but requires adding cosign to the image)
+**Dependencies (resolved):**
+- `github.com/sigstore/cosign/v2/pkg/cosign` — in-process Go verification, no shell-out, no binary added to image. Binary size impact acceptable for the `-tee` image (consumer proxy-router uses the same library).
+- Go 1.25.x (per CI/CD)
 
-**Effort:** L
+**Effort:** L — **DONE**
 
-### 7.5 Consumer UI: TEE badge and verification status
+### 7.5 Consumer UI: TEE badge and verification status — DONE
 
 **File:** `ui-desktop/src/renderer/src/components/` (model list, session views)
 
-**What:** Visual indicators for TEE models in the desktop UI.
+**What shipped:** Visual indicators for TEE models in the desktop UI.
 
 **Elements:**
 - TEE badge/icon on models tagged `"tee"` in the model browser
-- Verification status indicator during session creation ("Verifying TEE attestation...")
-- Success state: "Verified — running in TEE enclave"
-- Failure state: "Attestation verification failed — provider rejected"
+- Verification status indicator during session creation
+- Success and failure states
 
-**Effort:** M
+**Effort:** M — **DONE**
 
-### 7.6 Verifiable message signing (Phase 2, lower priority)
+### 7.6 Verifiable per-message signing — DEFERRED to Phase 2b
 
-**File:** New code in proxy-router
+**File:** New code in proxy-router (not yet added)
 
 **What:** Use SecretVM's internal signing service (`http://172.17.0.1:49153/sign`) to sign every response with a TEE-bound key. The public key is embedded in the attestation quote's `reportdata`, so consumers can verify that each response genuinely came from inside the TEE.
 
-**Why this matters:** Steps 7.1-7.5 verify attestation at session start. Per-message signing provides continuous proof throughout the session — not just "this provider was in a TEE when the session started" but "this specific response came from the TEE."
+**Why this matters:** Per-prompt fast-verify (§7.4) already re-checks the provider's CPU quote and TLS fingerprint on every request, so a compromise between session-open and the first prompt is detected before any inference ships. Per-message signing would tighten that further — prove that the response payload itself was produced inside the enclave, not just that the connection terminated there.
 
-**Effort:** L  
-**Priority:** Phase 2
+**Status:** Not shipped in v7.0.0. Deferred as "Phase 2b, lower priority" because the combination of TLS pinning (§7.7) + per-prompt fast-verify makes the practical attack window too narrow to justify the added per-response overhead at release time.
+
+**Effort:** L
+**Priority:** Phase 2b (post-v7)
+
+### 7.7 Phase 2 — P-Node verifies its own backend LLM — DONE (v7.0.0, PR #699)
+
+This is the Phase 2 capability that makes v7 the "full TEE" release. It closes the model-backend gap previously accepted in Phase 1 (Design Decision §2.4) without requiring CPU+GPU co-location in a single TDX VM.
+
+**Files (all under `proxy-router/internal/attestation/`):**
+- `backend_verifier.go` — `BackendVerifier.AttestBackend` (full) and `FastVerifyBackend` (per-prompt fast path)
+- `workload_verifier.go` — registry lookup + RTMR3 recalculation for the backend
+- `artifacts_registry.go` — downloads and caches the SecretVM TDX artifact registry CSV on a configurable interval (`ARTIFACT_REGISTRY_URL`, `ARTIFACT_REGISTRY_REFRESH_INTERVAL`)
+- `nras_verifier.go` — NVIDIA NRAS v4 API integration; validates the returned JWT Entity Attestation Token
+- `tdx_quote.go` — parses raw TDX quotes to extract MRTD + RTMR0-3 + reportData
+- `rtmr.go` — SHA-384 extend chain implementation used to replay expected RTMR3
+
+**Integration points:**
+- `proxy-router/cmd/main.go` — wires `BackendVerifier` into startup; calls `AttestBackend` once per `tee`-tagged model
+- `proxy-router/internal/proxyapi/proxy_receiver.go` — calls `FastVerifyBackend` in `SessionPrompt` before forwarding any inference for `tee`-tagged model sessions (hot path)
+- `proxy-router/internal/aiengine/ai_engine.go` — returns a `PinnedHTTPClient` for TEE models; the client's `VerifyPeerCertificate` callback refuses any onward TLS cert whose SHA-256 doesn't match the attested fingerprint
+- `proxy-router/internal/proxyapi/controller_http.go` — `GET /v1/models/attestation` returns per-model attestation state (verified / pending / failed + workload-match / last-success timestamp / error detail)
+
+**Backend attestation endpoints (derived from each TEE model's `apiUrl` host + standard port 29343):**
+- `:29343/cpu` — raw TDX CPU quote hex
+- `:29343/gpu` — JSON containing `nonce`, `arch`, `evidence_list`
+- `:29343/docker-compose` — exact `docker-compose.yaml` loaded into the backend VM (used for RTMR3 replay)
+
+**Full attestation sequence (`AttestBackend`):**
+```
+1. GET :29343/cpu            → raw TDX quote
+2. POST quote to TEE_PORTAL_URL (quote-parse) → portal verification
+3. Extract reportData[0:32]   → compare with SHA-256 of live TLS cert
+                                   → TLS binding proven
+4. if ArtifactRegistry loaded:
+     GET :29343/docker-compose
+     Parse TDX quote: MRTD + RTMR0-3 + reportData
+     Lookup (MRTD, RTMR0, RTMR1, RTMR2) in registry CSV → rootfs_data + secretvm_release
+     Replay RTMR3 = SHA-384-extend-chain( SHA-256(docker-compose) + rootfs_data )
+     if replayed RTMR3 != quote RTMR3 → fail (workload mismatch)
+5. GET :29343/gpu             → {nonce, arch, evidence_list}
+6. Extract reportData[32:64]  → compare with GPU nonce
+                                   → CPU-GPU binding proven
+7. if NRAS configured:
+     POST evidence to NVIDIA NRAS /v2/attest/gpu
+     Validate returned JWT EAT signature + claims
+     (non-fatal on network failure — NRAS outage does not block inference,
+      but CPU-GPU binding is still enforced)
+8. Cache snapshot: {quote_hash, tls_fingerprint, workload_status,
+                    last_verified_ts, compose_sha256}
+```
+
+**Per-prompt fast verify (`FastVerifyBackend`):**
+- No TTL. Runs unconditionally on every inference prompt for a `tee`-tagged model (inside `proxy_receiver.SessionPrompt`, on the hot path).
+- Always re-fetches `:29343/cpu` (~50 ms TLS handshake).
+- `SHA-256(new_quote) == cached_quote_hash` AND `live_tls_fp == cached_tls_fp` → pass.
+- Quote-hash change → run full `AttestBackend` again (backend restart / redeploy).
+- TLS-fingerprint change → immediate hard fail, prompt refused (MITM signal).
+- No cache → reject ("model not attested").
+- Cached status `failed` → reject ("attestation failed").
+
+**Measurement-register semantics (recap):**
+
+| Register | Content | How verified |
+|---|---|---|
+| MRTD | VM firmware measurement (set at launch, immutable) | Artifact registry lookup |
+| RTMR0 | VM configuration | Artifact registry lookup |
+| RTMR1 | Kernel | Artifact registry lookup |
+| RTMR2 | Initramfs | Artifact registry lookup |
+| RTMR3 | Rootfs + docker-compose.yaml | Client-side replay and compared to quote |
+
+**reportData layout (recap):**
+
+| Bytes | Content | Purpose |
+|---|---|---|
+| 0–31 | SHA-256(TLS cert) | Anti-MITM: pins the attested TEE to a specific TLS identity |
+| 32–63 | GPU nonce | CPU-GPU binding: GPU evidence can't be replayed from another box |
+
+**What Phase 2 proves end-to-end:**
+- The backend is genuine Intel TDX hardware running a known SecretVM firmware/kernel/initramfs build.
+- The exact set of loaded models (the `MODELS=...` line in `docker-compose.yaml`) is what the operator declared — swapping any model, port, or env var changes RTMR3 and fails verification.
+- The TLS endpoint serving inference terminates inside the attested enclave (no CDN/reverse-proxy MITM can sit between the P-Node and the backend).
+- The GPU evidence is genuine NVIDIA hardware (per NRAS), and cryptographically bound to the same CPU quote (per `reportData[32:64]`).
+- The backend identity hasn't changed since initial attestation, on a per-prompt basis.
+
+**Effort:** L — **DONE**
+**Priority:** Phase 2a — **shipped in v7.0.0**
+**PRs:** #699 (Phase 2 main), #700 (Phase 2 merge to test), #704 (error wrapping), #705 (request_id in logs), #708 / #709 (consolidate `tee` tag as sole TEE switch)
+
+See also: [`proxy-router/docs/tee-backend-verification.md`](../proxy-router/docs/tee-backend-verification.md) (developer reference with mermaid sequence + trust-chain diagrams).
 
 ---
 
@@ -580,11 +714,13 @@ if IsTEEModel(model.Tags):
 
 2. **~~SecretVM release pinning~~** — **RESOLVED.** Pinned in `.github/tee/secretvm.env`. Attestation manifest includes `secretvm_release` and `rootfs_sha256`. Providers must deploy on the matching release for RTMR3 to match.
 
-3. **Anti-MITM in practice:** The `reportdata` field contains the TLS certificate fingerprint. When the consumer connects to the provider over HTTPS, does it see the VM's TLS cert (proving it's inside the TEE), or does it see a CDN/load-balancer cert (breaking the chain)? If providers use Cloudflare/nginx in front, the anti-MITM guarantee breaks. Need to understand the typical network topology.
+3. **~~Anti-MITM in practice~~** — **RESOLVED in Phase 2.** The approach is now enforced on both hops:
+   - *Consumer → P-Node (Phase 1):* The consumer extracts the peer TLS cert during the `:29343/cpu` fetch and compares its SHA-256 to `reportData[0:32]` of the quote. Mismatch = session refused.
+   - *P-Node → Backend (Phase 2):* Same check at `AttestBackend`, **plus** the `PinnedHTTPClient` used for all onward inference refuses any TLS certificate whose SHA-256 doesn't match the attested fingerprint (in `VerifyPeerCertificate`). This means a TLS-terminating CDN/reverse-proxy in front of the backend *cannot* be used for `tee`-tagged models — the inference connection will refuse to establish. Operators are documented to expose SecretVM's port 443 (Traefik sidecar with SecretVM certs) directly for `tee`-tagged deployments.
 
-4. **Cosign verification in Go:** The consumer proxy-router is written in Go. Cosign has a Go library (`github.com/sigstore/cosign/v2/pkg/cosign`) for programmatic verification. Need to confirm it's compatible with the proxy-router's Go version (1.22.x) and doesn't bloat the binary excessively (relevant for `FROM scratch` image).
+4. **~~Cosign verification in Go~~** — **RESOLVED.** `github.com/sigstore/cosign/v2/pkg/cosign` is compiled into the proxy-router binary (Go 1.25.x). Binary-size impact accepted. Used both for consumer-side Phase 1 attestation manifest verification and for any in-process cosign verification needs.
 
-5. **ACPI templates for full RTMR0-2:** The `reproduce-mr` tool requires `template_qemu_cpu{N}.hex` files for ACPI table generation. These aren't published in the reproduce-mr repo. Need to either obtain from SCRT Labs or generate from a QEMU build. Not blocking — RTMR3 is the critical register for our software layer verification.
+5. **ACPI templates for full RTMR0-2:** The `reproduce-mr` tool requires `template_qemu_cpu{N}.hex` files for ACPI table generation — not needed for Phase 1 CI/CD (we only verify RTMR3 against the published manifest) *nor* for Phase 2 (we verify MRTD + RTMR0-2 by lookup in the published SecretVM TDX artifact registry CSV, not by recomputation). Remaining only if we ever want to recompute RTMR0-2 ourselves.
 
 ---
 
@@ -626,24 +762,45 @@ if IsTEEModel(model.Tags):
 | 1.20 | Temporarily disable service/UI builds on cicd/* branches | S | **DONE** | `Build-Service-Executables` set to `if: false`; cascades to all UI jobs. Re-enable before merge to main |
 | 1.21 | Testnet/mainnet TEE image split | S | **DONE** | `Dockerfile.tee` parameterized via ARG; pipeline sources `test.env` or `main.env` per branch — PR #669 |
 
-### Phase 1c — Proxy-Router Code (Developer Work)
+### Phase 1c — Proxy-Router Code (Consumer verifies P-Node) — DONE (v6.0.0)
 
 | # | Task | Effort | Status | Reference |
 |---|---|---|---|---|
 | ~~1.15~~ | ~~Extend `/healthcheck` with TEE metadata~~ | ~~S~~ | **DROPPED** | Not needed; TEE capability discovered via on-chain tag |
-| ~~1.16~~ | ~~Add `/attestation/quote` proxy endpoint~~ | ~~M~~ | **DROPPED** | Not needed; SecretVM host already exposes `:29343/cpu.html` |
-| 1.17 | `IsTEEModel()` helper in `model_tags.go` | S | TODO | §7.3 |
-| 1.18 | Consumer-side attestation verification in session flow | L | TODO | §7.4 — fetch quote from `:29343`, verify RTMR3 against signed manifest |
-| 1.19 | Consumer UI: TEE badge and verification status | M | TODO | §7.5 — frontend work, after 1.18 |
+| ~~1.16~~ | ~~Add `/attestation/quote` proxy endpoint~~ | ~~M~~ | **DROPPED** | Not needed; SecretVM host already exposes `:29343/cpu` |
+| 1.17 | `IsTeeModel()` helper in `model_tags.go` | S | **DONE** | §7.3 — consolidated in PR #708/#709 as sole TEE switch |
+| 1.18 | Consumer-side attestation verification in session flow | L | **DONE** | §7.4 — `attestation/verifier.go`, called from `blockchainapi/service.go` + `proxyapi/proxy_sender.go` |
+| 1.18a | Per-prompt `VerifyProviderQuick` fast path | M | **DONE** | PR #686 + #689 (quote-mismatch re-verify instead of hard fail) |
+| 1.18b | Storage-layer activity tracking for TEE sessions | S | **DONE** | PR #692/#693 (per-entry Badger keys, improved GC) |
+| 1.18c | Error-wrapping + request_id propagation for TEE failures | S | **DONE** | PR #704, #705 |
+| 1.19 | Consumer UI: TEE badge and verification status | M | **DONE** | §7.5 — renderer components + session-view states |
 
-### Phase 2 — Deeper Guarantees (future)
+### Phase 2a — P-Node verifies Backend LLM — DONE (v7.0.0)
 
-| # | Task | Effort | Status |
-|---|---|---|---|
-| 2.1 | Co-locate proxy-router + LLM in same TEE VM | L | TODO |
-| 2.2 | Verifiable per-message signing (TEE-bound key) | L | TODO |
-| 2.3 | On-chain measurement registry (if needed beyond cosign) | L | TODO |
-| 2.4 | Local quote verification (remove SCRT Labs API dependency) | L | TODO |
+| # | Task | Effort | Status | Reference |
+|---|---|---|---|---|
+| 2a.1 | `BackendVerifier` — full `AttestBackend` at startup | L | **DONE** | `attestation/backend_verifier.go`; PR #699 |
+| 2a.2 | `FastVerifyBackend` per-prompt hot-path check | M | **DONE** | Hooked from `proxy_receiver.SessionPrompt`; PR #699 |
+| 2a.3 | `WorkloadVerifier` — MRTD + RTMR0-2 registry lookup, RTMR3 replay | M | **DONE** | `attestation/workload_verifier.go`, `rtmr.go`, `tdx_quote.go` |
+| 2a.4 | `ArtifactRegistry` — download + cache SecretVM TDX artifact CSV | S | **DONE** | `attestation/artifacts_registry.go`; configurable interval |
+| 2a.5 | `NrasVerifier` — NVIDIA NRAS v4 evidence submission + JWT EAT validation | M | **DONE** | `attestation/nras_verifier.go` |
+| 2a.6 | `PinnedHTTPClient` — refuse onward TLS certs whose fingerprint doesn't match attested value | S | **DONE** | `aiengine/` — custom `VerifyPeerCertificate` |
+| 2a.7 | Health endpoint `GET /v1/models/attestation` | S | **DONE** | `proxyapi/controller_http.go` |
+| 2a.8 | New env config: `TEE_PORTAL_URL`, `TEE_IMAGE_REPO`, `ARTIFACT_REGISTRY_URL`, `ARTIFACT_REGISTRY_REFRESH_INTERVAL` | S | **DONE** | `config/config.go` (§7.7) |
+| 2a.9 | Consolidate `tee` on-chain tag as sole TEE switch (remove `isTee` field from models config schema) | S | **DONE** | PR #708 / #709 |
+| 2a.10 | Test coverage: `backend_verifier_test.go`, `golden_test.go`, `workload_verifier_test.go`, `workload_rytn_test.go`, `nras_verifier_test.go` | M | **DONE** | PR #699 |
+
+### Phase 2b — Deeper Guarantees (future, post-v7)
+
+| # | Task | Effort | Status | Notes |
+|---|---|---|---|---|
+| 2b.1 | Co-locate proxy-router + LLM in same TEE VM (single RTMR3 covers both hops) | L | TODO | Collapses Phase 1 + Phase 2 into one measurement chain |
+| 2b.2 | Verifiable per-message signing (TEE-bound key via SecretVM internal signer) | L | TODO | §7.6; deferred because Phase 2a fast-verify narrows the attack window significantly |
+| 2b.3 | AMD SEV-SNP measurement path in CI/CD | M | TODO | Blocked on upstream tooling; TDX-only today |
+| 2b.4 | Local quote verification in-process (remove SCRT Labs `quote-parse` dependency) | L | TODO | Requires PCK cert chain handling + Intel quote-verification library in Go |
+| 2b.5 | On-chain measurement registry (if ever needed beyond cosign signatures) | L | TODO | Cosign keyless via GHA OIDC is sufficient today |
+| 2b.6 | NRAS alternatives for non-NVIDIA GPU vendors | M | TODO | NVIDIA-only today |
+| 2b.7 | CVE scanning gate in CI/CD (Trivy/Grype) | S | TODO | §6.6 |
 
 ---
 
@@ -654,12 +811,22 @@ if IsTEEModel(model.Tags):
 | **Delivered artifacts** | |
 | Supply-chain hardening doc (in LMN) | `Morpheus-Lumerin-Node/.ai-docs/TEE_CICD_Supply_Chain_Hardening.md` |
 | Provider/consumer TEE guide (in LMN) | `Morpheus-Lumerin-Node/docs/02.3-proxy-router-tee.md` |
+| SecretVM provider quick-start (in LMN) | `Morpheus-Lumerin-Node/docs/02.4-proxy-router-secretvm-quickstart.md` |
+| **Phase 2 developer reference (in LMN)** | `Morpheus-Lumerin-Node/proxy-router/docs/tee-backend-verification.md` |
 | PR #644 — TEE image + BASE migration | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/644 |
 | PR #646 — Supply-chain hardening | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/646 |
 | PR #648 — Compose canonical format | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/648 |
 | PR #650 — User-facing TEE docs | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/650 |
 | PR #652 — SecretVM CLI instructions (from SCRT Labs) | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/652 |
 | PR #669 — Testnet/mainnet TEE image split | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/669 |
+| PR #686 — per-prompt TEE attestation with TLS binding and quote caching | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/686 |
+| PR #689 — re-verify provider on quote hash mismatch instead of failing | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/689 |
+| PR #692 — per-entry Badger activity tracking, improved GC reclaim | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/692 |
+| **PR #699 — Phase 2 TEE backend verification (main)** | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/699 |
+| PR #700 — Phase 2 merge to test | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/700 |
+| PR #703 / #704 — correct error wrapping on P-Node TEE attestation fail | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/704 |
+| PR #705 — request_id propagation in TEE logs | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/705 |
+| PR #708 / #709 — `tee` on-chain tag as sole TEE switch (removed `isTee` from models-config schema) | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/709 |
 | First verified pipeline run (build + sign) | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/actions/runs/22920492249 |
 | First end-to-end run (build → sign → deploy → verify attestation) | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/actions/runs/22969993910 |
 | **SCRT Labs / TEE platform** | |
@@ -678,8 +845,17 @@ if IsTEEModel(model.Tags):
 | **Proxy-router code references** | |
 | Healthcheck handler | `proxy-router/internal/system/controller.go:72-101` |
 | Healthcheck response struct | `proxy-router/internal/system/structs.go:19-24` |
-| Model tags detection | `proxy-router/internal/blockchainapi/model_tags.go` |
-| Session creation flow | `proxy-router/internal/blockchainapi/service.go` (`OpenSessionByModelId`, `tryOpenSession`) |
-| InitiateSession handshake | `proxy-router/internal/proxyapi/proxy_sender.go`, `proxy_receiver.go` |
+| Model tags detection (`IsTeeModel`) | `proxy-router/internal/blockchainapi/model_tags.go` |
+| Session creation flow + TEE branch | `proxy-router/internal/blockchainapi/service.go` (`OpenSessionByModelId`, `tryOpenSession`, sets `IsTee` on session) |
+| InitiateSession handshake + `VerifyProviderQuick` callsites | `proxy-router/internal/proxyapi/proxy_sender.go`, `proxy_receiver.go` |
+| **Phase 1 consumer verifier** | `proxy-router/internal/attestation/verifier.go` (`Verifier`, `VerifyProvider`, `VerifyProviderQuick`) |
+| **Phase 2 backend verifier** | `proxy-router/internal/attestation/backend_verifier.go` (`BackendVerifier.AttestBackend`, `FastVerifyBackend`) |
+| **Phase 2 workload verifier + RTMR3 replay** | `proxy-router/internal/attestation/workload_verifier.go`, `rtmr.go`, `tdx_quote.go` |
+| **Phase 2 artifact registry** | `proxy-router/internal/attestation/artifacts_registry.go` |
+| **Phase 2 NVIDIA NRAS client** | `proxy-router/internal/attestation/nras_verifier.go` |
+| **Phase 2 pinned TLS client** | `proxy-router/internal/aiengine/ai_engine.go` (returns `PinnedHTTPClient` for TEE models) |
+| **Phase 2 health endpoint** | `proxy-router/internal/proxyapi/controller_http.go` (`GET /v1/models/attestation`) |
+| TEE config struct | `proxy-router/internal/config/config.go` — `TEE` section (lines ~87-92) |
+| Session repository (tracks `IsTee`) | `proxy-router/internal/repositories/session/session_model.go`, `session_repo.go` |
 | ModelRegistry contract | `smart-contracts/contracts/diamond/facets/ModelRegistry.sol` |
 | Model struct (with tags) | `smart-contracts/contracts/interfaces/storage/IModelStorage.sol` |

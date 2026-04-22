@@ -1,13 +1,28 @@
-# TEE Backend Verification
+# TEE Backend Verification (Phase 2)
+
+## Where this fits in the trust chain
+
+Morpheus TEE trust is a **two-hop chain**:
+
+```
+C-Node (v6.0.0+) ──── Phase 1 ────▶ P-Node -tee image (v7.0.0+) ──── Phase 2 ────▶ Backend LLM (SecretVM)
+                      (consumer                                      (this document)
+                       verifies                                       P-Node verifies
+                       P-Node)                                        its own backend
+```
+
+This document describes **Phase 2 only** — the verification performed **by the P-Node** (the provider's proxy-router running inside its own TEE) **against its backend LLM**. Phase 1 (consumer verifying the P-Node) is documented in [`docs/02.3-proxy-router-tee.md`](../../docs/02.3-proxy-router-tee.md).
+
+Phase 2 is entirely self-contained inside the P-Node: the consumer never talks to the backend LLM directly and never sees the backend's attestation quote. The consumer trusts Phase 2 transitively, because it has already attested (in Phase 1) that the P-Node is running the exact `-tee` binary that implements Phase 2 faithfully. This is why **a v6.0.0+ consumer paired with a v7.0.0+ provider gains all Phase 2 guarantees without any client-side change**.
 
 ## Overview
 
-The TEE (Trusted Execution Environment) Backend Verification system provides cryptographic proof that AI inference requests are processed inside authentic, unmodified SecretVM instances running on genuine Intel TDX and NVIDIA GPU hardware. It operates in two modes:
+The Phase 2 Backend Verification system provides cryptographic proof that AI inference requests forwarded by this P-Node are processed inside authentic, unmodified SecretVM instances running on genuine Intel TDX and NVIDIA GPU hardware. It operates in two modes:
 
 - **Full attestation** (`AttestBackend`) runs at startup and whenever the fast verify detects a backend change. It performs end-to-end cryptographic verification of the backend's CPU TEE quote, GPU attestation evidence, workload integrity, and TLS binding.
 - **Fast verification** (`FastVerifyBackend`) runs on every inference prompt. It always re-fetches the CPU quote and compares its hash and TLS fingerprint against the cached attestation snapshot. If the quote changes, it triggers full re-attestation. There is no TTL -- the fast check runs on every request unconditionally.
 
-Together, these ensure that every inference request reaches a verified, tamper-proof backend -- from the hardware root of trust down to the specific AI models loaded inside the TEE.
+Together, these ensure that every inference request forwarded by this P-Node reaches a verified, tamper-proof backend -- from the hardware root of trust down to the specific AI models loaded inside the TEE.
 
 ## Security Guarantees
 
@@ -195,31 +210,44 @@ This provides a cryptographic guarantee that the backend is running exactly the 
 
 ## Configuration Reference
 
-### Model Configuration (`models-config.json`)
+### Model Tagging (on-chain)
 
-Each model entry supports the following TEE-related field:
+TEE verification is enabled **per-model on the blockchain**, not in the local `models-config.json`. When a model is registered in the Diamond contract with the `tee` tag (case-insensitive) in its `tags` array, the proxy-router automatically:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `isTee` | `boolean` | When `true`, enables TEE verification for this model. The attestation URL is always derived from the `apiUrl` host with port `29343`. |
+- On the **provider** side: performs full `AttestBackend` against that model's `apiUrl` host at startup, and runs `FastVerifyBackend` on every inference prompt (see [Per-Prompt Fast Verify](#per-prompt-fast-verify)).
+- On the **consumer** side: runs `VerifyProviderQuick` against the provider's P-node at session open and on every prompt, refusing to forward inference if attestation fails.
 
-Example:
+Tag detection is implemented in `internal/blockchainapi/model_tags.go`:
 
-```json
-{
-  "modelName": "deepseek-r1:70b",
-  "apiUrl": "https://backend.example.com:8080/v1",
-  "isTee": true
+```go
+func IsTeeModel(tags []string) bool {
+    for _, raw := range tags {
+        if strings.ToLower(raw) == "tee" {
+            return true
+        }
+    }
+    return false
 }
 ```
 
-With `apiUrl` set to `https://backend.example.com:8080/v1`, the attestation endpoints are automatically resolved to `https://backend.example.com:29343/cpu`, `https://backend.example.com:29343/gpu`, and `https://backend.example.com:29343/docker-compose`.
+No `isTee` field is required (or accepted) in `models-config.json` — the `models-config-schema.json` does not declare one. The only model-config values that matter for TEE are `modelId` (which the proxy-router uses to look up the on-chain tags) and `apiUrl` (the backend LLM endpoint).
+
+### Backend Attestation Endpoint Derivation
+
+Attestation endpoints are derived from the model's `apiUrl` host with port `29343` (the standard SecretVM attestation port).
+
+Example: a model registered on-chain with the `tee` tag and `apiUrl` set to `https://backend.example.com:8080/v1` will be attested against:
+
+- `https://backend.example.com:29343/cpu` — TDX CPU quote
+- `https://backend.example.com:29343/gpu` — GPU attestation evidence
+- `https://backend.example.com:29343/docker-compose` — backend's compose file for RTMR3 replay
 
 ### Environment Variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `TEE_PORTAL_URL` | Yes (for TEE models) | -- | SecretAI Portal API URL for CPU quote verification |
+| `TEE_PORTAL_URL` | Yes (for `tee`-tagged models) | -- | SecretAI Portal API URL for CPU quote verification |
+| `TEE_IMAGE_REPO` | No | -- | GHCR image repo for cosign attestation manifest verification (e.g. `ghcr.io/morpheusais/morpheus-lumerin-node-tee`). Used by consumer-side P-node attestation to fetch the signed golden RTMR3 values for the provider image |
 | `ARTIFACT_REGISTRY_URL` | No | [default registry](https://raw.githubusercontent.com/scrtlabs/secretvm-verify/main/artifacts_registry/tdx.csv) | URL to the TDX artifact registry CSV file. The default points to the official SecretVM artifact registry maintained by SCRT Labs |
 | `ARTIFACT_REGISTRY_REFRESH_INTERVAL` | No | `1h` | How often to re-download the artifact registry |
 

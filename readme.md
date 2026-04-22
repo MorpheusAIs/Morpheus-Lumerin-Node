@@ -3,6 +3,13 @@
 ![Simple-Overview](docs/images/simple.png)
 The purpose of this software is to enable interaction with distributed, decentralized LLMs on the Morpheus network through a desktop chat experience.
 
+> **v7.0.0 — Full TEE capability.** The v7 release completes a two-hop Trusted Execution Environment (TEE) trust chain for any model registered on-chain with the `tee` tag:
+>
+> - **Phase 1** — *consumer → P-Node.* A consumer proxy-router (v6.0.0+) cryptographically verifies the provider's P-Node runs the exact official hardened `-tee` image inside a genuine Intel TDX SecretVM, with TLS pinning, at session open and on every prompt.
+> - **Phase 2 (new in v7)** — *P-Node → backend LLM.* The v7+ P-Node itself verifies the backend LLM it forwards inference to (CPU TDX quote, TLS pinning, workload RTMR3 replay of the backend's `docker-compose.yaml`, CPU-GPU nonce binding, and NVIDIA NRAS GPU attestation) at startup and on every prompt.
+>
+> Because Phase 2 runs inside the attested P-Node, **any v6+ consumer is forward-compatible with a v7+ provider** and gains the Phase 2 guarantees automatically — no client-side upgrade required. See [02.3-proxy-router-tee.md](docs/02.3-proxy-router-tee.md), [02.4-proxy-router-secretvm-quickstart.md](docs/02.4-proxy-router-secretvm-quickstart.md), and the developer reference at [proxy-router/docs/tee-backend-verification.md](proxy-router/docs/tee-backend-verification.md).
+
 0. PreRequisites: BASE Layer 2 Blockchain, MOR and ETH on BASE for staking and bidding
 1. Existing, Hosted AI model that is available for inference via the Morpheus network
 2. The proxy-router talks to and listens to the blockchain, routes prompts and inference between the providers’ models and the consumers that purchase and use the models
@@ -47,3 +54,9 @@ manages secure sessions between consumers and providers and routes prompts and r
 
 * [02-Provider-Setup](docs/02-provider-setup.md) - This is the simplest way to get started with the Morpheus Lumerin Node as a Provider.  This will allow you to connect your existing AI-Model to the Morpheus network and offer it for use by consumers.
     * [02.1-Proxy-Router-Docker](docs/02.1-proxy-router-docker.md) - Fast start using existing Docker image and proxy-router configuration
+    * [02.2-Proxy-Router-Akash](docs/02.2-proxy-router-akash.md) - Run the proxy-router on the Akash decentralized cloud
+    * [02.3-Proxy-Router-TEE](docs/02.3-proxy-router-tee.md) - Full TEE (Trusted Execution Environment) reference: build-time baked-in config, RTMR3 attestation, cosign image/manifest verification, and consumer-side verification steps
+    * [02.4-Proxy-Router-SecretVM-Quickstart](docs/02.4-proxy-router-secretvm-quickstart.md) - Shortest path to a v7 TEE provider: deploy the hardened `-tee` image on SecretVM and register a `tee`-tagged model
+    * [02.5-API-Auth](docs/02.5-api-auth.md) - API authentication (cookie/proxy.conf) required since v2.0.0
+
+* [03-Provider-Offer](docs/03-provider-offer.md) - Register your provider, model (optionally with the `tee` tag), and bid on-chain.
