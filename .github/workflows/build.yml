@@ -28,6 +28,11 @@ on:
         description: "Deploy to hosted environments"
         required: true
         type: boolean
+      cnode_rehydration_wait_secs:
+        description: "Seconds to hold traffic off the new C-Node after it's up, to let BadgerDB session rehydration complete (default 90)"
+        required: false
+        type: string
+        default: "90"
 
   push:
     branches:
@@ -1164,6 +1169,132 @@ jobs:
             echo "⚠️ Continuing with warning - ECS deployment completed but version verification inconclusive"
           fi
 
+  Drain-Morpheus-C-Node:
+    # Quiet the C-Node BEFORE restarting any provider (P-Node) or the C-Node itself.
+    # 
+    # Why: the proxy-router on the C-Node keeps a BadgerDB of active sessions. On v6.x
+    # the BadgerDB is ephemeral on Fargate (no EFS) and the router has rehydration
+    # logic that rebuilds state on boot from on-chain data. While a P-Node restarts,
+    # any warm session streaming through the C-Node will see a clean upstream failure
+    # (NLB returns 503 / connection closed) instead of a half-dead mid-stream hang
+    # that would require manual BadgerDB cleanup afterwards.
+    #
+    # This job deregisters the running C-Node task ENI from every target group on the
+    # C-Node NLB. The target groups have connection_termination=true (see
+    # Morpheus-Infra/environments/02-morpheus_c_node/.terragrunt/02_mor_router_svc.tf),
+    # so existing TCP sessions are closed promptly. The ECS service and its task
+    # continue to run; we are only manipulating LB membership.
+    name: Drain Morpheus C-Node from NLB
+    if: |
+      github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      (
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true' && github.event.inputs.create_deployment == 'true')
+      )
+    needs:
+      - Generate-Tag
+      - GHCR-Build-and-Push
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name }}
+    outputs:
+      tg_arns: ${{ steps.drain.outputs.tg_arns }}
+      drained_ips: ${{ steps.drain.outputs.drained_ips }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.MORPHEUS_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.MORPHEUS_AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+
+      - name: Deregister C-Node targets from all NLB target groups
+        id: drain
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.ref_name }}" == "test" ]; then
+            ENV="dev"
+          elif [ "${{ github.ref_name }}" == "main" ]; then
+            ENV="prd"
+          else
+            echo "❌ Unsupported branch for drain: ${{ github.ref_name }}"
+            exit 1
+          fi
+
+          CLUSTER_NAME="ecs-${ENV}-morpheus-engine"
+          SERVICE_NAME="svc-${ENV}-router"
+
+          echo "🎯 Discovering target groups for ${CLUSTER_NAME}/${SERVICE_NAME}..."
+          TG_ARNS=$(aws ecs describe-services \
+            --cluster "$CLUSTER_NAME" \
+            --services "$SERVICE_NAME" \
+            --query 'services[0].loadBalancers[].targetGroupArn' \
+            --output text)
+
+          if [ -z "$TG_ARNS" ] || [ "$TG_ARNS" == "None" ]; then
+            echo "❌ No target groups resolved for service $SERVICE_NAME"
+            exit 1
+          fi
+
+          echo "📋 Target groups: $TG_ARNS"
+
+          DRAINED_IPS=""
+          for TG_ARN in $TG_ARNS; do
+            echo ""
+            echo "🔄 Inspecting $TG_ARN..."
+            TARGETS_JSON=$(aws elbv2 describe-target-health \
+              --target-group-arn "$TG_ARN" \
+              --query 'TargetHealthDescriptions[].Target' \
+              --output json)
+            TARGET_COUNT=$(echo "$TARGETS_JSON" | jq 'length')
+
+            if [ "$TARGET_COUNT" -eq 0 ]; then
+              echo "  (no registered targets — nothing to drain)"
+              continue
+            fi
+
+            # Build --targets Id=...,Port=... arg list
+            TARGETS_CLI=$(echo "$TARGETS_JSON" | jq -r '.[] | "Id=\(.Id),Port=\(.Port)"')
+            echo "  Current targets ($TARGET_COUNT):"
+            echo "$TARGETS_CLI" | sed 's/^/    /'
+
+            # Collect IPs across all TGs for later reference (deduped)
+            IPS=$(echo "$TARGETS_JSON" | jq -r '.[].Id')
+            DRAINED_IPS="$DRAINED_IPS $IPS"
+
+            echo "  Calling DeregisterTargets..."
+            # shellcheck disable=SC2086
+            aws elbv2 deregister-targets \
+              --target-group-arn "$TG_ARN" \
+              --targets $TARGETS_CLI
+          done
+
+          # connection_termination=true on router TGs closes live TCP sessions in under
+          # a second; svc TG has deregistration_delay=0 and API TG has 30. 45s leaves
+          # plenty of margin for LB state to propagate across AZs before we let the
+          # P-Node deployment start disrupting upstream providers.
+          DRAIN_WAIT=45
+          echo ""
+          echo "⏳ Waiting ${DRAIN_WAIT}s for deregistration to propagate..."
+          sleep $DRAIN_WAIT
+
+          # Flatten outputs (newline → space, then comma for workflow output)
+          TG_ARNS_CSV=$(echo "$TG_ARNS" | tr -s '[:space:]' ',' | sed 's/^,//;s/,$//')
+          IPS_CSV=$(echo "$DRAINED_IPS" | tr -s '[:space:]' ',' | sed 's/^,//;s/,$//' | awk -F, '{for (i=1;i<=NF;i++) if (!seen[$i]++) printf (i>1?",":"")"%s",$i; print ""}')
+
+          echo "tg_arns=$TG_ARNS_CSV" >> "$GITHUB_OUTPUT"
+          echo "drained_ips=$IPS_CSV" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### 🚰 C-Node drain complete"
+            echo ""
+            echo "**Environment:** \`$ENV\`"
+            echo "**Target groups drained:** \`$TG_ARNS_CSV\`"
+            echo "**Target IPs removed:** \`$IPS_CSV\`"
+            echo ""
+            echo "Upstream providers may now be safely restarted; the NLB will return clean upstream errors until the new C-Node is re-registered."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   Deploy-to-Morpheus-C-Node:
     name: Deploy to Morpheus Consumer via GitHub
     if: |
@@ -1174,7 +1305,11 @@ jobs:
       )
     needs:
       - Generate-Tag
-      - GHCR-Build-and-Push  
+      - GHCR-Build-and-Push
+      - Drain-Morpheus-C-Node
+      # P-Node is main-only; on test this job is skipped and the `needs` is still
+      # satisfied (skipped jobs are treated as successful for dependency resolution).
+      - Deploy-to-Morpheus-P-Node
     runs-on: ubuntu-latest
     environment: ${{ github.ref_name }}
     steps:
@@ -1294,12 +1429,20 @@ jobs:
           
           echo "✅ New task definition registered: $NEW_TASK_ARN"
           
-          # Update the ECS service
+          # Update the ECS service.
+          #
+          # --health-check-grace-period-seconds 600: ECS ignores LB target health for
+          # 10 minutes after the task starts. We need this because the next steps
+          # deliberately deregister the new task from the NLB target groups during
+          # the rehydration window. Without a generous grace period ECS would see
+          # the target as "unhealthy" (since it's not registered anywhere) and the
+          # deployment circuit breaker could roll back mid-deployment.
           echo "🔄 Updating ECS service..."
           UPDATE_RESULT=$(aws ecs update-service \
             --cluster "$CLUSTER_NAME" \
             --service "$SERVICE_NAME" \
             --task-definition "$NEW_TASK_ARN" \
+            --health-check-grace-period-seconds 600 \
             --force-new-deployment \
             --query 'service.{serviceName:serviceName,taskDefinition:taskDefinition,desiredCount:desiredCount,runningCount:runningCount,pendingCount:pendingCount}' \
             --output json)
@@ -1318,40 +1461,183 @@ jobs:
           echo "⚙️  Service: $SERVICE_NAME"
           echo "📦 Image: $BUILDIMAGE:$BUILDTAG"
           echo "📋 Task Definition: $NEW_TASK_ARN"
-          
-          # Wait for deployment to stabilize
-          # C-Node ECS lifecycle (from Terraform 02_mor_router_svc.tf):
-          #   - deployment_minimum_healthy_percent=0, deployment_maximum_percent=100
-          #     → ECS stops old task FIRST, then starts new one (single-writer BadgerDB)
-          #   - stopTimeout=120s (SIGTERM→SIGKILL)
-          #   - deregistration_delay=0 (svc TG) / 30s (API TG)
-          #   - ALB health_check: healthy_threshold=3, interval=30s → ~90s to register healthy
-          # Worst case: ~120s + ~30s + ~90s ≈ 4 min; enforce 180s floor before health-check polling.
-          DEPLOY_WAIT_FLOOR_SECS=180
-          echo "⏳ Waiting for ECS service to stabilize (default waiter: up to 10 min at 40×15s)..."
-          WAIT_START=$(date +%s)
-          set +e
-          aws ecs wait services-stable \
-            --cluster "$CLUSTER_NAME" \
-            --services "$SERVICE_NAME" \
-            --cli-read-timeout 900 \
-            --cli-connect-timeout 60
-          STABILIZATION_STATUS=$?
-          WAIT_ELAPSED=$(( $(date +%s) - WAIT_START ))
-          set -e
-          
-          if [ $STABILIZATION_STATUS -eq 0 ]; then
-            echo "✅ ECS service stabilized after ${WAIT_ELAPSED}s"
+
+          ##################################################################
+          # Controlled-traffic deployment sequence (v7+).
+          #
+          # Goal: after ECS brings up the new C-Node task, hold traffic off it
+          # for CNODE_REHYDRATION_WAIT_SECS so the proxy-router's BadgerDB
+          # session rehydration loop can catch up from on-chain state. Only
+          # then re-register to the NLB target groups.
+          #
+          # Flow:
+          #   1. Discover TG ARNs from the ECS service.
+          #   2. Poll until a task running the NEW task definition is RUNNING
+          #      and has a private ENI IP.
+          #   3. Deregister that IP from every TG — targets that are still in
+          #      "initial" state at this point never serve traffic; targets
+          #      that already became "healthy" go through connection_termination
+          #      (see Morpheus-Infra 02_mor_router_svc.tf).
+          #   4. Sleep CNODE_REHYDRATION_WAIT_SECS (the manual hold window).
+          #   5. Re-register and `elbv2 wait target-in-service` on each TG.
+          #   6. Fall through to the public /healthcheck version-match loop.
+          #
+          # The grace period on update-service prevents the ECS circuit
+          # breaker from rolling back while the task is deregistered.
+          ##################################################################
+
+          # Resolve the rehydration hold (workflow_dispatch override → env → default 90s).
+          CNODE_REHYDRATION_WAIT_SECS="${{ github.event.inputs.cnode_rehydration_wait_secs || '90' }}"
+          # Guard against non-numeric input
+          if ! [[ "$CNODE_REHYDRATION_WAIT_SECS" =~ ^[0-9]+$ ]]; then
+            echo "⚠️ cnode_rehydration_wait_secs not numeric ('$CNODE_REHYDRATION_WAIT_SECS'), defaulting to 90"
+            CNODE_REHYDRATION_WAIT_SECS=90
+          fi
+          echo "⏱️  Rehydration hold window: ${CNODE_REHYDRATION_WAIT_SECS}s"
+
+          # Resolve TGs (re-use drain-job output if provided, else rediscover).
+          DRAIN_TG_ARNS="${{ needs.Drain-Morpheus-C-Node.outputs.tg_arns }}"
+          if [ -n "$DRAIN_TG_ARNS" ]; then
+            TG_ARN_LIST=$(echo "$DRAIN_TG_ARNS" | tr ',' ' ')
+            echo "📋 Re-using TG ARNs from drain job: $TG_ARN_LIST"
           else
-            echo "⚠️ ECS wait returned status $STABILIZATION_STATUS after ${WAIT_ELAPSED}s, continuing with health check..."
+            echo "📋 Discovering TGs from ECS service (drain job output was empty)..."
+            TG_ARN_LIST=$(aws ecs describe-services \
+              --cluster "$CLUSTER_NAME" \
+              --services "$SERVICE_NAME" \
+              --query 'services[0].loadBalancers[].targetGroupArn' \
+              --output text)
           fi
-          
-          REMAINING=$(( DEPLOY_WAIT_FLOOR_SECS - WAIT_ELAPSED ))
-          if [ $REMAINING -gt 0 ]; then
-            echo "⏳ Ensuring minimum ${DEPLOY_WAIT_FLOOR_SECS}s deploy wait (sleeping ${REMAINING}s more)..."
-            sleep $REMAINING
+
+          if [ -z "$TG_ARN_LIST" ]; then
+            echo "❌ No TG ARNs resolved; cannot safely control traffic. Aborting."
+            exit 1
           fi
-          
+
+          # Poll (up to 15 min) until the new task is RUNNING and has a private IP.
+          # ECS lifecycle:
+          #   - stopTimeout=120s to let old task drain (already deregistered by drain job)
+          #   - new task goes PROVISIONING → PENDING → RUNNING
+          echo "⏳ Waiting for new C-Node task ($NEW_TASK_ARN) to be RUNNING..."
+          NEW_TASK_IP=""
+          NEW_TASK_DEF_ARN_TRIMMED="${NEW_TASK_ARN##*/}"  # family:revision
+          for attempt in $(seq 1 90); do
+            RUNNING_TASKS=$(aws ecs list-tasks \
+              --cluster "$CLUSTER_NAME" \
+              --service-name "$SERVICE_NAME" \
+              --desired-status RUNNING \
+              --query 'taskArns' \
+              --output json)
+
+            # Find a task whose taskDefinitionArn matches the one we just deployed.
+            if [ "$(echo "$RUNNING_TASKS" | jq 'length')" != "0" ]; then
+              TASK_DETAILS=$(aws ecs describe-tasks \
+                --cluster "$CLUSTER_NAME" \
+                --tasks $(echo "$RUNNING_TASKS" | jq -r '.[]') \
+                --query 'tasks[?lastStatus==`RUNNING`]' \
+                --output json)
+
+              NEW_TASK_IP=$(echo "$TASK_DETAILS" | jq -r --arg TD "$NEW_TASK_ARN" '
+                .[] | select(.taskDefinitionArn == $TD) |
+                .attachments[0].details[] | select(.name == "privateIPv4Address") | .value
+              ' | head -n1)
+
+              if [ -n "$NEW_TASK_IP" ] && [ "$NEW_TASK_IP" != "null" ]; then
+                echo "✅ New C-Node task running on ENI IP ${NEW_TASK_IP} (after ${attempt} polls)"
+                break
+              fi
+            fi
+
+            sleep 10
+          done
+
+          if [ -z "$NEW_TASK_IP" ] || [ "$NEW_TASK_IP" == "null" ]; then
+            echo "❌ Timed out waiting for new C-Node task to reach RUNNING with an ENI IP"
+            exit 1
+          fi
+
+          # Step: block traffic to the new task while rehydration runs.
+          echo ""
+          echo "🚧 Deregistering new C-Node task IP from all TGs to hold traffic..."
+          for TG_ARN in $TG_ARN_LIST; do
+            TG_PORT=$(aws elbv2 describe-target-groups \
+              --target-group-arns "$TG_ARN" \
+              --query 'TargetGroups[0].Port' \
+              --output text)
+            echo "  $TG_ARN (port $TG_PORT)"
+            # Idempotent: if ECS hasn't registered it yet, this is a no-op; if it has,
+            # the target enters `draining` (NLB connection_termination=true closes live flows).
+            aws elbv2 deregister-targets \
+              --target-group-arn "$TG_ARN" \
+              --targets "Id=${NEW_TASK_IP},Port=${TG_PORT}" || true
+          done
+
+          # Step: rehydration hold. This is the "manual delay from when new task is up
+          # before traffic is allowed back in".
+          echo ""
+          echo "⏳ Holding traffic off new C-Node for ${CNODE_REHYDRATION_WAIT_SECS}s (BadgerDB rehydration window)..."
+          sleep "$CNODE_REHYDRATION_WAIT_SECS"
+
+          # Step: re-register. Wrapped in a trap-like always-run block: if any of the
+          # subsequent checks fail, we want to make sure we don't leave the TGs empty
+          # and the service stuck.
+          REREGISTER_SUCCESS=false
+          echo ""
+          echo "🔁 Re-registering new C-Node task IP to all TGs..."
+          for TG_ARN in $TG_ARN_LIST; do
+            TG_PORT=$(aws elbv2 describe-target-groups \
+              --target-group-arns "$TG_ARN" \
+              --query 'TargetGroups[0].Port' \
+              --output text)
+            echo "  $TG_ARN (port $TG_PORT)"
+            aws elbv2 register-targets \
+              --target-group-arn "$TG_ARN" \
+              --targets "Id=${NEW_TASK_IP},Port=${TG_PORT}"
+          done
+          REREGISTER_SUCCESS=true
+
+          # Step: wait for each TG to report the new target healthy.
+          # healthy_threshold=3, interval=30s → ~90s typical; allow 4 min margin.
+          echo ""
+          echo "⏳ Waiting for TGs to report new target in service (timeout ~4 min per TG)..."
+          WAIT_FAILED_TGS=""
+          for TG_ARN in $TG_ARN_LIST; do
+            TG_PORT=$(aws elbv2 describe-target-groups \
+              --target-group-arns "$TG_ARN" \
+              --query 'TargetGroups[0].Port' \
+              --output text)
+            echo "  ⏳ $TG_ARN (port $TG_PORT)..."
+            set +e
+            aws elbv2 wait target-in-service \
+              --target-group-arn "$TG_ARN" \
+              --targets "Id=${NEW_TASK_IP},Port=${TG_PORT}"
+            WAIT_STATUS=$?
+            set -e
+            if [ $WAIT_STATUS -ne 0 ]; then
+              echo "    ⚠️ wait target-in-service returned status $WAIT_STATUS"
+              WAIT_FAILED_TGS="$WAIT_FAILED_TGS $TG_ARN"
+            else
+              echo "    ✅ in service"
+            fi
+          done
+
+          if [ -n "$WAIT_FAILED_TGS" ]; then
+            echo "⚠️ One or more TGs did not reach in-service within the waiter timeout:$WAIT_FAILED_TGS"
+            echo "    Continuing to public /healthcheck verification — NLB may still come healthy shortly."
+          fi
+
+          {
+            echo "### 🚦 C-Node controlled redeploy"
+            echo ""
+            echo "- **New task ENI IP:** \`${NEW_TASK_IP}\`"
+            echo "- **Target groups:** \`$(echo $TG_ARN_LIST | tr ' ' ',')\`"
+            echo "- **Rehydration hold:** \`${CNODE_REHYDRATION_WAIT_SECS}s\`"
+            echo "- **Re-registered:** \`${REREGISTER_SUCCESS}\`"
+            if [ -n "$WAIT_FAILED_TGS" ]; then
+              echo "- ⚠️ **TGs that did not confirm in-service before waiter timeout:** \`${WAIT_FAILED_TGS}\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
           # Determine the public endpoint for health check
           if [ "$ENV" == "dev" ]; then
             HEALTH_ENDPOINT="http://router.dev.mor.org:8082/healthcheck"
@@ -1441,7 +1727,9 @@ jobs:
 
   Deploy-to-Morpheus-P-Node:
     name: Deploy to Morpheus Provider via GitHub
-    # Only deploy provider node on main branch (production) - no dev provider node exists
+    # Only deploy provider node on main branch (production) - no dev provider node exists.
+    # Gated behind Drain-Morpheus-C-Node so the C-Node NLB is already quiet before the
+    # P-Node restarts and takes its hosted models briefly offline.
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
@@ -1450,7 +1738,8 @@ jobs:
       )
     needs:
       - Generate-Tag
-      - GHCR-Build-and-Push  
+      - GHCR-Build-and-Push
+      - Drain-Morpheus-C-Node
     runs-on: ubuntu-latest
     environment: ${{ github.ref_name }}
     steps:
