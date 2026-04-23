@@ -1,8 +1,10 @@
 # CI/CD Supply-Chain Hardening for Morpheus Docker Images
 
-**Last updated:** 2026-03-11  
-**First successful run (Phase 1a — signing):** [#22920492249](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/actions/runs/22920492249)  
+**Last updated:** 2026-04-22
+**First successful run (Phase 1a — signing):** [#22920492249](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/actions/runs/22920492249)
 **First end-to-end run (Phase 1b — deploy + verify):** [#22969993910](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/actions/runs/22969993910)
+
+> **v7.0.0 release status.** The CI/CD hardening described here is the foundation that every downstream trust check depends on. Both **Phase 1c** (consumer-side proxy-router verification of the P-Node) and **Phase 2** (P-Node verifies its own backend LLM) have shipped on top of it — see [`TEE_Attestation_Architecture.md`](TEE_Attestation_Architecture.md) §7.4 and §7.7 for the code-level flow. The CI/CD pipeline itself remains unchanged from Phase 1b in this release; v7 is the *consumer* of the artifacts this pipeline produces.
 
 ---
 
@@ -197,37 +199,58 @@ This shows all attached artifacts — signature, attestation, and SBOM — in a 
 
 ---
 
-## What This Enables — The Full Loop
+## What This Enables — The Full Loop (as of v7.0.0)
 
-This CI/CD hardening is the **foundation layer** for the full TEE attestation loop. As of Phase 1b, the pipeline is fully automated end-to-end:
+This CI/CD hardening is the **foundation layer** for the full TEE attestation loop. As of v7.0.0, the loop is complete end-to-end — both consumer-side Phase 1 and P-Node-side Phase 2 are shipped:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                         CI/CD Pipeline (done)                         │
+│                    CI/CD Pipeline (Phase 1a + 1b — DONE)             │
 │                                                                      │
 │  Source Code ──► Build ──► Sign ──► Compute RTMR3 ──► Publish GHCR   │
 │                    │         │           │               │            │
-│                    │     cosign sig    RTMR3 in       ├── image      │
-│                    │     (Sigstore)    manifest        ├── SBOM      │
-│                    │                                   └── manifest  │
-│                    ▼                                                  │
-│                  Deploy to SecretVM ──► Verify live RTMR3 matches     │
-│                  (secretvm-cli)         (polls attestation quote)     │
+│                    │     cosign sig    RTMR3 in        ├── image     │
+│                    │     (Sigstore)    manifest         ├── SBOM     │
+│                    │                                    └── manifest │
+│                    ▼                                                 │
+│                  Deploy to SecretVM ──► Verify live RTMR3 matches    │
+│                  (secretvm-cli)         (polls attestation quote)    │
 └──────────────────────────────────────────────────────────────────────┘
                                               │
                                               ▼
-                              ┌──────────────────────────────┐
-                              │  Consumer Verification       │
-                              │  (proxy-router code, next)   │
-                              │                              │
-                              │  1. Detect "tee" model tag   │
-                              │  2. Fetch manifest from GHCR │
-                              │  3. Fetch quote from :29343  │
-                              │  4. Compare RTMR3            │
-                              │  5. If match → session       │
-                              │     If fail → reject         │
-                              └──────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│     Phase 1c — Consumer verifies P-Node (DONE in v6.0.0)             │
+│                                                                      │
+│  C-Node (v6.0.0+) session open + every prompt:                       │
+│    1. IsTeeModel(on-chain tags) == true                              │
+│    2. cosign fetch signed manifest from GHCR                         │
+│    3. GET provider :29343/cpu → raw TDX quote                        │
+│    4. POST to TEE_PORTAL_URL → quote is genuine                      │
+│    5. Compare RTMR3 against manifest golden value                    │
+│    6. reportData[0:32] == SHA-256(peer TLS cert) → anti-MITM         │
+│    7. Cache snapshot; fast-verify on every prompt                    │
+│  (attestation/verifier.go; PR #686, #689, #699)                      │
+└──────────────────────────────────────────────────────────────────────┘
+                                              │
+                                              ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│     Phase 2  — P-Node verifies its Backend LLM (DONE in v7.0.0)      │
+│                                                                      │
+│  P-Node (-tee image, v7.0.0+) startup + every prompt:                │
+│    1. GET backend :29343/cpu → backend TDX quote (portal-verified)   │
+│    2. TLS pinning via reportData[0:32]                               │
+│    3. Artifact-registry lookup for MRTD + RTMR0-2                    │
+│    4. Replay RTMR3 from backend docker-compose.yaml (SHA-384 chain)  │
+│    5. GET backend :29343/gpu → CPU-GPU binding via reportData[32:64] │
+│    6. NVIDIA NRAS v4 attestation of GPU evidence                     │
+│    7. Fast-verify on every prompt; PinnedHTTPClient for inference    │
+│    8. State exposed at GET /v1/models/attestation                    │
+│  (attestation/backend_verifier.go, workload_verifier.go,             │
+│   nras_verifier.go, artifacts_registry.go; PR #699, #700, #708-#709) │
+└──────────────────────────────────────────────────────────────────────┘
 ```
+
+**Why v6+ consumers are forward-compatible with v7+ providers:** Phase 2 runs **entirely inside the P-Node** — the consumer never talks to the backend LLM and never sees the backend's attestation quote. The consumer trusts Phase 2 transitively because it has already attested (via Phase 1) that the P-Node is running the exact `-tee` binary that enforces Phase 2. No client-side upgrade is required to get Phase 2 guarantees.
 
 **How each artifact feeds the trust chain:**
 
@@ -255,28 +278,46 @@ This CI/CD hardening is the **foundation layer** for the full TEE attestation lo
 
 ## Current Status and Next Steps
 
-### Completed (Phase 1a + 1b)
+### Completed (Phase 1a + 1b — CI/CD)
 
 | Step | Description | Status |
 |---|---|---|
-| **Cosign signing + SBOM** | Keyless signing, digest capture, SPDX SBOM for TEE image | **Done** |
-| **TEE attestation manifest** | Signed JSON with digests, hashes, baked env, build provenance | **Done** |
-| **RTMR3 computation** | Computed in CI/CD from deployed compose + SecretVM rootfs; embedded in signed manifest | **Done** |
-| **Auto-deploy to SecretVM** | `Deploy-SecretVM-Test` job deploys digest-pinned compose to test VM via `secretvm-cli` | **Done** |
-| **Post-deploy verification** | Polls live VM attestation, extracts RTMR3 from raw TDX quote, compares against CI-computed value | **Done** |
+| **Cosign signing + SBOM** | Keyless signing, digest capture, SPDX SBOM for TEE image | **Done** (v6.0.0) |
+| **TEE attestation manifest** | Signed JSON with digests, hashes, baked env, build provenance | **Done** (v6.0.0) |
+| **RTMR3 computation** | Computed in CI/CD from deployed compose + SecretVM rootfs; embedded in signed manifest | **Done** (v6.0.0) |
+| **Auto-deploy to SecretVM** | `Deploy-SecretVM-Test` job deploys digest-pinned compose to test VM via `secretvm-cli` | **Done** (v6.0.0) |
+| **Post-deploy verification** | Polls live VM attestation, extracts RTMR3 from raw TDX quote, compares against CI-computed value | **Done** (v6.0.0) |
+| **ECS deploy timing hardening** | Retry + stabilization-timeout improvements so post-deploy healthchecks don't race ECS | **Done** (PR #694/#695, #701) |
 
-### Remaining (Developer Work — Proxy-Router Code)
-
-| Step | Description | Status |
-|---|---|---|
-| **`IsTEEModel()` helper** | Detect `"tee"` tag on blockchain-registered models | TODO |
-| **Consumer-side verification** | Fetch attestation from `:29343`, verify RTMR3 against signed manifest before opening session | TODO |
-| **Consumer UI TEE badge** | Visual indicator for TEE-verified models | TODO |
-
-### Lower Priority (CI/CD)
+### Completed (Phase 1c — Consumer verifies P-Node, v6.0.0 → v6.2.x)
 
 | Step | Description | Status |
 |---|---|---|
-| **Full RTMR0-2** | Integrate `reproduce-mr` for firmware/kernel layers (blocked on ACPI templates) | TODO |
-| **AMD SEV measurement** | Integrate `sev-snp-measure` for AMD platform | TODO |
-| **CVE scanning** | Trivy/Grype scan as advisory step, then gating | TODO |
+| **`IsTeeModel()` helper** | Detect `"tee"` tag on blockchain-registered models; drives both hops of the trust chain | **Done** — PR #708, #709 (consolidated as sole TEE switch) |
+| **Consumer-side verification** | Fetch attestation from `:29343`, verify quote via SecretAI portal, compare RTMR3 against signed manifest, pin TLS cert — all before opening session | **Done** (`attestation/verifier.go`) |
+| **Per-prompt fast-verify** | Re-fetch quote, compare hash + TLS fingerprint on every forwarded prompt | **Done** — PR #686, #689 |
+| **Consumer UI TEE badge** | Visual indicator for TEE-verified models + session status | **Done** |
+
+### Completed (Phase 2a — P-Node verifies its Backend LLM, v7.0.0)
+
+| Step | Description | Status |
+|---|---|---|
+| **`BackendVerifier.AttestBackend`** | Startup full attestation: portal-verified CPU quote, TLS binding, workload RTMR3 replay, CPU-GPU nonce binding, NRAS | **Done** — PR #699 |
+| **`FastVerifyBackend`** | Per-prompt hot-path re-check with hash + TLS fingerprint; no TTL | **Done** — PR #699 |
+| **`ArtifactRegistry`** | Auto-refreshed SecretVM TDX artifact CSV for MRTD + RTMR0-2 lookup | **Done** — PR #699 |
+| **`NrasVerifier`** | NVIDIA NRAS v4 API integration for GPU attestation | **Done** — PR #699 |
+| **`PinnedHTTPClient`** | Onward inference rejects any TLS cert whose SHA-256 differs from attested fingerprint | **Done** — PR #699 |
+| **`GET /v1/models/attestation`** | Per-model attestation state endpoint for monitoring and forensics | **Done** — PR #699 |
+| **New env vars** | `TEE_PORTAL_URL`, `TEE_IMAGE_REPO`, `ARTIFACT_REGISTRY_URL`, `ARTIFACT_REGISTRY_REFRESH_INTERVAL` | **Done** — PR #699 |
+
+### Remaining (Lower Priority / Future)
+
+| Area | Step | Status |
+|---|---|---|
+| CI/CD | Full RTMR0-2 *recomputation* in CI (today we verify RTMR0-2 by artifact-registry lookup, which is sufficient) | TODO — blocked on ACPI templates |
+| CI/CD | AMD SEV-SNP measurement via `sev-snp-measure` | TODO — TDX-only today |
+| CI/CD | CVE scanning (Trivy/Grype) — advisory then gating | TODO |
+| Proxy-router | Verifiable per-message signing using SecretVM TEE-bound key | Deferred to Phase 2b |
+| Proxy-router | Local in-process quote verification (remove `quote-parse` dependency on SCRT Labs) | Deferred to Phase 2b |
+| Proxy-router | Co-located proxy-router + LLM in a single TDX VM (collapses both hops into one RTMR3) | Deferred to Phase 2b |
+| Proxy-router | NRAS alternatives for non-NVIDIA GPU vendors | Deferred to Phase 2b |

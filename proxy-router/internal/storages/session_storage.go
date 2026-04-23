@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -162,99 +163,73 @@ func (s *SessionStorage) GetSessionsForModel(modelID string) ([]string, error) {
 	return sessionIDs, nil
 }
 
-// AddActivity atomically reads the existing activities, appends the new one, and writes back
-// in a single BadgerDB transaction to prevent race conditions.
+func formatActivityPrefix(modelID string) []byte {
+	return []byte(fmt.Sprintf("activity:%s:", strings.ToLower(modelID)))
+}
+
+func formatActivityKey(modelID string, endTime int64, sessionID string) []byte {
+	return []byte(fmt.Sprintf("activity:%s:%d:%s", strings.ToLower(modelID), endTime, strings.ToLower(sessionID)))
+}
+
+func parseActivityKeyTimestamp(key []byte) (int64, error) {
+	parts := strings.Split(string(key), ":")
+	if len(parts) < 4 {
+		return 0, fmt.Errorf("invalid activity key format: %s", string(key))
+	}
+	return strconv.ParseInt(parts[2], 10, 64)
+}
+
+// AddActivity stores each activity as an individual key-value entry.
 func (s *SessionStorage) AddActivity(modelID string, activity *PromptActivity) error {
 	modelID = strings.ToLower(modelID)
-	key := []byte(fmt.Sprintf("activity:%s", modelID))
-
-	return s.db.RunInTransaction(func(txn *badger.Txn) error {
-		var activities []*PromptActivity
-
-		item, err := txn.Get(key)
-		if err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
-			return fmt.Errorf("error reading activities for model %s: %w", modelID, err)
-		}
-		if err == nil {
-			var existingJson []byte
-			existingJson, err = item.ValueCopy(nil)
-			if err != nil {
-				return fmt.Errorf("error copying activity value for model %s: %w", modelID, err)
-			}
-			if err := json.Unmarshal(existingJson, &activities); err != nil {
-				return fmt.Errorf("error unmarshaling activities for model %s: %w", modelID, err)
-			}
-		}
-
-		activities = append(activities, activity)
-		activitiesJson, err := json.Marshal(activities)
-		if err != nil {
-			return err
-		}
-
-		entry := badger.NewEntry(key, activitiesJson).WithTTL(ActivityTTL)
-		return txn.SetEntry(entry)
-	})
+	key := formatActivityKey(modelID, activity.EndTime, activity.SessionID)
+	activityJSON, err := json.Marshal(activity)
+	if err != nil {
+		return err
+	}
+	return s.db.SetWithTTL(key, activityJSON, ActivityTTL)
 }
 
 func (s *SessionStorage) GetActivities(modelID string) ([]*PromptActivity, error) {
 	modelID = strings.ToLower(modelID)
-	key := fmt.Sprintf("activity:%s", modelID)
-
-	activitiesJson, err := s.db.Get([]byte(key))
+	_, values, err := s.db.GetPrefixWithValues(formatActivityPrefix(modelID))
 	if err != nil {
-		if errors.Is(err, badger.ErrKeyNotFound) {
-			return []*PromptActivity{}, nil
-		}
 		return nil, fmt.Errorf("error reading activities for model %s: %w", modelID, err)
 	}
 
-	var activities []*PromptActivity
-	if err := json.Unmarshal(activitiesJson, &activities); err != nil {
-		return nil, fmt.Errorf("error unmarshaling activities for model %s: %w", modelID, err)
+	activities := make([]*PromptActivity, 0, len(values))
+	for _, activityJSON := range values {
+		var activity PromptActivity
+		if err := json.Unmarshal(activityJSON, &activity); err != nil {
+			return nil, fmt.Errorf("error unmarshaling activity for model %s: %w", modelID, err)
+		}
+		activities = append(activities, &activity)
 	}
 
 	return activities, nil
 }
 
-// RemoveOldActivities atomically reads, filters, and writes back activities in a single transaction.
+// RemoveOldActivities removes individual activity keys older than beforeTime.
 func (s *SessionStorage) RemoveOldActivities(modelID string, beforeTime int64) error {
 	modelID = strings.ToLower(modelID)
-	key := []byte(fmt.Sprintf("activity:%s", modelID))
+	keys, err := s.db.GetPrefix(formatActivityPrefix(modelID))
+	if err != nil {
+		return fmt.Errorf("error reading activity keys for model %s: %w", modelID, err)
+	}
 
 	return s.db.RunInTransaction(func(txn *badger.Txn) error {
-		item, err := txn.Get(key)
-		if err != nil {
-			if errors.Is(err, badger.ErrKeyNotFound) {
-				return nil
+		for _, key := range keys {
+			endTime, err := parseActivityKeyTimestamp(key)
+			if err != nil {
+				continue
 			}
-			return fmt.Errorf("error reading activities for model %s: %w", modelID, err)
-		}
-
-		existingJson, err := item.ValueCopy(nil)
-		if err != nil {
-			return fmt.Errorf("error copying activity value for model %s: %w", modelID, err)
-		}
-
-		var activities []*PromptActivity
-		if err := json.Unmarshal(existingJson, &activities); err != nil {
-			return fmt.Errorf("error unmarshaling activities for model %s: %w", modelID, err)
-		}
-
-		var updatedActivities []*PromptActivity
-		for _, activity := range activities {
-			if activity.EndTime > beforeTime {
-				updatedActivities = append(updatedActivities, activity)
+			if endTime <= beforeTime {
+				if err := txn.Delete(key); err != nil {
+					return fmt.Errorf("error deleting activity key %s: %w", string(key), err)
+				}
 			}
 		}
-
-		activitiesJson, err := json.Marshal(updatedActivities)
-		if err != nil {
-			return err
-		}
-
-		entry := badger.NewEntry(key, activitiesJson).WithTTL(ActivityTTL)
-		return txn.SetEntry(entry)
+		return nil
 	})
 }
 

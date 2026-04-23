@@ -144,6 +144,13 @@ func NewBlockchainService(
 	}
 }
 
+func (s *BlockchainService) requestLog(ctx context.Context) lib.ILogger {
+	if id := lib.RequestIDFromContext(ctx); id != "" {
+		return s.log.With("request_id", id)
+	}
+	return s.log
+}
+
 func (s *BlockchainService) GetLatestBlock(ctx context.Context) (uint64, error) {
 	return s.ethClient.BlockNumber(ctx)
 }
@@ -319,6 +326,8 @@ func (s *BlockchainService) rateBids(bidIds [][32]byte, bids []m.IBidStorageBid,
 }
 
 func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalSig []byte, stake *big.Int, directPayment bool, agentUsername string, isTee bool) (common.Hash, error) {
+	log := s.requestLog(ctx)
+
 	isAgent, err := s.authConfig.IsAllowanceEnough(agentUsername, s.morTokenAddr.Hex(), stake)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrAgentUserAllowance, err)
@@ -345,7 +354,7 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 	wouldOverflow := new(big.Int).Sub(maxUint256, currentAllowance).Cmp(stake) < 0
 
 	if wouldOverflow {
-		s.log.Warnf("skipping increaseAllowance: current allowance %s + stake %s would overflow uint256", currentAllowance.String(), stake.String())
+		log.Warnf("skipping increaseAllowance: current allowance %s + stake %s would overflow uint256", currentAllowance.String(), stake.String())
 		needsApproval = false
 	}
 
@@ -375,7 +384,7 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 		if isAgent {
 			err = s.authConfig.AuthStorage.SetAgentTx(approveReceipt.TxHash.Hex(), agentUsername, approveReceipt.BlockNumber)
 			if err != nil {
-				s.log.Errorf("failed to set agent tx: %s", err)
+				log.Errorf("failed to set agent tx: %s", err)
 			}
 		}
 	}
@@ -409,12 +418,12 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 		amountBigInt := lib.BigInt{Int: *stake}
 		err = s.authConfig.DecreaseAllowance(agentUsername, s.morTokenAddr.Hex(), amountBigInt)
 		if err != nil {
-			s.log.Errorf("failed to decrease allowance: %s", err)
+			log.Errorf("failed to decrease allowance: %s", err)
 			return common.Hash{}, err
 		}
 		err = s.authConfig.AuthStorage.SetAgentTx(sessionReceipt.TxHash.Hex(), agentUsername, sessionReceipt.BlockNumber)
 		if err != nil {
-			s.log.Errorf("failed to set agent tx: %s", err)
+			log.Errorf("failed to set agent tx: %s", err)
 		}
 	}
 
@@ -536,6 +545,14 @@ func (s *BlockchainService) DeregisterModel(ctx context.Context, modelId common.
 	}
 
 	return tx, nil
+}
+
+func (s *BlockchainService) GetModelTags(ctx context.Context, modelID common.Hash) ([]string, error) {
+	m, err := s.modelRegistry.GetModelById(ctx, modelID)
+	if err != nil {
+		return nil, err
+	}
+	return m.Tags, nil
 }
 
 func (s *BlockchainService) ModelExists(ctx context.Context, modelID common.Hash) (bool, error) {
@@ -1143,26 +1160,27 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 	}
 	var failures []providerFailure
 
-	scoredBids := s.rateBids(bidIDs, bids, providerStats, providers, modelStats, minStake, s.log)
+	log := s.requestLog(ctx)
+	scoredBids := s.rateBids(bidIDs, bids, providerStats, providers, modelStats, minStake, log)
 	for i, bid := range scoredBids {
 		providerAddr := bid.Bid.Provider
 		if providerAddr == omitProvider {
-			s.log.Infof("skipping provider #%d %s", i, providerAddr.String())
+			log.Infof("skipping provider #%d %s", i, providerAddr.String())
 			failures = append(failures, providerFailure{Provider: providerAddr.String(), Reason: "skipped: omitted provider"})
 			continue
 		}
 
 		if providerAddr == userAddr {
-			s.log.Infof("skipping own bid #%d %s", i, bid.Bid.Id)
+			log.Infof("skipping own bid #%d %s", i, bid.Bid.Id)
 			continue
 		}
 
-		s.log.Infof("trying to open session with provider #%d %s", i, bid.Bid.Provider.String())
+		log.Infof("trying to open session with provider #%d %s", i, bid.Bid.Provider.String())
 		durationCopy := new(big.Int).Set(duration)
 
 		hash, tryNext, err := s.tryOpenSession(ctx, &bid.Bid, durationCopy, supply, budget, userAddr, directPayment, isFailoverEnabled, agentUsername, isTee)
 		if err != nil {
-			s.log.Errorf("failed to open session with provider %s: %s", bid.Bid.Provider.String(), err.Error())
+			log.Errorf("failed to open session with provider %s: %s", bid.Bid.Provider.String(), err.Error())
 			failures = append(failures, providerFailure{Provider: providerAddr.String(), Reason: err.Error()})
 			if tryNext {
 				continue
@@ -1224,6 +1242,8 @@ func (s *BlockchainService) GetAllBidsWithRating(ctx context.Context, modelAgent
 }
 
 func (s *BlockchainService) tryOpenSession(ctx context.Context, bid *structs.Bid, duration, supply, budget *big.Int, userAddr common.Address, directPayment bool, failoverEnabled bool, agentUsername string, isTeeSession bool) (common.Hash, bool, error) {
+	log := s.requestLog(ctx)
+
 	provider, err := s.providerRegistry.GetProviderById(ctx, bid.Provider)
 	if err != nil {
 		return common.Hash{}, false, lib.WrapError(ErrProvider, err)
@@ -1231,10 +1251,10 @@ func (s *BlockchainService) tryOpenSession(ctx context.Context, bid *structs.Bid
 
 	if isTeeSession && s.attestationVerifier != nil {
 		if err := s.attestationVerifier.VerifyProviderQuick(ctx, provider.Endpoint, bid.Provider.Hex(), true); err != nil {
-			s.log.Warnf("TEE attestation failed for provider %s: %s", bid.Provider, err)
+			log.Warnf("TEE attestation failed for provider %s: %s", bid.Provider, err)
 			return common.Hash{}, true, fmt.Errorf("TEE attestation failed: %w", err)
 		}
-		s.log.Infof("TEE attestation passed for provider %s", bid.Provider)
+		log.Infof("TEE attestation passed for provider %s", bid.Provider)
 	}
 
 	sessionCost := (&big.Int{}).Mul(&bid.PricePerSecond.Int, duration)
@@ -1247,7 +1267,7 @@ func (s *BlockchainService) tryOpenSession(ctx context.Context, bid *structs.Bid
 		amountTransferred = stake
 	}
 
-	s.log.Infof("attempting to initiate session %s", map[string]string{
+	log.Infof("attempting to initiate session %s", map[string]string{
 		"provider":          bid.Provider.String(),
 		"directPayment":     strconv.FormatBool(directPayment),
 		"duration":          duration.String(),

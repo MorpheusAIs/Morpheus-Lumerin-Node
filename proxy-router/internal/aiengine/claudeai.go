@@ -75,15 +75,18 @@ type ClaudeAI struct {
 	log        lib.ILogger
 }
 
-func NewClaudeAIEngine(modelName, baseURL, apiKey string, llmTimeout time.Duration, log lib.ILogger) *ClaudeAI {
+func NewClaudeAIEngine(modelName, baseURL, apiKey string, llmTimeout time.Duration, log lib.ILogger, httpClient *http.Client) *ClaudeAI {
 	if baseURL != "" {
 		baseURL = strings.TrimSuffix(baseURL, "/")
+	}
+	if httpClient == nil {
+		httpClient = &http.Client{}
 	}
 	return &ClaudeAI{
 		baseURL:    baseURL,
 		modelName:  modelName,
 		apiKey:     apiKey,
-		client:     &http.Client{},
+		client:     httpClient,
 		llmTimeout: llmTimeout,
 		log:        log,
 	}

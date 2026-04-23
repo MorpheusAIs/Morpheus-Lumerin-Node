@@ -90,3 +90,4 @@ func (s *SessionModel) IsTee() bool {
 func (s *SessionModel) SetIsTee(v bool) {
 	s.isTee = v
 }
+

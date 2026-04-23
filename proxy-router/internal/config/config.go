@@ -85,8 +85,10 @@ type Config struct {
 		TcpMaxSynBacklog string `env:"SYS_TCP_MAX_SYN_BACKLOG" flag:"sys-tcp-max-syn-backlog" desc:""`
 	}
 	TEE struct {
-		PortalURL string `env:"TEE_PORTAL_URL"  flag:"tee-portal-url"  validate:"omitempty,url" desc:"SecretAI Portal API URL for TEE attestation quote parsing"`
-		ImageRepo string `env:"TEE_IMAGE_REPO"  flag:"tee-image-repo"  validate:"omitempty"     desc:"GHCR image repo for cosign attestation verification (e.g. ghcr.io/morpheusais/morpheus-lumerin-node-tee)"`
+		PortalURL                  string        `env:"TEE_PORTAL_URL"  flag:"tee-portal-url"  validate:"omitempty,url" desc:"SecretAI Portal API URL for TEE attestation quote parsing"`
+		ImageRepo                  string        `env:"TEE_IMAGE_REPO"  flag:"tee-image-repo"  validate:"omitempty"     desc:"GHCR image repo for cosign attestation verification (e.g. ghcr.io/morpheusais/morpheus-lumerin-node-tee)"`
+		ArtifactRegistryURL             string        `env:"ARTIFACT_REGISTRY_URL" flag:"artifact-registry-url" validate:"omitempty,url" desc:"URL for SecretVM TDX artifact registry CSV"`
+		ArtifactRegistryRefreshInterval time.Duration `env:"ARTIFACT_REGISTRY_REFRESH_INTERVAL" flag:"artifact-registry-refresh-interval" validate:"omitempty" desc:"how often to refresh the artifact registry"`
 	}
 	Web struct {
 		Address   string `env:"WEB_ADDRESS"    flag:"web-address"    validate:"required,hostname_port" desc:"http server address host:port"`
@@ -219,6 +221,7 @@ func (cfg *Config) SetDefaults() {
 	if cfg.TEE.ImageRepo == "" {
 		cfg.TEE.ImageRepo = "ghcr.io/morpheusais/morpheus-lumerin-node-tee"
 	}
+
 
 	cfg.Log.FolderPath = filepath.FromSlash(cfg.Log.FolderPath)
 	cfg.Proxy.StoragePath = filepath.FromSlash(cfg.Proxy.StoragePath)

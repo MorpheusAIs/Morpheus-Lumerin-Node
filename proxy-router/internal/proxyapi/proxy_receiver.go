@@ -20,6 +20,16 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
+// BackendTEEVerifier is used by ProxyReceiver for backend LLM TEE attestation.
+type BackendTEEVerifier interface {
+	FastVerifyBackend(ctx context.Context, modelID string) error
+}
+
+// ModelTagsProvider fetches blockchain model tags for TEE tag detection.
+type ModelTagsProvider interface {
+	GetModelTags(ctx context.Context, modelID common.Hash) ([]string, error)
+}
+
 type ProxyReceiver struct {
 	privateKeyHex     lib.HexString
 	publicKeyHex      lib.HexString
@@ -30,6 +40,8 @@ type ProxyReceiver struct {
 	modelConfigLoader *config.ModelConfigLoader
 	service           BidGetter
 	sessionRepo       *sessionrepo.SessionRepositoryCached
+	backendVerifier   BackendTEEVerifier
+	modelTagsProvider ModelTagsProvider
 }
 
 func NewProxyReceiver(privateKeyHex, publicKeyHex lib.HexString, sessionStorage *storages.SessionStorage, aiEngine *aiengine.AiEngine, chainID *big.Int, modelConfigLoader *config.ModelConfigLoader, blockchainService BidGetter, sessionRepo *sessionrepo.SessionRepositoryCached) *ProxyReceiver {
@@ -44,6 +56,30 @@ func NewProxyReceiver(privateKeyHex, publicKeyHex lib.HexString, sessionStorage 
 		sessionStorage:    sessionStorage,
 		sessionRepo:       sessionRepo,
 	}
+}
+
+func (s *ProxyReceiver) SetBackendVerifier(bv BackendTEEVerifier) {
+	s.backendVerifier = bv
+}
+
+func (s *ProxyReceiver) SetModelTagsProvider(p ModelTagsProvider) {
+	s.modelTagsProvider = p
+}
+
+func (s *ProxyReceiver) isTeeModel(ctx context.Context, modelID common.Hash) bool {
+	if s.modelTagsProvider == nil {
+		return false
+	}
+	tags, err := s.modelTagsProvider.GetModelTags(ctx, modelID)
+	if err != nil {
+		return false
+	}
+	for _, t := range tags {
+		if strings.ToLower(t) == "tee" {
+			return true
+		}
+	}
+	return false
 }
 
 // handleSessionError is a helper function to log errors and return consistent output
@@ -311,6 +347,12 @@ func (s *ProxyReceiver) SessionPrompt(ctx context.Context, requestID string, use
 		defer os.Remove(audioTranscriptionReq.FilePath)
 	}
 
+	if s.backendVerifier != nil && session.IsTee() {
+		if verifyErr := s.backendVerifier.FastVerifyBackend(ctx, session.ModelID().Hex()); verifyErr != nil {
+			return handleError(verifyErr, "LLM TEE verification failed", sourceLog)
+		}
+	}
+
 	// Start timing and get adapter
 	startTime := time.Now().UnixMilli()
 	ttftMs, inputTokens, outputTokens := 0, 0, 0
@@ -365,6 +407,14 @@ func (s *ProxyReceiver) SessionRequest(ctx context.Context, msgID string, reqID 
 	}
 
 	modelID := bid.ModelAgentId.String()
+
+	if s.backendVerifier != nil && s.isTeeModel(ctx, bid.ModelAgentId) {
+		if err := s.backendVerifier.FastVerifyBackend(ctx, modelID); err != nil {
+			log.Errorf("LLM TEE verification failed for model %s: %s", modelID, err)
+			return nil, fmt.Errorf("LLM TEE verification failed: %w", err)
+		}
+	}
+
 	modelConfig := s.modelConfigLoader.ModelConfigFromID(modelID)
 	capacityManager := CreateCapacityManager(modelConfig, s.sessionStorage, log)
 

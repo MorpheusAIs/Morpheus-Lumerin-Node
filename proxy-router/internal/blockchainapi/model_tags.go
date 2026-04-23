@@ -6,6 +6,8 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi/structs"
 )
 
+// IsTeeModel returns true if the model has the "tee" tag.
+// Enables both P-node attestation (consumer) and backend LLM attestation (provider).
 func IsTeeModel(tags []string) bool {
 	for _, raw := range tags {
 		if strings.ToLower(raw) == "tee" {

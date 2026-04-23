@@ -2,6 +2,7 @@ package sessionrepo
 
 import (
 	"context"
+	"strings"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/registries"
@@ -9,11 +10,16 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
+type ModelTagsProvider interface {
+	GetModelTags(ctx context.Context, modelID common.Hash) ([]string, error)
+}
+
 type SessionRepositoryCached struct {
-	storage *storages.SessionStorage
-	reg     *registries.SessionRouter
-	mkt     *registries.Marketplace
-	log     lib.ILogger
+	storage      *storages.SessionStorage
+	reg          *registries.SessionRouter
+	mkt          *registries.Marketplace
+	modelTags    ModelTagsProvider
+	log          lib.ILogger
 }
 
 func NewSessionRepositoryCached(storage *storages.SessionStorage, reg *registries.SessionRouter, mkt *registries.Marketplace, log lib.ILogger) *SessionRepositoryCached {
@@ -23,6 +29,10 @@ func NewSessionRepositoryCached(storage *storages.SessionStorage, reg *registrie
 		mkt:     mkt,
 		log:     log,
 	}
+}
+
+func (r *SessionRepositoryCached) SetModelTagsProvider(p ModelTagsProvider) {
+	r.modelTags = p
 }
 
 // GetSession returns a session by its ID from the read-through cache
@@ -82,6 +92,19 @@ func (r *SessionRepositoryCached) getSessionFromBlockchain(ctx context.Context, 
 		return nil, err
 	}
 
+	isTee := false
+	if r.modelTags != nil {
+		tags, err := r.modelTags.GetModelTags(ctx, bid.ModelId)
+		if err == nil {
+			for _, t := range tags {
+				if strings.ToLower(t) == "tee" {
+					isTee = true
+					break
+				}
+			}
+		}
+	}
+
 	return &SessionModel{
 		id:               id,
 		userAddr:         session.User,
@@ -93,6 +116,7 @@ func (r *SessionRepositoryCached) getSessionFromBlockchain(ctx context.Context, 
 		failoverEnabled:  false,
 		directPayment:    session.IsDirectPaymentFromUser,
 		agentUsername:    "admin",
+		isTee:           isTee,
 	}, nil
 }
 
