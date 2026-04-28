@@ -88,6 +88,7 @@ type Config struct {
 		PortalURL                  string        `env:"TEE_PORTAL_URL"  flag:"tee-portal-url"  validate:"omitempty,url" desc:"SecretAI Portal API URL for TEE attestation quote parsing"`
 		ImageRepo                  string        `env:"TEE_IMAGE_REPO"  flag:"tee-image-repo"  validate:"omitempty"     desc:"GHCR image repo for cosign attestation verification (e.g. ghcr.io/morpheusais/morpheus-lumerin-node-tee)"`
 		ArtifactRegistryURL             string        `env:"ARTIFACT_REGISTRY_URL" flag:"artifact-registry-url" validate:"omitempty,url" desc:"URL for SecretVM TDX artifact registry CSV"`
+		SevArtifactRegistryURL          string        `env:"SEV_ARTIFACT_REGISTRY_URL" flag:"sev-artifact-registry-url" validate:"omitempty,url" desc:"URL for SecretVM SEV-SNP artifact registry JSON"`
 		ArtifactRegistryRefreshInterval time.Duration `env:"ARTIFACT_REGISTRY_REFRESH_INTERVAL" flag:"artifact-registry-refresh-interval" validate:"omitempty" desc:"how often to refresh the artifact registry"`
 	}
 	Web struct {
