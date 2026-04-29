@@ -112,7 +112,7 @@ func VerifySevWorkload(registry *SevArtifactRegistry, cpuQuoteBase64 string, doc
 			return WorkloadResult{
 				Status:       WorkloadAuthentic,
 				TemplateName: family.TemplateName,
-				VMType:       family.TemplateName,
+				VMType:       family.VMType,
 				ArtifactsVer: versionEntries[i].ArtifactsVer,
 				Env:          family.VMType,
 			}
@@ -128,7 +128,7 @@ func VerifySevWorkload(registry *SevArtifactRegistry, cpuQuoteBase64 string, doc
 			return WorkloadResult{
 				Status:       WorkloadAuthentic,
 				TemplateName: family.TemplateName,
-				VMType:       family.TemplateName,
+				VMType:       family.VMType,
 				ArtifactsVer: candidates[i].ArtifactsVer,
 				Env:          family.VMType,
 			}
@@ -141,7 +141,7 @@ func VerifySevWorkload(registry *SevArtifactRegistry, cpuQuoteBase64 string, doc
 		return WorkloadResult{
 			Status:       WorkloadAuthenticMismatch,
 			TemplateName: family.TemplateName,
-			VMType:       family.TemplateName,
+			VMType:       family.VMType,
 			ArtifactsVer: imageID,
 			Env:          family.VMType,
 		}
