@@ -317,7 +317,7 @@ func start() error {
 
 	aiEngine := aiengine.NewAiEngine(proxyRouterApi, chatStorage, modelConfigLoader, agentConfigLoader, cfg.Proxy.LLMTimeout, appLog)
 
-	// TEE: create artifact registry and backend verifier
+	// TEE: create artifact registries and backend verifier
 	artifactRegistry := attestation.NewArtifactRegistry(
 		cfg.TEE.ArtifactRegistryURL,
 		cfg.TEE.ArtifactRegistryRefreshInterval,
@@ -325,10 +325,18 @@ func start() error {
 	)
 	artifactRegistry.Start(context.Background())
 
+	sevArtifactRegistry := attestation.NewSevArtifactRegistry(
+		cfg.TEE.SevArtifactRegistryURL,
+		cfg.TEE.ArtifactRegistryRefreshInterval,
+		appLog.Named("ARTIFACT_REGISTRY_SEV"),
+	)
+	sevArtifactRegistry.Start(context.Background())
+
 	backendVerifier := attestation.NewBackendVerifier(
 		cfg.TEE.PortalURL,
 		&attestation.NoopGoldenSource{},
 		artifactRegistry,
+		sevArtifactRegistry,
 		appLog.Named("BACKEND_TEE"),
 	)
 	// Startup pre-flight: attest models that have "tee" tag on-chain
