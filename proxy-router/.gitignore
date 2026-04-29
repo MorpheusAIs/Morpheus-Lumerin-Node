@@ -9,6 +9,7 @@ dist
 bin 
 proxy-router
 data*
+__pycache__/
 
 models-config.json
 rating-config.json

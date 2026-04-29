@@ -16,3 +16,4 @@ node_modules
 *.log
 tmp/
 temp/
+__pycache__/
