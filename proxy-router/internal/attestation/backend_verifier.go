@@ -69,13 +69,14 @@ type BackendVerifier struct {
 	goldenSource      BackendGoldenSource
 	nrasVerifier      *NRASVerifier
 	artifactRegistry  *ArtifactRegistry
+	sevRegistry       *SevArtifactRegistry
 	log               lib.ILogger
 
 	mu    sync.RWMutex
 	cache map[string]*BackendAttestationSnapshot
 }
 
-func NewBackendVerifier(portalURL string, goldenSource BackendGoldenSource, registry *ArtifactRegistry, log lib.ILogger) *BackendVerifier {
+func NewBackendVerifier(portalURL string, goldenSource BackendGoldenSource, registry *ArtifactRegistry, sevRegistry *SevArtifactRegistry, log lib.ILogger) *BackendVerifier {
 	if portalURL == "" {
 		portalURL = DefaultPortalURL
 	}
@@ -90,6 +91,7 @@ func NewBackendVerifier(portalURL string, goldenSource BackendGoldenSource, regi
 		goldenSource:      goldenSource,
 		nrasVerifier:      NewNRASVerifier(log),
 		artifactRegistry:  registry,
+		sevRegistry:       sevRegistry,
 		log:               log,
 		cache:             make(map[string]*BackendAttestationSnapshot),
 	}
@@ -141,7 +143,7 @@ func (bv *BackendVerifier) AttestBackend(ctx context.Context, modelID string, at
 		if composeErr != nil {
 			bv.log.Warnf("backend attestation: could not fetch docker-compose for model %s: %s (workload verification skipped)", modelID, composeErr)
 		} else {
-			result := VerifyWorkload(bv.artifactRegistry, cpuQuote, dockerCompose, bv.log)
+			result := VerifyWorkload(bv.artifactRegistry, bv.sevRegistry, cpuQuote, dockerCompose, bv.log)
 			workloadResult = &result
 			switch result.Status {
 			case WorkloadAuthentic:
@@ -152,6 +154,8 @@ func (bv *BackendVerifier) AttestBackend(ctx context.Context, modelID string, at
 			case WorkloadNotAuthentic:
 				bv.storeFailure(modelID, attestationURL, "VM is not an authentic SecretVM (MRTD/RTMR values not in registry)")
 				return fmt.Errorf("workload verification failed for model %s: not an authentic SecretVM", modelID)
+			case WorkloadSkipped:
+				bv.log.Infof("backend attestation: workload verification skipped for model %s (SEV quote, not yet supported)", modelID)
 			}
 		}
 	} else {
@@ -349,8 +353,8 @@ func (bv *BackendVerifier) PinnedHTTPClient(modelID string) (*http.Client, error
 // The second half (bytes 32-63, hex chars 64-127) of the CPU reportData should match
 // the GPU attestation's reportData (which serves as the GPU nonce).
 func VerifyCPUGPUBinding(cpuReportData string, gpuReportData string) error {
-	cpuReportData = strings.ToLower(strings.TrimSpace(cpuReportData))
-	gpuReportData = strings.ToLower(strings.TrimSpace(gpuReportData))
+	cpuReportData = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(cpuReportData), " ", ""))
+	gpuReportData = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(gpuReportData), " ", ""))
 
 	// CPU reportData layout:
 	//   chars 0-63  (bytes 0-31): TLS cert fingerprint

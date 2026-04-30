@@ -13,6 +13,7 @@ const (
 	WorkloadAuthentic         WorkloadStatus = "authentic_match"
 	WorkloadAuthenticMismatch WorkloadStatus = "authentic_mismatch"
 	WorkloadNotAuthentic      WorkloadStatus = "not_authentic"
+	WorkloadSkipped           WorkloadStatus = "skipped"
 )
 
 type WorkloadResult struct {
@@ -75,9 +76,15 @@ func VerifyTdxWorkload(registry *ArtifactRegistry, cpuQuoteHex string, dockerCom
 	}
 }
 
-func VerifyWorkload(registry *ArtifactRegistry, cpuQuoteData string, dockerComposeYaml string, log lib.ILogger) WorkloadResult {
+func VerifyWorkload(registry *ArtifactRegistry, sevRegistry *SevArtifactRegistry, cpuQuoteData string, dockerComposeYaml string, log lib.ILogger) WorkloadResult {
 	if IsTdxQuote(cpuQuoteData) {
 		return VerifyTdxWorkload(registry, cpuQuoteData, dockerComposeYaml, log)
 	}
-	return WorkloadResult{Status: WorkloadNotAuthentic}
+	if sevRegistry != nil && sevRegistry.IsLoaded() {
+		return VerifySevWorkload(sevRegistry, cpuQuoteData, dockerComposeYaml, log)
+	}
+	if log != nil {
+		log.Infof("workload: SEV quote detected but SEV registry not available, skipping")
+	}
+	return WorkloadResult{Status: WorkloadSkipped}
 }

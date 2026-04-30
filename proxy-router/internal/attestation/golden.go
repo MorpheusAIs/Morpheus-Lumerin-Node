@@ -50,7 +50,7 @@ type TEEPredicate struct {
 
 type TEEMeasurements struct {
 	IntelTDX *TDXMeasurements `json:"intel_tdx,omitempty"`
-	AMDSEV   *SEVMeasurements `json:"amd_sev,omitempty"`
+	AMDSEV   *SEVMeasurements `json:"amd_sev_snp,omitempty"`
 }
 
 type TDXMeasurements struct {
@@ -58,8 +58,19 @@ type TDXMeasurements struct {
 	SecretVMRelease string `json:"secretvm_release,omitempty"`
 }
 
+// SEVMeasurements is the SEV-SNP block of the signed attestation manifest.
+//
+// Because the SEV-SNP launch digest is a single cumulative SHA-384 that
+// includes the per-vCPU VMSA pages, one image produces *different*
+// `measurement` values for each VM template. The manifest therefore carries
+// a per-template map (`per_template`) covering every SecretVM-portal size
+// (small/medium/large/2xlarge/4xlarge). The legacy single-value
+// `Measurement` field is retained for backwards compatibility with manifests
+// that pre-date the per-template scheme.
 type SEVMeasurements struct {
-	Measurement string `json:"measurement,omitempty"`
+	Measurement     string            `json:"measurement,omitempty"`
+	PerTemplate     map[string]string `json:"per_template,omitempty"`
+	SecretVMRelease string            `json:"secretvm_release,omitempty"`
 }
 
 // GoldenValues contains the expected TEE register values extracted from a
@@ -71,8 +82,30 @@ type GoldenValues struct {
 	RTMR2 string
 	RTMR3 string
 
-	// AMD SEV-SNP
+	// AMD SEV-SNP — single legacy value (kept for backwards compatibility)
 	Measurement string
+
+	// AMD SEV-SNP — per-template map keyed by SecretVM template name
+	// (small/medium/large/2xlarge/4xlarge). The launch digest depends on
+	// vCPU count, so the manifest publishes one value per portal-selectable
+	// VM size; consumers pick the entry matching the live quote's family_id.
+	SEVPerTemplate map[string]string
+}
+
+// MatchSEVMeasurement returns the template name whose published golden SEV
+// measurement equals `live` (case-insensitive). Returns an empty string when
+// no template matches or when no per-template values were published.
+func (g *GoldenValues) MatchSEVMeasurement(live string) string {
+	if g == nil || live == "" {
+		return ""
+	}
+	live = strings.ToLower(strings.TrimSpace(live))
+	for tmpl, val := range g.SEVPerTemplate {
+		if strings.EqualFold(val, live) {
+			return tmpl
+		}
+	}
+	return ""
 }
 
 // DSSEEnvelope represents a Dead Simple Signing Envelope.
@@ -321,6 +354,12 @@ func (g *GoldenSource) verifyBundleLayer(
 	}
 	if m := predicate.Measurements.AMDSEV; m != nil {
 		values.Measurement = m.Measurement
+		if len(m.PerTemplate) > 0 {
+			values.SEVPerTemplate = make(map[string]string, len(m.PerTemplate))
+			for k, v := range m.PerTemplate {
+				values.SEVPerTemplate[k] = v
+			}
+		}
 	}
 
 	g.log.Infof("extracted golden values from verified attestation")
@@ -362,6 +401,12 @@ func parseAttestationPayload(payload []byte) (*GoldenValues, error) {
 	}
 	if m := statement.Predicate.Measurements.AMDSEV; m != nil {
 		values.Measurement = m.Measurement
+		if len(m.PerTemplate) > 0 {
+			values.SEVPerTemplate = make(map[string]string, len(m.PerTemplate))
+			for k, v := range m.PerTemplate {
+				values.SEVPerTemplate[k] = v
+			}
+		}
 	}
 
 	return values, nil

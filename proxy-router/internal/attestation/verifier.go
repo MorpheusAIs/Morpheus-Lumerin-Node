@@ -44,10 +44,17 @@ func (c *collateralField) UnmarshalJSON(data []byte) error {
 }
 
 const (
-	AttestationPort  = "29343"
-	DefaultPortalURL = "https://secretai.scrtlabs.com/api/quote-parse"
-	VerifyTimeout    = 30 * time.Second
+	AttestationPort     = "29343"
+	DefaultPortalURL    = "https://secretai.scrtlabs.com/api/quote-parse"
+	DefaultPortalURLSEV = "https://secretai.scrtlabs.com/api/quote-parse-sev"
+	VerifyTimeout       = 30 * time.Second
 )
+
+// deriveSEVPortalURL returns the SEV-specific portal URL by appending "-sev"
+// to the base portal URL path (e.g. ".../quote-parse" -> ".../quote-parse-sev").
+func deriveSEVPortalURL(portalURL string) string {
+	return strings.TrimSuffix(portalURL, "/") + "-sev"
+}
 
 // ParseQuoteRequest is the POST body for the SecretAI Portal quote-parse API.
 type ParseQuoteRequest struct {
@@ -188,14 +195,14 @@ func (v *Verifier) VerifyProvider(ctx context.Context, providerEndpoint string, 
 
 	v.log.Infof("verifying TEE attestation for provider %s (version %s)", providerEndpoint, version)
 
-	hexQuote, tlsFingerprint, err := v.loadAttestationQuote(ctx, attestationURL)
+	cpuQuote, tlsFingerprint, err := v.loadAttestationQuote(ctx, attestationURL)
 	if err != nil {
 		return fmt.Errorf("failed to load attestation quote from %s: %w", attestationURL, err)
 	}
 
 	v.log.Infof("captured TLS cert fingerprint: %s", tlsFingerprint)
 
-	result, err := v.verifyQuote(ctx, hexQuote)
+	result, err := v.verifyQuote(ctx, cpuQuote)
 	if err != nil {
 		return fmt.Errorf("attestation quote verification failed: %w", err)
 	}
@@ -228,7 +235,7 @@ func (v *Verifier) VerifyProvider(ctx context.Context, providerEndpoint string, 
 
 	v.log.Infof("all TEE register values match golden values for version %s", version)
 
-	quoteHash := fmt.Sprintf("%x", sha256.Sum256([]byte(hexQuote)))
+	quoteHash := fmt.Sprintf("%x", sha256.Sum256([]byte(cpuQuote)))
 	v.mu.Lock()
 	v.quoteCache[attestationURL] = &verifiedQuoteEntry{
 		quoteHash:      quoteHash,
@@ -256,7 +263,7 @@ func VerifyTLSBinding(tlsFingerprint string, reportData string) error {
 		return fmt.Errorf("no report_data in attestation quote")
 	}
 
-	reportData = strings.ToLower(strings.TrimSpace(reportData))
+	reportData = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(reportData), " ", ""))
 	tlsFingerprint = strings.ToLower(strings.TrimSpace(tlsFingerprint))
 
 	if len(reportData) < len(tlsFingerprint) {
@@ -309,14 +316,14 @@ func (v *Verifier) VerifyProviderQuick(ctx context.Context, providerEndpoint str
 
 	v.log.Infof("quick attestation: cache hit for %s, fetching live quote", attestationURL)
 
-	hexQuote, tlsFingerprint, err := v.loadAttestationQuote(ctx, attestationURL)
+	cpuQuote, tlsFingerprint, err := v.loadAttestationQuote(ctx, attestationURL)
 	if err != nil {
 		return fmt.Errorf("quick attestation check failed: %w", err)
 	}
 
 	v.log.Infof("quick attestation: fetched live quote from %s, TLS fingerprint: %s", attestationURL, tlsFingerprint)
 
-	currentHash := fmt.Sprintf("%x", sha256.Sum256([]byte(hexQuote)))
+	currentHash := fmt.Sprintf("%x", sha256.Sum256([]byte(cpuQuote)))
 
 	if currentHash != cached.quoteHash {
 		v.log.Warnf("quick attestation: quote hash MISMATCH for %s (cached=%s, live=%s)", providerEndpoint, cached.quoteHash, currentHash)
@@ -411,9 +418,9 @@ func CompareRegisters(result *AttestationResult, golden *GoldenValues, log lib.I
 	return nil
 }
 
-// LoadAttestationQuote fetches a raw hex-encoded attestation quote from the
-// given URL path and returns the SHA-256 fingerprint of the peer's TLS certificate.
-func LoadAttestationQuote(ctx context.Context, client *http.Client, quoteURL string) (hexQuote string, tlsFingerprint string, err error) {
+// LoadAttestationQuote fetches a raw attestation quote (hex for TDX, base64 for SEV)
+// from the given URL path and returns the SHA-256 fingerprint of the peer's TLS certificate.
+func LoadAttestationQuote(ctx context.Context, client *http.Client, quoteURL string) (quote string, tlsFingerprint string, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, quoteURL, nil)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to create request: %w", err)
@@ -439,20 +446,20 @@ func LoadAttestationQuote(ctx context.Context, client *http.Client, quoteURL str
 		return "", "", fmt.Errorf("failed to read attestation quote: %w", err)
 	}
 
-	hexQuote = strings.TrimSpace(string(body))
-	if hexQuote == "" {
+	quote = strings.TrimSpace(string(body))
+	if quote == "" {
 		return "", "", fmt.Errorf("empty attestation quote")
 	}
 
-	return hexQuote, tlsFingerprint, nil
+	return quote, tlsFingerprint, nil
 }
 
 // loadAttestationQuote is the instance method that delegates to the package-level function.
-func (v *Verifier) loadAttestationQuote(ctx context.Context, attestationBaseURL string) (hexQuote string, tlsFingerprint string, err error) {
+func (v *Verifier) loadAttestationQuote(ctx context.Context, attestationBaseURL string) (quote string, tlsFingerprint string, err error) {
 	cpuURL := attestationBaseURL + "/cpu"
 	v.log.Infof("fetching attestation quote from %s", cpuURL)
 
-	hexQuote, tlsFingerprint, err = LoadAttestationQuote(ctx, v.attestationClient, cpuURL)
+	quote, tlsFingerprint, err = LoadAttestationQuote(ctx, v.attestationClient, cpuURL)
 	if err != nil {
 		return "", "", err
 	}
@@ -461,20 +468,26 @@ func (v *Verifier) loadAttestationQuote(ctx context.Context, attestationBaseURL 
 		v.log.Warnf("no TLS peer certificate received from %s", cpuURL)
 	}
 
-	v.log.Infof("received attestation quote from %s (%d bytes)", cpuURL, len(hexQuote))
-	return hexQuote, tlsFingerprint, nil
+	v.log.Infof("received attestation quote from %s (%d bytes)", cpuURL, len(quote))
+	return quote, tlsFingerprint, nil
 }
 
-// VerifyQuote sends the hex attestation quote to the SecretAI Portal parse-quote API
-// for cryptographic verification and field extraction.
-func VerifyQuote(ctx context.Context, portalClient *http.Client, portalURL string, hexQuote string) (*AttestationResult, error) {
-	reqBody := ParseQuoteRequest{Quote: hexQuote}
+// VerifyQuote sends the attestation quote to the SecretAI Portal for cryptographic
+// verification and field extraction. TDX (hex-encoded) quotes go to portalURL;
+// SEV (base64-encoded) quotes are routed to the derived SEV endpoint automatically.
+func VerifyQuote(ctx context.Context, portalClient *http.Client, portalURL string, quote string) (*AttestationResult, error) {
+	targetURL := portalURL
+	if !IsTdxQuote(quote) {
+		targetURL = deriveSEVPortalURL(portalURL)
+	}
+
+	reqBody := ParseQuoteRequest{Quote: quote}
 	body, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, portalURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -551,9 +564,13 @@ func VerifyQuote(ctx context.Context, portalClient *http.Client, portalURL strin
 }
 
 // verifyQuote is the instance method that delegates to the package-level function.
-func (v *Verifier) verifyQuote(ctx context.Context, hexQuote string) (*AttestationResult, error) {
-	v.log.Infof("sending quote to SecretAI portal for cryptographic verification (%s)", v.portalURL)
-	result, err := VerifyQuote(ctx, v.portalClient, v.portalURL, hexQuote)
+func (v *Verifier) verifyQuote(ctx context.Context, quote string) (*AttestationResult, error) {
+	portalTarget := v.portalURL
+	if !IsTdxQuote(quote) {
+		portalTarget = deriveSEVPortalURL(v.portalURL)
+	}
+	v.log.Infof("sending quote to SecretAI portal for cryptographic verification (%s)", portalTarget)
+	result, err := VerifyQuote(ctx, v.portalClient, v.portalURL, quote)
 	if err != nil {
 		return nil, err
 	}
