@@ -2,16 +2,13 @@ package mobile
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"math/big"
 	"net/http"
 	"path/filepath"
-	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/attestation"
@@ -29,19 +26,25 @@ import (
 	sessionrepo "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/session"
 	wallet "github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/repositories/wallet"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/storages"
-	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
-	openai "github.com/sashabaranov/go-openai"
-	"github.com/tyler-smith/go-bip39"
 )
 
 const (
-	DefaultDerivationPath        = "m/44'/60'/0'/0/0"
-	DefaultCNodePNodeTimeout     = 120 * time.Second
-	DefaultCNodePNodeMaxRetries  = 3
-	DefaultCNodeAudioMaxRetries  = 1
-	DefaultModelCacheTTL         = 5 * time.Minute
+	DefaultDerivationPath       = "m/44'/60'/0'/0/0"
+	DefaultCNodePNodeTimeout    = 120 * time.Second
+	DefaultCNodePNodeMaxRetries = 3
+	DefaultCNodeAudioMaxRetries = 1
+	DefaultModelCacheTTL        = 5 * time.Minute
+
+	chainIDVerifyTimeout    = 15 * time.Second
+	httpClientTimeout       = 10 * time.Second
+	maintenanceStartupGrace = 2 * time.Minute
+
+	paginationLimit    uint8 = 50
+	paginationMaxPages int   = 40
 )
+
+var ErrSDKClosed = errors.New("SDK has been shut down")
 
 // Config holds the minimal configuration needed for the mobile SDK.
 type Config struct {
@@ -54,11 +57,10 @@ type Config struct {
 	ActiveModelsURL string // pre-built active models JSON (production: https://active.mor.org/active_models.json)
 	LogLevel        string // "debug", "info", "warn", "error" (default: "info")
 	// LogWriter, when non-nil, receives a copy of every SDK log line (tee'd alongside stdout).
-	// Use this to pipe internal proxy-router logs into the caller's own rotating log file.
 	LogWriter io.Writer
 	// TEEPortalURL is the SecretAI (or compatible) quote-parse API. Empty uses the default production URL.
 	TEEPortalURL string
-	// TEEImageRepo is the GHCR image used to load cosign golden TEE measurements (e.g. ghcr.io/.../morpheus-lumerin-node-tee). Empty uses the Morpheus default repo.
+	// TEEImageRepo is the GHCR image used to load cosign golden TEE measurements. Empty uses the Morpheus default repo.
 	TEEImageRepo string
 }
 
@@ -81,8 +83,8 @@ type SDK struct {
 	// Active models cache (HTTP-based, from Marketplace API)
 	modelsMu      sync.RWMutex
 	modelsCache   []Model
-	modelsByID    map[string]*Model // blockchain ID -> model
-	modelsByName  map[string]*Model // lowercase name -> model
+	modelsByID    map[string]*Model
+	modelsByName  map[string]*Model
 	modelsCacheAt time.Time
 	modelsHash    string
 	httpClient    *http.Client
@@ -93,7 +95,12 @@ type SDK struct {
 	httpSrvAddr   string
 
 	// Session maintenance (auto-close expired, detect provider closures)
+	maintMu     sync.Mutex
 	maintCancel context.CancelFunc
+	maintWg     sync.WaitGroup
+
+	// Lifecycle guard: prevents use-after-Shutdown panics
+	closed atomic.Int32
 }
 
 // NewSDK creates and initializes the SDK. Call Shutdown() when done.
@@ -109,6 +116,12 @@ func NewSDK(cfg Config) (*SDK, error) {
 	}
 	if cfg.BlockscoutURL == "" {
 		return nil, fmt.Errorf("BlockscoutURL is required")
+	}
+	if !common.IsHexAddress(cfg.DiamondAddr) {
+		return nil, fmt.Errorf("DiamondAddr is not a valid hex address")
+	}
+	if !common.IsHexAddress(cfg.MorTokenAddr) {
+		return nil, fmt.Errorf("MorTokenAddr is not a valid hex address")
 	}
 	if cfg.LogLevel == "" {
 		cfg.LogLevel = "info"
@@ -152,8 +165,7 @@ func NewSDK(cfg Config) (*SDK, error) {
 
 	ethClient := ethclient.NewClient(rpcBackend)
 
-	// Verify chain ID
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), chainIDVerifyTimeout)
 	defer cancel()
 
 	chainID, err := ethClient.ChainID(ctx)
@@ -170,52 +182,43 @@ func NewSDK(cfg Config) (*SDK, error) {
 	diamondAddr := common.HexToAddress(cfg.DiamondAddr)
 	morTokenAddr := common.HexToAddress(cfg.MorTokenAddr)
 
-	// In-memory BadgerDB for session tracking (consumer doesn't need persistence)
 	inMemStorage := storages.NewTestStorage()
 	sessionStorage := storages.NewSessionStorage(inMemStorage)
 
-	// In-memory wallet storage
 	walletKV := NewMemoryKeyValueStorage()
 	w := wallet.NewKeychainWallet(walletKV)
 
-	// Blockchain infrastructure
 	mc := multicall.NewMulticall3(ethClient)
 	rpcLog := log.Named("RPC")
 	sessionRouter := registries.NewSessionRouter(diamondAddr, ethClient, mc, rpcLog)
 	marketplace := registries.NewMarketplace(diamondAddr, ethClient, mc, rpcLog)
 	sessionRepo := sessionrepo.NewSessionRepositoryCached(sessionStorage, sessionRouter, marketplace, log)
 
-	// Proxy sender (consumer-side MOR-RPC client)
 	contractLogStorage := lib.NewCollection[*interfaces.LogStorage]()
 	proxySender := proxyapi.NewProxySender(
 		chainID, w, contractLogStorage, sessionStorage, sessionRepo,
 		DefaultCNodePNodeTimeout, DefaultCNodePNodeMaxRetries, DefaultCNodeAudioMaxRetries, log,
 	)
 
-	// Explorer (Blockscout) for transaction history
 	explorer := blockchainapi.NewBlockscoutApiV2Client(cfg.BlockscoutURL, log.Named("INDEXER"))
 
-	// Rating with default config
 	scorer, err := rating.NewRatingFromConfig([]byte(config.RatingConfigDefault), log.Named("RATING"))
 	if err != nil {
 		ethClient.Close()
 		return nil, fmt.Errorf("create rating: %w", err)
 	}
 
-	// TEE attestation (register match vs cosign golden manifest) — required for Secure models; same path as proxy-router daemon.
 	teeVerifier := attestation.NewVerifier(cfg.TEEPortalURL, cfg.TEEImageRepo, log.Named("TEE"))
 
-	// Blockchain service — the main orchestrator for on-chain operations
 	blockchainSvc := blockchainapi.NewBlockchainService(
 		ethClient, mc, diamondAddr, morTokenAddr,
 		explorer, w, proxySender, sessionRepo, scorer,
-		nil,   // authConfig — not needed for direct SDK calls
+		nil,
 		log, rpcLog,
-		false, // legacyTx
+		false,
 		teeVerifier,
 	)
 
-	// Wire circular dependencies
 	proxySender.SetSessionService(blockchainSvc)
 	proxySender.SetAttestationVerifier(teeVerifier)
 	teeVerifier.SetPingFunc(func(ctx context.Context, providerEndpoint string, providerAddr string) (string, error) {
@@ -223,7 +226,6 @@ func NewSDK(cfg Config) (*SDK, error) {
 		return version, err
 	})
 
-	// Chat storage (file-based JSON, portable)
 	var cs gcs.ChatStorageInterface
 	if cfg.DataDir != "" {
 		chatDir := filepath.Join(cfg.DataDir, "chats")
@@ -245,19 +247,16 @@ func NewSDK(cfg Config) (*SDK, error) {
 		sessionStorage: sessionStorage,
 		modelsByID:     make(map[string]*Model),
 		modelsByName:   make(map[string]*Model),
-		httpClient:     &http.Client{Timeout: 10 * time.Second},
+		httpClient:     &http.Client{Timeout: httpClientTimeout},
 	}
 
 	log.Info("SDK initialized")
-
-	// Start background session maintenance (auto-close expired sessions, reclaim MOR).
 	sdk.startSessionMaintenance()
 
 	return sdk, nil
 }
 
 // SetLogLevel changes the SDK's internal log level at runtime.
-// All cores (stdout, file, memory tee) switch together because they share an AtomicLevel.
 func (s *SDK) SetLogLevel(level string) error {
 	return s.baseLog.SetLevel(level)
 }
@@ -268,7 +267,6 @@ func (s *SDK) GetLogLevel() string {
 }
 
 // ProxyRouterVersion returns the proxy-router build version baked in at compile time.
-// Populated via -ldflags: -X config.BuildVersion=...
 func ProxyRouterVersion() string {
 	return config.BuildVersion
 }
@@ -279,836 +277,33 @@ func ProxyRouterCommit() string {
 }
 
 // Shutdown releases all resources held by the SDK.
+// After Shutdown returns, all public methods return ErrSDKClosed.
 func (s *SDK) Shutdown() {
-	if s.maintCancel != nil {
-		s.maintCancel()
-	}
-	s.StopHTTPServer()
-	if s.ethClient != nil {
-		s.ethClient.Close()
-		s.ethClient = nil
-	}
-	s.log.Info("SDK shut down")
-}
+	s.closed.Store(1)
 
-// DefaultMaintenanceInterval is how often the background loop checks for expired sessions.
-// Only naturally-expired sessions need this — provider-initiated closes already refund MOR
-// on-chain immediately. This is a housekeeping sweep, not time-critical.
-const DefaultMaintenanceInterval = 15 * time.Minute
-
-// SetMaintenanceInterval restarts the session maintenance loop with a new interval.
-// Pass 0 to disable automatic session closing entirely.
-func (s *SDK) SetMaintenanceInterval(d time.Duration) {
+	s.maintMu.Lock()
 	if s.maintCancel != nil {
 		s.maintCancel()
 		s.maintCancel = nil
 	}
-	if d > 0 {
-		ctx, cancel := context.WithCancel(context.Background())
-		s.maintCancel = cancel
-		go s.runSessionMaintenance(ctx, d)
+	s.maintMu.Unlock()
+	s.maintWg.Wait()
+
+	s.StopHTTPServer()
+
+	if s.ethClient != nil {
+		s.ethClient.Close()
+		s.ethClient = nil
 	}
+
+	s.walletStorage.Clear()
+
+	s.log.Info("SDK shut down")
 }
 
-func (s *SDK) startSessionMaintenance() {
-	ctx, cancel := context.WithCancel(context.Background())
-	s.maintCancel = cancel
-	go s.runSessionMaintenance(ctx, DefaultMaintenanceInterval)
-}
-
-// runSessionMaintenance periodically checks for expired on-chain sessions and auto-closes them
-// to reclaim the user's locked MOR stake. It also detects provider-initiated closures by
-// comparing against the on-chain state.
-func (s *SDK) runSessionMaintenance(ctx context.Context, interval time.Duration) {
-	log := s.log.Named("SESSION_MAINT")
-	log.Infof("session maintenance started (interval %s)", interval)
-
-	// Wait before the first tick — let the app finish startup, fund the wallet, etc.
-	select {
-	case <-ctx.Done():
-		return
-	case <-time.After(2 * time.Minute):
+func (s *SDK) checkClosed() error {
+	if s.closed.Load() != 0 {
+		return ErrSDKClosed
 	}
-
-	s.runMaintenanceTick(ctx, log)
-
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			log.Info("session maintenance stopped")
-			return
-		case <-ticker.C:
-			s.runMaintenanceTick(ctx, log)
-		}
-	}
-}
-
-func (s *SDK) runMaintenanceTick(ctx context.Context, log lib.ILogger) {
-	addr, err := s.getAddress()
-	if err != nil {
-		log.Warnf("cannot get wallet address: %s", err)
-		return
-	}
-	user := common.HexToAddress(addr)
-	now := time.Now().Unix()
-
-	var offset big.Int
-	const limit uint8 = 50
-	const maxPages = 40
-	var closed, alreadyClosed, active int
-
-	for page := 0; page < maxPages; page++ {
-		unclosed, _, totalFetched, err := s.blockchain.GetUnclosedUserSessions(ctx, user, &offset, limit, registries.OrderDESC)
-		if err != nil {
-			log.Warnf("error fetching sessions page %d: %s", page, err)
-			break
-		}
-		if totalFetched == 0 {
-			break
-		}
-		for _, ses := range unclosed {
-			if ses == nil {
-				continue
-			}
-			if ses.User.Hex() != addr {
-				continue
-			}
-			endsAt := ses.EndsAt.Int64()
-			if endsAt > 0 && endsAt < now {
-				sessionHash := common.HexToHash(ses.Id)
-				chainSes, err := s.blockchain.GetSession(ctx, sessionHash)
-				if err != nil {
-					log.Warnf("cannot fetch session %s from chain: %s", ses.Id, err)
-					continue
-				}
-				if chainSes.ClosedAt.Int64() != 0 {
-					alreadyClosed++
-					continue
-				}
-				log.Infof("auto-closing expired session %s (ended %ds ago)", ses.Id, now-endsAt)
-				_, err = s.blockchain.CloseSession(ctx, sessionHash)
-				if err != nil {
-					log.Warnf("failed to close session %s: %s", ses.Id, err)
-					continue
-				}
-				closed++
-			} else {
-				active++
-			}
-		}
-		offset.Add(&offset, big.NewInt(int64(totalFetched)))
-	}
-
-	if closed > 0 || alreadyClosed > 0 {
-		log.Infof("maintenance: closed %d expired sessions, %d already closed, %d active", closed, alreadyClosed, active)
-	}
-}
-
-// parseEthNodeURLs splits a config string into deduplicated RPC URLs (order preserved).
-func parseEthNodeURLs(s string) []string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return nil
-	}
-	parts := strings.FieldsFunc(s, func(r rune) bool {
-		return r == ',' || r == ';' || r == '|' || r == '\n' || r == '\t'
-	})
-	seen := make(map[string]struct{}, len(parts))
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		u := strings.TrimSpace(p)
-		if u == "" {
-			continue
-		}
-		if _, ok := seen[u]; ok {
-			continue
-		}
-		seen[u] = struct{}{}
-		out = append(out, u)
-	}
-	return out
-}
-
-// --- Wallet Operations ---
-
-// CreateWallet generates a new BIP-39 mnemonic and derives the wallet.
-// Returns the mnemonic (back it up!) and the Ethereum address.
-func (s *SDK) CreateWallet() (mnemonic string, address string, err error) {
-	entropy, err := bip39.NewEntropy(128) // 12 words
-	if err != nil {
-		return "", "", fmt.Errorf("generate entropy: %w", err)
-	}
-	mnemonic, err = bip39.NewMnemonic(entropy)
-	if err != nil {
-		return "", "", fmt.Errorf("generate mnemonic: %w", err)
-	}
-	err = s.wallet.SetMnemonic(mnemonic, DefaultDerivationPath)
-	if err != nil {
-		return "", "", fmt.Errorf("set mnemonic: %w", err)
-	}
-	addr, err := s.getAddress()
-	if err != nil {
-		return "", "", err
-	}
-	s.log.Infof("wallet created: %s", addr)
-	return mnemonic, addr, nil
-}
-
-// ImportMnemonic imports a wallet from an existing BIP-39 mnemonic.
-func (s *SDK) ImportMnemonic(mnemonic string) (address string, err error) {
-	if !bip39.IsMnemonicValid(mnemonic) {
-		return "", fmt.Errorf("invalid mnemonic")
-	}
-	err = s.wallet.SetMnemonic(mnemonic, DefaultDerivationPath)
-	if err != nil {
-		return "", fmt.Errorf("set mnemonic: %w", err)
-	}
-	return s.getAddress()
-}
-
-// ImportPrivateKey imports a wallet from a hex-encoded private key.
-func (s *SDK) ImportPrivateKey(hexKey string) (address string, err error) {
-	pk, err := lib.StringToHexString(hexKey)
-	if err != nil {
-		return "", fmt.Errorf("parse private key: %w", err)
-	}
-	err = s.wallet.SetPrivateKey(pk)
-	if err != nil {
-		return "", fmt.Errorf("set private key: %w", err)
-	}
-	return s.getAddress()
-}
-
-// VerifyMnemonicMatchesCurrent returns true if the mnemonic derives the same address as the loaded wallet (no mutation).
-func (s *SDK) VerifyMnemonicMatchesCurrent(mnemonic string) (bool, error) {
-	mnemonic = strings.TrimSpace(mnemonic)
-	if !bip39.IsMnemonicValid(mnemonic) {
-		return false, fmt.Errorf("invalid mnemonic")
-	}
-	current, err := s.getAddress()
-	if err != nil {
-		return false, err
-	}
-	w, err := wallet.NewFromMnemonic(mnemonic)
-	if err != nil {
-		return false, err
-	}
-	path, err := accounts.ParseDerivationPath(DefaultDerivationPath)
-	if err != nil {
-		return false, err
-	}
-	pk, err := w.DerivePrivateKey(path)
-	if err != nil {
-		return false, err
-	}
-	addr, err := lib.PrivKeyToAddr(pk)
-	if err != nil {
-		return false, err
-	}
-	return strings.EqualFold(addr.Hex(), current), nil
-}
-
-// VerifyPrivateKeyMatchesCurrent returns true if the hex private key matches the loaded wallet (no mutation).
-func (s *SDK) VerifyPrivateKeyMatchesCurrent(hexKey string) (bool, error) {
-	current, err := s.getAddress()
-	if err != nil {
-		return false, err
-	}
-	pk, err := lib.StringToHexString(hexKey)
-	if err != nil {
-		return false, err
-	}
-	addr, err := lib.PrivKeyBytesToAddr(pk)
-	if err != nil {
-		return false, err
-	}
-	return strings.EqualFold(addr.Hex(), current), nil
-}
-
-// ExportPrivateKey returns the private key as a hex string.
-func (s *SDK) ExportPrivateKey() (string, error) {
-	pk, err := s.wallet.GetPrivateKey()
-	if err != nil {
-		return "", err
-	}
-	return pk.Hex(), nil
-}
-
-// GetAddress returns the wallet's Ethereum address.
-func (s *SDK) GetAddress() (string, error) {
-	return s.getAddress()
-}
-
-func (s *SDK) getAddress() (string, error) {
-	pk, err := s.wallet.GetPrivateKey()
-	if err != nil {
-		return "", fmt.Errorf("get private key: %w", err)
-	}
-	addr, err := lib.PrivKeyBytesToAddr(pk)
-	if err != nil {
-		return "", fmt.Errorf("derive address: %w", err)
-	}
-	return addr.Hex(), nil
-}
-
-// --- Balance ---
-
-// GetBalance returns ETH and MOR balances as decimal strings (in wei).
-func (s *SDK) GetBalance(ctx context.Context) (*Balance, error) {
-	eth, mor, err := s.blockchain.GetBalance(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return &Balance{
-		ETH: eth.String(),
-		MOR: mor.String(),
-	}, nil
-}
-
-// GetBalanceJSON returns the balance as a JSON string (for FFI).
-func (s *SDK) GetBalanceJSON(ctx context.Context) (string, error) {
-	b, err := s.GetBalance(ctx)
-	if err != nil {
-		return "", err
-	}
-	return toJSON(b)
-}
-
-// SendETH sends native ETH (amount in wei, decimal string) to an 0x address. Waits for mining.
-func (s *SDK) SendETH(ctx context.Context, toHex string, amountWei string) (txHash string, err error) {
-	if !common.IsHexAddress(toHex) {
-		return "", fmt.Errorf("invalid recipient address")
-	}
-	to := common.HexToAddress(toHex)
-	amt, ok := new(big.Int).SetString(amountWei, 10)
-	if !ok || amt.Sign() <= 0 {
-		return "", fmt.Errorf("invalid amount: use wei as a decimal string")
-	}
-	h, err := s.blockchain.SendETH(ctx, to, amt, "")
-	if err != nil {
-		return "", err
-	}
-	return h.Hex(), nil
-}
-
-// SendMOR sends MOR ERC-20 (amount in token wei, 18 decimals, decimal string) to an 0x address.
-func (s *SDK) SendMOR(ctx context.Context, toHex string, amountWei string) (txHash string, err error) {
-	if !common.IsHexAddress(toHex) {
-		return "", fmt.Errorf("invalid recipient address")
-	}
-	to := common.HexToAddress(toHex)
-	amt, ok := new(big.Int).SetString(amountWei, 10)
-	if !ok || amt.Sign() <= 0 {
-		return "", fmt.Errorf("invalid amount: use wei as a decimal string")
-	}
-	h, err := s.blockchain.SendMOR(ctx, to, amt, "")
-	if err != nil {
-		return "", err
-	}
-	return h.Hex(), nil
-}
-
-// --- Models ---
-
-// activeModelsResponse matches the JSON shape at ActiveModelsURL.
-type activeModelsResponse struct {
-	Models []struct {
-		ID        string   `json:"Id"`
-		IpfsCID   string   `json:"IpfsCID"`
-		Fee       int64    `json:"Fee"`
-		Stake     int64    `json:"Stake"`
-		Owner     string   `json:"Owner"`
-		Name      string   `json:"Name"`
-		Tags      []string `json:"Tags"`
-		CreatedAt int64    `json:"CreatedAt"`
-		IsDeleted bool     `json:"IsDeleted"`
-		ModelType string   `json:"ModelType"`
-	} `json:"models"`
-	LastUpdated int64 `json:"last_updated"`
-}
-
-// refreshModelsCache fetches models from the HTTP endpoint and updates the cache.
-func (s *SDK) refreshModelsCache() error {
-	if s.cfg.ActiveModelsURL == "" {
-		return fmt.Errorf("ActiveModelsURL not configured")
-	}
-
-	resp, err := s.httpClient.Get(s.cfg.ActiveModelsURL)
-	if err != nil {
-		return fmt.Errorf("fetch active models: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("active models returned %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("read response: %w", err)
-	}
-
-	hash := sha256.Sum256(body)
-	hashStr := hex.EncodeToString(hash[:])
-
-	s.modelsMu.RLock()
-	same := hashStr == s.modelsHash
-	s.modelsMu.RUnlock()
-	if same {
-		s.modelsMu.Lock()
-		s.modelsCacheAt = time.Now()
-		s.modelsMu.Unlock()
-		s.log.Debug("active models unchanged, extending cache")
-		return nil
-	}
-
-	var data activeModelsResponse
-	if err := json.Unmarshal(body, &data); err != nil {
-		return fmt.Errorf("parse active models: %w", err)
-	}
-
-	models := make([]Model, 0, len(data.Models))
-	byID := make(map[string]*Model, len(data.Models))
-	byName := make(map[string]*Model, len(data.Models))
-
-	for _, m := range data.Models {
-		if m.IsDeleted {
-			continue
-		}
-		model := Model{
-			ID:        m.ID,
-			Name:      m.Name,
-			Tags:      m.Tags,
-			Fee:       fmt.Sprintf("%d", m.Fee),
-			Stake:     fmt.Sprintf("%d", m.Stake),
-			Owner:     m.Owner,
-			ModelType: m.ModelType,
-			CreatedAt: m.CreatedAt,
-		}
-		models = append(models, model)
-		stored := models[len(models)-1:]
-		byID[m.ID] = &stored[0]
-		byName[strings.ToLower(m.Name)] = &stored[0]
-	}
-
-	s.modelsMu.Lock()
-	s.modelsCache = models
-	s.modelsByID = byID
-	s.modelsByName = byName
-	s.modelsCacheAt = time.Now()
-	s.modelsHash = hashStr
-	s.modelsMu.Unlock()
-
-	s.log.Infof("cached %d active models from HTTP endpoint", len(models))
 	return nil
-}
-
-// GetAllModels returns active models, preferring the HTTP endpoint with blockchain fallback.
-func (s *SDK) GetAllModels(ctx context.Context) ([]Model, error) {
-	// Try HTTP cache first
-	s.modelsMu.RLock()
-	cached := s.modelsCache
-	age := time.Since(s.modelsCacheAt)
-	s.modelsMu.RUnlock()
-
-	if cached != nil && age < DefaultModelCacheTTL {
-		return cached, nil
-	}
-
-	// Refresh from HTTP endpoint
-	if s.cfg.ActiveModelsURL != "" {
-		if err := s.refreshModelsCache(); err != nil {
-			s.log.Warnf("HTTP model fetch failed, trying blockchain: %v", err)
-		} else {
-			s.modelsMu.RLock()
-			result := s.modelsCache
-			s.modelsMu.RUnlock()
-			return result, nil
-		}
-	}
-
-	// Fallback: blockchain via Multicall
-	models, err := s.blockchain.GetAllModels(ctx)
-	if err != nil {
-		if cached != nil {
-			s.log.Warn("blockchain fetch also failed, returning stale cache")
-			return cached, nil
-		}
-		return nil, err
-	}
-	out := make([]Model, 0, len(models))
-	for _, m := range models {
-		if m.IsDeleted {
-			continue
-		}
-		out = append(out, Model{
-			ID:    m.Id.Hex(),
-			Name:  m.Name,
-			Tags:  m.Tags,
-			Fee:   bigStr(m.Fee),
-			Stake: bigStr(m.Stake),
-			Owner: m.Owner.Hex(),
-		})
-	}
-	return out, nil
-}
-
-// ResolveModelID resolves a model name or blockchain ID to the canonical blockchain ID.
-func (s *SDK) ResolveModelID(ctx context.Context, nameOrID string) (string, error) {
-	if _, err := s.GetAllModels(ctx); err != nil {
-		return "", err
-	}
-	s.modelsMu.RLock()
-	defer s.modelsMu.RUnlock()
-
-	if m, ok := s.modelsByID[nameOrID]; ok {
-		return m.ID, nil
-	}
-	if m, ok := s.modelsByName[strings.ToLower(nameOrID)]; ok {
-		return m.ID, nil
-	}
-	return "", fmt.Errorf("model not found: %s", nameOrID)
-}
-
-// GetAllModelsJSON returns all models as a JSON string (for FFI).
-func (s *SDK) GetAllModelsJSON(ctx context.Context) (string, error) {
-	models, err := s.GetAllModels(ctx)
-	if err != nil {
-		return "", err
-	}
-	return toJSON(models)
-}
-
-// GetRatedBids returns bids for a model, scored and sorted by quality.
-func (s *SDK) GetRatedBids(ctx context.Context, modelID string) ([]ScoredBid, error) {
-	id := common.HexToHash(modelID)
-	bids, err := s.blockchain.GetRatedBids(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]ScoredBid, 0, len(bids))
-	for _, b := range bids {
-		out = append(out, ScoredBid{
-			ID:             b.ID.Hex(),
-			Provider:       b.Bid.Provider.Hex(),
-			ModelAgentID:   b.Bid.ModelAgentId.Hex(),
-			PricePerSecond: bigIntStr(b.Bid.PricePerSecond),
-			Score:          b.Score,
-		})
-	}
-	return out, nil
-}
-
-// GetRatedBidsJSON returns rated bids as a JSON string (for FFI).
-func (s *SDK) GetRatedBidsJSON(ctx context.Context, modelID string) (string, error) {
-	bids, err := s.GetRatedBids(ctx, modelID)
-	if err != nil {
-		return "", err
-	}
-	return toJSON(bids)
-}
-
-// EstimateOpenSessionStakeJSON returns stake + formula inputs as JSON (for FFI / UI).
-// Uses the top-scored bid (same as the first provider tried when opening a session).
-func (s *SDK) EstimateOpenSessionStakeJSON(ctx context.Context, modelID string, durationSec int64, directPayment bool) (string, error) {
-	id := common.HexToHash(modelID)
-	dur := big.NewInt(durationSec)
-	est, err := s.blockchain.EstimateOpenSessionStake(ctx, id, dur, directPayment)
-	if err != nil {
-		return "", err
-	}
-	b, err := json.Marshal(est)
-	if err != nil {
-		return "", err
-	}
-	return string(b), nil
-}
-
-// --- Sessions ---
-
-// OpenSession opens a session with the best-rated provider for a model.
-// duration is in seconds. Returns the session ID (tx hash).
-func (s *SDK) OpenSession(ctx context.Context, modelID string, durationSec int64, directPayment bool) (string, error) {
-	id := common.HexToHash(modelID)
-	dur := big.NewInt(durationSec)
-	txHash, err := s.blockchain.OpenSessionByModelId(ctx, id, dur, directPayment, true, common.Address{}, "")
-	if err != nil {
-		return "", err
-	}
-	return txHash.Hex(), nil
-}
-
-// CloseSession closes an active session. Returns the close tx hash.
-func (s *SDK) CloseSession(ctx context.Context, sessionID string) (string, error) {
-	id := common.HexToHash(sessionID)
-	txHash, err := s.blockchain.CloseSession(ctx, id)
-	if err != nil {
-		return "", err
-	}
-	return txHash.Hex(), nil
-}
-
-// GetSession retrieves session details by ID.
-func (s *SDK) GetSession(ctx context.Context, sessionID string) (*Session, error) {
-	id := common.HexToHash(sessionID)
-	sess, err := s.blockchain.GetSession(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	return sessionFromInternal(sess), nil
-}
-
-// GetSessionJSON returns session details as a JSON string (for FFI).
-func (s *SDK) GetSessionJSON(ctx context.Context, sessionID string) (string, error) {
-	sess, err := s.GetSession(ctx, sessionID)
-	if err != nil {
-		return "", err
-	}
-	return toJSON(sess)
-}
-
-// GetUnclosedUserSessions returns on-chain sessions for the wallet where ClosedAt == 0.
-// Paginates newest-first until a short page or maxPages.
-func (s *SDK) GetUnclosedUserSessions(ctx context.Context) ([]Session, error) {
-	addr, err := s.getAddress()
-	if err != nil {
-		return nil, err
-	}
-	user := common.HexToAddress(addr)
-	var out []Session
-	offset := big.NewInt(0)
-	const limit uint8 = 50
-	const maxPages = 40
-	order := registries.OrderDESC
-
-	for page := 0; page < maxPages; page++ {
-		unclosed, _, totalFetched, err := s.blockchain.GetUnclosedUserSessions(ctx, user, offset, limit, order)
-		if err != nil {
-			return nil, err
-		}
-		for _, ses := range unclosed {
-			if ses == nil {
-				continue
-			}
-			out = append(out, *sessionFromInternal(ses))
-		}
-		if totalFetched < int(limit) {
-			break
-		}
-		offset = new(big.Int).Add(offset, big.NewInt(int64(totalFetched)))
-	}
-	// JSON null vs []: encoding/json marshals nil slice as null; FFI/Flutter expect [].
-	if out == nil {
-		out = []Session{}
-	}
-	return out, nil
-}
-
-// GetUnclosedUserSessionsJSON is for FFI / JSON consumers.
-func (s *SDK) GetUnclosedUserSessionsJSON(ctx context.Context) (string, error) {
-	list, err := s.GetUnclosedUserSessions(ctx)
-	if err != nil {
-		return "", err
-	}
-	return toJSON(list)
-}
-
-// --- Chat ---
-
-// StreamCallback receives streaming chunks from a chat completion.
-// text is the content delta (or reasoning delta when isThinking is true),
-// isLast is true on the final chunk.
-type StreamCallback func(text string, isThinking bool, isLast bool) error
-
-// SendPrompt sends a chat completion request over an active session.
-// If stream is true, the provider may return SSE chunks; otherwise a single JSON completion.
-// In both cases, deltas are delivered through cb until the response is complete.
-func (s *SDK) SendPrompt(ctx context.Context, sessionID string, prompt string, stream bool, cb StreamCallback) error {
-	return s.SendPromptWithMessages(ctx, sessionID, []openai.ChatCompletionMessage{
-		{Role: openai.ChatMessageRoleUser, Content: prompt},
-	}, stream, cb)
-}
-
-// SendPromptWithMessages sends a full chat transcript (OpenAI roles) over an active session.
-// Use this when the app persists history locally and must re-supply prior turns after restart.
-func (s *SDK) SendPromptWithMessages(ctx context.Context, sessionID string, messages []openai.ChatCompletionMessage, stream bool, cb StreamCallback) error {
-	id := common.HexToHash(sessionID)
-	if err := s.ensureProviderForSession(ctx, id); err != nil {
-		return err
-	}
-
-	req := &gcs.OpenAICompletionRequestExtra{}
-	req.Model = sessionID
-	req.Messages = messages
-	req.Stream = stream
-
-	internalCB := func(ctx context.Context, chunk gcs.Chunk, errResp *gcs.AiEngineErrorResponse) error {
-		if errResp != nil {
-			return fmt.Errorf("provider error: %v", errResp.ProviderModelError)
-		}
-		if chunk.Type() == gcs.ChunkTypeControl {
-			return cb("", false, true)
-		}
-		isLast := !chunk.IsStreaming()
-		text := chunk.String()
-		reasoning := extractReasoningContent(chunk)
-		if reasoning != "" {
-			if err := cb(reasoning, true, false); err != nil {
-				return err
-			}
-		}
-		if text != "" || (reasoning == "" && isLast) {
-			return cb(text, false, isLast)
-		}
-		return nil
-	}
-
-	_, err := s.proxySender.SendPromptV2(ctx, id, req, internalCB)
-	return err
-}
-
-// ChatParams holds optional generation parameters forwarded to the provider.
-// Nil fields are left at their zero values (provider uses its own defaults).
-type ChatParams struct {
-	Temperature      *float32
-	TopP             *float32
-	MaxTokens        *int
-	FrequencyPenalty *float32
-	PresencePenalty  *float32
-}
-
-// SendPromptWithMessagesAndParams is like SendPromptWithMessages but allows
-// setting generation parameters (temperature, top_p, max_tokens, etc.).
-// Pass nil for params to get the default behavior.
-// Returns the last non-control chunk's Data() serialised as JSON so the
-// caller gets the full, unfiltered provider response metadata.
-func (s *SDK) SendPromptWithMessagesAndParams(ctx context.Context, sessionID string, messages []openai.ChatCompletionMessage, stream bool, params *ChatParams, cb StreamCallback) (json.RawMessage, error) {
-	id := common.HexToHash(sessionID)
-	if err := s.ensureProviderForSession(ctx, id); err != nil {
-		return nil, err
-	}
-
-	req := &gcs.OpenAICompletionRequestExtra{}
-	req.Model = sessionID
-	req.Messages = messages
-	req.Stream = stream
-
-	if params != nil {
-		if params.Temperature != nil {
-			req.Temperature = *params.Temperature
-		}
-		if params.TopP != nil {
-			req.TopP = *params.TopP
-		}
-		if params.MaxTokens != nil {
-			req.MaxTokens = *params.MaxTokens
-		}
-		if params.FrequencyPenalty != nil {
-			req.FrequencyPenalty = *params.FrequencyPenalty
-		}
-		if params.PresencePenalty != nil {
-			req.PresencePenalty = *params.PresencePenalty
-		}
-	}
-
-	var lastChunkData interface{}
-
-	internalCB := func(ctx context.Context, chunk gcs.Chunk, errResp *gcs.AiEngineErrorResponse) error {
-		if errResp != nil {
-			return fmt.Errorf("provider error: %v", errResp.ProviderModelError)
-		}
-		if chunk.Type() == gcs.ChunkTypeControl {
-			return cb("", false, true)
-		}
-
-		lastChunkData = chunk.Data()
-
-		isLast := !chunk.IsStreaming()
-		text := chunk.String()
-		reasoning := extractReasoningContent(chunk)
-		if reasoning != "" {
-			if err := cb(reasoning, true, false); err != nil {
-				return err
-			}
-		}
-		if text != "" || (reasoning == "" && isLast) {
-			return cb(text, false, isLast)
-		}
-		return nil
-	}
-
-	_, err := s.proxySender.SendPromptV2(ctx, id, req, internalCB)
-	if err != nil {
-		return nil, err
-	}
-
-	// Serialise whatever the last chunk carried — the full provider response
-	// for non-streaming, or the final SSE event for streaming.
-	var raw json.RawMessage
-	if lastChunkData != nil {
-		if b, merr := json.Marshal(lastChunkData); merr == nil {
-			raw = b
-		}
-	}
-	return raw, nil
-}
-
-// ensureProviderForSession repopulates in-memory provider URL + pubkey after SDK restart (mobile).
-func (s *SDK) ensureProviderForSession(ctx context.Context, sessionID common.Hash) error {
-	sess, err := s.sessionRepo.GetSession(ctx, sessionID)
-	if err != nil {
-		return fmt.Errorf("session: %w", err)
-	}
-	provAddr := sess.ProviderAddr()
-	u, err := s.sessionStorage.GetUser(provAddr.Hex())
-	if err != nil {
-		return fmt.Errorf("provider cache: %w", err)
-	}
-	if u != nil {
-		return nil
-	}
-	p, err := s.blockchain.GetProvider(ctx, provAddr)
-	if err != nil {
-		return fmt.Errorf("provider registry: %w", err)
-	}
-	if p == nil || p.Endpoint == "" {
-		return fmt.Errorf("provider endpoint not found for %s", provAddr.Hex())
-	}
-	return s.proxySender.EnsureProviderRegistered(ctx, provAddr, p.Endpoint)
-}
-
-// --- Helpers ---
-
-func toJSON(v interface{}) (string, error) {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return "", err
-	}
-	return string(b), nil
-}
-
-func bigStr(b *big.Int) string {
-	if b == nil {
-		return "0"
-	}
-	return b.String()
-}
-
-func bigIntStr(b *lib.BigInt) string {
-	if b == nil {
-		return "0"
-	}
-	return b.String()
-}
-
-// extractReasoningContent returns reasoning_content from a streaming chunk.
-// Uses the typed accessor on ChunkStreaming which reads from the preserved
-// original JSON — no re-marshaling, no side effects on the chunk state.
-func extractReasoningContent(chunk gcs.Chunk) string {
-	if cs, ok := chunk.(*gcs.ChunkStreaming); ok {
-		return cs.ReasoningContent()
-	}
-	return ""
 }
