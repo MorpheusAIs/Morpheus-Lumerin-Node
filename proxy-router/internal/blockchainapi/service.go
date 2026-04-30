@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/attestation"
@@ -42,6 +44,15 @@ const basefeeWiggleMultiplier = 2
 // allowance already exceeds stake * this factor (avoids unnecessary tx).
 const allowanceReserveMultiplier = 3
 
+// supplyBudgetCacheTTL bounds duplicate contract reads during session open / model flows.
+const supplyBudgetCacheTTL = 55 * time.Second
+
+// sessionTxMaxRetries is the number of attempts to submit a session tx
+// (open or close) before giving up. Retries only apply to "execution reverted"
+// errors, which are typically transient when prior state changes haven't fully
+// propagated across RPC nodes.
+const sessionTxMaxRetries = 3
+
 var maxUint256 = new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(1))
 
 type BlockchainService struct {
@@ -60,6 +71,12 @@ type BlockchainService struct {
 	rating              *rating.Rating
 	minStake            *big.Int
 	attestationVerifier *attestation.Verifier
+
+	supplyBudgetMu   sync.Mutex
+	cachedSupply     *big.Int
+	cachedSupplyAt   time.Time
+	cachedBudget     *big.Int
+	cachedBudgetAt   time.Time
 
 	legacyTx    bool
 	privateKey  i.PrKeyProvider
@@ -328,9 +345,13 @@ func (s *BlockchainService) rateBids(bidIds [][32]byte, bids []m.IBidStorageBid,
 func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalSig []byte, stake *big.Int, directPayment bool, agentUsername string, isTee bool) (common.Hash, error) {
 	log := s.requestLog(ctx)
 
-	isAgent, err := s.authConfig.IsAllowanceEnough(agentUsername, s.morTokenAddr.Hex(), stake)
-	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrAgentUserAllowance, err)
+	var isAgent bool
+	if s.authConfig != nil {
+		var err error
+		isAgent, err = s.authConfig.IsAllowanceEnough(agentUsername, s.morTokenAddr.Hex(), stake)
+		if err != nil {
+			return common.Hash{}, lib.WrapError(ErrAgentUserAllowance, err)
+		}
 	}
 
 	prKey, err := s.privateKey.GetPrivateKey()
@@ -374,14 +395,14 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 		)
 		if err != nil {
 			s.handleTxError(ctx, addr, err)
-			return common.Hash{}, lib.WrapError(ErrSendTx, fmt.Errorf("approve failed: %w", err))
+			return common.Hash{}, lib.WrapError(ErrSendTx, classifyOpenSessionError("approve MOR allowance failed", err))
 		}
 
 		if approveReceipt.Status != 1 {
 			return common.Hash{}, lib.WrapError(ErrSendTx, fmt.Errorf("approve tx failed with status %d", approveReceipt.Status))
 		}
 
-		if isAgent {
+		if isAgent && s.authConfig != nil {
 			err = s.authConfig.AuthStorage.SetAgentTx(approveReceipt.TxHash.Hex(), agentUsername, approveReceipt.BlockNumber)
 			if err != nil {
 				log.Errorf("failed to set agent tx: %s", err)
@@ -389,23 +410,45 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 		}
 	}
 
-	// Step 2: Open session with escalation
-	sessionBaseOpts, err := s.getTransactOpts(ctx, prKey)
-	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
-	}
+	// Step 2: Open session with escalation.
+	// Retry on "execution reverted" — the approval tx may have been mined but
+	// not yet visible to the RPC node serving the simulation/estimate call.
+	var sessionReceipt *types.Receipt
+	var lastOpenErr error
+	for attempt := 0; attempt < sessionTxMaxRetries; attempt++ {
+		if attempt > 0 {
+			backoff := time.Duration(attempt*3) * time.Second
+			log.Warnf("openSession reverted (attempt %d/%d), retrying in %s", attempt, sessionTxMaxRetries, backoff)
+			select {
+			case <-ctx.Done():
+				return common.Hash{}, fmt.Errorf("context cancelled during openSession retry: %w", ctx.Err())
+			case <-time.After(backoff):
+			}
+		}
 
-	sessionReceipt, err := s.txEscalator.SendWithEscalation(
-		ctx,
-		sessionBaseOpts,
-		func(opts *bind.TransactOpts) (*types.Transaction, error) {
-			return s.sessionRouter.OpenSessionTx(opts, approval, approvalSig, stake, directPayment)
-		},
-		s.legacyTx,
-	)
-	if err != nil {
-		s.handleTxError(ctx, addr, err)
-		return common.Hash{}, lib.WrapError(ErrSendTx, fmt.Errorf("open session failed: %w", err))
+		sessionBaseOpts, err := s.getTransactOpts(ctx, prKey)
+		if err != nil {
+			return common.Hash{}, lib.WrapError(ErrTxOpts, err)
+		}
+
+		sessionReceipt, lastOpenErr = s.txEscalator.SendWithEscalation(
+			ctx,
+			sessionBaseOpts,
+			func(opts *bind.TransactOpts) (*types.Transaction, error) {
+				return s.sessionRouter.OpenSessionTx(opts, approval, approvalSig, stake, directPayment)
+			},
+			s.legacyTx,
+		)
+		if lastOpenErr == nil {
+			break
+		}
+		if !isExecutionReverted(lastOpenErr) {
+			break
+		}
+	}
+	if lastOpenErr != nil {
+		s.handleTxError(ctx, addr, lastOpenErr)
+		return common.Hash{}, lib.WrapError(ErrSendTx, classifyOpenSessionError("open session failed", lastOpenErr))
 	}
 
 	// Parse session info from receipt
@@ -414,7 +457,7 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 		return common.Hash{}, lib.WrapError(ErrSendTx, fmt.Errorf("parse session receipt failed: %w", err))
 	}
 
-	if isAgent {
+	if isAgent && s.authConfig != nil {
 		amountBigInt := lib.BigInt{Int: *stake}
 		err = s.authConfig.DecreaseAllowance(agentUsername, s.morTokenAddr.Hex(), amountBigInt)
 		if err != nil {
@@ -427,9 +470,22 @@ func (s *BlockchainService) OpenSession(ctx context.Context, approval, approvalS
 		}
 	}
 
-	session, err := s.sessionRepo.GetSession(ctx, sessionID)
+	// Poll until the session is visible on-chain (handles RPC propagation lag).
+	var session *sessionrepo.SessionModel
+	for attempt := 0; attempt < 10; attempt++ {
+		session, err = s.sessionRepo.GetSession(ctx, sessionID)
+		if err == nil {
+			break
+		}
+		s.log.Warnf("session %s not yet visible (attempt %d/10): %s", sessionID.Hex(), attempt+1, err)
+		select {
+		case <-ctx.Done():
+			return sessionID, fmt.Errorf("context cancelled waiting for session visibility: %w", ctx.Err())
+		case <-time.After(2 * time.Second):
+		}
+	}
 	if err != nil {
-		return sessionID, fmt.Errorf("failed to get session: %s", err.Error())
+		return sessionID, fmt.Errorf("session created on-chain (tx mined) but not yet visible after retries: %s", err.Error())
 	}
 
 	session.SetAgentUsername(agentUsername)
@@ -677,22 +733,42 @@ func (s *BlockchainService) CloseSession(ctx context.Context, sessionID common.H
 		signedReport = report.SignedReport
 	}
 
-	baseOpts, err := s.getTransactOpts(ctx, prKey)
-	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
-	}
+	var receipt *types.Receipt
+	var lastCloseErr error
+	for attempt := 0; attempt < sessionTxMaxRetries; attempt++ {
+		if attempt > 0 {
+			backoff := time.Duration(attempt*3) * time.Second
+			s.log.Warnf("closeSession reverted (attempt %d/%d), retrying in %s", attempt, sessionTxMaxRetries, backoff)
+			select {
+			case <-ctx.Done():
+				return common.Hash{}, fmt.Errorf("context cancelled during closeSession retry: %w", ctx.Err())
+			case <-time.After(backoff):
+			}
+		}
 
-	receipt, err := s.txEscalator.SendWithEscalation(
-		ctx,
-		baseOpts,
-		func(opts *bind.TransactOpts) (*types.Transaction, error) {
-			return s.sessionRouter.CloseSessionTx(opts, reportMessage, signedReport)
-		},
-		s.legacyTx,
-	)
-	if err != nil {
-		s.handleTxError(ctx, addr, err)
-		return common.Hash{}, lib.WrapError(ErrSendTx, fmt.Errorf("close session failed: %w", err))
+		baseOpts, err := s.getTransactOpts(ctx, prKey)
+		if err != nil {
+			return common.Hash{}, lib.WrapError(ErrTxOpts, err)
+		}
+
+		receipt, lastCloseErr = s.txEscalator.SendWithEscalation(
+			ctx,
+			baseOpts,
+			func(opts *bind.TransactOpts) (*types.Transaction, error) {
+				return s.sessionRouter.CloseSessionTx(opts, reportMessage, signedReport)
+			},
+			s.legacyTx,
+		)
+		if lastCloseErr == nil {
+			break
+		}
+		if !isExecutionReverted(lastCloseErr) {
+			break
+		}
+	}
+	if lastCloseErr != nil {
+		s.handleTxError(ctx, addr, lastCloseErr)
+		return common.Hash{}, lib.WrapError(ErrSendTx, classifyCloseSessionError(lastCloseErr))
 	}
 
 	if receipt.Status != 1 {
@@ -743,9 +819,13 @@ func (s *BlockchainService) GetBalance(ctx context.Context) (eth *big.Int, mor *
 }
 
 func (s *BlockchainService) SendETH(ctx context.Context, to common.Address, amount *big.Int, agentUsername string) (common.Hash, error) {
-	shouldDecrease, err := s.authConfig.IsAllowanceEnough(agentUsername, "eth", amount)
-	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrAgentUserAllowance, err)
+	var shouldDecrease bool
+	if s.authConfig != nil {
+		var err error
+		shouldDecrease, err = s.authConfig.IsAllowanceEnough(agentUsername, "eth", amount)
+		if err != nil {
+			return common.Hash{}, lib.WrapError(ErrAgentUserAllowance, err)
+		}
 	}
 
 	signedTx, err := s.createSignedTransaction(ctx, &types.DynamicFeeTx{
@@ -767,7 +847,7 @@ func (s *BlockchainService) SendETH(ctx context.Context, to common.Address, amou
 		return common.Hash{}, lib.WrapError(ErrWaitMined, err)
 	}
 
-	if shouldDecrease {
+	if shouldDecrease && s.authConfig != nil {
 		amountBigInt := lib.BigInt{Int: *amount}
 		err = s.authConfig.DecreaseAllowance(agentUsername, "eth", amountBigInt)
 		if err != nil {
@@ -846,9 +926,13 @@ func (s *BlockchainService) createSignedTransaction(ctx context.Context, txdata 
 }
 
 func (s *BlockchainService) SendMOR(ctx context.Context, to common.Address, amount *big.Int, agentUsername string) (common.Hash, error) {
-	shouldDecrease, err := s.authConfig.IsAllowanceEnough(agentUsername, s.morTokenAddr.Hex(), amount)
-	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrAgentUserAllowance, err)
+	var shouldDecrease bool
+	if s.authConfig != nil {
+		var err error
+		shouldDecrease, err = s.authConfig.IsAllowanceEnough(agentUsername, s.morTokenAddr.Hex(), amount)
+		if err != nil {
+			return common.Hash{}, lib.WrapError(ErrAgentUserAllowance, err)
+		}
 	}
 
 	prKey, err := s.privateKey.GetPrivateKey()
@@ -866,7 +950,7 @@ func (s *BlockchainService) SendMOR(ctx context.Context, to common.Address, amou
 		return common.Hash{}, lib.WrapError(ErrSendTx, err)
 	}
 
-	if shouldDecrease {
+	if shouldDecrease && s.authConfig != nil {
 		amountBigInt := lib.BigInt{Int: *amount}
 		err = s.authConfig.DecreaseAllowance(agentUsername, s.morTokenAddr.Hex(), amountBigInt)
 		if err != nil {
@@ -963,11 +1047,47 @@ func (s *BlockchainService) ClaimProviderBalance(ctx context.Context, sessionID 
 }
 
 func (s *BlockchainService) GetTokenSupply(ctx context.Context) (*big.Int, error) {
-	return s.sessionRouter.GetTotalMORSupply(ctx, big.NewInt(time.Now().Unix()))
+	now := time.Now()
+	s.supplyBudgetMu.Lock()
+	if s.cachedSupply != nil && now.Sub(s.cachedSupplyAt) < supplyBudgetCacheTTL {
+		v := new(big.Int).Set(s.cachedSupply)
+		s.supplyBudgetMu.Unlock()
+		return v, nil
+	}
+	s.supplyBudgetMu.Unlock()
+
+	supply, err := s.sessionRouter.GetTotalMORSupply(ctx, big.NewInt(now.Unix()))
+	if err != nil {
+		return nil, err
+	}
+
+	s.supplyBudgetMu.Lock()
+	s.cachedSupply = new(big.Int).Set(supply)
+	s.cachedSupplyAt = now
+	s.supplyBudgetMu.Unlock()
+	return supply, nil
 }
 
 func (s *BlockchainService) GetTodaysBudget(ctx context.Context) (*big.Int, error) {
-	return s.sessionRouter.GetTodaysBudget(ctx, big.NewInt(time.Now().Unix()))
+	now := time.Now()
+	s.supplyBudgetMu.Lock()
+	if s.cachedBudget != nil && now.Sub(s.cachedBudgetAt) < supplyBudgetCacheTTL {
+		v := new(big.Int).Set(s.cachedBudget)
+		s.supplyBudgetMu.Unlock()
+		return v, nil
+	}
+	s.supplyBudgetMu.Unlock()
+
+	budget, err := s.sessionRouter.GetTodaysBudget(ctx, big.NewInt(now.Unix()))
+	if err != nil {
+		return nil, err
+	}
+
+	s.supplyBudgetMu.Lock()
+	s.cachedBudget = new(big.Int).Set(budget)
+	s.cachedBudgetAt = now
+	s.supplyBudgetMu.Unlock()
+	return budget, nil
 }
 
 func (s *BlockchainService) GetSessions(ctx context.Context, user, provider common.Address, offset *big.Int, limit uint8, order r.Order) ([]*structs.Session, error) {
@@ -1241,6 +1361,64 @@ func (s *BlockchainService) GetAllBidsWithRating(ctx context.Context, modelAgent
 	return ids, bids, providerModelStats, providers, nil
 }
 
+// computeSessionTokenAmount returns the MOR amount transferred when opening a session
+// (mirrors tryOpenSession / OpenSession on-chain pull).
+func computeSessionTokenAmount(bid *structs.Bid, duration, supply, budget *big.Int, directPayment bool) (*big.Int, error) {
+	if bid == nil || bid.PricePerSecond == nil {
+		return nil, fmt.Errorf("invalid bid")
+	}
+	sessionCost := new(big.Int).Mul(&bid.PricePerSecond.Int, duration)
+	if directPayment {
+		return new(big.Int).Set(sessionCost), nil
+	}
+	if supply == nil {
+		return nil, fmt.Errorf("invalid token supply")
+	}
+	if budget == nil || budget.Sign() == 0 {
+		return nil, fmt.Errorf("invalid emissions budget")
+	}
+	stake := new(big.Int).Div(new(big.Int).Mul(supply, sessionCost), budget)
+	return stake, nil
+}
+
+// EstimateOpenSessionStake estimates MOR moved for the highest-scored bid (first open attempt).
+func (s *BlockchainService) EstimateOpenSessionStake(ctx context.Context, modelID common.Hash, duration *big.Int, directPayment bool) (*structs.OpenSessionStakeEstimate, error) {
+	rated, err := s.GetRatedBids(ctx, modelID)
+	if err != nil {
+		return nil, err
+	}
+	if len(rated) == 0 {
+		return nil, ErrNoBid
+	}
+	top := &rated[0].Bid
+	supply, err := s.GetTokenSupply(ctx)
+	if err != nil {
+		return nil, err
+	}
+	budget, err := s.GetTodaysBudget(ctx)
+	if err != nil {
+		return nil, err
+	}
+	stake, err := computeSessionTokenAmount(top, duration, supply, budget, directPayment)
+	if err != nil {
+		return nil, err
+	}
+	sessionCost := new(big.Int).Mul(&top.PricePerSecond.Int, duration)
+	return &structs.OpenSessionStakeEstimate{
+		StakeWei:           stake.String(),
+		SessionCostWei:     sessionCost.String(),
+		MorSupplyWei:       supply.String(),
+		EmissionsBudgetWei: budget.String(),
+		PricePerSecondWei:  top.PricePerSecond.String(),
+		DurationSeconds:    duration.String(),
+		DirectPayment:      directPayment,
+		TopBidProvider:     top.Provider.Hex(),
+		TopBidScore:        rated[0].Score,
+		Explanation: "MOR moved ≈ (total MOR supply × provider price_per_second × duration) ÷ today's emissions budget. " +
+			"It is not the same as price_per_second × duration in MOR. The app uses increaseAllowance on the MOR token for the diamond when your allowance is below ~3× this amount, then the diamond pulls this stake in openSession.",
+	}, nil
+}
+
 func (s *BlockchainService) tryOpenSession(ctx context.Context, bid *structs.Bid, duration, supply, budget *big.Int, userAddr common.Address, directPayment bool, failoverEnabled bool, agentUsername string, isTeeSession bool) (common.Hash, bool, error) {
 	log := s.requestLog(ctx)
 
@@ -1257,14 +1435,9 @@ func (s *BlockchainService) tryOpenSession(ctx context.Context, bid *structs.Bid
 		log.Infof("TEE attestation passed for provider %s", bid.Provider)
 	}
 
-	sessionCost := (&big.Int{}).Mul(&bid.PricePerSecond.Int, duration)
-
-	var amountTransferred = new(big.Int)
-	if directPayment {
-		amountTransferred = sessionCost
-	} else {
-		stake := (&big.Int{}).Div((&big.Int{}).Mul(supply, sessionCost), budget)
-		amountTransferred = stake
+	amountTransferred, err := computeSessionTokenAmount(bid, duration, supply, budget, directPayment)
+	if err != nil {
+		return common.Hash{}, false, err
 	}
 
 	log.Infof("attempting to initiate session %s", map[string]string{
@@ -1427,5 +1600,78 @@ func (s *BlockchainService) getMinStakeCached(ctx context.Context) (*big.Int, er
 func (s *BlockchainService) handleTxError(ctx context.Context, addr common.Address, err error) {
 	if lib.IsNonceError(err) {
 		s.log.Warnf("Nonce error for %s: %v", addr.Hex(), err)
+	}
+}
+
+func isExecutionReverted(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "execution reverted") || strings.Contains(msg, "revert")
+}
+
+func isInsufficientAllowance(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "insufficient allowance")
+}
+
+func isInsufficientETH(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "insufficient funds for gas") ||
+		strings.Contains(msg, "insufficient funds for intrinsic transaction cost")
+}
+
+func isInsufficientMOR(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "transfer amount exceeds balance") ||
+		strings.Contains(msg, "erc20: transfer amount exceeds balance")
+}
+
+func isTxNotMined(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "not mined after all escalation") ||
+		strings.Contains(msg, "transaction not mined")
+}
+
+// classifyOpenSessionError wraps a raw chain error from OpenSession with
+// user-friendly context so the frontend can display actionable guidance.
+func classifyOpenSessionError(stage string, err error) error {
+	switch {
+	case isInsufficientETH(err):
+		return fmt.Errorf("%s: insufficient ETH for gas — add ETH to your wallet to cover transaction fees. Original: %w", stage, err)
+	case isInsufficientMOR(err):
+		return fmt.Errorf("%s: insufficient MOR balance — your wallet does not have enough MOR to stake for this session length. Original: %w", stage, err)
+	case isTxNotMined(err):
+		return fmt.Errorf("%s: transaction could not be confirmed on-chain — the network may be congested, try again shortly. Original: %w", stage, err)
+	default:
+		return fmt.Errorf("%s: %w", stage, err)
+	}
+}
+
+// classifyCloseSessionError wraps a raw chain error from CloseSession.
+func classifyCloseSessionError(err error) error {
+	switch {
+	case isInsufficientETH(err):
+		return fmt.Errorf("close session failed: insufficient ETH for gas — add ETH to your wallet to cover the close transaction fee. Original: %w", err)
+	case isInsufficientAllowance(err):
+		return fmt.Errorf("close session failed: the protocol funding pool does not have enough MOR allowance to settle provider payment — "+
+			"this is a network-level issue, not a wallet issue. The auto-close will keep retrying. Original: %w", err)
+	case isTxNotMined(err):
+		return fmt.Errorf("close session failed: transaction could not be confirmed on-chain — the network may be congested, try again shortly. Original: %w", err)
+	default:
+		return fmt.Errorf("close session failed: %w", err)
 	}
 }

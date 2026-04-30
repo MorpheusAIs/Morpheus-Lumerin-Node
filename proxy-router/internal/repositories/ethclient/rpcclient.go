@@ -6,6 +6,11 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
+// DialRPC connects to a single JSON-RPC endpoint (implements [RPCClient]).
+func DialRPC(rawURL string) (RPCClient, error) {
+	return rpc.Dial(rawURL)
+}
+
 type RPCClient interface {
 	Close()
 	BatchCallContext(context.Context, []rpc.BatchElem) error

@@ -216,6 +216,16 @@ func (c ChatCompletionStreamResponseExtra) MarshalJSON() ([]byte, error) {
 }
 
 // SetOriginalJSONUsage updates the usage field in originalJSON
+// OriginalChoicesJSON returns the raw JSON for the "choices" key from the
+// original unmarshaled data, preserving provider-specific delta fields like
+// reasoning_content that the typed struct doesn't capture.
+func (c *ChatCompletionStreamResponseExtra) OriginalChoicesJSON() json.RawMessage {
+	if c.originalJSON == nil {
+		return nil
+	}
+	return c.originalJSON["choices"]
+}
+
 func (c *ChatCompletionStreamResponseExtra) SetOriginalJSONUsage(usageBytes []byte) {
 	if c.originalJSON == nil {
 		c.originalJSON = make(map[string]json.RawMessage)

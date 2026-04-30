@@ -126,7 +126,32 @@ func (c *ChunkStreaming) Type() ChunkType {
 }
 
 func (c *ChunkStreaming) String() string {
+	if c.data == nil || len(c.data.Choices) == 0 {
+		return ""
+	}
 	return c.data.Choices[0].Delta.Content
+}
+
+// ReasoningContent returns the reasoning_content field from the delta, if present
+// in the original JSON. This field is used by reasoning models (Venice, DeepSeek,
+// OpenAI o-series) to separate chain-of-thought from the answer.
+func (c *ChunkStreaming) ReasoningContent() string {
+	if c.data == nil {
+		return ""
+	}
+	raw := c.data.OriginalChoicesJSON()
+	if raw == nil {
+		return ""
+	}
+	var choices []struct {
+		Delta struct {
+			ReasoningContent string `json:"reasoning_content"`
+		} `json:"delta"`
+	}
+	if err := json.Unmarshal(raw, &choices); err != nil || len(choices) == 0 {
+		return ""
+	}
+	return choices[0].Delta.ReasoningContent
 }
 
 func (c *ChunkStreaming) Data() interface{} {

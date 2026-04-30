@@ -31,8 +31,9 @@ type ChatCompletionMessage struct {
 }
 
 type ChatCompletionDelta struct {
-	Content string `json:"content"`
-	Role    string `json:"role"`
+	Content          string `json:"content"`
+	ReasoningContent string `json:"reasoning_content,omitempty"`
+	Role             string `json:"role"`
 }
 
 type ChatCompletionResponseFormat struct {

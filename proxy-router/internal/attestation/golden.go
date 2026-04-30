@@ -217,7 +217,11 @@ func (g *GoldenSource) verifyAndExtract(ctx context.Context, version string) (*G
 		return nil, fmt.Errorf("failed to read referrer index manifest: %w", err)
 	}
 
-	trustedRoot, err := root.FetchTrustedRoot()
+	// Use a sandbox-safe TUF cache directory when the mobile embedder has
+	// configured one via [SetSigstoreCacheDir]; falls back to the library
+	// default ($HOME/.sigstore/root) on desktop/server builds. See
+	// sigstore_cache.go for why this override exists.
+	trustedRoot, err := root.FetchTrustedRootWithOptions(tufOptions())
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch Sigstore trusted root: %w", err)
 	}
