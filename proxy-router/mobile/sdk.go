@@ -1055,6 +1055,135 @@ func (s *SDK) SendPromptWithMessagesAndParams(ctx context.Context, sessionID str
 	return raw, nil
 }
 
+// ChatCompletionRequestExtra is the OpenAI chat completion request type used by
+// the embedded gateway. It is exported as an alias so external callers (the
+// NodeNeo gateway) can build requests without importing internal packages.
+// All fields from openai.ChatCompletionRequest are honoured (Tools, ToolChoice,
+// ParallelToolCalls, ResponseFormat, StreamOptions, Seed, LogitBias, …) plus
+// any unknown JSON keys captured in Extra.
+type ChatCompletionRequestExtra = gcs.OpenAICompletionRequestExtra
+
+// RawChunkCallback receives upstream chat completion chunks verbatim, suitable
+// for an OpenAI-compatible gateway that needs to relay provider fields the
+// typed structs may not capture (delta.tool_calls, delta.reasoning_content,
+// stream usage events, finish_reason, custom Morpheus extensions, etc.).
+//
+// chunkJSON is the raw JSON of either a streaming delta
+// (ChatCompletionStreamResponseExtra) or a non-streaming response
+// (ChatCompletionResponseExtra), preserving the original key order and any
+// provider-specific fields. isLast is true on the terminal control chunk; in
+// that case chunkJSON is nil — the caller should write the SSE [DONE] sentinel
+// or close the response.
+type RawChunkCallback func(chunkJSON json.RawMessage, isLast bool) error
+
+// SendChatCompletion forwards an OpenAI-compatible chat completion request to
+// the upstream Morpheus provider and surfaces each response chunk verbatim via
+// cb. This is the entry point for OpenAI-compatible local gateways (e.g. the
+// NodeNeo AI Gateway used by Cursor / Zed / Claude Desktop / LangChain).
+//
+// Compared to SendPromptWithMessagesAndParams, this method:
+//   - Accepts the full request object (including Tools, ToolChoice,
+//     ResponseFormat, StreamOptions, ParallelToolCalls, Seed, LogitBias and
+//     any vendor-specific fields preserved in Extra).
+//   - Relays each chunk's original JSON unchanged so tool_calls,
+//     reasoning_content, finish_reason, and usage flow through untouched.
+//
+// req.Model is overwritten with sessionID so the proxy-router can route, which
+// matches what the existing SendPrompt* methods do; the upstream provider
+// rewrites it again to its own model name before responding.
+func (s *SDK) SendChatCompletion(ctx context.Context, sessionID string, req *ChatCompletionRequestExtra, cb RawChunkCallback) error {
+	if req == nil {
+		return fmt.Errorf("nil chat completion request")
+	}
+	if cb == nil {
+		return fmt.Errorf("nil chunk callback")
+	}
+
+	id := common.HexToHash(sessionID)
+	if err := s.ensureProviderForSession(ctx, id); err != nil {
+		return redactError(err)
+	}
+
+	req.Model = sessionID
+
+	internalCB := func(ctx context.Context, chunk gcs.Chunk, errResp *gcs.AiEngineErrorResponse) error {
+		if errResp != nil {
+			// errResp.ProviderModelError can include the upstream's
+			// raw URL/IP — redact before bubbling to consumers.
+			return fmt.Errorf("provider error: %s", redactProviderEndpointsString(fmt.Sprintf("%v", errResp.ProviderModelError)))
+		}
+		if chunk.Type() == gcs.ChunkTypeControl {
+			return cb(nil, true)
+		}
+
+		data := chunk.Data()
+		if data == nil {
+			return nil
+		}
+		raw, err := json.Marshal(data)
+		if err != nil {
+			return fmt.Errorf("marshal chunk: %w", err)
+		}
+
+		return cb(raw, !chunk.IsStreaming())
+	}
+
+	_, err := s.proxySender.SendPromptV2(ctx, id, req, internalCB)
+	return redactError(err)
+}
+
+// EmbeddingsRequest is the OpenAI embeddings request type used by the embedded
+// gateway. Exported as an alias so external callers do not need to import
+// internal proxy-router packages. All fields from openai.EmbeddingRequest are
+// honoured, plus any unknown JSON keys captured in Extra.
+type EmbeddingsRequest = gcs.EmbeddingsRequest
+
+// SendEmbeddings forwards an OpenAI-compatible embeddings request to the
+// upstream Morpheus provider and returns the response JSON verbatim. Embeddings
+// are non-streaming: the upstream emits a single response chunk followed by a
+// control chunk.
+//
+// The returned RawMessage is the provider's full EmbeddingsResponse (id,
+// object, data:[…vectors…], model, usage, plus any vendor-specific extras).
+// The caller is expected to relay it to its HTTP client unchanged.
+func (s *SDK) SendEmbeddings(ctx context.Context, sessionID string, req *EmbeddingsRequest) (json.RawMessage, error) {
+	if req == nil {
+		return nil, fmt.Errorf("nil embeddings request")
+	}
+
+	id := common.HexToHash(sessionID)
+	if err := s.ensureProviderForSession(ctx, id); err != nil {
+		return nil, redactError(err)
+	}
+
+	var responseJSON json.RawMessage
+
+	internalCB := func(ctx context.Context, chunk gcs.Chunk, errResp *gcs.AiEngineErrorResponse) error {
+		if errResp != nil {
+			return fmt.Errorf("provider error: %s", redactProviderEndpointsString(fmt.Sprintf("%v", errResp.ProviderModelError)))
+		}
+		if chunk.Type() == gcs.ChunkTypeControl {
+			return nil
+		}
+		data := chunk.Data()
+		if data == nil {
+			return nil
+		}
+		b, err := json.Marshal(data)
+		if err != nil {
+			return fmt.Errorf("marshal embeddings chunk: %w", err)
+		}
+		responseJSON = b
+		return nil
+	}
+
+	_, err := s.proxySender.SendEmbeddings(ctx, id, req, internalCB)
+	if err != nil {
+		return nil, redactError(err)
+	}
+	return responseJSON, nil
+}
+
 // ensureProviderForSession repopulates in-memory provider URL + pubkey after SDK restart (mobile).
 func (s *SDK) ensureProviderForSession(ctx context.Context, sessionID common.Hash) error {
 	sess, err := s.sessionRepo.GetSession(ctx, sessionID)
