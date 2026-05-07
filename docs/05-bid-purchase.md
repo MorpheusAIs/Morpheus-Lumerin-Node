@@ -1,1 +1,0 @@
-# TODO - detail steps for consumer to navigate in the MorpheusUI, select & purchase remote model 

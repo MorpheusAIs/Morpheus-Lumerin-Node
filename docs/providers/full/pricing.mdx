@@ -1,0 +1,102 @@
+---
+title: "Pricing your bid"
+description: "How to set pricePerSecond for a Morpheus provider bid: there is no marketplace 'helper' or order book — you estimate cost, set a competitive rate, and adjust."
+audience: ["provider-full", "provider-resale"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+---
+
+There is **no built-in pricing helper, no order book, and no "always use market price" toggle** for provider bids today. You set `pricePerSecond` (in **wei/sec** of MOR) when you call `postModelBid`, and you adjust it by replacing the bid. This page is the explicit how-to for that workflow.
+
+<Note>
+This page is for the **provider** side — pricing for the on-chain bid. Pricing for **consumers** of the [hosted Inference API](/inference-api/overview) is a different layer (per-token billing on top of the marketplace) and is documented at [apidocs.mor.org](https://apidocs.mor.org).
+</Note>
+
+## Units and floors
+
+- `pricePerSecond` is denominated in **wei of MOR** (1 MOR = 10^18 wei).
+- Floor: `bidPricePerSecondMin = 10000000000` wei/sec = `0.00000001` MOR/sec ≈ `0.0006` MOR/min ≈ `0.036` MOR/hour at the floor.
+- There is no upper limit, but rating algorithms and competing bids will push consumers away from over-priced bids.
+
+## Step 1 — Look at competing bids
+
+The cheapest reference is the live snapshot of bids the network is actually accepting:
+
+```bash
+curl -sS https://active.mor.org/active_bids.json | jq
+```
+
+Filter by your model (or one similar in size and capability):
+
+```bash
+curl -sS https://active.mor.org/active_bids.json \
+  | jq '[.[] | select(.modelName == "your-model-name")] | sort_by(.pricePerSecond)'
+```
+
+Look at the distribution. **Median competitor pricing** is a sane starting point.
+
+## Step 2 — Estimate your cost floor
+
+```
+your_$/sec  ≈  amortised_hardware_$/month
+              ÷ utilised_seconds_per_month
+              + amortised_electricity_$/sec
+              + amortised_bandwidth_$/sec
+              + your_target_margin
+```
+
+Rough sanity check:
+
+- A `g5.xlarge` on demand on AWS is roughly `$1.00 / hour` ≈ `$0.000278/sec` (a real provider would use spot or self-host, but this is a high bound).
+- If `1 MOR ≈ $X` (look up live), then `1 MOR/sec ≈ $X/sec`. Convert your `$/sec` into `MOR/sec` via that rate.
+- Convert to wei: `pricePerSecond_wei = MOR_per_second × 10^18`.
+
+For a resale provider, replace hardware cost with **upstream API cost** — e.g. Venice subscription `$X/month` divided by your expected utilised seconds. See [Resale registering-bid](/providers/resale/registering-bid) for the resale math.
+
+## Step 3 — Pick a number, post the bid
+
+```bash
+curl -X POST 'http://localhost:8082/blockchain/bids' \
+  -H 'Authorization: Basic <base64(user:pass)>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "modelID": "0xYOUR_MODELID",
+    "pricePerSecond": "10000000000"
+  }'
+```
+
+The contract reverts if `pricePerSecond` is below the floor.
+
+## Step 4 — Watch and adjust
+
+There is no auto-adjust. To change a price you **delete the old bid and post a new one**. Both calls cost gas; the **`postModelBid`** call **also charges a non-refundable `marketplaceBidFee` of `0.3 MOR`** every time (see "How bid posts cost MOR" below). Don't repost more often than you have to.
+
+Things to watch:
+
+- **Bid acceptance rate**. If you get zero sessions over days while competitors with similar specs do, you're priced too high.
+- **Provider reputation signals**. Even at the right price, low uptime / poor TTFT / failed sessions tank your match rate. See the [reputation system](/concepts/architecture#reputation-and-provider-selection).
+- **Active rate from `active_bids.json`**. If your bid disappears from the snapshot, your `:3333` is no longer reachable to the verifier — see [verify-setup](/providers/full/verify-setup).
+
+## How bid posts cost MOR
+
+Every time you call `postModelBid`, the marketplace charges a non-refundable **`marketplaceBidFee = 0.3 MOR`** ([`Marketplace.sol`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/smart-contracts/contracts/diamond/facets/Marketplace.sol)). This fee is **separate from**, and on top of:
+
+- the refundable **provider stake** (`0.2` MOR) you posted at registration,
+- the refundable **model stake** (`0.1` MOR) you posted when registering the model,
+- BASE gas (paid in ETH on BASE).
+
+If you post → tweak → post → tweak → … six times during configuration, you've paid `~1.8 MOR` in non-refundable bid fees, plus gas. That's the most common reason new providers see "I lost ~2 MOR during setup": **it wasn't slashed, it was bid fees**. See also [Quickstart → "What can cost you MOR during setup"](/providers/full/quickstart#what-can-cost-you-mor-during-setup).
+
+## What about "stake-for-liquidity" rewards?
+
+That's a **different product** — the Capital Contract / stake-for-liquidity program documented at [mor.org](https://mor.org). It is **not** the same as provider session payouts and is unrelated to your bid pricing decisions. Your provider stake bonded at registration is **not** the same as staking in the Capital Contract. See [Tokens and fees](/concepts/tokens-and-fees) for the distinction.
+
+## What you can't do today
+
+The chat history surfaces a few asks that **do not have a solution yet**:
+
+- ❌ "Always use market price" toggle. You set the rate manually.
+- ❌ Token-level pricing (input vs output, context size). Provider-side pricing is `wei/sec` only.
+- ❌ Built-in pricing recommender. Use `active_bids.json` and your own cost model.
+
+If/when these land, this page is where it'll be documented.

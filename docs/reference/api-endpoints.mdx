@@ -1,0 +1,202 @@
+---
+title: "API endpoints (selected)"
+description: "Hand-picked, prose-explained endpoints of the proxy-router HTTP API. Full schema lives in the repo at proxy-router/docs/swagger.yaml."
+audience: ["developer", "prosumer", "provider-full", "provider-resale"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+source: "docs/proxy-router-api-endpoints.md"
+---
+
+This page gives prose context for the endpoints integrators reach for first when calling **the proxy-router HTTP API** (i.e. the API your local node exposes on `:8082`). The complete schema lives at [`proxy-router/docs/swagger.yaml`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/docs/swagger.yaml) and is browsable at `http://localhost:8082/swagger/index.html` when your node is running.
+
+<Note>
+If you're looking for the **hosted** OpenAI-compatible Morpheus product (no node required), that is a separate service — see [Inference API overview](/inference-api/overview) and [apidocs.mor.org](https://apidocs.mor.org).
+</Note>
+
+## Authentication
+
+All endpoints require **Basic Authentication**:
+
+```
+Authorization: Basic <base64(username:password)>
+```
+
+See [API auth](/reference/api-auth).
+
+---
+
+## Chat completions
+
+`POST /v1/chat/completions`
+
+OpenAI-compatible chat. The request body is forwarded to the provider; you don't need a `model` field — it's set by the provider based on `session_id`.
+
+| Header | Purpose |
+|--------|---------|
+| `session_id` (hex32) | Required for remote provider routing |
+
+```bash
+curl --location 'http://localhost:8084/v1/chat/completions' \
+  --header 'Accept: application/json' \
+  --header 'session_id: 0x8e12df2f764b416c0ea1936a253c2a4be01005651c2d73f22dd0d72520f93ca1' \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: Basic YWRtaW46YWRtaW4=' \
+  --data '{
+    "messages": [
+      {"role": "system", "content": "You are a helpful assistant."},
+      {"role": "user", "content": "Tell me about AI."}
+    ],
+    "stream": false,
+    "max_tokens": 2048
+  }'
+```
+
+Response: `200 OK`, `text/event-stream` (streaming) or `application/json`.
+
+---
+
+## Audio transcriptions
+
+`POST /v1/audio/transcriptions`
+
+`multipart/form-data`. The body is forwarded — any field the provider accepts will pass through. Common fields:
+
+| Field | Notes |
+|-------|-------|
+| `file` | Audio file |
+| `s3_presigned_url` | Pre-signed URL for secure file access |
+| `language` | |
+| `response_format` | `json` / `text` / `srt` / `verbose_json` / `vtt` |
+| `timestamp_granularities[]` | `word` / `segment` |
+| `output_content` | |
+| `enable_diarization` | Boolean |
+
+```bash
+curl --location 'http://localhost:8084/v1/audio/transcriptions' \
+  --header 'session_id: 0x9fe60aa88c4e8d44414431dd565353efb762a923d639f54f856b3ac657e16263' \
+  --header 'Authorization: Basic YWRtaW46YWRtaW4=' \
+  --form 'file=@"/path/to/harvard.wav"'
+```
+
+---
+
+## Audio speech (TTS)
+
+`POST /v1/audio/speech`
+
+JSON. Common fields: `input` (required), `voice`, `response_format` (`mp3`/`opus`/`aac`/`flac`/`wav`/`pcm`; default `mp3`), `speed`.
+
+```bash
+curl --location 'http://localhost:8085/v1/audio/speech' \
+  --header 'session_id: 0xf38101fbd00ed4db25444e9d9a65b737d4cd3d464da3aeb118b749c10ee48b10' \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: Basic YWRtaW46YWRtaW4=' \
+  --data '{"input": "Lorem ipsum dolor sit amet.", "voice": "af_alloy"}'
+```
+
+---
+
+## Embeddings
+
+`POST /v1/embeddings`
+
+```bash
+curl --location 'http://localhost:8084/v1/embeddings' \
+  --header 'session_id: 0xbd5585da9c1e62b4ac89152e7770cdc2779400afa181f831484c60aabc2422f4' \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: Basic YWRtaW46YWRtaW4=' \
+  --data '{ "encoding_format": "float", "input": "The quick brown fox..." }'
+```
+
+---
+
+## Get providers
+
+`GET /blockchain/providers`
+
+Query params: `offset`, `limit`, `order`.
+
+```bash
+curl --location 'http://localhost:8082/blockchain/providers' \
+  --header 'Authorization: Basic YWRtaW46YWRtaW4='
+```
+
+---
+
+## Get models
+
+`GET /blockchain/models`
+
+`ModelType` is one of `LLM`, `STT`, `TTS`, `EMBEDDING`, `UNKNOWN`. Use it to choose the appropriate endpoint family. Full sample response in [`proxy-router/docs/swagger.yaml`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/docs/swagger.yaml).
+
+---
+
+## Open session by model ID
+
+`POST /blockchain/models/:id/session`
+
+| Body field | Required | Notes |
+|------------|----------|-------|
+| `sessionDuration` | yes | Seconds |
+| `directPayment` | optional | |
+| `failover` | optional | |
+
+```bash
+curl --location 'http://localhost:8084/blockchain/models/0xe086adc275c99e32bb10b0aff5e8bfc391aad18cbb184727a75b2569149425c6/session' \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: Basic YWRtaW46YWRtaW4=' \
+  --data '{ "sessionDuration": 600, "failover": false, "directPayment": false }'
+```
+
+Response includes `sessionID`.
+
+---
+
+## Close session
+
+`POST /blockchain/sessions/:id/close`
+
+```bash
+curl --location 'http://localhost:8084/blockchain/sessions/0xf343b654cc8a21d0666c38606146ae68ef67b4445643deba02991a72f0d09785/close' \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: Basic YWRtaW46YWRtaW4=' \
+  --data '{}'
+```
+
+Response includes the on-chain transaction hash.
+
+**Note on refunds:** on **natural expiration** (`closedAt >= endsAt`) your full share is `safeTransfer`'d back to your wallet inside this same transaction. On **early close** a slice may be parked in `userStakesOnHold` with a 1-day timelock — you must call `withdrawUserStakes` (below) after the timelock to receive it. See [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover) for full mechanics.
+
+---
+
+## List sessions for a wallet
+
+`GET /blockchain/sessions/user?user=0x…&offset=0&limit=20&order=desc`
+
+```bash
+curl --location -u 'admin:admin' \
+  'http://localhost:8082/blockchain/sessions/user?user=0xYOUR_WALLET&offset=0&limit=20&order=desc'
+```
+
+Variant for IDs only: `GET /blockchain/sessions/user/ids?user=0x…`. Fetch one: `GET /blockchain/sessions/0x<sessionId>`.
+
+---
+
+## Claim early-close on-hold balance (no node HTTP route)
+
+There is **no proxy-router HTTP route** for `withdrawUserStakes` today. You send a transaction to the Diamond (Inference) contract on Base directly:
+
+```bash
+cast send 0x6aBE1d282f72B474E54527D93b979A4f64d3030a \
+  "withdrawUserStakes(address,uint8)" 0xYOUR_WALLET 20 \
+  --rpc-url https://mainnet.base.org \
+  --private-key "$PRIVATE_KEY_OF_DELEGATEE"
+```
+
+Function selector: `0xa98a7c6b`. The caller must be the delegatee allowed for that consumer (usually the same key your consumer node uses). `iterations_` (e.g. `20`) caps how many releasable on-hold rows to process per call. Read on-hold balance via `getUserStakesOnHold(addr, iterations_)` — see [Where is my MOR? → Bucket 2](/ai/where-is-my-mor#bucket-2-on-hold-queue-early-close-timelock).
+
+---
+
+## Full schema
+
+The complete OpenAPI schema lives at [`proxy-router/docs/swagger.yaml`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/docs/swagger.yaml). When your proxy-router is running, the same spec is browsable interactively at `http://localhost:8082/swagger/index.html`.

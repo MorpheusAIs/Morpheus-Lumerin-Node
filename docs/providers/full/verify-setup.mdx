@@ -1,0 +1,120 @@
+---
+title: "Verify your provider setup"
+description: "Self-check your provider end-to-end after setup: healthcheck, on-chain registration, network discovery, and a real prompt against your bid."
+audience: ["provider-full", "provider-resale"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+---
+
+After [registering](/providers/full/register-onchain) your provider, model, and bid, you want to know **before any consumer hits you** that everything works. There is no built-in setup wizard yet. This page walks the same five checks the support team uses to verify a provider when someone posts in Discord asking "can you check if my setup is OK?".
+
+## Step 1 — Local health
+
+Your proxy-router is up and listening:
+
+```bash
+curl http://localhost:8082/healthcheck
+```
+
+Expected:
+
+```json
+{ "status": "healthy", "version": "v7.0.0", "uptime": "..." }
+```
+
+Logs should show:
+
+```
+INFO  proxy state: running
+INFO  HTTP  http server is listening: 0.0.0.0:8082
+INFO  TCP   tcp server is listening: 0.0.0.0:3333
+```
+
+If anything here is wrong, stop and fix it before the next steps — see [troubleshooting](/reference/troubleshooting).
+
+## Step 2 — Public TCP reachable
+
+Consumers connect to your `:3333` over the public internet. From a machine **outside your network**:
+
+```bash
+# Replace with your provider's registered endpoint (host:port, no protocol)
+nc -vz your-provider.example.com 3333
+```
+
+Expected: `Connection succeeded`. If it times out, your firewall / security group / NAT is blocking; consumers will see your bid but never get inference.
+
+## Step 3 — On-chain provider record
+
+Confirm the marketplace recognises your registration:
+
+```bash
+# Replace with your provider wallet address (lowercase 0x…)
+curl -sS -u 'admin:admin' \
+  'http://localhost:8082/blockchain/providers' \
+  | jq '.providers[] | select(.Address=="0xYOUR_PROVIDER")'
+```
+
+You should see your `Address`, `Endpoint` (the `host:port` you registered, no protocol), `Stake`, and `IsDeleted: false`.
+
+Same trick for your model:
+
+```bash
+curl -sS -u 'admin:admin' 'http://localhost:8082/blockchain/models' \
+  | jq '.models[] | select(.Owner=="0xYOUR_PROVIDER")'
+```
+
+And your bid:
+
+```bash
+curl -sS -u 'admin:admin' 'http://localhost:8082/blockchain/bids' \
+  | jq '.bids[] | select(.Provider=="0xYOUR_PROVIDER")'
+```
+
+If any of these doesn't return your record, the on-chain transaction either failed or is still pending. Check the explorer with your provider wallet address ([base.blockscout.com](https://base.blockscout.com)).
+
+## Step 4 — Network discovery
+
+Two cron-driven dashboards aggregate the marketplace into JSON snapshots. Your provider only shows up here if the cron has reached you successfully **after your registration**:
+
+```bash
+# Active models — populated when the verifier can reach your provider's :3333 and ping the model
+curl -sS https://active.mor.org/active_models.json | jq '.[] | select(.providerAddress=="0xYOUR_PROVIDER")'
+
+# Active bids — same, but for bids
+curl -sS https://active.mor.org/active_bids.json | jq '.[] | select(.providerAddress=="0xYOUR_PROVIDER")'
+```
+
+If your bid is on chain (Step 3) but **not** in `active_bids.json`, it means the verifier could reach the chain but **could not reach your `:3333`**. Re-check Step 2.
+
+The dashboards refresh on a schedule (a few minutes); give it time before concluding it failed.
+
+## Step 5 — End-to-end prompt via the Inference API
+
+The hosted [Morpheus Inference API](/inference-api/overview) serves as the easiest end-to-end consumer. If a real prompt against your model name returns text, you've proven the full chain (consumer → API Gateway → discovery → your P-Node → your backend → response).
+
+1. Sign in at [app.mor.org](https://app.mor.org), grab an API key.
+2. In the dashboard's **API Test** page (or any OpenAI-compatible client) pick your model name from the dropdown.
+3. Send any short prompt.
+
+If it streams back a response — **you're done**. If the model isn't in the dropdown, go back to Step 4. If it's there but errors out, check your proxy-router logs for the incoming request and your backend's logs for the forwarded request.
+
+You can also do this directly from a separate consumer-side proxy-router; see [API direct](/reference/api-direct).
+
+## When in doubt
+
+The Discord `#tech-support` channel is the fastest path. Include:
+
+- Your provider wallet address (lowercase `0x…`).
+- Your model ID and bid ID.
+- The output of **Steps 1, 3, and 4**.
+
+The first thing support does is exactly the above checks; arriving with the answers shortcuts the conversation.
+
+## Common gotchas surfaced by the chat history
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Provider on chain but missing from `active_bids.json` | Public `:3333` not reachable | Open firewall / security group; verify with `nc -vz` from outside |
+| `:3333` reachable, model still missing from `active_models.json` | The verifier couldn't ping the model's `apiUrl` | Confirm `models-config.json` `apiUrl` is reachable **from inside the proxy-router host** |
+| Healthcheck fails with `connection refused` to BASE | Default round-robin RPC rate-limited / unavailable | Set your own `ETH_NODE_ADDRESS` (Alchemy / Infura) — see [env-proxy-router](/reference/env-proxy-router) |
+| Lost ~MOR during setup | Each `postModelBid` charges a non-refundable `marketplaceBidFee` (`0.3 MOR`); reposting bids during configuration adds up | See [Pricing](/providers/full/pricing) and the "What can cost you MOR during setup" section in [Quickstart](/providers/full/quickstart) |

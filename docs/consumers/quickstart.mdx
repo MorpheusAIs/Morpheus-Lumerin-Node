@@ -1,0 +1,130 @@
+---
+title: "Consumer quickstart"
+description: "Install the bundled Consumer release (proxy-router + MorpheusUI + optional local llama.cpp), fund a wallet, and chat."
+audience: ["consumer"]
+product: ["proxy-router", "ui-desktop"]
+last_verified: "v7.0.0"
+source: "docs/04-consumer-setup.md"
+---
+
+This is the simplest way to get started with the Morpheus Lumerin Node as a consumer. It runs three pieces of software on your local machine:
+
+- `proxy-router` — same binary as the provider side, configured for the consumer role.
+- `MorpheusUI` — Electron GUI to browse bids, open sessions, and chat.
+- *(Optional)* `llama.cpp` — bundled sample model for free local-only testing. Started by passing `local` to `mor-launch`.
+
+## Installation
+
+<Steps>
+  <Step title="Download the release">
+    Grab the latest archive for your OS from the [GitHub releases page](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/releases).
+    - Mainnet builds have no suffix (e.g. `v7.0.0`).
+    - Testnet builds end in `-test` (e.g. `v7.0.0-test`).
+  </Step>
+  <Step title="Extract">
+    <Tabs>
+      <Tab title="macOS">
+        ```bash
+        cd ~/Downloads/morpheus
+        xattr -c mor-launch mor-cli proxy-router MorpheusUI.app
+        ```
+      </Tab>
+      <Tab title="Linux">
+        ```bash
+        cd ~/Downloads/morpheus
+        ```
+      </Tab>
+      <Tab title="Windows">
+        Extract to `%USERPROFILE%/Downloads/morpheus`.
+      </Tab>
+    </Tabs>
+  </Step>
+  <Step title="(Optional) tweak the .env">
+    Inspect the bundled `.env` and edit only if you need advanced behavior (custom log destination, private ETH node, alternate ports). Reference: [Env: proxy-router](/reference/env-proxy-router).
+  </Step>
+  <Step title="Launch">
+    <Tabs>
+      <Tab title="macOS / Linux">
+        ```bash
+        ./mor-launch
+        # Or, to also start the bundled local model:
+        ./mor-launch local
+        ```
+      </Tab>
+      <Tab title="Windows">
+        Double-click `mor-launch.exe`. Allow Defender. To run the bundled local model: `mor-launch.exe local`.
+      </Tab>
+    </Tabs>
+    A terminal window will show the proxy-router (and local model if requested) starting; MorpheusUI will launch on top.
+  </Step>
+  <Step title="Onboard MorpheusUI">
+    - Read & accept the terms.
+    - Set a strong password (this protects MorpheusUI's local key store; it is not your wallet password).
+    - Either **create** a new wallet (write down the mnemonic) or **recover** an existing top-level wallet via mnemonic.
+    - **Optional** CLI: in another terminal, `./mor-cli` (Linux/macOS).
+  </Step>
+</Steps>
+
+## Validation
+
+<Steps>
+  <Step title="Confirm proxy-router is up">
+    Open `http://localhost:8082/swagger/index.html` — the Swagger UI should render.
+    Logs in `./data/` capture detail. See [Troubleshooting](/reference/troubleshooting).
+  </Step>
+  <Step title="Local-model test (optional)">
+    In MorpheusUI's **Chat** tab, ensure **Local Model** is selected. Type a prompt and press Enter. A response confirms the local model + proxy-router pipeline works.
+  </Step>
+  <Step title="Remote-model test">
+    Click **Change Model**, select a remote provider model, click **Change**, then **Open Session**. Stake at least `5` MOR (contract minimum). Chat away.
+  </Step>
+  <Step title="Close out">
+    - Manually close all remote sessions: in the Chat window, click the time icon next to the model line, then the **X** next to each open session.
+    - Closing the MorpheusUI window leaves the launcher CMD open. Use `Ctrl-C` there to stop the local model and proxy-router.
+  </Step>
+</Steps>
+
+## Cleanup
+
+If you need to reset to a fresh state (different release, broken state):
+
+<Warning>
+**Save your wallet mnemonic / private key first.** Cleanup deletes the local key store.
+</Warning>
+
+<Tabs>
+  <Tab title="macOS / Linux">
+    ```bash
+    rm .cookie proxy.conf
+    rm -rf ~/Library/Logs/morpheus-ui
+    rm -rf ~/Library/Application\ Support/morpheus-ui
+    rm -rf data
+    xattr -c proxy-router MorpheusUI.app mor-launch mor-cli
+    ```
+    Linux: also check `~/.config/morpheus-ui`.
+  </Tab>
+  <Tab title="Windows">
+    ```cmd
+    del .cookie proxy.conf
+    rmdir /s /q data
+    rmdir /s /q %USERPROFILE%\AppData\Roaming\morpheus-ui
+    ```
+  </Tab>
+</Tabs>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Buy a bid" icon="cart-shopping" href="/consumers/buy-bid">
+    Walk through opening a session and selecting a remote model.
+  </Card>
+  <Card title="Chat" icon="comments" href="/consumers/chat">
+    Prompts, streaming, audio, embeddings.
+  </Card>
+  <Card title="Install from source" icon="github" href="/consumers/install-from-source">
+    Build the binaries yourself for development.
+  </Card>
+  <Card title="Troubleshooting" icon="circle-question" href="/reference/troubleshooting">
+    Proxy-router not starting? Wallet not funded?
+  </Card>
+</CardGroup>

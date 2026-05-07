@@ -1,0 +1,43 @@
+---
+title: "Ecosystem attribution"
+description: "Sources, licenses, and refresh policy for the mirrored ecosystem pages."
+audience: ["consumer", "prosumer", "provider-full", "provider-resale", "developer"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+---
+
+The pages under [Ecosystem](/ecosystem/overview) are **curated summaries** of public material from the broader Morpheus ecosystem. We mirror **conceptual content** (what something is for, how it relates to the rest of Morpheus); we **do not** snapshot live data (counts, prices, status).
+
+## Refresh policy
+
+- Each mirrored page has `last_verified` frontmatter naming the Morpheus Lumerin Node release the content was confirmed against.
+- All mirrored pages are reviewed at least once per release and rerun against their `source_url`.
+- If a `source_url` changes substantially, we either update the mirror or remove it (to avoid drift).
+
+## What we mirror
+
+- High-level descriptions of what each surface is for.
+- The relationship between each surface and this repo's code.
+- Stable conceptual content (architecture, sessions, TEE).
+
+## What we do not mirror
+
+- Live network numbers (model counts, bid prices, latencies).
+- Marketing copy that changes frequently.
+- Anything that's better consumed live (calculators, dashboards).
+
+## Sources
+
+| Page | Source URL |
+|------|-----------|
+| [mor.org](/ecosystem/mor-org) | https://mor.org |
+| [active.mor.org](/ecosystem/active-status) | https://active.mor.org |
+| [tech.mor.org](/ecosystem/tech-mor-org) | https://tech.mor.org |
+| [MyProvider](/ecosystem/myprovider) | https://myprovider.mor.org |
+| [Everclaw](/ecosystem/everclaw) | https://everclaw.xyz |
+| [NodeNeo](/ecosystem/nodeneo) | https://nodeneo.io |
+| [app.mor.org](/ecosystem/app-mor-org) | https://app.mor.org |
+
+## Reporting issues
+
+If a mirrored page contradicts the upstream source, the upstream source is correct — please [open an issue](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/issues) so we can refresh the mirror.

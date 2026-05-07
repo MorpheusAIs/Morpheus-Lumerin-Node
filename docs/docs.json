@@ -1,0 +1,280 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Morpheus Lumerin Node",
+  "description": "The canonical Morpheus DeAI knowledge base for humans and AI agents. Curated, role-based docs covering consumers, prosumers, providers, the proxy-router API, TEE attestation, and the broader Morpheus ecosystem.",
+  "colors": {
+    "primary": "#7C3AED",
+    "light": "#A78BFA",
+    "dark": "#4C1D95"
+  },
+  "favicon": "/images/favicon.png",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Docs",
+        "groups": [
+          {
+            "group": "Get started",
+            "pages": [
+              "get-started/introduction",
+              "get-started/quickstart-consumer",
+              "get-started/quickstart-provider",
+              "get-started/networks-and-tokens"
+            ]
+          },
+          {
+            "group": "Inference API (hosted)",
+            "pages": [
+              "inference-api/overview"
+            ]
+          },
+          {
+            "group": "Concepts",
+            "pages": [
+              "concepts/what-is-morpheus",
+              "concepts/architecture",
+              "concepts/sessions-stake-close-recover",
+              "concepts/local-vs-onchain-models",
+              "concepts/tee-overview",
+              "concepts/tokens-and-fees",
+              "concepts/rewards-and-economics"
+            ]
+          },
+          {
+            "group": "Consumers",
+            "pages": [
+              "consumers/quickstart",
+              {
+                "group": "Install",
+                "pages": [
+                  "consumers/install/macos",
+                  "consumers/install/windows",
+                  "consumers/install/linux",
+                  "consumers/install/docker"
+                ]
+              },
+              "consumers/install-from-source",
+              "consumers/buy-bid",
+              "consumers/chat",
+              "consumers/troubleshooting"
+            ]
+          },
+          {
+            "group": "Prosumers",
+            "pages": [
+              "prosumers/overview",
+              "prosumers/c-node-setup",
+              "prosumers/gateway-for-everclaw",
+              "prosumers/running-local-agents"
+            ]
+          },
+          {
+            "group": "Providers - Resale",
+            "pages": [
+              "providers/resale/overview",
+              "providers/resale/container-pnode",
+              "providers/resale/reselling-venice",
+              "providers/resale/registering-bid"
+            ]
+          },
+          {
+            "group": "Providers - Full P-Node",
+            "pages": [
+              "providers/full/quickstart",
+              "providers/full/model-setup",
+              "providers/full/proxy-router-docker",
+              "providers/full/proxy-router-akash",
+              "providers/full/aws",
+              "providers/full/tee-reference",
+              "providers/full/secretvm-quickstart",
+              "providers/full/headless",
+              "providers/full/myprovider-gui",
+              "providers/full/register-onchain",
+              "providers/full/verify-setup",
+              "providers/full/pricing"
+            ]
+          },
+          {
+            "group": "AI knowledge",
+            "pages": [
+              "ai/myths",
+              "ai/where-is-my-mor",
+              "ai/session-states-open-close-recover",
+              "ai/why-locked-in-contract",
+              "ai/local-vs-blockchain-models",
+              "ai/llm-prompt-cheatsheet"
+            ]
+          },
+          {
+            "group": "Ecosystem",
+            "pages": [
+              "ecosystem/overview",
+              "ecosystem/mor-org",
+              "ecosystem/active-status",
+              "ecosystem/tech-mor-org",
+              "ecosystem/myprovider",
+              "ecosystem/everclaw",
+              "ecosystem/nodeneo",
+              "ecosystem/app-mor-org",
+              "ecosystem/attribution"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/api-overview",
+              "reference/api-auth",
+              "reference/env-proxy-router",
+              "reference/env-ui-desktop",
+              "reference/models-config",
+              "reference/rating-config",
+              "reference/api-direct",
+              "reference/api-endpoints",
+              "reference/troubleshooting",
+              "reference/glossary"
+            ]
+          }
+        ]
+      }
+    ],
+    "global": {
+      "anchors": [
+        {
+          "anchor": "GitHub",
+          "href": "https://github.com/MorpheusAIs/Morpheus-Lumerin-Node",
+          "icon": "github"
+        },
+        {
+          "anchor": "Releases",
+          "href": "https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/releases",
+          "icon": "tag"
+        },
+        {
+          "anchor": "mor.org",
+          "href": "https://mor.org",
+          "icon": "globe"
+        },
+        {
+          "anchor": "Inference API",
+          "href": "https://apidocs.mor.org",
+          "icon": "plug"
+        }
+      ]
+    }
+  },
+  "logo": {
+    "light": "/images/logo-light.png",
+    "dark": "/images/logo-dark.png",
+    "href": "/"
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Releases",
+        "href": "https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/releases"
+      },
+      {
+        "label": "Status",
+        "href": "https://active.mor.org/status"
+      }
+    ],
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/MorpheusAIs/Morpheus-Lumerin-Node"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/MorpheusAIs",
+      "x": "https://x.com/MorpheusAIs"
+    },
+    "links": [
+      {
+        "header": "Product",
+        "items": [
+          {
+            "label": "app.mor.org",
+            "href": "https://app.mor.org"
+          },
+          {
+            "label": "MyProvider",
+            "href": "https://myprovider.mor.org"
+          },
+          {
+            "label": "Inference API (hosted)",
+            "href": "https://apidocs.mor.org"
+          }
+        ]
+      },
+      {
+        "header": "Network",
+        "items": [
+          {
+            "label": "Status",
+            "href": "https://active.mor.org/status"
+          },
+          {
+            "label": "Active models",
+            "href": "https://active.mor.org/active_models"
+          },
+          {
+            "label": "Active bids",
+            "href": "https://active.mor.org/active_bids"
+          }
+        ]
+      },
+      {
+        "header": "Ecosystem",
+        "items": [
+          {
+            "label": "tech.mor.org",
+            "href": "https://tech.mor.org"
+          },
+          {
+            "label": "NodeNeo",
+            "href": "https://nodeneo.io"
+          },
+          {
+            "label": "Everclaw",
+            "href": "https://everclaw.xyz"
+          }
+        ]
+      }
+    ]
+  },
+  "search": {
+    "prompt": "Ask anything about Morpheus, the proxy-router, sessions, or providers..."
+  },
+  "redirects": [
+    { "source": "/00-overview", "destination": "/concepts/architecture" },
+    { "source": "/01-model-setup", "destination": "/providers/full/model-setup" },
+    { "source": "/02-provider-setup", "destination": "/providers/full/quickstart" },
+    { "source": "/02.1-proxy-router-docker", "destination": "/providers/full/proxy-router-docker" },
+    { "source": "/02.2-proxy-router-akash", "destination": "/providers/full/proxy-router-akash" },
+    { "source": "/02.3-proxy-router-tee", "destination": "/providers/full/tee-reference" },
+    { "source": "/02.4-proxy-router-secretvm-quickstart", "destination": "/providers/full/secretvm-quickstart" },
+    { "source": "/02.5-api-auth", "destination": "/reference/api-auth" },
+    { "source": "/03-provider-offer", "destination": "/providers/full/register-onchain" },
+    { "source": "/04-consumer-setup", "destination": "/consumers/quickstart" },
+    { "source": "/04a-consumer-setup-source", "destination": "/consumers/install-from-source" },
+    { "source": "/05-bid-purchase", "destination": "/consumers/buy-bid" },
+    { "source": "/06-model-interaction", "destination": "/consumers/chat" },
+    { "source": "/99-troubleshooting", "destination": "/reference/troubleshooting" },
+    { "source": "/proxy-router.all.env", "destination": "/reference/env-proxy-router" },
+    { "source": "/ui-desktop.all.env", "destination": "/reference/env-ui-desktop" },
+    { "source": "/models-config.json", "destination": "/reference/models-config" },
+    { "source": "/rating-config.json", "destination": "/reference/rating-config" },
+    { "source": "/proxy-router-api-direct", "destination": "/reference/api-direct" },
+    { "source": "/proxy-router-api-endpoints", "destination": "/reference/api-endpoints" },
+    { "source": "/mac-boot-strap", "destination": "/consumers/install/macos" },
+    { "source": "/User%20Compute%20Note%20Setup%20via%20AWS", "destination": "/providers/full/aws" },
+    { "source": "/User-Compute-Note-Setup-via-AWS", "destination": "/providers/full/aws" }
+  ],
+  "contextual": {
+    "options": ["copy", "view", "chatgpt", "claude"]
+  },
+  "seo": {
+    "indexing": "navigable"
+  }
+}

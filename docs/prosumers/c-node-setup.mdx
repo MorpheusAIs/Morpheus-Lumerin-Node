@@ -1,0 +1,81 @@
+---
+title: "C-Node setup"
+description: "Run the proxy-router as a long-lived consumer-side daemon (C-Node) for your prosumer environment."
+audience: ["prosumer", "developer"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+---
+
+A C-Node is the proxy-router running in the **consumer role**: it holds your wallet key, talks to BASE, and exposes a local `:8082` HTTP API for your tools (UI, CLI, agents, bots). It does **not** need to expose `:3333` to the internet — that port is only for *providers*.
+
+## Install path
+
+Pick the most appropriate install for your environment:
+
+<CardGroup cols={2}>
+  <Card title="Docker" icon="docker" href="/consumers/install/docker">
+    Recommended for headless prosumer setups.
+  </Card>
+  <Card title="From source" icon="github" href="/consumers/install-from-source">
+    Build, run, and update via `git pull`.
+  </Card>
+  <Card title="Packaged release" icon="box" href="/consumers/quickstart">
+    Easiest if you also want the desktop UI.
+  </Card>
+  <Card title="systemd / supervisor" icon="bolt" href="/providers/full/headless">
+    Same headless patterns as a provider.
+  </Card>
+</CardGroup>
+
+## Minimal `.env` (consumer role)
+
+```bash
+# BASE Mainnet
+ETH_NODE_CHAIN_ID=8453
+BLOCKSCOUT_API_URL=https://base.blockscout.com/api/v2
+DIAMOND_CONTRACT_ADDRESS=0x6aBE1d282f72B474E54527D93b979A4f64d3030a
+MOR_TOKEN_ADDRESS=0x7431aDa8a591C955a994a21710752EF9b882b8e3
+
+ETH_NODE_ADDRESS=https://base-mainnet.g.alchemy.com/v2/<your_key>
+ETH_NODE_USE_SUBSCRIPTIONS=false   # https-only is more reliable for consumers
+
+WALLET_PRIVATE_KEY=<your_consumer_wallet>
+
+WEB_ADDRESS=127.0.0.1:8082         # bind loopback only
+WEB_PUBLIC_URL=http://127.0.0.1:8082
+PROXY_ADDRESS=127.0.0.1:3333       # not exposing to internet
+```
+
+Full reference: [Env: proxy-router](/reference/env-proxy-router).
+
+## Auth and `proxy.conf`
+
+On first start the proxy-router creates a `.cookie` with a random `admin:<password>`. Use that for tooling (UI, CLI). To add lower-permission users (for agents or third-party tools), see [API auth](/reference/api-auth) and [Running local agents](/prosumers/running-local-agents).
+
+## Wallet hygiene
+
+- Use a **dedicated** wallet for your C-Node, not your personal MetaMask.
+- Keep balances modest. Refill on a schedule rather than parking large amounts in the C-Node wallet.
+- The wallet is **not** retrievable from the proxy-router state — the private key is what the proxy-router holds.
+
+## Approve once
+
+Approve the Diamond contract for some MOR allowance so opening sessions doesn't require an interactive approval each time:
+
+```bash
+curl -X POST \
+  'http://127.0.0.1:8082/blockchain/approve?spender=0x6aBE1d282f72B474E54527D93b979A4f64d3030a&amount=20' \
+  -H 'Authorization: Basic <base64(user:pass)>' -d ''
+```
+
+This authorizes 20 MOR. Set higher if you expect heavy use; lower if you want tighter risk control.
+
+## Health and metrics
+
+- `GET /healthcheck` — JSON status / version / uptime.
+- `GET /v1/models/attestation` — TEE per-model attestation state (only meaningful when using `tee`-tagged models).
+- Logs — see `./data/` (or `docker logs`).
+
+## Updating
+
+For Docker: `docker pull ghcr.io/morpheusais/morpheus-lumerin-node:latest && docker restart …`. For source: `git pull && ./build.sh && systemctl restart …`. The on-disk Badger state in `./data/` is forward-compatible across patch and minor versions.

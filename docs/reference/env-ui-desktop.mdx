@@ -1,0 +1,46 @@
+---
+title: "Env: MorpheusUI"
+description: "Environment variables consumed by the MorpheusUI Electron desktop app."
+audience: ["consumer", "developer"]
+product: ["ui-desktop"]
+last_verified: "v7.0.0"
+source: "docs/ui-desktop.all.env"
+---
+
+MorpheusUI configuration lives in `MorpheusUI/.env` (or the equivalent platform-specific resource). The complete annotated dump is at [`docs/ui-desktop.all.env`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/docs/ui-desktop.all.env). Source of truth: `MorpheusUI/src/main/config/index.ts`.
+
+## Auth & networking
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `BYPASS_AUTH` | `false` | `true` to bypass auth (dev only) |
+| `PROXY_WEB_DEFAULT_PORT` | `8082` | Default port for the local proxy-router |
+| `PROXY_WEB_URL` | `http://localhost:8082` | Override the local API URL |
+
+## Chain
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `CHAIN_ID` | (unset) | `8453` (mainnet) or `84532` (testnet) |
+| `DEFAULT_SELLER_CURRENCY` | `BTC` | Default seller currency symbol |
+| `DIAMOND_ADDRESS` | mainnet `0x6aBE1d282f72B474E54527D93b979A4f64d3030a`; testnet `0x6e4d0B775E3C3b02683A6F277Ac80240C4aFF930` | Diamond contract |
+| `EXPLORER_URL` | (unset) | Block explorer URL |
+
+## Branding
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `DISPLAY_NAME` | `MorpheusUI` | Window/title text |
+
+## Pairing with a custom proxy-router
+
+Most consumer setups use the bundled proxy-router that `mor-launch` starts. To point the UI at a separate proxy-router (e.g. a Docker container or a remote C-Node):
+
+1. Stop the bundled proxy-router (or don't run `mor-launch`).
+2. Start your own proxy-router and confirm `http://<host>:8082/healthcheck`.
+3. Set `PROXY_WEB_URL=http://<host>:8082` in MorpheusUI's `.env`.
+4. Restart MorpheusUI.
+
+## Full annotated dump
+
+For every variable (including theme tweaks, debug flags, and feature toggles), see [`docs/ui-desktop.all.env`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/docs/ui-desktop.all.env).

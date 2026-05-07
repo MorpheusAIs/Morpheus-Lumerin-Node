@@ -1,0 +1,41 @@
+---
+title: "MyProvider GUI"
+description: "Use myprovider.mor.org's hosted operator dashboard to manage a Morpheus provider node."
+audience: ["provider-full", "provider-resale"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+source_url: "https://myprovider.mor.org"
+---
+
+[MyProvider](https://myprovider.mor.org) is a hosted operator GUI maintained by the Morpheus ecosystem. It lets you manage providers, models, bids, and sessions without scripting against the API directly.
+
+<Note>
+This page is a **mirror summary** of public information about MyProvider, last verified for v7.0.0. For canonical, current behavior, always defer to [myprovider.mor.org](https://myprovider.mor.org).
+</Note>
+
+## What it gives you
+
+- **Provider dashboard** — register/update your provider record, view stake, status, and earnings.
+- **Model management** — register, tag (including `tee`), and update models.
+- **Bid management** — post, edit, and retire bids.
+- **Session monitoring** — see active and historical sessions, pending claims, and earnings.
+- **Health pings** — quick visibility into whether your `:3333` and `/healthcheck` are reachable.
+
+## When to use it vs the Swagger / API
+
+| Task | Best surface |
+|------|--------------|
+| First-time provider registration | MyProvider GUI or Swagger |
+| Update bids in bulk | API/script |
+| TEE attestation inspection | [SecretVM portal](https://secretai.scrtlabs.com/attestation) + cosign |
+| Day-to-day operator monitoring | MyProvider GUI |
+| Programmatic automation | API ([endpoints reference](/reference/api-endpoints)) |
+
+## Authentication
+
+MyProvider authenticates against your provider's wallet — connect a wallet that owns the provider record on chain. Read the privacy and TOS on the site directly before connecting any wallet you care about.
+
+## Related
+
+- [Register on chain](/providers/full/register-onchain) — the underlying contract calls MyProvider wraps.
+- [API endpoints](/reference/api-endpoints) — direct API equivalents.

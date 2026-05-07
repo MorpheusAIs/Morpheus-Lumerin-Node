@@ -1,0 +1,54 @@
+---
+title: "Provider quickstart"
+description: "The 10-minute path from zero to a registered Morpheus provider with a live bid."
+audience: ["provider-full", "provider-resale"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+---
+
+This page is the high-level checklist. For the full setup, branch into one of:
+
+<CardGroup cols={2}>
+  <Card title="Standard provider (full)" icon="server" href="/providers/full/quickstart">
+    Run a proxy-router on your own infrastructure, point it at your model.
+  </Card>
+  <Card title="TEE provider (SecretVM)" icon="shield-check" href="/providers/full/secretvm-quickstart">
+    Deploy the hardened `-tee` image on SecretVM and tag your model `tee`.
+  </Card>
+  <Card title="Resale provider" icon="boxes-stacked" href="/providers/resale/overview">
+    Resell capacity from Venice / OpenAI / Anthropic.
+  </Card>
+  <Card title="Docker" icon="docker" href="/providers/full/proxy-router-docker">
+    Containerized proxy-router only.
+  </Card>
+  <Card title="AWS EC2" icon="aws" href="/providers/full/aws">
+    Two-instance EC2 setup (LLM + proxy-router).
+  </Card>
+</CardGroup>
+
+## Checklist
+
+<Steps>
+  <Step title="Have a backend model">
+    OpenAI-compatible endpoint reachable from your proxy-router host (e.g. `http://my-model:8080/v1/chat/completions`).
+  </Step>
+  <Step title="Have a funded wallet">
+    BASE wallet with at least `~0.6` MOR (provider stake `+` model stake `+` bid fee) plus a little ETH for gas. See [Networks and tokens](/get-started/networks-and-tokens).
+  </Step>
+  <Step title="Have a publicly reachable endpoint">
+    The proxy-router needs to be reachable on `host:3333` from the internet so consumers can connect. The Swagger/admin UI on `:8082` should **not** be public — see [API auth](/reference/api-auth).
+  </Step>
+  <Step title="Run the proxy-router">
+    Configure `.env`, `models-config.json`, `rating-config.json` and start the binary. See [Provider quickstart](/providers/full/quickstart).
+  </Step>
+  <Step title="Register on chain">
+    Approve the Diamond contract, register your provider, register your model (with the `tee` tag if you're TEE-enabled), and post a bid. See [Register on chain](/providers/full/register-onchain). Be aware: every `postModelBid` charges a non-refundable `0.3 MOR` `marketplaceBidFee`; finish your local setup before posting your first bid to avoid paying the fee multiple times — see [Pricing](/providers/full/pricing) and [Quickstart → What can cost you MOR](/providers/full/quickstart#what-can-cost-you-mor-during-setup).
+  </Step>
+  <Step title="Verify end-to-end">
+    Don't trust startup logs alone — run the five-step self-check in [Verify your provider setup](/providers/full/verify-setup): healthcheck, public TCP, on-chain records, `active.mor.org` discovery, and a real prompt via the hosted Inference API. This is exactly the procedure Discord support runs when a new provider asks "can you check if my setup is OK?".
+  </Step>
+</Steps>
+
+<Note>
+TEE providers must register with the model tag `"tee"` for any of the two-hop attestation chain to engage on the consumer side. See [TEE overview](/concepts/tee-overview).
+</Note>

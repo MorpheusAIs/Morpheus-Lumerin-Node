@@ -1,0 +1,54 @@
+---
+title: "Local vs on-chain models"
+description: "When you are using the bundled local llama.cpp model versus a real Morpheus blockchain model — and why expectations and pricing differ."
+audience: ["consumer", "prosumer"]
+product: ["proxy-router", "ui-desktop"]
+last_verified: "v7.0.0"
+---
+
+The single biggest source of confusion in Morpheus: **the bundled local model is not a Morpheus model.** Two things are easily conflated.
+
+## TL;DR
+
+| | Local model | On-chain (Morpheus) model |
+|---|---|---|
+| Where it runs | Your machine, started by `mor-launch local` | Some provider's host on the network |
+| Cost | Free (your CPU/GPU) | MOR per second |
+| Quality | Tiny demo (`tinyllama`) | Whatever the provider hosts (often production-grade) |
+| Wallet needed | Optional | Required (MOR + ETH on BASE) |
+| Session needed | No | Yes — `openSession` against a bid |
+| Visible in MorpheusUI as | "Local model" | "Change Model → Remote model dropdown" |
+
+## How to know which one you're using
+
+### In MorpheusUI
+
+Look at the model selector at the top of the **Chat** screen. If it says **"Local Model"** you are talking to the bundled `llama.cpp` server on `localhost:8080`. If it says a real model name like `LMR-OpenAI-GPT-4o`, you are spending MOR.
+
+### Via the API
+
+If you are sending prompts to `/v1/chat/completions` **without** a `session_id` header, you are routed to the local backend. **With** a `session_id` header, you are routed to the provider that opened that session. See [API direct](/reference/api-direct).
+
+```bash
+curl http://localhost:8082/v1/chat/completions \
+  -H 'Authorization: Basic YWRtaW46YWRtaW4=' \
+  -H 'session_id: 0x089111479fa2847106b4f7b17eace2e9b37e0d3c0db331b4e01a6e24de827477' \
+  -d '{"messages":[{"role":"user","content":"hi"}],"stream":true}'
+```
+
+## Why the local model exists
+
+It exists **only to prove the stack works end-to-end without spending money**. The bundled `tinyllama` is a 1B-parameter demonstration model — it will hallucinate, fail simple tasks, and produce inconsistent output. Comparing its quality to a real Morpheus provider is not a fair comparison.
+
+## When to use what
+
+<CardGroup cols={2}>
+  <Card title="Use the local model" icon="circle-check">
+    First-run validation. Smoke testing the pipeline. Demos without a wallet.
+  </Card>
+  <Card title="Use a Morpheus model" icon="globe">
+    Anything you actually care about. Real workloads. Apps. Agents.
+  </Card>
+</CardGroup>
+
+See also [Why is my MOR locked?](/ai/why-locked-in-contract) and [Local vs blockchain models (anti-hallucination)](/ai/local-vs-blockchain-models) for an LLM-focused version of this page.

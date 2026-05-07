@@ -1,0 +1,106 @@
+name: Docs
+
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "proxy-router/docs/swagger.yaml"
+      - ".github/workflows/docs.yml"
+  push:
+    branches:
+      - main
+      - dev
+      - test
+    paths:
+      - "docs/**"
+      - "proxy-router/docs/swagger.yaml"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  mintlify-validate:
+    name: Mintlify validate + broken-link check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Mintlify CLI
+        run: npm install -g mint@latest
+
+      - name: Validate Mintlify config
+        working-directory: docs
+        run: |
+          # Mintlify CLI command may evolve; we accept either name
+          mint --version
+          mint broken-links || echo "::warning::mint broken-links reported issues"
+
+      - name: List MDX files
+        run: find docs -name "*.mdx" | wc -l
+
+  openapi-lint:
+    name: OpenAPI spec lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Redocly CLI
+        run: npm install -g @redocly/cli@latest
+
+      - name: Lint swagger.yaml
+        run: |
+          redocly lint proxy-router/docs/swagger.yaml || \
+            echo "::warning::OpenAPI spec has lint issues (non-blocking)"
+
+  last-verified-staleness:
+    name: Check last_verified staleness
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Find pages with last_verified older than the latest release tag
+        run: |
+          set -euo pipefail
+          # Determine the latest non-test release tag, fall back to v0.0.0
+          LATEST_TAG=$(git tag --list 'v*' --sort=-v:refname | grep -v -- '-test' | head -n 1 || true)
+          LATEST_TAG=${LATEST_TAG:-v0.0.0}
+          echo "Latest release tag: $LATEST_TAG"
+
+          STALE_FILES=()
+          while IFS= read -r f; do
+            # Read first 30 lines for frontmatter and grep last_verified
+            VERIFIED=$(awk '/^---$/{n++; next} n==1 && /^last_verified:/ {print}' "$f" \
+              | sed -E 's/^last_verified:[[:space:]]*"?([^"]*)"?$/\1/' || true)
+            if [ -z "$VERIFIED" ]; then
+              continue
+            fi
+            # Compare lexicographically; vN.N.N strings sort correctly enough for warnings
+            if [ "$VERIFIED" \< "$LATEST_TAG" ]; then
+              STALE_FILES+=("$f (last_verified=$VERIFIED < $LATEST_TAG)")
+            fi
+          done < <(find docs -name "*.mdx")
+
+          if [ "${#STALE_FILES[@]}" -gt 0 ]; then
+            echo "::warning::Pages with last_verified older than $LATEST_TAG:"
+            for s in "${STALE_FILES[@]}"; do
+              echo "::warning::  $s"
+            done
+          else
+            echo "All pages report last_verified >= $LATEST_TAG."
+          fi

@@ -1,0 +1,74 @@
+---
+title: "Open a session (buy a bid)"
+description: "How to open a Morpheus session via MorpheusUI or the API: pick a model, select a bid, stake MOR, and what happens next."
+audience: ["consumer"]
+product: ["proxy-router", "ui-desktop"]
+last_verified: "v7.0.0"
+source: "docs/05-bid-purchase.md"
+---
+
+Opening a session = "buying a bid." You stake MOR for a fixed duration; the proxy-router routes prompts to the chosen provider until the session closes (or you close it). The MOR is **escrowed**, not spent up-front — see [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover) before you panic about a dropping wallet balance.
+
+## Via MorpheusUI
+
+<Steps>
+  <Step title="Confirm wallet funding">
+    Lower-left of MorpheusUI shows your wallet address; the Wallet tab shows MOR and ETH balances. You need at least `5` MOR for a session and a small ETH balance for gas.
+  </Step>
+  <Step title="Pick a remote model">
+    Chat tab → **Change Model** → pick from the remote dropdown (anything other than "Local Model"). The dropdown lists models registered in the Diamond marketplace contract.
+  </Step>
+  <Step title="Open a session">
+    Click **Open Session**. Enter a stake (minimum `5` MOR). Confirm.
+  </Step>
+  <Step title="Watch for the on-chain confirmation">
+    A transaction will be submitted. Once confirmed, the session is open and you can prompt.
+  </Step>
+  <Step title="Close when done (or let it expire naturally)">
+    Two paths:
+
+    - **Natural expiration** — if you let the session run to its `endsAt`, your consumer node submits `closeSession` ~1 minute later (assuming it's online) and your **full share** lands back in your wallet inside that one transaction.
+    - **Early close** — click the time icon next to the model line; click **X** next to the session. The contract may park a slice in `userStakesOnHold` (1-day timelock); the rest comes back immediately. After the timelock you must call `withdrawUserStakes` to claim the held slice.
+  </Step>
+</Steps>
+
+## Via the API
+
+```bash
+curl -X POST 'http://localhost:8082/blockchain/models/<modelId>/session' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Basic <base64(user:pass)>' \
+  -d '{"sessionDuration": 600, "failover": false, "directPayment": false}'
+```
+
+Response:
+
+```json
+{ "sessionID": "0x8e12df2f764b416c0ea1936a253c2a4be01005651c2d73f22dd0d72520f93ca1" }
+```
+
+Close it:
+
+```bash
+curl -X POST 'http://localhost:8082/blockchain/sessions/<sessionId>/close' \
+  -H 'Authorization: Basic <base64(user:pass)>' -d '{}'
+```
+
+## What you should expect
+
+- **Wallet balance drops by the staked amount** the instant the open transaction is mined. The MOR is now in the Inference Contract on Base for the duration of the session.
+- **Natural expiration**: at `endsAt`, your consumer node submits `closeSession` ~1 minute later and the **full share** of your stake lands in your wallet inside that single transaction. No separate withdraw needed.
+- **Early close**: a slice may go to `userStakesOnHold` with `releaseAt = startOfTheDay(closedAt) + 1 day` (≈ "after the end of the next full UTC day"). The rest is returned immediately. After `releaseAt`, call `withdrawUserStakes(yourAddress, iterations)` directly on the Diamond contract — there is no HTTP route on the proxy-router.
+- **The provider is paid from a separate protocol funding account**, not from your stake in real time. If that funding account is empty or under-approved, every `closeSession` fails — yours included. The session sits "active" past `endsAt` until operators top it up. See [Why is my MOR locked?](/ai/why-locked-in-contract) and [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover).
+- For a hosted read-only wallet checker that splits your MOR across the three on-chain buckets (wallet / active session / on-hold), see [tech.mor.org/session.html](https://tech.mor.org/session.html).
+
+## Picking a good bid
+
+There is no single right answer; consider:
+
+- **`pricePerSecond`** — lower is cheaper but providers compete on quality and uptime.
+- **Provider reputation / stake** — higher provider stake means more skin in the game.
+- **TEE vs non-TEE** — `tee`-tagged models give you cryptographic guarantees about the running software (see [TEE overview](/concepts/tee-overview)).
+- **Throughput / capacity** — see live data at [active.mor.org](https://active.mor.org).
+
+For a `rating-config.json` that prefers certain providers automatically, see [rating-config](/reference/rating-config).

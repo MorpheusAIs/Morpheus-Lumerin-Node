@@ -1,0 +1,61 @@
+---
+title: "Running local agents"
+description: "Generalized patterns for running automated agents against your C-Node: per-agent users, scoped permissions, session policies."
+audience: ["prosumer", "developer"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+---
+
+The C-Node is intentionally a thin OpenAI-shaped HTTP layer over Morpheus. That makes it a clean target for any agent framework — LangChain, LlamaIndex, custom tools, OpenClaw, etc.
+
+## Per-agent users
+
+Don't share the `admin` user with agents. Add a per-agent user with a method whitelist:
+
+```bash
+curl -X POST 'http://127.0.0.1:8082/auth/users' \
+  -H 'Authorization: Basic <base64(admin:pw)>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "username": "research-agent",
+    "password": "rotate-me",
+    "methods": ["chat", "open_session", "close_session", "get_balance"]
+  }'
+```
+
+This writes a new `rpcauth=` and `rpcwhitelist=` line to `proxy.conf`. Full method list and semantics: [API auth](/reference/api-auth).
+
+## Session policies
+
+| Pattern | When to use | Notes |
+|---------|-------------|-------|
+| Pre-open one long session per agent run | Repeated short prompts | Lower per-prompt latency; one cleanup at end |
+| Open per task | Bursty, infrequent tasks | Higher gas overhead, simpler state |
+| Pool of pre-opened sessions | High-throughput multi-agent | Fan agents across sessions; close idle ones |
+
+Always **close sessions explicitly** when work is done. On natural expiration the consumer node submits the close itself and your full share comes back in one transaction. On manual / early close, an immediate partial refund hits your wallet plus a timelocked slice in `userStakesOnHold` (claimable via `withdrawUserStakes` after ~1 UTC day). See [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover).
+
+## Streaming vs non-streaming
+
+Agents that need full deterministic JSON should use `stream: false`. Tool-calling chains that benefit from token streaming (e.g. user-facing typing UX) should set `stream: true`. The proxy-router supports both transparently — see [Chat](/consumers/chat).
+
+## Rate limiting
+
+The proxy-router does not currently expose per-user rate limits. If you need hard limits, terminate agent traffic at a reverse proxy (nginx `limit_req`, Caddy rate limiter, etc.) in front of `:8082`.
+
+## Observability
+
+- Tag each agent with its own `User-Agent` header for log filtering.
+- Run a small log shipper to capture `./data/proxy-router.log` lines.
+- Use `GET /v1/models/attestation` if your agents target `tee`-tagged models — surface attestation state in your dashboards.
+
+## Failure recovery
+
+| Symptom | Recovery |
+|---------|----------|
+| 401 / 403 from C-Node | Re-auth or rotate password |
+| 429 from C-Node | Back off; check provider/model concurrency |
+| Empty response stream | Provider may be down — close session, retry on a different model |
+| `session not found` | Session expired or closed; open a new one |
+
+For a more concrete worked example, see [Gateway for Everclaw](/prosumers/gateway-for-everclaw).

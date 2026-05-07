@@ -1,0 +1,64 @@
+---
+title: "TEE: trusted execution overview"
+description: "The two-hop trust chain (consumer → P-Node → backend LLM) introduced in v7.0.0. What it guarantees, what it does not, and how it is enforced."
+audience: ["consumer", "provider-full", "developer"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+---
+
+TEE (Trusted Execution Environment) verification on Morpheus is a **two-hop chain**, with each hop attested separately. The on-chain `tee` tag on a model triggers both hops:
+
+```
+C-Node (v6.0.0+) ─Phase 1─▶ P-Node -tee image (v7.0.0+) ─Phase 2─▶ Backend LLM (SecretVM)
+```
+
+- **Phase 1** is what the **consumer's proxy-router** runs against the provider's P-Node.
+- **Phase 2** is what the **provider's P-Node (v7.0.0+)** runs against its own backend LLM. The consumer never sees Phase 2 directly.
+- A v6.0.0+ consumer paired with a v7.0.0+ provider gets the full chain transparently — **no consumer-side upgrade is needed** to benefit from Phase 2.
+
+## What Phase 1 proves
+
+When a v6.0.0+ C-Node opens a session for a `tee`-tagged model, the consumer's proxy-router proves the following about the provider's P-Node, at session open and on every prompt:
+
+- The proxy-router binary is the exact binary built by the official CI/CD from a known commit (verified via cosign signature on the `-tee` image).
+- Chat context storage is disabled and cannot be re-enabled (baked in at image build, enforced by RTMR3).
+- Logging is in production mode and cannot be increased to capture prompts.
+- Blockchain config (contracts, chain ID, blockscout URL) is immutable, frozen for the target network.
+- The image has not been tampered with (RTMR3 replay of the published deployed compose against the live TDX quote).
+- The TLS certificate terminating the connection is pinned into the quote's `reportData[0:32]`, so no TLS-terminating proxy or CDN can sit between the consumer and the P-Node.
+- A ~50 ms fast path (quote hash + TLS fingerprint compare) re-checks on every prompt; any drift triggers full re-verification.
+
+## What Phase 2 proves
+
+Phase 2 runs **entirely inside the provider's P-Node**. For each `tee`-tagged model, the v7+ P-Node proves the following about the backend LLM at startup and on every prompt:
+
+- Backend's CPU TDX quote is independently verified (`AttestBackend` at startup, `FastVerifyBackend` per prompt).
+- Backend's TLS certificate fingerprint is pinned into the CPU quote's `reportData[0:32]`; the onward HTTP client refuses any non-matching certificate.
+- Backend's GPU attestation nonce is bound to the CPU quote via `reportData[32:64]`; GPU evidence is independently verified by **NVIDIA NRAS**.
+- Backend's `docker-compose.yaml` is recovered from `:29343/docker-compose` and **RTMR3 is replayed** against the live TDX quote — proving the exact set of models loaded.
+- MRTD + RTMR0-2 are looked up in the published SecretVM TDX artifact registry to confirm firmware/VM/kernel/initramfs.
+- Per-model attestation state is exposed on `GET /v1/models/attestation` for monitoring and forensics.
+
+## What it does *not* prove
+
+- It does **not** prove the *quality* of the model's output. TEE attests the *software*, not the *answer*.
+- It does **not** prove the model wasn't fine-tuned in a problematic way before being baked into the backend image.
+- It does **not** prove anything about non-TEE (untagged) providers. A non-`tee` model has no attestation chain at all.
+- AMD SEV-SNP measurements are not yet computed in CI/CD; only Intel TDX RTMR3 is published in the manifest today.
+
+## How to use it
+
+<CardGroup cols={2}>
+  <Card title="As a consumer" icon="shield-check" href="/concepts/tee-overview">
+    Use a v6.0.0+ proxy-router. When you open a session against a `tee`-tagged model, attestation runs automatically.
+  </Card>
+  <Card title="As a provider" icon="server" href="/providers/full/secretvm-quickstart">
+    Deploy the `-tee` image on SecretVM, register your model with the `tee` tag.
+  </Card>
+  <Card title="Reference (deep)" icon="book" href="/providers/full/tee-reference">
+    Cosign verification, RTMR3 recomputation, attestation manifest fields.
+  </Card>
+  <Card title="Backend verification (developer)" icon="code">
+    The full Phase 2 reference lives at [`proxy-router/docs/tee-backend-verification.md`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/docs/tee-backend-verification.md).
+  </Card>
+</CardGroup>

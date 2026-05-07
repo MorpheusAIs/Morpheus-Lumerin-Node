@@ -1,0 +1,49 @@
+---
+title: "Linux install"
+description: "Run a packaged Morpheus Lumerin Node consumer release on Linux."
+audience: ["consumer"]
+product: ["proxy-router", "ui-desktop"]
+last_verified: "v7.0.0"
+---
+
+The packaged Linux release contains the proxy-router, MorpheusUI, and an optional bundled `llama.cpp` server. For a source-build walk-through, see [macOS install (from source)](/consumers/install/macos) — the steps are nearly identical on Linux.
+
+## Steps
+
+<Steps>
+  <Step title="Download">
+    ```bash
+    cd ~/Downloads
+    curl -L -o morpheus.zip <release-asset-url>
+    unzip morpheus.zip -d morpheus
+    cd morpheus
+    ```
+    Or grab the asset manually from [Releases](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/releases).
+  </Step>
+  <Step title="(Optional) tweak .env">
+    Edit if you need a custom ETH node, log path, or non-default ports. See [Env: proxy-router](/reference/env-proxy-router).
+  </Step>
+  <Step title="Launch">
+    ```bash
+    ./mor-launch
+    # Or with the bundled local model:
+    ./mor-launch local
+    ```
+  </Step>
+  <Step title="Onboard">
+    Accept terms, set a UI password, create or recover a wallet. Save the mnemonic somewhere safe.
+  </Step>
+  <Step title="Validate">
+    Open `http://localhost:8082/swagger/index.html`. Use **Local Model** in Chat to verify the pipeline.
+  </Step>
+</Steps>
+
+## Cleanup
+
+```bash
+rm .cookie proxy.conf
+rm -rf ~/.config/morpheus-ui
+rm -rf data
+```
+
+See also: [Troubleshooting](/reference/troubleshooting).
