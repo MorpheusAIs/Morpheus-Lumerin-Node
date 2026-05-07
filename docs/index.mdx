@@ -1,0 +1,69 @@
+---
+title: "Morpheus Lumerin Node Docs"
+description: "The canonical knowledge base for Morpheus DeAI: consumers, providers, the proxy-router API, TEE attestation, and the broader Morpheus ecosystem. Curated for humans and AI agents."
+sidebarTitle: "Welcome"
+audience: ["consumer", "prosumer", "provider-resale", "provider-full", "developer"]
+last_verified: "v7.0.0"
+---
+
+The Morpheus Lumerin Node is the open-source software that lets a desktop chat experience talk to distributed, decentralized LLMs on the Morpheus network. This documentation is the **canonical, human-and-agent-friendly source of truth** for installing, running, and operating that software.
+
+<Note>
+**This site replaces the old `/docs/*.md` files.** All previous links such as `/04-consumer-setup` redirect to their new home. See [Get started](/get-started/introduction) or pick a role-based journey below.
+</Note>
+
+## Pick your journey
+
+<CardGroup cols={2}>
+  <Card title="I just want an OpenAI-compatible API" icon="plug" href="/inference-api/overview">
+    Use the **hosted** [Morpheus Inference API](https://apidocs.mor.org) — no node, no wallet, just an API key.
+  </Card>
+  <Card title="I'm a consumer" icon="user" href="/consumers/quickstart">
+    I want to chat with LLMs on Morpheus from my desktop or via `app.mor.org`.
+  </Card>
+  <Card title="I'm a prosumer" icon="laptop" href="/prosumers/overview">
+    I run my own C-Node and an AI gateway for Everclaw or local agents.
+  </Card>
+  <Card title="I'm a resale provider" icon="boxes-stacked" href="/providers/resale/overview">
+    I have Venice/OpenAI/Anthropic capacity and want to resell it on Morpheus.
+  </Card>
+  <Card title="I'm a full provider" icon="server" href="/providers/full/quickstart">
+    I host my own models and want to run a Full P-Node, optionally TEE-hardened.
+  </Card>
+</CardGroup>
+
+## What's here
+
+<CardGroup cols={3}>
+  <Card title="Concepts" icon="book" href="/concepts/architecture">
+    Architecture, sessions, TEE, tokens — what every user should understand once.
+  </Card>
+  <Card title="API endpoints" icon="code" href="/reference/api-endpoints">
+    Curated subset of the proxy-router HTTP API; full schema in [`proxy-router/docs/swagger.yaml`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/docs/swagger.yaml).
+  </Card>
+  <Card title="AI knowledge" icon="robot" href="/ai/myths">
+    Anti-hallucination pages: where is my MOR, session states, locked-in-contract.
+  </Card>
+  <Card title="Ecosystem" icon="globe" href="/ecosystem/overview">
+    Mirrors of mor.org, NodeNeo, Everclaw, MyProvider, with attribution.
+  </Card>
+  <Card title="Reference" icon="gear" href="/reference/api-overview">
+    Env vars, configs, troubleshooting, glossary.
+  </Card>
+  <Card title="GitHub" icon="github" href="https://github.com/MorpheusAIs/Morpheus-Lumerin-Node">
+    Source, releases, and issue tracker.
+  </Card>
+</CardGroup>
+
+## Live network resources
+
+These pages link out to **live data** that changes too often to mirror:
+
+- **Status, active models, active bids** — [active.mor.org](https://active.mor.org)
+- **Calculators, sessions, TEE, throughput** — [tech.mor.org](https://tech.mor.org)
+- **Provider portal** — [myprovider.mor.org](https://myprovider.mor.org)
+- **Hosted Inference API** (separate product, OpenAI-compatible) — [apidocs.mor.org](https://apidocs.mor.org)
+
+## For AI agents
+
+If you are an LLM or coding agent reading this repo, start with the [AI knowledge](/ai/myths) section and the [`AGENTS.md`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/AGENTS.md) file at the repo root. Mintlify also publishes `/llms.txt` and `/llms-full.txt` indexes for this site.

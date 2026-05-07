@@ -2464,7 +2464,7 @@ jobs:
             --env .env --platform tdx --persistence --upgradeability
           ```
           
-          See the [TEE Quick-Start Guide](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/docs/02.4-proxy-router-secretvm-quickstart.md) for full setup instructions.
+          See the [TEE Quick-Start Guide](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/docs/providers/full/secretvm-quickstart.mdx) for full setup instructions.
           
           ---
           

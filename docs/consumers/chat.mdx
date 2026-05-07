@@ -1,0 +1,83 @@
+---
+title: "Chat, audio, and embeddings"
+description: "Send prompts to a remote Morpheus model: streaming chat completions, audio transcription / TTS, and embeddings — all with OpenAI-compatible payloads."
+audience: ["consumer", "developer"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+---
+
+Once a session is open, you talk to the proxy-router exactly like you would talk to OpenAI: same routes, same body schemas. The only difference is the `session_id` header and the BasicAuth header for the local API.
+
+## Headers
+
+| Header | Required | Purpose |
+|--------|----------|---------|
+| `Authorization: Basic <base64(user:pass)>` | Yes | Auth to your local proxy-router. See [API auth](/reference/api-auth). |
+| `session_id: 0x...` | Yes (for remote) | Which open Morpheus session to route through. Omit for the bundled local model. |
+| `Content-Type` | As needed | `application/json` or `multipart/form-data`. |
+
+## Chat completions
+
+Streaming, OpenAI-compatible, model field is **set by the provider** based on `session_id`:
+
+```bash
+curl -X POST 'http://localhost:8082/v1/chat/completions' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Basic YWRtaW46YWRtaW4=' \
+  -H 'session_id: 0x8e12df2f764b416c0ea1936a253c2a4be01005651c2d73f22dd0d72520f93ca1' \
+  -d '{
+    "messages": [
+      {"role": "system", "content": "You are a helpful assistant."},
+      {"role": "user", "content": "Tell me about AI."}
+    ],
+    "stream": true
+  }'
+```
+
+Streaming responses are SSE (`text/event-stream`); non-streaming returns `application/json`.
+
+## Audio transcriptions
+
+`POST /v1/audio/transcriptions` — multipart form-data; the body is forwarded to the provider, so any field the provider accepts will pass through. Common fields: `file`, `language`, `response_format`, `timestamp_granularities[]`, `enable_diarization`.
+
+```bash
+curl -X POST 'http://localhost:8082/v1/audio/transcriptions' \
+  -H 'Authorization: Basic YWRtaW46YWRtaW4=' \
+  -H 'session_id: 0x...' \
+  -F 'file=@harvard.wav'
+```
+
+## Audio speech (TTS)
+
+```bash
+curl -X POST 'http://localhost:8082/v1/audio/speech' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Basic YWRtaW46YWRtaW4=' \
+  -H 'session_id: 0x...' \
+  -d '{"input": "Hello world.", "voice": "af_alloy"}'
+```
+
+Response is `audio/mpeg` (or whatever `response_format` you specified).
+
+## Embeddings
+
+```bash
+curl -X POST 'http://localhost:8082/v1/embeddings' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Basic YWRtaW46YWRtaW4=' \
+  -H 'session_id: 0x...' \
+  -d '{"input": "The quick brown fox jumped over the lazy dog", "encoding_format": "float"}'
+```
+
+## Closing a session early
+
+Always close manually if you are finished well before the session timer expires. Unused stake returns to your wallet on close.
+
+```bash
+curl -X POST 'http://localhost:8082/blockchain/sessions/<sessionId>/close' \
+  -H 'Authorization: Basic YWRtaW46YWRtaW4=' -d '{}'
+```
+
+## Full schema
+
+See [API endpoints](/reference/api-endpoints) for our curated subset, or [`proxy-router/docs/swagger.yaml`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/docs/swagger.yaml) for the full schema.

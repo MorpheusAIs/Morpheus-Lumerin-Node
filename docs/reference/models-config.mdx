@@ -1,0 +1,102 @@
+---
+title: "models-config.json"
+description: "How the proxy-router maps on-chain model IDs to backend HTTP endpoints, including OpenAI / Anthropic / Prodia / Hyperbolic API types."
+audience: ["provider-full", "provider-resale", "developer"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+source: "docs/models-config.json.md"
+---
+
+`models-config.json` tells the proxy-router how to translate on-chain `modelId` values into actual backend HTTP calls. The schema is enforced by [`proxy-router/internal/config/models-config-schema.json`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/internal/config/models-config-schema.json).
+
+## Per-model fields
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| `modelId` | yes | The on-chain model id (32-byte hex) |
+| `modelName` | yes | Human-readable name |
+| `apiType` | yes | One of `openai`, `claudeai`, `prodia-sd`, `prodia-sdxl`, `prodia-v2`, `hyperbolic-sd`, etc. |
+| `apiUrl` | yes | Full backend URL including the endpoint path |
+| `apiKey` | optional | Backend API key (resale providers usually need this) |
+| `concurrentSlots` | optional | Distinct concurrent chats your backend can handle for **this** model |
+| `capacityPolicy` | optional | `idle_timeout` or `simple` |
+
+<Note>
+**`concurrentSlots` is per-model, not global.** The proxy-router will accept up to `sum(concurrentSlots)` across all configured models concurrently. There is no built-in global cap. If your hardware can serve only one of N models at a time, register all N models but **only post a bid for the one currently active**, and rotate the bid when you want to switch. See [Pausing or temporarily disabling a model offering](/providers/full/register-onchain#pausing-or-temporarily-disabling-a-model-offering).
+</Note>
+| `parameters` | optional | Per-`apiType` extra parameters (e.g. SD `cfg_scale`, `steps`) |
+
+For the canonical per-`apiType` schema, see the JSON schema file linked above.
+
+## Examples
+
+```json
+{
+  "$schema": "./internal/config/models-config-schema.json",
+  "models": [
+    {
+      "modelId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "modelName": "llama2",
+      "apiType": "openai",
+      "apiUrl": "http://localhost:8080/v1/chat/completions"
+    },
+    {
+      "modelId": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "modelName": "inference.sdxl.txt2img.v1",
+      "apiType": "prodia-v2",
+      "apiUrl": "https://inference.prodia.com/v2/job",
+      "apiKey": "FILL_ME_IN"
+    },
+    {
+      "modelId": "0x0000000000000000000000000000000000000000000000000000000000000002",
+      "modelName": "SDXL1.0-base",
+      "apiType": "hyperbolic-sd",
+      "apiUrl": "https://api.hyperbolic.xyz/v1/image/generation",
+      "apiKey": "FILL_ME_IN",
+      "parameters": {
+        "cfg_scale": "5",
+        "steps": "30"
+      }
+    },
+    {
+      "modelId": "0x0000000000000000000000000000000000000000000000000000000000000003",
+      "modelName": "claude-3-5-sonnet-20241022",
+      "apiType": "claudeai",
+      "apiUrl": "https://api.anthropic.com/v1/messages",
+      "apiKey": "FILL_ME_IN"
+    },
+    {
+      "modelId": "0x0000000000000000000000000000000000000000000000000000000000000004",
+      "modelName": "gpt-4o-mini",
+      "apiType": "openai",
+      "apiUrl": "https://api.openai.com/v1/chat/completions",
+      "apiKey": "FILL_ME_IN"
+    },
+    {
+      "modelId": "0x0000000000000000000000000000000000000000000000000000000000000005",
+      "modelName": "text-embedding-bge-m3",
+      "apiType": "openai",
+      "apiUrl": "https://api.venice.ai/api/v1/embeddings",
+      "apiKey": "FILL_ME_IN"
+    },
+    {
+      "modelId": "0x0000000000000000000000000000000000000000000000000000000000000006",
+      "modelName": "tts-kokoro",
+      "apiType": "openai",
+      "apiUrl": "https://api.venice.ai/api/v1/audio/speech",
+      "apiKey": "FILL_ME_IN"
+    },
+    {
+      "modelId": "0x0000000000000000000000000000000000000000000000000000000000000007",
+      "modelName": "whisper-1",
+      "apiType": "openai",
+      "apiUrl": "https://api.openai.com/v1/audio/transcriptions",
+      "apiKey": "FILL_ME_IN"
+    }
+  ]
+}
+```
+
+## Inline content (for TEE / Akash)
+
+For deployments where mounting a JSON file is impractical, set `MODELS_CONFIG_CONTENT` to a **single-line JSON string** with the exact same shape as above. The proxy-router reads it instead of `MODELS_CONFIG_PATH`. This is the standard approach in [TEE](/providers/full/secretvm-quickstart) and [Akash](/providers/full/proxy-router-akash) deployments.

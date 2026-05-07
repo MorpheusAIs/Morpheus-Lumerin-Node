@@ -1,0 +1,41 @@
+---
+title: "active.mor.org (live status)"
+description: "Mirror summary of active.mor.org — live status, active models, and active bids on the Morpheus marketplace."
+audience: ["consumer", "prosumer", "provider-full", "provider-resale", "developer"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+source_url: "https://active.mor.org"
+---
+
+<Note>
+**Mirrored summary.** Live numbers (counts, prices, latencies) live at [active.mor.org](https://active.mor.org). This page describes the **semantics** of those numbers and how to interpret them.
+</Note>
+
+## What's there
+
+| Endpoint | What it shows | Useful for |
+|----------|---------------|-----------|
+| [active.mor.org/status](https://active.mor.org/status) | Overall network status | Spotting outages, monitoring uptime |
+| [active.mor.org/active_models](https://active.mor.org/active_models) | Models that have active bids and at least one healthy provider | Choosing what to consume; evaluating competition as a provider |
+| [active.mor.org/active_bids](https://active.mor.org/active_bids) | Currently posted bids across all models | Pricing decisions; reseller competitive analysis |
+
+## How to read it
+
+- **A model "active" here means `(at least one bid posted) AND (provider healthcheck passes)`.** A model on chain that has no healthy provider won't show up here even if its `Diamond` record exists.
+- **`pricePerSecond`** values are denominated in MOR. To compare across models with different token economies, multiply by tokens-per-second to get an apples-to-apples cost.
+- **Latency / throughput** numbers are aggregated; a single hot provider can pull averages dramatically up or down.
+
+## When to cite this page
+
+For an LLM answering "what models are available?" or "what's the going rate?" — **link out** to the appropriate sub-path of `active.mor.org`. Never invent counts or prices.
+
+## Related canonical pages on this site
+
+- [Architecture](/concepts/architecture)
+- [Pricing a resale bid](/providers/resale/registering-bid)
+- [Buy a bid](/consumers/buy-bid)
+- [Glossary](/reference/glossary)
+
+## Source
+
+- [https://active.mor.org](https://active.mor.org)

@@ -1,0 +1,50 @@
+---
+title: "Consumer troubleshooting"
+description: "The most common consumer-side problems and their fixes."
+audience: ["consumer"]
+product: ["proxy-router", "ui-desktop"]
+last_verified: "v7.0.0"
+---
+
+This page focuses on consumer-side symptoms. For provider-side or deeper proxy-router operational issues, see the full [Reference: troubleshooting](/reference/troubleshooting).
+
+## "Where is my MOR?" / wallet balance dropped
+
+You almost certainly opened a session. The MOR is escrowed in the Diamond contract, not lost. See:
+- [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover)
+- [Where is my MOR?](/ai/where-is-my-mor)
+- [Why is my MOR locked in the contract?](/ai/why-locked-in-contract)
+
+## MorpheusUI shows zero balance after recovering my wallet
+
+You probably recovered a **derived** address from your mnemonic. MorpheusUI only resolves the top-level address from a mnemonic. Use a tier-1 wallet, or import the private key directly.
+
+## "Provider not responding" or stuck mid-prompt
+
+- Confirm the proxy-router is still running (check the launcher CMD window or `http://localhost:8082/healthcheck`).
+- The provider may be down. Close the session early; an immediate partial refund hits your wallet, and any timelocked slice in `userStakesOnHold` becomes claimable via `withdrawUserStakes` after ~1 UTC day:
+  ```bash
+  curl -X POST 'http://localhost:8082/blockchain/sessions/<sessionId>/close' \
+    -H 'Authorization: Basic <base64(user:pass)>' -d '{}'
+  ```
+- Try a different model from a different provider.
+
+## Local model returns nonsense
+
+The bundled `tinyllama` is a **demonstration model only**. It will hallucinate, miscount, and contradict itself. Don't compare it to a real Morpheus model. See [Local vs on-chain models](/concepts/local-vs-onchain-models).
+
+## Swagger / API not reachable on `:8082`
+
+- Check the launcher terminal for proxy-router errors.
+- Common cause: invalid ETH node URL or wrong chain/contract addresses. See [proxy-router env reference](/reference/env-proxy-router).
+- macOS: ensure `xattr -c` removed quarantine flags from the binaries.
+
+## `xattr` / quarantine errors on macOS
+
+```bash
+xattr -c mor-launch mor-cli proxy-router MorpheusUI.app
+```
+
+## I want to start over completely
+
+Save the mnemonic first, then follow [Cleanup](/consumers/quickstart#cleanup).

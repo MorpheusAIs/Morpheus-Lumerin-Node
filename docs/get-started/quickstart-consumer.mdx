@@ -1,0 +1,43 @@
+---
+title: "Consumer quickstart"
+description: "The 5-minute path from zero to chatting with a remote model: download, fund a wallet, open a session, prompt."
+audience: ["consumer"]
+product: ["proxy-router", "ui-desktop"]
+last_verified: "v7.0.0"
+---
+
+This is the shortest path to chat with a remote model on Morpheus. For a full walk-through (including the optional local-only model and cleanup), see [Consumer install](/consumers/quickstart).
+
+<Steps>
+  <Step title="Download a release">
+    Grab the latest package for your OS from the [GitHub releases page](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/releases). Mainnet builds have no suffix (e.g. `v7.0.0`); testnet builds end in `-test`.
+  </Step>
+  <Step title="Unpack and launch">
+    Extract the zip, then:
+    <Tabs>
+      <Tab title="macOS / Linux">
+        ```bash
+        xattr -c mor-launch mor-cli proxy-router MorpheusUI.app
+        ./mor-launch
+        ```
+      </Tab>
+      <Tab title="Windows">
+        Double-click `mor-launch.exe`. Allow Defender if prompted.
+      </Tab>
+    </Tabs>
+    Add `local` (e.g. `./mor-launch local`) to also start the bundled `llama.cpp` model for free local testing.
+  </Step>
+  <Step title="Onboard the UI">
+    In MorpheusUI, accept the terms, set a password, and either create a new wallet or recover an existing one with your mnemonic. Save the mnemonic somewhere safe.
+  </Step>
+  <Step title="Fund the wallet">
+    Send `MOR` and `ETH` on BASE to the wallet address shown in the lower-left of the UI. See [Networks and tokens](/get-started/networks-and-tokens).
+  </Step>
+  <Step title="Open a session and chat">
+    Click **Chat → Change Model**, pick a remote model, click **Open Session**, stake at least `5` MOR, and prompt away. To close early, expand the session line and click the **X** next to it.
+  </Step>
+</Steps>
+
+<Tip>
+Confused about MOR appearing "locked" right after opening a session? That is expected — see [Where is my MOR?](/ai/where-is-my-mor) and [Session states](/ai/session-states-open-close-recover).
+</Tip>

@@ -1,0 +1,131 @@
+---
+title: "Where is my MOR? (diagnostic)"
+description: "A linear, agent-friendly diagnostic for users who think their MOR has gone missing. Almost always the answer is 'in an active session,' 'in the on-hold queue after an early close,' or 'on the wrong network' — not 'lost.'"
+audience: ["consumer", "provider-full", "provider-resale", "developer"]
+product: ["proxy-router", "ui-desktop"]
+last_verified: "v7.0.0"
+---
+
+The vast majority of "my MOR is gone" reports are **not** lost MOR. Per the canonical reference at [tech.mor.org/session.html](https://tech.mor.org/session.html), your MOR can only be in **three on-chain places**:
+
+1. **Your wallet** — standard ERC-20 `balanceOf(you)` on the MOR token.
+2. **Active session** — `openSession` moved your stake into the Inference Contract; `closedAt == 0`.
+3. **`userStakesOnHold` queue** — early-close timelock; `releaseAt = startOfTheDay(closedAt) + 1 day`.
+
+Walk this checklist top-to-bottom. The moment one matches, that is the answer.
+
+## Bucket 1: Active session
+
+If you recently opened a session in MorpheusUI or via `POST /blockchain/models/:id/session`, **the entire stake** is in the Inference Contract while `closedAt == 0`.
+
+**Confirm:**
+
+- `GET /blockchain/sessions/user?user=0x…` lists active sessions, or use the hosted [tech.mor.org/session.html](https://tech.mor.org/session.html) wallet checker.
+- Your wallet's transactions on Base show the `openSession` call.
+
+**Resolution:**
+
+- **Wait** for natural expiration — your consumer node will submit `closeSession` ~1 minute after `endsAt` and your full stake will land back in your wallet **inside the same transaction** (no extra step).
+- **Or close early** with `POST /blockchain/sessions/<sessionId>/close`. The contract may park a slice in `userStakesOnHold` (see Bucket 2); the rest comes back immediately.
+
+See [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover) for the full lifecycle.
+
+## Bucket 2: On-hold queue (early close timelock)
+
+If you closed a session **before** its scheduled `endsAt`, the contract may have pushed a slice of your stake to `userStakesOnHold[you]` with `releaseAt = startOfTheDay(closedAt) + 1 day`. Effectively this means **after the end of the next full UTC day** from your close. Until then, that slice is parked inside the contract — not lost, not in your wallet, not in any active session.
+
+**Confirm:**
+
+- `getUserStakesOnHold(yourAddress, iterations_)` on the Inference Contract — splits amounts into `hold_` (before `releaseAt`) vs `available_` (after).
+- The hosted wallet checker at [tech.mor.org/session.html](https://tech.mor.org/session.html) shows this bucket explicitly.
+- A direct Base RPC `eth_call` works too:
+  ```bash
+  DATA=$(cast calldata "getUserStakesOnHold(address,uint8)" 0xYOUR_WALLET 1)
+  curl -sS https://mainnet.base.org -H 'Content-Type: application/json' \
+    -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_call\",\"params\":[{\"to\":\"0x6aBE1d282f72B474E54527D93b979A4f64d3030a\",\"data\":\"$DATA\"},\"latest\"]}"
+  ```
+
+**Resolution:**
+
+After `releaseAt`, call `withdrawUserStakes` on the Diamond contract. **There is no HTTP route on the proxy-router** for this — you submit the on-chain call yourself:
+
+```bash
+cast send 0x6aBE1d282f72B474E54527D93b979A4f64d3030a \
+  "withdrawUserStakes(address,uint8)" 0xYOUR_WALLET 20 \
+  --rpc-url https://mainnet.base.org \
+  --private-key "$PRIVATE_KEY_OF_DELEGATEE"
+```
+
+The function selector is `0xa98a7c6b` if you're driving a non-Foundry tool. Or use MetaMask "Interact with contract" with the same ABI.
+
+## Bucket 3: Stuck close (funding account or gas)
+
+A session can sit "active" past `endsAt` because **`closeSession` is one transaction that has to succeed** — and it pays the provider from a **separate protocol funding account**, not from your stake. If that funding account is empty or has insufficient allowance to the Inference Contract, every close fails — yours included.
+
+**Confirm:**
+
+- `GET /blockchain/sessions/0x<sessionId>` shows `closedAt == 0` even though `endsAt` has passed.
+- Failed `closeSession` transactions on Base from your consumer node's wallet.
+
+**Common causes:**
+
+- Provider payment pool empty or unapproved (operator-side issue).
+- The wallet that submits `closeSession` has no ETH for gas.
+- Your consumer node has been offline since `endsAt`.
+
+**Resolution:**
+
+- Wait for operators to top up the funding account (community Discord / mor.org status).
+- Make sure your consumer node is online and has Base ETH on its operating wallet.
+- If your node is up but the close still fails, check its logs — the failure reason is usually printed.
+
+## Bucket 4: Wrong network
+
+MorpheusUI and the proxy-router can be configured for either **BASE Mainnet (`8453`)** or **BASE Sepolia (`84532`)**. MOR balances are independent: mainnet MOR is at one address, testnet MOR at another. You may be querying the wrong contract.
+
+**Confirm:**
+
+- Check `ETH_NODE_CHAIN_ID` in your `.env` (or `CHAIN_ID` for the UI).
+- Check the explorer URL the UI uses — `base.blockscout.com` (mainnet) vs `base-sepolia.blockscout.com` (testnet).
+- Confirm `MOR_TOKEN_ADDRESS` matches [Networks and tokens](/get-started/networks-and-tokens).
+
+**Resolution:** switch back to the right network. The MOR isn't gone — you're querying the wrong contract.
+
+## Bucket 5: Wrong wallet address
+
+MorpheusUI's mnemonic-recover only restores **tier-1 (index 0)** addresses. If your real wallet was a derived sub-account (e.g. MetaMask account #2), recovering by mnemonic gives you a different address with no funds.
+
+**Confirm:** the lower-left address in MorpheusUI does **not** match your real ERC-20 wallet address.
+
+**Resolution:** use **import private key** instead of mnemonic, or use a wallet that is the top-level address from this mnemonic.
+
+## Bucket 6 (rare): Allowance mismatch
+
+If you tried an action and the transaction reverted because you didn't have enough allowance, **no MOR moved** — but the action can look like it started.
+
+**Confirm:**
+
+- `GET /blockchain/allowance` against the Diamond contract.
+- Failed transactions on the explorer.
+
+**Resolution:** `POST /blockchain/approve?spender=<DiamondContract>&amount=...` and retry.
+
+## What is *not* "lost MOR"
+
+| Symptom | Reality |
+|---------|---------|
+| "Wallet balance dropped after opening a session." | Expected — stake is in the active session (Bucket 1). |
+| "I closed early and only part came back." | Expected — the rest is in the on-hold queue (Bucket 2). Wait until after the next full UTC day, then `withdrawUserStakes`. |
+| "Session is past `endsAt` but still open." | Bucket 3 — close transaction hasn't succeeded yet. |
+| "I see the contract holding tokens." | The Inference Contract holds tokens for **all users' active sessions and on-hold queues** combined. Not all of it is yours. |
+
+## Truly lost MOR
+
+In extremely rare cases — wrong-network transfer, sending to a non-Morpheus contract, etc. — MOR can actually be unrecoverable. **Always verify destination addresses** before sending.
+
+## Related
+
+- [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover) — full lifecycle reference.
+- [Why is my MOR locked in the contract?](/ai/why-locked-in-contract) — corrected lock-vs-unlock semantics.
+- [Session states (open, close, claim)](/ai/session-states-open-close-recover) — deterministic state machine.
+- Hosted wallet checker: [tech.mor.org/session.html](https://tech.mor.org/session.html).
