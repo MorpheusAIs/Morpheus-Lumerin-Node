@@ -1,0 +1,65 @@
+---
+title: "Proxy-router on Akash"
+description: "Deploy the proxy-router on Akash Network for decentralized hosting. API-only access; no GUI or wallet components included."
+audience: ["provider-full", "developer"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+source: "docs/02.2-proxy-router-akash.md"
+---
+
+This guide covers deploying the proxy-router on Akash Network. The deployment provides API access via Swagger interface — no GUI or wallet components.
+
+## Pre-requisites
+
+- AI model reachable on a private endpoint (e.g. `http://model.example:8080`).
+- Funded wallet (MOR + ETH on BASE) and its private key.
+- Akash account with deployment experience.
+
+<Note>
+The final endpoint URL is only available **after** provider selection and Akash deployment.
+</Note>
+
+## Configuration model
+
+Unlike a typical Docker run, on Akash the proxy-router uses **environment variables instead of volume mounts** for improved reliability:
+
+| Variable | Purpose |
+|----------|---------|
+| `COOKIE_CONTENT` | API authentication: `username:password` |
+| `MODELS_CONFIG_CONTENT` | Single-line JSON for model endpoints (see [models-config](/reference/models-config)) |
+| `WALLET_PRIVATE_KEY` | For blockchain interactions |
+| Plus chain ID, contract addresses, etc. | See [Env: proxy-router](/reference/env-proxy-router) |
+
+## Deployment
+
+<Steps>
+  <Step title="Prepare the SDL">
+    Download and customize [`docs/02.2-proxy-router-akash.yml`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/docs/02.2-proxy-router-akash.yml). Minimum proxy-router image version: `v2.3.0` (use a newer release tag for current features).
+    Configure:
+    - Wallet private key
+    - API credentials (`COOKIE_CONTENT`)
+    - `MODELS_CONFIG_CONTENT` (single-line JSON)
+
+    Save securely — the SDL contains sensitive data.
+  </Step>
+  <Step title="Deploy">
+    In the Akash Dashboard: **Deploy → Custom Container**. Upload your SDL. Select a provider and deploy. Verify status and logs.
+  </Step>
+  <Step title="Configure endpoints">
+    Update `WEB_PUBLIC_URL` with the provider URL and port. Note both API port (`8082`) and proxy-router port (`3333`). Format: `http://provider.example:port`.
+  </Step>
+  <Step title="Register provider on chain">
+    Open `http://provider.example:port/swagger/index.html`. Authenticate with your `COOKIE_CONTENT` credentials. Update the provider endpoint via `POST /blockchain/providers`:
+    ```json
+    {
+      "endpoint": "provider.example:proxy_port",
+      "stake": "123000000000"
+    }
+    ```
+    Verify with `GET /blockchain/providers`. Continue with model + bid registration in [Register on chain](/providers/full/register-onchain).
+  </Step>
+</Steps>
+
+## Sample logs
+
+A successful Akash startup looks like the screenshot at [`docs/images/akash_good_start.png`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/docs/images/akash_good_start.png).

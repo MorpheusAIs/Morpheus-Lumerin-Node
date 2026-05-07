@@ -1,0 +1,134 @@
+---
+title: "Full P-Node quickstart"
+description: "Run a standalone Morpheus provider proxy-router pointing at your own AI model."
+audience: ["provider-full"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+source: "docs/02-provider-setup.md"
+---
+
+This page covers a **non-TEE provider** running on your own infrastructure. For TEE-hardened deployment on SecretVM, see [SecretVM quickstart](/providers/full/secretvm-quickstart). Hosted alternatives: [Docker](/providers/full/proxy-router-docker), [AWS EC2](/providers/full/aws), or [Akash](/providers/full/proxy-router-akash).
+
+## Assumptions
+
+- Your AI model is configured, started, and reachable from the proxy-router host on a private endpoint (e.g. `http://my-model.example:8080`). Use the bundled `llama.cpp` + `tinyllama` for testing — adjust `models-config.json` if your local port differs.
+- You have a funded wallet on BASE (MOR + ETH) and the **private key** for `.env`.
+- You have your **own** ETH node URL — Alchemy or Infura private API key for BASE works (`wss://base-mainnet.g.alchemy.com/v2/<key>` or HTTPS). The proxy-router has a built-in round-robin of public RPC endpoints as a fallback, but it is rate-limited and unreliable in practice; running a real provider on it leads to silent missed events. Set `ETH_NODE_ADDRESS` explicitly.
+- Your proxy-router has a **publicly accessible endpoint** for the provider (`host:port`, no protocol), e.g. `mycoolmornode.example:3333`.
+
+## Install & configure
+
+<Steps>
+  <Step title="Get the software">
+    <Tabs>
+      <Tab title="Release package">
+        Download the latest release for your OS from [Releases](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/releases). Mainnet builds have no suffix; testnet builds end in `-test`.
+      </Tab>
+      <Tab title="From source">
+        ```bash
+        git clone -b main https://github.com/MorpheusAIs/Morpheus-Lumerin-Node.git
+        cd Morpheus-Lumerin-Node/proxy-router
+        ./build.sh
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+  <Step title="Extract / unzip">
+    <Tabs>
+      <Tab title="macOS">
+        ```bash
+        cd ~/Downloads/morpheus
+        xattr -c proxy-router
+        ```
+      </Tab>
+      <Tab title="Linux">
+        ```bash
+        cd ~/Downloads/morpheus
+        ```
+      </Tab>
+      <Tab title="Windows">
+        Extract to `%USERPROFILE%\Downloads\morpheus`.
+      </Tab>
+    </Tabs>
+  </Step>
+  <Step title="Configure .env">
+    Linux/macOS: rename `env.example` to `.env`. Windows: rename `env.example.win` to `.env`. Edit at minimum:
+    - `WALLET_PRIVATE_KEY=` — provider's private key.
+    - `ETH_NODE_ADDRESS=` — **required for any real deployment.** The bundled minimal example does not set this; without it the node falls back to a built-in public RPC round-robin that is rate-limited and unreliable. Use your own Alchemy / Infura HTTPS or WSS URL. Match `ETH_NODE_USE_SUBSCRIPTIONS` accordingly (`true` for WSS, `false` for HTTPS — recommended HTTPS + `false`).
+    - Choose **mainnet** (default) or testnet — uncomment the testnet block, comment mainnet, save.
+
+    Full reference: [Env: proxy-router](/reference/env-proxy-router) (see "Conflicting / overlapping variables" up top).
+  </Step>
+  <Step title="(Optional) external / pass-through providers">
+    To resell or front another LLM, set `MODELS_CONFIG_PATH=` in `.env` and add the entry to `models-config.json`:
+    ```json
+    {
+      "modelId": "<your_modelId_from_chain>",
+      "modelName": "your-model-name",
+      "apiType": "openai",
+      "apiUrl": "https://api.example.com/v1/chat/completions",
+      "apiKey": "..."
+    }
+    ```
+    Full schema: [models-config.json](/reference/models-config). Restart after edits.
+  </Step>
+  <Step title="(Optional) provider weights & allowlist">
+    Edit `rating-config.json` to bias selection or restrict to specific providers:
+    ```json
+    {
+      "algorithm": "default",
+      "providerAllowlist": [],
+      "params": {
+        "weights": { "tps": 0.24, "ttft": 0.08, "duration": 0.24, "success": 0.32, "stake": 0.12 }
+      }
+    }
+    ```
+    Weights must sum to 1. Reference: [rating-config.json](/reference/rating-config).
+  </Step>
+</Steps>
+
+## Start
+
+<Tabs>
+  <Tab title="macOS / Linux">
+    ```bash
+    ./proxy-router
+    ```
+  </Tab>
+  <Tab title="Windows">
+    Double-click `proxy-router.exe`. Allow Defender if prompted.
+  </Tab>
+</Tabs>
+
+## Validate
+
+- `http://localhost:8082/swagger/index.html` should render.
+- `./data/` directory contains logs.
+- The proxy-router log should include:
+  ```
+  INFO  proxy state: running
+  INFO  HTTP  http server is listening: 0.0.0.0:8082
+  INFO  TCP   tcp server is listening: 0.0.0.0:3333
+  ```
+
+## Next: register on chain
+
+Once running, register your provider, your model (with the `tee` tag if you've TEE-hardened), and your bid. See [Register on chain](/providers/full/register-onchain), then run the [self-checks in Verify your provider setup](/providers/full/verify-setup) before declaring victory.
+
+## What can cost you MOR during setup
+
+A few things will quietly draw down your MOR balance during initial configuration. None of them are slashing or forfeiture; they are normal protocol fees and stakes. Knowing them upfront prevents the "I lost ~2 MOR during setup, what happened?" support ticket.
+
+| Event | Cost | Refundable? |
+|-------|------|-------------|
+| Register provider (`providerRegister`) | `0.2 MOR` (or `10000 MOR` for subnet) | **Yes**, on `providerDeregister` (after deregistration cooldown opens) |
+| Register model (`modelRegister`) | `0.1 MOR` | **Yes**, on `modelDeregister` (model must have no active bids) |
+| **Post a bid** (`postModelBid`) | **`0.3 MOR` non-refundable `marketplaceBidFee`** | **No** — every bid post charges this fee |
+| BASE gas | a few cents in ETH-on-BASE per tx | No (standard gas) |
+| Sessions consumed before your node was actually serving | Possibly small — see "Disputed early closes" in [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover) | n/a |
+
+The most common pattern: a new provider posts a bid, tweaks their setup, **deletes and reposts the bid** several times. Each repost charges `0.3 MOR`. Six iterations is `~1.8 MOR` gone before the node is even serving traffic.
+
+**Mitigation:** finish your model and `models-config.json` setup, run [verify-setup steps 1-4](/providers/full/verify-setup) **before** posting your first bid. Repost only when pricing actually needs to change.
+
+For details on bid pricing and how to change a price, see [Pricing](/providers/full/pricing).

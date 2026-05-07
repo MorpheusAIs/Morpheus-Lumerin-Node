@@ -1,0 +1,66 @@
+---
+title: "Networks and tokens"
+description: "BASE mainnet and BASE Sepolia chain IDs, MOR token addresses, and Diamond marketplace contracts shipped with the current release."
+audience: ["consumer", "prosumer", "provider-resale", "provider-full", "developer"]
+product: ["proxy-router", "ui-desktop"]
+last_verified: "v7.0.0"
+---
+
+The Morpheus Lumerin Node currently targets two networks. The values below are the **canonical addresses for the latest release** — they match what the binary and `-tee` images bake in. Always trust the release notes over any other source.
+
+<Note>
+**Wallet**: Both consumers and providers need a BASE-compatible ERC-20 wallet funded with `MOR` (used to pay for sessions and provider stake) and `ETH` on BASE (used to pay gas).
+</Note>
+
+## BASE Mainnet
+
+Used by the `main` branch and main-channel releases.
+
+| Item | Value |
+|------|-------|
+| Chain ID | `8453` |
+| MOR token | `0x7431aDa8a591C955a994a21710752EF9b882b8e3` |
+| Diamond marketplace contract | `0x6aBE1d282f72B474E54527D93b979A4f64d3030a` |
+| Block explorer | https://base.blockscout.com/ |
+| GitHub branch | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/tree/main |
+
+## BASE Sepolia (testnet)
+
+Used by the `test` branch and `*-test` releases.
+
+| Item | Value |
+|------|-------|
+| Chain ID | `84532` |
+| MOR token | `0x5C80Ddd187054E1E4aBBfFCD750498e81d34FfA3` |
+| Diamond marketplace contract | `0x6e4d0B775E3C3b02683A6F277Ac80240C4aFF930` |
+| Block explorer | https://base-sepolia.blockscout.com/ |
+| GitHub branch | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/tree/test |
+
+## Funding a wallet
+
+<Steps>
+  <Step title="Pick a wallet">
+    Use a top-level (non-derived) ERC-20 wallet. The MorpheusUI's mnemonic recover flow does **not** support secondary/derived addresses.
+  </Step>
+  <Step title="Get ETH on BASE">
+    Bridge ETH to BASE Mainnet (or use a BASE Sepolia faucet for testnet). ETH pays gas.
+  </Step>
+  <Step title="Get MOR on BASE">
+    Acquire MOR via supported exchanges or convert from ETH inside MorpheusUI. MOR pays for staking, bidding, and consumer sessions.
+  </Step>
+</Steps>
+
+## On-chain minimums
+
+These are enforced by the Diamond contract and may change with governance:
+
+| Action | Minimum |
+|--------|---------|
+| Provider stake | `0.2` MOR |
+| Subnet provider stake | `10000` MOR |
+| Model stake | `0.1` MOR |
+| Marketplace bid fee | `0.3` MOR |
+| Consumer session open | `5` MOR |
+| Bid price floor | `0.00000001` MOR / second |
+
+See [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover) for what these mean and when they unlock.

@@ -1,0 +1,43 @@
+---
+title: "app.mor.org"
+description: "Mirror summary of app.mor.org — the hosted Morpheus consumer chat UI."
+audience: ["consumer"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+source_url: "https://app.mor.org"
+---
+
+<Note>
+**Mirrored summary** of [app.mor.org](https://app.mor.org). For current screens and feature behavior, defer to the live site.
+</Note>
+
+## What it is
+
+`app.mor.org` is the hosted **Morpheus Chat App** — a browser-based consumer chat UI powered by the [hosted Morpheus Inference API Gateway](/inference-api/overview). It is the **lowest-friction** way to try Morpheus: no install, no `mor-launch`, no proxy-router on your local machine, no on-chain wallet management.
+
+## How it differs from MorpheusUI
+
+| | `app.mor.org` (hosted Chat App) | MorpheusUI (this repo) |
+|---|---|---|
+| Install | None | Download release |
+| Wallet | Account on app.mor.org (no on-chain wallet needed for chat) | Self-custodial wallet (mnemonic / private key) |
+| Local model | No | Yes (bundled `tinyllama`) |
+| Backed by | Hosted [Inference API](/inference-api/overview) gateway | Direct on-chain sessions through your own proxy-router |
+| Pricing | Credits/billing on the Inference API (see [apidocs.mor.org](https://apidocs.mor.org)) | MOR per session-second |
+| Underlying network | Same Morpheus marketplace | Same Morpheus marketplace |
+
+## When to cite which
+
+- "I just want to try Morpheus right now" → `app.mor.org`.
+- "I want a desktop app, optional offline local-only test, full control" → MorpheusUI.
+- "I want it on my phone / cross-device" → [NodeNeo](/ecosystem/nodeneo).
+
+## Related canonical pages on this site
+
+- [What is Morpheus?](/concepts/what-is-morpheus)
+- [Consumer quickstart](/consumers/quickstart)
+- [Where is my MOR?](/ai/where-is-my-mor) — same diagnostics apply regardless of client
+
+## Source
+
+- [https://app.mor.org](https://app.mor.org)

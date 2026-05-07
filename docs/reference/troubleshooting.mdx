@@ -1,0 +1,117 @@
+---
+title: "Troubleshooting"
+description: "Common failure modes for the proxy-router and MorpheusUI, with diagnostics and fixes."
+audience: ["consumer", "prosumer", "provider-full", "provider-resale", "developer"]
+product: ["proxy-router", "ui-desktop"]
+last_verified: "v7.0.0"
+source: "docs/99-troubleshooting.md"
+---
+
+The single most important rule: **MorpheusUI / Swagger / CLI all depend on a healthy proxy-router**. If the proxy-router is wedged or can't talk to the BASE node, none of the higher layers will work.
+
+Tip: run the proxy-router in a foreground terminal at least once so you can see startup logs in real time. For log destinations and verbosity, see the **Logging Configuration** section of [`docs/proxy-router.all.env`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/docs/proxy-router.all.env).
+
+## Healthy startup looks like
+
+```
+INFO  proxy state: running
+INFO  HTTP  http server is listening: 0.0.0.0:8082
+INFO  TCP   tcp server is listening: 0.0.0.0:3333
+```
+
+You can also confirm via `http://localhost:8082/swagger/index.html` (or whatever URL is set in your `.env`).
+
+---
+
+## Proxy-router is not starting / crashing immediately
+
+### Likely cause 1: `.env` misconfiguration
+
+These four values **must** match your chain and OS. Use `proxy-router/env.main.example` as the canonical reference:
+
+- `DIAMOND_CONTRACT_ADDRESS=`
+- `MOR_TOKEN_ADDRESS=`
+- `BLOCKSCOUT_API_URL=`
+- `ETH_NODE_CHAIN_ID=`
+- `PROXY_STORAGE_PATH=`
+
+If running the proxy-router headless (without the UI), set:
+
+- `WALLET_PRIVATE_KEY=` — the provider's wallet private key.
+
+If you bring your own ETH node (Alchemy, Infura, etc.):
+
+- Confirm `ETH_NODE_URL=` (or `ETH_NODE_ADDRESS=`) is correct for the chain.
+- Recommended: HTTPS over WSS, with `ETH_NODE_USE_SUBSCRIPTIONS=false`.
+
+Full reference: [Env: proxy-router](/reference/env-proxy-router).
+
+### Likely cause 2: `models-config.json` misconfiguration
+
+- `MODELS_CONFIG_PATH=` in `.env` must point to the actual file with read permissions.
+- The JSON must follow [models-config.json](/reference/models-config).
+- Restart the proxy-router after edits.
+
+### Resolution
+
+1. Fix `.env` and `models-config.json`.
+2. Restart the proxy-router.
+3. Watch the log for connection errors to the ETH node and the Diamond contract.
+
+---
+
+## Wallet shows zero MOR / ETH after recovering from mnemonic
+
+You probably recovered a **derived address**. The MorpheusUI mnemonic flow only works with **top-level (tier-1)** addresses. Either:
+
+- Use a wallet that was originally created from this mnemonic at index 0, or
+- Import the **private key** directly instead of the mnemonic.
+
+---
+
+## "Where is my MOR?"
+
+Almost always: it's escrowed in the Diamond contract because of an open or recently-closed session. Walk through:
+
+- [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover)
+- [Where is my MOR?](/ai/where-is-my-mor)
+- [Why is my MOR locked in the contract?](/ai/why-locked-in-contract)
+
+---
+
+## Local model returns nonsense
+
+The bundled `tinyllama` is a **demo** model. It will hallucinate, miscount, and contradict itself. Compare quality only against real Morpheus models. See [Local vs on-chain models](/concepts/local-vs-onchain-models).
+
+---
+
+## Provider-side: consumers can't connect
+
+- Confirm `:3333` is **publicly reachable** (`telnet host 3333` from outside your network).
+- Confirm `WEB_PUBLIC_URL` and the registered provider `endpoint` match your actual public host.
+- Inspect provider logs — connection attempts and rejections show up there.
+
+---
+
+## Provider-side: TEE attestation fails on the consumer
+
+- Confirm your model is registered with the `tee` tag.
+- Confirm the consumer is on `v6.0.0+` (Phase 1) or `v7.0.0+` for full benefit.
+- Recheck the SecretVM portal at https://secretai.scrtlabs.com/attestation with your compose and VM URL — all three layers must pass.
+- Use `cosign verify` and `cosign verify-attestation` on your `-tee` image. See [TEE reference](/providers/full/tee-reference).
+
+---
+
+## "Locked files" or stale processes after Ctrl+C
+
+- macOS / Linux:
+  ```bash
+  ps -ax | grep proxy-router
+  kill -9 <pid>
+
+  lsof | grep /proxy-router/data/
+  kill -9 <pid>
+  ```
+- For Electron / MorpheusUI: `ps -ax | grep electron` and kill stragglers.
+
+See also: [Consumer troubleshooting](/consumers/troubleshooting).

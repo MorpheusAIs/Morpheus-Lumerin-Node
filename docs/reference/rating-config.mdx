@@ -1,0 +1,78 @@
+---
+title: "rating-config.json"
+description: "Configure provider rating, allowlists, and selection weights for consumer proxy-routers."
+audience: ["consumer", "prosumer", "developer"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+source: "docs/rating-config.json.md"
+---
+
+`rating-config.json` configures the **rating system** the consumer proxy-router uses when picking which provider to route a session to. It lives in the project root by default; override path via `RATING_CONFIG_PATH`.
+
+## Fields
+
+| Field | Notes |
+|-------|-------|
+| `providerAllowlist` | Array of provider addresses. **Empty** = allow all providers. |
+| `algorithm` | Rating algorithm. `default` is the canonical built-in. |
+| `params` | Algorithm-specific parameters. For `default`, the `weights` block (see below). |
+
+The full schema is enforced by [`proxy-router/internal/rating/rating-config-schema.json`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/internal/rating/rating-config-schema.json).
+
+## Default algorithm weights
+
+```json
+{
+  "$schema": "./internal/rating/rating-config-schema.json",
+  "algorithm": "default",
+  "providerAllowlist": [],
+  "params": {
+    "weights": {
+      "tps": 0.24,
+      "ttft": 0.08,
+      "duration": 0.24,
+      "success": 0.32,
+      "stake": 0.12
+    }
+  }
+}
+```
+
+| Weight | Meaning |
+|--------|---------|
+| `tps` | Tokens per second |
+| `ttft` | Time to first token |
+| `duration` | Session duration / stability |
+| `success` | Successful completions over total |
+| `stake` | Provider's posted stake |
+
+Weights must sum to `1.0`.
+
+## Restricting to specific providers
+
+To only allow the local default model:
+
+```json
+{
+  "providerAllowlist": ["0x0000000000000000000000000000000000000000"]
+}
+```
+
+To prefer a curated set, list their on-chain addresses (lower-case `0x...`). An empty array allows all.
+
+## Practical patterns
+
+<CardGroup cols={2}>
+  <Card title="Latency-first agent" icon="bolt">
+    Boost `ttft` and `tps`, lower `stake`.
+  </Card>
+  <Card title="Reliability-first prod" icon="shield">
+    Boost `success` and `duration`, lower `tps`.
+  </Card>
+  <Card title="Cost-first batch jobs" icon="dollar-sign">
+    Pair with a low `pricePerSecond` upper bound (currently outside `rating-config`; filter at session-open time).
+  </Card>
+  <Card title="TEE-only" icon="lock">
+    Filter at the `models` layer to `tee`-tagged models; rating then operates over TEE providers only.
+  </Card>
+</CardGroup>

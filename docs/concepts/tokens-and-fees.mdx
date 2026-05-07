@@ -1,0 +1,74 @@
+---
+title: "Tokens, fees, and economics"
+description: "MOR vs ETH on BASE, who pays what when, and where the on-chain minimums come from."
+audience: ["consumer", "prosumer", "provider-resale", "provider-full"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+---
+
+Two tokens, one chain. **MOR** is the unit of payment inside the Morpheus marketplace; **ETH on BASE** pays the underlying gas to the BASE Layer-2 network.
+
+## Token roles
+
+| | MOR | ETH (on BASE) |
+|---|---|---|
+| What is it? | Morpheus marketplace token (ERC-20) | BASE L2 native gas token |
+| Used for | Provider stake, model stake, bid fees, consumer session stake, settlement | All BASE transaction gas |
+| Required for consumers? | Yes (to open sessions) | Yes (to pay gas) |
+| Required for providers? | Yes (stake, bid fee) | Yes (to pay gas) |
+
+Token addresses by network are listed in [Networks and tokens](/get-started/networks-and-tokens).
+
+## Fee surfaces
+
+<AccordionGroup>
+  <Accordion title="Consumer session stake">
+    Total = `pricePerSecond * sessionDuration` (minimum `5` MOR). Paid in MOR, escrowed in the Inference Contract on `openSession`. On **natural expiration** (`closedAt >= endsAt`) your full share is `safeTransfer`'d back to your wallet inside the same `closeSession` transaction. On **early close** a slice may go to `userStakesOnHold` (1-day timelock), to be claimed later via `withdrawUserStakes`. The provider is paid by the contract from a separate protocol `fundingAccount`, not from your stake in real time. See [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover).
+  </Accordion>
+
+  <Accordion title="Provider stake">
+    Refundable bond posted when registering a provider. Minimum `0.2` MOR for a normal provider, `10000` MOR for a subnet provider. Returned (minus penalties) on provider deregistration.
+  </Accordion>
+
+  <Accordion title="Model stake">
+    Refundable bond posted when registering a model. Minimum `0.1` MOR.
+  </Accordion>
+
+  <Accordion title="Marketplace bid fee">
+    Non-refundable fee paid when posting a bid. `0.3` MOR.
+  </Accordion>
+
+  <Accordion title="Gas">
+    All on-chain calls (open, close, claim, register, etc.) consume BASE gas, paid in ETH. Keep a small ETH buffer per wallet.
+  </Accordion>
+</AccordionGroup>
+
+## Net cost to become a provider (one-time minimum)
+
+```
+provider stake (0.2)
+  + model stake (0.1)
+  + bid fee     (0.3)
+  ----------------
+  ~ 0.6 MOR  + ETH gas
+```
+
+Plus you must approve at least `~0.6` MOR to the Diamond contract. See [Register on chain](/providers/full/register-onchain).
+
+## Net cost to consume (per session)
+
+```
+session stake = pricePerSecond * sessionDuration
+   (minimum 5 MOR escrowed at open)
+```
+
+The full stake is escrowed at open. **Natural expiration** returns the full share to your wallet in one transaction. **Early close** splits the refund: a slice may be timelocked in `userStakesOnHold` for ~1 UTC day before you can claim it via `withdrawUserStakes`. See [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover).
+
+## Two reward systems (do not conflate)
+
+The Morpheus stack has two independent reward systems that are easy to mix up:
+
+1. **Compute Node session payouts** (this repo): providers earn MOR per second of sessions they serve. Paid inside `closeSession`. Tied to your provider stake's per-period limiter, but the stake itself is a refundable bond, not a yield-bearing position.
+2. **Capital Contract / stake-for-liquidity** (separate program at [mor.org](https://mor.org)): MOR holders lock MOR and earn emission rewards. Not part of this repo. Does **not** require running a node.
+
+Your provider stake **is not** enrolled in the Capital Contract. See [Rewards and economics](/concepts/rewards-and-economics) for the side-by-side breakdown.
