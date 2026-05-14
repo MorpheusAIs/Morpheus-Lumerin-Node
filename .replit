@@ -32,8 +32,3 @@ waitForPort = 5000
 
 [workflows.workflow.metadata]
 outputType = "webview"
-
-[deployment]
-deploymentTarget = "static"
-build = ["bash", "-c", "cd ui-desktop && yarn build 2>&1 || true"]
-publicDir = "ui-desktop/out/renderer"
