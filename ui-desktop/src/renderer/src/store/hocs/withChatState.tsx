@@ -19,9 +19,20 @@ const AvailabilityStatus = {
 export interface ContainerProps {
   client: ApiGateway;
   config: any;
+  address: string;
+  symbol: string;
+  selectedBid?: any;
+  model?: any;
+  provider?: any;
+  activeSession?: any;
+  setBid: (model: any) => void;
 }
 
-const withChatState = (WrappedComponent: ComponentType<ContainerProps>) => {
+// WrappedComponent receives `ContainerProps` plus all the helper props the HOC
+// injects (getProviders, onOpenSession, etc.) — typed loosely as `any` because
+// the container builds them dynamically and individual consumers refine them
+// in their own prop types.
+const withChatState = (WrappedComponent: ComponentType<any>) => {
   class Container extends React.Component<ContainerProps> {
     static contextType = ToastsContext;
     declare context: React.ContextType<typeof ToastsContext>;
@@ -239,7 +250,7 @@ const withChatState = (WrappedComponent: ComponentType<ContainerProps>) => {
         modelId,
         authHeaders,
       );
-      return bids
+      return (bids ?? [])
         .filter((b) => +b.DeletedAt === 0)
         .filter((b) => b.Provider != this.props.address);
     };
@@ -304,7 +315,7 @@ const withChatState = (WrappedComponent: ComponentType<ContainerProps>) => {
     }
   }
 
-  const mapStateToProps = (state, props) => ({
+  const mapStateToProps = (state, _props) => ({
     // selectedCurrency: selectors.getSellerSelectedCurrency(state),
     config: state.config,
     selectedBid: state.models.selectedBid,

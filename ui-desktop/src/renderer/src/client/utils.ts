@@ -1,5 +1,5 @@
 import * as utils from 'web3-utils';
-import cuid from 'cuid';
+import { createId as cuid } from '@paralleldrive/cuid2';
 import Deferred from '../lib/Deferred';
 import BN from 'bn.js';
 
@@ -15,7 +15,7 @@ export const toBN = (str: string) => utils.toBN(str);
 export const toHex = (bn: BN) => utils.toHex(bn);
 
 export function forwardToMainProcess<T>(eventName: string, timeout: number | null = 10000) {
-  return function (data: T) {
+  return function (data?: T) {
     return sendToMainProcess<T>(eventName, data, timeout);
   };
 }
@@ -28,7 +28,7 @@ export function forwardToMainProcess<T>(eventName: string, timeout: number | nul
  */
 export function sendToMainProcess<T = any, K = unknown>(
   eventName: string,
-  data: T,
+  data?: T,
   timeout: number | null = 10000,
   ipcRenderer = window.ipcRenderer,
 ): Promise<K> {

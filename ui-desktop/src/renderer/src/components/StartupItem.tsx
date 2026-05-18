@@ -132,13 +132,11 @@ const ProgressBarContainer = styled.div`
   border: 2px solid ${(p) => p.theme.colors.morMain};
 `;
 
-const ProgressBar = styled.div.attrs<{ progress: number }>({
-  style: ({ progress }) => {
-    return {
-      width: `${progress * 100}%`,
-    };
+const ProgressBar = styled.div.attrs<{ progress: number }>(({ progress }) => ({
+  style: {
+    width: `${progress * 100}%`,
   },
-})`
+}))<{ progress: number }>`
   background: ${(p) => p.theme.colors.primary};
   height: 3px;
   border-radius: 4px;

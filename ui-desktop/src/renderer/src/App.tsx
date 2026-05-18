@@ -1,4 +1,12 @@
-import { ThemeProvider } from 'styled-components';
+import { ThemeProvider as StyledThemeProvider } from 'styled-components';
+
+// Cast: styled-components v4 ships React 16/17-era class component typings that
+// React 18's stricter `JSX.LibraryManagedAttributes` resolution rejects. Until
+// styled-components is upgraded to v6 (or the project drops v4), narrow it to a
+// FC so TSC can use it. Runtime behavior is unchanged.
+const ThemeProvider = StyledThemeProvider as unknown as React.FC<
+  React.PropsWithChildren<{ theme: object }>
+>;
 
 import theme from './ui/theme';
 import Root from './components/common/Root';

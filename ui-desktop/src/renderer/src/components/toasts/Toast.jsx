@@ -1,4 +1,4 @@
-import { TransitionMotion, spring } from 'react-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import PropTypes from 'prop-types';
 import styled from 'styled-components';
 import React from 'react';
@@ -81,6 +81,8 @@ const ShowMoreBtn = styled.button`
   }
 `;
 
+const FADE_SPRING = { type: 'spring', stiffness: 60, damping: 5 };
+
 export default class Toast extends React.Component {
   static propTypes = {
     messagesPerToast: PropTypes.number.isRequired,
@@ -96,11 +98,8 @@ export default class Toast extends React.Component {
 
   handleShowMore = () => {
     this.setState({ showMore: true });
-    // cancel autoClose
     this.props.onShowMore(this.props.type);
   };
-
-  willEnter = () => ({ maxHeight: 0, opacity: 0 });
 
   render() {
     const { type, messages } = this.props;
@@ -121,42 +120,39 @@ export default class Toast extends React.Component {
             <CloseIcon />
           </DismissBtn>
 
-          <TransitionMotion
-            willEnter={this.willEnter}
-            styles={(hiddenMessages.length > 0
-              ? [...shownMessages, 'more']
-              : shownMessages
-            ).map(msg => ({
-              key: msg,
-              data: msg,
-              style: {
-                opacity: spring(1, { stiffness: 60, damping: 5 })
-              }
-            }))}
-          >
-            {interpolatedStyles => (
-              <Scroller>
-                {interpolatedStyles.map(({ key, style, data }) =>
-                  key === 'more' ? (
-                    <div style={style} key="more">
-                      <ShowMoreBtn
-                        data-type={type}
-                        onClick={this.handleShowMore}
-                        type="button"
-                      >
-                        View {hiddenMessages.length} more{' '}
-                        {hiddenMessages.length > 1 ? 'messages' : 'message'}
-                      </ShowMoreBtn>
-                    </div>
-                  ) : (
-                    <div style={style} key={key}>
-                      <Message>{data}</Message>
-                    </div>
-                  )
-                )}
-              </Scroller>
-            )}
-          </TransitionMotion>
+          <Scroller>
+            <AnimatePresence initial={false}>
+              {shownMessages.map(msg => (
+                <motion.div
+                  key={msg}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={FADE_SPRING}
+                >
+                  <Message>{msg}</Message>
+                </motion.div>
+              ))}
+              {hiddenMessages.length > 0 && (
+                <motion.div
+                  key="more"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={FADE_SPRING}
+                >
+                  <ShowMoreBtn
+                    data-type={type}
+                    onClick={this.handleShowMore}
+                    type="button"
+                  >
+                    View {hiddenMessages.length} more{' '}
+                    {hiddenMessages.length > 1 ? 'messages' : 'message'}
+                  </ShowMoreBtn>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </Scroller>
         </Container>
       </Separator>
     );

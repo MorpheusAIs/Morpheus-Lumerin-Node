@@ -5,6 +5,7 @@ import { LoadingState } from 'src/main/orchestrator.types';
 const initialState: LoadingState = {
   download: [],
   startup: [],
+  orchestratorStatus: 'initializing',
 };
 
 const reducer = handleActions(

@@ -12,12 +12,12 @@ export function formatTokenNameValue(
 ): { name: string; value: string } {
   if (isAddress(tokenAddress)) {
     if (tokenAddress.toLowerCase() === props.morTokenAddress.toLowerCase()) {
-      return { name: props.symbol, value: fromTokenBaseUnitsToLMR(value) };
+      return { name: props.symbol, value: String(fromTokenBaseUnitsToLMR(value)) };
     } else {
       return { name: formatAddress(tokenAddress), value: value + ' units' };
     }
   } else if (tokenAddress.toLowerCase() === 'eth') {
-    return { name: props.symbolEth, value: fromTokenBaseUnitsToETH(value) };
+    return { name: props.symbolEth, value: String(fromTokenBaseUnitsToETH(value)) };
   } else {
     return { name: tokenAddress, value: value };
   }

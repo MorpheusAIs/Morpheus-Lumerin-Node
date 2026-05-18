@@ -25,6 +25,12 @@ export class Orchestrator {
   private cfg: OrchestratorConfig
   private log: typeof logger
 
+  // Mutex-style guard: ensures only one startAll pipeline is in flight at a
+  // time. Re-entrant callers (e.g. an auto-resume after a successful
+  // restartService while the initial startAll hasn't returned yet) await the
+  // existing promise instead of racing a second pipeline.
+  private startInProgress: Promise<void> | null = null
+
   private proxyDownloadState: DownloadItem = {
     name: 'Proxy Router',
     status: 'pending',
@@ -63,7 +69,20 @@ export class Orchestrator {
     })
   }
 
-  async startAll() {
+  async startAll(): Promise<void> {
+    if (this.startInProgress) {
+      this.log.info('startAll already in progress; awaiting existing run')
+      return this.startInProgress
+    }
+    this.startInProgress = this.runStartupPipeline()
+    try {
+      await this.startInProgress
+    } finally {
+      this.startInProgress = null
+    }
+  }
+
+  private async runStartupPipeline() {
     this.log.info('Orchestrator started')
     await this.resetState()
     this.emitStateUpdate()
@@ -86,7 +105,7 @@ export class Orchestrator {
     this.proxyDownloadState.status = 'success'
     this.emitStateUpdate()
 
-    if (this.cfg.aiRuntime.downloadUrl) {
+    if (this.cfg.aiRuntime.downloadUrl && this.cfg.aiRuntime.extractPath) {
       if (fs.existsSync(resolveAppDataPath(this.cfg.aiRuntime.extractPath))) {
         this.log.info(
           'AI runtime already exists, skipping download',
@@ -146,6 +165,7 @@ export class Orchestrator {
 
     if (
       this.cfg.ipfs.downloadUrl &&
+      this.cfg.ipfs.extractPath &&
       !fs.existsSync(resolveAppDataPath(this.cfg.ipfs.extractPath))
     ) {
       await downloadFile(
@@ -225,7 +245,7 @@ export class Orchestrator {
     const proxyFolder = path.dirname(resolveAppDataPath(this.cfg.proxyRouter.runPath))
 
     // writting local config files if not exist
-    await this.writeEnvFile(path.join(proxyFolder, '.env'), this.cfg.proxyRouter.env)
+    await this.writeEnvFile(path.join(proxyFolder, '.env'), this.cfg.proxyRouter.env ?? {})
     await this.writeLocalConfigFile(
       path.join(proxyFolder, 'models-config.json'),
       this.cfg.proxyRouter.modelsConfig
@@ -286,8 +306,39 @@ export class Orchestrator {
     await process.stop()
     this.emitStateUpdate()
 
-    await process.start()
-    this.emitStateUpdate()
+    try {
+      await process.start()
+    } finally {
+      this.emitStateUpdate()
+    }
+
+    // If the original startAll pipeline aborted before reaching downstream
+    // services (e.g. IPFS failed, so containerRuntime + proxyRouter were
+    // never started), resume the pipeline now that this service is healthy.
+    // startAll is idempotent: downloads check fs.exists, and each process's
+    // start() short-circuits when already running.
+    if (process.getState() === 'running' && !this.allServicesRunning()) {
+      this.log.info(
+        `Service ${service} restarted; resuming startup pipeline for any downstream services still pending`
+      )
+      try {
+        await this.startAll()
+      } catch (err) {
+        this.log.error('Resume after restart failed', err)
+        // Don't rethrow — the explicit restart did succeed; downstream
+        // failures are surfaced via the per-service state.
+      }
+    }
+  }
+
+  private allServicesRunning(): boolean {
+    const all = [
+      this.ipfsProcess,
+      this.aiRuntimeProcess,
+      this.containerRuntimeProcess,
+      this.proxyRouterProcess
+    ]
+    return all.every((p) => p?.getState() === 'running')
   }
 
   async ping(service: keyof OrchestratorConfig): Promise<boolean> {
@@ -435,21 +486,29 @@ export class Orchestrator {
   }
 
   private async resetState() {
+    // Only reset processes that aren't already running. This preserves the
+    // healthy ones across a resume (e.g. when restartService kicks off a
+    // pipeline re-run, we don't want to flap IPFS / AI Runtime).
     this.proxyRouterProcess?.getState() !== 'running' && (await this.proxyRouterProcess?.reset())
     this.aiRuntimeProcess?.getState() !== 'running' && (await this.aiRuntimeProcess?.reset())
     this.ipfsProcess?.getState() !== 'running' && (await this.ipfsProcess?.reset())
     this.containerRuntimeProcess?.getState() !== 'running' &&
       (await this.containerRuntimeProcess?.reset())
 
-    this.proxyDownloadState.error = undefined
-    this.aiRuntimeDownloadState.error = undefined
-    this.aiModelDownloadState.error = undefined
-    this.ipfsDownloadState.error = undefined
-
-    this.proxyDownloadState.status = 'pending'
-    this.aiRuntimeDownloadState.status = 'pending'
-    this.aiModelDownloadState.status = 'pending'
-    this.ipfsDownloadState.status = 'pending'
+    // Preserve `success` download statuses across resume so the UI doesn't
+    // flash completed bars back to pending. Clear errors regardless — they
+    // belong to the previous attempt.
+    for (const dl of [
+      this.proxyDownloadState,
+      this.aiRuntimeDownloadState,
+      this.aiModelDownloadState,
+      this.ipfsDownloadState
+    ]) {
+      dl.error = undefined
+      if (dl.status !== 'success') {
+        dl.status = 'pending'
+      }
+    }
   }
 }
 

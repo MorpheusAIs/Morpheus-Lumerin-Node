@@ -30,7 +30,7 @@ import {
 import { BtnAccent } from '../dashboard/BalanceBlock.styles';
 import withChatState from '../../store/hocs/withChatState';
 import { abbreviateAddress } from '../../utils';
-import Markdown from 'react-markdown';
+import { ThinkingMessageBody } from './ThinkingMessageBody';
 
 import 'react-modern-drawer/dist/index.css';
 import './Chat.css';
@@ -46,14 +46,7 @@ import {
 } from './utils';
 import { Cooldown } from './Cooldown';
 import ImageViewer from 'react-simple-image-viewer';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { coldarkDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import {
-  ChatData,
-  ChatHistoryInterface,
-  ChatTitle,
-  HistoryMessage,
-} from './interfaces';
+import { ChatData, HistoryMessage } from './interfaces';
 import { formatValue } from '../../utils/coinValue';
 import { ApiGateway } from 'src/main/src/client/apiGateway';
 
@@ -64,6 +57,15 @@ const userMessage = { user: 'Me', role: 'user', icon: 'M', color: '#20dc8e' };
 type ChatProps = {
   client: ApiGateway;
   address: string;
+  symbol: string;
+  config: any;
+  toasts: {
+    toast: (
+      type: string,
+      message: string,
+      options?: { autoClose?: number },
+    ) => void;
+  };
   getModelsData: () => Promise<any>;
   getSessionsByUser: (address: string) => Promise<any>;
   getProvidersAvailability: (providers: any[]) => Promise<any[]>;
@@ -104,10 +106,10 @@ const Chat = (props: ChatProps) => {
   const [selectedBid, setSelectedBid] = useState<any>(null);
   const [selectedModel, setSelectedModel] = useState<any>(undefined);
   const [requiredStake, setRequiredStake] = useState<{
-    min: Number;
+    min: number;
     max: number;
   }>({ min: 0, max: 0 });
-  const [balances, setBalances] = useState<{ eth: Number; mor: number }>({
+  const [balances, setBalances] = useState<{ eth: number; mor: number }>({
     eth: 0,
     mor: 0,
   });
@@ -144,7 +146,17 @@ const Chat = (props: ChatProps) => {
       setChainData(chainData);
       setIsChainDataSet(true);
 
-      const mappedChatData = chats?.reduce<ChatData[]>((res, item) => {
+      const mappedChatData = (
+        chats as
+          | Array<{
+              chatId: string;
+              title: string;
+              modelId: string;
+              createdAt: number;
+              isLocal: boolean;
+            }>
+          | undefined
+      )?.reduce<ChatData[]>((res, item) => {
         const chatModel = chainData.models.find((x) => x.Id == item.modelId);
         if (chatModel) {
           res.push({
@@ -1076,28 +1088,7 @@ const renderMessage = (message, onOpenImage) => {
 
   return (
     <MessageBody>
-      <Markdown
-        children={message.text}
-        components={{
-          code(props) {
-            const { children, className, node, ...rest } = props;
-            const match = /language-(\w+)/.exec(className || '');
-            return match ? (
-              <SyntaxHighlighter
-                {...rest}
-                PreTag="div"
-                children={String(children).replace(/\n$/, '')}
-                language={match[1]}
-                style={coldarkDark}
-              />
-            ) : (
-              <code {...rest} className={className}>
-                {children}
-              </code>
-            );
-          },
-        }}
-      />
+      <ThinkingMessageBody text={message.text} />
     </MessageBody>
   );
 };
@@ -1114,4 +1105,6 @@ const Message = ({ message, onOpenImage }) => {
   );
 };
 
-export default withChatState(Chat);
+// withChatState injects props that are loosely typed in its HOC signature;
+// cast to suppress the HOC-vs-component prop mismatch.
+export default withChatState(Chat as React.ComponentType<any>);

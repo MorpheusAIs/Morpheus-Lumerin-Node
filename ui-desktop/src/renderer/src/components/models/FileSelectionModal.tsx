@@ -9,7 +9,7 @@ import {
 import { useState } from 'react';
 import Form from 'react-bootstrap/Form';
 import { Sp } from '../common'
-import { IconFile, IconUpload, IconX, IconHash, IconTag } from '@tabler/icons-react';
+import { IconFile, IconUpload, IconHash, IconTag } from '@tabler/icons-react';
 
 const bodyProps = {
     height: '750px',

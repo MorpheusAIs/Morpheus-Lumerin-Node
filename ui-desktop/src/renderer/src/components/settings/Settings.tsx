@@ -31,8 +31,10 @@ const Common = (props: CommonProps) => {
       const cfg = await props.getConfig();
       const customUrl = cfg?.DerivedConfig?.EthNodeURLs[0] || '';
       setEthUrl(customUrl);
-      const failoverSettings = await props.client.getFailoverSetting();
-      setUseFailover(Boolean(failoverSettings.isEnabled));
+      const failoverSettings = (await props.client.getFailoverSetting()) as
+        | { isEnabled?: boolean }
+        | undefined;
+      setUseFailover(Boolean(failoverSettings?.isEnabled));
     })();
   }, []);
 

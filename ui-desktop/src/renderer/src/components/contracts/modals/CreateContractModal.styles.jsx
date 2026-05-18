@@ -3,18 +3,39 @@ import styled from 'styled-components';
 import { BaseBtn } from '../../common';
 import { IconX } from '@tabler/icons-react';
 
+const CloseButton = styled.button`
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  padding: 0;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.7);
+  transition: background 0.12s ease, color 0.12s ease;
+  z-index: 21;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 1);
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba(32, 220, 142, 0.5);
+    outline-offset: 2px;
+  }
+`;
+
 export const CloseModal = onClose => (
-  <IconX
-    width={'2rem'}
-    style={{
-      position: 'absolute',
-      top: '25px',
-      right: '30px',
-      cursor: 'pointer',
-      color: 'white'
-    }}
-    onClick={onClose}
-  />
+  <CloseButton type="button" aria-label="Close" onClick={onClose}>
+    <IconX size={18} stroke={2} />
+  </CloseButton>
 );
 
 export const Modal = styled.div`

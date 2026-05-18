@@ -1,9 +1,10 @@
-const settings = require('electron-settings')
-const { hdkey } = require('ethereumjs-wallet')
+import settings from 'electron-settings'
+import { hdkey } from '@ethereumjs/wallet'
 
 import { aes256cbcIv } from './crypto'
 
-export const getWallet = () => Object.keys(settings.getSync('user.wallet'))
+export const getWallet = () =>
+  Object.keys((settings.getSync('user.wallet') as object | undefined) ?? {})
 
 export const getAddress = () => settings.getSync(`user.wallet.address`)
 
@@ -21,7 +22,9 @@ export const setSeed = (seed, password) =>
 export const clearWallet = () => settings.setSync('user.wallet', {})
 
 const getWalletFromSeed = (seed, index = 0) =>
-  hdkey.fromMasterSeed(Buffer.from(seed, 'hex')).derivePath(`m/44'/60'/0'/0/${index}`).getWallet()
+  hdkey.EthereumHDKey.fromMasterSeed(Buffer.from(seed, 'hex'))
+    .derivePath(`m/44'/60'/0'/0/${index}`)
+    .getWallet()
 
 const getAddress2 = (seed, index) => getWalletFromSeed(seed, index).getChecksumAddressString()
 
@@ -29,7 +32,7 @@ const getPrivateKey = (seed, index) => getWalletFromSeed(seed, index).getPrivate
 
 const getAddressAndPrivateKey = (seed, index) => ({
   address: getAddress2(seed, index),
-  privateKey: getPrivateKey(seed, index).toString('hex')
+  privateKey: Buffer.from(getPrivateKey(seed, index)).toString('hex')
 })
 
 export default {

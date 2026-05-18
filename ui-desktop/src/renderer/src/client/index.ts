@@ -15,7 +15,7 @@ const createClient = function (createStore) {
 
   const store = createStore(reduxDevtoolsOptions);
 
-  const onUIReady = (ev, payload) => {
+  const onUIReady = (_ev, payload) => {
     const debounceTime = get(
       payload,
       'data.config.statePersistanceDebounce',
@@ -30,7 +30,7 @@ const createClient = function (createStore) {
     store.subscribe(
       debounce(
         function () {
-          const passedState = pickBy(store.getState(), function (value, key) {
+          const passedState = pickBy(store.getState(), function (_value, key) {
             return keysToPersist.includes(key);
           });
 

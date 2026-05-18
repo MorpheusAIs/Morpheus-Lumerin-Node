@@ -758,7 +758,7 @@ export async function openWallet(password: string, { emitter }: Core) {
     return
   }
 
-  const { address } = storedAddress
+  const { address } = storedAddress as { address?: string }
 
   emitter.emit('open-wallet', { address, isActive: true })
   emitter.emit('open-proxy-router', { password })

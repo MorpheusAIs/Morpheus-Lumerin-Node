@@ -37,7 +37,7 @@ const configMacArm = {
       buildLocalModelsConfig(
         'tiny-llama-1.1B-chat',
         'openai',
-        `http://localhost:${process.env.SERVICE_AI_API_PORT}/v1`
+        `http://localhost:${process.env.SERVICE_AI_API_PORT}/v1/chat/completions`
       )
     ),
     ratingConfig: JSON.stringify(buildLocalRatingConfig()),

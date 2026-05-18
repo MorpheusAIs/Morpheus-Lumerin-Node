@@ -60,10 +60,6 @@ const Loading: FC<LoadingProps> = ({ services, client, onSkip }) => {
     }
   };
 
-  const onExit = () => {
-    client.quitApp();
-  };
-
   return (
     <AltLayout title="Starting services...">
       <LoadingBar />

@@ -1,13 +1,8 @@
-import { useRef, useState } from 'react';
-
-import withModelsState from '../../store/hocs/withModelsState';
 import styled from 'styled-components';
 
 import Card from 'react-bootstrap/Card';
 import { abbreviateAddress } from '../../utils';
-import { IconPinnedOff, IconCopy, IconFile, IconCalendar, IconTag, IconHash } from '@tabler/icons-react';
-import Form from 'react-bootstrap/esm/Form';
-import client from '../../client';
+import { IconPinnedOff, IconCopy, IconFile, IconTag, IconHash } from '@tabler/icons-react';
 
 
 const CustomCard = styled(Card)`
@@ -240,23 +235,6 @@ function ModelCard({ model, toasts, unpinFile }: { model: PinnedFile, toasts: an
       return `${MB.toFixed(2)} MB`;
     } else {
       return `${KB.toFixed(2)} KB`;
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    if (!dateString) return '';
-
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    } catch (e) {
-      return dateString;
     }
   };
 

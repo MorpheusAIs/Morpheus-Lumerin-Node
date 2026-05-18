@@ -22,11 +22,11 @@ type OneArg = (x: number) => string
 type TwoArgs = (x: number, y: string) => string
 type ThreeArgs = (x: number, y: string, z: boolean) => string
 
-// Test cases
-type test1 = Expect<Equal<FnWithFirstArg<ZeroArg>, () => string>>
-type test2 = Expect<Equal<FnWithFirstArg<OneArg>, (x: number) => string>>
-type test3 = Expect<Equal<FnWithFirstArg<TwoArgs>, (x: number) => string>>
-type test4 = Expect<Equal<FnWithFirstArg<ThreeArgs>, (x: number) => string>>
+// Test cases (exported to satisfy noUnusedLocals; act as compile-time assertions)
+export type test1 = Expect<Equal<FnWithFirstArg<ZeroArg>, () => string>>
+export type test2 = Expect<Equal<FnWithFirstArg<OneArg>, (x: number) => string>>
+export type test3 = Expect<Equal<FnWithFirstArg<TwoArgs>, (x: number) => string>>
+export type test4 = Expect<Equal<FnWithFirstArg<ThreeArgs>, (x: number) => string>>
 
 // Negative test case
 // @ts-expect-error - Should error because NotAFunction is not a function type

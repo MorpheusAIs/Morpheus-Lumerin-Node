@@ -45,3 +45,12 @@ export const EnvSchema = Type.Object({
 
 // Inferred type of environment variables
 export type Env = Static<typeof EnvSchema>
+
+// Augment `process.env` with the validated/typed env so config-reading code
+// (both main and renderer) sees the correct types. Validation in
+// `electron.vite.config.ts` is what makes this safe at runtime.
+declare global {
+  namespace NodeJS {
+    interface ProcessEnv extends Env {}
+  }
+}

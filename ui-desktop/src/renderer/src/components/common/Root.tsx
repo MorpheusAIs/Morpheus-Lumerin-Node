@@ -5,7 +5,31 @@ import React from 'react';
 import { ToastsContext } from '../toasts';
 import { LoadingState } from 'src/main/orchestrator.types';
 
-class Root extends React.Component<{ servicesState: LoadingState }> {
+type RootProps = {
+  // From connect() mapStateToProps
+  isSessionActive: boolean;
+  hasEnoughData: boolean;
+  isAuthBypassed: boolean;
+  sellerDefaultCurrency: string;
+  servicesState: LoadingState;
+  config: any;
+  // From connect()
+  dispatch: (action: { type: string; payload?: any }) => void;
+  // From withClient()
+  client: any;
+  // Render components passed from parent
+  StartupComponent: React.ComponentType<{ onSkip: () => void }>;
+  OnboardingComponent: React.ComponentType<{
+    onOnboardingCompleted: (data: unknown) => Promise<void>;
+  }>;
+  LoadingComponent: React.ComponentType;
+  RouterComponent: React.ComponentType;
+  LoginComponent: React.ComponentType<{
+    onLoginSubmit: (data: { password: string }) => Promise<void>;
+  }>;
+};
+
+class Root extends React.Component<RootProps> {
   static contextType = ToastsContext;
   declare context: React.ContextType<typeof ToastsContext>;
 
@@ -30,7 +54,7 @@ class Root extends React.Component<{ servicesState: LoadingState }> {
           this.props.client
             .onLoginSubmit({ password: 'password' })
             .then(() => this.props.dispatch({ type: 'session-started' }))
-            .catch((e) => {
+            .catch((_e) => {
               this.context.toast('error', 'Bypass auth failed');
             });
         }
@@ -77,7 +101,7 @@ class Root extends React.Component<{ servicesState: LoadingState }> {
           this.props.dispatch({ type: 'session-started' });
         })
         // eslint-disable-next-line no-console
-        .catch((e) => {
+        .catch((_e) => {
           this.context.toast(
             'error',
             'Failed to finish onboarding. Please wait a few minutes and try again',
