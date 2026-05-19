@@ -1,4 +1,4 @@
-import * as ReachUI from '@reach/menu-button';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import PropTypes from 'prop-types';
 import styled from 'styled-components';
 import React from 'react';
@@ -6,7 +6,7 @@ import React from 'react';
 import { ErrorMsg, Label } from './TextInput.styles';
 import SelectorCaret from '../icons/SelectorCaret';
 
-const MenuButton = styled(ReachUI.MenuButton)`
+const MenuButton = styled(DropdownMenu.Trigger)`
   background-color: #fff;
   color: ${p => p.theme.colors.dark};
   font-size: 1.3rem;
@@ -36,7 +36,7 @@ const MenuButton = styled(ReachUI.MenuButton)`
     outline: none;
     box-shadow: 0 2px 0 0px ${p => p.theme.colors.primary};
     box-shadow: ${p =>
-      p.noFocus && p.value.length > 0
+      p.noFocus && p.value && p.value.length > 0
         ? 'none'
         : `0 2px 0 0px ${p.theme.colors.primary}`};
   }
@@ -69,12 +69,12 @@ const CaretContainer = styled.div`
   }
 `;
 
-const MenuList = styled(ReachUI.MenuList)`
+const MenuList = styled(DropdownMenu.Content)`
   background-color: ${p => p.theme.colors.light};
-  width: 100%;
+  width: var(--radix-dropdown-menu-trigger-width);
 `;
 
-const MenuItem = styled(ReachUI.MenuItem)`
+const MenuItem = styled(DropdownMenu.Item)`
   color: ${p => p.theme.colors.copy};
   width: 100%;
   font-size: 1.3rem;
@@ -83,7 +83,7 @@ const MenuItem = styled(ReachUI.MenuItem)`
   padding: 1.2rem 1.6rem;
   cursor: pointer;
 
-  &[data-selected] {
+  &[data-highlighted] {
     background-color: #eaf7fc;
     color: ${p => p.theme.colors.primary};
     outline: none;
@@ -124,7 +124,7 @@ export default class Selector extends React.Component {
         <Label hasErrors={hasErrors} htmlFor={id}>
           {label}
         </Label>
-        <ReachUI.Menu>
+        <DropdownMenu.Root>
           <MenuButton {...other}>
             <ValueContainer>
               {activeItem ? activeItem.label : ''}{' '}
@@ -133,17 +133,19 @@ export default class Selector extends React.Component {
               <SelectorCaret />
             </CaretContainer>
           </MenuButton>
-          <MenuList>
-            {options.map(item => (
-              <MenuItem
-                onSelect={() => onChange({ id, value: item.value })}
-                key={item.value}
-              >
-                {item.label}
-              </MenuItem>
-            ))}
-          </MenuList>
-        </ReachUI.Menu>
+          <DropdownMenu.Portal>
+            <MenuList sideOffset={0} align="start">
+              {options.map(item => (
+                <MenuItem
+                  onSelect={() => onChange({ id, value: item.value })}
+                  key={item.value}
+                >
+                  {item.label}
+                </MenuItem>
+              ))}
+            </MenuList>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
         {hasErrors && (
           <ErrorMsg data-testid={`${this.props['data-testid']}-error`}>
             {typeof error === 'string' ? error : error.join('. ')}

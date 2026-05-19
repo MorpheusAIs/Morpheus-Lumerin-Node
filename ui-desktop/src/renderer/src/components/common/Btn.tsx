@@ -1,8 +1,17 @@
 import styled from 'styled-components';
 
-export const BaseBtn = styled.button.attrs(({ submit }) => ({
-  type: submit ? 'submit' : 'button'
-}))`
+type BaseBtnProps = {
+  submit?: boolean;
+  block?: boolean;
+};
+
+type FieldBtnProps = BaseBtnProps & {
+  float?: boolean;
+};
+
+export const BaseBtn = styled.button.attrs<BaseBtnProps>(({ submit }) => ({
+  type: submit ? 'submit' : 'button',
+}))<BaseBtnProps>`
   display: ${({ block }) => (block ? 'block' : 'inline-block')};
   width: ${({ block }) => (block ? '100%' : 'auto')};
   font: inherit;
@@ -39,7 +48,7 @@ export const Btn = styled(BaseBtn)`
   }
 `;
 
-export const FieldBtn = styled(BaseBtn)`
+export const FieldBtn = styled(BaseBtn)<FieldBtnProps>`
   float: ${p => (p.float ? 'right' : 'none')};
   line-height: 1.8rem;
   opacity: 0.5;

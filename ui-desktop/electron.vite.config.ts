@@ -3,14 +3,8 @@ import { defineConfig, externalizeDepsPlugin, loadEnv } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import svgr from 'vite-plugin-svgr'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
-import { Env, EnvSchema } from './env.schema'
+import { EnvSchema } from './env.schema'
 import { newAjv } from './validator'
-
-declare global {
-  namespace NodeJS {
-    interface ProcessEnv extends Env {}
-  }
-}
 
 const envsToInject = Object.keys(EnvSchema.properties)
 
@@ -63,8 +57,13 @@ export default defineConfig(({ /*command,*/ mode }) => {
     preload: {
       build: {
         rollupOptions: {
+          // CJS for the preload script. Electron 28's ESM preload support is
+          // patchy (notably, the bundled sandbox bootstrap fails with
+          // "object null is not iterable"). CJS sidesteps the whole CJS↔ESM
+          // interop issue around `electron` named imports and just works.
           output: {
-            format: 'es'
+            format: 'cjs',
+            entryFileNames: '[name].js'
           }
         }
       },

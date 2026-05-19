@@ -1,6 +1,6 @@
 import styled, { createGlobalStyle, css } from 'styled-components';
 import withCurrencySelectorState from '../../store/hocs/withCurrencySelectorState';
-import * as ReachUI from '@reach/menu-button';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import React from 'react';
 
 import { DisplayValue, Flex } from '../common';
@@ -22,24 +22,13 @@ const wideOrHover = styles => ({ parent }) =>
   `;
 
 const GlobalStyles = createGlobalStyle`
-  [data-reach-menu] {
-    position: absolute;
-    z-index: 4;
+  [data-radix-popper-content-wrapper] {
+    z-index: 4 !important;
     width: 20%;
   }
 `;
 
-const Title = styled.div`
-  color: ${({ theme }) => theme.colors.light};
-  font-size: 0.9rem;
-  letter-spacing: 1.6px;
-  font-weight: 600;
-  opacity: 0.5;
-  margin-bottom: 0.8rem;
-  margin-left: 0.6rem;
-`;
-
-const MenuButton = styled(ReachUI.MenuButton)`
+const MenuButton = styled(DropdownMenu.Trigger)`
   background-color: ${({ theme }) => theme.colors.lightShade};
   font: inherit;
   color: ${({ theme }) => theme.colors.light};
@@ -68,7 +57,7 @@ const MenuButton = styled(ReachUI.MenuButton)`
   `};
 `;
 
-const MenuList = styled(ReachUI.MenuList)`
+const MenuList = styled(DropdownMenu.Content)`
   box-shadow: 0 0 32px 0 rgba(0, 0, 0, 0.4);
   opactity: 0;
   display: block;
@@ -79,7 +68,7 @@ const MenuList = styled(ReachUI.MenuList)`
   transform: translateY(-56px);
 `;
 
-const MenuItem = styled(ReachUI.MenuItem)`
+const MenuItem = styled(DropdownMenu.Item)`
   background-color: ${({ theme }) => theme.colors.lightShade};
   display: block;
   cursor: pointer;
@@ -87,7 +76,7 @@ const MenuItem = styled(ReachUI.MenuItem)`
   display: flex;
   align-items: center;
   justify-content: space-between;
-  &[data-selected] {
+  &[data-highlighted] {
     background-color: ${({ theme }) => theme.colors.translucentPrimary};
     outline: none;
   }
@@ -102,7 +91,7 @@ const Icon = styled(CoinIcon)`
   height: 2.4rem;
   width: 2rem;
   transition: width 0.3s, opacity 0.3s;
-  [data-reach-menu-item] &,
+  [role='menuitem'] &,
   ${MenuButton}:focus &,
   ${MenuButton}:hover & {
     opacity: 1;
@@ -117,7 +106,7 @@ const ItemBody = styled(Flex.Item)`
   margin: 0;
   opacity: 0;
   transition: opacity 0.3s, margin 0.3s;
-  [data-reach-menu-item] & {
+  [role='menuitem'] & {
     opacity: 1;
     margin-left: 0.8rem;
     margin-right: 0.4rem;
@@ -157,14 +146,13 @@ const Caret = styled(CaretIcon)`
   transform: scaleY(${({ caret }) => (caret === 'up' ? -1 : 1)});
   opacity: ${({ caret }) => (caret === 'none' ? 0 : 0.5)};
   transition: opacity 0.3s;
-  [data-reach-menu-item] &,
+  [role='menuitem'] &,
   ${MenuButton}:focus &,
   ${MenuButton}:hover & {
     opacity: ${({ caret }) => (caret === 'none' ? 0 : 1)};
   }
 `;
 
-// class CurrencySelector extends React.Component {
 function CurrencySelector({
   onCurrencyChange,
   activeCurrency,
@@ -173,26 +161,9 @@ function CurrencySelector({
   handleMouseEnter,
   handleMouseLeave
 }) {
-  // static propTypes = {
-  //   onChainChange: PropTypes.func.isRequired,
-  //   activeChain: PropTypes.string.isRequired,
-  //   parent: PropTypes.object.isRequired,
-  //   chains: PropTypes.arrayOf(
-  //     PropTypes.shape({
-  //       displayName: PropTypes.string.isRequired,
-  //       balance: PropTypes.string.isRequired,
-  //       id: PropTypes.string.isRequired
-  //     })
-  //   ).isRequired,
-  //   handleMouseEnter: PropTypes.func,
-  //   handleMouseLeave: PropTypes.func
-  // }
-
-  // render() {
-
   return (
     <React.Fragment>
-      <ReachUI.Menu>
+      <DropdownMenu.Root>
         <MenuButton>
           <Item
             displayName={activeCurrency}
@@ -200,38 +171,42 @@ function CurrencySelector({
             caret="down"
           />
         </MenuButton>
-        <MenuList
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
-        >
-          <MenuItem
-            onSelect={() => onCurrencyChange(activeCurrency)}
-            key={activeCurrency}
+        <DropdownMenu.Portal>
+          <MenuList
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+            sideOffset={0}
+            align="start"
           >
-            <Item
-              displayName={activeCurrency}
-              balance={balances[activeCurrency]}
-              caret="up"
-            />
-          </MenuItem>
-          {[
-            {
-              balance: balances['LMR'],
-              name: 'LMR'
-            },
-            {
-              balance: balances['ETH'],
-              name: 'ETH'
-            }
-          ]
-            .filter(({ name }) => name !== activeCurrency)
-            .map(({ name, balance }) => (
-              <MenuItem onSelect={() => onCurrencyChange(name)} key={name}>
-                <Item displayName={name} balance={balance} caret="none" />
-              </MenuItem>
-            ))}
-        </MenuList>
-      </ReachUI.Menu>
+            <MenuItem
+              onSelect={() => onCurrencyChange(activeCurrency)}
+              key={activeCurrency}
+            >
+              <Item
+                displayName={activeCurrency}
+                balance={balances[activeCurrency]}
+                caret="up"
+              />
+            </MenuItem>
+            {[
+              {
+                balance: balances['LMR'],
+                name: 'LMR'
+              },
+              {
+                balance: balances['ETH'],
+                name: 'ETH'
+              }
+            ]
+              .filter(({ name }) => name !== activeCurrency)
+              .map(({ name, balance }) => (
+                <MenuItem onSelect={() => onCurrencyChange(name)} key={name}>
+                  <Item displayName={name} balance={balance} caret="none" />
+                </MenuItem>
+              ))}
+          </MenuList>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
       <GlobalStyles />
     </React.Fragment>
   );
@@ -247,7 +222,6 @@ const Item = ({ displayName, balance, id, caret, parent }) => {
     <React.Fragment>
       <Flex.Item>
         {displayName === 'ETH' ? <EtherIcon /> : <LumerinLightIcon />}
-        {/* <Icon coin={icons[displayName]} /> */}
       </Flex.Item>
       <ItemBody grow="1" shrink="1">
         <CurrencyName>{displayName}</CurrencyName>

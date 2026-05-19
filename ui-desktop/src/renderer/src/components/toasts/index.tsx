@@ -1,12 +1,12 @@
 import React from 'react';
-import { TransitionMotion, spring } from 'react-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import PropTypes from 'prop-types';
 
 import ToastsContainer from './ToastsContainer';
 import Toast from './Toast';
 import Timer from './Timer';
 
-type ToastsContextType = {
+export type ToastsContextType = {
   toast: (
     type: string,
     message: string,
@@ -14,14 +14,30 @@ type ToastsContextType = {
   ) => void;
 };
 
-export const ToastsContext = React.createContext<ToastsContextType>({});
+export const ToastsContext = React.createContext<ToastsContextType>({
+  toast: () => {},
+});
 
 const defaults = {
   messagesPerToast: 1,
   autoClose: 6000,
 };
 
-export class ToastsProvider extends React.Component<React.PropsWithChildren> {
+type ToastStackItem = [string, ...string[]];
+
+type ToastsProviderProps = React.PropsWithChildren<{
+  messagesPerToast?: number;
+  autoClose?: number;
+}>;
+
+type ToastsProviderState = {
+  stack: ToastStackItem[];
+};
+
+export class ToastsProvider extends React.Component<
+  ToastsProviderProps,
+  ToastsProviderState
+> {
   static propTypes = {
     messagesPerToast: PropTypes.number,
     autoClose: PropTypes.number,
@@ -30,7 +46,11 @@ export class ToastsProvider extends React.Component<React.PropsWithChildren> {
 
   timers = {};
 
-  addToast = (type, message, options = {}) => {
+  addToast = (
+    type: string,
+    message: string,
+    options: { autoClose?: number } = {},
+  ) => {
     if (!type || !message) return;
 
     const autoClose =
@@ -40,10 +60,8 @@ export class ToastsProvider extends React.Component<React.PropsWithChildren> {
           ? this.props.autoClose
           : defaults.autoClose;
 
-    // check if requested type is already visible
     const typeGroup = this.state.stack.find(([typeName]) => typeName === type);
 
-    // only set timer if first message in toast or if toast is not fixed
     if (
       autoClose > 0 &&
       (!typeGroup || (this.timers[type] && this.timers[type].timerId))
@@ -55,19 +73,16 @@ export class ToastsProvider extends React.Component<React.PropsWithChildren> {
     this.setState((state) => ({
       ...state,
       stack: typeGroup
-        ? // if type group exists, append message to it
-          state.stack.map(([typeName, ...messages]) =>
+        ? state.stack.map(([typeName, ...messages]) =>
             typeName === type
-              ? // append using Set to automatically avoid duplicates
-                [typeName, ...new Set([...messages, message])]
+              ? [typeName, ...new Set([...messages, message])]
               : [typeName, ...messages],
           )
-        : // if not, append a new type group with the new message
-          [...state.stack, [type, message]],
+        : [...state.stack, [type, message]],
     }));
   };
 
-  state = {
+  state: ToastsProviderState = {
     stack: [],
   };
 
@@ -106,62 +121,43 @@ export class ToastsProvider extends React.Component<React.PropsWithChildren> {
     }
   };
 
-  willEnter = () => ({ maxHeight: 0, opacity: 0, translate: -45 });
-
-  willLeave = () => ({
-    translate: spring(-45),
-    maxHeight: spring(0),
-    opacity: spring(0),
-  });
-
   contextValue = { toast: this.addToast };
 
   render() {
     return (
       <ToastsContext.Provider value={this.contextValue}>
         {this.props.children}
-        <TransitionMotion
-          willLeave={this.willLeave}
-          willEnter={this.willEnter}
-          styles={this.state.stack.map(([type, ...messages]) => ({
-            style: {
-              maxHeight: spring(450, { stiffness: 150, damping: 20 }),
-              translate: spring(0, { stiffness: 170, damping: 15 }),
-              opacity: spring(1),
-            },
-            data: messages,
-            key: type,
-          }))}
-        >
-          {(interpolatedStyles) => (
-            <ToastsContainer>
-              {interpolatedStyles.map(
-                ({ key, data, style: { translate, ...other } }) => (
-                  <div
-                    onMouseEnter={this.handleMouseEnter}
-                    onMouseLeave={this.handleMouseLeave}
-                    data-type={key}
-                    style={{
-                      ...other,
-                      transform: `translateY(${translate || 0}px)`,
-                    }}
-                    key={`toast-${key}`}
-                  >
-                    <Toast
-                      messagesPerToast={
-                        this.props.messagesPerToast || defaults.messagesPerToast
-                      }
-                      onShowMore={this.handleShowMore}
-                      onDismiss={this.handleDismiss}
-                      messages={data}
-                      type={key}
-                    />
-                  </div>
-                ),
-              )}
-            </ToastsContainer>
-          )}
-        </TransitionMotion>
+        <ToastsContainer>
+          <AnimatePresence initial={false}>
+            {this.state.stack.map(([type, ...messages]) => (
+              <motion.div
+                key={type as string}
+                data-type={type}
+                onMouseEnter={this.handleMouseEnter}
+                onMouseLeave={this.handleMouseLeave}
+                initial={{ maxHeight: 0, opacity: 0, y: -45 }}
+                animate={{ maxHeight: 450, opacity: 1, y: 0 }}
+                exit={{ maxHeight: 0, opacity: 0, y: -45 }}
+                transition={{
+                  type: 'spring',
+                  stiffness: 170,
+                  damping: 15,
+                }}
+                style={{ overflow: 'hidden' }}
+              >
+                <Toast
+                  messagesPerToast={
+                    this.props.messagesPerToast || defaults.messagesPerToast
+                  }
+                  onShowMore={this.handleShowMore}
+                  onDismiss={this.handleDismiss}
+                  messages={messages}
+                  type={type}
+                />
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </ToastsContainer>
       </ToastsContext.Provider>
     );
   }

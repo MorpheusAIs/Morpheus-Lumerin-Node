@@ -53,9 +53,10 @@ export interface MappedProps {
   morTokenAddress: string;
 }
 
-const withAgentsState = (
-  WrappedComponent: ComponentType<ContainerProps & MappedProps>,
-) => {
+// `MappedProps` get injected later by `connect()`; the Container itself only
+// receives `ContainerProps`. Type the wrapped component loosely so callers can
+// declare their own prop shapes without fighting HOC composition.
+const withAgentsState = (WrappedComponent: ComponentType<any>) => {
   const Container = (props: ContainerProps) => {
     const [pendingAgents, setPendingAgents] = useState<AgentUser[]>([]);
     const [activeAgents, setActiveAgents] = useState<AgentUser[]>([]);

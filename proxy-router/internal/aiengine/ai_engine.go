@@ -72,12 +72,17 @@ func (a *AiEngine) GetAdapter(ctx context.Context, chatID, modelID, sessionID co
 
 	if storeChatContext {
 		var actualModelID common.Hash
-		if modelID == (common.Hash{}) {
-			modelID, err := a.service.GetModelIdSession(ctx, sessionID)
+		// Only recover modelID from the session when we actually have one.
+		// `modelID == zero` is the legitimate identifier for the bundled
+		// local (tinyllama) model, so we must not treat zero as "missing"
+		// when there's no session to look up — that path returns
+		// "session not found" and breaks local chats.
+		if modelID == (common.Hash{}) && sessionID != (common.Hash{}) {
+			recoveredModelID, err := a.service.GetModelIdSession(ctx, sessionID)
 			if err != nil {
 				return nil, err
 			}
-			actualModelID = modelID
+			actualModelID = recoveredModelID
 		} else {
 			actualModelID = modelID
 		}
