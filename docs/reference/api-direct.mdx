@@ -1,0 +1,131 @@
+---
+title: "API direct (curl walkthrough)"
+description: "End-to-end consumer flow using only the proxy-router HTTP API: approve, query, open session, prompt."
+audience: ["consumer", "prosumer", "developer"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+source: "docs/proxy-router-api-direct.md"
+---
+
+This is the curl-only path through Morpheus — no MorpheusUI, no CLI. Useful for developers, scripts, or agent frameworks.
+
+## Pre-requisites
+
+- A consumer-side proxy-router running locally with a funded wallet. See [Install from source](/consumers/install-from-source) or [C-Node setup](/prosumers/c-node-setup).
+- BasicAuth credentials. The default `admin` lives in `.cookie`. See [API auth](/reference/api-auth).
+
+## TL;DR
+
+<Steps>
+  <Step title="Approve">Once per wallet, or when allowance is depleted.</Step>
+  <Step title="Query">Per session: list models, pick a `modelId`.</Step>
+  <Step title="Open session">Per session: `POST /blockchain/models/:id/session`.</Step>
+  <Step title="Prompt">Send completions with the `session_id` header.</Step>
+</Steps>
+
+## A. Authorize the contract
+
+```bash
+curl -X POST \
+  'http://localhost:8082/blockchain/approve?spender=0x6aBE1d282f72B474E54527D93b979A4f64d3030a&amount=3' \
+  -H 'Authorization: Basic <base64(user:pass)>' \
+  -H 'accept: application/json' -d ''
+```
+
+This authorizes the Diamond contract to spend up to `3` MOR on your behalf.
+
+## B. Query for a model
+
+```bash
+curl -X GET 'http://localhost:8082/wallet' \
+  -H 'Authorization: Basic <base64(user:pass)>' \
+  -H 'accept: application/json'
+
+curl -X GET 'http://localhost:8082/blockchain/models' \
+  -H 'Authorization: Basic <base64(user:pass)>' \
+  -H 'accept: application/json'
+```
+
+Sample response:
+
+```json
+{
+  "models": [
+    {
+      "Id": "0x6a4813e866a48da528c533e706344ea853a1d3f21e37b4c8e7ffd5ff25779018",
+      "Name": "llama2:7b",
+      "Tags": [],
+      "Owner": "0x0eb467381abbc5b71f275df0c8a4e0ed8561f46f",
+      "IsDeleted": false
+    }
+  ]
+}
+```
+
+Pick an `Id` for the next step.
+
+## C. Open a session
+
+```bash
+curl -s -X POST \
+  'http://localhost:8082/blockchain/models/<modelId>/session' \
+  -H 'Authorization: Basic <base64(user:pass)>' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d '{"sessionDuration": 600}'
+```
+
+The transaction will appear at `https://base.blockscout.com/address/<wallet_id>`.
+
+## D. Prompt
+
+```bash
+curl -X POST 'http://localhost:8082/v1/chat/completions' \
+  -H 'Authorization: Basic <base64(user:pass)>' \
+  -H 'accept: application/json' \
+  -H 'session_id: <sessionId>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "messages": [{"role":"user","content":"tell me a joke"}],
+    "stream": true
+  }'
+```
+
+OpenAI-compatible SSE response.
+
+## Quick-and-dirty one-liner
+
+```bash
+SPENDER=0x6aBE1d282f72B474E54527D93b979A4f64d3030a
+AUTH='Authorization: Basic <base64(user:pass)>'
+
+curl -s -X POST "http://localhost:8082/blockchain/approve?spender=$SPENDER&amount=3" -H "$AUTH" -d ''
+
+curl -s 'http://localhost:8082/wallet' -H "$AUTH" | jq .address
+
+curl -s 'http://localhost:8082/blockchain/models' -H "$AUTH" \
+  | jq -r '.models[] | "\(.Id), \(.Name)"'
+
+# Pick a modelId
+MODEL=0x84b6df5c84e1e6ae59c90e1639e3e77148d140065ef2cd4fba7f41cc7440e2c5
+
+SESSION=$(curl -s -X POST "http://localhost:8082/blockchain/models/$MODEL/session" \
+  -H "$AUTH" -H 'Content-Type: application/json' \
+  -d '{"sessionDuration":600}' | jq -r .sessionId)
+
+curl -X POST 'http://localhost:8082/v1/chat/completions' \
+  -H "$AUTH" -H "session_id: $SESSION" -H 'Content-Type: application/json' \
+  -d '{"messages":[{"role":"user","content":"tell me a joke"}],"stream":true}'
+```
+
+## Sample streaming output (truncated)
+
+```
+data: {"choices":[{"delta":{"content":"Why"}}]}
+data: {"choices":[{"delta":{"content":" don"}}]}
+data: {"choices":[{"delta":{"content":"'"}}]}
+...
+data: {"choices":[{"delta":{},"finish_reason":"stop"}]}
+```
+
+For full request/response schemas across endpoints, see [API endpoints](/reference/api-endpoints) or [`proxy-router/docs/swagger.yaml`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/docs/swagger.yaml).

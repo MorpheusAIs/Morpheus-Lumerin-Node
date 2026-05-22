@@ -1,0 +1,130 @@
+---
+title: "Register on chain (provider, model, bid)"
+description: "Approve the Diamond contract, register your provider, register your model (with optional tee tag), and post a bid."
+audience: ["provider-full", "provider-resale"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+source: "docs/03-provider-offer.md"
+---
+
+After your proxy-router is running, register your provider, model, and bid on the BASE Diamond contract. All steps go through your local Swagger UI at `http://localhost:8082/swagger/index.html`.
+
+## Contract minimums
+
+| Item | Value (wei) | Display |
+|------|-------------|---------|
+| `providerMinStake` | `200000000000000000` | `0.2` MOR |
+| `modelMinStake` | `100000000000000000` | `0.1` MOR |
+| `marketplaceBidFee` | `300000000000000000` | `0.3` MOR |
+| `bidPricePerSecondMin` | `10000000000` | `0.00000001` MOR/sec |
+
+## What you'll need
+
+| Item | Example |
+|------|---------|
+| Provider wallet | `0x9E26Fea97F7d644BAf62d0e20e4d4b8F836C166c` |
+| Public endpoint | `server.example.com:3333` |
+| Random `modelId` (32-byte hex) | `0xe1e6e3e77148d140065ef2cd4fba7f4ae59c90e1639184b6df5c84` |
+| `ipfsCID` (32-byte hex) | `0xc2d3a5e4f9b7c1a2c8f0b1d5e6c78492fa7bcd34e9a3b9c9e18f25d3be47a1f6` |
+| Model name | `CapybaraHermes-v2.5-Mistral-7b` |
+| Bid `pricePerSecond` | `10000000000` (`0.00000001` MOR) |
+
+## Steps
+
+<Steps>
+  <Step title="Authorize the Diamond contract">
+    `POST /blockchain/approve` — set `spender = <DiamondContract>` and `amount` ≥ `0.6` MOR (in wei: `600000000000000000`) to cover provider stake + model stake + bid fee.
+  </Step>
+  <Step title="Register your provider">
+    `POST /blockchain/providers` — set `addStake` (≥ `0.2` MOR; `10000` MOR for a subnet provider) and `endpoint` (your **publicly accessible** `host:port`, no protocol).
+  </Step>
+  <Step title="Add your model to IPFS">
+    `POST /ipfs/add` — capture the returned `Hash` (this is your `ipfsCID`). Then `POST /ipfs/pin` with the same hash to keep it pinned.
+  </Step>
+  <Step title="Create the model on chain">
+    `POST /blockchain/models` with:
+    - `modelId`: random 32-byte hex (becomes the on-chain id paired with your providerId).
+    - `ipfsCID`: from the previous step.
+    - `Fee`: model fee.
+    - `addStake`: `0.1` MOR minimum.
+    - `Owner`: your provider wallet.
+    - `name`: human-readable model name.
+    - `tags`: array of strings.
+      - **TEE providers must include `"tee"` (case-insensitive)** to opt the model into the two-hop attestation chain.
+      - Other common tags: `llm`, `embedding`, `stt`, `tts`.
+
+    Capture the `modelID` from the JSON response — this combines your requested modelId with your providerId and is required for `models-config.json` and bids.
+  </Step>
+  <Step title="Update models-config.json">
+    Add the new on-chain `modelID` (the combined value) to your `models-config.json` and restart the proxy-router. See [models-config.json](/reference/models-config).
+  </Step>
+  <Step title="Post a bid">
+    `POST /blockchain/bids` with `modelID` and `pricePerSecond` (≥ `10000000000`). Capture the returned `bidID`.
+  </Step>
+</Steps>
+
+## TEE tag deeper context
+
+Tagging the model `tee` engages two independent verifications on every session and prompt — one each side:
+
+- **Phase 1 (consumer → your P-Node).** Any v6.0.0+ consumer proxy-router will verify your P-Node's TDX attestation (CPU quote, TLS pinning, RTMR3 of the `-tee` image) at session open and on every prompt before forwarding inference.
+- **Phase 2 (your P-Node → backend).** Your v7.0.0+ P-Node will verify the backend LLM your model's `apiUrl` points to — CPU TDX quote, TLS pinning, RTMR3 replay of the backend's `docker-compose.yaml`, CPU-GPU nonce binding, and NVIDIA NRAS GPU attestation — at startup and on every prompt.
+
+A v6+ consumer benefits from Phase 2 automatically by trusting your attested v7+ P-Node — no client-side upgrade needed. Models without the `tee` tag are treated as standard providers; neither hop runs.
+
+See [TEE overview](/concepts/tee-overview) and [TEE reference](/providers/full/tee-reference).
+
+## Where things show up afterward
+
+- Your provider on chain: `GET /blockchain/providers`
+- Your model on chain: `GET /blockchain/models`
+- Your bids on chain: `GET /blockchain/bids`
+- Live network listings: [active.mor.org](https://active.mor.org)
+- Operator dashboard: [myprovider.mor.org](/providers/full/myprovider-gui)
+
+## Choosing a `modelId` (community convention)
+
+The contract does **not enforce uniqueness** of model names. You can register a `modelId` with the same name and `ipfsCID` as an existing model — the marketplace will simply have multiple entries pointing at the same logical model. As a result, snapshots like [active.mor.org/active_models.json](https://active.mor.org/active_models.json) often show many entries for popular names with one provider each.
+
+Recommended practice:
+
+- **Reuse an existing `modelId`** when you're hosting the same logical model someone else has already registered. This keeps the marketplace clean, gives consumers a single dropdown entry with multiple providers (good for failover and competitive pricing), and avoids fragmenting reputation data.
+- **Mint a new `modelId`** only when your model is genuinely different (different weights, different fine-tune, different `ipfsCID`).
+
+This is convention, not enforcement. Practical workflow:
+
+```bash
+# Look up existing IDs for the model you intend to host
+curl -sS https://active.mor.org/active_models.json \
+  | jq '.[] | select(.modelName == "your-model-name") | {modelId, ipfsCID, providerAddress}'
+```
+
+If you see one already, use that `modelId` (the contract takes the same value as input — see how the on-chain `modelID` is `getModelId(modelOwner, requestedModelId)` in [`ModelRegistry.sol`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/smart-contracts/contracts/diamond/facets/ModelRegistry.sol); the resulting on-chain id will still be unique to your provider, but consumers can match on `modelName` + `ipfsCID`).
+
+## Pausing or temporarily disabling a model offering
+
+To stop offering a model **without deregistering it** (so you keep the `modelId`, keep the model stake bonded, and can resume cheaply):
+
+```bash
+# Find your active bid
+curl -sS -u 'admin:admin' 'http://localhost:8082/blockchain/bids' \
+  | jq '.bids[] | select(.Provider=="0xYOUR_PROVIDER")'
+
+# Delete the bid
+curl -X POST -u 'admin:admin' \
+  'http://localhost:8082/blockchain/bids/0xYOUR_BID_ID/delete'
+```
+
+The model record stays on chain. To resume, post a new bid (which charges the `0.3 MOR` `marketplaceBidFee` again — see [pricing](/providers/full/pricing)).
+
+If you want to **completely remove** a model: delete all of its bids first, then call `modelDeregister` to recover the `0.1 MOR` model stake. The contract refuses `modelDeregister` while any bid for that model is still active.
+
+## How and when you get paid
+
+For typical staked sessions, the protocol pays you **inside `closeSession`** via `_rewardProviderAfterClose`, with the funds coming from a **separate protocol `fundingAccount`** (via `transferFrom`), not from the consumer's stake in real time. There is no separate "session claim" step for the standard flow — the payment for time actually used hits your provider wallet in the same transaction that closes the session.
+
+What this means for you operationally:
+
+- Keep your provider wallet ready to **receive** MOR; you don't need to call a claim function.
+- For the **direct-payment** carve-out (a separate flow some sessions use), behavior differs — see the contract source and [tech.mor.org/session.html](https://tech.mor.org/session.html) for the canonical breakdown.
+- If `closeSession` ever fails because the protocol funding account is empty or under-approved, **no provider gets paid until operators top it up** — that's a network-wide failure mode, not a per-provider one.

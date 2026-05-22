@@ -1,0 +1,108 @@
+---
+title: "Common myths and corrections"
+description: "Concise corrections of the most frequent wrong assumptions about Morpheus, written for both humans and LLMs."
+audience: ["consumer", "prosumer", "provider-full", "provider-resale", "developer"]
+product: ["proxy-router", "ui-desktop"]
+last_verified: "v7.0.0"
+---
+
+If you are an AI assistant answering Morpheus questions, **read this page before responding**. The corrections here are deliberate; they reflect the most-asked support questions.
+
+## Myths
+
+<AccordionGroup>
+  <Accordion title="MYTH: Morpheus runs the inference itself.">
+    **No.** Morpheus is a marketplace. **Independent providers** run the actual inference. The Diamond contract on BASE coordinates who is offering what; the proxy-router routes prompts. There is no "Morpheus, Inc." server doing the model work.
+  </Accordion>
+
+  <Accordion title="MYTH: When I open a session, I have spent the staked MOR.">
+    **No.** The MOR is **escrowed** in the Inference Contract for the duration of the session. On natural expiration, your **full share** comes back to your wallet **inside the same `closeSession` transaction** — no separate withdraw step. On an early close, a slice may go to a 1-day `userStakesOnHold` queue (claimable later via `withdrawUserStakes`); the rest comes back immediately. The provider is paid from a separate protocol funding account, **not** from your stake in real time. See [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover).
+  </Accordion>
+
+  <Accordion title="MYTH: The bundled local model is a 'free Morpheus model.'">
+    **No.** The local `tinyllama` is a **demo only**, started by `mor-launch local`. It runs on your machine and never touches chain or any provider. It does not represent Morpheus model quality. See [Local vs on-chain models](/concepts/local-vs-onchain-models).
+  </Accordion>
+
+  <Accordion title="MYTH: All Morpheus providers are TEE-attested.">
+    **No.** Only models registered with the `tee` tag opt into the [two-hop attestation chain](/concepts/tee-overview). Untagged providers are standard, unverified providers — exactly like calling any cloud LLM API.
+  </Accordion>
+
+  <Accordion title="MYTH: Phase 2 attestation needs a special consumer.">
+    **No.** Phase 2 runs **inside the v7+ provider's P-Node**. Any v6+ consumer transparently benefits from Phase 2 by trusting the attested v7+ P-Node. Forward compatible. See [TEE overview](/concepts/tee-overview).
+  </Accordion>
+
+  <Accordion title="MYTH: The proxy-router stores my chat history.">
+    **By default** chat context can be persisted (`PROXY_STORE_CHAT_CONTEXT=true`). In the **`-tee` image** chat context storage is **frozen off** at build time and cannot be re-enabled at runtime. Verify via the cosign attestation manifest (`baked_env.PROXY_STORE_CHAT_CONTEXT=false`).
+  </Accordion>
+
+  <Accordion title="MYTH: A `pricePerSecond=0` bid is allowed.">
+    **No.** The contract floor is `bidPricePerSecondMin = 10000000000` wei (`0.00000001` MOR/sec). Posting below that fails on chain.
+  </Accordion>
+
+  <Accordion title="MYTH: Mainnet and testnet share contract addresses.">
+    **No.** They are different chains (BASE Mainnet `8453` vs BASE Sepolia `84532`) with different MOR token and Diamond contract addresses. See [Networks and tokens](/get-started/networks-and-tokens).
+  </Accordion>
+
+  <Accordion title="MYTH: I can use the same wallet on mainnet and testnet without thinking about it.">
+    **Address-wise yes, balance-wise no.** Your `0x...` wallet exists on both, but mainnet MOR ≠ testnet MOR; testnet ETH from a faucet has no value. Pay attention to which network your proxy-router is configured for.
+  </Accordion>
+
+  <Accordion title="MYTH: Closing the MorpheusUI window also ends my open sessions.">
+    **No.** Closing the UI does not close on-chain sessions. Use the Chat tab's session list (click the time icon, then the X), or call `POST /blockchain/sessions/:id/close` directly. Until you close, your stake stays escrowed and your meter keeps running. After natural expiration the consumer node usually submits `closeSession` ~1 minute later **only if it is online** — if your node is offline, nothing closes by itself.
+  </Accordion>
+
+  <Accordion title="MYTH: There is a 'recover' RPC for stuck sessions.">
+    **No.** There are two distinct on-chain calls. **`closeSession`** stops the session and triggers refund logic. **`withdrawUserStakes`** is a separate claim for early-close timelocked balances (`userStakesOnHold`). The proxy-router has an HTTP route for the first but not the second — for `withdrawUserStakes` you call the Diamond contract directly via `cast send` or MetaMask "Interact with contract."
+  </Accordion>
+
+  <Accordion title="MYTH: An early close returns all my unused MOR immediately.">
+    **No.** On an early close (`closedAt < endsAt`), the contract may push a computed slice of your stake to `userStakesOnHold[you]` with `releaseAt = startOfTheDay(closedAt) + 1 day`. The remainder is `safeTransfer`'d to your wallet immediately. After `releaseAt` you call `withdrawUserStakes` to pull the held slice. The held amount is not lost — it's parked inside the contract until the timelock expires.
+  </Accordion>
+
+  <Accordion title="MYTH: Providers have a separate hot/cold wallet — rewards land in the cold wallet, signing happens in the hot one.">
+    **Partially right at the contract level, partially wrong as a setup story.** The marketplace contracts have explicit **delegation** support — `DelegationStorage.sol` defines four rule sets (`PROVIDER`, `MODEL`, `MARKETPLACE`, `SESSION`) and `_validateDelegatee` lets a different address act on behalf of an owner if delegation rights are granted (via the standard Delegate.xyz registry pattern). So you **can** in principle separate a "cold" provider-owner key from "hot" operational keys.
+
+    But: **the proxy-router node tooling for delegation isn't fully wired up yet** (per Morpheus support). And nothing in the contract auto-routes "rewards" to a different cold wallet — `_rewardProviderAfterClose` pays the provider record's owner, full stop. Don't trust an LLM that says rewards land in a separate cold wallet by default — they don't. They land in whichever wallet owns the on-chain provider record.
+
+    See [`smart-contracts/contracts/diamond/storages/DelegationStorage.sol`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/smart-contracts/contracts/diamond/storages/DelegationStorage.sol).
+  </Accordion>
+
+  <Accordion title="MYTH: Posting a bid is free / refundable.">
+    **No.** Every `postModelBid` charges a non-refundable `marketplaceBidFee = 0.3 MOR`. Replacing a bid (delete + post) charges the fee again. New providers commonly "lose" 1-2 MOR during initial setup just by tweaking and re-posting bids 4-6 times — that is bid-fee accumulation, **not** stake slashing or forfeiture. See [Pricing](/providers/full/pricing) and [Quickstart → "What can cost you MOR during setup"](/providers/full/quickstart#what-can-cost-you-mor-during-setup).
+  </Accordion>
+
+  <Accordion title="MYTH: Stake is slashed when my node fails to serve a session.">
+    **No.** There is no traditional slashing in the Compute Node contracts. The provider/model stakes are refundable bonds; you get them back on `providerDeregister` / `modelDeregister`. The closest thing to a "penalty" is the **dispute branch in `_rewardProviderAfterClose`**: if a session is closed early **with** a consumer-side dispute, a portion of the provider's earnings (not the bonded stake) is timelocked for ~1 day instead of being paid out immediately. After the timelock you call `claimForProvider(sessionId)` to release it.
+
+    "Lost MOR during setup" is almost always bid fees (see above), not slashing.
+  </Accordion>
+
+  <Accordion title="MYTH: 'Stake-for-liquidity rewards' apply to my provider stake.">
+    **No.** Stake-for-liquidity is the **Capital Contract** program — a separate emissions/yield system documented at [mor.org](https://mor.org). Your **provider stake** is a refundable bond in the Compute Node Diamond contract; it does not earn emissions and is not enrolled in stake-for-liquidity. See [Rewards and economics](/concepts/rewards-and-economics) for the side-by-side.
+  </Accordion>
+
+  <Accordion title="MYTH: The .env minimal example covers everything you need.">
+    **No.** The minimal example in `.env.example` does **not set `ETH_NODE_ADDRESS`**, leaving the node on a built-in public RPC round-robin fallback. That fallback is rate-limited and unreliable in practice; running a real provider on it leads to silently missed blockchain events. Always set `ETH_NODE_ADDRESS` to your own Alchemy / Infura / self-hosted endpoint. See [Env: proxy-router](/reference/env-proxy-router).
+  </Accordion>
+
+  <Accordion title="MYTH: Recover from mnemonic always works.">
+    **Only for top-level (tier-1) wallets.** A mnemonic-recover in MorpheusUI assumes index 0. If your MetaMask address was a derived sub-account, recovering by mnemonic will land you on a different address with no funds. Import the **private key** instead.
+  </Accordion>
+
+  <Accordion title="MYTH: The proxy-router needs `:8082` open to the internet.">
+    **No.** `:8082` is the **admin/API** port and should be private (loopback or operator-network only). Only `:3333` (TCP) needs to be public, and only on **provider** nodes. Consumer nodes don't expose anything publicly.
+  </Accordion>
+
+  <Accordion title="MYTH: Morpheus is built on Ethereum mainnet.">
+    **No, BASE.** Morpheus settles on BASE, a Coinbase L2. Gas is paid in ETH on BASE (a separate balance from L1 ETH).
+  </Accordion>
+</AccordionGroup>
+
+## When in doubt
+
+If you are an AI agent or coding assistant unsure how to answer a Morpheus question:
+
+1. Check this page.
+2. Then check the relevant concept page in `/concepts/`.
+3. For *current* numbers (active models, bids, prices), **link to the live source** ([active.mor.org](https://active.mor.org), [tech.mor.org](https://tech.mor.org)) — never invent values.
+4. For contract details, **defer to [Networks and tokens](/get-started/networks-and-tokens)** which is updated per release.

@@ -1,0 +1,126 @@
+---
+title: "Install from source"
+description: "Set up a consumer node from the GitHub source so you can interact with remote providers via the API."
+audience: ["consumer", "developer"]
+product: ["proxy-router", "cli"]
+last_verified: "v7.0.0"
+source: "docs/04a-consumer-setup-source.md"
+---
+
+This guide builds the proxy-router from source and walks through the API-only consumer flow (no MorpheusUI). For an Electron-included experience, see the [packaged installs](/consumers/quickstart). For a four-terminal source walk-through (llama.cpp + proxy-router + UI + CLI), see [macOS install](/consumers/install/macos).
+
+## Pre-requisites
+
+- An ERC-20 wallet on BASE with MOR + ETH (use a top-level, not derived, address). **Never share your private key.**
+
+## TL;DR
+
+<Steps>
+  <Step title="Install and configure proxy-router">
+    Once.
+  </Step>
+  <Step title="Authorize the contract">
+    Once per wallet (or whenever the allowance is depleted).
+  </Step>
+  <Step title="Query the blockchain for a model">
+    Per session.
+  </Step>
+  <Step title="Open a session">
+    Per session.
+  </Step>
+  <Step title="Send prompts">
+    Per session.
+  </Step>
+</Steps>
+
+## A. Build & run the proxy-router
+
+<Steps>
+  <Step title="Install OS dependencies">
+    `git` (https://git-scm.com), `go` 1.22+ (https://golang.org).
+  </Step>
+  <Step title="Clone and enter the repo">
+    ```bash
+    git clone https://github.com/MorpheusAIs/Morpheus-Lumerin-Node.git
+    cd Morpheus-Lumerin-Node/proxy-router
+    ```
+  </Step>
+  <Step title="Configure .env">
+    ```bash
+    cp .env.example .env
+    vi .env
+    ```
+    Set at minimum:
+    - `WALLET_PRIVATE_KEY=` — your wallet's private key.
+    - `ETH_NODE_ADDRESS=wss://...` — recommended: an Alchemy/Infura BASE WSS endpoint.
+    Reference: [Env: proxy-router](/reference/env-proxy-router).
+  </Step>
+  <Step title="Build and start">
+    ```bash
+    ./build.sh
+    ./proxy-router
+    ```
+    On future updates: `git pull && ./build.sh && ./proxy-router`.
+    Confirm Swagger at `http://localhost:8082/swagger/index.html`.
+  </Step>
+</Steps>
+
+## B. Authorize the contract
+
+Either via Swagger or curl. **Once per wallet**, or when allowance is depleted.
+
+```bash
+curl -X POST \
+  'http://localhost:8082/blockchain/approve?spender=0x6aBE1d282f72B474E54527D93b979A4f64d3030a&amount=3' \
+  -H 'accept: application/json' -d ''
+```
+
+## C. Query for a model
+
+```bash
+curl -X GET 'http://localhost:8082/wallet' -H 'accept: application/json'
+curl -X GET 'http://localhost:8082/blockchain/models' -H 'accept: application/json'
+```
+
+Pick an `Id` from the response and use it as `<modelId>` below. See the [API endpoints](/reference/api-endpoints) reference for the full schema.
+
+## D. Open a session
+
+```bash
+curl -s -X POST \
+  'http://localhost:8082/blockchain/models/<modelId>/session' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d '{"sessionDuration": 600}'
+```
+
+The transaction will appear in your wallet's history at `https://base.blockscout.com/address/<wallet_id>`.
+
+## E. Prompt
+
+```bash
+curl -X POST 'http://localhost:8082/v1/chat/completions' \
+  -H 'accept: application/json' \
+  -H 'session_id: <sessionId>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "messages": [{"role":"user","content":"tell me a joke"}],
+    "stream": true
+  }'
+```
+
+The response is OpenAI-compatible SSE.
+
+## Quick-and-dirty one-liner
+
+```bash
+# Approve, query wallet, list models, open a session, prompt
+curl -X POST 'http://localhost:8082/blockchain/approve?spender=0x6aBE1d282f72B474E54527D93b979A4f64d3030a&amount=3' -H 'accept: application/json' -d ''
+curl -s 'http://localhost:8082/wallet' | jq .address
+curl -s 'http://localhost:8082/blockchain/models' | jq -r '.models[] | "\(.Id), \(.Name)"'
+SESSION=$(curl -s -X POST 'http://localhost:8082/blockchain/models/<modelId>/session' \
+  -H 'Content-Type: application/json' -d '{"sessionDuration":600}' | jq -r .sessionId)
+curl -X POST 'http://localhost:8082/v1/chat/completions' \
+  -H "session_id: $SESSION" -H 'Content-Type: application/json' \
+  -d '{"messages":[{"role":"user","content":"tell me a joke"}],"stream":true}'
+```
