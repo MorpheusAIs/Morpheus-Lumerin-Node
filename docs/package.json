@@ -1,0 +1,17 @@
+{
+  "name": "morpheus-lumerin-node-docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "mint dev",
+    "validate": "mint broken-links",
+    "build:site": "node scripts/build-site.mjs",
+    "export:site": "node scripts/build-site.mjs"
+  },
+  "dependencies": {
+    "mint": "^4.2.574"
+  },
+  "devDependencies": {
+    "pagefind": "^1.3.0"
+  }
+}
