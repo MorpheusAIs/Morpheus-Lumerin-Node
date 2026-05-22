@@ -1,0 +1,132 @@
+---
+title: "Proxy-router on Docker"
+description: "Run the proxy-router as a Docker container. API access via Swagger; no GUI or wallet components included."
+audience: ["provider-full", "developer"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+source: "docs/02.1-proxy-router-docker.md"
+---
+
+The proxy-router is a critical component that monitors the BASE blockchain and manages models, providers, and sessions. It's a standalone application that runs anywhere with access to your blockchain node and AI model.
+
+## Published image
+
+The official image is on GHCR: `ghcr.io/morpheusais/morpheus-lumerin-node:latest`. Built per release from the main branch. Browse: [MorpheusAIs Packages](https://github.com/orgs/MorpheusAIs/packages?repo_name=Morpheus-Lumerin-Node).
+
+For TEE-hardened images (`-tee` suffix), see [SecretVM quickstart](/providers/full/secretvm-quickstart) and [TEE reference](/providers/full/tee-reference).
+
+## Pre-requisites
+
+- AI model reachable on a private endpoint (e.g. `http://my-model.example:8080`).
+- Funded wallet (MOR + ETH on BASE) and its private key.
+- Public endpoint for the provider (`host:port`, no protocol), e.g. `mycoolmornode.example:3333`.
+
+## Volume + env layout
+
+Mount a host directory into `/app/data` so these files persist:
+
+| File | Purpose |
+|------|---------|
+| `proxy-router.env` | Per-[Env reference](/reference/env-proxy-router) |
+| `.cookie` | Auto-generated admin credentials |
+| `proxy.conf` | API user/permission whitelist |
+| `models-config.json` | Models served (see [reference](/reference/models-config)) |
+| `rating-config.json` | Provider rating ([reference](/reference/rating-config)) |
+
+Map `-p` for the proxy port (`3333`) and admin/API port (`8082`).
+
+## Run with .env file
+
+Minimal `proxy-router.env` (mainnet):
+
+```bash
+AUTH_CONFIG_FILE_PATH=/app/data/proxy.conf
+COOKIE_FILE_PATH=/app/data/.cookie
+RATING_CONFIG_PATH=/app/data/rating-config.json
+PROXY_STORAGE_PATH=/app/data/data
+MODELS_CONFIG_PATH=/app/data/models-config.json
+ETH_NODE_CHAIN_ID=8453
+BLOCKSCOUT_API_URL=https://base.blockscout.com/api/v2
+DIAMOND_CONTRACT_ADDRESS=0x6aBE1d282f72B474E54527D93b979A4f64d3030a
+MOR_TOKEN_ADDRESS=0x7431aDa8a591C955a994a21710752EF9b882b8e3
+WALLET_PRIVATE_KEY=
+# REQUIRED for any real deployment. The proxy-router has a built-in public RPC
+# round-robin fallback, but it is rate-limited and unreliable; running without
+# your own ETH_NODE_ADDRESS leads to silent missed events.
+ETH_NODE_ADDRESS=
+ETH_NODE_USE_SUBSCRIPTIONS=false
+PROXY_ADDRESS=0.0.0.0:3333
+WEB_ADDRESS=0.0.0.0:8082
+WEB_PUBLIC_URL=https://your-public-host.example
+```
+
+Run:
+
+```bash
+docker run -d \
+  --env-file proxy-router.env \
+  -v /path/to/local/data:/app/data \
+  -p 3333:3333 \
+  -p 8082:8082 \
+  ghcr.io/morpheusais/morpheus-lumerin-node:latest
+```
+
+## Run with command-line variables
+
+```bash
+docker run -d \
+  -e AUTH_CONFIG_FILE_PATH=/app/data/proxy.conf \
+  -e COOKIE_FILE_PATH=/app/data/.cookie \
+  -e RATING_CONFIG_PATH=/app/data/rating-config.json \
+  -e PROXY_STORAGE_PATH=/app/data/data \
+  -e MODELS_CONFIG_PATH=/app/data/models-config.json \
+  -e ETH_NODE_CHAIN_ID=8453 \
+  -e BLOCKSCOUT_API_URL=https://base.blockscout.com/api/v2 \
+  -e DIAMOND_CONTRACT_ADDRESS=0x6aBE1d282f72B474E54527D93b979A4f64d3030a \
+  -e MOR_TOKEN_ADDRESS=0x7431aDa8a591C955a994a21710752EF9b882b8e3 \
+  -e WALLET_PRIVATE_KEY=<your_wallet_private_key> \
+  -e ETH_NODE_ADDRESS=https://base-mainnet.g.alchemy.com/v2/<your_alchemy_key> \
+  -e ETH_NODE_USE_SUBSCRIPTIONS=false \
+  -e PROXY_ADDRESS=0.0.0.0:3333 \
+  -e WEB_ADDRESS=0.0.0.0:8082 \
+  -e WEB_PUBLIC_URL=https://your-public-host.example \
+  -v /path/to/local/data:/app/data \
+  -p 3333:3333 \
+  -p 8082:8082 \
+  ghcr.io/morpheusais/morpheus-lumerin-node:latest
+```
+
+<Warning>
+**Set `ETH_NODE_ADDRESS` explicitly.** The proxy-router has a built-in public RPC round-robin fallback. It exists for first-run sanity checks only — for any real provider it is rate-limited and unreliable, and missing blockchain events will silently break your node.
+</Warning>
+
+## Manual build
+
+If you want to customize, build locally:
+
+```bash
+git clone -b main https://github.com/MorpheusAIs/Morpheus-Lumerin-Node.git
+cd Morpheus-Lumerin-Node/proxy-router
+
+# Copy and edit configs
+cp .env.example .env  # or .env.example.win on Windows
+vi .env
+cp models-config.json.example models-config.json
+vi models-config.json
+cp rating-config.json.example rating-config.json
+vi rating-config.json
+
+# Build and run
+./docker_build.sh --build
+./docker_build.sh --run
+```
+
+## Validate & register
+
+- `http://localhost:8082/swagger/index.html` should render.
+- Continue to [Register on chain](/providers/full/register-onchain).
+
+## Notes
+
+- We provide `docker-compose.yml`, `Dockerfile`, and `docker_build.sh` as templates — adapt them for your private key, ETH node, ports, volumes, and config files.
+- Reference docs: [Env: proxy-router](/reference/env-proxy-router), [models-config.json](/reference/models-config), [rating-config.json](/reference/rating-config).

@@ -1,0 +1,52 @@
+---
+description: Always-on rules for AI assistants working in this Morpheus Lumerin Node repo. Loaded automatically by Cursor.
+alwaysApply: true
+---
+
+# Morpheus Lumerin Node — agent rules
+
+This repository has nuance that generic web knowledge gets wrong. **Before answering any Morpheus question or writing any Morpheus code, consult the canonical `/docs` site and the [`AGENTS.md`](../../AGENTS.md) at the repo root.**
+
+## Canonical sources
+
+- Documentation site: `/docs/` (Mintlify; preview with `mint dev` in that folder)
+- API schema: [`proxy-router/docs/swagger.yaml`](../../proxy-router/docs/swagger.yaml)
+- Networks and contract addresses: [`docs/get-started/networks-and-tokens.mdx`](../../docs/get-started/networks-and-tokens.mdx)
+- TEE attestation reference: [`docs/providers/full/tee-reference.mdx`](../../docs/providers/full/tee-reference.mdx) and [`proxy-router/docs/tee-backend-verification.md`](../../proxy-router/docs/tee-backend-verification.md)
+
+## Anti-hallucination rules
+
+0. **Never confuse the proxy-router HTTP API (this repo) with the hosted Morpheus Inference API.** The proxy-router API is documented at `proxy-router/docs/swagger.yaml`. The hosted Morpheus Inference API at [apidocs.mor.org](https://apidocs.mor.org) (`https://api.mor.org/api/v1`) is a **separate product** for users who don't run a node — see [`docs/inference-api/overview.mdx`](../../docs/inference-api/overview.mdx).
+1. **Never invent contract addresses, chain IDs, or token addresses.** Use [`docs/get-started/networks-and-tokens.mdx`](../../docs/get-started/networks-and-tokens.mdx) (BASE Mainnet `8453`, Sepolia `84532`).
+2. **Never invent live values** (active model count, bid prices, latency). Link to `https://active.mor.org`.
+3. **Never claim "Morpheus runs the inference."** Independent providers run inference; Morpheus is a marketplace coordinated by the Diamond contract on BASE.
+4. **Disambiguate the local `tinyllama` demo from real Morpheus models.** Cite [`docs/ai/local-vs-blockchain-models.mdx`](../../docs/ai/local-vs-blockchain-models.mdx).
+5. **Opening a session escrows MOR; it does not spend MOR.** Unused MOR returns on close. Cite [`docs/ai/session-states-open-close-recover.mdx`](../../docs/ai/session-states-open-close-recover.mdx).
+6. **There is no `recover` RPC.** Closing the session is the recovery path.
+7. **For TEE questions, separate Phase 1 (consumer → P-Node) from Phase 2 (P-Node → backend).** A v6+ consumer transparently benefits from a v7+ provider's Phase 2 with no client-side upgrade.
+8. **The proxy-router `:8082` admin/API port must not be exposed publicly.** Only `:3333` is public, and only on providers.
+9. **MorpheusUI mnemonic recovery only works for tier-1 (index 0) addresses.** For derived addresses, recommend importing the private key directly.
+
+## When unsure
+
+If the user's question doesn't match a documented behavior:
+
+1. Search `/docs` first.
+2. Search `proxy-router/docs/swagger.yaml` for endpoint shape.
+3. Search the codebase under `proxy-router/`.
+4. **Dynamic-query the broader Morpheus docs hub** at [gitbook.mor.org](https://gitbook.mor.org). It supports `GET https://gitbook.mor.org/<page>.md?ask=<question>` returning a natural-language answer with sources — useful for ecosystem questions outside this repo.
+5. If you still don't have a confident answer, **say so** and link to the closest matching docs page rather than guessing.
+
+## When writing code
+
+- All proxy-router HTTP requests use **HTTP Basic Auth** ([`docs/reference/api-auth.mdx`](../../docs/reference/api-auth.mdx)).
+- For prompts to remote Morpheus models, include the `session_id: 0x...` header.
+- For the bundled local `tinyllama` model, omit `session_id`.
+- Do not hard-code contract addresses; read them from environment / config.
+
+## When editing documentation
+
+- Pages are MDX with frontmatter: `title`, `description`, `audience`, `product`, `last_verified`, and `source_url` for mirrored content.
+- Update navigation in [`docs/docs.json`](../../docs/docs.json) if you add a page.
+- Bump `last_verified` when content is reconfirmed against current behavior.
+- Mirrored ecosystem pages must include attribution and a `source_url`.

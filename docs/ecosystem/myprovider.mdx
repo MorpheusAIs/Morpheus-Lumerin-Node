@@ -1,0 +1,51 @@
+---
+title: "MyProvider"
+description: "Mirror summary of myprovider.mor.org — hosted operator GUI for managing Morpheus provider nodes."
+audience: ["provider-full", "provider-resale"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+source_url: "https://myprovider.mor.org"
+---
+
+<Note>
+**Mirrored summary** of [myprovider.mor.org](https://myprovider.mor.org). For current screens and feature behavior, defer to the live site.
+</Note>
+
+## What it is
+
+A hosted operator dashboard for Morpheus providers. Lets you manage providers, models, bids, and sessions through a GUI rather than scripting against the proxy-router HTTP API.
+
+## What it gives you
+
+- **Provider dashboard** — register / update your provider record, view stake, status, and earnings.
+- **Model management** — register, tag (including `tee`), and update models.
+- **Bid management** — post, edit, and retire bids.
+- **Session monitoring** — see active and historical sessions, pending claims, and earnings.
+- **Health pings** — quick visibility into whether your `:3333` and `/healthcheck` are reachable.
+
+## How it relates to this site
+
+- Conceptually it does the same thing as [Register on chain](/providers/full/register-onchain) and [API endpoints](/reference/api-endpoints).
+- Authenticates against your provider's wallet — connect a wallet that owns the provider record on chain.
+- Read the privacy and TOS on the site directly before connecting any wallet you care about.
+
+## When to use MyProvider vs the API
+
+| Task | Best surface |
+|------|--------------|
+| First-time provider registration | MyProvider GUI or Swagger |
+| Update bids in bulk | API/script |
+| TEE attestation inspection | [SecretVM portal](https://secretai.scrtlabs.com/attestation) + cosign |
+| Day-to-day operator monitoring | MyProvider GUI |
+| Programmatic automation | API ([endpoints reference](/reference/api-endpoints)) |
+
+## Related canonical pages on this site
+
+- [MyProvider GUI](/providers/full/myprovider-gui)
+- [Register on chain](/providers/full/register-onchain)
+- [Headless operation](/providers/full/headless)
+- [API endpoints](/reference/api-endpoints)
+
+## Source
+
+- [https://myprovider.mor.org](https://myprovider.mor.org)

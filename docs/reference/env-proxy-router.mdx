@@ -1,0 +1,223 @@
+---
+title: "Env: proxy-router"
+description: "Every environment variable consumed by the proxy-router, with mainnet/testnet defaults and explicit precedence rules where two variables overlap."
+audience: ["provider-full", "provider-resale", "prosumer", "developer"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+source: "docs/proxy-router.all.env"
+---
+
+The proxy-router is configured through `.env` (or container env vars). This page documents every variable. The canonical `.env.example` lives in the repo at [`proxy-router/.env.example`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/.env.example) and the full annotated dump at [`docs/proxy-router.all.env`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/docs/proxy-router.all.env).
+
+<Note>
+Defaults below are from the source of truth (`proxy-router/internal/config/config.go`). When in doubt, the source wins.
+</Note>
+
+## Conflicting / overlapping variables — read this first
+
+Several pairs of variables look like they do "the same thing." They don't. The proxy-router resolves each pair with a specific precedence rule, and getting it wrong is a common cause of "I changed the env but nothing happened."
+
+<Warning>
+For every `*_CONTENT` ↔ `*_PATH` pair below, the **`*_CONTENT`** variable is a **one-shot file seeder**, not a runtime override. It only takes effect when the corresponding file **does not exist**. After the first successful start the file exists, and changing the `*_CONTENT` env on subsequent runs has **no effect** until you delete the file at `*_PATH`.
+</Warning>
+
+### `COOKIE_FILE_PATH` ↔ `COOKIE_CONTENT`
+
+| Situation | What the proxy-router does |
+|-----------|---------------------------|
+| File at `COOKIE_FILE_PATH` already exists | Reads the file. **`COOKIE_CONTENT` is silently ignored.** |
+| File does not exist + `COOKIE_CONTENT` is set | Writes `COOKIE_CONTENT` to the file (`username:password\n`), then reads it. |
+| File does not exist + `COOKIE_CONTENT` is unset | Generates a random 32-char password for `admin`, writes it to the file. |
+
+Source: [`proxy-router/internal/system/auth.go`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/internal/system/auth.go) (`EnsureConfigFilesExist`).
+
+**Practical implications**
+
+- For TEE / Akash / ephemeral container deployments, set `COOKIE_CONTENT` once on first start; the file gets seeded inside the volume and persists.
+- To rotate credentials on a self-hosted node, use the **`POST /auth/users` endpoint** (or edit the cookie file in place) — changing `COOKIE_CONTENT` after first start does nothing.
+
+### `MODELS_CONFIG_PATH` ↔ `MODELS_CONFIG_CONTENT`
+
+| Situation | What the proxy-router does |
+|-----------|---------------------------|
+| File at `MODELS_CONFIG_PATH` already exists | Reads the file. **`MODELS_CONFIG_CONTENT` is silently ignored.** |
+| File does not exist + `MODELS_CONFIG_CONTENT` is set | Writes `MODELS_CONFIG_CONTENT` to the file, then reads it. |
+| File does not exist + `MODELS_CONFIG_CONTENT` is unset | Logs a warning and runs with an empty model registry. |
+
+Source: [`proxy-router/internal/config/models_config.go`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/internal/config/models_config.go) (`ModelConfigLoader.Init`).
+
+**Practical implications**
+
+- Use `MODELS_CONFIG_CONTENT` (single-line JSON) in TEE/Akash deployments where you can't mount a volume.
+- To update models on a self-hosted node, edit the JSON file directly and restart — don't bump `MODELS_CONFIG_CONTENT`. See [models-config.json](/reference/models-config).
+
+### `AGENT_CONFIG_PATH` ↔ `AGENT_CONFIG_CONTENT`
+
+Same `*_CONTENT`-only-seeds-the-file rule as the two above. Source: [`proxy-router/internal/config/agents_config.go`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/internal/config/agents_config.go).
+
+### `AUTH_CONFIG_FILE_PATH` (no inline twin)
+
+Path to `proxy.conf`, which holds `rpcauth=` and `rpcwhitelist=` lines. **There is no `AUTH_CONFIG_CONTENT` env** — the file is built at runtime by the proxy-router itself when you add users via [`POST /auth/users`](/reference/api-auth#add-or-update-a-user). For TEE / ephemeral deployments, `proxy.conf` is created on first start (with the admin entry derived from the cookie file) and managed via the API afterwards.
+
+### `WALLET_PRIVATE_KEY` ↔ system keychain
+
+| Situation | What the proxy-router does |
+|-----------|---------------------------|
+| `WALLET_PRIVATE_KEY` is set | Uses it. The keychain is **not** read. |
+| `WALLET_PRIVATE_KEY` is unset and the OS supports a keychain (macOS) | Reads / writes the key from the system keychain. |
+| Neither | Refuses to start signing transactions; read-only operations still work. |
+
+`APP_RESET_KEYCHAIN=true` wipes the macOS keychain entry on start (use with care).
+
+### `WEB_PUBLIC_URL` fallback
+
+If `WEB_PUBLIC_URL` is unset, the proxy-router synthesizes `http://localhost:<port-from-WEB_ADDRESS>`. For provider deployments where consumers must reach you over the public internet, **always set this explicitly** to your public URL (e.g. `https://provider.example.com`). The TLS-pinning step in TEE attestation reads this URL.
+
+### `ETH_NODE_USE_SUBSCRIPTIONS` ↔ `ETH_NODE_POLLING_INTERVAL`
+
+Not a precedence pair, but easy to misconfigure:
+
+- `ETH_NODE_USE_SUBSCRIPTIONS=true` → expects a **WSS** `ETH_NODE_ADDRESS` (e.g. `wss://...`). Polling interval is irrelevant.
+- `ETH_NODE_USE_SUBSCRIPTIONS=false` (default) → expects an **HTTPS** `ETH_NODE_ADDRESS` and uses `ETH_NODE_POLLING_INTERVAL` (default `10` seconds).
+
+Mismatch (e.g. `subscriptions=true` with HTTPS endpoint) makes the node fail to receive blockchain events even though startup may look healthy.
+
+### `PROXY_STORE_CHAT_CONTEXT` is TEE-frozen
+
+In the **`-tee` image** this is hard-coded `false` at build time and **cannot be overridden at runtime**. Setting it in the env has no effect inside a TEE deployment. See [TEE reference](/providers/full/tee-reference).
+
+---
+
+## Application
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `APP_RESET_KEYCHAIN` | `false` | Set `true` to reset the macOS keychain entry on start |
+| `AUTH_CONFIG_FILE_PATH` | `./proxy.conf` | Path to the auth config file (no inline twin) |
+| `COOKIE_FILE_PATH` | `./.cookie` | Path to admin cookie file |
+| `COOKIE_CONTENT` | (unset) | **Seeds the cookie file on first start only.** See precedence above. |
+
+## Blockchain
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `ETH_NODE_CHAIN_ID` | `8453` (mainnet) / `84532` (testnet) | BASE chain ID |
+| `ETH_NODE_ADDRESS` | (unset, falls back to built-in public RPC round-robin) | RPC endpoint URL (HTTPS or WSS — must match `ETH_NODE_USE_SUBSCRIPTIONS`). **Set explicitly for any real deployment** — the public round-robin fallback is rate-limited and unreliable; missed events break the node silently. |
+| `ETH_NODE_LEGACY_TX` | `false` | Set `true` to disable EIP-1559 |
+| `BLOCKSCOUT_API_URL` | `https://base.blockscout.com/api/v2` | Block explorer API |
+| `EXPLORER_RETRY_DELAY` | `5` | Delay between explorer retries (seconds) |
+| `EXPLORER_MAX_RETRIES` | `5` | Max explorer retries |
+| `ETH_NODE_USE_SUBSCRIPTIONS` | `false` | `true` to use WSS subscriptions; `false` for HTTP polling |
+| `ETH_NODE_POLLING_INTERVAL` | `10` | Polling interval (seconds, only when `ETH_NODE_USE_SUBSCRIPTIONS=false`) |
+| `ETH_NODE_MAX_RECONNECTS` | `30` | Max reconnect attempts |
+
+## Environment
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `ENVIRONMENT` | `development` | Use `production` in deployments |
+
+## Marketplace
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `DIAMOND_CONTRACT_ADDRESS` | mainnet `0x6aBE1d282f72B474E54527D93b979A4f64d3030a`; testnet `0x6e4d0B775E3C3b02683A6F277Ac80240C4aFF930` | Diamond marketplace contract |
+| `MOR_TOKEN_ADDRESS` | mainnet `0x7431aDa8a591C955a994a21710752EF9b882b8e3`; testnet `0x5C80Ddd187054E1E4aBBfFCD750498e81d34FfA3` | MOR ERC-20 token |
+| `WALLET_PRIVATE_KEY` | (unset) | Wallet private key. Falls back to system keychain when unset. See precedence above. |
+
+## Logging
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `LOG_COLOR` | `false` | Colored console output |
+| `LOG_FOLDER_PATH` | (unset) | If set, also write logs to files in this directory |
+| `LOG_IS_PROD` | `false` | Production log format |
+| `LOG_JSON` | `false` | JSON-formatted log lines |
+| `LOG_LEVEL_APP` | `warn` | App-level log level: `debug` `info` `warn` `error` `dpanic` `panic` `fatal` |
+| `LOG_LEVEL_TCP` | `warn` | TCP layer log level |
+| `LOG_LEVEL_ETH_RPC` | `warn` | Ethereum RPC log level |
+| `LOG_LEVEL_STORAGE` | `warn` | Badger storage log level |
+
+For TEE images logging is **frozen** to production / JSON / minimal at build time — these vars have no effect inside a `-tee` image.
+
+## Network ports & URLs
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `WEB_ADDRESS` | `0.0.0.0:8082` | Bind for the HTTP/Swagger API |
+| `WEB_PUBLIC_URL` | `http://localhost:<WEB_ADDRESS port>` | Public-facing URL of the API. **Set explicitly** for any provider that consumers must reach. |
+| `PROXY_ADDRESS` | `0.0.0.0:3333` | Bind for the consumer-to-provider TCP proxy |
+
+## Proxy state & configs
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `MAX_CACHED_DESTS` | `5` | Max cached provider destinations |
+| `PROXY_STORAGE_PATH` | `./data/badger/` | Local Badger / runtime state |
+| `PROXY_STORE_CHAT_CONTEXT` | `true` | Persist chat context. **Frozen `false` in `-tee` images.** |
+| `PROXY_FORWARD_CHAT_CONTEXT` | `true` | Prepend stored history to prompts |
+| `MODELS_CONFIG_PATH` | `./models-config.json` | See [models-config](/reference/models-config). See precedence above. |
+| `MODELS_CONFIG_CONTENT` | (unset) | **Seeds the models config file on first start only.** See precedence above. |
+| `AGENT_CONFIG_PATH` | (built-in default) | Local agent registry path |
+| `AGENT_CONFIG_CONTENT` | (unset) | **Seeds the agent config file on first start only.** Same rules as the models pair. |
+| `RATING_CONFIG_PATH` | `./rating-config.json` | See [rating-config](/reference/rating-config) |
+
+## Timeouts & retries
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `LLM_TIMEOUT` | (depends on release) | P-Node → backend LLM timeout (streaming + non-streaming) |
+| `CNODE_PNODE_TIMEOUT` | (depends on release) | Per-attempt timeout for C-Node waiting for P-Node first response |
+| `CNODE_PNODE_MAX_RETRIES` | (depends on release) | Max retries for C-Node → P-Node read timeout (chat / embeddings) |
+| `CNODE_PNODE_AUDIO_MAX_RETRIES` | (depends on release) | Max retries for audio transcription / speech routes |
+
+For exact defaults check the source of truth ([`config.go`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/internal/config/config.go)) — these can change between releases as we tune the network.
+
+## TEE (Phase 1 + Phase 2 attestation)
+
+These are only consulted when at least one model in the marketplace is `tee`-tagged. Otherwise they are unused.
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `TEE_PORTAL_URL` | `https://secretai.scrtlabs.com/api` | SecretAI Portal used to verify raw TDX CPU quotes |
+| `TEE_IMAGE_REPO` | `ghcr.io/morpheusais/morpheus-lumerin-node-tee` | GHCR repo where the consumer-side P-Node attestation fetches the signed golden manifest via cosign |
+| `ARTIFACT_REGISTRY_URL` | `https://raw.githubusercontent.com/scrtlabs/secretvm-verify/main/artifacts_registry/tdx.csv` | SecretVM TDX artifact registry CSV (MRTD + RTMR0-2 lookup) |
+| `ARTIFACT_REGISTRY_REFRESH_INTERVAL` | `1h` | How often the proxy-router re-downloads the artifact registry |
+
+See [TEE overview](/concepts/tee-overview) and [TEE reference](/providers/full/tee-reference).
+
+## System tuning (optional sysctl tweaks)
+
+These map to OS-level adjustments and only apply when `SYS_ENABLE=true`.
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `SYS_ENABLE` | `false` | Set `true` to apply the values below at startup |
+| `SYS_LOCAL_PORT_RANGE` | `1024 65535` | |
+| `SYS_NET_DEV_MAX_BACKLOG` | `100000` | |
+| `SYS_RLIMIT_HARD` | `524288` | |
+| `SYS_RLIMIT_SOFT` | `524288` | |
+| `SYS_SOMAXCONN` | `100000` (Linux) / `2048` (Darwin/macOS) | |
+| `SYS_TCP_MAX_SYN_BACKLOG` | `100000` | |
+
+## Mainnet vs testnet quick switch
+
+Comment / uncomment the appropriate block in `.env`:
+
+```bash
+# MAINNET
+ETH_NODE_CHAIN_ID=8453
+DIAMOND_CONTRACT_ADDRESS=0x6aBE1d282f72B474E54527D93b979A4f64d3030a
+MOR_TOKEN_ADDRESS=0x7431aDa8a591C955a994a21710752EF9b882b8e3
+BLOCKSCOUT_API_URL=https://base.blockscout.com/api/v2
+
+# TESTNET (Base Sepolia)
+# ETH_NODE_CHAIN_ID=84532
+# DIAMOND_CONTRACT_ADDRESS=0x6e4d0B775E3C3b02683A6F277Ac80240C4aFF930
+# MOR_TOKEN_ADDRESS=0x5C80Ddd187054E1E4aBBfFCD750498e81d34FfA3
+# BLOCKSCOUT_API_URL=https://base-sepolia.blockscout.com/api/v2
+```
+
+## Full annotated dump
+
+For the complete annotated reference (every variable, every example value), see [`docs/proxy-router.all.env`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/docs/proxy-router.all.env) in the repo.

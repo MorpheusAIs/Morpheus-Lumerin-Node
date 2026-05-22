@@ -1,0 +1,83 @@
+---
+title: "Container P-Node for resale"
+description: "Run a containerized proxy-router as a resale provider; only the configuration changes vs a full P-Node."
+audience: ["provider-resale"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+---
+
+A resale P-Node is the **same proxy-router image** as a full provider — `ghcr.io/morpheusais/morpheus-lumerin-node:latest`. Only the `models-config.json` differs.
+
+For full mechanics (volumes, env files, ports, build), follow [Provider Docker](/providers/full/proxy-router-docker). This page focuses on what changes.
+
+## Differences vs full P-Node
+
+| Aspect | Full P-Node | Resale P-Node |
+|--------|-------------|---------------|
+| `apiUrl` | Internal/private model URL | Upstream's chat-completions URL |
+| `apiKey` | Usually omitted | Required (your upstream account key) |
+| `concurrentSlots` | Bound by your hardware | Bound by your upstream rate limits |
+| Model `tee` tag | Optional (for TEE) | Don't use — you can't attest the upstream |
+| `endpoint` (on-chain) | Same | Same — must be publicly reachable |
+| Subnet provider stake | Same `10000` MOR if applicable | Same |
+
+## Example `models-config.json` for a resale node
+
+```json
+{
+  "$schema": "./internal/config/models-config-schema.json",
+  "models": [
+    {
+      "modelId": "0x<your_chain_modelId>",
+      "modelName": "gpt-4o-mini",
+      "apiType": "openai",
+      "apiUrl": "https://api.openai.com/v1/chat/completions",
+      "apiKey": "sk-...",
+      "concurrentSlots": 4,
+      "capacityPolicy": "simple"
+    },
+    {
+      "modelId": "0x<your_chain_modelId_2>",
+      "modelName": "claude-3-5-sonnet-20241022",
+      "apiType": "claudeai",
+      "apiUrl": "https://api.anthropic.com/v1/messages",
+      "apiKey": "sk-ant-...",
+      "concurrentSlots": 4
+    }
+  ]
+}
+```
+
+Full schema: [models-config.json](/reference/models-config).
+
+## Bare minimum docker run
+
+```bash
+docker run -d \
+  --name morpheus-resale \
+  -e ETH_NODE_CHAIN_ID=8453 \
+  -e BLOCKSCOUT_API_URL=https://base.blockscout.com/api/v2 \
+  -e DIAMOND_CONTRACT_ADDRESS=0x6aBE1d282f72B474E54527D93b979A4f64d3030a \
+  -e MOR_TOKEN_ADDRESS=0x7431aDa8a591C955a994a21710752EF9b882b8e3 \
+  -e WALLET_PRIVATE_KEY=<your_provider_wallet> \
+  -e PROXY_ADDRESS=0.0.0.0:3333 \
+  -e WEB_ADDRESS=0.0.0.0:8082 \
+  -e WEB_PUBLIC_URL=https://your.public.host \
+  -e MODELS_CONFIG_PATH=/app/data/models-config.json \
+  -v $HOME/morpheus-resale:/app/data \
+  -p 3333:3333 \
+  -p 8082:8082 \
+  ghcr.io/morpheusais/morpheus-lumerin-node:latest
+```
+
+(Place your `models-config.json` in `$HOME/morpheus-resale/` before starting.)
+
+## Reverse proxy and TLS
+
+Resale providers should put the proxy-router's `:8082` behind a reverse proxy (nginx, Caddy, Traefik) with TLS for the operator-facing API. The `:3333` TCP port stays plain for consumer traffic — it's an end-to-end TCP tunnel, not HTTPS.
+
+## Next
+
+- [Reselling Venice](/providers/resale/reselling-venice) — concrete walkthrough.
+- [Registering a bid](/providers/resale/registering-bid) — pricing decisions.
+- [Register on chain](/providers/full/register-onchain) — same flow as full providers.

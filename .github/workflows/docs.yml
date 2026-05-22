@@ -1,0 +1,165 @@
+name: Docs
+
+# Validate Mintlify docs on PRs and pushes. Deploy to S3 + CloudFront (OIDC) on
+# test/main after validation passes. Does not trigger the main CI-CD pipeline.
+
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "proxy-router/docs/swagger.yaml"
+      - ".github/workflows/docs.yml"
+  push:
+    branches:
+      - main
+      - dev
+      - test
+    paths:
+      - "docs/**"
+      - "proxy-router/docs/swagger.yaml"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  mintlify-validate:
+    name: Mintlify validate + broken-link check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Install docs dependencies
+        working-directory: docs
+        run: npm ci
+
+      - name: Validate Mintlify config
+        working-directory: docs
+        run: |
+          npx mint --version
+          npx mint broken-links || echo "::warning::mint broken-links reported issues"
+
+      - name: List MDX files
+        run: find docs -name "*.mdx" | wc -l
+
+  openapi-lint:
+    name: OpenAPI spec lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Redocly CLI
+        run: npm install -g @redocly/cli@latest
+
+      - name: Lint swagger.yaml
+        run: |
+          redocly lint proxy-router/docs/swagger.yaml || \
+            echo "::warning::OpenAPI spec has lint issues (non-blocking)"
+
+  last-verified-staleness:
+    name: Check last_verified staleness
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Find pages with last_verified older than the latest release tag
+        run: |
+          set -euo pipefail
+          LATEST_TAG=$(git tag --list 'v*' --sort=-v:refname | grep -v -- '-test' | head -n 1 || true)
+          LATEST_TAG=${LATEST_TAG:-v0.0.0}
+          echo "Latest release tag: $LATEST_TAG"
+
+          STALE_FILES=()
+          while IFS= read -r f; do
+            VERIFIED=$(awk '/^---$/{n++; next} n==1 && /^last_verified:/ {print}' "$f" \
+              | sed -E 's/^last_verified:[[:space:]]*"?([^"]*)"?$/\1/' || true)
+            if [ -z "$VERIFIED" ]; then
+              continue
+            fi
+            if [ "$VERIFIED" \< "$LATEST_TAG" ]; then
+              STALE_FILES+=("$f (last_verified=$VERIFIED < $LATEST_TAG)")
+            fi
+          done < <(find docs -name "*.mdx")
+
+          if [ "${#STALE_FILES[@]}" -gt 0 ]; then
+            echo "::warning::Pages with last_verified older than $LATEST_TAG:"
+            for s in "${STALE_FILES[@]}"; do
+              echo "::warning::  $s"
+            done
+          else
+            echo "All pages report last_verified >= $LATEST_TAG."
+          fi
+
+  deploy:
+    name: Build and deploy docs
+    needs:
+      - mintlify-validate
+      - openapi-lint
+      - last-verified-staleness
+    if: github.event_name == 'push' && (github.ref_name == 'test' || github.ref_name == 'main')
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Install docs dependencies
+        working-directory: docs
+        run: npm ci
+
+      - name: Build static site
+        working-directory: docs
+        env:
+          SITE_URL: ${{ vars.NODEDOCS_SITE_URL }}
+        run: npm run build:site -- ../.site
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.NODEDOCS_IAM_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Sync to S3
+        run: |
+          aws s3 sync .site/ "s3://${{ vars.NODEDOCS_S3_BUCKET }}/" \
+            --delete \
+            --exclude "serve.js" \
+            --exclude "Start Docs.command" \
+            --exclude "Start Docs.bat"
+
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ vars.NODEDOCS_CLOUDFRONT_DISTRIBUTION_ID }}" \
+            --paths "/*"

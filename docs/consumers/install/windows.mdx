@@ -1,0 +1,45 @@
+---
+title: "Windows install"
+description: "Run a packaged Morpheus Lumerin Node consumer release on Windows."
+audience: ["consumer"]
+product: ["proxy-router", "ui-desktop"]
+last_verified: "v7.0.0"
+---
+
+The packaged Windows release contains the proxy-router, MorpheusUI, and an optional bundled `llama.cpp` server. For source builds, see [macOS install](/consumers/install/macos) and adapt the toolchain.
+
+## Steps
+
+<Steps>
+  <Step title="Download">
+    Get the latest Windows zip from [Releases](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/releases). Mainnet builds have no suffix; testnet builds end in `-test`.
+  </Step>
+  <Step title="Extract">
+    Recommended location: `%USERPROFILE%\Downloads\morpheus`.
+  </Step>
+  <Step title="(Optional) tweak .env">
+    Edit only if you need a custom ETH node, log path, or non-default ports. See [Env: proxy-router](/reference/env-proxy-router).
+  </Step>
+  <Step title="Launch">
+    Double-click `mor-launch.exe`. Windows Defender may prompt — allow it. To also start the bundled local model:
+    ```cmd
+    mor-launch.exe local
+    ```
+  </Step>
+  <Step title="Onboard">
+    Accept terms, set a UI password, create or recover a wallet. Save the mnemonic somewhere safe.
+  </Step>
+  <Step title="Validate">
+    Open `http://localhost:8082/swagger/index.html`. Try the **Local Model** in the Chat tab to verify the local pipeline.
+  </Step>
+</Steps>
+
+## Cleanup
+
+```cmd
+del .cookie proxy.conf
+rmdir /s /q data
+rmdir /s /q %USERPROFILE%\AppData\Roaming\morpheus-ui
+```
+
+See also: [Troubleshooting](/reference/troubleshooting).
