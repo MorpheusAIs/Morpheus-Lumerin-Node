@@ -1,0 +1,141 @@
+---
+title: "macOS install (from source, 4-terminal walk-through)"
+description: "Build llama.cpp, the proxy-router, MorpheusUI, and the CLI from source on macOS. For developers and contributors."
+audience: ["consumer", "developer"]
+product: ["proxy-router", "ui-desktop", "cli"]
+last_verified: "v7.0.0"
+source: "docs/mac-boot-strap.md"
+---
+
+A simple guide to get the local `llama.cpp` model, the Lumerin proxy-router, and the MorpheusUI from source running on a Mac.
+
+<Note>
+For a packaged install (no compilation), use the [Consumer quickstart](/consumers/quickstart). This page is for developers or contributors.
+</Note>
+
+<Warning>
+**Wallet:** if you start with an existing MetaMask wallet, use a **tier-1** (top-level) address, not a derived/secondary one. MorpheusUI's mnemonic-recover flow does not work properly with secondary addresses derived under the same mnemonic.
+</Warning>
+
+## Dependencies
+
+| Tool | Minimum |
+|------|---------|
+| `git` | latest | https://git-scm.com |
+| `go`  | 1.22+  | https://golang.org |
+| `node`| 20+    | https://nodejs.org |
+| `make`| any    | https://www.gnu.org/software/make |
+| `yarn`| any    | https://yarnpkg.com |
+
+## Step A — llama.cpp (terminal 1)
+
+You will need a port for the local model server (`8080` in this guide). This setup is one-time.
+
+<Steps>
+  <Step title="Clone & build">
+    ```bash
+    git clone https://github.com/ggerganov/llama.cpp.git
+    cd llama.cpp
+    make -j 8
+    ```
+  </Step>
+  <Step title="Pick a model">
+    Set general variables:
+    ```bash
+    model_host=127.0.0.1
+    model_port=8080
+    ```
+    Then pick a model (full set in [`docs/mac-boot-strap.md`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/docs/mac-boot-strap.md)):
+    ```bash
+    model_url=https://huggingface.co/TheBloke
+    model_collection=TinyLlama-1.1B-Chat-v1.0-GGUF
+    model_file_name=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
+    ```
+  </Step>
+  <Step title="Download and run">
+    ```bash
+    wget -O models/${model_file_name} \
+      ${model_url}/${model_collection}/resolve/main/${model_file_name}
+    ./llama-server -m models/${model_file_name} \
+      --host ${model_host} --port ${model_port} --n-gpu-layers 4096
+    ```
+  </Step>
+  <Step title="Validate">
+    Open `http://127.0.0.1:8080` and confirm the local llama.cpp UI responds.
+  </Step>
+</Steps>
+
+## Step B — proxy-router (terminal 2)
+
+You'll need:
+- Wallet **private key** (do not share, used in `.env`)
+- ETH node WSS or HTTPS URL (Alchemy/Infura) for BASE
+- Ports for the proxy (`3333`) and API (`8082`)
+
+<Steps>
+  <Step title="Clone the repo">
+    ```bash
+    git clone https://github.com/MorpheusAIs/Morpheus-Lumerin-Node.git
+    cd Morpheus-Lumerin-Node/proxy-router
+    ```
+  </Step>
+  <Step title="Configure .env">
+    ```bash
+    cp .env.example .env
+    vi .env
+    ```
+    See [Env: proxy-router](/reference/env-proxy-router) for every field.
+  </Step>
+  <Step title="Build & run">
+    ```bash
+    ./build.sh
+    make run
+    ```
+    Allow firewall prompts on first launch.
+  </Step>
+  <Step title="Validate">
+    Confirm log lines like:
+    ```
+    INFO  proxy state: running
+    INFO  HTTP  http server is listening: 0.0.0.0:8082
+    INFO  TCP   tcp server is listening: 0.0.0.0:3333
+    ```
+    Open `http://localhost:8082/swagger/index.html`.
+  </Step>
+</Steps>
+
+## Step C — MorpheusUI (terminal 3)
+
+```bash
+cd <your_path>/Morpheus-Lumerin-Node/MorpheusUI
+cp .env.example .env
+vi .env  # confirm PROXY_WEB_URL points at the proxy-router API port
+yarn install
+yarn dev
+```
+
+The Electron app launches into onboarding. Confirm:
+- Lower-left shows your ERC-20 wallet.
+- Wallet tab shows MOR + ETH balances.
+- Chat tab is set to `Provider: (local)` by default.
+
+## Step D — CLI (terminal 4)
+
+```bash
+cd <your_path>/Morpheus-Lumerin-Node/cli
+cp .env.example .env
+vi .env  # confirm API_HOST is http://localhost:8082
+make build
+./mor-cli -h
+./mor-cli healthcheck
+```
+
+## Cleaning and troubleshooting
+
+- Save your wallet mnemonic before any cleanup.
+- `rm -rf ./node_modules` from inside `MorpheusUI` if dependencies get stuck.
+- `rm -rf ~/Library/Application\ Support/MorpheusUI` to start with a fresh wallet store.
+- Dangling processes: `ps -ax | grep electron` / `ps -ax | grep proxy-router` then `kill -9 <pid>`.
+- Locked log files in `./data/`: `lsof | grep /proxy-router/data/` and kill the holding process.
+
+For more, see [Troubleshooting](/reference/troubleshooting).

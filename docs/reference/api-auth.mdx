@@ -1,0 +1,152 @@
+---
+title: "API authentication"
+description: "How the proxy-router authenticates HTTP API callers: the .cookie file, proxy.conf, rpcauth/rpcwhitelist, and the /auth/users endpoints."
+audience: ["consumer", "prosumer", "provider-full", "provider-resale", "developer"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+source: "docs/02.5-api-auth.md"
+---
+
+API access requires authentication and network access. This was introduced in main release `2.0.0` (and dev/test `1.6.1`) to:
+1. Prevent unauthorized access to the API and the wallet in case of network or firewall mis-configuration.
+2. Enable governed access for AI agents — agents should have **scoped** access to the API, not full admin.
+
+## Files involved
+
+| File | Default location | Purpose |
+|------|------------------|---------|
+| `.cookie` | proxy-router binary directory | Admin username/password |
+| `proxy.conf` | proxy-router binary directory | All users + per-user method whitelists |
+
+Override paths via env vars:
+
+| Var | Effect |
+|-----|--------|
+| `COOKIE_FILE_PATH` | Where to read/write the `.cookie` file |
+| `AUTH_CONFIG_FILE_PATH` | Where to read/write `proxy.conf` |
+
+## Cookie file
+
+When the cookie file does not exist, the proxy-router auto-generates one:
+
+```
+admin:JJLRNze08ZN3vlNdgwgbrh6c4dRw9gQT
+```
+
+- `admin` is the administrator username.
+- The trailing string is a randomly generated password.
+
+## Proxy configuration file
+
+`proxy.conf` stores user credentials (`rpcauth=`) and permission whitelists (`rpcwhitelist=`):
+
+```
+rpcauth=admin:e13576ba0e96bd69f71317c75a06c6f8$cc56ee41055c65b184a34aa5e953d2d069626ce061dd56e22337d2e73804c35c
+rpcwhitelist=admin:*
+rpcwhitelistdefault=0
+```
+
+| Line | Meaning |
+|------|---------|
+| `rpcauth=<user>:<salt>$<hash>` | Username with salted, hashed password |
+| `rpcwhitelist=<user>:<methods>` | Allowed methods. `*` = all permitted |
+| `rpcwhitelistdefault=0` | `0` = only whitelisted methods allowed; `1` = all allowed unless restricted |
+
+### Adding a scoped user
+
+```
+rpcauth=admin:e13576ba0e96bd69f71317c75a06c6f8$cc56ee41055c65b184a34aa5e953d2d069626ce061dd56e22337d2e73804c35c
+rpcauth=agent:ad7a18621d37167502f29712ffc5f324$c056e5f7aa94f6e48c88c81973dc280d16436c1f7bc3c8bded090ae8ea8fc121
+rpcwhitelist=agent:get_balance
+rpcwhitelist=admin:*
+rpcwhitelistdefault=0
+```
+
+The `agent` user can only call `get_balance`. The `admin` user retains full access.
+
+## HTTP endpoints to manage users
+
+Both endpoints require **Basic Auth** (administrator credentials).
+
+### Add or update a user
+
+`POST /auth/users` — `application/json`
+
+```http
+POST /auth/users
+Authorization: Basic YWRtaW46SkpMUk56ZTA4Wk4zdmxOZGd3Z2JyaDZjNGRSdzlnUVQ=
+Content-Type: application/json
+
+{
+  "username": "agent",
+  "password": "agentPassword",
+  "methods": ["get_balance"]
+}
+```
+
+### Remove a user
+
+`DELETE /auth/users` — `application/json`
+
+```http
+DELETE /auth/users
+Authorization: Basic YWRtaW46SkpMUk56ZTA4Wk4zdmxOZGd3Z2JyaDZjNGRSdzlnUVQ=
+Content-Type: application/json
+
+{
+  "username": "agent"
+}
+```
+
+## Authorization header
+
+All endpoints require:
+
+```
+Authorization: Basic <base64(username:password)>
+```
+
+For example, `YWRtaW46SkpMUk56ZTA4Wk4zdmxOZGd3Z2JyaDZjNGRSdzlnUVQ=` decodes to `admin:JJLRNze08ZN3vlNdgwgbrh6c4dRw9gQT`.
+
+## Permission methods
+
+These method names are recognized in `rpcwhitelist=` entries (e.g. `rpcwhitelist=agent:get_balance,get_transactions`). Set `rpcwhitelistdefault=1` to allow them by default unless restricted.
+
+```
+get_balance
+get_transactions
+get_allowance
+get_latest_block
+approve
+send_eth
+send_mor
+get_providers
+create_provider
+delete_provider
+get_models
+create_model
+delete_model
+create_bid
+get_bids
+delete_bids
+get_sessions
+session_provider_claim
+open_session
+close_session
+get_budget
+get_supply
+system_config
+add_user
+remove_user
+initiate_session
+chat
+get_local_models
+get_chat_history
+edit_chat_history
+```
+
+## Recommendations
+
+- For **prosumer / agent** setups, add **per-agent users with restricted whitelists** — never share the admin password with agents.
+- For **TEE / SecretVM** deployments, set `COOKIE_CONTENT=admin:<strong-pw>` in your encrypted env so the `.cookie` is seeded from secrets.
+- Rotate the admin password regularly. Keep `proxy.conf` out of version control.

@@ -1,0 +1,65 @@
+---
+title: "Pricing a resale bid"
+description: "Translate upstream subscription / per-token cost into a Morpheus pricePerSecond bid that clears your costs."
+audience: ["provider-resale"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+---
+
+Morpheus bids quote `pricePerSecond` in MOR. Most upstream APIs quote per-token or per-month. To set a defensible bid, you need to translate upstream cost into per-second MOR.
+
+## A simple model
+
+For a per-token upstream:
+
+```
+upstream_$_per_second ≈ tokens_per_second_average × upstream_$_per_token_blended
+                      = tps × ((p × in_$/tok) + ((1−p) × out_$/tok))
+```
+
+Where `p` is the share of input tokens (often ~0.3 for chat). Convert dollars to MOR using the current MOR/USD rate.
+
+For a flat-rate (subscription) upstream:
+
+```
+upstream_$_per_second ≈ subscription_$_per_month / (utilized_seconds_per_month)
+```
+
+You should `pricePerSecond ≥ upstream_$_per_second + your_margin + risk_buffer`.
+
+## Floor and minimums
+
+| Item | Value |
+|------|-------|
+| `bidPricePerSecondMin` | `10000000000` wei (`0.00000001` MOR/sec) |
+| Marketplace bid fee (paid once) | `0.3` MOR |
+| Provider stake (refundable) | `0.2` MOR (or `10000` MOR for subnet) |
+| Model stake (refundable) | `0.1` MOR |
+
+You **cannot** post below the floor. There is no upper limit, but consumer rating algorithms will skip you if you're far above other providers serving the same model.
+
+## A worked example
+
+Suppose Venice Diem costs you `$30/mo` and you expect ~`100k` seconds of utilized inference per month:
+
+```
+$/sec = 30 / 100000  ≈  0.0003 USD/sec
+```
+
+If `1 MOR ≈ $X` (check live), then `MOR/sec ≈ 0.0003 / X`. Add a `~30%` margin for headroom.
+
+## Iterating on pricing
+
+- Watch your bid acceptance rate. If you get no sessions, you may be priced too high.
+- Watch upstream margin. If sessions cost more upstream than they bring in MOR, raise pricing or reduce concurrency.
+- Look at competing bids on [active.mor.org](https://active.mor.org).
+
+## Updating an existing bid
+
+Bids are immutable on chain — to change pricing, **delete** the old bid (`DELETE /blockchain/bids/:id`) and post a new one. Plan for the bid fee on each post.
+
+## Risk hygiene
+
+- Keep a small ETH balance for gas; running out mid-session is bad UX.
+- Keep extra MOR allowance approved to the Diamond contract so re-posting bids doesn't fail mid-month.
+- For multi-model resale, post one bid per `modelId` — the proxy-router routes by `modelId` deterministically.

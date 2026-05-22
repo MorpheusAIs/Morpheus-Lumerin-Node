@@ -1,0 +1,73 @@
+---
+title: "Docker (consumer)"
+description: "Run a consumer-side proxy-router in Docker. The MorpheusUI Electron app is not containerized; pair this with the desktop UI or hit the API directly."
+audience: ["consumer", "developer"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+---
+
+The proxy-router itself is published as a Docker image at `ghcr.io/morpheusais/morpheus-lumerin-node`. As a **consumer** you typically run it locally next to MorpheusUI or call its HTTP API directly. The container exposes the same `:8082` admin/API and `:3333` proxy ports.
+
+## Quickstart
+
+<Note>
+For provider-side Docker (with model registration, public `:3333`, etc.), see [Provider Docker](/providers/full/proxy-router-docker). The two flows share the same image and 90% of the configuration.
+</Note>
+
+<Steps>
+  <Step title="Prepare a data dir and .env">
+    Create a host directory you will mount into the container:
+    ```bash
+    mkdir -p ~/morpheus-data
+    cd ~/morpheus-data
+    cat > proxy-router.env <<'EOF'
+    AUTH_CONFIG_FILE_PATH=/app/data/proxy.conf
+    COOKIE_FILE_PATH=/app/data/.cookie
+    RATING_CONFIG_PATH=/app/data/rating-config.json
+    PROXY_STORAGE_PATH=/app/data/data
+    MODELS_CONFIG_PATH=/app/data/models-config.json
+    ETH_NODE_CHAIN_ID=8453
+    BLOCKSCOUT_API_URL=https://base.blockscout.com/api/v2
+    DIAMOND_CONTRACT_ADDRESS=0x6aBE1d282f72B474E54527D93b979A4f64d3030a
+    MOR_TOKEN_ADDRESS=0x7431aDa8a591C955a994a21710752EF9b882b8e3
+    WALLET_PRIVATE_KEY=<your_consumer_wallet_private_key>
+    # Strongly recommended even for consumers — public round-robin fallback
+    # is rate-limited and unreliable; sessions can fail silently.
+    ETH_NODE_ADDRESS=https://base-mainnet.g.alchemy.com/v2/<your_alchemy_key>
+    ETH_NODE_USE_SUBSCRIPTIONS=false
+    PROXY_ADDRESS=0.0.0.0:3333
+    WEB_ADDRESS=0.0.0.0:8082
+    WEB_PUBLIC_URL=http://localhost:8082
+    EOF
+    ```
+  </Step>
+  <Step title="Run the container">
+    ```bash
+    docker run -d \
+      --name morpheus-proxy-consumer \
+      --env-file proxy-router.env \
+      -v ~/morpheus-data:/app/data \
+      -p 8082:8082 \
+      ghcr.io/morpheusais/morpheus-lumerin-node:latest
+    ```
+    The TCP `:3333` port is **not** required for consumers and can be omitted.
+  </Step>
+  <Step title="Validate">
+    ```bash
+    curl http://localhost:8082/healthcheck
+    ```
+    Open Swagger at `http://localhost:8082/swagger/index.html`.
+  </Step>
+</Steps>
+
+## Networks
+
+Switch to BASE Sepolia by replacing the four blockchain values in the `.env`. See [Networks and tokens](/get-started/networks-and-tokens).
+
+## Pairing with MorpheusUI
+
+If you also want the desktop UI, run the packaged release as in [macOS](/consumers/install/macos) / [Windows](/consumers/install/windows) / [Linux](/consumers/install/linux), but stop the bundled proxy-router and point `PROXY_WEB_URL` (in MorpheusUI's `.env`) at your container's `http://localhost:8082`.
+
+## Direct API use
+
+You can skip the UI entirely. See [API direct](/reference/api-direct) for a curl-only walkthrough that opens a session and streams chat completions.

@@ -1,0 +1,52 @@
+---
+title: "Model setup (backend LLM)"
+description: "Stand up the actual AI model that your provider proxy-router will route prompts to."
+audience: ["provider-full", "developer"]
+product: ["proxy-router"]
+last_verified: "v7.0.0"
+source: "docs/01-model-setup.md"
+---
+
+The Morpheus proxy-router does **not** run inference itself. It forwards prompts to whatever OpenAI-compatible HTTP endpoint you point it at via [`models-config.json`](/reference/models-config). That endpoint is your "backend LLM" or "model server."
+
+<Note>
+This page is intentionally short. Picking, sizing, and operating an inference engine is its own discipline; we link to the canonical references rather than maintaining our own.
+</Note>
+
+## Common backends
+
+<CardGroup cols={2}>
+  <Card title="llama.cpp / llama-server" icon="microchip" href="https://github.com/ggerganov/llama.cpp">
+    Single-binary CPU/GPU inference. Bundled in our local-only demo.
+  </Card>
+  <Card title="vLLM" icon="bolt" href="https://github.com/vllm-project/vllm">
+    Production-grade GPU serving with continuous batching.
+  </Card>
+  <Card title="Ollama" icon="boxes-stacked" href="https://ollama.com">
+    Easy local model server, `OpenAI`-compatible.
+  </Card>
+  <Card title="Hosted reseller" icon="cloud">
+    Front Venice / OpenAI / Anthropic via `apiUrl` + `apiKey` in `models-config.json`. See [Resale provider](/providers/resale/overview).
+  </Card>
+</CardGroup>
+
+## What the proxy-router needs from your backend
+
+- **OpenAI-compatible** route appropriate for the model type:
+  - LLM: `/v1/chat/completions`
+  - Embeddings: `/v1/embeddings`
+  - STT: `/v1/audio/transcriptions`
+  - TTS: `/v1/audio/speech`
+- A **stable, private URL** the proxy-router can reach (e.g. `http://10.0.0.5:8080/v1/chat/completions`).
+- Enough **concurrency** to satisfy the `concurrentSlots` you advertise in `models-config.json`.
+
+## Capacity recommendations
+
+There is no one-size-fits-all sizing — start by measuring on your own hardware. The [`tech.mor.org` calculators](https://tech.mor.org) help estimate revenue and tokens-per-second across hardware tiers; mirror summary at [tech.mor.org (mirror)](/ecosystem/tech-mor-org).
+
+## TEE backends
+
+For full Phase 2 attestation, the backend itself must run inside a SecretVM-style TEE that exposes attestation endpoints on `:29343` (`/cpu`, `/gpu`, `/docker-compose`). See:
+- [TEE overview](/concepts/tee-overview)
+- [TEE reference](/providers/full/tee-reference)
+- Backend-side developer notes: [`proxy-router/docs/tee-backend-verification.md`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/docs/tee-backend-verification.md)

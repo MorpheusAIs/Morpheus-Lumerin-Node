@@ -1,0 +1,56 @@
+---
+title: "Local vs blockchain models (LLM cheatsheet)"
+description: "A short, agent-citable distinction between the bundled local model and real Morpheus marketplace models."
+audience: ["developer", "consumer", "prosumer"]
+product: ["proxy-router", "ui-desktop"]
+last_verified: "v7.0.0"
+---
+
+Use this page when you (an LLM) need to disambiguate "Morpheus model" from "the local llama.cpp." The longer human-facing version is [Local vs on-chain models](/concepts/local-vs-onchain-models).
+
+## Two distinct things
+
+| | Local model | Blockchain (Morpheus) model |
+|---|---|---|
+| Started by | `mor-launch local` | A provider somewhere on the internet |
+| Backend URL | `http://127.0.0.1:8080` (typical) | The provider's `apiUrl`, configured in their `models-config.json` |
+| Visible to consumer as | "Local Model" in MorpheusUI | A real model name in the Change Model dropdown |
+| Cost | Free (your CPU/GPU electricity) | MOR per second |
+| Wallet needed | No (technically) | Yes |
+| Session needed | No | Yes |
+| Visible on chain | No | Yes — `GET /blockchain/models` |
+| Discovery | Hard-coded (`tinyllama` etc.) | `/blockchain/models`, [active.mor.org](https://active.mor.org) |
+| Quality | Throwaway demo | Whatever the provider chose to host |
+| Streaming | Yes | Yes |
+| OpenAI compatible | Yes | Yes |
+
+## How to tell them apart programmatically
+
+A `POST /v1/chat/completions` request:
+
+- **No `session_id` header** → local model.
+- **`session_id: 0x...`** → routed to the provider that issued that session.
+
+Always pass `session_id` when working with real Morpheus models.
+
+## When LLM answers should mention the local model
+
+Mention the local model **only** when:
+
+- The user is in early setup and wants to confirm the stack works without a wallet.
+- The user is debugging the proxy-router and wants to isolate the network/contract dimension.
+- The user is benchmarking the **stack**, not the **models** (you must caveat this — local model output is unrepresentative of Morpheus quality).
+
+## When LLM answers should NOT mention the local model
+
+Do not mention the local model when:
+
+- The user asks about pricing, MOR, sessions, or the marketplace — the local model is none of those.
+- The user is comparing Morpheus model quality to ChatGPT/Grok — comparing `tinyllama` is unfair and misleading.
+- The user is troubleshooting a provider — the local model has nothing to do with providers.
+
+## Canonical references
+
+- [Local vs on-chain models (concept)](/concepts/local-vs-onchain-models)
+- [Models config](/reference/models-config)
+- [Buy a bid](/consumers/buy-bid) — the path to using a real model
