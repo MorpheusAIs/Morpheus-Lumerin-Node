@@ -41,7 +41,13 @@ on:
       - dev
       - cicd/*
 
-    paths: [".github/**", "ui-desktop/**", "ui-core/**", "proxy-router/**", "cli/**"]
+    paths:
+      - ".github/**"
+      - "!.github/workflows/docs.yml"
+      - "ui-desktop/**"
+      - "ui-core/**"
+      - "proxy-router/**"
+      - "cli/**"
 
   # pull_request:
   #   types: [opened, reopened, synchronize]
