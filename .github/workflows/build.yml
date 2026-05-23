@@ -2,7 +2,9 @@ name: CI-CD
 # CI/CD Pipeline for Morpheus Lumerin Node
 # 
 # Branch Strategy:
-#   • dev: Build and test only (no deployment)
+#   • dev: Build-only (TEMPORARY): verify, tag, proxy-router docker test, CLI/router executables,
+#     and UI desktop artifacts uploaded to the workflow run — no GHCR push, TEE, release, or deploy.
+#     Revert dev push builds after test→main promotion is unblocked.
 #   • test: Build, test, and deploy to AWS DEV environment (Titan dev + Morpheus dev consumer node)
 #   • main: Build, test, create release, and deploy to AWS PRD environment (Titan lmn + Morpheus prd consumer/provider nodes)
 #
@@ -958,7 +960,7 @@ jobs:
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true') 
       )
     needs:
@@ -2199,7 +2201,7 @@ jobs:
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true')
       )
     runs-on: macos-latest
@@ -2207,7 +2209,8 @@ jobs:
       - Generate-Tag
       - Build-Service-Executables
     env:
-      SERVICE_PROXY_DOWNLOAD_URL_MAC_ARM64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/mac-arm64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
+      # Dev builds have no GitHub release; omit router download URL (test router from workflow artifacts).
+      SERVICE_PROXY_DOWNLOAD_URL_MAC_ARM64: ${{ github.ref != 'refs/heads/dev' && format('{0}/mac-arm64-morpheus-router-{1}', needs.Generate-Tag.outputs.artifacts_base_url, needs.Generate-Tag.outputs.vfull) || '' }}
     steps:
       - name: Clone
         id: checkout
@@ -2263,7 +2266,7 @@ jobs:
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true')
       )
     runs-on: ubuntu-22.04
@@ -2271,7 +2274,7 @@ jobs:
       - Generate-Tag
       - Build-Service-Executables
     env:
-      SERVICE_PROXY_DOWNLOAD_URL_LINUX_X64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/linux-x86_64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
+      SERVICE_PROXY_DOWNLOAD_URL_LINUX_X64: ${{ github.ref != 'refs/heads/dev' && format('{0}/linux-x86_64-morpheus-router-{1}', needs.Generate-Tag.outputs.artifacts_base_url, needs.Generate-Tag.outputs.vfull) || '' }}
     steps:
       - name: Clone
         id: checkout
@@ -2326,7 +2329,7 @@ jobs:
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true')
       )
     runs-on: ubuntu-22.04
@@ -2334,7 +2337,7 @@ jobs:
       - Generate-Tag
       - Build-Service-Executables
     env:
-      SERVICE_PROXY_DOWNLOAD_URL_LINUX_ARM64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/linux-arm64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
+      SERVICE_PROXY_DOWNLOAD_URL_LINUX_ARM64: ${{ github.ref != 'refs/heads/dev' && format('{0}/linux-arm64-morpheus-router-{1}', needs.Generate-Tag.outputs.artifacts_base_url, needs.Generate-Tag.outputs.vfull) || '' }}
     steps:
       - name: Clone
         id: checkout
@@ -2389,7 +2392,7 @@ jobs:
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true')
       )
     runs-on: macos-15-intel
@@ -2397,7 +2400,7 @@ jobs:
       - Generate-Tag
       - Build-Service-Executables
     env:
-      SERVICE_PROXY_DOWNLOAD_URL_MAC_X64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/mac-x64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}
+      SERVICE_PROXY_DOWNLOAD_URL_MAC_X64: ${{ github.ref != 'refs/heads/dev' && format('{0}/mac-x64-morpheus-router-{1}', needs.Generate-Tag.outputs.artifacts_base_url, needs.Generate-Tag.outputs.vfull) || '' }}
     steps:
       - name: Clone
         id: checkout
@@ -2453,7 +2456,7 @@ jobs:
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true')
       )
     runs-on: windows-latest
@@ -2461,7 +2464,7 @@ jobs:
       - Generate-Tag
       - Build-Service-Executables
     env:
-      SERVICE_PROXY_DOWNLOAD_URL_WINDOWS_X64: ${{ needs.Generate-Tag.outputs.artifacts_base_url }}/win-x64-morpheus-router-${{ needs.Generate-Tag.outputs.vfull }}.exe
+      SERVICE_PROXY_DOWNLOAD_URL_WINDOWS_X64: ${{ github.ref != 'refs/heads/dev' && format('{0}/win-x64-morpheus-router-{1}.exe', needs.Generate-Tag.outputs.artifacts_base_url, needs.Generate-Tag.outputs.vfull) || '' }}
     steps:
       - name: Clone
         id: checkout
