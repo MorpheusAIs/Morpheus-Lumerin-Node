@@ -1,7 +1,5 @@
 # Morpheus Lumerin Node
 
-### Take part in the Lumerin coding weight rewards!! [stake.mor.lumerin.io](https://stake.mor.lumerin.io/)
-
 ![Simple-Overview](docs/images/simple.png)
 
 The purpose of this software is to enable interaction with distributed, decentralized LLMs on the Morpheus network through a desktop chat experience.
@@ -11,22 +9,13 @@ The purpose of this software is to enable interaction with distributed, decentra
 > - **Phase 1** — *consumer → P-Node.* A consumer proxy-router (v6.0.0+) cryptographically verifies the provider's P-Node runs the exact official hardened `-tee` image inside a genuine Intel TDX SecretVM, with TLS pinning, at session open and on every prompt.
 > - **Phase 2 (new in v7)** — *P-Node → backend LLM.* The v7+ P-Node itself verifies the backend LLM it forwards inference to (CPU TDX quote, TLS pinning, workload RTMR3 replay of the backend's `docker-compose.yaml`, CPU-GPU nonce binding, and NVIDIA NRAS GPU attestation) at startup and on every prompt.
 >
-> Because Phase 2 runs inside the attested P-Node, **any v6+ consumer is forward-compatible with a v7+ provider** and gains the Phase 2 guarantees automatically — no client-side upgrade required. See the new [TEE reference](docs/providers/full/tee-reference.mdx), the [SecretVM quickstart](docs/providers/full/secretvm-quickstart.mdx), and the developer reference at [proxy-router/docs/tee-backend-verification.md](proxy-router/docs/tee-backend-verification.md).
+> Because Phase 2 runs inside the attested P-Node, **any v6+ consumer is forward-compatible with a v7+ provider** and gains the Phase 2 guarantees automatically — no client-side upgrade required. See the [TEE reference](https://nodedocs.mor.org/providers/full/tee-reference), the [SecretVM quickstart](https://nodedocs.mor.org/providers/full/secretvm-quickstart), and the developer reference at [proxy-router/docs/tee-backend-verification.md](proxy-router/docs/tee-backend-verification.md).
 
 ## Documentation
 
-The canonical documentation is in **[`/docs`](docs/)** and is built with [Mintlify](https://mintlify.com). It replaces the previous `00-overview.md` / `02-*.md` / `04-*.md` / `99-troubleshooting.md` set of files; old paths still resolve via redirects in [`docs/docs.json`](docs/docs.json).
+The canonical documentation lives at **[nodedocs.mor.org](https://nodedocs.mor.org)**. Source files are in [`/docs`](docs/) and built with [Mintlify](https://mintlify.com). The site replaces the previous `00-overview.md` / `02-*.md` / `04-*.md` / `99-troubleshooting.md` set of files; old paths still resolve via redirects in [`docs/docs.json`](docs/docs.json).
 
-To preview the site locally:
-
-```bash
-npm i -g mint
-cd docs
-mint dev
-# open http://localhost:3000
-```
-
-The site is structured around **role-based journeys** (consumer / prosumer / provider tiers), with anti-hallucination [AI knowledge](docs/ai/) pages and curated mirrors of the broader [ecosystem](docs/ecosystem/) ([mor.org](https://mor.org), [tech.mor.org](https://tech.mor.org), [active.mor.org](https://active.mor.org), [MyProvider](https://myprovider.mor.org), [Everclaw](https://everclaw.xyz), [NodeNeo](https://nodeneo.io), [app.mor.org](https://app.mor.org)).
+The site is structured around **role-based journeys** (consumer / prosumer / provider tiers), with anti-hallucination [AI knowledge](https://nodedocs.mor.org/ai/myths) pages and curated mirrors of the broader [ecosystem](https://nodedocs.mor.org/ecosystem/overview) ([mor.org](https://mor.org), [tech.mor.org](https://tech.mor.org), [active.mor.org](https://active.mor.org), [MyProvider](https://myprovider.mor.org), [Everclaw](https://everclaw.xyz), [NodeNeo](https://nodeneo.io), [app.mor.org](https://app.mor.org)).
 
 ## What's in this repo
 
@@ -62,19 +51,19 @@ You will need both **MOR** (for stake / fees / session payment) and **ETH on BAS
 
 | Role | Start here |
 |------|-----------|
-| Consumer (chat) | [Consumer quickstart](docs/get-started/quickstart-consumer.mdx) |
-| Provider (host your own model) | [Provider quickstart](docs/get-started/quickstart-provider.mdx) |
-| TEE provider (SecretVM) | [SecretVM quickstart](docs/providers/full/secretvm-quickstart.mdx) |
-| Resale provider | [Resale overview](docs/providers/resale/overview.mdx) |
-| Prosumer / agent | [Prosumer overview](docs/prosumers/overview.mdx) |
-| Developer (API) | [API overview](docs/reference/api-overview.mdx) |
+| Consumer (chat) | [Consumer quickstart](https://nodedocs.mor.org/get-started/quickstart-consumer) |
+| Provider (host your own model) | [Provider quickstart](https://nodedocs.mor.org/get-started/quickstart-provider) |
+| TEE provider (SecretVM) | [SecretVM quickstart](https://nodedocs.mor.org/providers/full/secretvm-quickstart) |
+| Resale provider | [Resale overview](https://nodedocs.mor.org/providers/resale/overview) |
+| Prosumer / agent | [Prosumer overview](https://nodedocs.mor.org/prosumers/overview) |
+| Developer (API) | [API overview](https://nodedocs.mor.org/reference/api-overview) |
 
 ## For AI agents reading this repo
 
-Start with [`AGENTS.md`](AGENTS.md) and the curated [AI knowledge](docs/ai/) section. Key anti-hallucination pages:
+Start with [`AGENTS.md`](AGENTS.md), the site index at [`llms.txt`](https://nodedocs.mor.org/llms.txt) (full text corpus: [`llms-full.txt`](https://nodedocs.mor.org/llms-full.txt)), and the curated [AI knowledge](https://nodedocs.mor.org/ai/myths) section. Key anti-hallucination pages:
 
-- [Where is my MOR?](docs/ai/where-is-my-mor.mdx)
-- [Session states (open, close, recover)](docs/ai/session-states-open-close-recover.mdx)
-- [Why is my MOR locked in the contract?](docs/ai/why-locked-in-contract.mdx)
-- [Local vs blockchain models](docs/ai/local-vs-blockchain-models.mdx)
-- [LLM prompt cheatsheet](docs/ai/llm-prompt-cheatsheet.mdx)
+- [Where is my MOR?](https://nodedocs.mor.org/ai/where-is-my-mor)
+- [Session states (open, close, recover)](https://nodedocs.mor.org/ai/session-states-open-close-recover)
+- [Why is my MOR locked in the contract?](https://nodedocs.mor.org/ai/why-locked-in-contract)
+- [Local vs blockchain models](https://nodedocs.mor.org/ai/local-vs-blockchain-models)
+- [LLM prompt cheatsheet](https://nodedocs.mor.org/ai/llm-prompt-cheatsheet)
