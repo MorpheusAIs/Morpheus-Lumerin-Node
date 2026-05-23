@@ -2,7 +2,9 @@ name: CI-CD
 # CI/CD Pipeline for Morpheus Lumerin Node
 # 
 # Branch Strategy:
-#   • dev: Build and test only (no deployment)
+#   • dev: Build-only (TEMPORARY): verify, tag, proxy-router docker test, CLI/router executables,
+#     UI desktop builds, and GitHub pre-release (vX.Y.Z-dev) with router/CLI/UI assets — no GHCR,
+#     TEE, AWS, or SecretVM deploy. Revert after test→main promotion is unblocked.
 #   • test: Build, test, and deploy to AWS DEV environment (Titan dev + Morpheus dev consumer node)
 #   • main: Build, test, create release, and deploy to AWS PRD environment (Titan lmn + Morpheus prd consumer/provider nodes)
 #
@@ -958,7 +960,7 @@ jobs:
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true') 
       )
     needs:
@@ -2199,7 +2201,7 @@ jobs:
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true')
       )
     runs-on: macos-latest
@@ -2263,7 +2265,7 @@ jobs:
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true')
       )
     runs-on: ubuntu-22.04
@@ -2326,7 +2328,7 @@ jobs:
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true')
       )
     runs-on: ubuntu-22.04
@@ -2389,7 +2391,7 @@ jobs:
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true')
       )
     runs-on: macos-15-intel
@@ -2453,7 +2455,7 @@ jobs:
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
       (
-        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
+        (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true')
       )
     runs-on: windows-latest
@@ -2532,6 +2534,116 @@ jobs:
         with:
           path: ./ui-desktop/dist/win-x64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.exe
           name: win-x64-morpheus-app-${{ needs.Generate-Tag.outputs.vfull }}.exe
+
+  Dev-UI-Release:
+    name: Upload Dev Pre-release (desktop + CLI + router)
+    if: |
+      github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/dev'
+    needs:
+      - Generate-Tag
+      - Build-Service-Executables
+      - UI-macOS-latest-arm64
+      - UI-macOS-15-intel-x64
+      - UI-Ubuntu-22-x64
+      - UI-Ubuntu-22-arm64
+      - UI-Windows-avx2-x64
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Clone
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: ./artifact
+          merge-multiple: true
+
+      - name: Verify artifact contents
+        run: |
+          echo "🔍 Contents of ./artifact:"
+          ls -lh ./artifact
+
+      - name: Generate release notes
+        run: |
+          VERSION=${{ needs.Generate-Tag.outputs.vfull }}
+          TAG=${{ needs.Generate-Tag.outputs.tag_name }}
+
+          cat << RELEASE_NOTES > release_notes.md
+          ## Dev pre-release ($TAG)
+
+          Desktop, proxy-router, and CLI builds from the \`dev\` branch. No container or TEE assets in this release.
+
+          ### Desktop Application
+
+          | Platform | Download |
+          |----------|----------|
+          | **Windows** (x64) | [\`win-x64-morpheus-app-${VERSION}.exe\`](../../releases/download/${TAG}/win-x64-morpheus-app-${VERSION}.exe) |
+          | **macOS** (Apple Silicon) | [\`mac-arm64-morpheus-app-${VERSION}.dmg\`](../../releases/download/${TAG}/mac-arm64-morpheus-app-${VERSION}.dmg) |
+          | **macOS** (Intel) | [\`mac-x64-morpheus-app-${VERSION}.dmg\`](../../releases/download/${TAG}/mac-x64-morpheus-app-${VERSION}.dmg) |
+          | **Linux** (x64) | [\`linux-x86_64-morpheus-app-${VERSION}.AppImage\`](../../releases/download/${TAG}/linux-x86_64-morpheus-app-${VERSION}.AppImage) |
+          | **Linux** (ARM64) | [\`linux-arm64-morpheus-app-${VERSION}.AppImage\`](../../releases/download/${TAG}/linux-arm64-morpheus-app-${VERSION}.AppImage) |
+
+          ### Proxy Router
+
+          | Platform | Download |
+          |----------|----------|
+          | **Linux** (x64) | [\`linux-x86_64-morpheus-router-${VERSION}\`](../../releases/download/${TAG}/linux-x86_64-morpheus-router-${VERSION}) |
+          | **Linux** (ARM64) | [\`linux-arm64-morpheus-router-${VERSION}\`](../../releases/download/${TAG}/linux-arm64-morpheus-router-${VERSION}) |
+          | **macOS** (Apple Silicon) | [\`mac-arm64-morpheus-router-${VERSION}\`](../../releases/download/${TAG}/mac-arm64-morpheus-router-${VERSION}) |
+          | **macOS** (Intel) | [\`mac-x64-morpheus-router-${VERSION}\`](../../releases/download/${TAG}/mac-x64-morpheus-router-${VERSION}) |
+          | **Windows** (x64) | [\`win-x64-morpheus-router-${VERSION}.exe\`](../../releases/download/${TAG}/win-x64-morpheus-router-${VERSION}.exe) |
+
+          ### CLI
+
+          | Platform | Download |
+          |----------|----------|
+          | **Linux** (x64) | [\`linux-x86_64-morpheus-cli-${VERSION}\`](../../releases/download/${TAG}/linux-x86_64-morpheus-cli-${VERSION}) |
+          | **Linux** (ARM64) | [\`linux-arm64-morpheus-cli-${VERSION}\`](../../releases/download/${TAG}/linux-arm64-morpheus-cli-${VERSION}) |
+          | **macOS** (Apple Silicon) | [\`mac-arm64-morpheus-cli-${VERSION}\`](../../releases/download/${TAG}/mac-arm64-morpheus-cli-${VERSION}) |
+          | **macOS** (Intel) | [\`mac-x64-morpheus-cli-${VERSION}\`](../../releases/download/${TAG}/mac-x64-morpheus-cli-${VERSION}) |
+          | **Windows** (x64) | [\`win-x64-morpheus-cli-${VERSION}.exe\`](../../releases/download/${TAG}/win-x64-morpheus-cli-${VERSION}.exe) |
+
+          > Rolling alias: \`latest-dev\` git tag tracks the newest dev pre-release.
+          RELEASE_NOTES
+
+          echo "" >> release_notes.md
+          echo "---" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## Commit" >> release_notes.md
+          echo "" >> release_notes.md
+          git log -1 --pretty=format:"%B" ${{ github.sha }} >> release_notes.md
+          cat release_notes.md
+
+      - name: Create dev pre-release and upload assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          echo "📦 Creating dev pre-release $TAG..."
+          gh release create "$TAG" \
+            --title "Dev pre-release $TAG" \
+            --notes-file release_notes.md \
+            --prerelease \
+            ./artifact/*
+          echo "✅ Dev pre-release $TAG created with $(ls -1 ./artifact | wc -l) assets"
+
+      - name: Update latest-dev tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=${{ needs.Generate-Tag.outputs.tag_name }}
+          echo "🔄 Updating 'latest-dev' tag to point to $TAG..."
+          git push origin :refs/tags/latest-dev 2>/dev/null || true
+          git tag -f latest-dev
+          git push origin latest-dev
+          echo "✅ 'latest-dev' tag updated"
 
   UI-Release:
     name: Upload UI-Desktop Release
