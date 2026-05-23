@@ -60,10 +60,13 @@ You will need both **MOR** (for stake / fees / session payment) and **ETH on BAS
 
 ## For AI agents reading this repo
 
-Start with [`AGENTS.md`](AGENTS.md), the site index at [`llms.txt`](https://nodedocs.mor.org/llms.txt) (full text corpus: [`llms-full.txt`](https://nodedocs.mor.org/llms-full.txt)), and the curated [AI knowledge](https://nodedocs.mor.org/ai/myths) section. Key anti-hallucination pages:
+**Start with [`AGENTS.md`](AGENTS.md)** — hard rules, quick lookup tables, and ingestion instructions.
 
-- [Where is my MOR?](https://nodedocs.mor.org/ai/where-is-my-mor)
-- [Session states (open, close, recover)](https://nodedocs.mor.org/ai/session-states-open-close-recover)
-- [Why is my MOR locked in the contract?](https://nodedocs.mor.org/ai/why-locked-in-contract)
-- [Local vs blockchain models](https://nodedocs.mor.org/ai/local-vs-blockchain-models)
-- [LLM prompt cheatsheet](https://nodedocs.mor.org/ai/llm-prompt-cheatsheet)
+To load the full documentation corpus in one fetch:
+
+| Resource | URL | Use |
+|----------|-----|-----|
+| Full corpus (preferred) | [`llms-full.txt`](https://nodedocs.mor.org/llms-full.txt) | Complete markdown export — fetch this, do not scrape HTML pages |
+| Page index | [`llms.txt`](https://nodedocs.mor.org/llms.txt) | Titles, descriptions, and slugs for every page |
+
+Individual nodedocs page URLs are for human browsing and citation only. See `AGENTS.md` for priority reading slugs and anti-hallucination rules.
