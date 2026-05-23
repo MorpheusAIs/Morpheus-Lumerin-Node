@@ -1,10 +1,10 @@
 # CI/CD Supply-Chain Hardening for Morpheus Docker Images
 
-**Last updated:** 2026-04-29
+**Last updated:** 2026-05-23
 **First successful run (Phase 1a — signing):** [#22920492249](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/actions/runs/22920492249)
 **First end-to-end run (Phase 1b — deploy + verify):** [#22969993910](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/actions/runs/22969993910)
 
-> **v7.x release status (with AMD SEV-SNP).** The CI/CD hardening described here is the foundation that every downstream trust check depends on. Both **Phase 1c** (consumer-side proxy-router verification of the P-Node) and **Phase 2** (P-Node verifies its own backend LLM) have shipped on top of it — see [`TEE_Attestation_Architecture.md`](TEE_Attestation_Architecture.md) §7.4 and §7.7. **As of this release the pipeline now also publishes AMD SEV-SNP launch-digest goldens (one per portal template), pins SecretVM `v0.0.27-alpha.1` for both TDX and SEV rootfs, and bakes the proxy-router's privacy-sensitive `LOG_LEVEL_*` fields into the cosign-signed manifest's `baked_env` block.** The new SEV path mirrors the TDX one — Python compute script in CI (`compute-sev-measurement.py`) backed by the runtime Go source-of-truth (`sev_gctx.go`) with a parity test gating drift between the two.
+> **v7.x release status (with AMD SEV-SNP).** The CI/CD hardening described here is the foundation that every downstream trust check depends on. Both **Phase 1c** (consumer-side proxy-router verification of the P-Node) and **Phase 2** (P-Node verifies its own backend LLM) have shipped on top of it — see [`TEE_Attestation_Architecture.md`](TEE_Attestation_Architecture.md) §7.4 and §7.7. **As of this release the pipeline now also publishes AMD SEV-SNP launch-digest goldens (one per portal template), pins SecretVM `v0.0.26-beta.1` for both TDX and SEV rootfs, and bakes the proxy-router's privacy-sensitive `LOG_LEVEL_*` fields into the cosign-signed manifest's `baked_env` block.** The new SEV path mirrors the TDX one — Python compute script in CI (`compute-sev-measurement.py`) backed by the runtime Go source-of-truth (`sev_gctx.go`) with a parity test gating drift between the two.
 
 ---
 
@@ -104,11 +104,11 @@ This is the most important new artifact. It's a signed JSON document that record
   "dockerfile_tee_sha256": "sha256:30094e96...",
   "build": {
     "commit": "369e9027dc048b52003ca8abd4fbeb278196cba4",
-    "ref": "refs/heads/cicd/tee-sev-and-secretvm-v0.0.27",
+    "ref": "refs/heads/cicd/tee-sev-and-secretvm-v0.0.26",
     "workflow": "build.yml",
     "run_id": "22920492249",
     "run_url": "https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/actions/runs/22920492249",
-    "timestamp": "2026-04-29T15:00:00Z"
+    "timestamp": "2026-05-23T15:00:00Z"
   },
   "tee_platforms": ["intel-tdx", "amd-sev-snp"],
   "runtime_secrets_only": [
@@ -137,19 +137,19 @@ This is the most important new artifact. It's a signed JSON document that record
   "measurements": {
     "intel_tdx": {
       "rtmr3": "<96-char-hex — computed from sha256(compose) + sha256(rootfs)>",
-      "secretvm_release": "v0.0.27-alpha.1",
+      "secretvm_release": "v0.0.26-beta.1",
       "rootfs_variant": "rootfs-prod",
-      "rootfs_sha256": "<sha256 of rootfs-prod-v0.0.27-alpha.1-tdx.iso>",
+      "rootfs_sha256": "<sha256 of rootfs-prod-v0.0.26-beta.1-tdx.iso>",
       "note": "RTMR3 measures (compose + rootfs); template-independent. RTMR0-2 verified at runtime via SecretVM TDX artifact registry lookup."
     },
     "amd_sev_snp": {
       "vcpu_type": "EPYC",
       "vm_type": "prod",
-      "secretvm_release": "v0.0.27-alpha.1",
-      "rootfs_sha256": "<sha256 of rootfs-prod-v0.0.27-alpha.1-sev.iso>",
-      "kernel_hash":   "<sha256 of bzImage-v0.0.27-alpha.1-sev>",
-      "initrd_hash":   "<sha256 of initramfs-v0.0.27-alpha.1-sev.cpio.gz>",
-      "ovmf_hash":     "<sha384 of ovmf-v0.0.27-alpha.1-sev.fd, registry value>",
+      "secretvm_release": "v0.0.26-beta.1",
+      "rootfs_sha256": "<sha256 of rootfs-prod-v0.0.26-beta.1-sev.iso>",
+      "kernel_hash":   "<sha256 of bzImage-v0.0.26-beta.1-sev>",
+      "initrd_hash":   "<sha256 of initramfs-v0.0.26-beta.1-sev.cpio.gz>",
+      "ovmf_hash":     "<sha384 of ovmf-v0.0.26-beta.1-sev.fd, registry value>",
       "kernel_cmdline": "console=ttyS0 loglevel=7 docker_compose_hash=<...> rootfs_hash=<...>",
       "artifact_registry": {
         "url": "https://raw.githubusercontent.com/scrtlabs/secretvm-verify/main/artifacts_registry/sev.json",
@@ -300,10 +300,10 @@ This CI/CD hardening is the **foundation layer** for the full TEE attestation lo
 | File | Change |
 |---|---|
 | `.github/workflows/build.yml` | Cosign signing, digest capture, SBOM, attestation manifest, RTMR3 computation, **SEV-SNP measurement compute (per template) + SEV registry fetch + baked-loglevel extraction with privacy hard-fail**, auto-deploy, and post-deploy verification. Also: GitHub Actions upgraded to Node 24-compatible versions, Go version updated to 1.25.x. |
-| `.github/tee/secretvm.env` | Pins SecretVM release version (currently `v0.0.27-alpha.1`), rootfs variant (`rootfs-prod`), **TDX rootfs URL/SHA-256 AND SEV rootfs URL/SHA-256, plus the SEV artifact registry URL and registry vm_type**. All pipeline rootfs references derive from this file. |
+| `.github/tee/secretvm.env` | Pins SecretVM release version (currently `v0.0.26-beta.1`), rootfs variant (`rootfs-prod`), **TDX rootfs URL/SHA-256 AND SEV rootfs URL/SHA-256, plus the SEV artifact registry URL and registry vm_type**. All pipeline rootfs references derive from this file. |
 | `proxy-router/scripts/compute-rtmr3.py` | Standalone RTMR3 computation script matching the `reproduce-mr` algorithm. Can be run locally for independent verification. |
 | `proxy-router/scripts/compute-sev-measurement.py` | **NEW** — Standalone SEV-SNP launch-digest computation script. Byte-for-byte port of `attestation/sev_gctx.go::CalcSevMeasurement`. Computes one measurement per vCPU template (small/medium/large/2xlarge/4xlarge). Parity-tested against the runtime Go via `internal/attestation/sev_python_parity_test.go`. |
-| `proxy-router/internal/attestation/sev_python_parity_test.go` | **NEW** — Hermetic regression guard: runs `compute-sev-measurement.py` as a subprocess against the v0.0.27-alpha.1 prod registry fixture and asserts byte-for-byte match against `CalcSevMeasurement` for all 5 templates. Skips gracefully when `python3` is unavailable. |
+| `proxy-router/internal/attestation/sev_python_parity_test.go` | **NEW** — Hermetic regression guard: runs `compute-sev-measurement.py` as a subprocess against the v0.0.26-beta.1 prod registry fixture and asserts byte-for-byte match against `CalcSevMeasurement` for all 5 templates. Skips gracefully when `python3` is unavailable. |
 | `proxy-router/internal/attestation/golden.go` | Renamed JSON tag `amd_sev` → `amd_sev_snp` to align with the manifest schema; added `SEVMeasurements.PerTemplate map[string]string`, `GoldenValues.SEVPerTemplate`, and the `MatchSEVMeasurement` helper that looks up the golden by template-keyed live measurement. |
 | `proxy-router/Dockerfile.tee` | Bakes immutable ENV config into the TEE image. Blockchain values are parameterized via `ARG` with mainnet defaults; overridden via `--build-arg` for testnet builds. **Logging values (`LOG_LEVEL_APP=info`, `LOG_LEVEL_TCP=warn`, `LOG_LEVEL_ETH_RPC=warn`, `LOG_LEVEL_STORAGE=warn`, plus `LOG_COLOR=false`, `LOG_JSON=true`, `LOG_IS_PROD=true`) are baked here and surfaced into the cosign-signed manifest's `baked_env` block — the privacy gate ensures the live TEE image cannot silently revert to `debug`-level app logging.** |
 | `proxy-router/docker-compose.tee.yml` | Canonical compose template for TEE deployment with 5 runtime secrets. |
@@ -345,11 +345,11 @@ This CI/CD hardening is the **foundation layer** for the full TEE attestation lo
 | **`GET /v1/models/attestation`** | Per-model attestation state endpoint for monitoring and forensics | **Done** — PR #699 |
 | **New env vars** | `TEE_PORTAL_URL`, `TEE_IMAGE_REPO`, `ARTIFACT_REGISTRY_URL`, `ARTIFACT_REGISTRY_REFRESH_INTERVAL` | **Done** — PR #699 |
 
-### Completed (this PR — SEV-SNP and v0.0.27-alpha.1 cutover)
+### Completed (this PR — SEV-SNP and v0.0.26-beta.1 cutover)
 
 | Step | Description | Status |
 |---|---|---|
-| **SecretVM `v0.0.27-alpha.1` pin** | TDX + SEV rootfs URLs and SHA-256s pinned in `.github/tee/secretvm.env` (the portal currently only allows new VM provisioning on this release) | **Done** |
+| **SecretVM `v0.0.26-beta.1` pin** | TDX + SEV rootfs URLs and SHA-256s pinned in `.github/tee/secretvm.env` (the portal currently only allows new VM provisioning on this release) | **Done** |
 | **SEV rootfs download + SHA-256 verify** | `Download SecretVM rootfs (TDX + SEV)` step pulls both ISOs; both fail-closed if the pinned SHA doesn't match | **Done** |
 | **SEV artifact registry fetch** | `Fetch SecretVM SEV artifact registry` step downloads `sev.json` from `scrtlabs/secretvm-verify` and records its SHA-256 in the manifest | **Done** |
 | **SEV measurement compute (5 templates)** | `Compute SEV-SNP measurement (per template)` step runs `compute-sev-measurement.py --all-templates` and emits per-template digests as job outputs | **Done** |
