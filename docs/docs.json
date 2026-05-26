@@ -3,12 +3,22 @@
   "theme": "mint",
   "name": "Morpheus Lumerin Node",
   "description": "The canonical Morpheus DeAI knowledge base for humans and AI agents. Curated, role-based docs covering consumers, prosumers, providers, the proxy-router API, TEE attestation, and the broader Morpheus ecosystem.",
-  "colors": {
-    "primary": "#7C3AED",
-    "light": "#A78BFA",
-    "dark": "#4C1D95"
+  "metadata": {
+    "og:site_name": "Morpheus Lumerin Node Documentation",
+    "og:title": "Morpheus Lumerin Node — Run a Morpheus consumer, prosumer, or provider node",
+    "og:description": "Official docs for the Morpheus Lumerin Node: install MorpheusUI, run the proxy-router, become a provider (full or resale), attest with TEE, and call the local OpenAI-compatible API.",
+    "og:url": "https://nodedocs.mor.org",
+    "twitter:title": "Morpheus Lumerin Node Documentation",
+    "twitter:description": "Install MorpheusUI, run the proxy-router, become a provider (full or resale), attest with TEE, and call the local OpenAI-compatible API.",
+    "twitter:site": "@morpheusais",
+    "keywords": "Morpheus, Lumerin, MOR token, proxy-router, MorpheusUI, decentralized AI, OpenAI compatible, TEE, SecretVM, provider, consumer, prosumer"
   },
-  "favicon": "/images/favicon.png",
+  "colors": {
+    "primary": "#16A34A",
+    "light": "#07C983",
+    "dark": "#15803D"
+  },
+  "favicon": "/favicon.svg",
   "navigation": {
     "tabs": [
       {
@@ -164,8 +174,8 @@
     }
   },
   "logo": {
-    "light": "/images/logo-light.png",
-    "dark": "/images/logo-dark.png",
+    "light": "/logo/Morpheus-white-bg.svg",
+    "dark": "/logo/Morpheus-black-bg.svg",
     "href": "/"
   },
   "navbar": {
@@ -269,7 +279,7 @@
     { "source": "/User-Compute-Note-Setup-via-AWS", "destination": "/providers/full/aws" }
   ],
   "contextual": {
-    "options": ["copy", "view", "chatgpt", "claude"]
+    "options": ["copy", "view", "mcp", "cursor", "chatgpt", "claude", "perplexity", "vscode"]
   },
   "seo": {
     "indexing": "navigable"
