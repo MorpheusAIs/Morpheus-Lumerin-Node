@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Build static docs site: mint export → postprocess (Pagefind + llms.txt).
+ * Build static docs site: mint export → postprocess (Pagefind navbar search + llms.txt).
  * Usage: SITE_URL=https://nodedocs.mor.org node scripts/build-site.mjs [outDir]
  */
 import { execSync } from "child_process";
