@@ -40,11 +40,13 @@ const pagefindSnippet = `
   #search-bar-entry-mobile {
     display: none !important;
   }
-  .nodedocs-navbar-search {
+  #nodedocs-pagefind-host {
     width: 100%;
     max-width: 36rem;
+    min-width: 12rem;
+    flex: 1 1 auto;
   }
-  .nodedocs-navbar-search pagefind-searchbox {
+  #nodedocs-pagefind-host pagefind-searchbox {
     display: block;
     width: 100%;
   }
@@ -52,36 +54,100 @@ const pagefindSnippet = `
 <script type="module">
   import "/pagefind/pagefind-component-ui.js";
 
-  function mountNavbarSearch() {
-    const desktopSlot =
-      document.getElementById("search-bar-entry")?.parentElement ??
-      document.querySelector("#navbar .justify-center");
+  /** Mintlify client-nav re-renders the navbar; re-mount when the slot is replaced. */
+  function findDesktopSlot() {
+    const entry = document.getElementById("search-bar-entry");
+    if (entry?.parentElement) return entry.parentElement;
+    return (
+      document.querySelector("#navbar .justify-center") ??
+      document.querySelector("header .justify-center")
+    );
+  }
 
-    if (desktopSlot && !desktopSlot.querySelector("pagefind-searchbox")) {
-      desktopSlot.innerHTML = "";
-      desktopSlot.classList.add("nodedocs-navbar-search");
-      const searchbox = document.createElement("pagefind-searchbox");
-      searchbox.setAttribute(
-        "placeholder",
-        "Search documentation…"
-      );
-      desktopSlot.appendChild(searchbox);
+  function ensurePagefindModal() {
+    if (!document.querySelector("pagefind-modal")) {
+      document.body.appendChild(document.createElement("pagefind-modal"));
+    }
+  }
+
+  function ensureDesktopSearchbox() {
+    const desktopSlot = findDesktopSlot();
+    if (!desktopSlot) return;
+
+    let host = desktopSlot.querySelector("#nodedocs-pagefind-host");
+    if (!host) {
+      host = document.createElement("div");
+      host.id = "nodedocs-pagefind-host";
+      desktopSlot.appendChild(host);
     }
 
+    if (!host.querySelector("pagefind-searchbox")) {
+      const searchbox = document.createElement("pagefind-searchbox");
+      searchbox.setAttribute("placeholder", "Search documentation…");
+      host.replaceChildren(searchbox);
+    }
+  }
+
+  function ensureMobileTrigger() {
     const mobileBtn = document.getElementById("search-bar-entry-mobile");
-    if (mobileBtn && !mobileBtn.dataset.pagefindReplaced) {
-      mobileBtn.dataset.pagefindReplaced = "true";
-      mobileBtn.style.display = "none";
+    if (!mobileBtn?.parentElement) return;
+
+    const slot = mobileBtn.parentElement;
+    if (!slot.querySelector("pagefind-modal-trigger")) {
       const trigger = document.createElement("pagefind-modal-trigger");
       trigger.setAttribute("aria-label", "Search documentation");
       mobileBtn.insertAdjacentElement("afterend", trigger);
     }
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", mountNavbarSearch);
-  } else {
+  function mountNavbarSearch() {
+    ensurePagefindModal();
+    ensureDesktopSearchbox();
+    ensureMobileTrigger();
+  }
+
+  let mountTimer;
+  function scheduleMountNavbarSearch() {
+    clearTimeout(mountTimer);
+    mountTimer = setTimeout(mountNavbarSearch, 50);
+  }
+
+  function watchNavbar() {
+    const navbar =
+      document.getElementById("navbar") ??
+      document.querySelector("header nav") ??
+      document.querySelector("header");
+    if (!navbar) return;
+
+    new MutationObserver(() => scheduleMountNavbarSearch()).observe(navbar, {
+      childList: true,
+      subtree: true,
+    });
+  }
+
+  function patchHistory() {
+    for (const method of ["pushState", "replaceState"]) {
+      const original = history[method].bind(history);
+      history[method] = function (...args) {
+        const result = original(...args);
+        scheduleMountNavbarSearch();
+        return result;
+      };
+    }
+    window.addEventListener("popstate", scheduleMountNavbarSearch);
+    window.addEventListener("pageshow", scheduleMountNavbarSearch);
+  }
+
+  function initPagefindNavbar() {
     mountNavbarSearch();
+    watchNavbar();
+    patchHistory();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initPagefindNavbar);
+  } else {
+    initPagefindNavbar();
   }
 </script>
 `;
