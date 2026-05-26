@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 /**
- * Post-process a mint export directory: Pagefind index + UI hook + llms.txt.
+ * Post-process a mint export directory: Pagefind index + navbar search + llms.txt.
+ *
+ * Mintlify's built-in search (docs.json "search") targets Mintlify Cloud and prompts
+ * for CLI login on self-hosted S3/CloudFront exports. We use Pagefind (static index)
+ * in the top navbar instead.
+ *
  * Usage: SITE_URL=https://nodedocs.mor.org node scripts/postprocess-export.mjs <siteDir>
  */
 import { execSync } from "child_process";
@@ -28,27 +33,62 @@ execSync(
 );
 
 const pagefindSnippet = `
-<link href="/pagefind/pagefind-ui.css" rel="stylesheet">
-<script src="/pagefind/pagefind-ui.js"></script>
-<script>
-  window.addEventListener("DOMContentLoaded", function () {
-    if (typeof PagefindUI === "undefined") return;
-    var mount = document.createElement("di" + "v");
-    mount.id = "pagefind-ui";
-    mount.style.cssText = "position:fixed;bottom:1rem;right:1rem;z-index:9999;max-width:420px;width:100%;";
-    document.body.appendChild(mount);
-    new PagefindUI({
-      element: "#pagefind-ui",
-      showSubResults: true,
-      resetStyles: false
-    });
-  });
+<link href="/pagefind/pagefind-component-ui.css" rel="stylesheet">
+<style>
+  /* Mintlify export still renders cloud-search buttons; we replace them with Pagefind. */
+  #search-bar-entry,
+  #search-bar-entry-mobile {
+    display: none !important;
+  }
+  .nodedocs-navbar-search {
+    width: 100%;
+    max-width: 36rem;
+  }
+  .nodedocs-navbar-search pagefind-searchbox {
+    display: block;
+    width: 100%;
+  }
+</style>
+<script type="module">
+  import "/pagefind/pagefind-component-ui.js";
+
+  function mountNavbarSearch() {
+    const desktopSlot =
+      document.getElementById("search-bar-entry")?.parentElement ??
+      document.querySelector("#navbar .justify-center");
+
+    if (desktopSlot && !desktopSlot.querySelector("pagefind-searchbox")) {
+      desktopSlot.innerHTML = "";
+      desktopSlot.classList.add("nodedocs-navbar-search");
+      const searchbox = document.createElement("pagefind-searchbox");
+      searchbox.setAttribute(
+        "placeholder",
+        "Search documentation…"
+      );
+      desktopSlot.appendChild(searchbox);
+    }
+
+    const mobileBtn = document.getElementById("search-bar-entry-mobile");
+    if (mobileBtn && !mobileBtn.dataset.pagefindReplaced) {
+      mobileBtn.dataset.pagefindReplaced = "true";
+      mobileBtn.style.display = "none";
+      const trigger = document.createElement("pagefind-modal-trigger");
+      trigger.setAttribute("aria-label", "Search documentation");
+      mobileBtn.insertAdjacentElement("afterend", trigger);
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", mountNavbarSearch);
+  } else {
+    mountNavbarSearch();
+  }
 </script>
 `;
 
 function injectPagefind(htmlPath) {
   let html = fs.readFileSync(htmlPath, "utf8");
-  if (html.includes("pagefind-ui.js")) return;
+  if (html.includes("pagefind-component-ui.js")) return;
   if (html.includes("</body>")) {
     html = html.replace("</body>", `${pagefindSnippet}\n</body>`);
     fs.writeFileSync(htmlPath, html);
@@ -66,7 +106,7 @@ function walkHtml(dir) {
   }
 }
 
-console.log("Injecting Pagefind UI…");
+console.log("Injecting Pagefind navbar search…");
 walkHtml(siteDir);
 
 console.log("Post-process complete.");
