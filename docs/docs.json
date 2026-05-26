@@ -253,9 +253,6 @@
       }
     ]
   },
-  "search": {
-    "prompt": "Ask anything about Morpheus, the proxy-router, sessions, or providers..."
-  },
   "redirects": [
     { "source": "/00-overview", "destination": "/concepts/architecture" },
     { "source": "/01-model-setup", "destination": "/providers/full/model-setup" },
