@@ -109,7 +109,7 @@ func TestIntegration_RytnLive(t *testing.T) {
 	}
 
 	// 6. Run full VerifyWorkload
-	result := VerifyWorkload(registry, cpuQuoteHex, string(composeBody), &lib.LoggerMock{})
+	result := VerifyWorkload(registry, nil, cpuQuoteHex, string(composeBody), &lib.LoggerMock{})
 	t.Logf("VerifyWorkload result: status=%s template=%s ver=%s env=%s", result.Status, result.TemplateName, result.ArtifactsVer, result.Env)
 
 	if result.Status != WorkloadAuthentic {
@@ -121,7 +121,7 @@ func TestIntegration_RytnLive(t *testing.T) {
 		if localErr == nil {
 			localHash := sha256.Sum256(localCompose)
 			t.Logf("Local rytn-docker-compose.yaml: %d bytes, sha256=%s", len(localCompose), hex.EncodeToString(localHash[:]))
-			localResult := VerifyWorkload(registry, cpuQuoteHex, string(localCompose), &lib.LoggerMock{})
+			localResult := VerifyWorkload(registry, nil, cpuQuoteHex, string(localCompose), &lib.LoggerMock{})
 			t.Logf("VerifyWorkload with local file: status=%s", localResult.Status)
 
 			if len(composeBody) != len(localCompose) {
@@ -182,7 +182,7 @@ func TestIntegration_RytnLocalFiles(t *testing.T) {
 		t.Logf("    calculated=%s quote=%s match=%v", calculated, fields.RTMR3, calculated == fields.RTMR3)
 	}
 
-	result := VerifyWorkload(registry, cpuQuoteHex, string(composeBytes), &lib.LoggerMock{})
+	result := VerifyWorkload(registry, nil, cpuQuoteHex, string(composeBytes), &lib.LoggerMock{})
 	t.Logf("Result: status=%s template=%s ver=%s env=%s", result.Status, result.TemplateName, result.ArtifactsVer, result.Env)
 
 	if result.Status != WorkloadAuthentic {
@@ -209,6 +209,7 @@ func TestIntegration_RytnBackendVerifier(t *testing.T) {
 		DefaultPortalURL,
 		&NoopGoldenSource{},
 		registry,
+		nil,
 		&lib.LoggerMock{},
 	)
 

@@ -447,6 +447,15 @@ jobs:
           source .github/tee/secretvm.env
           echo "release=$SECRETVM_RELEASE" >> $GITHUB_OUTPUT
           echo "rootfs_variant=$SECRETVM_ROOTFS_VARIANT" >> $GITHUB_OUTPUT
+          echo "rootfs_tdx_url=$SECRETVM_ROOTFS_TDX_URL" >> $GITHUB_OUTPUT
+          echo "rootfs_tdx_sha256=$SECRETVM_ROOTFS_TDX_SHA256" >> $GITHUB_OUTPUT
+          echo "rootfs_sev_url=${SECRETVM_ROOTFS_SEV_URL:-}" >> $GITHUB_OUTPUT
+          echo "rootfs_sev_sha256=${SECRETVM_ROOTFS_SEV_SHA256:-}" >> $GITHUB_OUTPUT
+          echo "sev_registry_url=${SECRETVM_SEV_REGISTRY_URL:-https://raw.githubusercontent.com/scrtlabs/secretvm-verify/main/artifacts_registry/sev.json}" >> $GITHUB_OUTPUT
+          echo "sev_registry_vm_type=${SECRETVM_SEV_REGISTRY_VM_TYPE:-prod}" >> $GITHUB_OUTPUT
+          echo "sev_registry_artifacts_ver=${SECRETVM_SEV_REGISTRY_ARTIFACTS_VER:-$SECRETVM_RELEASE}" >> $GITHUB_OUTPUT
+
+          # legacy aliases retained so older steps continue to compile
           echo "rootfs_url=$SECRETVM_ROOTFS_TDX_URL" >> $GITHUB_OUTPUT
           echo "rootfs_sha256=$SECRETVM_ROOTFS_TDX_SHA256" >> $GITHUB_OUTPUT
 
@@ -455,28 +464,48 @@ jobs:
         uses: actions/cache@v5
         with:
           path: /tmp/secretvm-artifacts
-          key: secretvm-${{ steps.secretvm-config.outputs.release }}-${{ steps.secretvm-config.outputs.rootfs_variant }}
+          key: secretvm-${{ steps.secretvm-config.outputs.release }}-${{ steps.secretvm-config.outputs.rootfs_variant }}-tdx-sev
 
-      - name: Download SecretVM rootfs
+      - name: Download SecretVM rootfs (TDX + SEV)
         if: steps.cache-rootfs.outputs.cache-hit != 'true'
         run: |
           mkdir -p /tmp/secretvm-artifacts
-          echo "⬇️  Downloading SecretVM rootfs (${{ steps.secretvm-config.outputs.release }})..."
-          ROOTFS_FILE="/tmp/secretvm-artifacts/${{ steps.secretvm-config.outputs.rootfs_variant }}.iso"
-          curl -L --retry 3 --retry-delay 5 -o "$ROOTFS_FILE" \
-            "${{ steps.secretvm-config.outputs.rootfs_url }}"
-          
-          ACTUAL_SHA=$(sha256sum "$ROOTFS_FILE" | cut -d' ' -f1)
-          EXPECTED_SHA="${{ steps.secretvm-config.outputs.rootfs_sha256 }}"
-          
-          if [ -n "$EXPECTED_SHA" ]; then
-            echo "$EXPECTED_SHA  $ROOTFS_FILE" | sha256sum -c -
-            echo "✅ SecretVM rootfs downloaded and verified" >> $GITHUB_STEP_SUMMARY
+
+          echo "⬇️  Downloading SecretVM TDX rootfs (${{ steps.secretvm-config.outputs.release }})..."
+          TDX_FILE="/tmp/secretvm-artifacts/${{ steps.secretvm-config.outputs.rootfs_variant }}-tdx.iso"
+          curl -L --retry 3 --retry-delay 5 -o "$TDX_FILE" \
+            "${{ steps.secretvm-config.outputs.rootfs_tdx_url }}"
+
+          TDX_ACTUAL_SHA=$(sha256sum "$TDX_FILE" | cut -d' ' -f1)
+          TDX_EXPECTED_SHA="${{ steps.secretvm-config.outputs.rootfs_tdx_sha256 }}"
+          if [ -n "$TDX_EXPECTED_SHA" ]; then
+            echo "$TDX_EXPECTED_SHA  $TDX_FILE" | sha256sum -c -
+            echo "✅ SecretVM TDX rootfs downloaded and verified" >> $GITHUB_STEP_SUMMARY
           else
-            echo "⚠️  No expected SHA256 configured — rootfs hash: \`$ACTUAL_SHA\`" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️  No expected SHA256 configured — TDX rootfs hash: \`$TDX_ACTUAL_SHA\`" >> $GITHUB_STEP_SUMMARY
             echo "   PIN THIS in .github/tee/secretvm.env as SECRETVM_ROOTFS_TDX_SHA256" >> $GITHUB_STEP_SUMMARY
           fi
-          echo "   rootfs sha256: \`$ACTUAL_SHA\`" >> $GITHUB_STEP_SUMMARY
+          echo "   TDX rootfs sha256: \`$TDX_ACTUAL_SHA\`" >> $GITHUB_STEP_SUMMARY
+
+          if [ -n "${{ steps.secretvm-config.outputs.rootfs_sev_url }}" ]; then
+            echo "⬇️  Downloading SecretVM SEV rootfs (${{ steps.secretvm-config.outputs.release }})..."
+            SEV_FILE="/tmp/secretvm-artifacts/${{ steps.secretvm-config.outputs.rootfs_variant }}-sev.iso"
+            curl -L --retry 3 --retry-delay 5 -o "$SEV_FILE" \
+              "${{ steps.secretvm-config.outputs.rootfs_sev_url }}"
+
+            SEV_ACTUAL_SHA=$(sha256sum "$SEV_FILE" | cut -d' ' -f1)
+            SEV_EXPECTED_SHA="${{ steps.secretvm-config.outputs.rootfs_sev_sha256 }}"
+            if [ -n "$SEV_EXPECTED_SHA" ]; then
+              echo "$SEV_EXPECTED_SHA  $SEV_FILE" | sha256sum -c -
+              echo "✅ SecretVM SEV rootfs downloaded and verified" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "⚠️  No expected SHA256 configured — SEV rootfs hash: \`$SEV_ACTUAL_SHA\`" >> $GITHUB_STEP_SUMMARY
+              echo "   PIN THIS in .github/tee/secretvm.env as SECRETVM_ROOTFS_SEV_SHA256" >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "   SEV rootfs sha256: \`$SEV_ACTUAL_SHA\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "ℹ️  SEV rootfs URL not configured — skipping SEV download" >> $GITHUB_STEP_SUMMARY
+          fi
 
       - name: Generate deployed compose with immutable digest
         id: generate-compose
@@ -500,20 +529,84 @@ jobs:
       - name: Compute RTMR3 (Intel TDX)
         id: compute-rtmr3
         run: |
-          ROOTFS_FILE="/tmp/secretvm-artifacts/${{ steps.secretvm-config.outputs.rootfs_variant }}.iso"
+          ROOTFS_FILE="/tmp/secretvm-artifacts/${{ steps.secretvm-config.outputs.rootfs_variant }}-tdx.iso"
           RTMR3=$(python3 proxy-router/scripts/compute-rtmr3.py \
             /tmp/docker-compose.tee.deployed.yml \
             "$ROOTFS_FILE" \
             --json)
-          
+
           RTMR3_HEX=$(echo "$RTMR3" | python3 -c "import sys,json; print(json.load(sys.stdin)['rtmr3'])")
           COMPOSE_HASH=$(echo "$RTMR3" | python3 -c "import sys,json; print(json.load(sys.stdin)['compose_sha256'])")
           ROOTFS_HASH=$(echo "$RTMR3" | python3 -c "import sys,json; print(json.load(sys.stdin)['rootfs_sha256'])")
-          
+
           echo "rtmr3=$RTMR3_HEX" >> $GITHUB_OUTPUT
           echo "🔐 Expected RTMR3: \`$RTMR3_HEX\`" >> $GITHUB_STEP_SUMMARY
           echo "   compose sha256: \`$COMPOSE_HASH\`" >> $GITHUB_STEP_SUMMARY
           echo "   rootfs sha256:  \`$ROOTFS_HASH\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Fetch SecretVM SEV artifact registry
+        id: sev-registry
+        if: steps.secretvm-config.outputs.rootfs_sev_url != ''
+        run: |
+          REGISTRY_URL="${{ steps.secretvm-config.outputs.sev_registry_url }}"
+          REGISTRY_FILE="/tmp/secretvm-artifacts/sev.json"
+          echo "⬇️  Fetching SEV artifact registry from $REGISTRY_URL..."
+          curl -L --retry 3 --retry-delay 5 -o "$REGISTRY_FILE" "$REGISTRY_URL"
+          REGISTRY_SHA=$(sha256sum "$REGISTRY_FILE" | cut -d' ' -f1)
+          echo "registry_path=$REGISTRY_FILE" >> $GITHUB_OUTPUT
+          echo "registry_sha256=$REGISTRY_SHA" >> $GITHUB_OUTPUT
+          echo "📋 SEV registry sha256: \`$REGISTRY_SHA\`" >> $GITHUB_STEP_SUMMARY
+          echo "   URL: \`$REGISTRY_URL\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Compute SEV-SNP measurement (per template)
+        id: compute-sev
+        if: steps.secretvm-config.outputs.rootfs_sev_url != ''
+        run: |
+          SEV_OUT=$(python3 proxy-router/scripts/compute-sev-measurement.py \
+            --registry "${{ steps.sev-registry.outputs.registry_path }}" \
+            --vm-type "${{ steps.secretvm-config.outputs.sev_registry_vm_type }}" \
+            --artifacts-ver "${{ steps.secretvm-config.outputs.sev_registry_artifacts_ver }}" \
+            --compose /tmp/docker-compose.tee.deployed.yml \
+            --all-templates --json)
+
+          # Persist the full JSON to a file so the manifest step can pull individual fields.
+          echo "$SEV_OUT" > /tmp/sev-measurements.json
+
+          SMALL=$(  echo "$SEV_OUT" | python3 -c "import sys,json; print(json.load(sys.stdin)['per_template']['small'])")
+          MEDIUM=$( echo "$SEV_OUT" | python3 -c "import sys,json; print(json.load(sys.stdin)['per_template']['medium'])")
+          LARGE=$(  echo "$SEV_OUT" | python3 -c "import sys,json; print(json.load(sys.stdin)['per_template']['large'])")
+          XL2=$(    echo "$SEV_OUT" | python3 -c "import sys,json; print(json.load(sys.stdin)['per_template']['2xlarge'])")
+          XL4=$(    echo "$SEV_OUT" | python3 -c "import sys,json; print(json.load(sys.stdin)['per_template']['4xlarge'])")
+
+          echo "sev_measurement_small=$SMALL"     >> $GITHUB_OUTPUT
+          echo "sev_measurement_medium=$MEDIUM"   >> $GITHUB_OUTPUT
+          echo "sev_measurement_large=$LARGE"     >> $GITHUB_OUTPUT
+          echo "sev_measurement_2xlarge=$XL2"     >> $GITHUB_OUTPUT
+          echo "sev_measurement_4xlarge=$XL4"     >> $GITHUB_OUTPUT
+
+          KERNEL_HASH=$(echo "$SEV_OUT" | python3 -c "import sys,json; print(json.load(sys.stdin)['kernel_hash'])")
+          INITRD_HASH=$(echo "$SEV_OUT" | python3 -c "import sys,json; print(json.load(sys.stdin)['initrd_hash'])")
+          OVMF_HASH=$(  echo "$SEV_OUT" | python3 -c "import sys,json; print(json.load(sys.stdin)['ovmf_hash'])")
+          ROOTFS_SHA=$( echo "$SEV_OUT" | python3 -c "import sys,json; print(json.load(sys.stdin)['rootfs_hash'])")
+          CMDLINE=$(    echo "$SEV_OUT" | python3 -c "import sys,json; print(json.load(sys.stdin)['kernel_cmdline'])")
+
+          echo "sev_kernel_hash=$KERNEL_HASH"     >> $GITHUB_OUTPUT
+          echo "sev_initrd_hash=$INITRD_HASH"     >> $GITHUB_OUTPUT
+          echo "sev_ovmf_hash=$OVMF_HASH"         >> $GITHUB_OUTPUT
+          echo "sev_rootfs_sha256=$ROOTFS_SHA"    >> $GITHUB_OUTPUT
+          echo "sev_kernel_cmdline=$CMDLINE"      >> $GITHUB_OUTPUT
+
+          echo "🔐 Expected SEV-SNP measurement (per template):" >> $GITHUB_STEP_SUMMARY
+          echo "   small   (1 vCPU):  \`$SMALL\`" >> $GITHUB_STEP_SUMMARY
+          echo "   medium  (2 vCPU):  \`$MEDIUM\`" >> $GITHUB_STEP_SUMMARY
+          echo "   large   (4 vCPU):  \`$LARGE\`" >> $GITHUB_STEP_SUMMARY
+          echo "   2xlarge (8 vCPU):  \`$XL2\`" >> $GITHUB_STEP_SUMMARY
+          echo "   4xlarge (16 vCPU): \`$XL4\`" >> $GITHUB_STEP_SUMMARY
+          echo "   kernel sha256:  \`$KERNEL_HASH\`" >> $GITHUB_STEP_SUMMARY
+          echo "   initrd sha256:  \`$INITRD_HASH\`" >> $GITHUB_STEP_SUMMARY
+          echo "   ovmf sha384:    \`$OVMF_HASH\`" >> $GITHUB_STEP_SUMMARY
+          echo "   rootfs sha256:  \`$ROOTFS_SHA\`" >> $GITHUB_STEP_SUMMARY
+          echo "   cmdline:        \`$CMDLINE\`" >> $GITHUB_STEP_SUMMARY
 
       - name: Generate and attach SBOM
         run: |
@@ -523,6 +616,50 @@ jobs:
           syft "$TEE_IMAGE@$DIGEST" -o spdx-json=sbom-tee.spdx.json
           cosign attach sbom --sbom sbom-tee.spdx.json "$TEE_IMAGE@$DIGEST"
           echo "📦 SBOM generated and attached to TEE image" >> $GITHUB_STEP_SUMMARY
+
+      - name: Extract baked log levels from Dockerfile.tee
+        id: baked-loglevels
+        run: |
+          # Pin the manifest's baked_env LOG_LEVEL_* fields to whatever Dockerfile.tee bakes in.
+          # This guarantees the published attestation reflects the *actual* image contents and
+          # demonstrates that we are not running with debug-level logging in production
+          # (privacy concern: debug-level app logs could expose request/prompt payloads).
+          DF=proxy-router/Dockerfile.tee
+          extract() {
+            grep -E "^ENV $1=" "$DF" | head -n1 | sed -E "s/^ENV $1=//; s/[[:space:]]+$//"
+          }
+          LOG_LEVEL_APP=$(extract LOG_LEVEL_APP)
+          LOG_LEVEL_TCP=$(extract LOG_LEVEL_TCP)
+          LOG_LEVEL_ETH_RPC=$(extract LOG_LEVEL_ETH_RPC)
+          LOG_LEVEL_STORAGE=$(extract LOG_LEVEL_STORAGE)
+          LOG_COLOR=$(extract LOG_COLOR)
+          LOG_JSON=$(extract LOG_JSON)
+          LOG_IS_PROD=$(extract LOG_IS_PROD)
+
+          # Hard fail if the privacy-critical ones are missing or set to debug.
+          for var in LOG_LEVEL_APP LOG_LEVEL_TCP LOG_LEVEL_ETH_RPC LOG_LEVEL_STORAGE; do
+            val=$(eval echo \${$var})
+            if [ -z "$val" ]; then
+              echo "❌ $var is not baked in Dockerfile.tee — refusing to publish manifest" >&2
+              exit 1
+            fi
+            if [ "$val" = "debug" ] && [ "$var" = "LOG_LEVEL_APP" ]; then
+              echo "❌ LOG_LEVEL_APP=debug in Dockerfile.tee — privacy violation, refusing to publish manifest" >&2
+              exit 1
+            fi
+          done
+
+          echo "log_level_app=$LOG_LEVEL_APP"           >> $GITHUB_OUTPUT
+          echo "log_level_tcp=$LOG_LEVEL_TCP"           >> $GITHUB_OUTPUT
+          echo "log_level_eth_rpc=$LOG_LEVEL_ETH_RPC"   >> $GITHUB_OUTPUT
+          echo "log_level_storage=$LOG_LEVEL_STORAGE"   >> $GITHUB_OUTPUT
+          echo "log_color=$LOG_COLOR"                   >> $GITHUB_OUTPUT
+          echo "log_json=$LOG_JSON"                     >> $GITHUB_OUTPUT
+          echo "log_is_prod=$LOG_IS_PROD"               >> $GITHUB_OUTPUT
+
+          echo "📝 Baked log levels:" >> $GITHUB_STEP_SUMMARY
+          echo "   LOG_LEVEL_APP=$LOG_LEVEL_APP, LOG_LEVEL_TCP=$LOG_LEVEL_TCP, LOG_LEVEL_ETH_RPC=$LOG_LEVEL_ETH_RPC, LOG_LEVEL_STORAGE=$LOG_LEVEL_STORAGE" >> $GITHUB_STEP_SUMMARY
+          echo "   LOG_COLOR=$LOG_COLOR, LOG_JSON=$LOG_JSON, LOG_IS_PROD=$LOG_IS_PROD" >> $GITHUB_STEP_SUMMARY
 
       - name: Generate TEE attestation manifest
         run: |
@@ -534,12 +671,53 @@ jobs:
           RTMR3=${{ steps.compute-rtmr3.outputs.rtmr3 }}
           SECRETVM_RELEASE=${{ steps.secretvm-config.outputs.release }}
           ROOTFS_VARIANT=${{ steps.secretvm-config.outputs.rootfs_variant }}
-          ROOTFS_SHA256=${{ steps.secretvm-config.outputs.rootfs_sha256 }}
-          
+          ROOTFS_TDX_SHA256=${{ steps.secretvm-config.outputs.rootfs_tdx_sha256 }}
+          ROOTFS_SEV_SHA256=${{ steps.secretvm-config.outputs.rootfs_sev_sha256 }}
+
           COMPOSE_SHA="sha256:$(sha256sum /tmp/docker-compose.tee.deployed.yml | cut -d' ' -f1)"
           DOCKERFILE_SHA="sha256:$(sha256sum proxy-router/Dockerfile.tee | cut -d' ' -f1)"
           TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          
+
+          # SEV section is conditional on having computed measurements.
+          # Build it as standalone JSON first, then inject via --argjson into the main manifest.
+          if [ -n "${{ steps.compute-sev.outputs.sev_measurement_small }}" ]; then
+            SEV_BLOCK_JSON=$(jq -n \
+              --arg vm_type "${{ steps.secretvm-config.outputs.sev_registry_vm_type }}" \
+              --arg secretvm_release "$SECRETVM_RELEASE" \
+              --arg rootfs "$ROOTFS_SEV_SHA256" \
+              --arg kernel "${{ steps.compute-sev.outputs.sev_kernel_hash }}" \
+              --arg initrd "${{ steps.compute-sev.outputs.sev_initrd_hash }}" \
+              --arg ovmf "${{ steps.compute-sev.outputs.sev_ovmf_hash }}" \
+              --arg cmdline "${{ steps.compute-sev.outputs.sev_kernel_cmdline }}" \
+              --arg registry_url "${{ steps.secretvm-config.outputs.sev_registry_url }}" \
+              --arg registry_sha "${{ steps.sev-registry.outputs.registry_sha256 }}" \
+              --arg small   "${{ steps.compute-sev.outputs.sev_measurement_small }}" \
+              --arg medium  "${{ steps.compute-sev.outputs.sev_measurement_medium }}" \
+              --arg large   "${{ steps.compute-sev.outputs.sev_measurement_large }}" \
+              --arg xl2     "${{ steps.compute-sev.outputs.sev_measurement_2xlarge }}" \
+              --arg xl4     "${{ steps.compute-sev.outputs.sev_measurement_4xlarge }}" \
+              '{
+                vcpu_type: "EPYC",
+                vm_type: $vm_type,
+                secretvm_release: $secretvm_release,
+                rootfs_sha256: $rootfs,
+                kernel_hash: $kernel,
+                initrd_hash: $initrd,
+                ovmf_hash: $ovmf,
+                kernel_cmdline: $cmdline,
+                artifact_registry: { url: $registry_url, sha256: $registry_sha },
+                per_template: {
+                  small:    $small,
+                  medium:   $medium,
+                  large:    $large,
+                  "2xlarge": $xl2,
+                  "4xlarge": $xl4
+                }
+              }')
+          else
+            SEV_BLOCK_JSON='{"note":"SEV measurement not computed in this run (rootfs URL not configured)"}'
+          fi
+
           jq -n \
             --arg tee_image "${TEE_IMAGE}@${TEE_DIGEST}" \
             --arg tee_image_tag "${TEE_IMAGE}:${BUILDTAG}" \
@@ -557,12 +735,20 @@ jobs:
             --arg rtmr3 "$RTMR3" \
             --arg secretvm_release "$SECRETVM_RELEASE" \
             --arg rootfs_variant "$ROOTFS_VARIANT" \
-            --arg rootfs_sha256 "$ROOTFS_SHA256" \
+            --arg rootfs_tdx_sha256 "$ROOTFS_TDX_SHA256" \
             --arg baked_network "${{ steps.network-config.outputs.network }}" \
             --arg baked_diamond "${{ steps.network-config.outputs.diamond_contract_address }}" \
             --arg baked_mor_token "${{ steps.network-config.outputs.mor_token_address }}" \
             --arg baked_blockscout "${{ steps.network-config.outputs.blockscout_api_url }}" \
             --arg baked_chain_id "${{ steps.network-config.outputs.eth_node_chain_id }}" \
+            --arg log_level_app "${{ steps.baked-loglevels.outputs.log_level_app }}" \
+            --arg log_level_tcp "${{ steps.baked-loglevels.outputs.log_level_tcp }}" \
+            --arg log_level_eth_rpc "${{ steps.baked-loglevels.outputs.log_level_eth_rpc }}" \
+            --arg log_level_storage "${{ steps.baked-loglevels.outputs.log_level_storage }}" \
+            --arg log_color "${{ steps.baked-loglevels.outputs.log_color }}" \
+            --arg log_json "${{ steps.baked-loglevels.outputs.log_json }}" \
+            --arg log_is_prod "${{ steps.baked-loglevels.outputs.log_is_prod }}" \
+            --argjson sev_block "$SEV_BLOCK_JSON" \
             '{
               tee_image: $tee_image,
               tee_image_tag: $tee_image_tag,
@@ -595,9 +781,13 @@ jobs:
                 BLOCKSCOUT_API_URL: $baked_blockscout,
                 ETH_NODE_CHAIN_ID: $baked_chain_id,
                 PROXY_STORE_CHAT_CONTEXT: "false",
-                LOG_COLOR: "false",
-                LOG_JSON: "true",
-                LOG_IS_PROD: "true",
+                LOG_COLOR: $log_color,
+                LOG_JSON: $log_json,
+                LOG_IS_PROD: $log_is_prod,
+                LOG_LEVEL_APP: $log_level_app,
+                LOG_LEVEL_TCP: $log_level_tcp,
+                LOG_LEVEL_ETH_RPC: $log_level_eth_rpc,
+                LOG_LEVEL_STORAGE: $log_level_storage,
                 ENVIRONMENT: "production"
               },
               measurements: {
@@ -605,15 +795,13 @@ jobs:
                   rtmr3: $rtmr3,
                   secretvm_release: $secretvm_release,
                   rootfs_variant: $rootfs_variant,
-                  rootfs_sha256: $rootfs_sha256,
-                  note: "RTMR0-2 require full reproduce-mr with firmware/kernel/templates (Phase 1b follow-up)"
+                  rootfs_sha256: $rootfs_tdx_sha256,
+                  note: "RTMR3 measures (compose + rootfs); template-independent. RTMR0-2 verified at runtime via SecretVM TDX artifact registry lookup."
                 },
-                amd_sev_snp: {
-                  note: "SEV measurement computation not yet integrated"
-                }
+                amd_sev_snp: $sev_block
               }
             }' > tee-attestation-manifest.json
-          
+
           echo "📋 TEE attestation manifest:" >> $GITHUB_STEP_SUMMARY
           echo '```json' >> $GITHUB_STEP_SUMMARY
           cat tee-attestation-manifest.json >> $GITHUB_STEP_SUMMARY

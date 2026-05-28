@@ -1,16 +1,17 @@
 # TEE Attestation Architecture — Verifiable Provider Compute
 
-**Status:** v2.0 — Full two-hop trust chain shipped. Phase 1 (consumer → P-Node) in v6.0.0+; Phase 2 (P-Node → backend LLM) in v7.0.0+.
-**Last updated:** 2026-04-22
+**Status:** v2.1 — Full two-hop trust chain shipped, AMD SEV-SNP added. Phase 1 (consumer → P-Node) in v6.0.0+; Phase 2 (P-Node → backend LLM) in v7.0.0+; SEV-SNP support in v7.x (PR #718, #720).
+**Last updated:** 2026-05-23
 
-> **Shipping summary (as of v7.0.0):**
+> **Shipping summary (as of v7.x with SEV-SNP):**
 > - **Phase 1a (CI/CD supply-chain hardening)** — DONE (v6.0.0)
-> - **Phase 1b (RTMR3 computation + automated deployment + post-deploy attestation)** — DONE (v6.0.0)
-> - **Phase 1c (proxy-router code: consumer verifies P-Node)** — DONE (v6.0.0, refined through v6.2.x)
-> - **Phase 2a (P-Node verifies backend LLM: CPU quote, TLS pinning, RTMR3 replay, CPU-GPU binding, NRAS)** — DONE (v7.0.0, PR #699 and follow-ups #700, #703/#704, #705, #708/#709)
+> - **Phase 1b (RTMR3 computation + automated deployment + post-deploy attestation)** — DONE (v6.0.0); **SecretVM release pin updated to `v0.0.26-beta.1`** (the only release the SecretVM portal currently accepts for *new* VM provisioning, 2026-05-23)
+> - **Phase 1c (proxy-router code: consumer verifies P-Node)** — DONE (v6.0.0, refined through v6.2.x); SEV-SNP path verifies via the dedicated `quote-parse-sev` portal endpoint and a per-template golden table (PR #718)
+> - **Phase 2a (P-Node verifies backend LLM: CPU quote, TLS pinning, RTMR3 replay for TDX *and* GCTX launch-digest replay for SEV, CPU-GPU binding, NRAS)** — DONE (v7.0.0; SEV branch added by PR #718, VMType fix in PR #720)
+> - **CI/CD SEV measurement signing** — DONE (this PR — SEV launch digest computed for all 5 portal templates and attached to the cosign-signed manifest, alongside baked log-level fields in `baked_env`)
 > - **Phase 2b (verifiable per-message signing, local quote verification, co-located CPU+GPU TDX VM)** — still future work
 >
-> The `tee` on-chain model tag is the single switch that turns on **both** hops: consumer-side P-Node verification (Phase 1) and P-Node-side backend verification (Phase 2). A v6.0.0+ consumer paired with a v7.0.0+ provider gets the full chain transparently with no client-side upgrade.
+> The `tee` on-chain model tag is the single switch that turns on **both** hops: consumer-side P-Node verification (Phase 1) and P-Node-side backend verification (Phase 2). A v6.0.0+ consumer paired with a v7.x+ provider gets the full chain transparently with no client-side upgrade. The new SEV branch is platform-transparent — the consumer auto-routes the quote to the TDX or SEV portal endpoint based on whether the bytes parse as a TDX hex quote or a SEV base64 quote.
 
 ---
 
@@ -35,8 +36,9 @@ A consumer node should be able to **cryptographically verify**, before sending a
 - SBOM generation and attachment (syft) — **DONE**
 - Signed TEE attestation manifest (Option 5B — stored in GHCR as OCI artifact) — **DONE**
 - Intel TDX RTMR3 computed in CI and published in the signed manifest — **DONE**
-- Auto-deploy to SecretVM test instance + post-deploy RTMR3 verification gate — **DONE**
-- AMD SEV-SNP measurement path — still TODO (blocked on upstream tooling)
+- Auto-deploy to SecretVM test instance + post-deploy RTMR3 verification gate — **DONE** (TDX-only; SEV auto-deploy is a follow-up — see §6.5)
+- AMD SEV-SNP measurement path — **DONE** (this PR; pre-computed for all 5 portal templates: small/medium/large/2xlarge/4xlarge — see §6.3)
+- Baked log-level pin in attestation manifest (`baked_env.LOG_LEVEL_*`) so consumers can verify privacy-sensitive log levels are not at debug — **DONE** (this PR)
 
 **Proxy-router code (consumer verifies P-Node):**
 - `IsTeeModel()` helper for on-chain tag detection — **DONE** (`blockchainapi/model_tags.go`)
@@ -67,8 +69,9 @@ A consumer node should be able to **cryptographically verify**, before sending a
 
 - On-chain oracle / DAO governance for golden-measurement updates (cosign keyless via GHA OIDC remains the signer)
 - Verifiable per-message signing using a TEE-bound key (§7.6) — slipped to Phase 2b
-- Local quote verification in Go (today we still call SCRT Labs `quote-parse`)
+- Local quote verification in Go (today we still call SCRT Labs `quote-parse` / `quote-parse-sev`)
 - Co-located proxy-router + LLM in a single TDX VM (would collapse both hops into one RTMR3)
+- Auto-deploy + RTMR3-style verification for an SEV test VM (TDX-only today; needs SEV-flavoured offsets and a separate `SECRETVM_TEST_SEV_VM_UUID`)
 - Rating system integration
 - CVE scanning gate
 
@@ -78,7 +81,7 @@ A consumer node should be able to **cryptographically verify**, before sending a
 |---|---|---|
 | 1 | Oracle governance | **Automated by CI/CD** — cosign keyless signing via GitHub Actions OIDC. No multi-sig/DAO for now. |
 | 2 | SCRT Labs coupling | **Yes, couple** — use their quote-parse API and `reproduce-mr` tool. They control the VM layer; we need their artifacts. See §3. |
-| 3 | AMD SEV support | **Both platforms from day one** if feasible; if `reproduce-mr` only handles TDX, compute what we can and extend for SEV in a fast follow. |
+| 3 | AMD SEV support | **Shipped (PR #718, #720).** Runtime path verifies SEV-SNP quotes via a dedicated portal endpoint (`quote-parse-sev`) and replays the launch digest in-process via the GCTX page-update chain (`sev_gctx.go::CalcSevMeasurement`) using the SCRT Labs SEV artifact registry. Pipeline pre-computes the launch digest for every SecretVM portal template (small/medium/large/2xlarge/4xlarge) and stores them in `measurements.amd_sev_snp.per_template` of the cosign-signed manifest — the per-template scheme is needed because the SEV measurement includes per-vCPU VMSA pages (TDX RTMR3 is template-independent). |
 | 4 | Model backend trust | **Closed in Phase 2 (v7.0.0).** Instead of co-locating, the P-Node actively verifies the backend LLM over the network: CPU quote + TLS pinning + RTMR3 replay of the backend's `docker-compose.yaml` + CPU-GPU nonce binding + NVIDIA NRAS. See §7.7. Co-location (single TDX VM for proxy-router + LLM) remains a future simplification that would collapse both hops into one measurement chain. |
 | 5 | RTMR computation in CI/CD | **Attempt to integrate** `reproduce-mr` using SCRT Labs release artifacts from GitHub. If not available in CI, publish all inputs so it can be run independently. |
 | 6 | Attestation freshness | **Version-based, not clock-based.** Support current version and N-2 prior versions. When a new version publishes, the oldest attestation manifest becomes stale. This is a release-cadence policy. |
@@ -95,11 +98,14 @@ We intentionally couple to SCRT Labs' infrastructure because they control the TE
 
 | Asset | Where | Purpose |
 |---|---|---|
-| **Quote parse API** | `POST https://pccs.scrtlabs.com/dcap-tools/quote-parse` | Parse Intel TDX / AMD SEV quotes into human-readable fields. Used by consumers for verification. |
+| **Quote parse API (TDX)** | `POST https://secretai.scrtlabs.com/api/quote-parse` | Parse Intel TDX quotes (hex) into human-readable fields. Default `TEE_PORTAL_URL`. |
+| **Quote parse API (SEV)** | `POST https://secretai.scrtlabs.com/api/quote-parse-sev` | Parse AMD SEV-SNP quotes (base64). Auto-derived from the TDX URL by `attestation/verifier.go::deriveSEVPortalURL` when the quote is detected as non-TDX. |
 | **Attestation portal** | `https://secretai.scrtlabs.com/attestation` | Web-based quick verification (paste compose + quote). Useful for manual spot-checks. |
-| **`reproduce-mr` tool** | [github.com/scrtlabs/reproduce-mr](https://github.com/scrtlabs/reproduce-mr) | Compute expected RTMR values (Intel TDX) from VM artifacts + docker-compose. Run in CI/CD. |
-| **`sev-snp-measure` tool** | [github.com/virtee/sev-snp-measure](https://github.com/virtee/sev-snp-measure) | Compute expected AMD SEV measurement. Run in CI/CD. |
-| **SecretVM build artifacts** | [github.com/scrtlabs/secret-vm-build/releases](https://github.com/scrtlabs/secret-vm-build/releases) | Firmware (ovmf.fd), kernel (bzImage), initramfs, rootfs — needed by `reproduce-mr`. |
+| **`reproduce-mr` tool** | [github.com/scrtlabs/reproduce-mr](https://github.com/scrtlabs/reproduce-mr) | Compute expected RTMR values (Intel TDX) from VM artifacts + docker-compose. CI uses our standalone Python port (`compute-rtmr3.py`) for the RTMR3-only subset. |
+| **SecretVM SEV verifier** | [github.com/scrtlabs/secretvm-verify](https://github.com/scrtlabs/secretvm-verify) | TypeScript reference verifier; the Go port lives at `proxy-router/internal/attestation/sev_*.go` (PR #718). The pipeline ports the GCTX algorithm to Python in `compute-sev-measurement.go`+`compute-sev-measurement.py` (kept in lockstep with the runtime Go via `sev_python_parity_test.go`). |
+| **SecretVM SEV artifact registry** | `https://raw.githubusercontent.com/scrtlabs/secretvm-verify/main/artifacts_registry/sev.json` | Per-release JSON listing kernel/initrd/ovmf hashes + OVMF section table for SEV measurement compute. The pipeline pulls the entry whose `(vm_type, artifacts_ver)` matches our `secretvm.env`. |
+| **SecretVM TDX artifact registry** | `https://raw.githubusercontent.com/scrtlabs/secretvm-verify/main/artifacts_registry/tdx.csv` | Per-release CSV used by the runtime BackendVerifier to look up MRTD + RTMR0-2 (which we don't recompute). |
+| **SecretVM build artifacts** | [github.com/scrtlabs/secret-vm-build/releases](https://github.com/scrtlabs/secret-vm-build/releases) | Firmware (ovmf.fd), kernel (bzImage), initramfs, rootfs — needed by `reproduce-mr` and SEV measurement compute. |
 | **Host attestation service** | `https://<vm-domain>:29343/cpu.html` | Returns the live attestation quote from a running SecretVM instance. Queried directly by the consumer — served by the TEE host, outside the application container. |
 | **Verifiable signing service** | `http://172.17.0.1:49153/sign` (internal only) | Signs messages with a TEE-bound key whose public key is embedded in attestation `reportdata`. Phase 2 feature. |
 | **SecretVM CLI** | `npm install --global secretvm-cli` / [CLI docs](https://docs.scrt.network/secret-network-documentation/secretvm-confidential-virtual-machines/secretvm-cli) | CLI tool for provisioning, managing, and monitoring SecretVM instances. Alternative to the web portal. |
@@ -154,7 +160,19 @@ The CLI is useful for automation and scripting — could be integrated into depl
 
 ### AMD SEV-SNP Difference
 
-AMD SEV-SNP produces a **single cumulative `measurement`** hash over the entire initial guest state. Both platforms are x86_64 — the same Docker image works on both, but the measurement format and computation tool differ.
+AMD SEV-SNP produces a **single cumulative `measurement`** hash (SHA-384) over the entire initial guest state — OVMF firmware, the SEV kernel-hashes table (which itself binds kernel + initrd + cmdline), and one VMSA page per vCPU. Both platforms are x86_64 — the same Docker image works on both, but the measurement format and computation tool differ.
+
+**TDX vs SEV measurement asymmetry that matters for the manifest:**
+
+| Aspect | Intel TDX | AMD SEV-SNP |
+|---|---|---|
+| Software-controlled register | RTMR3 only (RTMR0-2 + MRTD owned by SCRT Labs) | The single `measurement` field |
+| Inputs we control | `sha256(compose) + sha256(rootfs)` | Same compose + rootfs hashes appear inside the kernel cmdline (`docker_compose_hash=… rootfs_hash=…`), which is hashed into the SEV kernel-hashes table |
+| Template (vCPU count) sensitivity | **No** — RTMR3 is identical for small/medium/large | **Yes** — VMSA pages depend on vCPU count, so each portal size produces a different launch digest |
+| What we publish in the manifest | one `intel_tdx.rtmr3` value | a `amd_sev_snp.per_template` map: `{small, medium, large, 2xlarge, 4xlarge}` plus the inputs (kernel/initrd/ovmf/rootfs hashes, exact cmdline, registry URL+sha256) |
+| What the consumer compares against the live quote | RTMR3 byte-for-byte | the entry whose template matches the quote's `family_id` (encoded as `<vmType>-<template>-sev`); helper `attestation.GoldenValues.MatchSEVMeasurement` does this lookup |
+
+The runtime BackendVerifier (Phase 2) does NOT need the manifest to verify the backend's workload — it brute-forces the public SEV registry just like for TDX. The per-template manifest values exist for **Phase 1** (the consumer's pre-session check), where the consumer wants a CI/CD-signed golden to compare the freshly-attested provider against.
 
 ---
 
@@ -340,11 +358,11 @@ This is a **release cadence** concern, not a clock-based TTL. A version doesn't 
    - Can be run locally by providers/consumers for independent verification
 
 2. **SecretVM artifact config:** `.github/tee/secretvm.env`
-   - Pins SecretVM release version (`v0.0.25`) and rootfs variant (`rootfs-prod-tdx`)
-   - Pins rootfs URL and expected SHA-256 hash
-   - All pipeline references to rootfs filenames are derived from `SECRETVM_ROOTFS_VARIANT` — no hardcoded filenames in `build.yml`
-   - Separate entries for TDX / SEV / GPU variants (SEV/GPU commented out for now)
-   - **Important:** Always use the `prod` rootfs variant — SecretVM runs "environment prod" even for developer portal deployments
+   - Pins SecretVM release version (currently **`v0.0.26-beta.1`** — the only release the SecretVM portal accepts for *new* VM provisioning as of 2026-05-23) and rootfs variant base (`rootfs-prod`)
+   - Pins TDX **and** SEV rootfs URLs + their expected SHA-256 hashes
+   - Pins the SEV artifact registry URL (`SECRETVM_SEV_REGISTRY_URL`) and the registry vm_type (`SECRETVM_SEV_REGISTRY_VM_TYPE=prod`) — used by `compute-sev-measurement.py` to find the right entry
+   - All pipeline references to rootfs filenames are derived from `SECRETVM_ROOTFS_VARIANT` (no hardcoded filenames in `build.yml`); the platform suffix (`-tdx` / `-sev`) is appended at use site
+   - **Important:** Always use the `prod` rootfs variant — SecretVM runs "environment prod" even for developer portal deployments. Using `dev` produces a different rootfs hash → wrong measurement → verification fails.
 
 3. **Compose generation with immutable digest reference:**
    - The repo's `docker-compose.tee.yml` is a **template** (tag-based, for reference)
@@ -356,20 +374,23 @@ This is a **release cadence** concern, not a clock-based TTL. A version doesn't 
    ```
    Load network config (main.env or test.env based on branch)
      → Build TEE image with network-specific build args → capture digest → sign image
-     → load secretvm.env → download rootfs (cached)
+     → load secretvm.env → download TDX rootfs + SEV rootfs (both cached, both SHA-verified)
      → generate compose with @sha256:DIGEST
-     → compute RTMR3 from compose + rootfs
-     → generate attestation manifest (with RTMR3 + network-specific baked_env)
+     → compute RTMR3 from compose + TDX rootfs (compute-rtmr3.py)
+     → fetch SecretVM SEV artifact registry → compute SEV launch digest for all 5 templates (compute-sev-measurement.py)
+     → extract baked LOG_LEVEL_* fields from Dockerfile.tee (privacy gate: hard-fails if LOG_LEVEL_APP=debug)
+     → generate attestation manifest (with TDX RTMR3 + SEV per-template + baked_env including baked log levels)
      → sign and attach manifest → upload deployed compose
    ```
 
-5. **Enhanced attestation manifest structure:**
+5. **Enhanced attestation manifest structure (current schema, v0.0.26-beta.1 era):**
    ```json
    {
      "tee_image": "ghcr.io/.../morpheus-lumerin-node-tee@sha256:DIGEST",
      "tee_image_tag": "ghcr.io/.../morpheus-lumerin-node-tee:vX.Y.Z-branch",
      "compose_sha256": "sha256:...",
      "compose_image_reference": "ghcr.io/.../morpheus-lumerin-node-tee@sha256:DIGEST",
+     "tee_platforms": ["intel-tdx", "amd-sev-snp"],
      "baked_env": {
        "network": "mainnet | testnet",
        "DIAMOND_CONTRACT_ADDRESS": "...",
@@ -377,18 +398,49 @@ This is a **release cadence** concern, not a clock-based TTL. A version doesn't 
        "BLOCKSCOUT_API_URL": "...",
        "ETH_NODE_CHAIN_ID": "8453 | 84532",
        "PROXY_STORE_CHAT_CONTEXT": "false",
-       "ENVIRONMENT": "production"
+       "ENVIRONMENT": "production",
+       "LOG_COLOR": "false",
+       "LOG_JSON": "true",
+       "LOG_IS_PROD": "true",
+       "LOG_LEVEL_APP": "info",
+       "LOG_LEVEL_TCP": "warn",
+       "LOG_LEVEL_ETH_RPC": "warn",
+       "LOG_LEVEL_STORAGE": "warn"
      },
      "measurements": {
        "intel_tdx": {
          "rtmr3": "96-char-hex-value",
-         "secretvm_release": "v0.0.25",
-         "rootfs_variant": "rootfs-prod-tdx",
-         "rootfs_sha256": "<sha256-of-rootfs-prod-v0.0.25-tdx.iso>"
+         "secretvm_release": "v0.0.26-beta.1",
+         "rootfs_variant": "rootfs-prod",
+         "rootfs_sha256": "<sha256-of-rootfs-prod-v0.0.26-beta.1-tdx.iso>",
+         "note": "RTMR3 measures (compose + rootfs); template-independent. RTMR0-2 verified at runtime via SecretVM TDX artifact registry lookup."
+       },
+       "amd_sev_snp": {
+         "vcpu_type": "EPYC",
+         "vm_type": "prod",
+         "secretvm_release": "v0.0.26-beta.1",
+         "rootfs_sha256": "<sha256-of-rootfs-prod-v0.0.26-beta.1-sev.iso>",
+         "kernel_hash":   "<sha256 of bzImage-...-sev>",
+         "initrd_hash":   "<sha256 of initramfs-...-sev.cpio.gz>",
+         "ovmf_hash":     "<sha384 of ovmf-...-sev.fd, registry value>",
+         "kernel_cmdline": "console=ttyS0 loglevel=7 docker_compose_hash=<...> rootfs_hash=<...>",
+         "artifact_registry": {
+           "url": "https://raw.githubusercontent.com/scrtlabs/secretvm-verify/main/artifacts_registry/sev.json",
+           "sha256": "<sha256 of the registry file at build time>"
+         },
+         "per_template": {
+           "small":   "<96-char-hex SEV launch digest, vCPU=1>",
+           "medium":  "<96-char-hex SEV launch digest, vCPU=2>",
+           "large":   "<96-char-hex SEV launch digest, vCPU=4>",
+           "2xlarge": "<96-char-hex SEV launch digest, vCPU=8>",
+           "4xlarge": "<96-char-hex SEV launch digest, vCPU=16>"
+         }
        }
      }
    }
    ```
+
+   The `baked_env.LOG_LEVEL_*` fields are extracted from `proxy-router/Dockerfile.tee` at manifest-generation time. The pipeline hard-fails the build if any of `LOG_LEVEL_APP`/`LOG_LEVEL_TCP`/`LOG_LEVEL_ETH_RPC`/`LOG_LEVEL_STORAGE` is missing or if `LOG_LEVEL_APP=debug` (privacy gate — prevents debug-level prompt/request payload logging in a TEE-published image). Consumers verifying the cosign-signed manifest can compare these against the proxy-router runtime config to confirm the running TEE image is not silently elevating verbosity.
 
 **Why RTMR3 only (not RTMR0-3):**
 - RTMR3 measures rootfs + docker-compose.yaml — the only registers **our software** controls
@@ -411,22 +463,44 @@ This is a **release cadence** concern, not a clock-based TTL. A version doesn't 
 **Effort:** M  
 **Blocked by:** Obtaining ACPI templates from SCRT Labs
 
-### 6.3 Integrate `sev-snp-measure` for AMD SEV
+### 6.3 SEV-SNP measurement in CI — DONE
 
-**Goal:** Compute expected AMD SEV-SNP `measurement` hash.
+**Goal:** Compute expected AMD SEV-SNP launch-digest (`measurement`) values in CI/CD and publish them in the cosign-signed manifest.
 
-**Approach:** Same rootfs, different computation tool: [virtee/sev-snp-measure](https://github.com/virtee/sev-snp-measure) (Python).
+**Implementation:**
 
-**Effort:** M  
-**Blocked by:** Same template/config dependency as 6.2
+1. **Standalone Python script:** `proxy-router/scripts/compute-sev-measurement.py`
+   - Byte-for-byte port of `proxy-router/internal/attestation/sev_gctx.go::CalcSevMeasurement` (the runtime source-of-truth introduced in PR #718).
+   - Mirrors the GCTX page-update chain (AMD SNP spec §8.17.2 Table 67): `PAGE_INFO = ld(48) || contents(48) || u16_LE(0x70) || page_type(1) || zeros(5) || gpa_LE(8); ld_next = SHA-384(PAGE_INFO)`.
+   - Inputs: SEV registry JSON entry (kernel/initrd/ovmf hashes, OVMF section table, sev_hashes_table_gpa, sev_es_reset_eip), the deployed `docker-compose.tee.yml`, and a vCPU template.
+   - Emits one `measurement` per template (small=1, medium=2, large=4, 2xlarge=8, 4xlarge=16).
+   - Parity-tested against the Go runtime via `internal/attestation/sev_python_parity_test.go` (uses `t.TempDir()` + the v0.0.26-beta.1 fixture; the test runs the Python script as a subprocess and asserts identical hex output for all 5 templates).
 
-### 6.4 SecretVM release version tracking — DONE
+2. **Pipeline integration (`GHCR-Build-and-Push-TEE`):**
+   - Downloads SEV rootfs (URL + SHA from `secretvm.env`) into the same cache as the TDX rootfs.
+   - `Fetch SecretVM SEV artifact registry` step pulls `sev.json` from `scrtlabs/secretvm-verify` and records its SHA-256 in the manifest.
+   - `Compute SEV-SNP measurement (per template)` step invokes `compute-sev-measurement.py --all-templates --json` and exposes one job-output per template (`sev_measurement_small`, `sev_measurement_medium`, …).
+   - `Generate TEE attestation manifest` writes the full `amd_sev_snp` block (per-template values + kernel/initrd/ovmf/rootfs hashes + exact cmdline + registry URL/SHA) into the cosign-attested predicate.
 
-**Implementation:** `.github/tee/secretvm.env` pins the release version and rootfs variant. The pipeline derives all rootfs filenames, cache keys, and download paths from `SECRETVM_RELEASE` and `SECRETVM_ROOTFS_VARIANT` — no hardcoded filenames in `build.yml`. The attestation manifest includes `measurements.intel_tdx.secretvm_release`, `rootfs_variant`, and `rootfs_sha256`.
+3. **Why per-template instead of a single value:** the SEV launch digest folds in one VMSA page per vCPU, so a small VM (1 vCPU) and a large VM (4 vCPU) running the same image produce different launch digests. The TDX RTMR3 chain does not have this property — RTMR3 only covers `(rootfs, compose)` and is template-independent — so the manifest's `intel_tdx` block stays single-valued.
 
-**Upgrade procedure:** When SCRT Labs publishes a new release, edit `secretvm.env` (version, URL, clear SHA256), push, let CI capture the new rootfs hash from the step summary, then pin it back. Full instructions in `docs/02.3-proxy-router-tee.md` § "Upgrading SecretVM Artifacts".
+**Effort:** M — **DONE** (this PR)
 
-**Version detection:** There is no SCRT Labs push notification or dedicated API for new releases. The GitHub Releases API (`https://api.github.com/repos/scrtlabs/secret-vm-build/releases`) can be polled, but newer versions are often marked as **pre-release** on GitHub while already deployed to the SecretVM portal (e.g., `v0.0.25` is a pre-release on GitHub but portal runs "artifacts v0.0.25, environment prod"). The `/releases/latest` endpoint only returns non-prerelease versions and should NOT be relied on. Future consideration: a scheduled GitHub Action that polls for new releases and opens an issue or PR.
+### 6.4 SecretVM release version tracking — DONE (current pin: v0.0.26-beta.1)
+
+**Implementation:** `.github/tee/secretvm.env` pins the release version, rootfs variant, and BOTH the TDX and SEV rootfs URLs + SHA-256s. The pipeline derives all artifact filenames, cache keys, and download paths from `SECRETVM_RELEASE` and `SECRETVM_ROOTFS_VARIANT` (with the platform suffix `-tdx`/`-sev` appended). The attestation manifest includes `measurements.intel_tdx.{secretvm_release, rootfs_variant, rootfs_sha256}` and `measurements.amd_sev_snp.{secretvm_release, rootfs_sha256, kernel_hash, initrd_hash, ovmf_hash, …}`.
+
+**Current pin (2026-05-23):** `v0.0.26-beta.1`. The SecretVM portal Production environment currently only allows new VM provisioning against this release (older releases like `v0.0.25` continue to run already-provisioned VMs but cannot be selected for fresh `vm create`). Both the TDX rootfs (`rootfs-prod-v0.0.26-beta.1-tdx.iso`, sha256 `780214c6…`) and the SEV rootfs (`rootfs-prod-v0.0.26-beta.1-sev.iso`, sha256 `30abaaa5…`) are pinned.
+
+**Upgrade procedure:** When SCRT Labs publishes a new release:
+
+1. Update `SECRETVM_RELEASE` in `.github/tee/secretvm.env`.
+2. Update both `SECRETVM_ROOTFS_TDX_URL` and `SECRETVM_ROOTFS_SEV_URL`. Clear the corresponding `*_SHA256` lines.
+3. Push to a `cicd/*` branch — CI downloads the new artifacts and prints their SHA-256s in the step summary.
+4. Pin those SHA-256s back into `secretvm.env` and re-push.
+5. Confirm the SEV registry (`scrtlabs/secretvm-verify/artifacts_registry/sev.json`) has been updated with the new release's `(vm_type, artifacts_ver)` entry — without it the SEV measurement compute will fail with `no SEV registry entry found`. SCRT Labs typically publishes the registry alongside the build artifacts; check by `curl ${SECRETVM_SEV_REGISTRY_URL} | jq '.[] | select(.artifacts_ver == "${SECRETVM_RELEASE}")'`.
+
+**Version detection:** There is no SCRT Labs push notification or dedicated API for new releases. The GitHub Releases API (`https://api.github.com/repos/scrtlabs/secret-vm-build/releases`) can be polled, but newer versions are often marked as **pre-release** on GitHub while already required by the portal (e.g., `v0.0.26-beta.1` is a pre-release on GitHub but is the *only* version the portal accepts for new VMs). The `/releases/latest` endpoint only returns non-prerelease versions and should NOT be relied on. Future consideration: a scheduled GitHub Action that polls for new releases AND new SEV-registry entries, opens an issue or PR.
 
 ### 6.5 Auto-deploy to SecretVM test instance — DONE
 
@@ -753,10 +827,13 @@ See also: [`proxy-router/docs/tee-backend-verification.md`](../proxy-router/docs
 | 1.13c | Variablize rootfs config — no hardcoded filenames in pipeline | S | **DONE** | `SECRETVM_ROOTFS_VARIANT` flows to cache key, download, RTMR3 compute, attestation manifest |
 | 1.13d | Switch rootfs from `dev` to `prod` variant (v0.0.25) | S | **DONE** | SecretVM runs "environment prod"; `dev` rootfs produces wrong RTMR3 |
 | 1.13e | Document upgrade procedure for SecretVM releases | S | **DONE** | `docs/02.3-proxy-router-tee.md` § "Upgrading SecretVM Artifacts" |
-| 1.14 | Full `reproduce-mr` for RTMR0-2 (Intel TDX) | M | TODO | Blocked: ACPI templates from SCRT Labs |
-| 1.15 | `sev-snp-measure` for AMD SEV measurement | M | TODO | Blocked: same as 1.14 |
+| 1.13f | Pin SecretVM release `v0.0.26-beta.1` (TDX + SEV rootfs) | S | **DONE** | Portal-required release; this PR. SHA-256s pinned in `secretvm.env` |
+| 1.13g | SEV-SNP measurement in CI: `compute-sev-measurement.py` + per-template publish | M | **DONE** | This PR; parity-tested against Go `sev_gctx.go`. See §6.3 |
+| 1.13h | Bake `LOG_LEVEL_*` into `Dockerfile.tee` and surface them in `baked_env` | S | **DONE** | This PR; pipeline hard-fails if `LOG_LEVEL_APP=debug` |
+| 1.14 | Full `reproduce-mr` for RTMR0-2 (Intel TDX) | M | TODO | Blocked: ACPI templates from SCRT Labs (not on critical path — RTMR0-2 verified at runtime via artifact registry lookup) |
+| 1.15 | Auto-deploy + RTMR3-verify for an SEV test VM | S | TODO | TDX-only today; needs SEV-flavoured offsets, `SECRETVM_TEST_SEV_VM_UUID`, parallel `Deploy-SecretVM-Test-SEV` job |
 | 1.16 | CVE scanning (Trivy/Grype) — advisory, then gate | S | TODO | — |
-| 1.17 | Automated SecretVM release monitoring (scheduled GHA) | S | TODO | GitHub API pre-release caveat; see §6.4 |
+| 1.17 | Automated SecretVM release monitoring (scheduled GHA) | S | TODO | GitHub API pre-release caveat; see §6.4. Should also poll secretvm-verify SEV registry for matching `artifacts_ver` entries. |
 | 1.18 | Auto-deploy to SecretVM test instance via CLI | S | **DONE** | Separate `Deploy-SecretVM-Test` job; `environment: test`; `test` + `cicd/*` branches |
 | 1.19 | Post-deploy attestation verification | S | **DONE** | Extracts RTMR3 from raw TDX quote at byte offset 520; polls 12×30s; fails job on mismatch |
 | 1.20 | Temporarily disable service/UI builds on cicd/* branches | S | **DONE** | `Build-Service-Executables` set to `if: false`; cascades to all UI jobs. Re-enable before merge to main |
@@ -790,17 +867,31 @@ See also: [`proxy-router/docs/tee-backend-verification.md`](../proxy-router/docs
 | 2a.9 | Consolidate `tee` on-chain tag as sole TEE switch (remove `isTee` field from models config schema) | S | **DONE** | PR #708 / #709 |
 | 2a.10 | Test coverage: `backend_verifier_test.go`, `golden_test.go`, `workload_verifier_test.go`, `workload_rytn_test.go`, `nras_verifier_test.go` | M | **DONE** | PR #699 |
 
+### Phase 2 SEV-SNP add-on — DONE (this PR + PR #718, #720)
+
+| # | Task | Effort | Status | Reference |
+|---|---|---|---|---|
+| 2c.1 | Route SEV quotes to dedicated `quote-parse-sev` portal endpoint | S | **DONE** — PR #718 | `attestation/verifier.go::deriveSEVPortalURL` |
+| 2c.2 | Normalize space-separated `report_data` from SEV portal response | S | **DONE** — PR #718 | `attestation/verifier.go::VerifyTLSBinding` |
+| 2c.3 | Implement SEV-SNP launch-digest replay (GCTX page-update chain) | L | **DONE** — PR #718 | `attestation/sev_gctx.go::CalcSevMeasurement` |
+| 2c.4 | SEV artifact registry loader (auto-refresh from `secretvm-verify`) | S | **DONE** — PR #718 | `attestation/sev_registry.go::SevArtifactRegistry` |
+| 2c.5 | SEV workload verifier with family_id + brute-force fallback | M | **DONE** — PR #718 | `attestation/sev_workload.go::VerifySevWorkload` |
+| 2c.6 | Pass correct VMType for SEV in workload result | XS | **DONE** — PR #720 | `attestation/sev_workload.go` |
+| 2c.7 | Wire `SevArtifactRegistry` into `BackendVerifier` constructor + `cmd/main.go` | S | **DONE** — PR #718 | `cmd/main.go` (~line 328); new env var `SEV_ARTIFACT_REGISTRY_URL` in `config/config.go` |
+| 2c.8 | Pre-compute SEV `measurement` per template in CI and ship in cosign manifest | M | **DONE** | This PR — §6.3 above |
+
 ### Phase 2b — Deeper Guarantees (future, post-v7)
 
 | # | Task | Effort | Status | Notes |
 |---|---|---|---|---|
 | 2b.1 | Co-locate proxy-router + LLM in same TEE VM (single RTMR3 covers both hops) | L | TODO | Collapses Phase 1 + Phase 2 into one measurement chain |
 | 2b.2 | Verifiable per-message signing (TEE-bound key via SecretVM internal signer) | L | TODO | §7.6; deferred because Phase 2a fast-verify narrows the attack window significantly |
-| 2b.3 | AMD SEV-SNP measurement path in CI/CD | M | TODO | Blocked on upstream tooling; TDX-only today |
-| 2b.4 | Local quote verification in-process (remove SCRT Labs `quote-parse` dependency) | L | TODO | Requires PCK cert chain handling + Intel quote-verification library in Go |
+| ~~2b.3~~ | ~~AMD SEV-SNP measurement path in CI/CD~~ | ~~M~~ | **DONE** | Closed by §6.3 + Phase 2c |
+| 2b.4 | Local quote verification in-process (remove SCRT Labs `quote-parse` / `quote-parse-sev` dependency) | L | TODO | Requires PCK cert chain handling + Intel/AMD quote-verification libraries in Go |
 | 2b.5 | On-chain measurement registry (if ever needed beyond cosign signatures) | L | TODO | Cosign keyless via GHA OIDC is sufficient today |
 | 2b.6 | NRAS alternatives for non-NVIDIA GPU vendors | M | TODO | NVIDIA-only today |
 | 2b.7 | CVE scanning gate in CI/CD (Trivy/Grype) | S | TODO | §6.6 |
+| 2b.8 | Auto-deploy + post-deploy verify for an SEV test VM | S | TODO | TDX-only today; see §1.15 above |
 
 ---
 
@@ -827,15 +918,20 @@ See also: [`proxy-router/docs/tee-backend-verification.md`](../proxy-router/docs
 | PR #703 / #704 — correct error wrapping on P-Node TEE attestation fail | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/704 |
 | PR #705 — request_id propagation in TEE logs | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/705 |
 | PR #708 / #709 — `tee` on-chain tag as sole TEE switch (removed `isTee` from models-config schema) | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/709 |
+| **PR #718 — AMD SEV-SNP attestation support for TEE providers** | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/718 |
+| PR #719 — SEV merge dev → stg | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/719 |
+| PR #720 — fix: pass correct VMType for SEV | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/720 |
 | First verified pipeline run (build + sign) | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/actions/runs/22920492249 |
 | First end-to-end run (build → sign → deploy → verify attestation) | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/actions/runs/22969993910 |
 | **SCRT Labs / TEE platform** | |
 | SecretVM Attestation Docs | https://docs.scrt.network/secret-network-documentation/secretvm-confidential-virtual-machines/attestation |
 | SecretVM CLI Docs | https://docs.scrt.network/secret-network-documentation/secretvm-confidential-virtual-machines/secretvm-cli |
 | SCRT Labs reproduce-mr | https://github.com/scrtlabs/reproduce-mr |
-| SCRT Labs secret-vm-build | https://github.com/scrtlabs/secret-vm-build |
-| SCRT Labs quote parser API | `POST https://pccs.scrtlabs.com/dcap-tools/quote-parse` |
-| AMD sev-snp-measure | https://github.com/virtee/sev-snp-measure |
+| SCRT Labs secret-vm-build (rootfs/bzImage/ovmf/initramfs releases) | https://github.com/scrtlabs/secret-vm-build |
+| **SCRT Labs secretvm-verify (TS reference verifier + TDX/SEV registries)** | https://github.com/scrtlabs/secretvm-verify |
+| Current SecretVM release pin | https://github.com/scrtlabs/secret-vm-build/releases/tag/v0.0.26-beta.1 |
+| SCRT Labs TDX quote parser API | `POST https://secretai.scrtlabs.com/api/quote-parse` |
+| SCRT Labs SEV-SNP quote parser API | `POST https://secretai.scrtlabs.com/api/quote-parse-sev` |
 | **Sigstore / supply-chain tools** | |
 | Sigstore cosign | https://github.com/sigstore/cosign |
 | Cosign keyless signing docs | https://docs.sigstore.dev/cosign/signing/signing_with_containers/ |
@@ -850,12 +946,18 @@ See also: [`proxy-router/docs/tee-backend-verification.md`](../proxy-router/docs
 | InitiateSession handshake + `VerifyProviderQuick` callsites | `proxy-router/internal/proxyapi/proxy_sender.go`, `proxy_receiver.go` |
 | **Phase 1 consumer verifier** | `proxy-router/internal/attestation/verifier.go` (`Verifier`, `VerifyProvider`, `VerifyProviderQuick`) |
 | **Phase 2 backend verifier** | `proxy-router/internal/attestation/backend_verifier.go` (`BackendVerifier.AttestBackend`, `FastVerifyBackend`) |
-| **Phase 2 workload verifier + RTMR3 replay** | `proxy-router/internal/attestation/workload_verifier.go`, `rtmr.go`, `tdx_quote.go` |
-| **Phase 2 artifact registry** | `proxy-router/internal/attestation/artifacts_registry.go` |
+| **Phase 2 workload verifier (TDX RTMR3 replay)** | `proxy-router/internal/attestation/workload_verifier.go`, `rtmr.go`, `tdx_quote.go` |
+| **Phase 2 SEV launch-digest replay (PR #718)** | `proxy-router/internal/attestation/sev_gctx.go`, `sev_workload.go`, `sev_registry.go` |
+| **Phase 2 TDX artifact registry** | `proxy-router/internal/attestation/artifacts_registry.go` |
+| **Phase 2 SEV artifact registry** | `proxy-router/internal/attestation/sev_registry.go` (default URL `https://raw.githubusercontent.com/scrtlabs/secretvm-verify/main/artifacts_registry/sev.json`) |
 | **Phase 2 NVIDIA NRAS client** | `proxy-router/internal/attestation/nras_verifier.go` |
 | **Phase 2 pinned TLS client** | `proxy-router/internal/aiengine/ai_engine.go` (returns `PinnedHTTPClient` for TEE models) |
 | **Phase 2 health endpoint** | `proxy-router/internal/proxyapi/controller_http.go` (`GET /v1/models/attestation`) |
-| TEE config struct | `proxy-router/internal/config/config.go` — `TEE` section (lines ~87-92) |
+| **Phase 1 cosign manifest parser (TDX + SEV per-template)** | `proxy-router/internal/attestation/golden.go` — `TEEMeasurements`, `SEVMeasurements`, `GoldenValues.MatchSEVMeasurement` |
+| **Pipeline SEV measurement compute** | `proxy-router/scripts/compute-sev-measurement.py` (parity-tested in `internal/attestation/sev_python_parity_test.go`) |
+| **Pipeline TDX RTMR3 compute** | `proxy-router/scripts/compute-rtmr3.py` |
+| **SecretVM artifact pin** | `.github/tee/secretvm.env` |
+| TEE config struct | `proxy-router/internal/config/config.go` — `TEE` section (`PortalURL`, `ImageRepo`, `ArtifactRegistryURL`, **`SevArtifactRegistryURL`** added by PR #718, `ArtifactRegistryRefreshInterval`) |
 | Session repository (tracks `IsTee`) | `proxy-router/internal/repositories/session/session_model.go`, `session_repo.go` |
 | ModelRegistry contract | `smart-contracts/contracts/diamond/facets/ModelRegistry.sol` |
 | Model struct (with tags) | `smart-contracts/contracts/interfaces/storage/IModelStorage.sol` |

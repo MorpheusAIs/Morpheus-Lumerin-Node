@@ -158,7 +158,7 @@ func TestVerifyWorkload_TdxQuote(t *testing.T) {
 	quoteHex := readTestFixture(t, "tdx_cpu_docker_check_quote.txt")
 	composeYaml := readTestFixture(t, "tdx_cpu_docker_check_compose.yaml")
 
-	result := VerifyWorkload(reg, quoteHex, composeYaml, nil)
+	result := VerifyWorkload(reg, nil, quoteHex, composeYaml, nil)
 	if result.Status != WorkloadAuthentic {
 		t.Fatalf("status = %s, want %s", result.Status, WorkloadAuthentic)
 	}
@@ -166,8 +166,8 @@ func TestVerifyWorkload_TdxQuote(t *testing.T) {
 
 func TestVerifyWorkload_NonTdxQuote(t *testing.T) {
 	reg := testRegistry(t)
-	result := VerifyWorkload(reg, "SGVsbG8gV29ybGQ=", "anything", nil)
-	if result.Status != WorkloadNotAuthentic {
-		t.Fatalf("status = %s, want %s", result.Status, WorkloadNotAuthentic)
+	result := VerifyWorkload(reg, nil, "SGVsbG8gV29ybGQ=", "anything", nil)
+	if result.Status != WorkloadSkipped {
+		t.Fatalf("status = %s, want %s", result.Status, WorkloadSkipped)
 	}
 }
