@@ -455,6 +455,7 @@ jobs:
           echo "rootfs_sev_sha256=${SECRETVM_ROOTFS_SEV_SHA256:-}" >> $GITHUB_OUTPUT
           echo "sev_registry_url=${SECRETVM_SEV_REGISTRY_URL:-https://raw.githubusercontent.com/scrtlabs/secretvm-verify/main/artifacts_registry/sev.json}" >> $GITHUB_OUTPUT
           echo "sev_registry_vm_type=${SECRETVM_SEV_REGISTRY_VM_TYPE:-prod}" >> $GITHUB_OUTPUT
+          echo "sev_registry_artifacts_ver=${SECRETVM_SEV_REGISTRY_ARTIFACTS_VER:-$SECRETVM_RELEASE}" >> $GITHUB_OUTPUT
 
           # legacy aliases retained so older steps continue to compile
           echo "rootfs_url=$SECRETVM_ROOTFS_TDX_URL" >> $GITHUB_OUTPUT
@@ -566,7 +567,7 @@ jobs:
           SEV_OUT=$(python3 proxy-router/scripts/compute-sev-measurement.py \
             --registry "${{ steps.sev-registry.outputs.registry_path }}" \
             --vm-type "${{ steps.secretvm-config.outputs.sev_registry_vm_type }}" \
-            --artifacts-ver "${{ steps.secretvm-config.outputs.release }}" \
+            --artifacts-ver "${{ steps.secretvm-config.outputs.sev_registry_artifacts_ver }}" \
             --compose /tmp/docker-compose.tee.deployed.yml \
             --all-templates --json)
 
