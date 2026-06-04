@@ -1,7 +1,10 @@
 import { useState } from 'react'
 
-function Versions(): JSX.Element {
-  const [versions] = useState(window.electron.process.versions)
+function Versions(): JSX.Element | null {
+  const electronProcess = (window as any).electron?.process
+  const [versions] = useState(electronProcess?.versions)
+
+  if (!versions) return null
 
   return (
     <ul className="versions">

@@ -1,4 +1,5 @@
 // import './assets/main.css'
+import './browser-ipc-stub';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import ReactModal from 'react-modal';

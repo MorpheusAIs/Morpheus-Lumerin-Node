@@ -31,6 +31,8 @@ export const subscribeToMainProcessMessages = function (store) {
     'proxy-router-type-changed',
     'allow-send-transaction',
     'services-state',
+    'required-data-gathered',
+    'session-started',
   ];
 
   // Subscribe to every IPC message defined above and dispatch a
