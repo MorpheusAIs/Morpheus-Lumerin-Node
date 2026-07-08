@@ -2126,31 +2126,62 @@ jobs:
           # OPEN rows older than that. release_tag only annotates error_reason.
           PAYLOAD="{\"release_tag\":\"${BUILDTAG}\"}"
 
-          echo "🧹 Invoking ${FUNCTION_NAME} with payload: ${PAYLOAD}"
-          set +e
-          INVOKE_META=$(aws lambda invoke \
-            --function-name "$FUNCTION_NAME" \
-            --cli-binary-format raw-in-base64-out \
-            --payload "$PAYLOAD" \
-            /tmp/sweep_out.json 2>/tmp/sweep_err.txt)
-          INVOKE_RC=$?
-          set -e
+          # This job starts seconds after the C-Node deploy settles, but the
+          # Lambda's cutoff = deployments[0].updatedAt + 90s rehydration + 120s
+          # safety (~210s ahead) and it REFUSES a future cutoff. So the first
+          # invoke almost always lands before the cutoff and no-ops with a 400.
+          # Retry with backoff until the cutoff has passed (or the budget is
+          # exhausted) so the sweep actually runs. Budget: 10 * 30s = ~5 min,
+          # comfortably past the ~210s cutoff. Only the future-cutoff case is
+          # retried; any other status (200 / SWEEP_MAX_ROWS / error) is terminal.
+          MAX_ATTEMPTS=10
+          SLEEP_SECS=30
+          STATUS=""
+          BODY=""
+          FUNCTION_ERROR=""
+          for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+            echo "🧹 [attempt ${attempt}/${MAX_ATTEMPTS}] Invoking ${FUNCTION_NAME} with payload: ${PAYLOAD}"
+            set +e
+            INVOKE_META=$(aws lambda invoke \
+              --function-name "$FUNCTION_NAME" \
+              --cli-binary-format raw-in-base64-out \
+              --payload "$PAYLOAD" \
+              /tmp/sweep_out.json 2>/tmp/sweep_err.txt)
+            INVOKE_RC=$?
+            set -e
 
-          if [ $INVOKE_RC -ne 0 ]; then
-            echo "⚠️ lambda invoke call failed (rc=$INVOKE_RC):"
-            cat /tmp/sweep_err.txt || true
-            echo "ℹ️ Deploy already succeeded; the API Gateway self-heals zombies within ~30 min. Not failing the pipeline."
-            exit 0
-          fi
+            if [ $INVOKE_RC -ne 0 ]; then
+              echo "⚠️ lambda invoke call failed (rc=$INVOKE_RC):"
+              cat /tmp/sweep_err.txt || true
+              echo "ℹ️ Deploy already succeeded; the API Gateway self-heals zombies within ~30 min. Not failing the pipeline."
+              exit 0
+            fi
 
-          echo "📡 Invoke metadata: $INVOKE_META"
-          FUNCTION_ERROR=$(echo "$INVOKE_META" | jq -r '.FunctionError // empty')
-          RESPONSE=$(cat /tmp/sweep_out.json)
-          echo "📦 Lambda response: $RESPONSE"
+            echo "📡 Invoke metadata: $INVOKE_META"
+            FUNCTION_ERROR=$(echo "$INVOKE_META" | jq -r '.FunctionError // empty')
+            RESPONSE=$(cat /tmp/sweep_out.json)
+            echo "📦 Lambda response: $RESPONSE"
 
-          # The handler returns {"statusCode": N, "body": "<json string>"}.
-          STATUS=$(echo "$RESPONSE" | jq -r '.statusCode // empty' 2>/dev/null)
-          BODY=$(echo "$RESPONSE" | jq -r '.body // empty' 2>/dev/null)
+            # The handler returns {"statusCode": N, "body": "<json string>"}.
+            STATUS=$(echo "$RESPONSE" | jq -r '.statusCode // empty' 2>/dev/null)
+            BODY=$(echo "$RESPONSE" | jq -r '.body // empty' 2>/dev/null)
+
+            # An unhandled Lambda error has no statusCode — terminal, don't retry.
+            if [ -n "$FUNCTION_ERROR" ]; then
+              break
+            fi
+
+            # Retry ONLY the "future cutoff" 400 — we just deployed and need to
+            # wait for the cutoff to pass. Everything else is a final result.
+            if [ "$STATUS" = "400" ] && echo "$BODY" | grep -qi "in the future"; then
+              if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+                echo "⏳ Cutoff not reached yet; sleeping ${SLEEP_SECS}s before retry."
+                sleep "$SLEEP_SECS"
+                continue
+              fi
+            fi
+            break
+          done
 
           {
             echo "### 🧹 Routed-sessions zombie sweep"
