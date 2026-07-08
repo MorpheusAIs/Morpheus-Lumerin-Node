@@ -102,6 +102,7 @@
               "providers/full/myprovider-gui",
               "providers/full/register-onchain",
               "providers/full/verify-setup",
+              "providers/full/model-health",
               "providers/full/pricing"
             ]
           },

@@ -64,6 +64,8 @@ On provider nodes the response also includes a `models` array — the periodic m
 | `no_model_configured` | **Active bid exists but the model is missing from `models-config.json`** | Add the model entry or delete the bid — consumers can open sessions against this bid and get errors |
 | `skipped` | Model type other than LLM/embedding; not probed | — |
 
+The self-report has its own operational reference — schedule, tuning, backend impact, and diagnosis recipes — at [Model health self-report](/providers/full/model-health).
+
 For `unhealthy` models, `errorKind` narrows the failure and, when the backend answered with an HTTP error, `httpStatus` carries the exact upstream status code:
 
 | errorKind | Meaning | Typical `httpStatus` |
