@@ -397,6 +397,32 @@ func TestActiveBidModelsPaginates(t *testing.T) {
 	require.Equal(t, bidIDFor(modelLLM), byModel[modelLLM])
 }
 
+func TestTriggerNowQueuesAtMostOne(t *testing.T) {
+	checker := newTestChecker(&mockDeps{})
+	require.True(t, checker.TriggerNow())
+	require.False(t, checker.TriggerNow(), "second trigger must be rejected while one is queued")
+}
+
+func TestRunConsumesTrigger(t *testing.T) {
+	checker := newTestChecker(&mockDeps{})
+	require.True(t, checker.TriggerNow())
+	require.False(t, checker.TriggerNow())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		_ = checker.Run(ctx, common.Address{})
+		close(done)
+	}()
+
+	// the Run loop must drain the queued trigger, freeing the slot
+	require.Eventually(t, func() bool { return checker.TriggerNow() }, 5*time.Second, 10*time.Millisecond)
+
+	cancel()
+	<-done
+}
+
 func TestCheckAllBidsError(t *testing.T) {
 	deps := &mockDeps{
 		bidsErr:  errors.New("rpc unavailable"),

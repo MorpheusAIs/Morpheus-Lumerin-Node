@@ -73,6 +73,10 @@ type Checker struct {
 	mu        sync.RWMutex
 	reports   map[string]system.ModelHealthReport
 	modelMeta map[string]modelMeta
+
+	// triggerCh carries manual re-check requests into the Run loop; buffered
+	// at 1 so triggers queue at most one extra sweep and can never overlap.
+	triggerCh chan struct{}
 }
 
 // Deps groups the external dependencies of the checker.
@@ -92,6 +96,7 @@ func NewChecker(deps Deps, interval, timeout, probeDelay time.Duration, log lib.
 		log:        log.Named("MODEL_HEALTH"),
 		reports:    make(map[string]system.ModelHealthReport),
 		modelMeta:  make(map[string]modelMeta),
+		triggerCh:  make(chan struct{}, 1),
 	}
 }
 
@@ -110,7 +115,26 @@ func (c *Checker) Run(ctx context.Context, walletAddr common.Address) error {
 			return ctx.Err()
 		case <-ticker.C:
 			c.checkAll(ctx, walletAddr)
+		case <-c.triggerCh:
+			c.log.Info("manual model health re-check triggered")
+			c.checkAll(ctx, walletAddr)
+			// restart the scheduled cadence relative to the manual sweep so
+			// a trigger isn't immediately followed by a scheduled sweep
+			ticker.Reset(c.interval)
 		}
+	}
+}
+
+// TriggerNow queues an immediate re-check sweep on the Run loop and reports
+// whether it was accepted. It returns false when a manual sweep is already
+// queued; the sweep itself runs asynchronously — callers observe progress
+// through the lastChecked timestamps in the reports.
+func (c *Checker) TriggerNow() bool {
+	select {
+	case c.triggerCh <- struct{}{}:
+		return true
+	default:
+		return false
 	}
 }
 

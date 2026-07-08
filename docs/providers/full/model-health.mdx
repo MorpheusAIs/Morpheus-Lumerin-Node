@@ -9,7 +9,7 @@ last_verified: "v7.4.0"
 Since v7.4.0 every provider proxy-router continuously verifies that the models it sells actually work, and publishes the result as a `models` array on its `/healthcheck` endpoint. This page is the operational reference for that capability: what runs, what it costs, how to tune it, and how to read the report when something is unhealthy. For the one-time post-setup walkthrough, see [Verify your provider setup](/providers/full/verify-setup).
 
 <Note>
-The `httpStatus` and `modelName` report fields, the `rate_limited` error kind, and probe pacing (`MODEL_HEALTH_CHECK_PROBE_DELAY`) were added in the release **after** v7.4.0. On v7.4.0 nodes you get the report without those fields.
+The `httpStatus` and `modelName` report fields, the `rate_limited` error kind, probe pacing (`MODEL_HEALTH_CHECK_PROBE_DELAY`), and the manual `POST /healthcheck/models/refresh` trigger were added in the release **after** v7.4.0. On v7.4.0 nodes you get the report without those features.
 </Note>
 
 ## What actually runs
@@ -94,7 +94,14 @@ A `healthy` model with `promptCorrect: false` deserves attention too: the backen
 
 ## Diagnosing locally — the tricky parts
 
-**The report is cached, and there is no "run now" endpoint.** `lastChecked` (unix epoch — `date -r 1783536653` on macOS, `date -d @1783536653` on Linux) tells you how stale each entry is. After fixing a backend, either wait out the interval or **restart the proxy-router** — a sweep always runs at startup, so a restart doubles as a forced re-check.
+**The report is cached — trigger a re-check instead of waiting.** `lastChecked` (unix epoch — `date -r 1783536653` on macOS, `date -d @1783536653` on Linux) tells you how stale each entry is. After fixing a backend, queue an immediate sweep:
+
+```bash
+curl -s -X POST -u 'admin:yourpassword' http://localhost:8082/healthcheck/models/refresh
+# {"status":"refresh queued"}
+```
+
+The call returns `202` immediately and the sweep runs in the background — with probe pacing, a many-model sweep takes a few minutes, so poll `GET /healthcheck` and watch `lastChecked` move. Triggers don't stack: while one manual sweep is queued or running, another `POST` answers `"refresh already pending"` — you cannot hammer your own backend through this endpoint. It requires basic auth (method permission `model_health_refresh`; the admin user's `*` whitelist covers it). On older releases without the endpoint, **restart the proxy-router** instead — a sweep always runs at startup.
 
 **Timestamps carry the history.** `lastHealthy` survives failures: an unhealthy model with a recent `lastHealthy` broke recently (billing, throttling); one with `lastHealthy: 0` has never worked since the router started (misconfiguration).
 
