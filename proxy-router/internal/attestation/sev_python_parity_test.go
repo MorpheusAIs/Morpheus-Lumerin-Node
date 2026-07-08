@@ -28,7 +28,7 @@ const parityFixtureArtifactsVer = "parity-test-fixture-v1"
 // both implementations produce identical SHA-384 chains given identical
 // inputs — so any well-formed entry suffices.
 //
-// Byte values mirror the scrtlabs/secretvm-verify SEV registry `prod`/`v0.0.30`
+// Byte values mirror the scrtlabs/secretvm-verify SEV registry `prod`/`v0.0.31`
 // entry (snapshotted 2026-07) so the fixture stays realistic and in step with the
 // current pin in `.github/tee/secretvm.env`. This is provenance only — the parity
 // assertion is release-agnostic (it checks Go ↔ Python equivalence given identical
@@ -38,10 +38,10 @@ const parityFixtureArtifactsVer = "parity-test-fixture-v1"
 var parityFixtureSevEntry = &SevArtifactEntry{
 	VMType:            "prod",
 	ArtifactsVer:      parityFixtureArtifactsVer,
-	KernelHash:        "98c41a86a1ba6a9a9d772ae0b028835091b4930f79ea509b595d2080d7df90c2",
-	InitrdHash:        "491eb5d8666ec0696c4beae7f58a8a9658534dae5d8233215dff3aef1b0b910c",
+	KernelHash:        "ca7645b25cb4f9af4e5c1a0ec8c182b6c5dea4462ab31cccb46427874356baae",
+	InitrdHash:        "9cfb7ac809ff9d5e972bf77edbbf2db80f74f741d62e1486d3daf64a47b4a555",
 	VcpuType:          "EPYC",
-	RootfsHash:        "f7c901c110f56c24e4bce0d3a177556ab71787597a800d4c1db0981be7b8a36b",
+	RootfsHash:        "4e11fcb840d9dffe2b33868314d33bac337f82a25f09b3ca990e21f3002a59d2",
 	OvmfHash:          "c581d3eaebf2941beb1f757de97497279b953a6999921cab05f9ed5268f9c0505d741f4021b5a3995c9893851cde190e",
 	SevHashesTableGPA: 8457216,
 	SevEsResetEIP:     8433668,
