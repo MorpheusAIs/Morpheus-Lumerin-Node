@@ -58,25 +58,26 @@ type Config struct {
 		LevelStorage string `env:"LOG_LEVEL_STORAGE"     flag:"log-level-storage"     validate:"omitempty,oneof=debug info warn error dpanic panic fatal"`
 	}
 	Proxy struct {
-		Address                   string        `env:"PROXY_ADDRESS" flag:"proxy-address" validate:"required,hostname_port"`
-		StoragePath               string        `env:"PROXY_STORAGE_PATH"    flag:"proxy-storage-path"    validate:"omitempty,dirpath" desc:"enables file storage and sets the folder path"`
-		StoreChatContext          *lib.Bool     `env:"PROXY_STORE_CHAT_CONTEXT" flag:"proxy-store-chat-context" desc:"store chat context in the proxy storage"`
-		ForwardChatContext        *lib.Bool     `env:"PROXY_FORWARD_CHAT_CONTEXT" flag:"proxy-forward-chat-context" desc:"prepend whole stored message history to the prompt"`
-		AgentConfigPath           string        `env:"AGENT_CONFIG_PATH" flag:"agent-config-path" validate:"omitempty"`
-		AgentConfigContent        string        `env:"AGENT_CONFIG_CONTENT" flag:"agent-config-content" validate:"omitempty" desc:"content of the agent config file"`
-		ModelsConfigPath          string        `env:"MODELS_CONFIG_PATH" flag:"models-config-path" validate:"omitempty"`
-		ModelsConfigContent       string        `env:"MODELS_CONFIG_CONTENT" flag:"models-config-content" validate:"omitempty" desc:"content of the models config file"`
-		RatingConfigPath          string        `env:"RATING_CONFIG_PATH" flag:"rating-config-path" validate:"omitempty" desc:"path to the rating config file"`
-		CookieFilePath            string        `env:"COOKIE_FILE_PATH" flag:"cookie-file-path" validate:"omitempty" desc:"path to the cookie file"`
-		CookieContent             string        `env:"COOKIE_CONTENT" flag:"cookie-content" validate:"omitempty" desc:"content of the cookie file"`
-		AuthConfigFilePath        string        `env:"AUTH_CONFIG_FILE_PATH" flag:"auth-config-file-path" validate:"omitempty"`
-		LLMTimeout                time.Duration `env:"LLM_TIMEOUT" flag:"llm-timeout" validate:"omitempty" desc:"timeout for PNode to LLM requests, applies to both streaming and non-streaming"`
-		CNodePNodeTimeout         time.Duration `env:"CNODE_PNODE_TIMEOUT" flag:"cnode-pnode-timeout" validate:"omitempty" desc:"per-attempt timeout for CNode waiting for PNode first response"`
-		CNodePNodeMaxRetries      int           `env:"CNODE_PNODE_MAX_RETRIES" flag:"cnode-pnode-max-retries" validate:"omitempty,gte=0" desc:"max retries for CNode to PNode read timeout (chat/embeddings)"`
-		CNodePNodeAudioMaxRetries int           `env:"CNODE_PNODE_AUDIO_MAX_RETRIES" flag:"cnode-pnode-audio-max-retries" validate:"omitempty,gte=0" desc:"max retries for CNode to PNode read timeout (audio transcription/speech)"`
-		ModelHealthCheckDisabled  bool          `env:"MODEL_HEALTH_CHECK_DISABLED" flag:"model-health-check-disabled" desc:"disable periodic model health self-checks on provider"`
-		ModelHealthCheckInterval  time.Duration `env:"MODEL_HEALTH_CHECK_INTERVAL" flag:"model-health-check-interval" validate:"omitempty,duration" desc:"how often to probe configured models with a test prompt, result is cached between runs"`
-		ModelHealthCheckTimeout   time.Duration `env:"MODEL_HEALTH_CHECK_TIMEOUT" flag:"model-health-check-timeout" validate:"omitempty,duration" desc:"per-model health probe timeout"`
+		Address                    string        `env:"PROXY_ADDRESS" flag:"proxy-address" validate:"required,hostname_port"`
+		StoragePath                string        `env:"PROXY_STORAGE_PATH"    flag:"proxy-storage-path"    validate:"omitempty,dirpath" desc:"enables file storage and sets the folder path"`
+		StoreChatContext           *lib.Bool     `env:"PROXY_STORE_CHAT_CONTEXT" flag:"proxy-store-chat-context" desc:"store chat context in the proxy storage"`
+		ForwardChatContext         *lib.Bool     `env:"PROXY_FORWARD_CHAT_CONTEXT" flag:"proxy-forward-chat-context" desc:"prepend whole stored message history to the prompt"`
+		AgentConfigPath            string        `env:"AGENT_CONFIG_PATH" flag:"agent-config-path" validate:"omitempty"`
+		AgentConfigContent         string        `env:"AGENT_CONFIG_CONTENT" flag:"agent-config-content" validate:"omitempty" desc:"content of the agent config file"`
+		ModelsConfigPath           string        `env:"MODELS_CONFIG_PATH" flag:"models-config-path" validate:"omitempty"`
+		ModelsConfigContent        string        `env:"MODELS_CONFIG_CONTENT" flag:"models-config-content" validate:"omitempty" desc:"content of the models config file"`
+		RatingConfigPath           string        `env:"RATING_CONFIG_PATH" flag:"rating-config-path" validate:"omitempty" desc:"path to the rating config file"`
+		CookieFilePath             string        `env:"COOKIE_FILE_PATH" flag:"cookie-file-path" validate:"omitempty" desc:"path to the cookie file"`
+		CookieContent              string        `env:"COOKIE_CONTENT" flag:"cookie-content" validate:"omitempty" desc:"content of the cookie file"`
+		AuthConfigFilePath         string        `env:"AUTH_CONFIG_FILE_PATH" flag:"auth-config-file-path" validate:"omitempty"`
+		LLMTimeout                 time.Duration `env:"LLM_TIMEOUT" flag:"llm-timeout" validate:"omitempty" desc:"timeout for PNode to LLM requests, applies to both streaming and non-streaming"`
+		CNodePNodeTimeout          time.Duration `env:"CNODE_PNODE_TIMEOUT" flag:"cnode-pnode-timeout" validate:"omitempty" desc:"per-attempt timeout for CNode waiting for PNode first response"`
+		CNodePNodeMaxRetries       int           `env:"CNODE_PNODE_MAX_RETRIES" flag:"cnode-pnode-max-retries" validate:"omitempty,gte=0" desc:"max retries for CNode to PNode read timeout (chat/embeddings)"`
+		CNodePNodeAudioMaxRetries  int           `env:"CNODE_PNODE_AUDIO_MAX_RETRIES" flag:"cnode-pnode-audio-max-retries" validate:"omitempty,gte=0" desc:"max retries for CNode to PNode read timeout (audio transcription/speech)"`
+		ModelHealthCheckDisabled   bool          `env:"MODEL_HEALTH_CHECK_DISABLED" flag:"model-health-check-disabled" desc:"disable periodic model health self-checks on provider"`
+		ModelHealthCheckInterval   time.Duration `env:"MODEL_HEALTH_CHECK_INTERVAL" flag:"model-health-check-interval" validate:"omitempty,duration" desc:"how often to probe configured models with a test prompt, result is cached between runs"`
+		ModelHealthCheckTimeout    time.Duration `env:"MODEL_HEALTH_CHECK_TIMEOUT" flag:"model-health-check-timeout" validate:"omitempty,duration" desc:"per-model health probe timeout"`
+		ModelHealthCheckProbeDelay time.Duration `env:"MODEL_HEALTH_CHECK_PROBE_DELAY" flag:"model-health-check-probe-delay" validate:"omitempty,duration" desc:"pause between per-model health probes so many-model providers don't burst their upstream and trip rate limits"`
 	}
 	System struct {
 		Enable           bool   `env:"SYS_ENABLE"              flag:"sys-enable" desc:"enable system level configuration adjustments"`
@@ -218,6 +219,9 @@ func (cfg *Config) SetDefaults() {
 	if cfg.Proxy.ModelHealthCheckTimeout == 0 {
 		cfg.Proxy.ModelHealthCheckTimeout = 60 * time.Second
 	}
+	if cfg.Proxy.ModelHealthCheckProbeDelay == 0 {
+		cfg.Proxy.ModelHealthCheckProbeDelay = 2 * time.Second
+	}
 
 	// IPFS
 	if cfg.IPFS.Address == "" {
@@ -278,6 +282,7 @@ func (cfg *Config) GetSanitized() interface{} {
 	publicCfg.Proxy.ModelHealthCheckDisabled = cfg.Proxy.ModelHealthCheckDisabled
 	publicCfg.Proxy.ModelHealthCheckInterval = cfg.Proxy.ModelHealthCheckInterval
 	publicCfg.Proxy.ModelHealthCheckTimeout = cfg.Proxy.ModelHealthCheckTimeout
+	publicCfg.Proxy.ModelHealthCheckProbeDelay = cfg.Proxy.ModelHealthCheckProbeDelay
 
 	publicCfg.System.Enable = cfg.System.Enable
 	publicCfg.System.LocalPortRange = cfg.System.LocalPortRange

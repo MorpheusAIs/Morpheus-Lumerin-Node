@@ -84,8 +84,8 @@ func (a *OpenAI) Prompt(ctx context.Context, compl *gcs.OpenAICompletionRequestE
 	log.Infof("AI Model responded with status code: %d", resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK {
-		log.Warnf("AI Model responded with error: %s", resp.StatusCode)
-		return a.readError(ctx, resp.Body, cb)
+		log.Warnf("AI Model responded with error: %d", resp.StatusCode)
+		return a.readError(ctx, resp.StatusCode, resp.Body, cb)
 	}
 
 	if isContentTypeStream(resp.Header) {
@@ -110,7 +110,7 @@ func (a *OpenAI) readResponse(ctx context.Context, body io.Reader, cb gcs.Comple
 	return nil
 }
 
-func (a *OpenAI) readError(ctx context.Context, body io.Reader, cb gcs.CompletionCallback) error {
+func (a *OpenAI) readError(ctx context.Context, statusCode int, body io.Reader, cb gcs.CompletionCallback) error {
 	raw, err := io.ReadAll(body)
 	if err != nil {
 		return fmt.Errorf("failed to read error response body: %v", err)
@@ -127,10 +127,10 @@ func (a *OpenAI) readError(ctx context.Context, body io.Reader, cb gcs.Completio
 				"type":    "upstream_error",
 			},
 		}
-		return cb(ctx, nil, gcs.NewAiEngineErrorResponse(parsed))
+		return cb(ctx, nil, gcs.NewAiEngineErrorResponse(statusCode, parsed))
 	}
 
-	if cbErr := cb(ctx, nil, gcs.NewAiEngineErrorResponse(parsed)); cbErr != nil {
+	if cbErr := cb(ctx, nil, gcs.NewAiEngineErrorResponse(statusCode, parsed)); cbErr != nil {
 		return fmt.Errorf("callback failed: %v", cbErr)
 	}
 	return nil
@@ -255,7 +255,7 @@ func (a *OpenAI) AudioTranscription(ctx context.Context, audioRequest *gcs.Audio
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return a.readError(ctx, resp.Body, cb)
+		return a.readError(ctx, resp.StatusCode, resp.Body, cb)
 	}
 
 	// Check if response is streaming
@@ -386,7 +386,7 @@ func (a *OpenAI) AudioSpeech(ctx context.Context, audioRequest *gcs.AudioSpeechR
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return a.readError(ctx, resp.Body, cb)
+		return a.readError(ctx, resp.StatusCode, resp.Body, cb)
 	}
 
 	// Stream the audio response in chunks
@@ -426,7 +426,7 @@ func (a *OpenAI) Embeddings(ctx context.Context, embedRequest *gcs.EmbeddingsReq
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return a.readError(ctx, resp.Body, cb)
+		return a.readError(ctx, resp.StatusCode, resp.Body, cb)
 	}
 
 	var embResp gcs.EmbeddingsResponse

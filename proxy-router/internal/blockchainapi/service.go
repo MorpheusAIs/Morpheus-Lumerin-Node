@@ -72,11 +72,11 @@ type BlockchainService struct {
 	minStake            *big.Int
 	attestationVerifier *attestation.Verifier
 
-	supplyBudgetMu   sync.Mutex
-	cachedSupply     *big.Int
-	cachedSupplyAt   time.Time
-	cachedBudget     *big.Int
-	cachedBudgetAt   time.Time
+	supplyBudgetMu sync.Mutex
+	cachedSupply   *big.Int
+	cachedSupplyAt time.Time
+	cachedBudget   *big.Int
+	cachedBudgetAt time.Time
 
 	legacyTx    bool
 	privateKey  i.PrKeyProvider
@@ -609,6 +609,16 @@ func (s *BlockchainService) GetModelTags(ctx context.Context, modelID common.Has
 		return nil, err
 	}
 	return m.Tags, nil
+}
+
+// GetModelNameAndTags returns the public on-chain name and tags of a model
+// in a single registry read.
+func (s *BlockchainService) GetModelNameAndTags(ctx context.Context, modelID common.Hash) (string, []string, error) {
+	m, err := s.modelRegistry.GetModelById(ctx, modelID)
+	if err != nil {
+		return "", nil, err
+	}
+	return m.Name, m.Tags, nil
 }
 
 func (s *BlockchainService) ModelExists(ctx context.Context, modelID common.Hash) (bool, error) {

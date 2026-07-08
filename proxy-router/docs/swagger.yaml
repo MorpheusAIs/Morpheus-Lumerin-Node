@@ -1110,6 +1110,12 @@ definitions:
         type: string
       hasActiveBid:
         type: boolean
+      httpStatus:
+        description: |-
+          HttpStatus is the HTTP status code returned by the upstream backend
+          when the probe failed with a non-200 response (e.g. 402, 429).
+          Zero when the probe succeeded or never got an HTTP response.
+        type: integer
       lastChecked:
         type: integer
       lastHealthy:
@@ -1117,6 +1123,8 @@ definitions:
       latencyMs:
         type: integer
       modelId:
+        type: string
+      modelName:
         type: string
       modelType:
         type: string

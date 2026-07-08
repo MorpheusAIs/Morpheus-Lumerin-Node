@@ -182,6 +182,7 @@ On provider nodes the proxy-router periodically probes every model from `models-
 | `MODEL_HEALTH_CHECK_DISABLED` | `false` | Set `true` to disable the loop (the `models` field disappears from `/healthcheck`) |
 | `MODEL_HEALTH_CHECK_INTERVAL` | `1h` | How often models are probed; results are cached between runs |
 | `MODEL_HEALTH_CHECK_TIMEOUT` | `60s` | Per-model probe timeout |
+| `MODEL_HEALTH_CHECK_PROBE_DELAY` | `2s` | Pause between per-model probes so many-model providers don't burst their upstream into a rate limit |
 
 ## TEE (Phase 1 + Phase 2 attestation)
 

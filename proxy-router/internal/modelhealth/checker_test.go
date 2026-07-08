@@ -67,6 +67,7 @@ type mockDeps struct {
 	bids       []*structs.Bid
 	bidsErr    error
 	tags       map[common.Hash][]string
+	names      map[common.Hash]string
 	modelIDs   []common.Hash
 	adapter    aiengine.AIEngineStream
 	adapterErr error
@@ -87,12 +88,12 @@ func (m *mockDeps) GetActiveBidsByProvider(ctx context.Context, provider common.
 	return m.bids[from:to], nil
 }
 
-func (m *mockDeps) GetModelTags(ctx context.Context, modelID common.Hash) ([]string, error) {
+func (m *mockDeps) GetModelNameAndTags(ctx context.Context, modelID common.Hash) (string, []string, error) {
 	tags, ok := m.tags[modelID]
 	if !ok {
-		return nil, errors.New("model not found")
+		return "", nil, errors.New("model not found")
 	}
-	return tags, nil
+	return m.names[modelID], tags, nil
 }
 
 func (m *mockDeps) GetAll() ([]common.Hash, []config.ModelConfig) {
@@ -152,9 +153,9 @@ func newTestChecker(deps *mockDeps) *Checker {
 	return NewChecker(Deps{
 		Adapters:     deps,
 		Bids:         deps,
-		Tags:         deps,
+		Models:       deps,
 		ModelConfigs: deps,
-	}, time.Hour, time.Second, lib.NewTestLogger())
+	}, time.Hour, time.Second, 0, lib.NewTestLogger())
 }
 
 func reportByID(t *testing.T, reports []system.ModelHealthReport, modelID common.Hash) system.ModelHealthReport {
@@ -188,6 +189,7 @@ func TestCheckAllStatuses(t *testing.T) {
 			modelTTS:          {"tts"},
 			modelUnconfigured: {"llm"},
 		},
+		names:    map[common.Hash]string{modelLLM: "test-llm"},
 		modelIDs: []common.Hash{modelLLM, modelEmbedding, modelNoBid, modelTTS},
 		adapter:  &mathSolvingAdapter{},
 	}
@@ -203,6 +205,8 @@ func TestCheckAllStatuses(t *testing.T) {
 	require.True(t, llm.HasActiveBid)
 	require.Equal(t, bidIDFor(modelLLM).Hex(), llm.BidID)
 	require.Equal(t, string(structs.ModelTypeLLM), llm.ModelType)
+	require.Equal(t, "test-llm", llm.ModelName)
+	require.Zero(t, llm.HttpStatus)
 	require.NotNil(t, llm.PromptCorrect)
 	require.True(t, *llm.PromptCorrect)
 	require.NotZero(t, llm.LastHealthy)
@@ -266,6 +270,65 @@ func TestCheckAllBidsOnlyNoConfig(t *testing.T) {
 	reports := checker.GetReports()
 	require.Len(t, reports, 1)
 	require.Equal(t, system.ModelHealthStatusNoModel, reports[0].Status)
+}
+
+// errorRespondingAdapter simulates an upstream backend that answers every
+// request with an HTTP error status (e.g. 402 payment required, 429 rate
+// limited) instead of a completion.
+type errorRespondingAdapter struct {
+	statusCode int
+}
+
+func (a *errorRespondingAdapter) Prompt(ctx context.Context, compl *gcs.OpenAICompletionRequestExtra, cb gcs.CompletionCallback) error {
+	return cb(ctx, nil, gcs.NewAiEngineErrorResponse(a.statusCode, map[string]interface{}{"error": "upstream error"}))
+}
+
+func (a *errorRespondingAdapter) Embeddings(ctx context.Context, req *gcs.EmbeddingsRequest, cb gcs.CompletionCallback) error {
+	return cb(ctx, nil, gcs.NewAiEngineErrorResponse(a.statusCode, map[string]interface{}{"error": "upstream error"}))
+}
+
+func (a *errorRespondingAdapter) AudioTranscription(ctx context.Context, req *gcs.AudioTranscriptionRequest, cb gcs.CompletionCallback) error {
+	return errors.New("not implemented")
+}
+
+func (a *errorRespondingAdapter) AudioSpeech(ctx context.Context, req *gcs.AudioSpeechRequest, cb gcs.CompletionCallback) error {
+	return errors.New("not implemented")
+}
+
+func (a *errorRespondingAdapter) ApiType() string { return "openai" }
+
+func TestCheckAllUpstreamHTTPError(t *testing.T) {
+	deps := &mockDeps{
+		bids:     []*structs.Bid{bidFor(modelLLM)},
+		tags:     map[common.Hash][]string{modelLLM: {"llm"}},
+		modelIDs: []common.Hash{modelLLM},
+		adapter:  &errorRespondingAdapter{statusCode: 402},
+	}
+
+	checker := newTestChecker(deps)
+	checker.checkAll(context.Background(), common.Address{})
+
+	llm := reportByID(t, checker.GetReports(), modelLLM)
+	require.Equal(t, system.ModelHealthStatusUnhealthy, llm.Status)
+	require.Equal(t, system.ModelHealthErrorBadResponse, llm.ErrorKind)
+	require.Equal(t, 402, llm.HttpStatus)
+}
+
+func TestCheckAllRateLimited(t *testing.T) {
+	deps := &mockDeps{
+		bids:     []*structs.Bid{bidFor(modelLLM)},
+		tags:     map[common.Hash][]string{modelLLM: {"llm"}},
+		modelIDs: []common.Hash{modelLLM},
+		adapter:  &errorRespondingAdapter{statusCode: 429},
+	}
+
+	checker := newTestChecker(deps)
+	checker.checkAll(context.Background(), common.Address{})
+
+	llm := reportByID(t, checker.GetReports(), modelLLM)
+	require.Equal(t, system.ModelHealthStatusUnhealthy, llm.Status)
+	require.Equal(t, system.ModelHealthErrorRateLimited, llm.ErrorKind)
+	require.Equal(t, 429, llm.HttpStatus)
 }
 
 func TestCheckAllProbeFailure(t *testing.T) {

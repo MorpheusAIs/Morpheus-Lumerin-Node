@@ -4797,6 +4797,10 @@ const docTemplate = `{
                 "hasActiveBid": {
                     "type": "boolean"
                 },
+                "httpStatus": {
+                    "description": "HttpStatus is the HTTP status code returned by the upstream backend\nwhen the probe failed with a non-200 response (e.g. 402, 429).\nZero when the probe succeeded or never got an HTTP response.",
+                    "type": "integer"
+                },
                 "lastChecked": {
                     "type": "integer"
                 },
@@ -4807,6 +4811,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "modelId": {
+                    "type": "string"
+                },
+                "modelName": {
                     "type": "string"
                 },
                 "modelType": {

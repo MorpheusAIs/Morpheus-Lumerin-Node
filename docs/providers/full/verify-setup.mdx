@@ -22,13 +22,14 @@ Expected:
 { "status": "healthy", "version": "v7.0.0", "uptime": "..." }
 ```
 
-On provider nodes the response also includes a `models` array — the periodic model health self-report covering your **whole ecosystem of configured models and active bids**. For every model in `models-config.json` that has an active bid from your wallet, the proxy-router sends a small test prompt on a schedule (default hourly, see `MODEL_HEALTH_CHECK_INTERVAL` in [env-proxy-router](/reference/env-proxy-router)) and caches the result. Active bids whose model is *missing* from `models-config.json` are also listed, so a bid you're selling but cannot serve doesn't go unnoticed:
+On provider nodes the response also includes a `models` array — the periodic model health self-report covering your **whole ecosystem of configured models and active bids**. For every model in `models-config.json` that has an active bid from your wallet, the proxy-router sends a small test prompt on a schedule (default hourly, see `MODEL_HEALTH_CHECK_INTERVAL` in [env-proxy-router](/reference/env-proxy-router)) and caches the result. Probes are paced a few seconds apart (`MODEL_HEALTH_CHECK_PROBE_DELAY`, default `2s`) so a provider with many models doesn't burst its own backend into a rate limit. Active bids whose model is *missing* from `models-config.json` are also listed, so a bid you're selling but cannot serve doesn't go unnoticed:
 
 ```json
 {
   "models": [
     {
       "modelId": "0xe086...",
+      "modelName": "llama-3.3-70b",
       "modelType": "LLM",
       "hasActiveBid": true,
       "bidId": "0x3f2a...",
@@ -40,6 +41,7 @@ On provider nodes the response also includes a `models` array — the periodic m
     },
     {
       "modelId": "0x85670d...",
+      "modelName": "mistral-31-24b",
       "modelType": "LLM",
       "hasActiveBid": true,
       "bidId": "0x9c41...",
@@ -50,15 +52,26 @@ On provider nodes the response also includes a `models` array — the periodic m
 }
 ```
 
+`modelName` is the model's public name as registered on-chain (not the private backend model string from `models-config.json`, which is never exposed).
+
 `status` is one of:
 
 | Status | Meaning | Action |
 |--------|---------|--------|
 | `healthy` | Probe succeeded (LLM answer graded via `promptCorrect`) | — |
-| `unhealthy` | Probe failed — see `errorKind`: `timeout`, `connection`, `bad_response` | Fix the backend `apiUrl`; consumers opening a session hit the same failure |
+| `unhealthy` | Probe failed — see `errorKind` and `httpStatus` below | Fix the backend; consumers opening a session hit the same failure |
 | `no_bid` | Configured model has no active bid; not probed | Post a bid if you want to sell it |
 | `no_model_configured` | **Active bid exists but the model is missing from `models-config.json`** | Add the model entry or delete the bid — consumers can open sessions against this bid and get errors |
 | `skipped` | Model type other than LLM/embedding; not probed | — |
+
+For `unhealthy` models, `errorKind` narrows the failure and, when the backend answered with an HTTP error, `httpStatus` carries the exact upstream status code:
+
+| errorKind | Meaning | Typical `httpStatus` |
+|-----------|---------|----------------------|
+| `timeout` | Probe hit the per-model timeout | — |
+| `connection` | Could not reach the backend `apiUrl` at all | — |
+| `rate_limited` | Backend is up and configured, but throttled the probe | `429` |
+| `bad_response` | Backend answered with an error or empty completion | `402` (billing), `400`/`404` (bad model config), `5xx` |
 
 Logs should show:
 

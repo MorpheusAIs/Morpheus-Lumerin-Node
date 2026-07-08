@@ -2,7 +2,9 @@
 // models-config.json that have an active on-chain bid from this provider
 // actually respond to inference requests. Results are cached in memory and
 // exposed through the public /healthcheck endpoint, deliberately excluding
-// private config fields (modelName, apiUrl, apiKey).
+// private config fields (the models-config modelName, apiUrl, apiKey). The
+// report's modelName is the public name registered on-chain, which anyone
+// can already derive from the model ID.
 package modelhealth
 
 import (
@@ -12,6 +14,7 @@ import (
 	"math/big"
 	"math/rand"
 	"net"
+	"net/http"
 	"regexp"
 	"sort"
 	"strings"
@@ -45,41 +48,50 @@ type BidProvider interface {
 	GetActiveBidsByProvider(ctx context.Context, provider common.Address, offset *big.Int, limit uint8, order registries.Order) ([]*structs.Bid, error)
 }
 
-type ModelTagsProvider interface {
-	GetModelTags(ctx context.Context, modelID common.Hash) ([]string, error)
+type ModelMetaProvider interface {
+	GetModelNameAndTags(ctx context.Context, modelID common.Hash) (string, []string, error)
 }
 
 type ModelConfigProvider interface {
 	GetAll() ([]common.Hash, []config.ModelConfig)
 }
 
-type Checker struct {
-	deps     Deps
-	interval time.Duration
-	timeout  time.Duration
-	log      lib.ILogger
+// modelMeta caches the public on-chain facts about a model so each sweep
+// only pays one registry call per previously unseen model.
+type modelMeta struct {
+	name      string
+	modelType structs.ModelType
+}
 
-	mu         sync.RWMutex
-	reports    map[string]system.ModelHealthReport
-	modelTypes map[string]structs.ModelType
+type Checker struct {
+	deps       Deps
+	interval   time.Duration
+	timeout    time.Duration
+	probeDelay time.Duration
+	log        lib.ILogger
+
+	mu        sync.RWMutex
+	reports   map[string]system.ModelHealthReport
+	modelMeta map[string]modelMeta
 }
 
 // Deps groups the external dependencies of the checker.
 type Deps struct {
 	Adapters     AdapterProvider
 	Bids         BidProvider
-	Tags         ModelTagsProvider
+	Models       ModelMetaProvider
 	ModelConfigs ModelConfigProvider
 }
 
-func NewChecker(deps Deps, interval, timeout time.Duration, log lib.ILogger) *Checker {
+func NewChecker(deps Deps, interval, timeout, probeDelay time.Duration, log lib.ILogger) *Checker {
 	return &Checker{
 		deps:       deps,
 		interval:   interval,
 		timeout:    timeout,
+		probeDelay: probeDelay,
 		log:        log.Named("MODEL_HEALTH"),
 		reports:    make(map[string]system.ModelHealthReport),
-		modelTypes: make(map[string]structs.ModelType),
+		modelMeta:  make(map[string]modelMeta),
 	}
 }
 
@@ -130,6 +142,7 @@ func (c *Checker) checkAll(ctx context.Context, walletAddr common.Address) {
 
 	seen := make(map[string]bool, len(modelIDs)+len(bidsByModel))
 
+	probed := false
 	for _, modelID := range modelIDs {
 		select {
 		case <-ctx.Done():
@@ -137,7 +150,17 @@ func (c *Checker) checkAll(ctx context.Context, walletAddr common.Address) {
 		default:
 		}
 		bidID, hasBid := bidsByModel[modelID]
+		// Pace backend probes so a provider with many models doesn't burst
+		// its upstream (often a single account behind all models) and
+		// self-inflict rate-limit failures. Only probed models (those with
+		// an active bid) hit the backend, so only they are paced.
+		if hasBid && probed && !c.sleep(ctx, c.probeDelay) {
+			return
+		}
 		c.checkModel(ctx, modelID, bidID, hasBid)
+		if hasBid {
+			probed = true
+		}
 		seen[modelID.Hex()] = true
 	}
 
@@ -171,11 +194,28 @@ func (c *Checker) reportUnconfigured(ctx context.Context, modelID common.Hash, b
 
 	c.log.Warnf("active bid %s for model %s has no entry in models config", lib.Short(bidID), lib.Short(modelID))
 
-	if modelType, err := c.modelType(ctx, modelID); err == nil {
-		report.ModelType = string(modelType)
+	if meta, err := c.modelMetaFor(ctx, modelID); err == nil {
+		report.ModelName = meta.name
+		report.ModelType = string(meta.modelType)
 	}
 
 	c.setReport(report)
+}
+
+// sleep blocks for d unless the context is cancelled first; it reports
+// whether the full delay elapsed.
+func (c *Checker) sleep(ctx context.Context, d time.Duration) bool {
+	if d <= 0 {
+		return true
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
 }
 
 // prune drops cached reports for models that are no longer configured and no
@@ -243,18 +283,19 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 		return
 	}
 
-	modelType, err := c.modelType(ctx, modelID)
+	meta, err := c.modelMetaFor(ctx, modelID)
 	if err != nil {
-		c.log.Warnf("model %s: cannot resolve model type: %s", lib.Short(modelID), err)
+		c.log.Warnf("model %s: cannot resolve model metadata: %s", lib.Short(modelID), err)
 		report.Status = system.ModelHealthStatusSkipped
 		report.ErrorKind = system.ModelHealthErrorTypeLookup
 		c.setReport(report)
 		return
 	}
-	report.ModelType = string(modelType)
+	report.ModelName = meta.name
+	report.ModelType = string(meta.modelType)
 
 	var probe func(ctx context.Context, adapter aiengine.AIEngineStream, report *system.ModelHealthReport) error
-	switch modelType {
+	switch meta.modelType {
 	case structs.ModelTypeLLM:
 		probe = c.probeLLM
 	case structs.ModelTypeEMBEDDING:
@@ -284,7 +325,14 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 	if err != nil {
 		c.log.Warnf("model %s: probe failed: %s", lib.Short(modelID), err)
 		report.Status = system.ModelHealthStatusUnhealthy
-		report.ErrorKind = classifyError(err)
+		// 429 means the backend is up and correctly configured, just
+		// throttled right now — a materially different signal than a
+		// billing (402) or configuration (404) failure.
+		if report.HttpStatus == http.StatusTooManyRequests {
+			report.ErrorKind = system.ModelHealthErrorRateLimited
+		} else {
+			report.ErrorKind = classifyError(err)
+		}
 	} else {
 		report.Status = system.ModelHealthStatusHealthy
 		report.LastHealthy = time.Now().Unix()
@@ -309,6 +357,7 @@ func (c *Checker) probeLLM(ctx context.Context, adapter aiengine.AIEngineStream,
 	var engineErr error
 	err := adapter.Prompt(ctx, req, func(ctx context.Context, chunk gcs.Chunk, aiEngineErr *gcs.AiEngineErrorResponse) error {
 		if aiEngineErr != nil {
+			report.HttpStatus = aiEngineErr.StatusCode
 			engineErr = errors.New("model backend returned an error response")
 			return nil
 		}
@@ -340,6 +389,7 @@ func (c *Checker) probeEmbeddings(ctx context.Context, adapter aiengine.AIEngine
 	var gotVector bool
 	err := adapter.Embeddings(ctx, req, func(ctx context.Context, chunk gcs.Chunk, aiEngineErr *gcs.AiEngineErrorResponse) error {
 		if aiEngineErr != nil {
+			report.HttpStatus = aiEngineErr.StatusCode
 			return nil
 		}
 		resp, ok := chunk.Data().(gcs.EmbeddingsResponse)
@@ -360,25 +410,27 @@ func (c *Checker) probeEmbeddings(ctx context.Context, adapter aiengine.AIEngine
 	return nil
 }
 
-func (c *Checker) modelType(ctx context.Context, modelID common.Hash) (structs.ModelType, error) {
+// modelMetaFor resolves the public on-chain name and type of a model,
+// caching the result. Both come from a single registry read.
+func (c *Checker) modelMetaFor(ctx context.Context, modelID common.Hash) (modelMeta, error) {
 	c.mu.RLock()
-	cached, ok := c.modelTypes[modelID.Hex()]
+	cached, ok := c.modelMeta[modelID.Hex()]
 	c.mu.RUnlock()
 	if ok {
 		return cached, nil
 	}
 
-	tags, err := c.deps.Tags.GetModelTags(ctx, modelID)
+	name, tags, err := c.deps.Models.GetModelNameAndTags(ctx, modelID)
 	if err != nil {
-		return structs.ModelTypeUnknown, err
+		return modelMeta{}, err
 	}
 
-	modelType := blockchainapi.DetectModelType(tags)
+	meta := modelMeta{name: name, modelType: blockchainapi.DetectModelType(tags)}
 
 	c.mu.Lock()
-	c.modelTypes[modelID.Hex()] = modelType
+	c.modelMeta[modelID.Hex()] = meta
 	c.mu.Unlock()
-	return modelType, nil
+	return meta, nil
 }
 
 func (c *Checker) getReport(modelID string) (system.ModelHealthReport, bool) {

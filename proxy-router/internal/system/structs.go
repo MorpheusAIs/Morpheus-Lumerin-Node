@@ -34,16 +34,19 @@ const (
 	ModelHealthErrorTimeout     = "timeout"
 	ModelHealthErrorConnection  = "connection"
 	ModelHealthErrorBadResponse = "bad_response"
+	ModelHealthErrorRateLimited = "rate_limited"
 	ModelHealthErrorTypeLookup  = "model_type_lookup"
 )
 
 // ModelHealthReport is the sanitized per-model self-report exposed on the
 // public /healthcheck endpoint. It covers the union of configured models and
-// this provider's active bids, and intentionally carries only the on-chain
-// model ID and derived status — never the private modelName, apiUrl or
-// apiKey from models-config.json.
+// this provider's active bids, and intentionally carries only on-chain data
+// and derived status — never the private modelName, apiUrl or apiKey from
+// models-config.json. The ModelName here is the public name registered
+// on-chain for the model ID, not the private backend model string.
 type ModelHealthReport struct {
 	ModelID       string `json:"modelId"`
+	ModelName     string `json:"modelName,omitempty"`
 	ModelType     string `json:"modelType,omitempty"`
 	HasActiveBid  bool   `json:"hasActiveBid"`
 	BidID         string `json:"bidId,omitempty"`
@@ -53,6 +56,10 @@ type ModelHealthReport struct {
 	LatencyMs     int64  `json:"latencyMs,omitempty"`
 	PromptCorrect *bool  `json:"promptCorrect,omitempty"`
 	ErrorKind     string `json:"errorKind,omitempty"`
+	// HttpStatus is the HTTP status code returned by the upstream backend
+	// when the probe failed with a non-200 response (e.g. 402, 429).
+	// Zero when the probe succeeded or never got an HTTP response.
+	HttpStatus int `json:"httpStatus,omitempty"`
 }
 
 type StatusRes struct {

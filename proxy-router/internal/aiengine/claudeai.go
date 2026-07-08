@@ -129,7 +129,7 @@ func (a *ClaudeAI) Prompt(ctx context.Context, compl *gcs.OpenAICompletionReques
 	log := a.log.With("request_id", lib.RequestIDFromContext(ctx))
 	log.Infof("AI Model responded with status code: %d", resp.StatusCode)
 	if resp.StatusCode != http.StatusOK {
-		return a.readError(ctx, resp.Body, cb)
+		return a.readError(ctx, resp.StatusCode, resp.Body, cb)
 	}
 
 	if isContentTypeStream(resp.Header) {
@@ -166,13 +166,13 @@ func (a *ClaudeAI) readResponse(ctx context.Context, body io.Reader, cb gcs.Comp
 	return nil
 }
 
-func (a *ClaudeAI) readError(ctx context.Context, body io.Reader, cb gcs.CompletionCallback) error {
+func (a *ClaudeAI) readError(ctx context.Context, statusCode int, body io.Reader, cb gcs.CompletionCallback) error {
 	var aiEngineErrorResponse interface{}
 	if err := json.NewDecoder(body).Decode(&aiEngineErrorResponse); err != nil {
 		return fmt.Errorf("failed to decode response: %v", err)
 	}
 
-	err := cb(ctx, nil, gcs.NewAiEngineErrorResponse(aiEngineErrorResponse))
+	err := cb(ctx, nil, gcs.NewAiEngineErrorResponse(statusCode, aiEngineErrorResponse))
 	if err != nil {
 		return fmt.Errorf("callback failed: %v", err)
 	}

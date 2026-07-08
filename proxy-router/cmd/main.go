@@ -384,9 +384,9 @@ func start() error {
 		modelHealthChecker = modelhealth.NewChecker(modelhealth.Deps{
 			Adapters:     aiEngine,
 			Bids:         blockchainApi,
-			Tags:         blockchainApi,
+			Models:       blockchainApi,
 			ModelConfigs: modelConfigLoader,
-		}, cfg.Proxy.ModelHealthCheckInterval, cfg.Proxy.ModelHealthCheckTimeout, appLog)
+		}, cfg.Proxy.ModelHealthCheckInterval, cfg.Proxy.ModelHealthCheckTimeout, cfg.Proxy.ModelHealthCheckProbeDelay, appLog)
 		modelHealthReporter = modelHealthChecker
 	}
 
