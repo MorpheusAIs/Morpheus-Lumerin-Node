@@ -1,6 +1,7 @@
 package genericchatstorage
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/sashabaranov/go-openai"
@@ -21,6 +22,37 @@ type ChatHistory struct {
 	Messages []ChatMessage `json:"messages"`
 }
 
+// ChatMessage.Prompt is an `interface{}`, so a history read back from disk holds
+// a map[string]interface{}, NOT an OpenAiCompletionRequest. A plain type
+// assertion therefore ALWAYS fails after a JSON round-trip — and because the
+// `ok` was discarded, it failed silently: every stored turn was dropped and the
+// model was handed a conversation with no history. That is why chat memory never
+// worked. Accept both shapes.
+func asCompletionRequest(prompt interface{}) (OpenAiCompletionRequest, bool) {
+	switch p := prompt.(type) {
+	case OpenAiCompletionRequest:
+		return p, true
+	case *OpenAiCompletionRequest:
+		if p == nil {
+			return OpenAiCompletionRequest{}, false
+		}
+		return *p, true
+	case nil:
+		return OpenAiCompletionRequest{}, false
+	default:
+		// Loaded from JSON: re-marshal the generic map back through the concrete type.
+		raw, err := json.Marshal(prompt)
+		if err != nil {
+			return OpenAiCompletionRequest{}, false
+		}
+		var req OpenAiCompletionRequest
+		if err := json.Unmarshal(raw, &req); err != nil {
+			return OpenAiCompletionRequest{}, false
+		}
+		return req, true
+	}
+}
+
 func (h *ChatHistory) AppendChatHistory(req *OpenAICompletionRequestExtra) *OpenAICompletionRequestExtra {
 	if h == nil {
 		return req
@@ -28,17 +60,27 @@ func (h *ChatHistory) AppendChatHistory(req *OpenAICompletionRequestExtra) *Open
 
 	messagesWithHistory := make([]openai.ChatCompletionMessage, 0)
 	for _, chat := range h.Messages {
-		// Only append chat completion messages to history, skip audio transcriptions
-		if chatReq, ok := chat.Prompt.(OpenAiCompletionRequest); ok {
-			messagesWithHistory = append(messagesWithHistory, openai.ChatCompletionMessage{
-				Role:    chatReq.Messages[0].Role,
-				Content: chatReq.Messages[0].Content,
-			})
-			messagesWithHistory = append(messagesWithHistory, openai.ChatCompletionMessage{
-				Role:    "assistant",
-				Content: chat.Response,
-			})
+		// Only append chat completion messages to history, skip audio transcriptions.
+		chatReq, ok := asCompletionRequest(chat.Prompt)
+		if !ok || len(chatReq.Messages) == 0 {
+			continue
 		}
+
+		// The turn the user actually took is the LAST message of the stored
+		// prompt. Taking Messages[0] only holds if the client sends exactly one
+		// message per request; a client that sends the running transcript (as
+		// every OpenAI-compatible client does) would otherwise have its FIRST
+		// message replayed on every turn.
+		last := chatReq.Messages[len(chatReq.Messages)-1]
+
+		messagesWithHistory = append(messagesWithHistory, openai.ChatCompletionMessage{
+			Role:    last.Role,
+			Content: last.Content,
+		})
+		messagesWithHistory = append(messagesWithHistory, openai.ChatCompletionMessage{
+			Role:    "assistant",
+			Content: chat.Response,
+		})
 	}
 
 	messagesWithHistory = append(messagesWithHistory, req.Messages...)

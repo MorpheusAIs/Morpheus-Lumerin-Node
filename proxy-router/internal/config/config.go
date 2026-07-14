@@ -189,7 +189,13 @@ func (cfg *Config) SetDefaults() {
 		cfg.Proxy.StoreChatContext = &lib.Bool{Bool: &val}
 	}
 	if cfg.Proxy.ForwardChatContext.Bool == nil {
-		val := true
+		// Default OFF: the client owns the transcript and sends the full
+		// messages[] it wants the model to see. With FORWARD on, the router
+		// ALSO prepends the stored history, duplicating context for any
+		// OpenAI-compatible client. Storage (PROXY_STORE_CHAT_CONTEXT) stays on
+		// for the history drawer; forwarding is an explicit opt-in for unusual
+		// clients that send only the latest turn.
+		val := false
 		cfg.Proxy.ForwardChatContext = &lib.Bool{Bool: &val}
 	}
 	if cfg.Proxy.RatingConfigPath == "" {
