@@ -460,10 +460,16 @@ export class Orchestrator {
     return 'initializing'
   }
 
+  // Keys introduced after a user's first install, listed here so they reach
+  // existing .env files (which are otherwise never rewritten). Only ABSENT
+  // keys are appended — user-edited values are left untouched.
+  private static readonly envKeysAppendedOnUpgrade = ['PROXY_FORWARD_CHAT_CONTEXT']
+
   private async writeEnvFile(path: string, env: Record<string, string>) {
     // check if the file exists
     if (fs.existsSync(path)) {
       this.log.info(`Env file already exists: ${path}`)
+      await this.appendMissingEnvKeys(path, env, Orchestrator.envKeysAppendedOnUpgrade)
       return
     }
 
@@ -472,6 +478,21 @@ export class Orchestrator {
       .join('\n')
     await fs.writeFile(path, envString)
     this.log.info(`Created env file: ${path}`)
+  }
+
+  private async appendMissingEnvKeys(path: string, env: Record<string, string>, keys: string[]) {
+    const contents = await fs.readFile(path, 'utf8')
+    const missing = keys.filter(
+      (key) => env[key] !== undefined && !new RegExp(`^\\s*${key}=`, 'm').test(contents)
+    )
+    if (missing.length === 0) {
+      return
+    }
+
+    const lines = missing.map((key) => `${key}=${env[key]}`).join('\n')
+    const separator = contents === '' || contents.endsWith('\n') ? '' : '\n'
+    await fs.appendFile(path, `${separator}${lines}\n`)
+    this.log.info(`Appended missing env key(s) to ${path}: ${missing.join(', ')}`)
   }
 
   private async writeLocalConfigFile(filepath: string, content: string) {

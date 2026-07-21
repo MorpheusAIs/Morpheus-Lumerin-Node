@@ -27,6 +27,11 @@ const configMacArm = {
       ETH_NODE_USE_SUBSCRIPTIONS: 'false',
       ETH_NODE_ADDRESS: '',
       PROXY_STORE_CHAT_CONTEXT: 'true',
+      // The bundled UI sends only the latest turn (Chat.tsx builds
+      // `messages: [incommingMessage]`), so the router must prepend stored
+      // history — without this the desktop app has no chat memory now that
+      // the router-side default is off.
+      PROXY_FORWARD_CHAT_CONTEXT: 'true',
       PROXY_STORAGE_PATH: './data/',
       LOG_COLOR: 'false',
       LOG_FOLDER_PATH: './logs/',

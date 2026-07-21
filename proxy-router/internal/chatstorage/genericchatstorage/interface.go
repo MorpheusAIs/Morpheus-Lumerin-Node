@@ -68,10 +68,19 @@ func (h *ChatHistory) AppendChatHistory(req *OpenAICompletionRequestExtra) *Open
 
 		// The turn the user actually took is the LAST message of the stored
 		// prompt. Taking Messages[0] only holds if the client sends exactly one
-		// message per request; a client that sends the running transcript (as
-		// every OpenAI-compatible client does) would otherwise have its FIRST
-		// message replayed on every turn.
+		// message per request; a client that sends the running transcript
+		// (as most OpenAI-compatible clients do — though the bundled desktop
+		// UI and CLI send only the latest turn) would otherwise have its
+		// FIRST message replayed on every turn.
 		last := chatReq.Messages[len(chatReq.Messages)-1]
+
+		// An image-only multi-content turn flattens to empty text. Forwarding
+		// it as an empty-content user message can be rejected by strict
+		// providers, so skip the pair — the same treatment such turns got
+		// before multi-content prompts survived the round-trip at all.
+		if last.Content == "" {
+			continue
+		}
 
 		messagesWithHistory = append(messagesWithHistory, openai.ChatCompletionMessage{
 			Role:    last.Role,
