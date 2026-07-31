@@ -70,7 +70,8 @@ The consumer release is a **single desktop app** per OS. On first launch, the ap
 <Steps>
   <Step title="Confirm proxy-router is up">
     Open `http://localhost:8082/swagger/index.html` — the Swagger UI should render.
-    See [Troubleshooting](/reference/troubleshooting) if it doesn't.
+    If you use **Try it out** on API routes, click **Authorize** and enter the `admin` credentials from the proxy-router `.cookie` file (see [API auth](/reference/api-auth)).
+    See [Troubleshooting](/reference/troubleshooting) if Swagger doesn't load.
   </Step>
   <Step title="Local-model test (optional)">
     In MorpheusUI's **Chat** tab, ensure **Local Model** is selected. Type a prompt and press Enter. A response confirms the local model + proxy-router pipeline works.

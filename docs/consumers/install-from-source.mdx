@@ -3,7 +3,7 @@ title: "Install from source"
 description: "Set up a consumer node from the GitHub source so you can interact with remote providers via the API."
 audience: ["consumer", "developer"]
 product: ["proxy-router", "cli"]
-last_verified: "v7.0.0"
+last_verified: "v7.9.0"
 source: "docs/04a-consumer-setup-source.md"
 ---
 
@@ -12,6 +12,7 @@ This guide builds the proxy-router from source and walks through the API-only co
 ## Pre-requisites
 
 - An ERC-20 wallet on BASE with MOR + ETH (use a top-level, not derived, address). **Never share your private key.**
+- Basic Auth credentials for the local API. On first start the proxy-router writes `admin:<password>` to `.cookie` next to the binary — use those credentials in Swagger (**Authorize**) and in every curl below. See [API auth](/reference/api-auth).
 
 ## TL;DR
 
@@ -61,7 +62,7 @@ This guide builds the proxy-router from source and walks through the API-only co
     ./proxy-router
     ```
     On future updates: `git pull && ./build.sh && ./proxy-router`.
-    Confirm Swagger at `http://localhost:8082/swagger/index.html`.
+    Confirm Swagger at `http://localhost:8082/swagger/index.html`. Click **Authorize** and enter the `admin` / password from `.cookie` before using **Try it out** — almost every route requires Basic Auth (same as the curl headers below).
   </Step>
 </Steps>
 
@@ -69,17 +70,25 @@ This guide builds the proxy-router from source and walks through the API-only co
 
 Either via Swagger or curl. **Once per wallet**, or when allowance is depleted.
 
+In Swagger: **Authorize** → run `POST /blockchain/approve`. Via curl (replace the Basic value with `base64(username:password)` from your `.cookie`, or use `-u 'admin:<password>'`):
+
 ```bash
 curl -X POST \
   'http://localhost:8082/blockchain/approve?spender=0x6aBE1d282f72B474E54527D93b979A4f64d3030a&amount=3' \
+  -H 'Authorization: Basic <base64(user:pass)>' \
   -H 'accept: application/json' -d ''
 ```
 
 ## C. Query for a model
 
 ```bash
-curl -X GET 'http://localhost:8082/wallet' -H 'accept: application/json'
-curl -X GET 'http://localhost:8082/blockchain/models' -H 'accept: application/json'
+curl -X GET 'http://localhost:8082/wallet' \
+  -H 'Authorization: Basic <base64(user:pass)>' \
+  -H 'accept: application/json'
+
+curl -X GET 'http://localhost:8082/blockchain/models' \
+  -H 'Authorization: Basic <base64(user:pass)>' \
+  -H 'accept: application/json'
 ```
 
 Pick an `Id` from the response and use it as `<modelId>` below. See the [API endpoints](/reference/api-endpoints) reference for the full schema.
@@ -89,6 +98,7 @@ Pick an `Id` from the response and use it as `<modelId>` below. See the [API end
 ```bash
 curl -s -X POST \
   'http://localhost:8082/blockchain/models/<modelId>/session' \
+  -H 'Authorization: Basic <base64(user:pass)>' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{"sessionDuration": 600}'
@@ -100,6 +110,7 @@ The transaction will appear in your wallet's history at `https://base.blockscout
 
 ```bash
 curl -X POST 'http://localhost:8082/v1/chat/completions' \
+  -H 'Authorization: Basic <base64(user:pass)>' \
   -H 'accept: application/json' \
   -H 'session_id: <sessionId>' \
   -H 'Content-Type: application/json' \
@@ -115,12 +126,18 @@ The response is OpenAI-compatible SSE.
 
 ```bash
 # Approve, query wallet, list models, open a session, prompt
-curl -X POST 'http://localhost:8082/blockchain/approve?spender=0x6aBE1d282f72B474E54527D93b979A4f64d3030a&amount=3' -H 'accept: application/json' -d ''
-curl -s 'http://localhost:8082/wallet' | jq .address
-curl -s 'http://localhost:8082/blockchain/models' | jq -r '.models[] | "\(.Id), \(.Name)"'
+# AUTH from .cookie — either header form or: curl -u 'admin:<password>' ...
+AUTH='Authorization: Basic <base64(user:pass)>'
+SPENDER=0x6aBE1d282f72B474E54527D93b979A4f64d3030a
+
+curl -X POST "http://localhost:8082/blockchain/approve?spender=$SPENDER&amount=3" \
+  -H "$AUTH" -H 'accept: application/json' -d ''
+curl -s 'http://localhost:8082/wallet' -H "$AUTH" | jq .address
+curl -s 'http://localhost:8082/blockchain/models' -H "$AUTH" \
+  | jq -r '.models[] | "\(.Id), \(.Name)"'
 SESSION=$(curl -s -X POST 'http://localhost:8082/blockchain/models/<modelId>/session' \
-  -H 'Content-Type: application/json' -d '{"sessionDuration":600}' | jq -r .sessionId)
+  -H "$AUTH" -H 'Content-Type: application/json' -d '{"sessionDuration":600}' | jq -r .sessionId)
 curl -X POST 'http://localhost:8082/v1/chat/completions' \
-  -H "session_id: $SESSION" -H 'Content-Type: application/json' \
+  -H "$AUTH" -H "session_id: $SESSION" -H 'Content-Type: application/json' \
   -d '{"messages":[{"role":"user","content":"tell me a joke"}],"stream":true}'
 ```

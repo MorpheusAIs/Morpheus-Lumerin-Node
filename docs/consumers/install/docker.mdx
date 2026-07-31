@@ -56,7 +56,7 @@ For provider-side Docker (with model registration, public `:3333`, etc.), see [P
     ```bash
     curl http://localhost:8082/healthcheck
     ```
-    Open Swagger at `http://localhost:8082/swagger/index.html`.
+    Open Swagger at `http://localhost:8082/swagger/index.html`. For any authenticated route (**Try it out**), click **Authorize** first and use the `admin` / password from your `.cookie` (see [API auth](/reference/api-auth)). `GET /healthcheck` does not require auth.
   </Step>
 </Steps>
 

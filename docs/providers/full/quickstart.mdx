@@ -118,7 +118,7 @@ Run from the working directory (so the relative config and data paths resolve):
 
 ## Validate
 
-- `http://localhost:8082/swagger/index.html` should render.
+- `http://localhost:8082/swagger/index.html` should render. Authenticated routes need **Authorize** with your `.cookie` credentials ([API auth](/reference/api-auth)).
 - `./data/` directory contains logs.
 - The proxy-router log should include:
   ```
