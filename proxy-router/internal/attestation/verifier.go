@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -43,6 +44,32 @@ func (c *collateralField) UnmarshalJSON(data []byte) error {
 	c.Error = obj.Error
 	return nil
 }
+
+// softString unmarshals a JSON string or number into a Go string.
+// SecretAI Portal quote-parse currently emits version/tee_type as numbers;
+// older responses used strings or omitted the fields.
+type softString string
+
+func (s *softString) UnmarshalJSON(data []byte) error {
+	data = bytes.TrimSpace(data)
+	if bytes.Equal(data, []byte("null")) {
+		*s = ""
+		return nil
+	}
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		*s = softString(str)
+		return nil
+	}
+	var num float64
+	if err := json.Unmarshal(data, &num); err == nil {
+		*s = softString(strconv.FormatFloat(num, 'f', -1, 64))
+		return nil
+	}
+	return fmt.Errorf("softString: expected string or number, got %s", string(data))
+}
+
+func (s softString) String() string { return string(s) }
 
 const (
 	// AttestationPort is Phase 1 (consumer → P-Node): SecretVM host attestation.
@@ -117,18 +144,18 @@ type ParseQuoteResponse struct {
 }
 
 type QuoteFields struct {
-	Version     string `json:"version,omitempty"`
-	TEEType     string `json:"tee_type,omitempty"`
-	TCBSVN      string `json:"tcb_svn,omitempty"`
-	MRSeam      string `json:"mr_seam,omitempty"`
-	MRTD        string `json:"mr_td,omitempty"`
-	RTMR0       string `json:"rtmr0,omitempty"`
-	RTMR1       string `json:"rtmr1,omitempty"`
-	RTMR2       string `json:"rtmr2,omitempty"`
-	RTMR3       string `json:"rtmr3,omitempty"`
-	ReportData  string `json:"report_data,omitempty"`
-	Measurement string `json:"measurement,omitempty"`
-	MachineID   string `json:"machine_id,omitempty"`
+	Version     softString `json:"version,omitempty"`
+	TEEType     softString `json:"tee_type,omitempty"`
+	TCBSVN      string     `json:"tcb_svn,omitempty"`
+	MRSeam      string     `json:"mr_seam,omitempty"`
+	MRTD        string     `json:"mr_td,omitempty"`
+	RTMR0       string     `json:"rtmr0,omitempty"`
+	RTMR1       string     `json:"rtmr1,omitempty"`
+	RTMR2       string     `json:"rtmr2,omitempty"`
+	RTMR3       string     `json:"rtmr3,omitempty"`
+	ReportData  string     `json:"report_data,omitempty"`
+	Measurement string     `json:"measurement,omitempty"`
+	MachineID   string     `json:"machine_id,omitempty"`
 }
 
 type QuoteStatus struct {
