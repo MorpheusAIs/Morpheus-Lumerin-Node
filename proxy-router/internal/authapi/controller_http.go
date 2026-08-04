@@ -336,24 +336,30 @@ func (a *AuthController) GetAgentTxs(ctx *gin.Context) {
 //	@Router			/auth/cookie/path [get]
 func (a *AuthController) GetPathToCookieFile(ctx *gin.Context) {
 	cookieFilePath := a.authConfig.CookieFilePath
-	if a.environment == "development" {
-		workingDir, err := os.Getwd()
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
 
-		cookieFilePath = filepath.Join(workingDir, cookieFilePath)
-	} else {
-		executablePath, err := os.Executable()
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
-		executableDir := filepath.Dir(executablePath)
-		cookieFilePath = filepath.Join(executableDir, cookieFilePath)
+	// Config load resolves relative paths with filepath.Abs. Still defend against
+	// absolute-path double-joining on Windows (filepath.Join can produce
+	// `base\C:\...` when the second element is not recognized as absolute).
+	if filepath.IsAbs(cookieFilePath) {
+		ctx.JSON(http.StatusOK, gin.H{"path": filepath.Clean(cookieFilePath)})
+		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"path": cookieFilePath})
+	var baseDir string
+	var err error
+	if a.environment == "development" {
+		baseDir, err = os.Getwd()
+	} else {
+		var executablePath string
+		executablePath, err = os.Executable()
+		if err == nil {
+			baseDir = filepath.Dir(executablePath)
+		}
+	}
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"path": filepath.Clean(filepath.Join(baseDir, cookieFilePath))})
 }

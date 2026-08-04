@@ -243,7 +243,9 @@ func (c *ProxyController) Prompt(ctx *gin.Context) {
 	err = adapter.Prompt(ctx, &body, func(cbctx context.Context, completion gsc.Chunk, aiResponseError *gsc.AiEngineErrorResponse) error {
 		if aiResponseError != nil {
 			ctx.Writer.Header().Set(constants.HEADER_CONTENT_TYPE, constants.CONTENT_TYPE_JSON)
-			ctx.JSON(http.StatusBadRequest, aiResponseError)
+			// Propagate the model backend's real status (e.g. 429/503) so
+			// consumers can distinguish impaired providers from bad requests.
+			ctx.JSON(aiResponseError.HTTPStatusCode(), aiResponseError)
 			return nil
 		}
 

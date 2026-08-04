@@ -18,7 +18,7 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 )
 
-const rytnAttestationURL = "https://secretai-rytn.scrtlabs.com:29343"
+const rytnAttestationURL = "https://secretai-rytn.scrtlabs.com:21434"
 
 func skipIfNoNetwork(t *testing.T) {
 	if os.Getenv("TEE_INTEGRATION_TEST") == "" {

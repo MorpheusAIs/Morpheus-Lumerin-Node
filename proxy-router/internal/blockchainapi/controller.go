@@ -669,7 +669,7 @@ func (s *BlockchainController) openSessionByModelId(ctx *gin.Context) {
 	usernameStr := username.(string)
 
 	isFailoverEnabled := reqPayload.Failover
-	sessionId, err := s.service.OpenSessionByModelId(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), reqPayload.DirectPayment, isFailoverEnabled, common.Address{}, usernameStr)
+	sessionId, err := s.service.OpenSessionByModelId(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), reqPayload.DirectPayment, isFailoverEnabled, reqPayload.OmitProvider.Address, usernameStr)
 	if err != nil {
 		s.log.Error(err)
 		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})

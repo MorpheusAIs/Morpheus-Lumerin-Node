@@ -3,7 +3,7 @@ title: "API endpoints (selected)"
 description: "Hand-picked, prose-explained endpoints of the proxy-router HTTP API. Full schema lives in the repo at proxy-router/docs/swagger.yaml."
 audience: ["developer", "prosumer", "provider-full", "provider-resale"]
 product: ["proxy-router"]
-last_verified: "v7.0.0"
+last_verified: "v7.9.0"
 source: "docs/proxy-router-api-endpoints.md"
 ---
 
@@ -165,7 +165,7 @@ curl --location 'http://localhost:8084/blockchain/sessions/0xf343b654cc8a21d0666
 
 Response includes the on-chain transaction hash.
 
-**Note on refunds:** on **natural expiration** (`closedAt >= endsAt`) your full share is `safeTransfer`'d back to your wallet inside this same transaction. On **early close** a slice may be parked in `userStakesOnHold` with a 1-day timelock — you must call `withdrawUserStakes` (below) after the timelock to receive it. See [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover) for full mechanics.
+**Note on refunds:** **unused** stake is `safeTransfer`'d back in this same transaction. The **used stipend** may be parked in `userStakesOnHold` with `releaseAt = startOfTheDay(min(closedAt, endsAt)) + 1 day` — including same-day natural/late close. Call `withdrawUserStakes` (below) after the timelock. See [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover).
 
 ---
 
@@ -182,7 +182,7 @@ Variant for IDs only: `GET /blockchain/sessions/user/ids?user=0x…`. Fetch one:
 
 ---
 
-## Claim early-close on-hold balance (no node HTTP route)
+## Claim day-locked on-hold balance (no node HTTP route)
 
 There is **no proxy-router HTTP route** for `withdrawUserStakes` today. You send a transaction to the Diamond (Inference) contract on Base directly:
 
@@ -193,7 +193,7 @@ cast send 0x6aBE1d282f72B474E54527D93b979A4f64d3030a \
   --private-key "$PRIVATE_KEY_OF_DELEGATEE"
 ```
 
-Function selector: `0xa98a7c6b`. The caller must be the delegatee allowed for that consumer (usually the same key your consumer node uses). `iterations_` (e.g. `20`) caps how many releasable on-hold rows to process per call. Read on-hold balance via `getUserStakesOnHold(addr, iterations_)` — see [Where is my MOR? → Bucket 2](/ai/where-is-my-mor#bucket-2-on-hold-queue-early-close-timelock).
+Function selector: `0xa98a7c6b`. The caller must be the delegatee allowed for that consumer (usually the same key your consumer node uses). `iterations_` (e.g. `20`) caps how many releasable on-hold rows to process per call. Read on-hold balance via `getUserStakesOnHold(addr, iterations_)` — see [Where is my MOR? → Bucket 2](/ai/where-is-my-mor#bucket-2-on-hold-queue-used-stipend-day-lock).
 
 ---
 

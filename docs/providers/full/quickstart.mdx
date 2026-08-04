@@ -3,7 +3,7 @@ title: "Full P-Node quickstart"
 description: "Run a standalone Morpheus provider proxy-router pointing at your own AI model."
 audience: ["provider-full"]
 product: ["proxy-router"]
-last_verified: "v7.0.0"
+last_verified: "v7.6.0"
 source: "docs/02-provider-setup.md"
 ---
 
@@ -11,7 +11,7 @@ This page covers a **non-TEE provider** running on your own infrastructure. For 
 
 ## Assumptions
 
-- Your AI model is configured, started, and reachable from the proxy-router host on a private endpoint (e.g. `http://my-model.example:8080`). Use the bundled `llama.cpp` + `tinyllama` for testing — adjust `models-config.json` if your local port differs.
+- Your AI model is configured, started, and reachable from the proxy-router host on a private endpoint (e.g. `http://my-model.example:8080`). For testing, a local `llama.cpp` server with `tinyllama` works fine — adjust `models-config.json` if your local port differs.
 - You have a funded wallet on BASE (MOR + ETH) and the **private key** for `.env`.
 - You have your **own** ETH node URL — Alchemy or Infura private API key for BASE works (`wss://base-mainnet.g.alchemy.com/v2/<key>` or HTTPS). The proxy-router has a built-in round-robin of public RPC endpoints as a fallback, but it is rate-limited and unreliable in practice; running a real provider on it leads to silent missed events. Set `ETH_NODE_ADDRESS` explicitly.
 - Your proxy-router has a **publicly accessible endpoint** for the provider (`host:port`, no protocol), e.g. `mycoolmornode.example:3333`.
@@ -21,8 +21,16 @@ This page covers a **non-TEE provider** running on your own infrastructure. For 
 <Steps>
   <Step title="Get the software">
     <Tabs>
-      <Tab title="Release package">
-        Download the latest release for your OS from [Releases](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/releases). Mainnet builds have no suffix; testnet builds end in `-test`.
+      <Tab title="Release binary">
+        The proxy-router ships as a **standalone binary** (not a zip archive). Download the **latest** `*-morpheus-router-*` asset for your platform from [Releases](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/releases). Mainnet builds have no suffix; testnet builds end in `-test`. Asset names look like (version will differ):
+
+        | Platform | File |
+        |----------|------|
+        | Linux (x64) | `linux-x86_64-morpheus-router-<version>` |
+        | Linux (ARM64/Raspberry Pi) | `linux-arm64-morpheus-router-<version>` |
+        | macOS (Apple Silicon) | `mac-arm64-morpheus-router-<version>` |
+        | macOS (Intel) | `mac-x64-morpheus-router-<version>` |
+        | Windows (x64) | `win-x64-morpheus-router-<version>.exe` |
       </Tab>
       <Tab title="From source">
         ```bash
@@ -33,34 +41,39 @@ This page covers a **non-TEE provider** running on your own infrastructure. For 
       </Tab>
     </Tabs>
   </Step>
-  <Step title="Extract / unzip">
+  <Step title="Create a working directory">
+    The proxy-router reads its config (`.env`, `models-config.json`) and writes its state (`./data/`, `.cookie`, `proxy.conf`) relative to the directory it runs from, so give it a dedicated one and move the binary there (adjust the filename to the version you downloaded):
     <Tabs>
       <Tab title="macOS">
         ```bash
-        cd ~/Downloads/morpheus
-        xattr -c proxy-router
+        mkdir -p ~/morpheus-router && cd ~/morpheus-router
+        mv ~/Downloads/mac-arm64-morpheus-router-* ./proxy-router
+        chmod 755 proxy-router
+        xattr -c proxy-router   # clear the quarantine flag (build is not notarized)
         ```
       </Tab>
       <Tab title="Linux">
         ```bash
-        cd ~/Downloads/morpheus
+        mkdir -p ~/morpheus-router && cd ~/morpheus-router
+        mv ~/Downloads/linux-x86_64-morpheus-router-* ./proxy-router
+        chmod 755 proxy-router
         ```
       </Tab>
       <Tab title="Windows">
-        Extract to `%USERPROFILE%\Downloads\morpheus`.
+        Create `%USERPROFILE%\morpheus-router`, move the downloaded `win-x64-morpheus-router-<version>.exe` into it, and rename it to `proxy-router.exe`.
       </Tab>
     </Tabs>
   </Step>
-  <Step title="Configure .env">
-    Linux/macOS: rename `env.example` to `.env`. Windows: rename `env.example.win` to `.env`. Edit at minimum:
+  <Step title="Create .env">
+    In the working directory, create a `.env` file. Start from the repo's [`proxy-router/.env.example`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/.env.example) (`.env.example.win` on Windows) — the standalone binary does not ship one. Edit at minimum:
     - `WALLET_PRIVATE_KEY=` — provider's private key.
-    - `ETH_NODE_ADDRESS=` — **required for any real deployment.** The bundled minimal example does not set this; without it the node falls back to a built-in public RPC round-robin that is rate-limited and unreliable. Use your own Alchemy / Infura HTTPS or WSS URL. Match `ETH_NODE_USE_SUBSCRIPTIONS` accordingly (`true` for WSS, `false` for HTTPS — recommended HTTPS + `false`).
+    - `ETH_NODE_ADDRESS=` — **required for any real deployment.** The minimal example file does not set this; without it the node falls back to a built-in public RPC round-robin that is rate-limited and unreliable. Use your own Alchemy / Infura HTTPS or WSS URL. Match `ETH_NODE_USE_SUBSCRIPTIONS` accordingly (`true` for WSS, `false` for HTTPS — recommended HTTPS + `false`).
     - Choose **mainnet** (default) or testnet — uncomment the testnet block, comment mainnet, save.
 
     Full reference: [Env: proxy-router](/reference/env-proxy-router) (see "Conflicting / overlapping variables" up top).
   </Step>
   <Step title="(Optional) external / pass-through providers">
-    To resell or front another LLM, set `MODELS_CONFIG_PATH=` in `.env` and add the entry to `models-config.json`:
+    To resell or front another LLM, create `models-config.json` in the working directory, set `MODELS_CONFIG_PATH=./models-config.json` in `.env`, and add the entry:
     ```json
     {
       "modelId": "<your_modelId_from_chain>",
@@ -73,7 +86,7 @@ This page covers a **non-TEE provider** running on your own infrastructure. For 
     Full schema: [models-config.json](/reference/models-config). Restart after edits.
   </Step>
   <Step title="(Optional) provider weights & allowlist">
-    Edit `rating-config.json` to bias selection or restrict to specific providers:
+    Create `rating-config.json` in the working directory (and set `RATING_CONFIG_PATH=./rating-config.json` in `.env`) to bias selection or restrict to specific providers:
     ```json
     {
       "algorithm": "default",
@@ -89,14 +102,17 @@ This page covers a **non-TEE provider** running on your own infrastructure. For 
 
 ## Start
 
+Run from the working directory (so the relative config and data paths resolve):
+
 <Tabs>
   <Tab title="macOS / Linux">
     ```bash
+    cd ~/morpheus-router
     ./proxy-router
     ```
   </Tab>
   <Tab title="Windows">
-    Double-click `proxy-router.exe`. Allow Defender if prompted.
+    Double-click `proxy-router.exe` in `%USERPROFILE%\morpheus-router`. Allow Defender if prompted.
   </Tab>
 </Tabs>
 
@@ -113,7 +129,13 @@ This page covers a **non-TEE provider** running on your own infrastructure. For 
 
 ## Next: register on chain
 
-Once running, register your provider, your model (with the `tee` tag if you've TEE-hardened), and your bid. See [Register on chain](/providers/full/register-onchain), then run the [self-checks in Verify your provider setup](/providers/full/verify-setup) before declaring victory.
+Once running:
+
+1. Look up existing models on [active.mor.org/status](https://active.mor.org/status) — prefer bidding on an existing `modelId`.
+2. Register via [MyProvider](/providers/full/myprovider-gui) if your admin API is reachable over HTTPS (or use the desktop/local app for HTTP `:8082`); otherwise use Swagger. Full steps: [Register on chain](/providers/full/register-onchain).
+3. Run the [self-checks in Verify your provider setup](/providers/full/verify-setup) before declaring victory.
+
+Mint a new model only when nothing suitable exists (or you need a new `tee`-tagged listing).
 
 ## What can cost you MOR during setup
 

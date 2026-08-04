@@ -1,0 +1,146 @@
+---
+title: "Model health self-report"
+description: "How the provider's built-in model health checker works: what it probes, what it costs your backend, how to tune the schedule, and how to read the report to diagnose failing models."
+audience: ["provider-full", "provider-resale"]
+product: ["proxy-router"]
+last_verified: "v7.4.0"
+---
+
+Since v7.4.0 every provider proxy-router continuously verifies that the models it sells actually work, and publishes the result as a `models` array on its `/healthcheck` endpoint. This page is the operational reference for that capability: what runs, what it costs, how to tune it, and how to read the report when something is unhealthy. For the one-time post-setup walkthrough, see [Verify your provider setup](/providers/full/verify-setup).
+
+<Note>
+The `httpStatus` and `modelName` report fields, the `rate_limited` error kind, probe pacing (`MODEL_HEALTH_CHECK_PROBE_DELAY`), and the manual `POST /healthcheck/models/refresh` trigger were added in the release **after** v7.4.0. On v7.4.0 nodes you get the report without those features.
+</Note>
+
+## What actually runs
+
+On a schedule (default hourly, plus one sweep immediately at startup), the proxy-router walks the union of:
+
+- every model in `models-config.json`, **probed only if it has an active on-chain bid from your wallet**, and
+- every active bid whose model is *missing* from `models-config.json` — capacity you are selling but cannot serve, reported as `no_model_configured`.
+
+An LLM probe is a real, tiny chat completion sent **directly to your backend `apiUrl`** — a randomized arithmetic question ("What is 17+34? Reply with only the number."), graded into `promptCorrect`. Embedding models get a one-input embeddings request. Other model types (TTS, image, video) are not probed and report `skipped`. Results are cached in memory between sweeps.
+
+Two consequences worth internalizing:
+
+1. **The probe validates your backend wiring, not your public path.** It goes straight from the proxy-router to the `apiUrl` in `models-config.json` — it does not traverse `:3333`, sessions, or the marketplace. A model can be `healthy` here while your node is unreachable from the internet (check that separately, see [verify-setup](/providers/full/verify-setup)).
+2. **A configured model without a bid is not probed** (`no_bid`). A typo'd `apiUrl` stays invisible until you post a bid — probe-test new models by posting the bid first, or hit the backend manually.
+
+## Configuration and defaults
+
+| Variable | Default | What it controls |
+|----------|---------|------------------|
+| `MODEL_HEALTH_CHECK_DISABLED` | `false` | Set `true` to disable the loop entirely; the `models` field disappears from `/healthcheck` |
+| `MODEL_HEALTH_CHECK_INTERVAL` | `1h` | How often the full sweep runs; results are cached between sweeps |
+| `MODEL_HEALTH_CHECK_TIMEOUT` | `60s` | Per-model probe timeout; slower probes report `errorKind: timeout` |
+| `MODEL_HEALTH_CHECK_PROBE_DELAY` | `2s` | Pause between consecutive probes within a sweep |
+| `MODEL_HEALTH_MAX_CONSECUTIVE_ERRORS` | `3` | Consecutive real-session prompt failures after which a model is flipped to `unhealthy` immediately, without waiting for the next sweep |
+
+Full env reference: [env-proxy-router](/reference/env-proxy-router).
+
+## Live signals between sweeps
+
+The report is not only cron-driven — real traffic updates it immediately:
+
+- **Consecutive session errors.** When prompts from open sessions fail against your backend (connection error, upstream `5xx`, `401`/`402`/`404`, `429`) `MODEL_HEALTH_MAX_CONSECUTIVE_ERRORS` times in a row, the model is marked `unhealthy` with `errorKind: session_errors` on the spot. Client-fault upstream responses (`400`, `403`, `413`, `422`) count neither way, so a consumer sending malformed requests cannot flip a healthy model. A later successful prompt — or a passing scheduled probe — heals the status and resets the streak.
+- **TEE self-verification.** For `tee`-tagged models the provider verifies its own backend attestation. If that verification fails (at startup, during a sweep, or on the per-session fast-verify), the model is reported with the dedicated status `tee_unverified` and `errorKind: tee_attestation` instead of being probed — session requests for it would be rejected anyway. The status heals once attestation passes again.
+
+Consumers use this report **before opening a session**: the pre-open healthcheck ping reads the pong's `models` array and skips providers that self-report the bid's model as `unhealthy`, `tee_unverified`, or `no_model_configured`, moving on to the next rated bid.
+
+### Impact on your node and your backend
+
+The load on the proxy-router itself is negligible — one lightweight request at a time, sequentially. The cost that matters is **downstream, on your backend**:
+
+- **Every probe is a real completion against your upstream.** With 65 models on an hourly sweep that is ~1,560 tiny (≈10-token) completions per day. Against a metered upstream this is real but usually negligible billing; raise `MODEL_HEALTH_CHECK_INTERVAL` if you care.
+- **Probes share your upstream rate-limit budget with real consumer traffic.** This is why pacing exists: many resale providers fan all models onto a single upstream account (for example a LiteLLM node in front of Venice), and an unpaced sweep of 60+ models fires several requests per second at it — enough to trip a per-minute rate limit, mark your own models `rate_limited`, and throttle paying consumers at the same time. The default 2s delay keeps a 65-model sweep at ~0.5 req/s over roughly 3–5 minutes. If your upstream is particularly strict, raise the delay; you have a whole hour of headroom before it affects the schedule.
+- A sweep takes about `models × (probe latency + probe delay)`. Keep `interval` comfortably larger than that.
+
+## Reading the report
+
+```bash
+curl -s http://localhost:8082/healthcheck | jq '.models'
+```
+
+```json
+{
+  "modelId": "0x0b0b...",
+  "modelName": "gemini-3.1-pro-preview",
+  "modelType": "LLM",
+  "hasActiveBid": true,
+  "bidId": "0x02f5...",
+  "status": "unhealthy",
+  "errorKind": "bad_response",
+  "httpStatus": 402,
+  "latencyMs": 292,
+  "lastHealthy": 1783534671,
+  "lastChecked": 1783536653
+}
+```
+
+`modelName` is the model's **public on-chain registered name** — looked up from the model registry, never your private `modelName` from `models-config.json` (which, like `apiUrl` and `apiKey`, is never exposed).
+
+| Status | Meaning |
+|--------|---------|
+| `healthy` | Probe succeeded; for LLMs `promptCorrect` says whether the answer was right |
+| `unhealthy` | Probe failed — `errorKind` and `httpStatus` say why (see below) |
+| `no_bid` | Configured but no active bid; **not probed** |
+| `no_model_configured` | Active bid but no `models-config.json` entry — consumers can open sessions against this bid and get errors |
+| `skipped` | Model type not probeable (TTS, image, video) |
+| `tee_unverified` | `tee`-tagged model whose backend TEE attestation failed or never succeeded; **not probed**, and session requests for it are rejected |
+
+For `unhealthy` models, the diagnosis is the combination of `errorKind` and `httpStatus`:
+
+| errorKind | httpStatus | Almost always means |
+|-----------|------------|---------------------|
+| `connection` | — | Backend `apiUrl` unreachable: wrong host/port, container down, DNS |
+| `timeout` | — | Backend reachable but slower than `MODEL_HEALTH_CHECK_TIMEOUT` |
+| `rate_limited` | `429` | Backend up and correctly configured, just throttled — often transient; if persistent, your upstream quota is too small for your traffic |
+| `bad_response` | `402` | Upstream account out of credits / payment required — a billing problem, not a node problem |
+| `bad_response` | `400` / `404` | Upstream rejected the request: wrong model name in `models-config.json`, model retired upstream, malformed base URL |
+| `bad_response` | `401` / `403` | Bad or expired `apiKey` |
+| `bad_response` | `5xx` | Upstream itself is failing |
+| `bad_response` | *(absent)* | Backend returned 200 but an empty/invalid completion |
+| `session_errors` | — | Flipped by consecutive real-session prompt failures (see [Live signals](#live-signals-between-sweeps)), not by a probe |
+| `tee_attestation` | — | Accompanies `tee_unverified`: the backend TEE attestation is not currently passed |
+
+A `healthy` model with `promptCorrect: false` deserves attention too: the backend responds, but the model can't answer 2-digit addition — usually the `apiUrl`/`modelName` pair is wired to the wrong model.
+
+## Diagnosing locally — the tricky parts
+
+**The report is cached — trigger a re-check instead of waiting.** `lastChecked` (unix epoch — `date -r 1783536653` on macOS, `date -d @1783536653` on Linux) tells you how stale each entry is. After fixing a backend, queue an immediate sweep:
+
+```bash
+curl -s -X POST -u 'admin:yourpassword' http://localhost:8082/healthcheck/models/refresh
+# {"status":"refresh queued"}
+```
+
+The call returns `202` immediately and the sweep runs in the background — with probe pacing, a many-model sweep takes a few minutes, so poll `GET /healthcheck` and watch `lastChecked` move. Triggers don't stack: while one manual sweep is queued or running, another `POST` answers `"refresh already pending"` — you cannot hammer your own backend through this endpoint. It requires basic auth (method permission `model_health_refresh`; the admin user's `*` whitelist covers it). On older releases without the endpoint, **restart the proxy-router** instead — a sweep always runs at startup.
+
+**Timestamps carry the history.** `lastHealthy` survives failures: an unhealthy model with a recent `lastHealthy` broke recently (billing, throttling); one with `lastHealthy: 0` has never worked since the router started (misconfiguration).
+
+**The probe result can differ from what consumers experience.** The probe hits the backend directly. If it's `healthy` but consumers report failures, the problem is in front: `:3333` reachability, on-chain endpoint registration, or session handling. Work through [verify-setup](/providers/full/verify-setup) steps 2–5.
+
+**Checking your node from the outside.** `/healthcheck` lives on the `:8082` admin API, which must **not** be exposed publicly. To read a provider's self-report remotely, ask any C-Node to relay it over the Morpheus TCP protocol — the ping RPC returns the same `models` array:
+
+```bash
+curl -s -X POST 'http://<your-c-node>:8082/proxy/provider/ping' \
+  -H 'Content-Type: application/json' \
+  -d '{"providerAddr": "0xYOUR_PROVIDER_WALLET", "providerUrl": "your.node.example:3333"}' | jq '.models'
+```
+
+Use the provider's **own registered wallet and endpoint** exactly as they appear on-chain (`/blockchain/providers`) — a mismatched pair fails signature verification.
+
+**Quick triage one-liner** — group your unhealthy models by cause:
+
+```bash
+curl -s http://localhost:8082/healthcheck \
+  | jq -r '.models[] | select(.status=="unhealthy")
+      | "\(.errorKind)/\(.httpStatus // "-")\t\(.modelName // .modelId)"' \
+  | sort | uniq -c | sort -rn
+```
+
+If most rows share one `errorKind/httpStatus` (say `bad_response/402`), you have one upstream problem, not N model problems.
+
+## Turning it off
+
+Set `MODEL_HEALTH_CHECK_DISABLED=true` only if you genuinely cannot afford the probe traffic. The report is how the network — and your own monitoring — can tell a billing failure from a dead node from a rate limit **before** consumers burn sessions discovering it for you.

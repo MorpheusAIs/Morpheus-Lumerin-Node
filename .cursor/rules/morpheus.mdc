@@ -12,7 +12,7 @@ This repository has nuance that generic web knowledge gets wrong. **Before answe
 - Documentation site: `/docs/` (Mintlify; preview with `mint dev` in that folder)
 - API schema: [`proxy-router/docs/swagger.yaml`](../../proxy-router/docs/swagger.yaml)
 - Networks and contract addresses: [`docs/get-started/networks-and-tokens.mdx`](../../docs/get-started/networks-and-tokens.mdx)
-- TEE attestation reference: [`docs/providers/full/tee-reference.mdx`](../../docs/providers/full/tee-reference.mdx) and [`proxy-router/docs/tee-backend-verification.md`](../../proxy-router/docs/tee-backend-verification.md)
+- TEE attestation reference: [`docs/providers/full/tee-reference.mdx`](../../docs/providers/full/tee-reference.mdx) and [`docs/providers/full/tee-backend-verification.mdx`](../../docs/providers/full/tee-backend-verification.mdx)
 
 ## Anti-hallucination rules
 

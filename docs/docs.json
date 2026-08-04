@@ -98,10 +98,13 @@
               "providers/full/aws",
               "providers/full/tee-reference",
               "providers/full/secretvm-quickstart",
+              "providers/full/tee-backend-verification",
+              "providers/full/sev-verification",
               "providers/full/headless",
               "providers/full/myprovider-gui",
               "providers/full/register-onchain",
               "providers/full/verify-setup",
+              "providers/full/model-health",
               "providers/full/pricing"
             ]
           },

@@ -9,7 +9,7 @@ Maintainer-only file (not in the Mintlify nav). Links to repo-root paths use Git
 ### 1. Update canonical numbers and addresses
 
 - [ ] [`docs/get-started/networks-and-tokens.mdx`](get-started/networks-and-tokens.mdx) — confirm chain IDs, MOR token, and Diamond addresses match the release. Bump `last_verified`.
-- [ ] [`readme.md`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/readme.md) — same table sanity-check.
+- [ ] [`README.md`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/README.md) — same table sanity-check.
 
 ### 2. Refresh affected pages
 

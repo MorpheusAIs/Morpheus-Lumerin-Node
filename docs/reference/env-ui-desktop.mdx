@@ -3,11 +3,11 @@ title: "Env: MorpheusUI"
 description: "Environment variables consumed by the MorpheusUI Electron desktop app."
 audience: ["consumer", "developer"]
 product: ["ui-desktop"]
-last_verified: "v7.0.0"
+last_verified: "v7.6.0"
 source: "docs/ui-desktop.all.env"
 ---
 
-MorpheusUI configuration lives in `MorpheusUI/.env` (or the equivalent platform-specific resource). The complete annotated dump is at [`docs/ui-desktop.all.env`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/docs/ui-desktop.all.env). Source of truth: `MorpheusUI/src/main/config/index.ts`.
+MorpheusUI configuration lives in `ui-desktop/.env` when building from source (or the equivalent platform-specific resource for a packaged install). The complete annotated dump is at [`docs/ui-desktop.all.env`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/docs/ui-desktop.all.env). Source of truth: [`ui-desktop/src/main/config/index.ts`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/ui-desktop/src/main/config/index.ts).
 
 ## Auth & networking
 
@@ -34,9 +34,9 @@ MorpheusUI configuration lives in `MorpheusUI/.env` (or the equivalent platform-
 
 ## Pairing with a custom proxy-router
 
-Most consumer setups use the bundled proxy-router that `mor-launch` starts. To point the UI at a separate proxy-router (e.g. a Docker container or a remote C-Node):
+Most consumer setups use the proxy-router that the MorpheusUI desktop app downloads and starts itself. To point the UI at a separate proxy-router (e.g. a Docker container or a remote C-Node):
 
-1. Stop the bundled proxy-router (or don't run `mor-launch`).
+1. Stop the managed proxy-router (quit the app, or stop it from the startup screen).
 2. Start your own proxy-router and confirm `http://<host>:8082/healthcheck`.
 3. Set `PROXY_WEB_URL=http://<host>:8082` in MorpheusUI's `.env`.
 4. Restart MorpheusUI.

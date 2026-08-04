@@ -455,19 +455,22 @@ function ModelCard({ onSelect, model, openSelectDownloadFolder, toasts, client, 
     }
   };
 
-  const copyId = () => {
-    navigator.clipboard.writeText(model.Id);
-    toasts.toast("success", "ID copied to clipboard", {
-      autoClose: 700
-    });
+  const copyToClipboard = async (text: string, label: string) => {
+    try {
+      // Use the Electron clipboard bridge; navigator.clipboard silently
+      // fails in the renderer (focus/permissions), see issue #793
+      await window.copyToClipboard(text);
+      toasts.toast("success", `${label} copied to clipboard`, {
+        autoClose: 700
+      });
+    } catch (e) {
+      toasts.toast("error", `Failed to copy ${label} to clipboard`);
+    }
   };
 
-  const copyCIDHash = () => {
-    navigator.clipboard.writeText(model.IpfsCID);
-    toasts.toast("success", "CID Hash copied to clipboard", {
-      autoClose: 700
-    });
-  };
+  const copyId = () => copyToClipboard(model.Id, "ID");
+
+  const copyCIDHash = () => copyToClipboard(model.IpfsCID, "CID Hash");
 
   // Format MOR values to prevent scientific notation and limit decimals
   const formatMorValue = (value) => {

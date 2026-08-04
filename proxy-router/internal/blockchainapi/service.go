@@ -72,11 +72,11 @@ type BlockchainService struct {
 	minStake            *big.Int
 	attestationVerifier *attestation.Verifier
 
-	supplyBudgetMu   sync.Mutex
-	cachedSupply     *big.Int
-	cachedSupplyAt   time.Time
-	cachedBudget     *big.Int
-	cachedBudgetAt   time.Time
+	supplyBudgetMu sync.Mutex
+	cachedSupply   *big.Int
+	cachedSupplyAt time.Time
+	cachedBudget   *big.Int
+	cachedBudgetAt time.Time
 
 	legacyTx    bool
 	privateKey  i.PrKeyProvider
@@ -113,6 +113,9 @@ var (
 
 	ErrNoBid = errors.New("no bids available")
 	ErrModel = errors.New("can't get model")
+
+	ErrProviderUnreachable    = errors.New("provider healthcheck ping failed")
+	ErrProviderModelUnhealthy = errors.New("provider self-reports model as not serviceable")
 )
 
 func NewBlockchainService(
@@ -609,6 +612,16 @@ func (s *BlockchainService) GetModelTags(ctx context.Context, modelID common.Has
 		return nil, err
 	}
 	return m.Tags, nil
+}
+
+// GetModelNameAndTags returns the public on-chain name and tags of a model
+// in a single registry read.
+func (s *BlockchainService) GetModelNameAndTags(ctx context.Context, modelID common.Hash) (string, []string, error) {
+	m, err := s.modelRegistry.GetModelById(ctx, modelID)
+	if err != nil {
+		return "", nil, err
+	}
+	return m.Name, m.Tags, nil
 }
 
 func (s *BlockchainService) ModelExists(ctx context.Context, modelID common.Hash) (bool, error) {
@@ -1194,6 +1207,11 @@ func (s *BlockchainService) GetTransactions(ctx context.Context, page uint64, li
 	return allTrxs, nil
 }
 
+// OpenSessionByBidId opens a session against a specific bid (no provider failover).
+func (s *BlockchainService) OpenSessionByBidId(ctx context.Context, bidID common.Hash, duration *big.Int, agentUsername string) (common.Hash, error) {
+	return s.openSessionByBid(ctx, bidID, duration, agentUsername)
+}
+
 func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.Hash, duration *big.Int, agentUsername string) (common.Hash, error) {
 	supply, err := s.GetTokenSupply(ctx)
 	if err != nil {
@@ -1427,6 +1445,22 @@ func (s *BlockchainService) tryOpenSession(ctx context.Context, bid *structs.Bid
 		return common.Hash{}, false, lib.WrapError(ErrProvider, err)
 	}
 
+	// Healthcheck ping before opening the session: verifies the provider is
+	// reachable and inspects its model health self-report from the pong. A
+	// provider that answers but reports the bid's model as not serviceable
+	// is skipped the same way an unreachable one is.
+	pingCtx, cancelPing := context.WithTimeout(ctx, proxyapi.TimeoutPingDefault)
+	_, _, models, err := s.proxyService.Ping(pingCtx, provider.Endpoint, bid.Provider)
+	cancelPing()
+	if err != nil {
+		log.Warnf("provider %s healthcheck ping failed: %s", bid.Provider, err)
+		return common.Hash{}, true, lib.WrapError(ErrProviderUnreachable, err)
+	}
+	if status := blockingModelHealthStatus(models, bid.ModelAgentId); status != "" {
+		log.Warnf("provider %s reports model %s as %s, skipping", bid.Provider, bid.ModelAgentId, status)
+		return common.Hash{}, true, lib.WrapError(ErrProviderModelUnhealthy, fmt.Errorf("model %s status: %s", bid.ModelAgentId, status))
+	}
+
 	if isTeeSession && s.attestationVerifier != nil {
 		if err := s.attestationVerifier.VerifyProviderQuick(ctx, provider.Endpoint, bid.Provider.Hex(), true); err != nil {
 			log.Warnf("TEE attestation failed for provider %s: %s", bid.Provider, err)
@@ -1460,6 +1494,28 @@ func (s *BlockchainService) tryOpenSession(ctx context.Context, bid *structs.Bid
 	}
 
 	return hash, false, nil
+}
+
+// blockingModelHealthStatus inspects the provider's model health self-report
+// (from the healthcheck pong) and returns the reported status when it means a
+// session for the model would not be serviceable: the model backend is
+// unhealthy, its backend TEE attestation failed, or the provider has a bid
+// but no backend configured for the model. An empty result means the session
+// open may proceed — including when the report is absent (pre-upgrade
+// provider or health checks disabled), since absence of data is not evidence
+// of failure.
+func blockingModelHealthStatus(models []system.ModelHealthReport, modelID common.Hash) string {
+	for _, report := range models {
+		if !strings.EqualFold(report.ModelID, modelID.Hex()) {
+			continue
+		}
+		switch report.Status {
+		case system.ModelHealthStatusUnhealthy, system.ModelHealthStatusTeeUnverified, system.ModelHealthStatusNoModel:
+			return report.Status
+		}
+		return ""
+	}
+	return ""
 }
 
 func (s *BlockchainService) GetMyAddress(ctx context.Context) (common.Address, error) {

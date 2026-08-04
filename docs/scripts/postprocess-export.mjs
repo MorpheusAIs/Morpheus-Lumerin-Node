@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 /**
- * Post-process a mint export directory: Pagefind index + navbar search + llms.txt.
+ * Post-process a mint export directory: Pagefind index + navbar search +
+ * llms.txt / llms-full.txt / per-page *.md.
  *
  * Mintlify's built-in search (docs.json "search") targets Mintlify Cloud and prompts
  * for CLI login on self-hosted S3/CloudFront exports. We use Pagefind (static index)
  * in the top navbar instead.
+ *
+ * Per-page *.md and the Fargate MCP at /mcp replace Mintlify cloud agent endpoints
+ * that do not ship with `mint export`.
  *
  * Usage: SITE_URL=https://nodedocs.mor.org node scripts/postprocess-export.mjs <siteDir>
  */
@@ -26,7 +30,7 @@ if (!fs.existsSync(siteDir)) {
 console.log("Running Pagefind index…");
 execSync(`npx pagefind --site "${siteDir}"`, { stdio: "inherit", cwd: docsDir });
 
-console.log("Generating llms.txt…");
+console.log("Generating llms.txt / llms-full.txt / per-page *.md…");
 execSync(
   `node "${path.join(__dirname, "generate-llms-txt.mjs")}" "${docsDir}" "${siteDir}"`,
   { stdio: "inherit", env: { ...process.env, SITE_URL: siteUrl } }

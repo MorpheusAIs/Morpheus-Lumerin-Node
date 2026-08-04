@@ -926,6 +926,12 @@ definitions:
         type: boolean
       failover:
         type: boolean
+      omitProvider:
+        description: |-
+          OmitProvider excludes a provider from bid selection, e.g. one whose
+          backend just failed a prompt (impaired provider failover).
+        example: 0x1234567890abcdef1234567890abcdef12345678
+        type: string
       sessionDuration:
         type: integer
     type: object
@@ -1110,6 +1116,12 @@ definitions:
         type: string
       hasActiveBid:
         type: boolean
+      httpStatus:
+        description: |-
+          HttpStatus is the HTTP status code returned by the upstream backend
+          when the probe failed with a non-200 response (e.g. 402, 429).
+          Zero when the probe succeeded or never got an HTTP response.
+        type: integer
       lastChecked:
         type: integer
       lastHealthy:
@@ -1117,6 +1129,8 @@ definitions:
       latencyMs:
         type: integer
       modelId:
+        type: string
+      modelName:
         type: string
       modelType:
         type: string
@@ -2465,6 +2479,25 @@ paths:
           schema:
             $ref: '#/definitions/system.HealthCheckResponse'
       summary: Healthcheck example
+      tags:
+      - system
+  /healthcheck/models/refresh:
+    post:
+      description: Queue an immediate model health sweep instead of waiting for the
+        next scheduled run (provider nodes only). Returns immediately; the sweep runs
+        in the background — poll GET /healthcheck and watch models[].lastChecked for
+        fresh results. Probes are paced by MODEL_HEALTH_CHECK_PROBE_DELAY, so a full
+        sweep over many models takes minutes.
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/system.StatusRes'
+      security:
+      - BasicAuth: []
+      summary: Trigger model health re-check
       tags:
       - system
   /ipfs/add:

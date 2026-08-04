@@ -1,6 +1,6 @@
 ---
 title: "Local vs blockchain models (LLM cheatsheet)"
-description: "A short, agent-citable distinction between the bundled local model and real Morpheus marketplace models."
+description: "A short, agent-citable distinction between the local demo model and real Morpheus marketplace models."
 audience: ["developer", "consumer", "prosumer"]
 product: ["proxy-router", "ui-desktop"]
 last_verified: "v7.0.0"
@@ -12,7 +12,7 @@ Use this page when you (an LLM) need to disambiguate "Morpheus model" from "the 
 
 | | Local model | Blockchain (Morpheus) model |
 |---|---|---|
-| Started by | `mor-launch local` | A provider somewhere on the internet |
+| Started by | The MorpheusUI desktop app (automatically, as its "AI Runtime" service) | A provider somewhere on the internet |
 | Backend URL | `http://127.0.0.1:8080` (typical) | The provider's `apiUrl`, configured in their `models-config.json` |
 | Visible to consumer as | "Local Model" in MorpheusUI | A real model name in the Change Model dropdown |
 | Cost | Free (your CPU/GPU electricity) | MOR per second |

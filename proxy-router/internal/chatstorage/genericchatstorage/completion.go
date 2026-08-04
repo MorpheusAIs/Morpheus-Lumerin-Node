@@ -471,10 +471,23 @@ var _ Chunk = &ChunkEmbedding{}
 
 type AiEngineErrorResponse struct {
 	ProviderModelError interface{} `json:"providerModelError"`
+	// StatusCode is the HTTP status returned by the upstream model backend
+	// (e.g. 402 payment required, 429 rate limited). Zero when unknown.
+	StatusCode int `json:"statusCode,omitempty"`
 }
 
-func NewAiEngineErrorResponse(ProviderModelError interface{}) *AiEngineErrorResponse {
+func NewAiEngineErrorResponse(statusCode int, providerModelError interface{}) *AiEngineErrorResponse {
 	return &AiEngineErrorResponse{
-		ProviderModelError: ProviderModelError,
+		ProviderModelError: providerModelError,
+		StatusCode:         statusCode,
 	}
+}
+
+// HTTPStatusCode returns the upstream status code when known, otherwise 400
+// (the historical default for provider model errors).
+func (e *AiEngineErrorResponse) HTTPStatusCode() int {
+	if e.StatusCode >= 400 && e.StatusCode <= 599 {
+		return e.StatusCode
+	}
+	return 400
 }

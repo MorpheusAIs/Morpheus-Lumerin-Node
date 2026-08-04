@@ -291,20 +291,25 @@ contract SessionRouter is
     }
 
     function _rewardUserAfterClose(Session storage session, Bid storage bid) private {
-        uint128 startOfClosedAt_ = startOfTheDay(session.closedAt);
-        bool isClosingLate_ = session.closedAt >= session.endsAt;
+        // Anchor to when the session actually stopped consuming compute,
+        // not to when the close tx landed (PR #830 stipend-recycle fix).
+        uint128 sessionEnd_ = uint128(session.closedAt.min(session.endsAt));
+        uint128 startOfEndDay_ = startOfTheDay(sessionEnd_);
+        uint128 releaseAt_ = startOfEndDay_ + 1 days;
 
         uint256 userStakeToProvider = session.isDirectPaymentFromUser ? _getProviderRewards(session, bid, false) : 0;
         uint256 userStake = session.stake - userStakeToProvider;
         uint256 userStakeToLock_ = 0;
-        if (!isClosingLate_) {
-            uint256 userDuration_ = session.endsAt.min(session.closedAt) - session.openedAt.max(startOfClosedAt_);
-            uint256 userInitialLock_ = userDuration_ * bid.pricePerSecond;
-            userStakeToLock_ = userStake.min(stipendToStake(userInitialLock_, startOfClosedAt_));
 
-            _getSessionsStorage().userStakesOnHold[session.user].push(
-                OnHold(userStakeToLock_, uint128(startOfClosedAt_ + 1 days))
-            );
+        // Lock only while the epoch the stipend was drawn against is still open.
+        if (block.timestamp < releaseAt_) {
+            uint256 userDuration_ = sessionEnd_ - session.openedAt.max(startOfEndDay_);
+            uint256 userInitialLock_ = userDuration_ * bid.pricePerSecond;
+            userStakeToLock_ = userStake.min(stipendToStake(userInitialLock_, startOfEndDay_));
+
+            if (userStakeToLock_ > 0) {
+                _getSessionsStorage().userStakesOnHold[session.user].push(OnHold(userStakeToLock_, releaseAt_));
+            }
         }
         uint256 userAmountToWithdraw_ = userStake - userStakeToLock_;
         IERC20(_getBidsStorage().token).safeTransfer(session.user, userAmountToWithdraw_);

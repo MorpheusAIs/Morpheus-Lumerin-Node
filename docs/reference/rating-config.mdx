@@ -7,13 +7,16 @@ last_verified: "v7.0.0"
 source: "docs/rating-config.json.md"
 ---
 
-`rating-config.json` configures the **rating system** the consumer proxy-router uses when picking which provider to route a session to. It lives in the project root by default; override path via `RATING_CONFIG_PATH`.
+`rating-config.json` configures the **rating system** the consumer proxy-router uses when picking which provider to route a session to. It lives in the project root by default; override path via `RATING_CONFIG_PATH`, or supply the JSON inline via the `RATING_CONFIG_CONTENT` environment variable (useful for containers where mounting a file is inconvenient — same pattern as `MODELS_CONFIG_CONTENT`).
+
+Load order: the file at `RATING_CONFIG_PATH` (or `./rating-config.json`) wins if it exists; otherwise `RATING_CONFIG_CONTENT` is used; otherwise built-in defaults (empty allowlist, `default` algorithm).
 
 ## Fields
 
 | Field | Notes |
 |-------|-------|
 | `providerAllowlist` | Array of provider addresses. **Empty** = allow all providers. |
+| `providerDenylist` | Array of provider addresses excluded from rating and session opening. Takes precedence over the allowlist. |
 | `algorithm` | Rating algorithm. `default` is the canonical built-in. |
 | `params` | Algorithm-specific parameters. For `default`, the `weights` block (see below). |
 

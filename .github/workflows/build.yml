@@ -206,8 +206,9 @@ jobs:
       tee_image_name: ${{ steps.gen_tag_name.outputs.tee_image_name }}
       artifacts_base_url: ${{ github.server_url }}/${{ github.repository }}/releases/download/${{ steps.gen_tag_name.outputs.tag_name }}
       # Proxy-router "anchor" the desktop app downloads its bundled router from.
-      # On main this is always vX.Y.0 (the minor's proxy baseline); on test/dev
-      # it is the current self build (router executables are always built there).
+      # On main this is always vX.Y.0 (the minor's proxy baseline). On test,
+      # full (proxy-changed) builds self-anchor; UI-only builds reuse the last
+      # known good -test release that published router binaries.
       anchor_vfull: ${{ steps.gen_tag_name.outputs.anchor_vfull }}
       anchor_tag: ${{ steps.gen_tag_name.outputs.anchor_tag }}
       anchor_artifacts_base_url: ${{ github.server_url }}/${{ github.repository }}/releases/download/${{ steps.gen_tag_name.outputs.anchor_tag }}
@@ -223,6 +224,7 @@ jobs:
         shell: bash
         env:
           PROXY_CHANGED: ${{ needs.changes.outputs.proxy }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           IMAGE_NAME="ghcr.io/morpheusais/morpheus-lumerin-node"
           VMAJ_NEW=7
@@ -280,10 +282,32 @@ jobs:
               [ "$GITHUB_EVENT_NAME" = "pull_request" ] && RNAME=pr${GITHUB_REF_NAME%/merge}
               VTAG=v${VFULL}-${RNAME}
               BUMP="prerelease"
-              # test/dev always build their own router executables, so the app
-              # anchors to this same prerelease build (self-contained).
-              ANCHOR_VFULL=${VFULL}
-              ANCHOR_TAG=${VTAG}
+              if [ "${PROXY_CHANGED}" = "true" ] || [ "$GITHUB_REF_NAME" != "test" ]; then
+                  # Full prerelease / non-test branches build their own router
+                  # executables and self-anchor.
+                  ANCHOR_VFULL=${VFULL}
+                  ANCHOR_TAG=${VTAG}
+              else
+                  # UI-only on test: same idea as main's vX.Y.0 — do not rebuild
+                  # router/docker/TEE; point the desktop app at the last known
+                  # good -test release that published router binaries.
+                  ANCHOR_TAG=""
+                  while read -r cand; do
+                      has_router=$(gh release view "$cand" --json assets \
+                        --jq '[.assets[].name | select(contains("morpheus-router"))] | length' 2>/dev/null || echo 0)
+                      if [ "${has_router:-0}" -gt 0 ]; then
+                          ANCHOR_TAG=$cand
+                          break
+                      fi
+                  done < <(git tag -l "v[0-9]*-test" | sort -V -r)
+
+                  if [ -z "$ANCHOR_TAG" ]; then
+                      echo "❌ UI-only test release needs a last-known-good -test release with router binaries" >&2
+                      exit 1
+                  fi
+                  ANCHOR_VFULL=$(echo "$ANCHOR_TAG" | sed -E 's/^v([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+                  BUMP="prerelease (UI-only, proxy anchored to ${ANCHOR_TAG})"
+              fi
           fi
 
           # Output variables for use in subsequent jobs environment
@@ -304,7 +328,7 @@ jobs:
     name: Test Proxy Router Docker Image
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
-      !(github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.proxy != 'true') &&
+      !(github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test') && needs.changes.outputs.proxy != 'true') &&
       (
         (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test' || github.ref == 'refs/heads/dev')) ||
         (github.event_name == 'workflow_dispatch') 
@@ -351,7 +375,7 @@ jobs:
     name: Build & Push Docker Image
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
-      !(github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.proxy != 'true') &&
+      !(github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test') && needs.changes.outputs.proxy != 'true') &&
       (
         (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/')|| github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true') 
@@ -453,7 +477,7 @@ jobs:
     name: Build & Push TEE Docker Image
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
-      !(github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.proxy != 'true') &&
+      !(github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test') && needs.changes.outputs.proxy != 'true') &&
       (
         (github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/cicd/')|| github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true') 
@@ -1070,11 +1094,130 @@ jobs:
             exit 1
           fi
 
+  Deploy-SecretVM-Prod:
+    name: Deploy TEE Image to SecretVM (prod)
+    if: |
+      github.ref == 'refs/heads/main' &&
+      (needs.changes.outputs.proxy == 'true' || github.event_name == 'workflow_dispatch')
+    needs:
+      - changes
+      - Generate-Tag
+      - GHCR-Build-and-Push-TEE
+    runs-on: ubuntu-latest
+    environment: main
+    steps:
+      - name: Download deployed compose artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: docker-compose-tee-deployed-${{ needs.Generate-Tag.outputs.tag_name }}
+          path: /tmp
+
+      - name: Deploy to SecretVM prod instance
+        env:
+          SECRETVM_API_KEY: ${{ secrets.SECRETVM_API_KEY }}
+          SECRETVM_PROD_VM_UUID: ${{ secrets.SECRETVM_PROD_VM_UUID }}
+          SECRETVM_PROD_ENV_B64: ${{ secrets.SECRETVM_PROD_ENV }}
+        run: |
+          if [ -z "$SECRETVM_API_KEY" ] || [ -z "$SECRETVM_PROD_VM_UUID" ] || [ -z "$SECRETVM_PROD_ENV_B64" ]; then
+            echo "⏭️  SecretVM prod secrets not configured — skipping deploy" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          npm install --global secretvm-cli
+
+          echo "$SECRETVM_PROD_ENV_B64" | base64 -d > /tmp/secretvm-prod.env
+
+          echo "🚀 Updating SecretVM prod instance ${SECRETVM_PROD_VM_UUID:0:8}..." >> $GITHUB_STEP_SUMMARY
+
+          secretvm-cli -k "$SECRETVM_API_KEY" vm edit "$SECRETVM_PROD_VM_UUID" \
+            --docker-compose /tmp/docker-compose.tee.deployed.yml \
+            --env /tmp/secretvm-prod.env
+
+          rm -f /tmp/secretvm-prod.env
+
+          echo "✅ SecretVM prod instance updated with new TEE image" >> $GITHUB_STEP_SUMMARY
+          echo "   Compose: \`docker-compose-tee-deployed-${{ needs.Generate-Tag.outputs.tag_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "   Expected RTMR3: \`${{ needs.GHCR-Build-and-Push-TEE.outputs.rtmr3 }}\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Verify attestation after deploy
+        env:
+          SECRETVM_API_KEY: ${{ secrets.SECRETVM_API_KEY }}
+          SECRETVM_PROD_VM_UUID: ${{ secrets.SECRETVM_PROD_VM_UUID }}
+          EXPECTED_RTMR3: ${{ needs.GHCR-Build-and-Push-TEE.outputs.rtmr3 }}
+        run: |
+          if [ -z "$SECRETVM_API_KEY" ] || [ -z "$SECRETVM_PROD_VM_UUID" ] || [ -z "$EXPECTED_RTMR3" ]; then
+            echo "⏭️  Skipping attestation verify (missing secrets or RTMR3)" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          echo "⏳ Waiting for VM to reboot with new image..." >> $GITHUB_STEP_SUMMARY
+
+          # vm attestation returns raw TDX quote hex; extract RTMR3 from known offset
+          # TDX Quote v4: 48-byte header + TD Report Body
+          # RTMR3 at body offset 472 bytes (48 bytes long)
+          RTMR3_HEX_START=$(( (48 + 472) * 2 ))
+          RTMR3_HEX_LEN=96
+
+          MAX_ATTEMPTS=12
+          SLEEP_SECS=30
+          MATCHED=false
+
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            echo "  Attestation poll attempt $i/$MAX_ATTEMPTS..."
+
+            RAW_QUOTE=$(secretvm-cli -k "$SECRETVM_API_KEY" vm attestation "$SECRETVM_PROD_VM_UUID" 2>/dev/null) || true
+
+            LIVE_RTMR3=$(echo "$RAW_QUOTE" | python3 -c "
+          import sys, json
+          try:
+              data = json.load(sys.stdin)
+              raw = data.get('result', '')
+              rtmr3 = raw[$RTMR3_HEX_START:$RTMR3_HEX_START+$RTMR3_HEX_LEN]
+              if len(rtmr3) == $RTMR3_HEX_LEN:
+                  print(rtmr3)
+              else:
+                  print('')
+          except:
+              print('')
+          " 2>/dev/null)
+
+            if [ -n "$LIVE_RTMR3" ]; then
+              echo "  Got RTMR3: ${LIVE_RTMR3:0:16}..."
+
+              if [ "$LIVE_RTMR3" = "$EXPECTED_RTMR3" ]; then
+                MATCHED=true
+                echo "🎉 **RTMR3 MATCH** — attestation verified!" >> $GITHUB_STEP_SUMMARY
+                echo "   Live RTMR3:     \`$LIVE_RTMR3\`" >> $GITHUB_STEP_SUMMARY
+                echo "   Expected RTMR3: \`$EXPECTED_RTMR3\`" >> $GITHUB_STEP_SUMMARY
+                break
+              else
+                echo "  RTMR3 mismatch (VM may still be rebooting)"
+                echo "    live:     $LIVE_RTMR3"
+                echo "    expected: $EXPECTED_RTMR3"
+              fi
+            else
+              echo "  No attestation data yet (VM may still be starting)"
+            fi
+
+            if [ "$i" -lt "$MAX_ATTEMPTS" ]; then
+              sleep $SLEEP_SECS
+            fi
+          done
+
+          if [ "$MATCHED" = false ]; then
+            echo "⚠️ **RTMR3 mismatch after ${MAX_ATTEMPTS} attempts** (${SLEEP_SECS}s × ${MAX_ATTEMPTS} = $(( SLEEP_SECS * MAX_ATTEMPTS ))s)" >> $GITHUB_STEP_SUMMARY
+            echo "   Live RTMR3:     \`${LIVE_RTMR3:-unavailable}\`" >> $GITHUB_STEP_SUMMARY
+            echo "   Expected RTMR3: \`$EXPECTED_RTMR3\`" >> $GITHUB_STEP_SUMMARY
+            echo "   This may indicate the VM is still rebooting, or there is a genuine mismatch." >> $GITHUB_STEP_SUMMARY
+            echo "   Check manually: \`secretvm-cli vm attestation $SECRETVM_PROD_VM_UUID\`" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
   Build-Service-Executables:
     name: Build Service Executables
     if: |
       github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node' &&
-      !(github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.proxy != 'true') &&
+      !(github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test') && needs.changes.outputs.proxy != 'true') &&
       (
         (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test')) ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.build_all_os == 'true') 
@@ -2121,42 +2264,103 @@ jobs:
           fi
 
           FUNCTION_NAME="${ENV}-routed-sessions-sweep"
-          # deploy_cutoff mode (default): the Lambda derives cutoff from the C-Node
-          # service deployments[0].updatedAt + rehydration + safety, then closes
-          # OPEN rows older than that. release_tag only annotates error_reason.
+          CLUSTER_NAME="ecs-${ENV}-morpheus-engine"
+          SERVICE_NAME="svc-${ENV}-router"
+          # Must match Lambda DEFAULT_REHYDRATION_SECS / DEFAULT_SAFETY_SECS
+          # (02-morpheus_c_node/.terragrunt/06_routed_sessions_sweep.tf).
+          REHYDRATION_SECS=90
+          SAFETY_SECS=120
+          SKEW_BUFFER_SECS=15
+
+          # deploy_cutoff mode (default): the Lambda derives cutoff from the
+          # C-Node PRIMARY deployment updatedAt + rehydration + safety, then
+          # closes OPEN rows older than that. release_tag only annotates
+          # error_reason.
           PAYLOAD="{\"release_tag\":\"${BUILDTAG}\"}"
 
-          echo "🧹 Invoking ${FUNCTION_NAME} with payload: ${PAYLOAD}"
-          set +e
-          INVOKE_META=$(aws lambda invoke \
-            --function-name "$FUNCTION_NAME" \
-            --cli-binary-format raw-in-base64-out \
-            --payload "$PAYLOAD" \
-            /tmp/sweep_out.json 2>/tmp/sweep_err.txt)
-          INVOKE_RC=$?
-          set -e
-
-          if [ $INVOKE_RC -ne 0 ]; then
-            echo "⚠️ lambda invoke call failed (rc=$INVOKE_RC):"
-            cat /tmp/sweep_err.txt || true
-            echo "ℹ️ Deploy already succeeded; the API Gateway self-heals zombies within ~30 min. Not failing the pipeline."
-            exit 0
+          # Proactive wait: the Lambda REFUSES a future cutoff (would close
+          # fresh sessions). Invoking immediately after C-Node settle almost
+          # always 400s for ~updatedAt+210s, and the old 10×30s retry budget
+          # was barely enough — leaving zombies OPEN long enough to reopen/
+          # failover-storm MOR. Sleep until the same cutoff the Lambda will
+          # derive, then invoke (small retry loop only for clock skew).
+          echo "🔎 Resolving C-Node PRIMARY updatedAt from ${CLUSTER_NAME}/${SERVICE_NAME}..."
+          UPDATED_AT=$(aws ecs describe-services \
+            --cluster "$CLUSTER_NAME" \
+            --services "$SERVICE_NAME" \
+            --query 'services[0].deployments[?status==`PRIMARY`]|[0].updatedAt' \
+            --output text)
+          if [ -z "$UPDATED_AT" ] || [ "$UPDATED_AT" = "None" ]; then
+            echo "⚠️ Could not resolve PRIMARY updatedAt; falling back to fixed ${REHYDRATION_SECS}+${SAFETY_SECS}s wait."
+            sleep $((REHYDRATION_SECS + SAFETY_SECS + SKEW_BUFFER_SECS))
+          else
+            echo "📌 PRIMARY updatedAt: ${UPDATED_AT}"
+            UPDATED_EPOCH=$(date -d "$UPDATED_AT" +%s)
+            CUTOFF_EPOCH=$((UPDATED_EPOCH + REHYDRATION_SECS + SAFETY_SECS + SKEW_BUFFER_SECS))
+            NOW_EPOCH=$(date +%s)
+            WAIT_SECS=$((CUTOFF_EPOCH - NOW_EPOCH))
+            if [ "$WAIT_SECS" -gt 0 ]; then
+              echo "⏳ Waiting ${WAIT_SECS}s for sweep cutoff (updatedAt + ${REHYDRATION_SECS}s + ${SAFETY_SECS}s + ${SKEW_BUFFER_SECS}s skew)..."
+              sleep "$WAIT_SECS"
+            else
+              echo "✅ Cutoff already in the past (${WAIT_SECS}s); invoking immediately."
+            fi
           fi
 
-          echo "📡 Invoke metadata: $INVOKE_META"
-          FUNCTION_ERROR=$(echo "$INVOKE_META" | jq -r '.FunctionError // empty')
-          RESPONSE=$(cat /tmp/sweep_out.json)
-          echo "📦 Lambda response: $RESPONSE"
+          MAX_ATTEMPTS=5
+          SLEEP_SECS=20
+          STATUS=""
+          BODY=""
+          FUNCTION_ERROR=""
+          for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+            echo "🧹 [attempt ${attempt}/${MAX_ATTEMPTS}] Invoking ${FUNCTION_NAME} with payload: ${PAYLOAD}"
+            set +e
+            INVOKE_META=$(aws lambda invoke \
+              --function-name "$FUNCTION_NAME" \
+              --cli-binary-format raw-in-base64-out \
+              --payload "$PAYLOAD" \
+              /tmp/sweep_out.json 2>/tmp/sweep_err.txt)
+            INVOKE_RC=$?
+            set -e
 
-          # The handler returns {"statusCode": N, "body": "<json string>"}.
-          STATUS=$(echo "$RESPONSE" | jq -r '.statusCode // empty' 2>/dev/null)
-          BODY=$(echo "$RESPONSE" | jq -r '.body // empty' 2>/dev/null)
+            if [ $INVOKE_RC -ne 0 ]; then
+              echo "⚠️ lambda invoke call failed (rc=$INVOKE_RC):"
+              cat /tmp/sweep_err.txt || true
+              echo "ℹ️ Deploy already succeeded; the API Gateway self-heals zombies within ~30 min. Not failing the pipeline."
+              exit 0
+            fi
+
+            echo "📡 Invoke metadata: $INVOKE_META"
+            FUNCTION_ERROR=$(echo "$INVOKE_META" | jq -r '.FunctionError // empty')
+            RESPONSE=$(cat /tmp/sweep_out.json)
+            echo "📦 Lambda response: $RESPONSE"
+
+            # The handler returns {"statusCode": N, "body": "<json string>"}.
+            STATUS=$(echo "$RESPONSE" | jq -r '.statusCode // empty' 2>/dev/null)
+            BODY=$(echo "$RESPONSE" | jq -r '.body // empty' 2>/dev/null)
+
+            # An unhandled Lambda error has no statusCode — terminal, don't retry.
+            if [ -n "$FUNCTION_ERROR" ]; then
+              break
+            fi
+
+            # Retry ONLY residual "future cutoff" 400 (clock skew / ECS lag).
+            if [ "$STATUS" = "400" ] && echo "$BODY" | grep -qi "in the future"; then
+              if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+                echo "⏳ Cutoff not reached yet; sleeping ${SLEEP_SECS}s before retry."
+                sleep "$SLEEP_SECS"
+                continue
+              fi
+            fi
+            break
+          done
 
           {
             echo "### 🧹 Routed-sessions zombie sweep"
             echo ""
             echo "- **Function:** \`${FUNCTION_NAME}\`"
             echo "- **Release tag:** \`${BUILDTAG}\`"
+            echo "- **PRIMARY updatedAt:** \`${UPDATED_AT:-unknown}\`"
             echo "- **Handler statusCode:** \`${STATUS:-unknown}\`"
             if [ -n "$BODY" ]; then
               echo ""
@@ -3116,16 +3320,16 @@ jobs:
         id: mode
         run: |
           # "full" = router/docker/TEE/executables were built in this run and are
-          # attached to THIS release. "ui-only" = a UI/CLI patch on main where the
-          # router stays at the anchor (vX.Y.0) and is NOT re-attached here.
-          if [ "${{ github.ref }}" != "refs/heads/main" ] || \
-             [ "${{ needs.changes.outputs.proxy }}" = "true" ] || \
-             [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "full=true" >> "$GITHUB_OUTPUT"
-            echo "Release mode: FULL"
-          else
+          # attached to THIS release. "ui-only" = a UI/CLI patch on main or test
+          # where the router stays at the anchor and is NOT re-attached here.
+          if { [ "${{ github.ref }}" = "refs/heads/main" ] || [ "${{ github.ref }}" = "refs/heads/test" ]; } && \
+             [ "${{ needs.changes.outputs.proxy }}" != "true" ] && \
+             [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
             echo "full=false" >> "$GITHUB_OUTPUT"
             echo "Release mode: UI-ONLY (router anchored to ${{ needs.Generate-Tag.outputs.anchor_tag }})"
+          else
+            echo "full=true" >> "$GITHUB_OUTPUT"
+            echo "Release mode: FULL"
           fi
 
       - name: Generate release notes

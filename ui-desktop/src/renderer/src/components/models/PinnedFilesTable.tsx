@@ -201,26 +201,24 @@ function ModelCard({ model, toasts, unpinFile }: { model: PinnedFile, toasts: an
     toasts.toast("success", "File unpinned successfully", { autoClose: 2000 });
   };
 
-  const copyHash = () => {
-    navigator.clipboard.writeText(model.metadataCIDHash);
-    toasts.toast("success", "Hash copied to clipboard", {
-      autoClose: 700
-    });
+  const copyToClipboard = async (text: string, label: string) => {
+    try {
+      // Use the Electron clipboard bridge; navigator.clipboard silently
+      // fails in the renderer (focus/permissions)
+      await window.copyToClipboard(text);
+      toasts.toast("success", `${label} copied to clipboard`, {
+        autoClose: 700
+      });
+    } catch (e) {
+      toasts.toast("error", `Failed to copy ${label} to clipboard`);
+    }
   };
 
-  const copyCID = () => {
-    navigator.clipboard.writeText(model.metadataCID);
-    toasts.toast("success", "CID copied to clipboard", {
-      autoClose: 700
-    });
-  };
+  const copyHash = () => copyToClipboard(model.metadataCIDHash, "Hash");
 
-  const copyId = () => {
-    navigator.clipboard.writeText(model.id);
-    toasts.toast("success", "ID copied to clipboard", {
-      autoClose: 700
-    });
-  };
+  const copyCID = () => copyToClipboard(model.metadataCID, "CID");
+
+  const copyId = () => copyToClipboard(model.id, "ID");
 
   const formatFileSize = (bytes: number) => {
     if (!bytes) return '';

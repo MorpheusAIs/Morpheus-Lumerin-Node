@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -44,16 +45,62 @@ func (c *collateralField) UnmarshalJSON(data []byte) error {
 }
 
 const (
-	AttestationPort     = "29343"
-	DefaultPortalURL    = "https://secretai.scrtlabs.com/api/quote-parse"
-	DefaultPortalURLSEV = "https://secretai.scrtlabs.com/api/quote-parse-sev"
-	VerifyTimeout       = 30 * time.Second
+	// AttestationPort is Phase 1 (consumer → P-Node): SecretVM host attestation.
+	AttestationPort = "29343"
+	// BackendAttestationPort is Phase 2 (P-Node → backend): SecretAI GPU/LLM TEE
+	// attestation co-located with the inference endpoint.
+	BackendAttestationPort = "21434"
+	DefaultPortalURL       = "https://secretai.scrtlabs.com/api/quote-parse"
+	DefaultPortalURLSEV    = "https://secretai.scrtlabs.com/api/quote-parse-sev"
+	VerifyTimeout          = 30 * time.Second
 )
 
 // deriveSEVPortalURL returns the SEV-specific portal URL by appending "-sev"
 // to the base portal URL path (e.g. ".../quote-parse" -> ".../quote-parse-sev").
 func deriveSEVPortalURL(portalURL string) string {
 	return strings.TrimSuffix(portalURL, "/") + "-sev"
+}
+
+// TLSBindingKind identifies which TLS certificate digest matched the
+// report_data binding in the attestation quote.
+type TLSBindingKind string
+
+const (
+	// TLSBindingSPKI: report_data binds SHA-256(SubjectPublicKeyInfo DER).
+	// Used by current SecretVMs; survives certificate renewals that keep the key.
+	TLSBindingSPKI TLSBindingKind = "spki"
+	// TLSBindingCertificate: report_data binds SHA-256(full certificate DER).
+	// Legacy binding used by pre-SPKI SecretVMs.
+	TLSBindingCertificate TLSBindingKind = "certificate"
+)
+
+// TLSCertBinding carries both digests that a SecretVM may bind into the first
+// 32 bytes of report_data: SHA-256 of the certificate's SPKI DER (current VMs)
+// or SHA-256 of the full certificate DER (legacy VMs). Both are captured from
+// a single TLS connection so report_data can be checked against either,
+// keeping a mixed fleet verifiable during the SPKI rollout
+// (mirrors scrtlabs/secretvm-verify v0.12.0).
+type TLSCertBinding struct {
+	SPKI        string // lowercase hex SHA-256 of SubjectPublicKeyInfo DER
+	Certificate string // lowercase hex SHA-256 of full certificate DER
+}
+
+func (b TLSCertBinding) IsZero() bool {
+	return b.SPKI == "" && b.Certificate == ""
+}
+
+func (b TLSCertBinding) String() string {
+	return fmt.Sprintf("spki=%s cert=%s", b.SPKI, b.Certificate)
+}
+
+// TLSBindingFromCert computes both binding digests from a parsed certificate.
+func TLSBindingFromCert(cert *x509.Certificate) TLSCertBinding {
+	spkiHash := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
+	certHash := sha256.Sum256(cert.Raw)
+	return TLSCertBinding{
+		SPKI:        hex.EncodeToString(spkiHash[:]),
+		Certificate: hex.EncodeToString(certHash[:]),
+	}
 }
 
 // ParseQuoteRequest is the POST body for the SecretAI Portal quote-parse API.
@@ -116,8 +163,8 @@ type AttestationResult struct {
 }
 
 type verifiedQuoteEntry struct {
-	quoteHash      string
-	tlsFingerprint string
+	quoteHash  string
+	tlsBinding TLSCertBinding
 }
 
 // PingFunc obtains the provider's software version by pinging its endpoint.
@@ -195,12 +242,12 @@ func (v *Verifier) VerifyProvider(ctx context.Context, providerEndpoint string, 
 
 	v.log.Infof("verifying TEE attestation for provider %s (version %s)", providerEndpoint, version)
 
-	cpuQuote, tlsFingerprint, err := v.loadAttestationQuote(ctx, attestationURL)
+	cpuQuote, tlsBinding, err := v.loadAttestationQuote(ctx, attestationURL)
 	if err != nil {
 		return fmt.Errorf("failed to load attestation quote from %s: %w", attestationURL, err)
 	}
 
-	v.log.Infof("captured TLS cert fingerprint: %s", tlsFingerprint)
+	v.log.Infof("captured TLS cert binding digests: %s", tlsBinding)
 
 	result, err := v.verifyQuote(ctx, cpuQuote)
 	if err != nil {
@@ -215,11 +262,12 @@ func (v *Verifier) VerifyProvider(ctx context.Context, providerEndpoint string, 
 
 	v.log.Infof("attestation quote is valid (type: %s) for provider %s", result.Type, providerEndpoint)
 
-	if err := VerifyTLSBinding(tlsFingerprint, result.ReportData); err != nil {
+	bindingKind, err := VerifyTLSBinding(tlsBinding, result.ReportData)
+	if err != nil {
 		return fmt.Errorf("TLS binding verification failed (possible spoofing): %w", err)
 	}
 
-	v.log.Infof("TLS certificate fingerprint matches reportdata (anti-spoofing check passed)")
+	v.log.Infof("TLS certificate matches reportdata via %s digest (anti-spoofing check passed)", bindingKind)
 
 	golden, err := v.goldenSrc.FetchGoldenValues(ctx, version)
 	if err != nil {
@@ -238,8 +286,8 @@ func (v *Verifier) VerifyProvider(ctx context.Context, providerEndpoint string, 
 	quoteHash := fmt.Sprintf("%x", sha256.Sum256([]byte(cpuQuote)))
 	v.mu.Lock()
 	v.quoteCache[attestationURL] = &verifiedQuoteEntry{
-		quoteHash:      quoteHash,
-		tlsFingerprint: tlsFingerprint,
+		quoteHash:  quoteHash,
+		tlsBinding: tlsBinding,
 	}
 	v.mu.Unlock()
 	v.log.Infof("cached verified quote for %s", attestationURL)
@@ -247,37 +295,42 @@ func (v *Verifier) VerifyProvider(ctx context.Context, providerEndpoint string, 
 	return nil
 }
 
-// VerifyTLSBinding checks that the SHA-256 fingerprint of the TLS certificate
-// presented by the attestation endpoint matches the reportdata field in the
-// hardware-signed attestation quote.
+// VerifyTLSBinding checks that the TLS certificate presented by the
+// attestation endpoint matches the reportdata field in the hardware-signed
+// attestation quote, and reports which digest kind matched.
 //
 // SecretVM generates a TLS certificate inside the TEE at boot and stores its
-// fingerprint in the first 32 bytes (64 hex chars) of reportdata. Because the
-// TLS private key never leaves the TEE, a spoofed server cannot present a
-// certificate whose fingerprint matches a stolen quote's reportdata.
-func VerifyTLSBinding(tlsFingerprint string, reportData string) error {
-	if tlsFingerprint == "" {
-		return fmt.Errorf("no TLS certificate fingerprint captured from attestation endpoint")
+// digest in the first 32 bytes (64 hex chars) of reportdata. Current VMs bind
+// SHA-256(SPKI DER); legacy VMs bind SHA-256(full certificate DER). Either is
+// accepted so a mixed fleet keeps verifying during the SPKI rollout. Because
+// the TLS private key never leaves the TEE, a spoofed server cannot present a
+// certificate whose digest matches a stolen quote's reportdata.
+func VerifyTLSBinding(binding TLSCertBinding, reportData string) (TLSBindingKind, error) {
+	if binding.IsZero() {
+		return "", fmt.Errorf("no TLS certificate captured from attestation endpoint")
 	}
 	if reportData == "" {
-		return fmt.Errorf("no report_data in attestation quote")
+		return "", fmt.Errorf("no report_data in attestation quote")
 	}
 
 	reportData = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(reportData), " ", ""))
-	tlsFingerprint = strings.ToLower(strings.TrimSpace(tlsFingerprint))
 
-	if len(reportData) < len(tlsFingerprint) {
-		return fmt.Errorf("report_data too short (%d chars) to contain TLS fingerprint (%d chars)",
-			len(reportData), len(tlsFingerprint))
+	const digestHexLen = 64
+	if len(reportData) < digestHexLen {
+		return "", fmt.Errorf("report_data too short (%d chars) to contain TLS binding digest (%d chars)",
+			len(reportData), digestHexLen)
 	}
 
-	reportPrefix := reportData[:len(tlsFingerprint)]
-	if reportPrefix != tlsFingerprint {
-		return fmt.Errorf("TLS certificate fingerprint mismatch: connection=%s, reportdata_prefix=%s",
-			tlsFingerprint, reportPrefix)
+	reportPrefix := reportData[:digestHexLen]
+	if reportPrefix == strings.ToLower(binding.SPKI) {
+		return TLSBindingSPKI, nil
+	}
+	if reportPrefix == strings.ToLower(binding.Certificate) {
+		return TLSBindingCertificate, nil
 	}
 
-	return nil
+	return "", fmt.Errorf("TLS certificate binding mismatch: connection %s, reportdata_prefix=%s",
+		binding, reportPrefix)
 }
 
 // VerifyProviderQuick performs a fast per-request attestation check.
@@ -316,12 +369,12 @@ func (v *Verifier) VerifyProviderQuick(ctx context.Context, providerEndpoint str
 
 	v.log.Infof("quick attestation: cache hit for %s, fetching live quote", attestationURL)
 
-	cpuQuote, tlsFingerprint, err := v.loadAttestationQuote(ctx, attestationURL)
+	cpuQuote, tlsBinding, err := v.loadAttestationQuote(ctx, attestationURL)
 	if err != nil {
 		return fmt.Errorf("quick attestation check failed: %w", err)
 	}
 
-	v.log.Infof("quick attestation: fetched live quote from %s, TLS fingerprint: %s", attestationURL, tlsFingerprint)
+	v.log.Infof("quick attestation: fetched live quote from %s, TLS binding: %s", attestationURL, tlsBinding)
 
 	currentHash := fmt.Sprintf("%x", sha256.Sum256([]byte(cpuQuote)))
 
@@ -332,12 +385,19 @@ func (v *Verifier) VerifyProviderQuick(ctx context.Context, providerEndpoint str
 
 	v.log.Infof("quick attestation: quote hash matches cached value for %s", providerEndpoint)
 
-	if !strings.EqualFold(tlsFingerprint, cached.tlsFingerprint) {
-		v.log.Warnf("quick attestation: TLS fingerprint MISMATCH for %s (cached=%s, live=%s)", providerEndpoint, cached.tlsFingerprint, tlsFingerprint)
+	if !strings.EqualFold(tlsBinding.Certificate, cached.tlsBinding.Certificate) {
+		// A renewed certificate keeps the same SPKI when the key stays inside
+		// the TEE; re-run full verification so the binding is re-proven against
+		// the quote instead of hard-failing.
+		if tlsBinding.SPKI != "" && strings.EqualFold(tlsBinding.SPKI, cached.tlsBinding.SPKI) {
+			v.log.Warnf("quick attestation: TLS certificate rotated (same SPKI) for %s, performing full re-verification", providerEndpoint)
+			return v.fullVerifyWithPing(ctx, providerEndpoint, providerAddr)
+		}
+		v.log.Warnf("quick attestation: TLS binding MISMATCH for %s (cached=%s, live=%s)", providerEndpoint, cached.tlsBinding, tlsBinding)
 		return fmt.Errorf("TLS certificate changed since session was opened (provider %s)", providerEndpoint)
 	}
 
-	v.log.Infof("quick attestation: TLS fingerprint matches cached value for %s — provider verified", providerEndpoint)
+	v.log.Infof("quick attestation: TLS certificate matches cached value for %s — provider verified", providerEndpoint)
 	return nil
 }
 
@@ -419,57 +479,57 @@ func CompareRegisters(result *AttestationResult, golden *GoldenValues, log lib.I
 }
 
 // LoadAttestationQuote fetches a raw attestation quote (hex for TDX, base64 for SEV)
-// from the given URL path and returns the SHA-256 fingerprint of the peer's TLS certificate.
-func LoadAttestationQuote(ctx context.Context, client *http.Client, quoteURL string) (quote string, tlsFingerprint string, err error) {
+// from the given URL path and returns the SPKI and full-certificate SHA-256
+// digests of the peer's TLS certificate.
+func LoadAttestationQuote(ctx context.Context, client *http.Client, quoteURL string) (quote string, tlsBinding TLSCertBinding, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, quoteURL, nil)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to create request: %w", err)
+		return "", TLSCertBinding{}, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to fetch attestation quote: %w", err)
+		return "", TLSCertBinding{}, fmt.Errorf("failed to fetch attestation quote: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", "", fmt.Errorf("attestation endpoint returned status %d", resp.StatusCode)
+		return "", TLSCertBinding{}, fmt.Errorf("attestation endpoint returned status %d", resp.StatusCode)
 	}
 
 	if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
-		hash := sha256.Sum256(resp.TLS.PeerCertificates[0].Raw)
-		tlsFingerprint = hex.EncodeToString(hash[:])
+		tlsBinding = TLSBindingFromCert(resp.TLS.PeerCertificates[0])
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to read attestation quote: %w", err)
+		return "", TLSCertBinding{}, fmt.Errorf("failed to read attestation quote: %w", err)
 	}
 
 	quote = strings.TrimSpace(string(body))
 	if quote == "" {
-		return "", "", fmt.Errorf("empty attestation quote")
+		return "", TLSCertBinding{}, fmt.Errorf("empty attestation quote")
 	}
 
-	return quote, tlsFingerprint, nil
+	return quote, tlsBinding, nil
 }
 
 // loadAttestationQuote is the instance method that delegates to the package-level function.
-func (v *Verifier) loadAttestationQuote(ctx context.Context, attestationBaseURL string) (quote string, tlsFingerprint string, err error) {
+func (v *Verifier) loadAttestationQuote(ctx context.Context, attestationBaseURL string) (quote string, tlsBinding TLSCertBinding, err error) {
 	cpuURL := attestationBaseURL + "/cpu"
 	v.log.Infof("fetching attestation quote from %s", cpuURL)
 
-	quote, tlsFingerprint, err = LoadAttestationQuote(ctx, v.attestationClient, cpuURL)
+	quote, tlsBinding, err = LoadAttestationQuote(ctx, v.attestationClient, cpuURL)
 	if err != nil {
-		return "", "", err
+		return "", TLSCertBinding{}, err
 	}
 
-	if tlsFingerprint == "" {
+	if tlsBinding.IsZero() {
 		v.log.Warnf("no TLS peer certificate received from %s", cpuURL)
 	}
 
 	v.log.Infof("received attestation quote from %s (%d bytes)", cpuURL, len(quote))
-	return quote, tlsFingerprint, nil
+	return quote, tlsBinding, nil
 }
 
 // VerifyQuote sends the attestation quote to the SecretAI Portal for cryptographic
@@ -606,24 +666,41 @@ func qf(q *QuoteFields, field string) string {
 	}
 }
 
-// DeriveAttestationURL constructs the SecretVM attestation base URL from an endpoint.
+// DeriveAttestationURL constructs the Phase 1 SecretVM host attestation base URL.
 // Input format: "host:port" or "https://host:port/path"
 // Output format: "https://host:29343"
 func DeriveAttestationURL(endpoint string) (string, error) {
+	return deriveAttestationURLWithPort(endpoint, AttestationPort)
+}
+
+// DeriveBackendAttestationURL constructs the Phase 2 backend TEE attestation base URL.
+// Input format: "host:port" or "https://host:port/path"
+// Output format: "https://host:21434"
+func DeriveBackendAttestationURL(endpoint string) (string, error) {
+	return deriveAttestationURLWithPort(endpoint, BackendAttestationPort)
+}
+
+// DeriveAttestationURLWithPort constructs an attestation base URL for the
+// endpoint's host on the given port ("https://<host>:<port>").
+func DeriveAttestationURLWithPort(endpoint, port string) (string, error) {
+	return deriveAttestationURLWithPort(endpoint, port)
+}
+
+func deriveAttestationURLWithPort(endpoint, port string) (string, error) {
 	if strings.Contains(endpoint, "://") {
 		parsed, err := url.Parse(endpoint)
 		if err != nil {
 			return "", fmt.Errorf("invalid endpoint URL: %w", err)
 		}
 		host := parsed.Hostname()
-		return fmt.Sprintf("https://%s:%s", host, AttestationPort), nil
+		return fmt.Sprintf("https://%s:%s", host, port), nil
 	}
 
 	host, _, err := net.SplitHostPort(endpoint)
 	if err != nil {
 		host = endpoint
 	}
-	return fmt.Sprintf("https://%s:%s", host, AttestationPort), nil
+	return fmt.Sprintf("https://%s:%s", host, port), nil
 }
 
 // deriveAttestationURL is the old unexported alias kept for internal compatibility.

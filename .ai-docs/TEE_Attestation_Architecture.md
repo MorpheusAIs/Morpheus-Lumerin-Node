@@ -51,10 +51,10 @@ A consumer node should be able to **cryptographically verify**, before sending a
 **P-Node verifies its own backend LLM** (the gap previously "accepted" for Phase 1 is now closed without co-locating):
 
 - `BackendVerifier.AttestBackend` at startup — **DONE**
-  - Fetch backend CPU quote from `:29343/cpu`; verify via SecretAI portal
+  - Fetch backend CPU quote from `:21434/cpu`; verify via SecretAI portal
   - TLS binding: compare TLS cert SHA-256 with CPU quote `reportData[0:32]`
   - Workload verification: parse TDX quote, look up MRTD + RTMR0-2 in the published SecretVM TDX artifact registry CSV, replay RTMR3 using SHA-384 extend chain over `SHA-256(docker-compose)` + rootfs data
-  - GPU attestation: fetch from `:29343/gpu`, verify CPU-GPU binding via `reportData[32:64] == GPU nonce`
+  - GPU attestation: fetch from `:21434/gpu`, verify CPU-GPU binding via `reportData[32:64] == GPU nonce`
   - NVIDIA NRAS v4 API: submit GPU evidence for independent hardware validation (non-fatal if unreachable)
 - `BackendVerifier.FastVerifyBackend` on every prompt — **DONE**
   - Always re-fetches CPU quote (~50 ms), compares hash + TLS fingerprint against cached snapshot
@@ -358,7 +358,7 @@ This is a **release cadence** concern, not a clock-based TTL. A version doesn't 
    - Can be run locally by providers/consumers for independent verification
 
 2. **SecretVM artifact config:** `.github/tee/secretvm.env`
-   - Pins SecretVM release version (currently **`v0.0.30`** — the SecretVM portal's Production "Artifacts version" as of 2026-07, which GitHub still labels a pre-release) and rootfs variant base (`rootfs-prod`)
+   - Pins SecretVM release version (currently **`v0.0.31`** — the SecretVM portal's Production "Artifacts version" as of 2026-07, which GitHub still labels a pre-release) and rootfs variant base (`rootfs-prod`)
    - Pins TDX **and** SEV rootfs URLs + their expected SHA-256 hashes
    - Pins the SEV artifact registry URL (`SECRETVM_SEV_REGISTRY_URL`) and the registry vm_type (`SECRETVM_SEV_REGISTRY_VM_TYPE=prod`) — used by `compute-sev-measurement.py` to find the right entry
    - All pipeline references to rootfs filenames are derived from `SECRETVM_ROOTFS_VARIANT` (no hardcoded filenames in `build.yml`); the platform suffix (`-tdx` / `-sev`) is appended at use site
@@ -474,7 +474,7 @@ This is a **release cadence** concern, not a clock-based TTL. A version doesn't 
    - Mirrors the GCTX page-update chain (AMD SNP spec §8.17.2 Table 67): `PAGE_INFO = ld(48) || contents(48) || u16_LE(0x70) || page_type(1) || zeros(5) || gpa_LE(8); ld_next = SHA-384(PAGE_INFO)`.
    - Inputs: SEV registry JSON entry (kernel/initrd/ovmf hashes, OVMF section table, sev_hashes_table_gpa, sev_es_reset_eip), the deployed `docker-compose.tee.yml`, and a vCPU template.
    - Emits one `measurement` per template (small=1, medium=2, large=4, 2xlarge=8, 4xlarge=16).
-   - Parity-tested against the Go runtime via `internal/attestation/sev_python_parity_test.go` (uses `t.TempDir()` + a frozen fixture snapshotted from the v0.0.30 prod registry entry; the test runs the Python script as a subprocess and asserts identical hex output for all 5 templates).
+   - Parity-tested against the Go runtime via `internal/attestation/sev_python_parity_test.go` (uses `t.TempDir()` + a frozen fixture snapshotted from the v0.0.31 prod registry entry; the test runs the Python script as a subprocess and asserts identical hex output for all 5 templates).
 
 2. **Pipeline integration (`GHCR-Build-and-Push-TEE`):**
    - Downloads SEV rootfs (URL + SHA from `secretvm.env`) into the same cache as the TDX rootfs.
@@ -486,11 +486,11 @@ This is a **release cadence** concern, not a clock-based TTL. A version doesn't 
 
 **Effort:** M — **DONE** (this PR)
 
-### 6.4 SecretVM release version tracking — DONE (current pin: v0.0.30)
+### 6.4 SecretVM release version tracking — DONE (current pin: v0.0.31)
 
 **Implementation:** `.github/tee/secretvm.env` pins the release version, rootfs variant, and BOTH the TDX and SEV rootfs URLs + SHA-256s. The pipeline derives all artifact filenames, cache keys, and download paths from `SECRETVM_RELEASE` and `SECRETVM_ROOTFS_VARIANT` (with the platform suffix `-tdx`/`-sev` appended). The attestation manifest includes `measurements.intel_tdx.{secretvm_release, rootfs_variant, rootfs_sha256}` and `measurements.amd_sev_snp.{secretvm_release, rootfs_sha256, kernel_hash, initrd_hash, ovmf_hash, …}`.
 
-**Current pin (2026-07):** `v0.0.30`. The **source of truth is the SecretVM portal's Production "Artifacts version"** (what new prod deploys actually boot), which is `v0.0.30`. Note this diverges from GitHub's release labels: GitHub marks `v0.0.30` (and `v0.0.29`) as **pre-release** and marks `v0.0.28` as its "Latest" stable — but the portal only offers `v0.0.30` for new production deploys, so we pin `v0.0.30` to match what runs. The SEV verify registry publishes a matching `prod`/`v0.0.30` entry. TDX rootfs (`rootfs-prod-v0.0.30-tdx.iso`, sha256 `e0accc0c…`) and SEV rootfs (`rootfs-prod-v0.0.30-sev.iso`, sha256 `f7c901c1…`) are pinned in `secretvm.env` (values are the GitHub release asset digests).
+**Current pin (2026-07):** `v0.0.31`. The **source of truth is the SecretVM portal's Production "Artifacts version"** (what new prod deploys actually boot), which is `v0.0.31`. Note this diverges from GitHub's release labels: GitHub marks `v0.0.31` (and `v0.0.29`) as **pre-release** and marks `v0.0.28` as its "Latest" stable — but the portal only offers `v0.0.31` for new production deploys, so we pin `v0.0.31` to match what runs. The SEV verify registry publishes a matching `prod`/`v0.0.31` entry. TDX rootfs (`rootfs-prod-v0.0.31-tdx.iso`, sha256 `9d1ace11…`) and SEV rootfs (`rootfs-prod-v0.0.31-sev.iso`, sha256 `4e11fcb8…`) are pinned in `secretvm.env` (values are the GitHub release asset digests).
 
 **Upgrade procedure:** When SCRT Labs publishes a new release:
 
@@ -500,7 +500,7 @@ This is a **release cadence** concern, not a clock-based TTL. A version doesn't 
 4. Pin those SHA-256s back into `secretvm.env` and re-push.
 5. Confirm the SEV registry (`scrtlabs/secretvm-verify/artifacts_registry/sev.json`) has been updated with the new release's `(vm_type, artifacts_ver)` entry — without it the SEV measurement compute will fail with `no SEV registry entry found`. SCRT Labs typically publishes the registry alongside the build artifacts; check by `curl ${SECRETVM_SEV_REGISTRY_URL} | jq '.[] | select(.artifacts_ver == "${SECRETVM_RELEASE}")'`.
 
-**Version detection:** There is no SCRT Labs push notification or dedicated API for new releases. The authoritative signal is the **SecretVM portal's Production "Artifacts version"** — pin whatever it offers for new prod deploys. Cross-check against the GitHub Releases API (`https://api.github.com/repos/scrtlabs/secret-vm-build/releases`) and the `secretvm-verify/artifacts_registry/{tdx.csv,sev.json}` `(vm_type, artifacts_ver)` entries to obtain URLs, asset digests, and the SEV registry entry. Note: GitHub and the portal can disagree in *either* direction — `/releases/latest` currently returns `v0.0.28` (stable) while the portal already provisions `v0.0.30` (which GitHub still flags pre-release). Trust the portal for what to pin. Future consideration: a scheduled GitHub Action that polls for new releases AND registry entries, opens an issue or PR.
+**Version detection:** There is no SCRT Labs push notification or dedicated API for new releases. The authoritative signal is the **SecretVM portal's Production "Artifacts version"** — pin whatever it offers for new prod deploys. Cross-check against the GitHub Releases API (`https://api.github.com/repos/scrtlabs/secret-vm-build/releases`) and the `secretvm-verify/artifacts_registry/{tdx.csv,sev.json}` `(vm_type, artifacts_ver)` entries to obtain URLs, asset digests, and the SEV registry entry. Note: GitHub and the portal can disagree in *either* direction — `/releases/latest` currently returns `v0.0.28` (stable) while the portal already provisions `v0.0.31` (which GitHub still flags pre-release). Trust the portal for what to pin. Future consideration: a scheduled GitHub Action that polls for new releases AND registry entries, opens an issue or PR.
 
 ### 6.5 Auto-deploy to SecretVM test instance — DONE
 
@@ -559,8 +559,14 @@ The `test` environment uses custom deployment branch policies. The allowed branc
 
 **First successful end-to-end run:** https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/actions/runs/22969993910
 
-**Future: production deployment**
-Add a `Deploy-SecretVM-Prod` job bound to `environment: production`, triggered only on `main` branch, with its own set of secrets (`SECRETVM_API_KEY`, `SECRETVM_PROD_VM_UUID`, `SECRETVM_PROD_ENV`). Environment protection rules (reviewers, wait timer) can gate production deploys.
+**Production deployment**
+A `Deploy-SecretVM-Prod` job mirrors the test flow, bound to `environment: main`, triggered only on the `main` branch. Required secrets on the `main` GitHub Environment:
+
+| Secret | Value |
+|---|---|
+| `SECRETVM_API_KEY` | SCRT Labs API key (same account as test is fine) |
+| `SECRETVM_PROD_VM_UUID` | UUID of the production SecretVM |
+| `SECRETVM_PROD_ENV` | The 5 runtime secrets as a `.env` file, base64-encoded |
 
 **Security notes:**
 - The env file is decoded to `/tmp` and deleted immediately after `vm edit`
@@ -712,24 +718,26 @@ This is the Phase 2 capability that makes v7 the "full TEE" release. It closes t
 - `proxy-router/internal/aiengine/ai_engine.go` — returns a `PinnedHTTPClient` for TEE models; the client's `VerifyPeerCertificate` callback refuses any onward TLS cert whose SHA-256 doesn't match the attested fingerprint
 - `proxy-router/internal/proxyapi/controller_http.go` — `GET /v1/models/attestation` returns per-model attestation state (verified / pending / failed + workload-match / last-success timestamp / error detail)
 
-**Backend attestation endpoints (derived from each TEE model's `apiUrl` host + standard port 29343):**
-- `:29343/cpu` — raw TDX CPU quote hex
-- `:29343/gpu` — JSON containing `nonce`, `arch`, `evidence_list`
-- `:29343/docker-compose` — exact `docker-compose.yaml` loaded into the backend VM (used for RTMR3 replay)
+**Backend attestation endpoints (derived from each TEE model's `apiUrl` host + port 21434):**
+- `:21434/cpu` — raw TDX CPU quote hex
+- `:21434/gpu` — JSON containing `nonce`, `arch`, `evidence_list`
+- `:21434/docker-compose` — exact `docker-compose.yaml` loaded into the backend VM (used for RTMR3 replay)
+
+Phase 1 P-Node host attestation remains on `:29343`.
 
 **Full attestation sequence (`AttestBackend`):**
 ```
-1. GET :29343/cpu            → raw TDX quote
+1. GET :21434/cpu            → raw TDX quote
 2. POST quote to TEE_PORTAL_URL (quote-parse) → portal verification
 3. Extract reportData[0:32]   → compare with SHA-256 of live TLS cert
                                    → TLS binding proven
 4. if ArtifactRegistry loaded:
-     GET :29343/docker-compose
+     GET :21434/docker-compose
      Parse TDX quote: MRTD + RTMR0-3 + reportData
      Lookup (MRTD, RTMR0, RTMR1, RTMR2) in registry CSV → rootfs_data + secretvm_release
      Replay RTMR3 = SHA-384-extend-chain( SHA-256(docker-compose) + rootfs_data )
      if replayed RTMR3 != quote RTMR3 → fail (workload mismatch)
-5. GET :29343/gpu             → {nonce, arch, evidence_list}
+5. GET :21434/gpu             → {nonce, arch, evidence_list}
 6. Extract reportData[32:64]  → compare with GPU nonce
                                    → CPU-GPU binding proven
 7. if NRAS configured:
@@ -743,7 +751,7 @@ This is the Phase 2 capability that makes v7 the "full TEE" release. It closes t
 
 **Per-prompt fast verify (`FastVerifyBackend`):**
 - No TTL. Runs unconditionally on every inference prompt for a `tee`-tagged model (inside `proxy_receiver.SessionPrompt`, on the hot path).
-- Always re-fetches `:29343/cpu` (~50 ms TLS handshake).
+- Always re-fetches `:21434/cpu` (~50 ms TLS handshake).
 - `SHA-256(new_quote) == cached_quote_hash` AND `live_tls_fp == cached_tls_fp` → pass.
 - Quote-hash change → run full `AttestBackend` again (backend restart / redeploy).
 - TLS-fingerprint change → immediate hard fail, prompt refused (MITM signal).
@@ -778,7 +786,7 @@ This is the Phase 2 capability that makes v7 the "full TEE" release. It closes t
 **Priority:** Phase 2a — **shipped in v7.0.0**
 **PRs:** #699 (Phase 2 main), #700 (Phase 2 merge to test), #704 (error wrapping), #705 (request_id in logs), #708 / #709 (consolidate `tee` tag as sole TEE switch)
 
-See also: [`proxy-router/docs/tee-backend-verification.md`](../proxy-router/docs/tee-backend-verification.md) (developer reference with mermaid sequence + trust-chain diagrams).
+See also: [TEE backend verification](https://nodedocs.mor.org/providers/full/tee-backend-verification) (developer reference with mermaid sequence + trust-chain diagrams; source at `docs/providers/full/tee-backend-verification.mdx`).
 
 ---
 
@@ -903,7 +911,7 @@ See also: [`proxy-router/docs/tee-backend-verification.md`](../proxy-router/docs
 | Supply-chain hardening doc (in LMN) | `Morpheus-Lumerin-Node/.ai-docs/TEE_CICD_Supply_Chain_Hardening.md` |
 | Provider/consumer TEE guide (in LMN) | `Morpheus-Lumerin-Node/docs/02.3-proxy-router-tee.md` |
 | SecretVM provider quick-start (in LMN) | `Morpheus-Lumerin-Node/docs/02.4-proxy-router-secretvm-quickstart.md` |
-| **Phase 2 developer reference (in LMN)** | `Morpheus-Lumerin-Node/proxy-router/docs/tee-backend-verification.md` |
+| **Phase 2 developer reference (in LMN)** | `Morpheus-Lumerin-Node/docs/providers/full/tee-backend-verification.mdx` (published at https://nodedocs.mor.org/providers/full/tee-backend-verification) |
 | PR #644 — TEE image + BASE migration | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/644 |
 | PR #646 — Supply-chain hardening | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/646 |
 | PR #648 — Compose canonical format | https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/pull/648 |
@@ -929,7 +937,7 @@ See also: [`proxy-router/docs/tee-backend-verification.md`](../proxy-router/docs
 | SCRT Labs reproduce-mr | https://github.com/scrtlabs/reproduce-mr |
 | SCRT Labs secret-vm-build (rootfs/bzImage/ovmf/initramfs releases) | https://github.com/scrtlabs/secret-vm-build |
 | **SCRT Labs secretvm-verify (TS reference verifier + TDX/SEV registries)** | https://github.com/scrtlabs/secretvm-verify |
-| Current SecretVM release pin | https://github.com/scrtlabs/secret-vm-build/releases/tag/v0.0.30 |
+| Current SecretVM release pin | https://github.com/scrtlabs/secret-vm-build/releases/tag/v0.0.31 |
 | SCRT Labs TDX quote parser API | `POST https://secretai.scrtlabs.com/api/quote-parse` |
 | SCRT Labs SEV-SNP quote parser API | `POST https://secretai.scrtlabs.com/api/quote-parse-sev` |
 | **Sigstore / supply-chain tools** | |

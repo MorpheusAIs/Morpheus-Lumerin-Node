@@ -274,7 +274,7 @@ func start() error {
 		appLog.Infof("using polling for blockchain events")
 	}
 
-	scorer, err := config.LoadRating(cfg.Proxy.RatingConfigPath, appLog)
+	scorer, err := config.LoadRating(cfg.Proxy.RatingConfigPath, cfg.Proxy.RatingConfigContent, appLog)
 	if err != nil {
 		return err
 	}
@@ -351,7 +351,7 @@ func start() error {
 		if !blockchainapi.IsTeeModel(tags) {
 			continue
 		}
-		attestURL, err := attestation.DeriveAttestationURL(mc.ApiURL)
+		attestURL, err := backendVerifier.ResolveAttestationURL(context.Background(), mc.ApiURL)
 		if err != nil {
 			appLog.Warnf("cannot derive attestation URL for model %s: %s", modelIDs[i].Hex(), err)
 			continue
@@ -384,9 +384,10 @@ func start() error {
 		modelHealthChecker = modelhealth.NewChecker(modelhealth.Deps{
 			Adapters:     aiEngine,
 			Bids:         blockchainApi,
-			Tags:         blockchainApi,
+			Models:       blockchainApi,
 			ModelConfigs: modelConfigLoader,
-		}, cfg.Proxy.ModelHealthCheckInterval, cfg.Proxy.ModelHealthCheckTimeout, appLog)
+			TeeStatus:    backendVerifier,
+		}, cfg.Proxy.ModelHealthCheckInterval, cfg.Proxy.ModelHealthCheckTimeout, cfg.Proxy.ModelHealthCheckProbeDelay, cfg.Proxy.ModelHealthMaxConsecErrors, appLog)
 		modelHealthReporter = modelHealthChecker
 	}
 

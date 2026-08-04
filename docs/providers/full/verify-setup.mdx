@@ -6,7 +6,9 @@ product: ["proxy-router"]
 last_verified: "v7.0.0"
 ---
 
-After [registering](/providers/full/register-onchain) your provider, model, and bid, you want to know **before any consumer hits you** that everything works. There is no built-in setup wizard yet. This page walks the same five checks the support team uses to verify a provider when someone posts in Discord asking "can you check if my setup is OK?".
+After [registering](/providers/full/register-onchain) your provider and bid (and a new model only if you had to mint one), you want to know **before any consumer hits you** that everything works. There is no built-in setup wizard yet. This page walks the same five checks the support team uses to verify a provider when someone posts in Discord asking "can you check if my setup is OK?".
+
+If you used [MyProvider](/providers/full/myprovider-gui), confirm **Model Configuration Sync** already wrote the on-chain `modelId` into `models-config.json` / `MODELS_CONFIG_CONTENT` before Step 1.
 
 ## Step 1 — Local health
 
@@ -22,13 +24,14 @@ Expected:
 { "status": "healthy", "version": "v7.0.0", "uptime": "..." }
 ```
 
-On provider nodes the response also includes a `models` array — the periodic model health self-report. For every model in `models-config.json` that has an active bid from your wallet, the proxy-router sends a small test prompt on a schedule (default hourly, see `MODEL_HEALTH_CHECK_INTERVAL` in [env-proxy-router](/reference/env-proxy-router)) and caches the result:
+On provider nodes the response also includes a `models` array — the periodic model health self-report covering your **whole ecosystem of configured models and active bids**. For every model in `models-config.json` that has an active bid from your wallet, the proxy-router sends a small test prompt on a schedule (default hourly, see `MODEL_HEALTH_CHECK_INTERVAL` in [env-proxy-router](/reference/env-proxy-router)) and caches the result. Probes are paced a few seconds apart (`MODEL_HEALTH_CHECK_PROBE_DELAY`, default `2s`) so a provider with many models doesn't burst its own backend into a rate limit. Active bids whose model is *missing* from `models-config.json` are also listed, so a bid you're selling but cannot serve doesn't go unnoticed:
 
 ```json
 {
   "models": [
     {
       "modelId": "0xe086...",
+      "modelName": "llama-3.3-70b",
       "modelType": "LLM",
       "hasActiveBid": true,
       "bidId": "0x3f2a...",
@@ -37,12 +40,42 @@ On provider nodes the response also includes a `models` array — the periodic m
       "lastChecked": 1751871600,
       "latencyMs": 412,
       "promptCorrect": true
+    },
+    {
+      "modelId": "0x85670d...",
+      "modelName": "mistral-31-24b",
+      "modelType": "LLM",
+      "hasActiveBid": true,
+      "bidId": "0x9c41...",
+      "status": "no_model_configured",
+      "lastChecked": 1751871600
     }
   ]
 }
 ```
 
-`status` is one of `healthy`, `unhealthy` (probe failed — see `errorKind`: `timeout`, `connection`, or `bad_response`), `no_bid` (configured model has no active bid, so it is not probed), or `skipped` (model type other than LLM/embedding). A model showing `unhealthy` here means consumers who open a session will hit the same failure, so fix the backend `apiUrl` before going further.
+`modelName` is the model's public name as registered on-chain (not the private backend model string from `models-config.json`, which is never exposed).
+
+`status` is one of:
+
+| Status | Meaning | Action |
+|--------|---------|--------|
+| `healthy` | Probe succeeded (LLM answer graded via `promptCorrect`) | — |
+| `unhealthy` | Probe failed — see `errorKind` and `httpStatus` below | Fix the backend; consumers opening a session hit the same failure |
+| `no_bid` | Configured model has no active bid; not probed | Post a bid if you want to sell it |
+| `no_model_configured` | **Active bid exists but the model is missing from `models-config.json`** | Add the model entry or delete the bid — consumers can open sessions against this bid and get errors |
+| `skipped` | Model type other than LLM/embedding; not probed | — |
+
+The self-report has its own operational reference — schedule, tuning, backend impact, and diagnosis recipes — at [Model health self-report](/providers/full/model-health).
+
+For `unhealthy` models, `errorKind` narrows the failure and, when the backend answered with an HTTP error, `httpStatus` carries the exact upstream status code:
+
+| errorKind | Meaning | Typical `httpStatus` |
+|-----------|---------|----------------------|
+| `timeout` | Probe hit the per-model timeout | — |
+| `connection` | Could not reach the backend `apiUrl` at all | — |
+| `rate_limited` | Backend is up and configured, but throttled the probe | `429` |
+| `bad_response` | Backend answered with an error or empty completion | `402` (billing), `400`/`404` (bad model config), `5xx` |
 
 Logs should show:
 
@@ -100,10 +133,19 @@ Two cron-driven dashboards aggregate the marketplace into JSON snapshots. Your p
 
 ```bash
 # Active models — populated when the verifier can reach your provider's :3333 and ping the model
-curl -sS https://active.mor.org/active_models.json | jq '.[] | select(.providerAddress=="0xYOUR_PROVIDER")'
+curl -sS https://active.mor.org/active_models.json \
+  | jq --arg p "0xYOUR_PROVIDER" '
+      .models[]
+      | select(any(.bidDetail[]?; .providerId | ascii_downcase == ($p | ascii_downcase)))
+      | {Name, Id, Tags, bidDetail}
+    '
 
 # Active bids — same, but for bids
-curl -sS https://active.mor.org/active_bids.json | jq '.[] | select(.providerAddress=="0xYOUR_PROVIDER")'
+curl -sS https://active.mor.org/active_bids.json \
+  | jq --arg p "0xYOUR_PROVIDER" '
+      .bids[]
+      | select(.Provider | ascii_downcase == ($p | ascii_downcase))
+    '
 ```
 
 If your bid is on chain (Step 3) but **not** in `active_bids.json`, it means the verifier could reach the chain but **could not reach your `:3333`**. Re-check Step 2.

@@ -2,6 +2,7 @@ package attestation
 
 import (
 	"encoding/hex"
+	"html"
 	"os"
 	"path/filepath"
 	"strings"
@@ -121,6 +122,44 @@ func TestVerifyTdxWorkload_AuthenticMatch(t *testing.T) {
 	result := VerifyTdxWorkload(reg, quoteHex, composeYaml, nil)
 	if result.Status != WorkloadAuthentic {
 		t.Fatalf("status = %s, want %s", result.Status, WorkloadAuthentic)
+	}
+}
+
+// TestVerifyTdxWorkload_HTMLWrappedCompose verifies that a docker-compose
+// served by old attest-rest (HTML page with the YAML in a <pre> block) still
+// matches: the HTML-extracted variant is tried alongside the raw response.
+func TestVerifyTdxWorkload_HTMLWrappedCompose(t *testing.T) {
+	reg := testRegistry(t)
+	quoteHex := readTestFixture(t, "tdx_cpu_docker_check_quote.txt")
+	composeYaml := readTestFixture(t, "tdx_cpu_docker_check_compose.yaml")
+	wrapped := "<html><body><pre>" + html.EscapeString(composeYaml) + "</pre></body></html>"
+
+	result := VerifyTdxWorkload(reg, quoteHex, wrapped, nil)
+	if result.Status != WorkloadAuthentic {
+		t.Fatalf("status = %s, want %s", result.Status, WorkloadAuthentic)
+	}
+}
+
+func TestComposeCandidates_Raw(t *testing.T) {
+	raw := "services:\n  app:\n    image: test\n"
+	got := composeCandidates(raw)
+	if len(got) != 1 || got[0] != raw {
+		t.Fatalf("expected single raw candidate, got %q", got)
+	}
+}
+
+func TestComposeCandidates_HTMLWrapped(t *testing.T) {
+	inner := "services:\n  app:\n    image: test\n"
+	wrapped := "<pre>" + html.EscapeString(inner) + "</pre>"
+	got := composeCandidates(wrapped)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 candidates, got %d", len(got))
+	}
+	if got[0] != wrapped {
+		t.Fatalf("first candidate must be the raw response, got %q", got[0])
+	}
+	if got[1] != inner {
+		t.Fatalf("second candidate must be the extracted content, got %q", got[1])
 	}
 }
 

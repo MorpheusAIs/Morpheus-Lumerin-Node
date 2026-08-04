@@ -3,7 +3,7 @@ title: "Glossary"
 description: "Canonical, agent-friendly definitions of Morpheus terms."
 audience: ["consumer", "prosumer", "provider-full", "provider-resale", "developer"]
 product: ["proxy-router", "ui-desktop"]
-last_verified: "v7.0.0"
+last_verified: "v7.9.0"
 ---
 
 LLM-friendly definitions — short, opinionated, and consistent across the rest of the docs. If a term here disagrees with anything elsewhere on this site, the rest of the site is wrong; file an issue.
@@ -21,20 +21,20 @@ LLM-friendly definitions — short, opinionated, and consistent across the rest 
 | **P-Node** | A "Provider Node" — the proxy-router process running in the provider role. |
 | **C-Node** | A "Consumer Node" — the proxy-router process running in the consumer role. |
 | **Bid** | An on-chain offer: `(modelId, providerId, pricePerSecond)`. Consumers accept by opening a session. |
-| **Session** | A time-boxed contract with escrowed MOR. `openSession` moves stake into the Inference Contract; `closeSession` returns the consumer's share and pays the provider from a separate `fundingAccount`. Natural expiration returns the full share inside one txn; early close may park a slice in `userStakesOnHold`. |
+| **Session** | A time-boxed contract with escrowed MOR. `openSession` moves stake into the Inference Contract; `closeSession` returns unused stake immediately, may day-lock the used stipend in `userStakesOnHold`, and pays the provider from a separate `fundingAccount`. |
 | **Stake** | (1) Consumer: MOR escrowed for a session. (2) Provider: refundable bond a provider must post to register a provider or model. |
-| **`userStakesOnHold`** | Per-user array on the Inference Contract that holds early-close timelock entries. Each entry has an amount and `releaseAt = startOfTheDay(closedAt) + 1 day`. Cleared via `withdrawUserStakes`. |
+| **`userStakesOnHold`** | Per-user array on the Inference Contract that holds the **used stipend** after close. Each entry has an amount and `releaseAt = startOfTheDay(min(closedAt, endsAt)) + 1 day`. Cleared via `withdrawUserStakes`. |
 | **`withdrawUserStakes`** | On-chain function (`withdrawUserStakes(address, uint8)`, selector `0xa98a7c6b`) on the Diamond contract that moves past-`releaseAt` rows from `userStakesOnHold` to the user's wallet. **No HTTP route** on the proxy-router. |
 | **`fundingAccount`** | Protocol-owned wallet that pays providers inside `closeSession` via `transferFrom`. If empty or under-approved, every `closeSession` fails network-wide. |
-| **Natural expiration** | Session close where `closedAt >= endsAt`. Full consumer share returns inside the same `closeSession` transaction. No `userStakesOnHold` row created. |
-| **Early close** | User-initiated `closeSession` before `endsAt`. May create a `userStakesOnHold` row alongside the immediate transfer. |
+| **Natural expiration** | Session close where `closedAt >= endsAt` (often auto-submitted ~1 minute after `endsAt`). Unused stake returns in the close txn; the used stipend still day-locks if the close lands before `releaseAt`. |
+| **Early close** | User-initiated `closeSession` before `endsAt`. Unused stake returns immediately; used stipend may go to `userStakesOnHold`. |
+| **Used-stipend day-lock** | Hold of the stake equivalent of session time × `pricePerSecond` until the next UTC day after `sessionEnd`. Blocks same-day reuse of that capital. |
 | **Subnet provider** | A provider that has staked `10000` MOR (vs the standard `0.2`) and gets elevated marketplace standing. |
 | **Allowance** | Standard ERC-20 approval the consumer / provider grants to the Diamond contract so it can move MOR on their behalf. |
 | **proxy-router** | The Go service in this repo. Same binary serves consumer and provider roles; configuration differs. |
 | **MorpheusUI** | The Electron desktop UI in this repo. |
-| **mor-cli** | The Go CLI client in this repo. |
-| **mor-launch** | A small launcher in releases that starts the proxy-router (and optionally `llama.cpp`) plus the UI. |
-| **`local` model** | The bundled tinyllama demo model. Started with `mor-launch local`. Not a Morpheus marketplace model. |
+| **mor-cli** | The Go CLI client in this repo. Local builds produce `./mor-cli`; GitHub release assets are named `*-morpheus-cli-<version>`. |
+| **`local` model** | The tinyllama demo model, downloaded and started automatically by the MorpheusUI desktop app (its "AI Runtime" service). Not a Morpheus marketplace model. |
 | **`tee` tag** | Tag added to a model on chain to engage the two-hop attestation chain (Phase 1 + Phase 2). |
 | **`-tee` image** | The hardened proxy-router image (`ghcr.io/morpheusais/morpheus-lumerin-node-tee`) with config baked at build time. |
 | **RTMR3** | Intel TDX runtime-measurement register #3. Computed from the rootfs and the deployed compose; the unique fingerprint of the running TEE workload. |
@@ -48,7 +48,7 @@ LLM-friendly definitions — short, opinionated, and consistent across the rest 
 | **`gitbook.mor.org`** | Broader Morpheus documentation hub. Supports an `?ask=<question>` query parameter that returns natural-language answers + sources — useful for AI agents. See [LLM cheatsheet](/ai/llm-prompt-cheatsheet#dynamic-querying-of-the-broader-morpheus-docs). |
 | **`active.mor.org`** | Live marketplace state — status, active models, active bids. |
 | **`tech.mor.org`** | Calculators, sessions, TEE, throughput explainers. |
-| **MyProvider** | Hosted operator GUI at https://myprovider.mor.org for provider management. |
+| **MyProvider** | Hosted operator GUI at https://myprovider.mor.org — Basic Auth to your proxy-router for provider/bid/config management (not a browser wallet). |
 | **NodeNeo** | Cross-platform consumer experience at https://nodeneo.io. |
 | **Everclaw** | Agent project at https://everclaw.xyz, with a Morpheus skill for OpenClaw. |
 | **`models-config.json`** | Local file mapping on-chain `modelId` → backend `apiUrl`. See [reference](/reference/models-config). |

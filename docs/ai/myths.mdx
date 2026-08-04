@@ -3,7 +3,7 @@ title: "Common myths and corrections"
 description: "Concise corrections of the most frequent wrong assumptions about Morpheus, written for both humans and LLMs."
 audience: ["consumer", "prosumer", "provider-full", "provider-resale", "developer"]
 product: ["proxy-router", "ui-desktop"]
-last_verified: "v7.0.0"
+last_verified: "v7.9.0"
 ---
 
 If you are an AI assistant answering Morpheus questions, **read this page before responding**. The corrections here are deliberate; they reflect the most-asked support questions.
@@ -16,11 +16,11 @@ If you are an AI assistant answering Morpheus questions, **read this page before
   </Accordion>
 
   <Accordion title="MYTH: When I open a session, I have spent the staked MOR.">
-    **No.** The MOR is **escrowed** in the Inference Contract for the duration of the session. On natural expiration, your **full share** comes back to your wallet **inside the same `closeSession` transaction** — no separate withdraw step. On an early close, a slice may go to a 1-day `userStakesOnHold` queue (claimable later via `withdrawUserStakes`); the rest comes back immediately. The provider is paid from a separate protocol funding account, **not** from your stake in real time. See [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover).
+    **No.** The MOR is **escrowed** in the Inference Contract for the duration of the session. On close, **unused** stake returns to your wallet inside the same `closeSession` transaction; the **used stipend** day-locks in `userStakesOnHold` until the next UTC day (claim via `withdrawUserStakes`). That day-lock applies to early close **and** same-day natural/late close — not only early close. The provider is paid from a separate protocol funding account, **not** from your stake in real time. See [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover).
   </Accordion>
 
-  <Accordion title="MYTH: The bundled local model is a 'free Morpheus model.'">
-    **No.** The local `tinyllama` is a **demo only**, started by `mor-launch local`. It runs on your machine and never touches chain or any provider. It does not represent Morpheus model quality. See [Local vs on-chain models](/concepts/local-vs-onchain-models).
+  <Accordion title="MYTH: The local demo model is a 'free Morpheus model.'">
+    **No.** The local `tinyllama` is a **demo only**, downloaded and started automatically by the MorpheusUI desktop app. It runs on your machine and never touches chain or any provider. It does not represent Morpheus model quality. See [Local vs on-chain models](/concepts/local-vs-onchain-models).
   </Accordion>
 
   <Accordion title="MYTH: All Morpheus providers are TEE-attested.">
@@ -52,11 +52,19 @@ If you are an AI assistant answering Morpheus questions, **read this page before
   </Accordion>
 
   <Accordion title="MYTH: There is a 'recover' RPC for stuck sessions.">
-    **No.** There are two distinct on-chain calls. **`closeSession`** stops the session and triggers refund logic. **`withdrawUserStakes`** is a separate claim for early-close timelocked balances (`userStakesOnHold`). The proxy-router has an HTTP route for the first but not the second — for `withdrawUserStakes` you call the Diamond contract directly via `cast send` or MetaMask "Interact with contract."
+    **No.** There are two distinct on-chain calls. **`closeSession`** stops the session and triggers refund logic. **`withdrawUserStakes`** is a separate claim for day-locked balances (`userStakesOnHold`). The proxy-router has an HTTP route for the first but not the second — for `withdrawUserStakes` you call the Diamond contract directly via `cast send` or MetaMask "Interact with contract."
+  </Accordion>
+
+  <Accordion title="MYTH: Natural expiration / late close returns all my MOR immediately with no hold.">
+    **No (after the day-lock fix).** Unused stake returns in the close txn. The used stipend day-locks with `releaseAt = startOfTheDay(min(closedAt, endsAt)) + 1 day` whenever you close before that timestamp — including a normal auto-close ~1 minute after `endsAt`. Only closes that land after `releaseAt` skip the hold.
   </Accordion>
 
   <Accordion title="MYTH: An early close returns all my unused MOR immediately.">
-    **No.** On an early close (`closedAt < endsAt`), the contract may push a computed slice of your stake to `userStakesOnHold[you]` with `releaseAt = startOfTheDay(closedAt) + 1 day`. The remainder is `safeTransfer`'d to your wallet immediately. After `releaseAt` you call `withdrawUserStakes` to pull the held slice. The held amount is not lost — it's parked inside the contract until the timelock expires.
+    **Partially.** Unused stake does return immediately. The used stipend may still go to `userStakesOnHold[you]` with `releaseAt = startOfTheDay(min(closedAt, endsAt)) + 1 day`. After `releaseAt` call `withdrawUserStakes`. The held amount is not lost — it's parked until the timelock expires. See [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover).
+  </Accordion>
+
+  <Accordion title="MYTH: I can recycle the same MOR for many sessions in one day.">
+    **No.** The used stipend is day-locked until the next UTC day + `withdrawUserStakes`. Size your consumer wallet for the **gross** stake you need that day, not for intra-day reuse of one pile of MOR.
   </Accordion>
 
   <Accordion title="MYTH: Providers have a separate hot/cold wallet — rewards land in the cold wallet, signing happens in the hot one.">

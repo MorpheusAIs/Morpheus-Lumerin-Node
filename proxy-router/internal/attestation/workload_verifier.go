@@ -24,6 +24,21 @@ type WorkloadResult struct {
 	Env          string
 }
 
+// composeCandidates returns the docker-compose byte interpretations to try
+// when replaying the measurement. Old attest-rest wraps the /docker-compose
+// response in an HTML page (a <pre> block); newer attest-rest serves the raw
+// file bytes. The measurement (RTMR3 on TDX, docker_compose_hash on SEV) is
+// always over the original file, so both the raw response and the
+// HTML-extracted content are tried and a match on either is accepted
+// (mirrors scrtlabs/secretvm-verify v0.12.0).
+func composeCandidates(compose string) []string {
+	extracted := extractPreContent(compose)
+	if extracted != compose {
+		return []string{compose, extracted}
+	}
+	return []string{compose}
+}
+
 func VerifyTdxWorkload(registry *ArtifactRegistry, cpuQuoteHex string, dockerComposeYaml string, log lib.ILogger) WorkloadResult {
 	fields, err := ParseTdxQuoteFields(cpuQuoteHex)
 	if err != nil {
@@ -43,26 +58,28 @@ func VerifyTdxWorkload(registry *ArtifactRegistry, cpuQuoteHex string, dockerCom
 
 	best := registry.PickNewestVersion(candidates)
 
-	composeBytes := []byte(dockerComposeYaml)
-	composeHash := sha256.Sum256(composeBytes)
+	composeVariants := composeCandidates(dockerComposeYaml)
 	if log != nil {
-		log.Infof("workload: compose size=%d bytes, sha256=%s, quote RTMR3=%s, candidates=%d",
-			len(composeBytes), hex.EncodeToString(composeHash[:]), fields.RTMR3, len(candidates))
+		composeHash := sha256.Sum256([]byte(dockerComposeYaml))
+		log.Infof("workload: compose size=%d bytes, sha256=%s, variants=%d, quote RTMR3=%s, candidates=%d",
+			len(dockerComposeYaml), hex.EncodeToString(composeHash[:]), len(composeVariants), fields.RTMR3, len(candidates))
 	}
 
 	for i, entry := range candidates {
-		expected := CalculateRTMR3(composeBytes, entry.RootfsData)
-		if log != nil {
-			log.Infof("workload: candidate[%d] template=%s ver=%s rootfs=%s calculated_rtmr3=%s match=%v",
-				i, entry.TemplateName, entry.ArtifactsVer, entry.RootfsData, expected, expected == fields.RTMR3)
-		}
-		if expected == fields.RTMR3 {
-			return WorkloadResult{
-				Status:       WorkloadAuthentic,
-				TemplateName: entry.TemplateName,
-				VMType:       entry.VMType,
-				ArtifactsVer: entry.ArtifactsVer,
-				Env:          entry.VMType,
+		for _, variant := range composeVariants {
+			expected := CalculateRTMR3([]byte(variant), entry.RootfsData)
+			if log != nil {
+				log.Infof("workload: candidate[%d] template=%s ver=%s rootfs=%s calculated_rtmr3=%s match=%v",
+					i, entry.TemplateName, entry.ArtifactsVer, entry.RootfsData, expected, expected == fields.RTMR3)
+			}
+			if expected == fields.RTMR3 {
+				return WorkloadResult{
+					Status:       WorkloadAuthentic,
+					TemplateName: entry.TemplateName,
+					VMType:       entry.VMType,
+					ArtifactsVer: entry.ArtifactsVer,
+					Env:          entry.VMType,
+				}
 			}
 		}
 	}

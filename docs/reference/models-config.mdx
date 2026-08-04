@@ -22,7 +22,7 @@ source: "docs/models-config.json.md"
 | `capacityPolicy` | optional | `idle_timeout` or `simple` |
 
 <Note>
-**`concurrentSlots` is per-model, not global.** The proxy-router will accept up to `sum(concurrentSlots)` across all configured models concurrently. There is no built-in global cap. If your hardware can serve only one of N models at a time, register all N models but **only post a bid for the one currently active**, and rotate the bid when you want to switch. See [Pausing or temporarily disabling a model offering](/providers/full/register-onchain#pausing-or-temporarily-disabling-a-model-offering).
+**`concurrentSlots` is per-model, not global.** The proxy-router will accept up to `sum(concurrentSlots)` across all configured models concurrently. There is no built-in global cap. If your hardware can serve only one of N models at a time, configure all N in `models-config.json` but **only post a bid for the one currently active**, and rotate the bid when you want to switch. Prefer bidding on existing marketplace `modelId`s rather than minting duplicates — see [Register on chain](/providers/full/register-onchain). See also [Pausing or temporarily disabling a model offering](/providers/full/register-onchain#pausing-or-temporarily-disabling-a-model-offering).
 </Note>
 | `parameters` | optional | Per-`apiType` extra parameters (e.g. SD `cfg_scale`, `steps`) |
 

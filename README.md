@@ -9,7 +9,7 @@ The purpose of this software is to enable interaction with distributed, decentra
 > - **Phase 1** — *consumer → P-Node.* A consumer proxy-router (v6.0.0+) cryptographically verifies the provider's P-Node runs the exact official hardened `-tee` image inside a genuine Intel TDX SecretVM, with TLS pinning, at session open and on every prompt.
 > - **Phase 2 (new in v7)** — *P-Node → backend LLM.* The v7+ P-Node itself verifies the backend LLM it forwards inference to (CPU TDX quote, TLS pinning, workload RTMR3 replay of the backend's `docker-compose.yaml`, CPU-GPU nonce binding, and NVIDIA NRAS GPU attestation) at startup and on every prompt.
 >
-> Because Phase 2 runs inside the attested P-Node, **any v6+ consumer is forward-compatible with a v7+ provider** and gains the Phase 2 guarantees automatically — no client-side upgrade required. See the [TEE reference](https://nodedocs.mor.org/providers/full/tee-reference), the [SecretVM quickstart](https://nodedocs.mor.org/providers/full/secretvm-quickstart), and the developer reference at [proxy-router/docs/tee-backend-verification.md](proxy-router/docs/tee-backend-verification.md).
+> Because Phase 2 runs inside the attested P-Node, **any v6+ consumer is forward-compatible with a v7+ provider** and gains the Phase 2 guarantees automatically — no client-side upgrade required. See the [TEE reference](https://nodedocs.mor.org/providers/full/tee-reference), the [SecretVM quickstart](https://nodedocs.mor.org/providers/full/secretvm-quickstart), and the [TEE backend verification developer reference](https://nodedocs.mor.org/providers/full/tee-backend-verification).
 
 ## Documentation
 
@@ -19,11 +19,10 @@ The site is structured around **role-based journeys** (consumer / prosumer / pro
 
 ## What's in this repo
 
-- Local `Llama.cpp` and tinyllama model to run locally for demonstration purposes only.
 - Lumerin `proxy-router` — background process that monitors blockchain contract events, manages secure sessions between consumers and providers, and routes prompts and responses between them.
-- Lumerin `MorpheusUI` — the Electron front end UI to interact with LLMs and the Morpheus network as a consumer.
-- Lumerin `cli` — CLI client to interact with LLMs and the Morpheus network as a consumer.
-- Kubo `ipfs` — IPFS client to store and retrieve model/agent files.
+- `ui-desktop/` (**MorpheusUI**) — Electron desktop app for consumers. Release assets are `*-morpheus-app-*` installers (`.dmg` / `.AppImage` / portable `.exe`); on first launch the app downloads the proxy-router, a local `llama.cpp` + tinyllama demo model, and an IPFS (kubo) node. There is no zip / `mor-launch` package in current releases.
+- `cli/` — CLI client (`*-morpheus-cli-*` release binaries; local builds produce `mor-cli`).
+- Standalone `*-morpheus-router-*` release binaries for headless / provider deployments.
 
 ## End-to-end picture
 
@@ -57,6 +56,12 @@ You will need both **MOR** (for stake / fees / session payment) and **ETH on BAS
 | Resale provider | [Resale overview](https://nodedocs.mor.org/providers/resale/overview) |
 | Prosumer / agent | [Prosumer overview](https://nodedocs.mor.org/prosumers/overview) |
 | Developer (API) | [API overview](https://nodedocs.mor.org/reference/api-overview) |
+
+## Contributing
+
+**PRs should target [`dev`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/tree/dev), not `main`.** Changes promote `dev` → `test` → `main`.
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the branch model, PR checklist, and local docs/proxy-router tips. The GitHub PR template reminds you to pick the right base branch.
 
 ## For AI agents reading this repo
 

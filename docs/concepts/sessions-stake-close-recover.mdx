@@ -1,15 +1,15 @@
 ---
 title: "Sessions: stake, close, claim"
-description: "The complete lifecycle of a Morpheus session — open, stake, close (natural vs early), and the on-hold timelock for early closes. Why MOR is not 'gone' just because the session is open."
+description: "The complete lifecycle of a Morpheus session — open, stake, close, day-lock of the used stipend, and withdrawUserStakes. Why MOR is not 'gone' just because the session is open, and why used stake is not reusable the same UTC day."
 audience: ["consumer", "provider-full", "provider-resale", "developer"]
 product: ["proxy-router"]
-last_verified: "v7.0.0"
+last_verified: "v7.9.0"
 ---
 
 This is the most misunderstood part of Morpheus. The vast majority of "where is my MOR?" support questions resolve here. Read carefully.
 
 <Note>
-The canonical reference for this lifecycle (with a read-only Base wallet checker) is [tech.mor.org/session.html](https://tech.mor.org/session.html). The page below is the curated repo-side summary; if it ever disagrees with `tech.mor.org`, that page wins.
+The hosted checker at [tech.mor.org/session.html](https://tech.mor.org/session.html) is useful for reading the three on-chain buckets. **Contract behavior in this repo is authoritative** if that page lags (especially the day-lock rules below).
 </Note>
 
 ## End-to-end flow
@@ -18,27 +18,12 @@ The canonical reference for this lifecycle (with a read-only Base wallet checker
 flowchart TB
   Wallet1["1. MOR in your wallet"] --> Open["2. Approve + Open session"]
   Open --> Active["3. Active session"]
-  Active --> NaturalPath["Natural expiration path"]
-  Active --> EarlyPath["Early close path"]
-
-  subgraph NaturalPath
-    direction TB
-    NatClose["4a. Consumer node submits close ~1 minute after endsAt"]
-    NatNoLock["5a. No timelock"]
-    NatRefund["6a. Full refund inside the same close txn"]
-    NatClose --> NatNoLock --> NatRefund
-  end
-
-  subgraph EarlyPath
-    direction TB
-    EarlyClose["4b. User calls close via API/app"]
-    EarlyLock["5b. Slice may go to userStakesOnHold (1-day timelock)"]
-    EarlyClaim["6b. Call withdrawUserStakes after the timelock"]
-    EarlyClose --> EarlyLock --> EarlyClaim
-  end
-
-  NaturalPath --> Wallet2["7. MOR back in your wallet"]
-  EarlyPath --> Wallet2
+  Active --> Close["4. closeSession (early or at/after endsAt)"]
+  Close --> Immediate["5a. Unused stake → wallet (same txn)"]
+  Close --> Hold["5b. Used stipend → userStakesOnHold until next UTC day"]
+  Hold --> Claim["6. withdrawUserStakes after releaseAt"]
+  Immediate --> Wallet2["7. Spendable MOR"]
+  Claim --> Wallet2
 ```
 
 ## The three places your MOR can be on chain
@@ -53,7 +38,7 @@ The Morpheus consumer node (proxy-router) does **not** custody tokens — it jus
     `openSession` does `transferFrom(you, InferenceContract, amount)`. While `closedAt == 0`, your stake lives inside the session record — not in your wallet, not yet in the on-hold queue.
   </Card>
   <Card title="3. On-hold queue" icon="lock">
-    `userStakesOnHold[user]` array. Entries are only created on **certain early closes** (`closedAt < endsAt`) with `releaseAt = startOfTheDay(closedAt) + 1 day`. After that timestamp you call `withdrawUserStakes` to move them to your wallet.
+    `userStakesOnHold[user]` array. Holds the **used stipend** after close until `releaseAt = startOfTheDay(min(closedAt, endsAt)) + 1 day`. Cleared via `withdrawUserStakes`.
   </Card>
 </CardGroup>
 
@@ -64,56 +49,54 @@ The Morpheus consumer node (proxy-router) does **not** custody tokens — it jus
     Standard ERC-20 balance, like any token.
   </Step>
   <Step title="Approve + open">
-    `openSession(bidId, sessionDuration)` does `transferFrom(you, Diamond, amount)`. The whole stake moves out of your wallet into the Inference Contract for the duration of the session. The session has a scheduled `endsAt` derived from `pricePerSecond × sessionDuration`.
+    `openSession` does `transferFrom(you, Diamond, amount)`. The whole stake moves out of your wallet into the Inference Contract for the duration of the session. Scheduled `endsAt` comes from stake → daily stipend ÷ `pricePerSecond` (capped by max session duration).
   </Step>
   <Step title="Active">
     Until `endsAt` (or until you close early), the session is active and your stake is reserved for inference with the chosen provider.
   </Step>
   <Step title="Close — one transaction">
-    Closing always happens in a single on-chain `closeSession` call. The path splits depending on **when** the close happens:
+    Closing always happens in a single on-chain `closeSession` call — either your consumer node ~1 minute after `endsAt` (if online), or you closing early via API / UI.
 
-    - **Natural expiration (`closedAt ≥ endsAt`)** — your consumer node usually submits the close transaction itself ~1 minute after `endsAt` (assuming it's online and caught up).
-    - **Early close (`closedAt < endsAt`)** — you (or your app/agent) call close via API / `cast` before the scheduled end. This is the first user-initiated step on the early-close path.
+    Refund math does **not** treat "late" vs "early" as a special case that skips the lock. It anchors to when the session stopped consuming compute: `sessionEnd = min(closedAt, endsAt)`.
   </Step>
-  <Step title="Token state right after close (5a vs 5b)">
-    <Tabs>
-      <Tab title="5a — Natural expiration">
-        **No on-hold row, no timelock.** The contract `safeTransfer`s your share back to your wallet **inside the same `closeSession` transaction**. You don't need a separate "withdraw" step.
-      </Tab>
-      <Tab title="5b — Early close">
-        The contract may push a computed slice of your stake to `userStakesOnHold[you]` with `releaseAt = startOfTheDay(closedAt) + 1 day`. The rest is `safeTransfer`'d to your wallet immediately. The held slice is *not* lost — it's parked inside the contract until the timelock passes. **How much is held depends on how long the session ran and the agreed price** — it's not a simple "minutes left on the clock" slider, and the rule mirrors how natural-expiration settlement would have paid out.
-      </Tab>
-    </Tabs>
-  </Step>
-  <Step title="Last mile — MOR back in your wallet (6a vs 6b)">
-    <Tabs>
-      <Tab title="6a — Natural expiration">
-        Already done in step 5a. No further action needed.
-      </Tab>
-      <Tab title="6b — Early close (claim)">
-        After the timelock passes (≈ "after the end of the next full UTC day" from `closedAt`), call `withdrawUserStakes(yourAddress, iterations)` on the Diamond contract. The held rows that have passed `releaseAt` move to your wallet. **There is no HTTP route for this on the proxy-router today** — you call it directly via `cast send`, MetaMask "Interact with contract", or your wallet app's withdraw / claim flow.
+  <Step title="Token state right after close">
+    Inside `_rewardUserAfterClose`:
 
-        ```bash
-        # Mainnet; replace placeholders
-        cast send 0x6aBE1d282f72B474E54527D93b979A4f64d3030a \
-          "withdrawUserStakes(address,uint8)" 0xYOUR_CONSUMER_WALLET 20 \
-          --rpc-url https://mainnet.base.org \
-          --private-key "$PRIVATE_KEY_OF_DELEGATEE"
-        ```
-      </Tab>
-    </Tabs>
+    - **Unused stake** is `safeTransfer`'d to your wallet **in the same transaction**.
+    - **Used stipend** (session time × `pricePerSecond`, converted back to stake) is pushed to `userStakesOnHold` with `releaseAt = startOfTheDay(sessionEnd) + 1 day`, **if you close before that timestamp**.
+
+    Practical effect: a normal natural expiration (close ~1 minute after `endsAt` on the same UTC day) **does** day-lock the used portion. Only a close that lands after `releaseAt` (e.g. days late) returns everything with no hold.
+  </Step>
+  <Step title="Claim the day-locked slice">
+    After `releaseAt` (≈ after the end of the UTC day the session ended on), call `withdrawUserStakes(yourAddress, iterations)` on the Diamond contract. **There is no HTTP route for this on the proxy-router today** — use `cast send`, MetaMask "Interact with contract", or your wallet's contract UI.
+
+    ```bash
+    # Mainnet; replace placeholders
+    cast send 0x6aBE1d282f72B474E54527D93b979A4f64d3030a \
+      "withdrawUserStakes(address,uint8)" 0xYOUR_CONSUMER_WALLET 20 \
+      --rpc-url https://mainnet.base.org \
+      --private-key "$PRIVATE_KEY_OF_DELEGATEE"
+    ```
   </Step>
   <Step title="Done">
-    Spendable MOR back in your wallet — either right after a successful natural-expiration close, or after an early close + claim once the timelock allows it.
+    Spendable MOR is back in your wallet — unused immediately after close, used portion after the day-lock + claim.
   </Step>
 </Steps>
+
+## Consumer capital expectation (important)
+
+The used portion of stake is **not reusable the same UTC day**. Plan float accordingly:
+
+- Opening many short sessions that each "use" most of their stake will park that capital until the next day + `withdrawUserStakes`.
+- Letting sessions expire naturally does **not** free the used stake for immediate reuse — the node auto-close still day-locks it.
+- Size your wallet for the **gross** stake you need in a day of concurrent / sequential sessions, not for recycling one pile of MOR many times before midnight UTC.
 
 ## How the provider gets paid (and what your stake has to do with it)
 
 Your stake **is not** what pays the provider in real time. Inside `closeSession`:
 
 1. The contract sets `closedAt` and marks the session inactive.
-2. **`_rewardUserAfterClose`** — your share is computed and either `safeTransfer`'d to your wallet (natural expiration) or split between an immediate transfer and an `userStakesOnHold` row (early close).
+2. **`_rewardUserAfterClose`** — unused stake returns immediately; used stipend may go to `userStakesOnHold`.
 3. **`_rewardProviderAfterClose`** — pays the provider for time actually used. For typical staked sessions, the payment comes from the protocol's separate **`fundingAccount` via `transferFrom`**, **not** from your stake in that same step.
 
 The practical implication: if the protocol's funding wallet is empty or has insufficient allowance to the Inference Contract, **no session can close** — yours included. That's a different failure mode from a stuck consumer node and is handled by the Morpheus operators, not by you. It can manifest as sessions sitting "active" past their `endsAt`.
@@ -124,11 +107,9 @@ The practical implication: if the protocol's funding wallet is empty or has insu
 stateDiagram-v2
   [*] --> Opening
   Opening --> Open: openSession succeeds, stake escrowed, sessionId issued
-  Open --> ClosedNatural: closeSession after endsAt (consumer node usually submits)
-  Open --> ClosedEarly: user-initiated close before endsAt
-  ClosedNatural --> [*]: full refund inside the same txn
-  ClosedEarly --> OnHold: contract may park a slice in userStakesOnHold (releaseAt = startOfDay(closedAt) + 1 day)
-  ClosedEarly --> [*]: remainder transferred immediately
+  Open --> Closed: closeSession (early or at/after endsAt)
+  Closed --> [*]: unused stake transferred immediately
+  Closed --> OnHold: used stipend parked until releaseAt = startOfDay(sessionEnd) + 1 day
   OnHold --> [*]: withdrawUserStakes after releaseAt
 ```
 
@@ -137,7 +118,7 @@ stateDiagram-v2
 Older docs (and even some early Morpheus discussion) used the word "recover" loosely. There is no single `recover` RPC. There are two distinct on-chain calls:
 
 - **`closeSession`** stops the session and triggers refund logic.
-- **`withdrawUserStakes`** is the *separate* claim action for early-close timelocked balances.
+- **`withdrawUserStakes`** is the *separate* claim action for day-locked balances.
 
 If a session is genuinely stuck (e.g. funding account empty, your consumer node offline past `endsAt`), the resolution is still a successful `closeSession` followed, if needed, by `withdrawUserStakes`. There is no other path.
 
@@ -151,7 +132,7 @@ If a session is genuinely stuck (e.g. funding account empty, your consumer node 
 | List session IDs only (lighter) | `GET /blockchain/sessions/user/ids?user=0x…` |
 | Fetch one session | `GET /blockchain/sessions/0x…` |
 | Close a session | `POST /blockchain/sessions/0x…/close` |
-| Claim early-close on-hold balance | **No HTTP route** — call `withdrawUserStakes` on the Diamond contract directly |
+| Claim day-locked on-hold balance | **No HTTP route** — call `withdrawUserStakes` on the Diamond contract directly |
 
 See [API endpoints](/reference/api-endpoints) for full curl examples.
 

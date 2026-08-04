@@ -3,29 +3,49 @@ title: "Consumer quickstart"
 description: "The 5-minute path from zero to chatting with a remote model: download, fund a wallet, open a session, prompt."
 audience: ["consumer"]
 product: ["proxy-router", "ui-desktop"]
-last_verified: "v7.0.0"
+last_verified: "v7.7.0"
 ---
 
 This is the shortest path to chat with a remote model on Morpheus. For a full walk-through (including the optional local-only model and cleanup), see [Consumer install](/consumers/quickstart).
 
 <Steps>
   <Step title="Download a release">
-    Grab the latest package for your OS from the [GitHub releases page](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/releases). Mainnet builds have no suffix (e.g. `v7.0.0`); testnet builds end in `-test`.
+    Grab the latest **Desktop Application** for your OS from the [GitHub releases page](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/releases). Current releases ship installers (`.dmg` / `.AppImage` / portable `.exe`) — not a zip archive and not `mor-launch`. Mainnet builds have no suffix; testnet builds end in `-test`. Asset names look like (version will differ):
+
+    | OS | File |
+    |----|------|
+    | macOS | `mac-arm64-morpheus-app-<version>.dmg` (Apple Silicon) or `mac-x64-...` (Intel) |
+    | Linux | `linux-x86_64-morpheus-app-<version>.AppImage` (or `linux-arm64-...`) |
+    | Windows | `win-x64-morpheus-app-<version>.exe` (portable) |
   </Step>
-  <Step title="Unpack and launch">
-    Extract the zip, then:
+  <Step title="Install and launch">
     <Tabs>
-      <Tab title="macOS / Linux">
+      <Tab title="macOS">
+        Open the `.dmg` and drag **MorpheusUI** into **Applications**. The build is not notarized, so clear the quarantine flag before the first launch:
+
         ```bash
-        xattr -c mor-launch mor-cli proxy-router MorpheusUI.app
-        ./mor-launch
+        xattr -c /Applications/MorpheusUI.app
+        ```
+
+        Then open the app from Applications.
+      </Tab>
+      <Tab title="Linux">
+        Make the AppImage executable and run it (adjust the filename to the version you downloaded):
+
+        ```bash
+        chmod +x linux-x86_64-morpheus-app-*.AppImage
+        ./linux-x86_64-morpheus-app-*.AppImage
         ```
       </Tab>
       <Tab title="Windows">
-        Double-click `mor-launch.exe`. Allow Defender if prompted.
+        Double-click the portable `.exe`. Allow Defender if prompted.
       </Tab>
     </Tabs>
-    Add `local` (e.g. `./mor-launch local`) to also start the bundled `llama.cpp` model for free local testing.
+  </Step>
+  <Step title="Let the app fetch its components">
+    On every OS, the first launch (and the first launch after an update) shows a **Starting services** screen. The app downloads the proxy-router first (required), then optional local AI / IPFS pieces, and starts the **Proxy Router** before optional services so onboarding is not blocked if local tinyllama or IPFS fails.
+
+    One item, **Container Runtime** (Docker), is only *detected*, never installed: it is required solely for containerized agent features. If a service fails or you don't need it — no Docker installed, for example — click **Skip** to continue into the app; **Retry** re-runs the failed steps.
   </Step>
   <Step title="Onboard the UI">
     In MorpheusUI, accept the terms, set a password, and either create a new wallet or recover an existing one with your mnemonic. Save the mnemonic somewhere safe.

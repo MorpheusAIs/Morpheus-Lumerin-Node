@@ -1,30 +1,24 @@
 ---
 title: "Windows install"
-description: "Run a packaged Morpheus Lumerin Node consumer release on Windows."
+description: "Run the MorpheusUI desktop app (portable exe) on Windows."
 audience: ["consumer"]
 product: ["proxy-router", "ui-desktop"]
-last_verified: "v7.0.0"
+last_verified: "v7.7.0"
 ---
 
-The packaged Windows release contains the proxy-router, MorpheusUI, and an optional bundled `llama.cpp` server. For source builds, see [macOS install](/consumers/install/macos) and adapt the toolchain.
+The Windows release is a single **portable executable**. On first launch, the app downloads and manages its own services — proxy-router, `llama.cpp` AI runtime with the `tinyllama` demo model, and an IPFS node. For source builds, see [macOS install](/consumers/install/macos) and adapt the toolchain.
 
 ## Steps
 
 <Steps>
   <Step title="Download">
-    Get the latest Windows zip from [Releases](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/releases). Mainnet builds have no suffix; testnet builds end in `-test`.
-  </Step>
-  <Step title="Extract">
-    Recommended location: `%USERPROFILE%\Downloads\morpheus`.
-  </Step>
-  <Step title="(Optional) tweak .env">
-    Edit only if you need a custom ETH node, log path, or non-default ports. See [Env: proxy-router](/reference/env-proxy-router).
+    Get the **latest** portable executable from [Releases](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/releases) — the asset is named like `win-x64-morpheus-app-<version>.exe`. Mainnet builds have no suffix; testnet builds end in `-test`.
   </Step>
   <Step title="Launch">
-    Double-click `mor-launch.exe`. Windows Defender may prompt — allow it. To also start the bundled local model:
-    ```cmd
-    mor-launch.exe local
-    ```
+    Double-click the `.exe`. Windows Defender may prompt — allow it.
+  </Step>
+  <Step title="Let the app fetch its services">
+    The first launch (and the first after each update) shows a **Starting services** screen: the app downloads the proxy-router first, then optional AI runtime / demo model / IPFS, and starts the **Proxy Router** before optional services. Local AI Runtime can fail on some Windows setups (e.g. ARM Parallels without AVX2) without blocking onboarding — use remote models, or **Skip** / **Retry** as needed. **Container Runtime** (Docker) is only detected, never installed.
   </Step>
   <Step title="Onboard">
     Accept terms, set a UI password, create or recover a wallet. Save the mnemonic somewhere safe.
@@ -36,10 +30,15 @@ The packaged Windows release contains the proxy-router, MorpheusUI, and an optio
 
 ## Cleanup
 
+<Warning>
+**Save your wallet mnemonic / private key first.** This deletes the local key store along with the downloaded services.
+</Warning>
+
 ```cmd
-del .cookie proxy.conf
-rmdir /s /q data
-rmdir /s /q %USERPROFILE%\AppData\Roaming\morpheus-ui
+rmdir /s /q %APPDATA%\morpheus-app
+rmdir /s /q %LOCALAPPDATA%\morpheus-app
 ```
+
+(`morpheus-app` is the Electron package / `userData` folder name; the product name in the UI is **MorpheusUI**.)
 
 See also: [Troubleshooting](/reference/troubleshooting).

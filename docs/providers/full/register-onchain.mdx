@@ -1,13 +1,17 @@
 ---
 title: "Register on chain (provider, model, bid)"
-description: "Approve the Diamond contract, register your provider, register your model (with optional tee tag), and post a bid."
+description: "Look up existing models on active.mor.org, register as a provider, bid on a known modelId when possible, and only mint a new model when nothing suitable exists."
 audience: ["provider-full", "provider-resale"]
 product: ["proxy-router"]
-last_verified: "v7.0.0"
+last_verified: "v7.5.0"
 source: "docs/03-provider-offer.md"
 ---
 
-After your proxy-router is running, register your provider, model, and bid on the BASE Diamond contract. All steps go through your local Swagger UI at `http://localhost:8082/swagger/index.html`.
+After your proxy-router is running, register on the BASE Diamond contract. **Prefer looking up an existing model and posting a bid on it** — minting a new model for every provider floods the marketplace with duplicate names.
+
+<Note>
+**Preferred operator UI:** [MyProvider](https://myprovider.mor.org) ([guide](/providers/full/myprovider-gui)) — especially on SecretVM, where the node already serves HTTPS. Swagger at `http://localhost:8082/swagger/index.html` (or `https://<your-node>/swagger/`) remains the API fallback.
+</Note>
 
 ## Contract minimums
 
@@ -24,44 +28,86 @@ After your proxy-router is running, register your provider, model, and bid on th
 |------|---------|
 | Provider wallet | `0x9E26Fea97F7d644BAf62d0e20e4d4b8F836C166c` |
 | Public endpoint | `server.example.com:3333` |
-| Random `modelId` (32-byte hex) | `0xe1e6e3e77148d140065ef2cd4fba7f4ae59c90e1639184b6df5c84` |
-| `ipfsCID` (32-byte hex) | `0xc2d3a5e4f9b7c1a2c8f0b1d5e6c78492fa7bcd34e9a3b9c9e18f25d3be47a1f6` |
-| Model name | `CapybaraHermes-v2.5-Mistral-7b` |
-| Bid `pricePerSecond` | `10000000000` (`0.00000001` MOR) |
+| Existing or new on-chain `modelId` | From [active.mor.org](https://active.mor.org/status) — see below |
+| Bid `pricePerSecond` | Check competitors first; floor is `10000000000` |
+
+## Step 0 — Look up models before you mint
+
+Browse [active.mor.org/status](https://active.mor.org/status) or pull the JSON snapshots:
+
+| URL | Use |
+|-----|-----|
+| [active_models.json](https://active.mor.org/active_models.json) | Routable models (healthy/degraded bids) — start here |
+| [active_bids.json](https://active.mor.org/active_bids.json) | Competing `pricePerSecond` for a model name |
+| [all_models.json](https://active.mor.org/all_models.json) | All non-deleted on-chain models (including ones with no live healthy provider) |
+| [status](https://active.mor.org/status) | Human UI + uptime / min price views |
+
+```bash
+# Find a model by name (field names are PascalCase in the JSON)
+curl -sS https://active.mor.org/active_models.json \
+  | jq '.models[] | select(.Name | test("llama-3.3"; "i")) | {Name, Id, IpfsCID, Tags, Owner, health}'
+
+# Competing bids for that name
+curl -sS https://active.mor.org/active_bids.json \
+  | jq '[.bids[] | select(.ModelName | test("llama-3.3"; "i"))] | sort_by(.PricePerSecond | tonumber) | .[:5] | .[] | {ModelName, Provider, PricePerSecond, Id}'
+```
+
+**Decision rule:**
+
+| Situation | What to do |
+|-----------|------------|
+| Same logical model already listed (same weights / name you intend to serve) | **Do not create a model.** Register as a provider, then **bid on that existing `Id`**. Put that `Id` in `models-config.json`. |
+| You need a `tee` tag and no suitable `tee`-tagged model exists | Register a **new** model with tag `tee`, then bid. |
+| Genuinely new weights, fine-tune, or metadata | Register a **new** model (new `ipfsCID` / name), then bid. |
+
+Any registered provider can bid on any active model — you do **not** need to own the model record. Creating another model with the same display name still adds a separate marketplace entry and is what produces the duplicate clutter on [active.mor.org](https://active.mor.org).
 
 ## Steps
 
-<Steps>
-  <Step title="Authorize the Diamond contract">
-    `POST /blockchain/approve` — set `spender = <DiamondContract>` and `amount` ≥ `0.6` MOR (in wei: `600000000000000000`) to cover provider stake + model stake + bid fee.
-  </Step>
-  <Step title="Register your provider">
-    `POST /blockchain/providers` — set `addStake` (≥ `0.2` MOR; `10000` MOR for a subnet provider) and `endpoint` (your **publicly accessible** `host:port`, no protocol).
-  </Step>
-  <Step title="Add your model to IPFS">
-    `POST /ipfs/add` — capture the returned `Hash` (this is your `ipfsCID`). Then `POST /ipfs/pin` with the same hash to keep it pinned.
-  </Step>
-  <Step title="Create the model on chain">
-    `POST /blockchain/models` with:
-    - `modelId`: random 32-byte hex (becomes the on-chain id paired with your providerId).
-    - `ipfsCID`: from the previous step.
-    - `Fee`: model fee.
-    - `addStake`: `0.1` MOR minimum.
-    - `Owner`: your provider wallet.
-    - `name`: human-readable model name.
-    - `tags`: array of strings.
-      - **TEE providers must include `"tee"` (case-insensitive)** to opt the model into the two-hop attestation chain.
-      - Other common tags: `llm`, `embedding`, `stt`, `tts`.
-
-    Capture the `modelID` from the JSON response — this combines your requested modelId with your providerId and is required for `models-config.json` and bids.
-  </Step>
-  <Step title="Update models-config.json">
-    Add the new on-chain `modelID` (the combined value) to your `models-config.json` and restart the proxy-router. See [models-config.json](/reference/models-config).
-  </Step>
-  <Step title="Post a bid">
-    `POST /blockchain/bids` with `modelID` and `pricePerSecond` (≥ `10000000000`). Capture the returned `bidID`.
-  </Step>
-</Steps>
+<Tabs>
+  <Tab title="MyProvider (recommended)">
+    <Steps>
+      <Step title="Connect">
+        Open [myprovider.mor.org](https://myprovider.mor.org). Enter your proxy-router base URL and Basic Auth credentials from `.cookie` / `COOKIE_CONTENT` (not a browser wallet). Hosted MyProvider requires **HTTPS** to the node — SecretVM Traefik on `:443` fits; for plain HTTP use the [desktop app or local `npm run dev`](/providers/full/myprovider-gui#https-requirement).
+      </Step>
+      <Step title="Register your provider">
+        **Provider** tab → verify `:3333` reachability → create/update provider with your public `host:3333` endpoint and at least `0.2` MOR stake (`10000` MOR for a subnet provider). Approve the Diamond spend if prompted.
+      </Step>
+      <Step title="Bid on an existing model (preferred)">
+        **Models & Bids** → find the model under **Available Models** (or look up `Id` on active.mor.org first) → **Add Bid**. Set `pricePerSecond` from the competitor check in Step 0. Capture the returned bid id.
+      </Step>
+      <Step title="Only if no suitable model exists — create model + bid">
+        Use **Create Model & Bid** only for a genuinely new offering (or a required `tee` tag with no existing tee model). Include tag `tee` when applicable. Today the GUI auto-generates `modelId` / `ipfsCID` — that is fine for a true new model; it is **not** the path for joining an existing listing.
+      </Step>
+      <Step title="Sync models-config">
+        Use **Model Configuration Sync** to map the on-chain `modelId` to your backend `apiUrl`, copy `MODELS_CONFIG_CONTENT` / update `models-config.json`, and restart or redeploy the node so config matches the bid **before** you rely on live traffic. See [models-config.json](/reference/models-config).
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Swagger / API">
+    <Steps>
+      <Step title="Authorize the Diamond contract">
+        `POST /blockchain/approve` — set `spender = <DiamondContract>` and `amount` ≥ enough MOR for provider stake + (optional) model stake + bid fee. Bidding on an existing model needs provider stake + `0.3` MOR fee (≈ `0.5` MOR); minting a new model adds `0.1` MOR model stake (≈ `0.6` MOR total).
+      </Step>
+      <Step title="Register your provider">
+        `POST /blockchain/providers` — set `addStake` (≥ `0.2` MOR; `10000` MOR for a subnet provider) and `endpoint` (your **publicly accessible** `host:port`, no protocol).
+      </Step>
+      <Step title="Post a bid on an existing model (preferred)">
+        From Step 0, take the model's `Id`. `POST /blockchain/bids` with that `modelID` and `pricePerSecond` (≥ `10000000000`). Put the same `Id` in `models-config.json` and restart the proxy-router. Capture the returned `bidID`.
+      </Step>
+      <Step title="Only if needed — create a new model">
+        `POST /ipfs/add` (and `POST /ipfs/pin`) for a real CID when you have one, then `POST /blockchain/models` with:
+        - `modelId`: random 32-byte hex (base id; on-chain id becomes `keccak256(owner ‖ baseId)`).
+        - `ipfsCID`, `Fee`, `addStake` (`0.1` MOR min), `Owner`, `name`, `tags`.
+        - **TEE providers must include `"tee"`** (case-insensitive).
+        Capture the response `modelID` (combined id) for `models-config.json` and the bid.
+      </Step>
+      <Step title="Update models-config.json">
+        Map the on-chain `modelID` you bid on to your backend `apiUrl`. Restart the proxy-router. See [models-config.json](/reference/models-config).
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
 
 ## TEE tag deeper context
 
@@ -72,38 +118,21 @@ Tagging the model `tee` engages two independent verifications on every session a
 
 A v6+ consumer benefits from Phase 2 automatically by trusting your attested v7+ P-Node — no client-side upgrade needed. Models without the `tee` tag are treated as standard providers; neither hop runs.
 
+If you **bid on someone else's model**, you inherit that model's tags. To offer TEE attestation to consumers, bid on an existing `tee`-tagged model or register your own with `"tee"`.
+
 See [TEE overview](/concepts/tee-overview) and [TEE reference](/providers/full/tee-reference).
 
 ## Where things show up afterward
 
 - Your provider on chain: `GET /blockchain/providers`
-- Your model on chain: `GET /blockchain/models`
+- Models on chain: `GET /blockchain/models`
 - Your bids on chain: `GET /blockchain/bids`
-- Live network listings: [active.mor.org](https://active.mor.org)
-- Operator dashboard: [myprovider.mor.org](/providers/full/myprovider-gui)
-
-## Choosing a `modelId` (community convention)
-
-The contract does **not enforce uniqueness** of model names. You can register a `modelId` with the same name and `ipfsCID` as an existing model — the marketplace will simply have multiple entries pointing at the same logical model. As a result, snapshots like [active.mor.org/active_models.json](https://active.mor.org/active_models.json) often show many entries for popular names with one provider each.
-
-Recommended practice:
-
-- **Reuse an existing `modelId`** when you're hosting the same logical model someone else has already registered. This keeps the marketplace clean, gives consumers a single dropdown entry with multiple providers (good for failover and competitive pricing), and avoids fragmenting reputation data.
-- **Mint a new `modelId`** only when your model is genuinely different (different weights, different fine-tune, different `ipfsCID`).
-
-This is convention, not enforcement. Practical workflow:
-
-```bash
-# Look up existing IDs for the model you intend to host
-curl -sS https://active.mor.org/active_models.json \
-  | jq '.[] | select(.modelName == "your-model-name") | {modelId, ipfsCID, providerAddress}'
-```
-
-If you see one already, use that `modelId` (the contract takes the same value as input — see how the on-chain `modelID` is `getModelId(modelOwner, requestedModelId)` in [`ModelRegistry.sol`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/smart-contracts/contracts/diamond/facets/ModelRegistry.sol); the resulting on-chain id will still be unique to your provider, but consumers can match on `modelName` + `ipfsCID`).
+- Live network listings: [active.mor.org](https://active.mor.org/status)
+- Operator dashboard: [MyProvider](/providers/full/myprovider-gui)
 
 ## Pausing or temporarily disabling a model offering
 
-To stop offering a model **without deregistering it** (so you keep the `modelId`, keep the model stake bonded, and can resume cheaply):
+To stop offering a model **without deregistering it** (so you keep any model stake bonded and can resume):
 
 ```bash
 # Find your active bid
@@ -117,7 +146,7 @@ curl -X POST -u 'admin:admin' \
 
 The model record stays on chain. To resume, post a new bid (which charges the `0.3 MOR` `marketplaceBidFee` again — see [pricing](/providers/full/pricing)).
 
-If you want to **completely remove** a model: delete all of its bids first, then call `modelDeregister` to recover the `0.1 MOR` model stake. The contract refuses `modelDeregister` while any bid for that model is still active.
+If you **own** a model and want to **completely remove** it: delete all of its bids first, then call `modelDeregister` to recover the `0.1 MOR` model stake. The contract refuses `modelDeregister` while any bid for that model is still active. If you only ever bid on someone else's model, deleting your bid is enough — you have no model stake to recover.
 
 ## How and when you get paid
 

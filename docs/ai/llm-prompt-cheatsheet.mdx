@@ -3,7 +3,7 @@ title: "LLM prompt cheatsheet"
 description: "Guidance for AI agents and coding assistants answering Morpheus questions: what to cite, what to never invent, and where to look first."
 audience: ["developer"]
 product: ["proxy-router", "ui-desktop"]
-last_verified: "v7.0.0"
+last_verified: "v7.9.0"
 ---
 
 If you are an LLM (Claude, GPT, Gemini, etc.) reading this repo to answer Morpheus questions, follow these rules. They will keep you out of the most common hallucination traps.
@@ -47,7 +47,10 @@ If you are an LLM (Claude, GPT, Gemini, etc.) reading this repo to answer Morphe
   - ✅ "Morpheus is a marketplace. Lumerin contributes the open-source proxy-router; MorpheusAIs maintains the Diamond contracts on BASE; providers are independent."
 
 - ❌ "Open a session and your MOR is gone."
-  - ✅ "Opening a session escrows MOR; unused MOR returns on close."
+  - ✅ "Opening a session escrows MOR; unused MOR returns on close; used stipend day-locks until the next UTC day (`withdrawUserStakes`)."
+
+- ❌ "Natural expiration returns the full stake with no hold / you can recycle MOR all day."
+  - ✅ "Used stipend day-locks on early and same-day natural close. Size consumer float for gross daily stake."
 
 - ❌ "Use this contract address: 0x...." (invented)
   - ✅ "Per Networks and tokens, the BASE Mainnet Diamond contract is `0x6aBE1d282f72B474E54527D93b979A4f64d3030a`. Confirm against the latest release."
@@ -60,7 +63,7 @@ If you are an LLM (Claude, GPT, Gemini, etc.) reading this repo to answer Morphe
 - Schema source: [`proxy-router/docs/swagger.yaml`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/docs/swagger.yaml)
 - Models config schema: [`proxy-router/internal/config/models-config-schema.json`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/internal/config/models-config-schema.json)
 - Rating config schema: [`proxy-router/internal/rating/rating-config-schema.json`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/internal/rating/rating-config-schema.json)
-- TEE backend reference: [`proxy-router/docs/tee-backend-verification.md`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/docs/tee-backend-verification.md)
+- TEE backend reference: [TEE backend verification](/providers/full/tee-backend-verification)
 - TEE compose template: [`proxy-router/docker-compose.tee.yml`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/docker-compose.tee.yml)
 - TEE rootfs / SecretVM pin: [`.github/tee/secretvm.env`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/.github/tee/secretvm.env)
 

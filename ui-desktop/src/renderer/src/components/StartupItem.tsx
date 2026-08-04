@@ -258,7 +258,9 @@ export const StartupItemComponent: FC<{
             {showLogs ? 'Hide logs' : 'Show logs'}
           </LogsButton>
         )}
-        {props.alwaysShowPingRestart || props.item.status === 'stopped' ? (
+        {props.alwaysShowPingRestart ||
+        props.item.status === 'stopped' ||
+        props.item.status === 'pending' ? (
           <Flex.Row gap="0.5rem" justify="flex-end" grow="1">
             <PingBtn onClick={handlePing}>
               <IconText

@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 /**
- * Generate llms.txt and llms-full.txt from docs.json navigation + MDX source.
+ * Generate llms.txt, llms-full.txt, and per-page *.md from docs.json + MDX.
  * Usage: SITE_URL=https://nodedocs.mor.org node scripts/generate-llms-txt.mjs [docsDir] [outDir]
+ *
+ * Per-page markdown makes "View as Markdown" / Accept: text/markdown work on the
+ * self-hosted S3 site (Mintlify cloud serves these dynamically; mint export does not).
  */
 import fs from "fs";
 import path from "path";
@@ -56,8 +59,19 @@ function slugToMdxPath(slug) {
   return path.join(docsDir, `${slug}.mdx`);
 }
 
+function writePageMarkdown(slug, title, url, body) {
+  const mdPath =
+    slug === "index"
+      ? path.join(outDir, "index.md")
+      : path.join(outDir, `${slug}.md`);
+  fs.mkdirSync(path.dirname(mdPath), { recursive: true });
+  const md = `# ${title}\n\nSource: ${url}\n\n${body.trim()}\n`;
+  fs.writeFileSync(mdPath, md);
+}
+
 const entries = [];
 const fullSections = [];
+let mdCount = 0;
 
 for (const slug of collectSlugs()) {
   const mdxPath = slugToMdxPath(slug);
@@ -70,6 +84,8 @@ for (const slug of collectSlugs()) {
 
   entries.push({ title, description, url });
   fullSections.push(`# ${title}\n\nSource: ${url}\n\n${body.trim()}\n`);
+  writePageMarkdown(slug, title, url, body);
+  mdCount += 1;
 }
 
 const siteName = docsJson.name ?? "Morpheus Lumerin Node Docs";
@@ -104,4 +120,6 @@ fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(path.join(outDir, "llms.txt"), llmsTxt);
 fs.writeFileSync(path.join(outDir, "llms-full.txt"), llmsFullTxt);
 
-console.log(`Wrote llms.txt (${entries.length} pages) and llms-full.txt to ${outDir}`);
+console.log(
+  `Wrote llms.txt (${entries.length} pages), llms-full.txt, and ${mdCount} *.md files to ${outDir}`
+);

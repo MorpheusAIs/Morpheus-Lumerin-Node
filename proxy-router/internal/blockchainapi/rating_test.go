@@ -14,7 +14,7 @@ func TestRating(t *testing.T) {
 	bidIds, bids, pmStats, mStats := sampleDataTPS()
 
 	bs := BlockchainService{
-		rating: rating.NewRating(rating.NewScorerMock(), nil, lib.NewTestLogger()),
+		rating: rating.NewRating(rating.NewScorerMock(), nil, nil, lib.NewTestLogger()),
 	}
 
 	scoredBids := bs.rateBids(bidIds, bids, pmStats, []providerregistry.IProviderStorageProvider{}, mStats, big.NewInt(0), lib.NewTestLogger())

@@ -3,7 +3,7 @@ title: "Open a session (buy a bid)"
 description: "How to open a Morpheus session via MorpheusUI or the API: pick a model, select a bid, stake MOR, and what happens next."
 audience: ["consumer"]
 product: ["proxy-router", "ui-desktop"]
-last_verified: "v7.0.0"
+last_verified: "v7.9.0"
 source: "docs/05-bid-purchase.md"
 ---
 
@@ -25,10 +25,12 @@ Opening a session = "buying a bid." You stake MOR for a fixed duration; the prox
     A transaction will be submitted. Once confirmed, the session is open and you can prompt.
   </Step>
   <Step title="Close when done (or let it expire naturally)">
-    Two paths:
+    Either path:
 
-    - **Natural expiration** — if you let the session run to its `endsAt`, your consumer node submits `closeSession` ~1 minute later (assuming it's online) and your **full share** lands back in your wallet inside that one transaction.
-    - **Early close** — click the time icon next to the model line; click **X** next to the session. The contract may park a slice in `userStakesOnHold` (1-day timelock); the rest comes back immediately. After the timelock you must call `withdrawUserStakes` to claim the held slice.
+    - **Natural expiration** — your consumer node submits `closeSession` ~1 minute after `endsAt` (if online).
+    - **Early close** — click the time icon next to the model line; click **X** next to the session.
+
+    In both cases: **unused** stake returns in the close txn; the **used stipend** day-locks in `userStakesOnHold` until the next UTC day. After `releaseAt`, call `withdrawUserStakes` to claim the held slice.
   </Step>
 </Steps>
 
@@ -57,9 +59,9 @@ curl -X POST 'http://localhost:8082/blockchain/sessions/<sessionId>/close' \
 ## What you should expect
 
 - **Wallet balance drops by the staked amount** the instant the open transaction is mined. The MOR is now in the Inference Contract on Base for the duration of the session.
-- **Natural expiration**: at `endsAt`, your consumer node submits `closeSession` ~1 minute later and the **full share** of your stake lands in your wallet inside that single transaction. No separate withdraw needed.
-- **Early close**: a slice may go to `userStakesOnHold` with `releaseAt = startOfTheDay(closedAt) + 1 day` (≈ "after the end of the next full UTC day"). The rest is returned immediately. After `releaseAt`, call `withdrawUserStakes(yourAddress, iterations)` directly on the Diamond contract — there is no HTTP route on the proxy-router.
-- **The provider is paid from a separate protocol funding account**, not from your stake in real time. If that funding account is empty or under-approved, every `closeSession` fails — yours included. The session sits "active" past `endsAt` until operators top it up. See [Why is my MOR locked?](/ai/why-locked-in-contract) and [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover).
+- **On close (early or natural):** unused stake returns in the same txn; the used stipend day-locks with `releaseAt = startOfTheDay(min(closedAt, endsAt)) + 1 day`. After `releaseAt`, call `withdrawUserStakes(yourAddress, iterations)` on the Diamond — there is no HTTP route on the proxy-router.
+- **Capital planning:** used stake is **not reusable the same UTC day**. Size your wallet for the gross stake you need that day, not for recycling one pile of MOR many times before midnight UTC. See [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover).
+- **The provider is paid from a separate protocol funding account**, not from your stake in real time. If that funding account is empty or under-approved, every `closeSession` fails — yours included. The session sits "active" past `endsAt` until operators top it up. See [Why is my MOR locked?](/ai/why-locked-in-contract).
 - For a hosted read-only wallet checker that splits your MOR across the three on-chain buckets (wallet / active session / on-hold), see [tech.mor.org/session.html](https://tech.mor.org/session.html).
 
 ## Picking a good bid

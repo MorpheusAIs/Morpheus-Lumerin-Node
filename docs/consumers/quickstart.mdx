@@ -1,67 +1,67 @@
 ---
 title: "Consumer quickstart"
-description: "Install the bundled Consumer release (proxy-router + MorpheusUI + optional local llama.cpp), fund a wallet, and chat."
+description: "Install the MorpheusUI desktop app, let it fetch its services (proxy-router, local llama.cpp, IPFS), fund a wallet, and chat."
 audience: ["consumer"]
 product: ["proxy-router", "ui-desktop"]
-last_verified: "v7.0.0"
+last_verified: "v7.7.0"
 source: "docs/04-consumer-setup.md"
 ---
 
-This is the simplest way to get started with the Morpheus Lumerin Node as a consumer. It runs three pieces of software on your local machine:
+The consumer release is a **single desktop app** per OS. On first launch, the app downloads and manages the services it needs:
 
 - `proxy-router` — same binary as the provider side, configured for the consumer role.
-- `MorpheusUI` — Electron GUI to browse bids, open sessions, and chat.
-- *(Optional)* `llama.cpp` — bundled sample model for free local-only testing. Started by passing `local` to `mor-launch`.
+- `llama.cpp` AI runtime + the `tinyllama` demo model — for free local-only testing, started automatically.
+- An IPFS node (kubo) — used for agent/model file distribution.
 
 ## Installation
 
 <Steps>
   <Step title="Download the release">
-    Grab the latest archive for your OS from the [GitHub releases page](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/releases).
-    - Mainnet builds have no suffix (e.g. `v7.0.0`).
-    - Testnet builds end in `-test` (e.g. `v7.0.0-test`).
+    Grab the **latest** installer for your OS from the [GitHub releases page](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/releases).
+    - Mainnet builds have no suffix; testnet builds end in `-test`.
+    - Asset names look like the following (version will differ):
+
+    | Platform | File |
+    |----------|------|
+    | macOS (Apple Silicon) | `mac-arm64-morpheus-app-<version>.dmg` |
+    | macOS (Intel) | `mac-x64-morpheus-app-<version>.dmg` |
+    | Linux (x64) | `linux-x86_64-morpheus-app-<version>.AppImage` |
+    | Linux (ARM64) | `linux-arm64-morpheus-app-<version>.AppImage` |
+    | Windows (x64) | `win-x64-morpheus-app-<version>.exe` (portable) |
   </Step>
-  <Step title="Extract">
+  <Step title="Install and launch">
     <Tabs>
       <Tab title="macOS">
+        Open the `.dmg` and drag **MorpheusUI** into **Applications**. The build is not notarized, so clear the quarantine flag once before the first launch:
         ```bash
-        cd ~/Downloads/morpheus
-        xattr -c mor-launch mor-cli proxy-router MorpheusUI.app
+        xattr -c /Applications/MorpheusUI.app
         ```
+        Then open the app from Applications.
       </Tab>
       <Tab title="Linux">
+        Make the AppImage executable and run it (adjust the filename to the version you downloaded):
         ```bash
-        cd ~/Downloads/morpheus
+        chmod +x linux-x86_64-morpheus-app-*.AppImage
+        ./linux-x86_64-morpheus-app-*.AppImage
         ```
       </Tab>
       <Tab title="Windows">
-        Extract to `%USERPROFILE%/Downloads/morpheus`.
+        Double-click the portable `.exe`. Allow Defender if prompted.
       </Tab>
     </Tabs>
   </Step>
-  <Step title="(Optional) tweak the .env">
-    Inspect the bundled `.env` and edit only if you need advanced behavior (custom log destination, private ETH node, alternate ports). Reference: [Env: proxy-router](/reference/env-proxy-router).
-  </Step>
-  <Step title="Launch">
-    <Tabs>
-      <Tab title="macOS / Linux">
-        ```bash
-        ./mor-launch
-        # Or, to also start the bundled local model:
-        ./mor-launch local
-        ```
-      </Tab>
-      <Tab title="Windows">
-        Double-click `mor-launch.exe`. Allow Defender. To run the bundled local model: `mor-launch.exe local`.
-      </Tab>
-    </Tabs>
-    A terminal window will show the proxy-router (and local model if requested) starting; MorpheusUI will launch on top.
+  <Step title="Let the app fetch and start its services">
+    The first launch (and the first one after each update) shows a **Starting services** screen with two sections:
+
+    - **Downloading** — the app fetches the proxy-router first (required), then best-effort downloads for the `llama.cpp` AI runtime, the `tinyllama` demo model, and an IPFS node, skipping anything already present on disk.
+    - **Startup** — **Proxy Router** starts first (required for onboarding and marketplace use). IPFS, AI Runtime, and Container Runtime are optional and started afterward; a failure there does not block the UI.
+
+    **Container Runtime** (Docker) is only *detected*, never installed — it is needed solely for containerized agent features. Local AI Runtime is only for the free `tinyllama` demo; remote Morpheus models do not need it. **Skip** continues into the app; **Retry** re-runs any failed step.
   </Step>
   <Step title="Onboard MorpheusUI">
     - Read & accept the terms.
     - Set a strong password (this protects MorpheusUI's local key store; it is not your wallet password).
     - Either **create** a new wallet (write down the mnemonic) or **recover** an existing top-level wallet via mnemonic.
-    - **Optional** CLI: in another terminal, `./mor-cli` (Linux/macOS).
   </Step>
 </Steps>
 
@@ -70,7 +70,7 @@ This is the simplest way to get started with the Morpheus Lumerin Node as a cons
 <Steps>
   <Step title="Confirm proxy-router is up">
     Open `http://localhost:8082/swagger/index.html` — the Swagger UI should render.
-    Logs in `./data/` capture detail. See [Troubleshooting](/reference/troubleshooting).
+    See [Troubleshooting](/reference/troubleshooting) if it doesn't.
   </Step>
   <Step title="Local-model test (optional)">
     In MorpheusUI's **Chat** tab, ensure **Local Model** is selected. Type a prompt and press Enter. A response confirms the local model + proxy-router pipeline works.
@@ -80,7 +80,7 @@ This is the simplest way to get started with the Morpheus Lumerin Node as a cons
   </Step>
   <Step title="Close out">
     - Manually close all remote sessions: in the Chat window, click the time icon next to the model line, then the **X** next to each open session.
-    - Closing the MorpheusUI window leaves the launcher CMD open. Use `Ctrl-C` there to stop the local model and proxy-router.
+    - Quitting MorpheusUI also stops the managed services (proxy-router, AI runtime, IPFS).
   </Step>
 </Steps>
 
@@ -92,22 +92,30 @@ If you need to reset to a fresh state (different release, broken state):
 **Save your wallet mnemonic / private key first.** Cleanup deletes the local key store.
 </Warning>
 
+The app keeps everything — downloaded services, proxy-router data, and the wallet store — in Electron's `userData` directory. The package name is `morpheus-app` (that is the folder name on disk; the product name shown in the UI is **MorpheusUI**):
+
 <Tabs>
-  <Tab title="macOS / Linux">
+  <Tab title="macOS">
     ```bash
-    rm .cookie proxy.conf
-    rm -rf ~/Library/Logs/morpheus-ui
-    rm -rf ~/Library/Application\ Support/morpheus-ui
-    rm -rf data
-    xattr -c proxy-router MorpheusUI.app mor-launch mor-cli
+    # Packaged .app often uses the product name:
+    rm -rf ~/Library/Application\ Support/MorpheusUI
+    rm -rf ~/Library/Logs/MorpheusUI
+    # Electron package name (also used on some builds / when running from source):
+    rm -rf ~/Library/Application\ Support/morpheus-app
+    rm -rf ~/Library/Logs/morpheus-app
     ```
-    Linux: also check `~/.config/morpheus-ui`.
+  </Tab>
+  <Tab title="Linux">
+    ```bash
+    rm -rf ~/.config/morpheus-app
+    # Older builds may have used:
+    rm -rf ~/.config/MorpheusUI
+    ```
   </Tab>
   <Tab title="Windows">
     ```cmd
-    del .cookie proxy.conf
-    rmdir /s /q data
-    rmdir /s /q %USERPROFILE%\AppData\Roaming\morpheus-ui
+    rmdir /s /q %APPDATA%\morpheus-app
+    rmdir /s /q %LOCALAPPDATA%\morpheus-app
     ```
   </Tab>
 </Tabs>

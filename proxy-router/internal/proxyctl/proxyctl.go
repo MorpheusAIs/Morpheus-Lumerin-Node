@@ -200,6 +200,7 @@ func (p *Proxy) run(ctx context.Context, prKey lib.HexString) error {
 	var modelHealthReporter system.ModelHealthReporter
 	if p.modelHealthChecker != nil {
 		modelHealthReporter = p.modelHealthChecker
+		proxyReceiver.SetModelHealthTracker(p.modelHealthChecker)
 	}
 	morTcpHandler := proxyapi.NewMORRPCController(proxyReceiver, p.validator, p.sessionRepo, p.sessionStorage, prKey, modelHealthReporter)
 	tcpHandler := tcphandlers.NewTCPHandler(

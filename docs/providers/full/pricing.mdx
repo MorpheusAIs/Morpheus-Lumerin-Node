@@ -3,7 +3,7 @@ title: "Pricing your bid"
 description: "How to set pricePerSecond for a Morpheus provider bid: there is no marketplace 'helper' or order book — you estimate cost, set a competitive rate, and adjust."
 audience: ["provider-full", "provider-resale"]
 product: ["proxy-router"]
-last_verified: "v7.0.0"
+last_verified: "v7.5.0"
 ---
 
 There is **no built-in pricing helper, no order book, and no "always use market price" toggle** for provider bids today. You set `pricePerSecond` (in **wei/sec** of MOR) when you call `postModelBid`, and you adjust it by replacing the bid. This page is the explicit how-to for that workflow.
@@ -30,7 +30,7 @@ Filter by your model (or one similar in size and capability):
 
 ```bash
 curl -sS https://active.mor.org/active_bids.json \
-  | jq '[.[] | select(.modelName == "your-model-name")] | sort_by(.pricePerSecond)'
+  | jq '[.bids[] | select(.ModelName | test("your-model-name"; "i"))] | sort_by(.PricePerSecond | tonumber)'
 ```
 
 Look at the distribution. **Median competitor pricing** is a sane starting point.

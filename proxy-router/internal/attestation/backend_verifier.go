@@ -47,7 +47,8 @@ type BackendAttestationSnapshot struct {
 	AttestationURL    string                   `json:"attestationUrl"`
 	CPUQuoteHash      string                   `json:"-"`
 	GPUQuoteHash      string                   `json:"-"`
-	TLSFingerprint    string                   `json:"-"`
+	TLSBinding        TLSCertBinding           `json:"-"`
+	TLSBindingKind    TLSBindingKind           `json:"tlsBindingKind,omitempty"`
 	CPUReportData     string                   `json:"-"`
 	GPUReportData     string                   `json:"-"`
 	TEEType           TEEType                  `json:"teeType,omitempty"`
@@ -98,6 +99,58 @@ func NewBackendVerifier(portalURL string, goldenSource BackendGoldenSource, regi
 	}
 }
 
+// backendAttestationPorts lists the candidate ports probed when resolving the
+// Phase 2 backend attestation endpoint: 21434 first (host-net Caddy topology
+// used by current SecretAI backends, e.g. jedi/rytn, where attest-rest is
+// loopback-only and proxied), then 29343 (attest-rest bound directly, standard
+// SecretVMs). Upstream secretvm-verify v0.12.0 probes 29343 first; the order
+// is flipped here so the common backend topology resolves without waiting out
+// a probe timeout.
+var backendAttestationPorts = []string{BackendAttestationPort, AttestationPort}
+
+const attestationProbeTimeout = 5 * time.Second
+
+// ResolveAttestationURL derives the Phase 2 backend attestation base URL from
+// a model's apiUrl by probing GET /cpu on each candidate port and returning
+// the first endpoint that answers. If none answers, the primary
+// (https://<host>:21434) URL is returned so the subsequent attestation
+// surfaces a clear fetch error against it.
+func (bv *BackendVerifier) ResolveAttestationURL(ctx context.Context, endpoint string) (string, error) {
+	var first string
+	for _, port := range backendAttestationPorts {
+		candidate, err := DeriveAttestationURLWithPort(endpoint, port)
+		if err != nil {
+			return "", err
+		}
+		if first == "" {
+			first = candidate
+		}
+		if bv.probeCPU(ctx, candidate) {
+			bv.log.Infof("backend attestation: resolved attestation endpoint %s for %s", candidate, endpoint)
+			return candidate, nil
+		}
+	}
+	bv.log.Warnf("backend attestation: no attestation port answered /cpu for %s, falling back to %s", endpoint, first)
+	return first, nil
+}
+
+func (bv *BackendVerifier) probeCPU(ctx context.Context, baseURL string) bool {
+	probeCtx, cancel := context.WithTimeout(ctx, attestationProbeTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(probeCtx, http.MethodGet, baseURL+"/cpu", nil)
+	if err != nil {
+		return false
+	}
+	resp, err := bv.attestationClient.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return resp.StatusCode == http.StatusOK
+}
+
 // AttestBackend performs full CPU+GPU attestation of a backend LLM TEE endpoint.
 // On success the result is cached for fast-verify. On failure the snapshot is
 // stored with StatusFailed so the health endpoint can report it.
@@ -106,14 +159,14 @@ func (bv *BackendVerifier) AttestBackend(ctx context.Context, modelID string, at
 
 	// 1. Fetch CPU quote
 	cpuURL := attestationURL + "/cpu"
-	cpuQuote, tlsFingerprint, err := LoadAttestationQuote(ctx, bv.attestationClient, cpuURL)
+	cpuQuote, tlsBinding, err := LoadAttestationQuote(ctx, bv.attestationClient, cpuURL)
 	if err != nil {
 		bv.storeFailure(modelID, attestationURL, fmt.Sprintf("CPU quote fetch failed: %s", err))
 		return fmt.Errorf("failed to load CPU attestation quote from %s: %w", cpuURL, err)
 	}
-	bv.log.Infof("backend attestation: fetched CPU quote from %s, TLS fingerprint: %s", cpuURL, tlsFingerprint)
+	bv.log.Infof("backend attestation: fetched CPU quote from %s, TLS binding: %s", cpuURL, tlsBinding)
 
-	if tlsFingerprint == "" {
+	if tlsBinding.IsZero() {
 		bv.storeFailure(modelID, attestationURL, "no TLS certificate from CPU endpoint")
 		return fmt.Errorf("no TLS peer certificate received from %s", cpuURL)
 	}
@@ -130,12 +183,13 @@ func (bv *BackendVerifier) AttestBackend(ctx context.Context, modelID string, at
 	}
 	bv.log.Infof("backend attestation: CPU quote valid (type: %s) for model %s", cpuResult.Type, modelID)
 
-	// 3. Verify TLS binding (first half of reportData = TLS cert fingerprint)
-	if err := VerifyTLSBinding(tlsFingerprint, cpuResult.ReportData); err != nil {
+	// 3. Verify TLS binding (first half of reportData = SPKI or full-cert digest)
+	bindingKind, err := VerifyTLSBinding(tlsBinding, cpuResult.ReportData)
+	if err != nil {
 		bv.storeFailure(modelID, attestationURL, fmt.Sprintf("TLS binding failed: %s", err))
 		return fmt.Errorf("CPU TLS binding verification failed: %w", err)
 	}
-	bv.log.Infof("backend attestation: TLS binding verified for model %s", modelID)
+	bv.log.Infof("backend attestation: TLS binding verified (%s digest) for model %s", bindingKind, modelID)
 
 	// 3a. Workload verification (docker-compose vs attestation quote).
 	dockerCompose, composeErr := bv.fetchDockerCompose(ctx, attestationURL)
@@ -233,7 +287,8 @@ func (bv *BackendVerifier) AttestBackend(ctx context.Context, modelID string, at
 		AttestationURL: attestationURL,
 		CPUQuoteHash:   cpuHash,
 		GPUQuoteHash:   gpuHash,
-		TLSFingerprint: tlsFingerprint,
+		TLSBinding:     tlsBinding,
+		TLSBindingKind: bindingKind,
 		CPUReportData:  cpuResult.ReportData,
 		GPUReportData:  gpuData.Nonce,
 		TEEType:        cpuResult.Type,
@@ -251,6 +306,31 @@ func (bv *BackendVerifier) AttestBackend(ctx context.Context, modelID string, at
 
 	bv.log.Infof("backend attestation: cached verified snapshot for model %s", modelID)
 	return nil
+}
+
+// ReattestBackend re-runs full backend attestation for a model regardless of
+// the current snapshot status, so a transient failure (e.g. a portal glitch
+// during startup attestation) self-heals on the next health sweep and a
+// stale pass is re-proven. endpoint is the model's apiUrl, used to resolve
+// the attestation URL when no snapshot with a URL exists.
+func (bv *BackendVerifier) ReattestBackend(ctx context.Context, modelID string, endpoint string) error {
+	bv.mu.RLock()
+	snapshot := bv.cache[modelID]
+	bv.mu.RUnlock()
+
+	attestationURL := ""
+	if snapshot != nil {
+		attestationURL = snapshot.AttestationURL
+	}
+	if attestationURL == "" {
+		resolved, err := bv.ResolveAttestationURL(ctx, endpoint)
+		if err != nil {
+			return fmt.Errorf("cannot resolve attestation URL for model %s: %w", modelID, err)
+		}
+		attestationURL = resolved
+	}
+
+	return bv.AttestBackend(ctx, modelID, attestationURL)
 }
 
 // FastVerifyBackend performs a lightweight per-request check.
@@ -272,7 +352,7 @@ func (bv *BackendVerifier) FastVerifyBackend(ctx context.Context, modelID string
 	}
 
 	cpuURL := snapshot.AttestationURL + "/cpu"
-	cpuQuote, tlsFingerprint, err := LoadAttestationQuote(ctx, bv.attestationClient, cpuURL)
+	cpuQuote, tlsBinding, err := LoadAttestationQuote(ctx, bv.attestationClient, cpuURL)
 	if err != nil {
 		return fmt.Errorf("LLM fast-verify failed for model %s: %w", modelID, err)
 	}
@@ -284,8 +364,15 @@ func (bv *BackendVerifier) FastVerifyBackend(ctx context.Context, modelID string
 		return bv.AttestBackend(ctx, modelID, snapshot.AttestationURL)
 	}
 
-	if !strings.EqualFold(tlsFingerprint, snapshot.TLSFingerprint) {
-		bv.log.Warnf("LLM fast-verify: TLS fingerprint mismatch for model %s (cached=%s, live=%s)", modelID, snapshot.TLSFingerprint, tlsFingerprint)
+	if !strings.EqualFold(tlsBinding.Certificate, snapshot.TLSBinding.Certificate) {
+		// A renewed certificate keeps the same SPKI when the private key stays
+		// inside the TEE; re-attest so the binding is re-proven against the
+		// quote instead of hard-failing.
+		if tlsBinding.SPKI != "" && strings.EqualFold(tlsBinding.SPKI, snapshot.TLSBinding.SPKI) {
+			bv.log.Warnf("LLM fast-verify: TLS certificate rotated (same SPKI) for model %s, performing full re-attestation", modelID)
+			return bv.AttestBackend(ctx, modelID, snapshot.AttestationURL)
+		}
+		bv.log.Warnf("LLM fast-verify: TLS binding mismatch for model %s (cached=%s, live=%s)", modelID, snapshot.TLSBinding, tlsBinding)
 		return fmt.Errorf("LLM TLS certificate changed for model %s (possible MITM)", modelID)
 	}
 
@@ -325,7 +412,9 @@ func (bv *BackendVerifier) GetAllStatuses() map[string]*BackendAttestationSnapsh
 }
 
 // PinnedHTTPClient returns an HTTP client whose TLS transport is pinned to the
-// certificate fingerprint from the model's attestation snapshot.
+// certificate binding from the model's attestation snapshot. A peer matching
+// either the full-certificate digest or the SPKI digest is accepted, so a
+// certificate renewal that keeps the TEE-resident key does not break pinning.
 func (bv *BackendVerifier) PinnedHTTPClient(modelID string) (*http.Client, error) {
 	bv.mu.RLock()
 	snapshot, exists := bv.cache[modelID]
@@ -335,7 +424,7 @@ func (bv *BackendVerifier) PinnedHTTPClient(modelID string) (*http.Client, error
 		return nil, fmt.Errorf("no valid attestation for model %s", modelID)
 	}
 
-	expectedFingerprint := snapshot.TLSFingerprint
+	expected := snapshot.TLSBinding
 
 	return &http.Client{
 		Transport: &http.Transport{
@@ -346,12 +435,18 @@ func (bv *BackendVerifier) PinnedHTTPClient(modelID string) (*http.Client, error
 					if len(rawCerts) == 0 {
 						return fmt.Errorf("no peer certificate presented")
 					}
-					hash := sha256.Sum256(rawCerts[0])
-					actual := hex.EncodeToString(hash[:])
-					if !strings.EqualFold(actual, expectedFingerprint) {
-						return fmt.Errorf("TLS cert pinning mismatch: expected %s, got %s", expectedFingerprint, actual)
+					certHash := sha256.Sum256(rawCerts[0])
+					actualCert := hex.EncodeToString(certHash[:])
+					if strings.EqualFold(actualCert, expected.Certificate) {
+						return nil
 					}
-					return nil
+					if cert, err := x509.ParseCertificate(rawCerts[0]); err == nil {
+						spkiHash := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
+						if strings.EqualFold(hex.EncodeToString(spkiHash[:]), expected.SPKI) {
+							return nil
+						}
+					}
+					return fmt.Errorf("TLS cert pinning mismatch: expected %s, got cert=%s", expected, actualCert)
 				},
 			},
 		},
@@ -419,13 +514,10 @@ func (bv *BackendVerifier) fetchDockerCompose(ctx context.Context, attestationUR
 		return "", fmt.Errorf("failed to read docker-compose response: %w", err)
 	}
 
-	content := string(body)
-
-	// The SecretVM :29343/docker-compose endpoint wraps the YAML in an HTML page.
-	// Extract the raw content from inside <pre>...</pre> tags.
-	content = extractPreContent(content)
-
-	return content, nil
+	// Return the exact response bytes. Old attest-rest wraps the YAML in an
+	// HTML page while newer attest-rest serves the raw file; workload
+	// verification tries both interpretations (see composeCandidates).
+	return string(body), nil
 }
 
 // extractPreContent extracts text between <pre> and </pre> tags,

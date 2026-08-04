@@ -3,27 +3,41 @@ title: "active.mor.org (live status)"
 description: "Mirror summary of active.mor.org — live status, active models, and active bids on the Morpheus marketplace."
 audience: ["consumer", "prosumer", "provider-full", "provider-resale", "developer"]
 product: ["proxy-router"]
-last_verified: "v7.0.0"
+last_verified: "v7.5.0"
 source_url: "https://active.mor.org"
 ---
 
 <Note>
-**Mirrored summary.** Live numbers (counts, prices, latencies) live at [active.mor.org](https://active.mor.org). This page describes the **semantics** of those numbers and how to interpret them.
+**Mirrored summary.** Live numbers (counts, prices, latencies) live at [active.mor.org](https://active.mor.org). This page describes the **semantics** of those numbers and how to interpret them. Providers: start here **before** minting a new model — see [Register on chain → Step 0](/providers/full/register-onchain#step-0--look-up-models-before-you-mint).
 </Note>
 
 ## What's there
 
 | Endpoint | What it shows | Useful for |
 |----------|---------------|-----------|
-| [active.mor.org/status](https://active.mor.org/status) | Overall network status | Spotting outages, monitoring uptime |
-| [active.mor.org/active_models](https://active.mor.org/active_models) | Models that have active bids and at least one healthy provider | Choosing what to consume; evaluating competition as a provider |
-| [active.mor.org/active_bids](https://active.mor.org/active_bids) | Currently posted bids across all models | Pricing decisions; reseller competitive analysis |
+| [active.mor.org/status](https://active.mor.org/status) | Human status UI (uptime, min prices, model detail) | Spotting outages; picking a model to join |
+| [active_models.json](https://active.mor.org/active_models.json) | Routable models (healthy/degraded bids) | Choosing what to consume; **finding an existing `Id` to bid on** |
+| [active_bids.json](https://active.mor.org/active_bids.json) | Currently posted bids across all models | Pricing decisions; competitive analysis |
+| [all_models.json](https://active.mor.org/all_models.json) | All non-deleted on-chain models | Lookup when a model has no live healthy provider yet |
+| [status/api.json](https://active.mor.org/status/api.json) | Machine-readable status summary | Monitoring / agents |
+
+HTML list views also exist at `/active_models` and `/active_bids` on the same host.
+
+## Provider tip: join, don't duplicate
+
+The marketplace does not stop two people from registering the same display name as separate models. That creates clutter. If you intend to serve a model that already appears in `active_models.json`, **register as a provider and bid on that model's `Id`** (via [MyProvider](/providers/full/myprovider-gui) or the API). Mint a new model only for genuinely new weights or a required new `tee` listing.
+
+```bash
+curl -sS https://active.mor.org/active_models.json \
+  | jq '.models[] | select(.Name | test("glm-5"; "i")) | {Name, Id, Tags, health}'
+```
 
 ## How to read it
 
-- **A model "active" here means `(at least one bid posted) AND (provider healthcheck passes)`.** A model on chain that has no healthy provider won't show up here even if its `Diamond` record exists.
-- **`pricePerSecond`** values are denominated in MOR. To compare across models with different token economies, multiply by tokens-per-second to get an apples-to-apples cost.
-- **Latency / throughput** numbers are aggregated; a single hot provider can pull averages dramatically up or down.
+- **A model "active" here means `(at least one bid posted) AND (provider healthcheck passes)`.** A model on chain that has no healthy provider won't show up in `active_models.json` even if its Diamond record exists — check `all_models.json` in that case.
+- Snapshot fields use PascalCase (`Id`, `Name`, `ModelName`, `PricePerSecond`, `Provider`, …).
+- **`pricePerSecond`** values are MOR wei per second. Many UIs also show `priceMorPerHour`.
+- Snapshots refresh on a short cron (on the order of minutes); a brand-new bid may take a few minutes to appear.
 
 ## When to cite this page
 
@@ -31,6 +45,8 @@ For an LLM answering "what models are available?" or "what's the going rate?" �
 
 ## Related canonical pages on this site
 
+- [Register on chain](/providers/full/register-onchain)
+- [MyProvider GUI](/providers/full/myprovider-gui)
 - [Architecture](/concepts/architecture)
 - [Pricing a resale bid](/providers/resale/registering-bid)
 - [Buy a bid](/consumers/buy-bid)
@@ -39,3 +55,4 @@ For an LLM answering "what models are available?" or "what's the going rate?" �
 ## Source
 
 - [https://active.mor.org](https://active.mor.org)
+- [https://active.mor.org/status](https://active.mor.org/status)

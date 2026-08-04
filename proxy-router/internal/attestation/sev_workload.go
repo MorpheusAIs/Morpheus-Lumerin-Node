@@ -41,8 +41,13 @@ func VerifySevWorkload(registry *SevArtifactRegistry, cpuQuoteBase64 string, doc
 		imageID = strings.TrimRight(string(raw[0x020:0x030]), "\x00#")
 	}
 
-	composeHashArr := sha256.Sum256([]byte(dockerComposeYaml))
-	composeHash := hex.EncodeToString(composeHashArr[:])
+	// Raw SHA-256 over the compose bytes (no YAML normalization). Both the raw
+	// response and the HTML-extracted variant are tried (old vs new attest-rest).
+	composeHashes := make([]string, 0, 2)
+	for _, variant := range composeCandidates(dockerComposeYaml) {
+		h := sha256.Sum256([]byte(variant))
+		composeHashes = append(composeHashes, hex.EncodeToString(h[:]))
+	}
 
 	family := ParseSevFamilyID(familyIDBytes)
 
@@ -51,11 +56,11 @@ func VerifySevWorkload(registry *SevArtifactRegistry, cpuQuoteBase64 string, doc
 		if family != nil {
 			familyStr = fmt.Sprintf("%s/%s/%d", family.VMType, family.TemplateName, family.Vcpus)
 		}
-		log.Infof("sev workload: measurement=%s..., family=%s, imageId=%s, composeHash=%s...",
-			quoteMeasurement[:16], familyStr, imageID, composeHash[:16])
+		log.Infof("sev workload: measurement=%s..., family=%s, imageId=%s, composeHash=%s... (%d variants)",
+			quoteMeasurement[:16], familyStr, imageID, composeHashes[0][:16], len(composeHashes))
 	}
 
-	buildCmdline := func(entry *SevArtifactEntry) string {
+	buildCmdline := func(entry *SevArtifactEntry, composeHash string) string {
 		prefix := "console=ttyS0 loglevel=7"
 		if entry.CmdlineExtra != "" {
 			prefix += " " + entry.CmdlineExtra
@@ -64,9 +69,13 @@ func VerifySevWorkload(registry *SevArtifactRegistry, cpuQuoteBase64 string, doc
 	}
 
 	tryEntry := func(entry *SevArtifactEntry, vcpus int) bool {
-		cmdline := buildCmdline(entry)
-		computed := CalcSevMeasurement(entry, vcpus, cmdline)
-		return computed == quoteMeasurement
+		for _, composeHash := range composeHashes {
+			cmdline := buildCmdline(entry, composeHash)
+			if CalcSevMeasurement(entry, vcpus, cmdline) == quoteMeasurement {
+				return true
+			}
+		}
+		return false
 	}
 
 	if family == nil {

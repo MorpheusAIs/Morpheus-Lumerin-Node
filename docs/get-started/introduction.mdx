@@ -3,8 +3,22 @@ title: "Introduction"
 description: "What the Morpheus Lumerin Node is, how the moving parts fit together, and which path to follow next."
 audience: ["consumer", "prosumer", "provider-resale", "provider-full", "developer"]
 product: ["proxy-router", "ui-desktop", "cli"]
-last_verified: "v7.0.0"
+last_verified: "v7.6.0"
 ---
+<Note>
+  **In a hurry? Pick the fastest path.**
+
+  - **Just want to use it (~5 min):** download the **Desktop Application** asset for your OS from the
+    [latest release](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/releases)
+    (`*-morpheus-app-*.dmg` / `.AppImage` / `.exe` — not a zip archive) and run it.
+    On first launch the app downloads the proxy-router and related services. See the
+    [Consumer quickstart](/consumers/quickstart).
+  - **Try it free — no wallet, no tokens:** after install, the app also downloads a local `llama.cpp`
+    demo model so you can chat without staking MOR. Look for **Local Model** in Chat.
+  - **Building on the marketplace?** jump to the [Hosted Inference API](/inference-api/overview).
+
+  New to Morpheus? Read on for how the pieces fit together.
+</Note>
 
 The Morpheus Lumerin Node is the open-source software that connects you to the **Morpheus Inference Marketplace** — a decentralized, peer-to-peer marketplace where consumers and independent providers trade AI inference, coordinated by smart contracts on BASE. You interact with it through a desktop chat experience, a CLI, or a direct HTTP API on your local node.
 
@@ -25,7 +39,7 @@ For the conceptual picture (decentralization rationale, Compute Node contracts, 
     Command-line client that talks to the proxy-router HTTP API.
   </Card>
   <Card title="llama.cpp + tinyllama" icon="microchip">
-    A throw-away local model bundled for demos so you can try the stack without paying MOR.
+    A throw-away local demo model the desktop app downloads on first launch so you can try the stack without paying MOR.
   </Card>
 </CardGroup>
 
@@ -56,7 +70,7 @@ flowchart LR
     Install the desktop release, fund a wallet, open a session, chat.
   </Card>
   <Card title="Provider quickstart" icon="server" href="/providers/full/quickstart">
-    Stand up a proxy-router, register a model, post a bid.
+    Stand up a proxy-router, look up existing models on active.mor.org, bid (mint only if needed).
   </Card>
   <Card title="TEE provider fast lane" icon="shield-check" href="/providers/full/secretvm-quickstart">
     Deploy a hardened `-tee` image on SecretVM in minutes.

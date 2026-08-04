@@ -71,6 +71,9 @@ type OpenSessionWithFailover struct {
 	SessionDuration *lib.BigInt `json:"sessionDuration" swaggertype:"integer"`
 	DirectPayment   bool        `json:"directPayment" binding:"omitempty"`
 	Failover        bool        `json:"failover" binding:"omitempty"`
+	// OmitProvider excludes a provider from bid selection, e.g. one whose
+	// backend just failed a prompt (impaired provider failover).
+	OmitProvider lib.Address `json:"omitProvider" binding:"omitempty" swaggertype:"string" example:"0x1234567890abcdef1234567890abcdef12345678"`
 }
 
 type CreateBidRequest struct {

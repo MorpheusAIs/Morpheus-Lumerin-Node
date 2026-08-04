@@ -3,7 +3,7 @@ title: "Tokens, fees, and economics"
 description: "MOR vs ETH on BASE, who pays what when, and where the on-chain minimums come from."
 audience: ["consumer", "prosumer", "provider-resale", "provider-full"]
 product: ["proxy-router"]
-last_verified: "v7.0.0"
+last_verified: "v7.9.0"
 ---
 
 Two tokens, one chain. **MOR** is the unit of payment inside the Morpheus marketplace; **ETH on BASE** pays the underlying gas to the BASE Layer-2 network.
@@ -23,7 +23,7 @@ Token addresses by network are listed in [Networks and tokens](/get-started/netw
 
 <AccordionGroup>
   <Accordion title="Consumer session stake">
-    Total = `pricePerSecond * sessionDuration` (minimum `5` MOR). Paid in MOR, escrowed in the Inference Contract on `openSession`. On **natural expiration** (`closedAt >= endsAt`) your full share is `safeTransfer`'d back to your wallet inside the same `closeSession` transaction. On **early close** a slice may go to `userStakesOnHold` (1-day timelock), to be claimed later via `withdrawUserStakes`. The provider is paid by the contract from a separate protocol `fundingAccount`, not from your stake in real time. See [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover).
+    Total = `pricePerSecond * sessionDuration` (minimum `5` MOR). Paid in MOR, escrowed in the Inference Contract on `openSession`. On close, **unused** stake returns immediately; the **used stipend** day-locks in `userStakesOnHold` until the next UTC day (`withdrawUserStakes`) — including same-day natural expiration. The provider is paid from a separate protocol `fundingAccount`, not from your stake in real time. See [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover).
   </Accordion>
 
   <Accordion title="Provider stake">
@@ -62,7 +62,7 @@ session stake = pricePerSecond * sessionDuration
    (minimum 5 MOR escrowed at open)
 ```
 
-The full stake is escrowed at open. **Natural expiration** returns the full share to your wallet in one transaction. **Early close** splits the refund: a slice may be timelocked in `userStakesOnHold` for ~1 UTC day before you can claim it via `withdrawUserStakes`. See [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover).
+The full stake is escrowed at open. On close, unused stake returns immediately; the used stipend day-locks until the next UTC day (`withdrawUserStakes`). Plan consumer float for gross daily stake — used MOR is not reusable the same UTC day. See [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover).
 
 ## Two reward systems (do not conflate)
 

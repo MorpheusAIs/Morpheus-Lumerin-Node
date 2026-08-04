@@ -3,7 +3,7 @@ title: "Provider quickstart"
 description: "The 10-minute path from zero to a registered Morpheus provider with a live bid."
 audience: ["provider-full", "provider-resale"]
 product: ["proxy-router"]
-last_verified: "v7.0.0"
+last_verified: "v7.5.0"
 ---
 
 This page is the high-level checklist. For the full setup, branch into one of:
@@ -16,7 +16,7 @@ This page is the high-level checklist. For the full setup, branch into one of:
     Deploy the hardened `-tee` image on SecretVM and tag your model `tee`.
   </Card>
   <Card title="Resale provider" icon="boxes-stacked" href="/providers/resale/overview">
-    Resell capacity from Venice / OpenAI / Anthropic.
+    Resell capacity from Venice / OpenAI / Anthropic — including Venice Diem holders monetizing API access.
   </Card>
   <Card title="Docker" icon="docker" href="/providers/full/proxy-router-docker">
     Containerized proxy-router only.
@@ -32,20 +32,23 @@ This page is the high-level checklist. For the full setup, branch into one of:
   <Step title="Have a backend model">
     OpenAI-compatible endpoint reachable from your proxy-router host (e.g. `http://my-model:8080/v1/chat/completions`).
   </Step>
+  <Step title="Look up what already exists">
+    Before minting a new marketplace model, check [active.mor.org/status](https://active.mor.org/status) (or `active_models.json` / `active_bids.json`) for the model name you intend to serve and competing prices. Prefer **bidding on an existing `modelId`**. See [Register on chain → Step 0](/providers/full/register-onchain#step-0--look-up-models-before-you-mint).
+  </Step>
   <Step title="Have a funded wallet">
-    BASE wallet with at least `~0.6` MOR (provider stake `+` model stake `+` bid fee) plus a little ETH for gas. See [Networks and tokens](/get-started/networks-and-tokens).
+    BASE wallet with enough MOR for provider stake + bid fee (and model stake only if you must mint a new model), plus a little ETH for gas. See [Networks and tokens](/get-started/networks-and-tokens).
   </Step>
   <Step title="Have a publicly reachable endpoint">
-    The proxy-router needs to be reachable on `host:3333` from the internet so consumers can connect. The Swagger/admin UI on `:8082` should **not** be public — see [API auth](/reference/api-auth).
+    The proxy-router needs to be reachable on `host:3333` from the internet so consumers can connect. The Swagger/admin UI on `:8082` should **not** be public — see [API auth](/reference/api-auth). SecretVM exposes HTTPS admin on `:443`, which pairs well with [MyProvider](https://myprovider.mor.org).
   </Step>
   <Step title="Run the proxy-router">
-    Configure `.env`, `models-config.json`, `rating-config.json` and start the binary. See [Provider quickstart](/providers/full/quickstart).
+    Configure `.env`, `models-config.json`, `rating-config.json` and start the binary — or follow [SecretVM quickstart](/providers/full/secretvm-quickstart). See [Provider quickstart](/providers/full/quickstart).
   </Step>
-  <Step title="Register on chain">
-    Approve the Diamond contract, register your provider, register your model (with the `tee` tag if you're TEE-enabled), and post a bid. See [Register on chain](/providers/full/register-onchain). Be aware: every `postModelBid` charges a non-refundable `0.3 MOR` `marketplaceBidFee`; finish your local setup before posting your first bid to avoid paying the fee multiple times — see [Pricing](/providers/full/pricing) and [Quickstart → What can cost you MOR](/providers/full/quickstart#what-can-cost-you-mor-during-setup).
+  <Step title="Register on chain (prefer MyProvider)">
+    Use [MyProvider](/providers/full/myprovider-gui) when you can (HTTPS node / SecretVM): register the provider, then **bid on an existing model**. Mint a new model only when nothing suitable exists (or you need a new `tee`-tagged listing). Swagger/API steps: [Register on chain](/providers/full/register-onchain). Every `postModelBid` charges a non-refundable `0.3 MOR` fee — finish local config before your first bid; see [Pricing](/providers/full/pricing).
   </Step>
   <Step title="Verify end-to-end">
-    Don't trust startup logs alone — run the five-step self-check in [Verify your provider setup](/providers/full/verify-setup): healthcheck, public TCP, on-chain records, `active.mor.org` discovery, and a real prompt via the hosted Inference API. This is exactly the procedure Discord support runs when a new provider asks "can you check if my setup is OK?".
+    Don't trust startup logs alone — run the five-step self-check in [Verify your provider setup](/providers/full/verify-setup): healthcheck, public TCP, on-chain records, `active.mor.org` discovery, and a real prompt via the hosted Inference API.
   </Step>
 </Steps>
 

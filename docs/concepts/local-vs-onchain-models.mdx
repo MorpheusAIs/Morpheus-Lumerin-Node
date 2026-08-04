@@ -1,18 +1,18 @@
 ---
 title: "Local vs on-chain models"
-description: "When you are using the bundled local llama.cpp model versus a real Morpheus blockchain model — and why expectations and pricing differ."
+description: "When you are using the local llama.cpp demo model versus a real Morpheus blockchain model — and why expectations and pricing differ."
 audience: ["consumer", "prosumer"]
 product: ["proxy-router", "ui-desktop"]
 last_verified: "v7.0.0"
 ---
 
-The single biggest source of confusion in Morpheus: **the bundled local model is not a Morpheus model.** Two things are easily conflated.
+The single biggest source of confusion in Morpheus: **the local demo model is not a Morpheus model.** Two things are easily conflated.
 
 ## TL;DR
 
 | | Local model | On-chain (Morpheus) model |
 |---|---|---|
-| Where it runs | Your machine, started by `mor-launch local` | Some provider's host on the network |
+| Where it runs | Your machine, started automatically by the MorpheusUI desktop app | Some provider's host on the network |
 | Cost | Free (your CPU/GPU) | MOR per second |
 | Quality | Tiny demo (`tinyllama`) | Whatever the provider hosts (often production-grade) |
 | Wallet needed | Optional | Required (MOR + ETH on BASE) |

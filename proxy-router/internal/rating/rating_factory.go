@@ -17,6 +17,7 @@ type RatingConfig struct {
 	Algorithm         string           `json:"algorithm"`
 	Params            json.RawMessage  `json:"params"`
 	ProviderAllowList []common.Address `json:"providerAllowlist"`
+	ProviderDenyList  []common.Address `json:"providerDenylist"`
 }
 
 func NewRatingFromConfig(config json.RawMessage, log lib.ILogger) (*Rating, error) {
@@ -33,10 +34,10 @@ func NewRatingFromConfig(config json.RawMessage, log lib.ILogger) (*Rating, erro
 		return nil, err
 	}
 
-	return NewRating(scorer, cfg.ProviderAllowList, log), nil
+	return NewRating(scorer, cfg.ProviderAllowList, cfg.ProviderDenyList, log), nil
 }
 
-func NewRating(scorer Scorer, providerAllowList []common.Address, log lib.ILogger) *Rating {
+func NewRating(scorer Scorer, providerAllowList []common.Address, providerDenyList []common.Address, log lib.ILogger) *Rating {
 	allowList := map[common.Address]struct{}{}
 
 	if providerAllowList != nil {
@@ -57,19 +58,37 @@ func NewRating(scorer Scorer, providerAllowList []common.Address, log lib.ILogge
 		log.Warnf("added %d addresses from PROVIDER_ALLOW_LIST", len(addresses))
 	}
 
-	if len(allowList) == 0 {
+	denyList := map[common.Address]struct{}{}
+
+	if providerDenyList != nil {
+		for _, addr := range providerDenyList {
+			denyList[addr] = struct{}{}
+		}
+	}
+
+	if len(allowList) == 0 && len(denyList) == 0 {
 		log.Infof("provider filtering is disabled")
 	} else {
-		keys := maps.Keys(allowList)
-		sort.Slice(keys, func(i, j int) bool {
-			return keys[i].Hex() < keys[j].Hex()
-		})
-		log.Warnf("provider filtering is enabled, allowList: %v", keys)
+		if len(allowList) > 0 {
+			keys := maps.Keys(allowList)
+			sort.Slice(keys, func(i, j int) bool {
+				return keys[i].Hex() < keys[j].Hex()
+			})
+			log.Warnf("provider filtering is enabled, allowList: %v", keys)
+		}
+		if len(denyList) > 0 {
+			keys := maps.Keys(denyList)
+			sort.Slice(keys, func(i, j int) bool {
+				return keys[i].Hex() < keys[j].Hex()
+			})
+			log.Warnf("provider filtering is enabled, denyList: %v", keys)
+		}
 	}
 
 	return &Rating{
 		scorer:            scorer,
 		providerAllowList: allowList,
+		providerDenyList:  denyList,
 	}
 }
 

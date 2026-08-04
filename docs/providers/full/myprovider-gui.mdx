@@ -1,41 +1,97 @@
 ---
 title: "MyProvider GUI"
-description: "Use myprovider.mor.org's hosted operator dashboard to manage a Morpheus provider node."
+description: "Use myprovider.mor.org to onboard providers: look up models on active.mor.org, craft SecretVM/Venice secrets, register, bid, and sync MODELS_CONFIG_CONTENT."
 audience: ["provider-full", "provider-resale"]
 product: ["proxy-router"]
-last_verified: "v7.0.0"
+last_verified: "v7.5.0"
 source_url: "https://myprovider.mor.org"
 ---
 
-[MyProvider](https://myprovider.mor.org) is a hosted operator GUI maintained by the Morpheus ecosystem. It lets you manage providers, models, bids, and sessions without scripting against the API directly.
+[MyProvider](https://myprovider.mor.org) is the hosted operator GUI for Morpheus providers. It talks to **your** proxy-router over HTTP Basic Auth (same credentials as Swagger) and wraps the blockchain admin calls you would otherwise run by hand.
+
+Use it as the default path for first-time registration and day-to-day bid/config work — especially on [SecretVM](/providers/full/secretvm-quickstart), where the node already exposes HTTPS on port 443.
 
 <Note>
-This page is a **mirror summary** of public information about MyProvider, last verified for v7.0.0. For canonical, current behavior, always defer to [myprovider.mor.org](https://myprovider.mor.org).
+This page describes MyProvider behavior including the onboarding wizard (active.mor.org lookup, SecretVM 5-secret export, Venice Diem presets). When in doubt, defer to the live app and [Register on chain](/providers/full/register-onchain).
 </Note>
 
-## What it gives you
+## Recommended first-time flow
 
-- **Provider dashboard** — register/update your provider record, view stake, status, and earnings.
-- **Model management** — register, tag (including `tee`), and update models.
-- **Bid management** — post, edit, and retire bids.
-- **Session monitoring** — see active and historical sessions, pending claims, and earnings.
-- **Health pings** — quick visibility into whether your `:3333` and `/healthcheck` are reachable.
+1. Open [myprovider.mor.org](https://myprovider.mor.org) — use **New provider onboarding** (no node connection required yet).
+2. Pick a path: **SecretVM TEE**, **Venice Diem resale**, or **Standard / Docker**.
+3. **Look up** the model on [active.mor.org](https://active.mor.org/status) inside the wizard — copy an existing `Id` when possible.
+4. Fill wallet / RPC / admin password and **copy secrets** (`MODELS_CONFIG_CONTENT` value for SecretVM, or a full 5-secret bundle).
+5. Deploy the node (SecretVM portal, Docker, or binary) with those secrets.
+6. **Connect** MyProvider to the node URL + Basic Auth; register the provider; **bid on the existing model**.
+7. Use **Model Configuration Sync** if you need to re-export `MODELS_CONFIG_CONTENT` after bidding.
+8. **Verify** with [Verify your provider setup](/providers/full/verify-setup).
 
-## When to use it vs the Swagger / API
+Mint a **new** model only when nothing suitable exists (new weights, or a required `tee` tag with no existing tee-tagged listing).
 
-| Task | Best surface |
-|------|--------------|
-| First-time provider registration | MyProvider GUI or Swagger |
-| Update bids in bulk | API/script |
-| TEE attestation inspection | [SecretVM portal](https://secretai.scrtlabs.com/attestation) + cosign |
-| Day-to-day operator monitoring | MyProvider GUI |
-| Programmatic automation | API ([endpoints reference](/reference/api-endpoints)) |
+## What it gives you today
+
+| Feature | Supported |
+|---------|-----------|
+| Guided onboarding (SecretVM / Venice / standard) | Yes |
+| Look up models + competitor prices via active.mor.org | Yes |
+| Craft SecretVM 5 secrets + `MODELS_CONFIG_CONTENT` value | Yes |
+| Venice Diem API URL presets | Yes |
+| Connect to proxy-router API (Basic Auth) | Yes |
+| Register / update / delete provider | Yes |
+| `:3333` endpoint reachability check | Yes |
+| Bid on existing on-chain models ("Available Models") | Yes — **prefer this** |
+| Create model + bid (single flow) | Yes — use only for genuinely new models |
+| Delete bids; replace bid price | Yes |
+| Model config sync + SecretVM / `.env` export | Yes |
+| Bootstrap `.env` generator | Yes |
+| Session monitoring / earnings dashboard | **No** |
 
 ## Authentication
 
-MyProvider authenticates against your provider's wallet — connect a wallet that owns the provider record on chain. Read the privacy and TOS on the site directly before connecting any wallet you care about.
+MyProvider does **not** connect MetaMask or any browser wallet. It authenticates to your proxy-router:
+
+1. Enter the proxy-router base URL (`https://your-node:8082` or SecretVM `https://your-vm/`).
+2. Enter the admin username/password from `.cookie` / `COOKIE_CONTENT`.
+3. The app reads the provider wallet from the node (`GET /wallet`) — that key must already be configured on the node.
+
+## HTTPS requirement
+
+The hosted app at [myprovider.mor.org](https://myprovider.mor.org) can only call **HTTPS** proxy-router APIs (browser mixed-content rules).
+
+| Your node | How to use MyProvider |
+|-----------|------------------------|
+| SecretVM (Traefik TLS on `:443`) | Point MyProvider at `https://<your-secretvm-url>/` |
+| Other HTTPS reverse proxy / ALB | Point at that HTTPS admin URL |
+| HTTP-only `:8082` | Use the [desktop release](https://github.com/MorpheusAIs/Morpheus-MyProvider/releases) or run `npm run dev` locally and connect to `http://…:8082` |
+
+## When to use it vs Swagger / API
+
+| Task | Best surface |
+|------|--------------|
+| First-time provider + secrets + bid (esp. SecretVM / Venice) | **MyProvider** onboarding + tabs |
+| Join an existing marketplace model | MyProvider → Available Models, or API `POST /blockchain/bids` |
+| Mint a genuinely new model | MyProvider Create Model & Bid, or Swagger |
+| Bulk / scripted bid updates | API ([endpoints reference](/reference/api-endpoints)) |
+| TEE attestation inspection | [SecretVM portal](https://secretai.scrtlabs.com/attestation) + cosign |
+| Programmatic automation | API |
+
+## Agent / bot discovery
+
+Plain-text surfaces on this host (no JS required):
+
+| Path | Purpose |
+|------|---------|
+| [/llms.txt](https://myprovider.mor.org/llms.txt) | Index + hard rules |
+| [/llms-full.txt](https://myprovider.mor.org/llms-full.txt) | One-shot install → bid recipe |
+| [/AGENTS.md](https://myprovider.mor.org/AGENTS.md) | Agent rules |
+| [/onboarding.md](https://myprovider.mor.org/onboarding.md) | Deploy-path steps |
+
+For protocol depth, agents should use [nodedocs llms-full](https://nodedocs.mor.org/llms-full.txt) or MCP `https://nodedocs.mor.org/mcp`. Live models/prices: [active.mor.org](https://active.mor.org/status).
 
 ## Related
 
-- [Register on chain](/providers/full/register-onchain) — the underlying contract calls MyProvider wraps.
-- [API endpoints](/reference/api-endpoints) — direct API equivalents.
+- [Register on chain](/providers/full/register-onchain) — discover → bid (canonical steps)
+- [SecretVM quickstart](/providers/full/secretvm-quickstart) — MyProvider-first TEE path
+- [Reselling Venice (Diem)](/providers/resale/reselling-venice) — Diem → Morpheus income path
+- [active.mor.org](/ecosystem/active-status) — live models and prices
+- [API endpoints](/reference/api-endpoints) — direct equivalents

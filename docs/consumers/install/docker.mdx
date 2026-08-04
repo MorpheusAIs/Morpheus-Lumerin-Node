@@ -3,7 +3,7 @@ title: "Docker (consumer)"
 description: "Run a consumer-side proxy-router in Docker. The MorpheusUI Electron app is not containerized; pair this with the desktop UI or hit the API directly."
 audience: ["consumer", "developer"]
 product: ["proxy-router"]
-last_verified: "v7.0.0"
+last_verified: "v7.6.0"
 ---
 
 The proxy-router itself is published as a Docker image at `ghcr.io/morpheusais/morpheus-lumerin-node`. As a **consumer** you typically run it locally next to MorpheusUI or call its HTTP API directly. The container exposes the same `:8082` admin/API and `:3333` proxy ports.
@@ -66,7 +66,7 @@ Switch to BASE Sepolia by replacing the four blockchain values in the `.env`. Se
 
 ## Pairing with MorpheusUI
 
-If you also want the desktop UI, run the packaged release as in [macOS](/consumers/install/macos) / [Windows](/consumers/install/windows) / [Linux](/consumers/install/linux), but stop the bundled proxy-router and point `PROXY_WEB_URL` (in MorpheusUI's `.env`) at your container's `http://localhost:8082`.
+If you also want the desktop UI, install the packaged **MorpheusUI** app ([Consumer quickstart](/consumers/quickstart), or per-OS: [Windows](/consumers/install/windows) / [Linux](/consumers/install/linux)). Then stop the app-managed proxy-router from the startup screen (or quit the app), run your Docker proxy-router, and point MorpheusUI at it with `PROXY_WEB_URL=http://localhost:8082` (see [Env: MorpheusUI](/reference/env-ui-desktop)). For building the UI from source, see [macOS install (from source)](/consumers/install/macos).
 
 ## Direct API use
 

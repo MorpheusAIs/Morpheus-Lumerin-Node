@@ -48,6 +48,16 @@ func testLog() lib.ILogger {
 	return &lib.LoggerMock{}
 }
 
+// certBinding computes both TLS binding digests for a test certificate.
+func certBinding(t *testing.T, cert tls.Certificate) TLSCertBinding {
+	t.Helper()
+	parsed, err := x509.ParseCertificate(cert.Certificate[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	return TLSBindingFromCert(parsed)
+}
+
 // --- VerifyCPUGPUBinding ---
 
 func TestVerifyCPUGPUBinding_Valid(t *testing.T) {
@@ -121,36 +131,69 @@ func TestVerifyCPUGPUBinding_EmptyGPU(t *testing.T) {
 
 // --- VerifyTLSBinding ---
 
-func TestVerifyTLSBinding_Valid(t *testing.T) {
-	fingerprint := "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
-	reportData := fingerprint + "0000000000000000000000000000000000000000000000000000000000000000"
+func TestVerifyTLSBinding_CertificateDigest(t *testing.T) {
+	certDigest := "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+	binding := TLSCertBinding{
+		SPKI:        "1234123412341234123412341234123412341234123412341234123412341234",
+		Certificate: certDigest,
+	}
+	reportData := certDigest + "0000000000000000000000000000000000000000000000000000000000000000"
 
-	if err := VerifyTLSBinding(fingerprint, reportData); err != nil {
+	kind, err := VerifyTLSBinding(binding, reportData)
+	if err != nil {
 		t.Fatalf("expected no error, got: %s", err)
+	}
+	if kind != TLSBindingCertificate {
+		t.Fatalf("expected certificate binding kind, got %s", kind)
+	}
+}
+
+func TestVerifyTLSBinding_SPKIDigest(t *testing.T) {
+	spkiDigest := "1234123412341234123412341234123412341234123412341234123412341234"
+	binding := TLSCertBinding{
+		SPKI:        spkiDigest,
+		Certificate: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+	}
+	reportData := spkiDigest + "0000000000000000000000000000000000000000000000000000000000000000"
+
+	kind, err := VerifyTLSBinding(binding, reportData)
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err)
+	}
+	if kind != TLSBindingSPKI {
+		t.Fatalf("expected spki binding kind, got %s", kind)
 	}
 }
 
 func TestVerifyTLSBinding_Mismatch(t *testing.T) {
-	fingerprint := "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
-	reportData := "1111111111111111111111111111111111111111111111111111111111111111" + "0000"
+	binding := TLSCertBinding{
+		SPKI:        "1234123412341234123412341234123412341234123412341234123412341234",
+		Certificate: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+	}
+	reportData := strings.Repeat("11", 32) + "0000"
 
-	err := VerifyTLSBinding(fingerprint, reportData)
-	if err == nil {
+	if _, err := VerifyTLSBinding(binding, reportData); err == nil {
 		t.Fatal("expected mismatch error")
 	}
 }
 
-func TestVerifyTLSBinding_EmptyFingerprint(t *testing.T) {
-	err := VerifyTLSBinding("", "aabb")
-	if err == nil {
-		t.Fatal("expected error for empty fingerprint")
+func TestVerifyTLSBinding_EmptyBinding(t *testing.T) {
+	if _, err := VerifyTLSBinding(TLSCertBinding{}, "aabb"); err == nil {
+		t.Fatal("expected error for empty binding")
 	}
 }
 
 func TestVerifyTLSBinding_EmptyReportData(t *testing.T) {
-	err := VerifyTLSBinding("aabb", "")
-	if err == nil {
+	binding := TLSCertBinding{Certificate: "aabb"}
+	if _, err := VerifyTLSBinding(binding, ""); err == nil {
 		t.Fatal("expected error for empty reportData")
+	}
+}
+
+func TestVerifyTLSBinding_ShortReportData(t *testing.T) {
+	binding := TLSCertBinding{Certificate: strings.Repeat("ab", 32)}
+	if _, err := VerifyTLSBinding(binding, "aabbcc"); err == nil {
+		t.Fatal("expected error for short reportData")
 	}
 }
 
@@ -203,11 +246,13 @@ func TestBackendVerifier_FastVerify_FailedStatus(t *testing.T) {
 	bv := NewBackendVerifier("http://unused", nil, nil, nil, testLog())
 	bv.storeFailure("model-1", "https://test:29343", "prev failure")
 
+	// A failed snapshot triggers a full re-attestation, which fails against the
+	// unreachable test URL.
 	err := bv.FastVerifyBackend(context.Background(), "model-1")
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Error(), "status is failed") {
+	if !strings.Contains(err.Error(), "failed to load CPU attestation quote") {
 		t.Fatalf("unexpected: %s", err)
 	}
 }
@@ -233,7 +278,7 @@ func TestBackendVerifier_FastVerify_CacheHit(t *testing.T) {
 		ModelID:        "test-model",
 		AttestationURL: attestServer.URL,
 		CPUQuoteHash:   cpuHash,
-		TLSFingerprint: fingerprint,
+		TLSBinding:     TLSCertBinding{Certificate: fingerprint},
 		Status:         StatusPassed,
 	}
 	bv.mu.Unlock()
@@ -327,6 +372,75 @@ func TestBackendVerifier_AttestBackend_FullFlow(t *testing.T) {
 	}
 	if status.TEEType != TEETypeTDX {
 		t.Fatalf("expected TDX, got %s", status.TEEType)
+	}
+	if status.TLSBindingKind != TLSBindingCertificate {
+		t.Fatalf("expected certificate binding kind, got %s", status.TLSBindingKind)
+	}
+}
+
+// TestBackendVerifier_AttestBackend_SPKIBinding verifies the full flow when
+// report_data binds SHA-256(SPKI DER) — the binding used by current SecretVMs —
+// instead of the legacy full-certificate digest.
+func TestBackendVerifier_AttestBackend_SPKIBinding(t *testing.T) {
+	cert, _ := selfSignedCert(t)
+	spkiFingerprint := certBinding(t, cert).SPKI
+
+	gpuNonce := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	cpuReportData := spkiFingerprint + gpuNonce
+	cpuQuote := testTdxQuoteHex()
+
+	gpuJSON := fmt.Sprintf(`{
+		"nonce": "%s",
+		"arch": "HOPPER",
+		"evidence_list": [{"certificate": "dGVzdA==", "evidence": "dGVzdA=="}]
+	}`, gpuNonce)
+
+	attestMux := http.NewServeMux()
+	attestMux.HandleFunc("/cpu", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, cpuQuote)
+	})
+	attestMux.HandleFunc("/gpu", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, gpuJSON)
+	})
+	attestMux.HandleFunc("/docker-compose", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, testComposeYAML)
+	})
+	attestServer := httptest.NewTLSServer(attestMux)
+	defer attestServer.Close()
+	attestServer.TLS.Certificates = []tls.Certificate{cert}
+
+	portalMux := http.NewServeMux()
+	portalHandler := func(w http.ResponseWriter, _ *http.Request) {
+		resp := ParseQuoteResponse{
+			Quote:  &QuoteFields{MRTD: "aaaa", RTMR0: "bbbb", RTMR1: "cccc", RTMR2: "dddd", RTMR3: "eeee", ReportData: cpuReportData},
+			Status: &QuoteStatus{AttestationType: "tdx"},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}
+	portalMux.HandleFunc("/api/quote-parse", portalHandler)
+	portalMux.HandleFunc("/api/quote-parse-sev", portalHandler)
+	portalServer := httptest.NewServer(portalMux)
+	defer portalServer.Close()
+
+	nrasServer := httptest.NewServer(mockNRASHandler(t, true))
+	defer nrasServer.Close()
+
+	bv := NewBackendVerifier(portalServer.URL+"/api/quote-parse", nil, loadedRegistry(), nil, testLog())
+	bv.attestationClient = NewAttestationHTTPClient()
+	bv.nrasVerifier.baseURL = nrasServer.URL
+
+	if err := bv.AttestBackend(context.Background(), "test-model-spki", attestServer.URL); err != nil {
+		t.Fatalf("AttestBackend with SPKI binding failed: %s", err)
+	}
+
+	status := bv.GetStatus("test-model-spki")
+	if status == nil || status.Status != StatusPassed {
+		t.Fatalf("expected StatusPassed, got %+v", status)
+	}
+	if status.TLSBindingKind != TLSBindingSPKI {
+		t.Fatalf("expected spki binding kind, got %s", status.TLSBindingKind)
 	}
 }
 
@@ -605,9 +719,9 @@ func TestBackendVerifier_PinnedHTTPClient_Success(t *testing.T) {
 
 	bv.mu.Lock()
 	bv.cache["model-1"] = &BackendAttestationSnapshot{
-		ModelID:        "model-1",
-		TLSFingerprint: "aabbccdd",
-		Status:         StatusPassed,
+		ModelID:    "model-1",
+		TLSBinding: TLSCertBinding{Certificate: "aabbccdd"},
+		Status:     StatusPassed,
 	}
 	bv.mu.Unlock()
 

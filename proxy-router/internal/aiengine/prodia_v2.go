@@ -86,7 +86,7 @@ func (s *ProdiaV2) Prompt(ctx context.Context, prompt *gcs.OpenAICompletionReque
 			return fmt.Errorf("failed to decode response: %v", err)
 		}
 
-		err := cb(ctx, nil, gcs.NewAiEngineErrorResponse(aiEngineErrorResponse))
+		err := cb(ctx, nil, gcs.NewAiEngineErrorResponse(res.StatusCode, aiEngineErrorResponse))
 		if err != nil {
 			return fmt.Errorf("callback failed: %v", err)
 		}

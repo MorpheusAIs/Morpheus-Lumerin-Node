@@ -11,12 +11,39 @@ import (
 // OpenSession opens a session with the best-rated provider for a model.
 // duration is in seconds. Returns the session ID (tx hash).
 func (s *SDK) OpenSession(ctx context.Context, modelID string, durationSec int64, directPayment bool) (string, error) {
+	return s.OpenSessionOmitting(ctx, modelID, durationSec, directPayment, "")
+}
+
+// OpenSessionOmitting opens a session while excluding omitProviderAddr from bid
+// selection. Pass an empty string to consider every rated bid (same as OpenSession).
+// Used by consumer failover after a mid-session provider impairment (429/503/etc.).
+func (s *SDK) OpenSessionOmitting(ctx context.Context, modelID string, durationSec int64, directPayment bool, omitProviderAddr string) (string, error) {
 	if err := s.checkClosed(); err != nil {
 		return "", err
 	}
 	id := common.HexToHash(modelID)
 	dur := big.NewInt(durationSec)
-	txHash, err := s.blockchain.OpenSessionByModelId(ctx, id, dur, directPayment, true, common.Address{}, "")
+	omit := common.Address{}
+	if omitProviderAddr != "" {
+		omit = common.HexToAddress(omitProviderAddr)
+	}
+	txHash, err := s.blockchain.OpenSessionByModelId(ctx, id, dur, directPayment, true, omit, "")
+	if err != nil {
+		return "", err
+	}
+	return txHash.Hex(), nil
+}
+
+// OpenSessionByBid opens a session against a specific bid ID.
+// Unlike OpenSession, there is no multi-provider failover — the chosen bid is
+// the only attempt. Prefer OpenSession / OpenSessionOmitting for normal UX.
+func (s *SDK) OpenSessionByBid(ctx context.Context, bidID string, durationSec int64) (string, error) {
+	if err := s.checkClosed(); err != nil {
+		return "", err
+	}
+	id := common.HexToHash(bidID)
+	dur := big.NewInt(durationSec)
+	txHash, err := s.blockchain.OpenSessionByBidId(ctx, id, dur, "")
 	if err != nil {
 		return "", err
 	}

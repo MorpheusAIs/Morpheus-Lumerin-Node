@@ -22,9 +22,13 @@ type StorageHealthChecker interface {
 	DBSize() (lsmSize int64, vlogSize int64)
 }
 
-// ModelHealthReporter provides cached per-model health self-reports.
+// ModelHealthReporter provides cached per-model health self-reports and
+// accepts manual re-check triggers.
 type ModelHealthReporter interface {
 	GetReports() []ModelHealthReport
+	// TriggerNow queues an immediate re-check sweep; false means one is
+	// already queued. The sweep runs asynchronously.
+	TriggerNow() bool
 }
 
 type SystemController struct {
@@ -61,6 +65,7 @@ func NewSystemController(config *config.Config, wallet i.Wallet, ethRPC i.RPCEnd
 
 func (s *SystemController) RegisterRoutes(r i.Router) {
 	r.GET("/healthcheck", s.HealthCheck)
+	r.POST("/healthcheck/models/refresh", s.authConfig.CheckAuth("model_health_refresh"), s.RefreshModelHealth)
 	r.GET("/config", s.authConfig.CheckAuth("system_config"), s.GetConfig)
 	r.GET("/files", s.authConfig.CheckAuth("system_config"), s.GetFiles)
 
@@ -111,6 +116,28 @@ func (s *SystemController) HealthCheck(ctx *gin.Context) {
 		Components: components,
 		Models:     models,
 	})
+}
+
+// RefreshModelHealth godoc
+//
+//	@Summary		Trigger model health re-check
+//	@Description	Queue an immediate model health sweep instead of waiting for the next scheduled run (provider nodes only). Returns immediately; the sweep runs in the background — poll GET /healthcheck and watch models[].lastChecked for fresh results. Probes are paced by MODEL_HEALTH_CHECK_PROBE_DELAY, so a full sweep over many models takes minutes.
+//	@Tags			system
+//	@Produce		json
+//	@Success		202	{object}	StatusRes
+//	@Security		BasicAuth
+//	@Router			/healthcheck/models/refresh [post]
+func (s *SystemController) RefreshModelHealth(ctx *gin.Context) {
+	if s.modelHealth == nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "model health checks are disabled on this node"})
+		return
+	}
+
+	if !s.modelHealth.TriggerNow() {
+		ctx.JSON(http.StatusAccepted, StatusRes{Status: "refresh already pending"})
+		return
+	}
+	ctx.JSON(http.StatusAccepted, StatusRes{Status: "refresh queued"})
 }
 
 // GetConfig godoc

@@ -3,7 +3,7 @@ title: "What is Morpheus?"
 description: "An opinionated explainer of the Morpheus Inference Marketplace: a decentralized, peer-to-peer marketplace for AI inference, coordinated by smart contracts on BASE."
 audience: ["consumer", "prosumer", "provider-resale", "provider-full", "developer"]
 product: ["proxy-router", "ui-desktop"]
-last_verified: "v7.0.0"
+last_verified: "v7.9.0"
 ---
 
 The **Morpheus Inference Marketplace** is where decentralized AI becomes accessible to everyone. It connects people who need compute power (consumers) with providers who supply it, all coordinated by smart contracts on BASE. Instead of a centralized service, requests and responses flow **directly** between consumer and provider in a peer-to-peer system.
@@ -46,7 +46,7 @@ To participate, **both sides** run a **proxy-router** — a lightweight binary (
     Once a session is open, prompts and responses go **directly** between consumer and provider — no Morpheus-operated server in the data path. The blockchain only sees session open / close / settle, never the inference itself.
   </Card>
   <Card title="Session-time pricing, not tokens" icon="hourglass">
-    Pricing is **per-second of session time**, not per-token. Consumers stake MOR for a fixed duration; the MOR is escrowed and refunded on close (full refund on natural expiration; early close uses a 1-day timelock for part of the refund). See [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover).
+    Pricing is **per-second of session time**, not per-token. Consumers stake MOR for a fixed duration; the MOR is escrowed on open. On close, unused stake returns immediately and the used stipend day-locks until the next UTC day. See [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover).
   </Card>
   <Card title="Reputation-weighted matching" icon="trophy">
     Providers with strong uptime, time-to-first-token, throughput, and success rate are matched more often by the consumer-side rating system. See [rating-config.json](/reference/rating-config) for how the weights work.

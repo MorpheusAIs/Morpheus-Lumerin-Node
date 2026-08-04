@@ -12,6 +12,7 @@ import (
 type Rating struct {
 	scorer            Scorer
 	providerAllowList map[common.Address]struct{}
+	providerDenyList  map[common.Address]struct{}
 }
 
 func (r *Rating) RateBids(scoreInputs []RatingInput, log lib.ILogger) []RatingRes {
@@ -20,7 +21,7 @@ func (r *Rating) RateBids(scoreInputs []RatingInput, log lib.ILogger) []RatingRe
 	for _, input := range scoreInputs {
 		score := r.scorer.GetScore(&input.ScoreInput)
 		if !r.isAllowed(input.ProviderID) {
-			log.Warnf("provider %s is not in the allow list, skipping", input.ProviderID.String())
+			log.Warnf("provider %s is filtered out by allowlist/denylist, skipping", input.ProviderID.String())
 			continue
 		}
 
@@ -44,6 +45,9 @@ func (r *Rating) RateBids(scoreInputs []RatingInput, log lib.ILogger) []RatingRe
 }
 
 func (r *Rating) isAllowed(provider common.Address) bool {
+	if _, denied := r.providerDenyList[provider]; denied {
+		return false
+	}
 	if len(r.providerAllowList) == 0 {
 		return true
 	}

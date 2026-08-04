@@ -1,48 +1,56 @@
 ---
 title: "MyProvider"
-description: "Mirror summary of myprovider.mor.org — hosted operator GUI for managing Morpheus provider nodes."
+description: "Mirror summary of myprovider.mor.org — onboarding wizard, active.mor.org lookup, SecretVM secrets, Venice Diem presets, and provider/bid management."
 audience: ["provider-full", "provider-resale"]
 product: ["proxy-router"]
-last_verified: "v7.0.0"
+last_verified: "v7.5.0"
 source_url: "https://myprovider.mor.org"
 ---
 
 <Note>
-**Mirrored summary** of [myprovider.mor.org](https://myprovider.mor.org). For current screens and feature behavior, defer to the live site.
+**Mirrored summary** of [myprovider.mor.org](https://myprovider.mor.org). For screens and the latest behavior, defer to the live site and the canonical [MyProvider GUI](/providers/full/myprovider-gui) page on this docs site.
 </Note>
 
 ## What it is
 
-A hosted operator dashboard for Morpheus providers. Lets you manage providers, models, bids, and sessions through a GUI rather than scripting against the proxy-router HTTP API.
+A hosted operator dashboard for Morpheus providers. It connects to **your** proxy-router with HTTP Basic Auth (same credentials as Swagger) and helps you:
 
-## What it gives you
+1. Look up existing models on [active.mor.org](https://active.mor.org/status)
+2. Craft SecretVM / Docker / Venice secrets (including `MODELS_CONFIG_CONTENT`)
+3. Register the provider, bid on models, and sync `models-config`
 
-- **Provider dashboard** — register / update your provider record, view stake, status, and earnings.
-- **Model management** — register, tag (including `tee`), and update models.
-- **Bid management** — post, edit, and retire bids.
-- **Session monitoring** — see active and historical sessions, pending claims, and earnings.
-- **Health pings** — quick visibility into whether your `:3333` and `/healthcheck` are reachable.
+It does **not** replace funding a wallet or running a node — it is the graphical control plane for that node.
 
-## How it relates to this site
+## Paths
 
-- Conceptually it does the same thing as [Register on chain](/providers/full/register-onchain) and [API endpoints](/reference/api-endpoints).
-- Authenticates against your provider's wallet — connect a wallet that owns the provider record on chain.
-- Read the privacy and TOS on the site directly before connecting any wallet you care about.
+| Path | Best for |
+|------|----------|
+| SecretVM TEE | Digest-pinned `-tee` image + 5 encrypted secrets + HTTPS MyProvider |
+| Venice Diem resale | Monetize Venice API access without hosting GPUs |
+| Standard / Docker | Your own LLM backend |
 
-## When to use MyProvider vs the API
+## Preferred use
 
-| Task | Best surface |
-|------|--------------|
-| First-time provider registration | MyProvider GUI or Swagger |
-| Update bids in bulk | API/script |
-| TEE attestation inspection | [SecretVM portal](https://secretai.scrtlabs.com/attestation) + cosign |
-| Day-to-day operator monitoring | MyProvider GUI |
-| Programmatic automation | API ([endpoints reference](/reference/api-endpoints)) |
+1. Look up existing models / prices on [active.mor.org/status](https://active.mor.org/status).
+2. Export secrets from MyProvider onboarding.
+3. Deploy the node; connect MyProvider with Basic Auth.
+4. **Bid on an existing model** when one matches what you serve.
+5. Re-export `MODELS_CONFIG_CONTENT` from Model Configuration Sync after bidding if needed.
+
+Full steps: [Register on chain](/providers/full/register-onchain) and [MyProvider GUI](/providers/full/myprovider-gui).
+
+## Auth and HTTPS
+
+- Auth = node Basic Auth, **not** MetaMask.
+- Hosted [myprovider.mor.org](https://myprovider.mor.org) requires an **HTTPS** proxy-router URL (SecretVM fits naturally). HTTP-only nodes: desktop app or local `npm run dev`.
 
 ## Related canonical pages on this site
 
 - [MyProvider GUI](/providers/full/myprovider-gui)
 - [Register on chain](/providers/full/register-onchain)
+- [SecretVM quickstart](/providers/full/secretvm-quickstart)
+- [Reselling Venice (Diem)](/providers/resale/reselling-venice)
+- [active.mor.org](/ecosystem/active-status)
 - [Headless operation](/providers/full/headless)
 - [API endpoints](/reference/api-endpoints)
 

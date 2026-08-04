@@ -175,13 +175,15 @@ For exact defaults check the source of truth ([`config.go`](https://github.com/M
 
 ## Model health self-checks (provider)
 
-On provider nodes the proxy-router periodically probes every model from `models-config.json` that has an **active bid from this provider**: LLM models get a small dynamically generated arithmetic prompt (correctness is graded), embedding models get an embeddings request, and other model types are skipped. The cached per-model results (on-chain `modelId`, status, `lastHealthy` epoch, latency, prompt correctness — never the private `modelName`, `apiUrl`, or `apiKey`) are exposed in the `models` field of `GET /healthcheck`.
+On provider nodes the proxy-router periodically probes every model from `models-config.json` that has an **active bid from this provider**: LLM models get a small dynamically generated arithmetic prompt (correctness is graded), embedding models get an embeddings request, and other model types are skipped. The report covers the whole ecosystem of bids and configured models — active bids whose model is missing from `models-config.json` are flagged as `no_model_configured` (capacity being sold with no backend to serve it). The cached per-model results (on-chain `modelId` and registered model name, `bidId`, status, `errorKind` plus upstream `httpStatus` on failure, `lastHealthy` epoch, latency, prompt correctness — never the private `models-config.json` `modelName`, `apiUrl`, or `apiKey`) are exposed in the `models` field of `GET /healthcheck`, in the `network.ping` (pong) response on the `:3333` MOR RPC port, and in `POST /proxy/provider/ping`, so consumers can see a provider's model health before opening a session. Full operational guide: [Model health self-report](/providers/full/model-health).
 
 | Variable | Default | Notes |
 |----------|---------|-------|
 | `MODEL_HEALTH_CHECK_DISABLED` | `false` | Set `true` to disable the loop (the `models` field disappears from `/healthcheck`) |
 | `MODEL_HEALTH_CHECK_INTERVAL` | `1h` | How often models are probed; results are cached between runs |
 | `MODEL_HEALTH_CHECK_TIMEOUT` | `60s` | Per-model probe timeout |
+| `MODEL_HEALTH_CHECK_PROBE_DELAY` | `2s` | Pause between per-model probes so many-model providers don't burst their upstream into a rate limit |
+| `MODEL_HEALTH_MAX_CONSECUTIVE_ERRORS` | `3` | Consecutive real-session prompt failures after which the model is reported `unhealthy` (`errorKind: session_errors`) immediately, without waiting for the next scheduled probe |
 
 ## TEE (Phase 1 + Phase 2 attestation)
 

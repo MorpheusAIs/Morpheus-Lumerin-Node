@@ -2092,6 +2092,31 @@ const docTemplate = `{
                 }
             }
         },
+        "/healthcheck/models/refresh": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Queue an immediate model health sweep instead of waiting for the next scheduled run (provider nodes only). Returns immediately; the sweep runs in the background — poll GET /healthcheck and watch models[].lastChecked for fresh results. Probes are paced by MODEL_HEALTH_CHECK_PROBE_DELAY, so a full sweep over many models takes minutes.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Trigger model health re-check",
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/system.StatusRes"
+                        }
+                    }
+                }
+            }
+        },
         "/ipfs/add": {
             "post": {
                 "security": [
@@ -4516,6 +4541,11 @@ const docTemplate = `{
                 "failover": {
                     "type": "boolean"
                 },
+                "omitProvider": {
+                    "description": "OmitProvider excludes a provider from bid selection, e.g. one whose\nbackend just failed a prompt (impaired provider failover).",
+                    "type": "string",
+                    "example": "0x1234567890abcdef1234567890abcdef12345678"
+                },
                 "sessionDuration": {
                     "type": "integer"
                 }
@@ -4797,6 +4827,10 @@ const docTemplate = `{
                 "hasActiveBid": {
                     "type": "boolean"
                 },
+                "httpStatus": {
+                    "description": "HttpStatus is the HTTP status code returned by the upstream backend\nwhen the probe failed with a non-200 response (e.g. 402, 429).\nZero when the probe succeeded or never got an HTTP response.",
+                    "type": "integer"
+                },
                 "lastChecked": {
                     "type": "integer"
                 },
@@ -4807,6 +4841,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "modelId": {
+                    "type": "string"
+                },
+                "modelName": {
                     "type": "string"
                 },
                 "modelType": {

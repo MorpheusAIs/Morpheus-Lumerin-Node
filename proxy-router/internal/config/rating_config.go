@@ -25,7 +25,7 @@ const (
 	`
 )
 
-func LoadRating(path string, log lib.ILogger) (*rating.Rating, error) {
+func LoadRating(path string, content string, log lib.ILogger) (*rating.Rating, error) {
 	log = log.Named("RATING_LOADER")
 
 	filePath := DefaultRatingConfigPath
@@ -35,8 +35,13 @@ func LoadRating(path string, log lib.ILogger) (*rating.Rating, error) {
 
 	config, err := lib.ReadJSONFile(filePath)
 	if err != nil {
-		log.Warnf("failed to load rating config file, using defaults")
-		config = RatingConfigDefault
+		if content != "" {
+			log.Infof("rating config file not found, using RATING_CONFIG_CONTENT")
+			config = content
+		} else {
+			log.Warnf("failed to load rating config file, using defaults")
+			config = RatingConfigDefault
+		}
 	} else {
 		log.Infof("rating config loaded from file: %s", filePath)
 	}

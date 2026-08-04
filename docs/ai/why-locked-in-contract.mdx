@@ -1,24 +1,24 @@
 ---
 title: "Why is my MOR locked in the contract?"
-description: "Concise reasons MOR can sit in the Diamond contract instead of your wallet — what's normal vs what to investigate."
+description: "Concise reasons MOR can sit in the Diamond contract instead of your wallet — what's normal vs what to investigate, including the used-stipend day-lock."
 audience: ["consumer", "provider-full", "provider-resale"]
 product: ["proxy-router"]
-last_verified: "v7.0.0"
+last_verified: "v7.9.0"
 ---
 
-If you see your MOR sitting in the Inference Contract instead of your wallet, you are looking at one of these legitimate states. None of them are "stuck" or "lost." For the canonical mechanics, see [tech.mor.org/session.html](https://tech.mor.org/session.html) and [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover).
+If you see your MOR sitting in the Inference Contract instead of your wallet, you are looking at one of these legitimate states. None of them are "stuck" or "lost." For the canonical mechanics, see [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover).
 
 ## Cause 1: Active session
 
-You opened a session. The **entire stake** sits in the Inference Contract while `closedAt == 0`. It will return to your wallet **inside the same transaction** as `closeSession` — no separate withdraw needed for the natural-expiration path.
+You opened a session. The **entire stake** sits in the Inference Contract while `closedAt == 0`.
 
-- Resolution: wait for natural expiration (your consumer node submits `closeSession` ~1 minute after `endsAt`), or close early via `POST /blockchain/sessions/<id>/close`. See [Session states](/ai/session-states-open-close-recover).
+- Resolution: wait for natural expiration (your consumer node submits `closeSession` ~1 minute after `endsAt`), or close early via `POST /blockchain/sessions/<id>/close`. After close, unused stake returns immediately; the used stipend may day-lock (Cause 2). See [Session states](/ai/session-states-open-close-recover).
 
-## Cause 2: Early-close timelock (`userStakesOnHold`)
+## Cause 2: Used-stipend day-lock (`userStakesOnHold`)
 
-You closed a session **before** its scheduled `endsAt`. The contract pushed a slice to `userStakesOnHold[you]` with `releaseAt = startOfTheDay(closedAt) + 1 day` (≈ "after the end of the next full UTC day"). The rest of your stake was already `safeTransfer`'d to your wallet inside the close transaction.
+You closed a session (early **or** same-day natural/late close). The contract pushed the **used stipend** to `userStakesOnHold[you]` with `releaseAt = startOfTheDay(min(closedAt, endsAt)) + 1 day` (≈ "after the end of the UTC day the session ended on"). Unused stake was already `safeTransfer`'d to your wallet inside the close transaction.
 
-- Resolution: after `releaseAt`, call `withdrawUserStakes(yourAddress, iterations)` on the Diamond contract. **No HTTP route on the proxy-router** — use `cast send` or MetaMask "Interact with contract" directly. See [Where is my MOR? → Bucket 2](/ai/where-is-my-mor#bucket-2-on-hold-queue-early-close-timelock).
+- Resolution: after `releaseAt`, call `withdrawUserStakes(yourAddress, iterations)` on the Diamond contract. **No HTTP route on the proxy-router** — use `cast send` or MetaMask "Interact with contract" directly. See [Where is my MOR? → Bucket 2](/ai/where-is-my-mor#bucket-2-on-hold-queue-used-stipend-day-lock).
 
 ## Cause 3: Stuck close — funding account or gas
 
@@ -56,9 +56,9 @@ Each registered model carries a `0.1` MOR refundable stake.
 ```mermaid
 flowchart TD
   Start[MOR appears 'locked'] --> Q1{Active session?}
-  Q1 -->|Yes| A1[Wait for endsAt or close manually — full refund inside close txn]
-  Q1 -->|No| Q2{Closed early in last 24-48h?}
-  Q2 -->|Yes| A2[Some MOR likely in userStakesOnHold; call withdrawUserStakes after releaseAt]
+  Q1 -->|Yes| A1[Wait for endsAt or close manually — unused returns on close; used may day-lock]
+  Q1 -->|No| Q2{Closed in last ~24-48h?}
+  Q2 -->|Yes| A2[Used stipend likely in userStakesOnHold; call withdrawUserStakes after releaseAt]
   Q2 -->|No| Q3{Session past endsAt but still active?}
   Q3 -->|Yes| A3[Stuck close — funding account or your node's gas]
   Q3 -->|No| Q4{Active provider/model stake?}

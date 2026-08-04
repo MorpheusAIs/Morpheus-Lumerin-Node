@@ -3,8 +3,7 @@ title: "macOS install (from source, 4-terminal walk-through)"
 description: "Build llama.cpp, the proxy-router, MorpheusUI, and the CLI from source on macOS. For developers and contributors."
 audience: ["consumer", "developer"]
 product: ["proxy-router", "ui-desktop", "cli"]
-last_verified: "v7.0.0"
-source: "docs/mac-boot-strap.md"
+last_verified: "v7.6.0"
 ---
 
 A simple guide to get the local `llama.cpp` model, the Lumerin proxy-router, and the MorpheusUI from source running on a Mac.
@@ -45,7 +44,7 @@ You will need a port for the local model server (`8080` in this guide). This set
     model_host=127.0.0.1
     model_port=8080
     ```
-    Then pick a model (full set in [`docs/mac-boot-strap.md`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/docs/mac-boot-strap.md)):
+    Then pick a model, for example the tinyllama demo GGUF:
     ```bash
     model_url=https://huggingface.co/TheBloke
     model_collection=TinyLlama-1.1B-Chat-v1.0-GGUF
@@ -106,8 +105,10 @@ You'll need:
 
 ## Step C — MorpheusUI (terminal 3)
 
+The Electron app lives in `ui-desktop/` (product name **MorpheusUI**):
+
 ```bash
-cd <your_path>/Morpheus-Lumerin-Node/MorpheusUI
+cd <your_path>/Morpheus-Lumerin-Node/ui-desktop
 cp .env.example .env
 vi .env  # confirm PROXY_WEB_URL points at the proxy-router API port
 yarn install
@@ -130,11 +131,13 @@ make build
 ./mor-cli healthcheck
 ```
 
+Release builds of the CLI are named `*-morpheus-cli-<version>` (see [Releases](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/releases)); a local `make build` still produces `./mor-cli`.
+
 ## Cleaning and troubleshooting
 
 - Save your wallet mnemonic before any cleanup.
-- `rm -rf ./node_modules` from inside `MorpheusUI` if dependencies get stuck.
-- `rm -rf ~/Library/Application\ Support/MorpheusUI` to start with a fresh wallet store.
+- `rm -rf ./node_modules` from inside `ui-desktop` if dependencies get stuck.
+- Packaged-app data lives under Electron's `userData` directory — typically `~/Library/Application Support/MorpheusUI` for the `.app`, or `~/Library/Application Support/morpheus-app` when the package name is used (including `yarn dev`). Delete whichever exists to reset the wallet store and downloaded services.
 - Dangling processes: `ps -ax | grep electron` / `ps -ax | grep proxy-router` then `kill -9 <pid>`.
 - Locked log files in `./data/`: `lsof | grep /proxy-router/data/` and kill the holding process.
 
