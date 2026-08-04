@@ -13,7 +13,8 @@ import (
 )
 
 const (
-	DefaultSevRegistryURL = "https://raw.githubusercontent.com/scrtlabs/secretvm-verify/main/artifacts_registry/sev.json"
+	// See DefaultRegistryURL — registries ship inside secretvm-verify on npm/PyPI.
+	DefaultSevRegistryURL = "https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/sev.json"
 )
 
 type SevArtifactRegistry struct {

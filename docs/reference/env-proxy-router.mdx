@@ -3,7 +3,7 @@ title: "Env: proxy-router"
 description: "Every environment variable consumed by the proxy-router, with mainnet/testnet defaults and explicit precedence rules where two variables overlap."
 audience: ["provider-full", "provider-resale", "prosumer", "developer"]
 product: ["proxy-router"]
-last_verified: "v7.0.0"
+last_verified: "v7.9.0"
 source: "docs/proxy-router.all.env"
 ---
 
@@ -209,7 +209,8 @@ These are only consulted when at least one model in the marketplace is `tee`-tag
 |----------|---------|-------|
 | `TEE_PORTAL_URL` | `https://secretai.scrtlabs.com/api` | SecretAI Portal used to verify raw TDX CPU quotes |
 | `TEE_IMAGE_REPO` | `ghcr.io/morpheusais/morpheus-lumerin-node-tee` | GHCR repo where the consumer-side P-Node attestation fetches the signed golden manifest via cosign |
-| `ARTIFACT_REGISTRY_URL` | `https://raw.githubusercontent.com/scrtlabs/secretvm-verify/main/artifacts_registry/tdx.csv` | SecretVM TDX artifact registry CSV (MRTD + RTMR0-2 lookup) |
+| `ARTIFACT_REGISTRY_URL` | `https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/tdx.csv` | SecretVM TDX artifact registry CSV (MRTD + RTMR0-2 lookup). Served from the published [secretvm-verify](https://www.npmjs.com/package/secretvm-verify) package after the GitHub repo was removed. |
+| `SEV_ARTIFACT_REGISTRY_URL` | `https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/sev.json` | SecretVM SEV-SNP artifact registry JSON |
 | `ARTIFACT_REGISTRY_REFRESH_INTERVAL` | `1h` | How often the proxy-router re-downloads the artifact registry |
 
 See [TEE overview](/concepts/tee-overview) and [TEE reference](/providers/full/tee-reference).

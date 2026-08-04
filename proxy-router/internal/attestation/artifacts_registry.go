@@ -14,7 +14,10 @@ import (
 )
 
 const (
-	DefaultRegistryURL             = "https://raw.githubusercontent.com/scrtlabs/secretvm-verify/main/artifacts_registry/tdx.csv"
+	// Bundled in the published secretvm-verify npm/PyPI packages after the
+	// scrtlabs/secretvm-verify GitHub repo was removed. Pin the npm version so
+	// registry contents stay reproducible; bump with SecretVM release pins.
+	DefaultRegistryURL             = "https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/tdx.csv"
 	DefaultRegistryRefreshInterval = 1 * time.Hour
 )
 

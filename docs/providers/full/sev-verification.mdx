@@ -3,7 +3,7 @@ title: "AMD SEV-SNP verification"
 description: "How Phase 2 backend attestation works on AMD SEV-SNP: GCTX launch digest replay, family_id/image_id parsing, the SEV artifact registry, and differences from Intel TDX."
 audience: ["provider-full", "developer"]
 product: ["proxy-router"]
-last_verified: "v7.7.0"
+last_verified: "v7.9.0"
 source: "proxy-router/docs/sev-verification.md"
 ---
 
@@ -170,7 +170,7 @@ This is how the docker-compose content gets measured into the SEV launch digest 
 
 ## SEV artifact registry
 
-The SEV registry is a JSON array at [sev.json](https://github.com/scrtlabs/secretvm-verify/blob/main/artifacts_registry/sev.json). Each entry contains all the data needed to recompute the GCTX launch digest:
+The SEV registry is a JSON array shipped in [secretvm-verify](https://www.npmjs.com/package/secretvm-verify) ([sev.json via jsDelivr](https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/sev.json); also on [PyPI](https://pypi.org/project/secretvm-verify/)). Each entry contains all the data needed to recompute the GCTX launch digest:
 
 | Field | Description |
 |-------|-------------|
@@ -202,7 +202,7 @@ The `family_id` field encodes the VM template name, which maps to a vCPU count:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SEV_ARTIFACT_REGISTRY_URL` | [sev.json on GitHub](https://raw.githubusercontent.com/scrtlabs/secretvm-verify/main/artifacts_registry/sev.json) | URL for the SEV-SNP artifact registry JSON |
+| `SEV_ARTIFACT_REGISTRY_URL` | [sev.json via npm](https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/sev.json) | URL for the SEV-SNP artifact registry JSON ([secretvm-verify](https://www.npmjs.com/package/secretvm-verify)) |
 | `ARTIFACT_REGISTRY_REFRESH_INTERVAL` | `1h` | Shared refresh interval for both TDX and SEV registries |
 
 ## Code structure

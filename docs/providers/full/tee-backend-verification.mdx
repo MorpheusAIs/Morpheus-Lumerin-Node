@@ -3,7 +3,7 @@ title: "TEE backend verification (Phase 2)"
 description: "How the provider's P-Node cryptographically verifies its backend LLM: full attestation flow, TLS binding, RTMR3 workload replay, GPU/NRAS verification, per-prompt fast verify, and known gaps."
 audience: ["provider-full", "developer"]
 product: ["proxy-router"]
-last_verified: "v7.7.0"
+last_verified: "v7.9.0"
 source: "proxy-router/docs/tee-backend-verification.md"
 ---
 
@@ -248,8 +248,8 @@ Example: a model registered on-chain with the `tee` tag and `apiUrl` set to `htt
 |----------|----------|---------|-------------|
 | `TEE_PORTAL_URL` | Yes (for `tee`-tagged models) | — | SecretAI Portal API URL for CPU quote verification |
 | `TEE_IMAGE_REPO` | No | — | GHCR image repo for cosign attestation manifest verification (e.g. `ghcr.io/morpheusais/morpheus-lumerin-node-tee`). Used by consumer-side P-Node attestation to fetch the signed golden RTMR3 values for the provider image |
-| `ARTIFACT_REGISTRY_URL` | No | [tdx.csv](https://raw.githubusercontent.com/scrtlabs/secretvm-verify/main/artifacts_registry/tdx.csv) | URL to the TDX artifact registry CSV file. The default points to the official SecretVM artifact registry maintained by SCRT Labs |
-| `SEV_ARTIFACT_REGISTRY_URL` | No | [sev.json](https://raw.githubusercontent.com/scrtlabs/secretvm-verify/main/artifacts_registry/sev.json) | URL to the AMD SEV-SNP artifact registry JSON file |
+| `ARTIFACT_REGISTRY_URL` | No | [tdx.csv via npm](https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/tdx.csv) | URL to the TDX artifact registry CSV ([secretvm-verify on npm](https://www.npmjs.com/package/secretvm-verify) / [PyPI](https://pypi.org/project/secretvm-verify/)) |
+| `SEV_ARTIFACT_REGISTRY_URL` | No | [sev.json via npm](https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/sev.json) | URL to the AMD SEV-SNP artifact registry JSON |
 | `ARTIFACT_REGISTRY_REFRESH_INTERVAL` | No | `1h` | How often to re-download the artifact registries (shared by TDX and SEV) |
 
 ## Health endpoint

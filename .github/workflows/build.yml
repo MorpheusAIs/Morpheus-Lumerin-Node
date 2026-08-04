@@ -589,60 +589,103 @@ jobs:
           echo "rootfs_tdx_sha256=$SECRETVM_ROOTFS_TDX_SHA256" >> $GITHUB_OUTPUT
           echo "rootfs_sev_url=${SECRETVM_ROOTFS_SEV_URL:-}" >> $GITHUB_OUTPUT
           echo "rootfs_sev_sha256=${SECRETVM_ROOTFS_SEV_SHA256:-}" >> $GITHUB_OUTPUT
-          echo "sev_registry_url=${SECRETVM_SEV_REGISTRY_URL:-https://raw.githubusercontent.com/scrtlabs/secretvm-verify/main/artifacts_registry/sev.json}" >> $GITHUB_OUTPUT
+          echo "tdx_registry_url=${SECRETVM_TDX_REGISTRY_URL:-https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/tdx.csv}" >> $GITHUB_OUTPUT
+          echo "sev_registry_url=${SECRETVM_SEV_REGISTRY_URL:-https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/sev.json}" >> $GITHUB_OUTPUT
           echo "sev_registry_vm_type=${SECRETVM_SEV_REGISTRY_VM_TYPE:-prod}" >> $GITHUB_OUTPUT
+          echo "verify_npm_version=${SECRETVM_VERIFY_NPM_VERSION:-0.13.0}" >> $GITHUB_OUTPUT
 
           # legacy aliases retained so older steps continue to compile
           echo "rootfs_url=$SECRETVM_ROOTFS_TDX_URL" >> $GITHUB_OUTPUT
           echo "rootfs_sha256=$SECRETVM_ROOTFS_TDX_SHA256" >> $GITHUB_OUTPUT
 
-      - name: Cache SecretVM rootfs
+      - name: Cache SecretVM artifacts
         id: cache-rootfs
         uses: actions/cache@v5
         with:
           path: /tmp/secretvm-artifacts
-          key: secretvm-${{ steps.secretvm-config.outputs.release }}-${{ steps.secretvm-config.outputs.rootfs_variant }}-tdx-sev
+          key: secretvm-${{ steps.secretvm-config.outputs.release }}-${{ steps.secretvm-config.outputs.rootfs_variant }}-reg-${{ steps.secretvm-config.outputs.verify_npm_version }}
 
-      - name: Download SecretVM rootfs (TDX + SEV)
-        if: steps.cache-rootfs.outputs.cache-hit != 'true'
+      - name: Fetch SecretVM registries + optional rootfs
+        id: secretvm-artifacts
         run: |
           mkdir -p /tmp/secretvm-artifacts
+          set -euo pipefail
 
-          echo "⬇️  Downloading SecretVM TDX rootfs (${{ steps.secretvm-config.outputs.release }})..."
-          TDX_FILE="/tmp/secretvm-artifacts/${{ steps.secretvm-config.outputs.rootfs_variant }}-tdx.iso"
-          curl -L --retry 3 --retry-delay 5 -o "$TDX_FILE" \
-            "${{ steps.secretvm-config.outputs.rootfs_tdx_url }}"
+          TDX_REG_URL="${{ steps.secretvm-config.outputs.tdx_registry_url }}"
+          SEV_REG_URL="${{ steps.secretvm-config.outputs.sev_registry_url }}"
+          TDX_REG_FILE="/tmp/secretvm-artifacts/tdx.csv"
+          SEV_REG_FILE="/tmp/secretvm-artifacts/sev.json"
 
-          TDX_ACTUAL_SHA=$(sha256sum "$TDX_FILE" | cut -d' ' -f1)
+          echo "⬇️  Fetching TDX registry from $TDX_REG_URL..."
+          curl -fsSL --retry 3 --retry-delay 5 -o "$TDX_REG_FILE" "$TDX_REG_URL"
+          echo "⬇️  Fetching SEV registry from $SEV_REG_URL..."
+          curl -fsSL --retry 3 --retry-delay 5 -o "$SEV_REG_FILE" "$SEV_REG_URL"
+
           TDX_EXPECTED_SHA="${{ steps.secretvm-config.outputs.rootfs_tdx_sha256 }}"
-          if [ -n "$TDX_EXPECTED_SHA" ]; then
-            echo "$TDX_EXPECTED_SHA  $TDX_FILE" | sha256sum -c -
-            echo "✅ SecretVM TDX rootfs downloaded and verified" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "⚠️  No expected SHA256 configured — TDX rootfs hash: \`$TDX_ACTUAL_SHA\`" >> $GITHUB_STEP_SUMMARY
-            echo "   PIN THIS in .github/tee/secretvm.env as SECRETVM_ROOTFS_TDX_SHA256" >> $GITHUB_STEP_SUMMARY
-          fi
-          echo "   TDX rootfs sha256: \`$TDX_ACTUAL_SHA\`" >> $GITHUB_STEP_SUMMARY
+          SEV_EXPECTED_SHA="${{ steps.secretvm-config.outputs.rootfs_sev_sha256 }}"
+          RELEASE="${{ steps.secretvm-config.outputs.release }}"
+          export TDX_EXPECTED_SHA SEV_EXPECTED_SHA RELEASE
 
-          if [ -n "${{ steps.secretvm-config.outputs.rootfs_sev_url }}" ]; then
-            echo "⬇️  Downloading SecretVM SEV rootfs (${{ steps.secretvm-config.outputs.release }})..."
-            SEV_FILE="/tmp/secretvm-artifacts/${{ steps.secretvm-config.outputs.rootfs_variant }}-sev.iso"
-            curl -L --retry 3 --retry-delay 5 -o "$SEV_FILE" \
-              "${{ steps.secretvm-config.outputs.rootfs_sev_url }}"
+          # Cross-check pins against secretvm-verify registries (npm/PyPI data/).
+          python3 - <<'PY'
+          import csv, json, os, sys
+          tdx_pin = os.environ["TDX_EXPECTED_SHA"].lower().removeprefix("0x")
+          sev_pin = os.environ["SEV_EXPECTED_SHA"].lower().removeprefix("0x")
+          release = os.environ["RELEASE"]
+          with open("/tmp/secretvm-artifacts/tdx.csv", newline="") as f:
+              rows = list(csv.DictReader(f))
+          tdx_ok = any(
+              r.get("artifacts_ver") == release
+              and r.get("vm_type") == "prod"
+              and (r.get("rootfs_data") or "").lower().removeprefix("0x") == tdx_pin
+              for r in rows
+          )
+          if not tdx_ok:
+              print(f"ERROR: TDX pin {tdx_pin} not found in tdx.csv for prod/{release}", file=sys.stderr)
+              sys.exit(1)
+          sev = json.load(open("/tmp/secretvm-artifacts/sev.json"))
+          sev_ok = any(
+              e.get("artifacts_ver") == release
+              and e.get("vm_type") == "prod"
+              and (e.get("rootfs_hash") or "").lower().removeprefix("0x") == sev_pin
+              for e in sev
+          )
+          if not sev_ok:
+              print(f"ERROR: SEV pin {sev_pin} not found in sev.json for prod/{release}", file=sys.stderr)
+              sys.exit(1)
+          print(f"✅ Pins match secretvm-verify registries for prod/{release}")
+          PY
 
-            SEV_ACTUAL_SHA=$(sha256sum "$SEV_FILE" | cut -d' ' -f1)
-            SEV_EXPECTED_SHA="${{ steps.secretvm-config.outputs.rootfs_sev_sha256 }}"
-            if [ -n "$SEV_EXPECTED_SHA" ]; then
-              echo "$SEV_EXPECTED_SHA  $SEV_FILE" | sha256sum -c -
-              echo "✅ SecretVM SEV rootfs downloaded and verified" >> $GITHUB_STEP_SUMMARY
+          # Optional ISO download (legacy GitHub releases). Prefer pin when 404.
+          TDX_FILE="/tmp/secretvm-artifacts/${{ steps.secretvm-config.outputs.rootfs_variant }}-tdx.iso"
+          ROOTFS_MODE="pin"
+          if curl -fsSL --retry 2 --retry-delay 3 -o "$TDX_FILE" \
+              "${{ steps.secretvm-config.outputs.rootfs_tdx_url }}"; then
+            ACTUAL=$(sha256sum "$TDX_FILE" | cut -d' ' -f1)
+            if [ "$ACTUAL" = "$TDX_EXPECTED_SHA" ]; then
+              ROOTFS_MODE="iso"
+              echo "✅ TDX rootfs ISO downloaded and matches pin" >> $GITHUB_STEP_SUMMARY
             else
-              echo "⚠️  No expected SHA256 configured — SEV rootfs hash: \`$SEV_ACTUAL_SHA\`" >> $GITHUB_STEP_SUMMARY
-              echo "   PIN THIS in .github/tee/secretvm.env as SECRETVM_ROOTFS_SEV_SHA256" >> $GITHUB_STEP_SUMMARY
+              echo "⚠️  TDX ISO sha mismatch (got $ACTUAL); using pin for RTMR3" >> $GITHUB_STEP_SUMMARY
+              rm -f "$TDX_FILE"
             fi
-            echo "   SEV rootfs sha256: \`$SEV_ACTUAL_SHA\`" >> $GITHUB_STEP_SUMMARY
           else
-            echo "ℹ️  SEV rootfs URL not configured — skipping SEV download" >> $GITHUB_STEP_SUMMARY
+            echo "ℹ️  TDX rootfs ISO unavailable; using pinned SHA for RTMR3" >> $GITHUB_STEP_SUMMARY
+            rm -f "$TDX_FILE"
           fi
+
+          SEV_REG_SHA=$(sha256sum "$SEV_REG_FILE" | cut -d' ' -f1)
+          TDX_REG_SHA=$(sha256sum "$TDX_REG_FILE" | cut -d' ' -f1)
+          echo "rootfs_mode=$ROOTFS_MODE" >> $GITHUB_OUTPUT
+          echo "sev_registry_path=$SEV_REG_FILE" >> $GITHUB_OUTPUT
+          echo "tdx_registry_path=$TDX_REG_FILE" >> $GITHUB_OUTPUT
+          echo "sev_registry_sha256=$SEV_REG_SHA" >> $GITHUB_OUTPUT
+          echo "tdx_registry_sha256=$TDX_REG_SHA" >> $GITHUB_OUTPUT
+          echo "📋 secretvm-verify@${{ steps.secretvm-config.outputs.verify_npm_version }} registries fetched" >> $GITHUB_STEP_SUMMARY
+          echo "   TDX: \`$TDX_REG_URL\`" >> $GITHUB_STEP_SUMMARY
+          echo "   SEV: \`$SEV_REG_URL\`" >> $GITHUB_STEP_SUMMARY
+          echo "   TDX rootfs sha256 (pin): \`$TDX_EXPECTED_SHA\`" >> $GITHUB_STEP_SUMMARY
+          echo "   SEV rootfs sha256 (pin): \`$SEV_EXPECTED_SHA\`" >> $GITHUB_STEP_SUMMARY
 
       - name: Generate deployed compose with immutable digest
         id: generate-compose
@@ -666,11 +709,19 @@ jobs:
       - name: Compute RTMR3 (Intel TDX)
         id: compute-rtmr3
         run: |
+          TDX_PIN="${{ steps.secretvm-config.outputs.rootfs_tdx_sha256 }}"
           ROOTFS_FILE="/tmp/secretvm-artifacts/${{ steps.secretvm-config.outputs.rootfs_variant }}-tdx.iso"
-          RTMR3=$(python3 proxy-router/scripts/compute-rtmr3.py \
-            /tmp/docker-compose.tee.deployed.yml \
-            "$ROOTFS_FILE" \
-            --json)
+          if [ -f "$ROOTFS_FILE" ]; then
+            RTMR3=$(python3 proxy-router/scripts/compute-rtmr3.py \
+              /tmp/docker-compose.tee.deployed.yml \
+              "$ROOTFS_FILE" \
+              --json)
+          else
+            RTMR3=$(python3 proxy-router/scripts/compute-rtmr3.py \
+              /tmp/docker-compose.tee.deployed.yml \
+              --rootfs-sha256="$TDX_PIN" \
+              --json)
+          fi
 
           RTMR3_HEX=$(echo "$RTMR3" | python3 -c "import sys,json; print(json.load(sys.stdin)['rtmr3'])")
           COMPOSE_HASH=$(echo "$RTMR3" | python3 -c "import sys,json; print(json.load(sys.stdin)['compose_sha256'])")
@@ -681,26 +732,12 @@ jobs:
           echo "   compose sha256: \`$COMPOSE_HASH\`" >> $GITHUB_STEP_SUMMARY
           echo "   rootfs sha256:  \`$ROOTFS_HASH\`" >> $GITHUB_STEP_SUMMARY
 
-      - name: Fetch SecretVM SEV artifact registry
-        id: sev-registry
-        if: steps.secretvm-config.outputs.rootfs_sev_url != ''
-        run: |
-          REGISTRY_URL="${{ steps.secretvm-config.outputs.sev_registry_url }}"
-          REGISTRY_FILE="/tmp/secretvm-artifacts/sev.json"
-          echo "⬇️  Fetching SEV artifact registry from $REGISTRY_URL..."
-          curl -L --retry 3 --retry-delay 5 -o "$REGISTRY_FILE" "$REGISTRY_URL"
-          REGISTRY_SHA=$(sha256sum "$REGISTRY_FILE" | cut -d' ' -f1)
-          echo "registry_path=$REGISTRY_FILE" >> $GITHUB_OUTPUT
-          echo "registry_sha256=$REGISTRY_SHA" >> $GITHUB_OUTPUT
-          echo "📋 SEV registry sha256: \`$REGISTRY_SHA\`" >> $GITHUB_STEP_SUMMARY
-          echo "   URL: \`$REGISTRY_URL\`" >> $GITHUB_STEP_SUMMARY
-
       - name: Compute SEV-SNP measurement (per template)
         id: compute-sev
-        if: steps.secretvm-config.outputs.rootfs_sev_url != ''
+        if: steps.secretvm-config.outputs.sev_registry_url != ''
         run: |
           SEV_OUT=$(python3 proxy-router/scripts/compute-sev-measurement.py \
-            --registry "${{ steps.sev-registry.outputs.registry_path }}" \
+            --registry "${{ steps.secretvm-artifacts.outputs.sev_registry_path }}" \
             --vm-type "${{ steps.secretvm-config.outputs.sev_registry_vm_type }}" \
             --artifacts-ver "${{ steps.secretvm-config.outputs.release }}" \
             --compose /tmp/docker-compose.tee.deployed.yml \
@@ -827,7 +864,7 @@ jobs:
               --arg ovmf "${{ steps.compute-sev.outputs.sev_ovmf_hash }}" \
               --arg cmdline "${{ steps.compute-sev.outputs.sev_kernel_cmdline }}" \
               --arg registry_url "${{ steps.secretvm-config.outputs.sev_registry_url }}" \
-              --arg registry_sha "${{ steps.sev-registry.outputs.registry_sha256 }}" \
+              --arg registry_sha "${{ steps.secretvm-artifacts.outputs.sev_registry_sha256 }}" \
               --arg small   "${{ steps.compute-sev.outputs.sev_measurement_small }}" \
               --arg medium  "${{ steps.compute-sev.outputs.sev_measurement_medium }}" \
               --arg large   "${{ steps.compute-sev.outputs.sev_measurement_large }}" \

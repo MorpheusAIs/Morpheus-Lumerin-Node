@@ -3,7 +3,7 @@ title: "TEE reference"
 description: "Build-time baked-in config, RTMR3 attestation, cosign image/manifest verification, and consumer-side verification steps for the -tee proxy-router image."
 audience: ["provider-full", "developer", "consumer"]
 product: ["proxy-router"]
-last_verified: "v7.0.0"
+last_verified: "v7.9.0"
 source: "docs/02.3-proxy-router-tee.md"
 ---
 
@@ -300,43 +300,40 @@ See the conceptual breakdown in [TEE overview](/concepts/tee-overview), which mi
 
 ## Upgrading SecretVM artifacts
 
-When SCRT Labs publishes a new SecretVM release (e.g. `v0.0.25 → v0.0.26`), the rootfs changes and all RTMR3 values must be recomputed. The CI/CD pipeline is fully variabilized so updating requires only editing `.github/tee/secretvm.env`.
+When SCRT Labs publishes a new SecretVM release (e.g. `v0.0.31 → v0.0.32`), the rootfs changes and all RTMR3 / SEV measurements must be recomputed. The CI/CD pipeline is fully variabilized so updating requires only editing `.github/tee/secretvm.env`.
 
 ### When to upgrade
 
-SCRT Labs publishes at [github.com/scrtlabs/secret-vm-build/releases](https://github.com/scrtlabs/secret-vm-build/releases). No push notifications — check periodically:
+Source of truth for the Production artifacts version is the **SecretVM portal**. Cross-check digests against the published [secretvm-verify](https://www.npmjs.com/package/secretvm-verify) package (`data/tdx.csv` / `data/sev.json` — also on [PyPI](https://pypi.org/project/secretvm-verify/)):
 
 ```bash
-curl -s https://api.github.com/repos/scrtlabs/secret-vm-build/releases \
-  | jq '[.[] | {tag: .tag_name, prerelease: .prerelease, date: .published_at}] | .[0:5]'
+# TDX rootfs_data for prod / <release>
+curl -fsSL https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/tdx.csv | head
+# SEV rootfs_hash for prod / <release>
+curl -fsSL https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/sev.json | jq '.[0]'
 ```
 
-<Note>
-SCRT Labs sometimes marks new releases as **pre-release** on GitHub while already deploying them to the SecretVM portal. The `/releases/latest` API only returns non-prerelease versions, so always check the full list.
-</Note>
+Bump `SECRETVM_VERIFY_NPM_VERSION` (and the registry URLs) when SCRT publishes a newer package that includes the release you are pinning.
 
 ### How to upgrade
 
 <Steps>
   <Step title="Edit secretvm.env">
     ```bash
-    SECRETVM_RELEASE=v0.0.26
-    SECRETVM_ROOTFS_TDX_URL=https://github.com/scrtlabs/secret-vm-build/releases/download/v0.0.26/rootfs-prod-v0.0.26-tdx.iso
-    SECRETVM_ROOTFS_TDX_SHA256=
+    SECRETVM_RELEASE=v0.0.31
+    SECRETVM_VERIFY_NPM_VERSION=0.13.0
+    SECRETVM_TDX_REGISTRY_URL=https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/tdx.csv
+    SECRETVM_SEV_REGISTRY_URL=https://cdn.jsdelivr.net/npm/secretvm-verify@0.13.0/data/sev.json
+    SECRETVM_ROOTFS_TDX_SHA256=<rootfs_data from tdx.csv for prod/v0.0.31>
+    SECRETVM_ROOTFS_SEV_SHA256=<rootfs_hash from sev.json for prod/v0.0.31>
     ```
-    `SECRETVM_ROOTFS_VARIANT` stays `rootfs-prod-tdx` unless naming changes.
+    `SECRETVM_ROOTFS_VARIANT` stays `rootfs-prod` unless naming changes. ISO download URLs are optional; CI uses the pinned SHA when the ISO host is unavailable.
   </Step>
   <Step title="Push and run CI/CD">
-    The pipeline downloads the new rootfs, computes its SHA-256, computes the new RTMR3, and embeds it in the signed manifest.
-  </Step>
-  <Step title="Pin the rootfs SHA-256">
-    Copy the SHA-256 from the GitHub Actions step summary back into `secretvm.env`:
-    ```bash
-    SECRETVM_ROOTFS_TDX_SHA256=<sha256-from-step-summary>
-    ```
+    The pipeline fetches the registries from the npm CDN, verifies the pins match, computes RTMR3 (from the pin or ISO) and SEV measurements, and embeds them in the signed manifest.
   </Step>
   <Step title="Rebuild providers">
-    Providers running older SecretVM versions will have mismatched RTMR3. They should redeploy on the current SecretVM release.
+    Providers running older SecretVM versions will have mismatched measurements. They should redeploy on the current SecretVM release.
   </Step>
 </Steps>
 
@@ -354,7 +351,8 @@ SCRT Labs sometimes marks new releases as **pre-release** on GitHub while alread
 | RTMR3 computation script | [`proxy-router/scripts/compute-rtmr3.py`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/scripts/compute-rtmr3.py) |
 | SecretVM artifact config | [`.github/tee/secretvm.env`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/.github/tee/secretvm.env) |
 | Sigstore cosign | https://github.com/sigstore/cosign |
-| SCRT Labs reproduce-mr | https://github.com/scrtlabs/reproduce-mr |
+| secretvm-verify (npm) | https://www.npmjs.com/package/secretvm-verify |
+| secretvm-verify (PyPI) | https://pypi.org/project/secretvm-verify/ |
 | SecretVM documentation | https://docs.scrt.network/secret-network-documentation/secretvm-confidential-virtual-machines |
 | SecretVM CLI docs | https://docs.scrt.network/secret-network-documentation/secretvm-confidential-virtual-machines/secretvm-cli |
 | SecretVM attestation portal | https://secretai.scrtlabs.com/attestation |
