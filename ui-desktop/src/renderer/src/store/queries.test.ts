@@ -1,0 +1,69 @@
+import { describe, expect, it } from 'vitest';
+import { computeStakedFunds, queryKeys } from './queries';
+
+const WEI = 10 ** 18;
+const secondsFromNow = (s: number) => Math.floor(Date.now() / 1000) + s;
+
+describe('computeStakedFunds', () => {
+  it('returns 0 when sessions have not loaded', () => {
+    expect(computeStakedFunds(undefined)).toBe('0');
+  });
+
+  // Note the asymmetry: `undefined` means "not loaded yet" and yields the bare
+  // '0', whereas a loaded-but-empty list yields the formatted '0.00'.
+  it('returns a formatted zero for an empty list', () => {
+    expect(computeStakedFunds([])).toBe('0.00');
+  });
+
+  it('sums stake across open sessions', () => {
+    expect(
+      computeStakedFunds([
+        { Stake: 1 * WEI, EndsAt: secondsFromNow(3600) },
+        { Stake: 2.5 * WEI, EndsAt: secondsFromNow(7200) },
+      ]),
+    ).toBe('3.50');
+  });
+
+  it('excludes explicitly closed sessions', () => {
+    expect(
+      computeStakedFunds([
+        { Stake: 1 * WEI, EndsAt: secondsFromNow(3600) },
+        { Stake: 5 * WEI, EndsAt: secondsFromNow(3600), ClosedAt: 12345 },
+      ]),
+    ).toBe('1.00');
+  });
+
+  it('excludes sessions whose end time has passed', () => {
+    expect(
+      computeStakedFunds([
+        { Stake: 1 * WEI, EndsAt: secondsFromNow(3600) },
+        { Stake: 9 * WEI, EndsAt: secondsFromNow(-3600) },
+      ]),
+    ).toBe('1.00');
+  });
+
+  it('does not throw on malformed entries', () => {
+    expect(() => computeStakedFunds([null as any])).not.toThrow();
+  });
+});
+
+describe('queryKeys', () => {
+  // Chat and Wallet must resolve to the same cache entry for a given wallet,
+  // otherwise opening a session on one tab leaves the other showing stale data
+  // — the cause of the "staked but the app forgot" report.
+  it('is stable for the same address', () => {
+    expect(queryKeys.sessions('0xabc')).toEqual(queryKeys.sessions('0xabc'));
+    expect(queryKeys.balances('0xabc')).toEqual(queryKeys.balances('0xabc'));
+  });
+
+  it('separates different addresses', () => {
+    expect(queryKeys.sessions('0xabc')).not.toEqual(
+      queryKeys.sessions('0xdef'),
+    );
+  });
+
+  it('tolerates a missing address without collapsing to undefined', () => {
+    expect(queryKeys.sessions(undefined)).toEqual(['sessions', '']);
+    expect(queryKeys.balances(undefined)).toEqual(['balances', '']);
+  });
+});
