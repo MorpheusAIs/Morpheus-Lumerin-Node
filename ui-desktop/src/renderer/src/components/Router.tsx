@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { HashRouter, Routes, Route, Navigate } from 'react-router';
+import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router';
 import { useSelector } from 'react-redux';
 import { useQueryClient } from '@tanstack/react-query';
 import styled, { keyframes } from 'styled-components';
@@ -17,6 +17,7 @@ import { withClient } from '../store/hocs/clientContext';
 import selectors from '../store/selectors';
 import { queryKeys } from '../store/queries';
 import { getSessionsByUser } from '../store/utils/apiCallsHelper';
+import ErrorBoundary from './common/ErrorBoundary';
 
 const fadeIn = keyframes`
   from {
@@ -78,27 +79,37 @@ const SessionPrefetcher = withClient(({ client }: any) => {
   return null;
 });
 
-export const Layout = () => (
-  <Container data-testid="router-container">
-    <Sidebar />
-    <Main
-      data-scrollelement // Required by react-virtualized implementation in Dashboard/TxList
-    >
-      <Routes>
-        <Route path="/wallet" element={<Dashboard />} />
-        <Route path="/chat" element={<Chat />} />
-        <Route path="/agents" element={<Agents />} />
-        <Route path="/models" element={<Models />} />
-        <Route path="/providers" element={<Providers />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="*" element={<Navigate replace to="/wallet" />} />
-      </Routes>
-    </Main>
-    {/* <AutoPriceAdjuster /> */}
-    <SessionPrefetcher />
-    <OfflineWarning />
-  </Container>
-);
+export const Layout = () => {
+  // Keyed on pathname so a crash on one tab is cleared when the user navigates
+  // elsewhere, instead of persisting for the rest of the session. The boundary
+  // wraps only the route outlet — the sidebar stays usable, so a broken screen
+  // never traps the user.
+  const location = useLocation();
+
+  return (
+    <Container data-testid="router-container">
+      <Sidebar />
+      <Main
+        data-scrollelement // Required by react-virtualized implementation in Dashboard/TxList
+      >
+        <ErrorBoundary resetKey={location.pathname} label={location.pathname}>
+          <Routes>
+            <Route path="/wallet" element={<Dashboard />} />
+            <Route path="/chat" element={<Chat />} />
+            <Route path="/agents" element={<Agents />} />
+            <Route path="/models" element={<Models />} />
+            <Route path="/providers" element={<Providers />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="*" element={<Navigate replace to="/wallet" />} />
+          </Routes>
+        </ErrorBoundary>
+      </Main>
+      {/* <AutoPriceAdjuster /> */}
+      <SessionPrefetcher />
+      <OfflineWarning />
+    </Container>
+  );
+};
 
 export default function Router() {
   return (

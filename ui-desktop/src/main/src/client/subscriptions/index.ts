@@ -27,6 +27,10 @@ const listeners = {
   'get-all-models': handlers.getAllModels,
   'get-transactions': handlers.getTransactions,
   'get-balances': handlers.getBalances,
+  // Transfers. `send-mor` was implemented in handlers.ts but never registered
+  // here, so the channel didn't exist and the renderer had no way to reach it.
+  'send-mor': handlers.sendMor,
+  'send-eth': handlers.sendEth,
   'get-rates': handlers.getMorRate,
   'get-todays-budget': handlers.getTodaysBudget,
   'get-supply': handlers.getTokenSupply,

@@ -179,49 +179,47 @@ export const getBalances = async (): Promise<unknown[]> => {
   }
 }
 
-export const sendEth = async (payload: {
-  to: string
-  amount: string
-}): Promise<string | undefined> => {
-  try {
-    const path = `${config.chain.localProxyRouterUrl}/blockchain/send/eth`
-    const response = await fetch(path, {
-      method: 'POST',
-      body: JSON.stringify({
-        to: payload.to,
-        amount: payload.amount
-      }),
-      headers: await getAuthHeaders()
-    })
-    const data = await response.json()
-    return data.tx
-  } catch (e) {
-    console.log('Error', e)
-    return undefined
+/**
+ * Shared transfer helper for the two send endpoints.
+ *
+ * `amount` must be a base-10 **wei** string — the proxy-router decodes it into
+ * a big.Int (see lib.BigInt.UnmarshalJSON), so decimals or exponent notation
+ * are rejected server-side.
+ *
+ * Unlike most handlers in this file, transfers deliberately throw on failure.
+ * Silently returning `undefined` for a money movement is the worst possible
+ * outcome: the user can't tell "rejected" from "broadcast but not yet mined".
+ */
+const sendToken = async (
+  token: 'eth' | 'mor',
+  payload: { to: string; amount: string }
+): Promise<string> => {
+  const path = `${config.chain.localProxyRouterUrl}/blockchain/send/${token}`
+  const response = await fetch(path, {
+    method: 'POST',
+    body: JSON.stringify({
+      to: payload.to,
+      amount: payload.amount
+    }),
+    headers: await getAuthHeaders()
+  })
+
+  const data = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    throw new Error(data?.error || `Transfer failed (HTTP ${response.status})`)
   }
+  if (!data?.tx) {
+    throw new Error('Transfer did not return a transaction hash')
+  }
+  return data.tx
 }
 
-export const sendMor = async (payload: {
-  to: string
-  amount: string
-}): Promise<string | undefined> => {
-  try {
-    const path = `${config.chain.localProxyRouterUrl}/blockchain/send/mor`
-    const response = await fetch(path, {
-      method: 'POST',
-      body: JSON.stringify({
-        to: payload.to,
-        amount: payload.amount
-      }),
-      headers: await getAuthHeaders()
-    })
-    const data = await response.json()
-    return data.tx
-  } catch (e) {
-    console.log('Error', e)
-    return undefined
-  }
-}
+export const sendEth = async (payload: { to: string; amount: string }): Promise<string> =>
+  sendToken('eth', payload)
+
+export const sendMor = async (payload: { to: string; amount: string }): Promise<string> =>
+  sendToken('mor', payload)
 
 export const getTransactions = async (payload: {
   page: number

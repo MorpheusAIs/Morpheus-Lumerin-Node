@@ -67,6 +67,10 @@ import { ChatData, HistoryMessage } from './interfaces';
 import { formatValue } from '../../utils/coinValue';
 import { ApiGateway } from 'src/main/src/client/apiGateway';
 import { queryKeys } from '../../store/queries';
+import { pooledMapSettled } from '../../store/utils/concurrency';
+
+// Max simultaneous per-model bid requests. See store/utils/concurrency.ts.
+const BIDS_CONCURRENCY = 6;
 
 let abort = false;
 let cancelScroll = false;
@@ -177,14 +181,19 @@ const Chat = (props: ChatProps) => {
         (a: any, b: any) => ({ ...a, [b.Address.toLowerCase()]: b }),
         {},
       );
+      // Bounded fan-out: one bid request per model, but at most
+      // BIDS_CONCURRENCY in flight. The previous unbounded Promise.all fired
+      // hundreds of simultaneous IPC calls, which saturated the proxy-router
+      // and blocked the renderer while the Chat tab loaded.
       const merged = (
-        await Promise.all(
-          md.models.map(async (m: any) => {
+        await pooledMapSettled(
+          md.models,
+          async (m: any) => {
             const id = m.Id;
             if (m.isLocal) {
               return { id };
             }
-            const bids = (await props.getBidsByModelId(id))
+            const bids = ((await props.getBidsByModelId(id)) ?? [])
               .map((b: any) => ({
                 ...b,
                 ProviderData: providersMap[b.Provider.toLowerCase()],
@@ -197,7 +206,10 @@ const Chat = (props: ChatProps) => {
             }
 
             return { id, bids };
-          }),
+          },
+          // One failing model must not blank the whole marketplace list.
+          () => null,
+          BIDS_CONCURRENCY,
         )
       ).reduce((acc: any[], next: any) => {
         if (!next) {
@@ -444,17 +456,51 @@ const Chat = (props: ChatProps) => {
     return Math.round((5 * 60 * stakingInfo.supply) / stakingInfo.budget) + 1;
   };
 
+  // A session that was just opened on-chain does not always show up in the very
+  // next indexer read. Poll briefly instead of assuming the first response
+  // contains it — previously a miss meant `targetSessionData` was undefined and
+  // the next line threw, which aborted the handler and left the UI wedged
+  // (and the user re-staking into a second session they didn't need).
+  const findSessionWithRetry = async (sessionId, attempts = 5, delayMs = 1200) => {
+    for (let i = 0; i < attempts; i++) {
+      const allSessions = await refreshSessions();
+      const match = allSessions.find((x) => x.Id == sessionId);
+      if (match) {
+        return match;
+      }
+      if (i < attempts - 1) {
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    }
+    return undefined;
+  };
+
   const setSessionData = async (sessionId) => {
-    const allSessions = await refreshSessions();
-    const targetSessionData = allSessions.find((x) => x.Id == sessionId);
+    const targetSessionData = await findSessionWithRetry(sessionId);
+
+    if (!targetSessionData) {
+      // The stake did go through — we just can't see it yet. Say so explicitly
+      // rather than silently falling back to the "open a session" screen, which
+      // is what led people to stake twice.
+      props.toasts.toast(
+        'info',
+        'Session created, but not visible yet. It will appear in Sessions shortly — please do not stake again.',
+        { autoClose: 12000 },
+      );
+      return;
+    }
+
     setActiveSession({ ...targetSessionData, sessionId });
-    const targetModel = chainData.models.find(
+
+    const targetModel = chainData?.models?.find(
       (x) => x.Id == targetSessionData.ModelAgentId,
     );
-    const targetBid = targetModel.bids.find(
+    const targetBid = targetModel?.bids?.find(
       (x) => x.Id == targetSessionData.BidID,
     );
-    setSelectedBid(targetBid);
+    if (targetBid) {
+      setSelectedBid(targetBid);
+    }
   };
 
   const onOpenSession = async (isReopen: boolean, isDirectPay: boolean) => {
@@ -482,8 +528,33 @@ const Chat = (props: ChatProps) => {
       if (!openedSession) {
         return;
       }
+
+      // Invalidate the shared caches *before* touching local component state.
+      // These run against the app-level QueryClient, which outlives this
+      // component — so even if the user navigates to Wallet mid-stake and this
+      // component unmounts, the sessions and balances caches are already marked
+      // stale and the new session shows up on return. Previously the only
+      // record of the new session was local state that died with the unmount,
+      // and the 30s-stale cache kept serving the pre-stake session list.
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.sessions(props.address),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.balances(props.address),
+      });
+
       await setSessionData(openedSession);
       return openedSession;
+    } catch (e: any) {
+      // Never let a post-open failure escape as an unhandled rejection — that
+      // used to take the whole view down with it.
+      console.error('Failed to finalize opened session', e);
+      props.toasts.toast(
+        'error',
+        'Session opened, but the app could not load it. Check the Sessions list before staking again.',
+        { autoClose: 12000 },
+      );
+      return;
     } finally {
       setIsActionLoading(false);
     }
@@ -1198,13 +1269,32 @@ const Chat = (props: ChatProps) => {
     const isCreateSessionMode =
       isNewChat && !isLocal && !activeSession && !isLoading;
 
-    // for stake mode
-    const isEnoughFunds = Number(balances.mor) > Number(requiredStake.min);
+    // `meta` falls back to { budget: 0, supply: 0 } while the models query is
+    // loading or has failed. Dividing by a zero budget produced NaN, and every
+    // `x > NaN` comparison is false — which silently disabled *both* payment
+    // buttons with no explanation. Treat unknown pricing as "not ready yet" and
+    // say so, rather than rendering a dead screen.
+    const isPricingReady =
+      Number(meta.budget) > 0 &&
+      Number(meta.supply) > 0 &&
+      Number.isFinite(Number(requiredStake.min));
 
-    // for direct pay mode TODO: fixme
-    const requiredStakeForDirectPay = (5 * 3600 * meta.supply) / meta.budget;
+    // for stake mode
+    const isEnoughFunds =
+      isPricingReady && Number(balances.mor) > Number(requiredStake.min);
+
+    const requiredStakeForDirectPay = isPricingReady
+      ? (5 * 3600 * Number(meta.supply)) / Number(meta.budget)
+      : Number.POSITIVE_INFINITY;
     const isEnoughFundsForDirectPay =
-      Number(balances.mor) > Number(requiredStakeForDirectPay);
+      isPricingReady && Number(balances.mor) > requiredStakeForDirectPay;
+
+    // The user may already hold an open session for this model. Surfacing it
+    // here is what stops people staking a second time when the first session
+    // simply hadn't been re-selected yet.
+    const openSessionsForModel = (sessions || []).filter(
+      (s: any) => !isClosed(s) && s.ModelAgentId == selectedModel?.Id,
+    );
 
     return (
       <>
@@ -1212,6 +1302,23 @@ const Chat = (props: ChatProps) => {
           <ChatIntroContainer>
             <ChatIntroInner>
               <ChatIntroInnerTitle>Select payment method</ChatIntroInnerTitle>
+
+              {openSessionsForModel.length > 0 && (
+                <ChatIntroInnerText style={{ color: '#20dc8e' }}>
+                  You already have {openSessionsForModel.length} open session
+                  {openSessionsForModel.length > 1 ? 's' : ''} for this model.
+                  Open it from the Sessions list in the sidebar instead of
+                  staking again — staking again locks additional MOR.
+                </ChatIntroInnerText>
+              )}
+
+              {!isPricingReady && (
+                <ChatIntroInnerText style={{ color: '#e8a33d' }}>
+                  Pricing data hasn't loaded yet, so staking is temporarily
+                  unavailable. If this persists, check that the proxy-router is
+                  running in Settings.
+                </ChatIntroInnerText>
+              )}
               <ChatIntroInnerText>
                 Stake MOR to get a free compute. Session will last from 5 mins
                 up to 24 hours depending on the amount you stake (min:{' '}
