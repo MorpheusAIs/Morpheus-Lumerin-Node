@@ -1,0 +1,133 @@
+name: Tests
+
+# Fast correctness gate, deliberately kept separate from build.yml.
+#
+# build.yml is scoped to `github.repository == 'MorpheusAIs/Morpheus-Lumerin-Node'`
+# and only fires on main/test/dev/cicd branches, so on a fork it never runs at
+# all — and it does not execute a single test in ~3.6k lines. This workflow has
+# no repository guard and runs on every push and pull request, so contributors
+# and forks get feedback before anything is merged.
+
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'proxy-router/**'
+      - 'ui-desktop/**'
+      - 'cli/**'
+      - '.github/workflows/tests.yml'
+  pull_request:
+    paths:
+      - 'proxy-router/**'
+      - 'ui-desktop/**'
+      - 'cli/**'
+      - '.github/workflows/tests.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  go:
+    name: proxy-router (Go)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: proxy-router/go.mod
+          cache-dependency-path: proxy-router/go.sum
+
+      - name: Verify the module builds
+        working-directory: proxy-router
+        run: go build ./...
+
+      - name: go vet
+        working-directory: proxy-router
+        run: go vet ./...
+
+      - name: Check formatting
+        working-directory: proxy-router
+        run: |
+          unformatted=$(gofmt -l . | grep -v '/bindings/' || true)
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files are not gofmt-formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Run tests
+        working-directory: proxy-router
+        run: go test -race ./...
+
+  cli:
+    name: cli (Go)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+
+      - name: Verify the module builds
+        working-directory: cli
+        run: go build ./...
+
+      - name: Run tests
+        working-directory: cli
+        run: go test ./...
+
+  ui:
+    name: ui-desktop (TypeScript/React)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # yarn, to match the release jobs in build.yml — mixing package managers
+      # between the test and build pipelines is how you get "passes CI, fails on
+      # release".
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          cache-dependency-path: ui-desktop/yarn.lock
+
+      # Note: no --frozen-lockfile here, unlike the release jobs. Unit tests
+      # should keep running when someone adds a dependency without having
+      # regenerated the lockfile yet; the release build is where lockfile
+      # exactness is enforced. Electron's postinstall is skipped because the
+      # unit tests never launch Electron and the download is slow and flaky.
+      - name: Install dependencies
+        working-directory: ui-desktop
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+        run: yarn install --network-timeout 600000 --ignore-scripts
+
+      - name: Run unit tests
+        working-directory: ui-desktop
+        run: yarn test
+
+  # Guard against a regression to two competing lockfiles. yarn.lock is
+  # authoritative (build.yml installs with `yarn --frozen-lockfile`); the stale
+  # package-lock.json has been removed. With both present, CI and a developer
+  # running `npm install` can silently resolve different dependency trees.
+  lockfiles:
+    name: Lockfile hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail if ui-desktop has competing lockfiles
+        run: |
+          if [ -f ui-desktop/package-lock.json ] && [ -f ui-desktop/yarn.lock ]; then
+            echo "::error::ui-desktop contains BOTH package-lock.json and yarn.lock."
+            echo "yarn.lock is authoritative; remove package-lock.json."
+            exit 1
+          fi

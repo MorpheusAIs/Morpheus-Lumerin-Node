@@ -2,6 +2,7 @@ import { withClient } from './clientContext';
 import selectors from '../selectors';
 import { connect } from 'react-redux';
 import React from 'react';
+import { toBaseUnits, isValidAddress } from '../utils/amount';
 
 // Send/receive state for the wallet transaction modal.
 //
@@ -11,41 +12,6 @@ import React from 'react';
 // implementation — the proxy-router has exposed POST /blockchain/send/mor the
 // whole time, but nothing in the UI ever called it. This is now a straight
 // MOR/ETH send against that endpoint.
-
-const DECIMALS = 18;
-
-/**
- * Converts a human-entered decimal amount into a base-10 wei string.
- *
- * Done with string maths rather than Number arithmetic so that large or
- * high-precision inputs can't lose low-order digits to float rounding — the
- * proxy-router parses this straight into a big.Int and any drift is real money.
- */
-export const toBaseUnits = (amount, decimals = DECIMALS) => {
-  const raw = String(amount ?? '').trim();
-  if (!raw) {
-    throw new Error('Enter an amount');
-  }
-  if (!/^\d*\.?\d*$/.test(raw) || raw === '.') {
-    throw new Error('Amount is not a valid number');
-  }
-
-  const [whole = '', fraction = ''] = raw.split('.');
-  if (fraction.length > decimals) {
-    throw new Error(`At most ${decimals} decimal places are supported`);
-  }
-
-  const padded = (whole + fraction.padEnd(decimals, '0')).replace(/^0+/, '');
-  const value = padded === '' ? '0' : padded;
-
-  if (value === '0') {
-    throw new Error('Amount must be greater than zero');
-  }
-  return value;
-};
-
-const isValidAddress = (address) =>
-  /^0x[a-fA-F0-9]{40}$/.test(String(address ?? '').trim());
 
 const withTransactionModalState = (WrappedComponent) => {
   class Container extends React.Component {
