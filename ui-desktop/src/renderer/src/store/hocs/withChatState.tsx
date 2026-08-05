@@ -8,6 +8,7 @@ import {
   getBidsByModelId,
   getBidInfoById,
 } from '../utils/apiCallsHelper';
+import { pooledMapSettled, withTimeout } from '../utils/concurrency';
 import { ApiGateway } from 'src/main/src/client/apiGateway';
 
 const AvailabilityStatus = {
@@ -15,6 +16,19 @@ const AvailabilityStatus = {
   unknown: 'unknown',
   disconnected: 'disconnected',
 };
+
+// Availability fan-out tuning. Previously every provider was pinged at once
+// with no timeout, and only *successful* results were cached — so each visit
+// re-pinged every dead provider and waited for each to time out. Dead providers
+// are precisely the slow ones, which is why this tab could take minutes.
+const AVAILABILITY_CONCURRENCY = 6;
+const AVAILABILITY_PING_TIMEOUT_MS = 4000;
+// Successful checks stay valid longer than failures, so a provider that comes
+// back online is picked up reasonably quickly without re-pinging dead ones on
+// every single render.
+const AVAILABILITY_TTL_MS = { available: 15 * 60_000, other: 5 * 60_000 };
+// Namespaced so provider addresses don't collide with other localStorage keys.
+const AVAILABILITY_KEY_PREFIX = 'provider-availability:';
 
 export interface ContainerProps {
   client: ApiGateway;
@@ -141,6 +155,37 @@ const withChatState = (WrappedComponent: ComponentType<any>) => {
       return { models: result, providers, meta, userBalances };
     };
 
+    readAvailabilityCache = (address) => {
+      try {
+        const raw = localStorage.getItem(AVAILABILITY_KEY_PREFIX + address);
+        if (!raw) {
+          return null;
+        }
+        const record = JSON.parse(raw);
+        const ttl =
+          record.status === AvailabilityStatus.available
+            ? AVAILABILITY_TTL_MS.available
+            : AVAILABILITY_TTL_MS.other;
+        if (new Date(record.time).getTime() + ttl < Date.now()) {
+          return null;
+        }
+        return record;
+      } catch (e) {
+        return null;
+      }
+    };
+
+    writeAvailabilityCache = (address, record) => {
+      try {
+        localStorage.setItem(
+          AVAILABILITY_KEY_PREFIX + address,
+          JSON.stringify({ status: record.status, time: record.time }),
+        );
+      } catch (e) {
+        // Quota exceeded / private mode — availability caching is best-effort.
+      }
+    };
+
     getProvidersAvailability = async (providers) => {
       const isValidUrl = (url) => {
         const urlRegex =
@@ -148,61 +193,69 @@ const withChatState = (WrappedComponent: ComponentType<any>) => {
         return urlRegex.test(url);
       };
 
-      const availabilityResults = await Promise.all(
-        providers.map(async (p) => {
-          try {
-            const recordString = localStorage.getItem(p.Address);
-            const storedRecord = recordString && JSON.parse(recordString);
-            if (
-              storedRecord &&
-              storedRecord.status == AvailabilityStatus.available
-            ) {
-              const lastUpdatedAt = new Date(storedRecord.time);
-              const cacheMinutes = 15;
-              const timestampBefore = new Date(
-                new Date().getTime() - cacheMinutes * 60 * 1000,
-              );
+      // Resolve everything we can from cache first (synchronous, no network),
+      // then ping only the genuinely unknown providers — at most
+      // AVAILABILITY_CONCURRENCY at a time, each with its own timeout.
+      const needsPing: any[] = [];
+      const resolved = new Map<string, any>();
 
-              if (lastUpdatedAt > timestampBefore) {
-                return { ...storedRecord, id: p.Address };
-              }
-            }
+      for (const p of providers) {
+        const cached = this.readAvailabilityCache(p.Address);
+        if (cached) {
+          resolved.set(p.Address, { ...cached, id: p.Address });
+        } else if (!isValidUrl(p.Endpoint)) {
+          const record = {
+            id: p.Address,
+            status: AvailabilityStatus.disconnected,
+            time: new Date(),
+          };
+          this.writeAvailabilityCache(p.Address, record);
+          resolved.set(p.Address, record);
+        } else {
+          needsPing.push(p);
+        }
+      }
 
-            if (!isValidUrl(p.Endpoint)) {
-              return {
-                id: p.Address,
-                status: AvailabilityStatus.disconnected,
-                time: new Date(),
-              };
-            }
-
-            const isValid = await this.props.client.checkProviderConnectivity({
+      const pinged = await pooledMapSettled(
+        needsPing,
+        async (p: any) => {
+          const isValid = await withTimeout(
+            this.props.client.checkProviderConnectivity({
               endpoint: p.Endpoint,
               address: p.Address,
-            });
-
-            const record = {
-              id: p.Address,
-              status: isValid
-                ? AvailabilityStatus.available
-                : AvailabilityStatus.disconnected,
-              time: new Date(),
-            };
-            localStorage.setItem(
-              record.id,
-              JSON.stringify({ status: record.status, time: record.time }),
-            );
-            return record;
-          } catch (e) {
-            return {
-              id: p.Address,
-              status: AvailabilityStatus.unknown,
-              time: new Date(),
-            };
-          }
-        }),
+            }),
+            AVAILABILITY_PING_TIMEOUT_MS,
+          );
+          const record = {
+            id: p.Address,
+            status: isValid
+              ? AvailabilityStatus.available
+              : AvailabilityStatus.disconnected,
+            time: new Date(),
+          };
+          // Cache failures too. The old code only persisted successes, so every
+          // load re-pinged (and re-waited on) every unreachable provider.
+          this.writeAvailabilityCache(p.Address, record);
+          return record;
+        },
+        (p: any) => {
+          const record = {
+            id: p.Address,
+            status: AvailabilityStatus.unknown,
+            time: new Date(),
+          };
+          this.writeAvailabilityCache(p.Address, record);
+          return record;
+        },
+        AVAILABILITY_CONCURRENCY,
       );
-      return availabilityResults;
+
+      for (const record of pinged) {
+        resolved.set(record.id, record);
+      }
+
+      // Preserve the caller's original provider ordering.
+      return providers.map((p) => resolved.get(p.Address)).filter(Boolean);
     };
 
     getMetaInfo = async () => {

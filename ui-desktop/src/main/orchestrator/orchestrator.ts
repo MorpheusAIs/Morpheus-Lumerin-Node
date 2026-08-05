@@ -263,6 +263,10 @@ export class Orchestrator {
         redirectProcessOutput: false,
         probe: this.cfg.proxyRouter.probe,
         ports: this.cfg.proxyRouter.ports,
+        // We own this binary, so keep it manageable even if an instance is
+        // already listening — otherwise a leftover process permanently
+        // disables restart for this service.
+        reclaimIfDetected: true,
         onStateChange: () => this.emitStateUpdate()
       })
     }
@@ -277,6 +281,10 @@ export class Orchestrator {
         redirectProcessOutput: true,
         probe: this.cfg.ipfs.probe,
         ports: this.cfg.ipfs.ports,
+        // We own this binary, so keep it manageable even if an instance is
+        // already listening — otherwise a leftover process permanently
+        // disables restart for this service.
+        reclaimIfDetected: true,
         onStateChange: () => this.emitStateUpdate()
       })
     }
@@ -291,6 +299,10 @@ export class Orchestrator {
         redirectProcessOutput: false,
         probe: this.cfg.aiRuntime.probe,
         ports: this.cfg.aiRuntime.ports,
+        // We own this binary, so keep it manageable even if an instance is
+        // already listening — otherwise a leftover process permanently
+        // disables restart for this service.
+        reclaimIfDetected: true,
         onStateChange: () => this.emitStateUpdate()
       })
     }
@@ -497,19 +509,53 @@ export class Orchestrator {
   // keys are appended — user-edited values are left untouched.
   private static readonly envKeysAppendedOnUpgrade = ['PROXY_FORWARD_CHAT_CONTEXT']
 
-  private async writeEnvFile(path: string, env: Record<string, string>) {
-    // check if the file exists
-    if (fs.existsSync(path)) {
-      this.log.info(`Env file already exists: ${path}`)
-      await this.appendMissingEnvKeys(path, env, Orchestrator.envKeysAppendedOnUpgrade)
+  // Config files are rewritten whenever the desired contents differ from what
+  // is on disk.
+  //
+  // These used to return early if the file merely *existed*. That froze the
+  // proxy-router's models-config.json and rating-config.json at whatever was
+  // written on the very first run: changing a setting in the app had no
+  // effect. The .env is deliberately not routed through here — see
+  // writeEnvFile, which must not discard a hand-edited file.
+  //
+  // Comparing before writing keeps the no-op case cheap and avoids touching
+  // mtime (which would otherwise look like external tampering in the logs).
+  private async writeFileIfChanged(filepath: string, content: string, label: string) {
+    try {
+      if (fs.existsSync(filepath)) {
+        const existing = await fs.readFile(filepath, 'utf-8')
+        if (existing === content) {
+          this.log.info(`${label} unchanged: ${filepath}`)
+          return
+        }
+        this.log.info(`${label} changed on disk, rewriting: ${filepath}`)
+      }
+
+      await fs.ensureDir(path.dirname(filepath))
+      await fs.writeFile(filepath, content)
+      this.log.info(`Wrote ${label}: ${filepath}`)
+    } catch (err) {
+      // A failure here is worth surfacing but must not abort startup — the
+      // router can still boot from the previous file.
+      this.log.error(`Failed to write ${label} at ${filepath}`, err)
+    }
+  }
+
+  // The .env is the one config a user may reasonably hand-edit, so an existing
+  // one is never rewritten wholesale. Keys added by a later release are
+  // appended when absent, which is what lets an upgrade reach an old install
+  // without discarding whatever the user changed.
+  private async writeEnvFile(filepath: string, env: Record<string, string>) {
+    if (fs.existsSync(filepath)) {
+      this.log.info(`Env file already exists: ${filepath}`)
+      await this.appendMissingEnvKeys(filepath, env, Orchestrator.envKeysAppendedOnUpgrade)
       return
     }
 
     const envString = Object.entries(env)
       .map(([key, value]) => `${key}=${value}`)
       .join('\n')
-    await fs.writeFile(path, envString)
-    this.log.info(`Created env file: ${path}`)
+    await this.writeFileIfChanged(filepath, envString, 'env file')
   }
 
   private async appendMissingEnvKeys(path: string, env: Record<string, string>, keys: string[]) {
@@ -528,14 +574,7 @@ export class Orchestrator {
   }
 
   private async writeLocalConfigFile(filepath: string, content: string) {
-    // check if the file exists
-    if (fs.existsSync(filepath)) {
-      this.log.info(`Config file already exists: ${filepath}`)
-      return
-    }
-
-    await fs.writeFile(filepath, content)
-    this.log.info(`Created config file: ${filepath}`)
+    await this.writeFileIfChanged(filepath, content, 'config file')
   }
 
   private async resetState() {

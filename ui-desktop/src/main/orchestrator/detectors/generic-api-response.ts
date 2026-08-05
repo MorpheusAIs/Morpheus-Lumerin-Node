@@ -13,6 +13,8 @@ type Params = {
 
 const DEFAULT_TIMEOUT = 10000
 const DEFAULT_POLL_INTERVAL = 1000
+/** Per-attempt HTTP timeout. See the note in `request()`. */
+const REQUEST_TIMEOUT_MS = 5000
 
 export class GenericApiResponseDetector {
   private url: string
@@ -69,7 +71,13 @@ export class GenericApiResponseDetector {
         return unixNpipeProtocolTransform(this, data, headers)
       },
       transformResponse: (data) => data,
-      timeout: this.pollInterval
+      // Per-request timeout used to be `this.pollInterval` (1s by default),
+      // which meant any service that took longer than a second to answer could
+      // *never* pass a health check, no matter how long the overall timeout
+      // was. A proxy-router doing initial chain sync routinely exceeds that,
+      // so startup would fail and the process got stopped again. Give each
+      // attempt a realistic budget, capped by the overall deadline.
+      timeout: Math.max(this.pollInterval, REQUEST_TIMEOUT_MS)
     })
   }
 }

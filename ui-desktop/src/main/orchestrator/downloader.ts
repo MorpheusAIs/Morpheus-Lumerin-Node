@@ -1,5 +1,5 @@
 import { LogFunctions } from 'electron-log'
-import { stat, writeFile } from 'node:fs/promises'
+import { stat, open as openFile } from 'node:fs/promises'
 import throttle from 'lodash/throttle'
 import fs from 'fs-extra'
 import path from 'node:path'
@@ -60,7 +60,6 @@ export async function downloadFile(
     // TODO: Verify if file updated (store metadata)
     const tempDestinationPath = getTempFilePath(destinationPath)
     await fs.ensureDir(path.dirname(tempDestinationPath))
-    await writeFile(tempDestinationPath, '', { flag: 'w' })
 
     const response = await fetchWithTimeout(url, {}, 30000)
 
@@ -76,30 +75,48 @@ export async function downloadFile(
 
     const reader = response.body.getReader()
 
-    while (true) {
-      const { done, value } = await reader.read()
+    // Stream to a single open handle. The previous implementation called
+    // writeFile(..., { flag: 'a' }) for EVERY chunk, i.e. open + append + close
+    // per chunk — hundreds of thousands of syscalls on a multi-hundred-MB model
+    // download, which made downloads crawl and pegged the main process.
+    const fileHandle = await openFile(tempDestinationPath, 'w')
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
 
-      if (done) {
-        break
-      }
-
-      bytesDownloaded += value.length
-
-      try {
-        await writeFile(tempDestinationPath, value, { flag: 'a' })
-      } catch (err: any) {
-        if (err.code === 'ENOSPC') {
-          throw new Error('Not enough space on disk')
+        if (done) {
+          break
         }
-        throw err
-      }
 
-      throttledOnProgress?.({
-        bytesDownloaded,
-        totalBytes,
-        progress: totalBytes ? bytesDownloaded / totalBytes : 0,
-        status: 'downloading'
-      })
+        bytesDownloaded += value.length
+
+        try {
+          await fileHandle.write(value)
+        } catch (err: any) {
+          if (err.code === 'ENOSPC') {
+            throw new Error('Not enough space on disk')
+          }
+          throw err
+        }
+
+        throttledOnProgress?.({
+          bytesDownloaded,
+          totalBytes,
+          progress: totalBytes ? bytesDownloaded / totalBytes : 0,
+          status: 'downloading'
+        })
+      }
+    } finally {
+      await fileHandle.close().catch(() => undefined)
+    }
+
+    // A truncated download that still produced a file is worse than no file at
+    // all: it gets moved into place, passes the "already exists" check forever,
+    // and the service then fails to start with an unrelated-looking error.
+    if (totalBytes && bytesDownloaded !== totalBytes) {
+      throw new Error(
+        `Download incomplete: got ${bytesDownloaded} of ${totalBytes} bytes. Please try again.`
+      )
     }
 
     // copy temp file to destination path
@@ -113,6 +130,10 @@ export async function downloadFile(
     throttledOnProgress?.flush()
   } catch (error: any) {
     logger?.error('Download failed:', url, error)
+
+    // Never leave a partial .temp behind — it would be resumed-as-complete or
+    // confuse the next run's disk-space accounting.
+    await fs.remove(getTempFilePath(destinationPath)).catch(() => undefined)
 
     throttledOnProgress?.({
       bytesDownloaded: 0,

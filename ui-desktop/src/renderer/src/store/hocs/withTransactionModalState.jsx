@@ -1,198 +1,185 @@
-import * as validators from '../validators';
 import { withClient } from './clientContext';
 import selectors from '../selectors';
 import { connect } from 'react-redux';
-import * as utils from '../utils';
-import PropTypes from 'prop-types';
-import debounce from 'lodash/debounce';
 import React from 'react';
-import { lmrDecimals, ethDecimals } from '../../utils/coinValue';
 
-const withTransactionModalState = WrappedComponent => {
+// Send/receive state for the wallet transaction modal.
+//
+// This used to be Lumerin-era code: it offered an "LMR" currency, dispatched to
+// `client.sendLmr` (a handler that does not exist anywhere in the app), and
+// computed gas for a token this product doesn't use. The MOR path simply had no
+// implementation — the proxy-router has exposed POST /blockchain/send/mor the
+// whole time, but nothing in the UI ever called it. This is now a straight
+// MOR/ETH send against that endpoint.
+
+const DECIMALS = 18;
+
+/**
+ * Converts a human-entered decimal amount into a base-10 wei string.
+ *
+ * Done with string maths rather than Number arithmetic so that large or
+ * high-precision inputs can't lose low-order digits to float rounding — the
+ * proxy-router parses this straight into a big.Int and any drift is real money.
+ */
+export const toBaseUnits = (amount, decimals = DECIMALS) => {
+  const raw = String(amount ?? '').trim();
+  if (!raw) {
+    throw new Error('Enter an amount');
+  }
+  if (!/^\d*\.?\d*$/.test(raw) || raw === '.') {
+    throw new Error('Amount is not a valid number');
+  }
+
+  const [whole = '', fraction = ''] = raw.split('.');
+  if (fraction.length > decimals) {
+    throw new Error(`At most ${decimals} decimal places are supported`);
+  }
+
+  const padded = (whole + fraction.padEnd(decimals, '0')).replace(/^0+/, '');
+  const value = padded === '' ? '0' : padded;
+
+  if (value === '0') {
+    throw new Error('Amount must be greater than zero');
+  }
+  return value;
+};
+
+const isValidAddress = (address) =>
+  /^0x[a-fA-F0-9]{40}$/.test(String(address ?? '').trim());
+
+const withTransactionModalState = (WrappedComponent) => {
   class Container extends React.Component {
-    // static propTypes = {
-    //   chainGasPrice: PropTypes.string.isRequired,
-    //   availableCoin: PropTypes.string.isRequired,
-    //   coinSymbol: PropTypes.string.isRequired,
-    //   coinPrice: PropTypes.number.isRequired,
-    //   walletId: PropTypes.oneOfType([PropTypes.string, PropTypes.number])
-    //     .isRequired,
-    //   client: PropTypes.shape({
-    //     copyToClipboard: PropTypes.func.isRequired,
-    //     isAddress: PropTypes.func.isRequired,
-    //     sendCoin: PropTypes.func.isRequired,
-    //     fromWei: PropTypes.func.isRequired,
-    //     toWei: PropTypes.func.isRequired
-    //   }).isRequired,
-    //   // sendLmrFeatureStatus: PropTypes.oneOf(['no-funds', 'offline', 'ok'])
-    //   // .isRequired,
-    //   from: PropTypes.string.isRequired
-    // }
+    static displayName = `withTransactionModalState(${
+      WrappedComponent.displayName || WrappedComponent.name
+    })`;
 
-    static displayName = `withTransactionModalState(${WrappedComponent.displayName ||
-      WrappedComponent.name})`;
-
-    rangeSelectOptions = [
-      {
-        label: this.props.symbol,
-        value: 'LMR'
-      },
-      {
-        label: this.props.symbolEth,
-        value: 'ETH'
-      }
+    currencyOptions = [
+      { label: this.props.symbol || 'MOR', value: 'MOR' },
+      { label: this.props.symbolEth || 'ETH', value: 'ETH' },
     ];
 
     initialState = {
       copyBtnLabel: 'Copy to clipboard',
-      gasEstimateError: false,
-      useCustomGas: false,
-      coinAmount: 0,
-      usdAmount: 0,
+      coinAmount: '',
       toAddress: '',
-      estimatedFee: null,
-      selectedCurrency: this.rangeSelectOptions[0],
-      errors: {
-        coinAmount: '',
-        toAddress: '',
-        gasLimit: '',
-        gasPrice: ''
-      }
+      txHash: null,
+      selectedCurrency: this.currencyOptions[0],
+      errors: { coinAmount: '', toAddress: '' },
     };
 
     state = this.initialState;
 
     resetForm = () => this.setState(this.initialState);
 
-    setSelectedCurrency = e => {
-      this.setState({ ...this.state, selectedCurrency: e });
-      this.onInputChange({
-        id: 'coinAmount',
-        value: this.state.coinAmount,
-        selectedCurrency: e
-      });
-    };
+    setSelectedCurrency = (option) =>
+      this.setState({ selectedCurrency: option, errors: {} });
 
-    onInputChange = ({ id, value, selectedCurrency }) => {
-      const { client, lmrCoinPrice, ethCoinPrice } = this.props;
-      const coinPrice =
-        (selectedCurrency || this.state.selectedCurrency)?.value === 'LMR'
-          ? lmrCoinPrice
-          : ethCoinPrice;
-      this.setState(state => {
-        return {
-          ...state,
-          ...utils.syncAmounts({ state, coinPrice, id, value, client }),
-          gasEstimateError: id === 'gasLimit' ? false : state.gasEstimateError,
-          errors: { ...state.errors, [id]: null },
-          [id]: utils.sanitizeInput(value)
-        };
-      });
+    onInputChange = ({ id, value }) =>
+      this.setState((state) => ({
+        ...state,
+        [id]: value,
+        errors: { ...state.errors, [id]: null },
+      }));
 
-      // Estimate gas limit again if parameters changed
-      if (['coinAmount', 'toAddress'].includes(id)) {
-        this.getGasEstimate();
-      }
-    };
-
-    onSubmit = type => {
-      const payload = {
-        gasPrice: this.props.client.toWei(this.state.gasPrice, 'gwei'),
-        walletId: this.props.walletId,
-        value: utils.sanitize(this.state.coinAmount),
-        chain: this.props.chain,
-        from: this.props.from,
-        gas: this.state.gasLimit,
-        to: this.state.toAddress
-      };
-      return type === 'ETH'
-        ? this.props.client.sendEth(payload)
-        : this.props.client.sendLmr(payload);
-    };
+    /** Balance of the currently selected asset, as a decimal number. */
+    getAvailableBalance = () =>
+      this.state.selectedCurrency.value === 'ETH'
+        ? Number(this.props.eth?.value ?? 0)
+        : Number(this.props.mor?.value ?? 0);
 
     validate = () => {
-      const { coinAmount, toAddress, gasPrice, gasLimit } = this.state;
-      const { client, lmrBalanceWei, ethBalanceWei } = this.props;
-      const balance =
-        this.state.selectedCurrency.value === 'LMR'
-          ? lmrBalanceWei
-          : ethBalanceWei;
+      const { coinAmount, toAddress } = this.state;
+      const errors = {};
 
-      const errors = {
-        ...validators.validateToAddress(client, toAddress),
-        ...validators.validateCoinAmount(client, coinAmount, balance),
-        ...validators.validateGasPrice(client, gasPrice),
-        ...validators.validateGasLimit(client, gasLimit)
-      };
+      if (!isValidAddress(toAddress)) {
+        errors.toAddress = 'Enter a valid 0x… address';
+      }
+
+      try {
+        toBaseUnits(coinAmount);
+        if (Number(coinAmount) > this.getAvailableBalance()) {
+          errors.coinAmount = `Amount exceeds your ${this.state.selectedCurrency.label} balance`;
+        }
+      } catch (e) {
+        errors.coinAmount = e.message;
+      }
+
+      // Sending the entire ETH balance leaves nothing for gas, so the
+      // transaction is guaranteed to fail on-chain. Warn before the user pays
+      // to find that out.
+      if (
+        !errors.coinAmount &&
+        this.state.selectedCurrency.value === 'ETH' &&
+        Number(coinAmount) >= this.getAvailableBalance()
+      ) {
+        errors.coinAmount = 'Leave some ETH to cover the network fee';
+      }
+
       const hasErrors = Object.keys(errors).length > 0;
-      if (hasErrors) this.setState({ errors });
+      if (hasErrors) {
+        this.setState({ errors });
+      }
       return hasErrors ? errors : false;
     };
 
+    onSubmit = async () => {
+      const amount = toBaseUnits(this.state.coinAmount);
+      const to = this.state.toAddress.trim();
+
+      const txHash =
+        this.state.selectedCurrency.value === 'ETH'
+          ? await this.props.client.sendEth({ to, amount })
+          : await this.props.client.sendMor({ to, amount });
+
+      this.setState({ txHash });
+      return txHash;
+    };
+
     onMaxClick = () => {
-      const coinAmount = this.props.client.fromWei(this.props.availableCoin);
-      this.onInputChange({ id: 'coinAmount', value: coinAmount });
+      const balance = this.getAvailableBalance();
+      // Never offer a true "max" on ETH — see the gas note in validate().
+      const value =
+        this.state.selectedCurrency.value === 'ETH'
+          ? String(Math.max(balance - 0.0005, 0))
+          : String(balance);
+      this.onInputChange({ id: 'coinAmount', value });
     };
 
     copyToClipboard = () => {
       this.props.client
         .copyToClipboard(this.props.address)
         .then(() => this.setState({ copyBtnLabel: 'Copied to clipboard!' }))
-        .catch(err => this.setState({ copyBtnLabel: err.message }));
+        .catch((err) => this.setState({ copyBtnLabel: err.message }));
     };
 
     render() {
-      const amountFieldsProps = utils.getAmountFieldsProps({
-        coinAmount: this.state.coinAmount,
-        usdAmount: this.state.usdAmount
-      });
-      const { sendLmrFeatureStatus, symbol } = this.props;
-
-      const sendLmrDisabledReason =
-        sendLmrFeatureStatus === 'no-funds'
-          ? `You need some ${symbol} to send`
-          : sendLmrFeatureStatus === 'offline'
-          ? "Can't send while offline"
-          : null;
-
       return (
         <WrappedComponent
           copyToClipboard={this.copyToClipboard}
-          sendLmrDisabledReason={sendLmrDisabledReason}
-          sendLmrDisabled={sendLmrFeatureStatus !== 'ok'}
           onInputChange={this.onInputChange}
           onMaxClick={this.onMaxClick}
           resetForm={this.resetForm}
           onSubmit={this.onSubmit}
           setSelectedCurrency={this.setSelectedCurrency}
+          currencyOptions={this.currencyOptions}
+          availableBalance={this.getAvailableBalance()}
           {...this.props}
           {...this.state}
-          coinPlaceholder={amountFieldsProps.coinPlaceholder}
-          usdPlaceholder={amountFieldsProps.usdPlaceholder}
-          coinAmount={amountFieldsProps.coinAmount}
-          usdAmount={amountFieldsProps.usdAmount}
           validate={this.validate}
         />
       );
     }
   }
 
-  const mapStateToProps = state => ({
+  const mapStateToProps = (state) => ({
     address: selectors.getWalletAddress(state),
     explorerUrl: selectors.getContractExplorerUrl(state, {
-      hash: selectors.getWalletAddress(state)
+      hash: selectors.getWalletAddress(state),
     }),
-    // availableCoin: selectors.getCoinBalanceWei(state),
-    coinSymbol: selectors.getCoinSymbol(state),
-    lmrBalanceUSD: selectors.getWalletLmrBalanceUSD(state),
-    lmrBalanceWei: selectors.getWalletLmrBalance(state),
-    ethBalanceUSD: selectors.getWalletEthBalanceUSD(state),
-    ethBalanceWei: selectors.getWalletEthBalance(state),
-    lmrCoinPrice: selectors.getRate(state),
-    ethCoinPrice: selectors.getRateEth(state),
     from: selectors.getWalletAddress(state),
     symbol: selectors.getCoinSymbol(state),
-    symbolEth: selectors.getSymbolEth(state)
+    symbolEth: selectors.getSymbolEth(state),
+    txUrlResolver: selectors.getTransactionExplorerUrlResolver(state),
   });
 
   return connect(mapStateToProps)(withClient(Container));

@@ -4,10 +4,8 @@ import { ToastsContext } from '../../toasts';
 import Select from 'react-select';
 
 import BackIcon from '../../icons/BackIcon';
-import SwapIcon from '../../icons/SwapIcon';
 import { BaseBtn } from '../../common';
 import Spinner from '../../common/Spinner';
-import theme from '../../../ui/theme';
 import {
   HeaderWrapper,
   BackBtn,
@@ -136,15 +134,12 @@ const SendContainer = styled.div`
   margin: 16px 0 0;
 `;
 
-const LMR_MODE = 'coinAmount';
-const USD_MODE = 'usdAmount';
-
 const selectorStyles = {
   singleValue: (provided) => ({
     ...provided,
     color: 'white',
   }),
-  control: (base, state) => ({
+  control: (base) => ({
     ...base,
     borderColor: '#20dc8e',
     color: '#FFFFFF',
@@ -163,75 +158,72 @@ const selectorStyles = {
   }),
 };
 
-export function SendForm(props) {
-  const rangeSelectOptions = [
-    {
-      label: props.symbol,
-      value: 'LMR',
-    },
-    {
-      label: props.symbolEth,
-      value: 'ETH',
-    },
-  ];
+const ErrorLabel = styled.div`
+  color: #ff6b6b;
+  font-size: 1.2rem;
+  text-align: center;
+  min-height: 1.6rem;
+  padding-top: 4px;
+`;
 
-  const [mode, setMode] = useState(LMR_MODE);
+const MaxBtn = styled.button`
+  background: none;
+  border: none;
+  color: ${(p) => p.theme.colors.morMain};
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0 4px;
+`;
+
+export function SendForm(props) {
   const [isPending, setIsPending] = useState(false);
   const context = useContext(ToastsContext);
-  const selectedCurrency = props.selectedCurrency;
 
-  const handleSendLmr = async (e) => {
+  const {
+    selectedCurrency,
+    currencyOptions,
+    availableBalance,
+    errors = {},
+  } = props;
+
+  const handleSend = async (e) => {
     e.preventDefault();
 
-    const errorObj = props.validate();
-    if (errorObj) {
-      const message =
-        errorObj.coinAmount ||
-        errorObj.toAddress ||
-        errorObj.gasLimit ||
-        errorObj.gasPrice;
-      context.toast('error', message);
+    if (isPending) {
       return;
     }
 
-    try {
-      setIsPending(true);
-      await props.onSubmit(selectedCurrency.value);
-      props.onTabSwitch('success');
-    } catch (err) {
-      context.toast('error', err.message);
+    // Client-side validation first, so obviously-bad input never costs gas.
+    if (props.validate()) {
+      return;
     }
 
-    setIsPending(false);
+    setIsPending(true);
+    try {
+      const txHash = await props.onSubmit();
+      if (!txHash) {
+        throw new Error('Transfer did not return a transaction hash');
+      }
+      props.onTabSwitch('success');
+    } catch (err) {
+      // The main-process transfer handler throws on a non-2xx response, so the
+      // real proxy-router message (insufficient funds, bad address, nonce
+      // problems) reaches the user instead of a silent no-op.
+      context.toast('error', err?.message || 'Failed to send transaction');
+    } finally {
+      setIsPending(false);
+    }
   };
 
-  const handleDestinationAddressInput = (e) => {
-    e.preventDefault();
+  const handleDestinationAddressInput = (e) =>
+    props.onInputChange({ id: 'toAddress', value: e.target.value });
 
-    props.onInputChange(e.target);
-    props.onDestinationAddressInput(e.target.value);
-  };
-
-  const handleAmountInput = (e) => {
-    e.preventDefault();
-
-    const { value } = e.target;
-    props.onInputChange({ id: mode, value });
-    props.onAmountInput(value);
-  };
+  const handleAmountInput = (e) =>
+    props.onInputChange({ id: 'coinAmount', value: e.target.value });
 
   if (!props.activeTab) {
     return <></>;
   }
-
-  const sanitize = (amount) => (amount === '< 0.01' ? '0.01' : amount);
-
-  const onModeChange = () => {
-    const newMode = mode === LMR_MODE ? USD_MODE : LMR_MODE;
-    const newAmount = props[newMode];
-    setMode(newMode);
-    props.onAmountInput(sanitize(newAmount));
-  };
 
   return (
     <>
@@ -246,11 +238,12 @@ export function SendForm(props) {
         <Select
           className="basic-single"
           classNamePrefix="select"
-          name="color"
+          name="currency"
           styles={selectorStyles}
           onChange={props.setSelectedCurrency}
           value={selectedCurrency}
-          options={rangeSelectOptions}
+          options={currencyOptions}
+          isDisabled={isPending}
         />
       </div>
 
@@ -258,38 +251,24 @@ export function SendForm(props) {
         <AmountContainer>
           <AmountInput
             type="number"
-            placeholder={0}
+            min="0"
+            step="any"
+            placeholder="0"
             isActive={true}
+            disabled={isPending}
             onChange={handleAmountInput}
-            value={props.amountInput}
+            value={props.coinAmount}
           />
         </AmountContainer>
-        <AmountSublabel>
-          {mode === LMR_MODE ? selectedCurrency.label : 'USD'}
-        </AmountSublabel>
-        <IconContainer>
-          <SwapIcon
-            onClick={onModeChange}
-            fill={theme.colors.helpertextGray}
-          ></SwapIcon>
-        </IconContainer>
-        {mode === LMR_MODE ? (
-          <SubAmount>≈ {props.usdAmount}</SubAmount>
-        ) : (
-          <SubAmount>
-            ≈ {props.coinAmount} {selectedCurrency.label}
-          </SubAmount>
-        )}
+        <AmountSublabel>{selectedCurrency?.label}</AmountSublabel>
+        <ErrorLabel>{errors.coinAmount}</ErrorLabel>
 
         <FeeContainer>
-          {props.estimatedFee && (
-            <FeeRow>
-              <FeeLabel>Estimated fee:</FeeLabel>
-              <FeeLabel>
-                {props.estimatedFee} {props.symbolEth}
-              </FeeLabel>
-            </FeeRow>
-          )}
+          <FeeRow>
+            <FeeLabel>
+              Network fee is paid in {props.symbolEth} and deducted separately.
+            </FeeLabel>
+          </FeeRow>
         </FeeContainer>
       </Column>
 
@@ -297,25 +276,30 @@ export function SendForm(props) {
         <WalletInputLabel>To: </WalletInputLabel>
         <WalletInput
           id="toAddress"
+          placeholder="0x…"
+          spellCheck={false}
+          disabled={isPending}
           onChange={handleDestinationAddressInput}
-          value={props.destinationAddress}
+          value={props.toAddress}
         />
       </WalletContainer>
+      <ErrorLabel>{errors.toAddress}</ErrorLabel>
 
       <Footer>
         <FooterRow>
-          <FooterLabel>{selectedCurrency.label} Balance</FooterLabel>
+          <FooterLabel>{selectedCurrency?.label} Balance</FooterLabel>
           <FooterLabel>
-            {selectedCurrency.value === 'ETH'
-              ? `${props.eth.value.toFixed(6)} ≈ ${props.eth.usd}`
-              : `${props.mor.value.toFixed(6)} ≈ ${props.mor.usd}`}
+            {Number(availableBalance || 0).toFixed(6)}
+            <MaxBtn type="button" disabled={isPending} onClick={props.onMaxClick}>
+              MAX
+            </MaxBtn>
           </FooterLabel>
         </FooterRow>
         <FooterRow>
           <SendContainer>
             {isPending && <Spinner size="16px" />}
             {!isPending && (
-              <SendBtn data-modal="success" onClick={handleSendLmr}>
+              <SendBtn data-modal="success" onClick={handleSend}>
                 Send now
               </SendBtn>
             )}

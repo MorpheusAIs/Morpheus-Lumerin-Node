@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useContext } from 'react';
 import styled, { keyframes } from 'styled-components';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   IconCopy,
   IconExternalLink,
   IconArrowDownLeft,
+  IconArrowUpRight,
   IconChartBar,
   IconLock,
 } from '@tabler/icons-react';
@@ -339,8 +340,20 @@ const Dashboard = ({
 }) => {
   const [activeModal, setActiveModal] = useState(null);
   const context = useContext(ToastsContext);
+  const queryClient = useQueryClient();
 
-  const onCloseModal = () => setActiveModal(null);
+  const onCloseModal = () => {
+    // A send may have just gone through, so drop the cached balances and
+    // transaction list rather than showing pre-transfer numbers for up to the
+    // 30s staleTime window.
+    if (activeModal === 'success') {
+      queryClient.invalidateQueries({ queryKey: queryKeys.balances(address) });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.transactions(address),
+      });
+    }
+    setActiveModal(null);
+  };
   const onTabSwitch = (modal) => setActiveModal(modal);
 
   // Cached, stale-while-revalidate data. Revisiting the wallet tab renders the
@@ -486,6 +499,16 @@ const Dashboard = ({
               </StatValue>
             </StatText>
           </StatCard>
+
+          <ActionTile onClick={() => onTabSwitch('send')}>
+            <StatIcon>
+              <IconArrowUpRight size={22} />
+            </StatIcon>
+            <ActionText>
+              <ActionTitle>Send</ActionTitle>
+              <ActionSub>Transfer {morSymbol} or {ethSymbol}</ActionSub>
+            </ActionText>
+          </ActionTile>
 
           <ActionTile onClick={() => onTabSwitch('receive')}>
             <StatIcon>

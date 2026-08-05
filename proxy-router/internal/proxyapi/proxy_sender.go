@@ -563,11 +563,26 @@ func (p *ProxyServiceSender) GetAgentTools(ctx context.Context, sessionID common
 	return string(decryptedResponse), nil
 }
 
+const (
+	// Time allowed to establish the TCP connection to a provider.
+	TIMEOUT_TO_ESTABLISH_CONNECTION = time.Second * 3
+	// Time allowed to write the request once connected.
+	TIMEOUT_TO_WRITE_REQUEST = time.Second * 5
+	// Time allowed for the provider to return a complete response.
+	//
+	// Previously there was NO read deadline at all: only the dial was bounded.
+	// A provider that accepted the TCP connection and then went silent (half
+	// open connection, wedged process, blackholing firewall) left Decode()
+	// blocked forever. The consumer-side spinner span indefinitely with no
+	// error and no way to recover short of restarting the router — a very
+	// common "the app just hangs" report.
+	TIMEOUT_TO_READ_RESPONSE = time.Second * 30
+)
+
 func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage) (*msgs.RpcResponse, int, error) {
 	// TODO: enable request-response matching by using requestID
 	// TODO: add context cancellation
 
-	TIMEOUT_TO_ESTABLISH_CONNECTION := time.Second * 3
 	dialer := net.Dialer{Timeout: TIMEOUT_TO_ESTABLISH_CONNECTION}
 
 	conn, err := dialer.Dial("tcp", url)
@@ -584,6 +599,10 @@ func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage)
 		p.log.Errorf("%s", err)
 		return nil, http.StatusInternalServerError, err
 	}
+
+	if err := conn.SetWriteDeadline(time.Now().Add(TIMEOUT_TO_WRITE_REQUEST)); err != nil {
+		p.log.Warnf("failed to set write deadline: %s", err)
+	}
 	_, err = conn.Write(msgJSON)
 	if err != nil {
 		err = lib.WrapError(ErrWriteProvider, err)
@@ -592,12 +611,22 @@ func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage)
 	}
 
 	// read response
+	if err := conn.SetReadDeadline(time.Now().Add(TIMEOUT_TO_READ_RESPONSE)); err != nil {
+		p.log.Warnf("failed to set read deadline: %s", err)
+	}
+
 	reader := bufio.NewReader(conn)
 	d := json.NewDecoder(reader)
 
 	var msg *msgs.RpcResponse
 	err = d.Decode(&msg)
 	if err != nil {
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+			err = lib.WrapError(ErrConnectProvider,
+				fmt.Errorf("provider did not respond within %s", TIMEOUT_TO_READ_RESPONSE))
+			p.log.Warnf("%s", err)
+			return nil, http.StatusGatewayTimeout, err
+		}
 		err = lib.WrapError(ErrDecode, err)
 		p.log.Errorf("%s", err)
 		return nil, http.StatusBadRequest, err
@@ -811,7 +840,9 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 ) (interface{}, int, int, int, error) {
 	log := p.log.With("request_id", lib.RequestIDFromContext(ctx))
 
-	const TIMEOUT_TO_ESTABLISH_CONNECTION = time.Second * 3
+	// Uses the package-level TIMEOUT_TO_ESTABLISH_CONNECTION; the local const
+	// that used to shadow it here has been removed so both call sites stay in
+	// step if the dial budget is ever retuned.
 
 	timeoutPerAttempt := p.cnodePnodeTimeout
 	maxRetries := p.cnodePnodeMaxRetries

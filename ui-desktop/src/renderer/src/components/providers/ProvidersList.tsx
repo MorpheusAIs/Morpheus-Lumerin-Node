@@ -1,3 +1,5 @@
+import { useContext, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import withProvidersState from '../../store/hocs/withProvidersState';
 import styled from 'styled-components';
 import Accordion from 'react-bootstrap/Accordion';
@@ -5,6 +7,8 @@ import Accordion from 'react-bootstrap/Accordion';
 import { abbreviateAddress } from '../../utils';
 import Table from 'react-bootstrap/Table';
 import Button from 'react-bootstrap/Button';
+import { ToastsContext } from '../toasts';
+import { queryKeys } from '../../store/queries';
 import './Providers.css';
 
 const BidTable = styled(Table)`
@@ -34,7 +38,7 @@ const Container = styled.div`
   overflow-y: auto;
 `;
 
-function renderTable({ onClaim, sessions }) {
+function renderTable({ onClaim, claiming, sessions }) {
   return (
     <BidTable striped bordered hover size="sm">
       <thead>
@@ -58,7 +62,12 @@ function renderTable({ onClaim, sessions }) {
                   <td>{b.Balance / 10 ** 18} MOR</td>
                   <td>
                     {!b.ClosedAt && (
-                      <StartBtn onClick={() => onClaim(b.Id)}>Claim</StartBtn>
+                      <StartBtn
+                        disabled={!!claiming}
+                        onClick={() => onClaim(b.Id)}
+                      >
+                        {claiming === b.Id ? 'Claiming…' : 'Claim'}
+                      </StartBtn>
                     )}
                   </td>
                 </tr>
@@ -70,7 +79,32 @@ function renderTable({ onClaim, sessions }) {
   );
 }
 
-function ProvidersList({ data, claimFunds }) {
+function ProvidersList({ data, claimFunds, providerId }) {
+  const context = useContext(ToastsContext);
+  const queryClient = useQueryClient();
+  const [claiming, setClaiming] = useState<string | null>(null);
+
+  // Claim used to fail silently (see withProvidersState.claimFunds). Now the
+  // result is actually surfaced, and the table refreshes so the claimed
+  // balance disappears without a manual tab switch.
+  const handleClaim = async (sessionId: string) => {
+    if (claiming) {
+      return;
+    }
+    setClaiming(sessionId);
+    try {
+      await claimFunds(sessionId);
+      context.toast('success', 'Funds claimed');
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.providerData(providerId),
+      });
+    } catch (e: any) {
+      context.toast('error', e?.message || 'Failed to claim funds');
+    } finally {
+      setClaiming(null);
+    }
+  };
+
   return (
     <Container>
       {data?.modelsNames &&
@@ -87,7 +121,8 @@ function ProvidersList({ data, claimFunds }) {
                 </Accordion.Header>
                 <Accordion.Body>
                   {renderTable({
-                    onClaim: claimFunds,
+                    onClaim: handleClaim,
+                    claiming,
                     sessions: modelSessions,
                   })}
                 </Accordion.Body>

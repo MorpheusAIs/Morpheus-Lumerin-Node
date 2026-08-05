@@ -108,36 +108,17 @@ const createClient = function (createStore) {
     ),
     onOnboardingCompleted: utils.forwardToMainProcess('onboarding-completed'),
     suggestAddresses: utils.forwardToMainProcess('suggest-addresses'),
-    getTokenGasLimit: utils.forwardToMainProcess('get-token-gas-limit'),
     validatePassword: utils.forwardToMainProcess('validate-password'),
     changePassword: utils.forwardToMainProcess('change-password'),
     onLoginSubmit: utils.forwardToMainProcess('login-submit'),
-    createContract: utils.forwardToMainProcess('create-contract', 750000),
-    purchaseContract: utils.forwardToMainProcess('purchase-contract', 750000),
-    editContract: utils.forwardToMainProcess('edit-contract', 750000),
-    cancelContract: utils.forwardToMainProcess('cancel-contract', 750000),
-    setDeleteContractStatus: utils.forwardToMainProcess(
-      'set-delete-contract-status',
-      750000,
-    ),
-    getPastTransactions: utils.forwardToMainProcess(
-      'get-past-transactions',
-      750000,
-    ),
-    sendLmr: utils.forwardToMainProcess('send-lmr', 750000),
-    sendEth: utils.forwardToMainProcess('send-eth', 750000),
+    // Transfers. 60s is generous for "broadcast the tx" while still failing in
+    // a timeframe a human will wait out — the old 750000ms (12.5 min) timeout
+    // meant a broken channel looked like an indefinite hang.
+    sendMor: utils.forwardToMainProcess('send-mor', 60000),
+    sendEth: utils.forwardToMainProcess('send-eth', 60000),
     clearCache: utils.forwardToMainProcess('clear-cache'),
     handleClientSideError: utils.forwardToMainProcess('handle-client-error'),
-    startDiscovery: utils.forwardToMainProcess('start-discovery'),
-    stopDiscovery: utils.forwardToMainProcess('stop-discovery'),
-    setMinerPool: utils.forwardToMainProcess('set-miner-pool'),
-    getLmrTransferGasLimit: utils.forwardToMainProcess(
-      'get-lmr-transfer-gas-limit',
-    ),
     logout: utils.forwardToMainProcess('logout'),
-    getLocalIp: utils.forwardToMainProcess('get-local-ip'),
-    getPoolAddress: utils.forwardToMainProcess('get-pool-address'),
-    getPrivateKey: utils.forwardToMainProcess('get-private-key'),
     getProxyRouterSettings: utils.forwardToMainProcess(
       'get-proxy-router-settings',
     ),
@@ -150,8 +131,11 @@ const createClient = function (createStore) {
     saveProxyRouterSettings: utils.forwardToMainProcess(
       'save-proxy-router-settings',
     ),
-    getMarketplaceFee: utils.forwardToMainProcess('get-marketplace-fee'),
-    claimFaucet: utils.forwardToMainProcess('claim-faucet', 750000),
+    // NOTE: `get-marketplace-fee` and `claim-faucet` were removed here — neither
+    // had a handler registered in the main process, so calling them hung until
+    // the timeout and then failed with a generic "Operation timed out". Nothing
+    // in the UI referenced them. If a faucet is reintroduced, register the IPC
+    // channel in src/main/src/client/subscriptions/index.ts at the same time.
     getCustomEnvValues: utils.forwardToMainProcess('get-custom-env-values'),
     setCustomEnvValues: utils.forwardToMainProcess('set-custom-env-values'),
     getProfitSettings: utils.forwardToMainProcess('get-profit-settings'),
