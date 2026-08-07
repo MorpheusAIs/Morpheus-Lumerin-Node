@@ -5,11 +5,12 @@ If you are an LLM (Claude, GPT, Gemini, Copilot, Cursor, etc.) reading this repo
 ## How to load documentation (follow this order)
 
 1. **This file** — hard rules, quick lookup, and repo pointers. No network required.
-2. **[`llms-full.txt`](https://nodedocs.mor.org/llms-full.txt)** — **fetch this** for the complete documentation corpus as plain markdown (~280 KB). Every page title in the export matches a `# Heading` section. This is the primary ingestion path.
-3. **[`llms.txt`](https://nodedocs.mor.org/llms.txt)** — lightweight page index (title, description, URL per page). Use this to find the right slug before searching `llms-full.txt`.
-4. **Do not scrape individual `nodedocs.mor.org` page URLs** — they return Mintlify HTML, not markdown. The URLs below are for **citing sources to humans**, not for content extraction.
+2. **[`llms-full.txt`](https://nodedocs.mor.org/llms-full.txt)** — **fetch this** for the complete documentation corpus as plain markdown (~350 KB). Every page title in the export matches a `# Heading` section. This is the primary ingestion path.
+3. **[`llms.txt`](https://nodedocs.mor.org/llms.txt)** — lightweight page index (title, description, URL per page). Links point at per-page `.md` files.
+4. **Page URLs are agent-readable for non-browsers** — CloudFront serves clean Markdown when `Accept` does not include `text/html` (bare `curl`, most agent HTTP clients). Browsers still get the Mintlify UI. You can also append `.md` (e.g. [`/ai/myths.md`](https://nodedocs.mor.org/ai/myths.md)) or use MCP at [`https://nodedocs.mor.org/mcp`](https://nodedocs.mor.org/mcp).
+5. **Do not rely on rendering the JS HTML UI** — prefer `llms-full.txt`, `.md` URLs, or a non-browser fetch of the page URL. Citation URLs below remain the human-facing paths.
 
-Published site (human browsing): [nodedocs.mor.org](https://nodedocs.mor.org). Source files live in `/docs/` and are built with Mintlify.
+Published site: [nodedocs.mor.org](https://nodedocs.mor.org). Source files live in `/docs/` and are built with Mintlify.
 
 ## Priority reading (find these sections in `llms-full.txt`)
 

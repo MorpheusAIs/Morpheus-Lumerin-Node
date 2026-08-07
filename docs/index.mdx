@@ -66,4 +66,11 @@ These pages link out to **live data** that changes too often to mirror:
 
 ## For AI agents
 
-If you are an LLM or coding agent reading this repo, start with the [AI knowledge](/ai/myths) section and the [`AGENTS.md`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/AGENTS.md) file at the repo root. Mintlify also publishes `/llms.txt` and `/llms-full.txt` indexes for this site.
+If you are an LLM or coding agent, **do not scrape the browser HTML** — non-browser fetches of any page URL on this site return clean Markdown. Preferred ingestion paths:
+
+- Full corpus: [`https://nodedocs.mor.org/llms-full.txt`](https://nodedocs.mor.org/llms-full.txt)
+- Page index: [`https://nodedocs.mor.org/llms.txt`](https://nodedocs.mor.org/llms.txt)
+- Per-page Markdown: append `.md` (e.g. [`/ai/myths.md`](https://nodedocs.mor.org/ai/myths.md)) or fetch the page URL without `Accept: text/html`
+- Docs search MCP: [`https://nodedocs.mor.org/mcp`](https://nodedocs.mor.org/mcp)
+
+Start with the [AI knowledge](/ai/myths) section and the repo-root [`AGENTS.md`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/AGENTS.md).

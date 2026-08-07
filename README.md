@@ -71,7 +71,9 @@ To load the full documentation corpus in one fetch:
 
 | Resource | URL | Use |
 |----------|-----|-----|
-| Full corpus (preferred) | [`llms-full.txt`](https://nodedocs.mor.org/llms-full.txt) | Complete markdown export — fetch this, do not scrape HTML pages |
-| Page index | [`llms.txt`](https://nodedocs.mor.org/llms.txt) | Titles, descriptions, and slugs for every page |
+| Full corpus (preferred) | [`llms-full.txt`](https://nodedocs.mor.org/llms-full.txt) | Complete markdown export — primary ingestion path |
+| Page index | [`llms.txt`](https://nodedocs.mor.org/llms.txt) | Titles, descriptions, and per-page `.md` links |
+| Page Markdown | append `.md` or non-browser fetch | Same page URL returns clean Markdown when `Accept` lacks `text/html` |
+| Docs MCP | [`/mcp`](https://nodedocs.mor.org/mcp) | Search / retrieve pages without scraping HTML |
 
-Individual nodedocs page URLs are for human browsing and citation only. See `AGENTS.md` for priority reading slugs and anti-hallucination rules.
+See `AGENTS.md` for priority reading slugs and anti-hallucination rules.

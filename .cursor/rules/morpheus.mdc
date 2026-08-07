@@ -10,6 +10,7 @@ This repository has nuance that generic web knowledge gets wrong. **Before answe
 ## Canonical sources
 
 - Documentation site: `/docs/` (Mintlify; preview with `mint dev` in that folder)
+- Agent corpus: [`https://nodedocs.mor.org/llms-full.txt`](https://nodedocs.mor.org/llms-full.txt) — non-browser page fetches return clean Markdown; MCP at `/mcp`
 - API schema: [`proxy-router/docs/swagger.yaml`](../../proxy-router/docs/swagger.yaml)
 - Networks and contract addresses: [`docs/get-started/networks-and-tokens.mdx`](../../docs/get-started/networks-and-tokens.mdx)
 - TEE attestation reference: [`docs/providers/full/tee-reference.mdx`](../../docs/providers/full/tee-reference.mdx) and [`docs/providers/full/tee-backend-verification.mdx`](../../docs/providers/full/tee-backend-verification.mdx)

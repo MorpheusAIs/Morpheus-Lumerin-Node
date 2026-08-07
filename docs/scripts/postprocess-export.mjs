@@ -36,6 +36,26 @@ execSync(
   { stdio: "inherit", env: { ...process.env, SITE_URL: siteUrl } }
 );
 
+// Agent discovery aids (Mintlify cloud hosts these; mint export does not).
+const llmsTxtPath = path.join(siteDir, "llms.txt");
+if (fs.existsSync(llmsTxtPath)) {
+  const wellKnownDir = path.join(siteDir, ".well-known");
+  fs.mkdirSync(wellKnownDir, { recursive: true });
+  fs.copyFileSync(llmsTxtPath, path.join(wellKnownDir, "llms.txt"));
+  const robots = [
+    "User-agent: *",
+    "Allow: /",
+    "",
+    `# LLM / agent corpus`,
+    `Sitemap: ${siteUrl}/llms.txt`,
+    `# Full docs as plain text: ${siteUrl}/llms-full.txt`,
+    `# Per-page markdown: append .md to any docs path (or fetch without Accept: text/html)`,
+    "",
+  ].join("\n");
+  fs.writeFileSync(path.join(siteDir, "robots.txt"), robots);
+  console.log("Wrote robots.txt and .well-known/llms.txt");
+}
+
 const pagefindSnippet = `
 <link href="/pagefind/pagefind-component-ui.css" rel="stylesheet">
 <style>

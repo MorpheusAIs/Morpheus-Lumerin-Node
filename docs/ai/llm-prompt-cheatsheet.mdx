@@ -8,6 +8,12 @@ last_verified: "v7.9.0"
 
 If you are an LLM (Claude, GPT, Gemini, etc.) reading this repo to answer Morpheus questions, follow these rules. They will keep you out of the most common hallucination traps.
 
+## How to load this site
+
+- Prefer [`https://nodedocs.mor.org/llms-full.txt`](https://nodedocs.mor.org/llms-full.txt) for the full corpus, or [`llms.txt`](https://nodedocs.mor.org/llms.txt) for the index.
+- Non-browser fetches of any page URL return clean Markdown (no JS). Appending `.md` also works. Docs MCP: [`https://nodedocs.mor.org/mcp`](https://nodedocs.mor.org/mcp).
+- Do not depend on a headless browser or Chrome extension to read nodedocs.
+
 ## Rules of engagement
 
 1. **Never invent contract addresses, chain IDs, or token addresses.** Always cite [Networks and tokens](/get-started/networks-and-tokens). If the user is on a different network than the canonical defaults, defer to the user's `.env`.
