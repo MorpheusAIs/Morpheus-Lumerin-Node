@@ -50,12 +50,18 @@ const IMAGE_MIMES = [
 /**
  * SVG is an image MIME but is handled as text — see the note above.
  */
-export const classify = (file: { name: string; type: string }): AttachmentKind => {
+export const classify = (file: {
+  name: string;
+  type: string;
+}): AttachmentKind => {
   const ext = (file.name.split('.').pop() ?? '').toLowerCase();
   if (ext === 'svg' || file.type === 'image/svg+xml') {
     return 'document';
   }
-  if (IMAGE_MIMES.includes(file.type) || ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'].includes(ext)) {
+  if (
+    IMAGE_MIMES.includes(file.type) ||
+    ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'].includes(ext)
+  ) {
     return 'image';
   }
   return 'document';
@@ -100,7 +106,10 @@ export const validateFile = (
  * typical photo at default detail. Both are estimates and the UI says so —
  * the point is order of magnitude, not billing accuracy.
  */
-export const estimateTokens = (attachments: Attachment[], prompt = ''): number => {
+export const estimateTokens = (
+  attachments: Attachment[],
+  prompt = '',
+): number => {
   let total = Math.ceil(prompt.length / 4);
   for (const a of attachments) {
     if (a.kind === 'image') {
@@ -150,16 +159,28 @@ const VISION_HINTS = [
   'cogvlm',
 ];
 
-export const looksVisionCapable = (model: { Name?: string; Tags?: string[] } | undefined): boolean => {
-  if (!model) return false;
-  const name = String(model.Name ?? '').toLowerCase();
-  if (VISION_HINTS.some((h) => name.includes(h))) {
-    return true;
-  }
-  // Honour an explicit tag if a provider ever sets one.
+export type VisionCapability = 'declared' | 'detected' | 'none';
+
+/**
+ * `declared` is backed by a provider-supplied capability tag. `detected` is a
+ * known vision model family inferred from its name because the on-chain schema
+ * does not yet require a vision field.
+ */
+export const getVisionCapability = (
+  model: { Name?: string; Tags?: string[] } | undefined,
+): VisionCapability => {
+  if (!model) return 'none';
   const tags = (model.Tags ?? []).map((t) => String(t).toLowerCase().trim());
-  return tags.some((t) => ['vision', 'multimodal', 'image', 'vlm'].includes(t));
+  if (tags.some((t) => ['vision', 'multimodal', 'image', 'vlm'].includes(t))) {
+    return 'declared';
+  }
+  const name = String(model.Name ?? '').toLowerCase();
+  return VISION_HINTS.some((hint) => name.includes(hint)) ? 'detected' : 'none';
 };
+
+export const looksVisionCapable = (
+  model: { Name?: string; Tags?: string[] } | undefined,
+): boolean => getVisionCapability(model) !== 'none';
 
 // ---------------------------------------------------------------------------
 // Prompt assembly

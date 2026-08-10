@@ -13,6 +13,7 @@ import {
   IconShieldLock,
 } from '@tabler/icons-react';
 import { formatSmallNumber, SECURE_TAG, SECURE_BADGE_TOOLTIP } from '../utils';
+import { getVisionCapability } from '../../../store/utils/attachments';
 
 type IconCmp = React.ComponentType<any>;
 
@@ -45,12 +46,17 @@ const RowContainer = styled.button<{ $online: boolean }>`
   cursor: ${(p) => (p.$online ? 'pointer' : 'not-allowed')};
   text-align: left;
   font: inherit;
-  transition: background 0.12s ease, border-color 0.12s ease, transform 0.06s ease;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    transform 0.06s ease;
   opacity: ${(p) => (p.$online ? 1 : 0.55)};
 
   &:hover {
-    background: ${(p) => (p.$online ? 'rgba(32, 220, 142, 0.08)' : 'rgba(255, 255, 255, 0.04)')};
-    border-color: ${(p) => (p.$online ? 'rgba(32, 220, 142, 0.4)' : 'rgba(255, 255, 255, 0.08)')};
+    background: ${(p) =>
+      p.$online ? 'rgba(32, 220, 142, 0.08)' : 'rgba(255, 255, 255, 0.04)'};
+    border-color: ${(p) =>
+      p.$online ? 'rgba(32, 220, 142, 0.4)' : 'rgba(255, 255, 255, 0.08)'};
   }
 
   &:active:not(:disabled) {
@@ -150,6 +156,21 @@ const TeePill = styled.span`
   letter-spacing: 0.3px;
   background: rgba(125, 188, 255, 0.14);
   color: rgba(173, 211, 255, 0.95);
+`;
+
+const VisionPill = styled.span<{ $declared: boolean }>`
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px 1px 5px;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  background: ${(p) =>
+    p.$declared ? 'rgba(190, 125, 255, 0.18)' : 'rgba(190, 125, 255, 0.1)'};
+  color: ${(p) =>
+    p.$declared ? 'rgba(224, 190, 255, 1)' : 'rgba(210, 180, 240, 0.85)'};
 `;
 
 const Dot = styled.span`
@@ -267,7 +288,11 @@ function computePrice(model: any): PriceInfo {
 function ModelRow(props: {
   model: any;
   symbol: string;
-  onChangeModel: (data: { modelId: string; bidId?: string; isLocal?: boolean }) => void;
+  onChangeModel: (data: {
+    modelId: string;
+    bidId?: string;
+    isLocal?: boolean;
+  }) => void;
 }) {
   const model = props.model || {};
   const modelId = model.Id || '';
@@ -284,11 +309,11 @@ function ModelRow(props: {
   );
 
   const primaryModalityKey = modalityKeys[0] || 'llm';
-  const ModalityIcon =
-    MODALITY[primaryModalityKey]?.Icon || IconMessage;
+  const ModalityIcon = MODALITY[primaryModalityKey]?.Icon || IconMessage;
 
   const price = useMemo(() => computePrice(model), [model]);
   const providerCount = (model?.bids || []).filter((b: any) => b?.Id).length;
+  const visionCapability = getVisionCapability(model);
 
   const handleSelect = () => {
     if (!isOnline) return;
@@ -334,6 +359,19 @@ function ModelRow(props: {
               Secure
             </TeePill>
           )}
+          {visionCapability !== 'none' && (
+            <VisionPill
+              $declared={visionCapability === 'declared'}
+              title={
+                visionCapability === 'declared'
+                  ? 'Image input support is declared by this model’s tags.'
+                  : 'Likely supports image input based on its recognised model family; the provider has not declared a vision tag.'
+              }
+            >
+              <IconEye size={11} stroke={2.2} />
+              {visionCapability === 'declared' ? 'Vision' : 'Likely vision'}
+            </VisionPill>
+          )}
           {!isLocal && providerCount > 1 && (
             <>
               <Dot>·</Dot>
@@ -375,7 +413,8 @@ function ModelRow(props: {
         {price.kind === 'range' && (
           <>
             <PriceValue>
-              {formatSmallNumber(price.minPerSec)} – {formatSmallNumber(price.maxPerSec)}
+              {formatSmallNumber(price.minPerSec)} –{' '}
+              {formatSmallNumber(price.maxPerSec)}
             </PriceValue>
             <PriceUnit>{symbol}/s</PriceUnit>
           </>

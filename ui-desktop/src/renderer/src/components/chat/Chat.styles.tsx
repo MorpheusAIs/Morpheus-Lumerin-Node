@@ -89,6 +89,38 @@ export const ChatIntroInnerText = styled.p`
   margin-bottom: 25px;
 `;
 
+export const SessionDurationField = styled.label`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 24px 0 8px;
+  color: #ffffff;
+  font-size: 14px;
+
+  select {
+    width: 100%;
+    padding: 10px 12px;
+    color: #ffffff;
+    background: ${(p) => p.theme.colors.primary};
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 8px;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  select:focus-visible {
+    outline: 2px solid ${(p) => p.theme.colors.active};
+    outline-offset: 2px;
+  }
+`;
+
+export const SessionCostSummary = styled.div`
+  margin: 10px 0 24px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+  line-height: 1.45;
+`;
+
 export const Control = styled.div`
   height: fit-content;
   position: relative;
@@ -322,7 +354,9 @@ export const AudioActionBtn = styled.button`
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 
   &:hover {
     background: rgba(32, 220, 142, 0.12);
