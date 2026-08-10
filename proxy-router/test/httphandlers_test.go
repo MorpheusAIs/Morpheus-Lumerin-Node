@@ -1,3 +1,19 @@
+//go:build integration
+// +build integration
+
+// QUARANTINED — does not currently compile.
+//
+// These are live-network integration tests: they expect a local Ollama on
+// :11434 and a fully wired APIBus, so they never ran in CI even when they did
+// build. They have since drifted against the current APIs (aiengine.NewAiEngine
+// gained parameters, AiEngine.Prompt/PromptStream were removed/renamed, and the
+// apibus construction here no longer matches), which broke `go build ./...` and
+// therefore `go test ./...` for the entire module.
+//
+// Tagged `integration` so the default build and test run are unblocked. To
+// revive: fix the call sites against the current package APIs, stand up the
+// dependencies, then run `go test -tags integration ./test/...`.
+
 package test
 
 import (
