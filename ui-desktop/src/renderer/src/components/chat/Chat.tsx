@@ -1,4 +1,11 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  memo,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 // import component 👇
 import Drawer from 'react-modern-drawer';
@@ -34,6 +41,8 @@ import {
   ChatIntroInnerTitle,
   ChatIntroInnerText,
   ChatIntroButton,
+  SessionDurationField,
+  SessionCostSummary,
   SendBtnWrapper,
   Btn,
   AudioInputZone,
@@ -85,6 +94,12 @@ import {
   isVisionRejection,
   rememberImageRejection,
 } from '../../store/utils/visionMemory';
+import {
+  DEFAULT_SESSION_DURATION_SECONDS,
+  SESSION_DURATION_OPTIONS,
+  estimateSessionTokenAmount,
+  toSessionRequestDuration,
+} from '../../store/utils/sessionDuration';
 
 // Max simultaneous per-model bid requests. See store/utils/concurrency.ts.
 const BIDS_CONCURRENCY = 6;
@@ -164,6 +179,9 @@ const Chat = (props: ChatProps) => {
     min: number;
     max: number;
   }>({ min: 0, max: 0 });
+  const [sessionDuration, setSessionDuration] = useState(
+    DEFAULT_SESSION_DURATION_SECONDS,
+  );
 
   const [chat, setChat] = useState<ChatData | undefined>(undefined);
 
@@ -196,48 +214,52 @@ const Chat = (props: ChatProps) => {
     enabled: !!modelsDataQuery.data,
     queryFn: async () => {
       const md = modelsDataQuery.data;
-      const providersMap = md.providers.reduce(
-        (a: any, b: any) => ({ ...a, [b.Address.toLowerCase()]: b }),
-        {},
+      const providersMap = new Map<string, any>(
+        md.providers.map((provider: any) => [
+          provider.Address.toLowerCase(),
+          provider,
+        ]),
       );
       // Bounded fan-out: one bid request per model, but at most
       // BIDS_CONCURRENCY in flight. The previous unbounded Promise.all fired
       // hundreds of simultaneous IPC calls, which saturated the proxy-router
       // and blocked the renderer while the Chat tab loaded.
-      const merged = (
-        await pooledMapSettled(
-          md.models,
-          async (m: any) => {
-            const id = m.Id;
-            if (m.isLocal) {
-              return { id };
-            }
-            const bids = ((await props.getBidsByModelId(id)) ?? [])
-              .map((b: any) => ({
-                ...b,
-                ProviderData: providersMap[b.Provider.toLowerCase()],
-                Model: m,
-              }))
-              .filter((b: any) => b.ProviderData);
+      const merged = await pooledMapSettled(
+        md.models,
+        async (m: any) => {
+          const id = m.Id;
+          if (m.isLocal) {
+            return { id };
+          }
+          const bids = ((await props.getBidsByModelId(id)) ?? [])
+            .map((b: any) => ({
+              ...b,
+              ProviderData: providersMap.get(b.Provider.toLowerCase()),
+              Model: m,
+            }))
+            .filter((b: any) => b.ProviderData);
 
-            if (!bids.length) {
-              return null;
-            }
+          if (!bids.length) {
+            return null;
+          }
 
-            return { id, bids };
-          },
-          // One failing model must not blank the whole marketplace list.
-          () => null,
-          BIDS_CONCURRENCY,
-        )
-      ).reduce((acc: any[], next: any) => {
+          return { id, bids };
+        },
+        // One failing model must not blank the whole marketplace list.
+        () => null,
+        BIDS_CONCURRENCY,
+      );
+      const modelsById = new Map<string, any>(
+        md.models.map((model: any) => [model.Id, model]),
+      );
+      return merged.reduce((acc: any[], next: any) => {
         if (!next) {
           return acc;
         }
-        const model = md.models.find((m: any) => m.Id == next.id);
-        return [...acc, { ...model, bids: next.bids }];
+        const model = modelsById.get(next.id);
+        acc.push({ ...model, bids: next.bids });
+        return acc;
       }, []);
-      return merged;
     },
   });
 
@@ -245,12 +267,17 @@ const Chat = (props: ChatProps) => {
     queryKey: queryKeys.providersAvailability,
     enabled: !!modelsDataQuery.data?.providers?.length,
     staleTime: 5 * 60_000,
-    queryFn: () => props.getProvidersAvailability(modelsDataQuery.data.providers),
+    queryFn: () =>
+      props.getProvidersAvailability(modelsDataQuery.data.providers),
   });
 
   // Full (unfiltered) model list — local + every marketplace model, no bids.
   // Used for mapping sessions/chats by id, matching the original mount logic.
   const allModels: any[] | undefined = modelsDataQuery.data?.models;
+  const allModelsById = useMemo(
+    () => new Map((allModels ?? []).map((model: any) => [model.Id, model])),
+    [allModels],
+  );
 
   // chainData.models prefers the bid-enriched (and bid-filtered) list once it
   // is available, otherwise falls back to the raw list so the UI can render.
@@ -273,13 +300,13 @@ const Chat = (props: ChatProps) => {
       return [];
     }
     return raw.reduce((res: any[], item: any) => {
-      const sessionModel = allModels.find((x) => x.Id == item.ModelAgentId);
+      const sessionModel = allModelsById.get(item.ModelAgentId);
       if (sessionModel) {
         res.push({ ...item, ModelName: sessionModel.Name });
       }
       return res;
     }, []);
-  }, [sessionsQuery.data, allModels]);
+  }, [sessionsQuery.data, allModels, allModelsById]);
 
   // Initial-load overlay: only while there is no cached data yet. On revisits
   // every query resolves synchronously from cache, so this is false and the
@@ -443,44 +470,16 @@ const Chat = (props: ChatProps) => {
     }
   };
 
-  const calculateAcceptableDuration = (
-    pricePerSecond: number,
-    balance: number,
-    stakingInfo: { budget: number; supply: number },
-  ) => {
-    const delta = 60; // 1 minute
-
-    if (balance > requiredStake.max) {
-      return 24 * 60 * 60; // 1 day in seconds
-    }
-
-    const targetDuration = Math.round(
-      (balance * Number(stakingInfo.budget)) /
-        (Number(stakingInfo.supply) * pricePerSecond),
-    );
-
-    if (targetDuration - delta < 5 * 60) {
-      return 5 * 60;
-    }
-
-    return targetDuration - (targetDuration % 60) - delta;
-  };
-
-  const calculateAcceptableDurationForDirectPay = (stakingInfo: {
-    budget: number;
-    supply: number;
-  }) => {
-    // there is a bug in the contract, that incorrectly validates the duration when using direct pay, (as if user would stake)
-    // so we calculate which duration is equivalent to amount of stake for minimum stake session duration (5 minutes)
-    return Math.round((5 * 60 * stakingInfo.supply) / stakingInfo.budget) + 1;
-  };
-
   // A session that was just opened on-chain does not always show up in the very
   // next indexer read. Poll briefly instead of assuming the first response
   // contains it — previously a miss meant `targetSessionData` was undefined and
   // the next line threw, which aborted the handler and left the UI wedged
   // (and the user re-staking into a second session they didn't need).
-  const findSessionWithRetry = async (sessionId, attempts = 5, delayMs = 1200) => {
+  const findSessionWithRetry = async (
+    sessionId,
+    attempts = 5,
+    delayMs = 1200,
+  ) => {
     for (let i = 0; i < attempts; i++) {
       const allSessions = await refreshSessions();
       const match = allSessions.find((x) => x.Id == sessionId);
@@ -545,11 +544,11 @@ const Chat = (props: ChatProps) => {
         });
       }
 
-      const prices = selectedModel.bids.map((x) => Number(x.PricePerSecond));
-      const maxPrice = Math.max(...prices);
-      const duration = isDirectPay
-        ? calculateAcceptableDurationForDirectPay(meta)
-        : calculateAcceptableDuration(maxPrice, Number(balances.mor), meta);
+      const duration = toSessionRequestDuration(
+        sessionDuration,
+        isDirectPay,
+        meta,
+      );
 
       const openedSession = await props.onOpenSession({
         modelId: selectedModel.Id,
@@ -613,9 +612,9 @@ const Chat = (props: ChatProps) => {
         //              flagged with isAudioContent on the stored message.
         const isChatPrompt =
           Array.isArray(prompt.messages) && prompt.messages.length > 0;
-        const isTtsPrompt =
-          !isChatPrompt && typeof prompt.input === 'string';
-        const isSttMessage = !isChatPrompt && !isTtsPrompt && !!m.isAudioContent;
+        const isTtsPrompt = !isChatPrompt && typeof prompt.input === 'string';
+        const isSttMessage =
+          !isChatPrompt && !isTtsPrompt && !!m.isAudioContent;
 
         let userText: string;
         if (isChatPrompt) {
@@ -648,7 +647,8 @@ const Chat = (props: ChatProps) => {
         };
         if (isTtsPrompt) {
           // Synthesized audio is not persisted in a replayable form.
-          assistant.text = '[Audio response — replay is not available from history]';
+          assistant.text =
+            '[Audio response — replay is not available from history]';
         } else if (!isSttMessage) {
           assistant.isImageContent = m.isImageContent;
           assistant.isVideoRawContent = m.isVideoRawContent;
@@ -1047,7 +1047,12 @@ const Chat = (props: ChatProps) => {
       const url = URL.createObjectURL(blob);
       memoState = [
         ...memoState,
-        { id: makeId(16), text: url, isAudioContent: true, ...audioIconProps() },
+        {
+          id: makeId(16),
+          text: url,
+          isAudioContent: true,
+          ...audioIconProps(),
+        },
       ];
       setMessages(memoState);
       scrollToBottom();
@@ -1074,7 +1079,10 @@ const Chat = (props: ChatProps) => {
     scrollToBottom();
 
     if (messages.length === 0 && chat) {
-      setChatsData([...chatData, { ...chat, title: file.name || 'Transcription' }]);
+      setChatsData([
+        ...chatData,
+        { ...chat, title: file.name || 'Transcription' },
+      ]);
     }
 
     try {
@@ -1303,7 +1311,10 @@ const Chat = (props: ChatProps) => {
               : a,
           ),
         );
-        props.toasts.toast('error', e?.message || `Could not read ${file.name}`);
+        props.toasts.toast(
+          'error',
+          e?.message || `Could not read ${file.name}`,
+        );
       }
     }
   };
@@ -1354,12 +1365,18 @@ const Chat = (props: ChatProps) => {
 
     // Sending while a PDF is still being read would silently drop it.
     if (attachments.some((a) => a.status === 'parsing')) {
-      props.toasts.toast('info', 'Still reading your attachments — one moment.');
+      props.toasts.toast(
+        'info',
+        'Still reading your attachments — one moment.',
+      );
       return;
     }
 
     if (messages.length === 0 && chat) {
-      const title = { ...chat, title: promptInput || readyAttachments[0]?.name };
+      const title = {
+        ...chat,
+        title: promptInput || readyAttachments[0]?.name,
+      };
       setChatsData([...chatData, title]);
     }
 
@@ -1462,14 +1479,19 @@ const Chat = (props: ChatProps) => {
       Number.isFinite(Number(requiredStake.min));
 
     // for stake mode
-    const isEnoughFunds =
-      isPricingReady && Number(balances.mor) > Number(requiredStake.min);
-
-    const requiredStakeForDirectPay = isPricingReady
-      ? (5 * 3600 * Number(meta.supply)) / Number(meta.budget)
+    const prices =
+      selectedModel?.bids?.map((x: any) => Number(x.PricePerSecond)) ?? [];
+    const maxPrice = prices.length ? Math.max(...prices) : Number.NaN;
+    const selectedStake = isPricingReady
+      ? estimateSessionTokenAmount(maxPrice, sessionDuration, false, meta)
       : Number.POSITIVE_INFINITY;
+    const requiredStakeForDirectPay = isPricingReady
+      ? estimateSessionTokenAmount(maxPrice, sessionDuration, true, meta)
+      : Number.POSITIVE_INFINITY;
+    const hasSelectedStakeFunds =
+      isPricingReady && Number(balances.mor) >= selectedStake;
     const isEnoughFundsForDirectPay =
-      isPricingReady && Number(balances.mor) > requiredStakeForDirectPay;
+      isPricingReady && Number(balances.mor) >= requiredStakeForDirectPay;
 
     // The user may already hold an open session for this model. Surfacing it
     // here is what stops people staking a second time when the first session
@@ -1484,6 +1506,23 @@ const Chat = (props: ChatProps) => {
           <ChatIntroContainer>
             <ChatIntroInner>
               <ChatIntroInnerTitle>Select payment method</ChatIntroInnerTitle>
+
+              <SessionDurationField>
+                Session length
+                <select
+                  aria-label="Session length"
+                  value={sessionDuration}
+                  onChange={(event) =>
+                    setSessionDuration(Number(event.target.value))
+                  }
+                >
+                  {SESSION_DURATION_OPTIONS.map((option) => (
+                    <option key={option.seconds} value={option.seconds}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </SessionDurationField>
 
               {openSessionsForModel.length > 0 && (
                 <ChatIntroInnerText style={{ color: '#20dc8e' }}>
@@ -1502,8 +1541,8 @@ const Chat = (props: ChatProps) => {
                 </ChatIntroInnerText>
               )}
               <ChatIntroInnerText>
-                Stake MOR to get a free compute. Session will last from 5 mins
-                up to 24 hours depending on the amount you stake (min:{' '}
+                Stake MOR to reserve compute for the session length selected
+                above (min:{' '}
                 {formatValue(requiredStake.min, 18)} MOR, max:{' '}
                 {formatValue(requiredStake.max, 18)} MOR). You can claim your
                 stake in 24h.
@@ -1511,11 +1550,20 @@ const Chat = (props: ChatProps) => {
               <div style={{ display: 'flex', justifyContent: 'center' }}>
                 <ChatIntroButton
                   onClick={() => onOpenSession(false, false)}
-                  disabled={!isEnoughFunds}
+                  disabled={!hasSelectedStakeFunds}
                 >
                   Stake MOR
                 </ChatIntroButton>
               </div>
+              <SessionCostSummary>
+                Estimated stake for this length:{' '}
+                {Number.isFinite(selectedStake)
+                  ? `${formatValue(selectedStake, 18)} MOR`
+                  : 'calculating…'}
+                {!hasSelectedStakeFunds && isPricingReady
+                  ? ' — insufficient balance'
+                  : ''}
+              </SessionCostSummary>
               <ChatIntroInnerText>
                 Pay with your MOR tokens directly. The duration of the session
                 is limited only with your MOR balance.
@@ -1528,12 +1576,25 @@ const Chat = (props: ChatProps) => {
                   Direct Pay
                 </ChatIntroButton>
               </div>
+              <SessionCostSummary>
+                Estimated direct payment:{' '}
+                {Number.isFinite(requiredStakeForDirectPay)
+                  ? `${formatValue(requiredStakeForDirectPay, 18)} MOR`
+                  : 'calculating…'}
+                {!isEnoughFundsForDirectPay && isPricingReady
+                  ? ' — insufficient balance'
+                  : ''}
+              </SessionCostSummary>
             </ChatIntroInner>
           </ChatIntroContainer>
         ) : (
           <ChatHistoryContainer>
             {messages?.map((x, index) => (
-              <Message key={index} message={x} onOpenImage={setImagePreview} />
+              <Message
+                key={x.id ?? index}
+                message={x}
+                onOpenImage={setImagePreview}
+              />
             ))}
           </ChatHistoryContainer>
         )}
@@ -1715,7 +1776,9 @@ const Chat = (props: ChatProps) => {
                   type="button"
                   data-recording={recording}
                   disabled={isDisabled || isSpinning}
-                  onClick={() => (recording ? stopRecording() : startRecording())}
+                  onClick={() =>
+                    recording ? stopRecording() : startRecording()
+                  }
                 >
                   {recording ? (
                     <>
@@ -1964,17 +2027,25 @@ const renderMessage = (message, onOpenImage) => {
   );
 };
 
-const Message = ({ message, onOpenImage }) => {
-  return (
-    <div style={{ display: 'flex', margin: '12px 0 28px 0' }}>
-      <Avatar color={message.color}>{message.icon}</Avatar>
-      <div>
-        <AvatarHeader>{message.user}</AvatarHeader>
-        {renderMessage(message, onOpenImage)}
+const Message = memo(
+  ({
+    message,
+    onOpenImage,
+  }: {
+    message: any;
+    onOpenImage: (url: string) => void;
+  }) => {
+    return (
+      <div style={{ display: 'flex', margin: '12px 0 28px 0' }}>
+        <Avatar color={message.color}>{message.icon}</Avatar>
+        <div>
+          <AvatarHeader>{message.user}</AvatarHeader>
+          {renderMessage(message, onOpenImage)}
+        </div>
       </div>
-    </div>
-  );
-};
+    );
+  },
+);
 
 // withChatState injects props that are loosely typed in its HOC signature;
 // cast to suppress the HOC-vs-component prop mismatch.

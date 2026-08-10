@@ -6,6 +6,7 @@ import {
   classify,
   estimateTokens,
   formatBytes,
+  getVisionCapability,
   looksVisionCapable,
   MAX_ATTACHMENTS,
   MAX_IMAGE_BYTES,
@@ -78,7 +79,9 @@ describe('validateFile', () => {
   });
 
   it('rejects an empty file', () => {
-    expect(validateFile({ name: 'a.txt', type: '', size: 0 }, 0)).toMatch(/empty/);
+    expect(validateFile({ name: 'a.txt', type: '', size: 0 }, 0)).toMatch(
+      /empty/,
+    );
   });
 
   it('enforces the attachment count cap', () => {
@@ -91,7 +94,10 @@ describe('validateFile', () => {
   // extracted to text, whereas an image goes into the prompt whole as base64.
   it('allows a document larger than the image cap', () => {
     expect(
-      validateFile({ name: 'big.pdf', type: 'application/pdf', size: MAX_IMAGE_BYTES + 1 }, 0),
+      validateFile(
+        { name: 'big.pdf', type: 'application/pdf', size: MAX_IMAGE_BYTES + 1 },
+        0,
+      ),
     ).toBeNull();
   });
 });
@@ -205,9 +211,27 @@ describe('looksVisionCapable', () => {
   // No on-chain tag exists today, but honour one if a provider sets it —
   // otherwise a genuinely new vision model stays unrecognised forever.
   it('honours an explicit tag', () => {
-    expect(looksVisionCapable({ Name: 'custom-model', Tags: ['vision'] })).toBe(true);
-    expect(looksVisionCapable({ Name: 'custom-model', Tags: ['multimodal'] })).toBe(true);
-    expect(looksVisionCapable({ Name: 'custom-model', Tags: ['llm'] })).toBe(false);
+    expect(looksVisionCapable({ Name: 'custom-model', Tags: ['vision'] })).toBe(
+      true,
+    );
+    expect(
+      looksVisionCapable({ Name: 'custom-model', Tags: ['multimodal'] }),
+    ).toBe(true);
+    expect(looksVisionCapable({ Name: 'custom-model', Tags: ['llm'] })).toBe(
+      false,
+    );
+  });
+
+  it('distinguishes declared support from name-based detection', () => {
+    expect(getVisionCapability({ Name: 'custom', Tags: ['vision'] })).toBe(
+      'declared',
+    );
+    expect(getVisionCapability({ Name: 'Qwen2-VL-7B', Tags: ['llm'] })).toBe(
+      'detected',
+    );
+    expect(getVisionCapability({ Name: 'llama-3-8b', Tags: ['llm'] })).toBe(
+      'none',
+    );
   });
 
   it('does not throw on a missing model', () => {

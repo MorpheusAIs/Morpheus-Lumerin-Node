@@ -16,10 +16,12 @@ import {
   IconWorld,
   IconShieldLock,
   IconInfoCircle,
+  IconEye,
 } from '@tabler/icons-react';
 import Modal from '../../contracts/modals/Modal';
 import ModelRow from './ModelRow';
 import { isSecureModel, SECURE_MODE_INFO } from '../utils';
+import { getVisionCapability } from '../../../store/utils/attachments';
 
 /* The shared outer modal `Body` (in CreateContractModal.styles) bakes in
    `padding: 5rem` and never sets `overflow: hidden`, so an `auto`-height box
@@ -83,7 +85,9 @@ const SearchWrapper = styled.div`
     border-radius: 8px;
     overflow: hidden;
     border: 1px solid rgba(255, 255, 255, 0.06);
-    transition: border-color 0.15s ease, background 0.15s ease;
+    transition:
+      border-color 0.15s ease,
+      background 0.15s ease;
   }
 
   .input-group:focus-within {
@@ -121,9 +125,7 @@ const FilterPill = styled.button<{ $active: boolean }>`
   border-radius: 999px;
   border: 1px solid
     ${(p) =>
-      p.$active
-        ? 'rgba(32, 220, 142, 0.5)'
-        : 'rgba(255, 255, 255, 0.08)'};
+      p.$active ? 'rgba(32, 220, 142, 0.5)' : 'rgba(255, 255, 255, 0.08)'};
   background: ${(p) =>
     p.$active ? 'rgba(32, 220, 142, 0.14)' : 'rgba(255, 255, 255, 0.03)'};
   color: ${(p) =>
@@ -132,7 +134,10 @@ const FilterPill = styled.button<{ $active: boolean }>`
   font-weight: 500;
   letter-spacing: 0.2px;
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
 
   &:hover {
     background: ${(p) =>
@@ -165,7 +170,9 @@ const Body = styled.div`
 
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
-  &::-webkit-scrollbar { width: 6px; }
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
   &::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.12);
     border-radius: 3px;
@@ -173,7 +180,9 @@ const Body = styled.div`
 `;
 
 const Section = styled.section`
-  & + & { margin-top: 1.8rem; }
+  & + & {
+    margin-top: 1.8rem;
+  }
 `;
 
 const SectionLabel = styled.div`
@@ -246,7 +255,10 @@ const EmptyState = styled.div`
   font-size: 1.35rem;
   line-height: 1.5;
 
-  svg { opacity: 0.4; margin-bottom: 1rem; }
+  svg {
+    opacity: 0.4;
+    margin-bottom: 1rem;
+  }
 `;
 
 const BidsLoadingHint = styled.div`
@@ -268,11 +280,20 @@ const BidsLoadingHint = styled.div`
   }
 `;
 
-type FilterId = 'all' | 'llm' | 'embeddings' | 'tts' | 'stt' | 'local' | 'tee';
+type FilterId =
+  | 'all'
+  | 'llm'
+  | 'vision'
+  | 'embeddings'
+  | 'tts'
+  | 'stt'
+  | 'local'
+  | 'tee';
 
 const FILTERS: { id: FilterId; label: string; modality?: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'llm', label: 'LLM', modality: 'llm' },
+  { id: 'vision', label: 'Vision' },
   { id: 'embeddings', label: 'Embeddings', modality: 'embeddings' },
   { id: 'tts', label: 'Text-to-Speech', modality: 'tts' },
   { id: 'stt', label: 'Speech-to-Text', modality: 'stt' },
@@ -281,6 +302,7 @@ const FILTERS: { id: FilterId; label: string; modality?: string }[] = [
 ];
 
 const isTee = (m: any) => isSecureModel(m);
+const isVision = (m: any) => getVisionCapability(m) !== 'none';
 
 function hasModality(tags: any[] = [], modality: string) {
   return tags.some((t: any) => String(t).toLowerCase() === modality);
@@ -328,7 +350,10 @@ const ModelSelectionModal = ({
           if (!entry) return acc;
           if (entry.isOnline) return acc;
           const online = entry.status != 'disconnected';
-          return { isOnline: online, lastCheck: !online ? entry.time : undefined };
+          return {
+            isOnline: online,
+            lastCheck: !online ? entry.time : undefined,
+          };
         }, {});
         return { ...m, ...info };
       }),
@@ -339,13 +364,21 @@ const ModelSelectionModal = ({
   // can show live counts and disabled-look for empty filters.
   const counts: Record<FilterId, number> = useMemo(() => {
     const c: Record<FilterId, number> = {
-      all: 0, llm: 0, embeddings: 0, tts: 0, stt: 0, tee: 0, local: 0,
+      all: 0,
+      llm: 0,
+      vision: 0,
+      embeddings: 0,
+      tts: 0,
+      stt: 0,
+      tee: 0,
+      local: 0,
     };
     for (const m of enriched) {
       if (!matchesQuery(m, search)) continue;
       c.all++;
       if (m.isLocal) c.local++;
       if (isTee(m)) c.tee++;
+      if (isVision(m)) c.vision++;
       const tags = m.Tags || [];
       if (hasModality(tags, 'llm') || hasModality(tags, 'chat')) c.llm++;
       if (hasModality(tags, 'embeddings') || hasModality(tags, 'embedding'))
@@ -367,6 +400,8 @@ const ModelSelectionModal = ({
           return !!m.isLocal;
         case 'tee':
           return isTee(m);
+        case 'vision':
+          return isVision(m);
         case 'llm':
           return hasModality(tags, 'llm') || hasModality(tags, 'chat');
         case 'embeddings':
@@ -397,22 +432,35 @@ const ModelSelectionModal = ({
     handleClose();
   };
 
-  // Section buckets: Local → TEE → Marketplace.
-  // TEE models surface in their own section (not duplicated under Marketplace)
-  // so privacy-sensitive options are visually unambiguous.
+  // Section buckets: Local → Vision → TEE → Marketplace. A model appears once;
+  // security and vision attributes remain visible as badges on its row.
   const localModels = visible.filter((m: any) => m.isLocal);
-  const teeModels = visible.filter((m: any) => !m.isLocal && isTee(m));
-  const remoteModels = visible.filter((m: any) => !m.isLocal && !isTee(m));
+  const visionModels = visible.filter((m: any) => !m.isLocal && isVision(m));
+  const teeModels = visible.filter(
+    (m: any) => !m.isLocal && !isVision(m) && isTee(m),
+  );
+  const remoteModels = visible.filter(
+    (m: any) => !m.isLocal && !isVision(m) && !isTee(m),
+  );
 
   const filterIconFor = (id: FilterId) => {
     switch (id) {
-      case 'llm': return <IconMessage size={13} stroke={2} />;
-      case 'embeddings': return <IconVector size={13} stroke={2} />;
-      case 'tts': return <IconHeadphones size={13} stroke={2} />;
-      case 'stt': return <IconMicrophone size={13} stroke={2} />;
-      case 'tee': return <IconShieldLock size={13} stroke={2} />;
-      case 'local': return <IconHome size={13} stroke={2} />;
-      default: return null;
+      case 'llm':
+        return <IconMessage size={13} stroke={2} />;
+      case 'vision':
+        return <IconEye size={13} stroke={2} />;
+      case 'embeddings':
+        return <IconVector size={13} stroke={2} />;
+      case 'tts':
+        return <IconHeadphones size={13} stroke={2} />;
+      case 'stt':
+        return <IconMicrophone size={13} stroke={2} />;
+      case 'tee':
+        return <IconShieldLock size={13} stroke={2} />;
+      case 'local':
+        return <IconHome size={13} stroke={2} />;
+      default:
+        return null;
     }
   };
 
@@ -535,6 +583,28 @@ const ModelSelectionModal = ({
               {showTeeInfo && <InfoPanel>{SECURE_MODE_INFO}</InfoPanel>}
               <SectionList>
                 {teeModels.map((m: any) => (
+                  <ModelRow
+                    key={m.Id}
+                    model={m}
+                    symbol={symbol}
+                    onChangeModel={handlePick}
+                  />
+                ))}
+              </SectionList>
+            </Section>
+          )}
+
+          {visionModels.length > 0 && (
+            <Section>
+              <SectionLabel>
+                <IconEye size={13} stroke={2} />
+                Vision
+                <SectionHint>
+                  (image input — declared models and recognised vision families)
+                </SectionHint>
+              </SectionLabel>
+              <SectionList>
+                {visionModels.map((m: any) => (
                   <ModelRow
                     key={m.Id}
                     model={m}
