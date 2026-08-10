@@ -79,6 +79,12 @@ import {
   readFile,
   validateFile,
 } from '../../store/utils/attachments';
+import { explainChainError } from '../../store/utils/chainErrors';
+import {
+  hasRejectedImages,
+  isVisionRejection,
+  rememberImageRejection,
+} from '../../store/utils/visionMemory';
 
 // Max simultaneous per-model bid requests. See store/utils/concurrency.ts.
 const BIDS_CONCURRENCY = 6;
@@ -826,8 +832,23 @@ const Chat = (props: ChatProps) => {
     }
 
     if (!response.ok) {
-      console.log('Failed', await response.json());
-      props.toasts.toast('error', 'Failed to send prompt');
+      // The provider's reason arrives wrapped in several layers of JSON. Show
+      // the actionable part rather than a generic "Failed to send prompt",
+      // which threw away the one piece of information the user needed.
+      const body = await response.json().catch(() => null);
+      const detail = body?.error ?? body?.message ?? `HTTP ${response.status}`;
+      console.error('Prompt failed:', detail);
+
+      // A refusal is a definitive answer to "does this model do vision?" —
+      // record it so next time the warning is a fact, not a guess.
+      if (isVisionRejection(detail)) {
+        rememberImageRejection(selectedModel?.Id);
+      }
+
+      const { message, hint } = explainChainError(detail);
+      props.toasts.toast('error', hint ? `${message} ${hint}` : message, {
+        autoClose: 15000,
+      });
       return;
     }
 
@@ -881,7 +902,16 @@ const Chat = (props: ChatProps) => {
           }
 
           if (part.error) {
-            console.warn(part.error);
+            // Mid-stream failures were only console.warn'd, so the chat just
+            // stopped producing text with no explanation.
+            console.error('Stream error:', part.error);
+            if (isVisionRejection(part.error)) {
+              rememberImageRejection(selectedModel?.Id);
+            }
+            const { message, hint } = explainChainError(part.error);
+            props.toasts.toast('error', hint ? `${message} ${hint}` : message, {
+              autoClose: 15000,
+            });
             return;
           }
 
@@ -1743,6 +1773,7 @@ const Chat = (props: ChatProps) => {
                       prompt={promptInput}
                       onRemove={removeAttachment}
                       visionWarning={!looksVisionCapable(selectedModel)}
+                      visionRejected={hasRejectedImages(selectedModel?.Id)}
                       modelName={selectedModel?.Name}
                     />
                     <input

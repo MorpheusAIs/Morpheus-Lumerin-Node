@@ -39,6 +39,27 @@ export function explainChainError(error: unknown): FriendlyError {
       : ((error as any)?.message ?? String(error ?? 'Unknown error'));
   const msg = raw.toLowerCase();
 
+  // ---- Model rejected an image -------------------------------------------
+  // Providers wrap this in several layers of JSON, e.g.
+  //   provider request failed: provider error: upstream error 400:
+  //   {"details":{...},"issues":[{"message":"Image content is not supported
+  //   by this model. Please use a model that supports vision."}]}
+  // which is unreadable, and the actionable part is one clause in the middle.
+  if (
+    (msg.includes('image') &&
+      (msg.includes('not supported') || msg.includes('does not support'))) ||
+    msg.includes('supports vision') ||
+    msg.includes('vision model')
+  ) {
+    return {
+      message: 'This model cannot read images.',
+      hint:
+        'Your text and any documents were fine — only the image was rejected. ' +
+        'Remove it, or switch to a vision-capable model.',
+      raw,
+    };
+  }
+
   // ---- RPC endpoint refuses to broadcast transactions ----------------------
   // Base's public RPC (https://mainnet.base.org) accepts reads but rejects
   // eth_sendRawTransaction. It is first in the proxy-router's public endpoint
