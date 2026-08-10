@@ -74,11 +74,31 @@ const pagefindSnippet = `
     display: block;
     width: 100%;
   }
+  /* Mobile: icon-only trigger so the navbar does not grow a desktop ⌘K pill. */
+  #nodedocs-pagefind-mobile-trigger.pf-nodedocs-mobile {
+    display: inline-flex;
+    align-items: center;
+  }
+  #nodedocs-pagefind-mobile-trigger.pf-nodedocs-mobile .pf-trigger-btn {
+    width: 2rem;
+    height: 2rem;
+    min-width: 2rem;
+    padding: 0;
+    justify-content: center;
+    border-radius: 0.5rem;
+  }
 </style>
 <script type="module">
   import "/pagefind/pagefind-component-ui.js";
 
-  /** Mintlify client-nav re-renders the navbar; re-mount when the slot is replaced. */
+  /**
+   * Mintlify hydration / client-nav re-renders the navbar (and sometimes body).
+   * Pagefind's component registry does not deregister disconnected utilities, and
+   * pagefind-modal-trigger.openModal() always uses getUtilities("modal")[0].
+   * After a remount that orphan is detached, so mobile taps set aria-expanded but
+   * never call showModal() on the live dialog (reproduced on iOS WebKit / Brave).
+   */
+
   function findDesktopSlot() {
     const entry = document.getElementById("search-bar-entry");
     if (entry?.parentElement) return entry.parentElement;
@@ -88,9 +108,51 @@ const pagefindSnippet = `
     );
   }
 
+  /** Keep the modal outside <body> so Mintlify body remounts do not detach it. */
+  function getPagefindRoot() {
+    let root = document.getElementById("nodedocs-pagefind-root");
+    if (!root) {
+      root = document.createElement("div");
+      root.id = "nodedocs-pagefind-root";
+      document.documentElement.appendChild(root);
+    }
+    return root;
+  }
+
   function ensurePagefindModal() {
-    if (!document.querySelector("pagefind-modal")) {
-      document.body.appendChild(document.createElement("pagefind-modal"));
+    const root = getPagefindRoot();
+    let modal = root.querySelector("pagefind-modal") ?? document.querySelector("pagefind-modal");
+    if (!modal) {
+      modal = document.createElement("pagefind-modal");
+      modal.setAttribute("instance", "nodedocs");
+      root.appendChild(modal);
+      return modal;
+    }
+    if (modal.parentElement !== root) {
+      root.appendChild(modal);
+    }
+    return modal;
+  }
+
+  /** Open the in-document modal; repair stuck Pagefind _isOpen / detached dialogEl. */
+  function openLivePagefindModal() {
+    const modal = ensurePagefindModal();
+    if (!modal || typeof modal.open !== "function") return;
+
+    const dialog = modal.dialogEl;
+    if (modal._isOpen && !dialog?.open) {
+      modal._isOpen = false;
+    }
+    if (dialog && !document.contains(dialog) && typeof modal.render === "function") {
+      modal._isOpen = false;
+      modal.render();
+    }
+    try {
+      modal.open();
+    } catch {
+      modal._isOpen = false;
+      if (typeof modal.render === "function") modal.render();
+      modal.open();
     }
   }
 
@@ -107,9 +169,20 @@ const pagefindSnippet = `
 
     if (!host.querySelector("pagefind-searchbox")) {
       const searchbox = document.createElement("pagefind-searchbox");
+      searchbox.setAttribute("instance", "nodedocs");
       searchbox.setAttribute("placeholder", "Search documentation…");
       host.replaceChildren(searchbox);
     }
+  }
+
+  function patchModalTrigger(trigger) {
+    if (trigger.dataset.nodedocsOpenPatched === "1") return;
+    trigger.dataset.nodedocsOpenPatched = "1";
+    // Bypass Pagefind's stale getUtilities("modal")[0] lookup after remounts.
+    trigger.openModal = function nodedocsOpenModal() {
+      openLivePagefindModal();
+      this.buttonEl?.setAttribute("aria-expanded", "true");
+    };
   }
 
   function ensureMobileTrigger() {
@@ -117,11 +190,18 @@ const pagefindSnippet = `
     if (!mobileBtn?.parentElement) return;
 
     const slot = mobileBtn.parentElement;
-    if (!slot.querySelector("pagefind-modal-trigger")) {
-      const trigger = document.createElement("pagefind-modal-trigger");
-      trigger.setAttribute("aria-label", "Search documentation");
+    let trigger = slot.querySelector("#nodedocs-pagefind-mobile-trigger");
+    if (!trigger) {
+      trigger = document.createElement("pagefind-modal-trigger");
+      trigger.id = "nodedocs-pagefind-mobile-trigger";
+      trigger.className = "pf-nodedocs-mobile";
+      trigger.setAttribute("instance", "nodedocs");
+      trigger.setAttribute("placeholder", "Search documentation");
+      trigger.setAttribute("compact", "");
+      trigger.setAttribute("hide-shortcut", "");
       mobileBtn.insertAdjacentElement("afterend", trigger);
     }
+    patchModalTrigger(trigger);
   }
 
   function mountNavbarSearch() {
