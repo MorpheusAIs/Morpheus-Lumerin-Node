@@ -111,11 +111,18 @@ const createClient = function (createStore) {
     validatePassword: utils.forwardToMainProcess('validate-password'),
     changePassword: utils.forwardToMainProcess('change-password'),
     onLoginSubmit: utils.forwardToMainProcess('login-submit'),
-    // Transfers. 60s is generous for "broadcast the tx" while still failing in
-    // a timeframe a human will wait out — the old 750000ms (12.5 min) timeout
-    // meant a broken channel looked like an indefinite hang.
-    sendMor: utils.forwardToMainProcess('send-mor', 60000),
-    sendEth: utils.forwardToMainProcess('send-eth', 60000),
+    // Transfers.
+    //
+    // These must comfortably EXCEED the proxy-router's own mining timeout
+    // (lib.DefaultTxMineTimeout, currently 1 minute) — SendMOR/SendETH block on
+    // WaitMinedWithTimeout, so the backend can legitimately take that long
+    // before answering. An equal timeout on this side is a race: we would
+    // report "Operation timed out" for a transaction that was broadcast and is
+    // still mining, and the obvious user reaction is to send again. 90s leaves
+    // the backend room to return its own success or timeout first, so the UI
+    // always reflects a decided outcome.
+    sendMor: utils.forwardToMainProcess('send-mor', 90000),
+    sendEth: utils.forwardToMainProcess('send-eth', 90000),
     clearCache: utils.forwardToMainProcess('clear-cache'),
     handleClientSideError: utils.forwardToMainProcess('handle-client-error'),
     logout: utils.forwardToMainProcess('logout'),

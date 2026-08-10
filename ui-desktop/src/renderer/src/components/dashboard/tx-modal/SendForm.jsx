@@ -2,6 +2,7 @@ import React, { useState, useContext } from 'react';
 import styled from 'styled-components';
 import { ToastsContext } from '../../toasts';
 import Select from 'react-select';
+import { explainChainError } from '../../../store/utils/chainErrors';
 
 import BackIcon from '../../icons/BackIcon';
 import { BaseBtn } from '../../common';
@@ -209,7 +210,22 @@ export function SendForm(props) {
       // The main-process transfer handler throws on a non-2xx response, so the
       // real proxy-router message (insufficient funds, bad address, nonce
       // problems) reaches the user instead of a silent no-op.
-      context.toast('error', err?.message || 'Failed to send transaction');
+      //
+      // A timeout is the dangerous case: the transaction may already be on
+      // chain. Say so explicitly rather than letting the user assume it failed
+      // and send a second time.
+      const { message, hint } = explainChainError(err);
+      const timedOut = /timed out/i.test(String(err?.message ?? ''));
+      context.toast(
+        'error',
+        timedOut
+          ? 'Timed out waiting for confirmation. The transaction may still go through — ' +
+              'check your transaction list or the block explorer BEFORE sending again.'
+          : hint
+            ? `${message} ${hint}`
+            : message,
+        { autoClose: 15000 },
+      );
     } finally {
       setIsPending(false);
     }
