@@ -32,6 +32,7 @@ import { Core } from './core.types'
 import WalletError from '../../client/WalletError'
 import keys from '../keys'
 import * as wallets from '../wallets'
+import * as attachments from '../attachments'
 import { cfg } from '../../../../../orchestrator.config'
 import { OrchestratorConfig } from '../../../orchestrator/orchestrator.types'
 
@@ -229,6 +230,14 @@ export const getAuthHeaders = async () => {
 export const resetAuthHeaders = () => {
   authentication = null
 }
+
+/**
+ * Extracts text from a chat attachment (PDF, DOCX, SVG, plain text, code).
+ *
+ * Lives in main so pdfjs and mammoth stay out of the renderer bundle.
+ */
+export const parseAttachment = (params: { name: string; mime: string; data: string }) =>
+  attachments.parseAttachment(params)
 
 // ---------------------------------------------------------------------------
 // Multi-wallet

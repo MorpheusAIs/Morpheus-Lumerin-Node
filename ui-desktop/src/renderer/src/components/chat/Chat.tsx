@@ -10,6 +10,7 @@ import {
   IconUpload,
   IconMicrophone,
   IconPlayerStopFilled,
+  IconPaperclip,
 } from '@tabler/icons-react';
 import {
   View,
@@ -69,6 +70,15 @@ import { ApiGateway } from 'src/main/src/client/apiGateway';
 import { queryKeys } from '../../store/queries';
 import { pooledMapSettled } from '../../store/utils/concurrency';
 import QueryError from '../common/QueryError';
+import AttachmentBar from './AttachmentBar';
+import {
+  Attachment,
+  buildUserMessage,
+  classify,
+  looksVisionCapable,
+  readFile,
+  validateFile,
+} from '../../store/utils/attachments';
 
 // Max simultaneous per-model bid requests. See store/utils/concurrency.ts.
 const BIDS_CONCURRENCY = 6;
@@ -122,6 +132,8 @@ const Chat = (props: ChatProps) => {
   const initializedRef = useRef(false);
 
   const [promptInput, setPromptInput] = useState('');
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const attachInputRef = useRef<HTMLInputElement | null>(null);
   // Overlay shown during user-triggered actions (open/close/reopen session,
   // manual session refresh). The *initial* page load no longer uses this — it
   // is gated on the react-query cache so revisiting the tab is instant.
@@ -755,10 +767,21 @@ const Chat = (props: ChatProps) => {
     }
   };
 
-  const call = async (message) => {
+  const call = async (message, callAttachments: Attachment[] = []) => {
     let memoState = [
       ...messages,
-      { id: makeId(16), text: promptInput, ...userMessage },
+      {
+        id: makeId(16),
+        text: promptInput,
+        // Shown as chips under the user's bubble so the transcript reflects
+        // what was actually sent.
+        attachments: callAttachments.map((a) => ({
+          name: a.name,
+          kind: a.kind,
+          dataUrl: a.kind === 'image' ? a.dataUrl : undefined,
+        })),
+        ...userMessage,
+      },
     ];
     setMessages(memoState);
     scrollToBottom();
@@ -773,7 +796,9 @@ const Chat = (props: ChatProps) => {
     }
     headers['chat_id'] = chat?.id;
 
-    const incommingMessage = { role: 'user', content: message };
+    // Plain string content when there are no images, so the text-only path
+    // keeps exactly the shape it had before attachments existed.
+    const incommingMessage = buildUserMessage(message, callAttachments);
     const payload = {
       stream: true,
       messages: [incommingMessage],
@@ -1178,6 +1203,106 @@ const Chat = (props: ChatProps) => {
     return;
   };
 
+  /**
+   * Adds files to the pending attachment list.
+   *
+   * Documents are handed to the main process for text extraction (pdfjs and
+   * mammoth live there, out of the renderer bundle). Images are kept as a data
+   * URI and sent as an image_url part. Each file lands in the list immediately
+   * with status 'parsing' so a slow PDF doesn't look like nothing happened.
+   */
+  const addFiles = async (files: File[]) => {
+    for (const file of files) {
+      const reason = validateFile(file, attachments.length);
+      if (reason) {
+        props.toasts.toast('error', reason, { autoClose: 8000 });
+        continue;
+      }
+
+      const kind = classify(file);
+      const id = makeId(12);
+
+      setAttachments((prev) => [
+        ...prev,
+        {
+          id,
+          name: file.name,
+          mime: file.type,
+          size: file.size,
+          kind,
+          status: 'parsing',
+        },
+      ]);
+
+      try {
+        const { base64, dataUrl } = await readFile(file);
+
+        if (kind === 'image') {
+          setAttachments((prev) =>
+            prev.map((a) =>
+              a.id === id ? { ...a, dataUrl, status: 'ready' as const } : a,
+            ),
+          );
+          continue;
+        }
+
+        const parsed = await props.client.parseAttachment({
+          name: file.name,
+          mime: file.type,
+          data: base64,
+        });
+
+        setAttachments((prev) =>
+          prev.map((a) =>
+            a.id === id
+              ? {
+                  ...a,
+                  text: parsed.text,
+                  note: parsed.note,
+                  empty: parsed.empty,
+                  status: 'ready' as const,
+                }
+              : a,
+          ),
+        );
+      } catch (e: any) {
+        setAttachments((prev) =>
+          prev.map((a) =>
+            a.id === id
+              ? { ...a, status: 'error' as const, error: e?.message }
+              : a,
+          ),
+        );
+        props.toasts.toast('error', e?.message || `Could not read ${file.name}`);
+      }
+    }
+  };
+
+  const removeAttachment = (id: string) =>
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
+
+  // Attachments only make sense for text/vision chat. TTS synthesises the text
+  // you type, and STT has its own audio input.
+  const attachmentsSupported = modality === 'llm' && !isReadonly;
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    if (!attachmentsSupported) return;
+    const files = Array.from(e.clipboardData?.files ?? []);
+    if (files.length) {
+      e.preventDefault();
+      addFiles(files);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    if (!attachmentsSupported) return;
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    if (files.length) {
+      e.preventDefault();
+      addFiles(files);
+    }
+  };
+
   const handleSubmit = () => {
     if (abort) {
       abort = false;
@@ -1189,19 +1314,33 @@ const Chat = (props: ChatProps) => {
       return;
     }
 
-    if (!promptInput) {
+    const readyAttachments = attachments.filter((a) => a.status === 'ready');
+
+    // A message with only attachments is meaningful ("summarise this"), but a
+    // completely empty one is not.
+    if (!promptInput && !readyAttachments.length) {
+      return;
+    }
+
+    // Sending while a PDF is still being read would silently drop it.
+    if (attachments.some((a) => a.status === 'parsing')) {
+      props.toasts.toast('info', 'Still reading your attachments — one moment.');
       return;
     }
 
     if (messages.length === 0 && chat) {
-      const title = { ...chat, title: promptInput };
+      const title = { ...chat, title: promptInput || readyAttachments[0]?.name };
       setChatsData([...chatData, title]);
     }
 
     setIsSpinning(true);
-    const request = modality === 'tts' ? callSpeech(promptInput) : call(promptInput);
+    const request =
+      modality === 'tts'
+        ? callSpeech(promptInput)
+        : call(promptInput, readyAttachments);
     request.finally(() => setIsSpinning(false));
     setPromptInput('');
+    setAttachments([]);
   };
 
   const deleteChatEntry = (id: string) => {
@@ -1597,6 +1736,28 @@ const Chat = (props: ChatProps) => {
                     </label>
                   </TtsControlsRow>
                 )}
+                {attachmentsSupported && (
+                  <>
+                    <AttachmentBar
+                      attachments={attachments}
+                      prompt={promptInput}
+                      onRemove={removeAttachment}
+                      visionWarning={!looksVisionCapable(selectedModel)}
+                      modelName={selectedModel?.Name}
+                    />
+                    <input
+                      ref={attachInputRef}
+                      type="file"
+                      multiple
+                      accept="image/*,.pdf,.docx,.svg,.txt,.md,.csv,.json,.xml,.yaml,.yml,.log,.ts,.tsx,.js,.jsx,.py,.go,.rs,.java,.c,.h,.cpp,.sh,.sql,.html,.css"
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        addFiles(Array.from(e.target.files ?? []));
+                        e.target.value = '';
+                      }}
+                    />
+                  </>
+                )}
                 <CustomTextArrea
                   disabled={isDisabled}
                   onKeyPress={(e) => {
@@ -1605,6 +1766,9 @@ const Chat = (props: ChatProps) => {
                       handleSubmit();
                     }
                   }}
+                  onPaste={handlePaste}
+                  onDrop={handleDrop}
+                  onDragOver={(e) => attachmentsSupported && e.preventDefault()}
                   value={promptInput}
                   onChange={(ev) => setPromptInput(ev.target.value)}
                   placeholder={
@@ -1612,7 +1776,7 @@ const Chat = (props: ChatProps) => {
                       ? 'Session is closed. Chat in ReadOnly Mode'
                       : modality === 'tts'
                         ? 'Enter text to synthesize...'
-                        : 'Ask me anything...'
+                        : 'Ask me anything, or drop in a file...'
                   }
                   minRows={1}
                   maxRows={6}
@@ -1636,13 +1800,24 @@ const Chat = (props: ChatProps) => {
                       </Btn>
                     </>
                   ) : (
-                    <Btn disabled={isDisabled} onClick={handleSubmit}>
-                      {isSpinning ? (
-                        <Spinner animation="border" />
-                      ) : (
-                        <IconArrowUp size={'26px'}></IconArrowUp>
+                    <>
+                      {attachmentsSupported && (
+                        <Btn
+                          disabled={isDisabled || isSpinning}
+                          onClick={() => attachInputRef.current?.click()}
+                          title="Attach images or documents"
+                        >
+                          <IconPaperclip size={'22px'} />
+                        </Btn>
                       )}
-                    </Btn>
+                      <Btn disabled={isDisabled} onClick={handleSubmit}>
+                        {isSpinning ? (
+                          <Spinner animation="border" />
+                        ) : (
+                          <IconArrowUp size={'26px'}></IconArrowUp>
+                        )}
+                      </Btn>
+                    </>
                   )}
                 </SendBtnWrapper>
               </>
@@ -1699,6 +1874,60 @@ const renderMessage = (message, onOpenImage) => {
 
   return (
     <MessageBody>
+      {/* Attachments the user sent with this message. Shown so the transcript
+          reflects what was actually submitted — the extracted document text is
+          deliberately not rendered, since a 40-page PDF pasted into the log
+          would bury the conversation. */}
+      {Array.isArray(message.attachments) && message.attachments.length > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '8px',
+            marginBottom: '10px',
+          }}
+        >
+          {message.attachments.map((a, i) =>
+            a.dataUrl ? (
+              <img
+                key={i}
+                src={a.dataUrl}
+                alt={a.name}
+                title={a.name}
+                onClick={() => onOpenImage(a.dataUrl)}
+                style={{
+                  maxWidth: '160px',
+                  maxHeight: '160px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                }}
+              />
+            ) : (
+              <span
+                key={i}
+                title={a.name}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  fontSize: '1.1rem',
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  maxWidth: '220px',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                📎 {a.name}
+              </span>
+            ),
+          )}
+        </div>
+      )}
       <ThinkingMessageBody text={message.text} />
     </MessageBody>
   );

@@ -123,6 +123,9 @@ const createClient = function (createStore) {
     // always reflects a decided outcome.
     sendMor: utils.forwardToMainProcess('send-mor', 90000),
     sendEth: utils.forwardToMainProcess('send-eth', 90000),
+    // Chat attachments. A large PDF can take a while to extract, and the whole
+    // file crosses IPC as base64, so this needs more headroom than a read.
+    parseAttachment: utils.forwardToMainProcess('parse-attachment', 120000),
     // Multi-wallet. Switching restarts the proxy-router's session machinery,
     // so it gets a longer budget than a plain read.
     getWallets: utils.forwardToMainProcess('get-wallets', 20000),
