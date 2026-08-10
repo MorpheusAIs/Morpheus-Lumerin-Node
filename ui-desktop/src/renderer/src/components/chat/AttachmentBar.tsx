@@ -118,6 +118,8 @@ type Props = {
   onRemove: (id: string) => void;
   /** True when the selected model is not recognised as vision-capable. */
   visionWarning?: boolean;
+  /** True when this model has actually refused an image before — a fact, not a guess. */
+  visionRejected?: boolean;
   modelName?: string;
 };
 
@@ -126,6 +128,7 @@ export function AttachmentBar({
   prompt,
   onRemove,
   visionWarning,
+  visionRejected,
   modelName,
 }: Props) {
   if (!attachments.length) {
@@ -167,17 +170,32 @@ export function AttachmentBar({
         ))}
       </Chips>
 
-      {/* Images silently doing nothing is the worst outcome, so say it up front
-          rather than after the user has paid for a session and got a refusal. */}
-      {hasImages && visionWarning && (
-        <Warning>
+      {/* Two levels, because they carry very different confidence.
+          `visionRejected` means this model has actually refused an image
+          before — a fact. `visionWarning` is only a guess from the model name,
+          since vision capability is not published on-chain. */}
+      {hasImages && visionRejected ? (
+        <Warning style={{ background: 'rgba(255,107,107,0.1)', borderColor: 'rgba(255,107,107,0.35)' }}>
           <IconAlertTriangle size={15} />
           <span>
-            {modelName ? `"${modelName}"` : 'This model'} isn&apos;t recognised as
-            accepting images. You can still send — it may work, or the provider
-            may return an error or ignore the picture. Documents are unaffected.
+            {modelName ? `"${modelName}"` : 'This model'} has already rejected an
+            image once — it cannot read pictures. Sending will fail again.
+            Remove the image, or pick a vision-capable model. Documents still work.
           </span>
         </Warning>
+      ) : (
+        hasImages &&
+        visionWarning && (
+          <Warning>
+            <IconAlertTriangle size={15} />
+            <span>
+              {modelName ? `"${modelName}"` : 'This model'} isn&apos;t recognised
+              as accepting images. You can still send — it may work, or the
+              provider may return an error or ignore the picture. Documents are
+              unaffected.
+            </span>
+          </Warning>
+        )
       )}
 
       {/* A scanned PDF parses "successfully" and yields nothing. Without this

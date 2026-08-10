@@ -92,6 +92,36 @@ describe('explainChainError', () => {
   });
 });
 
+// Verbatim provider refusal, several layers of JSON deep.
+const VISION_REJECTION =
+  'provider request failed: provider error: upstream error 400: {"details":{"_errors":[],"messages":{"_errors":["Image content is not supported by this model. Please use a model that supports vision."]}},"error":"Invalid request parameters","issues":[{"code":"custom","message":"Image content is not supported by this model. Please use a model that supports vision.","path":["messages"]}]}';
+
+describe('model rejected an image', () => {
+  it('extracts the actionable point from the JSON wrapping', () => {
+    const { message, hint } = explainChainError(VISION_REJECTION);
+    expect(message).toBe('This model cannot read images.');
+    expect(hint).toMatch(/vision-capable model/);
+  });
+
+  // The user's instinct on a failure is that the whole message was lost.
+  // Saying what still worked prevents a pointless retry from scratch.
+  it('says the text and documents were fine', () => {
+    expect(explainChainError(VISION_REJECTION).hint).toMatch(/documents were fine/i);
+  });
+
+  it('does not leak the raw JSON into the message', () => {
+    const { message } = explainChainError(VISION_REJECTION);
+    expect(message).not.toContain('{');
+    expect(message).not.toContain('upstream error');
+  });
+
+  it('is distinct from the read-only RPC and gas cases', () => {
+    const vision = explainChainError(VISION_REJECTION).message;
+    expect(vision).not.toBe(explainChainError(READ_ONLY_RPC).message);
+    expect(vision).not.toBe(explainChainError(INSUFFICIENT_GAS).message);
+  });
+});
+
 describe('formatChainError', () => {
   it('joins message and hint into one line', () => {
     const out = formatChainError(READ_ONLY_RPC);
