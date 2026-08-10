@@ -1,6 +1,5 @@
 import { electronAPI } from '@electron-toolkit/preload'
 import { ipcRenderer, clipboard, shell, contextBridge } from 'electron'
-import remote from '@electron/remote'
 
 // Custom APIs for renderer
 const api = {}
@@ -15,8 +14,13 @@ if (process.contextIsolated) {
       return clipboard.writeText(text)
     }
 
+    // Was `remote.app.getVersion()` via @electron/remote. That module is
+    // deprecated, widens the renderer's reach into main-process objects, and
+    // was never initialised here anyway (no `@electron/remote/main`
+    // initialize()/enable() call exists), so the call was failing at runtime.
+    // A synchronous IPC call is both safer and actually works.
     const getAppVersion = function () {
-      return remote.app.getVersion()
+      return ipcRenderer.sendSync('get-app-version')
     }
 
     const openLink = function (url) {
@@ -50,8 +54,11 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('getAppVersion', getAppVersion)
     contextBridge.exposeInMainWorld('copyToClipboard', copyToClipboard)
     
-    // contextBridge.exposeInMainWorld('isDev', !remote.app.isPackaged)
-    contextBridge.exposeInMainWorld('isDev', true)
+    // `isDev` used to be hardcoded to `true` (with the real check commented
+    // out), so production builds reported themselves as development builds.
+    // Nothing in the renderer consumes it, so rather than ship a value that is
+    // both dead and wrong, it is gone. If it is needed again, derive it in the
+    // main process and pass it over IPC — the renderer cannot determine it.
 
     contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('api', api)

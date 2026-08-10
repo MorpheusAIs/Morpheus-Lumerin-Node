@@ -17,6 +17,7 @@ import TxList from './tx-list/TxList';
 import { View } from '../common/View';
 import { toUSD } from '../../store/utils/syncAmounts';
 import { queryKeys, computeStakedFunds } from '../../store/queries';
+import QueryError from '../common/QueryError';
 import { ToastsContext } from '../toasts';
 import { abbreviateAddress } from '../../utils';
 import BaseLogo from '../icons/BaseLogo';
@@ -448,6 +449,12 @@ const Dashboard = ({
             </AddressPill>
           )}
         </TopBar>
+
+        <QueryError
+          error={balancesQuery.error}
+          what="balances"
+          onRetry={() => balancesQuery.refetch()}
+        />
 
         <HeroGrid>
           <TokenCard $accent>
