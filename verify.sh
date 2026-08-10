@@ -23,7 +23,7 @@ STEP=0
 
 step() {
   STEP=$((STEP + 1))
-  printf '\n%s[%d/8] %s%s\n' "$BOLD" "$STEP" "$1" "$RESET"
+  printf '\n%s[%d/9] %s%s\n' "$BOLD" "$STEP" "$1" "$RESET"
 }
 
 run() {
@@ -81,6 +81,19 @@ printf '%s  assuming it is a new regression: git stash && git checkout main%s\n'
 ( cd proxy-router && run "go test ./..." go test ./... )
 
 # ------------------------------------------------------------------ ui-desktop
+step "Checking ui-desktop/.env"
+if [ -f ui-desktop/.env ]; then
+  printf '%s  ✓ .env present%s\n' "$GREEN" "$RESET"
+else
+  printf '%s  .env missing — creating it from .env.example%s\n' "$YELLOW" "$RESET"
+  if cp ui-desktop/.env.example ui-desktop/.env; then
+    printf '%s  ✓ created ui-desktop/.env (Base Mainnet defaults)%s\n' "$GREEN" "$RESET"
+  else
+    printf '%s  ✗ could not create ui-desktop/.env%s\n' "$RED" "$RESET"
+    FAILED+=(".env")
+  fi
+fi
+
 step "Installing ui-desktop dependencies"
 printf '%s  This also regenerates yarn.lock with the new test dependencies.%s\n' "$DIM" "$RESET"
 ( cd ui-desktop && run "yarn install" yarn install --network-timeout 600000 )
@@ -104,6 +117,14 @@ printf '\n%s──────────────────────�
 if [ ${#FAILED[@]} -eq 0 ]; then
   printf '%s%sAll checks passed.%s\n\n' "$BOLD" "$GREEN" "$RESET"
   cat <<'NEXT'
+Run the app:
+
+    cd ui-desktop && yarn dev
+
+  First launch downloads the proxy-router, a llama.cpp + tinyllama demo model
+  and an IPFS node into your app-data directory, so give it a few minutes and
+  watch the startup progress. Subsequent launches are fast.
+
 Now smoke-test the three reported symptoms by hand:
 
   1. Unresponsive UI

@@ -1,4 +1,5 @@
 import { resolve } from 'path'
+import { existsSync } from 'fs'
 import { defineConfig, externalizeDepsPlugin, loadEnv } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import svgr from 'vite-plugin-svgr'
@@ -15,11 +16,26 @@ export default defineConfig(({ /*command,*/ mode }) => {
   const validate = ajv.compile(EnvSchema)
 
   if (!validate(env)) {
+    // A missing .env is by far the most common cause here, and the raw ajv
+    // output ("ENV must have required property 'NODE_ENV'") does not make that
+    // obvious to someone running the app for the first time. Say it plainly.
+    const envFileExists = existsSync(resolve(__dirname, '.env'))
+    const details = ajv.errorsText(validate.errors, { dataVar: 'ENV', separator: '\n  - ' })
+
     throw new Error(
-      `Invalid environment variables: ${ajv.errorsText(validate.errors, {
-        dataVar: 'ENV',
-        separator: '.'
-      })}`
+      [
+        '',
+        'Invalid environment configuration:',
+        `  - ${details}`,
+        '',
+        envFileExists
+          ? 'ui-desktop/.env exists but is incomplete. Compare it against .env.example.'
+          : 'ui-desktop/.env does not exist. Create it with:\n\n    cp .env.example .env\n',
+        'Note: an empty value is not the same as an absent one. SENTRY_DSN= fails',
+        'the uri format check and FAILOVER_ENABLED= fails the boolean check —',
+        'comment those lines out instead of blanking them.',
+        ''
+      ].join('\n')
     )
   }
 
