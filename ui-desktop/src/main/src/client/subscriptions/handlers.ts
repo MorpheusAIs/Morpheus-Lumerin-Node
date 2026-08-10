@@ -37,6 +37,68 @@ import { OrchestratorConfig } from '../../../orchestrator/orchestrator.types'
 let authentication: Record<string, string> | null = null
 let orchestrator: Orchestrator | null = null
 
+/**
+ * Error raised when the local proxy-router cannot be reached or returns a
+ * non-2xx. Distinguished from a generic Error so the renderer can tell
+ * "the node is down" apart from "the node said no".
+ */
+export class ProxyRouterError extends Error {
+  readonly status?: number
+  readonly unreachable: boolean
+
+  constructor(message: string, opts: { status?: number; unreachable?: boolean } = {}) {
+    super(message)
+    this.name = 'ProxyRouterError'
+    this.status = opts.status
+    this.unreachable = opts.unreachable ?? false
+  }
+}
+
+/**
+ * Single entry point for proxy-router reads.
+ *
+ * Every one of these calls used to be wrapped in `catch { return [] }` or
+ * `catch { return null }`. When the proxy-router was down or auth was broken,
+ * the UI therefore rendered a zero balance, an empty model list and no
+ * transactions — indistinguishable from "you genuinely have nothing". That is
+ * the single most damaging behaviour in the app: it is why users conclude
+ * their MOR has disappeared.
+ *
+ * Failing loudly here lets react-query put the affected view into an error
+ * state that says what is actually wrong.
+ */
+async function proxyFetch<T>(
+  pathname: string,
+  init: RequestInit = {},
+  label = pathname
+): Promise<T> {
+  const url = `${config.chain.localProxyRouterUrl}${pathname}`
+
+  let response: Response
+  try {
+    response = await fetch(url, {
+      ...init,
+      headers: { ...(await getAuthHeaders()), ...(init.headers ?? {}) }
+    })
+  } catch (e: any) {
+    log.error(`proxy-router unreachable for ${label}:`, e?.message ?? e)
+    throw new ProxyRouterError(
+      'Cannot reach the local proxy-router. Check that it is running in Settings.',
+      { unreachable: true }
+    )
+  }
+
+  const body = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    const detail = (body && (body.error || body.message)) || `HTTP ${response.status}`
+    log.error(`proxy-router error for ${label}: ${detail}`)
+    throw new ProxyRouterError(detail, { status: response.status })
+  }
+
+  return body as T
+}
+
 export const validatePassword = (data) => auth.isValidPassword(data)
 
 export const clearCache = () => {
@@ -144,39 +206,36 @@ export const getAuthHeaders = async () => {
       Authorization: `Basic ${Buffer.from(`${username}:${password}`, 'utf-8').toString('base64')}`
     }
     return authentication
-  } catch (e) {
-    console.log('Error', e)
-    throw e
+  } catch (e: any) {
+    // This is the first call every other request depends on, so it is also the
+    // most common failure when the node isn't up yet. Give it a message a user
+    // can act on rather than propagating a bare ECONNREFUSED.
+    log.error('failed to read proxy-router auth cookie:', e?.message ?? e)
+    throw new ProxyRouterError(
+      'Cannot authenticate with the local proxy-router. It may still be starting up — check Settings.',
+      { unreachable: true }
+    )
   }
+}
+
+/**
+ * Clears the cached Basic-auth header.
+ *
+ * The credentials are read once and memoised for the process lifetime, so a
+ * proxy-router restart (which regenerates the cookie) would otherwise leave
+ * every subsequent request failing with 401 until the app itself restarted.
+ */
+export const resetAuthHeaders = () => {
+  authentication = null
 }
 
 export const getAllModels = async (): Promise<unknown[]> => {
-  try {
-    const path = `${config.chain.localProxyRouterUrl}/blockchain/models`
-    const response = await fetch(path, {
-      headers: await getAuthHeaders(),
-      method: 'GET'
-    })
-    const data = await response.json()
-    return data.models
-  } catch (e) {
-    console.log('Error', e)
-    return []
-  }
+  const data = await proxyFetch<{ models: unknown[] }>('/blockchain/models', {}, 'models')
+  return data.models ?? []
 }
 
-export const getBalances = async (): Promise<unknown[]> => {
-  try {
-    const path = `${config.chain.localProxyRouterUrl}/blockchain/balance`
-    const response = await fetch(path, {
-      headers: await getAuthHeaders()
-    })
-    const data = await response.json()
-    return data
-  } catch (e) {
-    console.log('Error', e)
-    return []
-  }
+export const getBalances = async (): Promise<unknown> => {
+  return proxyFetch('/blockchain/balance', {}, 'balances')
 }
 
 /**
@@ -225,17 +284,12 @@ export const getTransactions = async (payload: {
   page: number
   pageSize: number
 }): Promise<unknown[]> => {
-  try {
-    const path = `${config.chain.localProxyRouterUrl}/blockchain/transactions?page=${payload.page}&limit=${payload.pageSize}`
-    const response = await fetch(path, {
-      headers: await getAuthHeaders()
-    })
-    const data = await response.json()
-    return data.transactions
-  } catch (e) {
-    console.log('Error', e)
-    return []
-  }
+  const data = await proxyFetch<{ transactions: unknown[] }>(
+    `/blockchain/transactions?page=${payload.page}&limit=${payload.pageSize}`,
+    {},
+    'transactions'
+  )
+  return data.transactions ?? []
 }
 
 export const getMorRate = async (payload?: {
@@ -256,45 +310,17 @@ export const getMorRate = async (payload?: {
 }
 
 export const getTodaysBudget = async () => {
-  try {
-    const path = `${config.chain.localProxyRouterUrl}/blockchain/sessions/budget`
-    const response = await fetch(path, {
-      headers: await getAuthHeaders()
-    })
-    const body = await response.json()
-    return body.budget
-  } catch (e) {
-    console.log('Error', e)
-    return null
-  }
+  const body = await proxyFetch<{ budget: unknown }>('/blockchain/sessions/budget', {}, 'budget')
+  return body.budget
 }
 
 export const getTokenSupply = async () => {
-  try {
-    const path = `${config.chain.localProxyRouterUrl}/blockchain/token/supply`
-    const response = await fetch(path, {
-      headers: await getAuthHeaders()
-    })
-    const body = await response.json()
-    return body.supply
-  } catch (e) {
-    console.log('Error', e)
-    return null
-  }
+  const body = await proxyFetch<{ supply: unknown }>('/blockchain/token/supply', {}, 'supply')
+  return body.supply
 }
 
-export const getChatHistoryTitles = async (): Promise<ChatTitle[] | null> => {
-  try {
-    const path = `${config.chain.localProxyRouterUrl}/v1/chats`
-    const response = await fetch(path, {
-      headers: await getAuthHeaders()
-    })
-    const body = await response.json()
-    return body
-  } catch (e) {
-    console.log('Error', e)
-    return null
-  }
+export const getChatHistoryTitles = async (): Promise<ChatTitle[]> => {
+  return proxyFetch<ChatTitle[]>('/v1/chats', {}, 'chat titles')
 }
 
 export const getChatHistory = async (chatId: string): Promise<ChatHistory | null> => {
@@ -664,6 +690,12 @@ export const startServices = async (_, core: Core) => {
 
 export const restartService = async (data: { service: keyof OrchestratorConfig }, core: Core) => {
   await getOrchestrator(core).restartService(data.service)
+  // The proxy-router regenerates its auth cookie on start, so the memoised
+  // header is stale the moment it comes back up. Without this, every request
+  // after a restart failed with 401 until the whole app was relaunched.
+  if (data.service === 'proxyRouter') {
+    resetAuthHeaders()
+  }
 }
 
 export const pingService = async (data: { service: keyof OrchestratorConfig }, core: Core) => {

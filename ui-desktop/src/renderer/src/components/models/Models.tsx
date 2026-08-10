@@ -12,6 +12,7 @@ import styled from 'styled-components'
 import FileSelectionModal from './FileSelectionModal';
 import PinnedFilesTable from './PinnedFilesTable';
 import { queryKeys } from '../../store/queries';
+import QueryError from '../common/QueryError';
 
 
 const Container = styled.div`
@@ -113,6 +114,11 @@ const Models = ({
                     <span>IPFS is not connected</span>
                 </IpfsStatus>
             )}
+            <QueryError
+                error={modelsQuery.error}
+                what="models"
+                onRetry={() => modelsQuery.refetch()}
+            />
             <LayoutHeader title="Models">
                 <BtnAccent style={{ padding: '1.5rem' }} onClick={() => setOpenChangeModal(true)}>Pin Model</BtnAccent>
             </LayoutHeader>

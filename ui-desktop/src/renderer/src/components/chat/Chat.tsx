@@ -68,6 +68,7 @@ import { formatValue } from '../../utils/coinValue';
 import { ApiGateway } from 'src/main/src/client/apiGateway';
 import { queryKeys } from '../../store/queries';
 import { pooledMapSettled } from '../../store/utils/concurrency';
+import QueryError from '../common/QueryError';
 
 // Max simultaneous per-model bid requests. See store/utils/concurrency.ts.
 const BIDS_CONCURRENCY = 6;
@@ -1359,6 +1360,22 @@ const Chat = (props: ChatProps) => {
     );
   };
 
+  // If the models query failed there is no marketplace to render at all, so
+  // show the reason instead of an empty shell with dead buttons. Previously the
+  // main-process handler swallowed the error and returned [], which made a
+  // down proxy-router look identical to "no models exist".
+  if (modelsDataQuery.isError && !modelsDataQuery.data) {
+    return (
+      <View data-testid="chat-container">
+        <QueryError
+          error={modelsDataQuery.error}
+          what="models"
+          onRetry={() => modelsDataQuery.refetch()}
+        />
+      </View>
+    );
+  }
+
   return (
     <>
       {isLoading && (
@@ -1369,6 +1386,15 @@ const Chat = (props: ChatProps) => {
             variant="success"
           />
         </LoadingCover>
+      )}
+
+      {/* Non-fatal: models loaded from cache but the latest refresh failed. */}
+      {modelsDataQuery.isError && !!modelsDataQuery.data && (
+        <QueryError
+          error={modelsDataQuery.error}
+          what="the latest model data"
+          onRetry={() => modelsDataQuery.refetch()}
+        />
       )}
       <Drawer
         open={isOpen}

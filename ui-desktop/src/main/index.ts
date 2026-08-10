@@ -25,6 +25,13 @@ function createWindow(): void {
     // ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
+      // NOTE: sandbox is still disabled. The original reason (@electron/remote
+      // in the preload) is gone, and the preload now only uses ipcRenderer,
+      // clipboard, shell and contextBridge — all of which are available to a
+      // sandboxed preload. Flipping this to `true` is very likely correct and
+      // is a real hardening win, but it changes the preload's module
+      // resolution and cannot be validated without launching the app on each
+      // platform. Do it as its own change, with a manual smoke test.
       sandbox: false
     }
   })
@@ -110,6 +117,12 @@ app
 
     // IPC test
     ipcMain.on('ping', () => console.log('pong'))
+
+    // Synchronous so the preload can expose getAppVersion() as a plain
+    // function. Replaces the previous @electron/remote round-trip.
+    ipcMain.on('get-app-version', (event) => {
+      event.returnValue = app.getVersion()
+    })
 
     createWindow()
 

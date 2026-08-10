@@ -1,4 +1,3 @@
-//import Modal from '../../contracts/modals/Modal';
 import Modal from '../contracts/modals/Modal';
 import styled from 'styled-components';
 import {
