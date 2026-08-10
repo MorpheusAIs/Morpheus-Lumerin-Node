@@ -328,10 +328,27 @@ func (s *BlockchainService) GetRatedBids(ctx context.Context, modelID common.Has
 }
 
 func (s *BlockchainService) rateBids(bidIds [][32]byte, bids []m.IBidStorageBid, pmStats []s.IStatsStorageProviderModelStats, provider []pr.IProviderStorageProvider, mStats *s.IStatsStorageModelStats, minStake *big.Int, log lib.ILogger) []structs.ScoredBid {
-	ratingInputs := make([]rating.RatingInput, len(bids))
+	// These five slices are assembled from separate on-chain reads and are only
+	// index-aligned if every read returned the same number of rows. A short
+	// provider or stats slice used to panic the whole daemon with an
+	// index-out-of-range inside this loop — an unrecoverable crash triggered by
+	// remote data we do not control. Rate only the prefix we can safely align,
+	// and say loudly when we had to truncate.
+	n := len(bids)
+	for _, l := range []int{len(bidIds), len(pmStats), len(provider)} {
+		if l < n {
+			n = l
+		}
+	}
+	if n < len(bids) {
+		log.Warnf("rateBids: inconsistent input lengths (bids=%d bidIds=%d pmStats=%d providers=%d); rating first %d",
+			len(bids), len(bidIds), len(pmStats), len(provider), n)
+	}
+
+	ratingInputs := make([]rating.RatingInput, n)
 	bidIDIndexMap := make(map[common.Hash]int)
 
-	for i := range bids {
+	for i := 0; i < n; i++ {
 		ratingInputs[i] = rating.RatingInput{
 			ScoreInput: rating.ScoreInput{
 				ProviderModel:  &pmStats[i],
