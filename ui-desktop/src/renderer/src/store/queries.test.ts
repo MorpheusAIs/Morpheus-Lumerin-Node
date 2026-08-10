@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeStakedFunds, queryKeys } from './queries';
+import { computeStakedFunds, countOpenSessions, queryKeys } from './queries';
 
 const WEI = 10 ** 18;
 const secondsFromNow = (s: number) => Math.floor(Date.now() / 1000) + s;
@@ -44,6 +44,35 @@ describe('computeStakedFunds', () => {
 
   it('does not throw on malformed entries', () => {
     expect(() => computeStakedFunds([null as any])).not.toThrow();
+  });
+});
+
+// Gates the "you have N open sessions" confirmation before a wallet switch.
+// Under-counting means switching silently kills a live chat; over-counting
+// nags the user on every switch.
+describe('countOpenSessions', () => {
+  it('counts only sessions that are still open', () => {
+    expect(
+      countOpenSessions([
+        { Stake: 1, EndsAt: secondsFromNow(3600) },
+        { Stake: 1, EndsAt: secondsFromNow(3600), ClosedAt: 999 },
+        { Stake: 1, EndsAt: secondsFromNow(-10) },
+        { Stake: 1, EndsAt: secondsFromNow(60) },
+      ]),
+    ).toBe(2);
+  });
+
+  it.each([
+    ['undefined', undefined],
+    ['empty', []],
+    ['not an array', {} as any],
+  ])('returns 0 for %s', (_label, input) => {
+    expect(countOpenSessions(input as any)).toBe(0);
+  });
+
+  it('skips malformed entries instead of throwing', () => {
+    expect(() => countOpenSessions([null as any, undefined as any])).not.toThrow();
+    expect(countOpenSessions([null as any])).toBe(0);
   });
 });
 

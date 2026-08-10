@@ -1,5 +1,5 @@
 import settings from 'electron-settings'
-import { hdkey } from '@ethereumjs/wallet'
+import { hdkey, Wallet as EthWallet } from '@ethereumjs/wallet'
 
 import { aes256cbcIv } from './crypto'
 
@@ -35,6 +35,21 @@ const getAddressAndPrivateKey = (seed, index) => ({
   privateKey: Buffer.from(getPrivateKey(seed, index)).toString('hex')
 })
 
+/**
+ * Derives the checksummed address for a raw private key.
+ *
+ * Used when importing a wallet, so the address can be shown and de-duplicated
+ * without pushing the key into the proxy-router first — importing must never
+ * disturb whichever wallet is currently active.
+ */
+export const privateKeyToAddress = (privateKeyHex: string): string => {
+  const hex = privateKeyHex.startsWith('0x') ? privateKeyHex.slice(2) : privateKeyHex
+  if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
+    throw new Error('Invalid private key (expected 64 hex characters).')
+  }
+  return EthWallet.fromPrivateKey(Buffer.from(hex, 'hex')).getChecksumAddressString()
+}
+
 export default {
   getAddress,
   setAddress,
@@ -42,6 +57,7 @@ export default {
   setActiveWallet: setAddress,
   createAddress: getAddress2,
   getAddressAndPrivateKey,
+  privateKeyToAddress,
   clearWallet,
   getWallet,
   getToken,

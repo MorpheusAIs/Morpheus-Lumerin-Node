@@ -16,8 +16,13 @@ import TransactionModal from './tx-modal';
 import TxList from './tx-list/TxList';
 import { View } from '../common/View';
 import { toUSD } from '../../store/utils/syncAmounts';
-import { queryKeys, computeStakedFunds } from '../../store/queries';
+import {
+  queryKeys,
+  computeStakedFunds,
+  countOpenSessions,
+} from '../../store/queries';
 import QueryError from '../common/QueryError';
+import WalletSwitcher from './WalletSwitcher';
 import { ToastsContext } from '../toasts';
 import { abbreviateAddress } from '../../utils';
 import BaseLogo from '../icons/BaseLogo';
@@ -409,6 +414,13 @@ const Dashboard = ({
     [sessionsQuery.data],
   );
 
+  // Drives the switch confirmation: switching wallets stops any in-flight chat,
+  // so the user should know a session is live before doing it.
+  const openSessionCount = useMemo(
+    () => countOpenSessions(sessionsQuery.data),
+    [sessionsQuery.data],
+  );
+
   const { eth, mor } = balanceData;
   const balancesLive = balancesQuery.isFetching;
   const morSymbol = mor.symbol || 'MOR';
@@ -434,19 +446,27 @@ const Dashboard = ({
           </TitleGroup>
 
           {address && (
-            <AddressPill>
-              <AddressDot />
-              {abbreviateAddress(address, 6)}
-              <IconBtn title="Copy address" onClick={handleCopy}>
-                <IconCopy size={16} />
-              </IconBtn>
-              <IconBtn
-                title={`View on ${explorerHost}`}
-                onClick={() => explorerUrl && window.openLink(explorerUrl)}
-              >
-                <IconExternalLink size={16} />
-              </IconBtn>
-            </AddressPill>
+            <div
+              style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}
+            >
+              <WalletSwitcher
+                activeAddress={address}
+                openSessionCount={openSessionCount}
+              />
+              <AddressPill>
+                <AddressDot />
+                {abbreviateAddress(address, 6)}
+                <IconBtn title="Copy address" onClick={handleCopy}>
+                  <IconCopy size={16} />
+                </IconBtn>
+                <IconBtn
+                  title={`View on ${explorerHost}`}
+                  onClick={() => explorerUrl && window.openLink(explorerUrl)}
+                >
+                  <IconExternalLink size={16} />
+                </IconBtn>
+              </AddressPill>
+            </div>
           )}
         </TopBar>
 

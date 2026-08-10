@@ -31,6 +31,13 @@ const listeners = {
   // here, so the channel didn't exist and the renderer had no way to reach it.
   'send-mor': handlers.sendMor,
   'send-eth': handlers.sendEth,
+  // Multi-wallet
+  'get-wallets': handlers.getWallets,
+  'add-hd-wallet': handlers.addHdWallet,
+  'import-wallet': handlers.importWallet,
+  'switch-wallet': handlers.switchWallet,
+  'remove-wallet': handlers.removeWallet,
+  'rename-wallet': handlers.renameWallet,
   'get-rates': handlers.getMorRate,
   'get-todays-budget': handlers.getTodaysBudget,
   'get-supply': handlers.getTokenSupply,
