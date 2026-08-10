@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import styled from 'styled-components'
 
 import withLoginState from '../store/hocs/withLoginState'
 
 import { TextInput, AltLayout, BaseBtn, Sp, AltLayoutNarrow } from './common'
+import ConfirmWalletReset from './common/ConfirmWalletReset'
 
 const LoginBtn = styled(BaseBtn)`
   font-size: 1.5rem;
@@ -27,8 +29,16 @@ const SecondaryBtn = styled(BaseBtn)`
 `
 
 function Login({ onInputChange, onSubmit, password, errors, status, error, logout }) {
+  const [confirmReset, setConfirmReset] = useState(false)
+
   return (
     <AltLayout title="Enter your password">
+      <ConfirmWalletReset
+        open={confirmReset}
+        fromLogin
+        onCancel={() => setConfirmReset(false)}
+        onConfirm={() => logout({})}
+      />
       <AltLayoutNarrow>
         <form onSubmit={onSubmit} data-testid="login-form">
           <Sp mt={4}>
@@ -44,8 +54,14 @@ function Login({ onInputChange, onSubmit, password, errors, status, error, logou
             />
           </Sp>
           <Sp mt={2}>
-            <SecondaryBtn onClick={() => logout({})} block>
-              Or setup new wallet
+            {/* Was labelled "Or setup new wallet", which reads as additive.
+                It deletes the existing wallet and restarts into onboarding. */}
+            <SecondaryBtn
+              type="button"
+              onClick={() => setConfirmReset(true)}
+              block
+            >
+              Forgot password? Erase wallet and start over
             </SecondaryBtn>
           </Sp>
           <Sp mt={4}>
