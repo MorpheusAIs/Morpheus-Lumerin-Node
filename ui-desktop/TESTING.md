@@ -12,6 +12,18 @@ yarn test:coverage    # with a coverage report
 Runner is [Vitest](https://vitest.dev) with a jsdom environment. Config lives in
 `vitest.config.ts`, global setup in `src/test/setup.ts`.
 
+## Use yarn, not npm
+
+`yarn.lock` is authoritative here (the release jobs in `build.yml` install with
+`yarn --frozen-lockfile`).
+
+This matters more than it looks: **yarn 1 does not auto-install peer
+dependencies, but npm 7+ does.** `@testing-library/react@16` declares
+`@testing-library/dom` as a peer, so a suite that passes under npm can fail
+under yarn with `Cannot find package '@testing-library/dom'`. It is listed
+explicitly in `devDependencies` for exactly this reason — don't remove it just
+because nothing imports it directly.
+
 ## Why the config is standalone
 
 `vitest.config.ts` does not extend `electron.vite.config.ts` on purpose. That
