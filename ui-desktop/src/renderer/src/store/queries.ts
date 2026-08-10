@@ -30,10 +30,26 @@ export const queryKeys = {
   // provider sessions + claimable balances (Providers tab)
   providerData: (providerId?: string) =>
     ['providerData', providerId ?? ''] as const,
+  // registry of known wallets + which one the proxy-router currently holds.
+  // Intentionally NOT parameterised by address: this is the list that tells you
+  // what the address could be.
+  wallets: ['wallets'] as const,
 };
 
 const isClosedSession = (item: any) =>
   item.ClosedAt || new Date().getTime() > item.EndsAt * 1000;
+
+/** Number of sessions still open. Used to warn before switching wallets. */
+export const countOpenSessions = (sessions: any[] | undefined): number => {
+  if (!Array.isArray(sessions)) {
+    return 0;
+  }
+  try {
+    return sessions.filter((s) => s && !isClosedSession(s)).length;
+  } catch (e) {
+    return 0;
+  }
+};
 
 // Sum of stake locked in currently-open sessions, in whole MOR (2 decimals).
 // Mirrors the previous withDashboardState.getStakedFunds computation but works

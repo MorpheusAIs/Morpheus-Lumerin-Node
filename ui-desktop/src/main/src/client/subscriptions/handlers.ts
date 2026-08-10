@@ -31,6 +31,7 @@ import log from '../../../logger'
 import { Core } from './core.types'
 import WalletError from '../../client/WalletError'
 import keys from '../keys'
+import * as wallets from '../wallets'
 import { cfg } from '../../../../../orchestrator.config'
 import { OrchestratorConfig } from '../../../orchestrator/orchestrator.types'
 
@@ -227,6 +228,209 @@ export const getAuthHeaders = async () => {
  */
 export const resetAuthHeaders = () => {
   authentication = null
+}
+
+// ---------------------------------------------------------------------------
+// Multi-wallet
+// ---------------------------------------------------------------------------
+
+/** Current wallet as the proxy-router sees it: address, storage kind, HD path. */
+export const getActiveWallet = async (): Promise<{
+  address: string
+  kind?: string
+  derivationPath?: string
+}> => {
+  return proxyFetch('/wallet', {}, 'active wallet')
+}
+
+/**
+ * Returns the wallet list, adopting the proxy-router's current wallet if the
+ * registry is empty (i.e. this install predates multi-wallet support).
+ */
+export const getWallets = async () => {
+  const active = await getActiveWallet()
+
+  if (active?.address && !wallets.listWallets().length) {
+    wallets.adoptCurrentWallet({
+      address: active.address,
+      kind: active.kind ?? 'privateKey',
+      derivationPath: active.derivationPath,
+    })
+  }
+
+  // Keep the active marker honest: the proxy-router is the source of truth for
+  // which key is loaded, not our stored pointer.
+  const list = wallets.listWallets()
+  const match = list.find(
+    (w) => w.address?.toLowerCase() === active?.address?.toLowerCase()
+  )
+  if (match && wallets.getActiveWalletId() !== match.id) {
+    wallets.setActiveWalletId(match.id)
+  }
+
+  return {
+    wallets: list,
+    activeId: match?.id ?? wallets.getActiveWalletId(),
+    activeAddress: active?.address,
+    // HD accounts can only be added when the proxy-router holds a mnemonic.
+    canAddHd: active?.kind === 'mnemonic',
+    nextHdIndex: wallets.nextHdIndex()
+  }
+}
+
+/**
+ * Adds the next HD account.
+ *
+ * Implemented as switch-read-switch-back: the proxy-router is the only party
+ * that can derive from the seed, and it exposes no "derive without activating"
+ * call. So we point it at the candidate path, read the resulting address, and
+ * restore the previous path. Deliberately NOT left on the new account —
+ * discovering an address should not silently move the user's funds context.
+ */
+export const addHdWallet = async (params: { label?: string }) => {
+  const before = await getActiveWallet()
+  if (before.kind !== 'mnemonic') {
+    throw new Error(
+      'This wallet was imported from a private key, so it has no seed phrase to derive further accounts from. Import another wallet instead.'
+    )
+  }
+
+  const index = String(wallets.nextHdIndex())
+  const previousPath = before.derivationPath ?? '0'
+
+  const derived = await proxyFetch<{ address: string }>(
+    '/wallet/derivationPath',
+    { method: 'POST', body: JSON.stringify({ derivationPath: index }) },
+    'derive HD account'
+  )
+
+  try {
+    return wallets.addHdWallet({
+      address: derived.address,
+      derivationPath: index,
+      label: params?.label
+    })
+  } finally {
+    await proxyFetch(
+      '/wallet/derivationPath',
+      { method: 'POST', body: JSON.stringify({ derivationPath: previousPath }) },
+      'restore derivation path'
+    ).catch((e) => log.error('failed to restore previous derivation path', e))
+  }
+}
+
+/** Imports an unrelated private key without activating it. */
+export const importWallet = async (params: { privateKey: string; label?: string }) => {
+  const privateKey = String(params.privateKey ?? '').trim()
+  if (!/^(0x)?[0-9a-fA-F]{64}$/.test(privateKey)) {
+    throw new Error('That is not a valid private key (expected 64 hex characters).')
+  }
+  const normalised = privateKey.startsWith('0x') ? privateKey : `0x${privateKey}`
+
+  // Derive the address locally — importing must not disturb the active wallet.
+  const address = keys.privateKeyToAddress(normalised)
+
+  return wallets.addImportedWallet({
+    address,
+    privateKey: normalised,
+    label: params.label
+  })
+}
+
+/**
+ * Makes `walletId` the proxy-router's active key.
+ *
+ * The proxy-router restarts its session machinery on key change (proxyctl
+ * watches PrivateKeyUpdated), so callers should treat every address-scoped
+ * cache as invalid afterwards.
+ */
+export const switchWallet = async (params: { walletId: string }, core: Core) => {
+  const target = wallets.getWallet(params.walletId)
+  if (!target) {
+    throw new Error('Wallet not found.')
+  }
+
+  const blocker = await wallets.assertSwitchable(params.walletId)
+  if (blocker) {
+    throw new Error(blocker)
+  }
+
+  if (target.kind === 'hd') {
+    await proxyFetch(
+      '/wallet/derivationPath',
+      {
+        method: 'POST',
+        body: JSON.stringify({ derivationPath: target.derivationPath ?? '0' })
+      },
+      'switch HD account'
+    )
+  } else {
+    const privateKey = await wallets.getImportedPrivateKey(params.walletId)
+    if (!privateKey) {
+      throw new Error('The private key for this wallet is no longer in the keychain.')
+    }
+    await proxyFetch(
+      '/wallet/privateKey',
+      { method: 'POST', body: JSON.stringify({ privateKey }) },
+      'switch wallet'
+    )
+  }
+
+  wallets.setActiveWalletId(params.walletId)
+
+  // The proxy-router tears down and restarts its session machinery when the key
+  // changes (proxyctl watches PrivateKeyUpdated), so /wallet can briefly report
+  // the old address or refuse the connection while that happens. Poll until it
+  // settles rather than reading once and reporting a spurious mismatch.
+  const now = await waitForAddress(target.address)
+  if (!now) {
+    log.error(
+      `wallet switch mismatch: expected ${target.address} but the proxy-router never reported it`
+    )
+    throw new Error(
+      'The node did not switch to the expected address. Check Settings, then try again.'
+    )
+  }
+
+  // The renderer keeps the active address in redux, populated by the
+  // 'create-wallet' event (see store/reducers/wallet.jsx). Without this the
+  // switch succeeds at the node but every selector — and therefore every
+  // address-scoped query key — keeps pointing at the previous wallet.
+  wallet.setAddress(now)
+  core?.emitter?.emit('create-wallet', { address: now })
+
+  return { address: now, walletId: params.walletId }
+}
+
+/** Polls GET /wallet until it reports `expected`, or the budget runs out. */
+async function waitForAddress(expected: string, timeoutMs = 20000): Promise<string | null> {
+  const deadline = Date.now() + timeoutMs
+  let last: string | undefined
+
+  while (Date.now() < deadline) {
+    try {
+      const res = await getActiveWallet()
+      last = res.address
+      if (res.address?.toLowerCase() === expected.toLowerCase()) {
+        return res.address
+      }
+    } catch (e) {
+      // Expected while the router is mid-restart; keep waiting.
+    }
+    await new Promise((r) => setTimeout(r, 400))
+  }
+
+  log.error(`waitForAddress timed out; last seen ${last ?? 'none'}, wanted ${expected}`)
+  return null
+}
+
+export const removeWallet = async (params: { walletId: string }) => {
+  await wallets.removeWallet(params.walletId)
+  return true
+}
+
+export const renameWallet = async (params: { walletId: string; label: string }) => {
+  return wallets.renameWallet(params.walletId, params.label)
 }
 
 export const getAllModels = async (): Promise<unknown[]> => {

@@ -123,6 +123,14 @@ const createClient = function (createStore) {
     // always reflects a decided outcome.
     sendMor: utils.forwardToMainProcess('send-mor', 90000),
     sendEth: utils.forwardToMainProcess('send-eth', 90000),
+    // Multi-wallet. Switching restarts the proxy-router's session machinery,
+    // so it gets a longer budget than a plain read.
+    getWallets: utils.forwardToMainProcess('get-wallets', 20000),
+    addHdWallet: utils.forwardToMainProcess('add-hd-wallet', 30000),
+    importWallet: utils.forwardToMainProcess('import-wallet', 20000),
+    switchWallet: utils.forwardToMainProcess('switch-wallet', 45000),
+    removeWallet: utils.forwardToMainProcess('remove-wallet', 20000),
+    renameWallet: utils.forwardToMainProcess('rename-wallet', 20000),
     clearCache: utils.forwardToMainProcess('clear-cache'),
     handleClientSideError: utils.forwardToMainProcess('handle-client-error'),
     logout: utils.forwardToMainProcess('logout'),
