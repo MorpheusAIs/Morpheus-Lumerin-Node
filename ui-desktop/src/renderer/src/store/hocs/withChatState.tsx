@@ -9,6 +9,7 @@ import {
   getBidInfoById,
 } from '../utils/apiCallsHelper';
 import { pooledMapSettled, withTimeout } from '../utils/concurrency';
+import { explainChainError } from '../utils/chainErrors';
 import { ApiGateway } from 'src/main/src/client/apiGateway';
 
 const AvailabilityStatus = {
@@ -327,18 +328,27 @@ const withChatState = (WrappedComponent: ComponentType<any>) => {
         });
         const dataResponse = await response.json();
         if (!response.ok) {
-          this.context.toast(
-            'error',
-            `Failed to open session: "${dataResponse.error}"`,
-          );
-          console.log('Failed initiate session', dataResponse);
+          // The proxy-router nests its failures several layers deep
+          // ("failed to send transaction: open session failed: failed to send
+          // transaction: <real cause>"). Surfacing that verbatim told the user
+          // nothing, and hid the fact that the two most common causes — no ETH
+          // for gas, and a read-only RPC endpoint — need completely different
+          // fixes.
+          const { message, hint } = explainChainError(dataResponse.error);
+          this.context.toast('error', hint ? `${message} ${hint}` : message, {
+            autoClose: 15000,
+          });
+          console.error('Failed to initiate session:', dataResponse.error);
           return;
         }
         this.context.toast('success', 'Session successfully created');
         return dataResponse.sessionID;
       } catch (e) {
         console.error(e);
-        this.context.toast('error', 'Failed to open session');
+        const { message, hint } = explainChainError(e);
+        this.context.toast('error', hint ? `${message} ${hint}` : message, {
+          autoClose: 15000,
+        });
         return;
       }
     };

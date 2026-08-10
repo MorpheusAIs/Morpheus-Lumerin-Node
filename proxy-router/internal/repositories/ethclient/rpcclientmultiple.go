@@ -250,6 +250,21 @@ func shouldRetryRPCError(err error) bool {
 	if strings.Contains(msg, "-32601") {
 		return true
 	}
+	// Read-only public endpoints accept queries but refuse to broadcast
+	// transactions. https://mainnet.base.org — first in the public list for
+	// chain 8453 — answers eth_sendRawTransaction with exactly
+	// "method is not allowed on this endpoint", which was not matched here, so
+	// the client never rotated and every write failed even though later
+	// endpoints in the list would have accepted it. Opening a session was
+	// impossible out of the box without setting ETH_NODE_ADDRESS.
+	if strings.Contains(msg, "method is not allowed") ||
+		strings.Contains(msg, "method not allowed") ||
+		strings.Contains(msg, "not allowed on this endpoint") ||
+		strings.Contains(msg, "method is not available") ||
+		strings.Contains(msg, "method not found") ||
+		strings.Contains(msg, "unsupported method") {
+		return true
+	}
 	if strings.Contains(msg, "timeout") ||
 		strings.Contains(msg, "connection refused") ||
 		strings.Contains(msg, "connection reset") ||

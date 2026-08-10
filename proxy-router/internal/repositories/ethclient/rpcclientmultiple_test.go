@@ -115,3 +115,50 @@ func TestShouldRetryRPCError(t *testing.T) {
 		})
 	}
 }
+
+// Read-only public RPCs answer reads happily but reject eth_sendRawTransaction.
+// https://mainnet.base.org is first in the public endpoint list for chain 8453
+// and returns exactly "method is not allowed on this endpoint". That phrasing
+// was not matched, so the client never rotated to an endpoint that would accept
+// the broadcast — making it impossible to open a session out of the box without
+// setting ETH_NODE_ADDRESS.
+func TestShouldRetryRPCError_ReadOnlyEndpoint(t *testing.T) {
+	retryable := []struct {
+		name string
+		msg  string
+	}{
+		{"base mainnet public rpc", "method is not allowed on this endpoint"},
+		{"capitalised", "Method Is Not Allowed On This Endpoint"},
+		{"wrapped by proxy-router", "failed to send transaction: open session failed: failed to send transaction: method is not allowed on this endpoint"},
+		{"method not allowed", "method not allowed"},
+		{"method not found", "the method eth_sendRawTransaction does not exist/is not available: method not found"},
+		{"unsupported method", "unsupported method: eth_sendRawTransaction"},
+		{"method is not available", "method is not available"},
+	}
+
+	for _, tt := range retryable {
+		t.Run(tt.name, func(t *testing.T) {
+			if !shouldRetryRPCError(fmt.Errorf("%s", tt.msg)) {
+				t.Errorf("shouldRetryRPCError(%q) = false, want true (should rotate to the next endpoint)", tt.msg)
+			}
+		})
+	}
+
+	// A revert is a decision by the contract, not an endpoint problem. Rotating
+	// would just replay a doomed transaction against every RPC in the list.
+	notRetryable := []struct {
+		name string
+		msg  string
+	}{
+		{"execution reverted", "execution reverted: insufficient allowance"},
+		{"insufficient funds", "insufficient funds for gas * price + value: have 100 want 200"},
+	}
+
+	for _, tt := range notRetryable {
+		t.Run(tt.name, func(t *testing.T) {
+			if shouldRetryRPCError(fmt.Errorf("%s", tt.msg)) {
+				t.Errorf("shouldRetryRPCError(%q) = true, want false (rotating cannot help)", tt.msg)
+			}
+		})
+	}
+}

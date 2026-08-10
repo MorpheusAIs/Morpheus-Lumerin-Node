@@ -505,22 +505,34 @@ const Chat = (props: ChatProps) => {
   };
 
   const onOpenSession = async (isReopen: boolean, isDirectPay: boolean) => {
-    setIsActionLoading(true);
-    if (!isReopen) {
-      setChat({
-        id: generateHashId(),
-        createdAt: new Date(),
-        modelId: selectedModel.Id,
-      });
+    // Everything below used to run before the try block, so a missing
+    // selectedModel threw an unhandled promise rejection *after*
+    // setIsActionLoading(true) — leaving the spinner stuck on with no error
+    // shown and no way to recover short of switching tabs.
+    if (!selectedModel?.Id || !selectedModel?.bids?.length) {
+      props.toasts.toast(
+        'error',
+        'No model selected, or its pricing has not loaded yet. Pick a model and try again.',
+      );
+      return;
     }
 
-    const prices = selectedModel.bids.map((x) => Number(x.PricePerSecond));
-    const maxPrice = Math.max(...prices);
-    const duration = isDirectPay
-      ? calculateAcceptableDurationForDirectPay(meta)
-      : calculateAcceptableDuration(maxPrice, Number(balances.mor), meta);
-
+    setIsActionLoading(true);
     try {
+      if (!isReopen) {
+        setChat({
+          id: generateHashId(),
+          createdAt: new Date(),
+          modelId: selectedModel.Id,
+        });
+      }
+
+      const prices = selectedModel.bids.map((x) => Number(x.PricePerSecond));
+      const maxPrice = Math.max(...prices);
+      const duration = isDirectPay
+        ? calculateAcceptableDurationForDirectPay(meta)
+        : calculateAcceptableDuration(maxPrice, Number(balances.mor), meta);
+
       const openedSession = await props.onOpenSession({
         modelId: selectedModel.Id,
         duration,
