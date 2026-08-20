@@ -287,6 +287,9 @@ func start() error {
 	marketplace := registries.NewMarketplace(*cfg.Marketplace.DiamondContractAddress, ethClient, multicallBackend, rpcLog)
 	sessionRepo := sessionrepo.NewSessionRepositoryCached(sessionStorage, sessionRouter, marketplace, appLog)
 	proxyRouterApi := proxyapi.NewProxySender(chainID, wallet, contractLogStorage, sessionStorage, sessionRepo, cfg.Proxy.CNodePNodeTimeout, cfg.Proxy.CNodePNodeMaxRetries, cfg.Proxy.CNodePNodeAudioMaxRetries, appLog)
+	// Authenticate contract providers (e.g. custody contracts) by their on-chain
+	// owner(), matching SessionRouter._isValidProviderReceipt's contract-owner branch.
+	proxyRouterApi.SetProviderAuthResolver(proxyapi.NewProviderAuthResolver(ethClient))
 	explorer := blockchainapi.NewBlockscoutApiV2Client(cfg.Blockchain.BlockscoutApiUrl, log.Named("INDEXER"))
 	var teeVerifier *attestation.Verifier
 	if cfg.TEE.PortalURL != "" || cfg.TEE.ImageRepo != "" {
