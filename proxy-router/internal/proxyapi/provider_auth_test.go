@@ -130,3 +130,26 @@ func TestContractProviderSignatureFlow(t *testing.T) {
 		t.Fatal("attacker-signed frame must be rejected — MITM protection intact")
 	}
 }
+
+func TestProxySender_AuthorizedSignerUsesResolver(t *testing.T) {
+	custody := common.HexToAddress("0x2222222222222222222222222222222222222222")
+	owner := common.HexToAddress("0x3333333333333333333333333333333333333333")
+	p := &ProxyServiceSender{}
+
+	got, err := p.authorizedSigner(context.Background(), custody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != custody {
+		t.Fatalf("nil resolver: want provider %s, got %s", custody.Hex(), got.Hex())
+	}
+
+	p.SetProviderAuthResolver(NewProviderAuthResolver(&mockCaller{code: []byte{0x60, 0x80}, owner: owner}))
+	got, err = p.authorizedSigner(context.Background(), custody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != owner {
+		t.Fatalf("wired resolver: want owner %s, got %s", owner.Hex(), got.Hex())
+	}
+}
