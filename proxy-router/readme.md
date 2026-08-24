@@ -1,38 +1,22 @@
-## Environment Variables: 
+## Environment Variables:
 
-`PROXY_STORE_CHAT_CONTEXT`
+Chat context is two independent flags. **Storing** history does not prepend it onto the next prompt.
 
-- **Type:** Boolean
-- **Purpose:** Controls whether the proxy-router stores chat contexts locally.
+### `PROXY_STORE_CHAT_CONTEXT` (default `true`)
 
-#### When `PROXY_STORE_CHAT_CONTEXT` is set to `TRUE`
+Persist chats to local files for the history drawer and `/v1/chats` (see swagger). Frozen `false` in `-tee` images.
 
-- **Local Storage of Chats:**
-  - The proxy saves chat sessions to local files.
-  - Chat histories are maintained, allowing for persistent conversations.
-  
-- **API Operations:** (check swagger - `/v1/chats`)
-  - **Retrieve Chats:** Access stored chats via API endpoints.
-  - **Update Titles:** Modify chat titles using API calls.
-  - **Delete Chats:** Remove chat sessions through the API.
+- **`true`:** save sessions locally; list / rename / delete via the chats API. Send a stable `chat_id` header if you want turns grouped into one conversation.
+- **`false`:** nothing is persisted. Clients must send the full `messages[]` transcript each request.
 
-- **Using `chat_id`:**
-  - Include a `chat_id` in the request header.
-  - The proxy-router automatically injects the corresponding chat context.
-  - **Request Simplification:** Only the latest message needs to be sent in the request body.
+### `PROXY_FORWARD_CHAT_CONTEXT` (default `false`)
 
-#### When `PROXY_STORE_CHAT_CONTEXT` is set to `FALSE`
+Prepend stored history onto the outgoing prompt. Requires store on and a reused `chat_id`.
 
-- **No Chat Storage:**
-  - The proxy-router does not save any chat sessions locally.
-  
-- **Client-Side Context Management:**
-  - Clients must include the entire conversation history in each request.
-  - The proxy-router forwards the request to the AI model without adding any context.
+- **`false` (default):** the client owns the transcript. Leave this off for OpenAI-compatible clients that already send the full `messages[]` — otherwise context is duplicated.
+- **`true`:** opt-in for clients that send only the latest turn (the bundled Desktop UI sets this). The router prepends stored user/assistant turns before the new prompt.
 
----
-
-Ensure the proxy-router is restarted after changing the environment variable to apply the new configuration.
+Restart the proxy-router after changing either variable.
 
 ## CapacityPolicy strategies (models-config.json):
 
