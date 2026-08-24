@@ -68,6 +68,7 @@ type ProxyServiceSender struct {
 	cnodePnodeMaxRetries      int               // Max retries on read timeout from PNode (chat/embeddings)
 	cnodePnodeAudioMaxRetries int               // Max retries on read timeout from PNode (audio)
 	attestationVerifier       *attestation.Verifier
+	authResolver              ProviderAuthResolver
 	log                       lib.ILogger
 }
 
@@ -93,6 +94,21 @@ func (p *ProxyServiceSender) SetSessionService(service SessionService) {
 
 func (p *ProxyServiceSender) SetAttestationVerifier(v *attestation.Verifier) {
 	p.attestationVerifier = v
+}
+
+func (p *ProxyServiceSender) SetProviderAuthResolver(r ProviderAuthResolver) {
+	p.authResolver = r
+}
+
+// authorizedSigner returns the address whose signature authenticates morrpc
+// frames from providerAddr. With no resolver configured it falls back to the
+// provider address itself (the original EOA-only behavior), so callers that do
+// not wire a resolver are unaffected.
+func (p *ProxyServiceSender) authorizedSigner(ctx context.Context, providerAddr common.Address) (common.Address, error) {
+	if p.authResolver == nil {
+		return providerAddr, nil
+	}
+	return p.authResolver.AuthorizedSigner(ctx, providerAddr)
 }
 
 func (p *ProxyServiceSender) Ping(ctx context.Context, providerURL string, providerAddr common.Address) (time.Duration, string, []system.ModelHealthReport, error) {
@@ -142,7 +158,11 @@ func (p *ProxyServiceSender) Ping(ctx context.Context, providerURL string, provi
 	typedMsg.Signature = lib.HexString{}
 	typedMsg.Models = nil // not part of the signed payload (see PongRes)
 
-	if !p.morRPC.VerifySignatureAddr(typedMsg, signature, providerAddr, p.log) {
+	signer, err := p.authorizedSigner(ctx, providerAddr)
+	if err != nil {
+		return pingDuration, "", nil, lib.WrapError(ErrInvalidSig, err)
+	}
+	if !p.morRPC.VerifySignatureAddr(typedMsg, signature, signer, p.log) {
 		return pingDuration, "", nil, ErrInvalidSig
 	}
 
@@ -195,7 +215,11 @@ func (p *ProxyServiceSender) EnsureProviderRegistered(ctx context.Context, provi
 	signature := typedMsg.Signature
 	typedMsg.Signature = lib.HexString{}
 	typedMsg.Models = nil // not part of the signed payload (see PongRes)
-	if !p.morRPC.VerifySignatureAddr(typedMsg, signature, providerAddr, p.log) {
+	signer, err := p.authorizedSigner(ctx, providerAddr)
+	if err != nil {
+		return lib.WrapError(ErrInvalidSig, err)
+	}
+	if !p.morRPC.VerifySignatureAddr(typedMsg, signature, signer, p.log) {
 		return ErrInvalidSig
 	}
 
@@ -203,7 +227,10 @@ func (p *ProxyServiceSender) EnsureProviderRegistered(ctx context.Context, provi
 	if err != nil {
 		return lib.WrapError(ErrInvalidResponse, err)
 	}
-	pubHex, err := lib.ProviderPubKeyHexFromAddrSignedJSON(paramsBytes, signature, providerAddr)
+	// For a contract provider the recovered key is the owner's; that IS the
+	// provider node's ECIES key, so store it (validated against the resolved
+	// signer, not the contract address).
+	pubHex, err := lib.ProviderPubKeyHexFromAddrSignedJSON(paramsBytes, signature, signer)
 	if err != nil {
 		return lib.WrapError(ErrInvalidResponse, fmt.Errorf("recover provider pubkey: %w", err))
 	}

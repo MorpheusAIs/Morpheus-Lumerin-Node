@@ -155,7 +155,7 @@ For TEE images logging is **frozen** to production / JSON / minimal at build tim
 | `MAX_CACHED_DESTS` | `5` | Max cached provider destinations |
 | `PROXY_STORAGE_PATH` | `./data/badger/` | Local Badger / runtime state |
 | `PROXY_STORE_CHAT_CONTEXT` | `true` | Persist chat context. **Frozen `false` in `-tee` images.** |
-| `PROXY_FORWARD_CHAT_CONTEXT` | `true` | Prepend stored history to prompts |
+| `PROXY_FORWARD_CHAT_CONTEXT` | `false` | Prepend stored history to prompts. Opt-in for clients that send only the latest turn (the bundled Desktop UI sets it to `true`); leave off for OpenAI-compatible clients that already send the full transcript. |
 | `MODELS_CONFIG_PATH` | `./models-config.json` | See [models-config](/reference/models-config). See precedence above. |
 | `MODELS_CONFIG_CONTENT` | (unset) | **Seeds the models config file on first start only.** See precedence above. |
 | `AGENT_CONFIG_PATH` | (built-in default) | Local agent registry path |
