@@ -94,6 +94,7 @@
               "providers/full/quickstart",
               "providers/full/model-setup",
               "providers/full/proxy-router-docker",
+              "providers/full/proxy-router-railway",
               "providers/full/proxy-router-akash",
               "providers/full/aws",
               "providers/full/tee-reference",

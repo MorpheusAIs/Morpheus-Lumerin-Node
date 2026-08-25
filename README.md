@@ -52,6 +52,7 @@ You will need both **MOR** (for stake / fees / session payment) and **ETH on BAS
 |------|-----------|
 | Consumer (chat) | [Consumer quickstart](https://nodedocs.mor.org/get-started/quickstart-consumer) |
 | Provider (host your own model) | [Provider quickstart](https://nodedocs.mor.org/get-started/quickstart-provider) |
+| Provider on Railway (same GHCR image) | [Railway docs](https://nodedocs.mor.org/providers/full/proxy-router-railway) · [video](https://youtu.be/-z-EPK11qmM) |
 | TEE provider (SecretVM) | [SecretVM quickstart](https://nodedocs.mor.org/providers/full/secretvm-quickstart) |
 | Resale provider | [Resale overview](https://nodedocs.mor.org/providers/resale/overview) |
 | Prosumer / agent | [Prosumer overview](https://nodedocs.mor.org/prosumers/overview) |
