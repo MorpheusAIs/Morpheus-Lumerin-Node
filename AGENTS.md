@@ -45,6 +45,7 @@ Read the **AI knowledge** pages before answering user questions:
 | Consumer | `consumers/quickstart` | https://nodedocs.mor.org/consumers/quickstart |
 | Prosumer (agents) | `prosumers/overview` | https://nodedocs.mor.org/prosumers/overview |
 | Provider — Full P-Node | `providers/full/quickstart` | https://nodedocs.mor.org/providers/full/quickstart |
+| Provider — Railway (GHCR) | `providers/full/proxy-router-railway` | https://nodedocs.mor.org/providers/full/proxy-router-railway — video https://youtu.be/-z-EPK11qmM |
 | Provider — TEE / SecretVM | `providers/full/secretvm-quickstart` | https://nodedocs.mor.org/providers/full/secretvm-quickstart |
 | Provider — Resale | `providers/resale/overview` | https://nodedocs.mor.org/providers/resale/overview |
 | Developer (proxy-router API) | `reference/api-overview` | https://nodedocs.mor.org/reference/api-overview |
@@ -81,6 +82,7 @@ Read the **AI knowledge** pages before answering user questions:
 | "How do I install as a consumer?" | `consumers/quickstart` | https://nodedocs.mor.org/consumers/quickstart |
 | "How do I become a provider?" | `get-started/quickstart-provider` | https://nodedocs.mor.org/get-started/quickstart-provider |
 | "How do I run TEE?" | `providers/full/secretvm-quickstart` | https://nodedocs.mor.org/providers/full/secretvm-quickstart |
+| "How do I run a provider on Railway?" | `providers/full/proxy-router-railway` | https://nodedocs.mor.org/providers/full/proxy-router-railway — https://youtu.be/-z-EPK11qmM |
 | "What contract address?" | `get-started/networks-and-tokens` | https://nodedocs.mor.org/get-started/networks-and-tokens |
 | "Where can I see live status?" | — | https://active.mor.org |
 
