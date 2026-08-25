@@ -1,0 +1,42 @@
+---
+title: "Proxy-router on Railway"
+description: "Deploy the official GHCR proxy-router image on Railway and register as a Morpheus provider. Includes a walkthrough video."
+audience: ["provider-full", "provider-resale"]
+product: ["proxy-router"]
+last_verified: "v7.5.0"
+---
+
+Railway is a hosted path for the same **GHCR image** as [Docker](/providers/full/proxy-router-docker). Use it when you want a public TCP `:3333` and HTTPS admin without running the box yourself.
+
+<Note>
+  11-minute walkthrough (Morpheus Intern): [AI Inference Node on Railway in 11 Min (No GPU)](https://youtu.be/-z-EPK11qmM)
+</Note>
+
+## What the video covers
+
+| Time | Step |
+|------|------|
+| 0:00 | What this is |
+| 0:20 | Create a Railway project |
+| 0:33 | Deploy `ghcr.io/morpheusais/morpheus-lumerin-node` |
+| 0:53 | Env vars (RPC, wallet, models) |
+| 2:39 | Models config (pass-through example) |
+| 4:06 | TCP proxy on port **3333** |
+| 4:22 | Volume at `/app/data` |
+| 4:42 | Deploy |
+| 5:19 | Public domain for admin port **8082** |
+| 6:21 | Reachability check |
+| 6:38 | Connect [MyProvider](/providers/full/myprovider-gui) |
+| 7:25 | Register on-chain and stake |
+| 8:17 | Post a model bid |
+| 9:33 | Confirm on [active.mor.org](https://active.mor.org) |
+| 10:17 | Stake vs emissions (earn only up to stake) |
+
+## Do this, not that
+
+- Same image and env contract as [Docker](/providers/full/proxy-router-docker). Set `ETH_NODE_ADDRESS` to **your** Alchemy/Infura BASE URL — do not rely on the public RPC fallback.
+- Expose **3333** to the marketplace. Treat **8082** as admin: set a real username/password; do not leave `admin`/`admin` on a public hostname.
+- Prefer bidding on an existing `modelId` from [active.mor.org](https://active.mor.org/status). Every `postModelBid` charges a non-refundable fee — finish config before the first bid. See [Pricing](/providers/full/pricing) and [Register on chain](/providers/full/register-onchain).
+- After deploy, run [Verify your provider setup](/providers/full/verify-setup).
+
+This page does not replace the Docker/env reference. After the video, use those pages for the exact variable list.

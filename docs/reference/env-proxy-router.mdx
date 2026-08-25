@@ -3,7 +3,7 @@ title: "Env: proxy-router"
 description: "Every environment variable consumed by the proxy-router, with mainnet/testnet defaults and explicit precedence rules where two variables overlap."
 audience: ["provider-full", "provider-resale", "prosumer", "developer"]
 product: ["proxy-router"]
-last_verified: "v7.9.0"
+last_verified: "2026-08-24"
 source: "docs/proxy-router.all.env"
 ---
 
@@ -86,6 +86,8 @@ Mismatch (e.g. `subscriptions=true` with HTTPS endpoint) makes the node fail to 
 
 In the **`-tee` image** this is hard-coded `false` at build time and **cannot be overridden at runtime**. Setting it in the env has no effect inside a TEE deployment. See [TEE reference](/providers/full/tee-reference).
 
+Storage and forwarding are independent. `PROXY_STORE_CHAT_CONTEXT` persists chats for `/v1/chats`. `PROXY_FORWARD_CHAT_CONTEXT` (default `false`) prepends that stored history onto the next prompt — opt-in for clients that send only the latest turn. OpenAI-compatible clients that already send the full `messages[]` should leave forwarding off.
+
 ---
 
 ## Application
@@ -155,7 +157,7 @@ For TEE images logging is **frozen** to production / JSON / minimal at build tim
 | `MAX_CACHED_DESTS` | `5` | Max cached provider destinations |
 | `PROXY_STORAGE_PATH` | `./data/badger/` | Local Badger / runtime state |
 | `PROXY_STORE_CHAT_CONTEXT` | `true` | Persist chat context. **Frozen `false` in `-tee` images.** |
-| `PROXY_FORWARD_CHAT_CONTEXT` | `true` | Prepend stored history to prompts |
+| `PROXY_FORWARD_CHAT_CONTEXT` | `false` | Prepend stored history to prompts. Opt-in for clients that send only the latest turn (the bundled Desktop UI sets it to `true`); leave off for OpenAI-compatible clients that already send the full transcript. |
 | `MODELS_CONFIG_PATH` | `./models-config.json` | See [models-config](/reference/models-config). See precedence above. |
 | `MODELS_CONFIG_CONTENT` | (unset) | **Seeds the models config file on first start only.** See precedence above. |
 | `AGENT_CONFIG_PATH` | (built-in default) | Local agent registry path |
