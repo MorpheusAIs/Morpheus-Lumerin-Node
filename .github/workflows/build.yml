@@ -2263,8 +2263,13 @@ jobs:
     # FAILED; its automation loop expires OPEN-past-expires_at), but this job clears
     # the whole batch immediately so users don't eat up to ~30 min of intermittent
     # "provider not found" retries. The Lambda is safe/idempotent (summary-first,
-    # refuses a future cutoff, guarded by SWEEP_MAX_ROWS). See Morpheus-Infra
+    # refuses a *future* cutoff, guarded by SWEEP_MAX_ROWS). See Morpheus-Infra
     # 02-morpheus_c_node/.terragrunt/06_routed_sessions_sweep.tf.
+    #
+    # Invoke immediately once Deploy-to-Morpheus-C-Node succeeded (rehydration hold
+    # + health already ran). Pass cutoff_utc = PRIMARY updatedAt — already in the
+    # past. Do not pad +90s/+120s and sleep; that is what aborted v7.10.0 with
+    # "cutoff is in the future" after the node was confirmed up.
     #
     # Runs only after a successful C-Node deploy; tolerates skipped P-Node jobs the
     # same way Deploy-to-Morpheus-C-Node does. Never fails the pipeline on a sweep
@@ -2303,94 +2308,71 @@ jobs:
           FUNCTION_NAME="${ENV}-routed-sessions-sweep"
           CLUSTER_NAME="ecs-${ENV}-morpheus-engine"
           SERVICE_NAME="svc-${ENV}-router"
-          # Must match Lambda DEFAULT_REHYDRATION_SECS / DEFAULT_SAFETY_SECS
-          # (02-morpheus_c_node/.terragrunt/06_routed_sessions_sweep.tf).
-          REHYDRATION_SECS=90
-          SAFETY_SECS=120
-          SKEW_BUFFER_SECS=15
 
-          # deploy_cutoff mode (default): the Lambda derives cutoff from the
-          # C-Node PRIMARY deployment updatedAt + rehydration + safety, then
-          # closes OPEN rows older than that. release_tag only annotates
-          # error_reason.
-          PAYLOAD="{\"release_tag\":\"${BUILDTAG}\"}"
-
-          # Proactive wait: the Lambda REFUSES a future cutoff (would close
-          # fresh sessions). Invoking immediately after C-Node settle almost
-          # always 400s for ~updatedAt+210s, and the old 10×30s retry budget
-          # was barely enough — leaving zombies OPEN long enough to reopen/
-          # failover-storm MOR. Sleep until the same cutoff the Lambda will
-          # derive, then invoke (small retry loop only for clock skew).
+          # cutoff_utc = PRIMARY updatedAt (naive UTC). Already in the past:
+          # this job only runs after Deploy-to-Morpheus-C-Node finished the
+          # rehydration hold + health check. Do not pad into the future.
           echo "🔎 Resolving C-Node PRIMARY updatedAt from ${CLUSTER_NAME}/${SERVICE_NAME}..."
           UPDATED_AT=$(aws ecs describe-services \
             --cluster "$CLUSTER_NAME" \
             --services "$SERVICE_NAME" \
             --query 'services[0].deployments[?status==`PRIMARY`]|[0].updatedAt' \
             --output text)
-          if [ -z "$UPDATED_AT" ] || [ "$UPDATED_AT" = "None" ]; then
-            echo "⚠️ Could not resolve PRIMARY updatedAt; falling back to fixed ${REHYDRATION_SECS}+${SAFETY_SECS}s wait."
-            sleep $((REHYDRATION_SECS + SAFETY_SECS + SKEW_BUFFER_SECS))
+
+          CUTOFF_UTC=""
+          if [ -n "$UPDATED_AT" ] && [ "$UPDATED_AT" != "None" ]; then
+            CUTOFF_UTC=$(python3 -c '
+import sys
+from datetime import datetime, timezone
+raw = sys.argv[1].strip().replace("Z", "+00:00")
+dt = datetime.fromisoformat(raw)
+if dt.tzinfo is None:
+    dt = dt.replace(tzinfo=timezone.utc)
+print(dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"))
+' "$UPDATED_AT")
+            echo "📌 PRIMARY updatedAt: ${UPDATED_AT} → cutoff_utc=${CUTOFF_UTC} UTC (invoke immediately)"
           else
-            echo "📌 PRIMARY updatedAt: ${UPDATED_AT}"
-            UPDATED_EPOCH=$(date -d "$UPDATED_AT" +%s)
-            CUTOFF_EPOCH=$((UPDATED_EPOCH + REHYDRATION_SECS + SAFETY_SECS + SKEW_BUFFER_SECS))
-            NOW_EPOCH=$(date +%s)
-            WAIT_SECS=$((CUTOFF_EPOCH - NOW_EPOCH))
-            if [ "$WAIT_SECS" -gt 0 ]; then
-              echo "⏳ Waiting ${WAIT_SECS}s for sweep cutoff (updatedAt + ${REHYDRATION_SECS}s + ${SAFETY_SECS}s + ${SKEW_BUFFER_SECS}s skew)..."
-              sleep "$WAIT_SECS"
-            else
-              echo "✅ Cutoff already in the past (${WAIT_SECS}s); invoking immediately."
-            fi
+            echo "⚠️ Could not resolve PRIMARY updatedAt; Lambda will derive from ECS."
           fi
 
-          MAX_ATTEMPTS=5
-          SLEEP_SECS=20
+          PAYLOAD=$(python3 -c '
+import json, sys
+tag = sys.argv[1]
+cutoff = sys.argv[2] if len(sys.argv) > 2 else ""
+payload = {"release_tag": tag}
+if cutoff:
+    payload["cutoff_utc"] = cutoff
+print(json.dumps(payload))
+' "$BUILDTAG" "$CUTOFF_UTC")
+
           STATUS=""
           BODY=""
           FUNCTION_ERROR=""
-          for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
-            echo "🧹 [attempt ${attempt}/${MAX_ATTEMPTS}] Invoking ${FUNCTION_NAME} with payload: ${PAYLOAD}"
-            set +e
-            INVOKE_META=$(aws lambda invoke \
-              --function-name "$FUNCTION_NAME" \
-              --cli-binary-format raw-in-base64-out \
-              --payload "$PAYLOAD" \
-              /tmp/sweep_out.json 2>/tmp/sweep_err.txt)
-            INVOKE_RC=$?
-            set -e
+          echo "🧹 Invoking ${FUNCTION_NAME} with payload: ${PAYLOAD}"
+          set +e
+          INVOKE_META=$(aws lambda invoke \
+            --function-name "$FUNCTION_NAME" \
+            --cli-binary-format raw-in-base64-out \
+            --payload "$PAYLOAD" \
+            /tmp/sweep_out.json 2>/tmp/sweep_err.txt)
+          INVOKE_RC=$?
+          set -e
 
-            if [ $INVOKE_RC -ne 0 ]; then
-              echo "⚠️ lambda invoke call failed (rc=$INVOKE_RC):"
-              cat /tmp/sweep_err.txt || true
-              echo "ℹ️ Deploy already succeeded; the API Gateway self-heals zombies within ~30 min. Not failing the pipeline."
-              exit 0
-            fi
+          if [ $INVOKE_RC -ne 0 ]; then
+            echo "⚠️ lambda invoke call failed (rc=$INVOKE_RC):"
+            cat /tmp/sweep_err.txt || true
+            echo "ℹ️ Deploy already succeeded; the API Gateway self-heals zombies within ~30 min. Not failing the pipeline."
+            exit 0
+          fi
 
-            echo "📡 Invoke metadata: $INVOKE_META"
-            FUNCTION_ERROR=$(echo "$INVOKE_META" | jq -r '.FunctionError // empty')
-            RESPONSE=$(cat /tmp/sweep_out.json)
-            echo "📦 Lambda response: $RESPONSE"
+          echo "📡 Invoke metadata: $INVOKE_META"
+          FUNCTION_ERROR=$(echo "$INVOKE_META" | jq -r '.FunctionError // empty')
+          RESPONSE=$(cat /tmp/sweep_out.json)
+          echo "📦 Lambda response: $RESPONSE"
 
-            # The handler returns {"statusCode": N, "body": "<json string>"}.
-            STATUS=$(echo "$RESPONSE" | jq -r '.statusCode // empty' 2>/dev/null)
-            BODY=$(echo "$RESPONSE" | jq -r '.body // empty' 2>/dev/null)
-
-            # An unhandled Lambda error has no statusCode — terminal, don't retry.
-            if [ -n "$FUNCTION_ERROR" ]; then
-              break
-            fi
-
-            # Retry ONLY residual "future cutoff" 400 (clock skew / ECS lag).
-            if [ "$STATUS" = "400" ] && echo "$BODY" | grep -qi "in the future"; then
-              if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
-                echo "⏳ Cutoff not reached yet; sleeping ${SLEEP_SECS}s before retry."
-                sleep "$SLEEP_SECS"
-                continue
-              fi
-            fi
-            break
-          done
+          # The handler returns {"statusCode": N, "body": "<json string>"}.
+          STATUS=$(echo "$RESPONSE" | jq -r '.statusCode // empty' 2>/dev/null)
+          BODY=$(echo "$RESPONSE" | jq -r '.body // empty' 2>/dev/null)
 
           {
             echo "### 🧹 Routed-sessions zombie sweep"
@@ -2398,6 +2380,7 @@ jobs:
             echo "- **Function:** \`${FUNCTION_NAME}\`"
             echo "- **Release tag:** \`${BUILDTAG}\`"
             echo "- **PRIMARY updatedAt:** \`${UPDATED_AT:-unknown}\`"
+            echo "- **cutoff_utc:** \`${CUTOFF_UTC:-lambda-derived}\`"
             echo "- **Handler statusCode:** \`${STATUS:-unknown}\`"
             if [ -n "$BODY" ]; then
               echo ""
@@ -2416,7 +2399,7 @@ jobs:
           if [ "$STATUS" = "200" ]; then
             echo "✅ Sweep completed."
           else
-            echo "⚠️ Sweep returned non-200 statusCode '${STATUS}' (e.g. future-cutoff or > SWEEP_MAX_ROWS guard)."
+            echo "⚠️ Sweep returned non-200 statusCode '${STATUS}' (e.g. > SWEEP_MAX_ROWS guard)."
             echo "ℹ️ Review the response above and run the runbook sweep manually if needed. Not failing the pipeline."
           fi
 
