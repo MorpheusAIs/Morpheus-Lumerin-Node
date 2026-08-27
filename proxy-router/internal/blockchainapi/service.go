@@ -860,6 +860,35 @@ func (s *BlockchainService) GetBalance(ctx context.Context) (eth *big.Int, mor *
 	return ethBalance, morBalance, nil
 }
 
+func (s *BlockchainService) GetUserStakesOnHold(ctx context.Context, iterations uint8) (available, hold *big.Int, err error) {
+	user, err := s.GetMyAddress(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return s.sessionRouter.GetUserStakesOnHold(ctx, user, iterations)
+}
+
+func (s *BlockchainService) WithdrawUserStakes(ctx context.Context, iterations uint8) (common.Hash, error) {
+	prKey, err := s.privateKey.GetPrivateKey()
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrPrKey, err)
+	}
+
+	transactOpts, err := s.getTransactOpts(ctx, prKey)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrTxOpts, err)
+	}
+
+	txHash, err := s.sessionRouter.WithdrawUserStakes(transactOpts, transactOpts.From, iterations)
+	if err != nil {
+		s.handleTxError(ctx, transactOpts.From, err)
+		return common.Hash{}, lib.WrapError(ErrSendTx, err)
+	}
+
+	return txHash, nil
+}
+
 func (s *BlockchainService) SendETH(ctx context.Context, to common.Address, amount *big.Int, agentUsername string) (common.Hash, error) {
 	var shouldDecrease bool
 	if s.authConfig != nil {

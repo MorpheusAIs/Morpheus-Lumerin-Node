@@ -68,7 +68,7 @@ The Morpheus consumer node (proxy-router) does **not** custody tokens — it jus
     Practical effect: a normal natural expiration (close ~1 minute after `endsAt` on the same UTC day) **does** day-lock the used portion. Only a close that lands after `releaseAt` (e.g. days late) returns everything with no hold.
   </Step>
   <Step title="Claim the day-locked slice">
-    After `releaseAt` (≈ after the end of the UTC day the session ended on), call `withdrawUserStakes(yourAddress, iterations)` on the Diamond contract. **There is no HTTP route for this on the proxy-router today** — use `cast send`, MetaMask "Interact with contract", or your wallet's contract UI.
+    After `releaseAt` (≈ after the end of the UTC day the session ended on), inspect the configured wallet with `GET /blockchain/stakes/onhold`, then claim releasable rows with `POST /blockchain/stakes/withdraw`. To bypass the node, call `withdrawUserStakes(yourAddress, iterations)` on the Diamond contract directly:
 
     ```bash
     # Mainnet; replace placeholders
@@ -132,7 +132,8 @@ If a session is genuinely stuck (e.g. funding account empty, your consumer node 
 | List session IDs only (lighter) | `GET /blockchain/sessions/user/ids?user=0x…` |
 | Fetch one session | `GET /blockchain/sessions/0x…` |
 | Close a session | `POST /blockchain/sessions/0x…/close` |
-| Claim day-locked on-hold balance | **No HTTP route** — call `withdrawUserStakes` on the Diamond contract directly |
+| Inspect day-locked on-hold balance | `GET /blockchain/stakes/onhold?iterations=20` |
+| Claim day-locked on-hold balance | `POST /blockchain/stakes/withdraw` body: `{"iterations": 20}` |
 
 See [API endpoints](/reference/api-endpoints) for full curl examples.
 

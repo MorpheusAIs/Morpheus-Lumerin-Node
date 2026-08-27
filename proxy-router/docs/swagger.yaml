@@ -1042,6 +1042,15 @@ definitions:
         example: 100000000
         type: integer
     type: object
+  structs.UserStakesOnHoldRes:
+    properties:
+      available:
+        example: "100000000"
+        type: string
+      hold:
+        example: "200000000"
+        type: string
+    type: object
   structs.TokenTransfer:
     properties:
       from:
@@ -1453,6 +1462,57 @@ paths:
       security:
       - BasicAuth: []
       summary: Get ETH and MOR balance
+      tags:
+      - transactions
+  /blockchain/stakes/onhold:
+    get:
+      description: Get the releasable and still time-locked MOR stake for the proxy-router
+        wallet
+      parameters:
+      - default: 255
+        description: Maximum on-hold entries to inspect
+        in: query
+        maximum: 255
+        minimum: 1
+        name: iterations
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.UserStakesOnHoldRes'
+      security:
+      - BasicAuth: []
+      summary: Get consumer stakes on hold
+      tags:
+      - transactions
+  /blockchain/stakes/withdraw:
+    post:
+      consumes:
+      - application/json
+      description: Claim releasable MOR stake for the proxy-router wallet
+      parameters:
+      - description: Withdrawal options; iterations defaults to 255 and accepts 1 through
+          255
+        in: body
+        name: request
+        schema:
+          properties:
+            iterations:
+              type: integer
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.TxRes'
+      security:
+      - BasicAuth: []
+      summary: Withdraw consumer stakes on hold
       tags:
       - transactions
   /blockchain/bids:

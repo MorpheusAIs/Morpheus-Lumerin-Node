@@ -182,9 +182,25 @@ Variant for IDs only: `GET /blockchain/sessions/user/ids?user=0x…`. Fetch one:
 
 ---
 
-## Claim day-locked on-hold balance (no node HTTP route)
+## Inspect and claim day-locked on-hold balance
 
-There is **no proxy-router HTTP route** for `withdrawUserStakes` today. You send a transaction to the Diamond (Inference) contract on Base directly:
+Both endpoints operate on the proxy-router's configured wallet. `iterations` caps how many on-hold rows the contract inspects or withdraws; it defaults to `255` and accepts values from `1` through `255`.
+
+```bash
+# Split the queue into releasable and still time-locked MOR
+curl -u 'admin:admin' \
+  'http://localhost:8082/blockchain/stakes/onhold?iterations=20'
+
+# Claim rows whose releaseAt has passed
+curl -u 'admin:admin' \
+  -X POST 'http://localhost:8082/blockchain/stakes/withdraw' \
+  -H 'Content-Type: application/json' \
+  -d '{"iterations":20}'
+```
+
+The read response is `{ "available": "...", "hold": "..." }`. The withdrawal response contains the on-chain transaction hash. An empty request body uses the default iteration limit.
+
+To bypass the node, send the same transaction to the Diamond (Inference) contract directly:
 
 ```bash
 cast send 0x6aBE1d282f72B474E54527D93b979A4f64d3030a \
@@ -193,7 +209,7 @@ cast send 0x6aBE1d282f72B474E54527D93b979A4f64d3030a \
   --private-key "$PRIVATE_KEY_OF_DELEGATEE"
 ```
 
-Function selector: `0xa98a7c6b`. The caller must be the delegatee allowed for that consumer (usually the same key your consumer node uses). `iterations_` (e.g. `20`) caps how many releasable on-hold rows to process per call. Read on-hold balance via `getUserStakesOnHold(addr, iterations_)` — see [Where is my MOR? → Bucket 2](/ai/where-is-my-mor#bucket-2-on-hold-queue-used-stipend-day-lock).
+Function selector: `0xa98a7c6b`. The caller must be the delegatee allowed for that consumer (usually the same key your consumer node uses). See [Where is my MOR? → Bucket 2](/ai/where-is-my-mor#bucket-2-on-hold-queue-used-stipend-day-lock).
 
 ---
 

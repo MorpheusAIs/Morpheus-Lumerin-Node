@@ -63,7 +63,8 @@ stateDiagram-v2
 | List session IDs only | `GET /blockchain/sessions/user/ids?user=0x…` |
 | Fetch one session | `GET /blockchain/sessions/0x…` |
 | Close | `POST /blockchain/sessions/:id/close` body: `{}` |
-| **Claim day-locked on-hold balance** | **No HTTP route.** Send `withdrawUserStakes(addr, iterations)` to the Diamond contract via `cast send` or wallet UI. |
+| Inspect day-locked on-hold balance | `GET /blockchain/stakes/onhold?iterations=20` |
+| **Claim day-locked on-hold balance** | `POST /blockchain/stakes/withdraw` body: `{"iterations": 20}` |
 
 See full schemas in [API endpoints](/reference/api-endpoints) or [`proxy-router/docs/swagger.yaml`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/docs/swagger.yaml).
 
