@@ -18,6 +18,17 @@ export const AgentList = styled.div`
   padding-bottom: 2rem;
 `;
 
+export const ListStatus = styled.div`
+  padding: 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 1.2rem;
+  line-height: 1.5;
+  text-align: center;
+`;
+
 export const Button = styled(BtnAccent)`
   height: 3em;
   padding: 0 0.7em;
