@@ -25,6 +25,7 @@ function createWindow(): void {
     // ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
+      devTools: is.dev,
       // NOTE: sandbox is still disabled. The original reason (@electron/remote
       // in the preload) is gone, and the preload now only uses ipcRenderer,
       // clipboard, shell and contextBridge — all of which are available to a
@@ -38,9 +39,6 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
-    if (is.dev) {
-      mainWindow.webContents.openDevTools()
-    }
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
