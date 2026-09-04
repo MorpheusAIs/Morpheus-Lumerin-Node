@@ -1,23 +1,24 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router';
 import { useSelector } from 'react-redux';
 import { useQueryClient } from '@tanstack/react-query';
 import styled, { keyframes } from 'styled-components';
 import OfflineWarning from './OfflineWarning';
 // import ChangePassword from './ChangePassword'
-import Dashboard from './dashboard/Dashboard';
 import Sidebar from './sidebar/Sidebar';
-import Chat from './chat/Chat';
-import Models from './models/Models';
-import Agents from './agents/Agents';
-import Settings from './settings/Settings';
 import 'bootstrap/dist/css/bootstrap.min.css';
-import Providers from './providers/Providers';
 import { withClient } from '../store/hocs/clientContext';
 import selectors from '../store/selectors';
 import { queryKeys } from '../store/queries';
 import { getSessionsByUser } from '../store/utils/apiCallsHelper';
 import ErrorBoundary from './common/ErrorBoundary';
+
+const Dashboard = lazy(() => import('./dashboard/Dashboard'));
+const Chat = lazy(() => import('./chat/Chat'));
+const Agents = lazy(() => import('./agents/Agents'));
+const Models = lazy(() => import('./models/Models'));
+const Providers = lazy(() => import('./providers/Providers'));
+const Settings = lazy(() => import('./settings/Settings'));
 
 const fadeIn = keyframes`
   from {
@@ -48,6 +49,17 @@ const Main = styled.div`
   overflow-y: hidden;
   min-height: 100vh;
   position: relative;
+`;
+
+const RouteLoading = styled.div`
+  align-items: center;
+  background: #04130d;
+  color: rgba(255, 255, 255, 0.62);
+  display: flex;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 1.2rem;
+  height: 100vh;
+  justify-content: center;
 `;
 
 // Warms the shared session cache as soon as the main app shell mounts, so the
@@ -93,15 +105,23 @@ export const Layout = () => {
         data-scrollelement // Required by react-virtualized implementation in Dashboard/TxList
       >
         <ErrorBoundary resetKey={location.pathname} label={location.pathname}>
-          <Routes>
-            <Route path="/wallet" element={<Dashboard />} />
-            <Route path="/chat" element={<Chat />} />
-            <Route path="/agents" element={<Agents />} />
-            <Route path="/models" element={<Models />} />
-            <Route path="/providers" element={<Providers />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="*" element={<Navigate replace to="/wallet" />} />
-          </Routes>
+          <Suspense
+            fallback={
+              <RouteLoading role="status" aria-live="polite">
+                Loading screen…
+              </RouteLoading>
+            }
+          >
+            <Routes>
+              <Route path="/wallet" element={<Dashboard />} />
+              <Route path="/chat" element={<Chat />} />
+              <Route path="/agents" element={<Agents />} />
+              <Route path="/models" element={<Models />} />
+              <Route path="/providers" element={<Providers />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="*" element={<Navigate replace to="/wallet" />} />
+            </Routes>
+          </Suspense>
         </ErrorBoundary>
       </Main>
       {/* <AutoPriceAdjuster /> */}

@@ -4,25 +4,25 @@ import PropTypes from 'prop-types';
 import 'react-hint/css/index.css';
 import * as utils from '../../store/utils';
 import {
-  PasswordStrengthMeter,
   TextInput,
   AltLayout,
   AltLayoutNarrow,
   Btn,
   Sp,
-  Tooltip
+  Tooltip,
 } from '../common';
+import PasswordStrengthMeter from '../common/PasswordStrengthMeter';
 import Message from './Message';
 
 const PasswordMessage = styled(Message)`
   text-align: left;
-  color: ${p => p.theme.colors.dark};
+  color: ${(p) => p.theme.colors.dark};
   text-align: justify;
 `;
 
 const Green = styled.div`
   display: inline-block;
-  color: ${p => p.theme.colors.success};
+  color: ${(p) => p.theme.colors.success};
 `;
 
 const PasswordInputWrap = styled.div`
@@ -30,12 +30,12 @@ const PasswordInputWrap = styled.div`
 `;
 
 const SecondaryBtn = styled(Btn)`
-    border: 1px solid #20dc8e;
-    color: #20dc8e;
-    background: transparent;
-`
+  border: 1px solid #20dc8e;
+  color: #20dc8e;
+  background: transparent;
+`;
 
-const PasswordStep = props => {
+const PasswordStep = (props) => {
   const [typed, setTyped] = useState(false);
   const [suggestion, setSuggestion] = useState('');
   const onPasswordSubmit = (e, useImportFlow) => {
@@ -60,7 +60,7 @@ const PasswordStep = props => {
               <TextInput
                 data-testid="pass-field"
                 autoFocus
-                onChange={e => {
+                onChange={(e) => {
                   if (!typed) {
                     tooltipTimeout && clearTimeout(tooltipTimeout);
                     setTyped(true);
@@ -77,7 +77,7 @@ const PasswordStep = props => {
               {!props.errors.password && (
                 <PasswordStrengthMeter
                   password={props.password}
-                  onChange={res => {
+                  onChange={(res) => {
                     const string = res?.suggestions?.join(`\n`);
                     setSuggestion(string);
                   }}
@@ -101,7 +101,7 @@ const PasswordStep = props => {
               Create a new wallet
             </Btn>
           </Sp>
-          <Sp style={{ marginTop: '10px'}}>
+          <Sp style={{ marginTop: '10px' }}>
             <SecondaryBtn block onClick={(e) => onPasswordSubmit(e, true)}>
               Import an existing wallet
             </SecondaryBtn>
@@ -117,7 +117,7 @@ PasswordStep.propTypes = {
   onInputChange: PropTypes.func.isRequired,
   passwordAgain: PropTypes.string,
   password: PropTypes.string,
-  errors: utils.errorPropTypes('passwordAgain', 'password')
+  errors: utils.errorPropTypes('passwordAgain', 'password'),
 };
 
 export default PasswordStep;

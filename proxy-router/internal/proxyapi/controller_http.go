@@ -49,16 +49,16 @@ type BackendAttestationStatusProvider interface {
 }
 
 type ProxyController struct {
-	service                   *ProxyServiceSender
-	aiEngine                  AIEngine
-	chatStorage               gsc.ChatStorageInterface
-	storeChatContext          bool
-	forwardChatContext        bool
-	log                       lib.ILogger
-	authConfig                system.HTTPAuthConfig
-	ipfsManager               *IpfsManager
-	dockerManager             *DockerManager
-	backendAttestationStatus  BackendAttestationStatusProvider
+	service                  *ProxyServiceSender
+	aiEngine                 AIEngine
+	chatStorage              gsc.ChatStorageInterface
+	storeChatContext         bool
+	forwardChatContext       bool
+	log                      lib.ILogger
+	authConfig               system.HTTPAuthConfig
+	ipfsManager              *IpfsManager
+	dockerManager            *DockerManager
+	backendAttestationStatus BackendAttestationStatusProvider
 }
 
 func NewProxyController(service *ProxyServiceSender, aiEngine AIEngine, chatStorage gsc.ChatStorageInterface, storeChatContext, forwardChatContext bool, authConfig system.HTTPAuthConfig, ipfsManager *IpfsManager, log lib.ILogger) *ProxyController {
@@ -695,6 +695,14 @@ func (c *ProxyController) StreamDownloadFile(ctx *gin.Context) {
 			percentage = float64(downloaded) / float64(total) * 100
 		}
 
+		// The progress reader reports every 32 KiB. Only serialize and flush an
+		// SSE update at MiB boundaries (plus the final update), otherwise large
+		// model downloads can generate millions of events and overwhelm the
+		// desktop IPC bridge even though the file transfer itself is healthy.
+		if downloaded != total && downloaded%1048576 != 0 {
+			return nil
+		}
+
 		event := DownloadProgressEvent{
 			Status:      "downloading",
 			Downloaded:  downloaded,
@@ -719,12 +727,6 @@ func (c *ProxyController) StreamDownloadFile(ctx *gin.Context) {
 			}
 
 			ctx.Writer.Flush()
-
-			// Don't spam too many updates
-			if downloaded < total && downloaded%1048576 != 0 { // Send at least every 1MB
-				// Skip some updates for better performance
-				return nil
-			}
 
 			return nil
 		}

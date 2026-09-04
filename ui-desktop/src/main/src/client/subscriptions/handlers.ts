@@ -40,6 +40,7 @@ import {
   validateAgentToken,
   validateAgentUsername
 } from './agentMutationSecurity'
+import { InferenceTargetPayload, sessionInferenceHeaders } from './inference-session-target'
 
 let authentication: Record<string, string> | null = null
 let orchestrator: Orchestrator | null = null
@@ -520,6 +521,166 @@ export const renameWallet = async (params: { walletId: string; label: string }) 
 export const getAllModels = async (): Promise<unknown[]> => {
   const data = await proxyFetch<{ models: unknown[] }>('/blockchain/models', {}, 'models')
   return data.models ?? []
+}
+
+async function boundedResponseBody(response: Response, limit: number): Promise<Buffer> {
+  const declared = Number(response.headers.get('content-length') ?? 0)
+  if (Number.isFinite(declared) && declared > limit) throw new Error('Proxy response is too large.')
+  if (!response.body) return Buffer.alloc(0)
+  const reader = response.body.getReader()
+  const chunks: Buffer[] = []
+  let total = 0
+  while (true) {
+    const { value, done } = await reader.read()
+    if (done) return Buffer.concat(chunks, total)
+    if (!value) continue
+    total += value.byteLength
+    if (total > limit) {
+      await reader.cancel().catch(() => undefined)
+      throw new Error('Proxy response is too large.')
+    }
+    chunks.push(Buffer.from(value))
+  }
+}
+
+async function inferenceFetch(
+  pathname: '/v1/chat/completions' | '/v1/audio/speech' | '/v1/audio/transcriptions',
+  init: RequestInit,
+  timeoutMs: number
+): Promise<Response> {
+  const signal = AbortSignal.timeout(timeoutMs)
+  try {
+    return await fetch(`${configuredLoopbackProxyUrl()}${pathname}`, {
+      ...init,
+      signal,
+      headers: { ...(await getAuthHeaders()), ...(init.headers ?? {}) }
+    })
+  } catch (error: any) {
+    if (signal.aborted) throw new Error('The inference request timed out.')
+    throw new ProxyRouterError(error?.message || 'Cannot reach the local proxy-router.', {
+      unreachable: true
+    })
+  }
+}
+
+export const openChatCompletionStream = async (
+  payload: {
+    target: InferenceTargetPayload
+    messages: unknown[]
+  },
+  signal: AbortSignal
+): Promise<Response> => {
+  if (
+    !Array.isArray(payload?.messages) ||
+    payload.messages.length < 1 ||
+    payload.messages.length > 500
+  ) {
+    throw new Error('Chat messages are invalid.')
+  }
+  const requestBody = JSON.stringify({ stream: true, messages: payload.messages })
+  if (Buffer.byteLength(requestBody, 'utf8') > 24 * 1024 * 1024) {
+    throw new Error('Chat request exceeds the 24 MB limit.')
+  }
+  try {
+    return await fetch(`${configuredLoopbackProxyUrl()}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        ...(await getAuthHeaders()),
+        ...sessionInferenceHeaders(payload.target),
+        Accept: 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: requestBody,
+      signal
+    })
+  } catch (error: any) {
+    if (signal.aborted) throw new Error('The chat request was cancelled or timed out.')
+    throw new ProxyRouterError(error?.message || 'Cannot reach the local proxy-router.', {
+      unreachable: true
+    })
+  }
+}
+
+export const synthesizeSpeech = async (payload: {
+  target: InferenceTargetPayload
+  text: string
+  voice: string
+  speed: number
+}): Promise<{
+  ok: boolean
+  status: number
+  mimeType: string
+  data: ArrayBuffer
+  error?: string
+}> => {
+  const text = String(payload?.text ?? '')
+  const voice = String(payload?.voice ?? '').trim()
+  const speed = Number(payload?.speed)
+  if (!text.trim() || text.length > 20_000) throw new Error('Speech input is invalid.')
+  if (!voice || voice.length > 100 || /[\u0000-\u001f\u007f]/u.test(voice)) {
+    throw new Error('Speech voice is invalid.')
+  }
+  if (!Number.isFinite(speed) || speed < 0.25 || speed > 4) {
+    throw new Error('Speech speed must be between 0.25 and 4.')
+  }
+  const response = await inferenceFetch(
+    '/v1/audio/speech',
+    {
+      method: 'POST',
+      headers: { ...sessionInferenceHeaders(payload.target), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: text, voice, response_format: 'mp3', speed })
+    },
+    5 * 60_000
+  )
+  const body = await boundedResponseBody(response, 20 * 1024 * 1024)
+  return {
+    ok: response.ok,
+    status: response.status,
+    mimeType: response.headers.get('content-type') ?? 'audio/mpeg',
+    data: response.ok ? Uint8Array.from(body).buffer : new ArrayBuffer(0),
+    ...(response.ok ? {} : { error: body.toString('utf8').slice(0, 4_000) })
+  }
+}
+
+export const transcribeAudio = async (payload: {
+  target: InferenceTargetPayload
+  fileName: string
+  mimeType: string
+  data: ArrayBuffer | ArrayBufferView
+}): Promise<{ ok: boolean; status: number; contentType: string; body: string }> => {
+  const fileName =
+    String(payload?.fileName ?? 'audio')
+      .trim()
+      .slice(0, 255) || 'audio'
+  const mimeType = String(payload?.mimeType ?? 'application/octet-stream')
+    .trim()
+    .slice(0, 200)
+  const data = payload?.data
+  if (!(data instanceof ArrayBuffer) && !ArrayBuffer.isView(data)) {
+    throw new Error('Audio data is invalid.')
+  }
+  const audio =
+    data instanceof ArrayBuffer
+      ? Buffer.from(data)
+      : Buffer.from(data.buffer, data.byteOffset, data.byteLength)
+  if (!audio.length || audio.length > 20 * 1024 * 1024) {
+    throw new Error('Audio must be between 1 byte and 20 MB.')
+  }
+  const form = new FormData()
+  form.append('file', new Blob([Uint8Array.from(audio)], { type: mimeType }), fileName)
+  form.append('response_format', 'json')
+  const response = await inferenceFetch(
+    '/v1/audio/transcriptions',
+    { method: 'POST', headers: sessionInferenceHeaders(payload.target), body: form },
+    5 * 60_000
+  )
+  const body = (await boundedResponseBody(response, 4 * 1024 * 1024)).toString('utf8')
+  return {
+    ok: response.ok,
+    status: response.status,
+    contentType: response.headers.get('content-type') ?? 'text/plain',
+    body
+  }
 }
 
 export const getBalances = async (): Promise<unknown> => {

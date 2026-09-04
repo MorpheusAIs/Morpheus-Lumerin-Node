@@ -25,6 +25,8 @@ const listeners = {
   'login-submit': handlers.onLoginSubmit,
   // Api Gateway
   'get-all-models': handlers.getAllModels,
+  'synthesize-speech': handlers.synthesizeSpeech,
+  'transcribe-audio': handlers.transcribeAudio,
   'get-transactions': handlers.getTransactions,
   'get-balances': handlers.getBalances,
   // Transfers. `send-mor` was implemented in handlers.ts but never registered
@@ -56,13 +58,10 @@ const listeners = {
 
   // IPFS
   'get-ipfs-version': handlers.getIpfsVersion,
-  'get-ipfs-file': handlers.getIpfsFile,
   'pin-ipfs-file': handlers.pinIpfsFile,
   'unpin-ipfs-file': handlers.unpinIpfsFile,
   'add-file-to-ipfs': handlers.addFileToIpfs,
   'get-ipfs-pinned-files': handlers.getIpfsPinnedFiles,
-  'open-select-folder-dialog': handlers.openSelectFolderDialog,
-
   // Agent
   'get-agent-users': handlers.getAgentUsers,
   'confirm-decline-agent-user': handlers.confirmDeclineAgentUser,
