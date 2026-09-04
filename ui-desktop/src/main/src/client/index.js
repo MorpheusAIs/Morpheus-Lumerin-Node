@@ -4,6 +4,7 @@ import logger from '../../logger'
 import subscriptions from './subscriptions'
 import * as settings from './settings'
 import storage from './storage'
+import { isTrustedRendererEvent } from '../../rendererTrust'
 
 export function startCore({ chain, core, config: coreConfig }, webContent) {
   logger.verbose(`Starting core ${chain}`)
@@ -57,8 +58,9 @@ export function stopCore({ core, chain }) {
 }
 
 export function createClient(config) {
-  ipcMain.on('log.error', function (_, args) {
-    logger.error('ipcMain error ', args.message)
+  ipcMain.on('log.error', function (event, args) {
+    if (!isTrustedRendererEvent(event)) return
+    logger.error('ipcMain error ', String(args?.message ?? '').slice(0, 2000))
   })
 
   settings.presetDefaults()
@@ -89,6 +91,7 @@ export function createClient(config) {
   }
 
   ipcMain.on('ui-ready', function (webContent, args) {
+    if (!isTrustedRendererEvent(webContent)) return
     if (coreStarted) return
     coreStarted = true
     const onboardingComplete = !!settings.getPasswordHash()
@@ -128,7 +131,8 @@ export function createClient(config) {
       })
   })
 
-  ipcMain.on('ui-unload', function () {
+  ipcMain.on('ui-unload', function (event) {
+    if (!isTrustedRendererEvent(event)) return
     if (!coreStarted) return
     subscriptions.unsubscribe(core)
     stopCore(core)

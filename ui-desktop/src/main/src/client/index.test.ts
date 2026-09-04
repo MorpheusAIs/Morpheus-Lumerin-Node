@@ -62,6 +62,10 @@ vi.mock('./storage', () => ({
   }
 }))
 
+vi.mock('../../rendererTrust', () => ({
+  isTrustedRendererEvent: vi.fn(() => true)
+}))
+
 const nodeRequire = createRequire(import.meta.url)
 const electronModulePath = nodeRequire.resolve('electron')
 let originalElectronModule: NodeJS.Module | undefined

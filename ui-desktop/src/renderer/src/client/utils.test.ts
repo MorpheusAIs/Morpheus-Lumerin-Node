@@ -31,7 +31,7 @@ function createFakeIpc() {
     /** Deliver a response to EVERY listener on the channel, as Electron does. */
     respond(channel: string, message: { id: string; data?: any; error?: any }) {
       for (const listener of [...(listeners.get(channel) ?? [])]) {
-        listener({}, message, () => listeners.get(channel)?.delete(listener));
+        listener(message, () => listeners.get(channel)?.delete(listener));
       }
     },
 

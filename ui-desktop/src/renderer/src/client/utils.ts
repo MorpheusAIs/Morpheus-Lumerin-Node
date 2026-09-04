@@ -37,7 +37,7 @@ export function sendToMainProcess<T = any, K = unknown>(
   const deferred = new Deferred();
   let timeoutId;
 
-  function listener(_, { id: _id, data: _data, error }, unsubscribe) {
+  function listener({ id: _id, data: _data, error }, unsubscribe) {
     // IMPORTANT: check the correlation id BEFORE cancelling our timeout.
     //
     // Every in-flight call on the same channel registers its own listener, and

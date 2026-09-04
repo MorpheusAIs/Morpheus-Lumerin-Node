@@ -1,4 +1,4 @@
-import { app, dialog } from 'electron'
+import { app, BrowserWindow, dialog } from 'electron'
 import restart from '../electron-restart'
 import dbManager from '../database'
 import storage from '../storage'
@@ -35,9 +35,53 @@ import * as wallets from '../wallets'
 import * as attachments from '../attachments'
 import { cfg } from '../../../../../orchestrator.config'
 import { OrchestratorConfig } from '../../../orchestrator/orchestrator.types'
+import {
+  validateAgentDecision,
+  validateAgentToken,
+  validateAgentUsername
+} from './agentMutationSecurity'
 
 let authentication: Record<string, string> | null = null
 let orchestrator: Orchestrator | null = null
+let sensitiveConfirmationOpen = false
+
+async function confirmNativeAction(options: {
+  title: string
+  message: string
+  detail: string
+  confirmLabel: string
+}): Promise<boolean> {
+  if (sensitiveConfirmationOpen) throw new Error('Another security confirmation is already open.')
+  sensitiveConfirmationOpen = true
+  const dialogOptions = {
+    type: 'warning' as const,
+    title: options.title,
+    message: options.message,
+    detail: options.detail,
+    buttons: ['Cancel', options.confirmLabel],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true
+  }
+  const owner =
+    BrowserWindow.getFocusedWindow() ??
+    BrowserWindow.getAllWindows().find((window) => !window.isDestroyed())
+  try {
+    const result = owner
+      ? await dialog.showMessageBox(owner, dialogOptions)
+      : await dialog.showMessageBox(dialogOptions)
+    return result.response === 1
+  } finally {
+    sensitiveConfirmationOpen = false
+  }
+}
+
+function formatTokenAmount(wei: string): string {
+  const padded = wei.padStart(19, '0')
+  const whole = padded.slice(0, -18).replace(/^0+(?=\d)/, '') || '0'
+  const fraction = padded.slice(-18).replace(/0+$/, '')
+  return fraction ? `${whole}.${fraction}` : whole
+}
 
 /**
  * Error raised when the local proxy-router cannot be reached or returns a
@@ -54,6 +98,25 @@ export class ProxyRouterError extends Error {
     this.status = opts.status
     this.unreachable = opts.unreachable ?? false
   }
+}
+
+export function configuredLoopbackProxyUrl(): string {
+  let url: URL
+  try {
+    url = new URL(config.chain.localProxyRouterUrl)
+  } catch {
+    throw new ProxyRouterError('The configured local proxy-router URL is invalid.')
+  }
+  const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase()
+  if (
+    (url.protocol !== 'http:' && url.protocol !== 'https:') ||
+    (hostname !== '127.0.0.1' && hostname !== 'localhost' && hostname !== '::1') ||
+    url.username ||
+    url.password
+  ) {
+    throw new ProxyRouterError('The proxy-router admin API must use a loopback URL.')
+  }
+  return url.origin
 }
 
 /**
@@ -74,7 +137,7 @@ async function proxyFetch<T>(
   init: RequestInit = {},
   label = pathname
 ): Promise<T> {
-  const url = `${config.chain.localProxyRouterUrl}${pathname}`
+  const url = `${configuredLoopbackProxyUrl()}${pathname}`
 
   let response: Response
   try {
@@ -194,7 +257,7 @@ export const getAuthHeaders = async () => {
   }
 
   try {
-    const path = `${config.chain.localProxyRouterUrl}/auth/cookie/path`
+    const path = `${configuredLoopbackProxyUrl()}/auth/cookie/path`
     const response = await fetch(path)
     const body = await response.json()
     let cookieFilePath = body.path
@@ -434,6 +497,18 @@ async function waitForAddress(expected: string, timeoutMs = 20000): Promise<stri
 }
 
 export const removeWallet = async (params: { walletId: string }) => {
+  const entry = wallets.getWallet(params.walletId)
+  if (entry) {
+    const approved = await confirmNativeAction({
+      title: 'Remove wallet',
+      message: `Remove “${String(entry.label || 'Wallet').slice(0, 120)}” from MorpheusUI?`,
+      detail:
+        `Address: ${entry.address}\n\n` +
+        'This removes the wallet record and, for imported wallets, its private key from the operating-system keychain. It does not move funds.',
+      confirmLabel: 'Remove wallet'
+    })
+    if (!approved) throw new Error('Wallet removal cancelled.')
+  }
   await wallets.removeWallet(params.walletId)
   return true
 }
@@ -466,12 +541,29 @@ const sendToken = async (
   token: 'eth' | 'mor',
   payload: { to: string; amount: string }
 ): Promise<string> => {
-  const path = `${config.chain.localProxyRouterUrl}/blockchain/send/${token}`
+  const to = String(payload?.to ?? '').trim()
+  const amount = String(payload?.amount ?? '').trim()
+  if (!/^0x[0-9a-fA-F]{40}$/.test(to)) throw new Error('Enter a valid 0x wallet address.')
+  if (!/^[0-9]{1,78}$/.test(amount))
+    throw new Error('Transfer amount must be a positive wei integer.')
+  const amountWei = BigInt(amount)
+  if (amountWei <= 0n || amountWei >= 2n ** 256n)
+    throw new Error('Transfer amount is outside the supported range.')
+  const symbol = token.toUpperCase()
+  const approved = await confirmNativeAction({
+    title: `Send ${symbol}`,
+    message: `Send ${formatTokenAmount(amount)} ${symbol}?`,
+    detail: `Recipient: ${to}\nRaw amount: ${amount} wei\n\nBlockchain transfers are irreversible. Verify the address and amount carefully.`,
+    confirmLabel: `Send ${symbol}`
+  })
+  if (!approved) throw new Error('Transfer cancelled.')
+
+  const path = `${configuredLoopbackProxyUrl()}/blockchain/send/${token}`
   const response = await fetch(path, {
     method: 'POST',
     body: JSON.stringify({
-      to: payload.to,
-      amount: payload.amount
+      to,
+      amount
     }),
     headers: await getAuthHeaders()
   })
@@ -638,6 +730,14 @@ export const clearWallet = async () => {
 }
 
 export const resetWallet = async () => {
+  const approved = await confirmNativeAction({
+    title: 'Erase wallet data',
+    message: 'Erase this MorpheusUI wallet and start over?',
+    detail:
+      'This clears the local wallet, node settings, and application cache, then restarts the app. Make sure you have the recovery material you need.',
+    confirmLabel: 'Erase and restart'
+  })
+  if (!approved) throw new Error('Wallet reset cancelled.')
   await clearWallet()
   await clearEthNodeEnv()
   await clearCacheV2()
@@ -657,41 +757,65 @@ export const getAgentUsers = async (): Promise<AgentUserRes | null> => {
   }
 }
 
+async function mutateAgentAccess(
+  pathname:
+    | '/auth/users/confirm'
+    | '/auth/users'
+    | '/auth/allowance/revoke'
+    | '/auth/allowance/confirm',
+  method: 'POST' | 'DELETE',
+  payload: Record<string, string | boolean>,
+  label: string
+): Promise<boolean> {
+  const result = await proxyFetch<ResultResponse>(
+    pathname,
+    {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    },
+    label
+  )
+  if (result?.result !== true) {
+    throw new ProxyRouterError(`The local proxy-router did not confirm ${label}.`)
+  }
+  return true
+}
+
 export const confirmDeclineAgentUser = async (params: {
   username: string
   confirm: boolean
 }): Promise<boolean> => {
-  const { username, confirm } = params
-  try {
-    const path = `${config.chain.localProxyRouterUrl}/auth/users/confirm`
-
-    const res = await fetch(path, {
-      method: 'POST',
-      body: JSON.stringify({ username, confirm }),
-      headers: await getAuthHeaders()
-    })
-    await res.json()
-    return true
-  } catch (e) {
-    console.log('Error', e)
-    return false
-  }
+  const username = validateAgentUsername(params?.username)
+  const confirm = validateAgentDecision(params?.confirm)
+  const approved = await confirmNativeAction({
+    title: confirm ? 'Approve agent access' : 'Decline agent access',
+    message: `${confirm ? 'Approve' : 'Decline'} access for agent “${username}”?`,
+    detail: confirm
+      ? 'This grants the agent its requested proxy-router permissions and requested token allowances. Review the request in the app before approving.'
+      : 'This rejects and removes the pending agent access request.',
+    confirmLabel: confirm ? 'Approve agent' : 'Decline request'
+  })
+  if (!approved) throw new Error(`Agent ${confirm ? 'approval' : 'decline'} cancelled.`)
+  return mutateAgentAccess(
+    '/auth/users/confirm',
+    'POST',
+    { username, confirm },
+    confirm ? 'agent access approval' : 'agent access denial'
+  )
 }
 
 export const removeAgentUser = async (params: { username: string }): Promise<boolean> => {
-  const { username } = params
-  try {
-    const path = `${config.chain.localProxyRouterUrl}/auth/users`
-    await fetch(path, {
-      method: 'DELETE',
-      body: JSON.stringify({ username }),
-      headers: await getAuthHeaders()
-    })
-    return true
-  } catch (e) {
-    console.log('Error', e)
-    return false
-  }
+  const username = validateAgentUsername(params?.username)
+  const approved = await confirmNativeAction({
+    title: 'Remove agent access',
+    message: `Remove agent “${username}”?`,
+    detail:
+      'This revokes the agent credentials and its proxy-router access. Requests using those credentials will stop working.',
+    confirmLabel: 'Remove agent'
+  })
+  if (!approved) throw new Error('Agent removal cancelled.')
+  return mutateAgentAccess('/auth/users', 'DELETE', { username }, 'agent removal')
 }
 
 export const getAgentTxs = async (params: {
@@ -722,19 +846,21 @@ export const revokeAgentAllowance = async (params: {
   username: string
   token: string
 }): Promise<boolean> => {
-  const { username, token } = params
-  try {
-    const path = `${config.chain.localProxyRouterUrl}/auth/allowance/revoke`
-    await fetch(path, {
-      method: 'POST',
-      body: JSON.stringify({ username, token }),
-      headers: await getAuthHeaders()
-    })
-    return true
-  } catch (e) {
-    console.log('Error', e)
-    return false
-  }
+  const username = validateAgentUsername(params?.username)
+  const token = validateAgentToken(params?.token)
+  const approved = await confirmNativeAction({
+    title: 'Revoke agent allowance',
+    message: `Revoke ${token} allowance for agent “${username}”?`,
+    detail: 'The agent will no longer be authorized to spend this token through the proxy-router.',
+    confirmLabel: 'Revoke allowance'
+  })
+  if (!approved) throw new Error('Agent allowance revocation cancelled.')
+  return mutateAgentAccess(
+    '/auth/allowance/revoke',
+    'POST',
+    { username, token },
+    'agent allowance revocation'
+  )
 }
 
 export const getAgentAllowanceRequests = async (): Promise<AgentAllowanceRequestsRes | null> => {
@@ -754,19 +880,24 @@ export const confirmDeclineAgentAllowanceRequest = async (params: {
   token: string
   confirm: boolean
 }): Promise<boolean> => {
-  const { username, token, confirm } = params
-  try {
-    const path = `${config.chain.localProxyRouterUrl}/auth/allowance/confirm`
-    await fetch(path, {
-      method: 'POST',
-      body: JSON.stringify({ username, token, confirm }),
-      headers: await getAuthHeaders()
-    })
-    return true
-  } catch (e) {
-    console.log('Error', e)
-    return false
-  }
+  const username = validateAgentUsername(params?.username)
+  const token = validateAgentToken(params?.token)
+  const confirm = validateAgentDecision(params?.confirm)
+  const approved = await confirmNativeAction({
+    title: confirm ? 'Approve agent allowance' : 'Decline agent allowance',
+    message: `${confirm ? 'Approve' : 'Decline'} ${token} allowance for agent “${username}”?`,
+    detail: confirm
+      ? 'This authorizes the pending token spending limit shown in the app. Verify the requested amount before approving.'
+      : 'This rejects and removes the pending token allowance request.',
+    confirmLabel: confirm ? 'Approve allowance' : 'Decline request'
+  })
+  if (!approved) throw new Error(`Agent allowance ${confirm ? 'approval' : 'decline'} cancelled.`)
+  return mutateAgentAccess(
+    '/auth/allowance/confirm',
+    'POST',
+    { username, token, confirm },
+    confirm ? 'agent allowance approval' : 'agent allowance denial'
+  )
 }
 
 export const getIpfsVersion = async (): Promise<{ version: string } | null> => {
@@ -917,7 +1048,10 @@ export const pingService = async (data: { service: keyof OrchestratorConfig }, c
 
 export const onboardingCompleted = async (data, core: Core) => {
   try {
-    const { proxyUrl } = data
+    // Never trust a renderer-provided destination for wallet setup. This flow
+    // sends the seed or imported key, so even a well-formed remote URL would be
+    // credential exfiltration. The admin API is deliberately loopback-only.
+    const proxyUrl = configuredLoopbackProxyUrl()
 
     if (data.ethNode) {
       const ethNodeResult = await fetch(`${proxyUrl}/config/ethNode`, {
