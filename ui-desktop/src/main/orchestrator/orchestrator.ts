@@ -87,18 +87,20 @@ export class Orchestrator {
     await this.resetState()
     this.emitStateUpdate()
 
-    // --- Downloads: proxy-router is required; AI / IPFS are best-effort ---
+    // The proxy-router is the only required service. Start it as soon as its
+    // own artifact is ready so a clean install can reach the wallet and remote
+    // marketplace while the much larger optional local-model/IPFS assets are
+    // still downloading.
     await this.downloadProxyRouter()
+    await this.startProxyRouter()
+    this.emitStateUpdate()
+
+    // Local AI, IPFS, and Docker are optional. The proxy only points at their
+    // local addresses; it does not need them downloaded or running to boot,
+    // open sessions, or serve remote Morpheus models.
     await this.downloadOptionalAiRuntime()
     await this.downloadOptionalAiModel()
     await this.downloadOptionalIpfs()
-
-    // --- Startup: proxy-router first (required for UI/onboarding) ---
-    // Local AI, IPFS, and Docker are optional. The proxy only *points at*
-    // localhost AI/IPFS in config; it does not need them running to boot,
-    // open sessions, or serve remote Morpheus models.
-    await this.startProxyRouter()
-    this.emitStateUpdate()
 
     await this.startOptionalService('ipfs', () => this.ensureIpfsProcess())
     await this.startOptionalService('aiRuntime', () => this.ensureAiRuntimeProcess())

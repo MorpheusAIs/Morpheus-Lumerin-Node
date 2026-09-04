@@ -124,6 +124,12 @@ app
       event.returnValue = app.getVersion()
     })
 
+    // Register the renderer bootstrap/listener map before loading the renderer.
+    // A packaged file:// page can execute quickly enough to emit `ui-ready`
+    // before createWindow() returns; IPC events have no queue for a listener
+    // that does not exist yet, so that race left Root waiting until its timeout
+    // and displayed a misleading wallet-startup failure.
+    createClient(config)
     createWindow()
 
     app.on('activate', function () {
@@ -136,8 +142,6 @@ app
 
     initMenu()
     initContextMenu()
-
-    createClient(config)
   })
 
 // Quit when all windows are closed, except on macOS. There, it's common
