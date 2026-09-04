@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { mutationArgumentsHash } from './cowork-mutation-journal'
+import type { CoworkAgentMessage } from './cowork.types'
 
 const electron = vi.hoisted(() => ({ userData: '' }))
 
@@ -122,6 +123,84 @@ describe.sequential('Cowork store persistence', () => {
     })
   })
 
+  it('keeps the complete display transcript while the task record stays bounded', async () => {
+    const store = await import('./cowork-store')
+    const [project] = await store.listProjects()
+    const task = await store.createTask({
+      projectId: project.id,
+      title: 'Long-lived workspace history',
+      goal: 'Keep every visible turn available.',
+      model: { modelId: 'model-a', modelName: 'Model A', isLocal: true }
+    })
+
+    for (let index = 0; index < 130; index++) {
+      store.appendDisplayMessage(task, 'assistant', `Visible answer ${index + 1}`, {
+        kind: 'model',
+        modelId: 'model-a',
+        modelName: 'Model A'
+      })
+    }
+    await store.replaceTask(task)
+
+    expect(task.messages).toHaveLength(100)
+    expect(task.hasEarlierMessages).toBe(true)
+    const latest = await store.listTaskMessages(task.id, { limit: 100 })
+    const earlier = await store.listTaskMessages(task.id, {
+      beforeSequence: latest.nextBeforeSequence,
+      limit: 100
+    })
+    expect(latest.hasMore).toBe(true)
+    expect(earlier.hasMore).toBe(false)
+    expect([...earlier.messages, ...latest.messages]).toHaveLength(131)
+    expect(latest.messages.at(-1)).toMatchObject({
+      content: 'Visible answer 130',
+      author: { kind: 'model', modelName: 'Model A' }
+    })
+
+    await store.deleteTask(task.id)
+    expect(await store.listTaskMessages(task.id)).toMatchObject({ messages: [], hasMore: false })
+  })
+
+  it('does not persist transcript messages from a task revision that loses the save CAS', async () => {
+    const store = await import('./cowork-store')
+    const project = await store.createProject({
+      name: 'Concurrent transcript saves',
+      rootPath: projectRoot,
+      approvalMode: 'auto'
+    })
+    const created = await store.createTask({
+      projectId: project.id,
+      title: 'Keep the winning transcript only',
+      goal: 'Resolve two concurrent task saves.',
+      model: { modelId: 'local-test', modelName: 'Local test model', isLocal: true }
+    })
+    const first = (await store.getTask(created.id))!
+    const stale = (await store.getTask(created.id))!
+    store.appendDisplayMessage(first, 'assistant', 'accepted revision message')
+    store.appendDisplayMessage(stale, 'assistant', 'rejected stale revision message')
+
+    const [accepted, rejected] = await Promise.allSettled([
+      store.replaceTask(first),
+      store.replaceTask(stale)
+    ])
+
+    expect(accepted.status).toBe('fulfilled')
+    expect(rejected).toMatchObject({
+      status: 'rejected',
+      reason: expect.objectContaining({
+        message: expect.stringMatching(/changed in another operation/)
+      })
+    })
+    const transcript = await store.listTaskMessages(created.id, { limit: 100 })
+    expect(transcript.messages.map((message) => message.content)).toEqual([
+      'Resolve two concurrent task saves.',
+      'accepted revision message'
+    ])
+
+    await store.deleteTask(created.id)
+    await store.deleteProject(project.id)
+  })
+
   it('soft-archives projects without deleting their task history', async () => {
     const store = await import('./cowork-store')
     const [project] = await store.listProjects()
@@ -173,6 +252,40 @@ describe.sequential('Cowork store persistence', () => {
     expect(JSON.parse(task.agentMessages.at(-1)!.tool_calls![0].function.arguments).content).toBe(
       '[omitted after execution: 1900000 characters]'
     )
+  })
+
+  it('keeps a rebound model context boundary aligned when old history is trimmed', async () => {
+    const store = await import('./cowork-store')
+    const project = await store.createProject({
+      name: 'Rebound context boundary',
+      rootPath: projectRoot,
+      approvalMode: 'auto'
+    })
+    const task = await store.createTask({
+      projectId: project.id,
+      title: 'Continue with a replacement model',
+      goal: 'Preserve only the replacement model context.',
+      model: { modelId: 'local-test', modelName: 'Local test model', isLocal: true }
+    })
+    task.agentMessages = Array.from(
+      { length: 500 },
+      (_, index): CoworkAgentMessage => ({
+        role: index === 0 || index === 250 ? 'user' : 'assistant',
+        content: `old-context-${index}`
+      })
+    )
+    task.modelContextStart = task.agentMessages.length
+
+    store.appendAgentMessage(task, {
+      role: 'user',
+      content: 'Continue from the bounded replacement-model handoff.'
+    })
+
+    expect(task.agentMessages).toHaveLength(251)
+    expect(task.modelContextStart).toBe(250)
+    expect(task.agentMessages.slice(task.modelContextStart)).toEqual([
+      { role: 'user', content: 'Continue from the bounded replacement-model handoff.' }
+    ])
   })
 
   it('fails closed instead of replaying a prepared mutation after app restart', async () => {
@@ -313,7 +426,7 @@ describe.sequential('Cowork store persistence', () => {
     expect(JSON.parse(results.at(-1)!.content!)).toEqual({
       ok: false,
       error:
-        'Cowork blocked a reused tool call ID whose action name or arguments had changed. No file action ran.'
+        'Workspace blocked a reused tool call ID whose action name or arguments had changed. No file action ran.'
     })
   })
 

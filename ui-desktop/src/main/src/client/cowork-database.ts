@@ -11,18 +11,25 @@ const INDEX_FIELDS = {
   projects: ['id'],
   // These are the task hot paths: direct lookup, project history, and startup
   // recovery of interrupted work.
-  tasks: ['id', 'projectId', 'status']
+  tasks: ['id', 'projectId', 'status'],
+  // Display transcripts are independent from a marketplace session and page
+  // backwards by their durable, per-task sequence.
+  messages: ['id', 'taskId', 'sequence']
 } as const
 
-export function coworkCollection(name: 'projects' | 'tasks'): any {
+export function coworkCollection(name: keyof typeof INDEX_FIELDS): any {
   const existing = collections.get(name)
   if (existing) return existing
 
-  const filename = prepareCoworkDataFile(`${name}.db`)
+  // prepareCoworkDataFile accepts this runtime-safe filename but its narrow
+  // legacy type predates the independently paginated message collection.
+  const filename = prepareCoworkDataFile(
+    `${name}.db` as Parameters<typeof prepareCoworkDataFile>[0]
+  )
   const db = createIndexedCoworkDatastore(
     filename,
     INDEX_FIELDS[name],
-    name === 'tasks' ? 5 * 60_000 : 60_000
+    name === 'tasks' || name === 'messages' ? 5 * 60_000 : 60_000
   )
   // Task records may contain bounded multi-megabyte transcripts. Compacting
   // every 30 seconds repeatedly rewrote the whole store during active runs and

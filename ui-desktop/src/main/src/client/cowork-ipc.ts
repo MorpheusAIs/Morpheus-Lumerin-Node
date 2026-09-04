@@ -12,6 +12,7 @@ import {
   getProject,
   getTask,
   listProjects,
+  listTaskMessages,
   listTaskSummaries,
   listTasks,
   recoverInterruptedTasks,
@@ -19,8 +20,9 @@ import {
 } from './cowork-store'
 import {
   cancelCoworkRun,
-  coworkRunActive,
+  deleteCoworkTask,
   pauseCoworkRun,
+  rebindCoworkTask,
   requestCoworkStart,
   resolveCoworkApproval,
   steerCoworkRun
@@ -61,11 +63,13 @@ const CHANNEL = {
   deleteProject: 'cowork:delete-project',
   listTasks: 'cowork:list-tasks',
   getTask: 'cowork:get-task',
+  listTaskMessages: 'cowork:list-task-messages',
   createTask: 'cowork:create-task',
   startTask: 'cowork:start-task',
   steerTask: 'cowork:steer-task',
   cancelTask: 'cowork:cancel-task',
   pauseTask: 'cowork:pause-task',
+  rebindTask: 'cowork:rebind-task',
   resolveApproval: 'cowork:resolve-approval',
   deleteTask: 'cowork:delete-task',
   listModelOptions: 'cowork:list-model-options',
@@ -97,7 +101,7 @@ const modelOptionsInFlight = new Map<string, Promise<ResolvedModelOption[]>>()
 
 function record(value: unknown): Record<string, any> {
   if (!value || typeof value !== 'object' || Array.isArray(value))
-    throw new Error('Invalid Cowork request.')
+    throw new Error('Invalid Workspace request.')
   return value as Record<string, any>
 }
 
@@ -155,19 +159,31 @@ function publicToolCall(call: CoworkToolCall): CoworkToolCall {
 }
 
 function publicTask(
-  task:
-    | CoworkTask
-    | (Omit<CoworkTask, 'agentMessages' | 'toolExecutions'> & {
-        agentMessages?: undefined
-        toolExecutions?: undefined
-      })
-): Omit<CoworkTask, 'agentMessages' | 'toolExecutions'> {
+  task: CoworkTask
+): Omit<
+  CoworkTask,
+  | 'agentMessages'
+  | 'toolExecutions'
+  | 'modelFingerprint'
+  | 'toolProtocol'
+  | 'dataAccessApprovedFingerprint'
+  | 'messagesPersistedThrough'
+  | 'modelContextStart'
+  | 'modelBindings'
+  | 'handoff'
+  | 'runSafety'
+> {
   const {
     agentMessages: _agentMessages,
     modelFingerprint: _modelFingerprint,
     toolProtocol: _toolProtocol,
     toolExecutions: _toolExecutions,
     dataAccessApprovedFingerprint: _dataAccessApprovedFingerprint,
+    messagesPersistedThrough: _messagesPersistedThrough,
+    modelContextStart: _modelContextStart,
+    modelBindings: _modelBindings,
+    handoff: _handoff,
+    runSafety: _runSafety,
     ...visible
   } = task
   if (!visible.pendingApproval) return visible
@@ -223,7 +239,7 @@ async function remoteModelOptions(walletAddress: string): Promise<ResolvedModelO
   const modelsResponse = await proxyFetch<{ models?: any[] }>(
     '/blockchain/models',
     {},
-    'Cowork models'
+    'Workspace models'
   )
   const sessions: any[] = []
   const limit = 50
@@ -231,7 +247,7 @@ async function remoteModelOptions(walletAddress: string): Promise<ResolvedModelO
     const page = await proxyFetch<{ sessions?: any[] }>(
       `/blockchain/sessions/user?user=${encodeURIComponent(walletAddress)}&offset=${offset}&limit=${limit}&order=desc`,
       {},
-      'Cowork sessions'
+      'Workspace sessions'
     )
     const values = Array.isArray(page.sessions) ? page.sessions : []
     sessions.push(...values)
@@ -301,7 +317,7 @@ async function requireActiveCoworkSession(): Promise<ResolvedModelOption> {
   )
   if (!option) {
     throw new Error(
-      'Cowork requires an active Morpheus marketplace session. Choose a model and open a session in Chat first.'
+      'Workspace requires an active Morpheus marketplace session. Choose a model and open a session in Chat first.'
     )
   }
   return option
@@ -377,10 +393,12 @@ const scheduler = createCoworkScheduler(
       startTask: (taskId) => requestCoworkStart(taskId, getAuthHeaders, emit, refreshModelTarget),
       cancelTask: (taskId) => cancelCoworkRun(taskId, emit)
     }),
-  { onError: (error) => log.error(`Cowork schedule failed: ${error.message}`) }
+  { onError: (error) => log.error(`Workspace schedule failed: ${error.message}`) }
 )
 
-async function selectedModel(value: unknown): Promise<CoworkModelTarget> {
+async function selectedModelBinding(
+  value: unknown
+): Promise<{ model: CoworkModelTarget; fingerprint: string }> {
   const input = record(value)
   const modelId = stringValue(input.modelId, 'Model ID', 512)
   const sessionId =
@@ -390,12 +408,16 @@ async function selectedModel(value: unknown): Promise<CoworkModelTarget> {
   )
   if (!option) throw new Error('The selected model or session is no longer available.')
   if (option.isLocal || option.source !== 'marketplace' || !option.sessionId) {
-    throw new Error('Cowork requires an active Morpheus marketplace session.')
+    throw new Error('Workspace requires an active Morpheus marketplace session.')
   }
   if (!option.sessionEndsAt || option.sessionEndsAt <= Date.now()) {
     throw new Error('The selected marketplace session has expired.')
   }
-  return modelTarget(option)
+  return { model: modelTarget(option), fingerprint: option.boundaryFingerprint }
+}
+
+async function selectedModel(value: unknown): Promise<CoworkModelTarget> {
+  return (await selectedModelBinding(value)).model
 }
 
 async function refreshModelTarget(
@@ -407,7 +429,7 @@ async function refreshModelTarget(
   )
   if (!option) throw new Error('The selected model or session is no longer available.')
   if (option.isLocal || option.source !== 'marketplace' || !option.sessionId) {
-    throw new Error('Cowork requires an active Morpheus marketplace session.')
+    throw new Error('Workspace requires an active Morpheus marketplace session.')
   }
   if (!option.sessionEndsAt || option.sessionEndsAt <= Date.now()) {
     throw new Error('The selected marketplace session has expired.')
@@ -432,15 +454,15 @@ export function registerCoworkIpc(): void {
 
   recoveryBarrier = recoverInterruptedTasks()
     .then((count) => {
-      if (count) log.warn(`Paused ${count} interrupted Cowork task(s) after restart.`)
+      if (count) log.warn(`Paused ${count} interrupted Workspace task(s) after restart.`)
     })
     .catch((error) => {
-      log.error(`Could not recover Cowork tasks: ${error.message}`)
+      log.error(`Could not recover Workspace tasks: ${error.message}`)
       throw error
     })
   void recoveryBarrier
     .then(() => (quitting ? undefined : scheduler.start()))
-    .catch((error) => log.error(`Could not initialize Cowork safely: ${error.message}`))
+    .catch((error) => log.error(`Could not initialize Workspace safely: ${error.message}`))
   app.once('before-quit', () => {
     quitting = true
     scheduler.stop()
@@ -454,11 +476,11 @@ export function registerCoworkIpc(): void {
     const owner = BrowserWindow.fromWebContents(event.sender) ?? undefined
     const selection = owner
       ? await dialog.showOpenDialog(owner, {
-          title: 'Connect a folder to Cowork',
+          title: 'Connect a folder to Workspace',
           properties: ['openDirectory', 'createDirectory']
         })
       : await dialog.showOpenDialog({
-          title: 'Connect a folder to Cowork',
+          title: 'Connect a folder to Workspace',
           properties: ['openDirectory', 'createDirectory']
         })
     if (selection.canceled || !selection.filePaths[0]) return null
@@ -471,7 +493,7 @@ export function registerCoworkIpc(): void {
       selectedRoot.startsWith(userDataRoot + path.sep) ||
       userDataRoot.startsWith(selectedRoot + path.sep)
     ) {
-      throw new Error('The app data directory cannot be connected as a Cowork project.')
+      throw new Error('The app data directory cannot be connected as a Workspace project.')
     }
     const mode = input.approvalMode ?? 'manual'
     if (!approvalModes.has(mode)) throw new Error('Invalid approval mode.')
@@ -535,6 +557,25 @@ export function registerCoworkIpc(): void {
     return task ? publicTask(task) : null
   })
 
+  handle(CHANNEL.listTaskMessages, async (value) => {
+    const input = record(value)
+    const taskId = idValue(input.taskId, 'Task ID')
+    if (!(await getTask(taskId))) throw new Error('Workspace task not found.')
+    const beforeSequence =
+      input.beforeSequence === undefined ? undefined : Number(input.beforeSequence)
+    if (
+      beforeSequence !== undefined &&
+      (!Number.isSafeInteger(beforeSequence) || beforeSequence <= 0)
+    ) {
+      throw new Error('Invalid transcript cursor.')
+    }
+    const limit = input.limit === undefined ? undefined : Number(input.limit)
+    if (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)) {
+      throw new Error('Transcript page size must be between 1 and 100.')
+    }
+    return listTaskMessages(taskId, { beforeSequence, limit })
+  })
+
   handle(CHANNEL.createTask, async (value) => {
     const input = record(value)
     const task = await createTask({
@@ -555,9 +596,9 @@ export function registerCoworkIpc(): void {
     const input = record(value)
     const id = idValue(input.id, 'Task ID')
     const task = await getTask(id)
-    if (!task) throw new Error('Cowork task not found.')
+    if (!task) throw new Error('Workspace task not found.')
     const project = await getProject(task.projectId)
-    if (!project || project.archivedAt) throw new Error('This Cowork project is archived.')
+    if (!project || project.archivedAt) throw new Error('This Workspace project is archived.')
     // steerCoworkRun persists the instruction before its shared start path
     // refreshes the model. Close that mutation window at the IPC boundary.
     await refreshModelTarget(task.model)
@@ -580,14 +621,21 @@ export function registerCoworkIpc(): void {
     publicTask(await pauseCoworkRun(idValue(record(value).id, 'Task ID'), emit))
   )
 
+  handle(CHANNEL.rebindTask, async (value) => {
+    const input = record(value)
+    const id = idValue(input.id, 'Task ID')
+    const binding = await selectedModelBinding(input.model)
+    return publicTask(await rebindCoworkTask(id, binding, emit))
+  })
+
   handle(CHANNEL.resolveApproval, async (value) => {
     const input = record(value)
     if (typeof input.approved !== 'boolean') throw new Error('Approval decision is required.')
     const taskId = idValue(input.taskId, 'Task ID')
     const task = await getTask(taskId)
-    if (!task) throw new Error('Cowork task not found.')
+    if (!task) throw new Error('Workspace task not found.')
     const project = await getProject(task.projectId)
-    if (!project || project.archivedAt) throw new Error('This Cowork project is archived.')
+    if (!project || project.archivedAt) throw new Error('This Workspace project is archived.')
     // Denial remains available as a safe recovery action. Approval can read or
     // mutate project files, so it requires the task's exact current-wallet
     // marketplace session to still be active.
@@ -606,8 +654,7 @@ export function registerCoworkIpc(): void {
 
   handle(CHANNEL.deleteTask, async (value) => {
     const id = idValue(record(value).id, 'Task ID')
-    if (coworkRunActive(id)) await cancelCoworkRun(id, emit)
-    await deleteTask(id)
+    await deleteCoworkTask(id)
     return true
   })
 
@@ -618,15 +665,14 @@ export function registerCoworkIpc(): void {
   })
 
   handle(CHANNEL.previewArtifact, async (value) => {
-    await requireActiveCoworkSession()
     const input = record(value)
     const task = await getTask(idValue(input.taskId, 'Task ID'))
-    if (!task) throw new Error('Cowork task not found.')
+    if (!task) throw new Error('Workspace task not found.')
     const requestedPath = stringValue(input.path, 'Artifact path', 2_000)
     const artifact = task.artifacts.find((item) => item.path === requestedPath)
     if (!artifact) throw new Error('Artifact is not part of this task.')
     const project = await getProject(task.projectId)
-    if (!project) throw new Error('Cowork project not found.')
+    if (!project) throw new Error('Workspace project not found.')
     if (artifact.kind === 'folder') {
       const output = await executeCoworkTool(project, 'list_files', {
         path: artifact.path,
@@ -677,15 +723,14 @@ export function registerCoworkIpc(): void {
   })
 
   handle(CHANNEL.revealArtifact, async (value) => {
-    await requireActiveCoworkSession()
     const input = record(value)
     const task = await getTask(idValue(input.taskId, 'Task ID'))
-    if (!task) throw new Error('Cowork task not found.')
+    if (!task) throw new Error('Workspace task not found.')
     const requestedPath = stringValue(input.path, 'Artifact path', 2_000)
     if (!task.artifacts.some((item) => item.path === requestedPath))
       throw new Error('Artifact is not part of this task.')
     const project = await getProject(task.projectId)
-    if (!project) throw new Error('Cowork project not found.')
+    if (!project) throw new Error('Workspace project not found.')
     await openCoworkPath(project, requestedPath)
     return true
   })
@@ -701,7 +746,7 @@ export function registerCoworkIpc(): void {
     const input = record(value)
     const projectId = idValue(input.projectId, 'Project ID')
     const project = await getProject(projectId)
-    if (!project || project.archivedAt) throw new Error('Cowork project not found.')
+    if (!project || project.archivedAt) throw new Error('Workspace project not found.')
     if (input.status !== undefined && input.status !== 'active' && input.status !== 'paused') {
       throw new Error('Invalid schedule status.')
     }
@@ -727,9 +772,9 @@ export function registerCoworkIpc(): void {
     const input = record(value)
     const id = idValue(input.id, 'Schedule ID')
     const current = await getCoworkSchedule(id)
-    if (!current) throw new Error('Cowork schedule not found.')
+    if (!current) throw new Error('Workspace schedule not found.')
     const project = await getProject(current.projectId)
-    if (!project || project.archivedAt) throw new Error('This Cowork project is archived.')
+    if (!project || project.archivedAt) throw new Error('This Workspace project is archived.')
     const patch: Parameters<typeof updateCoworkSchedule>[1] = {}
     if (input.name !== undefined) patch.name = stringValue(input.name, 'Schedule name', 120)
     if (input.cadence !== undefined) patch.cadence = cadenceValue(input.cadence)
@@ -756,9 +801,9 @@ export function registerCoworkIpc(): void {
   handle(CHANNEL.resumeSchedule, async (value) => {
     const id = idValue(record(value).id, 'Schedule ID')
     const current = await getCoworkSchedule(id)
-    if (!current) throw new Error('Cowork schedule not found.')
+    if (!current) throw new Error('Workspace schedule not found.')
     const project = await getProject(current.projectId)
-    if (!project || project.archivedAt) throw new Error('This Cowork project is archived.')
+    if (!project || project.archivedAt) throw new Error('This Workspace project is archived.')
     await refreshModelTarget(current.task.model)
     const schedule = await resumeCoworkSchedule(id)
     scheduler.wake()
@@ -775,16 +820,15 @@ export function registerCoworkIpc(): void {
   handle(CHANNEL.runScheduleNow, async (value) => {
     const id = idValue(record(value).id, 'Schedule ID')
     const current = await getCoworkSchedule(id)
-    if (!current) throw new Error('Cowork schedule not found.')
+    if (!current) throw new Error('Workspace schedule not found.')
     const project = await getProject(current.projectId)
-    if (!project || project.archivedAt) throw new Error('This Cowork project is archived.')
+    if (!project || project.archivedAt) throw new Error('This Workspace project is archived.')
     return scheduler.runNow(id)
   })
 
   handle(CHANNEL.listExtensions, async (value) => {
-    await requireActiveCoworkSession()
     const project = await getProject(idValue(record(value).projectId, 'Project ID'))
-    if (!project || project.archivedAt) throw new Error('Cowork project not found.')
+    if (!project || project.archivedAt) throw new Error('Workspace project not found.')
     return publicExtensionCatalog(await extensionCatalog(project), project)
   })
 
@@ -793,7 +837,7 @@ export function registerCoworkIpc(): void {
     const input = record(value)
     const projectId = idValue(input.projectId, 'Project ID')
     let project = await getProject(projectId)
-    if (!project || project.archivedAt) throw new Error('Cowork project not found.')
+    if (!project || project.archivedAt) throw new Error('Workspace project not found.')
     if (typeof input.folderInstructionsEnabled !== 'boolean') {
       throw new Error('Folder-instruction choice is required.')
     }

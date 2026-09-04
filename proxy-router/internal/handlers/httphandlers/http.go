@@ -72,7 +72,7 @@ func CreateHTTPServer(log lib.ILogger, authConfig system.HTTPAuthConfig, control
 	r.Use(cors.New(cors.Config{
 		AllowOriginFunc: newCORSOriginChecker(log),
 		AllowMethods:    []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:    []string{"session_id", "model_id", "chat_id", "Authorization", "content-type"},
+		AllowHeaders:    []string{"session_id", "model_id", "chat_id", "x-morpheus-history", "Authorization", "content-type"},
 	}))
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))

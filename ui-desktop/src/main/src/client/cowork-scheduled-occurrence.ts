@@ -58,7 +58,7 @@ export async function runCoworkScheduledOccurrence(
   if (signal.aborted) throw new Error('This schedule was deleted before its task started.')
   if (schedule.task.model.isLocal || !schedule.task.model.sessionId) {
     await dependencies.pauseSchedule(schedule.id)
-    throw new Error('Cowork schedules require an active Morpheus marketplace session.')
+    throw new Error('Workspace schedules require an active Morpheus marketplace session.')
   }
   if (!schedule.task.model.sessionEndsAt || schedule.task.model.sessionEndsAt <= now()) {
     await dependencies.pauseSchedule(schedule.id)

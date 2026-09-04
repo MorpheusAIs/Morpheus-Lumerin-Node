@@ -2856,6 +2856,17 @@ const docTemplate = `{
                         "in": "header"
                     },
                     {
+                        "enum": [
+                            "default",
+                            "on",
+                            "off"
+                        ],
+                        "type": "string",
+                        "description": "Request-local chat history mode. 'off' disables storing and forwarding context for this request; 'on' and 'default' preserve the server policy.",
+                        "name": "x-morpheus-history",
+                        "in": "header"
+                    },
+                    {
                         "description": "Prompt",
                         "name": "prompt",
                         "in": "body",

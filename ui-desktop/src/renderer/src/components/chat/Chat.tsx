@@ -575,13 +575,18 @@ const Chat = (props: ChatProps) => {
       .catch((e) => console.error('Failed to load open bid', e));
   }, [modelsDataQuery.data, sessionsQuery.data]);
 
-  // Cowork routes users here when they do not yet have an active marketplace
+  // Workspace routes users here when they do not yet have an active marketplace
   // session. Open the normal model picker in marketplace-only mode; after the
   // session opens, the header offers an explicit choice between Chat and
-  // Cowork. The query flag is consumed so revisiting Chat does not reopen it.
+  // Workspace. The legacy query value remains supported for existing links.
   useEffect(() => {
     const setup = new URLSearchParams(location.search).get('setup');
-    if (setup !== 'cowork' || !initialized || !chainData) return;
+    if (
+      (setup !== 'workspace' && setup !== 'cowork') ||
+      !initialized ||
+      !chainData
+    )
+      return;
     setCoworkModelSelection(true);
     setOpenChangeModal(true);
     navigate('/chat', { replace: true });
@@ -1928,11 +1933,11 @@ const Chat = (props: ChatProps) => {
                     className="change-modal"
                     onClick={() =>
                       navigate(
-                        `/cowork?sessionId=${encodeURIComponent(activeSession.Id)}`,
+                        `/workspace?sessionId=${encodeURIComponent(activeSession.Id)}`,
                       )
                     }
                   >
-                    <IconSparkles size={18} /> Use this session in Cowork
+                    <IconSparkles size={18} /> Use this session in Workspace
                   </BtnAccent>
                 )}
             </div>

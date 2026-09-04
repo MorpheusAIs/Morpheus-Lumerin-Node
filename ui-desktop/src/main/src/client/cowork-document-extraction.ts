@@ -182,7 +182,7 @@ function resolveSource(nameOrExtension: string): {
   if (!extension || !SUPPORTED_FORMATS.has(extension as CoworkDocumentFormat)) {
     throw extractionError(
       'unsupported-format',
-      'Unsupported document format. Cowork can extract PDF, DOCX, XLSX, and PPTX files.'
+      'Unsupported document format. Workspace can extract PDF, DOCX, XLSX, and PPTX files.'
     )
   }
 
@@ -375,7 +375,7 @@ function inspectOoxmlArchive(
                 fail(
                   extractionError(
                     'unsafe-content',
-                    'The document contains an external relationship, which Cowork will not resolve.'
+                    'The document contains an external relationship, which Workspace will not resolve.'
                   )
                 )
                 archive.close()

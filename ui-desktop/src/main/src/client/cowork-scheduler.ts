@@ -95,7 +95,7 @@ export class CoworkScheduler {
   }
 
   async runNow(scheduleId: string): Promise<CoworkSchedule> {
-    if (this.stopped) throw new Error('The Cowork scheduler is stopped.')
+    if (this.stopped) throw new Error('The Workspace scheduler is stopped.')
     if (this.activeSchedules.has(scheduleId)) throw new Error('This schedule is already running.')
     const claimedAt = this.now()
     const claimed = await claimCoworkScheduleRunNow(scheduleId, claimedAt)
@@ -148,7 +148,7 @@ export class CoworkScheduler {
     this.activeControllers.set(schedule.id, controller)
     try {
       if (this.stopped)
-        throw new Error('The Cowork scheduler stopped before this occurrence began.')
+        throw new Error('The Workspace scheduler stopped before this occurrence began.')
       const result = await this.runOccurrence({
         schedule,
         scheduledFor,
@@ -183,7 +183,7 @@ export class CoworkScheduler {
   private report(value: unknown): void {
     const error = asError(value)
     if (this.onError) this.onError(error)
-    else console.error('[CoworkScheduler]', error)
+    else console.error('[WorkspaceScheduler]', error)
   }
 }
 

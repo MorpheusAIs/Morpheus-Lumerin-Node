@@ -65,6 +65,13 @@ export interface CoworkDisplayMessage {
   role: 'user' | 'assistant';
   content: string;
   createdAt: number;
+  sequence?: number;
+  author?: {
+    kind: 'workspace' | 'model';
+    modelId?: string;
+    modelName?: string;
+    sessionId?: string;
+  };
 }
 
 export interface CoworkActivity {
@@ -102,6 +109,7 @@ export interface CoworkTask {
   model: CoworkModelTarget;
   plan: CoworkPlanStep[];
   messages: CoworkDisplayMessage[];
+  hasEarlierMessages?: boolean;
   activities: CoworkActivity[];
   artifacts: CoworkArtifact[];
   pendingApproval?: CoworkPendingApproval;

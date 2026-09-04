@@ -28,8 +28,8 @@ const marketplaceModel = (overrides: Record<string, unknown>) => ({
   ...overrides,
 });
 
-describe('ModelSelectionModal Cowork filter', () => {
-  it('shows only marketplace chat models as unverified Cowork candidates', () => {
+describe('ModelSelectionModal Workspace filter', () => {
+  it('shows only marketplace chat models as unverified Workspace candidates', () => {
     render(
       <ThemeProvider theme={theme}>
         <ModelSelectionModal
@@ -73,7 +73,7 @@ describe('ModelSelectionModal Cowork filter', () => {
     );
 
     const coworkFilter = screen.getByRole('button', {
-      name: 'Show Cowork candidate models (2)',
+      name: 'Show Workspace candidate models (2)',
     });
     expect(coworkFilter.getAttribute('aria-pressed')).toBe('false');
 
@@ -96,14 +96,14 @@ describe('ModelSelectionModal Cowork filter', () => {
 
     expect(
       screen.getByRole('button', {
-        name: 'Show Cowork candidate models (1)',
+        name: 'Show Workspace candidate models (1)',
       }),
     ).toBeTruthy();
     expect(screen.queryByText('Chat Model')).toBeNull();
     expect(screen.getByText('Legacy Chat Model')).toBeTruthy();
   });
 
-  it('keeps Cowork setup gated and hides the redundant filter', () => {
+  it('keeps Workspace setup gated and hides the redundant filter', () => {
     render(
       <ThemeProvider theme={theme}>
         <ModelSelectionModal
@@ -136,7 +136,7 @@ describe('ModelSelectionModal Cowork filter', () => {
     );
 
     expect(
-      screen.queryByRole('button', { name: /Cowork candidate/ }),
+      screen.queryByRole('button', { name: /Workspace candidate/ }),
     ).toBeNull();
     expect(screen.getByText('Chat Model')).toBeTruthy();
     expect(screen.queryByText('Speech Model')).toBeNull();

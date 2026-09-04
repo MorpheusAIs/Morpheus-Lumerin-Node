@@ -21,7 +21,7 @@ describe('session-first Cowork and Chat wiring', () => {
       'activeCoworkMarketplaceSessions(sessions, models, Date.now(), walletAddress)'
     )
     expect(selectedModel).toContain('modelOptions(true)')
-    expect(selectedModel).toContain('Cowork requires an active Morpheus marketplace session.')
+    expect(selectedModel).toContain('Workspace requires an active Morpheus marketplace session.')
   })
 
   it('preflights a schedule before creating its task', () => {
@@ -37,7 +37,7 @@ describe('session-first Cowork and Chat wiring', () => {
     expect(scheduledRun).toContain('removeUntouchedScheduledTask(task, dependencies)')
   })
 
-  it('requires a freshly validated active session before Cowork project and file access', () => {
+  it('requires a fresh session for mutations while preserving read-only Workspace access', () => {
     const ipc = source('src/main/src/client/cowork-ipc.ts')
     const gate = ipc.slice(
       ipc.indexOf('async function requireActiveCoworkSession'),
@@ -50,10 +50,7 @@ describe('session-first Cowork and Chat wiring', () => {
       'createProject',
       'updateProject',
       'deleteProject',
-      'previewArtifact',
-      'revealArtifact',
       'updateSchedule',
-      'listExtensions',
       'configureExtensions'
     ]) {
       const start = ipc.indexOf(`handle(CHANNEL.${channel}`)
@@ -61,7 +58,16 @@ describe('session-first Cowork and Chat wiring', () => {
       const handler = ipc.slice(start, next === -1 ? undefined : next)
       expect(handler, channel).toContain('await requireActiveCoworkSession()')
     }
-    for (const readOnlyChannel of ['listProjects', 'listTasks', 'getTask', 'listSchedules']) {
+    for (const readOnlyChannel of [
+      'listProjects',
+      'listTasks',
+      'getTask',
+      'listTaskMessages',
+      'previewArtifact',
+      'revealArtifact',
+      'listSchedules',
+      'listExtensions'
+    ]) {
       const start = ipc.indexOf(`handle(CHANNEL.${readOnlyChannel}`)
       const next = ipc.indexOf('\n  handle(CHANNEL.', start + 1)
       const handler = ipc.slice(start, next === -1 ? undefined : next)
@@ -74,6 +80,9 @@ describe('session-first Cowork and Chat wiring', () => {
       const handler = ipc.slice(start, next === -1 ? undefined : next)
       expect(handler, sessionBoundChannel).toContain('refreshModelTarget(task.model)')
     }
+    const rebindStart = ipc.indexOf('handle(CHANNEL.rebindTask')
+    const rebindEnd = ipc.indexOf('\n  handle(CHANNEL.', rebindStart + 1)
+    expect(ipc.slice(rebindStart, rebindEnd)).toContain('selectedModelBinding(input.model)')
   })
 
   it('keeps normal Chat marketplace-only and legacy local history read-only', () => {
@@ -84,6 +93,17 @@ describe('session-first Cowork and Chat wiring', () => {
     expect(chat).toContain('Legacy local-demo history is read-only.')
     expect(chat).toContain('if (isLocal) {')
     expect(chat).toContain('modelId: latestSessionModel.Id')
-    expect(chat).toContain('Use this session in Cowork')
+    expect(chat).toContain('Use this session in Workspace')
+  })
+
+  it('keeps historical model bindings in the main process', () => {
+    const ipc = source('src/main/src/client/cowork-ipc.ts')
+    const projection = ipc.slice(
+      ipc.indexOf('function publicTask('),
+      ipc.indexOf('function visionCapability')
+    )
+
+    expect(projection).toContain("| 'modelBindings'")
+    expect(projection).toContain('modelBindings: _modelBindings')
   })
 })

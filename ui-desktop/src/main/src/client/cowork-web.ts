@@ -428,7 +428,7 @@ const requestHop = (url: URL, binding: AddressBinding, signal: AbortSignal): Pro
         headers: {
           Accept: 'text/html, text/plain, application/json;q=0.9',
           'Accept-Encoding': 'identity',
-          'User-Agent': 'Morpheus-Cowork-Web/1.0'
+          'User-Agent': 'Morpheus-Workspace-Web/1.0'
         },
         lookup: (_hostname, _options, callback) => callback(null, binding.address, binding.family)
       },

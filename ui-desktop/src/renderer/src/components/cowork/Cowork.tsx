@@ -3,6 +3,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -23,7 +24,9 @@ import {
   IconFolder,
   IconFolderPlus,
   IconListCheck,
+  IconLayoutSidebarRight,
   IconLoader2,
+  IconMenu2,
   IconPaperclip,
   IconPencil,
   IconPlayerPause,
@@ -360,29 +363,49 @@ const SafeMarkdown = memo(({ children }: { children: string }) => (
 ));
 
 const CoworkMessageRow = memo(
-  ({ message }: { message: CoworkDisplayMessage }) => (
-    <article className={`cowork-message cowork-message-${message.role}`}>
-      <div className="cowork-message-avatar">
-        {message.role === 'assistant' ? <IconSparkles size={16} /> : 'You'}
-      </div>
-      <div>
-        <div className="cowork-message-meta">
-          <strong>{message.role === 'assistant' ? 'Cowork' : 'You'}</strong>
-          <span>{formatTime(message.createdAt)}</span>
+  ({ message }: { message: CoworkDisplayMessage }) => {
+    const modelAuthor =
+      message.role === 'assistant' && message.author?.kind === 'model'
+        ? message.author
+        : null;
+    const authorLabel =
+      message.role === 'user'
+        ? 'You'
+        : modelAuthor?.modelName ||
+          (message.author?.kind === 'model' ? 'Model' : 'Workspace');
+
+    return (
+      <article className={`cowork-message cowork-message-${message.role}`}>
+        <div className="cowork-message-avatar">
+          {message.role === 'assistant' ? <IconSparkles size={16} /> : 'You'}
         </div>
-        {message.role === 'assistant' ? (
-          <SafeMarkdown>{message.content}</SafeMarkdown>
-        ) : (
-          <p>{message.content}</p>
-        )}
-      </div>
-    </article>
-  ),
+        <div>
+          <div className="cowork-message-meta">
+            <strong>{authorLabel}</strong>
+            {modelAuthor && <span className="cowork-author-kind">Model</span>}
+            <time dateTime={new Date(message.createdAt).toISOString()}>
+              {formatTime(message.createdAt)}
+            </time>
+          </div>
+          {message.role === 'assistant' ? (
+            <SafeMarkdown>{message.content}</SafeMarkdown>
+          ) : (
+            <p>{message.content}</p>
+          )}
+        </div>
+      </article>
+    );
+  },
   (previous, next) =>
     previous.message.id === next.message.id &&
     previous.message.role === next.message.role &&
     previous.message.content === next.message.content &&
-    previous.message.createdAt === next.message.createdAt,
+    previous.message.createdAt === next.message.createdAt &&
+    previous.message.sequence === next.message.sequence &&
+    previous.message.author?.kind === next.message.author?.kind &&
+    previous.message.author?.modelId === next.message.author?.modelId &&
+    previous.message.author?.modelName === next.message.author?.modelName &&
+    previous.message.author?.sessionId === next.message.author?.sessionId,
 );
 
 const PlanStatusIcon = ({ status }: Pick<CoworkPlanStep, 'status'>) => {
@@ -391,6 +414,25 @@ const PlanStatusIcon = ({ status }: Pick<CoworkPlanStep, 'status'>) => {
     return <IconLoader2 className="cowork-spin" size={17} />;
   return <IconCircleDashed size={17} />;
 };
+
+const TaskStatusIcon = ({ status }: Pick<CoworkTask, 'status'>) => {
+  if (status === 'completed') return <IconCircleCheck size={16} />;
+  if (status === 'running')
+    return <IconLoader2 className="cowork-spin" size={16} />;
+  if (status === 'waiting_approval') return <IconAlertTriangle size={16} />;
+  if (status === 'paused') return <IconPlayerPause size={16} />;
+  if (status === 'failed' || status === 'cancelled') return <IconX size={16} />;
+  return <IconCircleDashed size={16} />;
+};
+
+const ScheduleStatusIcon = ({ schedule }: { schedule: CoworkSchedule }) =>
+  schedule.runningSince ? (
+    <IconLoader2 className="cowork-spin" size={16} />
+  ) : schedule.status === 'active' ? (
+    <IconCalendarTime size={16} />
+  ) : (
+    <IconPlayerPause size={16} />
+  );
 
 const EmptyPanel = ({
   icon,
@@ -475,6 +517,16 @@ function Cowork(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<CoworkArtifactPreview | null>(null);
+  const [railOpen, setRailOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [earlierMessages, setEarlierMessages] = useState<
+    CoworkDisplayMessage[]
+  >([]);
+  const [hasEarlierMessages, setHasEarlierMessages] = useState(false);
+  const [nextBeforeSequence, setNextBeforeSequence] = useState<
+    number | undefined
+  >(undefined);
+  const [loadingEarlierMessages, setLoadingEarlierMessages] = useState(false);
   const transcriptElementRef = useRef<HTMLDivElement | null>(null);
   const transcriptAutoScrollRef = useRef(true);
   const transcriptObserverCleanupRef = useRef<(() => void) | null>(null);
@@ -483,6 +535,10 @@ function Cowork(): JSX.Element {
   const activeTaskRequestRef = useRef(0);
   const selectedProjectIdRef = useRef<string | null>(selectedProjectId);
   const selectedTaskIdRef = useRef<string | null>(selectedTaskId);
+  const transcriptScrollSnapshotRef = useRef<{
+    scrollHeight: number;
+    scrollTop: number;
+  } | null>(null);
   const activeTaskRefreshRef = useRef<{
     dirty: boolean;
     inFlight: boolean;
@@ -531,6 +587,29 @@ function Cowork(): JSX.Element {
       null,
     [activeModels, selectedModelKey],
   );
+
+  const activeTaskSessionModel = useMemo(
+    () =>
+      activeTask
+        ? (activeModels.find(
+            (model) => modelKey(model) === modelKey(activeTask.model),
+          ) ?? null)
+        : null,
+    [activeModels, activeTask],
+  );
+  const exactTaskSessionActive = Boolean(activeTaskSessionModel);
+  const taskNeedsRebind = Boolean(activeTask && !activeTaskSessionModel);
+
+  const displayedMessages = useMemo(() => {
+    const seen = new Set<string>();
+    return [...earlierMessages, ...(activeTask?.messages ?? [])].filter(
+      (message) => {
+        if (seen.has(message.id)) return false;
+        seen.add(message.id);
+        return true;
+      },
+    );
+  }, [activeTask?.messages, earlierMessages]);
 
   const selectedSchedule = useMemo(
     () =>
@@ -707,34 +786,30 @@ function Cowork(): JSX.Element {
     }
     let active = true;
     setLoading(true);
-    loadModels(Boolean(requestedSessionId))
-      .catch((loadError) => active && setError(errorMessage(loadError)))
+    Promise.allSettled([
+      loadModels(Boolean(requestedSessionId)),
+      loadProjects(),
+    ])
+      .then((results) => {
+        if (!active) return;
+        const failures = results.filter(
+          (result): result is PromiseRejectedResult =>
+            result.status === 'rejected',
+        );
+        if (failures.length > 0) {
+          setError(
+            failures.map((failure) => errorMessage(failure.reason)).join(' '),
+          );
+        }
+      })
       .finally(() => active && setLoading(false));
     return () => {
       active = false;
     };
-  }, [api, loadModels, requestedSessionId]);
+  }, [api, loadModels, loadProjects, requestedSessionId]);
 
   useEffect(() => {
-    if (!selectedModel) {
-      taskListRequestRef.current += 1;
-      activeTaskRequestRef.current += 1;
-      setProjects([]);
-      setTasks([]);
-      setSchedules([]);
-      setExtensions(null);
-      setSelectedProjectId(null);
-      setSelectedTaskId(null);
-      setSelectedScheduleId(null);
-      setActiveTask(null);
-      setPreview(null);
-      return;
-    }
-    loadProjects().catch((loadError) => setError(errorMessage(loadError)));
-  }, [loadProjects, selectedModel]);
-
-  useEffect(() => {
-    if (!selectedModel || !selectedProjectId) {
+    if (!selectedProjectId) {
       taskListRequestRef.current += 1;
       activeTaskRequestRef.current += 1;
       setTasks([]);
@@ -750,16 +825,10 @@ function Cowork(): JSX.Element {
       loadSchedules(selectedProjectId),
       loadExtensions(selectedProjectId),
     ]).catch((loadError) => setError(errorMessage(loadError)));
-  }, [
-    loadExtensions,
-    loadSchedules,
-    loadTasks,
-    selectedModel,
-    selectedProjectId,
-  ]);
+  }, [loadExtensions, loadSchedules, loadTasks, selectedProjectId]);
 
   useEffect(() => {
-    if (!selectedModel || !selectedTaskId) {
+    if (!selectedTaskId) {
       activeTaskRequestRef.current += 1;
       setActiveTask(null);
       return;
@@ -767,10 +836,10 @@ function Cowork(): JSX.Element {
     loadTask(selectedTaskId).catch((loadError) =>
       setError(errorMessage(loadError)),
     );
-  }, [loadTask, selectedModel, selectedTaskId]);
+  }, [loadTask, selectedTaskId]);
 
   useEffect(() => {
-    if (!api || !selectedModel) return;
+    if (!api) return;
     const taskEvents = createCoworkTaskEventBatch((events) => {
       setTasks((current) =>
         events.reduce(
@@ -800,28 +869,51 @@ function Cowork(): JSX.Element {
       taskEvents.cancel();
       unsubscribe();
     };
-  }, [api, refreshActiveTask, selectedModel]);
+  }, [api, refreshActiveTask]);
 
   useEffect(() => {
-    if (!selectedModel || !selectedProjectId || railMode !== 'schedules')
-      return;
+    if (!selectedProjectId || railMode !== 'schedules') return;
     const interval = window.setInterval(() => {
       loadSchedules(selectedProjectId, selectedScheduleId).catch((loadError) =>
         setError(errorMessage(loadError)),
       );
     }, 30_000);
     return () => window.clearInterval(interval);
-  }, [
-    loadSchedules,
-    railMode,
-    selectedModel,
-    selectedProjectId,
-    selectedScheduleId,
-  ]);
+  }, [loadSchedules, railMode, selectedProjectId, selectedScheduleId]);
 
   useEffect(() => {
     transcriptAutoScrollRef.current = true;
+    setEarlierMessages([]);
+    setHasEarlierMessages(false);
+    setNextBeforeSequence(undefined);
+    setLoadingEarlierMessages(false);
+    transcriptScrollSnapshotRef.current = null;
   }, [selectedTaskId]);
+
+  useEffect(() => {
+    if (!activeTask || activeTask.id !== selectedTaskId) return;
+    setHasEarlierMessages(Boolean(activeTask.hasEarlierMessages));
+    setNextBeforeSequence((current) => {
+      if (current !== undefined) return current;
+      return activeTask.messages.reduce<number | undefined>(
+        (oldest, message) =>
+          message.sequence !== undefined &&
+          (oldest === undefined || message.sequence < oldest)
+            ? message.sequence
+            : oldest,
+        undefined,
+      );
+    });
+  }, [activeTask?.hasEarlierMessages, activeTask?.id, selectedTaskId]);
+
+  useLayoutEffect(() => {
+    const snapshot = transcriptScrollSnapshotRef.current;
+    const element = transcriptElementRef.current;
+    if (!snapshot || !element) return;
+    element.scrollTop =
+      snapshot.scrollTop + (element.scrollHeight - snapshot.scrollHeight);
+    transcriptScrollSnapshotRef.current = null;
+  }, [earlierMessages]);
 
   useEffect(
     () => () => {
@@ -832,11 +924,29 @@ function Cowork(): JSX.Element {
   );
 
   useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (preview) {
+        setPreview(null);
+        return;
+      }
+      setRailOpen(false);
+      setInspectorOpen(false);
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [preview]);
+
+  useEffect(() => {
     if (!transcriptAutoScrollRef.current) return;
     const frame = window.requestAnimationFrame(() => {
       const element = transcriptElementRef.current;
       if (!element || !transcriptAutoScrollRef.current) return;
-      element.scrollTo({ top: element.scrollHeight, behavior: 'smooth' });
+      if (typeof element.scrollTo === 'function') {
+        element.scrollTo({ top: element.scrollHeight, behavior: 'smooth' });
+      } else {
+        element.scrollTop = element.scrollHeight;
+      }
     });
     return () => window.cancelAnimationFrame(frame);
   }, [
@@ -989,6 +1099,12 @@ function Cowork(): JSX.Element {
 
   const handleStartTask = () => {
     if (!api || !activeTask) return;
+    if (!exactTaskSessionActive) {
+      setError(
+        'This task’s original session has ended. Choose an active session and continue the task before running it.',
+      );
+      return;
+    }
     void runAction('start-task', async () => {
       await api.startTask(activeTask.id);
       await loadTask(activeTask.id);
@@ -1032,7 +1148,13 @@ function Cowork(): JSX.Element {
 
   const handleSteer = (event: FormEvent) => {
     event.preventDefault();
-    if (!api || !activeTask || !steeringMessage.trim()) return;
+    if (
+      !api ||
+      !activeTask ||
+      !exactTaskSessionActive ||
+      !steeringMessage.trim()
+    )
+      return;
     const content = steeringMessage.trim();
     setSteeringMessage('');
     void runAction('steer-task', async () => {
@@ -1042,12 +1164,68 @@ function Cowork(): JSX.Element {
   };
 
   const handleApproval = (approved: boolean) => {
-    if (!api || !activeTask?.pendingApproval) return;
+    if (
+      !api ||
+      !activeTask?.pendingApproval ||
+      (approved && !exactTaskSessionActive)
+    )
+      return;
     const approvalId = activeTask.pendingApproval.id;
     void runAction('approval', async () => {
       await api.resolveApproval(activeTask.id, approvalId, approved);
       await loadTask(activeTask.id);
     });
+  };
+
+  const handleRebindTask = () => {
+    if (!api || !activeTask || !selectedModel) return;
+    void runAction('rebind-task', async () => {
+      await api.rebindTask(activeTask.id, selectedModel);
+      await loadTask(activeTask.id);
+      if (selectedProject) {
+        await loadTasks(selectedProject.id, activeTask.id);
+      }
+    });
+  };
+
+  const handleLoadEarlierMessages = async () => {
+    if (!api || !activeTask || loadingEarlierMessages) return;
+    const taskId = activeTask.id;
+    setLoadingEarlierMessages(true);
+    setError(null);
+    try {
+      const page = await api.listTaskMessages(taskId, nextBeforeSequence, 50);
+      if (selectedTaskIdRef.current !== taskId) return;
+
+      const transcript = transcriptElementRef.current;
+      if (transcript) {
+        transcriptAutoScrollRef.current = false;
+        transcriptScrollSnapshotRef.current = {
+          scrollHeight: transcript.scrollHeight,
+          scrollTop: transcript.scrollTop,
+        };
+      }
+
+      setEarlierMessages((current) => {
+        const knownIds = new Set([
+          ...current.map((message) => message.id),
+          ...(activeTask.messages ?? []).map((message) => message.id),
+        ]);
+        const additions = page.messages.filter(
+          (message) => !knownIds.has(message.id),
+        );
+        return [...additions, ...current];
+      });
+      setHasEarlierMessages(page.hasMore);
+      setNextBeforeSequence(page.nextBeforeSequence);
+    } catch (loadError) {
+      setError(errorMessage(loadError));
+      transcriptScrollSnapshotRef.current = null;
+    } finally {
+      if (selectedTaskIdRef.current === taskId) {
+        setLoadingEarlierMessages(false);
+      }
+    }
   };
 
   const handlePreviewArtifact = (artifact: CoworkArtifact) => {
@@ -1155,6 +1333,7 @@ function Cowork(): JSX.Element {
   const handleScheduleStatus = () => {
     if (!api || !selectedSchedule || !selectedProject) return;
     const shouldResume = selectedSchedule.status === 'paused';
+    if (shouldResume && !selectedModel) return;
     void runAction('schedule-status', async () => {
       if (shouldResume) await api.resumeSchedule(selectedSchedule.id);
       else await api.pauseSchedule(selectedSchedule.id);
@@ -1163,7 +1342,7 @@ function Cowork(): JSX.Element {
   };
 
   const handleRunSchedule = () => {
-    if (!api || !selectedSchedule || !selectedProject) return;
+    if (!api || !selectedSchedule || !selectedProject || !selectedModel) return;
     void runAction('run-schedule', async () => {
       const updated = await api.runScheduleNow(selectedSchedule.id);
       await Promise.all([
@@ -1233,7 +1412,7 @@ function Cowork(): JSX.Element {
     if (!nextModel) return;
     setSelectedModelKey(nextModelKey);
     if (requestedSessionId && nextModel.sessionId !== requestedSessionId) {
-      navigate('/cowork', { replace: true });
+      navigate('/workspace', { replace: true });
     }
   };
 
@@ -1244,6 +1423,7 @@ function Cowork(): JSX.Element {
     requestedSessionId &&
     !activeModels.some((model) => model.sessionId === requestedSessionId),
   );
+  const endedSelection = Boolean(requestedSessionId || selectedModelKey);
 
   const projectSettingsBusy =
     busy === 'project-settings' || busy === 'update-project';
@@ -1252,10 +1432,10 @@ function Cowork(): JSX.Element {
     return (
       <main className="cowork-unavailable">
         <IconRobot size={34} />
-        <h1>Cowork is not available</h1>
+        <h1>Workspace is not available</h1>
         <p>
-          Restart Morpheus after the Cowork runtime has been installed. No file
-          access is enabled in this window.
+          Restart Morpheus after the Workspace runtime has been installed. No
+          file access is enabled in this window.
         </p>
       </main>
     );
@@ -1265,96 +1445,52 @@ function Cowork(): JSX.Element {
     return (
       <main
         className="cowork-unavailable"
-        aria-label="Verifying Cowork session"
+        aria-label="Loading Morpheus Workspace"
       >
         <IconLoader2 className="cowork-spin" size={34} />
-        <h1>Verifying your Morpheus session</h1>
-        <p>
-          Cowork stays locked until the selected marketplace session is active.
-        </p>
-      </main>
-    );
-  }
-
-  if (!selectedModel) {
-    const endedSelection = Boolean(requestedSessionId || selectedModelKey);
-    return (
-      <main className="cowork-unavailable" aria-label="Cowork session required">
-        <IconCloud size={34} />
-        <h1>
-          {requestedSessionUnavailable
-            ? 'That Cowork session is no longer active'
-            : endedSelection
-              ? 'Your selected Cowork session has ended'
-              : 'Open a Morpheus session before using Cowork'}
-        </h1>
-        <p>
-          {requestedSessionUnavailable || endedSelection
-            ? 'The exact session selected in Chat is closed, expired, or unavailable for the active wallet. Cowork did not switch to another session.'
-            : 'Choose a marketplace model in Chat, select a session length, and open it before connecting folders or using Cowork tools.'}
-        </p>
-        {error && <p role="alert">{error}</p>}
-        {activeModels.length > 0 && (
-          <div className="cowork-project-form">
-            <label>
-              Choose another active session explicitly
-              <select
-                aria-label="Choose another active Cowork session"
-                onChange={(event) => setReplacementModelKey(event.target.value)}
-                value={replacementModelKey}
-              >
-                <option value="">Select an active session</option>
-                {modelGroups.map((group) => (
-                  <optgroup key={group.label} label={group.label}>
-                    {group.options.map((model) => (
-                      <option key={modelKey(model)} value={modelKey(model)}>
-                        {model.modelName}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-            </label>
-            <button
-              className="cowork-primary-button cowork-full-button"
-              disabled={!replacementIsActive}
-              onClick={() => {
-                chooseActiveModel(replacementModelKey);
-                setReplacementModelKey('');
-              }}
-              type="button"
-            >
-              Use selected active session
-            </button>
-          </div>
-        )}
-        <button
-          className="cowork-primary-button"
-          onClick={() => navigate('/chat?setup=cowork')}
-          type="button"
-        >
-          <IconExternalLink size={17} />
-          Choose model &amp; open session in Chat
-        </button>
-        <p>
-          Staked MOR is escrowed for the session; unused stake returns when the
-          session closes. This is not a subscription.
-        </p>
+        <h1>Loading Morpheus Workspace</h1>
+        <p>Restoring your projects, task history, and active sessions.</p>
       </main>
     );
   }
 
   return (
-    <main className="cowork-shell" aria-label="Cowork workspace">
-      <aside className="cowork-rail">
+    <main
+      aria-label="Morpheus Workspace"
+      className="cowork-shell"
+      data-inspector-open={inspectorOpen}
+      data-rail-open={railOpen}
+    >
+      <button
+        aria-label="Close Workspace panels"
+        className="cowork-scrim"
+        onClick={() => {
+          setRailOpen(false);
+          setInspectorOpen(false);
+        }}
+        type="button"
+      />
+      <aside
+        aria-label="Workspace navigation"
+        className="cowork-rail"
+        id="workspace-navigation"
+      >
         <div className="cowork-brand-row">
           <span className="cowork-brand-icon">
             <IconSparkles size={18} />
           </span>
           <div>
-            <strong>Cowork</strong>
-            <span>Work with your files</span>
+            <strong>Workspace</strong>
+            <span>Projects and task history</span>
           </div>
+          <button
+            aria-label="Close project navigation"
+            className="cowork-icon-button cowork-panel-close"
+            onClick={() => setRailOpen(false)}
+            type="button"
+          >
+            <IconX size={18} />
+          </button>
         </div>
 
         <section className="cowork-rail-section cowork-projects-section">
@@ -1426,7 +1562,7 @@ function Cowork(): JSX.Element {
                 Choose folder & create
               </button>
               <p className="cowork-form-hint">
-                Cowork can only access the folder you choose.
+                Workspace can only access the folder you choose.
               </p>
             </form>
           )}
@@ -1434,6 +1570,9 @@ function Cowork(): JSX.Element {
           <div className="cowork-project-list">
             {projects.map((project) => (
               <button
+                aria-current={
+                  project.id === selectedProjectId ? 'page' : undefined
+                }
                 className={`cowork-project-row ${
                   project.id === selectedProjectId ? 'is-active' : ''
                 }`}
@@ -1444,6 +1583,7 @@ function Cowork(): JSX.Element {
                   setSelectedScheduleId(null);
                   setEditingScheduleId(null);
                   setEditingProjectId(null);
+                  setRailOpen(false);
                 }}
                 type="button"
               >
@@ -1467,8 +1607,10 @@ function Cowork(): JSX.Element {
           <section className="cowork-rail-section cowork-tasks-section">
             <div className="cowork-rail-switch" role="tablist">
               <button
+                aria-controls="workspace-rail-panel"
                 aria-selected={railMode === 'tasks'}
                 className={railMode === 'tasks' ? 'is-active' : ''}
+                id="workspace-tasks-tab"
                 onClick={() => setRailMode('tasks')}
                 role="tab"
                 type="button"
@@ -1477,8 +1619,10 @@ function Cowork(): JSX.Element {
                 <span>{tasks.length}</span>
               </button>
               <button
+                aria-controls="workspace-rail-panel"
                 aria-selected={railMode === 'schedules'}
                 className={railMode === 'schedules' ? 'is-active' : ''}
+                id="workspace-schedules-tab"
                 onClick={() => setRailMode('schedules')}
                 role="tab"
                 type="button"
@@ -1534,26 +1678,48 @@ function Cowork(): JSX.Element {
                 </button>
               </div>
             </div>
-            <div className="cowork-task-list">
+            <div
+              aria-labelledby={
+                railMode === 'tasks'
+                  ? 'workspace-tasks-tab'
+                  : 'workspace-schedules-tab'
+              }
+              className="cowork-task-list"
+              id="workspace-rail-panel"
+              role="tabpanel"
+            >
               {railMode === 'tasks' ? (
                 <>
                   {tasks.map((task) => (
                     <button
+                      aria-current={
+                        task.id === selectedTaskId ? 'true' : undefined
+                      }
                       className={`cowork-task-row ${
                         task.id === selectedTaskId ? 'is-active' : ''
                       }`}
                       key={task.id}
-                      onClick={() => setSelectedTaskId(task.id)}
+                      onClick={() => {
+                        setSelectedTaskId(task.id);
+                        setRailOpen(false);
+                      }}
                       type="button"
                     >
                       <span
-                        className={`cowork-task-dot status-${task.status}`}
-                      />
+                        aria-hidden="true"
+                        className={`cowork-task-status status-${task.status}`}
+                      >
+                        <TaskStatusIcon status={task.status} />
+                      </span>
                       <span>
                         <strong>{task.title}</strong>
-                        <small>
-                          {STATUS_LABELS[task.status]} ·{' '}
-                          {formatRelativeTime(task.updatedAt)}
+                        <small className="cowork-task-meta">
+                          <span>{STATUS_LABELS[task.status]}</span>
+                          <time
+                            dateTime={new Date(task.updatedAt).toISOString()}
+                          >
+                            {formatRelativeTime(task.updatedAt)}
+                          </time>
                         </small>
                       </span>
                     </button>
@@ -1566,6 +1732,9 @@ function Cowork(): JSX.Element {
                 <>
                   {schedules.map((schedule) => (
                     <button
+                      aria-current={
+                        schedule.id === selectedScheduleId ? 'true' : undefined
+                      }
                       className={`cowork-task-row ${
                         schedule.id === selectedScheduleId ? 'is-active' : ''
                       }`}
@@ -1573,18 +1742,27 @@ function Cowork(): JSX.Element {
                       onClick={() => {
                         setEditingScheduleId(null);
                         setSelectedScheduleId(schedule.id);
+                        setRailOpen(false);
                       }}
                       type="button"
                     >
                       <span
-                        className={`cowork-task-dot schedule-${schedule.status}`}
-                      />
+                        aria-hidden="true"
+                        className={`cowork-task-status schedule-${schedule.status}`}
+                      >
+                        <ScheduleStatusIcon schedule={schedule} />
+                      </span>
                       <span>
                         <strong>{schedule.name}</strong>
-                        <small>
-                          {schedule.runningSince
-                            ? 'Running now'
-                            : cadenceLabel(schedule.cadence)}
+                        <small className="cowork-task-meta">
+                          <span>
+                            {schedule.runningSince
+                              ? 'Running'
+                              : schedule.status === 'active'
+                                ? 'Scheduled'
+                                : 'Paused'}
+                          </span>
+                          <span>{cadenceLabel(schedule.cadence)}</span>
                         </small>
                       </span>
                     </button>
@@ -1701,15 +1879,34 @@ function Cowork(): JSX.Element {
 
       <section className="cowork-workspace">
         <header className="cowork-workspace-header">
-          <div>
-            <span className="cowork-eyebrow">
-              {selectedProject?.folderName || 'Local workspace'}
-            </span>
-            <h1>
-              {railMode === 'schedules'
-                ? selectedSchedule?.name || 'New schedule'
-                : activeTask?.title || selectedProject?.name || 'Cowork'}
-            </h1>
+          <div className="cowork-header-main">
+            <button
+              aria-controls="workspace-navigation"
+              aria-expanded={railOpen}
+              aria-label={
+                railOpen
+                  ? 'Close project navigation'
+                  : 'Open project navigation'
+              }
+              className="cowork-icon-button cowork-rail-toggle"
+              onClick={() => {
+                setInspectorOpen(false);
+                setRailOpen((current) => !current);
+              }}
+              type="button"
+            >
+              <IconMenu2 size={19} />
+            </button>
+            <div className="cowork-workspace-title">
+              <span className="cowork-eyebrow">
+                {selectedProject?.folderName || 'Local workspace'}
+              </span>
+              <h1>
+                {railMode === 'schedules'
+                  ? selectedSchedule?.name || 'New schedule'
+                  : activeTask?.title || selectedProject?.name || 'Workspace'}
+              </h1>
+            </div>
           </div>
           <div className="cowork-header-actions">
             {railMode === 'schedules' && selectedSchedule && (
@@ -1740,26 +1937,28 @@ function Cowork(): JSX.Element {
                 activeTask.status,
               ) && (
                 <button
+                  aria-label="Run task"
                   className="cowork-secondary-button"
-                  disabled={busy === 'start-task'}
+                  disabled={busy === 'start-task' || !exactTaskSessionActive}
                   onClick={handleStartTask}
                   type="button"
                 >
                   <IconPlayerPlay size={15} />
-                  Run
+                  <span className="cowork-action-label">Run</span>
                 </button>
               )}
             {railMode === 'tasks' &&
               activeTask &&
               ['running', 'waiting_approval'].includes(activeTask.status) && (
                 <button
+                  aria-label="Pause task"
                   className="cowork-secondary-button"
                   disabled={busy === 'pause-task'}
                   onClick={handlePauseTask}
                   type="button"
                 >
                   <IconPlayerPause size={15} />
-                  Pause
+                  <span className="cowork-action-label">Pause</span>
                 </button>
               )}
             {railMode === 'tasks' &&
@@ -1768,13 +1967,14 @@ function Cowork(): JSX.Element {
                 activeTask.status,
               ) && (
                 <button
+                  aria-label="Cancel task"
                   className="cowork-secondary-button cowork-danger-button"
                   disabled={busy === 'cancel-task'}
                   onClick={handleCancelTask}
                   type="button"
                 >
                   <IconPlayerStop size={15} />
-                  Cancel
+                  <span className="cowork-action-label">Cancel</span>
                 </button>
               )}
             {railMode === 'tasks' && activeTask && (
@@ -1789,8 +1989,86 @@ function Cowork(): JSX.Element {
                 <IconTrash size={16} />
               </button>
             )}
+            <button
+              aria-controls="workspace-inspector"
+              aria-expanded={inspectorOpen}
+              aria-label={`${inspectorOpen ? 'Close' : 'Open'} ${
+                railMode === 'schedules' ? 'schedule' : 'task'
+              } details`}
+              className="cowork-icon-button cowork-inspector-toggle"
+              onClick={() => {
+                setRailOpen(false);
+                setInspectorOpen((current) => !current);
+              }}
+              type="button"
+            >
+              <IconLayoutSidebarRight size={18} />
+            </button>
           </div>
         </header>
+
+        {!selectedModel && (
+          <section className="cowork-session-banner" role="status">
+            <IconCloud size={18} />
+            <div className="cowork-session-copy">
+              <strong>
+                {requestedSessionUnavailable
+                  ? 'That session is no longer active'
+                  : endedSelection
+                    ? 'Your Workspace session has ended'
+                    : 'Open a session to start or continue work'}
+              </strong>
+              <span>
+                Project history remains available. Session-bound actions stay
+                paused until you choose an active Morpheus session.
+              </span>
+            </div>
+            <div className="cowork-session-actions">
+              {activeModels.length > 0 ? (
+                <>
+                  <select
+                    aria-label="Choose another active Workspace session"
+                    onChange={(event) =>
+                      setReplacementModelKey(event.target.value)
+                    }
+                    value={replacementModelKey}
+                  >
+                    <option value="">Choose active session</option>
+                    {modelGroups.map((group) => (
+                      <optgroup key={group.label} label={group.label}>
+                        {group.options.map((model) => (
+                          <option key={modelKey(model)} value={modelKey(model)}>
+                            {model.modelName}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                  <button
+                    className="cowork-primary-button"
+                    disabled={!replacementIsActive}
+                    onClick={() => {
+                      chooseActiveModel(replacementModelKey);
+                      setReplacementModelKey('');
+                    }}
+                    type="button"
+                  >
+                    Use session
+                  </button>
+                </>
+              ) : (
+                <button
+                  className="cowork-primary-button"
+                  onClick={() => navigate('/chat?setup=workspace')}
+                  type="button"
+                >
+                  <IconExternalLink size={16} />
+                  Open session in Chat
+                </button>
+              )}
+            </div>
+          </section>
+        )}
 
         {error && (
           <div className="cowork-error-banner" role="alert">
@@ -1802,47 +2080,18 @@ function Cowork(): JSX.Element {
           </div>
         )}
 
-        {!loading && activeModels.length === 0 ? (
-          <div className="cowork-stage cowork-welcome-stage">
-            <div className="cowork-welcome-card">
-              <span className="cowork-hero-icon">
-                <IconCloud size={30} />
-              </span>
-              <span className="cowork-eyebrow">Session required</span>
-              <h2>Open a Morpheus session before using Cowork.</h2>
-              <p>
-                Choose a marketplace model in Chat, select how long the session
-                should run, and open it. That active session can then be used in
-                either normal Chat or Cowork. This is the open-source P2P
-                marketplace flow, not a subscription.
-              </p>
-              <button
-                className="cowork-primary-button"
-                onClick={() => navigate('/chat?setup=cowork')}
-                type="button"
-              >
-                <IconExternalLink size={17} />
-                Choose model & open session
-              </button>
-              <div className="cowork-safety-row">
-                <IconShieldCheck size={17} />
-                Staked MOR is escrowed for the session; unused stake returns
-                when the session is closed.
-              </div>
-            </div>
-          </div>
-        ) : !selectedProject ? (
+        {!selectedProject ? (
           <div className="cowork-stage cowork-welcome-stage">
             <div className="cowork-welcome-card">
               <span className="cowork-hero-icon">
                 <IconSparkles size={30} />
               </span>
-              <span className="cowork-eyebrow">Morpheus Cowork</span>
+              <span className="cowork-eyebrow">Morpheus Workspace</span>
               <h2>Give an AI agent a goal, not a checklist.</h2>
               <p>
                 Connect a project folder, choose one of your active Morpheus
                 sessions, and review the agent’s plan and file changes as it
-                works.
+                works. Existing projects remain available between sessions.
               </p>
               <button
                 className="cowork-primary-button"
@@ -1877,7 +2126,9 @@ function Cowork(): JSX.Element {
                   <button
                     className="cowork-primary-button"
                     disabled={
-                      busy === 'run-schedule' || !!selectedSchedule.runningSince
+                      busy === 'run-schedule' ||
+                      !!selectedSchedule.runningSince ||
+                      !selectedModel
                     }
                     onClick={handleRunSchedule}
                     type="button"
@@ -1892,7 +2143,10 @@ function Cowork(): JSX.Element {
                   </button>
                   <button
                     className="cowork-secondary-button"
-                    disabled={busy === 'schedule-status'}
+                    disabled={
+                      busy === 'schedule-status' ||
+                      (selectedSchedule.status === 'paused' && !selectedModel)
+                    }
                     onClick={handleScheduleStatus}
                     type="button"
                   >
@@ -2029,7 +2283,7 @@ function Cowork(): JSX.Element {
                 <h2>
                   {editingScheduleId
                     ? 'Update this recurring task'
-                    : 'Run a Cowork task automatically'}
+                    : 'Run a Workspace task automatically'}
                 </h2>
 
                 <div className="cowork-form-grid">
@@ -2311,7 +2565,7 @@ function Cowork(): JSX.Element {
                 <IconRobot size={25} />
               </span>
               <span className="cowork-eyebrow">New task</span>
-              <h2>What should Cowork accomplish?</h2>
+              <h2>What should Workspace accomplish?</h2>
               <label className="cowork-title-field">
                 Task title <span>optional</span>
                 <input
@@ -2325,7 +2579,7 @@ function Cowork(): JSX.Element {
                 <textarea
                   autoFocus
                   onChange={(event) => setTaskGoal(event.target.value)}
-                  placeholder="Describe the outcome, relevant context, and anything Cowork must not change…"
+                  placeholder="Describe the outcome, relevant context, and anything Workspace must not change…"
                   rows={7}
                   value={taskGoal}
                 />
@@ -2340,6 +2594,9 @@ function Cowork(): JSX.Element {
                   >
                     {activeModels.length === 0 && (
                       <option value="">No models available</option>
+                    )}
+                    {activeModels.length > 0 && !selectedModelKey && (
+                      <option value="">Choose an active session</option>
                     )}
                     {modelGroups.map((group) => (
                       <optgroup key={group.label} label={group.label}>
@@ -2392,8 +2649,8 @@ function Cowork(): JSX.Element {
                     {selectedModel.dataBoundary === 'on-device'
                       ? 'Project data stays local to your computer.'
                       : selectedModel.dataBoundary === 'configured-endpoint'
-                        ? 'Cowork will ask before sending project content to that endpoint.'
-                        : 'Cowork will ask before sharing project content with the remote provider.'}
+                        ? 'Workspace will ask before sending project content to that endpoint.'
+                        : 'Workspace will ask before sharing project content with the remote provider.'}
                   </span>
                   {selectedModel.visionCapability !== 'none' && (
                     <b className="cowork-vision-badge">
@@ -2440,21 +2697,82 @@ function Cowork(): JSX.Element {
                   ) : (
                     <IconCloud size={14} />
                   )}
-                  {activeTask.model.modelName}
+                  Created with {activeTask.model.modelName}
                 </span>
                 <span>
                   {formatTime(activeTask.startedAt || activeTask.createdAt)}
                 </span>
               </div>
 
-              {activeTask.messages.map((message) => (
+              {taskNeedsRebind && (
+                <section className="cowork-rebind-card" role="note">
+                  <IconCloud size={20} />
+                  <div>
+                    <strong>The original task session has ended</strong>
+                    <p>
+                      This history was created with{' '}
+                      <b>{activeTask.model.modelName}</b> and remains unchanged.
+                      {selectedModel
+                        ? ` Continue with ${selectedModel.modelName} only when you are ready; Workspace will preserve the model boundary in the task history.`
+                        : ' Open a new session to continue without losing this project context.'}
+                    </p>
+                  </div>
+                  {selectedModel ? (
+                    <button
+                      className="cowork-primary-button"
+                      disabled={busy === 'rebind-task'}
+                      onClick={handleRebindTask}
+                      type="button"
+                    >
+                      {busy === 'rebind-task' ? (
+                        <IconLoader2 className="cowork-spin" size={16} />
+                      ) : (
+                        <IconPlayerPlay size={16} />
+                      )}
+                      Continue with {selectedModel.modelName}
+                    </button>
+                  ) : (
+                    <button
+                      className="cowork-secondary-button"
+                      onClick={() => navigate('/chat?setup=workspace')}
+                      type="button"
+                    >
+                      Open a session in Chat
+                    </button>
+                  )}
+                </section>
+              )}
+
+              {hasEarlierMessages && (
+                <div className="cowork-transcript-history">
+                  <button
+                    className="cowork-history-button"
+                    disabled={loadingEarlierMessages}
+                    onClick={() => void handleLoadEarlierMessages()}
+                    type="button"
+                  >
+                    {loadingEarlierMessages && (
+                      <IconLoader2
+                        aria-hidden="true"
+                        className="cowork-spin"
+                        size={15}
+                      />
+                    )}
+                    {loadingEarlierMessages
+                      ? 'Loading earlier messages…'
+                      : 'Load earlier messages'}
+                  </button>
+                </div>
+              )}
+
+              {displayedMessages.map((message) => (
                 <CoworkMessageRow key={message.id} message={message} />
               ))}
 
               {activeTask.status === 'running' && (
                 <div className="cowork-thinking-row">
                   <IconLoader2 className="cowork-spin" size={17} />
-                  Cowork is working through the plan…
+                  Workspace is working through the plan…
                 </div>
               )}
 
@@ -2499,7 +2817,7 @@ function Cowork(): JSX.Element {
                     </button>
                     <button
                       className="cowork-primary-button"
-                      disabled={busy === 'approval'}
+                      disabled={busy === 'approval' || !exactTaskSessionActive}
                       onClick={() => handleApproval(true)}
                       type="button"
                     >
@@ -2537,7 +2855,12 @@ function Cowork(): JSX.Element {
 
             <form className="cowork-steer-bar" onSubmit={handleSteer}>
               <textarea
-                aria-label="Message Cowork"
+                aria-label="Message Workspace"
+                disabled={
+                  busy === 'steer-task' ||
+                  !exactTaskSessionActive ||
+                  activeTask.status === 'waiting_approval'
+                }
                 onChange={(event) => setSteeringMessage(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && !event.shiftKey) {
@@ -2548,7 +2871,9 @@ function Cowork(): JSX.Element {
                 placeholder={
                   activeTask.status === 'waiting_approval'
                     ? 'Resolve the approval above to continue'
-                    : 'Give Cowork more context or change direction…'
+                    : !exactTaskSessionActive
+                      ? 'Choose an active session and continue this task first'
+                      : 'Give Workspace more context or change direction…'
                 }
                 rows={2}
                 value={steeringMessage}
@@ -2559,6 +2884,7 @@ function Cowork(): JSX.Element {
                 disabled={
                   busy === 'steer-task' ||
                   !steeringMessage.trim() ||
+                  !exactTaskSessionActive ||
                   activeTask.status === 'waiting_approval'
                 }
                 type="submit"
@@ -2577,7 +2903,30 @@ function Cowork(): JSX.Element {
         )}
       </section>
 
-      <aside className="cowork-details">
+      <aside
+        aria-label={
+          railMode === 'schedules' ? 'Schedule details' : 'Task details'
+        }
+        className="cowork-details"
+        id="workspace-inspector"
+      >
+        <div className="cowork-panel-header">
+          <strong>
+            {railMode === 'schedules' ? 'Schedule details' : 'Task details'}
+          </strong>
+          <button
+            aria-label={
+              railMode === 'schedules'
+                ? 'Close schedule details'
+                : 'Close task details'
+            }
+            className="cowork-icon-button cowork-panel-close"
+            onClick={() => setInspectorOpen(false)}
+            type="button"
+          >
+            <IconX size={18} />
+          </button>
+        </div>
         {railMode === 'schedules' ? (
           <>
             <section className="cowork-detail-section">
@@ -2702,7 +3051,7 @@ function Cowork(): JSX.Element {
                 </ol>
               ) : (
                 <EmptyPanel
-                  detail="Cowork will outline its approach before changing files."
+                  detail="Workspace will outline its approach before changing files."
                   icon={<IconListCheck size={20} />}
                   title="No plan yet"
                 />
@@ -2756,7 +3105,7 @@ function Cowork(): JSX.Element {
                 </div>
               ) : (
                 <EmptyPanel
-                  detail="Files created or updated by Cowork appear here."
+                  detail="Files created or updated by Workspace appear here."
                   icon={<IconPaperclip size={20} />}
                   title="No artifacts yet"
                 />

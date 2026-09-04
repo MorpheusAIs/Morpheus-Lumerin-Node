@@ -90,6 +90,9 @@ vi.mock('./cowork-extension-catalog', () => ({
 vi.mock('./cowork-store', () => ({
   getProject: vi.fn(async (id: string) => (state.project?.id === id ? clone(state.project) : null)),
   getTask: vi.fn(async (id: string) => (state.task?.id === id ? clone(state.task) : null)),
+  deleteTask: vi.fn(async (id: string) => {
+    if (state.task?.id === id) state.task = undefined
+  }),
   listRecentCompletedTaskMemories: vi.fn(async () => []),
   reconcileInterruptedToolCalls: vi.fn((task: CoworkTask) => reconcileToolCalls(task)),
   replaceTask: vi.fn(async (task: CoworkTask) => {
@@ -118,14 +121,22 @@ vi.mock('./cowork-store', () => ({
   appendAgentMessage: vi.fn((task: CoworkTask, message: CoworkTask['agentMessages'][number]) => {
     task.agentMessages.push(clone(message))
   }),
-  appendDisplayMessage: vi.fn((task: CoworkTask, role: 'user' | 'assistant', content: string) => {
-    task.messages.push({
-      id: `message-${task.messages.length + 1}`,
-      role,
-      content,
-      createdAt: Date.now()
-    })
-  }),
+  appendDisplayMessage: vi.fn(
+    (
+      task: CoworkTask,
+      role: 'user' | 'assistant',
+      content: string,
+      author?: CoworkTask['messages'][number]['author']
+    ) => {
+      task.messages.push({
+        id: `message-${task.messages.length + 1}`,
+        role,
+        content,
+        createdAt: Date.now(),
+        ...(author ? { author: clone(author) } : {})
+      })
+    }
+  ),
   setPlan: vi.fn((task: CoworkTask, plan: CoworkTask['plan']) => {
     task.plan = clone(plan)
   }),
@@ -164,7 +175,9 @@ vi.mock('./cowork-web', () => ({
 import {
   cancelCoworkRun,
   coworkRunActive,
+  deleteCoworkTask,
   pauseCoworkRun,
+  rebindCoworkTask,
   requestCoworkStart,
   resolveCoworkApproval,
   startCoworkRun,
@@ -283,6 +296,9 @@ describe.sequential('Cowork runner interruption safety', () => {
     expect(state.task!.toolProtocol).toBe('text-v1')
     expect(toolMocks.execute).toHaveBeenCalledTimes(1)
     expect(fetchMock).toHaveBeenCalledTimes(3)
+    for (const call of fetchMock.mock.calls) {
+      expect(call[1]?.headers).toMatchObject({ 'x-morpheus-history': 'off' })
+    }
     expect(state.task!.toolExecutions).toEqual([
       expect.objectContaining({
         toolName: 'write_file',
@@ -312,7 +328,7 @@ describe.sequential('Cowork runner interruption safety', () => {
     )?.tool_calls?.[0]
     expect(storedCall?.id).toMatch(/^text-[a-f0-9]{40}$/)
     expect(state.task!.activities).toContainEqual(
-      expect.objectContaining({ label: 'Using Cowork tool compatibility mode' })
+      expect.objectContaining({ label: 'Using Workspace tool compatibility mode' })
     )
   })
 
@@ -510,7 +526,7 @@ describe.sequential('Cowork runner interruption safety', () => {
 
   it('reconciles a prepared mutation when saving its executed result fails', async () => {
     toolMocks.execute.mockResolvedValue({ result: { path: 'uncertain.txt', bytes: 4 } })
-    state.failReplaceCall = 4
+    state.failReplaceCall = 5
     const callId = 'write-before-save-failure'
     const fetchMock = vi.fn().mockResolvedValue(
       completionResponse({
@@ -868,6 +884,33 @@ describe.sequential('Cowork runner interruption safety', () => {
     expect(coworkRunActive(cancelled.id)).toBe(false)
   })
 
+  it('serializes deletion with a concurrent start so a deleted task cannot run or reappear', async () => {
+    state.task = makeTask('paused')
+    const taskId = state.task.id
+    let releaseRefresh!: () => void
+    const refreshGate = new Promise<void>((resolve) => {
+      releaseRefresh = resolve
+    })
+    const refreshModelTarget = vi.fn(async () => {
+      await refreshGate
+      return { model: state.task!.model, fingerprint: 'local:test' }
+    })
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const starting = requestCoworkStart(taskId, async () => ({}), vi.fn(), refreshModelTarget, true)
+    await vi.waitFor(() => expect(refreshModelTarget).toHaveBeenCalledTimes(1))
+    const deleting = deleteCoworkTask(taskId)
+
+    releaseRefresh()
+    await starting
+    await deleting
+
+    expect(state.task).toBeUndefined()
+    expect(coworkRunActive(taskId)).toBe(false)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('serializes steering with cancellation and suppresses a late replacement run', async () => {
     state.task = makeTask('completed')
     state.task.completedAt = Date.now()
@@ -1063,6 +1106,261 @@ describe.sequential('Cowork runner interruption safety', () => {
         label: 'fetch web page',
         status: 'error',
         detail: expect.stringContaining('query parameters are not allowed')
+      })
+    )
+  })
+
+  it('executes an equivalent mutation once across new call IDs, then pauses the loop', async () => {
+    const argumentsText = JSON.stringify({ path: 'calc.py', content: 'print(2 + 2)' })
+    toolMocks.execute.mockResolvedValue({ result: { path: 'calc.py', bytes: 12 } })
+    const responseFor = (id: string) =>
+      completionResponse({
+        content: null,
+        tool_calls: [
+          {
+            id,
+            type: 'function',
+            function: { name: 'write_file', arguments: argumentsText }
+          }
+        ]
+      })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(responseFor('write-calc-1'))
+      .mockResolvedValueOnce(responseFor('write-calc-2'))
+      .mockResolvedValueOnce(responseFor('write-calc-3'))
+    vi.stubGlobal('fetch', fetchMock)
+
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false))
+
+    expect(toolMocks.execute).toHaveBeenCalledTimes(1)
+    expect(state.task!.toolExecutions).toHaveLength(1)
+    expect(state.task!.status).toBe('paused')
+    expect(state.task!.pauseReason).toBe('repetition_guard')
+    expect(state.task!.error).toMatch(/same file action|repetition/i)
+    await expect(
+      requestCoworkStart(
+        state.task!.id,
+        async () => ({}),
+        vi.fn(),
+        async () => ({ model: state.task!.model, fingerprint: 'same-session' }),
+        true
+      )
+    ).rejects.toThrow(/new instruction/i)
+  })
+
+  it('allows one equivalent restore in a fresh instruction but suppresses repeats in that instruction', async () => {
+    const argumentsText = JSON.stringify({ path: 'restorable.py', content: 'print("restored")' })
+    const responseFor = (id: string) =>
+      completionResponse({
+        content: null,
+        tool_calls: [
+          {
+            id,
+            type: 'function',
+            function: { name: 'write_file', arguments: argumentsText }
+          }
+        ]
+      })
+    toolMocks.execute.mockResolvedValue({ result: { path: 'restorable.py', bytes: 17 } })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(responseFor('initial-write'))
+      .mockResolvedValueOnce(completionResponse({ content: 'Initial version created.' }))
+      .mockResolvedValueOnce(responseFor('restore-write'))
+      .mockResolvedValueOnce(responseFor('same-instruction-repeat'))
+      .mockResolvedValueOnce(completionResponse({ content: 'Restored once without looping.' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false))
+    expect(toolMocks.execute).toHaveBeenCalledTimes(1)
+
+    await steerCoworkRun(
+      state.task!.id,
+      'The file changed outside Workspace. Restore the requested version.',
+      async () => ({}),
+      vi.fn(),
+      async () => ({ model: state.task!.model, fingerprint: 'same-session' })
+    )
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false))
+
+    expect(toolMocks.execute).toHaveBeenCalledTimes(2)
+    expect(state.task!.toolExecutions).toHaveLength(2)
+    expect(state.task!.toolExecutions?.map((execution) => execution.instructionId)).toEqual([
+      expect.any(String),
+      expect.any(String)
+    ])
+    expect(state.task!.toolExecutions?.[0].instructionId).not.toBe(
+      state.task!.toolExecutions?.[1].instructionId
+    )
+    expect(
+      state.task!.agentMessages.find(
+        (message) => message.role === 'tool' && message.tool_call_id === 'same-instruction-repeat'
+      )?.content
+    ).toContain('"duplicateOf":"restore-write"')
+    expect(state.task!.status).toBe('completed')
+  })
+
+  it('pauses instead of writing a persisted omitted-payload marker', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      completionResponse({
+        content: null,
+        tool_calls: [
+          {
+            id: 'placeholder-write',
+            type: 'function',
+            function: {
+              name: 'write_file',
+              arguments: JSON.stringify({
+                path: 'text_analyzer.py',
+                content: '[omitted after execution: 4457 characters]'
+              })
+            }
+          }
+        ]
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false))
+
+    expect(toolMocks.execute).not.toHaveBeenCalled()
+    expect(state.task!.status).toBe('paused')
+    expect(state.task!.error).toMatch(/omitted-payload marker/i)
+  })
+
+  it('rebinds an old task with a bounded handoff and excludes prior tool protocol', async () => {
+    state.task = makeTask('paused')
+    state.task.modelFingerprint = 'old-session'
+    state.task.dataAccessApproved = true
+    state.task.dataAccessApprovedFingerprint = 'old-session'
+    state.task.toolProtocol = 'text-v1'
+    state.task.agentMessages.push(
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [
+          {
+            id: 'old-write',
+            type: 'function',
+            function: {
+              name: 'write_file',
+              arguments: JSON.stringify({ path: 'old.txt', content: 'old generated content' })
+            }
+          }
+        ]
+      },
+      { role: 'tool', tool_call_id: 'old-write', content: JSON.stringify({ ok: true }) }
+    )
+    state.task.messages.push({
+      id: 'old-answer',
+      role: 'assistant',
+      content: 'Earlier output is ready, but verify it.',
+      createdAt: 2,
+      author: { kind: 'model', modelName: 'Local test model' }
+    })
+    const nextModel = {
+      modelId: 'replacement-model',
+      modelName: 'Replacement model',
+      isLocal: true,
+      dataBoundary: 'on-device' as const
+    }
+
+    const rebound = await rebindCoworkTask(
+      state.task.id,
+      { model: nextModel, fingerprint: 'new-session' },
+      vi.fn()
+    )
+
+    expect(rebound.model).toEqual(nextModel)
+    expect(rebound.toolProtocol).toBeUndefined()
+    expect(rebound.dataAccessApproved).toBeUndefined()
+    expect(rebound.handoff).toMatchObject({
+      previousModelName: 'Local test model',
+      goal: state.task.goal
+    })
+    expect(rebound.modelBindings).toHaveLength(2)
+    expect(rebound.messages.at(-1)).toMatchObject({
+      author: { kind: 'workspace' },
+      content: expect.stringContaining('Model changed')
+    })
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(completionResponse({ content: 'Continued safely.' }))
+    vi.stubGlobal('fetch', fetchMock)
+    await requestCoworkStart(
+      state.task.id,
+      async () => ({}),
+      vi.fn(),
+      async () => ({ model: nextModel, fingerprint: 'new-session' }),
+      true
+    )
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false))
+    const requestBody = JSON.parse(String(fetchMock.mock.calls[0][1]?.body))
+    expect(requestBody.messages.slice(1)).toEqual([
+      expect.objectContaining({
+        role: 'user',
+        content: expect.stringContaining('explicitly labelled handoff')
+      })
+    ])
+    expect(JSON.stringify(requestBody.messages.slice(1))).not.toContain('old generated content')
+    expect(state.task!.messages.at(-1)?.author).toMatchObject({
+      kind: 'model',
+      modelName: 'Replacement model'
+    })
+  })
+
+  it('preserves a repetition pause across rebind until the user sends a new instruction', async () => {
+    state.task = makeTask('paused')
+    state.task.modelFingerprint = 'old-session'
+    state.task.pauseReason = 'repetition_guard'
+    state.task.error =
+      'The model repeated the same file action. Review the project and send a new instruction.'
+    const nextModel = {
+      modelId: 'replacement-model',
+      modelName: 'Replacement model',
+      isLocal: true,
+      dataBoundary: 'on-device' as const
+    }
+    const refresh = async () => ({ model: nextModel, fingerprint: 'new-session' })
+
+    const rebound = await rebindCoworkTask(
+      state.task.id,
+      { model: nextModel, fingerprint: 'new-session' },
+      vi.fn()
+    )
+
+    expect(rebound.pauseReason).toBe('repetition_guard')
+    expect(rebound.error).toMatch(/new instruction/i)
+    await expect(
+      requestCoworkStart(state.task.id, async () => ({}), vi.fn(), refresh, true)
+    ).rejects.toThrow(/new instruction/i)
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        completionResponse({ content: 'Continued after the user reviewed the project.' })
+      )
+    vi.stubGlobal('fetch', fetchMock)
+    await steerCoworkRun(
+      state.task.id,
+      'I reviewed the project. Continue without repeating the earlier write.',
+      async () => ({}),
+      vi.fn(),
+      refresh
+    )
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false))
+
+    expect(state.task!.pauseReason).toBeUndefined()
+    expect(state.task!.status).toBe('completed')
+    expect(state.task!.agentMessages).toContainEqual(
+      expect.objectContaining({
+        role: 'user',
+        content: 'I reviewed the project. Continue without repeating the earlier write.'
       })
     )
   })

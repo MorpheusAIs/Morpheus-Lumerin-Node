@@ -46,6 +46,11 @@ export interface CoworkModelOption extends CoworkModelTarget {
   visionCapability: 'declared' | 'detected' | 'none'
 }
 
+export interface CoworkModelBinding extends CoworkModelTarget {
+  boundAt: number
+  unboundAt?: number
+}
+
 export interface CoworkPlanStep {
   id: string
   title: string
@@ -66,6 +71,44 @@ export interface CoworkDisplayMessage {
   role: 'user' | 'assistant'
   content: string
   createdAt: number
+  /** Stable per-task ordering used by the durable, paginated transcript. */
+  sequence?: number
+  author?: {
+    kind: 'workspace' | 'model'
+    modelId?: string
+    modelName?: string
+    sessionId?: string
+  }
+}
+
+export interface CoworkHandoffContext {
+  createdAt: number
+  previousModelName: string
+  previousSessionId?: string
+  goal: string
+  status: CoworkTaskStatus
+  summary?: string
+  plan: CoworkPlanStep[]
+  artifacts: Array<Pick<CoworkArtifact, 'path' | 'name' | 'kind' | 'updatedAt'>>
+  recentMessages: Array<Pick<CoworkDisplayMessage, 'role' | 'content' | 'createdAt'>>
+}
+
+export interface CoworkRunSafety {
+  /** A run epoch starts with a new user instruction and survives approvals/resumes. */
+  id: string
+  startedAt: number
+  modelSteps: number
+  mutations: number
+  loopGuard: {
+    version: 1
+    unverifiedMutations: number
+    lastMutationHash?: string
+    equivalentMutationStreak: number
+    lastDestinationHash?: string
+    destinationMutationStreak: number
+    recentMutationHashes: string[]
+    contentDestinationsByHash: Record<string, string[]>
+  }
 }
 
 export interface CoworkActivity {
@@ -107,6 +150,8 @@ export interface CoworkToolExecution {
   toolName: string
   status: 'prepared' | 'succeeded' | 'failed' | 'ambiguous'
   argumentsHash: string
+  /** User-instruction safety epoch; absent only on records created before this field existed. */
+  instructionId?: string
   resultMessage?: string
   preparedAt: number
   completedAt?: number
@@ -121,8 +166,18 @@ export interface CoworkTask {
   goal: string
   status: CoworkTaskStatus
   model: CoworkModelTarget
+  /** Provenance for every compute binding used by this durable task. */
+  modelBindings?: CoworkModelBinding[]
+  /** First model-protocol message that may be sent to the current binding. */
+  modelContextStart?: number
+  /** Bounded, explicitly labelled context for a replacement model/session. */
+  handoff?: CoworkHandoffContext
   plan: CoworkPlanStep[]
   messages: CoworkDisplayMessage[]
+  /** Highest display-message sequence copied into the durable transcript store. */
+  messagesPersistedThrough?: number
+  /** The task payload contains a recent window; older turns remain pageable. */
+  hasEarlierMessages?: boolean
   agentMessages: CoworkAgentMessage[]
   activities: CoworkActivity[]
   artifacts: CoworkArtifact[]
@@ -138,6 +193,8 @@ export interface CoworkTask {
   dataAccessApprovedFingerprint?: string
   summary?: string
   error?: string
+  pauseReason?: 'repetition_guard'
+  runSafety?: CoworkRunSafety
   createdAt: number
   updatedAt: number
   startedAt?: number

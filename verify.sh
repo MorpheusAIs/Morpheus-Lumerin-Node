@@ -159,11 +159,11 @@ Now smoke-test the main workflows by hand:
      Quit the proxy-router (Settings -> stop) and reload the Wallet tab. You
      should see "Not connected to your node", NOT a balance of 0.
 
-  6. Session-gated Chat and Cowork
+  6. Session-gated Chat and Workspace
      Choose a marketplace model, select a duration, and explicitly open a
      session with MOR stake or one-off Direct Pay. Verify that exact active
-     session works in both normal Chat and Cowork, while a closed or expired
-     session does not. Cowork and schedules must never open, fund, renew,
+     session works in both normal Chat and Workspace, while a closed or expired
+     session does not. Workspace and schedules must never open, fund, renew,
      extend, or substitute a session automatically.
 
   7. Desktop hardening

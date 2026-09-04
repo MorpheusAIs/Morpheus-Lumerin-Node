@@ -63,7 +63,7 @@ async function replaceSchedule(
     {}
   )
   if (replaced !== 1) {
-    throw new Error('This Cowork schedule changed in another operation. Refresh it and try again.')
+    throw new Error('This Workspace schedule changed in another operation. Refresh it and try again.')
   }
   return clean(next)
 }
@@ -121,7 +121,7 @@ export async function updateCoworkSchedule(
   now = Date.now()
 ): Promise<CoworkSchedule> {
   const current = await getCoworkSchedule(id)
-  if (!current) throw new Error('Cowork schedule not found.')
+  if (!current) throw new Error('Workspace schedule not found.')
   if (patch.name !== undefined && !patch.name.trim()) throw new Error('Schedule name is required.')
 
   const cadence =
@@ -143,13 +143,13 @@ export async function updateCoworkSchedule(
 
 export async function pauseCoworkSchedule(id: string, now = Date.now()): Promise<CoworkSchedule> {
   const current = await getCoworkSchedule(id)
-  if (!current) throw new Error('Cowork schedule not found.')
+  if (!current) throw new Error('Workspace schedule not found.')
   return replaceSchedule(current, { status: 'paused', nextRunAt: undefined }, now)
 }
 
 export async function resumeCoworkSchedule(id: string, now = Date.now()): Promise<CoworkSchedule> {
   const current = await getCoworkSchedule(id)
-  if (!current) throw new Error('Cowork schedule not found.')
+  if (!current) throw new Error('Workspace schedule not found.')
   const active = { ...current, status: 'active' as const }
   return replaceSchedule(
     current,
@@ -209,7 +209,7 @@ export async function claimCoworkScheduleRunNow(
   claimedAt: number
 ): Promise<CoworkSchedule> {
   const current = await getCoworkSchedule(id)
-  if (!current) throw new Error('Cowork schedule not found.')
+  if (!current) throw new Error('Workspace schedule not found.')
   if (current.runningSince !== undefined) throw new Error('This schedule is already running.')
 
   const next = clean({

@@ -20,6 +20,11 @@ const Models = lazy(() => import('./models/Models'));
 const Providers = lazy(() => import('./providers/Providers'));
 const Settings = lazy(() => import('./settings/Settings'));
 
+const LegacyCoworkRedirect = () => {
+  const location = useLocation();
+  return <Navigate replace to={`/workspace${location.search}`} />;
+};
+
 const fadeIn = keyframes`
   from {
     transform: scale(1.025);
@@ -44,7 +49,9 @@ const Container = styled.div`
 `;
 
 const Main = styled.div`
+  container: route-space / inline-size;
   flex-grow: 1;
+  min-width: 0;
   overflow-x: hidden;
   overflow-y: hidden;
   min-height: 100vh;
@@ -112,7 +119,8 @@ export const Layout = () => {
             <Routes>
               <Route path="/wallet" element={<Dashboard />} />
               <Route path="/chat" element={<Chat />} />
-              <Route path="/cowork" element={<Cowork />} />
+              <Route path="/workspace" element={<Cowork />} />
+              <Route path="/cowork" element={<LegacyCoworkRedirect />} />
               <Route path="/agents" element={<Agents />} />
               <Route path="/models" element={<Models />} />
               <Route path="/providers" element={<Providers />} />

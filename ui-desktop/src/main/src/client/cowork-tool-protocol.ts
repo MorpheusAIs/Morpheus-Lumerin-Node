@@ -202,7 +202,7 @@ export function textProtocolMessages(messages: readonly CoworkAgentMessage[]): C
 function assertExactKeys(value: Record<string, unknown>, allowed: readonly string[]): void {
   const allowedSet = new Set(allowed)
   if (Object.keys(value).some((key) => !allowedSet.has(key))) {
-    throw new Error('The selected model returned an invalid Cowork tool envelope.')
+      throw new Error('The selected model returned an invalid Workspace tool envelope.')
   }
 }
 
@@ -219,11 +219,11 @@ export function parseTextToolEnvelope(
     value = JSON.parse(text.trim())
   } catch {
     throw new Error(
-      'This model does not support native tools and did not follow the Cowork compatibility protocol.'
+        'This model does not support native tools and did not follow the Workspace compatibility protocol.'
     )
   }
   if (!isPlainObject(value) || value.protocol !== COWORK_TEXT_TOOL_PROTOCOL) {
-    throw new Error('The selected model returned an invalid Cowork tool envelope.')
+      throw new Error('The selected model returned an invalid Workspace tool envelope.')
   }
   if (value.type === 'tool_call') {
     assertExactKeys(value, ['protocol', 'type', 'name', 'arguments'])
@@ -233,16 +233,16 @@ export function parseTextToolEnvelope(
       )
     }
     if (!isPlainObject(value.arguments)) {
-      throw new Error('The selected model returned invalid Cowork tool arguments.')
+      throw new Error('The selected model returned invalid Workspace tool arguments.')
     }
     return { type: 'tool_call', name: value.name, arguments: value.arguments }
   }
   if (value.type === 'final') {
     assertExactKeys(value, ['protocol', 'type', 'content'])
     if (typeof value.content !== 'string' || !value.content.trim()) {
-      throw new Error('The selected model returned an empty Cowork response.')
+    throw new Error('The selected model returned an empty Workspace response.')
     }
     return { type: 'final', content: value.content }
   }
-  throw new Error('The selected model returned an unknown Cowork tool-envelope type.')
+  throw new Error('The selected model returned an unknown Workspace tool-envelope type.')
 }

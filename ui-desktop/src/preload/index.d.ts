@@ -95,6 +95,20 @@ type CoworkToolCallView = {
   function: { name: string; arguments: string }
 }
 
+type CoworkDisplayMessageView = {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  createdAt: number
+  sequence?: number
+  author?: {
+    kind: 'workspace' | 'model'
+    modelId?: string
+    modelName?: string
+    sessionId?: string
+  }
+}
+
 type CoworkTaskView = {
   schemaVersion: 1
   revision: number
@@ -113,7 +127,8 @@ type CoworkTaskView = {
     status: 'pending' | 'in_progress' | 'completed'
     note?: string
   }>
-  messages: Array<{ id: string; role: 'user' | 'assistant'; content: string; createdAt: number }>
+  messages: CoworkDisplayMessageView[]
+  hasEarlierMessages?: boolean
   activities: Array<{
     id: string
     type: 'plan' | 'tool' | 'approval' | 'system'
@@ -167,6 +182,15 @@ type CoworkApi = {
   deleteProject: (id: string) => Promise<boolean>
   listTasks: (projectId?: string) => Promise<CoworkTaskSummaryView[]>
   getTask: (id: string) => Promise<CoworkTaskView | null>
+  listTaskMessages: (
+    taskId: string,
+    beforeSequence?: number,
+    limit?: number
+  ) => Promise<{
+    messages: CoworkDisplayMessageView[]
+    hasMore: boolean
+    nextBeforeSequence?: number
+  }>
   createTask: (input: {
     projectId: string
     title?: string
@@ -177,6 +201,7 @@ type CoworkApi = {
   steerTask: (id: string, content: string) => Promise<CoworkTaskView>
   cancelTask: (id: string) => Promise<CoworkTaskView>
   pauseTask: (id: string) => Promise<CoworkTaskView>
+  rebindTask: (id: string, model: CoworkModelOptionView) => Promise<CoworkTaskView>
   resolveApproval: (
     taskId: string,
     approvalId: string,

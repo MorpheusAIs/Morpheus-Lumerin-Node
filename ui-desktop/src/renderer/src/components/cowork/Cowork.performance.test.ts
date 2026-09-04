@@ -12,6 +12,8 @@ import Cowork, {
 } from './Cowork';
 import type {
   CoworkModelOption,
+  CoworkProject,
+  CoworkTask,
   CoworkTaskEvent,
   CoworkTaskSummary,
 } from './types';
@@ -39,6 +41,62 @@ const taskSummary = (
   updatedAt: 20,
   ...overrides,
 });
+
+const persistedProject: CoworkProject = {
+  id: 'project-1',
+  name: 'Durable project',
+  folderName: 'durable-project',
+  instructions: 'Keep the implementation focused.',
+  approvalMode: 'manual',
+  createdAt: 10,
+  updatedAt: 20,
+};
+
+const persistedTask = (overrides: Partial<CoworkTask> = {}): CoworkTask => ({
+  id: 'task-1',
+  projectId: persistedProject.id,
+  title: 'Continue the durable work',
+  goal: 'Keep working after a session ends.',
+  status: 'completed',
+  model: {
+    modelId: 'old-model',
+    modelName: 'Original Model',
+    isLocal: false,
+    dataBoundary: 'independent-provider',
+    sessionId: 'old-session',
+    sessionEndsAt: 10,
+  },
+  plan: [],
+  messages: [
+    {
+      id: 'latest-message',
+      role: 'assistant',
+      content: 'The latest saved result.',
+      createdAt: 30,
+      sequence: 51,
+      author: {
+        kind: 'model',
+        modelId: 'old-model',
+        modelName: 'Original Model',
+        sessionId: 'old-session',
+      },
+    },
+  ],
+  activities: [],
+  artifacts: [],
+  createdAt: 10,
+  updatedAt: 30,
+  completedAt: 30,
+  ...overrides,
+});
+
+const emptyExtensions = {
+  skills: [],
+  connectors: [],
+  issues: [],
+  executionAvailable: false as const,
+  networkAccessPerformed: false as const,
+};
 
 describe('Cowork performance helpers', () => {
   it('uses the configured near-bottom threshold for transcript following', () => {
@@ -261,7 +319,7 @@ describe('Cowork marketplace session selection', () => {
     expect(selectCoworkModelKey([first], 'remote:model-2:session-2')).toBe('');
   });
 
-  it('keeps the whole workspace locked until another session is chosen explicitly', async () => {
+  it('keeps project history available while an unavailable session is replaced', async () => {
     const previousCowork = window.cowork;
     const listProjects = vi.fn(async () => []);
     Object.defineProperty(window, 'cowork', {
@@ -283,28 +341,275 @@ describe('Cowork marketplace session selection', () => {
         ),
       );
 
-      await screen.findByRole('heading', {
-        name: 'That Cowork session is no longer active',
-      });
-      expect(listProjects).not.toHaveBeenCalled();
+      await screen.findByText('That session is no longer active');
+      expect(listProjects).toHaveBeenCalledTimes(1);
       expect(
-        screen.queryByRole('button', { name: 'Create project' }),
-      ).toBeNull();
+        screen.getByRole('button', { name: 'Create project' }),
+      ).not.toBeNull();
+
+      const navigationToggle = screen.getByRole('button', {
+        name: 'Open project navigation',
+      });
+      fireEvent.click(navigationToggle);
+      expect(navigationToggle.getAttribute('aria-expanded')).toBe('true');
+      expect(navigationToggle.getAttribute('aria-label')).toBe(
+        'Close project navigation',
+      );
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(navigationToggle.getAttribute('aria-expanded')).toBe('false');
+
+      const inspectorToggle = screen.getByRole('button', {
+        name: 'Open task details',
+      });
+      fireEvent.click(inspectorToggle);
+      expect(inspectorToggle.getAttribute('aria-expanded')).toBe('true');
+      expect(inspectorToggle.getAttribute('aria-label')).toBe(
+        'Close task details',
+      );
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(inspectorToggle.getAttribute('aria-expanded')).toBe('false');
 
       fireEvent.change(
-        screen.getByLabelText('Choose another active Cowork session'),
+        screen.getByLabelText('Choose another active Workspace session'),
         { target: { value: 'remote:model-1:session-1' } },
       );
       fireEvent.click(
         screen.getByRole('button', {
-          name: 'Use selected active session',
+          name: 'Use session',
         }),
       );
 
-      await waitFor(() => expect(listProjects).toHaveBeenCalledTimes(1));
+      await waitFor(() =>
+        expect(
+          screen.queryByText('That session is no longer active'),
+        ).toBeNull(),
+      );
+    } finally {
+      Object.defineProperty(window, 'cowork', {
+        configurable: true,
+        writable: true,
+        value: previousCowork,
+      });
+    }
+  });
+
+  it('renders saved model-attributed history without an active session and pages backward', async () => {
+    const previousCowork = window.cowork;
+    const task = persistedTask({ hasEarlierMessages: true });
+    const listTaskMessages = vi.fn(async () => ({
+      messages: [
+        {
+          id: 'earlier-user',
+          role: 'user' as const,
+          content: 'Earlier project request',
+          createdAt: 15,
+          sequence: 1,
+        },
+        {
+          id: 'earlier-model',
+          role: 'assistant' as const,
+          content: 'Earlier saved answer',
+          createdAt: 16,
+          sequence: 2,
+          author: {
+            kind: 'model' as const,
+            modelId: 'first-model',
+            modelName: 'First Model',
+            sessionId: 'first-session',
+          },
+        },
+      ],
+      hasMore: false,
+    }));
+    Object.defineProperty(window, 'cowork', {
+      configurable: true,
+      writable: true,
+      value: {
+        listModelOptions: vi.fn(async () => []),
+        listProjects: vi.fn(async () => [persistedProject]),
+        listTasks: vi.fn(async () => [taskSummary({ status: 'completed' })]),
+        getTask: vi.fn(async () => task),
+        listTaskMessages,
+        listSchedules: vi.fn(async () => []),
+        listExtensions: vi.fn(async () => emptyExtensions),
+        onTaskEvent: vi.fn(() => () => undefined),
+      } as unknown as Window['cowork'],
+    });
+
+    try {
+      render(
+        createElement(
+          MemoryRouter,
+          { initialEntries: ['/workspace'] },
+          createElement(Cowork),
+        ),
+      );
+
+      await screen.findByText('The latest saved result.');
+      expect(screen.getAllByText('Original Model')).toHaveLength(2);
       expect(
-        screen.getByRole('button', { name: 'Create project' }),
-      ).not.toBeNull();
+        screen.getByText('The original task session has ended'),
+      ).toBeTruthy();
+      expect(
+        screen.getByText(/Project history remains available/),
+      ).toBeTruthy();
+
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Load earlier messages' }),
+      );
+
+      await screen.findByText('Earlier saved answer');
+      expect(screen.getByText('Earlier project request')).toBeTruthy();
+      expect(screen.getByText('First Model')).toBeTruthy();
+      expect(listTaskMessages).toHaveBeenCalledWith('task-1', 51, 50);
+      expect(
+        screen.queryByRole('button', { name: 'Load earlier messages' }),
+      ).toBeNull();
+    } finally {
+      Object.defineProperty(window, 'cowork', {
+        configurable: true,
+        writable: true,
+        value: previousCowork,
+      });
+    }
+  });
+
+  it('allows a pending action to be denied after its task session expires', async () => {
+    const previousCowork = window.cowork;
+    const task = persistedTask({
+      status: 'waiting_approval',
+      pendingApproval: {
+        id: 'approval-1',
+        toolCall: {
+          id: 'tool-call-1',
+          type: 'function',
+          function: {
+            name: 'write_file',
+            arguments: JSON.stringify({ path: 'report.txt' }),
+          },
+        },
+        reason: 'Write the generated report',
+        risk: 'write',
+        createdAt: 25,
+      },
+    });
+    const resolveApproval = vi.fn(async () => undefined);
+    Object.defineProperty(window, 'cowork', {
+      configurable: true,
+      writable: true,
+      value: {
+        listModelOptions: vi.fn(async () => []),
+        listProjects: vi.fn(async () => [persistedProject]),
+        listTasks: vi.fn(async () => [
+          taskSummary({ status: 'waiting_approval' }),
+        ]),
+        getTask: vi.fn(async () => task),
+        resolveApproval,
+        listSchedules: vi.fn(async () => []),
+        listExtensions: vi.fn(async () => emptyExtensions),
+        onTaskEvent: vi.fn(() => () => undefined),
+      } as unknown as Window['cowork'],
+    });
+
+    try {
+      render(
+        createElement(
+          MemoryRouter,
+          { initialEntries: ['/workspace'] },
+          createElement(Cowork),
+        ),
+      );
+
+      const denyButton = await screen.findByRole('button', { name: 'Deny' });
+      const approveButton = screen.getByRole('button', {
+        name: 'Approve once',
+      });
+      expect((denyButton as HTMLButtonElement).disabled).toBe(false);
+      expect((approveButton as HTMLButtonElement).disabled).toBe(true);
+
+      fireEvent.click(denyButton);
+
+      await waitFor(() =>
+        expect(resolveApproval).toHaveBeenCalledWith(
+          'task-1',
+          'approval-1',
+          false,
+        ),
+      );
+    } finally {
+      Object.defineProperty(window, 'cowork', {
+        configurable: true,
+        writable: true,
+        value: previousCowork,
+      });
+    }
+  });
+
+  it('requires an explicit continuation before steering with a new session', async () => {
+    const previousCowork = window.cowork;
+    const replacement = activeModel({
+      modelId: 'replacement-model',
+      modelName: 'Replacement Model',
+      sessionId: 'replacement-session',
+    });
+    const oldTask = persistedTask({ status: 'paused' });
+    const reboundTask = persistedTask({
+      status: 'paused',
+      model: replacement,
+    });
+    const getTask = vi
+      .fn()
+      .mockResolvedValueOnce(oldTask)
+      .mockResolvedValue(reboundTask);
+    const rebindTask = vi.fn(async () => reboundTask);
+    Object.defineProperty(window, 'cowork', {
+      configurable: true,
+      writable: true,
+      value: {
+        listModelOptions: vi.fn(async () => [replacement]),
+        listProjects: vi.fn(async () => [persistedProject]),
+        listTasks: vi.fn(async () => [taskSummary({ status: 'paused' })]),
+        getTask,
+        rebindTask,
+        listSchedules: vi.fn(async () => []),
+        listExtensions: vi.fn(async () => emptyExtensions),
+        onTaskEvent: vi.fn(() => () => undefined),
+      } as unknown as Window['cowork'],
+    });
+
+    try {
+      render(
+        createElement(
+          MemoryRouter,
+          { initialEntries: ['/workspace'] },
+          createElement(Cowork),
+        ),
+      );
+
+      const continueButton = await screen.findByRole('button', {
+        name: 'Continue with Replacement Model',
+      });
+      expect(
+        (
+          screen.getByPlaceholderText(
+            /Choose an active session/,
+          ) as HTMLTextAreaElement
+        ).disabled,
+      ).toBe(true);
+
+      fireEvent.click(continueButton);
+      await waitFor(() =>
+        expect(rebindTask).toHaveBeenCalledWith('task-1', replacement),
+      );
+      await waitFor(() =>
+        expect(
+          screen.queryByText('The original task session has ended'),
+        ).toBeNull(),
+      );
+      expect(
+        (screen.getByPlaceholderText(/Give Workspace/) as HTMLTextAreaElement)
+          .disabled,
+      ).toBe(false);
     } finally {
       Object.defineProperty(window, 'cowork', {
         configurable: true,

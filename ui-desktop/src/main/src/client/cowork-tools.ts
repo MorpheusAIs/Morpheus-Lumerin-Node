@@ -101,11 +101,11 @@ const coworkConfigurationPath = (relative: string): boolean => {
 function assertAllowedRelativePath(relative: string): void {
   if (coworkConfigurationPath(relative)) {
     throw new Error(
-      'Cowork extension configuration can only be changed by the user-facing project controls.'
+      'Workspace extension configuration can only be changed by the user-facing project controls.'
     )
   }
   if (sensitivePath(relative)) {
-    throw new Error('Credential and key-material paths are blocked from Cowork tasks.')
+    throw new Error('Credential and key-material paths are blocked from Workspace tasks.')
   }
 }
 
@@ -142,7 +142,8 @@ async function assertNoSymlinkComponents(root: string, absolute: string): Promis
       throw error
     })
     if (!stat) return
-    if (stat.isSymbolicLink()) throw new Error('Symbolic-link paths are blocked from Cowork tasks.')
+    if (stat.isSymbolicLink())
+      throw new Error('Symbolic-link paths are blocked from Workspace tasks.')
   }
 }
 
@@ -167,7 +168,7 @@ export async function resolveProjectPath(
     if (canonicalRelative !== '.') assertAllowedRelativePath(canonicalRelative)
     const stat = await fs.stat(existing)
     if (stat.isFile() && stat.nlink > 1) {
-      throw new Error('Hard-linked files are blocked from Cowork tasks.')
+      throw new Error('Hard-linked files are blocked from Workspace tasks.')
     }
   } else {
     const real = await fs.realpath(absolute)
@@ -176,7 +177,7 @@ export async function resolveProjectPath(
     if (canonicalRelative !== '.') assertAllowedRelativePath(canonicalRelative)
     const stat = await fs.stat(real)
     if (stat.isFile() && stat.nlink > 1) {
-      throw new Error('Hard-linked files are blocked from Cowork tasks.')
+      throw new Error('Hard-linked files are blocked from Workspace tasks.')
     }
   }
   await assertNoSymlinkComponents(root, absolute)
@@ -310,7 +311,7 @@ export async function approvalRequirement(
     throw error
   })
   if (destinationStat?.isSymbolicLink())
-    throw new Error('Symbolic-link paths are blocked from Cowork tasks.')
+    throw new Error('Symbolic-link paths are blocked from Workspace tasks.')
   if (
     destinationStat &&
     [
@@ -349,15 +350,16 @@ function sameFile(
 
 async function openStableFile(absolute: string, writable = false) {
   const before = await fs.lstat(absolute)
-  if (before.isSymbolicLink()) throw new Error('Symbolic-link paths are blocked from Cowork tasks.')
+  if (before.isSymbolicLink())
+    throw new Error('Symbolic-link paths are blocked from Workspace tasks.')
   if (!before.isFile()) throw new Error('This action requires a regular file.')
-  if (before.nlink > 1) throw new Error('Hard-linked files are blocked from Cowork tasks.')
+  if (before.nlink > 1) throw new Error('Hard-linked files are blocked from Workspace tasks.')
   const flags = (writable ? constants.O_RDWR : constants.O_RDONLY) | (constants.O_NOFOLLOW ?? 0)
   const handle = await fs.open(absolute, flags)
   try {
     const after = await handle.stat()
     if (!sameFile(before, after) || !after.isFile() || after.nlink > 1) {
-      throw new Error('The file changed while Cowork was opening it. Try the action again.')
+      throw new Error('The file changed while Workspace was opening it. Try the action again.')
     }
     return { handle, stat: after }
   } catch (error) {
@@ -388,7 +390,7 @@ async function storeBackup(
 ): Promise<void> {
   if (buffer.byteLength > MAX_BACKUP_FILE_BYTES) {
     throw new Error(
-      'The existing file is too large to back up safely, so Cowork will not overwrite it.'
+      'The existing file is too large to back up safely, so Workspace will not overwrite it.'
     )
   }
   const backupDir = path.join(app.getPath('userData'), 'CoworkBackups', project.id)
@@ -436,14 +438,16 @@ async function writeDestination(
     } catch (error: any) {
       if (error?.code === 'EEXIST') {
         throw new Error(
-          'The destination was created by another process. Retry so Cowork can request overwrite approval.'
+          'The destination was created by another process. Retry so Workspace can request overwrite approval.'
         )
       }
       throw error
     }
   }
   if (!allowOverwrite) {
-    throw new Error('The destination now exists. Retry so Cowork can request overwrite approval.')
+    throw new Error(
+      'The destination now exists. Retry so Workspace can request overwrite approval.'
+    )
   }
   const opened = await openStableFile(absolute, true)
   try {
@@ -743,7 +747,7 @@ export async function executeCoworkTool(
       return { result: { path: target.relative, movedToTrash: true } }
     }
     default:
-      throw new Error(`Unsupported Cowork tool: ${toolName}`)
+      throw new Error(`Unsupported Workspace tool: ${toolName}`)
   }
 }
 

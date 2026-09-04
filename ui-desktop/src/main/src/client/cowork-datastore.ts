@@ -68,7 +68,7 @@ export function createIndexedCoworkDatastore(
   // Observe initialization failures even if no operation has reached the store
   // yet; callers still receive the original rejection through the gate above.
   void indexesReady.catch((error) =>
-    console.error(`Could not initialize Cowork datastore indexes for ${filename}:`, error)
+    console.error(`Could not initialize Workspace datastore indexes for ${filename}:`, error)
   )
 
   db.persistence.setAutocompactionInterval(compactionInterval)

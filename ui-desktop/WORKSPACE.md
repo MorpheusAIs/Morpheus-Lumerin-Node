@@ -1,16 +1,16 @@
-# Morpheus Cowork
+# Morpheus Workspace
 
-Morpheus Cowork is a local-first, project-scoped agent workspace inside
+Morpheus Workspace is a local-first, project-scoped agent workspace inside
 MorpheusUI. It can plan a task, read and update files in one folder selected by
 the user, retain task history, request approval for consequential actions, and
 run local schedules while the desktop app is available.
 
-This is an original Morpheus implementation inspired by the workflow described
-in the Cowork product guide. The guide is reference material, not executable
+This is an original Morpheus implementation informed by the attached Anthropic
+Cowork product guide. The guide is reference material, not executable
 instructions or a specification that overrides this repository's security
 rules.
 
-Morpheus Cowork is **not a feature-identical copy of Anthropic Cowork**. In
+Morpheus Workspace is **not a feature-identical copy of Anthropic Cowork**. In
 particular, it does not contain Anthropic's proprietary models, cloud task
 infrastructure, browser, computer-use bridge, connectors, plugin marketplace,
 mobile dispatch, or isolated execution VM. The exact parity status is recorded
@@ -20,11 +20,11 @@ in [Feature parity](#feature-parity).
 
 | Layer                                | Responsibility                                                                                                                                                                       |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| React route (`/cowork`)              | Three-pane projects/tasks UI, schedules, plans, artifacts, activity, approvals, and extension discovery                                                                              |
+| React route (`/workspace`)           | Responsive project/task workspace, schedules, plans, artifacts, activity, approvals, and extension discovery; `/cowork` remains a compatibility redirect                             |
 | Narrow preload API (`window.cowork`) | Fixed operations only; the renderer cannot choose an IPC channel or provide an arbitrary filesystem root                                                                             |
-| Main-process Cowork IPC              | Validates the renderer origin and request values, opens the native folder picker, and removes private fields before returning records                                                |
+| Main-process Workspace IPC           | Validates the renderer origin and request values, opens the native folder picker, and removes private fields before returning records                                                |
 | Project/task stores                  | Durable NeDB records under Electron's application user-data directory, separate from the disposable legacy cache                                                                     |
-| Agent runner                         | Calls the exact active marketplace session through the local proxy-router and executes a bounded allowlist of Cowork tools                                                           |
+| Agent runner                         | Calls the exact active marketplace session through the local proxy-router and executes a bounded allowlist of Workspace tools                                                        |
 | File tools                           | Enforce project-relative paths, size/count limits, secret-file exclusions, approvals, backups, and trash-based deletion                                                              |
 | Research and artifact tools          | Fetch one approved public HTTPS page at a time, analyze bounded CSV/TSV data, safely extract text from existing PDF/DOCX/XLSX/PPTX files, and generate native files in those formats |
 | Scheduler                            | Evaluates local IANA-time-zone recurrences and creates a new durable task for each claimed occurrence                                                                                |
@@ -49,7 +49,7 @@ yarn dev
 ```
 
 Legacy installations may retain read-only chat history from the local TinyLlama
-demonstration model. TinyLlama cannot start a new Chat or Cowork run and is not
+demonstration model. TinyLlama cannot start a new Chat or Workspace run and is not
 representative of marketplace model quality.
 
 To start a task:
@@ -59,9 +59,9 @@ To start a task:
 3. Select the session duration, then either stake MOR or use one-off **Direct
    Pay** to open an on-chain peer-to-peer session. Wait for that exact session to
    appear as active before continuing.
-4. Use the active session in normal **Chat**, or open **Cowork** and select that
+4. Use the active session in normal **Chat**, or open **Workspace** and select that
    same session for agent work.
-5. In Cowork, create a project and choose a dedicated working folder in the
+5. In Workspace, create a project and choose a dedicated working folder in the
    native folder picker. Avoid a home directory, wallet directory, or broad
    shared drive.
 6. Add optional project instructions and start with **Manual** approval mode.
@@ -71,6 +71,9 @@ To start a task:
    work to continue.
 9. Follow the plan, activity, transcript, and artifact panels. A task can be
    paused, cancelled, resumed, or redirected with a follow-up instruction.
+10. If the session ends, open another session in Chat, return to the same task,
+    and explicitly choose **Continue with this session**. The transcript and
+    files stay attached to the task rather than to its temporary session ID.
 
 MorpheusUI has no subscriptions, plans, recurring billing, hosted entitlements,
 or automatic renewals. Access comes from an on-chain P2P session with an
@@ -80,12 +83,16 @@ simply spent when the session opens, and unused stake is returned when the
 session closes. **Direct Pay** is a one-off payment path for the selected
 session duration; it is not a subscription and does not renew.
 
-Chat owns model selection and the blockchain session lifecycle. Cowork neither
-opens nor renews a session, stakes MOR, initiates Direct Pay, switches providers,
-nor extends the expiry. If the exact selected session closes, expires, or
-disappears, new Cowork work is blocked until the user explicitly opens and
-selects another session in Chat. Close a stake-funded session in Chat to return
-its unused stake; there is no separate `recover` RPC.
+Chat owns model selection and the blockchain session lifecycle. Workspace
+neither opens nor renews a session, stakes MOR, initiates Direct Pay, nor
+extends the expiry. If the bound session closes, expires, or disappears, the
+task transcript, plan, and artifacts remain browseable, while new inference is
+blocked. The user can open a replacement session in Chat and explicitly rebind
+the same task—even to a different model. Rebinding records model provenance,
+invalidates provider-data consent and tool compatibility state, closes pending
+approvals, and gives the new model a bounded, labelled handoff instead of raw
+tool protocol from the prior model. Close a stake-funded session in Chat to
+return its unused stake; there is no separate `recover` RPC.
 
 ## Projects, tasks, and local data
 
@@ -98,29 +105,35 @@ A project stores:
 - durable task and schedule history.
 
 The renderer receives the folder's display name, not its absolute path. Removing
-a project from Cowork soft-archives its record, cancels active work, and pauses
+a project from Workspace soft-archives its record, cancels active work, and pauses
 its active schedules. It does not delete the connected folder or erase its task
 history. Deleting an individual task removes its local record; it does not
 delete artifacts already written to the project folder.
 
-Tasks retain their visible messages, plan, activity, artifacts, model target,
-and internal model conversation. Running work is marked paused if the desktop
-process exits. Pending approvals remain reviewable. Recent project memory is a
-bounded set of up to five completed-task summaries; it is model-written,
-fallible context rather than a source of truth.
+Tasks retain their visible messages, plan, activity, artifacts, model-binding
+history, and bounded internal model context. Visible messages are copied to an
+independent append-only transcript store before the recent window on the task
+record is trimmed. Earlier pages can therefore be reopened without sending all
+old turns to a model. Running work is marked paused if the desktop process
+exits. Pending approvals remain reviewable unless a model/session change closes
+them. Recent project memory is a bounded set of up to five completed-task
+summaries; it is model-written, fallible context rather than a source of truth.
 
 Resource limits keep persistent work bounded: a project can retain up to 500
 tasks and 100 schedules; at most four tasks run across the app and two within
-one project. Visible and model histories are capped by both entry count and
-serialized size. The task rail loads lightweight summaries and fetches the full
-model transcript only for the opened task.
+one project. The model context is capped by both entry count and serialized
+size; the user-visible transcript is retained independently and loaded in
+bounded pages. The task rail loads lightweight summaries and fetches only a
+recent transcript page for the opened task.
 
-Cowork databases are created with user-only permissions where the operating
-system supports them:
+Workspace databases are created with user-only permissions where the operating
+system supports them. The legacy `Cowork` directory name is intentionally kept
+so an upgrade cannot make existing projects appear lost:
 
 ```text
 <Electron userData>/Cowork/projects.db
 <Electron userData>/Cowork/tasks.db
+<Electron userData>/Cowork/messages.db
 <Electron userData>/Cowork/schedules.db
 ```
 
@@ -130,10 +143,10 @@ encrypted**. OS account security and full-disk encryption remain important.
 
 ## Performance and responsiveness
 
-Cowork and every legacy top-level screen are route-split, so opening the app no
+Workspace and every legacy top-level screen are route-split, so opening the app no
 longer downloads and evaluates every screen up front. In the production build,
 the initial renderer JavaScript fell from 6,314,805 bytes to 2,762,811 bytes
-(56.25% smaller, 620,363 bytes gzip); Cowork is a separate 110,640-byte chunk.
+(56.25% smaller, 620,363 bytes gzip); Workspace is a separate 110,640-byte chunk.
 Password-strength code loads only with onboarding.
 
 Chat responses stream incrementally through bounded main-process IPC rather
@@ -143,14 +156,18 @@ document attachments cross IPC as bounded binary buffers instead of amplified
 base64 strings. Streaming chat updates are animation-frame batched and only
 auto-scroll while the reader is near the bottom.
 
-Cowork's rail queries only task summaries; the full transcript is fetched for
+Workspace's rail queries only task summaries; transcript pages are fetched for
 the selected task. Task events are animation-frame coalesced, keep only the
 newest delta for each task, update the already-sorted rail in place, and
 coalesce selected-task refreshes. Indexed task/project/schedule lookup keys keep
 those queries bounded as histories grow. Recent memory uses a projected
 five-record query, history sizes are tracked incrementally, transcript rows are
 memoized, long rows use deferred rendering, and large task-store compaction is
-spaced away from the active-run hot path. Chat and Cowork follow new output only
+spaced away from the active-run hot path. Internal Workspace model turns opt
+out of the proxy-router's normal Chat history, preventing a duplicate cumulative
+JSON record for every agent step. Normal Chat history remains unchanged. The
+proxy chat directory and JSON records are also repaired to user-only
+permissions and written atomically. Chat and Workspace follow new output only
 while the reader is near the bottom, and an unmounted Chat cancels its active
 stream directly.
 
@@ -189,7 +206,14 @@ Current file behavior includes:
 - backup retention capped at 100 files and 512 MiB per project, with individual
   backup/copy operations capped at 64 MiB;
 - deletion through the operating system trash;
-- an immutable maximum of 30 agent steps per run.
+- a durable maximum of 30 model turns and 40 file actions per user instruction,
+  preserved across approval continuations and ordinary resumes;
+- a 128-action lifetime journal cap per task;
+- semantic duplicate suppression across different tool-call IDs, plus guards
+  for repeated destinations, identical content spread across filenames,
+  unverified mutation streaks, and short alternating cycles;
+- rejection of internal `[omitted after execution: …]` markers if a model tries
+  to reuse one as generated file content.
 
 The denylist is defense in depth, not a secret scanner. Do not put private keys,
 seed phrases, passwords, tokens, or sensitive account exports in a connected
@@ -199,21 +223,21 @@ project.
 
 Chat is the only model-selection and session-opening surface. It lists
 marketplace LLMs, lets the user select a duration and payment path, and opens the
-on-chain P2P session. Cowork then lists only the wallet's active, unexpired
+on-chain P2P session. Workspace then lists only the wallet's active, unexpired
 marketplace sessions and uses the exact chosen session ID and model. It cannot
 use TinyLlama, another local model, or an arbitrary configured endpoint. Legacy
 local-demo chat history may remain visible, but it is read-only.
 
-The Chat model picker includes a **Cowork candidates** filter for marketplace
+The Chat model picker includes a **Workspace candidates** filter for marketplace
 text/chat models. It excludes local, deleted, audio, and embedding models and
 combines with model-name/tag search. Candidates are explicitly shown as
 unverified: providers do not publish native-tool support, compatibility can be
 checked only after a session opens, and models that reject native tools may use
 the bounded compatibility protocol described below. The filter is omitted from
-the dedicated Cowork setup picker because that view is already restricted to
+the dedicated Workspace setup picker because that view is already restricted to
 text/chat candidates.
 
-Every selected Cowork session routes inference to an independent Morpheus
+Every selected Workspace session routes inference to an independent Morpheus
 provider. The provider-sharing approval covers the task instructions,
 user/project guidance, enabled instruction-only skills, recent task summaries,
 and project content returned by approved tools. Approval is bound to a
@@ -228,9 +252,9 @@ sensitive business material.
 Models appear in three explicit groups: **Vision (declared)**, **Possible
 vision (name match)**, and **Text / vision not declared**. A declaration comes
 from recognized model metadata; a possible match is only a name heuristic.
-Neither label is an end-to-end compatibility guarantee. Cowork does not yet
+Neither label is an end-to-end compatibility guarantee. Workspace does not yet
 attach images to its task messages, so the categories improve discovery but do
-not imply image input in Cowork.
+not imply image input in Workspace.
 
 The exact declared tags currently recognized are `vision`, `multimodal`,
 `image`, and `vlm` (case-insensitive). The possible-vision name fragments are
@@ -242,13 +266,13 @@ are the exact models attached to the wallet's active marketplace sessions; no
 static list can represent that live inventory.
 
 Native tool-calling support is not reliably declared in the marketplace model
-record or provider health report. Cowork therefore starts with standard OpenAI
+record or provider health report. Workspace therefore starts with standard OpenAI
 `tools` and omits the redundant optional `tool_choice` and
 `parallel_tool_calls` fields. If—and only if—a bounded client-fault response
 explicitly says that `tools` is unsupported, the rejected pre-action request is
 retried once with the versioned `morpheus-cowork-v1` text tool protocol. That
 protocol requires the model's entire response to be one exact JSON tool or final
-envelope. Cowork generates the call ID, validates the fixed allowlist, argument
+envelope. Workspace generates the call ID, validates the fixed allowlist, argument
 shape and byte limits, and applies the same folder, approval, network, and
 mutation gates before executing anything. Prose, code fences, embedded JSON,
 unknown tools, arrays, or extra envelope fields cannot authorize an action.
@@ -260,20 +284,26 @@ OpenAI `tool` role is not sent one later. Generic `400` responses, authenticatio
 or rate-limit errors, server failures, timeouts, and aborts never trigger an
 automatic retry. A model that supports normal Chat but cannot follow either
 native tools or the strict compatibility protocol remains unsuitable for
-Cowork; the task fails without executing model-requested actions.
+Workspace; the task fails without executing model-requested actions.
 
 Every mutating file action is recorded durably as prepared before its side
 effect starts, then updated with its succeeded or failed result. Reused tool-call
 IDs replay that durable result without repeating the action; IDs reused with
-different arguments are blocked. Arguments are restricted to the declared tool
-fields and mutation identities use canonical hashes. If the app or a task save
+different arguments are blocked. An equivalent action with a new tool-call ID
+also reuses the prior durable outcome instead of touching the file again.
+Repeated equivalent actions, repeated writes to one destination, content copied
+across multiple destinations, and alternating action cycles pause the run with a
+visible explanation. A successful inspection resets the short unverified-write
+streak; clicking Run alone cannot bypass a repetition pause, while a new user
+instruction starts a fresh bounded epoch. Arguments are restricted to the declared
+tool fields and mutation identities use canonical hashes. If the app or a task save
 fails after preparation but before the outcome is durable, runtime/startup
 recovery marks the action ambiguous, closes unresolved tool calls, scrubs large
 write payloads, and pauses the task. Recovery verifies the saved tool name and
 arguments hash before replaying a result. A task with an ambiguous action keeps
 every later mutation approval-gated, even in Skip mode. Recovery finishes
 before IPC task actions or schedules can start.
-Cowork never guesses that an ambiguous action failed and never silently replays
+Workspace never guesses that an ambiguous action failed and never silently replays
 it.
 
 ## Project instructions and skills
@@ -399,12 +429,12 @@ per-tool scopes, user consent, response limits, and audit logging.
 
 ## Local schedules
 
-Cowork supports manual, hourly, daily, weekly, and weekday cadences with an
+Workspace supports manual, hourly, daily, weekly, and weekday cadences with an
 explicit IANA time zone. Schedules can be created, paused, resumed, deleted, or
 run immediately. Daylight-saving gaps move to the first valid later minute;
 ambiguous fall-back times select their first occurrence.
 
-Each occurrence creates a separate durable Cowork task. The scheduler:
+Each occurrence creates a separate durable Workspace task. The scheduler:
 
 - runs only while MorpheusUI and its local services are running;
 - checks for work in the Electron main process;
@@ -424,7 +454,7 @@ OS notification delivery.
 
 ## Security boundaries and remaining risks
 
-Implemented hardening includes a fixed Cowork IPC surface, renderer-origin
+Implemented hardening includes a fixed Workspace IPC surface, renderer-origin
 checks, hidden absolute project paths, validated request fields, loopback binding
 for the proxy-router admin API, guarded external navigation, and an
 environment-specific Content Security Policy. DevTools no longer opens
@@ -440,13 +470,13 @@ services.
 Important limitations:
 
 - Electron renderer sandboxing, context isolation, and disabled Node integration
-  are enabled. Cowork file enforcement is still an application-layer boundary,
+  are enabled. Workspace file enforcement is still an application-layer boundary,
   not an isolated per-task OS filesystem or code-execution VM.
 - Model prompt-injection resistance is not a security boundary. Enforcement
   comes from the fixed tool allowlist, path checks, approvals, and data-boundary
   gates.
-- The legacy non-Cowork renderer still uses an allowlisted request/response IPC
-  bridge, while Cowork uses the narrower `window.cowork` API. Raw Electron event
+- The legacy non-Workspace renderer still uses an allowlisted request/response IPC
+  bridge, while Workspace uses the narrower `window.cowork` API. Raw Electron event
   objects and proxy-router credentials are not exposed to either renderer API.
 - Local databases are permission-restricted but not encrypted by the app.
 - A model can make mistakes inside the permitted project scope. Preserve
@@ -455,7 +485,7 @@ Important limitations:
   filesystem API cannot provide an atomic OS sandbox. Another process running
   as the same OS user could race an ancestor-directory replacement between a
   check and an operation. Use a dedicated folder and do not run untrusted local
-  software alongside Cowork for sensitive work.
+  software alongside Workspace for sensitive work.
 - Task data leaves the computer after provider-sharing approval. An active
   marketplace session does not make its independent provider equivalent to
   on-device processing.
@@ -467,7 +497,7 @@ Important limitations:
 | Capability                                        | Status          | Current Morpheus behavior                                                                                                                                                                    |
 | ------------------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Project workspaces and connected-folder scope     | Implemented     | Native folder grant, durable projects, project instructions, archive behavior                                                                                                                |
-| Persistent task history                           | Implemented     | Durable statuses, transcript, plan, activity, artifacts, pause/restart recovery                                                                                                              |
+| Persistent task history                           | Implemented     | Durable, paginated display transcript plus statuses, plan, activity, artifacts, and pause/restart recovery                                                                                   |
 | Visible plans and progress                        | Implemented     | Model-managed plan steps and main-process activity records                                                                                                                                   |
 | Task steering, pause, resume, cancel              | Implemented     | Follow-up instructions interrupt safely and re-enter shared start policy                                                                                                                     |
 | File-action approval modes                        | Implemented     | Manual, Auto, and Skip with deletion always gated                                                                                                                                            |
@@ -477,18 +507,19 @@ Important limitations:
 | CSV/TSV analysis                                  | Implemented     | Deterministic bounded schema, quality, categorical, and numeric summaries; no formula engine or chart authoring                                                                              |
 | Static artifacts                                  | Partial         | Text and safely extracted PDF/DOCX/XLSX/PPTX content are previewed in-app and files can be revealed in the OS; no visual document render, interactive live artifact, or version restore      |
 | Local scheduled tasks                             | Partial         | Durable local cadences and run-now; requires the app to remain available and is not a cloud scheduler                                                                                        |
-| Project memory                                    | Partial         | Up to five recent completed-task summaries; no semantic memory, global memory, or cross-device sync                                                                                          |
+| Project memory                                    | Partial         | Same-task history survives sessions with bounded model handoff; up to five completed-task summaries support other tasks; no semantic/global memory or cross-device sync                      |
 | Instruction-only project skills                   | Partial         | Strict discovery and explicit enablement; no scripts, packaged resources, automatic skill marketplace, or cross-surface distribution                                                         |
 | Plugins, commands, and hooks                      | Not implemented | No installable workflow bundle, hook runtime, plugin marketplace, or organization-managed distribution                                                                                       |
 | Remote MCP connector catalog                      | Partial         | Strict descriptor discovery and risk display only                                                                                                                                            |
 | Authenticated MCP execution and connector actions | Not implemented | No OAuth flow, credentials, tool discovery, connector calls, writes, or sends                                                                                                                |
 | Read-only delegated analysis                      | Partial         | Up to three bounded model workstreams; no persistent tool-using sub-agent processes                                                                                                          |
-| Session-first model access                        | Implemented     | Chat selects the marketplace LLM, duration, and one-off funding path; Cowork uses only an exact active P2P session                                                                           |
+| Session-first model access                        | Implemented     | Chat selects the marketplace LLM, duration, and one-off funding path; Workspace uses only an exact active P2P session                                                                        |
+| Cross-session/model task continuity               | Implemented     | Explicit rebind preserves history and provenance, resets consent/protocol state, and sends a bounded verified-first handoff                                                                  |
 | Native/non-native tool-call compatibility         | Implemented     | Standard OpenAI tools first; exact unsupported-tools rejection switches the same session to a strict, locally validated JSON protocol                                                        |
-| Mutation replay protection                        | Implemented     | Durable prepared/result journal, canonical action identities, explicit approval after ambiguity, duplicate-ID rejection, and recovery-before-run ordering                                    |
-| Subscriptions and hosted entitlements             | Not applicable  | No plans, subscriptions, recurring billing, hosted Cowork entitlement, or auto-renewal; access is through user-opened on-chain sessions                                                      |
+| Mutation replay and loop protection               | Implemented     | Durable journal, semantic deduplication across IDs, per-instruction budgets, repeated-write/cycle guards, ambiguous-action approval, and recovery-before-run ordering                        |
+| Subscriptions and hosted entitlements             | Not applicable  | No plans, subscriptions, recurring billing, hosted Workspace entitlement, or auto-renewal; access is through user-opened on-chain sessions                                                   |
 | Vision-model categorization                       | Implemented     | Declared tags or a clearly marked name heuristic                                                                                                                                             |
-| Cowork image or attachment inputs                 | Not implemented | Cowork can extract text from supported project documents but does not send image inputs or arbitrary chat attachments                                                                        |
+| Workspace image or attachment inputs              | Not implemented | Workspace can extract text from supported project documents but does not send image inputs or arbitrary chat attachments                                                                     |
 | Public web research                               | Partial         | Approved one-page HTTPS retrieval with exact-target, DNS, same-origin redirect, and private-address checks; no search engine, automatic citations, signed-in session, or interactive browser |
 | Computer use                                      | Not implemented | No screenshot/click/type automation or per-application permission system                                                                                                                     |
 | Isolated shell, code execution, or VM             | Not implemented | No shell tool and no isolated execution runtime                                                                                                                                              |
@@ -518,7 +549,7 @@ creation. Before release, also manually verify:
 - marketplace-provider data-sharing approval, including a changed, closed, or
   expired exact session;
 - Chat-first model selection, duration selection, stake and one-off Direct Pay
-  opening, then choosing normal Chat or Cowork without any automatic renewal;
+  opening, then choosing normal Chat or Workspace without any automatic renewal;
 - pause/cancel during a model request and restart recovery;
 - schedule creation, pause/resume, run-now, DST behavior, and app restart;
 - extension discovery, invalid manifests, explicit guidance enablement, and the

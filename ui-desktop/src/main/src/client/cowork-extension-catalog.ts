@@ -737,7 +737,7 @@ const discoverConnectors = async (
   try {
     canonicalRoot = await canonicalDirectory(
       userConfigRoot,
-      'Cowork extension configuration folder'
+      'Workspace extension configuration folder'
     )
   } catch (error) {
     issues.push(issueFromError(configSource, error))
@@ -837,7 +837,7 @@ const discoverConnectors = async (
 export const discoverCoworkExtensionCatalog = async (
   input: DiscoverCoworkExtensionCatalogInput
 ): Promise<CoworkExtensionCatalog> => {
-  const projectRoot = await canonicalDirectory(input.projectRoot, 'Cowork project folder')
+  const projectRoot = await canonicalDirectory(input.projectRoot, 'Workspace project folder')
   const issues: CoworkExtensionIssue[] = []
 
   let projectInstructions: CoworkExtensionCatalog['projectInstructions']

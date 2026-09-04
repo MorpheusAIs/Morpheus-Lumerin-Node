@@ -311,7 +311,7 @@ type FilterId =
 const FILTERS: { id: FilterId; label: string; modality?: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'llm', label: 'LLM', modality: 'llm' },
-  { id: 'cowork', label: 'Cowork candidates' },
+  { id: 'cowork', label: 'Workspace candidates' },
   { id: 'vision', label: 'Vision' },
   { id: 'embeddings', label: 'Embeddings', modality: 'embeddings' },
   { id: 'tts', label: 'Text-to-Speech', modality: 'tts' },
@@ -516,9 +516,7 @@ const ModelSelectionModal = ({
         <Header>
           <TitleRow>
             <Title>
-              {coworkSetup
-                ? 'Choose a text model to try with Cowork'
-                : 'New chat'}
+              {coworkSetup ? 'Choose a text model for Workspace' : 'New chat'}
             </Title>
             {/* Only surface the counter when filtering/search actually hides
                 models — otherwise "N of N" is noise. */}
@@ -569,12 +567,12 @@ const ModelSelectionModal = ({
                   aria-pressed={active}
                   aria-label={
                     f.id === 'cowork'
-                      ? `Show Cowork candidate models (${count})`
+                      ? `Show Workspace candidate models (${count})`
                       : `Show ${f.label} models (${count})`
                   }
                   title={
                     f.id === 'cowork'
-                      ? 'Marketplace text/chat models that can be tried with Cowork. Provider tool support is not published and is checked only after a session opens.'
+                      ? 'Marketplace text/chat models that can be tried with Workspace. Provider tool support is not published and is checked only after a session opens.'
                       : undefined
                   }
                 >
@@ -592,7 +590,7 @@ const ModelSelectionModal = ({
               <IconInfoCircle size={15} stroke={2} aria-hidden="true" />
               <span>
                 Candidates are not verified. Providers do not publish tool
-                support; Cowork checks it after a session opens and uses
+                support; Workspace checks it after a session opens and uses
                 compatibility mode when possible.
               </span>
             </CoworkCandidateHint>
@@ -614,7 +612,7 @@ const ModelSelectionModal = ({
                 {search.trim()
                   ? 'No models match your search.'
                   : filter === 'cowork'
-                    ? 'No marketplace text/chat models are available to try with Cowork.'
+                    ? 'No marketplace text/chat models are available to try with Workspace.'
                     : 'No models available for this filter.'}
               </div>
             </EmptyState>

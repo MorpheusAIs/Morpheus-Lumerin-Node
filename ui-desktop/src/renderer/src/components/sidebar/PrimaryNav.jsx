@@ -100,12 +100,12 @@ export default function PrimaryNav({ parent, activeIndex, setActiveIndex }) {
         </Label>
       </Button>
 
-      <Button onClick={() => setActiveIndex(2)} to="/cowork">
+      <Button onClick={() => setActiveIndex(2)} to="/workspace">
         <IconWrapper>
           <IconSparkles width={iconSize} />
         </IconWrapper>
         <Label active={activeIndex === 2} parent={parent}>
-          Cowork
+          Workspace
         </Label>
       </Button>
 

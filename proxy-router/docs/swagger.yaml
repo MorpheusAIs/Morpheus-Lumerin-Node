@@ -2967,6 +2967,15 @@ paths:
         in: header
         name: chat_id
         type: string
+      - description: Request-local chat history mode. 'off' disables storing and forwarding
+          context for this request; 'on' and 'default' preserve the server policy.
+        enum:
+        - default
+        - "on"
+        - "off"
+        in: header
+        name: x-morpheus-history
+        type: string
       - description: Prompt
         in: body
         name: prompt

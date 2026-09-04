@@ -18,7 +18,7 @@ export async function loadForStableCoworkWallet<T>(
   const currentWallet = normalizeCoworkWalletAddress(await readActiveWalletAddress())
   if (!expectedWallet || currentWallet !== expectedWallet) {
     throw new Error(
-      'The active wallet changed while Cowork sessions were loading. Refresh and try again.'
+      'The active wallet changed while Workspace sessions were loading. Refresh and try again.'
     )
   }
   return value

@@ -790,7 +790,7 @@ async function buildDocx(request: ProfessionalDocxRequest): Promise<Buffer> {
   children.push(...wordBlocks(request.blocks, accent))
   const document = new Document({
     title: request.title,
-    subject: 'Morpheus Cowork artifact',
+    subject: 'Morpheus Workspace artifact',
     creator: 'Morpheus',
     lastModifiedBy: 'Morpheus',
     styles: {
@@ -956,7 +956,7 @@ async function buildPptx(request: ProfessionalPptxRequest): Promise<Buffer> {
   presentation.layout = 'LAYOUT_WIDE'
   presentation.author = 'Morpheus'
   presentation.company = 'Morpheus'
-  presentation.subject = 'Morpheus Cowork artifact'
+  presentation.subject = 'Morpheus Workspace artifact'
   presentation.title = request.title
   presentation.theme = {
     headFontFace: 'Arial',
@@ -1365,9 +1365,9 @@ async function buildPdf(request: ProfessionalPdfRequest): Promise<Buffer> {
 
   document.setTitle(request.title, { showInWindowTitleBar: true })
   document.setAuthor('Morpheus')
-  document.setCreator('Morpheus Cowork')
-  document.setProducer('Morpheus Cowork')
-  document.setSubject('Morpheus Cowork artifact')
+  document.setCreator('Morpheus Workspace')
+  document.setProducer('Morpheus Workspace')
+  document.setSubject('Morpheus Workspace artifact')
   document.setCreationDate(new Date(0))
   document.setModificationDate(new Date(0))
 

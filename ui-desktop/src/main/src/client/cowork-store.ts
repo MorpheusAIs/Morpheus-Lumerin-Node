@@ -4,6 +4,12 @@ import os from 'node:os'
 import path from 'node:path'
 import { coworkCollection } from './cowork-database'
 import { executionMatchesToolCall } from './cowork-mutation-journal'
+import { createCoworkLoopGuardState } from './cowork-loop-guard'
+import {
+  deleteCoworkMessages,
+  listCoworkMessages,
+  persistCoworkMessages
+} from './cowork-message-store'
 import {
   CoworkActivity,
   CoworkAgentMessage,
@@ -22,7 +28,8 @@ import {
 const projects = () => coworkCollection('projects')
 const tasks = () => coworkCollection('tasks')
 const MAX_TASKS_PER_PROJECT = 500
-const MAX_DISPLAY_HISTORY_BYTES = 4 * 1024 * 1024
+const MAX_DISPLAY_HISTORY_BYTES = 2 * 1024 * 1024
+const MAX_RECENT_DISPLAY_MESSAGES = 100
 const MAX_AGENT_HISTORY_BYTES = 12 * 1024 * 1024
 const LARGE_ARGUMENT_TOOLS = new Set([
   'write_file',
@@ -34,6 +41,64 @@ const LARGE_ARGUMENT_TOOLS = new Set([
 
 const clean = <T>(value: T): T => JSON.parse(JSON.stringify(value))
 const historyByteSizes = new WeakMap<unknown[], number>()
+const taskMutationTails = new Map<string, Promise<void>>()
+
+async function withTaskMutationLock<T>(taskId: string, operation: () => Promise<T>): Promise<T> {
+  const previous = taskMutationTails.get(taskId) ?? Promise.resolve()
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const tail = previous.catch(() => undefined).then(() => gate)
+  taskMutationTails.set(taskId, tail)
+  await previous.catch(() => undefined)
+  try {
+    return await operation()
+  } finally {
+    release()
+    if (taskMutationTails.get(taskId) === tail) taskMutationTails.delete(taskId)
+  }
+}
+
+async function persistTaskDisplayMessages(task: CoworkTask): Promise<void> {
+  const pending =
+    task.messagesPersistedThrough === undefined
+      ? task.messages
+      : task.messages.filter(
+          (message) =>
+            message.sequence === undefined || message.sequence > task.messagesPersistedThrough!
+        )
+  if (pending.length) {
+    const persisted = await persistCoworkMessages(task.id, pending)
+    const sequenceById = new Map(persisted.map((message) => [message.id, message.sequence]))
+    for (const message of task.messages) {
+      const sequence = sequenceById.get(message.id)
+      if (sequence !== undefined) message.sequence = sequence
+    }
+  }
+  task.messagesPersistedThrough = task.messages.reduce(
+    (highest, message) => Math.max(highest, message.sequence ?? 0),
+    task.messagesPersistedThrough ?? 0
+  )
+}
+
+function hasUnpersistedDisplayMessages(task: CoworkTask): boolean {
+  if (task.messagesPersistedThrough === undefined) return task.messages.length > 0
+  return task.messages.some(
+    (message) => message.sequence === undefined || message.sequence > task.messagesPersistedThrough!
+  )
+}
+
+function trimRecentDisplayMessages(task: CoworkTask): void {
+  while (
+    task.messages.length > 1 &&
+    (task.messages.length > MAX_RECENT_DISPLAY_MESSAGES ||
+      historyBytes(task.messages) > MAX_DISPLAY_HISTORY_BYTES)
+  ) {
+    removeHistoryPrefix(task.messages, 1)
+  }
+  task.hasEarlierMessages = Boolean((task.messages[0]?.sequence ?? 1) > 1)
+}
 
 function historyBytes(items: unknown[]): number {
   const cached = historyByteSizes.get(items)
@@ -117,7 +182,7 @@ export const updateProject = async (
   >
 ): Promise<CoworkProject> => {
   const current = await getProject(id)
-  if (!current) throw new Error('Cowork project not found.')
+  if (!current) throw new Error('Workspace project not found.')
   if (patch.name !== undefined && !patch.name.trim()) throw new Error('Project name is required.')
   if (
     patch.approvalMode !== undefined &&
@@ -187,7 +252,7 @@ export const createTask = async (input: {
 }): Promise<CoworkTask> => {
   if (!input.goal.trim()) throw new Error('Describe the outcome you want.')
   const project = await getProject(input.projectId)
-  if (!project || project.archivedAt) throw new Error('Cowork project not found.')
+  if (!project || project.archivedAt) throw new Error('Workspace project not found.')
   if ((await tasks().countAsync({ projectId: input.projectId })) >= MAX_TASKS_PER_PROJECT) {
     throw new Error(
       `This project has reached the ${MAX_TASKS_PER_PROJECT}-task history limit. Delete old tasks before creating another.`
@@ -198,7 +263,8 @@ export const createTask = async (input: {
     id: randomUUID(),
     role: 'user',
     content: input.goal.trim(),
-    createdAt: now
+    createdAt: now,
+    sequence: 1
   }
   const task: CoworkTask = {
     schemaVersion: 1,
@@ -209,22 +275,48 @@ export const createTask = async (input: {
     goal: input.goal.trim(),
     status: 'queued',
     model: clean(input.model),
+    modelBindings: [{ ...clean(input.model), boundAt: now }],
+    modelContextStart: 0,
     plan: [],
     messages: [userMessage],
     agentMessages: [{ role: 'user', content: input.goal.trim() }],
     activities: [],
     artifacts: [],
+    runSafety: {
+      id: randomUUID(),
+      startedAt: now,
+      modelSteps: 0,
+      mutations: 0,
+      loopGuard: createCoworkLoopGuardState()
+    },
     createdAt: now,
     updatedAt: now
   }
   await tasks().insertAsync(task)
+  try {
+    await persistTaskDisplayMessages(task)
+    await tasks().updateAsync(
+      { id: task.id },
+      {
+        $set: {
+          messages: clean(task.messages),
+          messagesPersistedThrough: task.messagesPersistedThrough,
+          hasEarlierMessages: false
+        }
+      },
+      {}
+    )
+  } catch (error) {
+    await deleteTask(task.id)
+    throw error
+  }
   // Project archival and task creation can arrive on separate IPC calls. A
   // second check closes the window where creation read an active project just
   // before archival was persisted.
   const stillActive = await getProject(input.projectId)
   if (!stillActive || stillActive.archivedAt) {
-    await tasks().removeAsync({ id: task.id }, {})
-    throw new Error('This Cowork project is archived.')
+    await deleteTask(task.id)
+    throw new Error('This Workspace project is archived.')
   }
   await projects().updateAsync({ id: input.projectId }, { $set: { updatedAt: now } }, {})
   return clean(task)
@@ -235,6 +327,11 @@ export const listTasks = async (projectId?: string): Promise<CoworkTask[]> => {
   const result = (await tasks().findAsync(query)) as CoworkTask[]
   return clean(result.sort((a, b) => b.updatedAt - a.updatedAt))
 }
+
+export const listTaskMessages = (
+  taskId: string,
+  options: { beforeSequence?: number; limit?: number } = {}
+) => listCoworkMessages(taskId, options)
 
 /** Lightweight rail/list query; full model history is loaded only for an opened task. */
 export const listTaskSummaries = async (projectId?: string): Promise<CoworkTaskSummary[]> => {
@@ -284,25 +381,75 @@ export const listRecentCompletedTaskMemories = async (
   return clean(result)
 }
 
-export const getTask = async (id: string): Promise<CoworkTask | null> => {
+async function getTaskUnlocked(id: string): Promise<CoworkTask | null> {
   const result = (await tasks().findOneAsync({ id })) as CoworkTask | null
-  return result ? clean(result) : null
+  if (!result) return null
+  const task = clean(result)
+  if (hasUnpersistedDisplayMessages(task)) {
+    await persistTaskDisplayMessages(task)
+    trimRecentDisplayMessages(task)
+    const updated = await tasks().updateAsync(
+      { id, revision: task.revision },
+      {
+        $set: {
+          messages: clean(task.messages),
+          messagesPersistedThrough: task.messagesPersistedThrough,
+          hasEarlierMessages: task.hasEarlierMessages
+        }
+      },
+      {}
+    )
+    if (updated !== 1) return getTaskUnlocked(id)
+  } else {
+    trimRecentDisplayMessages(task)
+  }
+  return clean(task)
 }
 
-export const replaceTask = async (task: CoworkTask): Promise<CoworkTask> => {
-  const expectedRevision = task.revision ?? 0
-  const next = clean({ ...task, updatedAt: Date.now(), revision: expectedRevision + 1 })
-  const replaced = await tasks().updateAsync({ id: task.id, revision: expectedRevision }, next, {})
-  if (replaced !== 1) {
-    throw new Error('This Cowork task changed in another operation. Refresh it and try again.')
-  }
-  // Keep the runner's existing history-array identities so their incremental
-  // byte counters survive frequent saves. The persisted document is still a
-  // detached JSON-safe clone.
-  task.updatedAt = next.updatedAt
-  task.revision = next.revision
-  return clean(next)
-}
+export const getTask = (id: string): Promise<CoworkTask | null> =>
+  withTaskMutationLock(id, () => getTaskUnlocked(id))
+
+export const replaceTask = (task: CoworkTask): Promise<CoworkTask> =>
+  withTaskMutationLock(task.id, async () => {
+    const expectedRevision = task.revision ?? 0
+    const next = clean({ ...task, updatedAt: Date.now(), revision: expectedRevision + 1 })
+
+    // Commit the authoritative task revision before copying its display messages
+    // into the append-only transcript. A stale writer that loses this CAS can no
+    // longer leave renderer-visible "ghost" messages behind.
+    const replaced = await tasks().updateAsync(
+      { id: task.id, revision: expectedRevision },
+      next,
+      {}
+    )
+    if (replaced !== 1) {
+      throw new Error('This Workspace task changed in another operation. Refresh it and try again.')
+    }
+
+    // Advance the live object immediately. If transcript persistence is
+    // interrupted, getTask sees messages beyond messagesPersistedThrough in the
+    // accepted task revision and idempotently finishes the copy on the next read.
+    task.updatedAt = next.updatedAt
+    task.revision = next.revision
+    await persistTaskDisplayMessages(task)
+    trimRecentDisplayMessages(task)
+
+    const transcriptState = {
+      messages: clean(task.messages),
+      messagesPersistedThrough: task.messagesPersistedThrough,
+      hasEarlierMessages: task.hasEarlierMessages
+    }
+    // This projection-only finalization does not advance the revision. If
+    // another process already advanced it, that accepted task remains the
+    // authority and can finish its own idempotent transcript copy.
+    await tasks().updateAsync(
+      { id: task.id, revision: next.revision },
+      { $set: transcriptState },
+      {}
+    )
+
+    return clean({ ...next, ...transcriptState })
+  })
 
 export const setTaskStatus = async (
   id: string,
@@ -310,27 +457,29 @@ export const setTaskStatus = async (
   extra: Partial<CoworkTask> = {}
 ): Promise<CoworkTask> => {
   const task = await getTask(id)
-  if (!task) throw new Error('Cowork task not found.')
+  if (!task) throw new Error('Workspace task not found.')
   return replaceTask({ ...task, ...extra, status })
 }
 
 export const appendDisplayMessage = (
   task: CoworkTask,
   role: CoworkDisplayMessage['role'],
-  content: string
+  content: string,
+  author?: CoworkDisplayMessage['author']
 ): void => {
+  const sequence =
+    task.messages.reduce(
+      (highest, message, index) => Math.max(highest, message.sequence ?? index + 1),
+      0
+    ) + 1
   appendHistoryItem(task.messages, {
     id: randomUUID(),
     role,
     content: content.slice(0, 200_000),
-    createdAt: Date.now()
+    createdAt: Date.now(),
+    sequence,
+    ...(author ? { author: clean(author) } : {})
   })
-  while (
-    task.messages.length > 1 &&
-    (task.messages.length > 500 || historyBytes(task.messages) > MAX_DISPLAY_HISTORY_BYTES)
-  ) {
-    removeHistoryPrefix(task.messages, 1)
-  }
 }
 
 export const appendAgentMessage = (task: CoworkTask, message: CoworkAgentMessage): void => {
@@ -348,6 +497,13 @@ export const appendAgentMessage = (task: CoworkTask, message: CoworkAgentMessage
       throw new Error(
         'This task reached its 12 MB model-history limit. Start a new task to continue safely.'
       )
+    }
+    if (task.modelContextStart !== undefined) {
+      // modelContextStart is an index into this exact array. Keep the current
+      // binding boundary attached to the same message when an old prefix is
+      // discarded, especially when the handoff user message itself triggers
+      // the bounded-history trim.
+      task.modelContextStart = Math.max(0, task.modelContextStart - boundary)
     }
     removeHistoryPrefix(task.agentMessages, boundary)
   }
@@ -403,7 +559,7 @@ export function reconcileInterruptedToolCalls(task: CoworkTask): {
       ok: false,
       error:
         `A previous ${execution.toolName.replaceAll('_', ' ')} action was interrupted after it was prepared. ` +
-        'Cowork did not repeat it because its outcome may be ambiguous. Inspect the connected project before issuing a new instruction.'
+        'Workspace did not repeat it because its outcome may be ambiguous. Inspect the connected project before issuing a new instruction.'
     })
   }
 
@@ -437,14 +593,14 @@ export function reconcileInterruptedToolCalls(task: CoworkTask): {
           ? JSON.stringify({
               ok: false,
               error:
-                'Cowork blocked a reused tool call ID whose action name or arguments had changed. No file action ran.'
+                'Workspace blocked a reused tool call ID whose action name or arguments had changed. No file action ran.'
             })
           : (execution?.resultMessage ??
             JSON.stringify({
               ok: false,
               error:
                 `The app stopped before the ${call.function.name.replaceAll('_', ' ')} action returned a durable result. ` +
-                'Cowork did not replay it automatically.'
+                'Workspace did not replay it automatically.'
             }))
     })
     scrubCoworkToolArguments(task, call)
@@ -474,9 +630,13 @@ export const setPlan = (task: CoworkTask, plan: CoworkPlanStep[]): void => {
   task.plan = clean(plan)
 }
 
-export const deleteTask = async (id: string): Promise<void> => {
-  await tasks().removeAsync({ id }, {})
-}
+export const deleteTask = (id: string): Promise<void> =>
+  withTaskMutationLock(id, async () => {
+    // Delete sensitive transcript rows first. If either datastore operation
+    // fails, a retryable task record is preferable to unreachable orphaned data.
+    await deleteCoworkMessages(id)
+    await tasks().removeAsync({ id }, {})
+  })
 
 /**
  * A desktop process can exit while a model request or file operation is in
@@ -501,7 +661,7 @@ export const recoverInterruptedTasks = async (): Promise<number> => {
     delete task.pendingApproval
     task.error = ambiguousMutations
       ? `The app closed while ${ambiguousMutations} file action${ambiguousMutations === 1 ? ' was' : 's were'} in progress. ` +
-        'Cowork did not repeat potentially ambiguous actions. Inspect the connected project before resuming.'
+        'Workspace did not repeat potentially ambiguous actions. Inspect the connected project before resuming.'
       : 'The app closed while this task was running. Review its activity, then resume when ready.'
     appendActivity(task, {
       type: 'system',
