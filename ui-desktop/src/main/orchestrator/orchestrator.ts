@@ -309,10 +309,11 @@ export class Orchestrator {
         redirectProcessOutput: false,
         probe: this.cfg.proxyRouter.probe,
         ports: this.cfg.proxyRouter.ports,
-        // We own this binary, so keep it manageable even if an instance is
-        // already listening — otherwise a leftover process permanently
-        // disables restart for this service.
+        // Keep the proxy managed, but never trust a listener the app did not
+        // spawn. The proxy receives wallet credentials after startup, so a
+        // health response alone is not sufficient proof of ownership.
         reclaimIfDetected: true,
+        adoptIfDetected: false,
         onStateChange: () => this.emitStateUpdate()
       })
     }
@@ -331,6 +332,7 @@ export class Orchestrator {
         // already listening — otherwise a leftover process permanently
         // disables restart for this service.
         reclaimIfDetected: true,
+        adoptIfDetected: true,
         onStateChange: () => this.emitStateUpdate()
       })
     }
@@ -349,6 +351,7 @@ export class Orchestrator {
         // already listening — otherwise a leftover process permanently
         // disables restart for this service.
         reclaimIfDetected: true,
+        adoptIfDetected: true,
         onStateChange: () => this.emitStateUpdate()
       })
     }

@@ -2,6 +2,7 @@ import { LogFunctions } from 'electron-log'
 import { Pinger, Process, ProcessState, StateInfo } from './process'
 import { ChildProcess } from 'node:child_process'
 import { spawn } from 'child_process'
+import { randomUUID } from 'node:crypto'
 import net from 'node:net'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -14,7 +15,15 @@ export type ManagedProcessParams = {
   onStateChange?: (stateInfo: StateInfo) => void
   pinger?: Pinger
   ports?: number[]
+  /**
+   * Whether a healthy listener that the app did not spawn may be treated as
+   * this service. Disable this for services that receive wallet credentials.
+   */
+  adoptIfDetected?: boolean
 }
+
+export const MANAGED_PROCESS_IDENTITY_ENV = 'MORPHEUS_DESKTOP_INSTANCE_TOKEN'
+export const MANAGED_PROCESS_IDENTITY_HEADER = 'x-morpheus-instance-token'
 
 export class ManagedProcess implements Process {
   private static readonly MAX_OUTPUT_LINES = 10
@@ -30,6 +39,8 @@ export class ManagedProcess implements Process {
   private onStateChange?: (stateInfo: StateInfo) => void
   private ports?: number[]
   private pinger?: Pinger
+  private adoptIfDetected: boolean
+  private processIdentity?: string
   /**
    * True when we're tracking an instance we did not spawn (adopted because it
    * was already listening and healthy). We have no child handle for it, so
@@ -45,6 +56,7 @@ export class ManagedProcess implements Process {
     this.onStateChange = params.onStateChange
     this.pinger = params.pinger
     this.ports = params.ports
+    this.adoptIfDetected = params.adoptIfDetected ?? false
   }
 
   async start(): Promise<void> {
@@ -66,9 +78,8 @@ export class ManagedProcess implements Process {
         // causes and the old code conflated them into one opaque
         // "Port X is not available":
         //
-        //   1. A healthy instance of *this* service is already listening —
-        //      typically one we spawned and lost the handle to, or one left
-        //      over from a previous run. Adopt it instead of failing.
+        //   1. A healthy service is already listening. It may be adopted only
+        //      when the caller explicitly allows trusting an unowned listener.
         //   2. Something else owns the port. Say so, with the port number, so
         //      the user has a chance of acting on it.
         if (this.ports) {
@@ -80,6 +91,14 @@ export class ManagedProcess implements Process {
           }
 
           if (busyPorts.length) {
+            if (!this.adoptIfDetected) {
+              throw new Error(
+                `Port ${busyPorts.join(', ')} is already serving a process, but the app ` +
+                  `cannot verify that it owns that process. Close it, then restart this ` +
+                  `service from Settings.`
+              )
+            }
+
             const healthy = await this.isHealthy()
             if (healthy) {
               this.log.info(
@@ -113,7 +132,19 @@ export class ManagedProcess implements Process {
           await fs.chmod(this.command, 0o755) // rwxr-xr-x
         }
 
-        const child = spawn(this.command, this.args, { stdio: 'pipe', cwd })
+        this.rotateProcessIdentity()
+
+        const childEnvironment = this.processIdentity
+          ? ({
+              ...process.env,
+              [MANAGED_PROCESS_IDENTITY_ENV]: this.processIdentity
+            } as unknown as NodeJS.ProcessEnv)
+          : undefined
+        const child = spawn(this.command, this.args, {
+          stdio: 'pipe',
+          cwd,
+          env: childEnvironment
+        })
         this.process = child
 
         // log the stdout and stderr
@@ -273,6 +304,8 @@ export class ManagedProcess implements Process {
   }
 
   async ping(timeoutArg?: number) {
+    this.assertOwnedChildIsRunning()
+
     if (this.pinger) {
       try {
         await this.pinger.ping(timeoutArg)
@@ -283,9 +316,49 @@ export class ManagedProcess implements Process {
       }
     }
 
+    // The child may have exited while the asynchronous probe was in flight.
+    this.assertOwnedChildIsRunning()
+
     if (this.state !== 'running') {
       this.setState('running')
     }
+  }
+
+  private assertOwnedChildIsRunning() {
+    if (this.adoptIfDetected) {
+      return
+    }
+
+    const childIsRunning =
+      this.process?.pid !== undefined &&
+      this.process.exitCode === null &&
+      this.process.signalCode === null &&
+      !this.process.killed
+    if (!childIsRunning) {
+      const message =
+        'Cannot trust this health response because no app-owned service process is running. ' +
+        'Start the service from Settings first.'
+      this.setState('stopped', message)
+      throw new Error(message)
+    }
+  }
+
+  private rotateProcessIdentity() {
+    if (this.adoptIfDetected) {
+      this.processIdentity = undefined
+      this.pinger?.setExpectedHeader?.(undefined)
+      return
+    }
+
+    if (!this.pinger?.setExpectedHeader) {
+      throw new Error('The service health check cannot verify process ownership')
+    }
+
+    this.processIdentity = randomUUID()
+    this.pinger.setExpectedHeader({
+      name: MANAGED_PROCESS_IDENTITY_HEADER,
+      value: this.processIdentity
+    })
   }
 
   private setState(newState?: ProcessState, error?: string | null) {
