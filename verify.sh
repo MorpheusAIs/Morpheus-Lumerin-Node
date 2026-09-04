@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 #
-# One-shot verification for the fix/ux-stability branch.
+# One-shot repository verification.
 #
 #   ./verify.sh
 #
-# Runs everything that could not be run in the environment where these changes
-# were written: the Go compiler, the Go test suite, a TypeScript typecheck, and
-# a full Electron build. Stops at the first failure and tells you what broke.
+# Runs the Go compiler and test suite, the desktop unit tests and TypeScript
+# typecheck, and a full Electron build. It runs every check it can and reports
+# all failures at the end.
 #
-# Nothing here modifies your working tree apart from installing dependencies
-# and producing build output.
+# It may create ui-desktop/.env from the checked-in example, install
+# dependencies, and produce ignored build output.
 
 set -uo pipefail
 
@@ -26,9 +26,13 @@ step() {
   printf '\n%s[%d/9] %s%s\n' "$BOLD" "$STEP" "$1" "$RESET"
 }
 
-run() {
+# Keep result accounting in this shell. Calling a helper from `( cd ... )`
+# loses updates to FAILED when that subshell exits and can falsely report that
+# all checks passed.
+run_in() {
+  local directory="$1"; shift
   local label="$1"; shift
-  if "$@"; then
+  if ( cd "$directory" && "$@" ); then
     printf '%s  ✓ %s%s\n' "$GREEN" "$label" "$RESET"
     return 0
   else
@@ -47,7 +51,7 @@ require() {
   printf '%s  %s %s%s\n' "$DIM" "$1" "$($2 2>&1 | head -1)" "$RESET"
 }
 
-printf '%sVerifying fix/ux-stability%s\n' "$BOLD" "$RESET"
+printf '%sVerifying repository%s\n' "$BOLD" "$RESET"
 printf '%son %s%s\n' "$DIM" "$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'unknown branch')" "$RESET"
 
 step "Checking toolchain"
@@ -66,19 +70,14 @@ if [ ${#FAILED[@]} -gt 0 ]; then
 fi
 
 # ---------------------------------------------------------------- proxy-router
-# This is the highest-risk part of the branch: it was never compiled while the
-# changes were being written.
-step "Building proxy-router (never compiled during development)"
-( cd proxy-router && run "go build ./..." go build ./... )
+step "Building proxy-router"
+run_in proxy-router "go build ./..." go build ./...
 
 step "Vetting proxy-router"
-( cd proxy-router && run "go vet ./..." go vet ./... )
+run_in proxy-router "go vet ./..." go vet ./...
 
 step "Running proxy-router tests"
-printf '%s  Note: these 61 test files have not run in CI for a long time.%s\n' "$YELLOW" "$RESET"
-printf '%s  If something fails, check whether it also fails on main before%s\n' "$YELLOW" "$RESET"
-printf '%s  assuming it is a new regression: git stash && git checkout main%s\n' "$YELLOW" "$RESET"
-( cd proxy-router && run "go test ./..." go test ./... )
+run_in proxy-router "go test ./..." go test ./...
 
 # ------------------------------------------------------------------ ui-desktop
 step "Checking ui-desktop/.env"
@@ -95,22 +94,35 @@ else
 fi
 
 step "Installing ui-desktop dependencies"
-printf '%s  This also regenerates yarn.lock with the new test dependencies.%s\n' "$DIM" "$RESET"
-( cd ui-desktop && run "yarn install" yarn install --network-timeout 600000 )
+run_in ui-desktop "yarn install" yarn install --network-timeout 600000
 
 step "Running ui-desktop unit tests"
-( cd ui-desktop && run "yarn test (expect 65 passing)" yarn test )
+run_in ui-desktop "yarn test" yarn test
 
 step "Typechecking ui-desktop"
-( cd ui-desktop && run "yarn typecheck" yarn typecheck )
+run_in ui-desktop "yarn typecheck" yarn typecheck
 
 step "Building the desktop app"
 case "$(uname -s)" in
-  Darwin) BUILD_TARGET="build:mac" ;;
-  Linux)  BUILD_TARGET="build:linux" ;;
-  *)      BUILD_TARGET="build" ;;
+  Darwin)
+    # Avoid colliding with a mounted release DMG and force the packaged app to
+    # carry the proxy-router produced from this checkout.
+    VERIFY_DMG_TITLE='MorpheusUI Verify ${version}-${arch}-'"$$"
+    run_in ui-desktop "electron-vite build" yarn electron-vite build
+    run_in ui-desktop "unsigned macOS package with current proxy-router" env \
+      FORCE_BUNDLED_PROXY_ROUTER=1 \
+      yarn electron-builder \
+      --config electron.builder.config.ts \
+      --mac \
+      "--config.dmg.title=$VERIFY_DMG_TITLE"
+    ;;
+  Linux)
+    run_in ui-desktop "yarn build:linux" yarn build:linux
+    ;;
+  *)
+    run_in ui-desktop "yarn build" yarn build
+    ;;
 esac
-( cd ui-desktop && run "yarn $BUILD_TARGET" yarn "$BUILD_TARGET" )
 
 # ---------------------------------------------------------------------- report
 printf '\n%s────────────────────────────────────────%s\n' "$BOLD" "$RESET"
@@ -121,11 +133,11 @@ Run the app:
 
     cd ui-desktop && yarn dev
 
-  First launch downloads the proxy-router, a llama.cpp + tinyllama demo model
-  and an IPFS node into your app-data directory, so give it a few minutes and
-  watch the startup progress. Subsequent launches are fast.
+  First launch prepares the proxy-router and downloads optional legacy demo
+  assets into your app-data directory, so give it a few minutes and watch the
+  startup progress. Subsequent launches are faster.
 
-Now smoke-test the three reported symptoms by hand:
+Now smoke-test the main workflows by hand:
 
   1. Unresponsive UI
      Click rapidly between Wallet / Chat / Models / Providers / Agents for
@@ -139,15 +151,25 @@ Now smoke-test the three reported symptoms by hand:
      Open Providers and Models with a populated account. They should render
      in seconds, not minutes.
 
-  Plus the new feature:
+  4. Token transfer
      Wallet tab -> "Send" tile. Try an invalid address and an over-balance
      amount first; both should be rejected before any gas is spent.
 
-  And the error handling:
+  5. Connection errors
      Quit the proxy-router (Settings -> stop) and reload the Wallet tab. You
      should see "Not connected to your node", NOT a balance of 0.
 
-If everything holds up:  git push -u origin fix/ux-stability
+  6. Session-gated Chat and Cowork
+     Choose a marketplace model, select a duration, and explicitly open a
+     session with MOR stake or one-off Direct Pay. Verify that exact active
+     session works in both normal Chat and Cowork, while a closed or expired
+     session does not. Cowork and schedules must never open, fund, renew,
+     extend, or substitute a session automatically.
+
+  7. Desktop hardening
+     Confirm DevTools stays closed by default. Cancel wallet reset, session,
+     provider-claim, and agent-permission confirmations once each and verify
+     that no underlying action occurs.
 NEXT
   exit 0
 else
