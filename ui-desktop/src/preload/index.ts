@@ -69,6 +69,7 @@ const legacyIpcChannels = new Set([
   'set-auto-adjust-price',
   'get-contract-hashrate',
   'get-all-models',
+  'get-models-page',
   'get-providers',
   'get-local-models',
   'get-node-config',

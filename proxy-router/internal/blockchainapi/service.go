@@ -99,6 +99,7 @@ type BlockchainService struct {
 	cachedSupplyAt   time.Time
 	cachedBudget     *big.Int
 	cachedBudgetAt   time.Time
+	allModelsCache   modelListCache
 	sessionOpenLocks keyedLockSet
 
 	legacyTx    bool
@@ -242,12 +243,14 @@ func (s *BlockchainService) GetProvider(ctx context.Context, providerAddr common
 }
 
 func (s *BlockchainService) GetAllModels(ctx context.Context) ([]*structs.Model, error) {
-	ids, models, err := s.modelRegistry.GetAllModels(ctx)
-	if err != nil {
-		return nil, err
-	}
+	return s.allModelsCache.get(ctx, func(fetchCtx context.Context) ([]*structs.Model, error) {
+		ids, models, err := s.modelRegistry.GetAllModels(fetchCtx)
+		if err != nil {
+			return nil, err
+		}
 
-	return mapModels(ids, models), nil
+		return mapModels(ids, models), nil
+	})
 }
 
 func (s *BlockchainService) GetModels(ctx context.Context, offset *big.Int, limit uint8, order r.Order) ([]*structs.Model, error) {
@@ -607,6 +610,7 @@ func (s *BlockchainService) CreateNewModel(ctx context.Context, modelID common.H
 	if err != nil {
 		return nil, lib.WrapError(ErrSendTx, err)
 	}
+	s.allModelsCache.invalidate()
 
 	ID, err := s.modelRegistry.GetModelId(ctx, transactOpt.From, modelID)
 	if err != nil {
@@ -649,6 +653,7 @@ func (s *BlockchainService) DeregisterModel(ctx context.Context, modelId common.
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrSendTx, err)
 	}
+	s.allModelsCache.invalidate()
 
 	return tx, nil
 }

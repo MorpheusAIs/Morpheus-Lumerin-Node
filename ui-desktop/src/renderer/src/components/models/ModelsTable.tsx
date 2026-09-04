@@ -202,6 +202,34 @@ const Container = styled.div`
   }
 `;
 
+const ResultsFooter = styled.div`
+  align-items: center;
+  color: rgba(255, 255, 255, 0.7);
+  display: flex;
+  flex-basis: 100%;
+  flex-direction: column;
+  gap: 0.8rem;
+  justify-content: center;
+  padding: 1.6rem 0 2.4rem;
+`;
+
+const LoadMoreButton = styled.button`
+  background: rgba(33, 220, 143, 0.12);
+  border: 1px solid rgba(33, 220, 143, 0.55);
+  border-radius: 8px;
+  color: #21dc8f;
+  cursor: pointer;
+  font: inherit;
+  min-height: 4rem;
+  padding: 0.8rem 1.6rem;
+
+  &:hover,
+  &:focus-visible {
+    background: rgba(33, 220, 143, 0.2);
+    outline: none;
+  }
+`;
+
 // New styled component for progress bar container
 const DownloadProgressContainer = styled.div`
   position: absolute;
@@ -630,6 +658,10 @@ function ModelCard({
 function ModelsTable({
   setSelectedModel,
   models,
+  isLoading,
+  hasMore,
+  isFetchingMore,
+  onLoadMore,
   client,
   openSelectDownloadFolder,
   toasts,
@@ -641,17 +673,31 @@ function ModelsTable({
   return (
     <Container>
       {models.length ? (
-        models.map((x) => (
-          <div key={x.Id}>
-            <ModelCard
-              onSelect={onSelect}
-              model={x}
-              openSelectDownloadFolder={openSelectDownloadFolder}
-              toasts={toasts}
-              client={client}
-            />
-          </div>
-        ))
+        <>
+          {models.map((x) => (
+            <div key={x.Id}>
+              <ModelCard
+                onSelect={onSelect}
+                model={x}
+                openSelectDownloadFolder={openSelectDownloadFolder}
+                toasts={toasts}
+                client={client}
+              />
+            </div>
+          ))}
+          <ResultsFooter aria-live="polite">
+            <span>{models.length} models loaded</span>
+            {hasMore && (
+              <LoadMoreButton
+                type="button"
+                disabled={isFetchingMore}
+                onClick={onLoadMore}
+              >
+                {isFetchingMore ? 'Loading more…' : 'Show more models'}
+              </LoadMoreButton>
+            )}
+          </ResultsFooter>
+        </>
       ) : (
         <div
           style={{
@@ -665,7 +711,7 @@ function ModelsTable({
             fontStyle: 'italic',
           }}
         >
-          No models found
+          {isLoading ? 'Loading model registry…' : 'No models found'}
         </div>
       )}
     </Container>

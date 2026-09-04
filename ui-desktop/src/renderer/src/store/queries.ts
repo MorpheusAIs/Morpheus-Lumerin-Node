@@ -26,13 +26,27 @@ export const queryKeys = {
   transactions: (address?: string) => ['transactions', address ?? ''] as const,
   // Raw on-chain model registry shared by Models and Chat/New Chat.
   allModels: ['allModels'] as const,
+  // The Models screen loads the registry incrementally for a fast first paint.
+  modelPages: ['modelPages'] as const,
   // local IPFS node version / connectivity
   ipfsVersion: ['ipfsVersion'] as const,
   // IPFS-pinned model files
   pinnedFiles: ['pinnedFiles'] as const,
-  // provider sessions + claimable balances (Providers tab)
-  providerData: (providerId?: string) =>
-    ['providerData', providerId ?? ''] as const,
+  // Provider Hub renders the session rows first; slower claimable balances are
+  // a separate cache so they cannot hold the entire page hostage.
+  providerSessions: (providerId?: string) =>
+    ['providerSessions', providerId ?? ''] as const,
+  providerBalances: (providerId?: string, sessionIds?: readonly string[]) =>
+    sessionIds
+      ? ([
+          'providerBalances',
+          providerId ?? '',
+          [...sessionIds].sort().join(','),
+        ] as const)
+      : (['providerBalances', providerId ?? ''] as const),
+  // Agent access and allowance requests are fetched together and cached when
+  // navigating away from the Agents tab.
+  agents: (address?: string) => ['agents', address ?? ''] as const,
   // registry of known wallets + which one the proxy-router currently holds.
   // Intentionally NOT parameterised by address: this is the list that tells you
   // what the address could be.

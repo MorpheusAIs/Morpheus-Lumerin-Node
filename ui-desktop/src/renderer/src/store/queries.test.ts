@@ -92,6 +92,7 @@ describe('queryKeys', () => {
     expect(queryKeys.sessions('0xabc')).not.toEqual(
       queryKeys.sessions('0xdef'),
     );
+    expect(queryKeys.agents('0xabc')).not.toEqual(queryKeys.agents('0xdef'));
   });
 
   it('tolerates a missing address without collapsing to undefined', () => {

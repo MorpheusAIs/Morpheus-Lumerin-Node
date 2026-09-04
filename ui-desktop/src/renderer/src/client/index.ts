@@ -199,7 +199,11 @@ const createClient = function (createStore) {
     setAutoAdjustPriceData: utils.forwardToMainProcess('set-auto-adjust-price'),
     getContractHashrate: utils.forwardToMainProcess('get-contract-hashrate'),
     // API Gateway
-    getAllModels: utils.forwardToMainProcess('get-all-models'),
+    // A cold full-registry read can legitimately exceed the generic 10s IPC
+    // budget. Chat still needs the full list, so let the backend finish once
+    // instead of timing out and immediately duplicating the same chain scan.
+    getAllModels: utils.forwardToMainProcess('get-all-models', 120000),
+    getModelsPage: utils.forwardToMainProcess('get-models-page', 30000),
     getProviders: utils.forwardToMainProcess('get-providers'),
     getLocalModels: utils.forwardToMainProcess('get-local-models'),
     getNodeConfig: utils.forwardToMainProcess('get-node-config'),

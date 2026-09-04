@@ -25,6 +25,7 @@ const listeners = {
   'login-submit': handlers.onLoginSubmit,
   // Api Gateway
   'get-all-models': handlers.getAllModels,
+  'get-models-page': handlers.getModelsPage,
   'get-providers': handlers.getProviders,
   'get-local-models': handlers.getLocalModels,
   'get-node-config': handlers.getNodeConfig,

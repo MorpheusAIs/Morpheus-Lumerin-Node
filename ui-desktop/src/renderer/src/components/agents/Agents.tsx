@@ -17,6 +17,7 @@ import {
 } from '@renderer/components/agents/Agents.styles';
 import { AgentRowComp } from '@renderer/components/agents/AgentRow';
 import { AllowanceRowComp } from '@renderer/components/agents/AllowanceRow';
+import QueryError from '../common/QueryError';
 
 const Agents = (props: ContainerProps & MappedProps) => {
   const {
@@ -28,6 +29,9 @@ const Agents = (props: ContainerProps & MappedProps) => {
     handleApproveAccess,
     handleApproveAllowance,
     handleDeleteAgent,
+    agentsLoading,
+    agentsError,
+    retryAgents,
   } = props;
 
   return (
@@ -38,7 +42,9 @@ const Agents = (props: ContainerProps & MappedProps) => {
       }}
     >
       <LayoutHeader title="Agents" />
+      <QueryError error={agentsError} what="agents" onRetry={retryAgents} />
       <ScrollContainer>
+        {agentsLoading && <SubHeader role="status">Loading agents…</SubHeader>}
         <SubHeader>Access requests</SubHeader>
         <AgentList>
           {pendingAgents.map((agent) => (

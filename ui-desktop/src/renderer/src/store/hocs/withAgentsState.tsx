@@ -1,4 +1,5 @@
 import { ComponentType, useState, useEffect, useContext } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { withClient } from './clientContext';
 import selectors from '../selectors';
 import { connect } from 'react-redux';
@@ -8,6 +9,7 @@ import {
   AgentUser,
   AgentAllowanceRequest,
 } from 'src/main/src/client/api.types';
+import { queryKeys } from '../queries';
 
 export interface ContainerProps {
   client: ApiGateway;
@@ -22,6 +24,9 @@ export interface ContainerProps {
     approve: boolean,
   ) => Promise<void>;
   handleDeleteAgent: (agent: AgentUser) => Promise<void>;
+  agentsLoading: boolean;
+  agentsError: unknown;
+  retryAgents: () => void;
 }
 
 type TxModal =
@@ -57,14 +62,9 @@ export interface MappedProps {
 // receives `ContainerProps`. Type the wrapped component loosely so callers can
 // declare their own prop shapes without fighting HOC composition.
 const withAgentsState = (WrappedComponent: ComponentType<any>) => {
-  const Container = (props: ContainerProps) => {
-    const [pendingAgents, setPendingAgents] = useState<AgentUser[]>([]);
-    const [activeAgents, setActiveAgents] = useState<AgentUser[]>([]);
-    const [allowanceRequests, setAllowanceRequests] = useState<
-      AgentAllowanceRequest[]
-    >([]);
-    const [refresh, setRefresh] = useState(0);
+  const Container = (props: ContainerProps & MappedProps) => {
     const context = useContext(ToastsContext);
+    const queryClient = useQueryClient();
 
     const [txModal, setTxModal] = useState<TxModal>({ state: 'pending' });
 
@@ -90,40 +90,13 @@ const withAgentsState = (WrappedComponent: ComponentType<any>) => {
       }
     }, [txModal.state !== 'pending' && txModal.agentName]);
 
-    function refreshPage() {
-      setRefresh((prev) => prev + 1);
-    }
-
-    useEffect(() => {
-      fetchPageData();
-    }, [refresh]);
-
-    async function fetchPageData() {
-      const pendingAgentRequests = await props.client.getAgentUsers();
-      if (!pendingAgentRequests) {
-        console.error('Failed to fetch pending agent requests');
-        return;
-      }
-      let pendingAgents: AgentUser[] = [];
-      let activeAgents: AgentUser[] = [];
-
-      for (const agent of pendingAgentRequests.agents) {
-        if (agent.isConfirmed) {
-          activeAgents.push(agent);
-        } else {
-          pendingAgents.push(agent);
-        }
-      }
-      setPendingAgents(pendingAgents);
-      setActiveAgents(activeAgents);
-
-      const allowanceRequests = await props.client.getAgentAllowanceRequests();
-      if (!allowanceRequests) {
-        console.error('Failed to fetch allowance requests');
-        return;
-      }
-      setAllowanceRequests(allowanceRequests.requests);
-    }
+    const agentsQuery = useQuery({
+      queryKey: queryKeys.agents(props.address),
+      queryFn: () => loadAgentsPageData(props.client),
+    });
+    const pendingAgents = agentsQuery.data?.pendingAgents ?? [];
+    const activeAgents = agentsQuery.data?.activeAgents ?? [];
+    const allowanceRequests = agentsQuery.data?.allowanceRequests ?? [];
 
     async function handleApproveAccess(agent: AgentUser, approve: boolean) {
       const res = await props.client.confirmDeclineAgentUser({
@@ -135,7 +108,9 @@ const withAgentsState = (WrappedComponent: ComponentType<any>) => {
           'success',
           `Agent "${agent.username}" ${approve ? 'approved' : 'declined'}`,
         );
-        refreshPage();
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.agents(props.address),
+        });
       }
     }
 
@@ -153,7 +128,9 @@ const withAgentsState = (WrappedComponent: ComponentType<any>) => {
           'success',
           `Allowance for "${data.username}" ${approve ? 'approved' : 'declined'}`,
         );
-        refreshPage();
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.agents(props.address),
+        });
       }
     }
 
@@ -163,7 +140,9 @@ const withAgentsState = (WrappedComponent: ComponentType<any>) => {
       });
       if (res) {
         context.toast('success', `Agent "${agent.username}" deleted`);
-        refreshPage();
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.agents(props.address),
+        });
       }
     }
 
@@ -178,6 +157,9 @@ const withAgentsState = (WrappedComponent: ComponentType<any>) => {
         handleApproveAccess={handleApproveAccess}
         handleApproveAllowance={handleApproveAllowance}
         handleDeleteAgent={handleDeleteAgent}
+        agentsLoading={agentsQuery.isPending}
+        agentsError={agentsQuery.error}
+        retryAgents={() => void agentsQuery.refetch()}
       />
     );
   };
@@ -193,6 +175,31 @@ const withAgentsState = (WrappedComponent: ComponentType<any>) => {
   });
 
   return withClient(connect(mapStateToProps)(Container));
+};
+
+export const loadAgentsPageData = async (client: ApiGateway) => {
+  // These endpoints are independent. Starting both before awaiting either
+  // removes an unnecessary round trip from the first Agents render.
+  const [agentUsers, allowanceRequests] = await Promise.all([
+    client.getAgentUsers(),
+    client.getAgentAllowanceRequests(),
+  ]);
+  if (!agentUsers) throw new Error('Failed to fetch agent access requests.');
+  if (!allowanceRequests) {
+    throw new Error('Failed to fetch agent allowance requests.');
+  }
+
+  const pendingAgents: AgentUser[] = [];
+  const activeAgents: AgentUser[] = [];
+  for (const agent of agentUsers.agents) {
+    (agent.isConfirmed ? activeAgents : pendingAgents).push(agent);
+  }
+
+  return {
+    pendingAgents,
+    activeAgents,
+    allowanceRequests: allowanceRequests.requests as AgentAllowanceRequest[],
+  };
 };
 
 export default withAgentsState;

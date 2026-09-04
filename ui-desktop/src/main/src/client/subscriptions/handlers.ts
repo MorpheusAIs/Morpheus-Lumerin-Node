@@ -528,6 +528,28 @@ export const getAllModels = async (): Promise<unknown[]> => {
   return data.models ?? []
 }
 
+const MODEL_PAGE_LIMIT_MAX = 100
+
+export const getModelsPage = async (payload?: {
+  offset?: number
+  limit?: number
+}): Promise<unknown[]> => {
+  const offset = Number(payload?.offset ?? 0)
+  const limit = Number(payload?.limit ?? MODEL_PAGE_LIMIT_MAX)
+  if (!Number.isSafeInteger(offset) || offset < 0) {
+    throw new Error('Model page offset is invalid.')
+  }
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > MODEL_PAGE_LIMIT_MAX) {
+    throw new Error(`Model page limit must be between 1 and ${MODEL_PAGE_LIMIT_MAX}.`)
+  }
+  const data = await proxyFetch<{ models: unknown[] }>(
+    `/blockchain/models?offset=${offset}&limit=${limit}&order=asc`,
+    {},
+    'models'
+  )
+  return data.models ?? []
+}
+
 const boundedProxyId = (value: unknown, label: string): string => {
   const result = String(value ?? '').trim()
   if (!result || result.length > 256 || /[\u0000-\u001f\u007f]/u.test(result)) {

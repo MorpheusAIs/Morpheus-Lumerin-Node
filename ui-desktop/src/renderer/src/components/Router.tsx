@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useCallback, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router';
 import { useSelector } from 'react-redux';
 import { useQueryClient } from '@tanstack/react-query';
@@ -11,7 +11,8 @@ import { withClient } from '../store/hocs/clientContext';
 import selectors from '../store/selectors';
 import { queryKeys } from '../store/queries';
 import ErrorBoundary from './common/ErrorBoundary';
-import { preloadRoute, routeModules } from './routeModules';
+import { AppRoutePath, preloadRoute, routeModules } from './routeModules';
+import { modelPagesQueryOptions } from '../store/modelQueries';
 
 const Dashboard = lazy(routeModules['/wallet']);
 const Chat = lazy(routeModules['/chat']);
@@ -96,6 +97,40 @@ const SessionPrefetcher = withClient(({ client }: any) => {
   return null;
 });
 
+// Navigation intent warms both the code chunk and the first useful response.
+// This keeps expensive chain reads out of initial wallet startup while still
+// beginning them before the click that opens Models or Provider Hub.
+const RoutePrefetchSidebar = withClient(({ client }: any) => {
+  const queryClient = useQueryClient();
+  const address = useSelector((state: any) =>
+    selectors.getWalletAddress(state),
+  );
+  const onRouteIntent = useCallback(
+    (path: AppRoutePath) => {
+      const requests: Promise<unknown>[] = [preloadRoute(path)];
+      if (path === '/models') {
+        requests.push(
+          queryClient.prefetchInfiniteQuery(
+            modelPagesQueryOptions(client.getModelsPage),
+          ),
+        );
+      }
+      if (path === '/providers' && address) {
+        requests.push(
+          queryClient.prefetchQuery({
+            queryKey: queryKeys.providerSessions(address),
+            queryFn: () => client.getSessionsByProvider({ provider: address }),
+          }),
+        );
+      }
+      return Promise.all(requests);
+    },
+    [address, client, queryClient],
+  );
+
+  return <Sidebar onRouteIntent={onRouteIntent} />;
+});
+
 export const Layout = () => {
   // Keyed on pathname so a crash on one tab is cleared when the user navigates
   // elsewhere, instead of persisting for the rest of the session. The boundary
@@ -105,7 +140,7 @@ export const Layout = () => {
 
   return (
     <Container data-testid="router-container">
-      <Sidebar onRouteIntent={preloadRoute} />
+      <RoutePrefetchSidebar />
       <Main
         data-scrollelement // Required by react-virtualized implementation in Dashboard/TxList
       >

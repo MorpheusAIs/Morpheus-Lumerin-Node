@@ -1,12 +1,7 @@
-import * as validators from '../validators';
 import { withClient } from './clientContext';
-import * as utils from '../utils';
 import { connect } from 'react-redux';
-import PropTypes from 'prop-types';
 import React from 'react';
 import { ToastsContext } from '../../components/toasts';
-import selectors from '../selectors';
-import path from 'path';
 
 const withModelsState = (WrappedComponent) => {
   class Container extends React.Component {
@@ -16,9 +11,8 @@ const withModelsState = (WrappedComponent) => {
       WrappedComponent.displayName || WrappedComponent.name
     })`;
 
-    getAllModels = async () => {
-      const result = await this.props.client.getAllModels();
-      return result;
+    getModelsPage = async ({ offset, limit }) => {
+      return (await this.props.client.getModelsPage({ offset, limit })) || [];
     };
 
     getAllProviders = async () => {
@@ -70,7 +64,7 @@ const withModelsState = (WrappedComponent) => {
     render() {
       return (
         <WrappedComponent
-          getAllModels={this.getAllModels}
+          getModelsPage={this.getModelsPage}
           getAllProviders={this.getAllProviders}
           getIpfsVersion={this.getIpfsVersion}
           openSelectDownloadFolder={this.openSelectDownloadFolder}

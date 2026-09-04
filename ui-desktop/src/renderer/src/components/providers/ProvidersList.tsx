@@ -1,6 +1,5 @@
-import { useContext, useState } from 'react';
+import { useContext, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import withProvidersState from '../../store/hocs/withProvidersState';
 import styled from 'styled-components';
 import Accordion from 'react-bootstrap/Accordion';
 
@@ -38,7 +37,44 @@ const Container = styled.div`
   overflow-y: auto;
 `;
 
-function renderTable({ onClaim, claiming, sessions }) {
+const EmptyState = styled.div`
+  color: rgba(255, 255, 255, 0.62);
+  padding: 2rem 0;
+`;
+
+const formatBalance = (session, balances, balancesLoading) => {
+  if (session.ClosedAt) return '0 MOR';
+  const balance = balances[session.Id];
+  if (balance == null) return balancesLoading ? 'Loading…' : 'Unavailable';
+  const numericBalance = Number(balance);
+  return Number.isFinite(numericBalance)
+    ? `${numericBalance / 10 ** 18} MOR`
+    : 'Unavailable';
+};
+
+export const groupProviderSessions = (sessions, modelNames) => {
+  const groups = new Map();
+  for (const session of sessions ?? []) {
+    const modelId = String(session.ModelAgentId ?? 'Unknown model');
+    const key = modelId.toLowerCase();
+    const current = groups.get(key) ?? {
+      id: modelId,
+      name: modelNames[key] ?? abbreviateAddress(modelId, 6),
+      sessions: [],
+    };
+    current.sessions.push(session);
+    groups.set(key, current);
+  }
+  return [...groups.values()];
+};
+
+function renderTable({
+  onClaim,
+  claiming,
+  sessions,
+  balances,
+  balancesLoading,
+}) {
   return (
     <BidTable striped bordered hover size="sm">
       <thead>
@@ -47,7 +83,7 @@ function renderTable({ onClaim, claiming, sessions }) {
           <th>Bid</th>
           <th>Status</th>
           <th>Balance</th>
-          <th></th>
+          <th>Action</th>
         </tr>
       </thead>
       <tbody>
@@ -59,7 +95,7 @@ function renderTable({ onClaim, claiming, sessions }) {
                   <td>{abbreviateAddress(b.Id, 5)}</td>
                   <td>{abbreviateAddress(b.BidID, 5)}</td>
                   <td>{b.ClosedAt ? 'CLOSED' : 'OPEN'}</td>
-                  <td>{b.Balance / 10 ** 18} MOR</td>
+                  <td>{formatBalance(b, balances, balancesLoading)}</td>
                   <td>
                     {!b.ClosedAt && (
                       <StartBtn
@@ -79,7 +115,15 @@ function renderTable({ onClaim, claiming, sessions }) {
   );
 }
 
-function ProvidersList({ data, claimFunds, providerId }) {
+function ProvidersList({
+  sessions,
+  sessionsLoading,
+  modelNames,
+  balances,
+  balancesLoading,
+  claimFunds,
+  providerId,
+}) {
   const context = useContext(ToastsContext);
   const queryClient = useQueryClient();
   const [claiming, setClaiming] = useState<string | null>(null);
@@ -95,9 +139,14 @@ function ProvidersList({ data, claimFunds, providerId }) {
     try {
       await claimFunds(sessionId);
       context.toast('success', 'Funds claimed');
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.providerData(providerId),
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.providerSessions(providerId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.providerBalances(providerId),
+        }),
+      ]);
     } catch (e: any) {
       context.toast('error', e?.message || 'Failed to claim funds');
     } finally {
@@ -105,33 +154,43 @@ function ProvidersList({ data, claimFunds, providerId }) {
     }
   };
 
+  const groups = useMemo(
+    () => groupProviderSessions(sessions, modelNames),
+    [sessions, modelNames],
+  );
+
+  if (sessionsLoading) {
+    return <EmptyState role="status">Loading provider sessions…</EmptyState>;
+  }
+
+  if (!groups.length) {
+    return <EmptyState>No provider sessions found.</EmptyState>;
+  }
+
   return (
     <Container>
-      {data?.modelsNames &&
-        Object.keys(data?.modelsNames).map((model) => {
-          const modelSessions = data.results.filter(
-            (r) => r.ModelAgentId.toLowerCase() == model.toLowerCase(),
-          );
-
-          return (
-            <Accordion alwaysOpen key={model}>
-              <Accordion.Item eventKey={model}>
-                <Accordion.Header className="model-header">
-                  {data?.modelsNames[model]}
-                </Accordion.Header>
-                <Accordion.Body>
-                  {renderTable({
-                    onClaim: handleClaim,
-                    claiming,
-                    sessions: modelSessions,
-                  })}
-                </Accordion.Body>
-              </Accordion.Item>
-            </Accordion>
-          );
-        })}
+      {groups.map((group) => {
+        return (
+          <Accordion alwaysOpen key={group.id}>
+            <Accordion.Item eventKey={group.id}>
+              <Accordion.Header className="model-header">
+                {group.name}
+              </Accordion.Header>
+              <Accordion.Body>
+                {renderTable({
+                  onClaim: handleClaim,
+                  claiming,
+                  sessions: group.sessions,
+                  balances,
+                  balancesLoading,
+                })}
+              </Accordion.Body>
+            </Accordion.Item>
+          </Accordion>
+        );
+      })}
     </Container>
   );
 }
 
-export default withProvidersState(ProvidersList);
+export default ProvidersList;
