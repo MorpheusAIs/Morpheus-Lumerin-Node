@@ -40,6 +40,7 @@ import {
   VideoContainer,
   ChatIntroContainer,
   ChatHistoryContainer,
+  ChatStartupState,
   ChatIntroInner,
   ChatIntroInnerTitle,
   ChatIntroInnerText,
@@ -246,7 +247,11 @@ type ChatProps = {
       options?: { autoClose?: number },
     ) => void;
   };
-  getModelsData: () => Promise<any>;
+  getAllModels: () => Promise<any[]>;
+  getLocalModels: () => Promise<any[]>;
+  getProviders: () => Promise<any[]>;
+  getMetaInfo: () => Promise<{ budget: number; supply: number }>;
+  getBalances: () => Promise<{ eth: number; mor: number }>;
   getSessionsByUser: (address: string) => Promise<any>;
   getProvidersAvailability: (providers: any[]) => Promise<any[]>;
   getBidInfo: (id: string) => Promise<any>;
@@ -280,7 +285,6 @@ const Chat = (props: ChatProps) => {
   // manual session refresh). The *initial* page load no longer uses this — it
   // is gated on the react-query cache so revisiting the tab is instant.
   const [isActionLoading, setIsActionLoading] = useState(false);
-  const [initialized, setInitialized] = useState(false);
   const [messages, setMessages] = useState<any>([]);
   const [chatScrollElement, setChatScrollElement] =
     useState<HTMLDivElement | null>(null);
@@ -300,10 +304,6 @@ const Chat = (props: ChatProps) => {
 
   const [selectedBid, setSelectedBid] = useState<any>(null);
   const [selectedModel, setSelectedModel] = useState<any>(undefined);
-  const [requiredStake, setRequiredStake] = useState<{
-    min: number;
-    max: number;
-  }>({ min: 0, max: 0 });
   const [sessionDuration, setSessionDuration] = useState(
     DEFAULT_SESSION_DURATION_SECONDS,
   );
@@ -323,9 +323,38 @@ const Chat = (props: ChatProps) => {
   // and back to /chat serves cached data instantly and revalidates silently
   // instead of blocking behind a full-screen spinner.
 
-  const modelsDataQuery = useQuery({
-    queryKey: queryKeys.modelsData,
-    queryFn: () => props.getModelsData(),
+  const marketplaceModelsQuery = useQuery({
+    queryKey: queryKeys.allModels,
+    queryFn: () => props.getAllModels(),
+    select: (models) => (models ?? []).filter((model: any) => !model.IsDeleted),
+  });
+
+  // Local models, providers, and session-funding data are useful, but none of
+  // them should hold the model registry hostage. Keeping them in independent
+  // queries lets New Chat render the marketplace catalog as soon as its single
+  // critical read resolves.
+  const localModelsQuery = useQuery({
+    queryKey: queryKeys.localModels,
+    queryFn: () => props.getLocalModels(),
+  });
+
+  const providersQuery = useQuery({
+    queryKey: queryKeys.modelProviders,
+    queryFn: async () =>
+      ((await props.getProviders()) ?? []).filter(
+        (provider: any) => !provider.IsDeleted,
+      ),
+  });
+
+  const fundingQuery = useQuery({
+    queryKey: queryKeys.chatFunding,
+    queryFn: async () => {
+      const [meta, userBalances] = await Promise.all([
+        props.getMetaInfo(),
+        props.getBalances(),
+      ]);
+      return { meta, userBalances };
+    },
   });
 
   const sessionsQuery = useQuery({
@@ -344,11 +373,14 @@ const Chat = (props: ChatProps) => {
   // previous "effect #2" merge logic but cached across visits.
   const modelsWithBidsQuery = useQuery({
     queryKey: queryKeys.modelsWithBids,
-    enabled: !!modelsDataQuery.data,
+    enabled:
+      marketplaceModelsQuery.data !== undefined &&
+      providersQuery.data !== undefined,
     queryFn: async () => {
-      const md = modelsDataQuery.data;
+      const providers = providersQuery.data ?? [];
+      const marketplaceModels = marketplaceModelsQuery.data ?? [];
       const providersMap = new Map<string, any>(
-        md.providers.map((provider: any) => [
+        providers.map((provider: any) => [
           provider.Address.toLowerCase(),
           provider,
         ]),
@@ -358,12 +390,9 @@ const Chat = (props: ChatProps) => {
       // hundreds of simultaneous IPC calls, which saturated the proxy-router
       // and blocked the renderer while the Chat tab loaded.
       const merged = await pooledMapSettled(
-        md.models,
+        marketplaceModels,
         async (m: any) => {
           const id = m.Id;
-          if (m.isLocal) {
-            return { id };
-          }
           const bids = ((await props.getBidsByModelId(id)) ?? [])
             .map((b: any) => ({
               ...b,
@@ -383,7 +412,7 @@ const Chat = (props: ChatProps) => {
         BIDS_CONCURRENCY,
       );
       const modelsById = new Map<string, any>(
-        md.models.map((model: any) => [model.Id, model]),
+        marketplaceModels.map((model: any) => [model.Id, model]),
       );
       return merged.reduce((acc: any[], next: any) => {
         if (!next) {
@@ -398,15 +427,28 @@ const Chat = (props: ChatProps) => {
 
   const availabilityQuery = useQuery({
     queryKey: queryKeys.providersAvailability,
-    enabled: !!modelsDataQuery.data?.providers?.length,
+    enabled: !!providersQuery.data?.length,
     staleTime: 5 * 60_000,
-    queryFn: () =>
-      props.getProvidersAvailability(modelsDataQuery.data.providers),
+    queryFn: () => props.getProvidersAvailability(providersQuery.data ?? []),
   });
 
   // Full (unfiltered) model list — local + every marketplace model, no bids.
   // Used for mapping sessions/chats by id, matching the original mount logic.
-  const allModels: any[] | undefined = modelsDataQuery.data?.models;
+  const localModels = useMemo(
+    () =>
+      (localModelsQuery.data ?? []).map((model: any) => ({
+        ...model,
+        isLocal: true,
+      })),
+    [localModelsQuery.data],
+  );
+  const allModels: any[] | undefined = useMemo(
+    () =>
+      marketplaceModelsQuery.data === undefined
+        ? undefined
+        : [...localModels, ...marketplaceModelsQuery.data],
+    [localModels, marketplaceModelsQuery.data],
+  );
   const allModelsById = useMemo(
     () =>
       new Map(
@@ -420,17 +462,34 @@ const Chat = (props: ChatProps) => {
   // chainData.models prefers the bid-enriched (and bid-filtered) list once it
   // is available, otherwise falls back to the raw list so the UI can render.
   const chainData = useMemo(() => {
-    const md = modelsDataQuery.data;
-    if (!md) {
+    if (marketplaceModelsQuery.data === undefined) {
       return null;
     }
-    return { ...md, models: modelsWithBidsQuery.data ?? md.models };
-  }, [modelsDataQuery.data, modelsWithBidsQuery.data]);
+    return {
+      models: [
+        ...localModels,
+        ...(modelsWithBidsQuery.data ?? marketplaceModelsQuery.data),
+      ],
+      providers: providersQuery.data ?? [],
+      meta: fundingQuery.data?.meta,
+      userBalances: fundingQuery.data?.userBalances,
+    };
+  }, [
+    fundingQuery.data,
+    localModels,
+    marketplaceModelsQuery.data,
+    modelsWithBidsQuery.data,
+    providersQuery.data,
+  ]);
 
-  const meta = modelsDataQuery.data?.meta ?? { budget: 0, supply: 0 };
-  const balances = modelsDataQuery.data?.userBalances ?? { eth: 0, mor: 0 };
+  const meta = fundingQuery.data?.meta ?? { budget: 0, supply: 0 };
+  const balances = fundingQuery.data?.userBalances ?? { eth: 0, mor: 0 };
   const providersAvailability = availabilityQuery.data ?? [];
-  const bidsLoading = modelsWithBidsQuery.isFetching;
+  const modelsLoading =
+    marketplaceModelsQuery.isPending &&
+    marketplaceModelsQuery.data === undefined;
+  const bidsLoading =
+    providersQuery.isPending || modelsWithBidsQuery.isFetching;
 
   const sessions = useMemo(() => {
     const raw = sessionsQuery.data;
@@ -446,14 +505,10 @@ const Chat = (props: ChatProps) => {
     }, []);
   }, [sessionsQuery.data, allModels, allModelsById]);
 
-  // Initial-load overlay: only while there is no cached data yet. On revisits
-  // every query resolves synchronously from cache, so this is false and the
-  // spinner never appears.
-  const isLoading =
-    isActionLoading ||
-    !modelsDataQuery.data ||
-    sessionsQuery.isLoading ||
-    !initialized;
+  // The blocking overlay is reserved for user-triggered mutations. Startup
+  // reads now render honest inline states, so a slow session scan cannot make
+  // the entire Chat route look frozen or hide the New Chat control.
+  const isLoading = isActionLoading;
 
   // TTS controls + STT recording state
   const [ttsVoice, setTtsVoice] = useState('af_bella');
@@ -502,6 +557,28 @@ const Chat = (props: ChatProps) => {
     });
   }, [activeSession, isLocal]);
 
+  // A user can pick a model while the slower session inventory is still in
+  // flight. Reconcile that choice when the inventory arrives so an existing
+  // session is resumed instead of offering to stake twice.
+  useEffect(() => {
+    if (
+      !selectedModel ||
+      selectedModel.isLocal ||
+      activeSession ||
+      !sessionsQuery.isSuccess
+    )
+      return;
+    const existingSession = sessions.find(
+      (session) =>
+        !isClosed(session) && session.ModelAgentId == selectedModel.Id,
+    );
+    if (!existingSession) return;
+    setActiveSession(existingSession);
+    setSelectedBid(
+      selectedModel.bids?.find((bid: any) => bid.Id == existingSession.BidID),
+    );
+  }, [activeSession, selectedModel, sessions, sessionsQuery.isSuccess]);
+
   // One-time selection of the default chat once the (possibly cached) model and
   // session data is available. Runs in a layout effect so that on a warm cache
   // the selection is committed before paint — no flash of the empty/intro state
@@ -510,14 +587,13 @@ const Chat = (props: ChatProps) => {
     if (initializedRef.current) {
       return;
     }
-    const md = modelsDataQuery.data;
     const rawSessions = sessionsQuery.data;
-    if (!md || !rawSessions) {
+    if (!allModels || !rawSessions) {
       return;
     }
     initializedRef.current = true;
 
-    const models: any[] = md.models;
+    const models = allModels;
 
     const requireMarketplaceSelection = () => {
       setSelectedModel(undefined);
@@ -540,7 +616,6 @@ const Chat = (props: ChatProps) => {
     const openSessions = mappedSessions.filter((s) => !isClosed(s));
 
     if (!openSessions.length) {
-      setInitialized(true);
       requireMarketplaceSelection();
       return;
     }
@@ -551,7 +626,6 @@ const Chat = (props: ChatProps) => {
     );
 
     if (!latestSessionModel) {
-      setInitialized(true);
       requireMarketplaceSelection();
       return;
     }
@@ -565,15 +639,13 @@ const Chat = (props: ChatProps) => {
       createdAt: new Date(),
       modelId: latestSessionModel.Id,
     });
-    setInitialized(true);
-
     props
       .getBidInfo(latestSession.BidID)
       .then((openBid) => {
         if (openBid) setSelectedBid(openBid);
       })
       .catch((e) => console.error('Failed to load open bid', e));
-  }, [modelsDataQuery.data, sessionsQuery.data]);
+  }, [allModels, sessionsQuery.data]);
 
   // Workspace routes users here when they do not yet have an active marketplace
   // session. Open the normal model picker in marketplace-only mode; after the
@@ -581,16 +653,11 @@ const Chat = (props: ChatProps) => {
   // Workspace. The legacy query value remains supported for existing links.
   useEffect(() => {
     const setup = new URLSearchParams(location.search).get('setup');
-    if (
-      (setup !== 'workspace' && setup !== 'cowork') ||
-      !initialized ||
-      !chainData
-    )
-      return;
+    if (setup !== 'workspace' && setup !== 'cowork') return;
     setCoworkModelSelection(true);
     setOpenChangeModal(true);
     navigate('/chat', { replace: true });
-  }, [chainData, initialized, location.search, navigate]);
+  }, [location.search, navigate]);
 
   // Keep the chat-history drawer list in sync with the cached titles + models.
   useEffect(() => {
@@ -761,6 +828,13 @@ const Chat = (props: ChatProps) => {
       );
       return;
     }
+    if (!sessionsQuery.isSuccess) {
+      props.toasts.toast(
+        'info',
+        'Still checking your existing sessions. Wait for that check before paying for another one.',
+      );
+      return;
+    }
 
     setIsActionLoading(true);
     try {
@@ -826,7 +900,7 @@ const Chat = (props: ChatProps) => {
         return;
       }
 
-      const model = chainData.models.find((m) => m.Id == history.modelId);
+      const model = chainData?.models.find((m) => m.Id == history.modelId);
       const modelName = model?.Name || 'Model';
       const aiIcon = modelName.toUpperCase()[0];
       const aiColor = getColor(aiIcon);
@@ -936,9 +1010,10 @@ const Chat = (props: ChatProps) => {
       return;
     }
 
+    const availableModels = chainData?.models ?? [];
     const selectedModel = chatData.isLocal
-      ? chainData.models.find((m: any) => m.Id == modelId)
-      : chainData.models.find((m: any) => m.Id == modelId && m.bids);
+      ? availableModels.find((m: any) => m.Id == modelId)
+      : availableModels.find((m: any) => m.Id == modelId && m.bids);
     setSelectedModel(selectedModel);
     setIsReadonly(false);
 
@@ -1634,12 +1709,6 @@ const Chat = (props: ChatProps) => {
       .catch(console.error);
   };
 
-  const calculateStake = (pricePerSecond, durationInMin) => {
-    const totalCost = pricePerSecond * durationInMin * 60;
-    const stake = (totalCost * Number(meta.supply)) / Number(meta.budget);
-    return stake;
-  };
-
   const onCreateNewChat = ({ modelId, isLocal }) => {
     if (isLocal) {
       props.toasts.toast(
@@ -1648,6 +1717,10 @@ const Chat = (props: ChatProps) => {
       );
       return;
     }
+    // A deliberate model choice owns the screen. If the slower session query
+    // completes afterwards, the one-time bootstrap must not replace it with a
+    // different historical session.
+    initializedRef.current = true;
     abort = true;
     chatGenerationRef.current += 1;
     autoScrollRef.current = true;
@@ -1657,7 +1730,7 @@ const Chat = (props: ChatProps) => {
     setIsReadonly(false);
     setChat({ id: generateHashId(), createdAt: new Date(), modelId });
 
-    const selectedModel = chainData.models.find(
+    const selectedModel = chainData?.models.find(
       (m: any) => !m.isLocal && m.Id == modelId && m.bids,
     );
 
@@ -1686,14 +1759,6 @@ const Chat = (props: ChatProps) => {
       setActiveSession(openModelSession);
       return;
     }
-
-    const prices = selectedModel.bids.map((x) => Number(x.PricePerSecond));
-    const maxPrice = Math.max(...prices);
-
-    setRequiredStake({
-      min: calculateStake(maxPrice, 5),
-      max: calculateStake(maxPrice, 24 * 60),
-    });
   };
 
   const wrapChangeTitle = async (data: { id; title }) => {
@@ -1701,20 +1766,70 @@ const Chat = (props: ChatProps) => {
   };
 
   const renderChatBlock = () => {
+    if (!selectedModel) {
+      return (
+        <ChatStartupState role="status" aria-live="polite">
+          <IconMessagePlus size={30} stroke={1.7} aria-hidden="true" />
+          <strong>
+            {modelsLoading
+              ? 'Loading available models…'
+              : sessionsQuery.isPending
+                ? 'Checking your active sessions…'
+                : 'Choose a model to start a chat'}
+          </strong>
+          <span>
+            {modelsLoading
+              ? 'The Chat screen is ready. Models will appear as soon as your node responds.'
+              : sessionsQuery.isPending
+                ? 'You can browse models now while the session list finishes loading.'
+                : 'Open New chat to browse current Morpheus marketplace models.'}
+          </span>
+          <ChatIntroButton
+            onClick={() => {
+              setCoworkModelSelection(false);
+              setOpenChangeModal(true);
+            }}
+            type="button"
+          >
+            Browse models
+          </ChatIntroButton>
+        </ChatStartupState>
+      );
+    }
+
     // `meta` falls back to { budget: 0, supply: 0 } while the models query is
     // loading or has failed. Dividing by a zero budget produced NaN, and every
     // `x > NaN` comparison is false — which silently disabled *both* payment
     // buttons with no explanation. Treat unknown pricing as "not ready yet" and
     // say so, rather than rendering a dead screen.
-    const isPricingReady =
-      Number(meta.budget) > 0 &&
-      Number(meta.supply) > 0 &&
-      Number.isFinite(Number(requiredStake.min));
-
-    // for stake mode
     const prices =
       selectedModel?.bids?.map((x: any) => Number(x.PricePerSecond)) ?? [];
     const maxPrice = prices.length ? Math.max(...prices) : Number.NaN;
+    const isPricingReady =
+      fundingQuery.isSuccess &&
+      Number(meta.budget) > 0 &&
+      Number(meta.supply) > 0 &&
+      Number.isFinite(maxPrice);
+
+    const requiredStake = isPricingReady
+      ? {
+          min: estimateSessionTokenAmount(
+            maxPrice,
+            SESSION_DURATION_OPTIONS[0].seconds,
+            false,
+            meta,
+          ),
+          max: estimateSessionTokenAmount(
+            maxPrice,
+            SESSION_DURATION_OPTIONS[SESSION_DURATION_OPTIONS.length - 1]
+              .seconds,
+            false,
+            meta,
+          ),
+        }
+      : null;
+
+    // for stake mode
     const selectedStake = isPricingReady
       ? estimateSessionTokenAmount(maxPrice, sessionDuration, false, meta)
       : Number.POSITIVE_INFINITY;
@@ -1722,9 +1837,13 @@ const Chat = (props: ChatProps) => {
       ? estimateSessionTokenAmount(maxPrice, sessionDuration, true, meta)
       : Number.POSITIVE_INFINITY;
     const hasSelectedStakeFunds =
-      isPricingReady && Number(balances.mor) >= selectedStake;
+      isPricingReady &&
+      sessionsQuery.isSuccess &&
+      Number(balances.mor) >= selectedStake;
     const isEnoughFundsForDirectPay =
-      isPricingReady && Number(balances.mor) >= requiredStakeForDirectPay;
+      isPricingReady &&
+      sessionsQuery.isSuccess &&
+      Number(balances.mor) >= requiredStakeForDirectPay;
 
     // The user may already hold an open session for this model. Surfacing it
     // here is what stops people staking a second time when the first session
@@ -1773,11 +1892,25 @@ const Chat = (props: ChatProps) => {
                   running in Settings.
                 </ChatIntroInnerText>
               )}
+              {!sessionsQuery.isSuccess && (
+                <ChatIntroInnerText style={{ color: '#e8a33d' }}>
+                  {sessionsQuery.isError
+                    ? 'Existing sessions could not be checked. Retry the session check before paying for another one.'
+                    : 'Checking your existing sessions before enabling payment…'}
+                </ChatIntroInnerText>
+              )}
               <ChatIntroInnerText>
                 Stake MOR to reserve compute for the session length selected
-                above (min: {formatValue(requiredStake.min, 18)} MOR, max:{' '}
-                {formatValue(requiredStake.max, 18)} MOR). The MOR is escrowed,
-                and unused stake returns when the session closes.
+                above (min:{' '}
+                {requiredStake
+                  ? `${formatValue(requiredStake.min, 18)} MOR`
+                  : 'calculating…'}
+                , max:{' '}
+                {requiredStake
+                  ? `${formatValue(requiredStake.max, 18)} MOR`
+                  : 'calculating…'}
+                ). The MOR is escrowed, and unused stake returns when the
+                session closes.
               </ChatIntroInnerText>
               <div style={{ display: 'flex', justifyContent: 'center' }}>
                 <ChatIntroButton
@@ -1838,13 +1971,16 @@ const Chat = (props: ChatProps) => {
   // show the reason instead of an empty shell with dead buttons. Previously the
   // main-process handler swallowed the error and returned [], which made a
   // down proxy-router look identical to "no models exist".
-  if (modelsDataQuery.isError && !modelsDataQuery.data) {
+  if (
+    marketplaceModelsQuery.isError &&
+    marketplaceModelsQuery.data === undefined
+  ) {
     return (
       <View data-testid="chat-container">
         <QueryError
-          error={modelsDataQuery.error}
+          error={marketplaceModelsQuery.error}
           what="models"
-          onRetry={() => modelsDataQuery.refetch()}
+          onRetry={() => marketplaceModelsQuery.refetch()}
         />
       </View>
     );
@@ -1863,11 +1999,26 @@ const Chat = (props: ChatProps) => {
       )}
 
       {/* Non-fatal: models loaded from cache but the latest refresh failed. */}
-      {modelsDataQuery.isError && !!modelsDataQuery.data && (
+      {marketplaceModelsQuery.isError &&
+        marketplaceModelsQuery.data !== undefined && (
+          <QueryError
+            error={marketplaceModelsQuery.error}
+            what="the latest model data"
+            onRetry={() => marketplaceModelsQuery.refetch()}
+          />
+        )}
+      {sessionsQuery.isError && (
         <QueryError
-          error={modelsDataQuery.error}
-          what="the latest model data"
-          onRetry={() => modelsDataQuery.refetch()}
+          error={sessionsQuery.error}
+          what="sessions"
+          onRetry={() => sessionsQuery.refetch()}
+        />
+      )}
+      {providersQuery.isError && (
+        <QueryError
+          error={providersQuery.error}
+          what="model providers"
+          onRetry={() => providersQuery.refetch()}
         />
       )}
       <Drawer
@@ -2115,11 +2266,13 @@ const Chat = (props: ChatProps) => {
                   value={promptInput}
                   onChange={(ev) => setPromptInput(ev.target.value)}
                   placeholder={
-                    isReadonly
-                      ? 'Session is closed. Chat in ReadOnly Mode'
-                      : modality === 'tts'
-                        ? 'Enter text to synthesize...'
-                        : 'Ask me anything, or drop in a file...'
+                    !selectedModel
+                      ? 'Choose a model to start a chat'
+                      : isReadonly
+                        ? 'Session is closed. Chat in ReadOnly Mode'
+                        : modality === 'tts'
+                          ? 'Enter text to synthesize...'
+                          : 'Ask me anything, or drop in a file...'
                   }
                   minRows={1}
                   maxRows={6}
@@ -2175,6 +2328,7 @@ const Chat = (props: ChatProps) => {
       </View>
       <ModelSelectionModal
         models={(chainData as any)?.models}
+        modelsLoading={modelsLoading}
         isActive={openChangeModal}
         marketplaceOnly
         coworkSetup={coworkModelSelection}

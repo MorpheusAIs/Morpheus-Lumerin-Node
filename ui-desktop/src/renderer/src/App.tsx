@@ -25,7 +25,6 @@ import { subscribeToMainProcessMessages } from './subscriptions';
 import Web3ConnectionNotifier from './components/Web3ConnectionNotifier';
 import { ToastsProvider } from './components/toasts';
 import { GlobalTooltips } from './components/common/Tooltips';
-import Loading from './components/Loading';
 import ErrorBoundary from './components/common/ErrorBoundary';
 
 const Startup = lazy(() => import('@renderer/components/Startup'));
@@ -68,7 +67,6 @@ function App(): JSX.Element {
                     <Root
                       StartupComponent={Startup}
                       OnboardingComponent={Onboarding}
-                      LoadingComponent={Loading}
                       RouterComponent={Router}
                       LoginComponent={Login}
                     />

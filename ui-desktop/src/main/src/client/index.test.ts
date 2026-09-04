@@ -7,12 +7,15 @@ const runtime = vi.hoisted(() => ({
   subscribed: false,
   subscriptionStateAtReady: [] as boolean[],
   stopped: false,
-  unsubscribed: false
+  unsubscribed: false,
+  startError: null as Error | null,
+  getState: vi.fn(async () => ({ chain: { persisted: true } }))
 }))
 
 vi.mock('../../core', () => ({
   default: vi.fn(() => ({
     start: vi.fn(() => {
+      if (runtime.startError) throw runtime.startError
       runtime.order.push('core-start')
       return {
         emitter: {
@@ -58,7 +61,7 @@ vi.mock('./settings', () => ({
 
 vi.mock('./storage', () => ({
   default: {
-    getState: vi.fn(async () => ({ chain: { persisted: true } }))
+    getState: runtime.getState
   }
 }))
 
@@ -108,6 +111,9 @@ describe('renderer client bootstrap', () => {
     runtime.subscriptionStateAtReady.length = 0
     runtime.stopped = false
     runtime.unsubscribed = false
+    runtime.startError = null
+    runtime.getState.mockReset()
+    runtime.getState.mockResolvedValue({ chain: { persisted: true } })
   })
 
   it('installs follow-up IPC subscriptions before acknowledging ui-ready', async () => {
@@ -165,5 +171,93 @@ describe('renderer client bootstrap', () => {
       'unsubscribe',
       'core-stop'
     ])
+  })
+
+  it('coalesces concurrent ui-ready requests and acknowledges each correlation id', async () => {
+    let resolveState!: (state: { chain: { persisted: boolean } }) => void
+    runtime.getState.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveState = resolve
+        })
+    )
+    createClient({ chain: { chainId: 'base' } })
+    const send = vi.fn()
+    const event = { sender: { send } }
+    const uiReady = runtime.ipcHandlers.get('ui-ready')
+
+    uiReady?.(event, { id: 'ready-request-1' })
+    uiReady?.(event, { id: 'ready-request-2' })
+
+    expect(runtime.getState).toHaveBeenCalledTimes(1)
+    expect(runtime.order).not.toContain('core-start')
+
+    resolveState({ chain: { persisted: true } })
+
+    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(2))
+    expect(runtime.order.filter((entry) => entry === 'core-start')).toHaveLength(1)
+    expect(runtime.order.filter((entry) => entry === 'subscribe')).toHaveLength(1)
+    expect(send.mock.calls.map(([, payload]) => payload.id)).toEqual([
+      'ready-request-1',
+      'ready-request-2'
+    ])
+
+    uiReady?.(event, { id: 'ready-request-3' })
+    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(3))
+
+    expect(runtime.getState).toHaveBeenCalledTimes(1)
+    expect(runtime.order.filter((entry) => entry === 'core-start')).toHaveLength(1)
+    expect(runtime.order.filter((entry) => entry === 'subscribe')).toHaveLength(1)
+    expect(send.mock.calls[2][1].id).toBe('ready-request-3')
+  })
+
+  it('invalidates in-flight bootstrap on ui-unload without stopping an uninitialized core', async () => {
+    let resolveFirstState!: (state: { chain: { persisted: boolean } }) => void
+    runtime.getState.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirstState = resolve
+        })
+    )
+    createClient({ chain: { chainId: 'base' } })
+    const staleSend = vi.fn()
+    const uiReady = runtime.ipcHandlers.get('ui-ready')
+    const uiUnload = runtime.ipcHandlers.get('ui-unload')
+
+    uiReady?.({ sender: { send: staleSend } }, { id: 'stale-request' })
+    uiUnload?.({ sender: {} })
+    resolveFirstState({ chain: { persisted: false } })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(runtime.stopped).toBe(false)
+    expect(runtime.unsubscribed).toBe(false)
+    expect(runtime.order).not.toContain('core-start')
+    expect(staleSend).not.toHaveBeenCalled()
+
+    const freshSend = vi.fn()
+    uiReady?.({ sender: { send: freshSend } }, { id: 'fresh-request' })
+
+    await vi.waitFor(() => expect(freshSend).toHaveBeenCalledTimes(1))
+    expect(runtime.order.filter((entry) => entry === 'core-start')).toHaveLength(1)
+    expect(runtime.order.filter((entry) => entry === 'subscribe')).toHaveLength(1)
+  })
+
+  it('reports a bootstrap failure immediately instead of waiting for the renderer timeout', async () => {
+    runtime.startError = new Error('wallet core failed to start')
+    createClient({ chain: { chainId: 'base' } })
+    const send = vi.fn()
+    const uiReady = runtime.ipcHandlers.get('ui-ready')
+
+    uiReady?.({ sender: { send } }, { id: 'failed-ready-request' })
+
+    await vi.waitFor(() =>
+      expect(send).toHaveBeenCalledWith('ui-ready', {
+        id: 'failed-ready-request',
+        error: { message: 'wallet core failed to start' }
+      })
+    )
+    expect(runtime.stopped).toBe(false)
+    expect(runtime.unsubscribed).toBe(false)
   })
 })

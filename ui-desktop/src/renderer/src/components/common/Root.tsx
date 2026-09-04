@@ -8,7 +8,6 @@ import { LoadingState } from 'src/main/orchestrator.types';
 type RootProps = {
   // From connect() mapStateToProps
   isSessionActive: boolean;
-  hasEnoughData: boolean;
   isAuthBypassed: boolean;
   sellerDefaultCurrency: string;
   servicesState: LoadingState;
@@ -22,7 +21,6 @@ type RootProps = {
   OnboardingComponent: React.ComponentType<{
     onOnboardingCompleted: (data: unknown) => Promise<void>;
   }>;
-  LoadingComponent: React.ComponentType;
   RouterComponent: React.ComponentType;
   LoginComponent: React.ComponentType<{
     onLoginSubmit: (data: { password: string }) => Promise<void>;
@@ -131,11 +129,9 @@ export class Root extends React.Component<RootProps> {
     const {
       StartupComponent,
       OnboardingComponent,
-      LoadingComponent,
       RouterComponent,
       isSessionActive,
       LoginComponent,
-      hasEnoughData,
     } = this.props;
 
     const { onboardingComplete, startupComplete } = this.state;
@@ -164,17 +160,17 @@ export class Root extends React.Component<RootProps> {
       return <LoginComponent onLoginSubmit={this.onLoginSubmit} />;
     }
 
-    if (hasEnoughData) {
-      return <RouterComponent />;
-    }
-
-    return <LoadingComponent />;
+    // Service readiness and authentication are the only global gates. Wallet
+    // balances, exchange rates, sessions, and model catalogs belong to their
+    // individual tabs and load through their own cached queries. Holding the
+    // whole application behind those optional network reads made navigation
+    // appear frozen whenever one public API was slow or unavailable.
+    return <RouterComponent />;
   }
 }
 
 const mapStateToProps = (state) => ({
   isSessionActive: selectors.isSessionActive(state),
-  hasEnoughData: selectors.hasEnoughData(state),
   isAuthBypassed: selectors.getIsAuthBypassed(state),
   sellerDefaultCurrency: selectors.getSellerDefaultCurrency(state),
   servicesState: selectors.getServices(state),

@@ -7,8 +7,11 @@
 // components/HOCs that own the proxy-router fetch logic and are passed inline to
 // `useQuery`, since they close over the IPC client + chain config.
 export const queryKeys = {
-  // { models, providers, meta, userBalances } from withChatState.getModelsData
-  modelsData: ['modelsData'] as const,
+  // Chat's supplemental startup reads stay separate from the shared model
+  // registry, so the picker is not held behind provider/funding responses.
+  localModels: ['localModels'] as const,
+  modelProviders: ['modelProviders'] as const,
+  chatFunding: ['chatFunding'] as const,
   // models merged with their bids (withChatState.getBidsByModelId fan-out)
   modelsWithBids: ['modelsWithBids'] as const,
   // raw on-chain user sessions (paginated) — shared by Chat + Wallet
@@ -21,7 +24,7 @@ export const queryKeys = {
   balances: (address?: string) => ['balances', address ?? ''] as const,
   // Blockscout transaction history
   transactions: (address?: string) => ['transactions', address ?? ''] as const,
-  // raw on-chain model list (Models tab registry)
+  // Raw on-chain model registry shared by Models and Chat/New Chat.
   allModels: ['allModels'] as const,
   // local IPFS node version / connectivity
   ipfsVersion: ['ipfsVersion'] as const,

@@ -1,9 +1,58 @@
 import { useEffect, useRef, useState } from 'react';
 import styled from 'styled-components';
 import Markdown from 'react-markdown';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { coldarkDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import bash from 'react-syntax-highlighter/dist/esm/languages/prism/bash';
+import c from 'react-syntax-highlighter/dist/esm/languages/prism/c';
+import cpp from 'react-syntax-highlighter/dist/esm/languages/prism/cpp';
+import csharp from 'react-syntax-highlighter/dist/esm/languages/prism/csharp';
+import css from 'react-syntax-highlighter/dist/esm/languages/prism/css';
+import go from 'react-syntax-highlighter/dist/esm/languages/prism/go';
+import java from 'react-syntax-highlighter/dist/esm/languages/prism/java';
+import javascript from 'react-syntax-highlighter/dist/esm/languages/prism/javascript';
+import json from 'react-syntax-highlighter/dist/esm/languages/prism/json';
+import jsx from 'react-syntax-highlighter/dist/esm/languages/prism/jsx';
+import markdown from 'react-syntax-highlighter/dist/esm/languages/prism/markdown';
+import python from 'react-syntax-highlighter/dist/esm/languages/prism/python';
+import rust from 'react-syntax-highlighter/dist/esm/languages/prism/rust';
+import sql from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
+import tsx from 'react-syntax-highlighter/dist/esm/languages/prism/tsx';
+import typescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript';
+import yaml from 'react-syntax-highlighter/dist/esm/languages/prism/yaml';
 import { IconChevronRight, IconChevronDown } from '@tabler/icons-react';
+
+// The full Prism export eagerly bundles hundreds of language grammars into the
+// startup-critical Chat route. Workspace/chat output overwhelmingly uses this
+// focused set; unknown fences still render safely as plain code.
+SyntaxHighlighter.registerLanguage('bash', bash);
+SyntaxHighlighter.registerLanguage('c', c);
+SyntaxHighlighter.registerLanguage('cpp', cpp);
+SyntaxHighlighter.registerLanguage('csharp', csharp);
+SyntaxHighlighter.registerLanguage('css', css);
+SyntaxHighlighter.registerLanguage('go', go);
+SyntaxHighlighter.registerLanguage('java', java);
+SyntaxHighlighter.registerLanguage('javascript', javascript);
+SyntaxHighlighter.registerLanguage('json', json);
+SyntaxHighlighter.registerLanguage('jsx', jsx);
+SyntaxHighlighter.registerLanguage('markdown', markdown);
+SyntaxHighlighter.registerLanguage('python', python);
+SyntaxHighlighter.registerLanguage('rust', rust);
+SyntaxHighlighter.registerLanguage('sql', sql);
+SyntaxHighlighter.registerLanguage('tsx', tsx);
+SyntaxHighlighter.registerLanguage('typescript', typescript);
+SyntaxHighlighter.registerLanguage('yaml', yaml);
+
+const CODE_LANGUAGE_ALIASES: Record<string, string> = {
+  cs: 'csharp',
+  js: 'javascript',
+  md: 'markdown',
+  py: 'python',
+  sh: 'bash',
+  shell: 'bash',
+  ts: 'typescript',
+  yml: 'yaml',
+};
 
 // Reasoning-capable models emit their hidden chain-of-thought wrapped in one
 // of several tag conventions. We detect them all and render as collapsible
@@ -16,11 +65,21 @@ import { IconChevronRight, IconChevronDown } from '@tabler/icons-react';
 //   <reasoning>  Various open-source reasoning models
 //   <reflection> Reflection-70B and derivatives
 
-type ReasoningKind = 'think' | 'thinking' | 'thought' | 'reasoning' | 'reflection';
+type ReasoningKind =
+  | 'think'
+  | 'thinking'
+  | 'thought'
+  | 'reasoning'
+  | 'reflection';
 
 type Segment =
   | { kind: 'text'; content: string }
-  | { kind: 'reasoning'; tag: ReasoningKind; content: string; complete: boolean };
+  | {
+      kind: 'reasoning';
+      tag: ReasoningKind;
+      content: string;
+      complete: boolean;
+    };
 
 const REASONING_TAGS: ReasoningKind[] = [
   'think',
@@ -161,10 +220,18 @@ const ThinkingDots = styled.span`
     width: 0;
   }
   @keyframes thinkingDots {
-    0% { width: 0; }
-    33% { width: 0.4em; }
-    66% { width: 0.8em; }
-    100% { width: 1.2em; }
+    0% {
+      width: 0;
+    }
+    33% {
+      width: 0.4em;
+    }
+    66% {
+      width: 0.8em;
+    }
+    100% {
+      width: 1.2em;
+    }
   }
 `;
 
@@ -192,7 +259,10 @@ const markdownComponents = {
       <SyntaxHighlighter
         {...rest}
         PreTag="div"
-        language={match[1]}
+        language={
+          CODE_LANGUAGE_ALIASES[match[1].toLowerCase()] ??
+          match[1].toLowerCase()
+        }
         style={coldarkDark}
       >
         {String(children).replace(/\n$/, '')}
@@ -240,9 +310,12 @@ function ReasoningBlock({
         onClick={() => setOpen((v) => !v)}
       >
         <Caret size={14} stroke={1.8} />
-        {complete ? label : (
+        {complete ? (
+          label
+        ) : (
           <>
-            {label}<ThinkingDots />
+            {label}
+            <ThinkingDots />
           </>
         )}
         {isEmpty && <EmptyTag>empty</EmptyTag>}
@@ -265,9 +338,7 @@ export function ThinkingMessageBody({ text }: { text: string }) {
 
   // Fast path: no reasoning tag anywhere → plain markdown.
   if (segments.every((s) => s.kind === 'text')) {
-    return (
-      <Markdown components={markdownComponents}>{text}</Markdown>
-    );
+    return <Markdown components={markdownComponents}>{text}</Markdown>;
   }
 
   return (

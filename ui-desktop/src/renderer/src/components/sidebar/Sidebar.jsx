@@ -9,12 +9,13 @@ import { AddressHeader } from '../common/AddressHeader';
 import withSidebarState from '../../store/hocs/withSidebarState';
 
 const Container = styled.div`
-  background: rgba(5, 35, 22, 0.84);
-  width: 7rem;
+  background: #03160e !important;
+  width: 250px;
   padding-bottom: 4.5rem;
   display: flex;
   flex-direction: column;
-  transition: width 0.2s;
+  clip-path: inset(0 calc(250px - 7rem) 0 0);
+  transition: clip-path 0.2s cubic-bezier(0.22, 1, 0.36, 1);
   position: absolute;
   overflow: hidden;
   top: 0;
@@ -22,12 +23,13 @@ const Container = styled.div`
   bottom: 0;
   z-index: 3;
   border-right: 1px solid rgba(255, 255, 255, 0.16);
-  background: #03160e!important .sidebar-address {
+
+  .sidebar-address {
     display: none;
   }
 
   &:hover {
-    width: 250px;
+    clip-path: inset(0);
     box-shadow: 0 0 16px 0 rgba(0, 0, 0, 0.2);
 
     .sidebar-address {
@@ -38,6 +40,8 @@ const Container = styled.div`
     position: relative;
     min-width: 250px;
     width: 250px;
+    clip-path: none;
+    transition: none;
 
     .sidebar-address {
       display: block;
@@ -96,7 +100,7 @@ const PrimaryNavContainer = styled.nav`
 `;
 
 function Sidebar(props) {
-  const { address, copyToClipboard } = props;
+  const { address, copyToClipboard, onRouteIntent } = props;
   const [activeIndex, setActiveIndex] = useState(0);
   return (
     <Container>
@@ -113,6 +117,7 @@ function Sidebar(props) {
             parent={Container}
             activeIndex={activeIndex}
             setActiveIndex={setActiveIndex}
+            onRouteIntent={onRouteIntent}
           />
         </PrimaryNavContainer>
 
@@ -121,6 +126,7 @@ function Sidebar(props) {
             activeIndex={activeIndex}
             setActiveIndex={setActiveIndex}
             parent={Container}
+            onRouteIntent={onRouteIntent}
           />
         </nav>
         <AddressHeader address={address} copyToClipboard={copyToClipboard} />

@@ -18,6 +18,7 @@ import {
   IconInfoCircle,
   IconEye,
   IconSparkles,
+  IconLoader2,
 } from '@tabler/icons-react';
 import Modal from '../../contracts/modals/Modal';
 import ModelRow from './ModelRow';
@@ -278,6 +279,16 @@ const EmptyState = styled.div`
   }
 `;
 
+const LoadingState = styled(EmptyState)`
+  color: rgba(255, 255, 255, 0.72);
+
+  svg {
+    animation: ${spin} 0.7s linear infinite;
+    color: ${(p) => p.theme.colors.morMain};
+    opacity: 0.9;
+  }
+`;
+
 const BidsLoadingHint = styled.div`
   display: flex;
   align-items: center;
@@ -344,6 +355,7 @@ const ModelSelectionModal = ({
   onChangeModel,
   symbol,
   providersAvailability,
+  modelsLoading = false,
   bidsLoading,
   marketplaceOnly = false,
   coworkSetup = false,
@@ -595,7 +607,7 @@ const ModelSelectionModal = ({
               </span>
             </CoworkCandidateHint>
           )}
-          {bidsLoading && (
+          {bidsLoading && !modelsLoading && enriched.length > 0 && (
             <BidsLoadingHint>
               {marketplaceOnly
                 ? 'Loading marketplace options…'
@@ -604,8 +616,13 @@ const ModelSelectionModal = ({
           )}
         </Header>
 
-        <Body>
-          {visible.length === 0 && (
+        <Body aria-busy={modelsLoading}>
+          {modelsLoading ? (
+            <LoadingState role="status" aria-live="polite">
+              <IconLoader2 size={32} stroke={1.8} aria-hidden="true" />
+              <div>Loading models from your node…</div>
+            </LoadingState>
+          ) : visible.length === 0 ? (
             <EmptyState>
               <IconWorld size={36} stroke={1.5} />
               <div>
@@ -613,10 +630,12 @@ const ModelSelectionModal = ({
                   ? 'No models match your search.'
                   : filter === 'cowork'
                     ? 'No marketplace text/chat models are available to try with Workspace.'
-                    : 'No models available for this filter.'}
+                    : filter === 'all'
+                      ? 'No models are currently available from this node.'
+                      : 'No models available for this filter.'}
               </div>
             </EmptyState>
-          )}
+          ) : null}
 
           {localModels.length > 0 && (
             <Section>
@@ -629,6 +648,7 @@ const ModelSelectionModal = ({
                   <ModelRow
                     key={m.Id}
                     model={m}
+                    bidsLoading={bidsLoading}
                     symbol={symbol}
                     onChangeModel={handlePick}
                   />
@@ -658,6 +678,7 @@ const ModelSelectionModal = ({
                   <ModelRow
                     key={m.Id}
                     model={m}
+                    bidsLoading={bidsLoading}
                     symbol={symbol}
                     onChangeModel={handlePick}
                   />
@@ -680,6 +701,7 @@ const ModelSelectionModal = ({
                   <ModelRow
                     key={m.Id}
                     model={m}
+                    bidsLoading={bidsLoading}
                     symbol={symbol}
                     onChangeModel={handlePick}
                   />
@@ -702,6 +724,7 @@ const ModelSelectionModal = ({
                   <ModelRow
                     key={m.Id}
                     model={m}
+                    bidsLoading={bidsLoading}
                     symbol={symbol}
                     onChangeModel={handlePick}
                   />
@@ -721,6 +744,7 @@ const ModelSelectionModal = ({
                   <ModelRow
                     key={m.Id}
                     model={m}
+                    bidsLoading={bidsLoading}
                     symbol={symbol}
                     onChangeModel={handlePick}
                   />

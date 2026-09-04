@@ -11,6 +11,7 @@ import {
   IconChevronRight,
   IconHome,
   IconShieldLock,
+  IconLoader2,
 } from '@tabler/icons-react';
 import { formatSmallNumber, SECURE_TAG, SECURE_BADGE_TOOLTIP } from '../utils';
 import { getVisionCapability } from '../../../store/utils/attachments';
@@ -222,6 +223,20 @@ const OfflineBadge = styled.div`
   letter-spacing: 0.3px;
 `;
 
+const LoadingBadge = styled(OfflineBadge)`
+  color: rgba(255, 255, 255, 0.72);
+
+  svg {
+    animation: model-row-spin 0.7s linear infinite;
+  }
+
+  @keyframes model-row-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+`;
+
 const Caret = styled.div`
   color: rgba(255, 255, 255, 0.25);
   display: flex;
@@ -288,6 +303,7 @@ function computePrice(model: any): PriceInfo {
 function ModelRow(props: {
   model: any;
   symbol: string;
+  bidsLoading?: boolean;
   onChangeModel: (data: {
     modelId: string;
     bidId?: string;
@@ -300,6 +316,8 @@ function ModelRow(props: {
   const providerCount = (model?.bids || []).filter(
     (bid: any) => bid?.Id,
   ).length;
+  const isPricingLoading =
+    !isLocal && !!props.bidsLoading && !Array.isArray(model.bids);
   const isOnline = isLocal || (providerCount > 0 && model.isOnline !== false);
   const symbol = props.symbol || 'MOR';
   const lastCheck: Date | undefined = model.lastCheck
@@ -336,6 +354,7 @@ function ModelRow(props: {
     <RowContainer
       type="button"
       $online={isOnline}
+      aria-busy={isPricingLoading}
       disabled={!isOnline}
       onClick={handleSelect}
       title={tooltip}
@@ -405,7 +424,14 @@ function ModelRow(props: {
             Local
           </LocalBadge>
         )}
-        {price.kind === 'offline' && <OfflineBadge>Unavailable</OfflineBadge>}
+        {isPricingLoading ? (
+          <LoadingBadge>
+            <IconLoader2 size={13} stroke={2} aria-hidden="true" />
+            Checking providers…
+          </LoadingBadge>
+        ) : (
+          price.kind === 'offline' && <OfflineBadge>Unavailable</OfflineBadge>
+        )}
         {price.kind === 'single' && (
           <>
             <PriceValue>{formatSmallNumber(price.perSec)}</PriceValue>

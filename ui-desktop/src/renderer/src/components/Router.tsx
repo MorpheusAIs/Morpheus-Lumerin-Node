@@ -11,14 +11,15 @@ import { withClient } from '../store/hocs/clientContext';
 import selectors from '../store/selectors';
 import { queryKeys } from '../store/queries';
 import ErrorBoundary from './common/ErrorBoundary';
+import { preloadRoute, routeModules } from './routeModules';
 
-const Dashboard = lazy(() => import('./dashboard/Dashboard'));
-const Chat = lazy(() => import('./chat/Chat'));
-const Cowork = lazy(() => import('./cowork/Cowork'));
-const Agents = lazy(() => import('./agents/Agents'));
-const Models = lazy(() => import('./models/Models'));
-const Providers = lazy(() => import('./providers/Providers'));
-const Settings = lazy(() => import('./settings/Settings'));
+const Dashboard = lazy(routeModules['/wallet']);
+const Chat = lazy(routeModules['/chat']);
+const Cowork = lazy(routeModules['/workspace']);
+const Agents = lazy(routeModules['/agents']);
+const Models = lazy(routeModules['/models']);
+const Providers = lazy(routeModules['/providers']);
+const Settings = lazy(routeModules['/settings']);
 
 const LegacyCoworkRedirect = () => {
   const location = useLocation();
@@ -104,7 +105,7 @@ export const Layout = () => {
 
   return (
     <Container data-testid="router-container">
-      <Sidebar />
+      <Sidebar onRouteIntent={preloadRoute} />
       <Main
         data-scrollelement // Required by react-virtualized implementation in Dashboard/TxList
       >

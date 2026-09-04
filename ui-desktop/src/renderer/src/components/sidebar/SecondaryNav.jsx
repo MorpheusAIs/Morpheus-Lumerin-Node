@@ -112,6 +112,7 @@ function SecondaryNav({
   client: { onHelpLinkClick },
   activeIndex,
   setActiveIndex,
+  onRouteIntent,
 }) {
   return (
     <Container>
@@ -140,6 +141,10 @@ function SecondaryNav({
         onClick={() => setActiveIndex(5)}
         // className={(navData) => (navData.isActive ? "active-style" : 'none')}
         data-testid="tools-nav-btn"
+        onFocus={() => void onRouteIntent?.('/settings').catch(() => undefined)}
+        onPointerEnter={() =>
+          void onRouteIntent?.('/settings').catch(() => undefined)
+        }
         parent={parent}
         to="/settings"
       >

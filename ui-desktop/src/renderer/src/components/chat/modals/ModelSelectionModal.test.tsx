@@ -29,6 +29,38 @@ const marketplaceModel = (overrides: Record<string, unknown>) => ({
 });
 
 describe('ModelSelectionModal Workspace filter', () => {
+  it('distinguishes a catalog still loading from a genuinely empty catalog', () => {
+    const props = {
+      isActive: true,
+      handleClose: vi.fn(),
+      onChangeModel: vi.fn(),
+      symbol: 'MOR',
+      models: undefined,
+    };
+    const { rerender } = render(
+      <ThemeProvider theme={theme}>
+        <ModelSelectionModal {...props} modelsLoading />
+      </ThemeProvider>,
+    );
+
+    expect(screen.getByRole('status').textContent).toContain(
+      'Loading models from your node',
+    );
+    expect(
+      screen.queryByText('No models are currently available from this node.'),
+    ).toBeNull();
+
+    rerender(
+      <ThemeProvider theme={theme}>
+        <ModelSelectionModal {...props} models={[]} modelsLoading={false} />
+      </ThemeProvider>,
+    );
+
+    expect(
+      screen.getByText('No models are currently available from this node.'),
+    ).toBeTruthy();
+  });
+
   it('shows only marketplace chat models as unverified Workspace candidates', () => {
     render(
       <ThemeProvider theme={theme}>

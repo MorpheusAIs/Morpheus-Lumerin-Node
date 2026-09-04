@@ -50,6 +50,39 @@ export const ChatHistoryContainer = styled.div`
   height: 100%;
 `;
 
+export const ChatStartupState = styled.div`
+  align-items: center;
+  color: rgba(255, 255, 255, 0.72);
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1rem;
+  height: 100%;
+  justify-content: center;
+  padding: 3rem;
+  text-align: center;
+
+  svg {
+    color: ${(p) => p.theme.colors.morMain};
+  }
+
+  strong {
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 1.8rem;
+    font-weight: 600;
+  }
+
+  span {
+    font-size: 1.3rem;
+    line-height: 1.55;
+    max-width: 52ch;
+  }
+
+  button {
+    margin-top: 0.8rem;
+  }
+`;
+
 export const ChatIntroContainer = styled.div`
   width: 100%;
   height: 100%;

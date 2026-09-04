@@ -72,15 +72,18 @@ export function createClient(config) {
   }
   let coreStarted = false
   let coreInitialized = false
+  let bootstrapGeneration = 0
+  let bootstrapPromise = null
+  let persistedBootstrapState = {}
 
   function cleanupCoreAfterFailedStartup() {
-    try {
-      subscriptions.unsubscribe(core)
-    } catch (err) {
-      logger.warn('Could not remove partially initialized renderer subscriptions', err.message)
-    }
-
     if (coreInitialized) {
+      try {
+        subscriptions.unsubscribe(core)
+      } catch (err) {
+        logger.warn('Could not remove partially initialized renderer subscriptions', err.message)
+      }
+
       try {
         stopCore(core)
       } catch (err) {
@@ -88,28 +91,38 @@ export function createClient(config) {
       }
     }
     coreInitialized = false
+    coreStarted = false
   }
 
-  ipcMain.on('ui-ready', function (webContent, args) {
-    if (!isTrustedRendererEvent(webContent)) return
-    if (coreStarted) return
-    coreStarted = true
-    const onboardingComplete = !!settings.getPasswordHash()
+  function ensureCoreStarted(webContent) {
+    if (coreInitialized) {
+      return Promise.resolve({
+        generation: bootstrapGeneration,
+        persistedState: persistedBootstrapState
+      })
+    }
 
-    storage
+    // A renderer reload or duplicate mount can emit ui-ready again while the
+    // first request is still reading persisted state. Share that work and
+    // reply to every request instead of dropping the later request and making
+    // it time out. The generation also lets ui-unload invalidate work that is
+    // still pending without calling stop() on a core that has not started.
+    if (bootstrapPromise) {
+      return bootstrapPromise
+    }
+
+    coreStarted = true
+    const generation = ++bootstrapGeneration
+    const pendingBootstrap = storage
       .getState()
       .catch(function (err) {
         logger.warn('Failed to get state', err.message)
         return {}
       })
       .then(function (persistedState) {
-        const payload = Object.assign({}, args, {
-          data: {
-            onboardingComplete,
-            persistedState: persistedState || {},
-            config
-          }
-        })
+        if (generation !== bootstrapGeneration) {
+          return null
+        }
 
         // Install every follow-up listener before acknowledging ui-ready.
         // Root immediately requests settings after this response; replying
@@ -121,22 +134,87 @@ export function createClient(config) {
         core.api = api
         subscriptions.subscribe(core)
 
-        webContent.sender.send('ui-ready', payload)
-        // logger.verbose(`<-- ui-ready ${stringify(payload)}`);
+        persistedBootstrapState = persistedState || {}
+        return { generation, persistedState: persistedBootstrapState }
       })
       .catch(function (err) {
-        cleanupCoreAfterFailedStartup()
-        coreStarted = false
-        logger.error('Could not initialize renderer client', err.message)
+        // A stale attempt belongs to a renderer that already unloaded. It must
+        // neither tear down a newer attempt nor surface a false startup error.
+        if (generation === bootstrapGeneration) {
+          cleanupCoreAfterFailedStartup()
+          logger.error('Could not initialize renderer client', err.message)
+        }
+        throw err
+      })
+      .finally(function () {
+        if (bootstrapPromise === pendingBootstrap) {
+          bootstrapPromise = null
+        }
+      })
+
+    bootstrapPromise = pendingBootstrap
+    return pendingBootstrap
+  }
+
+  ipcMain.on('ui-ready', function (webContent, args) {
+    if (!isTrustedRendererEvent(webContent)) return
+    ensureCoreStarted(webContent)
+      .then(function (bootstrap) {
+        if (!bootstrap || bootstrap.generation !== bootstrapGeneration || !coreInitialized) {
+          return
+        }
+
+        const payload = Object.assign({}, args, {
+          data: {
+            onboardingComplete: !!settings.getPasswordHash(),
+            persistedState: bootstrap.persistedState,
+            config
+          }
+        })
+
+        try {
+          webContent.sender.send('ui-ready', payload)
+        } catch (err) {
+          // Invalidate every waiter from this renderer before cleanup so none
+          // of them can acknowledge a core that was just stopped.
+          if (bootstrap.generation === bootstrapGeneration) {
+            bootstrapGeneration++
+            bootstrapPromise = null
+            cleanupCoreAfterFailedStartup()
+            logger.error('Could not initialize renderer client', err.message)
+          }
+        }
+        // logger.verbose(`<-- ui-ready ${stringify(payload)}`);
+      })
+      // Initialization failures are logged once inside the shared bootstrap;
+      // acknowledge every coalesced requester immediately as well. Otherwise
+      // each renderer waits for its generic IPC timeout and reports a much less
+      // useful "operation timed out" error.
+      .catch(function (err) {
+        try {
+          webContent.sender.send(
+            'ui-ready',
+            Object.assign({}, args, {
+              error: {
+                message: err?.message || 'Could not initialize the wallet core'
+              }
+            })
+          )
+        } catch {
+          // The renderer disappeared while startup failed; there is nobody left
+          // to notify and ensureCoreStarted already rolled back the partial core.
+        }
       })
   })
 
   ipcMain.on('ui-unload', function (event) {
     if (!isTrustedRendererEvent(event)) return
     if (!coreStarted) return
-    subscriptions.unsubscribe(core)
-    stopCore(core)
-    coreInitialized = false
-    coreStarted = false
+
+    // Cancel in-flight state reads and prevent their continuations from
+    // starting the core after this renderer is gone.
+    bootstrapGeneration++
+    bootstrapPromise = null
+    cleanupCoreAfterFailedStartup()
   })
 }

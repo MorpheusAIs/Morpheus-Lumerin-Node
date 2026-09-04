@@ -74,13 +74,24 @@ const Label = styled.span`
 
 const iconSize = '2rem';
 
-export default function PrimaryNav({ parent, activeIndex, setActiveIndex }) {
+export default function PrimaryNav({
+  parent,
+  activeIndex,
+  setActiveIndex,
+  onRouteIntent,
+}) {
+  const warm = (path) => {
+    void onRouteIntent?.(path).catch(() => undefined);
+  };
+
   return (
     <Container>
       <Button
         onClick={() => setActiveIndex(0)}
         className={(navData) => (navData.isActive ? 'active-style' : 'none')}
         data-testid="wallet-nav-btn"
+        onFocus={() => warm('/wallet')}
+        onPointerEnter={() => warm('/wallet')}
         to="/wallet"
       >
         <IconWrapper>
@@ -91,7 +102,12 @@ export default function PrimaryNav({ parent, activeIndex, setActiveIndex }) {
         </Label>
       </Button>
 
-      <Button onClick={() => setActiveIndex(1)} to="/chat">
+      <Button
+        onClick={() => setActiveIndex(1)}
+        onFocus={() => warm('/chat')}
+        onPointerEnter={() => warm('/chat')}
+        to="/chat"
+      >
         <IconWrapper>
           <IconMessage width={iconSize} />
         </IconWrapper>
@@ -100,7 +116,12 @@ export default function PrimaryNav({ parent, activeIndex, setActiveIndex }) {
         </Label>
       </Button>
 
-      <Button onClick={() => setActiveIndex(2)} to="/workspace">
+      <Button
+        onClick={() => setActiveIndex(2)}
+        onFocus={() => warm('/workspace')}
+        onPointerEnter={() => warm('/workspace')}
+        to="/workspace"
+      >
         <IconWrapper>
           <IconSparkles width={iconSize} />
         </IconWrapper>
@@ -109,7 +130,12 @@ export default function PrimaryNav({ parent, activeIndex, setActiveIndex }) {
         </Label>
       </Button>
 
-      <Button onClick={() => setActiveIndex(3)} to="/models">
+      <Button
+        onClick={() => setActiveIndex(3)}
+        onFocus={() => warm('/models')}
+        onPointerEnter={() => warm('/models')}
+        to="/models"
+      >
         <IconWrapper>
           <IconPackages width={iconSize} />
         </IconWrapper>
@@ -118,7 +144,12 @@ export default function PrimaryNav({ parent, activeIndex, setActiveIndex }) {
         </Label>
       </Button>
 
-      <Button onClick={() => setActiveIndex(4)} to="/agents">
+      <Button
+        onClick={() => setActiveIndex(4)}
+        onFocus={() => warm('/agents')}
+        onPointerEnter={() => warm('/agents')}
+        to="/agents"
+      >
         <IconWrapper>
           <IconUsers width={iconSize} />
         </IconWrapper>
@@ -127,7 +158,12 @@ export default function PrimaryNav({ parent, activeIndex, setActiveIndex }) {
         </Label>
       </Button>
 
-      <Button onClick={() => setActiveIndex(5)} to="/providers">
+      <Button
+        onClick={() => setActiveIndex(5)}
+        onFocus={() => warm('/providers')}
+        onPointerEnter={() => warm('/providers')}
+        to="/providers"
+      >
         <IconWrapper>
           <IconBrandStackshare width={iconSize} />
         </IconWrapper>

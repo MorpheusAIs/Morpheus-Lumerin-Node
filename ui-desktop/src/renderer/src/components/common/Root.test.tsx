@@ -1,4 +1,4 @@
-import { render, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ToastsContext } from '../toasts';
 import { Root } from './Root';
@@ -30,7 +30,6 @@ describe('Root bootstrap', () => {
       <ToastsContext.Provider value={{ toast }}>
         <Root
           isSessionActive={false}
-          hasEnoughData={false}
           isAuthBypassed={false}
           sellerDefaultCurrency="MOR"
           servicesState={{ orchestratorStatus: 'starting' } as any}
@@ -39,7 +38,6 @@ describe('Root bootstrap', () => {
           client={client}
           StartupComponent={EmptyComponent}
           OnboardingComponent={EmptyComponent as any}
-          LoadingComponent={EmptyComponent}
           RouterComponent={EmptyComponent}
           LoginComponent={EmptyComponent as any}
         />
@@ -77,7 +75,6 @@ describe('Root bootstrap', () => {
       <ToastsContext.Provider value={{ toast }}>
         <Root
           isSessionActive={false}
-          hasEnoughData={false}
           isAuthBypassed={false}
           sellerDefaultCurrency="MOR"
           servicesState={{ orchestratorStatus: 'starting' } as any}
@@ -86,7 +83,6 @@ describe('Root bootstrap', () => {
           client={client}
           StartupComponent={EmptyComponent}
           OnboardingComponent={EmptyComponent as any}
-          LoadingComponent={EmptyComponent}
           RouterComponent={EmptyComponent}
           LoginComponent={EmptyComponent as any}
         />
@@ -105,5 +101,44 @@ describe('Root bootstrap', () => {
       'root component error',
       'renderer bootstrap failed',
     );
+  });
+
+  it('renders the authenticated app immediately without waiting for optional chain data', async () => {
+    const dispatch = vi.fn();
+    const client = {
+      onInit: vi.fn(async () => ({
+        onboardingComplete: true,
+        persistedState: {},
+        config: {},
+      })),
+      getDefaultCurrencySetting: vi.fn(async () => 'MOR'),
+    };
+
+    const Startup = () => <div data-testid="startup" />;
+    const Router = () => <div data-testid="router" />;
+
+    render(
+      <ToastsContext.Provider value={{ toast: vi.fn() }}>
+        <Root
+          isSessionActive
+          isAuthBypassed={false}
+          sellerDefaultCurrency="MOR"
+          servicesState={{ orchestratorStatus: 'ready' } as any}
+          config={{}}
+          dispatch={dispatch}
+          client={client}
+          StartupComponent={Startup}
+          OnboardingComponent={EmptyComponent as any}
+          RouterComponent={Router}
+          LoginComponent={EmptyComponent as any}
+        />
+      </ToastsContext.Provider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId('router')).toBeTruthy());
+    expect(screen.queryByTestId('startup')).toBeNull();
+    expect(dispatch).not.toHaveBeenCalledWith({
+      type: 'required-data-gathered',
+    });
   });
 });

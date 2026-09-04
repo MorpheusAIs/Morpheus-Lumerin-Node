@@ -52,12 +52,7 @@ const withChatState = (WrappedComponent: ComponentType<any>) => {
     })`;
 
     getProviders = async () => {
-      try {
-        return (await this.props.client.getProviders()) || [];
-      } catch (e) {
-        console.log('Error', e);
-        return [];
-      }
+      return (await this.props.client.getProviders()) || [];
     };
 
     closeSession = async (sessionId: string) => {
@@ -78,42 +73,11 @@ const withChatState = (WrappedComponent: ComponentType<any>) => {
     };
 
     getAllModels = async () => {
-      try {
-        return (await this.props.client.getAllModels()) || [];
-      } catch (e) {
-        console.log('Error', e);
-        return [];
-      }
+      return (await this.props.client.getAllModels()) || [];
     };
 
     getLocalModels = async () => {
-      try {
-        return (await this.props.client.getLocalModels()) || [];
-      } catch (e) {
-        console.log('Error', e);
-        return [];
-      }
-    };
-
-    getModelsData = async () => {
-      const [localModels, modelsResp, providersResp, meta, userBalances] =
-        await Promise.all([
-          this.getLocalModels(),
-          this.getAllModels(),
-          this.getProviders(),
-          this.getMetaInfo(),
-          this.getBalances(),
-        ]);
-
-      const models = modelsResp.filter((m) => !m.IsDeleted);
-      const providers = providersResp.filter((m) => !m.IsDeleted);
-
-      const result = [
-        ...localModels.map((m) => ({ ...m, isLocal: true })),
-        ...models,
-      ];
-
-      return { models: result, providers, meta, userBalances };
+      return (await this.props.client.getLocalModels()) || [];
     };
 
     readAvailabilityCache = (address) => {
@@ -299,11 +263,12 @@ const withChatState = (WrappedComponent: ComponentType<any>) => {
       return (
         <WrappedComponent
           getProviders={this.getProviders}
+          getAllModels={this.getAllModels}
+          getLocalModels={this.getLocalModels}
           getProvidersAvailability={this.getProvidersAvailability}
           getBidInfo={this.getBidInfo}
           getMetaInfo={this.getMetaInfo}
           getBidsByModelId={this.getBidsByModelId}
-          getModelsData={this.getModelsData}
           getSessionsByUser={this.getSessionsByUser}
           closeSession={this.closeSession}
           onOpenSession={this.onOpenSession}
