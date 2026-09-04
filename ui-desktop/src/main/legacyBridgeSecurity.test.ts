@@ -15,7 +15,7 @@ describe('legacy renderer bridge security boundaries', () => {
 
   it('registers bootstrap IPC before loading the renderer and follow-up IPC before replying', () => {
     const main = source('src/main/index.ts')
-    const readyBlock = main.slice(main.indexOf('app\n  .whenReady()'))
+    const readyBlock = main.slice(main.indexOf('const appReady ='))
     const client = source('src/main/src/client/index.js')
 
     expect(readyBlock.indexOf('createClient(config)')).toBeGreaterThan(-1)
@@ -25,6 +25,17 @@ describe('legacy renderer bridge security boundaries', () => {
     expect(client.indexOf('subscriptions.subscribe(core)')).toBeGreaterThan(-1)
     expect(client.indexOf('subscriptions.subscribe(core)')).toBeLessThan(
       client.indexOf("webContent.sender.send('ui-ready', payload)")
+    )
+  })
+
+  it('runs one main process for shared wallet, router, and Workspace state', () => {
+    const main = source('src/main/index.ts')
+
+    expect(main).toContain('app.requestSingleInstanceLock()')
+    expect(main).toContain("app.on('second-instance'")
+    expect(main).toContain('mainWindow.focus()')
+    expect(main.indexOf('app.requestSingleInstanceLock()')).toBeLessThan(
+      main.indexOf('const appReady =')
     )
   })
 

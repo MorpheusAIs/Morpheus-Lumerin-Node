@@ -1,5 +1,13 @@
 export type CoworkApprovalMode = 'manual' | 'auto' | 'skip'
 
+export interface CoworkApprovalPolicy {
+  schemaVersion: 1
+  id: 'workspace'
+  mode: CoworkApprovalMode
+  revision: number
+  updatedAt: number
+}
+
 export type CoworkTaskStatus =
   | 'draft'
   | 'queued'
@@ -18,6 +26,7 @@ export interface CoworkProject {
   name: string
   rootPath: string
   instructions: string
+  /** @deprecated Read through the Workspace-wide approval policy instead. */
   approvalMode: CoworkApprovalMode
   extensionSettings?: {
     folderInstructionsEnabled: boolean

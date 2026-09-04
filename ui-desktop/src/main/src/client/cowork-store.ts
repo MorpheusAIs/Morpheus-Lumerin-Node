@@ -2,6 +2,10 @@ import { randomUUID } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import {
+  withCoworkApprovalPolicyReadLock,
+  withCoworkApprovalPolicyWriteLock
+} from './cowork-approval-policy-lock'
 import { coworkCollection } from './cowork-database'
 import { executionMatchesToolCall } from './cowork-mutation-journal'
 import { createCoworkLoopGuardState } from './cowork-loop-guard'
@@ -13,6 +17,8 @@ import {
 import {
   CoworkActivity,
   CoworkAgentMessage,
+  CoworkApprovalMode,
+  CoworkApprovalPolicy,
   CoworkArtifact,
   CoworkDisplayMessage,
   CoworkModelTarget,
@@ -27,6 +33,8 @@ import {
 
 const projects = () => coworkCollection('projects')
 const tasks = () => coworkCollection('tasks')
+const preferences = () => coworkCollection('preferences')
+const APPROVAL_POLICY_ID = 'workspace'
 const MAX_TASKS_PER_PROJECT = 500
 const MAX_DISPLAY_HISTORY_BYTES = 2 * 1024 * 1024
 const MAX_RECENT_DISPLAY_MESSAGES = 100
@@ -42,6 +50,181 @@ const LARGE_ARGUMENT_TOOLS = new Set([
 const clean = <T>(value: T): T => JSON.parse(JSON.stringify(value))
 const historyByteSizes = new WeakMap<unknown[], number>()
 const taskMutationTails = new Map<string, Promise<void>>()
+let approvalPolicyMutationTail: Promise<void> = Promise.resolve()
+let cachedApprovalPolicy: CoworkApprovalPolicy | null = null
+
+const isApprovalMode = (value: unknown): value is CoworkApprovalMode =>
+  value === 'manual' || value === 'auto' || value === 'skip'
+
+const approvalStrictness = (mode: CoworkApprovalMode): number =>
+  mode === 'manual' ? 2 : mode === 'auto' ? 1 : 0
+
+const syncLegacyProjectApprovalMode = async (mode: CoworkApprovalMode): Promise<void> => {
+  await projects().updateAsync(
+    { approvalMode: { $ne: mode } },
+    { $set: { approvalMode: mode } },
+    { multi: true }
+  )
+}
+
+const normalizedApprovalPolicy = (value: unknown): CoworkApprovalPolicy | null => {
+  const stored = value as Partial<CoworkApprovalPolicy> | null
+  if (
+    stored?.schemaVersion !== 1 ||
+    stored.id !== APPROVAL_POLICY_ID ||
+    !isApprovalMode(stored.mode) ||
+    !Number.isSafeInteger(stored.revision) ||
+    stored.revision! < 1 ||
+    !Number.isSafeInteger(stored.updatedAt) ||
+    stored.updatedAt! < 0
+  ) {
+    return null
+  }
+  return {
+    schemaVersion: 1,
+    id: APPROVAL_POLICY_ID,
+    mode: stored.mode,
+    revision: stored.revision!,
+    updatedAt: stored.updatedAt!
+  }
+}
+
+async function withApprovalPolicyMutationLock<T>(operation: () => Promise<T>): Promise<T> {
+  const previous = approvalPolicyMutationTail
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const tail = previous.catch(() => undefined).then(() => gate)
+  approvalPolicyMutationTail = tail
+  await previous.catch(() => undefined)
+  try {
+    return await operation()
+  } finally {
+    release()
+    if (approvalPolicyMutationTail === tail) approvalPolicyMutationTail = Promise.resolve()
+  }
+}
+
+async function readApprovalPolicyUnlocked(): Promise<CoworkApprovalPolicy> {
+  if (cachedApprovalPolicy) return clean(cachedApprovalPolicy)
+  const storedRows = (await preferences().findAsync({ id: APPROVAL_POLICY_ID })) as unknown[]
+  const futurePolicy = storedRows.find((value) => {
+    const schemaVersion = (value as { schemaVersion?: unknown } | null)?.schemaVersion
+    return Number.isSafeInteger(schemaVersion) && Number(schemaVersion) > 1
+  })
+  if (futurePolicy) {
+    throw new Error(
+      'Workspace approval settings were created by a newer app version. Update Morpheus before running Workspace tasks.'
+    )
+  }
+  const highestObservedRevision = storedRows.reduce<number>((highest, value) => {
+    const revision = (value as { revision?: unknown } | null)?.revision
+    return Number.isSafeInteger(revision) && Number(revision) >= 1
+      ? Math.max(highest, Number(revision))
+      : highest
+  }, 0)
+  const validPolicies = storedRows
+    .map(normalizedApprovalPolicy)
+    .filter((policy): policy is CoworkApprovalPolicy => Boolean(policy))
+    .sort(
+      (left, right) =>
+        right.revision - left.revision ||
+        approvalStrictness(right.mode) - approvalStrictness(left.mode) ||
+        right.updatedAt - left.updatedAt
+    )
+  const normalized = validPolicies[0]
+  const malformedAtOrAboveWinner = Boolean(
+    normalized &&
+    storedRows.some((value) => {
+      if (normalizedApprovalPolicy(value)) return false
+      const revision = (value as { revision?: unknown } | null)?.revision
+      return Number.isSafeInteger(revision) && Number(revision) >= normalized.revision
+    })
+  )
+  if (normalized && !malformedAtOrAboveWinner) {
+    if (storedRows.length !== 1) {
+      await preferences().removeAsync({ id: APPROVAL_POLICY_ID }, { multi: true })
+      await preferences().insertAsync(normalized)
+    }
+    await syncLegacyProjectApprovalMode(normalized.mode)
+    cachedApprovalPolicy = normalized
+    return clean(normalized)
+  }
+
+  // Project-scoped modes from older builds cannot safely be promoted across
+  // unrelated folders. Migrate to the least-privileged global default and let
+  // the user make one explicit Workspace-wide choice.
+  if (highestObservedRevision >= Number.MAX_SAFE_INTEGER) {
+    throw new Error(
+      'Workspace approval settings are invalid and cannot be repaired safely. Update Morpheus or restore the Workspace preferences file.'
+    )
+  }
+  const fallback: CoworkApprovalPolicy = {
+    schemaVersion: 1,
+    id: APPROVAL_POLICY_ID,
+    mode: 'manual',
+    revision: highestObservedRevision + 1,
+    updatedAt: Date.now()
+  }
+  // Tighten legacy project rows before publishing the new canonical default so
+  // a rollback cannot briefly reactivate an old per-project Skip value.
+  await syncLegacyProjectApprovalMode(fallback.mode)
+  await preferences().removeAsync({ id: APPROVAL_POLICY_ID }, { multi: true })
+  await preferences().insertAsync(fallback)
+  cachedApprovalPolicy = fallback
+  return clean(fallback)
+}
+
+export const getCoworkApprovalPolicy = (): Promise<CoworkApprovalPolicy> =>
+  withApprovalPolicyMutationLock(readApprovalPolicyUnlocked)
+
+export const updateCoworkApprovalPolicy = (
+  mode: CoworkApprovalMode,
+  expectedRevision: number
+): Promise<CoworkApprovalPolicy> =>
+  withCoworkApprovalPolicyWriteLock(() =>
+    withApprovalPolicyMutationLock(async () => {
+      if (!isApprovalMode(mode)) throw new Error('Invalid approval mode.')
+      if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1) {
+        throw new Error('Invalid approval policy revision.')
+      }
+      const current = await readApprovalPolicyUnlocked()
+      if (current.revision !== expectedRevision) {
+        throw new Error(
+          'The Workspace approval policy changed. Review the latest setting and retry.'
+        )
+      }
+      if (current.revision >= Number.MAX_SAFE_INTEGER) {
+        throw new Error(
+          'The Workspace approval policy revision limit was reached. Update Morpheus before changing this setting.'
+        )
+      }
+      const next: CoworkApprovalPolicy = {
+        schemaVersion: 1,
+        id: APPROVAL_POLICY_ID,
+        mode,
+        revision: current.revision + 1,
+        updatedAt: Date.now()
+      }
+      const tightening = approvalStrictness(mode) > approvalStrictness(current.mode)
+      if (tightening) await syncLegacyProjectApprovalMode(mode)
+      const replaced = await preferences().updateAsync(
+        { id: APPROVAL_POLICY_ID, revision: current.revision },
+        { $set: next },
+        {}
+      )
+      if (replaced !== 1) {
+        cachedApprovalPolicy = null
+        throw new Error(
+          'The Workspace approval policy changed. Review the latest setting and retry.'
+        )
+      }
+      cachedApprovalPolicy = next
+      if (!tightening) await syncLegacyProjectApprovalMode(mode)
+      return clean(next)
+    })
+  )
 
 async function withTaskMutationLock<T>(taskId: string, operation: () => Promise<T>): Promise<T> {
   const previous = taskMutationTails.get(taskId) ?? Promise.resolve()
@@ -137,6 +320,7 @@ export const createProject = async (input: {
   name: string
   rootPath: string
   instructions?: string
+  /** @deprecated File approval policy is Workspace-wide; this value is ignored. */
   approvalMode?: CoworkProject['approvalMode']
 }): Promise<CoworkProject> => {
   const now = Date.now()
@@ -149,47 +333,51 @@ export const createProject = async (input: {
     )
   }
   if (!input.name.trim()) throw new Error('Project name is required.')
-  const project: CoworkProject = {
-    schemaVersion: 1,
-    id: randomUUID(),
-    name: input.name.trim(),
-    rootPath,
-    instructions: input.instructions?.trim() ?? '',
-    approvalMode: input.approvalMode ?? 'manual',
-    createdAt: now,
-    updatedAt: now
-  }
-  await projects().insertAsync(project)
-  return clean(project)
+  return withCoworkApprovalPolicyReadLock(async () => {
+    const approvalPolicy = await getCoworkApprovalPolicy()
+    const project: CoworkProject = {
+      schemaVersion: 1,
+      id: randomUUID(),
+      name: input.name.trim(),
+      rootPath,
+      instructions: input.instructions?.trim() ?? '',
+      approvalMode: approvalPolicy.mode,
+      createdAt: now,
+      updatedAt: now
+    }
+    await projects().insertAsync(project)
+    return clean(project)
+  })
 }
 
 export const listProjects = async (): Promise<CoworkProject[]> => {
-  const result = (await projects().findAsync({})) as CoworkProject[]
+  const [result, approvalPolicy] = await Promise.all([
+    projects().findAsync({}) as Promise<CoworkProject[]>,
+    getCoworkApprovalPolicy()
+  ])
   return clean(
-    result.filter((project) => !project.archivedAt).sort((a, b) => b.updatedAt - a.updatedAt)
+    result
+      .filter((project) => !project.archivedAt)
+      .map((project) => ({ ...project, approvalMode: approvalPolicy.mode }))
+      .sort((a, b) => b.updatedAt - a.updatedAt)
   )
 }
 
 export const getProject = async (id: string): Promise<CoworkProject | null> => {
-  const result = (await projects().findOneAsync({ id })) as CoworkProject | null
-  return result ? clean(result) : null
+  const [result, approvalPolicy] = await Promise.all([
+    projects().findOneAsync({ id }) as Promise<CoworkProject | null>,
+    getCoworkApprovalPolicy()
+  ])
+  return result ? clean({ ...result, approvalMode: approvalPolicy.mode }) : null
 }
 
 export const updateProject = async (
   id: string,
-  patch: Partial<
-    Pick<CoworkProject, 'name' | 'instructions' | 'approvalMode' | 'extensionSettings'>
-  >
+  patch: Partial<Pick<CoworkProject, 'name' | 'instructions' | 'extensionSettings'>>
 ): Promise<CoworkProject> => {
   const current = await getProject(id)
   if (!current) throw new Error('Workspace project not found.')
   if (patch.name !== undefined && !patch.name.trim()) throw new Error('Project name is required.')
-  if (
-    patch.approvalMode !== undefined &&
-    !['manual', 'auto', 'skip'].includes(patch.approvalMode)
-  ) {
-    throw new Error('Invalid approval mode.')
-  }
   if (patch.extensionSettings !== undefined) {
     const settings = patch.extensionSettings
     if (typeof settings.folderInstructionsEnabled !== 'boolean') {
@@ -226,7 +414,6 @@ export const updateProject = async (
   const update = {
     ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
     ...(patch.instructions !== undefined ? { instructions: patch.instructions.trim() } : {}),
-    ...(patch.approvalMode !== undefined ? { approvalMode: patch.approvalMode } : {}),
     ...(patch.extensionSettings !== undefined
       ? { extensionSettings: clean(patch.extensionSettings) }
       : {}),

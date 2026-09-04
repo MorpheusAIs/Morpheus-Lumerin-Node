@@ -1,6 +1,8 @@
 import { ipcRenderer, clipboard, contextBridge } from 'electron'
 
 const coworkChannels = {
+  getApprovalPolicy: 'cowork:get-approval-policy',
+  updateApprovalPolicy: 'cowork:update-approval-policy',
   listProjects: 'cowork:list-projects',
   createProject: 'cowork:create-project',
   updateProject: 'cowork:update-project',
@@ -196,6 +198,9 @@ const sanitizedCoworkTaskEvent = (payload) => {
 // Unlike the legacy generic IPC bridge, Cowork exposes only fixed operations.
 // The renderer cannot choose a main-process channel or supply a filesystem root.
 const cowork = {
+  getApprovalPolicy: () => ipcRenderer.invoke(coworkChannels.getApprovalPolicy),
+  updateApprovalPolicy: (mode, expectedRevision) =>
+    ipcRenderer.invoke(coworkChannels.updateApprovalPolicy, { mode, expectedRevision }),
   listProjects: () => ipcRenderer.invoke(coworkChannels.listProjects),
   createProject: (input) => ipcRenderer.invoke(coworkChannels.createProject, input),
   updateProject: (input) => ipcRenderer.invoke(coworkChannels.updateProject, input),

@@ -33,6 +33,14 @@ afterAll(async () => {
 describe.sequential('Cowork store persistence', () => {
   it('canonicalizes projects and creates a durable task record', async () => {
     const store = await import('./cowork-store')
+    const initialPolicy = await store.getCoworkApprovalPolicy()
+    expect(initialPolicy).toMatchObject({
+      schemaVersion: 1,
+      id: 'workspace',
+      mode: 'manual',
+      revision: 1
+    })
+    expect(initialPolicy).not.toHaveProperty('_id')
     const project = await store.createProject({
       name: '  Documentation  ',
       rootPath: projectRoot,
@@ -45,8 +53,20 @@ describe.sequential('Cowork store persistence', () => {
       name: 'Documentation',
       rootPath: await fs.realpath(projectRoot),
       instructions: 'Keep examples concise.',
+      approvalMode: 'manual'
+    })
+
+    const globalPolicy = await store.updateCoworkApprovalPolicy('auto', initialPolicy.revision)
+    expect(globalPolicy).toMatchObject({ mode: 'auto', revision: 2 })
+    expect(globalPolicy).not.toHaveProperty('_id')
+    expect(await store.getProject(project.id)).toMatchObject({ approvalMode: 'auto' })
+    const { coworkCollection } = await import('./cowork-database')
+    expect(await coworkCollection('projects').findOneAsync({ id: project.id })).toMatchObject({
       approvalMode: 'auto'
     })
+    await expect(store.updateCoworkApprovalPolicy('skip', initialPolicy.revision)).rejects.toThrow(
+      /policy changed/i
+    )
 
     const task = await store.createTask({
       projectId: project.id,
@@ -101,8 +121,11 @@ describe.sequential('Cowork store persistence', () => {
       const dataDirectoryMode = (await fs.stat(path.join(electron.userData, 'Cowork'))).mode & 0o777
       const projectsFileMode =
         (await fs.stat(path.join(electron.userData, 'Cowork', 'projects.db'))).mode & 0o777
+      const preferencesFileMode =
+        (await fs.stat(path.join(electron.userData, 'Cowork', 'preferences.db'))).mode & 0o777
       expect(dataDirectoryMode).toBe(0o700)
       expect(projectsFileMode).toBe(0o600)
+      expect(preferencesFileMode).toBe(0o600)
     }
 
     await store.setTaskStatus(task.id, 'paused', { summary: 'Waiting for the next app launch.' })
@@ -112,8 +135,15 @@ describe.sequential('Cowork store persistence', () => {
     const reloadedStore = await import('./cowork-store')
     const recoveredProject = await reloadedStore.getProject(project.id)
     const recoveredTask = await reloadedStore.getTask(task.id)
+    const recoveredPolicy = await reloadedStore.getCoworkApprovalPolicy()
 
-    expect(recoveredProject).toMatchObject({ id: project.id, name: 'Documentation' })
+    expect(recoveredProject).toMatchObject({
+      id: project.id,
+      name: 'Documentation',
+      approvalMode: 'auto'
+    })
+    expect(recoveredPolicy).toMatchObject({ mode: 'auto', revision: 2 })
+    expect(recoveredPolicy).not.toHaveProperty('_id')
     expect(recoveredTask).toMatchObject({
       id: task.id,
       projectId: project.id,
@@ -456,5 +486,104 @@ describe.sequential('Cowork store persistence', () => {
         model: { modelId: 'local-test', modelName: 'Local test model', isLocal: true }
       })
     ).rejects.toThrow(/outcome you want/)
+  })
+
+  it('fails closed when a persisted Workspace approval policy is invalid', async () => {
+    const { coworkCollection } = await import('./cowork-database')
+    await coworkCollection('preferences').updateAsync(
+      { id: 'workspace' },
+      { $set: { mode: 'unexpected-mode' } },
+      {}
+    )
+
+    vi.resetModules()
+    const reloadedStore = await import('./cowork-store')
+    const policy = await reloadedStore.getCoworkApprovalPolicy()
+
+    expect(policy).toMatchObject({
+      schemaVersion: 1,
+      id: 'workspace',
+      mode: 'manual',
+      revision: 3
+    })
+    expect(policy).not.toHaveProperty('_id')
+  })
+
+  it('normalizes duplicate policies to the strictest mode at the highest revision', async () => {
+    const { coworkCollection } = await import('./cowork-database')
+    await coworkCollection('preferences').insertAsync({
+      schemaVersion: 1,
+      id: 'workspace',
+      mode: 'skip',
+      revision: 7,
+      updatedAt: Date.now() + 1_000
+    })
+    await coworkCollection('preferences').insertAsync({
+      schemaVersion: 1,
+      id: 'workspace',
+      mode: 'manual',
+      revision: 7,
+      updatedAt: Date.now()
+    })
+
+    vi.resetModules()
+    const reloadedStore = await import('./cowork-store')
+    const policy = await reloadedStore.getCoworkApprovalPolicy()
+    const reloadedDatabase = await import('./cowork-database')
+    const policyRows = await reloadedDatabase.coworkCollection('preferences').findAsync({
+      id: 'workspace'
+    })
+    const projectRows = await reloadedDatabase.coworkCollection('projects').findAsync({})
+
+    expect(policy).toMatchObject({ mode: 'manual', revision: 7 })
+    expect(policy).not.toHaveProperty('_id')
+    expect(policyRows).toHaveLength(1)
+    expect(projectRows.every((project) => project.approvalMode === 'manual')).toBe(true)
+  })
+
+  it('repairs a malformed higher revision without reusing CAS history', async () => {
+    const { coworkCollection } = await import('./cowork-database')
+    await coworkCollection('preferences').insertAsync({
+      schemaVersion: 1,
+      id: 'workspace',
+      mode: 'invalid',
+      revision: 9,
+      updatedAt: Date.now()
+    })
+
+    vi.resetModules()
+    const reloadedStore = await import('./cowork-store')
+    const policy = await reloadedStore.getCoworkApprovalPolicy()
+    const reloadedDatabase = await import('./cowork-database')
+    const rows = await reloadedDatabase.coworkCollection('preferences').findAsync({
+      id: 'workspace'
+    })
+
+    expect(policy).toMatchObject({ mode: 'manual', revision: 10 })
+    expect(rows).toHaveLength(1)
+  })
+
+  it('refuses to overwrite approval settings from a newer schema', async () => {
+    const { coworkCollection } = await import('./cowork-database')
+    const future = {
+      schemaVersion: 2,
+      id: 'workspace',
+      mode: 'skip',
+      revision: 11,
+      updatedAt: Date.now()
+    }
+    await coworkCollection('preferences').insertAsync(future)
+
+    vi.resetModules()
+    const reloadedStore = await import('./cowork-store')
+    await expect(reloadedStore.getCoworkApprovalPolicy()).rejects.toThrow(/newer app version/i)
+    const reloadedDatabase = await import('./cowork-database')
+    const rows = await reloadedDatabase.coworkCollection('preferences').findAsync({
+      id: 'workspace',
+      schemaVersion: 2
+    })
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject(future)
   })
 })

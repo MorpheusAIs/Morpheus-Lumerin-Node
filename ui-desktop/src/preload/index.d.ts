@@ -50,6 +50,13 @@ type IpfsDownloadApi = {
 }
 
 type CoworkApprovalMode = 'manual' | 'auto' | 'skip'
+type CoworkApprovalPolicyView = {
+  schemaVersion: 1
+  id: 'workspace'
+  mode: CoworkApprovalMode
+  revision: number
+  updatedAt: number
+}
 type CoworkTaskStatus =
   | 'draft'
   | 'queued'
@@ -167,17 +174,20 @@ type CoworkTaskSummaryView = Pick<
 >
 
 type CoworkApi = {
+  getApprovalPolicy: () => Promise<CoworkApprovalPolicyView>
+  updateApprovalPolicy: (
+    mode: CoworkApprovalMode,
+    expectedRevision: number
+  ) => Promise<CoworkApprovalPolicyView>
   listProjects: () => Promise<CoworkProjectView[]>
   createProject: (input: {
     name: string
     instructions?: string
-    approvalMode?: CoworkApprovalMode
   }) => Promise<CoworkProjectView | null>
   updateProject: (input: {
     id: string
     name?: string
     instructions?: string
-    approvalMode?: CoworkApprovalMode
   }) => Promise<CoworkProjectView>
   deleteProject: (id: string) => Promise<boolean>
   listTasks: (projectId?: string) => Promise<CoworkTaskSummaryView[]>

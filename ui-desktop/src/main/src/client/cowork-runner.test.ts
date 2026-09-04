@@ -949,6 +949,89 @@ describe.sequential('Cowork runner interruption safety', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('treats an old approval token as an idempotent no-op', async () => {
+    const freshCall = {
+      id: 'fresh-write',
+      type: 'function' as const,
+      function: {
+        name: 'write_file',
+        arguments: JSON.stringify({ path: 'fresh.txt', content: 'fresh' })
+      }
+    }
+    state.task = makeTask('waiting_approval')
+    state.task.pendingApproval = {
+      id: 'fresh-approval',
+      toolCall: freshCall,
+      remainingToolCalls: [],
+      reason: 'Review the fresh action.',
+      risk: 'write',
+      createdAt: Date.now()
+    }
+    const refreshModelTarget = vi.fn()
+
+    const authoritative = await resolveCoworkApproval(
+      state.task.id,
+      'old-approval',
+      true,
+      async () => ({}),
+      vi.fn(),
+      refreshModelTarget
+    )
+
+    expect(authoritative).toMatchObject({
+      status: 'waiting_approval',
+      pendingApproval: { id: 'fresh-approval' }
+    })
+    expect(refreshModelTarget).not.toHaveBeenCalled()
+    expect(toolMocks.execute).not.toHaveBeenCalled()
+  })
+
+  it('allows remote data sharing to be denied after its session expires', async () => {
+    const authorizationCall = {
+      id: 'authorize-remote',
+      type: 'function' as const,
+      function: { name: 'authorize_remote_model', arguments: '{}' }
+    }
+    state.task = makeTask('waiting_approval')
+    state.task.model = {
+      modelId: 'remote-model',
+      modelName: 'Remote model',
+      isLocal: false,
+      dataBoundary: 'independent-provider',
+      sessionId: 'expired-session',
+      sessionEndsAt: 1
+    }
+    state.task.modelFingerprint = 'remote:expired-session'
+    state.task.pendingApproval = {
+      id: 'remote-approval',
+      toolCall: authorizationCall,
+      remainingToolCalls: [],
+      reason: 'Share the task with the independent provider.',
+      risk: 'read',
+      createdAt: Date.now()
+    }
+    const refreshModelTarget = vi.fn(async () => {
+      throw new Error('The selected marketplace session has expired.')
+    })
+
+    const denied = await resolveCoworkApproval(
+      state.task.id,
+      state.task.pendingApproval.id,
+      false,
+      async () => ({}),
+      vi.fn(),
+      refreshModelTarget
+    )
+
+    expect(refreshModelTarget).not.toHaveBeenCalled()
+    expect(denied.status).toBe('paused')
+    expect(denied.pendingApproval).toBeUndefined()
+    expect(denied.activities.at(-1)).toMatchObject({
+      label: 'Remote model data sharing denied',
+      status: 'error'
+    })
+  })
+
   it.each([
     { label: 'cancellation', stop: cancelCoworkRun, expectedStatus: 'cancelled' as const },
     { label: 'pause', stop: pauseCoworkRun, expectedStatus: 'paused' as const }

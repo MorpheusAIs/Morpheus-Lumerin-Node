@@ -9,6 +9,7 @@ import {
   createTask,
   deleteProject,
   deleteTask,
+  getCoworkApprovalPolicy,
   getProject,
   getTask,
   listProjects,
@@ -16,6 +17,7 @@ import {
   listTaskSummaries,
   listTasks,
   recoverInterruptedTasks,
+  updateCoworkApprovalPolicy,
   updateProject
 } from './cowork-store'
 import {
@@ -57,6 +59,8 @@ import {
 } from './cowork-marketplace-sessions'
 
 const CHANNEL = {
+  getApprovalPolicy: 'cowork:get-approval-policy',
+  updateApprovalPolicy: 'cowork:update-approval-policy',
   listProjects: 'cowork:list-projects',
   createProject: 'cowork:create-project',
   updateProject: 'cowork:update-project',
@@ -470,6 +474,18 @@ export function registerCoworkIpc(): void {
 
   handle(CHANNEL.listProjects, async () => (await listProjects()).map(publicProject))
 
+  handle(CHANNEL.getApprovalPolicy, async () => getCoworkApprovalPolicy())
+
+  handle(CHANNEL.updateApprovalPolicy, async (value) => {
+    const input = record(value)
+    if (!approvalModes.has(input.mode)) throw new Error('Invalid approval mode.')
+    const expectedRevision = Number(input.expectedRevision)
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1) {
+      throw new Error('Invalid approval policy revision.')
+    }
+    return updateCoworkApprovalPolicy(input.mode, expectedRevision)
+  })
+
   handle(CHANNEL.createProject, async (value, event) => {
     await requireActiveCoworkSession()
     const input = record(value)
@@ -495,16 +511,13 @@ export function registerCoworkIpc(): void {
     ) {
       throw new Error('The app data directory cannot be connected as a Workspace project.')
     }
-    const mode = input.approvalMode ?? 'manual'
-    if (!approvalModes.has(mode)) throw new Error('Invalid approval mode.')
     const project = await createProject({
       name: stringValue(input.name, 'Project name', 120),
       rootPath: selectedRoot,
       instructions:
         input.instructions === undefined
           ? ''
-          : stringValue(input.instructions, 'Instructions', 20_000, true),
-      approvalMode: mode
+          : stringValue(input.instructions, 'Instructions', 20_000, true)
     })
     return publicProject(project)
   })
@@ -517,10 +530,6 @@ export function registerCoworkIpc(): void {
     if (input.name !== undefined) patch.name = stringValue(input.name, 'Project name', 120)
     if (input.instructions !== undefined)
       patch.instructions = stringValue(input.instructions, 'Instructions', 20_000, true)
-    if (input.approvalMode !== undefined) {
-      if (!approvalModes.has(input.approvalMode)) throw new Error('Invalid approval mode.')
-      patch.approvalMode = input.approvalMode
-    }
     return publicProject(await updateProject(id, patch))
   })
 
@@ -632,14 +641,8 @@ export function registerCoworkIpc(): void {
     const input = record(value)
     if (typeof input.approved !== 'boolean') throw new Error('Approval decision is required.')
     const taskId = idValue(input.taskId, 'Task ID')
-    const task = await getTask(taskId)
-    if (!task) throw new Error('Workspace task not found.')
-    const project = await getProject(task.projectId)
-    if (!project || project.archivedAt) throw new Error('This Workspace project is archived.')
-    // Denial remains available as a safe recovery action. Approval can read or
-    // mutate project files, so it requires the task's exact current-wallet
-    // marketplace session to still be active.
-    if (input.approved) await refreshModelTarget(task.model)
+    // The runner validates the exact approval token and then the bound session
+    // under one task lifecycle lock. Denial remains available after expiry.
     return publicTask(
       await resolveCoworkApproval(
         taskId,

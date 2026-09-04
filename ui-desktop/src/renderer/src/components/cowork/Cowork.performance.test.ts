@@ -8,6 +8,7 @@ import Cowork, {
   isNearCoworkBottom,
   mergeCoworkTaskEvent,
   observeCoworkAutoScroll,
+  scrollCoworkTranscriptToLatest,
   selectCoworkModelKey,
 } from './Cowork';
 import type {
@@ -49,6 +50,14 @@ const persistedProject: CoworkProject = {
   instructions: 'Keep the implementation focused.',
   approvalMode: 'manual',
   createdAt: 10,
+  updatedAt: 20,
+};
+
+const persistedApprovalPolicy = {
+  schemaVersion: 1 as const,
+  id: 'workspace' as const,
+  mode: 'manual' as const,
+  revision: 1,
   updatedAt: 20,
 };
 
@@ -145,6 +154,14 @@ describe('Cowork performance helpers', () => {
     expect(onAutoScrollChange).toHaveBeenNthCalledWith(3, false);
     expect(removeEventListener).toHaveBeenCalledWith('scroll', scrollListener);
     expect(removeEventListener).toHaveBeenCalledWith('wheel', wheelListener);
+  });
+
+  it('positions a newly opened transcript at its latest message immediately', () => {
+    const element = { scrollHeight: 1_200, scrollTop: 0 };
+
+    scrollCoworkTranscriptToLatest(element);
+
+    expect(element.scrollTop).toBe(1_200);
   });
 
   it('moves an updated task into place without mutating the existing rail', () => {
@@ -305,6 +322,88 @@ describe('Cowork marketplace session selection', () => {
     expect(selectCoworkModelKey([first], '', 'missing')).toBe('');
   });
 
+  it('remounts a selected chat at its latest message after scrolling another chat upward', async () => {
+    const previousCowork = window.cowork;
+    const scrollHeight = vi
+      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+      .mockReturnValue(1_200);
+    const clientHeight = vi
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockReturnValue(240);
+    const firstTask = persistedTask({ title: 'First chat' });
+    const secondTask = persistedTask({
+      id: 'task-2',
+      title: 'Second chat',
+      messages: [
+        {
+          id: 'second-latest',
+          role: 'assistant',
+          content: 'Newest message in the second chat.',
+          createdAt: 40,
+          sequence: 8,
+        },
+      ],
+    });
+    Object.defineProperty(window, 'cowork', {
+      configurable: true,
+      writable: true,
+      value: {
+        getApprovalPolicy: vi.fn(async () => persistedApprovalPolicy),
+        listModelOptions: vi.fn(async () => []),
+        listProjects: vi.fn(async () => [persistedProject]),
+        listTasks: vi.fn(async () => [
+          taskSummary({ title: firstTask.title, status: 'completed' }),
+          taskSummary({
+            id: secondTask.id,
+            title: secondTask.title,
+            status: 'completed',
+            updatedAt: 15,
+          }),
+        ]),
+        getTask: vi.fn(async (id: string) =>
+          id === secondTask.id ? secondTask : firstTask,
+        ),
+        listSchedules: vi.fn(async () => []),
+        listExtensions: vi.fn(async () => emptyExtensions),
+        onTaskEvent: vi.fn(() => () => undefined),
+      } as unknown as Window['cowork'],
+    });
+
+    try {
+      render(
+        createElement(
+          MemoryRouter,
+          { initialEntries: ['/workspace'] },
+          createElement(Cowork),
+        ),
+      );
+
+      await screen.findByText('The latest saved result.');
+      const firstTranscript = document.querySelector(
+        '.cowork-transcript',
+      ) as HTMLDivElement;
+      firstTranscript.scrollTop = 0;
+      fireEvent.wheel(firstTranscript, { deltaY: -1 });
+
+      fireEvent.click(screen.getByRole('button', { name: /Second chat/ }));
+      await screen.findByText('Newest message in the second chat.');
+      const secondTranscript = document.querySelector(
+        '.cowork-transcript',
+      ) as HTMLDivElement;
+
+      expect(secondTranscript).not.toBe(firstTranscript);
+      expect(secondTranscript.scrollTop).toBe(1_200);
+    } finally {
+      scrollHeight.mockRestore();
+      clientHeight.mockRestore();
+      Object.defineProperty(window, 'cowork', {
+        configurable: true,
+        writable: true,
+        value: previousCowork,
+      });
+    }
+  });
+
   it('keeps an active explicit selection and only defaults on first entry', () => {
     const first = activeModel();
     const second = activeModel({
@@ -319,6 +418,61 @@ describe('Cowork marketplace session selection', () => {
     expect(selectCoworkModelKey([first], 'remote:model-2:session-2')).toBe('');
   });
 
+  it('updates one approval policy for every existing and future Workspace task', async () => {
+    const previousCowork = window.cowork;
+    const updateApprovalPolicy = vi.fn(async () => ({
+      ...persistedApprovalPolicy,
+      mode: 'skip' as const,
+      revision: 2,
+      updatedAt: 30,
+    }));
+    Object.defineProperty(window, 'cowork', {
+      configurable: true,
+      writable: true,
+      value: {
+        getApprovalPolicy: vi.fn(async () => persistedApprovalPolicy),
+        updateApprovalPolicy,
+        listModelOptions: vi.fn(async () => []),
+        listProjects: vi.fn(async () => [persistedProject]),
+        listTasks: vi.fn(async () => []),
+        listSchedules: vi.fn(async () => []),
+        listExtensions: vi.fn(async () => emptyExtensions),
+        onTaskEvent: vi.fn(() => () => undefined),
+      } as unknown as Window['cowork'],
+    });
+
+    try {
+      render(
+        createElement(
+          MemoryRouter,
+          { initialEntries: ['/workspace'] },
+          createElement(Cowork),
+        ),
+      );
+
+      const policySelect = (await screen.findByLabelText(
+        'Global Workspace approval policy',
+      )) as HTMLSelectElement;
+      expect(policySelect.value).toBe('manual');
+      expect(
+        screen.getByText(/Applies to every existing and future Workspace task/),
+      ).toBeTruthy();
+
+      fireEvent.change(policySelect, { target: { value: 'skip' } });
+
+      await waitFor(() =>
+        expect(updateApprovalPolicy).toHaveBeenCalledWith('skip', 1),
+      );
+      await waitFor(() => expect(policySelect.value).toBe('skip'));
+    } finally {
+      Object.defineProperty(window, 'cowork', {
+        configurable: true,
+        writable: true,
+        value: previousCowork,
+      });
+    }
+  });
+
   it('keeps project history available while an unavailable session is replaced', async () => {
     const previousCowork = window.cowork;
     const listProjects = vi.fn(async () => []);
@@ -326,6 +480,7 @@ describe('Cowork marketplace session selection', () => {
       configurable: true,
       writable: true,
       value: {
+        getApprovalPolicy: vi.fn(async () => persistedApprovalPolicy),
         listModelOptions: vi.fn(async () => [activeModel()]),
         listProjects,
         onTaskEvent: vi.fn(() => () => undefined),
@@ -425,6 +580,7 @@ describe('Cowork marketplace session selection', () => {
       configurable: true,
       writable: true,
       value: {
+        getApprovalPolicy: vi.fn(async () => persistedApprovalPolicy),
         listModelOptions: vi.fn(async () => []),
         listProjects: vi.fn(async () => [persistedProject]),
         listTasks: vi.fn(async () => [taskSummary({ status: 'completed' })]),
@@ -493,11 +649,16 @@ describe('Cowork marketplace session selection', () => {
         createdAt: 25,
       },
     });
-    const resolveApproval = vi.fn(async () => undefined);
+    const resolveApproval = vi.fn(async () => ({
+      ...task,
+      status: 'paused' as const,
+      pendingApproval: undefined,
+    }));
     Object.defineProperty(window, 'cowork', {
       configurable: true,
       writable: true,
       value: {
+        getApprovalPolicy: vi.fn(async () => persistedApprovalPolicy),
         listModelOptions: vi.fn(async () => []),
         listProjects: vi.fn(async () => [persistedProject]),
         listTasks: vi.fn(async () => [
@@ -528,6 +689,7 @@ describe('Cowork marketplace session selection', () => {
       expect((approveButton as HTMLButtonElement).disabled).toBe(true);
 
       fireEvent.click(denyButton);
+      fireEvent.click(denyButton);
 
       await waitFor(() =>
         expect(resolveApproval).toHaveBeenCalledWith(
@@ -536,6 +698,13 @@ describe('Cowork marketplace session selection', () => {
           false,
         ),
       );
+      expect(resolveApproval).toHaveBeenCalledTimes(1);
+      await waitFor(() =>
+        expect(screen.queryByRole('button', { name: 'Deny' })).toBeNull(),
+      );
+      expect(
+        screen.queryByText(/approval request is no longer active/i),
+      ).toBeNull();
     } finally {
       Object.defineProperty(window, 'cowork', {
         configurable: true,
@@ -566,6 +735,7 @@ describe('Cowork marketplace session selection', () => {
       configurable: true,
       writable: true,
       value: {
+        getApprovalPolicy: vi.fn(async () => persistedApprovalPolicy),
         listModelOptions: vi.fn(async () => [replacement]),
         listProjects: vi.fn(async () => [persistedProject]),
         listTasks: vi.fn(async () => [taskSummary({ status: 'paused' })]),

@@ -47,6 +47,7 @@ import { useLocation, useNavigate } from 'react-router';
 import type {
   CoworkActivity,
   CoworkApprovalMode,
+  CoworkApprovalPolicy,
   CoworkArtifact,
   CoworkArtifactPreview,
   CoworkDisplayMessage,
@@ -75,6 +76,12 @@ export const isNearCoworkBottom = (
   threshold = COWORK_BOTTOM_THRESHOLD_PX,
 ): boolean =>
   element.scrollHeight - element.scrollTop - element.clientHeight <= threshold;
+
+export const scrollCoworkTranscriptToLatest = (
+  element: Pick<HTMLElement, 'scrollHeight' | 'scrollTop'>,
+): void => {
+  element.scrollTop = element.scrollHeight;
+};
 
 export const observeCoworkAutoScroll = (
   element: HTMLElement,
@@ -491,8 +498,8 @@ function Cowork(): JSX.Element {
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [projectName, setProjectName] = useState('');
   const [projectInstructions, setProjectInstructions] = useState('');
-  const [projectApproval, setProjectApproval] =
-    useState<CoworkApprovalMode>('manual');
+  const [approvalPolicy, setApprovalPolicy] =
+    useState<CoworkApprovalPolicy | null>(null);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [projectSettingsName, setProjectSettingsName] = useState('');
   const [projectSettingsInstructions, setProjectSettingsInstructions] =
@@ -539,6 +546,7 @@ function Cowork(): JSX.Element {
     scrollHeight: number;
     scrollTop: number;
   } | null>(null);
+  const approvalSubmissionRef = useRef<string | null>(null);
   const activeTaskRefreshRef = useRef<{
     dirty: boolean;
     inFlight: boolean;
@@ -557,6 +565,7 @@ function Cowork(): JSX.Element {
       // A newly mounted transcript represents a newly opened task and should
       // start at its latest message. Subsequent user scrolling owns the policy.
       transcriptAutoScrollRef.current = true;
+      scrollCoworkTranscriptToLatest(element);
       transcriptObserverCleanupRef.current = observeCoworkAutoScroll(
         element,
         (enabled) => {
@@ -580,6 +589,16 @@ function Cowork(): JSX.Element {
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
     [projects, selectedProjectId],
   );
+  const approvalMode = approvalPolicy?.mode ?? 'manual';
+
+  const selectTask = useCallback((taskId: string | null) => {
+    if (selectedTaskIdRef.current !== taskId) {
+      activeTaskRequestRef.current += 1;
+      setActiveTask(null);
+    }
+    selectedTaskIdRef.current = taskId;
+    setSelectedTaskId(taskId);
+  }, []);
 
   const selectedModel = useMemo(
     () =>
@@ -644,6 +663,12 @@ function Cowork(): JSX.Element {
     );
   }, [api]);
 
+  const loadApprovalPolicy = useCallback(async () => {
+    if (!api) return;
+    const policy = await api.getApprovalPolicy();
+    setApprovalPolicy(policy);
+  }, [api]);
+
   const loadModels = useCallback(
     async (force = false) => {
       if (!api) return;
@@ -684,17 +709,14 @@ function Cowork(): JSX.Element {
         return;
       }
       setTasks(result);
-      setSelectedTaskId((current) => {
-        const preferred = preferredTaskId ?? current;
-        const next =
-          preferred && result.some((task) => task.id === preferred)
-            ? preferred
-            : (result[0]?.id ?? null);
-        selectedTaskIdRef.current = next;
-        return next;
-      });
+      const preferred = preferredTaskId ?? selectedTaskIdRef.current;
+      const next =
+        preferred && result.some((task) => task.id === preferred)
+          ? preferred
+          : (result[0]?.id ?? null);
+      selectTask(next);
     },
-    [api],
+    [api, selectTask],
   );
 
   const loadTask = useCallback(
@@ -789,6 +811,7 @@ function Cowork(): JSX.Element {
     Promise.allSettled([
       loadModels(Boolean(requestedSessionId)),
       loadProjects(),
+      loadApprovalPolicy(),
     ])
       .then((results) => {
         if (!active) return;
@@ -806,7 +829,7 @@ function Cowork(): JSX.Element {
     return () => {
       active = false;
     };
-  }, [api, loadModels, loadProjects, requestedSessionId]);
+  }, [api, loadApprovalPolicy, loadModels, loadProjects, requestedSessionId]);
 
   useEffect(() => {
     if (!selectedProjectId) {
@@ -815,7 +838,7 @@ function Cowork(): JSX.Element {
       setTasks([]);
       setSchedules([]);
       setExtensions(null);
-      setSelectedTaskId(null);
+      selectTask(null);
       setSelectedScheduleId(null);
       return;
     }
@@ -825,7 +848,7 @@ function Cowork(): JSX.Element {
       loadSchedules(selectedProjectId),
       loadExtensions(selectedProjectId),
     ]).catch((loadError) => setError(errorMessage(loadError)));
-  }, [loadExtensions, loadSchedules, loadTasks, selectedProjectId]);
+  }, [loadExtensions, loadSchedules, loadTasks, selectTask, selectedProjectId]);
 
   useEffect(() => {
     if (!selectedTaskId) {
@@ -941,12 +964,14 @@ function Cowork(): JSX.Element {
     if (!transcriptAutoScrollRef.current) return;
     const frame = window.requestAnimationFrame(() => {
       const element = transcriptElementRef.current;
-      if (!element || !transcriptAutoScrollRef.current) return;
-      if (typeof element.scrollTo === 'function') {
-        element.scrollTo({ top: element.scrollHeight, behavior: 'smooth' });
-      } else {
-        element.scrollTop = element.scrollHeight;
-      }
+      if (
+        !element ||
+        !transcriptAutoScrollRef.current ||
+        !activeTask ||
+        activeTask.id !== selectedTaskId
+      )
+        return;
+      scrollCoworkTranscriptToLatest(element);
     });
     return () => window.cancelAnimationFrame(frame);
   }, [
@@ -978,7 +1003,6 @@ function Cowork(): JSX.Element {
       const project = await api.createProject({
         name: projectName.trim(),
         instructions: projectInstructions.trim(),
-        approvalMode: projectApproval,
       });
       if (!project) return;
       setProjectName('');
@@ -986,39 +1010,33 @@ function Cowork(): JSX.Element {
       setShowProjectForm(false);
       await loadProjects();
       setSelectedProjectId(project.id);
-      setSelectedTaskId(null);
+      selectTask(null);
       setEditingProjectId(null);
     });
   };
 
-  const handleApprovalMode = (approvalMode: CoworkApprovalMode) => {
-    if (!api || !selectedProject) return;
-    const previous = selectedProject.approvalMode;
+  const handleApprovalMode = (nextMode: CoworkApprovalMode) => {
+    if (!api || !approvalPolicy || busy === 'approval-policy') return;
+    const previous = approvalPolicy;
+    setApprovalPolicy({ ...previous, mode: nextMode });
     setProjects((current) =>
-      current.map((project) =>
-        project.id === selectedProject.id
-          ? { ...project, approvalMode }
-          : project,
-      ),
+      current.map((project) => ({ ...project, approvalMode: nextMode })),
     );
-    void runAction('project-settings', async () => {
+    void runAction('approval-policy', async () => {
       try {
-        const updated = await api.updateProject({
-          id: selectedProject.id,
-          approvalMode,
-        });
-        setProjects((current) =>
-          current.map((project) =>
-            project.id === updated.id ? updated : project,
-          ),
+        const updated = await api.updateApprovalPolicy(
+          nextMode,
+          previous.revision,
         );
+        setApprovalPolicy(updated);
       } catch (updateError) {
+        const latest = await api.getApprovalPolicy().catch(() => previous);
+        setApprovalPolicy(latest);
         setProjects((current) =>
-          current.map((project) =>
-            project.id === selectedProject.id
-              ? { ...project, approvalMode: previous }
-              : project,
-          ),
+          current.map((project) => ({
+            ...project,
+            approvalMode: latest.mode,
+          })),
         );
         throw updateError;
       }
@@ -1069,7 +1087,7 @@ function Cowork(): JSX.Element {
     void runAction('delete-project', async () => {
       await api.deleteProject(selectedProject.id);
       setSelectedProjectId(null);
-      setSelectedTaskId(null);
+      selectTask(null);
       setSelectedScheduleId(null);
       setEditingScheduleId(null);
       setEditingProjectId(null);
@@ -1089,7 +1107,7 @@ function Cowork(): JSX.Element {
       });
       setTaskTitle('');
       setTaskGoal('');
-      setSelectedTaskId(task.id);
+      selectTask(task.id);
       setActiveTask(task);
       await loadTasks(selectedProject.id, task.id);
       await api.startTask(task.id);
@@ -1140,7 +1158,7 @@ function Cowork(): JSX.Element {
       return;
     void runAction('delete-task', async () => {
       await api.deleteTask(activeTask.id);
-      setSelectedTaskId(null);
+      selectTask(null);
       setActiveTask(null);
       await loadTasks(selectedProject.id);
     });
@@ -1170,10 +1188,30 @@ function Cowork(): JSX.Element {
       (approved && !exactTaskSessionActive)
     )
       return;
+    const taskId = activeTask.id;
     const approvalId = activeTask.pendingApproval.id;
+    const submissionKey = `${taskId}:${approvalId}`;
+    if (approvalSubmissionRef.current === submissionKey) return;
+    approvalSubmissionRef.current = submissionKey;
     void runAction('approval', async () => {
-      await api.resolveApproval(activeTask.id, approvalId, approved);
-      await loadTask(activeTask.id);
+      try {
+        const authoritativeTask = await api.resolveApproval(
+          taskId,
+          approvalId,
+          approved,
+        );
+        if (selectedTaskIdRef.current === taskId) {
+          setActiveTask(authoritativeTask);
+        }
+      } catch (approvalError) {
+        // A transport failure must not leave a clickable stale card behind.
+        await loadTask(taskId).catch(() => undefined);
+        throw approvalError;
+      } finally {
+        if (approvalSubmissionRef.current === submissionKey) {
+          approvalSubmissionRef.current = null;
+        }
+      }
     });
   };
 
@@ -1366,7 +1404,7 @@ function Cowork(): JSX.Element {
   const handleOpenScheduledTask = () => {
     if (!selectedSchedule?.lastTaskId) return;
     setRailMode('tasks');
-    setSelectedTaskId(selectedSchedule.lastTaskId);
+    selectTask(selectedSchedule.lastTaskId);
   };
 
   const handleConfigureExtensions = (
@@ -1426,7 +1464,7 @@ function Cowork(): JSX.Element {
   const endedSelection = Boolean(requestedSessionId || selectedModelKey);
 
   const projectSettingsBusy =
-    busy === 'project-settings' || busy === 'update-project';
+    busy === 'approval-policy' || busy === 'update-project';
 
   if (!api) {
     return (
@@ -1536,19 +1574,6 @@ function Cowork(): JSX.Element {
                   value={projectInstructions}
                 />
               </label>
-              <label>
-                File approvals
-                <select
-                  onChange={(event) =>
-                    setProjectApproval(event.target.value as CoworkApprovalMode)
-                  }
-                  value={projectApproval}
-                >
-                  <option value="manual">Manual</option>
-                  <option value="auto">Auto</option>
-                  <option value="skip">Skip approvals</option>
-                </select>
-              </label>
               <button
                 className="cowork-primary-button cowork-full-button"
                 disabled={busy === 'create-project' || !projectName.trim()}
@@ -1562,7 +1587,8 @@ function Cowork(): JSX.Element {
                 Choose folder & create
               </button>
               <p className="cowork-form-hint">
-                Workspace can only access the folder you choose.
+                Workspace can only access the folder you choose. File approval
+                policy is shared across every project.
               </p>
             </form>
           )}
@@ -1579,7 +1605,7 @@ function Cowork(): JSX.Element {
                 key={project.id}
                 onClick={() => {
                   setSelectedProjectId(project.id);
-                  setSelectedTaskId(null);
+                  selectTask(null);
                   setSelectedScheduleId(null);
                   setEditingScheduleId(null);
                   setEditingProjectId(null);
@@ -1664,8 +1690,7 @@ function Cowork(): JSX.Element {
                   className="cowork-icon-button"
                   onClick={() => {
                     if (railMode === 'tasks') {
-                      setSelectedTaskId(null);
-                      setActiveTask(null);
+                      selectTask(null);
                     } else {
                       resetScheduleForm();
                       setSelectedScheduleId(null);
@@ -1700,7 +1725,7 @@ function Cowork(): JSX.Element {
                       }`}
                       key={task.id}
                       onClick={() => {
-                        setSelectedTaskId(task.id);
+                        selectTask(task.id);
                         setRailOpen(false);
                       }}
                       type="button"
@@ -1849,22 +1874,6 @@ function Cowork(): JSX.Element {
                 </button>
               </form>
             )}
-            <label>
-              Approval mode
-              <select
-                aria-label="Project approval mode"
-                disabled={projectSettingsBusy}
-                onChange={(event) =>
-                  handleApprovalMode(event.target.value as CoworkApprovalMode)
-                }
-                value={selectedProject.approvalMode}
-              >
-                <option value="manual">Manual</option>
-                <option value="auto">Auto</option>
-                <option value="skip">Skip</option>
-              </select>
-            </label>
-            <span>{APPROVAL_DESCRIPTIONS[selectedProject.approvalMode]}</span>
             <button
               className="cowork-text-button danger"
               disabled={busy === 'delete-project'}
@@ -1873,6 +1882,33 @@ function Cowork(): JSX.Element {
             >
               Archive project
             </button>
+          </div>
+        )}
+
+        {approvalPolicy && (
+          <div className="cowork-project-controls">
+            <div className="cowork-project-settings-heading">
+              <strong>Workspace settings</strong>
+            </div>
+            <label>
+              File approval policy
+              <select
+                aria-label="Global Workspace approval policy"
+                disabled={busy === 'approval-policy'}
+                onChange={(event) =>
+                  handleApprovalMode(event.target.value as CoworkApprovalMode)
+                }
+                value={approvalMode}
+              >
+                <option value="manual">Manual</option>
+                <option value="auto">Auto</option>
+                <option value="skip">Skip</option>
+              </select>
+            </label>
+            <span>
+              {APPROVAL_DESCRIPTIONS[approvalMode]}. Applies to every existing
+              and future Workspace task.
+            </span>
           </div>
         )}
       </aside>
@@ -2664,7 +2700,7 @@ function Cowork(): JSX.Element {
               <div className="cowork-new-task-footer">
                 <span>
                   <IconShieldCheck size={16} />
-                  {APPROVAL_DESCRIPTIONS[selectedProject.approvalMode]}
+                  {APPROVAL_DESCRIPTIONS[approvalMode]}
                 </span>
                 <button
                   className="cowork-primary-button"
@@ -2686,6 +2722,7 @@ function Cowork(): JSX.Element {
         ) : (
           <>
             <div
+              key={activeTask.id}
               ref={attachTranscriptElement}
               className="cowork-transcript"
               aria-live="polite"
@@ -2776,61 +2813,67 @@ function Cowork(): JSX.Element {
                 </div>
               )}
 
-              {activeTask.pendingApproval && (
-                <section className="cowork-approval-card">
-                  <div className="cowork-approval-heading">
-                    <span className={`risk-${activeTask.pendingApproval.risk}`}>
-                      <IconShieldCheck size={19} />
-                    </span>
-                    <div>
-                      <span className="cowork-eyebrow">
-                        {activeTask.pendingApproval.risk} approval
+              {activeTask.status === 'waiting_approval' &&
+                activeTask.pendingApproval && (
+                  <section className="cowork-approval-card">
+                    <div className="cowork-approval-heading">
+                      <span
+                        className={`risk-${activeTask.pendingApproval.risk}`}
+                      >
+                        <IconShieldCheck size={19} />
                       </span>
-                      <h3>{activeTask.pendingApproval.reason}</h3>
+                      <div>
+                        <span className="cowork-eyebrow">
+                          {activeTask.pendingApproval.risk} approval
+                        </span>
+                        <h3>{activeTask.pendingApproval.reason}</h3>
+                      </div>
                     </div>
-                  </div>
-                  <div className="cowork-tool-preview">
-                    <strong>
-                      {toolLabel(
-                        activeTask.pendingApproval.toolCall.function.name,
-                      )}
-                    </strong>
-                    <pre>
-                      {parseToolArguments(
-                        activeTask.pendingApproval.toolCall.function.arguments,
-                      )}
-                    </pre>
-                  </div>
-                  <p>
-                    Review the exact action above. Only approve it if it matches
-                    this task’s goal.
-                  </p>
-                  <div className="cowork-approval-actions">
-                    <button
-                      className="cowork-secondary-button"
-                      disabled={busy === 'approval'}
-                      onClick={() => handleApproval(false)}
-                      type="button"
-                    >
-                      <IconX size={16} />
-                      Deny
-                    </button>
-                    <button
-                      className="cowork-primary-button"
-                      disabled={busy === 'approval' || !exactTaskSessionActive}
-                      onClick={() => handleApproval(true)}
-                      type="button"
-                    >
-                      {busy === 'approval' ? (
-                        <IconLoader2 className="cowork-spin" size={16} />
-                      ) : (
-                        <IconCheck size={16} />
-                      )}
-                      Approve once
-                    </button>
-                  </div>
-                </section>
-              )}
+                    <div className="cowork-tool-preview">
+                      <strong>
+                        {toolLabel(
+                          activeTask.pendingApproval.toolCall.function.name,
+                        )}
+                      </strong>
+                      <pre>
+                        {parseToolArguments(
+                          activeTask.pendingApproval.toolCall.function
+                            .arguments,
+                        )}
+                      </pre>
+                    </div>
+                    <p>
+                      Review the exact action above. Only approve it if it
+                      matches this task’s goal.
+                    </p>
+                    <div className="cowork-approval-actions">
+                      <button
+                        className="cowork-secondary-button"
+                        disabled={busy === 'approval'}
+                        onClick={() => handleApproval(false)}
+                        type="button"
+                      >
+                        <IconX size={16} />
+                        Deny
+                      </button>
+                      <button
+                        className="cowork-primary-button"
+                        disabled={
+                          busy === 'approval' || !exactTaskSessionActive
+                        }
+                        onClick={() => handleApproval(true)}
+                        type="button"
+                      >
+                        {busy === 'approval' ? (
+                          <IconLoader2 className="cowork-spin" size={16} />
+                        ) : (
+                          <IconCheck size={16} />
+                        )}
+                        Approve once
+                      </button>
+                    </div>
+                  </section>
+                )}
 
               {activeTask.error && (
                 <div className="cowork-inline-error">

@@ -22,6 +22,22 @@ const openExternalChannel = 'open-external-url'
 const maxExternalUrlLength = 8192
 const trustedExternalHosts = ['mor.org', 'lumerin.io', 'github.com', 'etherscan.io']
 let externalConfirmationOpen = false
+const ownsSingleInstanceLock = app.requestSingleInstanceLock()
+
+if (!ownsSingleInstanceLock) {
+  // Wallet state, the managed proxy-router, and Workspace's NeDB stores are all
+  // process-owned. A second main process would contend for the same ports and
+  // could retain a stale approval policy cache.
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    const mainWindow = BrowserWindow.getAllWindows()[0]
+    if (!mainWindow) return
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+  })
+}
 
 function normalizeExternalUrl(value: unknown): string | null {
   if (typeof value !== 'string' || value.length === 0 || value.length > maxExternalUrlLength) {
@@ -146,8 +162,9 @@ const sleepBeforeStart = 3000
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app
-  .whenReady()
+const appReady = ownsSingleInstanceLock ? app.whenReady() : new Promise<void>(() => undefined)
+
+appReady
   .then(() => new Promise((r) => setTimeout(r, sleepBeforeStart)))
   .then(() => {
     // Set app user model id for windows

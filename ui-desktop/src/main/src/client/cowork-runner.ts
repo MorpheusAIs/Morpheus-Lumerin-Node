@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import config from '../../config'
 import log from '../../logger'
+import { withCoworkApprovalPolicyReadLock } from './cowork-approval-policy-lock'
 import {
   appendActivity,
   appendAgentMessage,
@@ -1774,7 +1775,9 @@ async function executeToolCall(
     return 'continue'
   }
 
-  return mutation ? withCoworkMutationLock(project.id, runFileTool) : runFileTool()
+  return mutation
+    ? withCoworkApprovalPolicyReadLock(() => withCoworkMutationLock(project.id, runFileTool))
+    : runFileTool()
 }
 
 async function processToolCalls(
@@ -2181,37 +2184,52 @@ async function resolveCoworkApprovalUnlocked(
   refreshModelTarget: RefreshModelTarget
 ): Promise<CoworkTask> {
   const storedTask = await getTask(taskId)
-  if (!storedTask?.pendingApproval || storedTask.pendingApproval.id !== approvalId) {
-    throw new Error('This approval request is no longer active.')
+  if (!storedTask) throw new Error('Workspace task not found.')
+  // Approval cards can be stale for a frame after another window, a task
+  // event, or an earlier click resolves them. Treat the exact old token as an
+  // idempotent no-op and return the authoritative task; never apply it to a
+  // replacement approval.
+  if (
+    storedTask.status !== 'waiting_approval' ||
+    !storedTask.pendingApproval ||
+    storedTask.pendingApproval.id !== approvalId
+  ) {
+    return storedTask
   }
   let task: CoworkTask = storedTask
   const pending: CoworkPendingApproval = storedTask.pendingApproval
+  const project = await getProject(task.projectId)
+  if (!project || project.archivedAt) throw new Error('This Workspace project is archived.')
   if (approved && pending.toolCall.function.name !== 'authorize_remote_model') {
+    // Validate the exact bound marketplace session only after the approval ID
+    // wins the task lifecycle lock. This closes the old preflight race while
+    // keeping denial available after a session expires.
+    await refreshModelTarget(task.model)
     assertRunCapacity(task.projectId, task.id)
   }
   delete task.pendingApproval
   task.status = 'running'
 
   if (pending.toolCall.function.name === 'authorize_remote_model') {
-    const refreshed = await refreshModelTarget(task.model)
-    if (task.modelFingerprint !== refreshed.fingerprint) {
-      task.model = refreshed.model
-      task.modelFingerprint = refreshed.fingerprint
-      delete task.toolProtocol
-      delete task.dataAccessApproved
-      delete task.dataAccessApprovedFingerprint
-      task.status = 'paused'
-      appendActivity(task, {
-        type: 'approval',
-        label: 'Model destination changed',
-        detail:
-          'The model endpoint or marketplace session changed while approval was pending. Review a fresh data-sharing request.',
-        status: 'waiting'
-      })
-      await save(task, emit)
-      return requestCoworkStartUnlocked(taskId, authHeaders, emit, refreshModelTarget)
-    }
     if (approved) {
+      const refreshed = await refreshModelTarget(task.model)
+      if (task.modelFingerprint !== refreshed.fingerprint) {
+        task.model = refreshed.model
+        task.modelFingerprint = refreshed.fingerprint
+        delete task.toolProtocol
+        delete task.dataAccessApproved
+        delete task.dataAccessApprovedFingerprint
+        task.status = 'paused'
+        appendActivity(task, {
+          type: 'approval',
+          label: 'Model destination changed',
+          detail:
+            'The model endpoint or marketplace session changed while approval was pending. Review a fresh data-sharing request.',
+          status: 'waiting'
+        })
+        await save(task, emit)
+        return requestCoworkStartUnlocked(taskId, authHeaders, emit, refreshModelTarget)
+      }
       task.dataAccessApproved = true
       task.dataAccessApprovedFingerprint = refreshed.fingerprint
       appendActivity(task, {

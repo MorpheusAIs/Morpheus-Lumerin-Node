@@ -74,12 +74,22 @@ describe('session-first Cowork and Chat wiring', () => {
       expect(handler, readOnlyChannel).not.toContain('requireActiveCoworkSession')
     }
 
-    for (const sessionBoundChannel of ['steerTask', 'resolveApproval']) {
-      const start = ipc.indexOf(`handle(CHANNEL.${sessionBoundChannel}`)
-      const next = ipc.indexOf('\n  handle(CHANNEL.', start + 1)
-      const handler = ipc.slice(start, next === -1 ? undefined : next)
-      expect(handler, sessionBoundChannel).toContain('refreshModelTarget(task.model)')
-    }
+    const steerStart = ipc.indexOf('handle(CHANNEL.steerTask')
+    const steerEnd = ipc.indexOf('\n  handle(CHANNEL.', steerStart + 1)
+    expect(ipc.slice(steerStart, steerEnd)).toContain('refreshModelTarget(task.model)')
+    const approvalStart = ipc.indexOf('handle(CHANNEL.resolveApproval')
+    const approvalEnd = ipc.indexOf('\n  handle(CHANNEL.', approvalStart + 1)
+    expect(ipc.slice(approvalStart, approvalEnd)).toContain('resolveCoworkApproval(')
+    expect(ipc.slice(approvalStart, approvalEnd)).toContain('refreshModelTarget')
+    const runner = source('src/main/src/client/cowork-runner.ts')
+    const resolution = runner.slice(
+      runner.indexOf('async function resolveCoworkApprovalUnlocked'),
+      runner.indexOf('export function resolveCoworkApproval')
+    )
+    expect(resolution).toContain('await refreshModelTarget(task.model)')
+    expect(resolution.indexOf("storedTask.status !== 'waiting_approval'")).toBeLessThan(
+      resolution.indexOf('await refreshModelTarget(task.model)')
+    )
     const rebindStart = ipc.indexOf('handle(CHANNEL.rebindTask')
     const rebindEnd = ipc.indexOf('\n  handle(CHANNEL.', rebindStart + 1)
     expect(ipc.slice(rebindStart, rebindEnd)).toContain('selectedModelBinding(input.model)')

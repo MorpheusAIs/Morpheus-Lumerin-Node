@@ -14,18 +14,16 @@ const INDEX_FIELDS = {
   tasks: ['id', 'projectId', 'status'],
   // Display transcripts are independent from a marketplace session and page
   // backwards by their durable, per-task sequence.
-  messages: ['id', 'taskId', 'sequence']
+  messages: ['id', 'taskId', 'sequence'],
+  // One fail-closed policy applies to every current and future Workspace task.
+  preferences: ['id']
 } as const
 
 export function coworkCollection(name: keyof typeof INDEX_FIELDS): any {
   const existing = collections.get(name)
   if (existing) return existing
 
-  // prepareCoworkDataFile accepts this runtime-safe filename but its narrow
-  // legacy type predates the independently paginated message collection.
-  const filename = prepareCoworkDataFile(
-    `${name}.db` as Parameters<typeof prepareCoworkDataFile>[0]
-  )
+  const filename = prepareCoworkDataFile(`${name}.db`)
   const db = createIndexedCoworkDatastore(
     filename,
     INDEX_FIELDS[name],
