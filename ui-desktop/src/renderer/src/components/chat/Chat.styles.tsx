@@ -3,20 +3,25 @@ import TextareaAutosize from 'react-textarea-autosize';
 import { BtnAccent } from '../dashboard/BalanceBlock.styles';
 
 export const View = styled.div`
+  display: flex;
+  flex-direction: column;
   height: 100vh;
   max-width: 100%;
-  min-width: 600px;
+  min-width: 0;
   position: relative;
+  width: 100%;
 `;
 
 export const Container = styled.div`
   max-width: 1120px;
-  height: calc(100% - 200px);
+  flex: 1 1 auto;
+  min-height: 0;
   justify-content: space-between;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   padding: 20px 2.4rem 0;
+  width: 100%;
 `;
 
 export const ChatBlock = styled.div`
@@ -86,16 +91,22 @@ export const ChatStartupState = styled.div`
 export const ChatIntroContainer = styled.div`
   width: 100%;
   height: 100%;
+  min-height: 0;
   overflow-y: auto;
   margin-bottom: 20px;
+  padding: clamp(1.6rem, 5vh, 4rem) 0;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
 `;
 
 export const ChatIntroInner = styled.div`
-  width: 486px;
-  padding: 54px;
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  margin: auto;
+  max-width: 100%;
+  padding: clamp(2.4rem, 6vw, 5.4rem);
+  width: 48.6rem;
   background-color: ${(p) => p.theme.colors.primaryDark};
   border-radius: 15px;
 `;
@@ -352,6 +363,7 @@ export const CustomTextArrea = styled(TextareaAutosize)`
 
 export const ContainerTitle = styled.div`
   display: flex;
+  flex: 0 0 auto;
   flex-direction: row;
   justify-content: space-between;
   align-items: center;
@@ -371,6 +383,48 @@ export const TitleRow = styled.div`
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
+`;
+
+export const ChatHeaderControls = styled.div`
+  align-items: center;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 35rem) max-content;
+  justify-content: start;
+  min-width: 0;
+  width: 100%;
+`;
+
+export const ChatHeaderActions = styled.div`
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  min-width: 0;
+`;
+
+export const ChatHeaderActionButton = styled(BtnAccent)`
+  align-items: center;
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 0 14rem;
+  gap: 0.8rem;
+  height: auto;
+  justify-content: center;
+  line-height: 1.2;
+  margin: 0;
+  min-height: 6rem;
+  padding: 1.2rem;
+  white-space: nowrap;
+  width: 14rem;
+
+  svg {
+    flex: 0 0 auto;
+  }
+
+  &:focus-visible {
+    outline: 2px solid ${(p) => p.theme.colors.active};
+    outline-offset: 2px;
+  }
 `;
 
 export const Title = styled.label`

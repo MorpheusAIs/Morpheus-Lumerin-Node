@@ -96,6 +96,50 @@ describe('session-first Cowork and Chat wiring', () => {
     expect(chat).toContain('Use this session in Workspace')
   })
 
+  it('keeps Chat header actions contained as the route narrows', () => {
+    const chat = source('src/renderer/src/components/chat/Chat.tsx')
+    const styles = source('src/renderer/src/components/chat/Chat.styles.tsx')
+    const css = source('src/renderer/src/components/chat/Chat.css')
+    const headerStyles = styles.slice(
+      styles.indexOf('export const ChatHeaderControls'),
+      styles.indexOf('export const Title =')
+    )
+
+    expect(chat).toContain('<ChatHeaderControls className="chat-header-controls">')
+    expect(chat).toContain('<ChatHeaderActions className="chat-header-actions">')
+    expect(chat).toContain('aria-label="Use this session in Workspace"')
+    expect(chat).toContain('<span>Workspace</span>')
+    expect(headerStyles).toContain('grid-template-columns: minmax(0, 35rem) max-content')
+    expect(headerStyles).toContain('white-space: nowrap')
+    expect(css).not.toContain('.change-modal')
+    expect(css).toContain('@container route-space (max-width: 900px)')
+    expect(css).toContain('@container route-space (max-width: 520px)')
+    expect(css).toContain('.chat-header-controls.chat-header-controls')
+    expect(css).toContain('.chat-header-actions.chat-header-actions')
+    expect(css).toContain('.chat-header-action.chat-header-action')
+    expect(css).toContain('min-height: 4.8rem')
+    expect(css).toContain('text-overflow: ellipsis')
+  })
+
+  it('keeps compact Chat warnings and session checkout controls reachable', () => {
+    const chat = source('src/renderer/src/components/chat/Chat.tsx')
+    const styles = source('src/renderer/src/components/chat/Chat.styles.tsx')
+    const liveChat = chat.slice(chat.indexOf('return (\n    <>'))
+    const introStyles = styles.slice(
+      styles.indexOf('export const ChatIntroContainer'),
+      styles.indexOf('export const ChatIntroInnerTitle')
+    )
+
+    expect(liveChat.indexOf('<View>')).toBeLessThan(
+      liveChat.indexOf('what="the latest model data"')
+    )
+    expect(introStyles).toContain('align-items: flex-start')
+    expect(introStyles).toContain('overflow-y: auto')
+    expect(introStyles).toContain('margin: auto')
+    expect(introStyles).toContain('max-width: 100%')
+    expect(introStyles).toContain('padding: clamp(')
+  })
+
   it('keeps historical model bindings in the main process', () => {
     const ipc = source('src/main/src/client/cowork-ipc.ts')
     const projection = ipc.slice(

@@ -29,6 +29,9 @@ import {
   ChatAvatar,
   Avatar,
   TitleRow,
+  ChatHeaderControls,
+  ChatHeaderActions,
+  ChatHeaderActionButton,
   AvatarHeader,
   MessageBody,
   Container,
@@ -59,7 +62,6 @@ import {
   TtsControlsRow,
   AudioPlayer,
 } from './Chat.styles';
-import { BtnAccent } from '../dashboard/BalanceBlock.styles';
 import withChatState from '../../store/hocs/withChatState';
 import { abbreviateAddress } from '../../utils';
 import { ThinkingMessageBody } from './ThinkingMessageBody';
@@ -2168,15 +2170,6 @@ const Chat = (props: ChatProps) => {
         </LoadingCover>
       )}
 
-      {/* Non-fatal: models loaded from cache but the latest refresh failed. */}
-      {marketplaceModelsQuery.isError &&
-        marketplaceModelsQuery.data !== undefined && (
-          <QueryError
-            error={marketplaceModelsQuery.error}
-            what="the latest model data"
-            onRetry={() => marketplaceModelsQuery.refetch()}
-          />
-        )}
       <Drawer
         open={isOpen}
         onClose={toggleDrawer}
@@ -2204,10 +2197,19 @@ const Chat = (props: ChatProps) => {
         />
       </Drawer>
       <View>
+        {/* Non-fatal: models loaded from cache but the latest refresh failed. */}
+        {marketplaceModelsQuery.isError &&
+          marketplaceModelsQuery.data !== undefined && (
+            <QueryError
+              error={marketplaceModelsQuery.error}
+              what="the latest model data"
+              onRetry={() => marketplaceModelsQuery.refetch()}
+            />
+          )}
         <ContainerTitle>
           <TitleRow>
             {/* <Title>Chat</Title> */}
-            <div className="d-flex" style={{ alignItems: 'center' }}>
+            <ChatHeaderControls className="chat-header-controls">
               <div className="d-flex model-selector">
                 <div className="model-selector__info">
                   <h3>{isLocal ? '(local)' : providerAddress}</h3>
@@ -2227,30 +2229,34 @@ const Chat = (props: ChatProps) => {
                   </div>
                 )}
               </div>
-              <BtnAccent
-                className="change-modal"
-                onClick={() => {
-                  setCoworkModelSelection(false);
-                  setOpenChangeModal(true);
-                }}
-              >
-                <IconMessagePlus></IconMessagePlus> New chat
-              </BtnAccent>
-              {activeSession?.Id &&
-                !marketplaceSessionUnavailable &&
-                isCoworkCandidate(selectedModel) && (
-                  <BtnAccent
-                    className="change-modal"
-                    onClick={() =>
-                      navigate(
-                        `/workspace?sessionId=${encodeURIComponent(activeSession.Id)}`,
-                      )
-                    }
-                  >
-                    <IconSparkles size={18} /> Use this session in Workspace
-                  </BtnAccent>
-                )}
-            </div>
+              <ChatHeaderActions className="chat-header-actions">
+                <ChatHeaderActionButton
+                  className="chat-header-action"
+                  onClick={() => {
+                    setCoworkModelSelection(false);
+                    setOpenChangeModal(true);
+                  }}
+                >
+                  <IconMessagePlus size={18} /> <span>New chat</span>
+                </ChatHeaderActionButton>
+                {activeSession?.Id &&
+                  !marketplaceSessionUnavailable &&
+                  isCoworkCandidate(selectedModel) && (
+                    <ChatHeaderActionButton
+                      className="chat-header-action"
+                      aria-label="Use this session in Workspace"
+                      title="Use this session in Workspace"
+                      onClick={() =>
+                        navigate(
+                          `/workspace?sessionId=${encodeURIComponent(activeSession.Id)}`,
+                        )
+                      }
+                    >
+                      <IconSparkles size={18} /> <span>Workspace</span>
+                    </ChatHeaderActionButton>
+                  )}
+              </ChatHeaderActions>
+            </ChatHeaderControls>
           </TitleRow>
         </ContainerTitle>
         <ChatTitleContainer>
