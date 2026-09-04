@@ -1,9 +1,11 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import { createRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ToastsContext } from '../toasts';
 import { Root } from './Root';
 
 const EmptyComponent = () => <div />;
+const ADDRESS = '0x1111111111111111111111111111111111111111';
 
 describe('Root bootstrap', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -140,5 +142,101 @@ describe('Root bootstrap', () => {
     expect(dispatch).not.toHaveBeenCalledWith({
       type: 'required-data-gathered',
     });
+  });
+
+  it('restores the acknowledged wallet before starting a login session', async () => {
+    const dispatch = vi.fn();
+    const client = {
+      onInit: vi.fn(async () => ({
+        onboardingComplete: true,
+        persistedState: {},
+        config: {},
+      })),
+      onLoginSubmit: vi.fn(async () => ({
+        address: ADDRESS,
+        isActive: true,
+      })),
+      getDefaultCurrencySetting: vi.fn(async () => 'MOR'),
+    };
+    const rootRef = createRef<Root>();
+
+    render(
+      <ToastsContext.Provider value={{ toast: vi.fn() }}>
+        <Root
+          ref={rootRef}
+          isSessionActive={false}
+          isAuthBypassed={false}
+          sellerDefaultCurrency="MOR"
+          servicesState={{ orchestratorStatus: 'ready' } as any}
+          config={{}}
+          dispatch={dispatch}
+          client={client}
+          StartupComponent={EmptyComponent}
+          OnboardingComponent={EmptyComponent as any}
+          RouterComponent={EmptyComponent}
+          LoginComponent={EmptyComponent as any}
+        />
+      </ToastsContext.Provider>,
+    );
+
+    await waitFor(() => expect(rootRef.current).not.toBeNull());
+    await act(async () => {
+      await rootRef.current?.onLoginSubmit({ password: 'correct-password' });
+    });
+
+    expect(client.onLoginSubmit).toHaveBeenCalledWith({
+      password: 'correct-password',
+    });
+    const loginActions = dispatch.mock.calls
+      .map(([action]) => action)
+      .filter(
+        ({ type }) => type === 'open-wallet' || type === 'session-started',
+      );
+    expect(loginActions).toEqual([
+      {
+        type: 'open-wallet',
+        payload: { address: ADDRESS, isActive: true },
+      },
+      { type: 'session-started' },
+    ]);
+  });
+
+  it('does not enter the app when login has no active wallet address', async () => {
+    const dispatch = vi.fn();
+    const client = {
+      onInit: vi.fn(async () => ({
+        onboardingComplete: true,
+        persistedState: {},
+        config: {},
+      })),
+      onLoginSubmit: vi.fn(async () => ({ address: '' })),
+      getDefaultCurrencySetting: vi.fn(async () => 'MOR'),
+    };
+    const rootRef = createRef<Root>();
+
+    render(
+      <ToastsContext.Provider value={{ toast: vi.fn() }}>
+        <Root
+          ref={rootRef}
+          isSessionActive={false}
+          isAuthBypassed={false}
+          sellerDefaultCurrency="MOR"
+          servicesState={{ orchestratorStatus: 'ready' } as any}
+          config={{}}
+          dispatch={dispatch}
+          client={client}
+          StartupComponent={EmptyComponent}
+          OnboardingComponent={EmptyComponent as any}
+          RouterComponent={EmptyComponent}
+          LoginComponent={EmptyComponent as any}
+        />
+      </ToastsContext.Provider>,
+    );
+
+    await waitFor(() => expect(rootRef.current).not.toBeNull());
+    await expect(
+      rootRef.current?.onLoginSubmit({ password: 'correct-password' }),
+    ).rejects.toThrow('did not return an active address');
+    expect(dispatch).not.toHaveBeenCalledWith({ type: 'session-started' });
   });
 });

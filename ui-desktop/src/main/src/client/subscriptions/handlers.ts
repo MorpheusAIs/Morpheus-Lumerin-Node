@@ -150,7 +150,7 @@ export async function proxyFetch<T>(
   try {
     response = await fetch(url, {
       ...init,
-      headers: { ...(await getAuthHeaders()), ...(init.headers ?? {}) }
+      headers: { ...(await getAuthHeaders(init.signal)), ...(init.headers ?? {}) }
     })
   } catch (e: any) {
     log.error(`proxy-router unreachable for ${label}:`, e?.message ?? e)
@@ -252,14 +252,14 @@ export const setFailoverSetting = (params) => setFailoverSettingMain(params)
 
 export const restartWallet = () => restart(1)
 
-export const getAuthHeaders = async () => {
+export const getAuthHeaders = async (signal?: AbortSignal | null) => {
   if (authentication) {
     return authentication
   }
 
   try {
     const path = `${configuredLoopbackProxyUrl()}/auth/cookie/path`
-    const response = await fetch(path)
+    const response = await fetch(path, { signal })
     const body = await response.json()
     let cookieFilePath = body.path
 
@@ -311,12 +311,14 @@ export const parseAttachment = (params: {
 // ---------------------------------------------------------------------------
 
 /** Current wallet as the proxy-router sees it: address, storage kind, HD path. */
-export const getActiveWallet = async (): Promise<{
+export const getActiveWallet = async (
+  init: RequestInit = {}
+): Promise<{
   address: string
   kind?: string
   derivationPath?: string
 }> => {
-  return proxyFetch('/wallet', {}, 'active wallet')
+  return proxyFetch('/wallet', init, 'active wallet')
 }
 
 /**
@@ -1438,51 +1440,77 @@ export const onboardingCompleted = async (data, core: Core) => {
       console.log('Set Private Key To Wallet', await pKeyResp.json())
     }
 
-    const walletAddress = await fetch(`${proxyUrl}/wallet`, {
+    const activeAddress = await fetch(`${proxyUrl}/wallet`, {
       method: 'GET',
       headers: await getAuthHeaders()
     })
       .then((res) => res.json())
       .then((res) => res.address)
+    const verifiedAddress = walletAddress(activeAddress, 'Wallet address')
 
-    console.log('Wallet Address Is', walletAddress)
+    console.log('Wallet Address Is', verifiedAddress)
 
-    wallet.setSeed(walletAddress, data.password)
-    wallet.setAddress(walletAddress)
-    core.emitter.emit('create-wallet', { address: walletAddress })
-    openWallet(data.password, core)
+    wallet.setSeed(verifiedAddress, data.password)
+    wallet.setAddress(verifiedAddress)
+    core.emitter.emit('create-wallet', { address: verifiedAddress })
+    await openWallet(data.password, core, verifiedAddress)
   } catch (err) {
     return { error: new WalletError('Onboarding unable to be completed: ', err) }
   }
 }
 
-export const onLoginSubmit = ({ password }, core: Core) => {
-  var checkPassword = config.chain.bypassAuth
-    ? new Promise((r) => r(true))
-    : auth.isValidPassword(password)
-
-  return checkPassword
-    .then(function (isValid) {
-      if (!isValid) {
-        return { error: new WalletError('Invalid password') }
-      }
-      openWallet(password, core)
-
-      return isValid
-    })
-    .catch((err) => log.error('onLoginSubmit err', err))
-}
-
-export async function openWallet(password: string, { emitter }: Core) {
-  const storedAddress = wallet.getAddress()
-  if (!storedAddress) {
-    return
+export const onLoginSubmit = async ({ password }, core: Core) => {
+  const isValid = config.chain.bypassAuth ? true : await auth.isValidPassword(password)
+  if (!isValid) {
+    return { error: new WalletError('Invalid password') }
   }
 
-  const { address } = storedAddress as { address?: string }
+  try {
+    return await openWallet(password, core)
+  } catch (err) {
+    log.error('onLoginSubmit err', err)
+    const message =
+      err instanceof ProxyRouterError && err.unreachable
+        ? 'Cannot connect to the local proxy-router yet. Wait a moment and try again; if it persists, restart MorpheusUI.'
+        : err instanceof ProxyRouterError
+          ? err.message
+          : 'Unable to open wallet.'
+    return { error: new WalletError(message, err) }
+  }
+}
 
-  emitter.emit('open-wallet', { address, isActive: true })
+export async function openWallet(
+  password: string,
+  { emitter }: Core,
+  knownAddress?: string
+) {
+  const storedAddress = wallet.getAddress()
+  const storedAddressValue = (storedAddress as { address?: unknown } | undefined)?.address
+  const previousAddress = typeof storedAddressValue === 'string' ? storedAddressValue : undefined
+  const activeAddress =
+    knownAddress ??
+    (await getActiveWallet({ signal: AbortSignal.timeout(2_000) }))?.address
+
+  let address: string
+  try {
+    address = walletAddress(activeAddress, 'Wallet address')
+  } catch {
+    throw new ProxyRouterError(
+      'The local proxy-router did not return a valid wallet address. Please wait a moment and try again.'
+    )
+  }
+
+  // The managed proxy-router owns the key that can sign. Never let a stale
+  // desktop pointer make the UI display/query wallet A while the node signs as
+  // wallet B. Repair the non-secret pointer when the node reports a change.
+  if (previousAddress?.toLowerCase() !== address.toLowerCase()) {
+    wallet.setAddress(address)
+  }
+
+  const openedWallet = { address, isActive: true }
+  emitter.emit('open-wallet', openedWallet)
   emitter.emit('open-proxy-router', { password })
+  return openedWallet
 }
 
 export const suggestAddresses = async (mnemonic: string) => {

@@ -36,6 +36,25 @@ export class Root extends React.Component<RootProps> {
     onboardingComplete: null,
   };
 
+  startAuthenticatedSession = async (password: string): Promise<void> => {
+    // Make the login acknowledgement carry the wallet identity. Relying only
+    // on a separate `open-wallet` event allowed late bootstrap hydration to
+    // erase it, while a second proxy request would make offline login slow.
+    const walletState = await this.props.client.onLoginSubmit({ password });
+    const address = walletState?.address;
+    if (!address) {
+      throw new Error(
+        'Wallet login did not return an active address. Please try again.',
+      );
+    }
+
+    this.props.dispatch({
+      type: 'open-wallet',
+      payload: { address, isActive: true },
+    });
+    this.props.dispatch({ type: 'session-started' });
+  };
+
   componentDidMount() {
     this.props.client
       .onInit()
@@ -49,13 +68,11 @@ export class Root extends React.Component<RootProps> {
       .then(() => {
         if (this.props.isAuthBypassed) {
           // TODO: replace dummy password
-          return this.props.client
-            .onLoginSubmit({ password: 'password' })
-            .then(() => this.props.dispatch({ type: 'session-started' }))
-            .catch((_e) => {
-              this.context.toast('error', 'Bypass auth failed');
-            });
+          return this.startAuthenticatedSession('password').catch((_e) => {
+            this.context.toast('error', 'Bypass auth failed');
+          });
         }
+        return undefined;
       })
       // The display currency is cosmetic. A missed/failed settings response
       // must not turn into "Failed to startup wallet" after the wallet and
@@ -120,10 +137,7 @@ export class Root extends React.Component<RootProps> {
     );
   };
 
-  onLoginSubmit = ({ password }) =>
-    this.props.client
-      .onLoginSubmit({ password })
-      .then(() => this.props.dispatch({ type: 'session-started' }));
+  onLoginSubmit = ({ password }) => this.startAuthenticatedSession(password);
 
   render() {
     const {
