@@ -3,7 +3,6 @@ package proxyctl
 import (
 	"context"
 	"errors"
-	"fmt"
 	"math/big"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
@@ -242,7 +241,13 @@ func (p *Proxy) afterStart(ctx context.Context, walletAddr common.Address) error
 	// check if provider exists
 	pr, err := p.blockchainService.GetProvider(ctx, walletAddr)
 	if err != nil {
-		return fmt.Errorf("cannot get provider %s: %w", walletAddr, err)
+		// This is a diagnostic provider check, not a prerequisite for consumer
+		// sessions. A retired or temporarily unavailable public RPC endpoint must
+		// not tear down an otherwise-started proxy-router. Provider operators still
+		// get the failure in the log and the normal blockchain workers continue to
+		// surface/retry their own errors.
+		log.Warnf("cannot get provider %s: %s", walletAddr, err)
+		return nil
 	} else if pr == nil {
 		log.Warnf("provider is not registered under this wallet address: %s", walletAddr)
 	} else {
