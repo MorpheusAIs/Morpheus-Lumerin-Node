@@ -2,7 +2,6 @@ package proxyapi
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/json"
@@ -13,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -1252,63 +1250,10 @@ func (p *ProxyServiceSender) handleEmbeddings(aiResponse []byte, responses []int
 	return nil, 0, false, lib.WrapError(ErrInvalidResponse, fmt.Errorf("unknown embeddings response format"))
 }
 
-// checkProviderAvailability checks if the provider is alive using portchecker.io API
+// checkProviderAvailability preserves the current behavior while the external
+// availability probe is disabled: a connected provider is treated as alive.
 func checkProviderAvailability(url string) (bool, error) {
 	return true, nil
-	host, port, err := net.SplitHostPort(url)
-	if err != nil {
-		return false, err
-	}
-
-	portInt, err := strconv.Atoi(port)
-	if err != nil {
-		return false, err
-	}
-
-	requestBody, err := json.Marshal(map[string]interface{}{
-		"host":  host,
-		"ports": []int{portInt},
-	})
-	if err != nil {
-		return false, err
-	}
-
-	req, err := http.NewRequest("POST", "https://portchecker.io/api/v1/query", bytes.NewBuffer(requestBody))
-	if err != nil {
-		return false, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return false, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return false, err
-	}
-
-	var response struct {
-		Check []struct {
-			Status bool `json:"status"`
-			Port   int  `json:"port"`
-		} `json:"check"`
-	}
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		return false, err
-	}
-
-	for _, check := range response.Check {
-		if check.Port == portInt {
-			return check.Status, nil
-		}
-	}
-
-	return false, fmt.Errorf("port status not found in response")
 }
 
 // SendAudioTranscriptionStreamV2 sends audio transcription using streaming chunks to avoid memory issues with large files

@@ -469,7 +469,7 @@ func (cfg *HTTPAuthConfig) RequestAgentUser(username, password string, perms []s
 		if !ok {
 			return fmt.Errorf("invalid allowance value for token %s", token)
 		}
-		mappedAllowances[token] = lib.BigInt{*allowance}
+		mappedAllowances[token] = lib.BigInt{Int: *allowance}
 	}
 
 	err = cfg.AuthStorage.AddAuthRequest(&storages.AgentUser{
