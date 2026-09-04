@@ -20,19 +20,13 @@ function httpsOrigin(value: string | undefined): string | undefined {
   }
 }
 
-function contentSecurityPolicyPlugin(
-  isDevelopment: boolean,
-  proxyPort: string,
-  sentryDsn?: string
-): Plugin {
+function contentSecurityPolicyPlugin(isDevelopment: boolean, sentryDsn?: string): Plugin {
   const scriptSource = isDevelopment
     ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
     : "script-src 'self'"
   const sentry = httpsOrigin(sentryDsn)
   const connectSource = [
     "connect-src 'self'",
-    `http://localhost:${proxyPort}`,
-    `http://127.0.0.1:${proxyPort}`,
     ...(isDevelopment
       ? ['http://127.0.0.1:*', 'http://localhost:*', 'ws://127.0.0.1:*', 'ws://localhost:*']
       : []),
@@ -155,11 +149,7 @@ export default defineConfig(({ command, mode }) => {
         }
       },
       plugins: [
-        contentSecurityPolicyPlugin(
-          command === 'serve',
-          String(env.SERVICE_PROXY_API_PORT),
-          env.SENTRY_DSN
-        ),
+        contentSecurityPolicyPlugin(command === 'serve', env.SENTRY_DSN),
         react({ babel: { plugins: ['styled-components'], babelrc: false, configFile: false } }),
         svgr(),
         nodePolyfills()

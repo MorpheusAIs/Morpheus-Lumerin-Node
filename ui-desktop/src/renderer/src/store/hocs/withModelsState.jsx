@@ -8,85 +8,80 @@ import { ToastsContext } from '../../components/toasts';
 import selectors from '../selectors';
 import path from 'path';
 
-const withModelsState = WrappedComponent => {
+const withModelsState = (WrappedComponent) => {
   class Container extends React.Component {
-   
     static contextType = ToastsContext;
 
-    static displayName = `withModelsState(${WrappedComponent.displayName ||
-      WrappedComponent.name})`;
+    static displayName = `withModelsState(${
+      WrappedComponent.displayName || WrappedComponent.name
+    })`;
 
     getAllModels = async () => {
-        const result = await this.props.client.getAllModels();
-        return result;
-    }
+      const result = await this.props.client.getAllModels();
+      return result;
+    };
 
     getAllProviders = async () => {
       try {
-        const authHeaders = await this.props.client.getAuthHeaders();
-        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/providers`
-        const response = await fetch(path, {
-          headers: authHeaders
-        });
-        const data = await response.json();
-        return data.providers;
-      }
-      catch(e) {
-        console.log("Error", e)
+        return (await this.props.client.getProviders()) || [];
+      } catch (e) {
+        console.log('Error', e);
         return [];
       }
-    }
+    };
 
-    getBitsByModels = async (modelId) => {
-        
-    }
+    getBitsByModels = async (modelId) => {};
 
     getIpfsVersion = async () => {
       const response = await this.props.client.getIpfsVersion();
       return response;
-    }
+    };
 
     openSelectDownloadFolder = async () => {
       const response = await this.props.client.selectIpfsDownloadFolder();
       return response;
-    }
+    };
 
     addFileToIpfs = async (filePath, modelId, modelName, tags) => {
-      const response = await this.props.client.addFileToIpfs({ filePath, modelId, modelName, tags });
+      const response = await this.props.client.addFileToIpfs({
+        filePath,
+        modelId,
+        modelName,
+        tags,
+      });
       return response;
-    }
+    };
 
     pinFile = async (cidHash) => {
       const response = await this.props.client.pinIpfsFile({ cidHash });
       return response;
-    }
+    };
 
     unpinFile = async (cidHash) => {
       const response = await this.props.client.unpinIpfsFile({ cidHash });
       return response;
-    }
+    };
 
     getPinnedFiles = async () => {
       const response = await this.props.client.getIpfsPinnedFiles();
       return response;
-    }
- 
-    render() {
+    };
 
+    render() {
       return (
         <WrappedComponent
-            getAllModels={this.getAllModels}
-            getAllProviders={this.getAllProviders}
-            getIpfsVersion={this.getIpfsVersion}
-            openSelectDownloadFolder={this.openSelectDownloadFolder}
-            addFileToIpfs={this.addFileToIpfs}
-            getPinnedFiles={this.getPinnedFiles}
-            pinFile={this.pinFile}
-            unpinFile={this.unpinFile}
-            toasts={this.context}
-            {...this.state}
-            {...this.props}
-            client={this.props.client}
+          getAllModels={this.getAllModels}
+          getAllProviders={this.getAllProviders}
+          getIpfsVersion={this.getIpfsVersion}
+          openSelectDownloadFolder={this.openSelectDownloadFolder}
+          addFileToIpfs={this.addFileToIpfs}
+          getPinnedFiles={this.getPinnedFiles}
+          pinFile={this.pinFile}
+          unpinFile={this.unpinFile}
+          toasts={this.context}
+          {...this.state}
+          {...this.props}
+          client={this.props.client}
         />
       );
     }
@@ -94,11 +89,12 @@ const withModelsState = WrappedComponent => {
 
   const mapStateToProps = (state, props) => ({
     // selectedCurrency: selectors.getSellerSelectedCurrency(state),
-    config: state.config
+    config: state.config,
   });
 
-  const mapDispatchToProps = dispatch => ({
-    setSelectedModel: model => dispatch({ type: 'set-model', payload: model })
+  const mapDispatchToProps = (dispatch) => ({
+    setSelectedModel: (model) =>
+      dispatch({ type: 'set-model', payload: model }),
   });
 
   return withClient(connect(mapStateToProps, mapDispatchToProps)(Container));

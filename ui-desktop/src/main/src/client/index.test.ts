@@ -140,6 +140,8 @@ describe('renderer client bootstrap', () => {
       })
     })
 
+    // Snapshot the state at send-time. Checking only the eventual state would
+    // miss the original race because subscribe() did run shortly afterward.
     expect(runtime.subscriptionStateAtReady).toEqual([true])
     expect(runtime.order).toEqual(['core-start', 'subscribe', 'ui-ready'])
   })
