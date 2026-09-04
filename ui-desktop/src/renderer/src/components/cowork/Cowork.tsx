@@ -981,7 +981,9 @@ function Cowork(): JSX.Element {
     activeTask?.pendingApproval?.id,
     activeTask?.status,
     activeTask?.summary,
+    selectedModelKey,
     selectedTaskId,
+    taskNeedsRebind,
   ]);
 
   const runAction = async (name: string, action: () => Promise<void>) => {
@@ -2741,45 +2743,6 @@ function Cowork(): JSX.Element {
                 </span>
               </div>
 
-              {taskNeedsRebind && (
-                <section className="cowork-rebind-card" role="note">
-                  <IconCloud size={20} />
-                  <div>
-                    <strong>The original task session has ended</strong>
-                    <p>
-                      This history was created with{' '}
-                      <b>{activeTask.model.modelName}</b> and remains unchanged.
-                      {selectedModel
-                        ? ` Continue with ${selectedModel.modelName} only when you are ready; Workspace will preserve the model boundary in the task history.`
-                        : ' Open a new session to continue without losing this project context.'}
-                    </p>
-                  </div>
-                  {selectedModel ? (
-                    <button
-                      className="cowork-primary-button"
-                      disabled={busy === 'rebind-task'}
-                      onClick={handleRebindTask}
-                      type="button"
-                    >
-                      {busy === 'rebind-task' ? (
-                        <IconLoader2 className="cowork-spin" size={16} />
-                      ) : (
-                        <IconPlayerPlay size={16} />
-                      )}
-                      Continue with {selectedModel.modelName}
-                    </button>
-                  ) : (
-                    <button
-                      className="cowork-secondary-button"
-                      onClick={() => navigate('/chat?setup=workspace')}
-                      type="button"
-                    >
-                      Open a session in Chat
-                    </button>
-                  )}
-                </section>
-              )}
-
               {hasEarlierMessages && (
                 <div className="cowork-transcript-history">
                   <button
@@ -2893,6 +2856,45 @@ function Cowork(): JSX.Element {
                     <SafeMarkdown>{activeTask.summary}</SafeMarkdown>
                   </div>
                 </div>
+              )}
+
+              {taskNeedsRebind && (
+                <section className="cowork-rebind-card" role="note">
+                  <IconCloud size={20} />
+                  <div>
+                    <strong>The original task session has ended</strong>
+                    <p>
+                      This history was created with{' '}
+                      <b>{activeTask.model.modelName}</b> and remains unchanged.
+                      {selectedModel
+                        ? ` Continue with ${selectedModel.modelName} only when you are ready; Workspace will preserve the model boundary in the task history.`
+                        : ' Open a new session to continue without losing this project context.'}
+                    </p>
+                  </div>
+                  {selectedModel ? (
+                    <button
+                      className="cowork-primary-button"
+                      disabled={busy === 'rebind-task'}
+                      onClick={handleRebindTask}
+                      type="button"
+                    >
+                      {busy === 'rebind-task' ? (
+                        <IconLoader2 className="cowork-spin" size={16} />
+                      ) : (
+                        <IconPlayerPlay size={16} />
+                      )}
+                      Continue with {selectedModel.modelName}
+                    </button>
+                  ) : (
+                    <button
+                      className="cowork-secondary-button"
+                      onClick={() => navigate('/chat?setup=workspace')}
+                      type="button"
+                    >
+                      Open a session in Chat
+                    </button>
+                  )}
+                </section>
               )}
             </div>
 

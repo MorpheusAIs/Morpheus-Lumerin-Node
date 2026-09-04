@@ -601,27 +601,127 @@ describe('Cowork marketplace session selection', () => {
         ),
       );
 
-      await screen.findByText('The latest saved result.');
+      const latestMessageText = await screen.findByText(
+        'The latest saved result.',
+      );
       expect(screen.getAllByText('Original Model')).toHaveLength(2);
-      expect(
-        screen.getByText('The original task session has ended'),
-      ).toBeTruthy();
+      const rebindHeading = screen.getByText(
+        'The original task session has ended',
+      );
       expect(
         screen.getByText(/Project history remains available/),
       ).toBeTruthy();
+      const transcript = rebindHeading.closest(
+        '.cowork-transcript',
+      ) as HTMLElement;
+      const latestMessage = latestMessageText.closest(
+        '.cowork-message',
+      ) as HTMLElement;
+      const rebindCard = rebindHeading.closest(
+        '.cowork-rebind-card',
+      ) as HTMLElement;
+
+      expect(
+        latestMessage.compareDocumentPosition(rebindCard) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).not.toBe(0);
+      expect(transcript.lastElementChild).toBe(rebindCard);
 
       fireEvent.click(
         screen.getByRole('button', { name: 'Load earlier messages' }),
       );
 
-      await screen.findByText('Earlier saved answer');
+      const earlierMessageText = await screen.findByText(
+        'Earlier saved answer',
+      );
       expect(screen.getByText('Earlier project request')).toBeTruthy();
       expect(screen.getByText('First Model')).toBeTruthy();
       expect(listTaskMessages).toHaveBeenCalledWith('task-1', 51, 50);
       expect(
         screen.queryByRole('button', { name: 'Load earlier messages' }),
       ).toBeNull();
+      const earlierMessage = earlierMessageText.closest(
+        '.cowork-message',
+      ) as HTMLElement;
+      expect(
+        earlierMessage.compareDocumentPosition(latestMessage) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).not.toBe(0);
+      expect(transcript.lastElementChild).toBe(rebindCard);
     } finally {
+      Object.defineProperty(window, 'cowork', {
+        configurable: true,
+        writable: true,
+        value: previousCowork,
+      });
+    }
+  });
+
+  it('keeps following the transcript when its active session expires', async () => {
+    const previousCowork = window.cowork;
+    const expiringModel = activeModel({
+      sessionEndsAt: Date.now() + 2_000,
+    });
+    const task = persistedTask({
+      model: expiringModel,
+      status: 'paused',
+    });
+    let transcriptHeight = 1_000;
+    const scrollHeight = vi
+      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+      .mockImplementation(() => transcriptHeight);
+    const clientHeight = vi
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockReturnValue(240);
+    Object.defineProperty(window, 'cowork', {
+      configurable: true,
+      writable: true,
+      value: {
+        getApprovalPolicy: vi.fn(async () => persistedApprovalPolicy),
+        listModelOptions: vi.fn(async () => [expiringModel]),
+        listProjects: vi.fn(async () => [persistedProject]),
+        listTasks: vi.fn(async () => [taskSummary({ status: 'paused' })]),
+        getTask: vi.fn(async () => task),
+        listSchedules: vi.fn(async () => []),
+        listExtensions: vi.fn(async () => emptyExtensions),
+        onTaskEvent: vi.fn(() => () => undefined),
+      } as unknown as Window['cowork'],
+    });
+    const view = render(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ['/workspace'] },
+        createElement(Cowork),
+      ),
+    );
+
+    try {
+      await screen.findByText('The latest saved result.');
+      expect(
+        screen.queryByText('The original task session has ended'),
+      ).toBeNull();
+
+      const transcript = document.querySelector(
+        '.cowork-transcript',
+      ) as HTMLDivElement;
+      transcript.scrollTop = 760;
+      fireEvent.scroll(transcript);
+      transcriptHeight = 1_400;
+
+      const rebindHeading = await screen.findByText(
+        'The original task session has ended',
+        {},
+        { timeout: 4_000 },
+      );
+      const rebindCard = rebindHeading.closest(
+        '.cowork-rebind-card',
+      ) as HTMLElement;
+      expect(transcript.lastElementChild).toBe(rebindCard);
+      await waitFor(() => expect(transcript.scrollTop).toBe(1_400));
+    } finally {
+      view.unmount();
+      scrollHeight.mockRestore();
+      clientHeight.mockRestore();
       Object.defineProperty(window, 'cowork', {
         configurable: true,
         writable: true,

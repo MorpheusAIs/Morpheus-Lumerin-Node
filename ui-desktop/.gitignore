@@ -6,5 +6,6 @@
 
 .DS_Store
 *.log*
+*.tsbuildinfo
 /.env
 /services/
