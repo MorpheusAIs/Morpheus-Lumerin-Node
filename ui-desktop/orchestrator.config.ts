@@ -37,8 +37,10 @@ const configMacArm = {
       AUTH_CONFIG_FILE_PATH: './proxy.conf',
       COOKIE_FILE_PATH: './.cookie',
       PROXY_ADDRESS: `0.0.0.0:${process.env.SERVICE_PROXY_PORT}`,
-      WEB_ADDRESS: `0.0.0.0:${process.env.SERVICE_PROXY_API_PORT}`,
-      WEB_PUBLIC_URL: `http://localhost:${process.env.SERVICE_PROXY_API_PORT}`,
+      // The admin API carries wallet/configuration operations and is consumed
+      // only by this desktop app. Never expose it on the LAN.
+      WEB_ADDRESS: `127.0.0.1:${process.env.SERVICE_PROXY_API_PORT}`,
+      WEB_PUBLIC_URL: `http://127.0.0.1:${process.env.SERVICE_PROXY_API_PORT}`,
       MODELS_CONFIG_PATH: './models-config.json',
       RATING_CONFIG_PATH: './rating-config.json',
       ETH_NODE_USE_SUBSCRIPTIONS: 'false',
@@ -64,7 +66,7 @@ const configMacArm = {
     ),
     ratingConfig: JSON.stringify(buildLocalRatingConfig()),
     probe: {
-      url: `http://localhost:${process.env.SERVICE_PROXY_API_PORT}/healthcheck`
+      url: `http://127.0.0.1:${process.env.SERVICE_PROXY_API_PORT}/healthcheck`
     }
   },
   aiRuntime: {

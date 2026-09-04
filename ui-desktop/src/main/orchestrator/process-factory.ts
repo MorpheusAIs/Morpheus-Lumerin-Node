@@ -10,14 +10,15 @@ export const ProcessFactory = async (
     probe: ProbeConfig
     /**
      * When true, an already-listening service is still wrapped in a
-     * ManagedProcess so the app retains the ability to stop/restart it.
-     * Set for services we own (proxy-router) but not for genuinely external
-     * dependencies like Docker.
+     * ManagedProcess. ManagedProcess then applies its own adoption policy when
+     * start() verifies the occupied port.
      */
     reclaimIfDetected?: boolean
   }
 ) => {
   const { log } = params
+  const managedParams = params as ManagedProcessParams
+  const hasCommand = !!managedParams.command
   const pinger = new GenericApiResponseDetector({
     url: params.probe.url,
     method: params.probe.method,
@@ -27,31 +28,32 @@ export const ProcessFactory = async (
     // responseRegexp: probeConfig.responseRegexp,
   })
 
-  const isDetected = await pinger
-    .ping(PING_TIMEOUT)
-    .then(() => true)
-    .catch(() => false)
+  // A service that must be app-owned cannot be identified by its public
+  // health response. Skip adoption detection and let ManagedProcess validate
+  // the port plus a fresh per-spawn identity.
+  const requiresOwnedProcess = hasCommand && managedParams.adoptIfDetected !== true
+  const isDetected = requiresOwnedProcess
+    ? false
+    : await pinger
+        .ping(PING_TIMEOUT)
+        .then(() => true)
+        .catch(() => false)
 
   log?.info(`already running process was ${isDetected ? 'detected' : 'not detected'}`)
 
-  const hasCommand = !!(params as ManagedProcessParams).command
-
   // Previously ANY detected listener forced an ExternalProcess, permanently.
-  // A zombie proxy-router left over from a previous crash would answer the
-  // probe, get classified as "external", and from then on the app refused to
-  // stop or restart it ("Cannot restart external service") — with no recovery
-  // path short of the user killing the process by hand. For services we own we
-  // now keep a ManagedProcess so restart still works; ManagedProcess.start()
-  // short-circuits when the health check already passes, so a genuinely healthy
-  // instance is left alone.
+  // A zombie service left over from a previous crash can answer the probe. For
+  // services that should be app-owned, retain a ManagedProcess so start() can
+  // apply the configured fail-open or fail-closed adoption policy rather than
+  // permanently classifying the listener as an external dependency.
   if (hasCommand && (!isDetected || params.reclaimIfDetected)) {
     log?.info(
       isDetected
-        ? 'detected an already-running instance; managing it so restart stays available'
+        ? 'detected an already-running instance; deferring ownership checks to startup'
         : 'creating managed process'
     )
     return new ManagedProcess({
-      ...(params as ManagedProcessParams),
+      ...managedParams,
       pinger
     })
   }
