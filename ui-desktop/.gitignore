@@ -2,9 +2,9 @@
 /build/
 /dist/
 /out/
+/buildResources/.generated/
 
 .DS_Store
 *.log*
 /.env
 /services/
-
