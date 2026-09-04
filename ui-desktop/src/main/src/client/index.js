@@ -68,8 +68,29 @@ export function createClient(config) {
     core: createCore(),
     config: Object.assign({}, config.chain, config)
   }
+  let coreStarted = false
+  let coreInitialized = false
+
+  function cleanupCoreAfterFailedStartup() {
+    try {
+      subscriptions.unsubscribe(core)
+    } catch (err) {
+      logger.warn('Could not remove partially initialized renderer subscriptions', err.message)
+    }
+
+    if (coreInitialized) {
+      try {
+        stopCore(core)
+      } catch (err) {
+        logger.warn('Could not stop partially initialized wallet core', err.message)
+      }
+    }
+    coreInitialized = false
+  }
 
   ipcMain.on('ui-ready', function (webContent, args) {
+    if (coreStarted) return
+    coreStarted = true
     const onboardingComplete = !!settings.getPasswordHash()
 
     storage
@@ -86,29 +107,32 @@ export function createClient(config) {
             config
           }
         })
-        webContent.sender.send('ui-ready', payload)
-        // logger.verbose(`<-- ui-ready ${stringify(payload)}`);
-      })
-      .catch(function (err) {
-        logger.error('Could not send ui-ready message back', err.message)
-      })
-      .then(function () {
+
+        // Install every follow-up listener before acknowledging ui-ready.
+        // Root immediately requests settings after this response; replying
+        // first made that request race subscriptions.subscribe() and time out.
         const { emitter, events, api } = startCore(core, webContent)
+        coreInitialized = true
         core.emitter = emitter
         core.events = events
         core.api = api
         subscriptions.subscribe(core)
+
+        webContent.sender.send('ui-ready', payload)
+        // logger.verbose(`<-- ui-ready ${stringify(payload)}`);
       })
       .catch(function (err) {
-        console.log('panic')
-        console.log(err)
-        console.log('Unknown chain =', err.message)
-        logger.error('Could not start core', err.message)
+        cleanupCoreAfterFailedStartup()
+        coreStarted = false
+        logger.error('Could not initialize renderer client', err.message)
       })
   })
 
   ipcMain.on('ui-unload', function () {
-    stopCore(core)
+    if (!coreStarted) return
     subscriptions.unsubscribe(core)
+    stopCore(core)
+    coreInitialized = false
+    coreStarted = false
   })
 }

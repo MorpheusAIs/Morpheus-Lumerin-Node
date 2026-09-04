@@ -29,7 +29,7 @@ type RootProps = {
   }>;
 };
 
-class Root extends React.Component<RootProps> {
+export class Root extends React.Component<RootProps> {
   static contextType = ToastsContext;
   declare context: React.ContextType<typeof ToastsContext>;
 
@@ -51,7 +51,7 @@ class Root extends React.Component<RootProps> {
       .then(() => {
         if (this.props.isAuthBypassed) {
           // TODO: replace dummy password
-          this.props.client
+          return this.props.client
             .onLoginSubmit({ password: 'password' })
             .then(() => this.props.dispatch({ type: 'session-started' }))
             .catch((_e) => {
@@ -59,7 +59,19 @@ class Root extends React.Component<RootProps> {
             });
         }
       })
-      .then(() => this.props.client.getDefaultCurrencySetting())
+      // The display currency is cosmetic. A missed/failed settings response
+      // must not turn into "Failed to startup wallet" after the wallet and
+      // proxy-router have already initialized successfully.
+      .then(() =>
+        this.props.client.getDefaultCurrencySetting().catch((error) => {
+          // eslint-disable-next-line no-console
+          console.warn(
+            'Could not load the saved display currency; using the default.',
+            error,
+          );
+          return null;
+        }),
+      )
       .then((defaultCurr) => {
         this.props.dispatch({
           type: 'set-seller-currency',
@@ -71,7 +83,7 @@ class Root extends React.Component<RootProps> {
         console.error('root component error', e.message);
         this.context.toast(
           'error',
-          'Failed to startup wallet. Please wait a few minutes and try again',
+          'Failed to initialize Morpheus. Your wallet is unchanged; restart the app and try again.',
         );
       });
   }
