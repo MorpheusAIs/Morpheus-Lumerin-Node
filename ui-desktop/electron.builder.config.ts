@@ -1,4 +1,9 @@
 import { Configuration } from 'electron-builder'
+import {
+  prepareProxyRouterBundle,
+  ProxyRouterBundleDirectoryName,
+  verifyPackagedProxyRouterBundle
+} from './src/main/orchestrator/proxy-router-bundle'
 
 const config: Configuration = {
   appId: 'com.electron.morpheus-ui',
@@ -16,6 +21,15 @@ const config: Configuration = {
     '!services/*'
   ],
   asarUnpack: ['resources/**', 'pkg-scripts/**'],
+  extraResources: [
+    {
+      from: 'buildResources/.generated/proxy-router/${os}-${arch}',
+      to: ProxyRouterBundleDirectoryName,
+      filter: ['bundled-proxy-router', 'manifest.json']
+    }
+  ],
+  beforePack: prepareProxyRouterBundle,
+  afterPack: verifyPackagedProxyRouterBundle,
   win: {
     executableName: 'morpheus-ui',
     target: ['portable']

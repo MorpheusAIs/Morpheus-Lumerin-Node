@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import fs from 'fs-extra'
 import path from 'node:path'
-import { downloadFile } from './downloader'
+import { downloadFile, installBundledExecutable } from './downloader'
 import logger from '../logger'
 import { extractFile } from './unzipper'
 import {
@@ -15,6 +15,16 @@ import { ProcessFactory } from './process-factory'
 
 console.log('Process cwd', process.cwd())
 console.log('App path', resolveAppDataPath(''))
+
+const BundledProxyRouterDirectoryName = 'proxy-router-bundle'
+const BundledProxyRouterExecutableName = 'bundled-proxy-router'
+const BundledProxyRouterManifestName = 'manifest.json'
+
+const localBundleTargetDirectory = () => {
+  const builderOs =
+    process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'win' : 'linux'
+  return `${builderOs}-${process.arch}`
+}
 
 export class Orchestrator {
   private proxyRouterProcess?: Process
@@ -108,18 +118,52 @@ export class Orchestrator {
   }
 
   private async downloadProxyRouter() {
-    if (this.cfg.proxyRouter.downloadUrl) {
+    const bundledProxyRouterDirectory = app.isPackaged
+      ? path.join(process.resourcesPath, BundledProxyRouterDirectoryName)
+      : path.join(
+          app.getAppPath(),
+          'buildResources',
+          '.generated',
+          'proxy-router',
+          localBundleTargetDirectory()
+        )
+    const destinationPath = resolveAppDataPath(this.cfg.proxyRouter.fileName)
+    const onProgress = (progress: {
+      status: 'downloading' | 'error'
+      progress: number
+      error?: string
+      bytesDownloaded: number
+    }) => {
+      this.proxyDownloadState.status = progress.status
+      this.proxyDownloadState.progress = progress.progress
+      this.proxyDownloadState.error = progress.error
+      this.emitStateUpdate()
+      this.log.info(`Preparing proxy-router: ${progress.bytesDownloaded} bytes`)
+    }
+
+    const bundledExecutableExists = bundledProxyRouterDirectory
+      ? await fs.pathExists(
+          path.join(bundledProxyRouterDirectory, BundledProxyRouterExecutableName)
+        )
+      : false
+    const bundledManifestExists = bundledProxyRouterDirectory
+      ? await fs.pathExists(path.join(bundledProxyRouterDirectory, BundledProxyRouterManifestName))
+      : false
+
+    if (bundledProxyRouterDirectory && (bundledExecutableExists || bundledManifestExists)) {
+      await installBundledExecutable(
+        bundledProxyRouterDirectory,
+        destinationPath,
+        onProgress,
+        this.log.scope('Bundled proxy-router')
+      )
+    } else if (this.cfg.proxyRouter.downloadUrl) {
       await downloadFile(
         this.cfg.proxyRouter.downloadUrl,
-        resolveAppDataPath(this.cfg.proxyRouter.fileName),
-        (progress) => {
-          this.proxyDownloadState.status = progress.status
-          this.proxyDownloadState.progress = progress.progress
-          this.proxyDownloadState.error = progress.error
-          this.emitStateUpdate()
-          this.log.info(`Downloading proxy-router: ${progress.bytesDownloaded} bytes`)
-        },
-        this.log.scope('Proxy-router download')
+        destinationPath,
+        onProgress,
+        this.log.scope('Proxy-router download'),
+        { refreshIfSourceChanged: true }
       )
     }
     this.proxyDownloadState.status = 'success'
