@@ -17,10 +17,11 @@ import {
   IconShieldLock,
   IconInfoCircle,
   IconEye,
+  IconSparkles,
 } from '@tabler/icons-react';
 import Modal from '../../contracts/modals/Modal';
 import ModelRow from './ModelRow';
-import { isSecureModel, SECURE_MODE_INFO } from '../utils';
+import { isCoworkCandidate, isSecureModel, SECURE_MODE_INFO } from '../utils';
 import { getVisionCapability } from '../../../store/utils/attachments';
 
 /* The shared outer modal `Body` (in CreateContractModal.styles) bakes in
@@ -115,6 +116,22 @@ const FilterRow = styled.div`
   gap: 6px;
   flex-wrap: wrap;
   margin-top: 1.2rem;
+`;
+
+const CoworkCandidateHint = styled.div`
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 0.9rem;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 1.05rem;
+  line-height: 1.45;
+
+  svg {
+    flex: 0 0 auto;
+    margin-top: 1px;
+    color: ${(p) => p.theme.colors.morMain};
+  }
 `;
 
 const FilterPill = styled.button<{ $active: boolean }>`
@@ -283,6 +300,7 @@ const BidsLoadingHint = styled.div`
 type FilterId =
   | 'all'
   | 'llm'
+  | 'cowork'
   | 'vision'
   | 'embeddings'
   | 'tts'
@@ -293,6 +311,7 @@ type FilterId =
 const FILTERS: { id: FilterId; label: string; modality?: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'llm', label: 'LLM', modality: 'llm' },
+  { id: 'cowork', label: 'Cowork candidates' },
   { id: 'vision', label: 'Vision' },
   { id: 'embeddings', label: 'Embeddings', modality: 'embeddings' },
   { id: 'tts', label: 'Text-to-Speech', modality: 'tts' },
@@ -303,6 +322,7 @@ const FILTERS: { id: FilterId; label: string; modality?: string }[] = [
 
 const isTee = (m: any) => isSecureModel(m);
 const isVision = (m: any) => getVisionCapability(m) !== 'none';
+const isCoworkCandidateModel = (m: any) => isCoworkCandidate(m);
 
 function hasModality(tags: any[] = [], modality: string) {
   return tags.some((t: any) => String(t).toLowerCase() === modality);
@@ -326,6 +346,7 @@ const ModelSelectionModal = ({
   providersAvailability,
   bidsLoading,
   marketplaceOnly = false,
+  coworkSetup = false,
 }: any) => {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<FilterId>('all');
@@ -342,6 +363,7 @@ const ModelSelectionModal = ({
     () =>
       (models || [])
         .filter((m: any) => !marketplaceOnly || !m.isLocal)
+        .filter((m: any) => !coworkSetup || isCoworkCandidate(m))
         .map((m: any) => {
           if (m.isLocal || !providersAvailability) {
             return { ...m, isOnline: true };
@@ -360,7 +382,7 @@ const ModelSelectionModal = ({
           }, {});
           return { ...m, ...info };
         }),
-    [marketplaceOnly, models, providersAvailability],
+    [coworkSetup, marketplaceOnly, models, providersAvailability],
   );
 
   // Count results per filter (using the current search query) so the pills
@@ -369,6 +391,7 @@ const ModelSelectionModal = ({
     const c: Record<FilterId, number> = {
       all: 0,
       llm: 0,
+      cowork: 0,
       vision: 0,
       embeddings: 0,
       tts: 0,
@@ -382,6 +405,7 @@ const ModelSelectionModal = ({
       if (m.isLocal) c.local++;
       if (isTee(m)) c.tee++;
       if (isVision(m)) c.vision++;
+      if (isCoworkCandidateModel(m)) c.cowork++;
       const tags = m.Tags || [];
       if (hasModality(tags, 'llm') || hasModality(tags, 'chat')) c.llm++;
       if (hasModality(tags, 'embeddings') || hasModality(tags, 'embedding'))
@@ -405,6 +429,8 @@ const ModelSelectionModal = ({
           return isTee(m);
         case 'vision':
           return isVision(m);
+        case 'cowork':
+          return isCoworkCandidateModel(m);
         case 'llm':
           return hasModality(tags, 'llm') || hasModality(tags, 'chat');
         case 'embeddings':
@@ -467,6 +493,8 @@ const ModelSelectionModal = ({
         return <IconMessage size={13} stroke={2} />;
       case 'vision':
         return <IconEye size={13} stroke={2} />;
+      case 'cowork':
+        return <IconSparkles size={13} stroke={2} />;
       case 'embeddings':
         return <IconVector size={13} stroke={2} />;
       case 'tts':
@@ -487,7 +515,11 @@ const ModelSelectionModal = ({
       <Layout>
         <Header>
           <TitleRow>
-            <Title>New chat</Title>
+            <Title>
+              {coworkSetup
+                ? 'Choose a text model to try with Cowork'
+                : 'New chat'}
+            </Title>
             {/* Only surface the counter when filtering/search actually hides
                 models — otherwise "N of N" is noise. */}
             {visible.length !== enriched.length && (
@@ -522,7 +554,9 @@ const ModelSelectionModal = ({
           </SearchWrapper>
           <FilterRow role="group" aria-label="Filter models by capability">
             {FILTERS.filter(
-              (item) => !marketplaceOnly || item.id !== 'local',
+              (item) =>
+                (!marketplaceOnly || item.id !== 'local') &&
+                (!coworkSetup || item.id !== 'cowork'),
             ).map((f) => {
               const active = filter === f.id;
               const count = counts[f.id];
@@ -533,7 +567,16 @@ const ModelSelectionModal = ({
                   type="button"
                   onClick={() => setFilter(f.id)}
                   aria-pressed={active}
-                  aria-label={`Show ${f.label} models (${count})`}
+                  aria-label={
+                    f.id === 'cowork'
+                      ? `Show Cowork candidate models (${count})`
+                      : `Show ${f.label} models (${count})`
+                  }
+                  title={
+                    f.id === 'cowork'
+                      ? 'Marketplace text/chat models that can be tried with Cowork. Provider tool support is not published and is checked only after a session opens.'
+                      : undefined
+                  }
                 >
                   {filterIconFor(f.id)}
                   {f.label}
@@ -544,6 +587,16 @@ const ModelSelectionModal = ({
               );
             })}
           </FilterRow>
+          {filter === 'cowork' && (
+            <CoworkCandidateHint role="note">
+              <IconInfoCircle size={15} stroke={2} aria-hidden="true" />
+              <span>
+                Candidates are not verified. Providers do not publish tool
+                support; Cowork checks it after a session opens and uses
+                compatibility mode when possible.
+              </span>
+            </CoworkCandidateHint>
+          )}
           {bidsLoading && (
             <BidsLoadingHint>
               {marketplaceOnly
@@ -560,7 +613,9 @@ const ModelSelectionModal = ({
               <div>
                 {search.trim()
                   ? 'No models match your search.'
-                  : 'No models available for this filter.'}
+                  : filter === 'cowork'
+                    ? 'No marketplace text/chat models are available to try with Cowork.'
+                    : 'No models available for this filter.'}
               </div>
             </EmptyState>
           )}

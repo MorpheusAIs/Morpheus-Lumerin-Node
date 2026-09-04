@@ -63,6 +63,26 @@ export const getModelModality = (model) => {
   return 'llm';
 };
 
+// The marketplace currently publishes modality, not provider tool support.
+// This predicate therefore identifies models that can be *tried* with Cowork;
+// it must never be presented as verified native-tool compatibility.
+export const isCoworkCandidate = (model) => {
+  if (!model || model.isLocal || model.IsDeleted === true) return false;
+  const type = String(model?.ModelType ?? '')
+    .trim()
+    .toLowerCase();
+  const tags = (model?.Tags || []).map((tag) =>
+    String(tag).toLowerCase().trim(),
+  );
+  if (type === 'llm') return true;
+  if (type && type !== 'unknown') return false;
+  if (tags.includes('llm') || tags.includes('chat')) return true;
+  const nonChatTags = Object.values(MODALITY_TAGS)
+    .flat()
+    .filter((tag) => !MODALITY_TAGS.llm.includes(tag));
+  return !nonChatTags.some((tag) => tags.includes(tag));
+};
+
 export const makeId = (length) => {
   let result = '';
   const characters =

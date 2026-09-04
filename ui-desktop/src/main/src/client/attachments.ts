@@ -37,50 +37,32 @@ const truncate = (text: string): { text: string; note?: string } => {
   }
 }
 
-async function parsePdf(buf: Buffer): Promise<ParsedAttachment> {
-  // Legacy build: the modern one assumes a browser environment.
-  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+const MAX_ATTACHMENT_INPUT_BYTES = 20 * 1024 * 1024
+const STRUCTURED_DOCUMENT_EXTENSIONS = new Set(['pdf', 'docx', 'xlsx', 'pptx'])
 
-  const doc = await pdfjs.getDocument({
-    data: new Uint8Array(buf),
-    // Fonts and images are irrelevant when all we want is the text layer.
-    disableFontFace: true,
-    isEvalSupported: false
-  }).promise
-
-  const pages: string[] = []
-  for (let i = 1; i <= doc.numPages; i++) {
-    const page = await doc.getPage(i)
-    const content = await page.getTextContent()
-    const pageText = content.items
-      .map((it: any) => ('str' in it ? it.str : ''))
-      .join(' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-    if (pageText) {
-      pages.push(`--- page ${i} ---\n${pageText}`)
-    }
+async function parseStructuredDocument(buf: Buffer, name: string): Promise<ParsedAttachment> {
+  const { extractCoworkDocument } = await import('./cowork-document-extraction')
+  const extracted = await extractCoworkDocument(buf, name)
+  const sectionCount =
+    extracted.metadata.pageCount ?? extracted.metadata.sheetCount ?? extracted.metadata.slideCount
+  const sectionLabel =
+    extracted.format === 'pdf'
+      ? 'page(s)'
+      : extracted.format === 'xlsx'
+        ? 'sheet(s)'
+        : extracted.format === 'pptx'
+          ? 'slide(s)'
+          : 'document section(s)'
+  const notes = [
+    sectionCount === undefined ? undefined : `${sectionCount} ${sectionLabel}`,
+    extracted.truncated ? 'text truncated to the safe extraction limit' : undefined,
+    ...extracted.warnings
+  ].filter((value): value is string => Boolean(value))
+  return {
+    text: extracted.text,
+    ...(notes.length ? { note: notes.join('; ').slice(0, 2_000) } : {}),
+    empty: extracted.empty
   }
-
-  const joined = pages.join('\n\n')
-  if (!joined.trim()) {
-    // Almost always a scanned document: images of text, no text layer.
-    return {
-      text: '',
-      empty: true,
-      note: `${doc.numPages} page(s), no selectable text — this looks like a scanned PDF`
-    }
-  }
-
-  const { text, note } = truncate(joined)
-  return { text, note: note ?? `${doc.numPages} page(s)` }
-}
-
-async function parseDocx(buf: Buffer): Promise<ParsedAttachment> {
-  const mammoth = await import('mammoth')
-  const result = await mammoth.extractRawText({ buffer: buf })
-  const { text, note } = truncate(result.value ?? '')
-  return { text, note, empty: !text.trim() }
 }
 
 /**
@@ -106,28 +88,53 @@ function parseText(buf: Buffer): ParsedAttachment {
 /**
  * Extracts text from an attachment.
  *
- * `data` is base64 — the renderer reads the file uniformly whether it came from
- * the picker, a drop, or a paste (a pasted image has no path), so bytes rather
- * than a path is the one shape that covers all three.
+ * `data` is a structured-cloned binary buffer, not a path. This covers picker,
+ * drop, and paste inputs without exposing a host path or amplifying a large
+ * document into a base64 string on the renderer thread.
  */
 export const parseAttachment = async (params: {
   name: string
   mime: string
-  data: string
+  data: ArrayBuffer | ArrayBufferView
 }): Promise<ParsedAttachment> => {
-  const { name, mime } = params
-  const buf = Buffer.from(params.data, 'base64')
+  const name = String(params?.name ?? '').trim()
+  const mime = String(params?.mime ?? '').trim()
+  if (!name || name.length > 255 || /[\u0000-\u001f\u007f]/u.test(name)) {
+    throw new Error('The attachment filename is invalid.')
+  }
+  if (mime.length > 200 || /[\u0000-\u001f\u007f]/u.test(mime)) {
+    throw new Error('The attachment content type is invalid.')
+  }
+  const data = params?.data
+  if (!(data instanceof ArrayBuffer) && !ArrayBuffer.isView(data)) {
+    throw new Error('The attachment data is invalid.')
+  }
+  const buf =
+    data instanceof ArrayBuffer
+      ? Buffer.from(data)
+      : Buffer.from(data.buffer, data.byteOffset, data.byteLength)
+  if (!buf.length || buf.length > MAX_ATTACHMENT_INPUT_BYTES) {
+    throw new Error('The attachment must be between 1 byte and 20 MiB.')
+  }
   const ext = (name.split('.').pop() ?? '').toLowerCase()
+  const mimeExtension =
+    mime === 'application/pdf'
+      ? 'pdf'
+      : mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        ? 'docx'
+        : mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          ? 'xlsx'
+          : mime === 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+            ? 'pptx'
+            : undefined
+  const structuredExtension = STRUCTURED_DOCUMENT_EXTENSIONS.has(ext) ? ext : mimeExtension
 
   try {
-    if (mime === 'application/pdf' || ext === 'pdf') {
-      return await parsePdf(buf)
-    }
-    if (
-      mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-      ext === 'docx'
-    ) {
-      return await parseDocx(buf)
+    if (structuredExtension) {
+      return await parseStructuredDocument(
+        buf,
+        STRUCTURED_DOCUMENT_EXTENSIONS.has(ext) ? name : `${name}.${structuredExtension}`
+      )
     }
     // Legacy .doc is a binary OLE format; mammoth cannot read it.
     if (ext === 'doc') {

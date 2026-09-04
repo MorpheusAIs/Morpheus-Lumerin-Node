@@ -12,6 +12,7 @@ import initMenu from './menu'
 import errorHandler from './errorHandler'
 import logger from './logger'
 import { join } from 'path'
+import { registerCoworkIpc } from './src/client/cowork-ipc'
 import { isTrustedRendererEvent, isTrustedRendererUrl } from './rendererTrust'
 import { registerChatStreamIpc } from './src/client/chat-stream-ipc'
 import { registerIpfsDownloadIpc } from './src/client/ipfs-download-ipc'
@@ -230,6 +231,7 @@ app
     // and displayed a misleading wallet-startup failure.
     createClient(config)
 
+    registerCoworkIpc()
     registerChatStreamIpc()
     registerIpfsDownloadIpc()
     createWindow()
