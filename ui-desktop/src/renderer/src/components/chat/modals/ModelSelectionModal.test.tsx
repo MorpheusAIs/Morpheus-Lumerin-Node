@@ -12,7 +12,17 @@ vi.mock('../../contracts/modals/Modal', () => ({
 }));
 
 vi.mock('./ModelRow', () => ({
-  default: ({ model }: { model: { Name: string } }) => <div>{model.Name}</div>,
+  default: ({
+    model,
+    onChangeModel,
+  }: {
+    model: { Id: string; Name: string };
+    onChangeModel: (value: { modelId: string }) => void;
+  }) => (
+    <button type="button" onClick={() => onChangeModel({ modelId: model.Id })}>
+      {model.Name}
+    </button>
+  ),
 }));
 
 const ThemeProvider = StyledThemeProvider as unknown as FC<
@@ -29,6 +39,35 @@ const marketplaceModel = (overrides: Record<string, unknown>) => ({
 });
 
 describe('ModelSelectionModal Workspace filter', () => {
+  it('lets a raw marketplace model start its one-model price check', () => {
+    const onChangeModel = vi.fn();
+    const handleClose = vi.fn();
+
+    render(
+      <ThemeProvider theme={theme}>
+        <ModelSelectionModal
+          isActive
+          handleClose={handleClose}
+          onChangeModel={onChangeModel}
+          symbol="MOR"
+          models={[
+            marketplaceModel({
+              Id: 'raw-model',
+              Name: 'Unchecked model',
+              bids: undefined,
+            }),
+          ]}
+        />
+      </ThemeProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unchecked model' }));
+
+    expect(onChangeModel).toHaveBeenCalledOnce();
+    expect(onChangeModel).toHaveBeenCalledWith({ modelId: 'raw-model' });
+    expect(handleClose).toHaveBeenCalledOnce();
+  });
+
   it('distinguishes a catalog still loading from a genuinely empty catalog', () => {
     const props = {
       isActive: true,

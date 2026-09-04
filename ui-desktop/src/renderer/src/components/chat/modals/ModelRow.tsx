@@ -7,11 +7,9 @@ import {
   IconVector,
   IconPhoto,
   IconEye,
-  IconPlugConnectedX,
   IconChevronRight,
   IconHome,
   IconShieldLock,
-  IconLoader2,
 } from '@tabler/icons-react';
 import { formatSmallNumber, SECURE_TAG, SECURE_BADGE_TOOLTIP } from '../utils';
 import { getVisionCapability } from '../../../store/utils/attachments';
@@ -44,6 +42,8 @@ const RowContainer = styled.button<{ $online: boolean }>`
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 10px;
   color: rgba(255, 255, 255, 0.92);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 68px;
   cursor: ${(p) => (p.$online ? 'pointer' : 'not-allowed')};
   text-align: left;
   font: inherit;
@@ -223,18 +223,8 @@ const OfflineBadge = styled.div`
   letter-spacing: 0.3px;
 `;
 
-const LoadingBadge = styled(OfflineBadge)`
-  color: rgba(255, 255, 255, 0.72);
-
-  svg {
-    animation: model-row-spin 0.7s linear infinite;
-  }
-
-  @keyframes model-row-spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
+const CheckPriceBadge = styled(OfflineBadge)`
+  color: ${(p) => p.theme.colors.morMain};
 `;
 
 const Caret = styled.div`
@@ -303,7 +293,6 @@ function computePrice(model: any): PriceInfo {
 function ModelRow(props: {
   model: any;
   symbol: string;
-  bidsLoading?: boolean;
   onChangeModel: (data: {
     modelId: string;
     bidId?: string;
@@ -313,12 +302,15 @@ function ModelRow(props: {
   const model = props.model || {};
   const modelId = model.Id || '';
   const isLocal = !!model.isLocal;
+  const hasBidData = Array.isArray(model?.bids);
   const providerCount = (model?.bids || []).filter(
     (bid: any) => bid?.Id,
   ).length;
-  const isPricingLoading =
-    !isLocal && !!props.bidsLoading && !Array.isArray(model.bids);
-  const isOnline = isLocal || (providerCount > 0 && model.isOnline !== false);
+  const availabilityUnknown = !isLocal && !hasBidData;
+  const isOnline =
+    isLocal ||
+    availabilityUnknown ||
+    (providerCount > 0 && model.isOnline !== false);
   const symbol = props.symbol || 'MOR';
   const lastCheck: Date | undefined = model.lastCheck
     ? new Date(model.lastCheck)
@@ -354,7 +346,6 @@ function ModelRow(props: {
     <RowContainer
       type="button"
       $online={isOnline}
-      aria-busy={isPricingLoading}
       disabled={!isOnline}
       onClick={handleSelect}
       title={tooltip}
@@ -365,7 +356,7 @@ function ModelRow(props: {
 
       <NameStack>
         <NameLine>
-          <StatusDot $online={isOnline} />
+          <StatusDot $online={isLocal || providerCount > 0} />
           <NameText>{model.Name}</NameText>
         </NameLine>
         <MetaLine>
@@ -402,16 +393,10 @@ function ModelRow(props: {
           {familyTags.slice(0, 2).map((t) => (
             <Pill key={t}>{t}</Pill>
           ))}
-          {!isOnline && lastCheck && (
+          {!availabilityUnknown && !isOnline && lastCheck && (
             <>
               <Dot>·</Dot>
-              <span>
-                <IconPlugConnectedX
-                  size={12}
-                  style={{ verticalAlign: '-2px', marginRight: 3 }}
-                />
-                Offline since {lastCheck.toLocaleTimeString()}
-              </span>
+              <span>Offline since {lastCheck.toLocaleTimeString()}</span>
             </>
           )}
         </MetaLine>
@@ -424,13 +409,9 @@ function ModelRow(props: {
             Local
           </LocalBadge>
         )}
-        {isPricingLoading ? (
-          <LoadingBadge>
-            <IconLoader2 size={13} stroke={2} aria-hidden="true" />
-            Checking providers…
-          </LoadingBadge>
-        ) : (
-          price.kind === 'offline' && <OfflineBadge>Unavailable</OfflineBadge>
+        {availabilityUnknown && <CheckPriceBadge>Check price</CheckPriceBadge>}
+        {!availabilityUnknown && price.kind === 'offline' && (
+          <OfflineBadge>Unavailable</OfflineBadge>
         )}
         {price.kind === 'single' && (
           <>

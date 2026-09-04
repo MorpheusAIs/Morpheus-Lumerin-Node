@@ -21,6 +21,10 @@ type OpenSessionRes struct {
 	SessionID common.Hash `json:"sessionID" example:"0x1234"`
 }
 
+type ExistingSessionRes struct {
+	ExistingSessionID string `json:"existingSessionID" example:"0x1234"`
+}
+
 type BalanceRes struct {
 	Balance *lib.BigInt `json:"balance" swaggertype:"string"`
 }

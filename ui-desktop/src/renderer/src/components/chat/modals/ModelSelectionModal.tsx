@@ -289,25 +289,6 @@ const LoadingState = styled(EmptyState)`
   }
 `;
 
-const BidsLoadingHint = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 1rem;
-  font-size: 1.1rem;
-  color: rgba(255, 255, 255, 0.5);
-
-  &::before {
-    content: '';
-    width: 12px;
-    height: 12px;
-    border: 2px solid rgba(255, 255, 255, 0.25);
-    border-top-color: ${(p) => p.theme.colors.morMain};
-    border-radius: 50%;
-    animation: ${spin} 0.7s linear infinite;
-  }
-`;
-
 type FilterId =
   | 'all'
   | 'llm'
@@ -354,9 +335,7 @@ const ModelSelectionModal = ({
   models,
   onChangeModel,
   symbol,
-  providersAvailability,
   modelsLoading = false,
-  bidsLoading,
   marketplaceOnly = false,
   coworkSetup = false,
 }: any) => {
@@ -364,9 +343,6 @@ const ModelSelectionModal = ({
   const [filter, setFilter] = useState<FilterId>('all');
   const [showTeeInfo, setShowTeeInfo] = useState(false);
 
-  // Annotate each model with `isOnline` (true for local, otherwise derived
-  // from provider availability checks). Sort online first within each section.
-  //
   // NB: hooks must run on every render — keep `useMemo` BEFORE the
   // `isActive` early-return, otherwise the hook count changes between
   // renders and React throws "Rendered more hooks than during the previous
@@ -375,26 +351,8 @@ const ModelSelectionModal = ({
     () =>
       (models || [])
         .filter((m: any) => !marketplaceOnly || !m.isLocal)
-        .filter((m: any) => !coworkSetup || isCoworkCandidate(m))
-        .map((m: any) => {
-          if (m.isLocal || !providersAvailability) {
-            return { ...m, isOnline: true };
-          }
-          const info = (m.bids || []).reduce((acc: any, next: any) => {
-            const entry = providersAvailability.find(
-              (pa: any) => pa.id == next.Provider,
-            );
-            if (!entry) return acc;
-            if (entry.isOnline) return acc;
-            const online = entry.status != 'disconnected';
-            return {
-              isOnline: online,
-              lastCheck: !online ? entry.time : undefined,
-            };
-          }, {});
-          return { ...m, ...info };
-        }),
-    [coworkSetup, marketplaceOnly, models, providersAvailability],
+        .filter((m: any) => !coworkSetup || isCoworkCandidate(m)),
+    [coworkSetup, marketplaceOnly, models],
   );
 
   // Count results per filter (using the current search query) so the pills
@@ -607,13 +565,6 @@ const ModelSelectionModal = ({
               </span>
             </CoworkCandidateHint>
           )}
-          {bidsLoading && !modelsLoading && enriched.length > 0 && (
-            <BidsLoadingHint>
-              {marketplaceOnly
-                ? 'Loading marketplace options…'
-                : 'Loading marketplace options… local models are ready to use.'}
-            </BidsLoadingHint>
-          )}
         </Header>
 
         <Body aria-busy={modelsLoading}>
@@ -648,7 +599,6 @@ const ModelSelectionModal = ({
                   <ModelRow
                     key={m.Id}
                     model={m}
-                    bidsLoading={bidsLoading}
                     symbol={symbol}
                     onChangeModel={handlePick}
                   />
@@ -678,7 +628,6 @@ const ModelSelectionModal = ({
                   <ModelRow
                     key={m.Id}
                     model={m}
-                    bidsLoading={bidsLoading}
                     symbol={symbol}
                     onChangeModel={handlePick}
                   />
@@ -701,7 +650,6 @@ const ModelSelectionModal = ({
                   <ModelRow
                     key={m.Id}
                     model={m}
-                    bidsLoading={bidsLoading}
                     symbol={symbol}
                     onChangeModel={handlePick}
                   />
@@ -724,7 +672,6 @@ const ModelSelectionModal = ({
                   <ModelRow
                     key={m.Id}
                     model={m}
-                    bidsLoading={bidsLoading}
                     symbol={symbol}
                     onChangeModel={handlePick}
                   />
@@ -744,7 +691,6 @@ const ModelSelectionModal = ({
                   <ModelRow
                     key={m.Id}
                     model={m}
-                    bidsLoading={bidsLoading}
                     symbol={symbol}
                     onChangeModel={handlePick}
                   />

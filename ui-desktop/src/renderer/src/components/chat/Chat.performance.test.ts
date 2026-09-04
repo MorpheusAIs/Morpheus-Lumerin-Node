@@ -2,12 +2,32 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createAnimationFrameBatch,
   disposeActiveChatStream,
+  isInitialQueryFetchActive,
   isNearChatBottom,
   observeChatAutoScroll,
+  resolveSessionOpenResult,
   revokeInactiveObjectUrls,
 } from './Chat';
 
 describe('Chat streaming performance helpers', () => {
+  it('does not present a disabled pending query as active work', () => {
+    expect(isInitialQueryFetchActive(undefined, 'idle')).toBe(false);
+    expect(isInitialQueryFetchActive(undefined, 'paused')).toBe(false);
+    expect(isInitialQueryFetchActive(undefined, 'fetching')).toBe(true);
+    expect(isInitialQueryFetchActive([], 'fetching')).toBe(false);
+  });
+
+  it('distinguishes a duplicate-session sentinel from a newly opened session', () => {
+    expect(resolveSessionOpenResult('new-session')).toEqual({
+      kind: 'opened',
+      sessionId: 'new-session',
+    });
+    expect(
+      resolveSessionOpenResult({ existingSessionID: 'existing-session' }),
+    ).toEqual({ kind: 'existing', sessionId: 'existing-session' });
+    expect(resolveSessionOpenResult(undefined)).toBeNull();
+  });
+
   it('treats only the configured bottom threshold as eligible for auto-scroll', () => {
     expect(
       isNearChatBottom({

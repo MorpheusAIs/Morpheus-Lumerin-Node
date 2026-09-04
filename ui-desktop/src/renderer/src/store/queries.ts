@@ -10,16 +10,16 @@ export const queryKeys = {
   // Chat's supplemental startup reads stay separate from the shared model
   // registry, so the picker is not held behind provider/funding responses.
   localModels: ['localModels'] as const,
-  modelProviders: ['modelProviders'] as const,
-  chatFunding: ['chatFunding'] as const,
-  // models merged with their bids (withChatState.getBidsByModelId fan-out)
-  modelsWithBids: ['modelsWithBids'] as const,
+  chatFunding: (address?: string) => ['chatFunding', address ?? ''] as const,
+  // Active bids are loaded only for the marketplace model the user selects.
+  // The wallet belongs in the key because consumers must not select their own
+  // provider bid, so the filtered result can differ after switching wallets.
+  modelBids: (address?: string, modelId?: string) =>
+    ['modelBids', address ?? '', modelId ?? ''] as const,
   // raw on-chain user sessions (paginated) — shared by Chat + Wallet
   sessions: (address?: string) => ['sessions', address ?? ''] as const,
   // saved chat-history titles (local proxy-router index)
   chatTitles: ['chatTitles'] as const,
-  // provider connectivity ping results
-  providersAvailability: ['providersAvailability'] as const,
   // wallet ETH/MOR balances (+ MOR rate)
   balances: (address?: string) => ['balances', address ?? ''] as const,
   // Blockscout transaction history

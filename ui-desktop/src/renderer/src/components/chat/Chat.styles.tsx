@@ -154,6 +154,80 @@ export const SessionCostSummary = styled.div`
   line-height: 1.45;
 `;
 
+export const SessionSetupState = styled.div`
+  min-height: 250px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px 0 12px;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: center;
+
+  strong {
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  span {
+    max-width: 38ch;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .spinner-border {
+    width: 32px;
+    height: 32px;
+  }
+`;
+
+export const SessionSetupActions = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
+
+  ${ChatIntroButton} {
+    width: auto;
+    min-width: 148px;
+    min-height: 40px;
+  }
+`;
+
+export const SessionHistoryNotice = styled.div`
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 18px 0 0;
+  color: #e8a33d;
+  font-size: 12px;
+  line-height: 1.45;
+
+  span {
+    flex: 1;
+  }
+
+  button {
+    min-height: 40px;
+    padding: 0 10px;
+    flex: 0 0 auto;
+    border: 1px solid rgba(232, 163, 61, 0.45);
+    border-radius: 7px;
+    background: transparent;
+    color: #f2bd6d;
+    cursor: pointer;
+    font: inherit;
+  }
+
+  button:focus-visible {
+    outline: 2px solid ${(p) => p.theme.colors.active};
+    outline-offset: 2px;
+  }
+`;
+
 export const Control = styled.div`
   height: fit-content;
   position: relative;
@@ -329,6 +403,26 @@ export const LoadingCover = styled.div`
   background: rgba(0, 0, 0, 0.4);
 
   z-index: 5;
+`;
+
+export const LoadingStatus = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 36rem;
+  padding: 24px;
+  text-align: center;
+
+  strong {
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 16px;
+  }
+
+  span {
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 13px;
+  }
 `;
 
 export const ImageContainer = styled.img`

@@ -714,6 +714,7 @@ func (s *BlockchainController) openSessionByBid(ctx *gin.Context) {
 //	@Param			opensession	body		structs.OpenSessionWithFailover	true	"Open session"
 //	@Param			id			path		string							true	"Model ID"
 //	@Success		200			{object}	structs.OpenSessionRes
+//	@Failure		409			{object}	structs.ExistingSessionRes
 //	@Router			/blockchain/models/{id}/session [post]
 //	@Security		BasicAuth
 func (s *BlockchainController) openSessionByModelId(ctx *gin.Context) {
@@ -741,15 +742,31 @@ func (s *BlockchainController) openSessionByModelId(ctx *gin.Context) {
 	usernameStr := username.(string)
 
 	isFailoverEnabled := reqPayload.Failover
-	sessionId, err := s.service.OpenSessionByModelId(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), reqPayload.DirectPayment, isFailoverEnabled, reqPayload.OmitProvider.Address, usernameStr)
+	var sessionId common.Hash
+	if reqPayload.RejectExisting {
+		sessionId, err = s.service.OpenSessionByModelIdRejectExisting(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), reqPayload.DirectPayment, isFailoverEnabled, reqPayload.OmitProvider.Address, usernameStr)
+	} else {
+		sessionId, err = s.service.OpenSessionByModelId(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), reqPayload.DirectPayment, isFailoverEnabled, reqPayload.OmitProvider.Address, usernameStr)
+	}
 	if err != nil {
 		s.log.Error(err)
-		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
+		writeOpenSessionByModelError(ctx, err)
 		return
 	}
 
 	ctx.JSON(http.StatusOK, structs.OpenSessionRes{SessionID: sessionId})
 	return
+}
+
+func writeOpenSessionByModelError(ctx *gin.Context, err error) {
+	var existing *ExistingSessionError
+	if errors.As(err, &existing) {
+		ctx.JSON(http.StatusConflict, structs.ExistingSessionRes{
+			ExistingSessionID: existing.SessionID,
+		})
+		return
+	}
+	ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
 }
 
 // CloseSession godoc
@@ -1121,7 +1138,7 @@ func (c *BlockchainController) createNewModel(ctx *gin.Context) {
 	if modelType == structs.ModelTypeUnknown {
 		c.log.Error("Model tags must include a supported type tag (chat, embedding, tts, stt)")
 		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: "Model tags must include a supported type tag (chat, embedding, tts, stt)"})
-		return 
+		return
 	}
 
 	var modelId common.Hash

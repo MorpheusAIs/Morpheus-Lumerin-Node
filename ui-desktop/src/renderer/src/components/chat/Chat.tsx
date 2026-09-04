@@ -47,6 +47,10 @@ import {
   ChatIntroButton,
   SessionDurationField,
   SessionCostSummary,
+  SessionSetupState,
+  SessionSetupActions,
+  SessionHistoryNotice,
+  LoadingStatus,
   SendBtnWrapper,
   Btn,
   AudioInputZone,
@@ -83,7 +87,6 @@ import { ChatData, HistoryMessage } from './interfaces';
 import { formatValue } from '../../utils/coinValue';
 import { ApiGateway } from 'src/main/src/client/apiGateway';
 import { queryKeys } from '../../store/queries';
-import { pooledMapSettled } from '../../store/utils/concurrency';
 import QueryError from '../common/QueryError';
 import AttachmentBar from './AttachmentBar';
 import {
@@ -107,8 +110,6 @@ import {
   toSessionRequestDuration,
 } from '../../store/utils/sessionDuration';
 
-// Max simultaneous per-model bid requests. See store/utils/concurrency.ts.
-const BIDS_CONCURRENCY = 6;
 const CHAT_BOTTOM_THRESHOLD_PX = 96;
 const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
 
@@ -221,6 +222,43 @@ export const revokeInactiveObjectUrls = (
   }
 };
 
+/** A disabled/paused no-data query is pending, but it is not doing any work. */
+export const isInitialQueryFetchActive = (
+  data: unknown,
+  fetchStatus: string,
+): boolean => data === undefined && fetchStatus === 'fetching';
+
+type SessionOpenResult =
+  | { kind: 'opened'; sessionId: string }
+  | { kind: 'existing'; sessionId: string };
+
+/** Normalizes both the legacy string result and the duplicate-session sentinel. */
+export const resolveSessionOpenResult = (
+  value: unknown,
+): SessionOpenResult | null => {
+  if (typeof value === 'string' && value) {
+    return { kind: 'opened', sessionId: value };
+  }
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const result = value as {
+    existingSessionID?: unknown;
+    sessionID?: unknown;
+  };
+  if (
+    typeof result.existingSessionID === 'string' &&
+    result.existingSessionID
+  ) {
+    return { kind: 'existing', sessionId: result.existingSessionID };
+  }
+  if (typeof result.sessionID === 'string' && result.sessionID) {
+    return { kind: 'opened', sessionId: result.sessionID };
+  }
+  return null;
+};
+
 // Common TTS voice presets. Names are backend-specific (Kokoro `af_*`,
 // OpenAI `alloy`/`nova`/...), so the field also accepts free-text input.
 const TTS_VOICES = [
@@ -249,11 +287,9 @@ type ChatProps = {
   };
   getAllModels: () => Promise<any[]>;
   getLocalModels: () => Promise<any[]>;
-  getProviders: () => Promise<any[]>;
   getMetaInfo: () => Promise<{ budget: number; supply: number }>;
   getBalances: () => Promise<{ eth: number; mor: number }>;
   getSessionsByUser: (address: string) => Promise<any>;
-  getProvidersAvailability: (providers: any[]) => Promise<any[]>;
   getBidInfo: (id: string) => Promise<any>;
   getBidsByModelId: (id: string) => Promise<any>;
   onOpenSession: (props: {
@@ -284,7 +320,8 @@ const Chat = (props: ChatProps) => {
   // Overlay shown during user-triggered actions (open/close/reopen session,
   // manual session refresh). The *initial* page load no longer uses this — it
   // is gated on the react-query cache so revisiting the tab is instant.
-  const [isActionLoading, setIsActionLoading] = useState(false);
+  const [actionStatus, setActionStatus] = useState<string | null>(null);
+  const sessionActionInFlightRef = useRef(false);
   const [messages, setMessages] = useState<any>([]);
   const [chatScrollElement, setChatScrollElement] =
     useState<HTMLDivElement | null>(null);
@@ -329,25 +366,18 @@ const Chat = (props: ChatProps) => {
     select: (models) => (models ?? []).filter((model: any) => !model.IsDeleted),
   });
 
-  // Local models, providers, and session-funding data are useful, but none of
-  // them should hold the model registry hostage. Keeping them in independent
-  // queries lets New Chat render the marketplace catalog as soon as its single
-  // critical read resolves.
+  // Local models and session-funding data are useful, but neither should hold
+  // the model registry hostage. Active bids are intentionally absent here:
+  // loading them for every registered model produced hundreds of requests and
+  // kept every picker row disabled until the entire sweep finished.
   const localModelsQuery = useQuery({
     queryKey: queryKeys.localModels,
     queryFn: () => props.getLocalModels(),
   });
 
-  const providersQuery = useQuery({
-    queryKey: queryKeys.modelProviders,
-    queryFn: async () =>
-      ((await props.getProviders()) ?? []).filter(
-        (provider: any) => !provider.IsDeleted,
-      ),
-  });
-
   const fundingQuery = useQuery({
-    queryKey: queryKeys.chatFunding,
+    queryKey: queryKeys.chatFunding(props.address),
+    enabled: !!props.address,
     queryFn: async () => {
       const [meta, userBalances] = await Promise.all([
         props.getMetaInfo(),
@@ -363,73 +393,21 @@ const Chat = (props: ChatProps) => {
     enabled: !!props.address,
   });
 
+  // One cached active-bids request for the model the user actually selected.
+  // A raw registry row remains useful/selectable while this is idle; choosing
+  // it moves to an honest price-loading state instead of starting a 738-model
+  // background sweep.
+  const selectedModelBidsQuery = useQuery({
+    queryKey: queryKeys.modelBids(props.address, selectedModel?.Id),
+    enabled: !!props.address && !!selectedModel?.Id && !selectedModel?.isLocal,
+    staleTime: 60_000,
+    queryFn: async () =>
+      (await props.getBidsByModelId(selectedModel?.Id)) ?? [],
+  });
+
   const chatTitlesQuery = useQuery({
     queryKey: queryKeys.chatTitles,
     queryFn: () => props.client.getChatHistoryTitles(),
-  });
-
-  // Bid fan-out for every marketplace model. Runs in the background after the
-  // base model list is available; does NOT gate the initial render. Mirrors the
-  // previous "effect #2" merge logic but cached across visits.
-  const modelsWithBidsQuery = useQuery({
-    queryKey: queryKeys.modelsWithBids,
-    enabled:
-      marketplaceModelsQuery.data !== undefined &&
-      providersQuery.data !== undefined,
-    queryFn: async () => {
-      const providers = providersQuery.data ?? [];
-      const marketplaceModels = marketplaceModelsQuery.data ?? [];
-      const providersMap = new Map<string, any>(
-        providers.map((provider: any) => [
-          provider.Address.toLowerCase(),
-          provider,
-        ]),
-      );
-      // Bounded fan-out: one bid request per model, but at most
-      // BIDS_CONCURRENCY in flight. The previous unbounded Promise.all fired
-      // hundreds of simultaneous IPC calls, which saturated the proxy-router
-      // and blocked the renderer while the Chat tab loaded.
-      const merged = await pooledMapSettled(
-        marketplaceModels,
-        async (m: any) => {
-          const id = m.Id;
-          const bids = ((await props.getBidsByModelId(id)) ?? [])
-            .map((b: any) => ({
-              ...b,
-              ProviderData: providersMap.get(b.Provider.toLowerCase()),
-              Model: m,
-            }))
-            .filter((b: any) => b.ProviderData);
-
-          if (!bids.length) {
-            return null;
-          }
-
-          return { id, bids };
-        },
-        // One failing model must not blank the whole marketplace list.
-        () => null,
-        BIDS_CONCURRENCY,
-      );
-      const modelsById = new Map<string, any>(
-        marketplaceModels.map((model: any) => [model.Id, model]),
-      );
-      return merged.reduce((acc: any[], next: any) => {
-        if (!next) {
-          return acc;
-        }
-        const model = modelsById.get(next.id);
-        acc.push({ ...model, bids: next.bids });
-        return acc;
-      }, []);
-    },
-  });
-
-  const availabilityQuery = useQuery({
-    queryKey: queryKeys.providersAvailability,
-    enabled: !!providersQuery.data?.length,
-    staleTime: 5 * 60_000,
-    queryFn: () => props.getProvidersAvailability(providersQuery.data ?? []),
   });
 
   // Full (unfiltered) model list — local + every marketplace model, no bids.
@@ -459,37 +437,24 @@ const Chat = (props: ChatProps) => {
     [allModels],
   );
 
-  // chainData.models prefers the bid-enriched (and bid-filtered) list once it
-  // is available, otherwise falls back to the raw list so the UI can render.
+  // Model browsing and history only need registry metadata. The selected model
+  // receives its bid data separately through selectedModelBidsQuery.
   const chainData = useMemo(() => {
     if (marketplaceModelsQuery.data === undefined) {
       return null;
     }
     return {
-      models: [
-        ...localModels,
-        ...(modelsWithBidsQuery.data ?? marketplaceModelsQuery.data),
-      ],
-      providers: providersQuery.data ?? [],
+      models: [...localModels, ...marketplaceModelsQuery.data],
       meta: fundingQuery.data?.meta,
       userBalances: fundingQuery.data?.userBalances,
     };
-  }, [
-    fundingQuery.data,
-    localModels,
-    marketplaceModelsQuery.data,
-    modelsWithBidsQuery.data,
-    providersQuery.data,
-  ]);
+  }, [fundingQuery.data, localModels, marketplaceModelsQuery.data]);
 
   const meta = fundingQuery.data?.meta ?? { budget: 0, supply: 0 };
   const balances = fundingQuery.data?.userBalances ?? { eth: 0, mor: 0 };
-  const providersAvailability = availabilityQuery.data ?? [];
   const modelsLoading =
     marketplaceModelsQuery.isPending &&
     marketplaceModelsQuery.data === undefined;
-  const bidsLoading =
-    providersQuery.isPending || modelsWithBidsQuery.isFetching;
 
   const sessions = useMemo(() => {
     const raw = sessionsQuery.data;
@@ -508,7 +473,7 @@ const Chat = (props: ChatProps) => {
   // The blocking overlay is reserved for user-triggered mutations. Startup
   // reads now render honest inline states, so a slow session scan cannot make
   // the entire Chat route look frozen or hide the New Chat control.
-  const isLoading = isActionLoading;
+  const isLoading = Boolean(actionStatus);
 
   // TTS controls + STT recording state
   const [ttsVoice, setTtsVoice] = useState('af_bella');
@@ -574,10 +539,19 @@ const Chat = (props: ChatProps) => {
     );
     if (!existingSession) return;
     setActiveSession(existingSession);
-    setSelectedBid(
-      selectedModel.bids?.find((bid: any) => bid.Id == existingSession.BidID),
-    );
   }, [activeSession, selectedModel, sessions, sessionsQuery.isSuccess]);
+
+  useEffect(() => {
+    if (!activeSession || !selectedModelBidsQuery.data) {
+      return;
+    }
+    const matchingBid = selectedModelBidsQuery.data.find(
+      (bid: any) => bid.Id == activeSession.BidID,
+    );
+    if (matchingBid) {
+      setSelectedBid(matchingBid);
+    }
+  }, [activeSession, selectedModelBidsQuery.data]);
 
   // One-time selection of the default chat once the (possibly cached) model and
   // session data is available. Runs in a layout effect so that on a warm cache
@@ -805,38 +779,45 @@ const Chat = (props: ChatProps) => {
 
     setActiveSession({ ...targetSessionData, sessionId });
 
-    const targetModel = chainData?.models?.find(
-      (x) => !x.isLocal && x.Id == targetSessionData.ModelAgentId,
-    );
-    const targetBid = targetModel?.bids?.find(
+    const targetBid = selectedModelBidsQuery.data?.find(
       (x) => x.Id == targetSessionData.BidID,
     );
     if (targetBid) {
       setSelectedBid(targetBid);
+    } else if (targetSessionData.BidID) {
+      // A live session can outlast the provider's currently-active bid. Keep
+      // the resumed chat usable immediately, then recover its provider label
+      // from the bid record without holding the checkout overlay open.
+      void props
+        .getBidInfo(targetSessionData.BidID)
+        .then((openBid) => {
+          if (openBid) setSelectedBid(openBid);
+        })
+        .catch((error) =>
+          console.error('Failed to load resumed session bid', error),
+        );
     }
   };
 
   const onOpenSession = async (isReopen: boolean, isDirectPay: boolean) => {
-    // Everything below used to run before the try block, so a missing
-    // selectedModel threw an unhandled promise rejection *after*
-    // setIsActionLoading(true) — leaving the spinner stuck on with no error
-    // shown and no way to recover short of switching tabs.
-    if (!selectedModel?.Id || !selectedModel?.bids?.length) {
+    if (!selectedModel?.Id || !selectedModelBidsQuery.data?.length) {
       props.toasts.toast(
         'error',
-        'No model selected, or its pricing has not loaded yet. Pick a model and try again.',
-      );
-      return;
-    }
-    if (!sessionsQuery.isSuccess) {
-      props.toasts.toast(
-        'info',
-        'Still checking your existing sessions. Wait for that check before paying for another one.',
+        'This model has no active provider price. Retry the price check or choose another model.',
       );
       return;
     }
 
-    setIsActionLoading(true);
+    // State updates are asynchronous, so use a ref to close the same-tick
+    // double-click window before the first network await. The proxy-router's
+    // rejectExisting guard remains the cross-process source of truth.
+    if (sessionActionInFlightRef.current) {
+      return;
+    }
+    sessionActionInFlightRef.current = true;
+
+    let resolvedResult: SessionOpenResult | null = null;
+    setActionStatus('Checking and opening session…');
     try {
       if (!isReopen) {
         setChat({
@@ -852,14 +833,21 @@ const Chat = (props: ChatProps) => {
         meta,
       );
 
-      const openedSession = await props.onOpenSession({
+      const rawResult = await props.onOpenSession({
         modelId: selectedModel.Id,
         duration,
         isDirectPay,
       });
-      if (!openedSession) {
+      resolvedResult = resolveSessionOpenResult(rawResult);
+      if (!resolvedResult) {
         return;
       }
+
+      setActionStatus(
+        resolvedResult.kind === 'existing'
+          ? 'Existing session found — syncing it…'
+          : 'Session opened — syncing it…',
+      );
 
       // Invalidate the shared caches *before* touching local component state.
       // These run against the app-level QueryClient, which outlives this
@@ -874,21 +862,29 @@ const Chat = (props: ChatProps) => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.balances(props.address),
       });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.chatFunding(props.address),
+      });
 
-      await setSessionData(openedSession);
-      return openedSession;
+      await setSessionData(resolvedResult.sessionId);
+      return resolvedResult.sessionId;
     } catch (e: any) {
       // Never let a post-open failure escape as an unhandled rejection — that
       // used to take the whole view down with it.
       console.error('Failed to finalize opened session', e);
       props.toasts.toast(
         'error',
-        'Session opened, but the app could not load it. Check the Sessions list before staking again.',
+        resolvedResult?.kind === 'existing'
+          ? 'An existing session was found, but the app could not load it. Refresh Sessions before trying again.'
+          : resolvedResult?.kind === 'opened'
+            ? 'Session opened, but the app could not load it. Check the Sessions list before staking again.'
+            : 'The session could not be opened. Retry when your node connection is stable.',
         { autoClose: 12000 },
       );
       return;
     } finally {
-      setIsActionLoading(false);
+      sessionActionInFlightRef.current = false;
+      setActionStatus(null);
     }
   };
 
@@ -971,6 +967,9 @@ const Chat = (props: ChatProps) => {
     const fresh = await queryClient.fetchQuery({
       queryKey: queryKeys.sessions(props.address),
       queryFn: () => props.getSessionsByUser(props.address),
+      // Reconciliation is an explicit post-transaction poll. It must bypass
+      // the normal app-level stale window on every retry.
+      staleTime: 0,
     });
     const models = allModels ?? [];
     return (fresh || []).reduce((res, item) => {
@@ -985,10 +984,13 @@ const Chat = (props: ChatProps) => {
   };
 
   const closeSession = async (sessionId: string) => {
-    setIsActionLoading(true);
-    await props.closeSession(sessionId);
-    await refreshSessions();
-    setIsActionLoading(false);
+    setActionStatus('Closing session…');
+    try {
+      await props.closeSession(sessionId);
+      await refreshSessions();
+    } finally {
+      setActionStatus(null);
+    }
 
     if (activeSession?.Id == sessionId) {
       setActiveSession(undefined);
@@ -1011,9 +1013,7 @@ const Chat = (props: ChatProps) => {
     }
 
     const availableModels = chainData?.models ?? [];
-    const selectedModel = chatData.isLocal
-      ? availableModels.find((m: any) => m.Id == modelId)
-      : availableModels.find((m: any) => m.Id == modelId && m.bids);
+    const selectedModel = availableModels.find((m: any) => m.Id == modelId);
     setSelectedModel(selectedModel);
     setIsReadonly(false);
 
@@ -1037,10 +1037,9 @@ const Chat = (props: ChatProps) => {
 
     if (openSession) {
       setActiveSession(openSession);
-      const activeBid = selectedModel?.bids?.find(
-        (b) => b.Id == openSession.BidID,
-      );
-      setSelectedBid(activeBid);
+      // The selected-model query resolves the provider bid without a global
+      // marketplace sweep. Clear any bid from the previous chat meanwhile.
+      setSelectedBid(undefined);
     } else {
       setActiveSession(undefined);
       setSelectedBid(undefined);
@@ -1717,6 +1716,18 @@ const Chat = (props: ChatProps) => {
       );
       return;
     }
+
+    const model = (allModels ?? chainData?.models ?? []).find(
+      (candidate: any) => !candidate.isLocal && candidate.Id == modelId,
+    );
+    if (!model) {
+      props.toasts.toast(
+        'info',
+        'Model details are still loading. Please try again in a moment.',
+      );
+      return;
+    }
+
     // A deliberate model choice owns the screen. If the slower session query
     // completes afterwards, the one-time bootstrap must not replace it with a
     // different historical session.
@@ -1729,22 +1740,9 @@ const Chat = (props: ChatProps) => {
     setSelectedBid(undefined);
     setIsReadonly(false);
     setChat({ id: generateHashId(), createdAt: new Date(), modelId });
-
-    const selectedModel = chainData?.models.find(
-      (m: any) => !m.isLocal && m.Id == modelId && m.bids,
-    );
-
-    // Marketplace selection needs the bid list, which may still be loading on a
-    // cold first visit. Guard instead of dereferencing undefined bids.
-    if (!selectedModel) {
-      props.toasts.toast(
-        'info',
-        'Model options are still loading. Please try again in a moment.',
-      );
-      return;
-    }
-
-    setSelectedModel(selectedModel);
+    // Selecting registry metadata starts exactly one cached active-bids query
+    // for this model. It does not wait for every model in the marketplace.
+    setSelectedModel(model);
 
     const openSessions = sessions.filter((s) => !isClosed(s));
     const openModelSession = openSessions.find(
@@ -1752,12 +1750,7 @@ const Chat = (props: ChatProps) => {
     );
 
     if (openModelSession) {
-      const selectedBid = selectedModel.bids.find(
-        (b) => b.Id == openModelSession.BidID,
-      );
-      setSelectedBid(selectedBid);
       setActiveSession(openModelSession);
-      return;
     }
   };
 
@@ -1767,22 +1760,30 @@ const Chat = (props: ChatProps) => {
 
   const renderChatBlock = () => {
     if (!selectedModel) {
+      const sessionsAreLoading = isInitialQueryFetchActive(
+        sessionsQuery.data,
+        sessionsQuery.fetchStatus,
+      );
       return (
         <ChatStartupState role="status" aria-live="polite">
           <IconMessagePlus size={30} stroke={1.7} aria-hidden="true" />
           <strong>
             {modelsLoading
               ? 'Loading available models…'
-              : sessionsQuery.isPending
-                ? 'Checking your active sessions…'
-                : 'Choose a model to start a chat'}
+              : !props.address
+                ? 'Wallet connection isn’t ready'
+                : sessionsAreLoading
+                  ? 'Checking your active sessions…'
+                  : 'Choose a model to start a chat'}
           </strong>
           <span>
             {modelsLoading
               ? 'The Chat screen is ready. Models will appear as soon as your node responds.'
-              : sessionsQuery.isPending
-                ? 'You can browse models now while the session list finishes loading.'
-                : 'Open New chat to browse current Morpheus marketplace models.'}
+              : !props.address
+                ? 'You can browse models now. Open Wallet to finish connecting before starting a paid session.'
+                : sessionsAreLoading
+                  ? 'You can browse models now while the session list finishes loading.'
+                  : 'Open New chat to browse current Morpheus marketplace models.'}
           </span>
           <ChatIntroButton
             onClick={() => {
@@ -1802,11 +1803,11 @@ const Chat = (props: ChatProps) => {
     // `x > NaN` comparison is false — which silently disabled *both* payment
     // buttons with no explanation. Treat unknown pricing as "not ready yet" and
     // say so, rather than rendering a dead screen.
-    const prices =
-      selectedModel?.bids?.map((x: any) => Number(x.PricePerSecond)) ?? [];
+    const selectedModelBids = selectedModelBidsQuery.data ?? [];
+    const prices = selectedModelBids.map((x: any) => Number(x.PricePerSecond));
     const maxPrice = prices.length ? Math.max(...prices) : Number.NaN;
     const isPricingReady =
-      fundingQuery.isSuccess &&
+      fundingQuery.data !== undefined &&
       Number(meta.budget) > 0 &&
       Number(meta.supply) > 0 &&
       Number.isFinite(maxPrice);
@@ -1837,13 +1838,43 @@ const Chat = (props: ChatProps) => {
       ? estimateSessionTokenAmount(maxPrice, sessionDuration, true, meta)
       : Number.POSITIVE_INFINITY;
     const hasSelectedStakeFunds =
-      isPricingReady &&
-      sessionsQuery.isSuccess &&
-      Number(balances.mor) >= selectedStake;
+      isPricingReady && Number(balances.mor) >= selectedStake;
     const isEnoughFundsForDirectPay =
-      isPricingReady &&
-      sessionsQuery.isSuccess &&
-      Number(balances.mor) >= requiredStakeForDirectPay;
+      isPricingReady && Number(balances.mor) >= requiredStakeForDirectPay;
+
+    const bidsAreLoading = isInitialQueryFetchActive(
+      selectedModelBidsQuery.data,
+      selectedModelBidsQuery.fetchStatus,
+    );
+    const bidsFailed =
+      selectedModelBidsQuery.isError && selectedModelBids.length === 0;
+    const bidsCouldNotStart =
+      Boolean(props.address) &&
+      selectedModelBidsQuery.data === undefined &&
+      !bidsAreLoading &&
+      !bidsFailed;
+    const noActiveProviders =
+      selectedModelBidsQuery.data !== undefined &&
+      !selectedModelBidsQuery.isError &&
+      selectedModelBids.length === 0;
+    const fundingIsLoading = isInitialQueryFetchActive(
+      fundingQuery.data,
+      fundingQuery.fetchStatus,
+    );
+    const fundingFailed =
+      fundingQuery.data === undefined && fundingQuery.isError;
+    const fundingCouldNotStart =
+      Boolean(props.address) &&
+      fundingQuery.data === undefined &&
+      !fundingIsLoading &&
+      !fundingFailed;
+    const pricingUsesCachedData =
+      (selectedModelBidsQuery.isError && selectedModelBids.length > 0) ||
+      (fundingQuery.isError && fundingQuery.data !== undefined);
+    const showModelPicker = () => {
+      setCoworkModelSelection(false);
+      setOpenChangeModal(true);
+    };
 
     // The user may already hold an open session for this model. Surfacing it
     // here is what stops people staking a second time when the first session
@@ -1858,98 +1889,233 @@ const Chat = (props: ChatProps) => {
           <ChatIntroContainer>
             <ChatIntroInner>
               <ChatIntroInnerTitle>Select payment method</ChatIntroInnerTitle>
-
-              <SessionDurationField>
-                Session length
-                <select
-                  aria-label="Session length"
-                  value={sessionDuration}
-                  onChange={(event) =>
-                    setSessionDuration(Number(event.target.value))
-                  }
+              {!props.address ? (
+                <SessionSetupState role="alert">
+                  <strong>Wallet connection isn’t ready</strong>
+                  <span>
+                    Pricing and payment will become available after the app
+                    finishes connecting to your wallet.
+                  </span>
+                  <SessionSetupActions>
+                    <ChatIntroButton
+                      type="button"
+                      onClick={() => navigate('/wallet')}
+                    >
+                      Open Wallet
+                    </ChatIntroButton>
+                    <ChatIntroButton type="button" onClick={showModelPicker}>
+                      Change model
+                    </ChatIntroButton>
+                  </SessionSetupActions>
+                </SessionSetupState>
+              ) : bidsAreLoading ? (
+                <SessionSetupState
+                  role="status"
+                  aria-live="polite"
+                  aria-busy="true"
                 >
-                  {SESSION_DURATION_OPTIONS.map((option) => (
-                    <option key={option.seconds} value={option.seconds}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </SessionDurationField>
-
-              {openSessionsForModel.length > 0 && (
-                <ChatIntroInnerText style={{ color: '#20dc8e' }}>
-                  You already have {openSessionsForModel.length} open session
-                  {openSessionsForModel.length > 1 ? 's' : ''} for this model.
-                  Open it from the Sessions list in the sidebar instead of
-                  staking again — staking again locks additional MOR.
-                </ChatIntroInnerText>
-              )}
-
-              {!isPricingReady && (
-                <ChatIntroInnerText style={{ color: '#e8a33d' }}>
-                  Pricing data hasn't loaded yet, so staking is temporarily
-                  unavailable. If this persists, check that the proxy-router is
-                  running in Settings.
-                </ChatIntroInnerText>
-              )}
-              {!sessionsQuery.isSuccess && (
-                <ChatIntroInnerText style={{ color: '#e8a33d' }}>
-                  {sessionsQuery.isError
-                    ? 'Existing sessions could not be checked. Retry the session check before paying for another one.'
-                    : 'Checking your existing sessions before enabling payment…'}
-                </ChatIntroInnerText>
-              )}
-              <ChatIntroInnerText>
-                Stake MOR to reserve compute for the session length selected
-                above (min:{' '}
-                {requiredStake
-                  ? `${formatValue(requiredStake.min, 18)} MOR`
-                  : 'calculating…'}
-                , max:{' '}
-                {requiredStake
-                  ? `${formatValue(requiredStake.max, 18)} MOR`
-                  : 'calculating…'}
-                ). The MOR is escrowed, and unused stake returns when the
-                session closes.
-              </ChatIntroInnerText>
-              <div style={{ display: 'flex', justifyContent: 'center' }}>
-                <ChatIntroButton
-                  onClick={() => onOpenSession(false, false)}
-                  disabled={!hasSelectedStakeFunds}
+                  <Spinner animation="border" variant="success" />
+                  <strong>Checking current price</strong>
+                  <span>
+                    Looking for an active provider for {selectedModel.Name}.
+                  </span>
+                  <SessionSetupActions>
+                    <ChatIntroButton type="button" onClick={showModelPicker}>
+                      Change model
+                    </ChatIntroButton>
+                  </SessionSetupActions>
+                </SessionSetupState>
+              ) : bidsFailed || bidsCouldNotStart ? (
+                <SessionSetupState role="alert">
+                  <strong>Couldn’t load this model’s price</strong>
+                  <span>
+                    {bidsCouldNotStart
+                      ? 'The provider check is waiting for your node connection.'
+                      : 'The provider check failed. Your balance has not been charged.'}
+                  </span>
+                  <SessionSetupActions>
+                    <ChatIntroButton
+                      type="button"
+                      onClick={() => selectedModelBidsQuery.refetch()}
+                    >
+                      Retry
+                    </ChatIntroButton>
+                    <ChatIntroButton type="button" onClick={showModelPicker}>
+                      Change model
+                    </ChatIntroButton>
+                  </SessionSetupActions>
+                </SessionSetupState>
+              ) : noActiveProviders ? (
+                <SessionSetupState role="status" aria-live="polite">
+                  <strong>No provider currently offers this model</strong>
+                  <span>
+                    Availability can change. Retry this model or choose another
+                    one.
+                  </span>
+                  <SessionSetupActions>
+                    <ChatIntroButton
+                      type="button"
+                      onClick={() => selectedModelBidsQuery.refetch()}
+                    >
+                      Retry
+                    </ChatIntroButton>
+                    <ChatIntroButton type="button" onClick={showModelPicker}>
+                      Change model
+                    </ChatIntroButton>
+                  </SessionSetupActions>
+                </SessionSetupState>
+              ) : fundingIsLoading ? (
+                <SessionSetupState
+                  role="status"
+                  aria-live="polite"
+                  aria-busy="true"
                 >
-                  Stake MOR
-                </ChatIntroButton>
-              </div>
-              <SessionCostSummary>
-                Estimated stake for this length:{' '}
-                {Number.isFinite(selectedStake)
-                  ? `${formatValue(selectedStake, 18)} MOR`
-                  : 'calculating…'}
-                {!hasSelectedStakeFunds && isPricingReady
-                  ? ' — insufficient balance'
-                  : ''}
-              </SessionCostSummary>
-              <ChatIntroInnerText>
-                Pay with your MOR tokens directly for the session length
-                selected above.
-              </ChatIntroInnerText>
-              <div style={{ display: 'flex', justifyContent: 'center' }}>
-                <ChatIntroButton
-                  onClick={() => onOpenSession(false, true)}
-                  disabled={!isEnoughFundsForDirectPay}
-                >
-                  Direct Pay
-                </ChatIntroButton>
-              </div>
-              <SessionCostSummary>
-                Estimated direct payment:{' '}
-                {Number.isFinite(requiredStakeForDirectPay)
-                  ? `${formatValue(requiredStakeForDirectPay, 18)} MOR`
-                  : 'calculating…'}
-                {!isEnoughFundsForDirectPay && isPricingReady
-                  ? ' — insufficient balance'
-                  : ''}
-              </SessionCostSummary>
+                  <Spinner animation="border" variant="success" />
+                  <strong>Loading balance and session pricing</strong>
+                  <span>
+                    The model price is ready. Finishing the MOR estimate.
+                  </span>
+                  <SessionSetupActions>
+                    <ChatIntroButton type="button" onClick={showModelPicker}>
+                      Change model
+                    </ChatIntroButton>
+                  </SessionSetupActions>
+                </SessionSetupState>
+              ) : fundingFailed || fundingCouldNotStart ? (
+                <SessionSetupState role="alert">
+                  <strong>Couldn’t load balance and session pricing</strong>
+                  <span>
+                    {fundingCouldNotStart
+                      ? 'The estimate is waiting for your node connection.'
+                      : 'Retry the estimate before choosing a payment method.'}
+                  </span>
+                  <SessionSetupActions>
+                    <ChatIntroButton
+                      type="button"
+                      onClick={() => fundingQuery.refetch()}
+                    >
+                      Retry
+                    </ChatIntroButton>
+                    <ChatIntroButton type="button" onClick={showModelPicker}>
+                      Change model
+                    </ChatIntroButton>
+                  </SessionSetupActions>
+                </SessionSetupState>
+              ) : (
+                <>
+                  <SessionDurationField>
+                    Session length
+                    <select
+                      aria-label="Session length"
+                      value={sessionDuration}
+                      onChange={(event) =>
+                        setSessionDuration(Number(event.target.value))
+                      }
+                    >
+                      {SESSION_DURATION_OPTIONS.map((option) => (
+                        <option key={option.seconds} value={option.seconds}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </SessionDurationField>
+
+                  {openSessionsForModel.length > 0 && (
+                    <ChatIntroInnerText style={{ color: '#20dc8e' }}>
+                      You already have {openSessionsForModel.length} open
+                      session{openSessionsForModel.length > 1 ? 's' : ''} for
+                      this model. Open it from the Sessions list in the sidebar
+                      instead of staking again — staking again locks additional
+                      MOR.
+                    </ChatIntroInnerText>
+                  )}
+
+                  {sessionsQuery.isError && (
+                    <SessionHistoryNotice role="status">
+                      <span>
+                        Session history couldn’t refresh. You can still
+                        continue; your node will check for an existing session
+                        before opening another.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => sessionsQuery.refetch()}
+                      >
+                        Retry history
+                      </button>
+                    </SessionHistoryNotice>
+                  )}
+                  {pricingUsesCachedData && (
+                    <SessionHistoryNotice role="status">
+                      <span>
+                        The latest price or balance refresh failed. This
+                        estimate uses recently cached data; the node will still
+                        validate the session when you continue.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void selectedModelBidsQuery.refetch();
+                          void fundingQuery.refetch();
+                        }}
+                      >
+                        Retry estimate
+                      </button>
+                    </SessionHistoryNotice>
+                  )}
+                  <ChatIntroInnerText>
+                    Stake MOR to reserve compute for the session length selected
+                    above (min:{' '}
+                    {requiredStake
+                      ? `${formatValue(requiredStake.min, 18)} MOR`
+                      : 'calculating…'}
+                    , max:{' '}
+                    {requiredStake
+                      ? `${formatValue(requiredStake.max, 18)} MOR`
+                      : 'calculating…'}
+                    ). The MOR is escrowed, and unused stake returns when the
+                    session closes.
+                  </ChatIntroInnerText>
+                  <SessionSetupActions>
+                    <ChatIntroButton
+                      onClick={() => onOpenSession(false, false)}
+                      disabled={!hasSelectedStakeFunds}
+                    >
+                      Stake MOR
+                    </ChatIntroButton>
+                  </SessionSetupActions>
+                  <SessionCostSummary>
+                    Estimated stake for this length:{' '}
+                    {Number.isFinite(selectedStake)
+                      ? `${formatValue(selectedStake, 18)} MOR`
+                      : 'calculating…'}
+                    {!hasSelectedStakeFunds && isPricingReady
+                      ? ' — insufficient balance'
+                      : ''}
+                  </SessionCostSummary>
+                  <ChatIntroInnerText>
+                    Pay with your MOR tokens directly for the session length
+                    selected above.
+                  </ChatIntroInnerText>
+                  <SessionSetupActions>
+                    <ChatIntroButton
+                      onClick={() => onOpenSession(false, true)}
+                      disabled={!isEnoughFundsForDirectPay}
+                    >
+                      Direct Pay
+                    </ChatIntroButton>
+                  </SessionSetupActions>
+                  <SessionCostSummary>
+                    Estimated direct payment:{' '}
+                    {Number.isFinite(requiredStakeForDirectPay)
+                      ? `${formatValue(requiredStakeForDirectPay, 18)} MOR`
+                      : 'calculating…'}
+                    {!isEnoughFundsForDirectPay && isPricingReady
+                      ? ' — insufficient balance'
+                      : ''}
+                  </SessionCostSummary>
+                </>
+              )}
             </ChatIntroInner>
           </ChatIntroContainer>
         ) : (
@@ -1989,12 +2155,16 @@ const Chat = (props: ChatProps) => {
   return (
     <>
       {isLoading && (
-        <LoadingCover>
-          <Spinner
-            style={{ width: '5rem', height: '5rem' }}
-            animation="border"
-            variant="success"
-          />
+        <LoadingCover role="status" aria-live="polite" aria-busy="true">
+          <LoadingStatus>
+            <Spinner
+              style={{ width: '4rem', height: '4rem' }}
+              animation="border"
+              variant="success"
+            />
+            <strong>{actionStatus}</strong>
+            <span>Please keep the app open while this finishes.</span>
+          </LoadingStatus>
         </LoadingCover>
       )}
 
@@ -2007,20 +2177,6 @@ const Chat = (props: ChatProps) => {
             onRetry={() => marketplaceModelsQuery.refetch()}
           />
         )}
-      {sessionsQuery.isError && (
-        <QueryError
-          error={sessionsQuery.error}
-          what="sessions"
-          onRetry={() => sessionsQuery.refetch()}
-        />
-      )}
-      {providersQuery.isError && (
-        <QueryError
-          error={providersQuery.error}
-          what="model providers"
-          onRetry={() => providersQuery.refetch()}
-        />
-      )}
       <Drawer
         open={isOpen}
         onClose={toggleDrawer}
@@ -2036,9 +2192,12 @@ const Chat = (props: ChatProps) => {
           models={chainData?.models || []}
           onSelectChat={selectChat}
           refreshSessions={async () => {
-            setIsActionLoading(true);
-            await refreshSessions();
-            setIsActionLoading(false);
+            setActionStatus('Refreshing sessions…');
+            try {
+              await refreshSessions();
+            } finally {
+              setActionStatus(null);
+            }
           }}
           onChangeTitle={wrapChangeTitle}
           onCloseSession={closeSession}
@@ -2333,8 +2492,6 @@ const Chat = (props: ChatProps) => {
         marketplaceOnly
         coworkSetup={coworkModelSelection}
         symbol={props.symbol}
-        bidsLoading={bidsLoading}
-        providersAvailability={providersAvailability}
         onChangeModel={(eventData) => {
           onCreateNewChat(eventData);
         }}

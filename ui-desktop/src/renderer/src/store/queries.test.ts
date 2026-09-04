@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { QueryClient } from '@tanstack/react-query';
+import { describe, expect, it, vi } from 'vitest';
 import { computeStakedFunds, countOpenSessions, queryKeys } from './queries';
 
 const WEI = 10 ** 18;
@@ -71,7 +72,9 @@ describe('countOpenSessions', () => {
   });
 
   it('skips malformed entries instead of throwing', () => {
-    expect(() => countOpenSessions([null as any, undefined as any])).not.toThrow();
+    expect(() =>
+      countOpenSessions([null as any, undefined as any]),
+    ).not.toThrow();
     expect(countOpenSessions([null as any])).toBe(0);
   });
 });
@@ -94,5 +97,37 @@ describe('queryKeys', () => {
   it('tolerates a missing address without collapsing to undefined', () => {
     expect(queryKeys.sessions(undefined)).toEqual(['sessions', '']);
     expect(queryKeys.balances(undefined)).toEqual(['balances', '']);
+  });
+
+  it('scopes chat funding and selected-model bids to the active wallet', () => {
+    expect(queryKeys.chatFunding('0xabc')).toEqual(['chatFunding', '0xabc']);
+    expect(queryKeys.chatFunding('0xabc')).not.toEqual(
+      queryKeys.chatFunding('0xdef'),
+    );
+    expect(queryKeys.modelBids('0xabc', 'model-1')).toEqual([
+      'modelBids',
+      '0xabc',
+      'model-1',
+    ]);
+    expect(queryKeys.modelBids('0xabc', 'model-1')).not.toEqual(
+      queryKeys.modelBids('0xabc', 'model-2'),
+    );
+  });
+
+  it('reuses a fresh selected-model bid result instead of refetching it', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const loadBids = vi.fn().mockResolvedValue([{ Id: 'bid-1' }]);
+    const options = {
+      queryKey: queryKeys.modelBids('0xabc', 'model-1'),
+      queryFn: loadBids,
+      staleTime: 60_000,
+    };
+
+    await queryClient.fetchQuery(options);
+    await queryClient.fetchQuery(options);
+
+    expect(loadBids).toHaveBeenCalledOnce();
   });
 });

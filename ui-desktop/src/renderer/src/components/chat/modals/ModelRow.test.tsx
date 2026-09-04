@@ -10,11 +10,10 @@ const ThemeProvider = StyledThemeProvider as unknown as FC<
 >;
 
 describe('ModelRow provider discovery state', () => {
-  it('shows provider discovery as loading rather than falsely unavailable', () => {
+  it('keeps an unchecked marketplace model selectable without calling it unavailable', () => {
     const { rerender } = render(
       <ThemeProvider theme={theme}>
         <ModelRow
-          bidsLoading
           model={{ Id: 'model-1', Name: 'Model one', Tags: ['llm'] }}
           onChangeModel={vi.fn()}
           symbol="MOR"
@@ -23,22 +22,27 @@ describe('ModelRow provider discovery state', () => {
     );
 
     const row = screen.getByRole('button', { name: /Model one/ });
-    expect(row.getAttribute('aria-busy')).toBe('true');
-    expect((row as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText('Checking providers…')).toBeTruthy();
+    expect((row as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByText('Check price')).toBeTruthy();
     expect(screen.queryByText('Unavailable')).toBeNull();
 
     rerender(
       <ThemeProvider theme={theme}>
         <ModelRow
-          bidsLoading={false}
-          model={{ Id: 'model-1', Name: 'Model one', Tags: ['llm'] }}
+          model={{
+            Id: 'model-1',
+            Name: 'Model one',
+            Tags: ['llm'],
+            bids: [],
+          }}
           onChangeModel={vi.fn()}
           symbol="MOR"
         />
       </ThemeProvider>,
     );
 
+    const unavailableRow = screen.getByRole('button', { name: /Model one/ });
+    expect((unavailableRow as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText('Unavailable')).toBeTruthy();
   });
 });

@@ -94,11 +94,12 @@ type BlockchainService struct {
 	// OpenSessionByModelId; empty means HealthPolicyPermissive.
 	sessionHealthPolicy string
 
-	supplyBudgetMu sync.Mutex
-	cachedSupply   *big.Int
-	cachedSupplyAt time.Time
-	cachedBudget   *big.Int
-	cachedBudgetAt time.Time
+	supplyBudgetMu   sync.Mutex
+	cachedSupply     *big.Int
+	cachedSupplyAt   time.Time
+	cachedBudget     *big.Int
+	cachedBudgetAt   time.Time
+	sessionOpenLocks keyedLockSet
 
 	legacyTx    bool
 	privateKey  i.PrKeyProvider
@@ -1325,6 +1326,23 @@ func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.H
 }
 
 func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID common.Hash, duration *big.Int, directPayment bool, isFailoverEnabled bool, omitProvider common.Address, agentUsername string) (common.Hash, error) {
+	return s.openSessionByModelID(ctx, modelID, duration, directPayment, isFailoverEnabled, omitProvider, agentUsername, nil)
+}
+
+func (s *BlockchainService) openSessionByModelID(ctx context.Context, modelID common.Hash, duration *big.Int, directPayment bool, isFailoverEnabled bool, omitProvider common.Address, agentUsername string, beforeOpen func(context.Context, common.Address) error) (common.Hash, error) {
+	userAddr, err := s.GetMyAddress(ctx)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrMyAddress, err)
+	}
+	if beforeOpen != nil {
+		// Guarded desktop opens check for a resumable session before provider
+		// discovery and health probes. The caller holds the wallet/model lock,
+		// so other guarded opens for this pair cannot race this decision.
+		if err := beforeOpen(ctx, userAddr); err != nil {
+			return common.Hash{}, err
+		}
+	}
+
 	supply, err := s.GetTokenSupply(ctx)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrTokenSupply, err)
@@ -1355,11 +1373,6 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 
 	if len(bids) == 0 {
 		return common.Hash{}, ErrNoBid
-	}
-
-	userAddr, err := s.GetMyAddress(ctx)
-	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrMyAddress, err)
 	}
 
 	minStake, err := s.getMinStakeCached(ctx)
@@ -1429,7 +1442,14 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 		}
 		candidates = kept
 	}
-
+	if beforeOpen != nil {
+		// Recheck at the transaction boundary as well. Legacy/API callers do not
+		// opt into the keyed guarded path and may have opened this model while
+		// provider discovery was running after the fast check above.
+		if err := beforeOpen(ctx, userAddr); err != nil {
+			return common.Hash{}, err
+		}
+	}
 	for i, bid := range candidates {
 		log.Infof("trying to open session with provider #%d %s", i, bid.Bid.Provider.String())
 		durationCopy := new(big.Int).Set(duration)

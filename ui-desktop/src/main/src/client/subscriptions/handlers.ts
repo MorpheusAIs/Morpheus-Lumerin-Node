@@ -41,6 +41,7 @@ import {
   validateAgentUsername
 } from './agentMutationSecurity'
 import { InferenceTargetPayload, sessionInferenceHeaders } from './inference-session-target'
+import { parseExistingSessionConflict } from './proxy-router-conflict'
 
 let authentication: Record<string, string> | null = null
 let orchestrator: Orchestrator | null = null
@@ -92,12 +93,17 @@ function formatTokenAmount(wei: string): string {
 export class ProxyRouterError extends Error {
   readonly status?: number
   readonly unreachable: boolean
+  readonly responseBody?: unknown
 
-  constructor(message: string, opts: { status?: number; unreachable?: boolean } = {}) {
+  constructor(
+    message: string,
+    opts: { status?: number; unreachable?: boolean; responseBody?: unknown } = {}
+  ) {
     super(message)
     this.name = 'ProxyRouterError'
     this.status = opts.status
     this.unreachable = opts.unreachable ?? false
+    this.responseBody = opts.responseBody
   }
 }
 
@@ -159,7 +165,7 @@ export async function proxyFetch<T>(
   if (!response.ok) {
     const detail = (body && (body.error || body.message)) || `HTTP ${response.status}`
     log.error(`proxy-router error for ${label}: ${detail}`)
-    throw new ProxyRouterError(detail, { status: response.status })
+    throw new ProxyRouterError(detail, { status: response.status, responseBody: body })
   }
 
   return body as T
@@ -599,7 +605,7 @@ export const getBidsByModel = async (payload: { modelId: string }): Promise<unkn
   const limit = 50
   for (let offset = 0; offset < 1_000; offset += limit) {
     const data = await proxyFetch<{ bids: unknown[] }>(
-      `/blockchain/models/${encodeURIComponent(modelId)}/bids?offset=${offset}&limit=${limit}&order=desc`,
+      `/blockchain/models/${encodeURIComponent(modelId)}/bids/active?offset=${offset}&limit=${limit}&order=desc`,
       {},
       'model bids'
     )
@@ -662,14 +668,25 @@ export const openSession = async (payload: {
     confirmLabel: 'Open session'
   })
   if (!approved) throw new Error('Session opening cancelled.')
-  return proxyFetch(
-    `/blockchain/models/${encodeURIComponent(modelId)}/session`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ failover, sessionDuration: duration, directPayment })
-    },
-    'session opening'
-  )
+  try {
+    return await proxyFetch(
+      `/blockchain/models/${encodeURIComponent(modelId)}/session`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          failover,
+          sessionDuration: duration,
+          directPayment,
+          rejectExisting: true
+        })
+      },
+      'session opening'
+    )
+  } catch (error) {
+    const conflict = parseExistingSessionConflict(error)
+    if (conflict) return conflict
+    throw error
+  }
 }
 
 export const getSessionsByProvider = async (payload: { provider: string }): Promise<unknown[]> => {
