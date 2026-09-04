@@ -87,7 +87,7 @@ export class ToastsProvider extends React.Component<
   };
 
   componentDidMount() {
-    window.ipcRenderer.on('wallet-error', (_, { message }) =>
+    window.ipcRenderer.on('wallet-error', ({ message }) =>
       this.addToast('error', message, { autoClose: 15000 }),
     );
   }

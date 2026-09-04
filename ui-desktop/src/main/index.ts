@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, session, shell, systemPreferences } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, session, shell, systemPreferences } from 'electron'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import {
   default as install,
@@ -12,8 +12,78 @@ import initMenu from './menu'
 import errorHandler from './errorHandler'
 import logger from './logger'
 import { join } from 'path'
+import { isTrustedRendererEvent, isTrustedRendererUrl } from './rendererTrust'
 
 const installExtension = (install as any).default as typeof install
+const openExternalChannel = 'open-external-url'
+const maxExternalUrlLength = 8192
+const trustedExternalHosts = ['mor.org', 'lumerin.io', 'github.com', 'etherscan.io']
+let externalConfirmationOpen = false
+
+function normalizeExternalUrl(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length === 0 || value.length > maxExternalUrlLength) {
+    return null
+  }
+
+  try {
+    const url = new URL(value)
+    if (
+      url.protocol !== 'https:' ||
+      !url.hostname ||
+      url.username.length > 0 ||
+      url.password.length > 0
+    ) {
+      return null
+    }
+    return url.href
+  } catch {
+    return null
+  }
+}
+
+const trustedExternalHost = (hostname: string): boolean =>
+  trustedExternalHosts.some((host) => hostname === host || hostname.endsWith(`.${host}`))
+
+async function openExternalUrl(value: unknown): Promise<void> {
+  const url = normalizeExternalUrl(value)
+  if (!url) {
+    logger.warn('Rejected unsafe external URL')
+    return
+  }
+
+  try {
+    const parsed = new URL(url)
+    if (!trustedExternalHost(parsed.hostname)) {
+      if (externalConfirmationOpen) {
+        logger.warn('Ignored external URL while another link confirmation was open')
+        return
+      }
+      externalConfirmationOpen = true
+      try {
+        const owner = BrowserWindow.getFocusedWindow()
+        const options = {
+          type: 'question' as const,
+          title: 'Open external link',
+          message: `Open ${parsed.hostname} in your browser?`,
+          detail: url.slice(0, 2_000),
+          buttons: ['Cancel', 'Open link'],
+          defaultId: 0,
+          cancelId: 0,
+          noLink: true
+        }
+        const response = owner
+          ? await dialog.showMessageBox(owner, options)
+          : await dialog.showMessageBox(options)
+        if (response.response !== 1) return
+      } finally {
+        externalConfirmationOpen = false
+      }
+    }
+    await shell.openExternal(url)
+  } catch (error) {
+    logger.error('Failed to open external URL', error)
+  }
+}
 
 function createWindow(): void {
   // Create the browser window.
@@ -26,14 +96,13 @@ function createWindow(): void {
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       devTools: is.dev,
-      // NOTE: sandbox is still disabled. The original reason (@electron/remote
-      // in the preload) is gone, and the preload now only uses ipcRenderer,
-      // clipboard, shell and contextBridge — all of which are available to a
-      // sandboxed preload. Flipping this to `true` is very likely correct and
-      // is a real hardening win, but it changes the preload's module
-      // resolution and cannot be validated without launching the app on each
-      // platform. Do it as its own change, with a manual smoke test.
-      sandbox: false
+      contextIsolation: true,
+      nodeIntegration: false,
+      webviewTag: false,
+      // The preload is a bundled CJS bridge using only Electron's sandbox-safe
+      // APIs. Renderer code therefore has neither Node integration nor an
+      // unsandboxed preload escape hatch.
+      sandbox: true
     }
   })
 
@@ -42,9 +111,21 @@ function createWindow(): void {
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    void openExternalUrl(details.url)
     return { action: 'deny' }
   })
+
+  const guardNavigation = (event: Electron.Event, navigationUrl: string): void => {
+    if (isTrustedRendererUrl(navigationUrl)) {
+      return
+    }
+
+    event.preventDefault()
+    void openExternalUrl(navigationUrl)
+  }
+
+  mainWindow.webContents.on('will-navigate', guardNavigation)
+  mainWindow.webContents.on('will-redirect', guardNavigation)
 
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.
@@ -73,15 +154,23 @@ app
     // media devices. Without an explicit handler Electron does not grant the
     // `media` permission, so getUserMedia() yields a silent track instead of
     // throwing. On macOS we also proactively request the OS-level mic grant.
-    const grantedPermissions = new Set(['media', 'mediaKeySystem', 'audioCapture', 'videoCapture'])
+    session.defaultSession.setPermissionRequestHandler(
+      (webContents, permission, callback, details) => {
+        const requestingUrl = details.requestingUrl || webContents.getURL()
+        const mediaTypes = Array.isArray((details as any).mediaTypes)
+          ? ((details as any).mediaTypes as string[])
+          : []
+        const audioOnly = mediaTypes.length === 0 || mediaTypes.every((type) => type === 'audio')
+        callback(isTrustedRendererUrl(requestingUrl) && permission === 'media' && audioOnly)
+      }
+    )
 
-    session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-      callback(grantedPermissions.has(permission))
-    })
-
-    session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
-      return grantedPermissions.has(permission)
-    })
+    session.defaultSession.setPermissionCheckHandler(
+      (webContents, permission, _requestingOrigin, details) => {
+        const requestingUrl = details.requestingUrl || webContents?.getURL() || ''
+        return isTrustedRendererUrl(requestingUrl) && permission === 'media'
+      }
+    )
 
     if (process.platform === 'darwin') {
       const micStatus = systemPreferences.getMediaAccessStatus('microphone')
@@ -114,12 +203,22 @@ app
     }
 
     // IPC test
-    ipcMain.on('ping', () => console.log('pong'))
+    ipcMain.on('ping', (event) => {
+      if (isTrustedRendererEvent(event)) console.log('pong')
+    })
 
     // Synchronous so the preload can expose getAppVersion() as a plain
     // function. Replaces the previous @electron/remote round-trip.
     ipcMain.on('get-app-version', (event) => {
-      event.returnValue = app.getVersion()
+      event.returnValue = isTrustedRendererEvent(event) ? app.getVersion() : ''
+    })
+
+    ipcMain.handle(openExternalChannel, async (event, url: unknown) => {
+      if (!isTrustedRendererEvent(event)) {
+        logger.warn('Rejected external URL request from an untrusted renderer')
+        return
+      }
+      await openExternalUrl(url)
     })
 
     // Register the renderer bootstrap/listener map before loading the renderer.

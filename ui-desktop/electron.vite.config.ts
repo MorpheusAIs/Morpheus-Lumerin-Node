@@ -4,12 +4,73 @@ import { defineConfig, externalizeDepsPlugin, loadEnv } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import svgr from 'vite-plugin-svgr'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
+import type { Plugin } from 'vite'
 import { EnvSchema } from './env.schema'
 import { newAjv } from './validator'
 
 const envsToInject = Object.keys(EnvSchema.properties)
 
-export default defineConfig(({ /*command,*/ mode }) => {
+function httpsOrigin(value: string | undefined): string | undefined {
+  if (!value) return undefined
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' ? url.origin : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function contentSecurityPolicyPlugin(
+  isDevelopment: boolean,
+  proxyPort: string,
+  sentryDsn?: string
+): Plugin {
+  const scriptSource = isDevelopment
+    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+    : "script-src 'self'"
+  const sentry = httpsOrigin(sentryDsn)
+  const connectSource = [
+    "connect-src 'self'",
+    `http://localhost:${proxyPort}`,
+    `http://127.0.0.1:${proxyPort}`,
+    ...(isDevelopment
+      ? ['http://127.0.0.1:*', 'http://localhost:*', 'ws://127.0.0.1:*', 'ws://localhost:*']
+      : []),
+    ...(sentry ? [sentry] : [])
+  ].join(' ')
+  const policy = [
+    "default-src 'self'",
+    "base-uri 'none'",
+    "object-src 'none'",
+    scriptSource,
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    "img-src 'self' data: blob:",
+    "media-src 'self' data: blob:",
+    connectSource,
+    "worker-src 'self' blob:",
+    "frame-src 'none'",
+    "form-action 'self'"
+  ].join('; ')
+
+  return {
+    name: 'morpheus-content-security-policy',
+    transformIndexHtml() {
+      return [
+        {
+          tag: 'meta',
+          attrs: {
+            'http-equiv': 'Content-Security-Policy',
+            content: policy
+          },
+          injectTo: 'head-prepend'
+        }
+      ]
+    }
+  }
+}
+
+export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
   const ajv = newAjv()
@@ -94,6 +155,11 @@ export default defineConfig(({ /*command,*/ mode }) => {
         }
       },
       plugins: [
+        contentSecurityPolicyPlugin(
+          command === 'serve',
+          String(env.SERVICE_PROXY_API_PORT),
+          env.SENTRY_DSN
+        ),
         react({ babel: { plugins: ['styled-components'], babelrc: false, configFile: false } }),
         svgr(),
         nodePolyfills()

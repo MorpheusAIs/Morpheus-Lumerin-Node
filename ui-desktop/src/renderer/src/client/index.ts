@@ -15,7 +15,7 @@ const createClient = function (createStore) {
 
   const store = createStore(reduxDevtoolsOptions);
 
-  const onUIReady = (_ev, payload) => {
+  const onUIReady = (payload) => {
     const debounceTime = get(
       payload,
       'data.config.statePersistanceDebounce',
