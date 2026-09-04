@@ -325,6 +325,7 @@ const ModelSelectionModal = ({
   symbol,
   providersAvailability,
   bidsLoading,
+  marketplaceOnly = false,
 }: any) => {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<FilterId>('all');
@@ -339,25 +340,27 @@ const ModelSelectionModal = ({
   // render".
   const enriched = useMemo(
     () =>
-      (models || []).map((m: any) => {
-        if (m.isLocal || !providersAvailability) {
-          return { ...m, isOnline: true };
-        }
-        const info = (m.bids || []).reduce((acc: any, next: any) => {
-          const entry = providersAvailability.find(
-            (pa: any) => pa.id == next.Provider,
-          );
-          if (!entry) return acc;
-          if (entry.isOnline) return acc;
-          const online = entry.status != 'disconnected';
-          return {
-            isOnline: online,
-            lastCheck: !online ? entry.time : undefined,
-          };
-        }, {});
-        return { ...m, ...info };
-      }),
-    [models, providersAvailability],
+      (models || [])
+        .filter((m: any) => !marketplaceOnly || !m.isLocal)
+        .map((m: any) => {
+          if (m.isLocal || !providersAvailability) {
+            return { ...m, isOnline: true };
+          }
+          const info = (m.bids || []).reduce((acc: any, next: any) => {
+            const entry = providersAvailability.find(
+              (pa: any) => pa.id == next.Provider,
+            );
+            if (!entry) return acc;
+            if (entry.isOnline) return acc;
+            const online = entry.status != 'disconnected';
+            return {
+              isOnline: online,
+              lastCheck: !online ? entry.time : undefined,
+            };
+          }, {});
+          return { ...m, ...info };
+        }),
+    [marketplaceOnly, models, providersAvailability],
   );
 
   // Count results per filter (using the current search query) so the pills
@@ -427,20 +430,35 @@ const ModelSelectionModal = ({
   // Bail out *after* all hooks have run.
   if (!isActive) return null;
 
-  const handlePick = (data: any) => {
-    onChangeModel(data);
+  const resetAndClose = () => {
+    setSearch('');
+    setFilter('all');
+    setShowTeeInfo(false);
     handleClose();
   };
 
-  // Section buckets: Local → Vision → TEE → Marketplace. A model appears once;
-  // security and vision attributes remain visible as badges on its row.
-  const localModels = visible.filter((m: any) => m.isLocal);
-  const visionModels = visible.filter((m: any) => !m.isLocal && isVision(m));
+  const handlePick = (data: any) => {
+    onChangeModel(data);
+    resetAndClose();
+  };
+
+  // A provider-declared capability and a name-family heuristic are materially
+  // different confidence levels. Keep them in separate buckets so users never
+  // have to infer which models actually advertise image input.
+  const declaredVisionModels = visible.filter(
+    (m: any) => getVisionCapability(m) === 'declared',
+  );
+  const possibleVisionModels = visible.filter(
+    (m: any) => getVisionCapability(m) === 'detected',
+  );
+  const localModels = visible.filter(
+    (m: any) => m.isLocal && getVisionCapability(m) === 'none',
+  );
   const teeModels = visible.filter(
-    (m: any) => !m.isLocal && !isVision(m) && isTee(m),
+    (m: any) => !m.isLocal && getVisionCapability(m) === 'none' && isTee(m),
   );
   const remoteModels = visible.filter(
-    (m: any) => !m.isLocal && !isVision(m) && !isTee(m),
+    (m: any) => !m.isLocal && getVisionCapability(m) === 'none' && !isTee(m),
   );
 
   const filterIconFor = (id: FilterId) => {
@@ -465,15 +483,7 @@ const ModelSelectionModal = ({
   };
 
   return (
-    <Modal
-      onClose={() => {
-        setSearch('');
-        setFilter('all');
-        setShowTeeInfo(false);
-        handleClose();
-      }}
-      bodyProps={bodyProps}
-    >
+    <Modal onClose={resetAndClose} bodyProps={bodyProps}>
       <Layout>
         <Header>
           <TitleRow>
@@ -481,7 +491,7 @@ const ModelSelectionModal = ({
             {/* Only surface the counter when filtering/search actually hides
                 models — otherwise "N of N" is noise. */}
             {visible.length !== enriched.length && (
-              <ResultCount>
+              <ResultCount role="status" aria-live="polite">
                 {visible.length} of {enriched.length}{' '}
                 {enriched.length === 1 ? 'model' : 'models'}
               </ResultCount>
@@ -494,6 +504,7 @@ const ModelSelectionModal = ({
               </InputGroup.Text>
               <Form.Control
                 type="text"
+                aria-label="Search models"
                 placeholder="Search models or tags…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -509,8 +520,10 @@ const ModelSelectionModal = ({
               />
             </InputGroup>
           </SearchWrapper>
-          <FilterRow>
-            {FILTERS.map((f) => {
+          <FilterRow role="group" aria-label="Filter models by capability">
+            {FILTERS.filter(
+              (item) => !marketplaceOnly || item.id !== 'local',
+            ).map((f) => {
               const active = filter === f.id;
               const count = counts[f.id];
               return (
@@ -519,17 +532,23 @@ const ModelSelectionModal = ({
                   $active={active}
                   type="button"
                   onClick={() => setFilter(f.id)}
+                  aria-pressed={active}
+                  aria-label={`Show ${f.label} models (${count})`}
                 >
                   {filterIconFor(f.id)}
                   {f.label}
-                  <FilterCount $active={active}>{count}</FilterCount>
+                  <FilterCount $active={active} aria-hidden="true">
+                    {count}
+                  </FilterCount>
                 </FilterPill>
               );
             })}
           </FilterRow>
           {bidsLoading && (
             <BidsLoadingHint>
-              Loading marketplace options… local models are ready to use.
+              {marketplaceOnly
+                ? 'Loading marketplace options…'
+                : 'Loading marketplace options… local models are ready to use.'}
             </BidsLoadingHint>
           )}
         </Header>
@@ -594,17 +613,39 @@ const ModelSelectionModal = ({
             </Section>
           )}
 
-          {visionModels.length > 0 && (
+          {declaredVisionModels.length > 0 && (
             <Section>
               <SectionLabel>
                 <IconEye size={13} stroke={2} />
-                Vision
+                Vision (declared)
                 <SectionHint>
-                  (image input — declared models and recognised vision families)
+                  (image input advertised by model metadata)
                 </SectionHint>
               </SectionLabel>
               <SectionList>
-                {visionModels.map((m: any) => (
+                {declaredVisionModels.map((m: any) => (
+                  <ModelRow
+                    key={m.Id}
+                    model={m}
+                    symbol={symbol}
+                    onChangeModel={handlePick}
+                  />
+                ))}
+              </SectionList>
+            </Section>
+          )}
+
+          {possibleVisionModels.length > 0 && (
+            <Section>
+              <SectionLabel>
+                <IconEye size={13} stroke={2} />
+                Possible vision (name match)
+                <SectionHint>
+                  (recognised family; provider did not declare it)
+                </SectionHint>
+              </SectionLabel>
+              <SectionList>
+                {possibleVisionModels.map((m: any) => (
                   <ModelRow
                     key={m.Id}
                     model={m}

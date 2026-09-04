@@ -3,11 +3,6 @@ import { connect } from 'react-redux';
 import { withClient } from './clientContext';
 import { ToastsContext } from '../../components/toasts';
 import selectors from '../selectors';
-import {
-  getSessionsByUser,
-  getBidsByModelId,
-  getBidInfoById,
-} from '../utils/apiCallsHelper';
 import { pooledMapSettled, withTimeout } from '../utils/concurrency';
 import { explainChainError } from '../utils/chainErrors';
 import { ApiGateway } from 'src/main/src/client/apiGateway';
@@ -58,17 +53,7 @@ const withChatState = (WrappedComponent: ComponentType<any>) => {
 
     getProviders = async () => {
       try {
-        const authHeaders = await this.props.client.getAuthHeaders();
-        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/providers`;
-        const response = await fetch(path, {
-          headers: authHeaders,
-        });
-        const data = await response.json();
-        if (data.error) {
-          console.error(data.error);
-          return [];
-        }
-        return data.providers;
+        return (await this.props.client.getProviders()) || [];
       } catch (e) {
         console.log('Error', e);
         return [];
@@ -78,13 +63,7 @@ const withChatState = (WrappedComponent: ComponentType<any>) => {
     closeSession = async (sessionId: string) => {
       this.context.toast('info', 'Closing...');
       try {
-        const authHeaders = await this.props.client.getAuthHeaders();
-        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions/${sessionId}/close`;
-        const response = await fetch(path, {
-          method: 'POST',
-          headers: authHeaders,
-        });
-        const data = await response.json();
+        const data = await this.props.client.closeSession({ sessionId });
         if (data.error) {
           this.context.toast('error', 'Session not closed');
           throw new Error(data.error);
@@ -100,18 +79,7 @@ const withChatState = (WrappedComponent: ComponentType<any>) => {
 
     getAllModels = async () => {
       try {
-        const authHeaders = await this.props.client.getAuthHeaders();
-        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/models`;
-        const response = await fetch(path, {
-          headers: authHeaders,
-          method: 'GET',
-        });
-        const data = await response.json();
-        if (data.error) {
-          console.error(data.error);
-          return [];
-        }
-        return data.models;
+        return (await this.props.client.getAllModels()) || [];
       } catch (e) {
         console.log('Error', e);
         return [];
@@ -120,15 +88,7 @@ const withChatState = (WrappedComponent: ComponentType<any>) => {
 
     getLocalModels = async () => {
       try {
-        const authHeaders = await this.props.client.getAuthHeaders();
-        const path = `${this.props.config.chain.localProxyRouterUrl}/v1/models`;
-        const response = await fetch(path, {
-          headers: authHeaders,
-        });
-        if (!response.ok) {
-          return [];
-        }
-        return await response.json();
+        return (await this.props.client.getLocalModels()) || [];
       } catch (e) {
         console.log('Error', e);
         return [];
@@ -272,12 +232,7 @@ const withChatState = (WrappedComponent: ComponentType<any>) => {
         return;
       }
 
-      const authHeaders = await this.props.client.getAuthHeaders();
-      return await getSessionsByUser(
-        this.props.config.chain.localProxyRouterUrl,
-        user,
-        authHeaders,
-      );
+      return await this.props.client.getSessionsByUser({ user });
     };
 
     getBidInfo = async (id) => {
@@ -285,12 +240,7 @@ const withChatState = (WrappedComponent: ComponentType<any>) => {
         return;
       }
 
-      const authHeaders = await this.props.client.getAuthHeaders();
-      return await getBidInfoById(
-        this.props.config.chain.localProxyRouterUrl,
-        id,
-        authHeaders,
-      );
+      return await this.props.client.getBidInfo({ id });
     };
 
     getBidsByModelId = async (modelId) => {
@@ -298,12 +248,7 @@ const withChatState = (WrappedComponent: ComponentType<any>) => {
         return;
       }
 
-      const authHeaders = await this.props.client.getAuthHeaders();
-      const bids = await getBidsByModelId(
-        this.props.config.chain.localProxyRouterUrl,
-        modelId,
-        authHeaders,
-      );
+      const bids = await this.props.client.getBidsByModel({ modelId });
       return (bids ?? [])
         .filter((b) => +b.DeletedAt === 0)
         .filter((b) => b.Provider != this.props.address);
@@ -314,20 +259,13 @@ const withChatState = (WrappedComponent: ComponentType<any>) => {
       try {
         const failoverSettings = await this.props.client.getFailoverSetting();
 
-        const authHeaders = await this.props.client.getAuthHeaders();
-        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/models/${modelId}/session`;
-        const body = {
+        const dataResponse = await this.props.client.openSession({
+          modelId,
           failover: failoverSettings?.isEnabled || false,
-          sessionDuration: +duration, // convert to seconds
+          duration: +duration,
           directPayment: isDirectPay,
-        };
-        const response = await fetch(path, {
-          method: 'POST',
-          body: JSON.stringify(body),
-          headers: authHeaders,
         });
-        const dataResponse = await response.json();
-        if (!response.ok) {
+        if (dataResponse?.error) {
           // The proxy-router nests its failures several layers deep
           // ("failed to send transaction: open session failed: failed to send
           // transaction: <real cause>"). Surfacing that verbatim told the user

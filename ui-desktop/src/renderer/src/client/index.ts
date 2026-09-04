@@ -209,6 +209,27 @@ const createClient = function (createStore) {
     // API Gateway
     getAuthHeaders: utils.forwardToMainProcess('get-auth-headers'),
     getAllModels: utils.forwardToMainProcess('get-all-models'),
+    getProviders: utils.forwardToMainProcess('get-providers'),
+    getLocalModels: utils.forwardToMainProcess('get-local-models'),
+    getSessionsByUser: utils.forwardToMainProcess(
+      'get-sessions-by-user',
+      120000,
+    ),
+    getBidsByModel: utils.forwardToMainProcess('get-bids-by-model', 120000),
+    getBidInfo: utils.forwardToMainProcess('get-bid-info'),
+    closeSession: utils.forwardToMainProcess('close-session', 120000),
+    openSession: utils.forwardToMainProcess('open-session', 120000),
+    getSessionsByProvider: utils.forwardToMainProcess(
+      'get-sessions-by-provider',
+      120000,
+    ),
+    getProviderClaimableBalance: utils.forwardToMainProcess(
+      'get-provider-claimable-balance',
+    ),
+    claimProviderFunds: utils.forwardToMainProcess(
+      'claim-provider-funds',
+      120000,
+    ),
     chatCompletion,
     selectIpfsDownloadFolder: () => window.ipfsDownload.selectFolder(),
     startIpfsDownload: ({ requestId, folderToken, cidHash }) =>

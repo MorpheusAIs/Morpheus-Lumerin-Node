@@ -162,6 +162,7 @@ describe('buildDocumentContext', () => {
     expect(ctx).toContain('AAA');
     expect(ctx).toContain('BBB');
     expect(ctx).toContain('2 files');
+    expect(ctx).toContain('untrusted reference data');
   });
 
   it('is empty when nothing has usable text', () => {

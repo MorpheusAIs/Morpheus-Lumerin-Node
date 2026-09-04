@@ -523,6 +523,163 @@ export const getAllModels = async (): Promise<unknown[]> => {
   return data.models ?? []
 }
 
+const boundedProxyId = (value: unknown, label: string): string => {
+  const result = String(value ?? '').trim()
+  if (!result || result.length > 256 || /[\u0000-\u001f\u007f]/u.test(result)) {
+    throw new Error(`${label} is invalid.`)
+  }
+  return result
+}
+
+const walletAddress = (value: unknown, label: string): string => {
+  const result = String(value ?? '').trim()
+  if (!/^0x[0-9a-fA-F]{40}$/u.test(result)) throw new Error(`${label} is invalid.`)
+  return result
+}
+
+export const getProviders = async (): Promise<unknown[]> => {
+  const data = await proxyFetch<{ providers: unknown[] }>('/blockchain/providers', {}, 'providers')
+  return data.providers ?? []
+}
+
+export const getLocalModels = async (): Promise<unknown> => {
+  return proxyFetch('/v1/models', {}, 'local models')
+}
+
+export const getSessionsByUser = async (payload: { user: string }): Promise<unknown[]> => {
+  const user = walletAddress(payload?.user, 'Wallet address')
+  const sessions: unknown[] = []
+  const limit = 50
+  for (let offset = 0; offset < 1_000; offset += limit) {
+    const data = await proxyFetch<{ sessions: unknown[] }>(
+      `/blockchain/sessions/user?user=${encodeURIComponent(user)}&offset=${offset}&limit=${limit}&order=desc`,
+      {},
+      'user sessions'
+    )
+    const page = data.sessions ?? []
+    sessions.push(...page)
+    if (page.length !== limit) return sessions
+  }
+  return sessions
+}
+
+export const getBidsByModel = async (payload: { modelId: string }): Promise<unknown[]> => {
+  const modelId = boundedProxyId(payload?.modelId, 'Model ID')
+  const bids: unknown[] = []
+  const limit = 50
+  for (let offset = 0; offset < 1_000; offset += limit) {
+    const data = await proxyFetch<{ bids: unknown[] }>(
+      `/blockchain/models/${encodeURIComponent(modelId)}/bids?offset=${offset}&limit=${limit}&order=desc`,
+      {},
+      'model bids'
+    )
+    const page = data.bids ?? []
+    bids.push(...page)
+    if (page.length !== limit) return bids
+  }
+  return bids
+}
+
+export const getBidInfo = async (payload: { id: string }): Promise<unknown> => {
+  const id = boundedProxyId(payload?.id, 'Bid ID')
+  const data = await proxyFetch<{ bid: unknown }>(
+    `/blockchain/bids/${encodeURIComponent(id)}`,
+    {},
+    'bid information'
+  )
+  return data.bid
+}
+
+export const closeSession = async (payload: { sessionId: string }): Promise<unknown> => {
+  const sessionId = boundedProxyId(payload?.sessionId, 'Session ID')
+  const approved = await confirmNativeAction({
+    title: 'Close session',
+    message: 'Close this Morpheus session?',
+    detail:
+      `Session: ${sessionId}\n\n` +
+      'Closing ends inference for this session and returns unused escrow according to the contract.',
+    confirmLabel: 'Close session'
+  })
+  if (!approved) throw new Error('Session close cancelled.')
+  return proxyFetch(
+    `/blockchain/sessions/${encodeURIComponent(sessionId)}/close`,
+    { method: 'POST' },
+    'session close'
+  )
+}
+
+export const openSession = async (payload: {
+  modelId: string
+  duration: number
+  directPayment?: boolean
+  failover?: boolean
+}): Promise<unknown> => {
+  const modelId = boundedProxyId(payload?.modelId, 'Model ID')
+  const duration = Number(payload?.duration)
+  if (!Number.isSafeInteger(duration) || duration <= 0 || duration > 315_360_000) {
+    throw new Error('Session duration is invalid.')
+  }
+  const directPayment = payload?.directPayment === true
+  const failover = payload?.failover === true
+  const approved = await confirmNativeAction({
+    title: 'Open session',
+    message: `Open a session for model “${modelId.slice(0, 120)}”?`,
+    detail:
+      `Contract duration input: ${duration.toLocaleString()} seconds\n` +
+      `Payment mode: ${directPayment ? 'direct MOR payment' : 'MOR stake/escrow'}\n` +
+      `Failover: ${failover ? 'enabled' : 'disabled'}\n\n` +
+      'This submits a blockchain transaction and may lock or spend tokens according to the selected payment mode.',
+    confirmLabel: 'Open session'
+  })
+  if (!approved) throw new Error('Session opening cancelled.')
+  return proxyFetch(
+    `/blockchain/models/${encodeURIComponent(modelId)}/session`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ failover, sessionDuration: duration, directPayment })
+    },
+    'session opening'
+  )
+}
+
+export const getSessionsByProvider = async (payload: { provider: string }): Promise<unknown[]> => {
+  const provider = walletAddress(payload?.provider, 'Provider address')
+  const data = await proxyFetch<{ sessions: unknown[] }>(
+    `/blockchain/sessions/provider?provider=${encodeURIComponent(provider)}`,
+    {},
+    'provider sessions'
+  )
+  return data.sessions ?? []
+}
+
+export const getProviderClaimableBalance = async (payload: {
+  sessionId: string
+}): Promise<unknown> => {
+  const sessionId = boundedProxyId(payload?.sessionId, 'Session ID')
+  const data = await proxyFetch<{ balance: unknown }>(
+    `/proxy/sessions/${encodeURIComponent(sessionId)}/providerClaimableBalance`,
+    {},
+    'provider claimable balance'
+  )
+  return data.balance
+}
+
+export const claimProviderFunds = async (payload: { sessionId: string }): Promise<unknown> => {
+  const sessionId = boundedProxyId(payload?.sessionId, 'Session ID')
+  const approved = await confirmNativeAction({
+    title: 'Claim provider funds',
+    message: 'Submit the provider claim transaction?',
+    detail: `Session: ${sessionId}\n\nThis submits an on-chain transaction and incurs gas.`,
+    confirmLabel: 'Claim funds'
+  })
+  if (!approved) throw new Error('Provider claim cancelled.')
+  return proxyFetch(
+    `/proxy/sessions/${encodeURIComponent(sessionId)}/providerClaim`,
+    { method: 'POST' },
+    'provider claim'
+  )
+}
+
 async function boundedResponseBody(response: Response, limit: number): Promise<Buffer> {
   const declared = Number(response.headers.get('content-length') ?? 0)
   if (Number.isFinite(declared) && declared > limit) throw new Error('Proxy response is too large.')

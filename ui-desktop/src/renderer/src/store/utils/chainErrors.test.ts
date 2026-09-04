@@ -7,6 +7,8 @@ const READ_ONLY_RPC =
   'failed to send transaction: open session failed: failed to send transaction: method is not allowed on this endpoint';
 const INSUFFICIENT_GAS =
   'failed to send transaction: open session failed: insufficient funds for gas * price + value: have 3150354941278 want 8624200817020';
+const TEE_UNVERIFIED =
+  'no provider accepting session: [{"provider":"0xc3cB223c77a755a1F0Eb6e5b8004897d3e4De839","reason":"provider self-reports model as not serviceable: model 0x5adefc8fb85486ee787a23516c0385974a71eefee1b672ed2495a2505be601f1 status: tee_unverified"}]';
 
 describe('explainChainError', () => {
   describe('read-only RPC endpoint', () => {
@@ -49,6 +51,38 @@ describe('explainChainError', () => {
     it('still explains itself when the amounts cannot be parsed', () => {
       const { message } = explainChainError('insufficient funds');
       expect(message).toMatch(/not enough eth/i);
+    });
+  });
+
+  describe('TEE backend is not verified', () => {
+    it('explains that this is a provider/model availability problem', () => {
+      const { message, hint } = explainChainError(TEE_UNVERIFIED);
+      expect(message).toMatch(/no serviceable provider/i);
+      expect(hint).toMatch(/backend TEE verification/i);
+      expect(hint).toMatch(/choose another model|retry later/i);
+    });
+
+    it('confirms that the rejected pre-open attempt did not escrow MOR', () => {
+      const { hint } = explainChainError(TEE_UNVERIFIED);
+      expect(hint).toMatch(/no session was opened/i);
+      expect(hint).toMatch(/no MOR was escrowed or directly paid/i);
+    });
+
+    it('preserves the provider diagnostic for logs', () => {
+      const explained = explainChainError(TEE_UNVERIFIED);
+      expect(explained.raw).toBe(TEE_UNVERIFIED);
+      expect(explained.raw).toContain('0xc3cB223c77a755a1F0Eb6e5b8004897d3e4De839');
+    });
+
+    it('does not confuse a Phase 1 quote/parser failure with provider model health', () => {
+      const explained = explainChainError(
+        'TEE attestation failed: quote verification failed: failed to parse portal response',
+      );
+      expect(explained.message).not.toMatch(/no serviceable provider/i);
+    });
+
+    it('does not expose the raw provider JSON in the one-line toast', () => {
+      expect(formatChainError(TEE_UNVERIFIED)).not.toContain('[{');
     });
   });
 

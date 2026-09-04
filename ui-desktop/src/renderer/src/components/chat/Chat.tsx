@@ -1,5 +1,6 @@
 import {
   memo,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -70,6 +71,7 @@ import {
   isSecureModel,
   SECURE_BADGE_TOOLTIP,
   getModelModality,
+  scheduleSessionExpiry,
 } from './utils';
 import { Cooldown } from './Cooldown';
 import ImageViewer from 'react-simple-image-viewer';
@@ -103,10 +105,117 @@ import {
 
 // Max simultaneous per-model bid requests. See store/utils/concurrency.ts.
 const BIDS_CONCURRENCY = 6;
+const CHAT_BOTTOM_THRESHOLD_PX = 96;
+const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
 
 let abort = false;
-let cancelScroll = false;
 const userMessage = { user: 'Me', role: 'user', icon: 'M', color: '#20dc8e' };
+
+type ScrollMetrics = Pick<
+  HTMLElement,
+  'clientHeight' | 'scrollHeight' | 'scrollTop'
+>;
+
+export const isNearChatBottom = (
+  element: ScrollMetrics,
+  threshold = CHAT_BOTTOM_THRESHOLD_PX,
+): boolean =>
+  element.scrollHeight - element.scrollTop - element.clientHeight <= threshold;
+
+export const observeChatAutoScroll = (
+  element: HTMLElement,
+  onAutoScrollChange: (enabled: boolean) => void,
+): (() => void) => {
+  const updateAutoScroll = () => {
+    onAutoScrollChange(isNearChatBottom(element));
+  };
+  const handleWheel = (event: WheelEvent) => {
+    const legacyDelta = (event as WheelEvent & { wheelDelta?: number })
+      .wheelDelta;
+    if (event.deltaY < 0 || (legacyDelta !== undefined && legacyDelta > 0)) {
+      onAutoScrollChange(false);
+    }
+  };
+
+  element.addEventListener('scroll', updateAutoScroll, { passive: true });
+  element.addEventListener('wheel', handleWheel, { passive: true });
+  return () => {
+    element.removeEventListener('scroll', updateAutoScroll);
+    element.removeEventListener('wheel', handleWheel);
+  };
+};
+
+type AnimationFrameBatch<T> = {
+  cancel: () => void;
+  flush: () => void;
+  schedule: (value: T) => void;
+};
+
+type MutableRef<T> = { current: T };
+
+/** Invalidates queued chat work and propagates cancellation to the IPC stream. */
+export const disposeActiveChatStream = async (
+  mountedRef: MutableRef<boolean>,
+  generationRef: MutableRef<number>,
+  activeReaderRef: MutableRef<ReadableStreamDefaultReader<Uint8Array> | null>,
+): Promise<void> => {
+  mountedRef.current = false;
+  generationRef.current += 1;
+  const reader = activeReaderRef.current;
+  activeReaderRef.current = null;
+  if (reader) {
+    await reader.cancel().catch(() => undefined);
+  }
+};
+
+/** Keeps the latest stream state and commits it at most once per paint. */
+export const createAnimationFrameBatch = <T,>(
+  commit: (value: T) => void,
+  requestFrame: (callback: FrameRequestCallback) => number = (callback) =>
+    window.requestAnimationFrame(callback),
+  cancelFrame: (handle: number) => void = (handle) =>
+    window.cancelAnimationFrame(handle),
+): AnimationFrameBatch<T> => {
+  let frame: number | undefined;
+  let hasPendingValue = false;
+  let pendingValue: T;
+
+  const commitPending = () => {
+    frame = undefined;
+    if (!hasPendingValue) return;
+    hasPendingValue = false;
+    commit(pendingValue);
+  };
+
+  return {
+    schedule(value) {
+      pendingValue = value;
+      hasPendingValue = true;
+      frame ??= requestFrame(commitPending);
+    },
+    flush() {
+      if (frame !== undefined) cancelFrame(frame);
+      commitPending();
+    },
+    cancel() {
+      if (frame !== undefined) cancelFrame(frame);
+      frame = undefined;
+      hasPendingValue = false;
+    },
+  };
+};
+
+export const revokeInactiveObjectUrls = (
+  ownedUrls: Set<string>,
+  activeUrls: ReadonlySet<string>,
+  revoke: (url: string) => void = (url) => URL.revokeObjectURL(url),
+): void => {
+  for (const url of ownedUrls) {
+    if (activeUrls.has(url)) continue;
+    revoke(url);
+    ownedUrls.delete(url);
+  }
+};
 
 // Common TTS voice presets. Names are backend-specific (Kokoro `af_*`,
 // OpenAI `alloy`/`nova`/...), so the field also accepts free-text input.
@@ -149,6 +258,13 @@ type ChatProps = {
 
 const Chat = (props: ChatProps) => {
   const chatBlockRef = useRef<null | HTMLDivElement>(null);
+  const autoScrollRef = useRef(true);
+  const scrollFrameRef = useRef<number | undefined>(undefined);
+  const ownedAudioUrlsRef = useRef(new Set<string>());
+  const mountedRef = useRef(true);
+  const chatGenerationRef = useRef(0);
+  const activeReaderRef =
+    useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const queryClient = useQueryClient();
   const initializedRef = useRef(false);
 
@@ -161,12 +277,15 @@ const Chat = (props: ChatProps) => {
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [messages, setMessages] = useState<any>([]);
+  const [chatScrollElement, setChatScrollElement] =
+    useState<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
 
   const [isSpinning, setIsSpinning] = useState(false);
 
   const [imagePreview, setImagePreview] = useState<string>();
   const [activeSession, setActiveSession] = useState<any>(undefined);
+  const [, setSessionValidityVersion] = useState(0);
 
   const [chatData, setChatsData] = useState<ChatData[]>([]);
 
@@ -184,6 +303,14 @@ const Chat = (props: ChatProps) => {
   );
 
   const [chat, setChat] = useState<ChatData | undefined>(undefined);
+
+  const attachChatScrollElement = useCallback(
+    (element: HTMLDivElement | null) => {
+      chatBlockRef.current = element;
+      setChatScrollElement(element);
+    },
+    [],
+  );
 
   // --- Cached data layer (stale-while-revalidate via react-query) ---------
   // These queries live in the app-level QueryClient, so navigating away from
@@ -275,7 +402,12 @@ const Chat = (props: ChatProps) => {
   // Used for mapping sessions/chats by id, matching the original mount logic.
   const allModels: any[] | undefined = modelsDataQuery.data?.models;
   const allModelsById = useMemo(
-    () => new Map((allModels ?? []).map((model: any) => [model.Id, model])),
+    () =>
+      new Map(
+        (allModels ?? [])
+          .filter((model: any) => !model.isLocal)
+          .map((model: any) => [model.Id, model]),
+      ),
     [allModels],
   );
 
@@ -338,7 +470,14 @@ const Chat = (props: ChatProps) => {
     : selectedBid?.Provider
       ? abbreviateAddress(selectedBid?.Provider, 6)
       : 'Unknown';
-  const isDisabled = (!activeSession && !isLocal) || isReadonly;
+  const marketplaceSessionUnavailable = !isLocal && isClosed(activeSession);
+  const isDisabled = marketplaceSessionUnavailable || isReadonly;
+  const isCreateSessionMode =
+    Boolean(selectedModel) &&
+    !messages?.length &&
+    !isLocal &&
+    !activeSession &&
+    !isLoading;
   const stakedFunds = activeSession
     ? (
         ((activeSession.EndsAt - activeSession.OpenedAt) *
@@ -346,6 +485,16 @@ const Chat = (props: ChatProps) => {
         10 ** 18
       ).toFixed(2)
     : 0;
+
+  useEffect(() => {
+    if (isLocal || !activeSession) return;
+    return scheduleSessionExpiry(activeSession, () => {
+      // Cooldown owns its own countdown state. Bump the Chat parent as well so
+      // submit, attachments, and recording all close together.
+      setSessionValidityVersion((current) => current + 1);
+      setIsReadonly(true);
+    });
+  }, [activeSession, isLocal]);
 
   // One-time selection of the default chat once the (possibly cached) model and
   // session data is available. Runs in a layout effect so that on a warm cache
@@ -364,21 +513,18 @@ const Chat = (props: ChatProps) => {
 
     const models: any[] = md.models;
 
-    const useLocalModelChat = () => {
-      const localModel = models.find((m: any) => m.isLocal);
-      if (localModel) {
-        setSelectedModel(localModel);
-        setChat({
-          id: generateHashId(),
-          createdAt: new Date(),
-          modelId: localModel.Id,
-          isLocal: true,
-        });
-      }
+    const requireMarketplaceSelection = () => {
+      setSelectedModel(undefined);
+      setSelectedBid(undefined);
+      setActiveSession(undefined);
+      setChat(undefined);
+      setOpenChangeModal(true);
     };
 
     const mappedSessions = rawSessions.reduce((res: any[], item: any) => {
-      const sessionModel = models.find((x) => x.Id == item.ModelAgentId);
+      const sessionModel = models.find(
+        (x) => !x.isLocal && x.Id == item.ModelAgentId,
+      );
       if (sessionModel) {
         res.push({ ...item, ModelName: sessionModel.Name });
       }
@@ -387,19 +533,19 @@ const Chat = (props: ChatProps) => {
     const openSessions = mappedSessions.filter((s) => !isClosed(s));
 
     if (!openSessions.length) {
-      useLocalModelChat();
       setInitialized(true);
+      requireMarketplaceSelection();
       return;
     }
 
     const latestSession = openSessions[0];
     const latestSessionModel = models.find(
-      (m: any) => m.Id == latestSession.ModelAgentId,
+      (m: any) => !m.isLocal && m.Id == latestSession.ModelAgentId,
     );
 
     if (!latestSessionModel) {
-      useLocalModelChat();
       setInitialized(true);
+      requireMarketplaceSelection();
       return;
     }
 
@@ -410,18 +556,14 @@ const Chat = (props: ChatProps) => {
     setChat({
       id: generateHashId(),
       createdAt: new Date(),
-      modelId: latestSessionModel.ModelAgentId,
+      modelId: latestSessionModel.Id,
     });
     setInitialized(true);
 
     props
       .getBidInfo(latestSession.BidID)
       .then((openBid) => {
-        if (!openBid) {
-          useLocalModelChat();
-          return;
-        }
-        setSelectedBid(openBid);
+        if (openBid) setSelectedBid(openBid);
       })
       .catch((e) => console.error('Failed to load open bid', e));
   }, [modelsDataQuery.data, sessionsQuery.data]);
@@ -461,14 +603,68 @@ const Chat = (props: ChatProps) => {
     setIsOpen((prevState) => !prevState);
   };
 
-  const scrollToBottom = (behavior: ScrollBehavior = 'instant') => {
-    if (!cancelScroll) {
-      chatBlockRef.current?.scroll({
-        top: chatBlockRef.current.scrollHeight,
-        behavior: behavior,
-      });
-    }
+  const scrollToBottom = (behavior: ScrollBehavior = 'auto', force = false) => {
+    const element = chatBlockRef.current;
+    if (!element || (!force && !autoScrollRef.current)) return;
+    autoScrollRef.current = true;
+    element.scroll({ top: element.scrollHeight, behavior });
   };
+
+  const scheduleScrollToBottom = (
+    behavior: ScrollBehavior = 'auto',
+    force = false,
+  ) => {
+    if (!force && !autoScrollRef.current) return;
+    if (scrollFrameRef.current !== undefined) {
+      window.cancelAnimationFrame(scrollFrameRef.current);
+    }
+    scrollFrameRef.current = window.requestAnimationFrame(() => {
+      scrollFrameRef.current = undefined;
+      scrollToBottom(behavior, force);
+    });
+  };
+
+  useEffect(() => {
+    const activeUrls = new Set<string>();
+    if (Array.isArray(messages)) {
+      for (const message of messages) {
+        if (message?.isAudioContent && typeof message.text === 'string') {
+          activeUrls.add(message.text);
+        }
+      }
+    }
+    revokeInactiveObjectUrls(ownedAudioUrlsRef.current, activeUrls);
+  }, [messages]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      void disposeActiveChatStream(
+        mountedRef,
+        chatGenerationRef,
+        activeReaderRef,
+      );
+      if (scrollFrameRef.current !== undefined) {
+        window.cancelAnimationFrame(scrollFrameRef.current);
+        scrollFrameRef.current = undefined;
+      }
+      revokeInactiveObjectUrls(ownedAudioUrlsRef.current, new Set());
+    };
+  }, []);
+
+  useEffect(() => {
+    const element = chatScrollElement;
+    if (!element) return;
+
+    if (autoScrollRef.current) {
+      element.scroll({ top: element.scrollHeight, behavior: 'auto' });
+    } else {
+      autoScrollRef.current = isNearChatBottom(element);
+    }
+    return observeChatAutoScroll(element, (enabled) => {
+      autoScrollRef.current = enabled;
+    });
+  }, [chatScrollElement]);
 
   // A session that was just opened on-chain does not always show up in the very
   // next indexer read. Poll briefly instead of assuming the first response
@@ -508,10 +704,18 @@ const Chat = (props: ChatProps) => {
       return;
     }
 
+    if (isClosed(targetSessionData)) {
+      props.toasts.toast(
+        'info',
+        'The new session is already closed or expired. Refresh Sessions before trying again.',
+      );
+      return;
+    }
+
     setActiveSession({ ...targetSessionData, sessionId });
 
     const targetModel = chainData?.models?.find(
-      (x) => x.Id == targetSessionData.ModelAgentId,
+      (x) => !x.isLocal && x.Id == targetSessionData.ModelAgentId,
     );
     const targetBid = targetModel?.bids?.find(
       (x) => x.Id == targetSessionData.BidID,
@@ -672,7 +876,9 @@ const Chat = (props: ChatProps) => {
     });
     const models = allModels ?? [];
     return (fresh || []).reduce((res, item) => {
-      const sessionModel = models.find((x) => x.Id == item.ModelAgentId);
+      const sessionModel = models.find(
+        (x) => !x.isLocal && x.Id == item.ModelAgentId,
+      );
       if (sessionModel) {
         res.push({ ...item, ModelName: sessionModel.Name });
       }
@@ -686,29 +892,26 @@ const Chat = (props: ChatProps) => {
     await refreshSessions();
     setIsActionLoading(false);
 
-    if (activeSession.Id == sessionId) {
-      const localModel = chainData?.models?.find((m: any) => m.isLocal);
-      if (localModel) {
-        setSelectedModel(localModel);
-        setChat({
-          id: generateHashId(),
-          createdAt: new Date(),
-          modelId: localModel.Id,
-          isLocal: true,
-        });
-      }
+    if (activeSession?.Id == sessionId) {
+      setActiveSession(undefined);
+      setSelectedBid(undefined);
+      setSelectedModel(undefined);
+      setChat(undefined);
       setMessages([]);
+      setOpenChangeModal(true);
     }
   };
 
   const selectChat = async (chatData: ChatData) => {
+    abort = true;
+    chatGenerationRef.current += 1;
     const modelId = chatData.modelId;
     if (!modelId) {
       console.warn('Model ID is missed');
       return;
     }
 
-    const selectedModel = chainData.isLocal
+    const selectedModel = chatData.isLocal
       ? chainData.models.find((m: any) => m.Id == modelId)
       : chainData.models.find((m: any) => m.Id == modelId && m.bids);
     setSelectedModel(selectedModel);
@@ -717,6 +920,12 @@ const Chat = (props: ChatProps) => {
     setChat({ ...chatData });
 
     if (chatData.isLocal) {
+      // Local TinyLlama was historically a development demo. Keep its saved
+      // transcript readable, but do not let it bypass the production
+      // marketplace-session gate.
+      setActiveSession(undefined);
+      setSelectedBid(undefined);
+      setIsReadonly(true);
       await loadChatHistory(chatData.id);
       return;
     }
@@ -728,7 +937,7 @@ const Chat = (props: ChatProps) => {
 
     if (openSession) {
       setActiveSession(openSession);
-      const activeBid = selectedModel.bids.find(
+      const activeBid = selectedModel?.bids?.find(
         (b) => b.Id == openSession.BidID,
       );
       setSelectedBid(activeBid);
@@ -737,8 +946,9 @@ const Chat = (props: ChatProps) => {
       setSelectedBid(undefined);
     }
 
+    autoScrollRef.current = true;
     await loadChatHistory(chatData.id);
-    setTimeout(() => scrollToBottom('smooth'), 400);
+    setTimeout(() => scheduleScrollToBottom('smooth', true), 400);
   };
 
   const handleReopen = async (isDirectPay: boolean) => {
@@ -746,34 +956,8 @@ const Chat = (props: ChatProps) => {
     setIsReadonly(false);
   };
 
-  const registerScrollEvent = (register) => {
-    cancelScroll = false;
-    const handler = (event: any) => {
-      const isUp = event.wheelDelta ? event.wheelDelta > 0 : event.deltaY < 0;
-      if (isUp) {
-        cancelScroll = true;
-      } else {
-        if (!chatBlockRef?.current || !cancelScroll) {
-          return;
-        }
-        // Return scrolling if scrolled to div end
-        if (
-          chatBlockRef.current.offsetHeight + chatBlockRef.current.scrollTop >=
-          chatBlockRef.current.scrollHeight
-        ) {
-          cancelScroll = false;
-        }
-      }
-    };
-
-    if (register) {
-      chatBlockRef?.current?.addEventListener('wheel', handler);
-    } else {
-      chatBlockRef?.current?.removeEventListener('wheel', handler);
-    }
-  };
-
   const call = async (message, callAttachments: Attachment[] = []) => {
+    const chatGeneration = chatGenerationRef.current;
     let memoState = [
       ...messages,
       {
@@ -790,52 +974,45 @@ const Chat = (props: ChatProps) => {
       },
     ];
     setMessages(memoState);
-    scrollToBottom();
-
-    const headers = {
-      Accept: 'application/json',
-    };
-    if (isLocal) {
-      headers['model_id'] = selectedModel.Id;
-    } else {
-      headers['session_id'] = activeSession.Id;
-    }
-    headers['chat_id'] = chat?.id;
+    scheduleScrollToBottom();
 
     // Plain string content when there are no images, so the text-only path
     // keeps exactly the shape it had before attachments existed.
     const incommingMessage = buildUserMessage(message, callAttachments);
-    const payload = {
-      stream: true,
-      messages: [incommingMessage],
-    };
+    const proxyResponse = await props.client
+      .chatCompletion({
+        target: isLocal
+          ? { modelId: selectedModel.Id, chatId: chat?.id }
+          : { sessionId: activeSession.Id, chatId: chat?.id },
+        messages: [incommingMessage],
+      })
+      .catch((e) => {
+        console.log('Failed to send request', e);
+        return null;
+      });
 
-    const authHeaders = await props.client.getAuthHeaders();
-    // If image take only last message
-    const response = await fetch(
-      `${props.config.chain.localProxyRouterUrl}/v1/chat/completions`,
-      {
-        method: 'POST',
-        headers: {
-          ...headers,
-          ...authHeaders,
-        },
-        body: JSON.stringify(payload),
-      },
-    ).catch((e) => {
-      console.log('Failed to send request', e);
-      return null;
-    });
-
-    if (!response) {
+    if (!proxyResponse) {
       return;
     }
+
+    if (!mountedRef.current || chatGenerationRef.current !== chatGeneration) {
+      await proxyResponse.body?.cancel().catch(() => undefined);
+      return memoState;
+    }
+
+    const response = new Response(proxyResponse.body, {
+      status: proxyResponse.status,
+      headers: { 'Content-Type': proxyResponse.contentType },
+    });
 
     if (!response.ok) {
       // The provider's reason arrives wrapped in several layers of JSON. Show
       // the actionable part rather than a generic "Failed to send prompt",
       // which threw away the one piece of information the user needed.
       const body = await response.json().catch(() => null);
+      if (!mountedRef.current || chatGenerationRef.current !== chatGeneration) {
+        return memoState;
+      }
       const detail = body?.error ?? body?.message ?? `HTTP ${response.status}`;
       console.error('Prompt failed:', detail);
 
@@ -857,10 +1034,9 @@ const Chat = (props: ChatProps) => {
       return;
     }
 
-    registerScrollEvent(true);
-
     const textDecoder = new TextDecoder();
     const reader = response.body.getReader();
+    activeReaderRef.current = reader;
 
     const icon = modelName.toUpperCase()[0];
     const iconProps = {
@@ -869,6 +1045,13 @@ const Chat = (props: ChatProps) => {
       user: modelName,
       role: 'assistant',
     };
+    const messageBatch = createAnimationFrameBatch<any[]>((nextMessages) => {
+      if (!mountedRef.current || chatGenerationRef.current !== chatGeneration) {
+        return;
+      }
+      setMessages(nextMessages);
+      scheduleScrollToBottom();
+    });
     try {
       let chunksBuffer = '';
       while (true) {
@@ -879,7 +1062,12 @@ const Chat = (props: ChatProps) => {
 
         const { value, done } = await reader.read();
         if (done) {
-          setIsSpinning(false);
+          if (
+            mountedRef.current &&
+            chatGenerationRef.current === chatGeneration
+          ) {
+            setIsSpinning(false);
+          }
           break;
         }
 
@@ -978,32 +1166,31 @@ const Chat = (props: ChatProps) => {
             ];
           }
           memoState = result;
-          setMessages(result);
-          scrollToBottom();
+          messageBatch.schedule(result);
         });
       }
     } catch (e) {
-      props.toasts.toast('error', 'Something goes wrong. Try later.');
-      console.error(e);
+      if (mountedRef.current && chatGenerationRef.current === chatGeneration) {
+        props.toasts.toast('error', 'Something goes wrong. Try later.');
+        console.error(e);
+      }
+    } finally {
+      if (activeReaderRef.current === reader) {
+        activeReaderRef.current = null;
+      }
+      // requestAnimationFrame can be throttled while the window is hidden. A
+      // synchronous final flush keeps persisted history and the visible state
+      // aligned on completion, cancellation, and error paths.
+      messageBatch.flush();
     }
 
-    registerScrollEvent(false);
     return memoState;
   };
 
-  const buildAudioHeaders = async () => {
-    const headers: Record<string, string> = {};
-    if (isLocal) {
-      headers['model_id'] = selectedModel.Id;
-    } else {
-      headers['session_id'] = activeSession.Id;
-    }
-    if (chat?.id) {
-      headers['chat_id'] = chat.id;
-    }
-    const authHeaders = await props.client.getAuthHeaders();
-    return { ...headers, ...authHeaders };
-  };
+  const buildInferenceTarget = () =>
+    isLocal
+      ? { modelId: selectedModel.Id, chatId: chat?.id }
+      : { sessionId: activeSession.Id, chatId: chat?.id };
 
   const audioIconProps = () => {
     const icon = modelName.toUpperCase()[0];
@@ -1017,34 +1204,36 @@ const Chat = (props: ChatProps) => {
 
   // TTS: text in -> synthesized audio out
   const callSpeech = async (text: string) => {
+    const chatGeneration = chatGenerationRef.current;
     const userText = { id: makeId(16), text, ...userMessage };
     let memoState = [...messages, userText];
     setMessages(memoState);
-    scrollToBottom();
+    scheduleScrollToBottom();
 
     try {
-      const headers = await buildAudioHeaders();
-      const response = await fetch(
-        `${props.config.chain.localProxyRouterUrl}/v1/audio/speech`,
-        {
-          method: 'POST',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            input: text,
-            voice: ttsVoice,
-            response_format: 'mp3',
-            speed: Number(ttsSpeed),
-          }),
-        },
-      );
+      const response = await props.client.synthesizeSpeech({
+        target: buildInferenceTarget(),
+        text,
+        voice: ttsVoice,
+        speed: Number(ttsSpeed),
+      });
 
       if (!response || !response.ok) {
-        props.toasts.toast('error', 'Failed to synthesize speech');
+        props.toasts.toast(
+          'error',
+          response?.error || 'Failed to synthesize speech',
+        );
         return memoState;
       }
 
-      const blob = await response.blob();
+      if (!mountedRef.current || chatGenerationRef.current !== chatGeneration) {
+        return memoState;
+      }
+      const blob = new Blob([response.data], {
+        type: response.mimeType || 'audio/mpeg',
+      });
       const url = URL.createObjectURL(blob);
+      ownedAudioUrlsRef.current.add(url);
       memoState = [
         ...memoState,
         {
@@ -1055,7 +1244,7 @@ const Chat = (props: ChatProps) => {
         },
       ];
       setMessages(memoState);
-      scrollToBottom();
+      scheduleScrollToBottom();
     } catch (e) {
       props.toasts.toast('error', 'Something goes wrong. Try later.');
       console.error(e);
@@ -1065,7 +1254,9 @@ const Chat = (props: ChatProps) => {
 
   // STT: audio in -> transcription text out
   const callTranscription = async (file: File) => {
+    const chatGeneration = chatGenerationRef.current;
     const userAudioUrl = URL.createObjectURL(file);
+    ownedAudioUrlsRef.current.add(userAudioUrl);
     let memoState = [
       ...messages,
       {
@@ -1076,7 +1267,7 @@ const Chat = (props: ChatProps) => {
       },
     ];
     setMessages(memoState);
-    scrollToBottom();
+    scheduleScrollToBottom();
 
     if (messages.length === 0 && chat) {
       setChatsData([
@@ -1086,33 +1277,29 @@ const Chat = (props: ChatProps) => {
     }
 
     try {
-      const headers = await buildAudioHeaders();
-      const form = new FormData();
-      form.append('file', file);
-      form.append('response_format', 'json');
-
-      // NB: do not set Content-Type; the browser adds the multipart boundary.
-      const response = await fetch(
-        `${props.config.chain.localProxyRouterUrl}/v1/audio/transcriptions`,
-        {
-          method: 'POST',
-          headers,
-          body: form,
-        },
-      );
+      const response = await props.client.transcribeAudio({
+        target: buildInferenceTarget(),
+        fileName: file.name,
+        mimeType: file.type || 'application/octet-stream',
+        data: await file.arrayBuffer(),
+      });
 
       if (!response || !response.ok) {
         props.toasts.toast('error', 'Failed to transcribe audio');
         return memoState;
       }
 
-      const contentType = response.headers.get('content-type') || '';
+      const contentType = response.contentType || '';
       let transcript = '';
       if (contentType.includes('application/json')) {
-        const data = await response.json();
+        const data = JSON.parse(response.body);
         transcript = data?.text ?? JSON.stringify(data);
       } else {
-        transcript = await response.text();
+        transcript = response.body;
+      }
+
+      if (!mountedRef.current || chatGenerationRef.current !== chatGeneration) {
+        return memoState;
       }
 
       memoState = [
@@ -1120,7 +1307,7 @@ const Chat = (props: ChatProps) => {
         { id: makeId(16), text: transcript, ...audioIconProps() },
       ];
       setMessages(memoState);
-      scrollToBottom();
+      scheduleScrollToBottom();
     } catch (e) {
       props.toasts.toast('error', 'Something goes wrong. Try later.');
       console.error(e);
@@ -1130,6 +1317,10 @@ const Chat = (props: ChatProps) => {
 
   const handleAudioFile = (file?: File | null) => {
     if (!file || isDisabled) {
+      return;
+    }
+    if (!file.size || file.size > MAX_AUDIO_BYTES) {
+      props.toasts.toast('error', 'Audio must be between 1 byte and 20 MB.');
       return;
     }
     setIsSpinning(true);
@@ -1244,10 +1435,10 @@ const Chat = (props: ChatProps) => {
   /**
    * Adds files to the pending attachment list.
    *
-   * Documents are handed to the main process for text extraction (pdfjs and
-   * mammoth live there, out of the renderer bundle). Images are kept as a data
-   * URI and sent as an image_url part. Each file lands in the list immediately
-   * with status 'parsing' so a slow PDF doesn't look like nothing happened.
+   * Documents cross IPC as bounded binary and are handed to the main process
+   * for hardened text extraction. Images are kept as a data URI and sent as an
+   * image_url part. Each file lands in the list immediately with status
+   * 'parsing' so a slow document doesn't look like nothing happened.
    */
   const addFiles = async (files: File[]) => {
     for (const file of files) {
@@ -1273,9 +1464,8 @@ const Chat = (props: ChatProps) => {
       ]);
 
       try {
-        const { base64, dataUrl } = await readFile(file);
-
         if (kind === 'image') {
+          const { dataUrl } = await readFile(file);
           setAttachments((prev) =>
             prev.map((a) =>
               a.id === id ? { ...a, dataUrl, status: 'ready' as const } : a,
@@ -1287,7 +1477,7 @@ const Chat = (props: ChatProps) => {
         const parsed = await props.client.parseAttachment({
           name: file.name,
           mime: file.type,
-          data: base64,
+          data: await file.arrayBuffer(),
         });
 
         setAttachments((prev) =>
@@ -1324,7 +1514,8 @@ const Chat = (props: ChatProps) => {
 
   // Attachments only make sense for text/vision chat. TTS synthesises the text
   // you type, and STT has its own audio input.
-  const attachmentsSupported = modality === 'llm' && !isReadonly;
+  const attachmentsSupported =
+    Boolean(selectedModel) && modality === 'llm' && !isReadonly;
 
   const handlePaste = (e: React.ClipboardEvent) => {
     if (!attachmentsSupported) return;
@@ -1355,6 +1546,16 @@ const Chat = (props: ChatProps) => {
       return;
     }
 
+    if (isDisabled) {
+      if (!isLocal) {
+        props.toasts.toast(
+          'info',
+          'This session is closed or expired. Open a new session before sending another message.',
+        );
+      }
+      return;
+    }
+
     const readyAttachments = attachments.filter((a) => a.status === 'ready');
 
     // A message with only attachments is meaningful ("summarise this"), but a
@@ -1381,11 +1582,19 @@ const Chat = (props: ChatProps) => {
     }
 
     setIsSpinning(true);
+    const requestGeneration = chatGenerationRef.current;
     const request =
       modality === 'tts'
         ? callSpeech(promptInput)
         : call(promptInput, readyAttachments);
-    request.finally(() => setIsSpinning(false));
+    request.finally(() => {
+      if (
+        mountedRef.current &&
+        chatGenerationRef.current === requestGeneration
+      ) {
+        setIsSpinning(false);
+      }
+    });
     setPromptInput('');
     setAttachments([]);
   };
@@ -1407,20 +1616,29 @@ const Chat = (props: ChatProps) => {
   };
 
   const onCreateNewChat = ({ modelId, isLocal }) => {
+    if (isLocal) {
+      props.toasts.toast(
+        'info',
+        'The local model is a read-only legacy demo. Choose a Morpheus marketplace model and open a session to chat.',
+      );
+      return;
+    }
     abort = true;
+    chatGenerationRef.current += 1;
+    autoScrollRef.current = true;
     setMessages([]);
     setActiveSession(undefined);
     setSelectedBid(undefined);
     setIsReadonly(false);
-    setChat({ id: generateHashId(), createdAt: new Date(), modelId, isLocal });
+    setChat({ id: generateHashId(), createdAt: new Date(), modelId });
 
-    const selectedModel = isLocal
-      ? chainData.models.find((m: any) => m.Id == modelId)
-      : chainData.models.find((m: any) => m.Id == modelId && m.bids);
+    const selectedModel = chainData.models.find(
+      (m: any) => !m.isLocal && m.Id == modelId && m.bids,
+    );
 
     // Marketplace selection needs the bid list, which may still be loading on a
     // cold first visit. Guard instead of dereferencing undefined bids.
-    if (!isLocal && !selectedModel) {
+    if (!selectedModel) {
       props.toasts.toast(
         'info',
         'Model options are still loading. Please try again in a moment.',
@@ -1430,12 +1648,6 @@ const Chat = (props: ChatProps) => {
 
     setSelectedModel(selectedModel);
 
-    if (isLocal) {
-      setActiveSession(undefined);
-      setSelectedBid(undefined);
-      return;
-    }
-
     const openSessions = sessions.filter((s) => !isClosed(s));
     const openModelSession = openSessions.find(
       (s) => s.ModelAgentId == modelId,
@@ -1443,7 +1655,7 @@ const Chat = (props: ChatProps) => {
 
     if (openModelSession) {
       const selectedBid = selectedModel.bids.find(
-        (b) => b.Id == openModelSession.BidID && b.bids,
+        (b) => b.Id == openModelSession.BidID,
       );
       setSelectedBid(selectedBid);
       setActiveSession(openModelSession);
@@ -1464,10 +1676,6 @@ const Chat = (props: ChatProps) => {
   };
 
   const renderChatBlock = () => {
-    const isNewChat = !messages?.length;
-    const isCreateSessionMode =
-      isNewChat && !isLocal && !activeSession && !isLoading;
-
     // `meta` falls back to { budget: 0, supply: 0 } while the models query is
     // loading or has failed. Dividing by a zero budget produced NaN, and every
     // `x > NaN` comparison is false — which silently disabled *both* payment
@@ -1542,10 +1750,9 @@ const Chat = (props: ChatProps) => {
               )}
               <ChatIntroInnerText>
                 Stake MOR to reserve compute for the session length selected
-                above (min:{' '}
-                {formatValue(requiredStake.min, 18)} MOR, max:{' '}
-                {formatValue(requiredStake.max, 18)} MOR). You can claim your
-                stake in 24h.
+                above (min: {formatValue(requiredStake.min, 18)} MOR, max:{' '}
+                {formatValue(requiredStake.max, 18)} MOR). The MOR is escrowed,
+                and unused stake returns when the session closes.
               </ChatIntroInnerText>
               <div style={{ display: 'flex', justifyContent: 'center' }}>
                 <ChatIntroButton
@@ -1565,8 +1772,8 @@ const Chat = (props: ChatProps) => {
                   : ''}
               </SessionCostSummary>
               <ChatIntroInnerText>
-                Pay with your MOR tokens directly. The duration of the session
-                is limited only with your MOR balance.
+                Pay with your MOR tokens directly for the session length
+                selected above.
               </ChatIntroInnerText>
               <div style={{ display: 'flex', justifyContent: 'center' }}>
                 <ChatIntroButton
@@ -1588,7 +1795,7 @@ const Chat = (props: ChatProps) => {
             </ChatIntroInner>
           </ChatIntroContainer>
         ) : (
-          <ChatHistoryContainer>
+          <ChatHistoryContainer ref={attachChatScrollElement}>
             {messages?.map((x, index) => (
               <Message
                 key={x.id ?? index}
@@ -1687,7 +1894,9 @@ const Chat = (props: ChatProps) => {
               </div>
               <BtnAccent
                 className="change-modal"
-                onClick={() => setOpenChangeModal(true)}
+                onClick={() => {
+                  setOpenChangeModal(true);
+                }}
               >
                 <IconMessagePlus></IconMessagePlus> New chat
               </BtnAccent>
@@ -1876,7 +2085,12 @@ const Chat = (props: ChatProps) => {
                   maxRows={6}
                 />
                 <SendBtnWrapper>
-                  {isReadonly ? (
+                  {isReadonly && isLocal ? (
+                    <AudioHint>
+                      Legacy local-demo history is read-only. Choose a
+                      marketplace model and open a session to continue.
+                    </AudioHint>
+                  ) : isReadonly ? (
                     <>
                       <Btn onClick={() => handleReopen(false)}>
                         {isSpinning ? (
@@ -1922,13 +2136,16 @@ const Chat = (props: ChatProps) => {
       <ModelSelectionModal
         models={(chainData as any)?.models}
         isActive={openChangeModal}
+        marketplaceOnly
         symbol={props.symbol}
         bidsLoading={bidsLoading}
         providersAvailability={providersAvailability}
         onChangeModel={(eventData) => {
           onCreateNewChat(eventData);
         }}
-        handleClose={() => setOpenChangeModal(false)}
+        handleClose={() => {
+          setOpenChangeModal(false);
+        }}
       />
     </>
   );
