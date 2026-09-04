@@ -143,14 +143,6 @@ const createClient = function (createStore) {
   };
 
   const forwardedMethods = {
-    refreshAllTransactions: utils.forwardToMainProcess(
-      'refresh-all-transactions',
-      120000,
-    ),
-    refreshAllContracts: utils.forwardToMainProcess(
-      'refresh-all-contracts',
-      120000,
-    ),
     onOnboardingCompleted: utils.forwardToMainProcess('onboarding-completed'),
     suggestAddresses: utils.forwardToMainProcess('suggest-addresses'),
     validatePassword: utils.forwardToMainProcess('validate-password'),
@@ -168,8 +160,8 @@ const createClient = function (createStore) {
     // always reflects a decided outcome.
     sendMor: utils.forwardToMainProcess('send-mor', 90000),
     sendEth: utils.forwardToMainProcess('send-eth', 90000),
-    // Chat attachments. A large PDF can take a while to extract, and the whole
-    // file crosses IPC as base64, so this needs more headroom than a read.
+    // Chat attachments. A large document can take a while to validate and
+    // extract even though it crosses IPC as bounded binary, not base64.
     parseAttachment: utils.forwardToMainProcess('parse-attachment', 120000),
     // Multi-wallet. Switching restarts the proxy-router's session machinery,
     // so it gets a longer budget than a plain read.
@@ -207,10 +199,11 @@ const createClient = function (createStore) {
     setAutoAdjustPriceData: utils.forwardToMainProcess('set-auto-adjust-price'),
     getContractHashrate: utils.forwardToMainProcess('get-contract-hashrate'),
     // API Gateway
-    getAuthHeaders: utils.forwardToMainProcess('get-auth-headers'),
     getAllModels: utils.forwardToMainProcess('get-all-models'),
     getProviders: utils.forwardToMainProcess('get-providers'),
     getLocalModels: utils.forwardToMainProcess('get-local-models'),
+    getNodeConfig: utils.forwardToMainProcess('get-node-config'),
+    updateEthNode: utils.forwardToMainProcess('update-eth-node'),
     getSessionsByUser: utils.forwardToMainProcess(
       'get-sessions-by-user',
       120000,

@@ -27,6 +27,8 @@ const listeners = {
   'get-all-models': handlers.getAllModels,
   'get-providers': handlers.getProviders,
   'get-local-models': handlers.getLocalModels,
+  'get-node-config': handlers.getNodeConfig,
+  'update-eth-node': handlers.updateEthNode,
   'get-sessions-by-user': handlers.getSessionsByUser,
   'get-bids-by-model': handlers.getBidsByModel,
   'get-bid-info': handlers.getBidInfo,
@@ -55,7 +57,6 @@ const listeners = {
   'get-rates': handlers.getMorRate,
   'get-todays-budget': handlers.getTodaysBudget,
   'get-supply': handlers.getTokenSupply,
-  'get-auth-headers': handlers.getAuthHeaders,
   // Chat history
   'get-chat-history-titles': handlers.getChatHistoryTitles,
   'get-chat-history': handlers.getChatHistory,
@@ -72,6 +73,7 @@ const listeners = {
   'unpin-ipfs-file': handlers.unpinIpfsFile,
   'add-file-to-ipfs': handlers.addFileToIpfs,
   'get-ipfs-pinned-files': handlers.getIpfsPinnedFiles,
+
   // Agent
   'get-agent-users': handlers.getAgentUsers,
   'confirm-decline-agent-user': handlers.confirmDeclineAgentUser,

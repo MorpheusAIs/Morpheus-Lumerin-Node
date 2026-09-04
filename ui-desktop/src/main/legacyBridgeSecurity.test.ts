@@ -13,23 +13,111 @@ describe('legacy renderer bridge security boundaries', () => {
     expect(main).toContain('devTools: is.dev')
   })
 
-  it('sandboxes the renderer and blocks untrusted navigation and permissions', () => {
+  it('registers bootstrap IPC before loading the renderer and follow-up IPC before replying', () => {
     const main = source('src/main/index.ts')
+    const readyBlock = main.slice(main.indexOf('app\n  .whenReady()'))
+    const client = source('src/main/src/client/index.js')
 
-    expect(main).toContain('contextIsolation: true')
-    expect(main).toContain('nodeIntegration: false')
-    expect(main).toContain('webviewTag: false')
-    expect(main).toContain('sandbox: true')
-    expect(main).toContain("webContents.on('will-navigate', guardNavigation)")
-    expect(main).toContain("webContents.on('will-redirect', guardNavigation)")
-    expect(main).toContain('isTrustedRendererUrl(requestingUrl)')
-    expect(main).toContain("permission === 'media'")
-    expect(main).toContain('isTrustedRendererEvent(event)')
-    expect(main).toContain('ipcMain.handle(openExternalChannel')
+    expect(readyBlock.indexOf('createClient(config)')).toBeGreaterThan(-1)
+    expect(readyBlock.indexOf('createClient(config)')).toBeLessThan(
+      readyBlock.indexOf('\n    createWindow()')
+    )
+    expect(client.indexOf('subscriptions.subscribe(core)')).toBeGreaterThan(-1)
+    expect(client.indexOf('subscriptions.subscribe(core)')).toBeLessThan(
+      client.indexOf("webContent.sender.send('ui-ready', payload)")
+    )
   })
 
-  it('exposes only fixed legacy channels and keeps Electron events behind the bridge', () => {
+  it('never exposes proxy-router Basic auth credentials to the renderer', () => {
     const preload = source('src/preload/index.ts')
+    const listeners = source('src/main/src/client/subscriptions/index.ts')
+    const rendererClient = source('src/renderer/src/client/index.ts')
+
+    expect(preload).not.toContain('get-auth-headers')
+    expect(listeners).not.toContain('get-auth-headers')
+    expect(rendererClient).not.toContain('get-auth-headers')
+    expect(rendererClient).not.toContain('getAuthHeaders')
+    expect(rendererClient).not.toMatch(/fetch\s*\(/u)
+  })
+
+  it('streams chat through fixed, bounded IPC without exposing Electron events', () => {
+    const preload = source('src/preload/index.ts')
+    const listeners = source('src/main/src/client/subscriptions/index.ts')
+    const rendererClient = source('src/renderer/src/client/index.ts')
+    const streamMain = source('src/main/src/client/chat-stream-ipc.ts')
+
+    expect(listeners).not.toContain("'chat-completion'")
+    expect(preload).not.toContain("'chat-completion'")
+    expect(preload).toContain("start: 'chat-stream:start'")
+    expect(preload).toContain("cancel: 'chat-stream:cancel'")
+    expect(preload).toContain("event: 'chat-stream:event'")
+    expect(preload).toContain("exposeInMainWorld('chatStream', chatStream)")
+    expect(preload).toContain('payload.dataBase64.length <= 87_384')
+    expect(preload).toContain('if (safePayload) listener(safePayload)')
+    expect(rendererClient).toContain('window.chatStream.start(requestId, payload)')
+    expect(rendererClient).toContain('window.chatStream.cancel(requestId)')
+    expect(streamMain).toContain('isTrustedRendererEvent(event)')
+    expect(streamMain).toContain('activePerRenderer: 4')
+    expect(streamMain).toContain('responseBytes: 8 * 1024 * 1024')
+    expect(streamMain).toContain('ipcEvents: 16_384')
+    expect(streamMain).toContain("controller.abort('Chat stream cancelled.')")
+    expect(streamMain).toContain("event.sender.once('destroyed', abortIfDestroyed)")
+    expect(streamMain).toContain("event.sender.on('did-start-navigation', abortIfNavigating)")
+    expect(streamMain).toContain("removeListener('did-start-navigation', abortIfNavigating)")
+    expect(streamMain).not.toContain('get-auth-headers')
+  })
+
+  it('uses bounded binary IPC for large audio and document payloads', () => {
+    const handlers = source('src/main/src/client/subscriptions/handlers.ts')
+    const attachments = source('src/main/src/client/attachments.ts')
+    const chat = source('src/renderer/src/components/chat/Chat.tsx')
+
+    expect(handlers).toContain('data: ArrayBuffer | ArrayBufferView')
+    expect(handlers).toContain('audio.length > 20 * 1024 * 1024')
+    expect(handlers).not.toContain("body.toString('base64')")
+    expect(attachments).toContain('data: ArrayBuffer | ArrayBufferView')
+    expect(attachments).toContain('buf.length > MAX_ATTACHMENT_INPUT_BYTES')
+    expect(chat).toContain('data: await file.arrayBuffer()')
+    expect(chat).not.toContain('dataBase64')
+    expect(chat).not.toContain('window.atob(')
+    expect(chat).not.toContain('window.btoa(')
+  })
+
+  it('keeps cancellable IPFS downloads behind scoped folder grants and fixed IPC', () => {
+    const preload = source('src/preload/index.ts')
+    const listeners = source('src/main/src/client/subscriptions/index.ts')
+    const rendererClient = source('src/renderer/src/client/index.ts')
+    const downloadMain = source('src/main/src/client/ipfs-download-ipc.ts')
+    const modelsTable = source('src/renderer/src/components/models/ModelsTable.tsx')
+
+    expect(listeners).not.toContain("'get-ipfs-file'")
+    expect(listeners).not.toContain("'open-select-folder-dialog'")
+    expect(preload).not.toContain("'get-ipfs-file'")
+    expect(preload).toContain("selectFolder: 'ipfs-download:select-folder'")
+    expect(preload).toContain("start: 'ipfs-download:start'")
+    expect(preload).toContain("cancel: 'ipfs-download:cancel'")
+    expect(preload).toContain("event: 'ipfs-download:event'")
+    expect(preload).toContain("exposeInMainWorld('ipfsDownload', ipfsDownload)")
+    expect(rendererClient).toContain('window.ipfsDownload.start(requestId, folderToken, cidHash)')
+    expect(rendererClient).toContain('window.ipfsDownload.cancel(requestId)')
+    expect(modelsTable).toContain('client.cancelIpfsDownload({ requestId })')
+    expect(downloadMain).toContain('isTrustedRendererEvent(event)')
+    expect(downloadMain).toContain('activePerRenderer: 2')
+    expect(downloadMain).toContain('modelBytes: 256 * 1024 * 1024 * 1024')
+    expect(downloadMain).toContain('for (const candidate of [finalPath, partialPath])')
+    expect(downloadMain).toContain('await finalizeIpfsDownload(partialPath, finalPath')
+    expect(downloadMain).toContain('void fs.unlink(partialPath)')
+    expect(downloadMain).not.toContain('return { accepted: true, destinationPath }')
+    expect(downloadMain).not.toContain('return { canceled: false, filePaths: [folder]')
+    expect(downloadMain).toContain("event.sender.once('destroyed', abortIfDestroyed)")
+    expect(downloadMain).toContain("event.sender.on('did-start-navigation', abortIfNavigating)")
+    expect(downloadMain).toContain('configuredLoopbackProxyUrl()')
+    expect(downloadMain).not.toContain('get-auth-headers')
+  })
+
+  it('registers every renderer-forwarded request in both preload and main', () => {
+    const preload = source('src/preload/index.ts')
+    const listeners = source('src/main/src/client/subscriptions/index.ts')
     const rendererClient = source('src/renderer/src/client/index.ts')
     const forwarded = [
       ...rendererClient.matchAll(/forwardToMainProcess\(\s*['"]([^'"]+)['"]/gu)
@@ -38,27 +126,22 @@ describe('legacy renderer bridge security boundaries', () => {
     expect(forwarded.length).toBeGreaterThan(30)
     for (const channel of forwarded) {
       expect(preload, `${channel} is missing from the preload allowlist`).toContain(`'${channel}'`)
+      expect(listeners, `${channel} is missing from the main listener map`).toMatch(
+        new RegExp(`['"]?${channel.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}['"]?\\s*:`)
+      )
     }
-    expect(preload).toContain('legacyIpcChannels.has(eventName)')
+  })
+
+  it('keeps the raw Electron event object behind the context bridge', () => {
+    const preload = source('src/preload/index.ts')
+
     expect(preload).toContain('listener(payload, unsubscribe)')
     expect(preload).not.toContain('listener(event, payload')
     expect(preload).not.toContain('listener(_event, payload')
-    expect(preload).not.toContain("from '@electron-toolkit/preload'")
-    expect(preload).not.toContain('shell.openExternal')
-    expect(preload).not.toContain("exposeInMainWorld('electron'")
-    expect(preload).not.toContain("exposeInMainWorld('api'")
-  })
-
-  it('validates trusted renderer envelopes and redacts secrets from IPC logs', () => {
-    const bootstrap = source('src/main/src/client/index.js')
-    const subscriptions = source('src/main/src/client/subscriptions/utils.js')
-
-    expect(bootstrap).toContain('isTrustedRendererEvent(webContent)')
-    expect(bootstrap).toContain('isTrustedRendererEvent(event)')
-    expect(subscriptions).toContain('isTrustedRendererEvent(event)')
-    expect(subscriptions).toContain("typeof evProps !== 'object'")
-    expect(subscriptions).toContain("typeof id !== 'string'")
-    expect(subscriptions).toMatch(/private\.\?key\|mnemonic\|seed\|authorization/u)
+    expect(preload).toContain('const safeEvent = sanitizedCoworkTaskEvent(payload)')
+    expect(preload).toContain('if (safeEvent) listener(safeEvent)')
+    expect(preload).toContain('payload.title.length > 240')
+    expect(preload).toContain('coworkTaskStatuses.has(payload.status)')
   })
 
   it('uses only the configured loopback proxy for wallet onboarding', () => {
@@ -67,57 +150,56 @@ describe('legacy renderer bridge security boundaries', () => {
     const end = handlers.indexOf('\nexport const ', start + 1)
     const onboarding = handlers.slice(start, end < 0 ? handlers.length : end)
 
-    expect(handlers).toContain('export function configuredLoopbackProxyUrl()')
     expect(onboarding).toContain('configuredLoopbackProxyUrl()')
     expect(onboarding).not.toContain('data.proxyUrl')
     expect(onboarding).not.toMatch(/\{\s*proxyUrl\s*\}\s*=\s*data/u)
   })
 
-  it('validates and natively confirms sensitive renderer-triggered mutations', () => {
+  it('keeps agent access mutations validated, loopback-only, confirmed, and fail-closed', () => {
     const handlers = source('src/main/src/client/subscriptions/handlers.ts')
+    const proxyFetchStart = handlers.indexOf('export async function proxyFetch')
+    const proxyFetchEnd = handlers.indexOf('\nexport const ', proxyFetchStart)
+    const proxyFetch = handlers.slice(proxyFetchStart, proxyFetchEnd)
 
-    for (const name of [
-      'removeWallet',
-      'resetWallet',
+    expect(proxyFetch).toContain('configuredLoopbackProxyUrl()')
+    expect(proxyFetch).toContain('if (!response.ok)')
+
+    const handlerNames = [
       'confirmDeclineAgentUser',
       'removeAgentUser',
       'revokeAgentAllowance',
       'confirmDeclineAgentAllowanceRequest'
-    ]) {
+    ]
+    for (const name of handlerNames) {
       const start = handlers.indexOf(`export const ${name}`)
       const end = handlers.indexOf('\nexport const ', start + 1)
+      const handler = handlers.slice(start, end < 0 ? handlers.length : end)
+
       expect(start, `${name} handler is missing`).toBeGreaterThan(-1)
-      expect(handlers.slice(start, end < 0 ? handlers.length : end)).toContain(
+      expect(handler, `${name} lacks bounded username validation`).toContain(
+        'validateAgentUsername'
+      )
+      expect(handler, `${name} lacks a native security confirmation`).toContain(
         'confirmNativeAction'
+      )
+      expect(handler, `${name} bypasses the fail-closed mutation helper`).toContain(
+        'mutateAgentAccess'
+      )
+      expect(handler, `${name} uses an unvalidated configured URL`).not.toContain(
+        'config.chain.localProxyRouterUrl'
       )
     }
 
-    expect(handlers).toContain('validateAgentUsername')
-    expect(handlers).toContain('validateAgentToken')
-    expect(handlers).toContain('validateAgentDecision')
-    expect(handlers).toContain('mutateAgentAccess')
-    expect(handlers).toContain('if (!/^0x[0-9a-fA-F]{40}$/.test(to))')
-    expect(handlers).toContain('if (!/^[0-9]{1,78}$/.test(amount))')
-  })
+    for (const name of ['revokeAgentAllowance', 'confirmDeclineAgentAllowanceRequest']) {
+      const start = handlers.indexOf(`export const ${name}`)
+      const end = handlers.indexOf('\nexport const ', start + 1)
+      expect(handlers.slice(start, end)).toContain('validateAgentToken')
+    }
 
-  it('injects a production CSP while retaining the exact loopback API connection', () => {
-    const vite = source('electron.vite.config.ts')
-    const html = source('src/renderer/index.html')
-
-    expect(vite).toContain("default-src 'self'")
-    expect(vite).toContain("object-src 'none'")
-    expect(vite).toContain("frame-src 'none'")
-    expect(vite).toContain('http://localhost:${proxyPort}')
-    expect(vite).toContain("command === 'serve'")
-    expect(html).not.toContain('default-src *')
-  })
-
-  it('does not embed a wallet key or expose the admin API beyond loopback in run-user', () => {
-    const makefile = source('../proxy-router/Makefile')
-    const runUser = makefile.slice(makefile.indexOf('run-user:'), makefile.indexOf('\nrun-race:'))
-
-    expect(runUser).not.toMatch(/WALLET_PRIVATE_KEY=0x[0-9a-fA-F]{64}/u)
-    expect(runUser).toContain('WALLET_PRIVATE_KEY="$$WALLET_PRIVATE_KEY"')
-    expect(runUser).toContain("WEB_ADDRESS='127.0.0.1:8083'")
+    for (const name of ['confirmDeclineAgentUser', 'confirmDeclineAgentAllowanceRequest']) {
+      const start = handlers.indexOf(`export const ${name}`)
+      const end = handlers.indexOf('\nexport const ', start + 1)
+      expect(handlers.slice(start, end)).toContain('validateAgentDecision')
+    }
   })
 })

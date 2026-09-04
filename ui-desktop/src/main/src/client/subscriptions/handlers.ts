@@ -246,12 +246,6 @@ export const setFailoverSetting = (params) => setFailoverSettingMain(params)
 
 export const restartWallet = () => restart(1)
 
-export const openSelectFolderDialog = () => {
-  return dialog.showOpenDialog({
-    properties: ['openDirectory']
-  })
-}
-
 export const getAuthHeaders = async () => {
   if (authentication) {
     return authentication
@@ -547,6 +541,39 @@ export const getProviders = async (): Promise<unknown[]> => {
 
 export const getLocalModels = async (): Promise<unknown> => {
   return proxyFetch('/v1/models', {}, 'local models')
+}
+
+export const getNodeConfig = async (): Promise<unknown> => {
+  return proxyFetch('/config', {}, 'proxy-router configuration')
+}
+
+export const updateEthNode = async (payload: { url: string }): Promise<unknown> => {
+  const raw = String(payload?.url ?? '').trim()
+  if (!raw || raw.length > 2_048) throw new Error('Enter a valid Ethereum node URL.')
+
+  let endpoint: URL
+  try {
+    endpoint = new URL(raw)
+  } catch {
+    throw new Error('Enter a valid Ethereum node URL.')
+  }
+  if (!['http:', 'https:', 'ws:', 'wss:'].includes(endpoint.protocol)) {
+    throw new Error('Ethereum node URLs must use HTTP(S) or WS(S).')
+  }
+
+  const approved = await confirmNativeAction({
+    title: 'Change Ethereum node',
+    message: 'Use this Ethereum RPC endpoint?',
+    detail: `${endpoint.origin}\n\nThe proxy-router will trust this endpoint for blockchain reads and transaction submission.`,
+    confirmLabel: 'Change endpoint'
+  })
+  if (!approved) throw new Error('Ethereum node change cancelled.')
+
+  return proxyFetch(
+    '/config/ethNode',
+    { method: 'POST', body: JSON.stringify({ urls: [raw] }) },
+    'Ethereum node update'
+  )
 }
 
 export const getSessionsByUser = async (payload: { user: string }): Promise<unknown[]> => {
@@ -1225,27 +1252,6 @@ export const getIpfsVersion = async (): Promise<{ version: string } | null> => {
   try {
     const path = `${config.chain.localProxyRouterUrl}/ipfs/version`
     const response = await fetch(path, { headers: await getAuthHeaders() })
-    const body = await response.json()
-    return body
-  } catch (e) {
-    console.log('Error', e)
-    return null
-  }
-}
-
-export const getIpfsFile = async ({
-  cidHash,
-  destinationPath
-}: {
-  cidHash: string
-  destinationPath: string
-}): Promise<ResultResponse | null> => {
-  try {
-    const path = `${config.chain.localProxyRouterUrl}/ipfs/download/${cidHash}?dest=${encodeURIComponent(destinationPath)}`
-    const response = await fetch(path, {
-      headers: await getAuthHeaders(),
-      method: 'GET'
-    })
     const body = await response.json()
     return body
   } catch (e) {
