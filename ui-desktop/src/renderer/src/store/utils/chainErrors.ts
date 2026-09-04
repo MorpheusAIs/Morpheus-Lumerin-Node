@@ -60,6 +60,26 @@ export function explainChainError(error: unknown): FriendlyError {
     };
   }
 
+  // ---- No serviceable TEE provider during session open -------------------
+  // A provider can be reachable and pass the consumer -> P-Node check while
+  // still refusing one particular model because its own P-Node -> backend TEE
+  // verification has not passed. This is deliberately checked before the
+  // on-chain session is opened, so the useful next step is to choose another
+  // model (or wait for the provider to recover), not to change wallet/RPC
+  // settings or weaken TEE verification.
+  if (
+    msg.includes('no provider accepting session') &&
+    msg.includes('tee_unverified')
+  ) {
+    return {
+      message: 'No serviceable provider is currently available for this TEE model.',
+      hint:
+        'Its provider has not passed backend TEE verification. Choose another model ' +
+        'or retry later. No session was opened, and no MOR was escrowed or directly paid.',
+      raw,
+    };
+  }
+
   // ---- RPC endpoint refuses to broadcast transactions ----------------------
   // Base's public RPC (https://mainnet.base.org) accepts reads but rejects
   // eth_sendRawTransaction. It is first in the proxy-router's public endpoint

@@ -297,7 +297,10 @@ function ModelRow(props: {
   const model = props.model || {};
   const modelId = model.Id || '';
   const isLocal = !!model.isLocal;
-  const isOnline = isLocal || model.isOnline !== false;
+  const providerCount = (model?.bids || []).filter(
+    (bid: any) => bid?.Id,
+  ).length;
+  const isOnline = isLocal || (providerCount > 0 && model.isOnline !== false);
   const symbol = props.symbol || 'MOR';
   const lastCheck: Date | undefined = model.lastCheck
     ? new Date(model.lastCheck)
@@ -312,7 +315,6 @@ function ModelRow(props: {
   const ModalityIcon = MODALITY[primaryModalityKey]?.Icon || IconMessage;
 
   const price = useMemo(() => computePrice(model), [model]);
-  const providerCount = (model?.bids || []).filter((b: any) => b?.Id).length;
   const visionCapability = getVisionCapability(model);
 
   const handleSelect = () => {

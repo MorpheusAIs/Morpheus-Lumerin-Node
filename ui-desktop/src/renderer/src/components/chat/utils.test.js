@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { isClosed } from './utils';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { isClosed, scheduleSessionExpiry } from './utils';
 
 const nowSeconds = () => Math.floor(Date.now() / 1000);
 
@@ -8,7 +8,9 @@ const nowSeconds = () => Math.floor(Date.now() / 1000);
 // direction is what let users stake a second time on top of a live session.
 describe('isClosed', () => {
   it('treats a session with ClosedAt as closed', () => {
-    expect(isClosed({ ClosedAt: 1700000000, EndsAt: nowSeconds() + 3600 })).toBeTruthy();
+    expect(
+      isClosed({ ClosedAt: 1700000000, EndsAt: nowSeconds() + 3600 }),
+    ).toBeTruthy();
   });
 
   it('treats an expired session as closed', () => {
@@ -21,5 +23,52 @@ describe('isClosed', () => {
 
   it('does not mark a session closed merely because it ends soon', () => {
     expect(isClosed({ ClosedAt: 0, EndsAt: nowSeconds() + 5 })).toBeFalsy();
+  });
+
+  it('treats string zero as open and positive numeric strings as closed', () => {
+    const now = 2_000_000;
+    expect(isClosed({ ClosedAt: '0', EndsAt: 2_100 }, now)).toBe(false);
+    expect(isClosed({ ClosedAt: '1', EndsAt: 2_100 }, now)).toBe(true);
+  });
+
+  it('fails closed for missing or invalid expiry values', () => {
+    const now = 2_000_000;
+    expect(isClosed({ ClosedAt: 0 }, now)).toBe(true);
+    expect(isClosed({ ClosedAt: 0, EndsAt: 'not-a-time' }, now)).toBe(true);
+  });
+
+  it('treats the exact expiry boundary as closed', () => {
+    expect(isClosed({ ClosedAt: 0, EndsAt: 2_000 }, 2_000_000)).toBe(true);
+  });
+});
+
+describe('scheduleSessionExpiry', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('notifies Chat when a live session reaches its expiry', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(2_000_000);
+    const onExpiry = vi.fn();
+    const cleanup = scheduleSessionExpiry(
+      { ClosedAt: '0', EndsAt: 2_005 },
+      onExpiry,
+    );
+
+    vi.advanceTimersByTime(4_999);
+    expect(onExpiry).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(onExpiry).toHaveBeenCalledTimes(1);
+    cleanup();
+  });
+
+  it('notifies immediately for an already closed session', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(2_000_000);
+    const onExpiry = vi.fn();
+
+    scheduleSessionExpiry({ ClosedAt: 1, EndsAt: 2_005 }, onExpiry);
+
+    expect(onExpiry).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

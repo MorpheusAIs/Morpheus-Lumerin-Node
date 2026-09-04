@@ -10,7 +10,6 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import { withClient } from '../store/hocs/clientContext';
 import selectors from '../store/selectors';
 import { queryKeys } from '../store/queries';
-import { getSessionsByUser } from '../store/utils/apiCallsHelper';
 import ErrorBoundary from './common/ErrorBoundary';
 
 const Dashboard = lazy(() => import('./dashboard/Dashboard'));
@@ -68,25 +67,23 @@ const RouteLoading = styled.div`
 // stale-while-revalidate config. Failures are non-fatal — the tabs refetch.
 const SessionPrefetcher = withClient(({ client }: any) => {
   const queryClient = useQueryClient();
-  const address = useSelector((state: any) => selectors.getWalletAddress(state));
-  const url = useSelector((state: any) =>
-    selectors.getLocalProxyRouterUrl(state),
+  const address = useSelector((state: any) =>
+    selectors.getWalletAddress(state),
   );
 
   useEffect(() => {
-    if (!address || !url) {
+    if (!address) {
       return;
     }
     queryClient
       .prefetchQuery({
         queryKey: queryKeys.sessions(address),
         queryFn: async () => {
-          const authHeaders = await client.getAuthHeaders();
-          return (await getSessionsByUser(url, address, authHeaders)) || [];
+          return (await client.getSessionsByUser({ user: address })) || [];
         },
       })
       .catch((e) => console.warn('Session prefetch failed', e));
-  }, [address, url, queryClient, client]);
+  }, [address, queryClient, client]);
 
   return null;
 });
