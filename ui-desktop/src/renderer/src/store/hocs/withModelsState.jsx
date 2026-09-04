@@ -47,7 +47,7 @@ const withModelsState = WrappedComponent => {
     }
 
     openSelectDownloadFolder = async () => {
-      const response = await this.props.client.openSelectFolderDialog();
+      const response = await this.props.client.selectIpfsDownloadFolder();
       return response;
     }
 

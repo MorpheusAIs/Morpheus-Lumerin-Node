@@ -1,13 +1,18 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import styled from 'styled-components';
 
 import Card from 'react-bootstrap/Card';
 import { abbreviateAddress } from '../../utils';
-import { IconDownload, IconCopy, IconCoin, IconTag, IconHash, IconX } from '@tabler/icons-react';
+import {
+  IconDownload,
+  IconCopy,
+  IconCoin,
+  IconTag,
+  IconHash,
+  IconX,
+} from '@tabler/icons-react';
 import ProgressBar from 'react-bootstrap/ProgressBar';
-import path from 'path';
-
 
 // Event payload for download progress events from the SSE stream
 interface DownloadProgressEvent {
@@ -22,7 +27,6 @@ interface DownloadProgressEvent {
 // Type for the progress callback function
 type DownloadProgressCallback = (event: DownloadProgressEvent) => void;
 
-
 const CustomCard = styled(Card)`
   background: linear-gradient(145deg, #244a47 0%, #1d3c39 100%) !important;
   color: #21dc8f !important;
@@ -32,7 +36,7 @@ const CustomCard = styled(Card)`
   border-radius: 12px !important;
   overflow: hidden;
   cursor: pointer !important;
-  
+
   &:hover {
     transform: translateY(-4px);
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.25);
@@ -99,7 +103,7 @@ const CustomCard = styled(Card)`
     transition: all 0.2s;
     background: rgba(255, 255, 255, 0.05);
     color: rgba(255, 255, 255, 0.8);
-    
+
     &:hover {
       background: rgba(33, 220, 143, 0.15);
       color: #21dc8f;
@@ -117,11 +121,11 @@ const CustomCard = styled(Card)`
     cursor: pointer;
     margin-left: 10px;
     transition: all 0.2s;
-    
+
     &:hover {
       background: rgba(33, 220, 143, 0.3);
     }
-    
+
     svg {
       margin-right: 4px;
     }
@@ -146,19 +150,19 @@ const CustomCard = styled(Card)`
     line-height: 1;
     transition: all 0.2s;
     border: 1px solid rgba(33, 220, 143, 0.1);
-    
+
     &:hover {
       background: rgba(33, 220, 143, 0.25);
       transform: translateY(-2px);
     }
   }
-  
+
   .monospace {
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.85rem;
     letter-spacing: -0.03em;
   }
-  
+
   .hash-container {
     background: rgba(0, 0, 0, 0.2);
     border-radius: 6px;
@@ -177,22 +181,22 @@ const Container = styled.div`
   max-height: 75vh;
   padding: 8px 4px;
   overflow-y: auto;
-  
+
   &::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
-  
+
   &::-webkit-scrollbar-track {
     background: rgba(0, 0, 0, 0.1);
     border-radius: 4px;
   }
-  
+
   &::-webkit-scrollbar-thumb {
     background: rgba(33, 220, 143, 0.3);
     border-radius: 4px;
   }
-  
+
   &::-webkit-scrollbar-thumb:hover {
     background: rgba(33, 220, 143, 0.5);
   }
@@ -211,17 +215,17 @@ const DownloadProgressContainer = styled.div`
   flex-direction: column;
   gap: 1rem;
   z-index: 10;
-  
+
   .progress-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    
+
     h4 {
       margin: 0;
       color: #21dc8f;
     }
-    
+
     .cancel-button {
       cursor: pointer;
       background: rgba(255, 0, 0, 0.2);
@@ -232,14 +236,14 @@ const DownloadProgressContainer = styled.div`
       align-items: center;
       justify-content: center;
       transition: all 0.2s;
-      
+
       &:hover {
         background: rgba(255, 0, 0, 0.3);
         transform: scale(1.05);
       }
     }
   }
-  
+
   .progress-info {
     display: flex;
     justify-content: space-between;
@@ -247,21 +251,35 @@ const DownloadProgressContainer = styled.div`
     color: rgba(255, 255, 255, 0.7);
     margin-top: 0.5rem;
   }
-  
+
   .progress-bar {
     height: 8px;
     border-radius: 4px;
-    background-color:rgb(137, 138, 137);
+    background-color: rgb(137, 138, 137);
   }
 `;
 
-function ModelCard({ onSelect, model, openSelectDownloadFolder, toasts, client, config }) {
+function ModelCard({
+  onSelect,
+  model,
+  openSelectDownloadFolder,
+  toasts,
+  client,
+}) {
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [downloadedSize, setDownloadedSize] = useState('0 KB');
   const [totalSize, setTotalSize] = useState('0 KB');
   const [latestUploadTime, setLatestUploadTime] = useState(0);
   const cancelDownloadRef = useRef<(() => void) | null>(null);
+
+  useEffect(
+    () => () => {
+      cancelDownloadRef.current?.();
+      cancelDownloadRef.current = null;
+    },
+    [],
+  );
 
   const formatBytes = (bytes, decimals = 2) => {
     if (bytes === 0) return '0 Bytes';
@@ -277,29 +295,27 @@ function ModelCard({ onSelect, model, openSelectDownloadFolder, toasts, client, 
 
   const handleDownloadError = (error) => {
     if (typeof error === 'string') {
-      if (error.includes("invalid CID")) {
-        toasts.toast("error", "Invalid CID specified in the model.");
-      } else if (error.includes("failed to find")) {
-        toasts.toast("error", "Model is not found in IPFS.");
+      if (error.includes('invalid CID')) {
+        toasts.toast('error', 'Invalid CID specified in the model.');
+      } else if (error.includes('failed to find')) {
+        toasts.toast('error', 'Model is not found in IPFS.');
       } else {
-        toasts.toast("error", "Failed to download model");
+        toasts.toast('error', 'Failed to download model');
       }
     } else {
-      toasts.toast("error", "Failed to download model");
+      toasts.toast('error', 'Failed to download model');
     }
     setIsDownloading(false);
-  }
+  };
 
   const handleFolderSelect = async (e) => {
     e.stopPropagation();
     try {
       const result = await openSelectDownloadFolder();
-      const { canceled, filePaths } = result;
-      if (canceled) {
+      const { canceled, folderToken } = result;
+      if (canceled || !folderToken) {
         return;
       }
-
-      const folderPath = filePaths[0];
 
       // Start download with progress tracking
       setIsDownloading(true);
@@ -308,11 +324,10 @@ function ModelCard({ onSelect, model, openSelectDownloadFolder, toasts, client, 
       setTotalSize('0 KB');
       setLatestUploadTime(Date.now());
 
-      const filePath = path.join(folderPath, model.IpfsCID || model.metadataCIDHash);
       // Use streaming download
       cancelDownloadRef.current = streamIpfsFileDownload({
         cid: model.IpfsCID || model.metadataCIDHash,
-        destinationPath: filePath,
+        folderToken,
         onProgress: (progressEvent) => {
           const { downloaded, total, percentage, timeUpdated } = progressEvent;
           setDownloadProgress(percentage);
@@ -322,14 +337,14 @@ function ModelCard({ onSelect, model, openSelectDownloadFolder, toasts, client, 
         },
         onComplete: () => {
           setIsDownloading(false);
-          toasts.toast("success", "Model downloaded successfully");
+          toasts.toast('success', 'Model downloaded successfully');
           cancelDownloadRef.current = null;
         },
         onError: (error) => {
           setIsDownloading(false);
-          toasts.toast("error", `Failed to download model: ${error}`);
+          toasts.toast('error', `Failed to download model: ${error}`);
           cancelDownloadRef.current = null;
-        }
+        },
       });
     } catch (error) {
       handleDownloadError(error);
@@ -338,112 +353,72 @@ function ModelCard({ onSelect, model, openSelectDownloadFolder, toasts, client, 
 
   const streamIpfsFileDownload = ({
     cid,
-    destinationPath,
+    folderToken,
     onProgress,
     onComplete,
-    onError
+    onError,
   }: {
-    cid: string,
-    destinationPath: string,
-    onProgress: DownloadProgressCallback,
-    onComplete: DownloadProgressCallback,
-    onError: (error: string) => void
-  }): () => void => {
-    // Create AbortController for cancellation
-    const controller = new AbortController();
-    const { signal } = controller;
+    cid: string;
+    folderToken: string;
+    onProgress: DownloadProgressCallback;
+    onComplete: DownloadProgressCallback;
+    onError: (error: string) => void;
+  }): (() => void) => {
+    let cancelled = false;
+    let settled = false;
+    const requestId = window.crypto.randomUUID();
+    const unsubscribe = client.onIpfsDownloadEvent({
+      requestId,
+      listener: (event) => {
+        if (cancelled || settled) return;
+        if (event.kind === 'error') {
+          settled = true;
+          unsubscribe();
+          onError(event.message);
+          return;
+        }
+        if (event.progress.status === 'completed') {
+          settled = true;
+          unsubscribe();
+          onComplete(event.progress);
+          return;
+        }
+        onProgress(event.progress);
+      },
+    });
 
-    // Start the download
     (async () => {
       try {
-        const authHeaders = await client.getAuthHeaders();
-        const destEncoded = encodeURIComponent(destinationPath);
-        const url = `${config.chain.localProxyRouterUrl}/ipfs/download/stream/${cid}?dest=${destEncoded}`;
-
-        // Use fetch API with streaming enabled
-        const response = await fetch(url, {
-          method: 'GET',
-          headers: authHeaders,
-          signal: signal,
+        onProgress({
+          status: 'downloading',
+          downloaded: 0,
+          total: 0,
+          percentage: 0,
+          timeUpdated: Date.now(),
         });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        // Set up a reader for the response body stream
-        const reader = response.body?.getReader();
-        if (!reader) {
-          throw new Error('Failed to get response reader');
-        }
-
-        // Initial progress state
-        let downloaded = 0;
-        let lastProgressUpdate = Date.now();
-        const progressUpdateInterval = 100; // Update progress at most every 100ms
-        const textDecoder = new TextDecoder();
-
-        // Process the stream
-        while (true) {
-          const { done, value } = await reader.read();
-
-          if (done) {
-            // Download completed successfully
-            onComplete({
-              status: 'completed',
-              downloaded,
-              total: downloaded,
-              percentage: 100,
-              timeUpdated: Date.now()
-            });
-            break;
-          }
-          const decodedString = textDecoder.decode(value, { stream: true });
-          const objects = decodedString.split('data: ').filter(Boolean).map(s => {
-            try {
-              return JSON.parse(s);
-            } catch (e) {
-              return null;
-            }
-          }).filter(Boolean);
-
-          if (objects.length === 0) {
-            continue;
-          }
-
-          const latestProgress = objects[objects.length - 1];
-
-          if (latestProgress.error) {
-            handleDownloadError(latestProgress.error);
-            break;
-          }
-
-          const now = Date.now();
-          if (now - lastProgressUpdate > progressUpdateInterval) {
-            lastProgressUpdate = now;
-
-            onProgress({
-              status: 'downloading',
-              downloaded: latestProgress.downloaded,
-              total: latestProgress.total,
-              percentage: latestProgress.percentage,
-              timeUpdated: lastProgressUpdate
-            });
-          }
-        }
+        await client.startIpfsDownload({
+          requestId,
+          folderToken,
+          cidHash: cid,
+        });
       } catch (error: unknown) {
-        if (error instanceof Error && error.name === 'AbortError') {
-          return;
-        } else {
-          const errorMessage = error instanceof Error ? error.message : String(error);
+        if (!cancelled && !settled) {
+          settled = true;
+          unsubscribe();
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
           onError(`Failed to download: ${errorMessage || 'Unknown error'}`);
         }
       }
     })();
 
-    // Return cancel function
-    return () => controller.abort();
-  }
+    return () => {
+      if (cancelled || settled) return;
+      cancelled = true;
+      unsubscribe();
+      client.cancelIpfsDownload({ requestId });
+    };
+  };
 
   const cancelDownload = (e) => {
     e.stopPropagation();
@@ -451,7 +426,7 @@ function ModelCard({ onSelect, model, openSelectDownloadFolder, toasts, client, 
       cancelDownloadRef.current();
       cancelDownloadRef.current = null;
       setIsDownloading(false);
-      toasts.toast("info", "Download canceled");
+      toasts.toast('info', 'Download canceled');
     }
   };
 
@@ -460,24 +435,24 @@ function ModelCard({ onSelect, model, openSelectDownloadFolder, toasts, client, 
       // Use the Electron clipboard bridge; navigator.clipboard silently
       // fails in the renderer (focus/permissions), see issue #793
       await window.copyToClipboard(text);
-      toasts.toast("success", `${label} copied to clipboard`, {
-        autoClose: 700
+      toasts.toast('success', `${label} copied to clipboard`, {
+        autoClose: 700,
       });
     } catch (e) {
-      toasts.toast("error", `Failed to copy ${label} to clipboard`);
+      toasts.toast('error', `Failed to copy ${label} to clipboard`);
     }
   };
 
-  const copyId = () => copyToClipboard(model.Id, "ID");
+  const copyId = () => copyToClipboard(model.Id, 'ID');
 
-  const copyCIDHash = () => copyToClipboard(model.IpfsCID, "CID Hash");
+  const copyCIDHash = () => copyToClipboard(model.IpfsCID, 'CID Hash');
 
   // Format MOR values to prevent scientific notation and limit decimals
   const formatMorValue = (value) => {
     if (!value) return '0 MOR';
 
     // Convert to MOR by dividing by 10^18
-    const morValue = value / (10 ** 18);
+    const morValue = value / 10 ** 18;
 
     // For very small values, use a different format to avoid scientific notation
     if (morValue < 0.000001) {
@@ -495,12 +470,15 @@ function ModelCard({ onSelect, model, openSelectDownloadFolder, toasts, client, 
     return date.toLocaleString(undefined, {
       hour: '2-digit',
       minute: '2-digit',
-      second: '2-digit'
+      second: '2-digit',
     });
   };
 
   return (
-    <CustomCard style={{ width: '36rem', position: 'relative' }} onClick={() => onSelect(model.Id)}>
+    <CustomCard
+      style={{ width: '36rem', position: 'relative' }}
+      onClick={() => onSelect(model.Id)}
+    >
       {isDownloading && (
         <DownloadProgressContainer>
           <div className="progress-header">
@@ -517,11 +495,15 @@ function ModelCard({ onSelect, model, openSelectDownloadFolder, toasts, client, 
           />
 
           <div className="progress-info">
-            <span>{downloadedSize} / {totalSize}</span>
+            <span>
+              {downloadedSize} / {totalSize}
+            </span>
             <span>{downloadProgress.toFixed(1)}%</span>
           </div>
           <div className="progress-info">
-            <span>Last updated at: {formatDate(new Date(latestUploadTime))}</span>  
+            <span>
+              Last updated at: {formatDate(new Date(latestUploadTime))}
+            </span>
           </div>
         </DownloadProgressContainer>
       )}
@@ -529,10 +511,20 @@ function ModelCard({ onSelect, model, openSelectDownloadFolder, toasts, client, 
       <Card.Body>
         <Card.Title
           as={'div'}
-          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
         >
-          <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: '90%' }}>
-            {model.Name || "Unnamed Model"}
+          <span
+            style={{
+              textOverflow: 'ellipsis',
+              overflow: 'hidden',
+              maxWidth: '90%',
+            }}
+          >
+            {model.Name || 'Unnamed Model'}
           </span>
           <IconDownload
             className="icon-button"
@@ -551,7 +543,13 @@ function ModelCard({ onSelect, model, openSelectDownloadFolder, toasts, client, 
               <span className="hash-container monospace">
                 {abbreviateAddress(model?.Id || '', 6)}
                 <IconCopy
-                  style={{ width: '1rem', height: '1rem', marginLeft: '8px', cursor: 'pointer', opacity: 0.8 }}
+                  style={{
+                    width: '1rem',
+                    height: '1rem',
+                    marginLeft: '8px',
+                    cursor: 'pointer',
+                    opacity: 0.8,
+                  }}
                   onClick={(e) => {
                     e.stopPropagation();
                     copyId();
@@ -570,7 +568,13 @@ function ModelCard({ onSelect, model, openSelectDownloadFolder, toasts, client, 
               <span className="hash-container monospace">
                 {abbreviateAddress(model?.IpfsCID, 6)}
                 <IconCopy
-                  style={{ width: '1rem', height: '1rem', marginLeft: '8px', cursor: 'pointer', opacity: 0.8 }}
+                  style={{
+                    width: '1rem',
+                    height: '1rem',
+                    marginLeft: '8px',
+                    cursor: 'pointer',
+                    opacity: 0.8,
+                  }}
                   onClick={(e) => {
                     e.stopPropagation();
                     copyCIDHash();
@@ -623,13 +627,11 @@ function ModelCard({ onSelect, model, openSelectDownloadFolder, toasts, client, 
   );
 }
 
-
 function ModelsTable({
   setSelectedModel,
   models,
   client,
   openSelectDownloadFolder,
-  config,
   toasts,
 }: any) {
   const onSelect = (id) => {
@@ -638,8 +640,8 @@ function ModelsTable({
 
   return (
     <Container>
-      {models.length ?
-        models.map(x => (
+      {models.length ? (
+        models.map((x) => (
           <div key={x.Id}>
             <ModelCard
               onSelect={onSelect}
@@ -647,23 +649,25 @@ function ModelsTable({
               openSelectDownloadFolder={openSelectDownloadFolder}
               toasts={toasts}
               client={client}
-              config={config}
             />
           </div>
-        )) :
-        <div style={{
-          width: '100%',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: '40px 0',
-          color: 'rgba(255, 255, 255, 0.6)',
-          fontSize: '1.1rem',
-          fontStyle: 'italic'
-        }}>
+        ))
+      ) : (
+        <div
+          style={{
+            width: '100%',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: '40px 0',
+            color: 'rgba(255, 255, 255, 0.6)',
+            fontSize: '1.1rem',
+            fontStyle: 'italic',
+          }}
+        >
           No models found
         </div>
-      }
+      )}
     </Container>
   );
 }

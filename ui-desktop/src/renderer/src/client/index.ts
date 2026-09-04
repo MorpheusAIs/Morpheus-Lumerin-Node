@@ -64,6 +64,51 @@ const createClient = function (createStore) {
   const copyToClipboard = (text) =>
     Promise.resolve(window.copyToClipboard(text));
 
+  const chatCompletion = async (payload) => {
+    const requestId = window.crypto.randomUUID();
+    let streamController;
+    let settled = false;
+    let unsubscribe = () => {};
+    const body = new ReadableStream({
+      start(controller) {
+        streamController = controller;
+        unsubscribe = window.chatStream.onEvent(requestId, (event) => {
+          if (settled) return;
+          if (event.kind === 'chunk') {
+            const binary = window.atob(event.dataBase64);
+            const chunk = new Uint8Array(binary.length);
+            for (let index = 0; index < binary.length; index += 1) {
+              chunk[index] = binary.charCodeAt(index);
+            }
+            controller.enqueue(chunk);
+            return;
+          }
+          settled = true;
+          unsubscribe();
+          if (event.kind === 'error')
+            controller.error(new Error(event.message));
+          else controller.close();
+        });
+      },
+      cancel() {
+        if (settled) return;
+        settled = true;
+        unsubscribe();
+        window.chatStream.cancel(requestId);
+      },
+    });
+
+    try {
+      const metadata = await window.chatStream.start(requestId, payload);
+      return { ...metadata, body };
+    } catch (error) {
+      settled = true;
+      unsubscribe();
+      streamController?.error(error);
+      throw error;
+    }
+  };
+
   const lockSendTransaction = () => {
     store.dispatch({
       type: 'allow-send-transaction',
@@ -164,6 +209,16 @@ const createClient = function (createStore) {
     // API Gateway
     getAuthHeaders: utils.forwardToMainProcess('get-auth-headers'),
     getAllModels: utils.forwardToMainProcess('get-all-models'),
+    chatCompletion,
+    selectIpfsDownloadFolder: () => window.ipfsDownload.selectFolder(),
+    startIpfsDownload: ({ requestId, folderToken, cidHash }) =>
+      window.ipfsDownload.start(requestId, folderToken, cidHash),
+    cancelIpfsDownload: ({ requestId }) =>
+      window.ipfsDownload.cancel(requestId),
+    onIpfsDownloadEvent: ({ requestId, listener }) =>
+      window.ipfsDownload.onEvent(requestId, listener),
+    synthesizeSpeech: utils.forwardToMainProcess('synthesize-speech', 330000),
+    transcribeAudio: utils.forwardToMainProcess('transcribe-audio', 330000),
 
     getTransactions: utils.forwardToMainProcess('get-transactions'),
     getBalances: utils.forwardToMainProcess('get-balances'),
@@ -197,17 +252,11 @@ const createClient = function (createStore) {
 
     // IPFS
     getIpfsVersion: utils.forwardToMainProcess('get-ipfs-version', 750000),
-    getIpfsFile: utils.forwardToMainProcess('get-ipfs-file', null),
     pinIpfsFile: utils.forwardToMainProcess('pin-ipfs-file', 750000),
     unpinIpfsFile: utils.forwardToMainProcess('unpin-ipfs-file', 750000),
     addFileToIpfs: utils.forwardToMainProcess('add-file-to-ipfs', 750000),
     getIpfsPinnedFiles: utils.forwardToMainProcess(
       'get-ipfs-pinned-files',
-      750000,
-    ),
-
-    openSelectFolderDialog: utils.forwardToMainProcess(
-      'open-select-folder-dialog',
       750000,
     ),
 

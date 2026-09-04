@@ -1,13 +1,15 @@
-import styled from 'styled-components'
+import styled from 'styled-components';
 
-import withLoadingState from '../store/hocs/withLoadingState'
+import withLoadingState from '../store/hocs/withLoadingState';
 
-import { LoadingBar, AltLayout, Flex } from './common'
-import ChecklistItem from './common/ChecklistItem'
+import AltLayout from './common/AltLayout';
+import ChecklistItem from './common/ChecklistItem';
+import Flex from './common/Flex';
+import LoadingBar from './common/LoadingBar';
 
 const ChecklistContainer = styled(Flex.Row)`
   margin: 4rem -20rem;
-`
+`;
 
 const Title = styled.div`
   display: none;
@@ -18,13 +20,13 @@ const Title = styled.div`
   opacity: 0.5;
   margin-bottom: 0.8rem;
   padding-left: 8rem;
-`
+`;
 
 const Checklist = styled.div`
   opacity: 0.5;
   color: ${(p) => p.theme.colors.dark}
   padding-left: 0;
-`
+`;
 
 function Loading({ chainStatus }) {
   return (
@@ -34,21 +36,24 @@ function Loading({ chainStatus }) {
         <div key={chainStatus.displayName}>
           <Title>{chainStatus.displayName}</Title>
           <Checklist>
-            <ChecklistItem isActive={chainStatus.hasBlockHeight} text="Blockchain status" />
+            <ChecklistItem
+              isActive={chainStatus.hasBlockHeight}
+              text="Blockchain status"
+            />
             <ChecklistItem
               isActive={chainStatus.hasCoinRate}
-              text={`${chainStatus.symbol || "MOR"} exchange data`}
+              text={`${chainStatus.symbol || 'MOR'} exchange data`}
             />
             <ChecklistItem
               isActive={chainStatus.hasCoinBalance}
-              text={`${chainStatus.symbol || "MOR"} balance`}
+              text={`${chainStatus.symbol || 'MOR'} balance`}
             />
             {/* <ChecklistItem isActive={chainStatus.hasLmrBalance} text={`${chainStatus.symbol || "MOR"} balance`} /> */}
           </Checklist>
         </div>
       </ChecklistContainer>
     </AltLayout>
-  )
+  );
 }
 
-export default withLoadingState(Loading)
+export default withLoadingState(Loading);

@@ -3,7 +3,6 @@ import { Label } from './TextInput.styles';
 import TextInput from './TextInput';
 import DisplayValue from './DisplayValue';
 import AmountFields from './AmountFields';
-import PasswordStrengthMeter from './PasswordStrengthMeter';
 import LastUpdated from './LastUpdated';
 import { ItemFilter } from './ItemFilter';
 import LightLayout from './LightLayout';
@@ -22,7 +21,6 @@ import Sp from './Spacing';
 export {
   DisplayValue,
   AmountFields,
-  PasswordStrengthMeter,
   LastUpdated,
   ItemFilter,
   LightLayout,
