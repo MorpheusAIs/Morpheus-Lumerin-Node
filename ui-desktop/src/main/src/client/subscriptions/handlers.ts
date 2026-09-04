@@ -133,7 +133,7 @@ export function configuredLoopbackProxyUrl(): string {
  * Failing loudly here lets react-query put the affected view into an error
  * state that says what is actually wrong.
  */
-async function proxyFetch<T>(
+export async function proxyFetch<T>(
   pathname: string,
   init: RequestInit = {},
   label = pathname
@@ -296,12 +296,15 @@ export const resetAuthHeaders = () => {
 }
 
 /**
- * Extracts text from a chat attachment (PDF, DOCX, SVG, plain text, code).
+ * Extracts text from a chat attachment (PDF, OOXML, SVG, plain text, code).
  *
- * Lives in main so pdfjs and mammoth stay out of the renderer bundle.
+ * Lives in main so the bounded document parsers stay out of the renderer bundle.
  */
-export const parseAttachment = (params: { name: string; mime: string; data: string }) =>
-  attachments.parseAttachment(params)
+export const parseAttachment = (params: {
+  name: string
+  mime: string
+  data: ArrayBuffer | ArrayBufferView
+}) => attachments.parseAttachment(params)
 
 // ---------------------------------------------------------------------------
 // Multi-wallet

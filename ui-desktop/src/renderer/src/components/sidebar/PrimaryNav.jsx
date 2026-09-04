@@ -1,15 +1,9 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import styled from 'styled-components';
-import { IconFileReport, IconMessage } from '@tabler/icons-react';
-import { IconBuildingStore } from '@tabler/icons-react';
+import { IconMessage, IconSparkles } from '@tabler/icons-react';
 import { IconBrandStackshare } from '@tabler/icons-react';
-import {
-  IconWallet,
-  IconPhoto,
-  IconPackages,
-  IconUsers,
-} from '@tabler/icons-react';
+import { IconWallet, IconPackages, IconUsers } from '@tabler/icons-react';
 
 const Container = styled.div`
   display: flex;
@@ -106,29 +100,38 @@ export default function PrimaryNav({ parent, activeIndex, setActiveIndex }) {
         </Label>
       </Button>
 
-      <Button onClick={() => setActiveIndex(2)} to="/models">
+      <Button onClick={() => setActiveIndex(2)} to="/cowork">
+        <IconWrapper>
+          <IconSparkles width={iconSize} />
+        </IconWrapper>
+        <Label active={activeIndex === 2} parent={parent}>
+          Cowork
+        </Label>
+      </Button>
+
+      <Button onClick={() => setActiveIndex(3)} to="/models">
         <IconWrapper>
           <IconPackages width={iconSize} />
         </IconWrapper>
-        <Label active={activeIndex === 2} parent={parent}>
+        <Label active={activeIndex === 3} parent={parent}>
           Models
         </Label>
       </Button>
 
-      <Button onClick={() => setActiveIndex(3)} to="/agents">
+      <Button onClick={() => setActiveIndex(4)} to="/agents">
         <IconWrapper>
           <IconUsers width={iconSize} />
         </IconWrapper>
-        <Label active={activeIndex === 3} parent={parent}>
+        <Label active={activeIndex === 4} parent={parent}>
           Agents
         </Label>
       </Button>
 
-      <Button onClick={() => setActiveIndex(4)} to="/providers">
+      <Button onClick={() => setActiveIndex(5)} to="/providers">
         <IconWrapper>
           <IconBrandStackshare width={iconSize} />
         </IconWrapper>
-        <Label active={activeIndex === 4} parent={parent}>
+        <Label active={activeIndex === 5} parent={parent}>
           Provider Hub
         </Label>
       </Button>

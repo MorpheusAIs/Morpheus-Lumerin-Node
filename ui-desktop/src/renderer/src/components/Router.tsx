@@ -14,6 +14,7 @@ import ErrorBoundary from './common/ErrorBoundary';
 
 const Dashboard = lazy(() => import('./dashboard/Dashboard'));
 const Chat = lazy(() => import('./chat/Chat'));
+const Cowork = lazy(() => import('./cowork/Cowork'));
 const Agents = lazy(() => import('./agents/Agents'));
 const Models = lazy(() => import('./models/Models'));
 const Providers = lazy(() => import('./providers/Providers'));
@@ -70,7 +71,6 @@ const SessionPrefetcher = withClient(({ client }: any) => {
   const address = useSelector((state: any) =>
     selectors.getWalletAddress(state),
   );
-
   useEffect(() => {
     if (!address) {
       return;
@@ -112,6 +112,7 @@ export const Layout = () => {
             <Routes>
               <Route path="/wallet" element={<Dashboard />} />
               <Route path="/chat" element={<Chat />} />
+              <Route path="/cowork" element={<Cowork />} />
               <Route path="/agents" element={<Agents />} />
               <Route path="/models" element={<Models />} />
               <Route path="/providers" element={<Providers />} />

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { isClosed, scheduleSessionExpiry } from './utils';
+import { isClosed, isCoworkCandidate, scheduleSessionExpiry } from './utils';
 
 const nowSeconds = () => Math.floor(Date.now() / 1000);
 
@@ -70,5 +70,43 @@ describe('scheduleSessionExpiry', () => {
 
     expect(onExpiry).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe('isCoworkCandidate', () => {
+  it('accepts LLM and chat-tagged legacy marketplace models', () => {
+    expect(isCoworkCandidate({ ModelType: 'llm' })).toBe(true);
+    expect(isCoworkCandidate({ ModelType: ' LLM ' })).toBe(true);
+    expect(isCoworkCandidate({ ModelType: 'UNKNOWN', Tags: ['chat'] })).toBe(
+      true,
+    );
+    expect(isCoworkCandidate({ ModelType: ' UNKNOWN ', Tags: ['chat'] })).toBe(
+      true,
+    );
+    expect(isCoworkCandidate({ Tags: ['chat'] })).toBe(true);
+    expect(isCoworkCandidate({ ModelType: 'UNKNOWN' })).toBe(true);
+  });
+
+  it('rejects audio and embedding-only models', () => {
+    expect(isCoworkCandidate(undefined)).toBe(false);
+    expect(isCoworkCandidate({ ModelType: 'llm', isLocal: true })).toBe(false);
+    expect(isCoworkCandidate({ ModelType: 'llm', IsDeleted: true })).toBe(
+      false,
+    );
+    expect(isCoworkCandidate({ ModelType: 'tts', Tags: ['tts'] })).toBe(false);
+    expect(isCoworkCandidate({ Tags: ['tts'] })).toBe(false);
+    expect(
+      isCoworkCandidate({ ModelType: 'embedding', Tags: ['embedding'] }),
+    ).toBe(false);
+  });
+
+  it('lets an explicit non-LLM type override contradictory tags', () => {
+    expect(isCoworkCandidate({ ModelType: 'tts', Tags: ['llm'] })).toBe(false);
+    expect(isCoworkCandidate({ ModelType: 'embedding', Tags: ['chat'] })).toBe(
+      false,
+    );
+    expect(isCoworkCandidate({ ModelType: 'agent', Tags: ['chat'] })).toBe(
+      false,
+    );
   });
 });

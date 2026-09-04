@@ -1,5 +1,34 @@
 import { clipboard, contextBridge, ipcRenderer } from 'electron'
 
+const coworkChannels = {
+  listProjects: 'cowork:list-projects',
+  createProject: 'cowork:create-project',
+  updateProject: 'cowork:update-project',
+  deleteProject: 'cowork:delete-project',
+  listTasks: 'cowork:list-tasks',
+  getTask: 'cowork:get-task',
+  createTask: 'cowork:create-task',
+  startTask: 'cowork:start-task',
+  steerTask: 'cowork:steer-task',
+  cancelTask: 'cowork:cancel-task',
+  pauseTask: 'cowork:pause-task',
+  resolveApproval: 'cowork:resolve-approval',
+  deleteTask: 'cowork:delete-task',
+  listModelOptions: 'cowork:list-model-options',
+  previewArtifact: 'cowork:preview-artifact',
+  revealArtifact: 'cowork:reveal-artifact',
+  listSchedules: 'cowork:list-schedules',
+  createSchedule: 'cowork:create-schedule',
+  updateSchedule: 'cowork:update-schedule',
+  pauseSchedule: 'cowork:pause-schedule',
+  resumeSchedule: 'cowork:resume-schedule',
+  deleteSchedule: 'cowork:delete-schedule',
+  runScheduleNow: 'cowork:run-schedule-now',
+  listExtensions: 'cowork:list-extensions',
+  configureExtensions: 'cowork:configure-extensions',
+  event: 'cowork:event'
+} as const
+
 // Temporary compatibility boundary for the legacy renderer client. Keeping a
 // fixed list prevents injected renderer code from selecting arbitrary main
 // process channels while the older screens are migrated to narrow APIs.
@@ -112,6 +141,99 @@ const legacyIpcChannels = new Set([
   'services-state',
   'wallet-error'
 ])
+
+const coworkTaskStatuses = new Set([
+  'draft',
+  'queued',
+  'running',
+  'waiting_approval',
+  'paused',
+  'completed',
+  'failed',
+  'cancelled'
+])
+
+const boundedCoworkEventId = (value) =>
+  typeof value === 'string' &&
+  value.length >= 1 &&
+  value.length <= 128 &&
+  /^[A-Za-z0-9_-]+$/u.test(value)
+
+const validCoworkTimestamp = (value) => Number.isSafeInteger(value) && value >= 0
+
+const sanitizedCoworkTaskEvent = (payload) => {
+  if (
+    !payload ||
+    typeof payload !== 'object' ||
+    Array.isArray(payload) ||
+    !boundedCoworkEventId(payload.taskId) ||
+    !boundedCoworkEventId(payload.projectId) ||
+    typeof payload.title !== 'string' ||
+    payload.title.length < 1 ||
+    payload.title.length > 240 ||
+    /[\u0000-\u001f\u007f]/u.test(payload.title) ||
+    !coworkTaskStatuses.has(payload.status) ||
+    !validCoworkTimestamp(payload.createdAt) ||
+    !validCoworkTimestamp(payload.updatedAt) ||
+    (payload.startedAt !== undefined && !validCoworkTimestamp(payload.startedAt)) ||
+    (payload.completedAt !== undefined && !validCoworkTimestamp(payload.completedAt))
+  ) {
+    return null
+  }
+  return {
+    taskId: payload.taskId,
+    projectId: payload.projectId,
+    title: payload.title,
+    status: payload.status,
+    createdAt: payload.createdAt,
+    updatedAt: payload.updatedAt,
+    ...(payload.startedAt !== undefined ? { startedAt: payload.startedAt } : {}),
+    ...(payload.completedAt !== undefined ? { completedAt: payload.completedAt } : {})
+  }
+}
+
+// Cowork exposes only fixed operations. The renderer cannot choose a
+// main-process channel or supply an unrestricted filesystem root.
+const cowork = {
+  listProjects: () => ipcRenderer.invoke(coworkChannels.listProjects),
+  createProject: (input) => ipcRenderer.invoke(coworkChannels.createProject, input),
+  updateProject: (input) => ipcRenderer.invoke(coworkChannels.updateProject, input),
+  deleteProject: (id) => ipcRenderer.invoke(coworkChannels.deleteProject, { id }),
+  listTasks: (projectId) => ipcRenderer.invoke(coworkChannels.listTasks, { projectId }),
+  getTask: (id) => ipcRenderer.invoke(coworkChannels.getTask, { id }),
+  createTask: (input) => ipcRenderer.invoke(coworkChannels.createTask, input),
+  startTask: (id) => ipcRenderer.invoke(coworkChannels.startTask, { id }),
+  steerTask: (id, content) => ipcRenderer.invoke(coworkChannels.steerTask, { id, content }),
+  cancelTask: (id) => ipcRenderer.invoke(coworkChannels.cancelTask, { id }),
+  pauseTask: (id) => ipcRenderer.invoke(coworkChannels.pauseTask, { id }),
+  resolveApproval: (taskId, approvalId, approved) =>
+    ipcRenderer.invoke(coworkChannels.resolveApproval, { taskId, approvalId, approved }),
+  deleteTask: (id) => ipcRenderer.invoke(coworkChannels.deleteTask, { id }),
+  listModelOptions: (force = false) =>
+    ipcRenderer.invoke(coworkChannels.listModelOptions, { force }),
+  previewArtifact: (taskId, path) =>
+    ipcRenderer.invoke(coworkChannels.previewArtifact, { taskId, path }),
+  revealArtifact: (taskId, path) =>
+    ipcRenderer.invoke(coworkChannels.revealArtifact, { taskId, path }),
+  listSchedules: (projectId) => ipcRenderer.invoke(coworkChannels.listSchedules, { projectId }),
+  createSchedule: (input) => ipcRenderer.invoke(coworkChannels.createSchedule, input),
+  updateSchedule: (input) => ipcRenderer.invoke(coworkChannels.updateSchedule, input),
+  pauseSchedule: (id) => ipcRenderer.invoke(coworkChannels.pauseSchedule, { id }),
+  resumeSchedule: (id) => ipcRenderer.invoke(coworkChannels.resumeSchedule, { id }),
+  deleteSchedule: (id) => ipcRenderer.invoke(coworkChannels.deleteSchedule, { id }),
+  runScheduleNow: (id) => ipcRenderer.invoke(coworkChannels.runScheduleNow, { id }),
+  listExtensions: (projectId) => ipcRenderer.invoke(coworkChannels.listExtensions, { projectId }),
+  configureExtensions: (projectId, settings) =>
+    ipcRenderer.invoke(coworkChannels.configureExtensions, { projectId, ...settings }),
+  onTaskEvent: (listener) => {
+    const subscription = (_event, payload) => {
+      const safeEvent = sanitizedCoworkTaskEvent(payload)
+      if (safeEvent) listener(safeEvent)
+    }
+    ipcRenderer.on(coworkChannels.event, subscription)
+    return () => ipcRenderer.removeListener(coworkChannels.event, subscription)
+  }
+}
 
 const chatStreamChannels = {
   start: 'chat-stream:start',
@@ -267,6 +389,7 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('openLink', openLink)
     contextBridge.exposeInMainWorld('getAppVersion', getAppVersion)
     contextBridge.exposeInMainWorld('copyToClipboard', copyToClipboard)
+    contextBridge.exposeInMainWorld('cowork', cowork)
     contextBridge.exposeInMainWorld('chatStream', chatStream)
     contextBridge.exposeInMainWorld('ipfsDownload', ipfsDownload)
   } catch (error) {

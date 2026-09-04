@@ -19,7 +19,9 @@ import {
   IconMicrophone,
   IconPlayerStopFilled,
   IconPaperclip,
+  IconSparkles,
 } from '@tabler/icons-react';
+import { useLocation, useNavigate } from 'react-router';
 import {
   View,
   ContainerTitle,
@@ -71,6 +73,7 @@ import {
   isSecureModel,
   SECURE_BADGE_TOOLTIP,
   getModelModality,
+  isCoworkCandidate,
   scheduleSessionExpiry,
 } from './utils';
 import { Cooldown } from './Cooldown';
@@ -257,6 +260,8 @@ type ChatProps = {
 };
 
 const Chat = (props: ChatProps) => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const chatBlockRef = useRef<null | HTMLDivElement>(null);
   const autoScrollRef = useRef(true);
   const scrollFrameRef = useRef<number | undefined>(undefined);
@@ -290,6 +295,7 @@ const Chat = (props: ChatProps) => {
   const [chatData, setChatsData] = useState<ChatData[]>([]);
 
   const [openChangeModal, setOpenChangeModal] = useState(false);
+  const [coworkModelSelection, setCoworkModelSelection] = useState(false);
   const [isReadonly, setIsReadonly] = useState(false);
 
   const [selectedBid, setSelectedBid] = useState<any>(null);
@@ -490,7 +496,7 @@ const Chat = (props: ChatProps) => {
     if (isLocal || !activeSession) return;
     return scheduleSessionExpiry(activeSession, () => {
       // Cooldown owns its own countdown state. Bump the Chat parent as well so
-      // submit, attachments, and recording all close together.
+      // submit, attachments, recording, and Cowork handoff all close together.
       setSessionValidityVersion((current) => current + 1);
       setIsReadonly(true);
     });
@@ -518,6 +524,7 @@ const Chat = (props: ChatProps) => {
       setSelectedBid(undefined);
       setActiveSession(undefined);
       setChat(undefined);
+      setCoworkModelSelection(false);
       setOpenChangeModal(true);
     };
 
@@ -567,6 +574,18 @@ const Chat = (props: ChatProps) => {
       })
       .catch((e) => console.error('Failed to load open bid', e));
   }, [modelsDataQuery.data, sessionsQuery.data]);
+
+  // Cowork routes users here when they do not yet have an active marketplace
+  // session. Open the normal model picker in marketplace-only mode; after the
+  // session opens, the header offers an explicit choice between Chat and
+  // Cowork. The query flag is consumed so revisiting Chat does not reopen it.
+  useEffect(() => {
+    const setup = new URLSearchParams(location.search).get('setup');
+    if (setup !== 'cowork' || !initialized || !chainData) return;
+    setCoworkModelSelection(true);
+    setOpenChangeModal(true);
+    navigate('/chat', { replace: true });
+  }, [chainData, initialized, location.search, navigate]);
 
   // Keep the chat-history drawer list in sync with the cached titles + models.
   useEffect(() => {
@@ -898,6 +917,7 @@ const Chat = (props: ChatProps) => {
       setSelectedModel(undefined);
       setChat(undefined);
       setMessages([]);
+      setCoworkModelSelection(false);
       setOpenChangeModal(true);
     }
   };
@@ -1895,11 +1915,26 @@ const Chat = (props: ChatProps) => {
               <BtnAccent
                 className="change-modal"
                 onClick={() => {
+                  setCoworkModelSelection(false);
                   setOpenChangeModal(true);
                 }}
               >
                 <IconMessagePlus></IconMessagePlus> New chat
               </BtnAccent>
+              {activeSession?.Id &&
+                !marketplaceSessionUnavailable &&
+                isCoworkCandidate(selectedModel) && (
+                  <BtnAccent
+                    className="change-modal"
+                    onClick={() =>
+                      navigate(
+                        `/cowork?sessionId=${encodeURIComponent(activeSession.Id)}`,
+                      )
+                    }
+                  >
+                    <IconSparkles size={18} /> Use this session in Cowork
+                  </BtnAccent>
+                )}
             </div>
           </TitleRow>
         </ContainerTitle>
@@ -2137,6 +2172,7 @@ const Chat = (props: ChatProps) => {
         models={(chainData as any)?.models}
         isActive={openChangeModal}
         marketplaceOnly
+        coworkSetup={coworkModelSelection}
         symbol={props.symbol}
         bidsLoading={bidsLoading}
         providersAvailability={providersAvailability}
@@ -2145,6 +2181,7 @@ const Chat = (props: ChatProps) => {
         }}
         handleClose={() => {
           setOpenChangeModal(false);
+          setCoworkModelSelection(false);
         }}
       />
     </>
