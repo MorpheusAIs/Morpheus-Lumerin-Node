@@ -189,6 +189,14 @@ func shouldRetryRPCError(err error) bool {
 		if httpErr.StatusCode == 408 || httpErr.StatusCode == 425 {
 			return true
 		}
+		// A public JSON-RPC URL can disappear or stop serving JSON-RPC while
+		// the remaining configured endpoints are still healthy. In particular,
+		// base.lava.build began returning 410 Gone in September 2026. Treat
+		// endpoint-not-found/gone and HTTP method rejection as endpoint failures
+		// so one retired free service cannot shut down the whole router.
+		if httpErr.StatusCode == 404 || httpErr.StatusCode == 405 || httpErr.StatusCode == 410 {
+			return true
+		}
 		// 401/403: Cloudflare / WAF / “open in browser” pages — useless for JSON-RPC; try next endpoint
 		if httpErr.StatusCode == 403 || httpErr.StatusCode == 401 {
 			return true
