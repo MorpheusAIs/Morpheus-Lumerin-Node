@@ -89,6 +89,7 @@ import { ChatData, HistoryMessage } from './interfaces';
 import { formatValue } from '../../utils/coinValue';
 import { ApiGateway } from 'src/main/src/client/apiGateway';
 import { queryKeys } from '../../store/queries';
+import { normalizeModelList } from '../../store/utils/modelMetadata';
 import QueryError from '../common/QueryError';
 import AttachmentBar from './AttachmentBar';
 import {
@@ -114,6 +115,8 @@ import {
 
 const CHAT_BOTTOM_THRESHOLD_PX = 96;
 const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
+const selectAvailableMarketplaceModels = (models: unknown) =>
+  normalizeModelList(models).filter((model) => !model.IsDeleted);
 
 let abort = false;
 const userMessage = { user: 'Me', role: 'user', icon: 'M', color: '#20dc8e' };
@@ -365,7 +368,7 @@ const Chat = (props: ChatProps) => {
   const marketplaceModelsQuery = useQuery({
     queryKey: queryKeys.allModels,
     queryFn: () => props.getAllModels(),
-    select: (models) => (models ?? []).filter((model: any) => !model.IsDeleted),
+    select: selectAvailableMarketplaceModels,
   });
 
   // Local models and session-funding data are useful, but neither should hold
@@ -416,7 +419,7 @@ const Chat = (props: ChatProps) => {
   // Used for mapping sessions/chats by id, matching the original mount logic.
   const localModels = useMemo(
     () =>
-      (localModelsQuery.data ?? []).map((model: any) => ({
+      normalizeModelList(localModelsQuery.data).map((model: any) => ({
         ...model,
         isLocal: true,
       })),

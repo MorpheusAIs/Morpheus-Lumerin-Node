@@ -22,4 +22,13 @@ describe('model page query', () => {
       options.getNextPageParam([{ Id: 1 }], [[{ Id: 1 }]]),
     ).toBeUndefined();
   });
+
+  it('uses the raw page size for pagination even when a row is malformed', () => {
+    const options = modelPagesQueryOptions(vi.fn());
+    const rawPage = Array.from({ length: MODEL_PAGE_SIZE }, (_, Id) =>
+      Id === 50 ? null : { Id },
+    );
+
+    expect(options.getNextPageParam(rawPage, [rawPage])).toBe(MODEL_PAGE_SIZE);
+  });
 });

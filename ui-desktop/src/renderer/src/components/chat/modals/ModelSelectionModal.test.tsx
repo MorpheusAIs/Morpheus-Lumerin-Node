@@ -214,4 +214,63 @@ describe('ModelSelectionModal Workspace filter', () => {
     expect(screen.queryByText('Local Chat Model')).toBeNull();
     expect(screen.queryByText('Deleted Chat Model')).toBeNull();
   });
+
+  it('keeps the catalog usable when model tags have inconsistent shapes', () => {
+    render(
+      <ThemeProvider theme={theme}>
+        <ModelSelectionModal
+          isActive
+          handleClose={vi.fn()}
+          onChangeModel={vi.fn()}
+          symbol="MOR"
+          models={[
+            marketplaceModel({
+              Id: 'null-tags',
+              Name: 'Null tags model',
+              Tags: null,
+            }),
+            marketplaceModel({
+              Id: 'string-tags',
+              Name: 'String tags model',
+              Tags: 'llm, tee',
+            }),
+            marketplaceModel({
+              Id: 'object-tags',
+              Name: 'Object tags model',
+              Tags: { unexpected: 'shape' },
+            }),
+            marketplaceModel({
+              Id: 'mixed-tags',
+              Name: 'Mixed tags model',
+              Tags: ['llm', null, { nested: true }, 'vision'],
+            }),
+            null,
+            'not-a-model',
+          ]}
+        />
+      </ThemeProvider>,
+    );
+
+    expect(screen.getByText('Null tags model')).toBeTruthy();
+    expect(screen.getByText('Object tags model')).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Show All models (4)' }),
+    ).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Show Secure models (1)' }),
+    );
+    expect(screen.getByText('String tags model')).toBeTruthy();
+    expect(screen.queryByText('Null tags model')).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Show All models (4)' }),
+    );
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search models' }), {
+      target: { value: 'vision' },
+    });
+
+    expect(screen.getByText('Mixed tags model')).toBeTruthy();
+    expect(screen.queryByText('Object tags model')).toBeNull();
+  });
 });

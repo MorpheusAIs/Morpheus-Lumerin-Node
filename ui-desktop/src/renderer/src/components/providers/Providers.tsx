@@ -10,6 +10,7 @@ import withProvidersState from '../../store/hocs/withProvidersState';
 import { queryKeys } from '../../store/queries';
 import QueryError from '../common/QueryError';
 import { pooledMapSettled, withTimeout } from '../../store/utils/concurrency';
+import { normalizeModelList } from '../../store/utils/modelMetadata';
 
 const BALANCE_CONCURRENCY = 6;
 const BALANCE_TIMEOUT_MS = 8_000;
@@ -50,6 +51,7 @@ export const Providers = ({
   const modelsQuery = useQuery({
     queryKey: queryKeys.allModels,
     queryFn: getAllModels,
+    select: normalizeModelList,
     // Model names are only decoration for the session groups. Let the
     // session request own the cold path; cached names remain available
     // immediately, and an uncached registry scan starts after rows arrive.

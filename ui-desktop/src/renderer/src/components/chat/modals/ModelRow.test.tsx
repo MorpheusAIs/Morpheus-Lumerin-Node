@@ -45,4 +45,49 @@ describe('ModelRow provider discovery state', () => {
     expect((unavailableRow as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText('Unavailable')).toBeTruthy();
   });
+
+  it.each([
+    ['null', null],
+    ['an object', { unexpected: 'shape' }],
+    ['mixed invalid entries', ['llm', null, { nested: true }, ['tee']]],
+  ])('renders safely when Tags is %s', (_description, Tags) => {
+    render(
+      <ThemeProvider theme={theme}>
+        <ModelRow
+          model={{
+            Id: 'malformed-tags-model',
+            Name: 'Malformed tags model',
+            Tags,
+            bids: undefined,
+          }}
+          onChangeModel={vi.fn()}
+          symbol="MOR"
+        />
+      </ThemeProvider>,
+    );
+
+    expect(
+      screen.getByRole('button', { name: /Malformed tags model/ }),
+    ).toBeTruthy();
+    expect(screen.getByText('Check price')).toBeTruthy();
+  });
+
+  it('normalizes comma-separated tag strings before rendering badges', () => {
+    render(
+      <ThemeProvider theme={theme}>
+        <ModelRow
+          model={{
+            Id: 'string-tags-model',
+            Name: 'String tags model',
+            Tags: 'llm, tee',
+          }}
+          onChangeModel={vi.fn()}
+          symbol="MOR"
+        />
+      </ThemeProvider>,
+    );
+
+    expect(screen.getByText('LLM')).toBeTruthy();
+    expect(screen.getByText('Secure')).toBeTruthy();
+  });
 });

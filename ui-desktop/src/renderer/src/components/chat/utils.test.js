@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { isClosed, isCoworkCandidate, scheduleSessionExpiry } from './utils';
+import {
+  getModelModality,
+  isClosed,
+  isCoworkCandidate,
+  isSecureModel,
+  scheduleSessionExpiry,
+} from './utils';
 
 const nowSeconds = () => Math.floor(Date.now() / 1000);
 
@@ -107,6 +113,45 @@ describe('isCoworkCandidate', () => {
     );
     expect(isCoworkCandidate({ ModelType: 'agent', Tags: ['chat'] })).toBe(
       false,
+    );
+  });
+
+  it('handles malformed tag metadata without throwing or broadening audio models', () => {
+    expect(isCoworkCandidate({ ModelType: 'UNKNOWN', Tags: null })).toBe(true);
+    expect(
+      isCoworkCandidate({ ModelType: 'UNKNOWN', Tags: { bad: 'shape' } }),
+    ).toBe(true);
+    expect(isCoworkCandidate({ Tags: 'tts' })).toBe(false);
+    expect(isCoworkCandidate({ Tags: ['tts', null, { nested: true }] })).toBe(
+      false,
+    );
+  });
+});
+
+describe('model tag helpers', () => {
+  it('detects secure models from supported tag shapes', () => {
+    expect(isSecureModel({ Tags: null })).toBe(false);
+    expect(isSecureModel({ Tags: { bad: 'shape' } })).toBe(false);
+    expect(isSecureModel({ Tags: 'llm, tee' })).toBe(true);
+    expect(isSecureModel({ Tags: [null, {}, 'TEE'] })).toBe(true);
+  });
+
+  it('derives modality safely from malformed and legacy tag shapes', () => {
+    expect(getModelModality({ Tags: null })).toBe('llm');
+    expect(getModelModality({ Tags: { bad: 'shape' } })).toBe('llm');
+    expect(getModelModality({ Tags: 'llm, tts' })).toBe('tts');
+    expect(getModelModality({ Tags: [null, {}, 'embedding'] })).toBe(
+      'embedding',
+    );
+  });
+
+  it('prefers the canonical model type over contradictory legacy tags', () => {
+    expect(getModelModality({ ModelType: 'TTS', Tags: ['llm'] })).toBe('tts');
+    expect(getModelModality({ ModelType: 'EMBEDDING', Tags: ['speech'] })).toBe(
+      'embedding',
+    );
+    expect(getModelModality({ ModelType: 'UNKNOWN', Tags: ['s2t'] })).toBe(
+      'stt',
     );
   });
 });

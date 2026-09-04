@@ -13,6 +13,10 @@ import {
 } from '@tabler/icons-react';
 import { formatSmallNumber, SECURE_TAG, SECURE_BADGE_TOOLTIP } from '../utils';
 import { getVisionCapability } from '../../../store/utils/attachments';
+import {
+  normalizeModelName,
+  normalizeModelTags,
+} from '../../../store/utils/modelMetadata';
 
 type IconCmp = React.ComponentType<any>;
 
@@ -237,14 +241,14 @@ const Caret = styled.div`
   }
 `;
 
-function classifyTags(rawTags: string[] = [], modelName: string = '') {
+function classifyTags(rawTags: unknown, modelName: string = '') {
   const modalityKeys: string[] = [];
   const familyTags: string[] = [];
   const seenModality = new Set<string>();
   const normalisedName = modelName.toLowerCase();
   let hasTee = false;
 
-  for (const tag of rawTags) {
+  for (const tag of normalizeModelTags(rawTags)) {
     const lower = tag.toLowerCase().trim();
     if (!lower) continue;
     // TEE is a security attribute, not a family tag — surface separately.
@@ -278,7 +282,9 @@ type PriceInfo =
 
 function computePrice(model: any): PriceInfo {
   if (model?.isLocal) return { kind: 'local' };
-  const bids = (model?.bids || []).filter((b: any) => b?.Id);
+  const bids = Array.isArray(model?.bids)
+    ? model.bids.filter((b: any) => b?.Id)
+    : [];
   if (bids.length === 0) return { kind: 'offline' };
   const prices = bids
     .map((b: any) => Number(b.PricePerSecond))
@@ -301,11 +307,13 @@ function ModelRow(props: {
 }) {
   const model = props.model || {};
   const modelId = model.Id || '';
+  const modelName = normalizeModelName(model.Name);
+  const modelTags = useMemo(() => normalizeModelTags(model.Tags), [model.Tags]);
   const isLocal = !!model.isLocal;
   const hasBidData = Array.isArray(model?.bids);
-  const providerCount = (model?.bids || []).filter(
-    (bid: any) => bid?.Id,
-  ).length;
+  const providerCount = hasBidData
+    ? model.bids.filter((bid: any) => bid?.Id).length
+    : 0;
   const availabilityUnknown = !isLocal && !hasBidData;
   const isOnline =
     isLocal ||
@@ -317,8 +325,8 @@ function ModelRow(props: {
     : undefined;
 
   const { modalityKeys, familyTags, hasTee } = useMemo(
-    () => classifyTags(model.Tags, model.Name),
-    [model.Tags, model.Name],
+    () => classifyTags(modelTags, modelName),
+    [modelName, modelTags],
   );
 
   const primaryModalityKey = modalityKeys[0] || 'llm';
@@ -338,9 +346,7 @@ function ModelRow(props: {
 
   // Title tooltip surfaces the full model name + all original tags for
   // discoverability when the row is truncated.
-  const tooltip = `${model.Name}${
-    model.Tags?.length ? ' — ' + model.Tags.join(', ') : ''
-  }`;
+  const tooltip = `${modelName}${modelTags.length ? ` — ${modelTags.join(', ')}` : ''}`;
 
   return (
     <RowContainer
@@ -357,7 +363,7 @@ function ModelRow(props: {
       <NameStack>
         <NameLine>
           <StatusDot $online={isLocal || providerCount > 0} />
-          <NameText>{model.Name}</NameText>
+          <NameText>{modelName}</NameText>
         </NameLine>
         <MetaLine>
           {modalityKeys.slice(0, 1).map((key) => (

@@ -135,7 +135,11 @@ func cloneModels(models []*structs.Model) []*structs.Model {
 		copyOfModel.Fee = cloneBigInt(model.Fee)
 		copyOfModel.Stake = cloneBigInt(model.Stake)
 		copyOfModel.CreatedAt = cloneBigInt(model.CreatedAt)
-		copyOfModel.Tags = append([]string(nil), model.Tags...)
+		// Always expose the API's array shape. append(nil, empty...) collapses an
+		// empty slice to nil, which JSON encodes as null and breaks clients that
+		// correctly expect model tags to be iterable.
+		copyOfModel.Tags = make([]string, len(model.Tags))
+		copy(copyOfModel.Tags, model.Tags)
 		cloned[index] = &copyOfModel
 	}
 

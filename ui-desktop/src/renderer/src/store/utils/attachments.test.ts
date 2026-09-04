@@ -239,6 +239,22 @@ describe('looksVisionCapable', () => {
     expect(looksVisionCapable(undefined)).toBe(false);
     expect(looksVisionCapable({})).toBe(false);
   });
+
+  it('handles null, non-array, and mixed tag metadata safely', () => {
+    expect(getVisionCapability({ Name: 'custom', Tags: null })).toBe('none');
+    expect(
+      getVisionCapability({ Name: 'custom', Tags: { bad: 'shape' } }),
+    ).toBe('none');
+    expect(getVisionCapability({ Name: 'custom', Tags: 'llm, vision' })).toBe(
+      'declared',
+    );
+    expect(
+      getVisionCapability({
+        Name: 'custom',
+        Tags: [null, { nested: true }, 'multimodal'],
+      }),
+    ).toBe('declared');
+  });
 });
 
 describe('formatBytes', () => {

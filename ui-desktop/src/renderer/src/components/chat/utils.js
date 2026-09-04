@@ -1,3 +1,5 @@
+import { normalizeModelTags } from '../../store/utils/modelMetadata';
+
 export const isClosed = (item, now = Date.now()) => {
   if (!item || typeof item !== 'object') return true;
 
@@ -31,8 +33,9 @@ export const scheduleSessionExpiry = (item, onExpiry) => {
 export const SECURE_TAG = 'tee';
 
 export const isSecureModel = (model) =>
-  Array.isArray(model?.Tags) &&
-  model.Tags.some((t) => String(t).toLowerCase().trim() === SECURE_TAG);
+  normalizeModelTags(model?.Tags).some(
+    (t) => t.toLowerCase().trim() === SECURE_TAG,
+  );
 
 // Plain-language copy explaining the TEE feature to non-technical users.
 // Accuracy-checked against docs/concepts/tee-overview.mdx — do not over-claim.
@@ -54,7 +57,16 @@ export const MODALITY_TAGS = {
 // Returns 'stt' | 'tts' | 'embedding' | 'llm' for a model. LLM is the default
 // when no recognised modality tag is present.
 export const getModelModality = (model) => {
-  const tags = (model?.Tags || []).map((t) => String(t).toLowerCase().trim());
+  const declaredType = String(model?.ModelType ?? '')
+    .trim()
+    .toLowerCase();
+  if (declaredType === 'stt' || declaredType === 'tts') return declaredType;
+  if (declaredType === 'embedding' || declaredType === 'embeddings') {
+    return 'embedding';
+  }
+  if (declaredType === 'llm') return 'llm';
+
+  const tags = normalizeModelTags(model?.Tags).map((t) => t.toLowerCase());
   for (const k of ['stt', 'tts', 'embedding']) {
     if (tags.some((t) => MODALITY_TAGS[k].includes(t))) {
       return k;
@@ -71,9 +83,7 @@ export const isCoworkCandidate = (model) => {
   const type = String(model?.ModelType ?? '')
     .trim()
     .toLowerCase();
-  const tags = (model?.Tags || []).map((tag) =>
-    String(tag).toLowerCase().trim(),
-  );
+  const tags = normalizeModelTags(model?.Tags).map((tag) => tag.toLowerCase());
   if (type === 'llm') return true;
   if (type && type !== 'unknown') return false;
   if (tags.includes('llm') || tags.includes('chat')) return true;

@@ -1,3 +1,5 @@
+import { normalizeModelTags } from './modelMetadata';
+
 // Attachment handling for chat prompts.
 //
 // The chat-completions protocol has exactly two content shapes: text parts and
@@ -167,10 +169,10 @@ export type VisionCapability = 'declared' | 'detected' | 'none';
  * does not yet require a vision field.
  */
 export const getVisionCapability = (
-  model: { Name?: string; Tags?: string[] } | undefined,
+  model: { Name?: string; Tags?: unknown } | undefined,
 ): VisionCapability => {
   if (!model) return 'none';
-  const tags = (model.Tags ?? []).map((t) => String(t).toLowerCase().trim());
+  const tags = normalizeModelTags(model.Tags).map((t) => t.toLowerCase());
   if (tags.some((t) => ['vision', 'multimodal', 'image', 'vlm'].includes(t))) {
     return 'declared';
   }
@@ -179,7 +181,7 @@ export const getVisionCapability = (
 };
 
 export const looksVisionCapable = (
-  model: { Name?: string; Tags?: string[] } | undefined,
+  model: { Name?: string; Tags?: unknown } | undefined,
 ): boolean => getVisionCapability(model) !== 'none';
 
 // ---------------------------------------------------------------------------

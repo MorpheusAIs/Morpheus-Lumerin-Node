@@ -2,8 +2,10 @@ package blockchainapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"math/big"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -91,6 +93,35 @@ func TestModelListCacheReturnsDefensiveCopies(t *testing.T) {
 	require.Equal(t, int64(30), second[0].CreatedAt.Int64())
 	require.Equal(t, []string{"llm", "tools"}, second[0].Tags)
 	require.EqualValues(t, 1, calls.Load())
+}
+
+func TestModelListCacheSerializesTagsAsJSONArrays(t *testing.T) {
+	var cache modelListCache
+	models, err := cache.get(context.Background(), func(context.Context) ([]*structs.Model, error) {
+		return []*structs.Model{
+			{Name: "empty-tags", Tags: []string{}},
+			{Name: "nil-tags", Tags: nil},
+		}, nil
+	})
+	require.NoError(t, err)
+	for _, model := range models {
+		require.NotNil(t, model.Tags)
+		require.Empty(t, model.Tags)
+	}
+
+	cached, err := cache.get(context.Background(), func(context.Context) ([]*structs.Model, error) {
+		t.Fatal("loader must not run on a cache hit")
+		return nil, nil
+	})
+	require.NoError(t, err)
+	for _, model := range cached {
+		require.NotNil(t, model.Tags)
+		require.Empty(t, model.Tags)
+	}
+
+	encoded, err := json.Marshal(cached)
+	require.NoError(t, err)
+	require.Equal(t, 2, strings.Count(string(encoded), `"Tags":[]`))
 }
 
 func TestModelListCacheInvalidationStartsANewGeneration(t *testing.T) {

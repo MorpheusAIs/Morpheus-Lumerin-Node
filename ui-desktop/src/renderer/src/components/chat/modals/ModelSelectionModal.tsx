@@ -22,8 +22,17 @@ import {
 } from '@tabler/icons-react';
 import Modal from '../../contracts/modals/Modal';
 import ModelRow from './ModelRow';
-import { isCoworkCandidate, isSecureModel, SECURE_MODE_INFO } from '../utils';
+import {
+  getModelModality,
+  isCoworkCandidate,
+  isSecureModel,
+  SECURE_MODE_INFO,
+} from '../utils';
 import { getVisionCapability } from '../../../store/utils/attachments';
+import {
+  normalizeModelList,
+  normalizeModelTags,
+} from '../../../store/utils/modelMetadata';
 
 /* The shared outer modal `Body` (in CreateContractModal.styles) bakes in
    `padding: 5rem` and never sets `overflow: hidden`, so an `auto`-height box
@@ -316,16 +325,17 @@ const isTee = (m: any) => isSecureModel(m);
 const isVision = (m: any) => getVisionCapability(m) !== 'none';
 const isCoworkCandidateModel = (m: any) => isCoworkCandidate(m);
 
-function hasModality(tags: any[] = [], modality: string) {
-  return tags.some((t: any) => String(t).toLowerCase() === modality);
-}
-
 function matchesQuery(model: any, q: string) {
   const needle = q.trim().toLowerCase();
   if (!needle) return true;
-  if ((model.Name || '').toLowerCase().includes(needle)) return true;
-  return (model.Tags || []).some((t: any) =>
-    String(t).toLowerCase().includes(needle),
+  if (
+    String(model.Name ?? '')
+      .toLowerCase()
+      .includes(needle)
+  )
+    return true;
+  return normalizeModelTags(model.Tags).some((tag) =>
+    tag.toLowerCase().includes(needle),
   );
 }
 
@@ -349,7 +359,7 @@ const ModelSelectionModal = ({
   // render".
   const enriched = useMemo(
     () =>
-      (models || [])
+      normalizeModelList(models)
         .filter((m: any) => !marketplaceOnly || !m.isLocal)
         .filter((m: any) => !coworkSetup || isCoworkCandidate(m)),
     [coworkSetup, marketplaceOnly, models],
@@ -376,12 +386,11 @@ const ModelSelectionModal = ({
       if (isTee(m)) c.tee++;
       if (isVision(m)) c.vision++;
       if (isCoworkCandidateModel(m)) c.cowork++;
-      const tags = m.Tags || [];
-      if (hasModality(tags, 'llm') || hasModality(tags, 'chat')) c.llm++;
-      if (hasModality(tags, 'embeddings') || hasModality(tags, 'embedding'))
-        c.embeddings++;
-      if (hasModality(tags, 'tts')) c.tts++;
-      if (hasModality(tags, 'stt')) c.stt++;
+      const modality = getModelModality(m);
+      if (modality === 'llm') c.llm++;
+      if (modality === 'embedding') c.embeddings++;
+      if (modality === 'tts') c.tts++;
+      if (modality === 'stt') c.stt++;
     }
     return c;
   }, [enriched, search]);
@@ -389,7 +398,6 @@ const ModelSelectionModal = ({
   const visible = useMemo(() => {
     const filtered = enriched.filter((m: any) => {
       if (!matchesQuery(m, search)) return false;
-      const tags = m.Tags || [];
       switch (filter) {
         case 'all':
           return true;
@@ -402,15 +410,13 @@ const ModelSelectionModal = ({
         case 'cowork':
           return isCoworkCandidateModel(m);
         case 'llm':
-          return hasModality(tags, 'llm') || hasModality(tags, 'chat');
+          return getModelModality(m) === 'llm';
         case 'embeddings':
-          return (
-            hasModality(tags, 'embeddings') || hasModality(tags, 'embedding')
-          );
+          return getModelModality(m) === 'embedding';
         case 'tts':
-          return hasModality(tags, 'tts');
+          return getModelModality(m) === 'tts';
         case 'stt':
-          return hasModality(tags, 'stt');
+          return getModelModality(m) === 'stt';
       }
     });
 

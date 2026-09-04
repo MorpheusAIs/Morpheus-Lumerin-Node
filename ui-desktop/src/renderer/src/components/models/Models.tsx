@@ -15,6 +15,7 @@ import Tabs from 'react-bootstrap/Tabs';
 import styled from 'styled-components';
 import { queryKeys } from '../../store/queries';
 import { modelPagesQueryOptions } from '../../store/modelQueries';
+import { normalizeModelList } from '../../store/utils/modelMetadata';
 import QueryError from '../common/QueryError';
 
 const FileSelectionModal = lazy(() => import('./FileSelectionModal'));
@@ -77,9 +78,9 @@ export const Models = ({
   const isIpfsConnected = !!ipfsVersion;
   const models = Array.from(
     new Map(
-      (modelsQuery.data?.pages ?? [])
-        .flat()
-        .map((model: any) => [model.Id, model]),
+      normalizeModelList((modelsQuery.data?.pages ?? []).flat()).map(
+        (model: any) => [model.Id, model],
+      ),
     ).values(),
   );
   const pinnedFiles = pinnedFilesQuery.data ?? [];
