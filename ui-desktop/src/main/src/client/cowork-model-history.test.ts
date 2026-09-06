@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { CoworkAgentMessage, CoworkToolCall } from './cowork.types'
 import {
   compactCoworkModelHistory,
   containsOmittedExecutionMarker,
-  isOmittedExecutionMarker
+  isOmittedExecutionMarker,
+  materialiseCoworkImages,
+  messageTextContent
 } from './cowork-model-history'
 
 function call(id: string, name: string, input: Record<string, unknown>): CoworkToolCall {
@@ -139,8 +141,180 @@ describe('cowork model history', () => {
     const compacted = compactCoworkModelHistory(history)
 
     expect(compacted).toHaveLength(1)
-    expect(compacted[0].content?.match(/^- write_file/gm)).toHaveLength(3)
-    expect(compacted[0].content?.match(/Inspect the current file/g)).toHaveLength(1)
+    expect(messageTextContent(compacted[0].content).match(/^- write_file/gm)).toHaveLength(3)
+    expect(
+      messageTextContent(compacted[0].content).match(/Inspect the current file/g)
+    ).toHaveLength(1)
     expect(compacted[0].content).not.toContain('Let me create')
+  })
+
+  it('preserves opaque provider reasoning state on assistant messages it retains', () => {
+    const history: CoworkAgentMessage[] = [
+      {
+        role: 'assistant',
+        content: null,
+        reasoning_content: 'sentinel-thinking',
+        tool_calls: [
+          call('keep-1', 'read_file', { path: 'notes.txt' }),
+          call('drop-1', 'write_file', {
+            path: 'notes.txt',
+            content: '[omitted after execution: 6 characters]'
+          })
+        ]
+      },
+      result('keep-1', { ok: true, result: { path: 'notes.txt' } }),
+      result('drop-1', { ok: true, result: { path: 'notes.txt', bytes: 6 } }),
+      { role: 'user', content: 'Continue.' },
+      { role: 'assistant', content: 'Done.', reasoning_content: 'sentinel-final' }
+    ]
+
+    const compacted = compactCoworkModelHistory(history)
+
+    expect(compacted[0]).toMatchObject({ reasoning_content: 'sentinel-thinking' })
+    expect(compacted[0].tool_calls?.map((item) => item.id)).toEqual(['keep-1'])
+    expect(compacted.at(-1)).toMatchObject({
+      content: 'Done.',
+      reasoning_content: 'sentinel-final'
+    })
+  })
+
+  it('carries reasoning state onto a record that fully replaces an assistant turn', () => {
+    const history: CoworkAgentMessage[] = [
+      {
+        role: 'assistant',
+        content: 'Writing the file.',
+        reasoning_content: 'first-thought',
+        tool_calls: [
+          call('drop-1', 'write_file', {
+            path: 'notes.txt',
+            content: '[omitted after execution: 6 characters]'
+          })
+        ]
+      },
+      result('drop-1', { ok: true, result: { path: 'notes.txt', bytes: 6 } }),
+      {
+        role: 'assistant',
+        content: 'Writing it again.',
+        reasoning_content: 'latest-thought',
+        tool_calls: [
+          call('drop-2', 'write_file', {
+            path: 'notes.txt',
+            content: '[omitted after execution: 6 characters]'
+          })
+        ]
+      },
+      result('drop-2', { ok: true, result: { path: 'notes.txt', bytes: 6 } })
+    ]
+
+    const compacted = compactCoworkModelHistory(history)
+
+    expect(compacted).toHaveLength(1)
+    expect(compacted[0].tool_calls).toBeUndefined()
+    expect(compacted[0].reasoning_content).toBe('latest-thought')
+  })
+})
+
+describe('compacted failure reasons', () => {
+  it('keeps the reason a generated-file action failed', () => {
+    const compacted = compactCoworkModelHistory([
+      { role: 'user', content: 'Build the manifest.' },
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [
+          {
+            id: 'c1',
+            type: 'function',
+            function: {
+              name: 'create_xlsx',
+              arguments: JSON.stringify({
+                path: 'docs/FILE_MANIFEST.xlsx',
+                content: '[omitted after execution: 40 characters]'
+              })
+            }
+          }
+        ]
+      },
+      {
+        role: 'tool',
+        tool_call_id: 'c1',
+        content: JSON.stringify({
+          ok: false,
+          error: 'request.sheets[0].rows[3] has 5 cells but the table has 4 headers.'
+        })
+      },
+      { role: 'user', content: 'why is it failing?' }
+    ] as any)
+
+    const serialized = JSON.stringify(compacted)
+    expect(serialized).toContain('rows[3] has 5 cells')
+    expect(serialized).not.toContain('[omitted after execution')
+  })
+
+  it('falls back to a bare failure when no reason was recorded', () => {
+    const compacted = compactCoworkModelHistory([
+      { role: 'user', content: 'Build it.' },
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [
+          {
+            id: 'c1',
+            type: 'function',
+            function: {
+              name: 'create_xlsx',
+              arguments: JSON.stringify({
+                path: 'a.xlsx',
+                content: '[omitted after execution: 40 characters]'
+              })
+            }
+          }
+        ]
+      },
+      { role: 'tool', tool_call_id: 'c1', content: JSON.stringify({ ok: false }) },
+      { role: 'user', content: 'again' }
+    ] as any)
+
+    expect(JSON.stringify(compacted)).toContain('reported failure')
+  })
+})
+
+describe('materialiseCoworkImages', () => {
+  const withImage = (): CoworkAgentMessage[] => [
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Look at this.' },
+        {
+          type: 'image',
+          image: {
+            source: 'project',
+            path: 'shot.png',
+            mediaType: 'image/png',
+            bytes: 6,
+            width: 2,
+            height: 3
+          }
+        }
+      ]
+    }
+  ]
+
+  it('sends pixels by default', async () => {
+    const [message] = await materialiseCoworkImages(withImage(), async () => Buffer.from('pixels'))
+    expect(Array.isArray(message.content)).toBe(true)
+    expect(JSON.stringify(message.content)).toContain('image_url')
+  })
+
+  it('collapses to a plain string when the endpoint cannot take pictures', async () => {
+    const load = vi.fn()
+    const [message] = await materialiseCoworkImages(withImage(), load, { pixels: false })
+    // A plain string is the one content shape no endpoint rejects.
+    expect(typeof message.content).toBe('string')
+    expect(message.content).toContain('Look at this.')
+    expect(message.content).toContain('shot.png')
+    expect(message.content).toContain('cannot receive pictures')
+    // Bytes are never read for an endpoint that would only reject them.
+    expect(load).not.toHaveBeenCalled()
   })
 })

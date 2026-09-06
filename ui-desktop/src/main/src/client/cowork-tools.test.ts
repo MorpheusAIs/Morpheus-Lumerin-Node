@@ -27,6 +27,7 @@ const {
   approvalRequirement,
   executeCoworkTool,
   isCoworkMutationTool,
+  loadCoworkImageBytes,
   resolveProjectPath,
   toolArguments,
   withCoworkMutationLock
@@ -453,5 +454,122 @@ describe('executeCoworkTool', () => {
     ]) {
       expect(isCoworkMutationTool(name)).toBe(false)
     }
+  })
+})
+
+/** A one-pixel PNG, written by hand so the fixture needs no encoder. */
+function onePixelPng(): Buffer {
+  const chunk = (type: string, body: Buffer): Buffer => {
+    const head = Buffer.alloc(8)
+    head.writeUInt32BE(body.length, 0)
+    head.write(type, 4, 'latin1')
+    const crcTable = Buffer.concat([Buffer.from(type, 'latin1'), body])
+    let crc = 0xffffffff
+    for (const byte of crcTable) {
+      crc ^= byte
+      for (let bit = 0; bit < 8; bit++) crc = crc & 1 ? (crc >>> 1) ^ 0xedb88320 : crc >>> 1
+    }
+    const tail = Buffer.alloc(4)
+    tail.writeUInt32BE((crc ^ 0xffffffff) >>> 0, 0)
+    return Buffer.concat([head, body, tail])
+  }
+  const ihdr = Buffer.alloc(13)
+  ihdr.writeUInt32BE(1, 0)
+  ihdr.writeUInt32BE(1, 4)
+  ihdr[8] = 8
+  ihdr[9] = 2
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    chunk(
+      'IDAT',
+      Buffer.from([0x08, 0x1d, 0x63, 0xf8, 0xcf, 0xc0, 0x00, 0x00, 0x03, 0x01, 0x01, 0x00])
+    ),
+    chunk('IEND', Buffer.alloc(0))
+  ])
+}
+
+describe('read_image', () => {
+  it('returns a project-relative reference the request builder can resolve', async () => {
+    await fs.mkdir(path.join(projectRoot, 'shots'))
+    await fs.writeFile(path.join(projectRoot, 'shots', 'pixel.png'), onePixelPng())
+
+    const output = await executeCoworkTool(project(), 'read_image', { path: 'shots/pixel.png' })
+
+    expect(output.image).toMatchObject({
+      source: 'project',
+      path: path.join('shots', 'pixel.png'),
+      mediaType: 'image/png',
+      width: 1,
+      height: 1
+    })
+    expect(output.result).toMatchObject({ mediaType: 'image/png', width: 1, height: 1 })
+    await expect(loadCoworkImageBytes(project(), output.image!)).resolves.toEqual(onePixelPng())
+  })
+
+  it('names the formats it accepts instead of failing opaquely on other files', async () => {
+    await fs.writeFile(path.join(projectRoot, 'notes.txt'), 'not an image')
+
+    await expect(executeCoworkTool(project(), 'read_image', { path: 'notes.txt' })).rejects.toThrow(
+      /read_image supports .*\.png/
+    )
+  })
+
+  it('refuses bytes that are not the format the extension claims', async () => {
+    await fs.writeFile(path.join(projectRoot, 'fake.png'), 'GIF89a but named png')
+
+    await expect(executeCoworkTool(project(), 'read_image', { path: 'fake.png' })).rejects.toThrow(
+      /not a readable PNG image/
+    )
+  })
+
+  it('cannot be steered outside the connected folder by a tampered reference', async () => {
+    await fs.writeFile(path.join(outsideRoot, 'private.png'), onePixelPng())
+
+    await expect(
+      loadCoworkImageBytes(project(), {
+        source: 'project',
+        path: path.join('..', path.basename(outsideRoot), 'private.png'),
+        mediaType: 'image/png',
+        bytes: 4
+      })
+    ).resolves.toBeNull()
+    await expect(
+      loadCoworkImageBytes(project(), {
+        source: 'attachment',
+        path: '../../etc/hosts.png',
+        mediaType: 'image/png',
+        bytes: 4
+      })
+    ).resolves.toBeNull()
+  })
+
+  it('reports a deleted image as unreadable rather than throwing mid-turn', async () => {
+    await expect(
+      loadCoworkImageBytes(project(), {
+        source: 'project',
+        path: 'gone.png',
+        mediaType: 'image/png',
+        bytes: 4
+      })
+    ).resolves.toBeNull()
+  })
+})
+
+describe('inspect_file on an image', () => {
+  it('reports format and dimensions so a model without vision still learns the shape', async () => {
+    await fs.writeFile(path.join(projectRoot, 'pixel.png'), onePixelPng())
+
+    const output = await executeCoworkTool(project(), 'inspect_file', { path: 'pixel.png' })
+
+    expect(output.result).toMatchObject({ mediaType: 'image/png', width: 1, height: 1 })
+  })
+
+  it('leaves ordinary files unchanged', async () => {
+    await fs.writeFile(path.join(projectRoot, 'notes.txt'), 'plain')
+
+    const output = await executeCoworkTool(project(), 'inspect_file', { path: 'notes.txt' })
+
+    expect(output.result).not.toHaveProperty('mediaType')
   })
 })

@@ -45,7 +45,6 @@ import {
 import ReactMarkdown from 'react-markdown';
 import { useLocation, useNavigate } from 'react-router';
 import type {
-  CoworkActivity,
   CoworkApprovalMode,
   CoworkApprovalPolicy,
   CoworkArtifact,
@@ -62,6 +61,8 @@ import type {
   CoworkTaskSummary,
   CoworkTaskStatus,
 } from './types';
+import ErrorBoundary from '../common/ErrorBoundary';
+
 import './Cowork.css';
 
 const COWORK_BOTTOM_THRESHOLD_PX = 96;
@@ -415,7 +416,13 @@ const CoworkMessageRow = memo(
     previous.message.author?.sessionId === next.message.author?.sessionId,
 );
 
-const PlanStatusIcon = ({ status }: Pick<CoworkPlanStep, 'status'>) => {
+const PLAN_STEP_STATUSES = new Set<string>([
+  'pending',
+  'in_progress',
+  'completed',
+]);
+
+const PlanStatusIcon = ({ status }: { status?: CoworkPlanStep['status'] }) => {
   if (status === 'completed') return <IconCircleCheck size={17} />;
   if (status === 'in_progress')
     return <IconLoader2 className="cowork-spin" size={17} />;
@@ -456,14 +463,6 @@ const EmptyPanel = ({
     <span>{detail}</span>
   </div>
 );
-
-const ActivityIcon = ({ activity }: { activity: CoworkActivity }) => {
-  if (activity.status === 'running')
-    return <IconLoader2 className="cowork-spin" />;
-  if (activity.status === 'success') return <IconCheck />;
-  if (activity.status === 'error') return <IconX />;
-  return <IconClock />;
-};
 
 function Cowork(): JSX.Element {
   const api = window.cowork;
@@ -577,6 +576,17 @@ function Cowork(): JSX.Element {
     [],
   );
 
+  // A task record written by an older build can reach here without a plan
+  // array at all, and the panel below indexes into it on every render.
+  const planSteps = useMemo(
+    () => (Array.isArray(activeTask?.plan) ? activeTask.plan : []),
+    [activeTask?.plan],
+  );
+  const planCompletedCount = useMemo(
+    () => planSteps.filter((step) => step?.status === 'completed').length,
+    [planSteps],
+  );
+
   const activeModels = useMemo(
     () =>
       models.filter((model) =>
@@ -638,6 +648,7 @@ function Cowork(): JSX.Element {
 
   const modelGroups = useMemo(() => {
     const capabilities = [
+      { value: 'verified', label: 'Vision (verified by Workspace)' },
       { value: 'declared', label: 'Vision (declared)' },
       { value: 'detected', label: 'Possible vision (name match)' },
       { value: 'none', label: 'Text / vision not declared' },
@@ -2691,10 +2702,21 @@ function Cowork(): JSX.Element {
                         : 'Workspace will ask before sharing project content with the remote provider.'}
                   </span>
                   {selectedModel.visionCapability !== 'none' && (
-                    <b className="cowork-vision-badge">
-                      {selectedModel.visionCapability === 'declared'
-                        ? 'Vision'
-                        : 'Likely vision'}
+                    <b
+                      className="cowork-vision-badge"
+                      title={
+                        selectedModel.visionCapability === 'verified'
+                          ? 'Workspace sent this model a test image and it described the image correctly.'
+                          : selectedModel.visionCapability === 'declared'
+                            ? 'The provider lists this model as accepting images. Workspace has not tested it yet.'
+                            : 'This model is named like a vision model. Workspace has not tested it yet.'
+                      }
+                    >
+                      {selectedModel.visionCapability === 'verified'
+                        ? 'Vision verified'
+                        : selectedModel.visionCapability === 'declared'
+                          ? 'Vision'
+                          : 'Likely vision'}
                     </b>
                   )}
                 </div>
@@ -3071,36 +3093,42 @@ function Cowork(): JSX.Element {
               <div className="cowork-detail-heading">
                 <IconListCheck size={17} />
                 <h2>Plan</h2>
-                {activeTask?.plan.length ? (
+                {planSteps.length ? (
                   <span>
-                    {
-                      activeTask.plan.filter(
-                        (step) => step.status === 'completed',
-                      ).length
-                    }
-                    /{activeTask.plan.length}
+                    {planCompletedCount}/{planSteps.length}
                   </span>
                 ) : null}
               </div>
-              {activeTask?.plan.length ? (
-                <ol className="cowork-plan-list">
-                  {activeTask.plan.map((step) => (
-                    <li className={`plan-${step.status}`} key={step.id}>
-                      <PlanStatusIcon status={step.status} />
-                      <div>
-                        <strong>{step.title}</strong>
-                        {step.note && <span>{step.note}</span>}
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              ) : (
-                <EmptyPanel
-                  detail="Workspace will outline its approach before changing files."
-                  icon={<IconListCheck size={20} />}
-                  title="No plan yet"
-                />
-              )}
+              {/*
+                A plan is model-authored data replayed straight into the DOM.
+                A step that arrives without the shape this markup expects should
+                cost the panel, not the whole Workspace screen. The task id
+                resets it so switching tasks clears a previous task's crash.
+              */}
+              <ErrorBoundary label="cowork-plan" resetKey={activeTask?.id}>
+                {planSteps.length ? (
+                  <ol className="cowork-plan-list">
+                    {planSteps.map((step, index) => (
+                      <li
+                        className={`plan-${PLAN_STEP_STATUSES.has(step?.status) ? step.status : 'pending'}`}
+                        key={step?.id || `plan-step-${index}`}
+                      >
+                        <PlanStatusIcon status={step?.status} />
+                        <div>
+                          <strong>{step?.title || `Step ${index + 1}`}</strong>
+                          {step?.note && <span>{step.note}</span>}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <EmptyPanel
+                    detail="Workspace will outline its approach before changing files."
+                    icon={<IconListCheck size={20} />}
+                    title="No plan yet"
+                  />
+                )}
+              </ErrorBoundary>
             </section>
 
             <section className="cowork-detail-section cowork-artifact-section">
@@ -3153,38 +3181,6 @@ function Cowork(): JSX.Element {
                   detail="Files created or updated by Workspace appear here."
                   icon={<IconPaperclip size={20} />}
                   title="No artifacts yet"
-                />
-              )}
-            </section>
-
-            <section className="cowork-detail-section cowork-activity-section">
-              <div className="cowork-detail-heading">
-                <IconActivity size={17} />
-                <h2>Activity</h2>
-              </div>
-              {activeTask?.activities.length ? (
-                <div className="cowork-activity-list">
-                  {[...activeTask.activities].reverse().map((activity) => (
-                    <div
-                      className={`cowork-activity-row activity-${activity.status}`}
-                      key={activity.id}
-                    >
-                      <span className="cowork-activity-icon">
-                        <ActivityIcon activity={activity} />
-                      </span>
-                      <div>
-                        <strong>{activity.label}</strong>
-                        {activity.detail && <span>{activity.detail}</span>}
-                        <small>{formatTime(activity.createdAt)}</small>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <EmptyPanel
-                  detail="Tool calls and approvals will be recorded here."
-                  icon={<IconActivity size={20} />}
-                  title="Nothing to report"
                 />
               )}
             </section>

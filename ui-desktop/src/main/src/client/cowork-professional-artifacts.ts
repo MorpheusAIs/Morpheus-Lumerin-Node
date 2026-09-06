@@ -62,7 +62,8 @@ export interface ProfessionalWorkbookSheet {
   name: string
   headers: string[]
   rows: ProfessionalArtifactScalar[][]
-  columnWidths?: number[]
+  /** A missing entry means the column is auto-sized from its contents. */
+  columnWidths?: (number | undefined)[]
   freezeHeader?: boolean
 }
 
@@ -77,6 +78,8 @@ export interface ProfessionalPresentationSlide {
   body?: string
   bullets?: string[]
   table?: ProfessionalArtifactTable
+  /** Speaker notes. They never render on the slide, so they cannot overflow it. */
+  notes?: string
 }
 
 export interface ProfessionalPptxRequest extends ProfessionalArtifactBaseRequest {
@@ -99,22 +102,26 @@ export interface GeneratedProfessionalArtifact {
   buffer: Buffer
 }
 
+// Ceilings that keep one document from exhausting the main process, not a view
+// about how big a real deliverable is allowed to be. totalCells is the binding
+// one: 300k cells costs roughly 340MB of peak heap through ExcelJS, where 500k
+// costs over 600MB, so that is where the line sits.
 export const PROFESSIONAL_ARTIFACT_LIMITS = Object.freeze({
-  inputBytes: 1024 * 1024,
-  outputBytes: 32 * 1024 * 1024,
-  totalTextCharacters: 250_000,
-  documentBlocks: 250,
-  documentTableRows: 500,
-  documentTableColumns: 20,
-  workbookSheets: 12,
-  workbookRowsPerSheet: 5_000,
-  workbookColumns: 100,
-  totalCells: 100_000,
-  presentationSlides: 40,
-  presentationBulletsPerSlide: 12,
-  presentationTableRows: 12,
-  presentationTableColumns: 8,
-  pdfPages: 100
+  inputBytes: 8 * 1024 * 1024,
+  outputBytes: 64 * 1024 * 1024,
+  totalTextCharacters: 1_000_000,
+  documentBlocks: 1_500,
+  documentTableRows: 2_000,
+  documentTableColumns: 40,
+  workbookSheets: 64,
+  workbookRowsPerSheet: 50_000,
+  workbookColumns: 256,
+  totalCells: 300_000,
+  presentationSlides: 150,
+  presentationBulletsPerSlide: 24,
+  presentationTableRows: 30,
+  presentationTableColumns: 16,
+  pdfPages: 400
 })
 
 type JsonObject = Record<string, unknown>
@@ -344,9 +351,28 @@ function validateTable(
   const rawRows = arrayValue(object.rows, `${path}.rows`, 0, limits.rows)
   budget.addCells(headers.length * (rawRows.length + 1), path)
   const rows = rawRows.map((row, rowIndex) => {
-    const values = arrayValue(row, `${path}.rows[${rowIndex}]`, headers.length, headers.length)
-    return values.map((cell, columnIndex) =>
-      scalarValue(cell, `${path}.rows[${rowIndex}][${columnIndex}]`, budget, limits.cellCharacters)
+    // A short row is a trailing cell the model left off, and padding it is exactly
+    // what a spreadsheet does anyway. A long one means the row and the header
+    // disagree about what the table is, which is worth refusing -- and worth
+    // saying both counts out loud, since the model has to fix it blind.
+    const values = arrayValue(row, `${path}.rows[${rowIndex}]`, 0, limits.columns)
+    if (values.length > headers.length) {
+      throw new Error(
+        `${path}.rows[${rowIndex}] has ${values.length} cells but the table has ` +
+          `${headers.length} headers. Every row must match the header count.`
+      )
+    }
+    const padded =
+      values.length === headers.length
+        ? values
+        : [...values, ...Array.from({ length: headers.length - values.length }, () => '')]
+    return padded.map((cell, columnIndex) =>
+      scalarValue(
+        cell === undefined ? '' : cell,
+        `${path}.rows[${rowIndex}][${columnIndex}]`,
+        budget,
+        limits.cellCharacters
+      )
     )
   })
   return { headers, rows }
@@ -407,11 +433,56 @@ function validateDocumentBlock(
   return { type: 'pageBreak' }
 }
 
+/**
+ * Converts a plain-text document body into structured blocks. Weaker models
+ * ignore the `blocks` schema and send prose in `content`; rejecting them there
+ * only produces a retry loop, so the text is structured here and then run
+ * through the ordinary block validation, limits and budget unchanged.
+ */
+function documentBlocksFromPlainText(value: unknown, path: string): JsonObject[] {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`${path} must be a non-empty string when request.blocks is omitted.`)
+  }
+  const blocks: JsonObject[] = []
+  for (const chunk of value.replaceAll('\r\n', '\n').split(/\n{2,}/)) {
+    const lines = chunk
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+    if (!lines.length) continue
+    const heading = lines.length === 1 ? /^(#{1,3})\s+(.+)$/.exec(lines[0]) : null
+    if (heading) {
+      blocks.push({ type: 'heading', level: heading[1].length, text: heading[2] })
+    } else if (lines.every((line) => /^[-*\u2022]\s+/.test(line))) {
+      blocks.push({
+        type: 'bulletList',
+        items: lines.map((line) => line.replace(/^[-*\u2022]\s+/, ''))
+      })
+    } else if (lines.every((line) => /^\d+[.)]\s+/.test(line))) {
+      blocks.push({
+        type: 'numberedList',
+        items: lines.map((line) => line.replace(/^\d+[.)]\s+/, ''))
+      })
+    } else {
+      blocks.push({ type: 'paragraph', text: lines.join(' ') })
+    }
+  }
+  if (!blocks.length) throw new Error(`${path} did not contain any document text.`)
+  return blocks
+}
+
 function validateDocumentRequest(
-  object: JsonObject,
+  input: JsonObject,
   format: 'docx' | 'pdf',
   budget: ValidationBudget
 ): ProfessionalDocxRequest | ProfessionalPdfRequest {
+  // Accepted only as a fallback: `blocks` stays the documented shape, and a
+  // request carrying both is a modelling error rather than something to guess at.
+  let object = input
+  if (input.blocks === undefined && input.content !== undefined) {
+    const { content, ...rest } = input
+    object = { ...rest, blocks: documentBlocksFromPlainText(content, 'request.content') }
+  }
   assertKeys(
     object,
     ['format', 'filename', 'title', 'subtitle', 'accentColor', 'pageSize', 'blocks'],
@@ -479,19 +550,28 @@ function validateWorkbookRequest(
       columns: PROFESSIONAL_ARTIFACT_LIMITS.workbookColumns,
       cellCharacters: 10_000
     })
-    let columnWidths: number[] | undefined
+    let columnWidths: (number | undefined)[] | undefined
     if (item.columnWidths !== undefined) {
+      // A column width is presentation, not data. Failing the whole workbook over
+      // one number outside the range Excel renders sensibly threw away content the
+      // model had spent several turns assembling, and it could only guess at the
+      // bound. Widths are now coerced into range, and a list that does not cover
+      // every column leaves the rest auto-sized.
       const rawWidths = arrayValue(
         item.columnWidths,
         `${path}.columnWidths`,
-        table.headers.length,
-        table.headers.length
+        0,
+        PROFESSIONAL_ARTIFACT_LIMITS.workbookColumns
       )
-      columnWidths = rawWidths.map((width, index) => {
-        if (!Number.isInteger(width) || (width as number) < 6 || (width as number) > 60) {
-          throw new Error(`${path}.columnWidths[${index}] must be an integer from 6 through 60.`)
+      columnWidths = table.headers.map((_, index) => {
+        const width = rawWidths[index]
+        if (width === undefined || width === null || width === '') return undefined
+        if (typeof width !== 'number' || !Number.isFinite(width)) {
+          throw new Error(
+            `${path}.columnWidths[${index}] must be a number of characters, or null to auto-size.`
+          )
         }
-        return width as number
+        return Math.min(60, Math.max(6, Math.round(width)))
       })
     }
     return {
@@ -523,13 +603,17 @@ function validatePresentationRequest(
   const slides = rawSlides.map((slide, slideIndex): ProfessionalPresentationSlide => {
     const path = `request.slides[${slideIndex}]`
     const item = plainObject(slide, path)
-    assertKeys(item, ['title', 'subtitle', 'body', 'bullets', 'table'], path)
+    assertKeys(item, ['title', 'subtitle', 'body', 'bullets', 'table', 'notes'], path)
     const slideTitle = textValue(item.title, `${path}.title`, budget, { maximum: 100, trim: true })
     const subtitle = optionalText(item.subtitle, `${path}.subtitle`, budget, {
       maximum: 220,
       trim: true
     })
-    const body = optionalText(item.body, `${path}.body`, budget, { maximum: 1_800 })
+    const body = optionalText(item.body, `${path}.body`, budget, {
+      // A table slide gets a one-line caption; a text slide gets a paragraph.
+      maximum: item.table === undefined ? 1_800 : 240
+    })
+    const notes = optionalText(item.notes, `${path}.notes`, budget, { maximum: 4_000 })
     let bullets: string[] | undefined
     if (item.bullets !== undefined) {
       bullets = arrayValue(
@@ -549,9 +633,12 @@ function validatePresentationRequest(
             columns: PROFESSIONAL_ARTIFACT_LIMITS.presentationTableColumns,
             cellCharacters: 80
           })
-    if (table && (body || bullets)) {
+    // A short line of interpretation above a table is what a deck is for, and it
+    // fits in the space the table gives up. Bullets under a table do not fit, and
+    // splitting them onto their own slide is the right answer.
+    if (table && bullets) {
       throw new Error(
-        `${path} cannot combine a table with body or bullet content; use a separate slide.`
+        `${path} cannot combine a table with bullet content; put the bullets on a separate slide.`
       )
     }
     if (!table) {
@@ -569,7 +656,7 @@ function validatePresentationRequest(
         )
       }
     }
-    return { title: slideTitle, subtitle, body, bullets, table }
+    return { title: slideTitle, subtitle, body, bullets, table, notes }
   })
   return { format, filename, title, accentColor, slides }
 }
@@ -875,7 +962,8 @@ async function buildDocx(request: ProfessionalDocxRequest): Promise<Buffer> {
 }
 
 function excelColumnWidth(sheet: ProfessionalWorkbookSheet, columnIndex: number): number {
-  if (sheet.columnWidths) return sheet.columnWidths[columnIndex]
+  const explicit = sheet.columnWidths?.[columnIndex]
+  if (typeof explicit === 'number') return explicit
   const values = [
     sheet.headers[columnIndex],
     ...sheet.rows.slice(0, 500).map((row) => scalarText(row[columnIndex]))
@@ -1027,6 +1115,21 @@ async function buildPptx(request: ProfessionalPptxRequest): Promise<Buffer> {
         y += 0.65
       }
       if (content.table) {
+        if (content.body) {
+          slide.addText(content.body, {
+            x: 0.82,
+            y,
+            w: 11.65,
+            h: 0.5,
+            margin: 0,
+            fontFace: 'Arial',
+            fontSize: 16,
+            color: '1F2937',
+            valign: 'top',
+            breakLine: false
+          })
+          y += 0.62
+        }
         const headerRow: PptxGenJS.TableRow = content.table.headers.map((header) => ({
           text: header,
           options: {
@@ -1052,7 +1155,8 @@ async function buildPptx(request: ProfessionalPptxRequest): Promise<Buffer> {
           x: 0.74,
           y,
           w: 11.85,
-          h: Math.min(5.15, 0.45 * (content.table.rows.length + 1)),
+          // End above the page number at 7.08 whether or not a caption pushed y down.
+          h: Math.min(content.body ? 6.9 - y : 5.15, 0.45 * (content.table.rows.length + 1)),
           border: { type: 'solid', color: 'CBD5E1', pt: 0.6 },
           fontFace: 'Arial',
           fontSize: 16,
@@ -1102,6 +1206,7 @@ async function buildPptx(request: ProfessionalPptxRequest): Promise<Buffer> {
         }
       }
     }
+    if (content.notes) slide.addNotes(content.notes)
     slide.addText(String(slideIndex + 1), {
       x: 12.05,
       y: 7.08,
@@ -1449,36 +1554,59 @@ async function buildPdf(request: ProfessionalPdfRequest): Promise<Buffer> {
   )
 }
 
+/**
+ * Building one artifact at the ceiling costs roughly half a gigabyte of peak
+ * heap. Workspace runs up to MAX_ACTIVE_RUNS tasks at once, and nothing else
+ * stops four of them from serialising a maximum workbook simultaneously, which
+ * measured 1.3 GB and is enough to take the main process down with it. Peak
+ * memory is a property of the process, not of a task, so the gate is global:
+ * builds queue rather than overlap. The cost is latency on a rare collision.
+ */
+let artifactBuildChain: Promise<unknown> = Promise.resolve()
+
+function withArtifactBuildSlot<T>(build: () => Promise<T>): Promise<T> {
+  const result = artifactBuildChain.then(build, build)
+  // Keep the chain alive after a rejection so one failed build cannot wedge the
+  // queue, and never let it retain the resolved artifact buffer.
+  artifactBuildChain = result.then(
+    () => undefined,
+    () => undefined
+  )
+  return result
+}
+
 export async function generateDocxArtifact(input: unknown): Promise<GeneratedProfessionalArtifact> {
   const request = validateProfessionalArtifactRequest(input)
   if (request.format !== 'docx') throw new Error('request.format must be docx.')
-  return finishArtifact(request, await buildDocx(request))
+  return withArtifactBuildSlot(async () => finishArtifact(request, await buildDocx(request)))
 }
 
 export async function generateXlsxArtifact(input: unknown): Promise<GeneratedProfessionalArtifact> {
   const request = validateProfessionalArtifactRequest(input)
   if (request.format !== 'xlsx') throw new Error('request.format must be xlsx.')
-  return finishArtifact(request, await buildXlsx(request))
+  return withArtifactBuildSlot(async () => finishArtifact(request, await buildXlsx(request)))
 }
 
 export async function generatePptxArtifact(input: unknown): Promise<GeneratedProfessionalArtifact> {
   const request = validateProfessionalArtifactRequest(input)
   if (request.format !== 'pptx') throw new Error('request.format must be pptx.')
-  return finishArtifact(request, await buildPptx(request))
+  return withArtifactBuildSlot(async () => finishArtifact(request, await buildPptx(request)))
 }
 
 export async function generatePdfArtifact(input: unknown): Promise<GeneratedProfessionalArtifact> {
   const request = validateProfessionalArtifactRequest(input)
   if (request.format !== 'pdf') throw new Error('request.format must be pdf.')
-  return finishArtifact(request, await buildPdf(request))
+  return withArtifactBuildSlot(async () => finishArtifact(request, await buildPdf(request)))
 }
 
 export async function generateProfessionalArtifact(
   input: unknown
 ): Promise<GeneratedProfessionalArtifact> {
   const request = validateProfessionalArtifactRequest(input)
-  if (request.format === 'docx') return finishArtifact(request, await buildDocx(request))
-  if (request.format === 'xlsx') return finishArtifact(request, await buildXlsx(request))
-  if (request.format === 'pptx') return finishArtifact(request, await buildPptx(request))
-  return finishArtifact(request, await buildPdf(request))
+  return withArtifactBuildSlot(async () => {
+    if (request.format === 'docx') return finishArtifact(request, await buildDocx(request))
+    if (request.format === 'xlsx') return finishArtifact(request, await buildXlsx(request))
+    if (request.format === 'pptx') return finishArtifact(request, await buildPptx(request))
+    return finishArtifact(request, await buildPdf(request))
+  })
 }

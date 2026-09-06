@@ -93,7 +93,8 @@ type CoworkModelOptionView = {
   sessionEndsAt?: number
   source: 'local' | 'marketplace'
   dataBoundary: 'on-device' | 'configured-endpoint' | 'independent-provider'
-  visionCapability: 'declared' | 'detected' | 'none'
+  visionCapability: 'verified' | 'declared' | 'detected' | 'none'
+  visionProbedAt?: number
 }
 
 type CoworkToolCallView = {

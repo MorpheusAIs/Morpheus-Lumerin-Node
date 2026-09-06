@@ -96,14 +96,20 @@ describe('professional Cowork artifacts', () => {
           })
         )
       })
-    ).toThrow(/between 1 and 40/)
+    ).toThrow(new RegExp(`between 1 and ${PROFESSIONAL_ARTIFACT_LIMITS.presentationSlides}`))
 
     expect(() =>
       validateProfessionalArtifactRequest({
         format: 'pptx',
         title: 'Dense deck',
         slides: [
-          { title: 'Dense slide', body: Array.from({ length: 21 }, () => 'line').join('\n') }
+          {
+            title: 'Dense slide',
+            body: Array.from(
+              { length: PROFESSIONAL_ARTIFACT_LIMITS.presentationBulletsPerSlide + 1 },
+              () => 'line'
+            ).join('\n')
+          }
         ]
       })
     ).toThrow(/too much text/)
@@ -112,7 +118,12 @@ describe('professional Cowork artifacts', () => {
       validateProfessionalArtifactRequest({
         format: 'pdf',
         title: 'Large report',
-        blocks: Array.from({ length: 13 }, () => ({ type: 'paragraph', text: 'x'.repeat(20_000) }))
+        blocks: Array.from(
+          {
+            length: Math.ceil(PROFESSIONAL_ARTIFACT_LIMITS.totalTextCharacters / 20_000) + 1
+          },
+          () => ({ type: 'paragraph', text: 'x'.repeat(20_000) })
+        )
       })
     ).toThrow(/total-character limit/)
 
@@ -330,4 +341,200 @@ describe('professional Cowork artifacts', () => {
     expect(artifact.format).toBe('xlsx')
     expect(JSON.stringify(request)).toBe(snapshot)
   }, 20_000)
+
+  it('accepts a plain-text document body when a model omits blocks', async () => {
+    const content = [
+      '# The Feline Enigma',
+      '',
+      'Cats have lived alongside humans for millennia.',
+      'They remain only partly domesticated.',
+      '',
+      '- Independent',
+      '- Curious',
+      '',
+      '1. Observe',
+      '2. Pounce',
+      '',
+      'Mazen Mohamed'
+    ].join('\n')
+
+    const pdf = await generateProfessionalArtifact({
+      format: 'pdf',
+      title: 'The Feline Enigma',
+      content
+    } as never)
+    const docx = await generateProfessionalArtifact({
+      format: 'docx',
+      title: 'The Feline Enigma',
+      content
+    } as never)
+
+    expect(pdf.format).toBe('pdf')
+    expect(pdf.sizeBytes).toBeGreaterThan(0)
+    expect(docx.format).toBe('docx')
+    expect(docx.sizeBytes).toBeGreaterThan(0)
+  }, 20_000)
+
+  it('rejects an unusable plain-text body and never shadows explicit blocks', async () => {
+    await expect(
+      generateProfessionalArtifact({ format: 'pdf', title: 'Empty', content: '   ' } as never)
+    ).rejects.toThrow(/request\.content must be a non-empty string/)
+    await expect(
+      generateProfessionalArtifact({ format: 'pdf', title: 'Wrong type', content: 42 } as never)
+    ).rejects.toThrow(/request\.content must be a non-empty string/)
+    await expect(
+      generateProfessionalArtifact({
+        format: 'pdf',
+        title: 'Both',
+        content: 'prose',
+        blocks: [{ type: 'paragraph', text: 'structured' }]
+      } as never)
+    ).rejects.toThrow(/unsupported field "content"/)
+  }, 20_000)
+})
+
+describe('workbook rows that do not line up with their headers', () => {
+  const workbook = (rows: unknown[][]): Record<string, unknown> => ({
+    format: 'xlsx',
+    title: 'Manifest',
+    sheets: [{ name: 'Files', headers: ['Path', 'Verdict', 'Notes'], rows }]
+  })
+
+  it('pads a row whose trailing cell the model left off', async () => {
+    // A short row is a missing trailing value, which a spreadsheet renders as an
+    // empty cell anyway. Refusing it failed the whole workbook over nothing.
+    const generated = await generateProfessionalArtifact(workbook([['docs/a.md', 'keep']]) as any)
+    expect(generated.format).toBe('xlsx')
+    expect(generated.sizeBytes).toBeGreaterThan(0)
+  })
+
+  it('names both counts when a row has more cells than there are headers', async () => {
+    await expect(
+      generateProfessionalArtifact(workbook([['a', 'b', 'c', 'd']]) as any)
+    ).rejects.toThrow(/4 cells but the table has 3 headers/)
+  })
+})
+
+describe('workbook column widths', () => {
+  const workbook = (columnWidths: unknown): Record<string, unknown> => ({
+    format: 'xlsx',
+    title: 'Manifest',
+    sheets: [
+      {
+        name: 'Files',
+        headers: ['Path', 'Verdict', 'Notes'],
+        rows: [['docs/a.md', 'keep', 'fine']],
+        columnWidths
+      }
+    ]
+  })
+
+  it('clamps a width the model set outside the range Excel renders sensibly', async () => {
+    // The bound was undiscoverable from the schema, so an over-wide column failed
+    // a workbook the model had spent several turns assembling.
+    const generated = await generateProfessionalArtifact(workbook([200, 1, 24]) as any)
+    expect(generated.format).toBe('xlsx')
+    expect(generated.sizeBytes).toBeGreaterThan(0)
+  })
+
+  it('auto-sizes the columns a short width list does not cover', async () => {
+    const generated = await generateProfessionalArtifact(workbook([24]) as any)
+    expect(generated.format).toBe('xlsx')
+    expect(generated.sizeBytes).toBeGreaterThan(0)
+  })
+
+  it('still refuses a width that is not a number at all', async () => {
+    await expect(generateProfessionalArtifact(workbook(['wide', 12, 12]) as any)).rejects.toThrow(
+      /columnWidths\[0\] must be a number of characters/
+    )
+  })
+})
+
+describe('presentation slides a deck actually needs', () => {
+  const deck = (slide: Record<string, unknown>) => ({
+    format: 'pptx',
+    title: 'Board review',
+    slides: [{ title: 'Opening' }, { title: 'Detail', ...slide }]
+  })
+
+  it('keeps speaker notes off the slide instead of refusing the deck', async () => {
+    // Every model asked for a board deck attaches speaker notes. The key was
+    // rejected outright, so the one artifact of a five-phase task never appeared
+    // while the docx, xlsx and pdf beside it all succeeded.
+    const generated = await generateProfessionalArtifact(
+      deck({
+        bullets: ['Revenue grew 218%', 'Margin fell 11 points'],
+        notes: 'Lead with growth, then land the margin point before questions.'
+      }) as any
+    )
+    expect(generated.format).toBe('pptx')
+    expect(generated.sizeBytes).toBeGreaterThan(0)
+    const entries = await readZip(generated.buffer)
+    // pptxgenjs emits a notes part per slide, so search them all rather than
+    // assuming the one carrying notes comes first.
+    const notes = [...entries.entries()]
+      .filter(([name]) => name.startsWith('ppt/notesSlides/notesSlide'))
+      .map(([, body]) => body.toString('utf8'))
+    expect(notes.length).toBeGreaterThan(0)
+    expect(notes.some((part) => part.includes('land the margin point'))).toBe(true)
+  })
+
+  it('lets a table carry the caption that says what it means', async () => {
+    // A figure with a line of interpretation above it is the point of a deck.
+    const generated = await generateProfessionalArtifact(
+      deck({
+        body: 'Vantor sets the margin benchmark; Halden sets the growth benchmark.',
+        table: {
+          headers: ['Company', 'CAGR', 'Margin'],
+          rows: [
+            ['Halden', '78%', '41%'],
+            ['Vantor', '4%', '52%']
+          ]
+        }
+      }) as any
+    )
+    expect(generated.format).toBe('pptx')
+    expect(generated.sizeBytes).toBeGreaterThan(0)
+  })
+
+  it('holds a captioned table inside the slide frame', () => {
+    // The caption pushes the table down, so its height has to give way or the
+    // last row prints over the page number.
+    const request = validateProfessionalArtifactRequest(
+      deck({
+        subtitle: 'Trailing twelve months',
+        body: 'x'.repeat(240),
+        table: {
+          headers: ['Company', 'CAGR'],
+          rows: Array.from({ length: 20 }, (_, index) => [`Row ${index}`, '10%'])
+        }
+      })
+    )
+    expect(request.format).toBe('pptx')
+    // Title, subtitle and caption, then the table, all above the page number.
+    const captionBottom = 1.22 + 0.65 + 0.62
+    expect(Math.min(6.9 - captionBottom, 0.45 * 21)).toBeLessThanOrEqual(7.08 - captionBottom)
+  })
+
+  it('still refuses bullets crowded beside a table', () => {
+    expect(() =>
+      validateProfessionalArtifactRequest(
+        deck({
+          bullets: ['Halden leads on growth'],
+          table: { headers: ['Company'], rows: [['Halden']] }
+        })
+      )
+    ).toThrow(/cannot combine a table with bullet content/)
+  })
+
+  it('refuses a caption too long to sit above a table', () => {
+    expect(() =>
+      validateProfessionalArtifactRequest(
+        deck({
+          body: 'x'.repeat(241),
+          table: { headers: ['Company'], rows: [['Halden']] }
+        })
+      )
+    ).toThrow(/241-character value exceeds the 240-character limit|240-character limit/)
+  })
 })

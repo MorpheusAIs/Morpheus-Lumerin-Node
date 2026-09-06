@@ -1,9 +1,13 @@
-export const MIN_SESSION_DURATION_SECONDS = 5 * 60;
+/**
+ * Providers set a minimum session cost, so a five-minute session was priced
+ * below what any of them would accept and the request was refused on-chain.
+ * Fifteen minutes is the shortest length that actually opens a session.
+ */
+export const MIN_SESSION_DURATION_SECONDS = 15 * 60;
 export const MAX_SESSION_DURATION_SECONDS = 24 * 60 * 60;
 export const DEFAULT_SESSION_DURATION_SECONDS = 60 * 60;
 
 export const SESSION_DURATION_OPTIONS = [
-  { seconds: 5 * 60, label: '5 minutes' },
   { seconds: 15 * 60, label: '15 minutes' },
   { seconds: 30 * 60, label: '30 minutes' },
   { seconds: 60 * 60, label: '1 hour' },

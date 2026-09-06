@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CoworkProject, CoworkTask, CoworkToolCall } from './cowork.types'
 import { mutationArgumentsHash } from './cowork-mutation-journal'
+import { messageTextContent } from './cowork-model-history'
 
 const state = vi.hoisted(() => ({
   project: undefined as CoworkProject | undefined,
@@ -10,11 +11,23 @@ const state = vi.hoisted(() => ({
 }))
 
 const toolMocks = vi.hoisted(() => ({
-  execute: vi.fn()
+  execute: vi.fn(),
+  loadImage: vi.fn(async (): Promise<Buffer | null> => Buffer.from('pixels'))
 }))
 
 const webMocks = vi.hoisted(() => ({
   retrieve: vi.fn()
+}))
+
+const visionMocks = vi.hoisted(() => ({
+  verdict: vi.fn((_modelId: string) => null as { sees: boolean } | null),
+  record: vi.fn(),
+  run: vi.fn(async (modelId: string) => ({
+    modelId,
+    sees: true,
+    probedAt: Date.now(),
+    answer: 'red'
+  }))
 }))
 
 const extensionState = vi.hoisted(() => ({
@@ -149,6 +162,7 @@ vi.mock('./cowork-store', () => ({
 vi.mock('./cowork-tools', () => ({
   approvalRequirement: vi.fn(async () => null),
   executeCoworkTool: toolMocks.execute,
+  loadCoworkImageBytes: toolMocks.loadImage,
   isCoworkMutationTool: vi.fn((name: string) =>
     [
       'write_file',
@@ -172,13 +186,29 @@ vi.mock('./cowork-web', () => ({
   retrieveCoworkWebPage: webMocks.retrieve
 }))
 
+vi.mock('./cowork-vision-cache', () => ({
+  loadCoworkVisionProbes: vi.fn(async () => undefined),
+  coworkVisionVerdict: visionMocks.verdict,
+  recordCoworkVisionProbe: visionMocks.record
+}))
+
+vi.mock('./cowork-vision-probe', () => ({
+  runCoworkVisionProbe: visionMocks.run
+}))
+
 import {
+  MAX_TOOL_CALLS_PER_TURN,
+  MAX_TOOL_PROTOCOL_CORRECTIONS,
+  MAX_CONSECUTIVE_REJECTED_TURNS,
+  MAX_TRUNCATED_TURN_CONTINUATIONS,
+  MAX_UNFINISHED_PLAN_NUDGES,
   cancelCoworkRun,
   coworkRunActive,
   deleteCoworkTask,
   pauseCoworkRun,
   rebindCoworkTask,
   requestCoworkStart,
+  resetCoworkImageRefusals,
   resolveCoworkApproval,
   startCoworkRun,
   steerCoworkRun
@@ -224,6 +254,9 @@ const completionResponse = (message: Record<string, unknown>): Response =>
     headers: { 'Content-Type': 'application/json' }
   })
 
+const errorResponse = (status: number, body: string): Response =>
+  new Response(body, { status, headers: { 'Content-Type': 'application/json' } })
+
 const textEnvelopeResponse = (value: Record<string, unknown>): Response =>
   completionResponse({ content: JSON.stringify({ protocol: 'morpheus-cowork-v1', ...value }) })
 
@@ -259,6 +292,13 @@ describe.sequential('Cowork runner interruption safety', () => {
     state.failReplaceCall = undefined
     extensionState.catalog = { projectInstructions: null, skills: [] }
     toolMocks.execute.mockReset()
+    toolMocks.loadImage.mockReset()
+    resetCoworkImageRefusals()
+    toolMocks.loadImage.mockResolvedValue(Buffer.from('pixels'))
+    visionMocks.verdict.mockReset()
+    visionMocks.verdict.mockReturnValue(null)
+    visionMocks.record.mockReset()
+    visionMocks.run.mockClear()
     webMocks.retrieve.mockReset()
     vi.unstubAllGlobals()
   })
@@ -495,7 +535,9 @@ describe.sequential('Cowork runner interruption safety', () => {
   })
 
   it('does not let ignored arguments bypass an ambiguous-mutation identity', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
+    // A fresh Response per turn: the rejection is now handed back to the model,
+    // so this run takes several turns instead of ending on the first one.
+    const fetchMock = vi.fn().mockImplementation(async () =>
       completionResponse({
         content: null,
         tool_calls: [
@@ -521,7 +563,17 @@ describe.sequential('Cowork runner interruption safety', () => {
 
     expect(state.task!.status).toBe('failed')
     expect(state.task!.error).toMatch(/unsupported argument/i)
+    // Nothing ran on any of the attempts, and the model was told why each time.
     expect(toolMocks.execute).not.toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledTimes(MAX_CONSECUTIVE_REJECTED_TURNS)
+    expect(
+      state.task!.agentMessages.filter(
+        (message) =>
+          message.role === 'tool' &&
+          typeof message.content === 'string' &&
+          message.content.includes('unsupported argument')
+      )
+    ).toHaveLength(MAX_CONSECUTIVE_REJECTED_TURNS)
   })
 
   it('reconciles a prepared mutation when saving its executed result fails', async () => {
@@ -571,26 +623,45 @@ describe.sequential('Cowork runner interruption safety', () => {
     )
   })
 
-  it('fails closed when the compatibility response contains fenced JSON', async () => {
+  const fencedEnvelope = (): Response =>
+    completionResponse({
+      content:
+        '```json\n{"protocol":"morpheus-cowork-v1","type":"tool_call","name":"write_file","arguments":{"path":"unsafe.txt","content":"no"}}\n```'
+    })
+
+  it('never authorizes a tool from fenced JSON, and asks the model to resend', async () => {
+    // Only an exact whole-response envelope may authorize a tool, so the fenced
+    // form must not execute. Ending the task over it was the harsher half of
+    // that rule: a fence is a formatting slip a correction turn fixes.
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(unsupportedNativeToolsResponse())
-      .mockResolvedValueOnce(
-        completionResponse({
-          content:
-            '```json\n{"protocol":"morpheus-cowork-v1","type":"tool_call","name":"write_file","arguments":{"path":"unsafe.txt","content":"no"}}\n```'
-        })
-      )
+      .mockResolvedValueOnce(fencedEnvelope())
+      .mockResolvedValueOnce(textEnvelopeResponse({ type: 'final', content: 'Resent properly.' }))
     vi.stubGlobal('fetch', fetchMock)
 
     startCoworkRun(state.task!.id, async () => ({}), vi.fn())
     await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false))
 
+    expect(toolMocks.execute).not.toHaveBeenCalled()
+    expect(state.task!.status).toBe('completed')
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('still fails closed when the model only ever sends fenced JSON', async () => {
+    const fetchMock = vi.fn().mockImplementation(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body))
+      return body.tools ? unsupportedNativeToolsResponse() : fencedEnvelope()
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false), { timeout: 15_000 })
+
     expect(state.task!.status).toBe('failed')
     expect(state.task!.error).toMatch(/compatibility protocol/i)
-    expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(toolMocks.execute).not.toHaveBeenCalled()
-  })
+  }, 20_000)
 
   it('keeps text mode for the same fingerprint and resets it for a new endpoint', async () => {
     state.task = makeTask('paused')
@@ -702,7 +773,11 @@ describe.sequential('Cowork runner interruption safety', () => {
       secondCall.id
     ])
     expect(
-      JSON.parse(toolResponses.find((message) => message.tool_call_id === secondCall.id)!.content!)
+      JSON.parse(
+        messageTextContent(
+          toolResponses.find((message) => message.tool_call_id === secondCall.id)!.content
+        )
+      )
     ).toEqual({
       ok: false,
       error: 'The task was interrupted before this action ran.'
@@ -1446,5 +1521,1564 @@ describe.sequential('Cowork runner interruption safety', () => {
         content: 'I reviewed the project. Continue without repeating the earlier write.'
       })
     )
+  })
+})
+
+describe.sequential('Cowork runner provider thinking-state continuity', () => {
+  const REASONING = 'plan: inspect notes.txt, then answer without repeating the write'
+  const FINAL_REASONING = 'the file is already correct; report and stop'
+
+  const toolCall = (name: string, input: Record<string, unknown>) => ({
+    id: `reasoning-${name}-1`,
+    type: 'function',
+    function: { name, arguments: JSON.stringify(input) }
+  })
+
+  const writeSucceeds = () => {
+    toolMocks.execute.mockResolvedValue({
+      result: { path: 'notes.txt', bytes: 6 },
+      artifact: {
+        path: 'notes.txt',
+        name: 'notes.txt',
+        kind: 'file',
+        createdAt: 2,
+        updatedAt: 2
+      }
+    })
+  }
+
+  const bodies = (fetchMock: ReturnType<typeof vi.fn>): any[] =>
+    fetchMock.mock.calls.map((call) => JSON.parse(String(call[1]?.body)))
+
+  beforeEach(() => {
+    state.project = makeProject()
+    state.task = makeTask()
+    state.replaceCalls = 0
+    state.failReplaceCall = undefined
+    extensionState.catalog = { projectInstructions: null, skills: [] }
+    toolMocks.execute.mockReset()
+    toolMocks.loadImage.mockReset()
+    resetCoworkImageRefusals()
+    toolMocks.loadImage.mockResolvedValue(Buffer.from('pixels'))
+    visionMocks.verdict.mockReset()
+    visionMocks.verdict.mockReturnValue(null)
+    visionMocks.record.mockReset()
+    visionMocks.run.mockClear()
+    webMocks.retrieve.mockReset()
+    vi.unstubAllGlobals()
+  })
+
+  it('replays provider reasoning state unchanged on the next native tool turn', async () => {
+    toolMocks.execute.mockResolvedValue({ result: { path: 'notes.txt', bytes: 6 } })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          reasoning_content: REASONING,
+          tool_calls: [toolCall('read_file', { path: 'notes.txt' })]
+        })
+      )
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: 'notes.txt is unchanged.',
+          reasoning_content: FINAL_REASONING
+        })
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false))
+
+    expect(state.task!.status).toBe('completed')
+    expect(toolMocks.execute).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+
+    const [first, second] = bodies(fetchMock)
+    expect(first.messages.some((message: any) => 'reasoning_content' in message)).toBe(false)
+    expect(second.tools.length).toBeGreaterThan(0)
+    const replayed = second.messages.find((message: any) => message.tool_calls?.length)
+    expect(replayed.reasoning_content).toBe(REASONING)
+
+    const stored = state.task!.agentMessages.find(
+      (message) => message.role === 'assistant' && message.tool_calls?.length
+    )
+    expect(stored!.reasoning_content).toBe(REASONING)
+    expect(state.task!.agentMessages.at(-1)).toMatchObject({
+      role: 'assistant',
+      reasoning_content: FINAL_REASONING
+    })
+  })
+
+  it('preserves reasoning state through generated-payload history compaction', async () => {
+    writeSucceeds()
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          reasoning_content: REASONING,
+          tool_calls: [toolCall('write_file', { path: 'notes.txt', content: 'Hello.' })]
+        })
+      )
+      .mockResolvedValueOnce(completionResponse({ content: 'Wrote notes.txt.' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false))
+
+    expect(state.task!.status).toBe('completed')
+    const second = bodies(fetchMock)[1]
+    const carried = second.messages.filter(
+      (message: any) => message.reasoning_content !== undefined
+    )
+    expect(carried).toHaveLength(1)
+    expect(carried[0].reasoning_content).toBe(REASONING)
+    expect(carried[0].tool_calls).toBeUndefined()
+  })
+
+  it('keeps replaying reasoning state after a follow-up instruction in the same task', async () => {
+    const refreshModelTarget = vi.fn(async () => ({
+      model: state.task!.model,
+      fingerprint: 'local:test'
+    }))
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        completionResponse({ content: 'Ready.', reasoning_content: REASONING })
+      )
+      .mockResolvedValueOnce(completionResponse({ content: 'Still ready.' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false))
+    await steerCoworkRun(
+      state.task!.id,
+      'Anything else?',
+      async () => ({}),
+      vi.fn(),
+      refreshModelTarget
+    )
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false))
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    const carried = bodies(fetchMock)[1].messages.filter(
+      (message: any) => message.reasoning_content !== undefined
+    )
+    expect(carried).toHaveLength(1)
+    expect(carried[0].reasoning_content).toBe(REASONING)
+  })
+
+  it('rejects malformed reasoning state before any action runs', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      completionResponse({
+        content: null,
+        reasoning_content: 42,
+        tool_calls: [toolCall('write_file', { path: 'notes.txt', content: 'Hello.' })]
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false))
+
+    expect(state.task!.status).toBe('failed')
+    expect(state.task!.error).toMatch(/invalid assistant reasoning state/i)
+    expect(toolMocks.execute).not.toHaveBeenCalled()
+    expect(
+      state.task!.agentMessages.some((message) => message.reasoning_content !== undefined)
+    ).toBe(false)
+  })
+
+  it('never sends reasoning state on the text tool compatibility protocol', async () => {
+    writeSucceeds()
+    const envelope = (value: Record<string, unknown>): Response =>
+      completionResponse({
+        content: JSON.stringify({ protocol: 'morpheus-cowork-v1', ...value }),
+        reasoning_content: REASONING
+      })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(unsupportedNativeToolsResponse())
+      .mockResolvedValueOnce(
+        envelope({
+          type: 'tool_call',
+          name: 'write_file',
+          arguments: { path: 'notes.txt', content: 'Hello.' }
+        })
+      )
+      .mockResolvedValueOnce(envelope({ type: 'final', content: 'Wrote notes.txt.' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false))
+
+    expect(state.task!.status).toBe('completed')
+    expect(state.task!.toolProtocol).toBe('text-v1')
+    for (const call of fetchMock.mock.calls) {
+      expect(String(call[1]?.body)).not.toContain('reasoning_content')
+    }
+    expect(
+      state.task!.agentMessages.some((message) => message.reasoning_content !== undefined)
+    ).toBe(false)
+  })
+})
+
+describe.sequential('Cowork runner transient upstream failures', () => {
+  beforeEach(() => {
+    state.project = makeProject()
+    state.task = makeTask()
+    state.replaceCalls = 0
+    state.failReplaceCall = undefined
+    extensionState.catalog = { projectInstructions: null, skills: [] }
+    toolMocks.execute.mockReset()
+    toolMocks.loadImage.mockReset()
+    resetCoworkImageRefusals()
+    toolMocks.loadImage.mockResolvedValue(Buffer.from('pixels'))
+    visionMocks.verdict.mockReset()
+    visionMocks.verdict.mockReturnValue(null)
+    visionMocks.record.mockReset()
+    visionMocks.run.mockClear()
+    webMocks.retrieve.mockReset()
+    vi.unstubAllGlobals()
+  })
+
+  const gatewayResponse = (status: number): Response =>
+    new Response(
+      JSON.stringify({
+        providerModelError: { error: { message: 'Upstream request timed out' } },
+        statusCode: status
+      }),
+      { status, headers: { 'Content-Type': 'application/json' } }
+    )
+
+  it.each([408, 429, 502, 503, 504])(
+    'replays a completion the gateway rejected with HTTP %i',
+    async (status) => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(gatewayResponse(status))
+        .mockResolvedValueOnce(completionResponse({ content: 'Recovered.' }))
+      vi.stubGlobal('fetch', fetchMock)
+
+      startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+      await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false), {
+        timeout: 15_000
+      })
+
+      expect(state.task!.status).toBe('completed')
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    },
+    20_000
+  )
+
+  it('recovers a task whose work is already underway rather than discarding it', async () => {
+    toolMocks.execute.mockResolvedValue({
+      result: { path: 'notes.md', bytes: 4 },
+      artifact: {
+        path: 'notes.md',
+        name: 'notes.md',
+        kind: 'file',
+        createdAt: 2,
+        updatedAt: 2
+      }
+    })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          tool_calls: [
+            {
+              id: 'call-1',
+              type: 'function',
+              function: {
+                name: 'write_file',
+                arguments: JSON.stringify({ path: 'notes.md', content: 'done' })
+              }
+            }
+          ]
+        })
+      )
+      .mockResolvedValueOnce(gatewayResponse(504))
+      .mockResolvedValueOnce(completionResponse({ content: 'Wrote notes.md.' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false), { timeout: 15_000 })
+
+    // The tool ran before the gateway failed; the retry must not run it again.
+    expect(state.task!.status).toBe('completed')
+    expect(toolMocks.execute).toHaveBeenCalledTimes(1)
+  }, 20_000)
+
+  it('surfaces a deterministic rejection without replaying it', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ error: 'Model not found' }), { status: 404 })
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false), { timeout: 15_000 })
+
+    expect(state.task!.status).toBe('failed')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  }, 20_000)
+
+  // proxy-router reports a provider-side fault as HTTP 500 with the cause in the
+  // body, so status alone cannot classify it. A single upstream stall used to
+  // discard an entire multi-phase task.
+  const providerFaultResponse = (message: string): Response =>
+    new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    })
+
+  it.each([
+    'provider request failed: provider error: failed to prompt: failed to send request: Post "http://127.0.0.1:8317/v1/chat/completions": context deadline exceeded',
+    'provider request failed: dial tcp 10.0.0.4:8317: connect: connection refused',
+    'provider request failed: read tcp 10.0.0.4:8317: i/o timeout'
+  ])(
+    'replays an HTTP 500 whose body names a transport fault: %s',
+    async (message) => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(providerFaultResponse(message))
+        .mockResolvedValueOnce(completionResponse({ content: 'Recovered.' }))
+      vi.stubGlobal('fetch', fetchMock)
+
+      startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+      await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false), {
+        timeout: 15_000
+      })
+
+      expect(state.task!.status).toBe('completed')
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    },
+    20_000
+  )
+
+  it('still fails fast on an HTTP 500 that describes the request itself', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(providerFaultResponse('model not found for session'))
+    vi.stubGlobal('fetch', fetchMock)
+
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false), { timeout: 15_000 })
+
+    expect(state.task!.status).toBe('failed')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  }, 20_000)
+
+  it('never widens a 4xx, however its body reads', async () => {
+    // A model that quotes the phrase back would otherwise buy itself retries.
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'context deadline exceeded' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false), { timeout: 15_000 })
+
+    expect(state.task!.status).toBe('failed')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  }, 20_000)
+
+  it('gives up after a bounded number of attempts', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(gatewayResponse(504))
+    vi.stubGlobal('fetch', fetchMock)
+
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false), { timeout: 20_000 })
+
+    expect(state.task!.status).toBe('failed')
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  }, 25_000)
+
+  it('replays a dead transport but never a stop request', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockResolvedValueOnce(completionResponse({ content: 'Recovered.' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false), { timeout: 15_000 })
+
+    expect(state.task!.status).toBe('completed')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+
+    const abortError = new Error('Aborted')
+    abortError.name = 'AbortError'
+    const abortingMock = vi.fn().mockRejectedValue(abortError)
+    vi.stubGlobal('fetch', abortingMock)
+    state.task = makeTask()
+
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false), { timeout: 15_000 })
+
+    expect(abortingMock).toHaveBeenCalledTimes(1)
+  }, 25_000)
+})
+
+describe.sequential('Cowork runner malformed tool turns', () => {
+  beforeEach(() => {
+    state.project = makeProject()
+    state.task = makeTask()
+    state.replaceCalls = 0
+    state.failReplaceCall = undefined
+    extensionState.catalog = { projectInstructions: null, skills: [] }
+    toolMocks.execute.mockReset()
+    toolMocks.loadImage.mockReset()
+    resetCoworkImageRefusals()
+    toolMocks.loadImage.mockResolvedValue(Buffer.from('pixels'))
+    visionMocks.verdict.mockReset()
+    visionMocks.verdict.mockReturnValue(null)
+    visionMocks.record.mockReset()
+    visionMocks.run.mockClear()
+    webMocks.retrieve.mockReset()
+    vi.unstubAllGlobals()
+  })
+
+  const readCalls = (count: number, name = 'read_file'): unknown[] =>
+    Array.from({ length: count }, (_, index) => ({
+      id: `call-${index + 1}`,
+      type: 'function',
+      function: { name, arguments: JSON.stringify({ path: `file-${index + 1}.md` }) }
+    }))
+
+  const runToCompletion = async (): Promise<void> => {
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false), { timeout: 15_000 })
+  }
+
+  it('accepts a wide reconnaissance turn rather than capping it at a handful', async () => {
+    toolMocks.execute.mockResolvedValue({ result: { content: 'x' } })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(completionResponse({ content: null, tool_calls: readCalls(16) }))
+      .mockResolvedValueOnce(completionResponse({ content: 'Read them all.' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToCompletion()
+
+    expect(state.task!.status).toBe('completed')
+    expect(toolMocks.execute).toHaveBeenCalledTimes(16)
+  }, 20_000)
+
+  it('asks the model to retry an over-wide turn instead of ending the task', async () => {
+    toolMocks.execute.mockResolvedValue({ result: { content: 'x' } })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        completionResponse({ content: null, tool_calls: readCalls(MAX_TOOL_CALLS_PER_TURN + 1) })
+      )
+      .mockResolvedValueOnce(completionResponse({ content: null, tool_calls: readCalls(2) }))
+      .mockResolvedValueOnce(completionResponse({ content: 'Done.' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToCompletion()
+
+    expect(state.task!.status).toBe('completed')
+    // Nothing from the rejected turn ran, and the correction reached the model.
+    expect(toolMocks.execute).toHaveBeenCalledTimes(2)
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain('at most')
+  }, 20_000)
+
+  it('leaves no unanswered tool calls in the history it replays', async () => {
+    toolMocks.execute.mockResolvedValue({ result: { content: 'x' } })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        completionResponse({ content: null, tool_calls: readCalls(MAX_TOOL_CALLS_PER_TURN + 1) })
+      )
+      .mockResolvedValueOnce(completionResponse({ content: 'Done.' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToCompletion()
+
+    const replayed = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)).messages as Array<{
+      role: string
+      tool_calls?: unknown[]
+    }>
+    expect(replayed.some((message) => message.tool_calls?.length)).toBe(false)
+    expect(state.task!.status).toBe('completed')
+  }, 20_000)
+
+  it('recovers a turn that named a tool which does not exist', async () => {
+    toolMocks.execute.mockResolvedValue({ result: { content: 'x' } })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        completionResponse({ content: null, tool_calls: readCalls(1, 'summon_daemon') })
+      )
+      .mockResolvedValueOnce(completionResponse({ content: 'Used a real tool instead.' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToCompletion()
+
+    expect(state.task!.status).toBe('completed')
+    expect(toolMocks.execute).not.toHaveBeenCalled()
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain('summon_daemon')
+  }, 20_000)
+
+  it('gives up when the model keeps repeating the same malformed turn', async () => {
+    // A fresh response per call: a Response body can only be read once.
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async () =>
+        completionResponse({ content: null, tool_calls: readCalls(MAX_TOOL_CALLS_PER_TURN + 1) })
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToCompletion()
+
+    expect(state.task!.status).toBe('failed')
+    // The first turn, then one turn per correction the runner is willing to ask for.
+    expect(fetchMock).toHaveBeenCalledTimes(1 + MAX_TOOL_PROTOCOL_CORRECTIONS)
+  }, 20_000)
+})
+
+describe.sequential('Cowork runner plan bookkeeping', () => {
+  beforeEach(() => {
+    state.project = makeProject()
+    state.task = makeTask()
+    state.replaceCalls = 0
+    state.failReplaceCall = undefined
+    extensionState.catalog = { projectInstructions: null, skills: [] }
+    toolMocks.execute.mockReset()
+    toolMocks.loadImage.mockReset()
+    resetCoworkImageRefusals()
+    toolMocks.loadImage.mockResolvedValue(Buffer.from('pixels'))
+    visionMocks.verdict.mockReset()
+    visionMocks.verdict.mockReturnValue(null)
+    visionMocks.record.mockReset()
+    visionMocks.run.mockClear()
+    webMocks.retrieve.mockReset()
+    vi.unstubAllGlobals()
+  })
+
+  const planCall = (id: string, name: string, args: unknown): unknown => ({
+    id,
+    type: 'function',
+    function: { name, arguments: JSON.stringify(args) }
+  })
+
+  const runToCompletion = async (): Promise<void> => {
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false), { timeout: 15_000 })
+  }
+
+  const toolResults = (fetchMock: ReturnType<typeof vi.fn>, callIndex: number): any[] =>
+    (JSON.parse(String(fetchMock.mock.calls[callIndex]?.[1]?.body)).messages as any[])
+      .filter((message) => message.role === 'tool')
+      .map((message) => JSON.parse(message.content))
+
+  it('keeps finished steps finished when the model re-plans mid-task', async () => {
+    const steps = [
+      { id: 'a', title: 'Read the folder' },
+      { id: 'b', title: 'Write the report' }
+    ]
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        completionResponse({ content: null, tool_calls: [planCall('c1', 'set_plan', { steps })] })
+      )
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          tool_calls: [planCall('c2', 'update_plan_step', { id: 'a', status: 'completed' })]
+        })
+      )
+      // The re-plan resubmits the finished step with no status at all, which used
+      // to reset it to pending and run the progress counter backwards.
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          tool_calls: [
+            planCall('c3', 'set_plan', {
+              steps: [...steps, { id: 'c', title: 'Check the numbers' }]
+            })
+          ]
+        })
+      )
+      // Saying "Done." with steps still open earns a nudge rather than an ending,
+      // so the model has to keep answering until the runner gives up asking. A
+      // fresh Response per call: a body can only be read once.
+      .mockImplementation(async () => completionResponse({ content: 'Done.' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToCompletion()
+
+    expect(state.task!.status).toBe('completed')
+    expect(state.task!.plan.map((step) => [step.id, step.status])).toEqual([
+      ['a', 'completed'],
+      ['b', 'pending'],
+      ['c', 'pending']
+    ])
+  }, 20_000)
+
+  it('honours an explicit status when the model deliberately reopens a step', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          tool_calls: [planCall('c1', 'set_plan', { steps: [{ id: 'a', title: 'Draft' }] })]
+        })
+      )
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          tool_calls: [planCall('c2', 'update_plan_step', { id: 'a', status: 'completed' })]
+        })
+      )
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          tool_calls: [
+            planCall('c3', 'set_plan', {
+              steps: [{ id: 'a', title: 'Draft', status: 'in_progress' }]
+            })
+          ]
+        })
+      )
+      .mockImplementation(async () => completionResponse({ content: 'Done.' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToCompletion()
+
+    expect(state.task!.plan[0]?.status).toBe('in_progress')
+  }, 20_000)
+
+  it('reports an unknown step id back to the model instead of ending the task', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          tool_calls: [planCall('c1', 'set_plan', { steps: [{ id: 'a', title: 'Draft' }] })]
+        })
+      )
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          tool_calls: [planCall('c2', 'update_plan_step', { id: 'ghost', status: 'completed' })]
+        })
+      )
+      .mockImplementation(async () => completionResponse({ content: 'Recovered.' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToCompletion()
+
+    expect(state.task!.status).toBe('completed')
+    const result = toolResults(fetchMock, 2).at(-1)
+    expect(result.ok).toBe(false)
+    expect(result.availableStepIds).toEqual(['a'])
+  }, 20_000)
+
+  it('reports a malformed plan back to the model instead of ending the task', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          tool_calls: [planCall('c1', 'set_plan', { steps: 'everything' })]
+        })
+      )
+      .mockImplementation(async () => completionResponse({ content: 'Recovered.' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToCompletion()
+
+    expect(state.task!.status).toBe('completed')
+    expect(toolResults(fetchMock, 1).at(-1).ok).toBe(false)
+  }, 20_000)
+
+  it('drops duplicate step ids so update_plan_step stays unambiguous', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          tool_calls: [
+            planCall('c1', 'set_plan', {
+              steps: [
+                { id: 'a', title: 'First' },
+                { id: 'a', title: 'Also first' },
+                { id: 'b', title: 'Second' }
+              ]
+            })
+          ]
+        })
+      )
+      .mockImplementation(async () => completionResponse({ content: 'Done.' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToCompletion()
+
+    expect(state.task!.plan.map((step) => step.id)).toEqual(['a', 'b'])
+    expect(state.task!.plan[0]?.title).toBe('First')
+  }, 20_000)
+})
+
+describe.sequential('Cowork runner unfinished plan continuation', () => {
+  beforeEach(() => {
+    state.project = makeProject()
+    state.task = makeTask()
+    state.replaceCalls = 0
+    state.failReplaceCall = undefined
+    extensionState.catalog = { projectInstructions: null, skills: [] }
+    toolMocks.execute.mockReset()
+    toolMocks.loadImage.mockReset()
+    resetCoworkImageRefusals()
+    toolMocks.loadImage.mockResolvedValue(Buffer.from('pixels'))
+    visionMocks.verdict.mockReset()
+    visionMocks.verdict.mockReturnValue(null)
+    visionMocks.record.mockReset()
+    visionMocks.run.mockClear()
+    webMocks.retrieve.mockReset()
+    vi.unstubAllGlobals()
+  })
+
+  const planCall = (id: string, name: string, args: unknown): unknown => ({
+    id,
+    type: 'function',
+    function: { name, arguments: JSON.stringify(args) }
+  })
+
+  const runToCompletion = async (): Promise<void> => {
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false), { timeout: 15_000 })
+  }
+
+  const setPlanTurn = (steps: unknown[]): unknown =>
+    completionResponse({ content: null, tool_calls: [planCall('c1', 'set_plan', { steps })] })
+
+  it('asks the model to carry on when it narrates an action it never took', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        setPlanTurn([
+          { id: 'a', title: 'Write the manifest' },
+          { id: 'b', title: 'Check it' }
+        ]) as any
+      )
+      // The model announces the write and then calls nothing, which used to end
+      // the task and leave the user typing "continue".
+      .mockResolvedValueOnce(completionResponse({ content: 'Creating it now.' }))
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          tool_calls: [planCall('c3', 'update_plan_step', { id: 'a', status: 'completed' })]
+        })
+      )
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          tool_calls: [planCall('c4', 'update_plan_step', { id: 'b', status: 'completed' })]
+        })
+      )
+      .mockResolvedValueOnce(completionResponse({ content: 'All done.' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToCompletion()
+
+    expect(state.task!.status).toBe('completed')
+    expect(state.task!.summary).toContain('All done.')
+    expect(String(fetchMock.mock.calls[2]?.[1]?.body)).toContain('Write the manifest')
+  }, 20_000)
+
+  it('still finishes once every plan step is closed', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        setPlanTurn([{ id: 'a', title: 'Only step', status: 'completed' }]) as any
+      )
+      .mockResolvedValueOnce(completionResponse({ content: 'Nothing left.' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToCompletion()
+
+    expect(state.task!.status).toBe('completed')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  }, 20_000)
+
+  it('stops nudging a model that will not move rather than looping forever', async () => {
+    let call = 0
+    const fetchMock = vi.fn().mockImplementation(async () => {
+      call += 1
+      if (call === 1) return setPlanTurn([{ id: 'a', title: 'Stuck step' }])
+      return completionResponse({ content: 'Creating it now.' })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToCompletion()
+
+    expect(state.task!.status).toBe('completed')
+    // One planning turn, the turn that stalled, then one turn per nudge.
+    expect(fetchMock).toHaveBeenCalledTimes(2 + MAX_UNFINISHED_PLAN_NUDGES)
+  }, 20_000)
+})
+
+describe.sequential('Cowork runner resilience over a long task', () => {
+  beforeEach(() => {
+    state.project = makeProject()
+    state.task = makeTask()
+    state.replaceCalls = 0
+    state.failReplaceCall = undefined
+    extensionState.catalog = { projectInstructions: null, skills: [] }
+    toolMocks.execute.mockReset()
+    toolMocks.loadImage.mockReset()
+    resetCoworkImageRefusals()
+    toolMocks.loadImage.mockResolvedValue(Buffer.from('pixels'))
+    visionMocks.verdict.mockReset()
+    visionMocks.verdict.mockReturnValue(null)
+    visionMocks.record.mockReset()
+    visionMocks.run.mockClear()
+    webMocks.retrieve.mockReset()
+    vi.unstubAllGlobals()
+  })
+
+  const call = (id: string, name: string, args: unknown): unknown => ({
+    id,
+    type: 'function',
+    function: { name, arguments: JSON.stringify(args) }
+  })
+
+  const runToRest = async (): Promise<void> => {
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false), { timeout: 20_000 })
+  }
+
+  it('hands a rejected tool call back to the model instead of discarding the task', async () => {
+    // Over a long run a model will eventually invent an argument. That used to
+    // escape the tool handler and fail the whole task, throwing away every phase
+    // already completed.
+    toolMocks.execute.mockResolvedValue({ result: { path: 'a.txt', bytes: 1 } })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          tool_calls: [call('bad', 'read_file', { path: 'a.txt', encoding: 'utf-9' })]
+        }) as any
+      )
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          tool_calls: [call('good', 'read_file', { path: 'a.txt' })]
+        }) as any
+      )
+      .mockResolvedValueOnce(completionResponse({ content: 'Recovered and finished.' }) as any)
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToRest()
+
+    expect(state.task!.status).toBe('completed')
+    // The rejection was reported as a tool result, so the turn still closed.
+    const answered = state.task!.agentMessages.filter((message) => message.role === 'tool')
+    expect(answered.some((message) => String(message.content).includes('"ok":false'))).toBe(true)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  }, 25_000)
+
+  it('answers every call in a batch even when one of them is rejected', async () => {
+    // An unanswered tool_calls block makes every later turn unsendable.
+    toolMocks.execute.mockResolvedValue({ result: { path: 'ok.txt', bytes: 1 } })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          tool_calls: [
+            call('one', 'read_file', { path: 'ok.txt' }),
+            call('two', 'read_file', { path: 'ok.txt', nonsense: true }),
+            call('three', 'read_file', { path: 'ok.txt' })
+          ]
+        }) as any
+      )
+      .mockResolvedValueOnce(completionResponse({ content: 'Done.' }) as any)
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToRest()
+
+    const answeredIds = new Set(
+      state
+        .task!.agentMessages.filter((message) => message.role === 'tool')
+        .map((message) => message.tool_call_id)
+    )
+    expect(answeredIds).toEqual(new Set(['one', 'two', 'three']))
+    expect(state.task!.status).toBe('completed')
+  }, 25_000)
+
+  it('asks for the rest of a reply the provider cut off rather than filing the fragment', async () => {
+    // finish_reason 'length' carries no tool calls because the model never got
+    // to emit them. Treating that as a finished answer stored a sentence
+    // fragment as the summary and stopped a task that was mid-flight.
+    const truncated = (content: string): Response =>
+      new Response(
+        JSON.stringify({ choices: [{ message: { content }, finish_reason: 'length' }] }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      )
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(truncated('I will now write the report, starting with the'))
+      .mockResolvedValueOnce(completionResponse({ content: 'Finished the report.' }) as any)
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToRest()
+
+    expect(state.task!.status).toBe('completed')
+    expect(state.task!.summary).toBe('Finished the report.')
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain('cut off')
+  }, 25_000)
+
+  it('gives up with a clear reason when the model never stops overrunning the limit', async () => {
+    const fetchMock = vi.fn().mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            choices: [{ message: { content: 'and then' }, finish_reason: 'length' }]
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToRest()
+
+    expect(state.task!.status).toBe('failed')
+    expect(state.task!.error).toMatch(/length limit/i)
+    expect(fetchMock).toHaveBeenCalledTimes(1 + MAX_TRUNCATED_TURN_CONTINUATIONS)
+  }, 25_000)
+
+  it('lets a compatibility-mode model recover from answering in prose', async () => {
+    // A text-v1 model that replies with prose has made the same class of mistake
+    // as a native model naming a tool that does not exist, and used to be the one
+    // case that ended the task outright.
+    toolMocks.execute.mockResolvedValue({ result: { path: 'result.txt', bytes: 4 } })
+    state.task!.toolProtocol = 'text-v1'
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(completionResponse({ content: 'Sure! Let me help with that.' }) as any)
+      .mockResolvedValueOnce(
+        textEnvelopeResponse({ type: 'final', content: 'Understood, and finished.' }) as any
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToRest()
+
+    expect(state.task!.status).toBe('completed')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    // The correction told it what shape to reply in.
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain('morpheus-cowork-v1')
+  }, 25_000)
+
+  it('carries a five-phase session through every recoverable fault to completion', async () => {
+    // The individual recoveries above are each proven in isolation. This is the
+    // case they exist for: one instruction, five phases, and every fault a long
+    // run actually hits arriving in the same session. Each one used to end the
+    // task outright, discarding every phase already on disk.
+    toolMocks.execute.mockImplementation(async (_project: unknown, toolName: string) => {
+      if (toolName === 'read_file') return { result: { path: 'source.csv', content: 'a,b\n1,2' } }
+      if (toolName === 'create_xlsx') return { result: { path: 'report.xlsx', bytes: 4096 } }
+      return { result: { path: 'notes.md', bytes: 128 } }
+    })
+
+    const truncatedTurn = (): Response =>
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: { content: 'Next I will build the workbook, which' },
+              finish_reason: 'length'
+            }
+          ]
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+
+    const script: Array<() => Response> = [
+      // Phase 0: plan the whole job up front.
+      () =>
+        completionResponse({
+          content: null,
+          tool_calls: [
+            call('p1', 'set_plan', {
+              steps: [
+                { id: 's1', title: 'Read the source' },
+                { id: 's2', title: 'Write notes' },
+                { id: 's3', title: 'Build the workbook' },
+                { id: 's4', title: 'Verify' },
+                { id: 's5', title: 'Summarise' }
+              ]
+            })
+          ]
+        }) as Response,
+      // Phase 1: a real read, alongside an invented argument that must not end the run.
+      () =>
+        completionResponse({
+          content: null,
+          tool_calls: [
+            call('r1', 'read_file', { path: 'source.csv' }),
+            call('r2', 'read_file', { path: 'source.csv', encoding: 'utf-9' })
+          ]
+        }) as Response,
+      () =>
+        completionResponse({
+          content: null,
+          tool_calls: [call('u1', 'update_plan_step', { id: 's1', status: 'completed' })]
+        }) as Response,
+      // Phase 2: a write, then a turn the provider cuts off mid-sentence.
+      () =>
+        completionResponse({
+          content: null,
+          tool_calls: [call('w1', 'write_file', { path: 'notes.md', content: '# Notes' })]
+        }) as Response,
+      truncatedTurn,
+      () =>
+        completionResponse({
+          content: null,
+          tool_calls: [call('u2', 'update_plan_step', { id: 's2', status: 'completed' })]
+        }) as Response,
+      // Phase 3: the artifact, then a turn that narrates instead of acting.
+      () =>
+        completionResponse({
+          content: null,
+          tool_calls: [
+            call('x1', 'create_xlsx', {
+              path: 'report.xlsx',
+              title: 'Report',
+              sheets: [{ name: 'Data', headers: ['a'], rows: [[1]] }]
+            })
+          ]
+        }) as Response,
+      () => completionResponse({ content: 'Building the workbook now.' }) as Response,
+      () =>
+        completionResponse({
+          content: null,
+          tool_calls: [call('u3', 'update_plan_step', { id: 's3', status: 'completed' })]
+        }) as Response,
+      // Phase 4: verify by reading back what was written.
+      () =>
+        completionResponse({
+          content: null,
+          tool_calls: [call('r3', 'read_file', { path: 'notes.md' })]
+        }) as Response,
+      () =>
+        completionResponse({
+          content: null,
+          tool_calls: [
+            call('u4', 'update_plan_step', { id: 's4', status: 'completed' }),
+            call('u5', 'update_plan_step', { id: 's5', status: 'completed' })
+          ]
+        }) as Response,
+      // Phase 5: the summary the user actually reads.
+      () => completionResponse({ content: 'All five phases are complete.' }) as Response
+    ]
+
+    let turn = 0
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async () => (script[turn++] ?? script[script.length - 1])())
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToRest()
+
+    expect(state.task!.status).toBe('completed')
+    expect(state.task!.summary).toBe('All five phases are complete.')
+    // Every phase finished, and the plan says so.
+    expect(state.task!.plan.map((step) => step.status)).toEqual([
+      'completed',
+      'completed',
+      'completed',
+      'completed',
+      'completed'
+    ])
+    // The work really ran: a read, a write, and the workbook.
+    const ranTools = toolMocks.execute.mock.calls.map((args: unknown[]) => args[1] as string)
+    expect(ranTools).toContain('read_file')
+    expect(ranTools).toContain('write_file')
+    expect(ranTools).toContain('create_xlsx')
+    // The one invented argument was answered rather than executed.
+    expect(ranTools.filter((name: string) => name === 'read_file')).toHaveLength(2)
+    // Nothing was left owing a tool result, which is what a provider rejects.
+    const pending = new Set<string>()
+    for (const message of state.task!.agentMessages) {
+      for (const toolCall of message.tool_calls ?? []) pending.add(toolCall.id)
+      if (message.role === 'tool') pending.delete(message.tool_call_id!)
+    }
+    expect(pending.size).toBe(0)
+    expect(fetchMock).toHaveBeenCalledTimes(script.length)
+  }, 30_000)
+})
+
+describe.sequential('Cowork runner unwritten-file reporting', () => {
+  beforeEach(() => {
+    state.project = makeProject()
+    state.task = makeTask()
+    state.replaceCalls = 0
+    state.failReplaceCall = undefined
+    extensionState.catalog = { projectInstructions: null, skills: [] }
+    toolMocks.execute.mockReset()
+    toolMocks.loadImage.mockReset()
+    resetCoworkImageRefusals()
+    toolMocks.loadImage.mockResolvedValue(Buffer.from('pixels'))
+    visionMocks.verdict.mockReset()
+    visionMocks.verdict.mockReturnValue(null)
+    visionMocks.record.mockReset()
+    visionMocks.run.mockClear()
+    webMocks.retrieve.mockReset()
+    vi.unstubAllGlobals()
+  })
+
+  const call = (id: string, name: string, args: unknown): unknown => ({
+    id,
+    type: 'function',
+    function: { name, arguments: JSON.stringify(args) }
+  })
+
+  const runToCompletion = async (): Promise<void> => {
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false), { timeout: 15_000 })
+  }
+
+  const workspaceNotices = (): string[] =>
+    state
+      .task!.messages.filter((message) => message.author?.kind === 'workspace')
+      .map((message) => message.content)
+
+  it('names a file the model claimed to create after the action failed', async () => {
+    toolMocks.execute.mockRejectedValue(new Error('slide 3 contains unsupported key "notes"'))
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          tool_calls: [call('c1', 'create_pptx', { path: 'reports/board-deck.pptx', slides: [] })]
+        }) as any
+      )
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          tool_calls: [call('c2', 'finish_task', { summary: 'The deck is in reports/.' })]
+        }) as any
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToCompletion()
+
+    expect(state.task!.status).toBe('completed')
+    // The summary still says what the model said; the notice contradicts it.
+    expect(state.task!.summary).toContain('The deck is in reports/.')
+    const notices = workspaceNotices()
+    expect(notices.length).toBe(1)
+    expect(notices[0]).toContain('reports/board-deck.pptx')
+    expect(notices[0]).toContain('unsupported key')
+    expect(notices[0]).toContain('not created')
+  }, 20_000)
+
+  it('stays quiet when the model recovers and writes the same file', async () => {
+    let attempt = 0
+    toolMocks.execute.mockImplementation(async () => {
+      attempt += 1
+      if (attempt === 1) throw new Error('slide 3 contains unsupported key "notes"')
+      return { result: { path: 'reports/board-deck.pptx', bytes: 4096 } }
+    })
+    const deckCall = (id: string): unknown =>
+      call(id, 'create_pptx', { path: 'reports/board-deck.pptx', slides: [{ title: id }] })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        completionResponse({ content: null, tool_calls: [deckCall('c1')] }) as any
+      )
+      .mockResolvedValueOnce(
+        completionResponse({ content: null, tool_calls: [deckCall('c2')] }) as any
+      )
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          tool_calls: [call('c3', 'finish_task', { summary: 'The deck is in reports/.' })]
+        }) as any
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToCompletion()
+
+    expect(state.task!.status).toBe('completed')
+    expect(workspaceNotices()).toEqual([])
+  }, 20_000)
+
+  it('reports the failure on a task the model ends without finish_task', async () => {
+    toolMocks.execute.mockRejectedValue(new Error('the destination folder is unavailable'))
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          tool_calls: [call('c1', 'write_file', { path: 'notes.md', content: 'hello' })]
+        }) as any
+      )
+      .mockResolvedValueOnce(completionResponse({ content: 'Saved the notes.' }) as any)
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToCompletion()
+
+    expect(state.task!.status).toBe('completed')
+    const notices = workspaceNotices()
+    expect(notices.length).toBe(1)
+    expect(notices[0]).toContain('notes.md')
+    expect(notices[0]).toContain('1 file action failed')
+  }, 20_000)
+})
+
+describe.sequential('Cowork runner image handling', () => {
+  beforeEach(() => {
+    state.project = makeProject()
+    state.task = makeTask()
+    state.replaceCalls = 0
+    state.failReplaceCall = undefined
+    extensionState.catalog = { projectInstructions: null, skills: [] }
+    toolMocks.execute.mockReset()
+    toolMocks.loadImage.mockReset()
+    resetCoworkImageRefusals()
+    toolMocks.loadImage.mockResolvedValue(Buffer.from('pixels'))
+    visionMocks.verdict.mockReset()
+    visionMocks.verdict.mockReturnValue(null)
+    visionMocks.record.mockReset()
+    visionMocks.run.mockClear()
+    webMocks.retrieve.mockReset()
+    vi.unstubAllGlobals()
+  })
+
+  const imageOutput = () => ({
+    result: { path: 'shot.png', mediaType: 'image/png', bytes: 6, width: 2, height: 3 },
+    image: {
+      source: 'project' as const,
+      path: 'shot.png',
+      mediaType: 'image/png',
+      bytes: 6,
+      width: 2,
+      height: 3
+    }
+  })
+
+  const readImageCall = (id: string): Record<string, unknown> => ({
+    id,
+    type: 'function',
+    function: { name: 'read_image', arguments: JSON.stringify({ path: 'shot.png' }) }
+  })
+
+  const finishCall = (id: string): Record<string, unknown> => ({
+    id,
+    type: 'function',
+    function: { name: 'finish_task', arguments: JSON.stringify({ summary: 'Looked at it.' }) }
+  })
+
+  it('sends the pixels as a user message and never stores base64 in the transcript', async () => {
+    toolMocks.execute.mockResolvedValue(imageOutput())
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(completionResponse({ tool_calls: [readImageCall('img-1')] }))
+      .mockResolvedValueOnce(completionResponse({ tool_calls: [finishCall('done-1')] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false))
+
+    // The stored turn keeps a reference; only the outgoing request carries bytes.
+    const stored = state.task!.agentMessages.find(
+      (message) => Array.isArray(message.content) && message.content.some((p) => p.type === 'image')
+    )
+    expect(stored).toMatchObject({ role: 'user' })
+    expect(JSON.stringify(state.task!.agentMessages)).not.toContain('base64')
+
+    const secondBody = JSON.parse(fetchMock.mock.calls[1][1].body)
+    const withImage = secondBody.messages.find(
+      (message: any) =>
+        Array.isArray(message.content) &&
+        message.content.some((part: any) => part.type === 'image_url')
+    )
+    expect(withImage.role).toBe('user')
+    expect(withImage.content.at(-1).image_url.url).toBe(
+      `data:image/png;base64,${Buffer.from('pixels').toString('base64')}`
+    )
+    // The reference, not the picture, is what the tool result reports.
+    const toolResult = state.task!.agentMessages.find((message) => message.role === 'tool')
+    expect(JSON.parse(messageTextContent(toolResult!.content))).toEqual({
+      ok: true,
+      result: { path: 'shot.png', mediaType: 'image/png', bytes: 6, width: 2, height: 3 }
+    })
+  })
+
+  it('keeps every tool result adjacent to its call when an image arrives mid-batch', async () => {
+    toolMocks.execute.mockImplementation(async (_project: unknown, name: string) =>
+      name === 'read_image' ? imageOutput() : { result: { ok: true } }
+    )
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      completionResponse({
+        tool_calls: [
+          readImageCall('img-1'),
+          {
+            id: 'list-1',
+            type: 'function',
+            function: { name: 'list_files', arguments: JSON.stringify({ path: '.' }) }
+          },
+          finishCall('done-1')
+        ]
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false))
+
+    const messages = state.task!.agentMessages
+    for (const [index, message] of messages.entries()) {
+      if (!message.tool_calls?.length) continue
+      const following = messages.slice(index + 1)
+      const contiguous = following.slice(
+        0,
+        following.findIndex((candidate) => candidate.role !== 'tool') === -1
+          ? following.length
+          : following.findIndex((candidate) => candidate.role !== 'tool')
+      )
+      const answered = contiguous.map((candidate) => candidate.tool_call_id)
+      for (const call of message.tool_calls) expect(answered).toContain(call.id)
+    }
+  })
+
+  it('offers the image tool whatever the model is judged capable of', async () => {
+    for (const capability of ['verified', 'declared', 'detected', 'none', undefined] as const) {
+      state.project = makeProject()
+      state.task = makeTask()
+      if (capability) state.task.model.visionCapability = capability
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(completionResponse({ tool_calls: [finishCall('done-1')] }))
+      vi.stubGlobal('fetch', fetchMock)
+
+      startCoworkRun(state.task.id, async () => ({}), vi.fn())
+      await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false))
+
+      const names = JSON.parse(fetchMock.mock.calls[0][1].body).tools.map(
+        (tool: any) => tool.function.name
+      )
+      expect(names).toContain('read_image')
+      expect(names).toContain('inspect_file')
+    }
+  })
+
+  it('offers the image tool even when a probe says the model is blind', async () => {
+    state.task!.model.visionCapability = 'none'
+    visionMocks.verdict.mockReturnValue({ sees: false })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(completionResponse({ tool_calls: [finishCall('done-1')] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false))
+
+    const names = JSON.parse(fetchMock.mock.calls[0][1].body).tools.map(
+      (tool: any) => tool.function.name
+    )
+    expect(names).toContain('read_image')
+  })
+
+  it('states the file facts alongside the pixels so a blind model cannot invent them', async () => {
+    toolMocks.execute.mockResolvedValue(imageOutput())
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(completionResponse({ tool_calls: [readImageCall('img-1')] }))
+      .mockResolvedValueOnce(completionResponse({ tool_calls: [finishCall('done-1')] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false))
+
+    const body = JSON.parse(fetchMock.mock.calls[1][1].body)
+    const withImage = body.messages.find(
+      (message: any) =>
+        Array.isArray(message.content) &&
+        message.content.some((part: any) => part.type === 'image_url')
+    )
+    const preamble = withImage.content[0].text
+    expect(preamble).toContain('shot.png')
+    expect(preamble).toContain('image/png')
+    expect(preamble).toContain('2x3')
+    expect(preamble).toContain('6 bytes')
+    expect(preamble).toContain('If no picture reached you, say so')
+  })
+
+  it('replays the turn in words when the endpoint refuses image content', async () => {
+    toolMocks.execute.mockResolvedValue(imageOutput())
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(completionResponse({ tool_calls: [readImageCall('img-1')] }))
+      .mockResolvedValueOnce(
+        errorResponse(400, JSON.stringify({ error: { message: 'image_url is not supported' } }))
+      )
+      .mockResolvedValueOnce(completionResponse({ tool_calls: [finishCall('done-1')] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false))
+
+    // The rejected attempt carried pixels; the replay carries only prose.
+    expect(
+      JSON.parse(fetchMock.mock.calls[1][1].body).messages.some(
+        (message: any) =>
+          Array.isArray(message.content) &&
+          message.content.some((part: any) => part.type === 'image_url')
+      )
+    ).toBe(true)
+    const replay = JSON.parse(fetchMock.mock.calls[2][1].body)
+    expect(JSON.stringify(replay.messages)).not.toContain('image_url')
+    expect(JSON.stringify(replay.messages)).toContain('cannot receive pictures')
+    // The refusal is remembered rather than advertised as vision.
+    expect(visionMocks.record).toHaveBeenCalledWith(
+      expect.objectContaining({ sees: false, answer: expect.stringContaining('rejected') })
+    )
+    expect(state.task!.status).toBe('completed')
+  })
+
+  it('does not strip pixels for a rejection that says nothing about images', async () => {
+    toolMocks.execute.mockResolvedValue(imageOutput())
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(completionResponse({ tool_calls: [readImageCall('img-1')] }))
+      .mockResolvedValueOnce(
+        errorResponse(400, JSON.stringify({ error: { message: 'temperature must be a number' } }))
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false))
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(state.task!.status).toBe('failed')
+  })
+
+  it('degrades an image whose file has gone rather than failing the turn', async () => {
+    toolMocks.execute.mockResolvedValue(imageOutput())
+    toolMocks.loadImage.mockResolvedValue(null)
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(completionResponse({ tool_calls: [readImageCall('img-1')] }))
+      .mockResolvedValueOnce(completionResponse({ tool_calls: [finishCall('done-1')] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false))
+
+    const body = JSON.parse(fetchMock.mock.calls[1][1].body)
+    expect(JSON.stringify(body.messages)).toContain('no longer readable')
+    expect(JSON.stringify(body.messages)).not.toContain('image_url')
+    expect(state.task!.status).toBe('completed')
+  })
+})
+
+describe.sequential('Cowork runner vision probing', () => {
+  beforeEach(() => {
+    state.project = makeProject()
+    state.task = makeTask()
+    state.replaceCalls = 0
+    state.failReplaceCall = undefined
+    extensionState.catalog = { projectInstructions: null, skills: [] }
+    toolMocks.execute.mockReset()
+    toolMocks.loadImage.mockReset()
+    resetCoworkImageRefusals()
+    toolMocks.loadImage.mockResolvedValue(Buffer.from('pixels'))
+    visionMocks.verdict.mockReset()
+    visionMocks.verdict.mockReturnValue(null)
+    visionMocks.record.mockReset()
+    visionMocks.run.mockClear()
+    webMocks.retrieve.mockReset()
+    vi.unstubAllGlobals()
+  })
+
+  const finish = (id: string): Record<string, unknown> => ({
+    id,
+    type: 'function',
+    function: { name: 'finish_task', arguments: JSON.stringify({ summary: 'Done.' }) }
+  })
+
+  it('probes an unknown model once and records the verdict', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(completionResponse({ tool_calls: [finish('done-1')] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false))
+    await vi.waitFor(() => expect(visionMocks.record).toHaveBeenCalled())
+
+    expect(visionMocks.run).toHaveBeenCalledTimes(1)
+    expect(visionMocks.run.mock.calls[0][0]).toBe('local-test')
+    expect(visionMocks.record.mock.calls[0][0]).toMatchObject({
+      modelId: 'local-test',
+      sees: true
+    })
+  })
+
+  it('never probes a model whose verdict is already known', async () => {
+    visionMocks.verdict.mockReturnValue({ sees: false })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(completionResponse({ tool_calls: [finish('done-1')] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false))
+
+    expect(visionMocks.run).not.toHaveBeenCalled()
+  })
+
+  it('reports a probe verdict without letting it remove the image tool', async () => {
+    for (const [capability, sees] of [
+      ['detected', false],
+      ['none', true]
+    ] as const) {
+      state.project = makeProject()
+      state.task = makeTask()
+      state.task.model.visionCapability = capability
+      visionMocks.verdict.mockReturnValue({ sees })
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(completionResponse({ tool_calls: [finish('done-1')] }))
+      vi.stubGlobal('fetch', fetchMock)
+
+      startCoworkRun(state.task.id, async () => ({}), vi.fn())
+      await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false))
+
+      const names = JSON.parse(fetchMock.mock.calls[0][1].body).tools.map(
+        (tool: any) => tool.function.name
+      )
+      expect(names).toContain('read_image')
+    }
+  })
+
+  it('finishes the task even when probing throws', async () => {
+    visionMocks.run.mockRejectedValueOnce(new Error('probe exploded'))
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(completionResponse({ tool_calls: [finish('done-1')] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    startCoworkRun(state.task!.id, async () => ({}), vi.fn())
+    await vi.waitFor(() => expect(coworkRunActive(state.task!.id)).toBe(false))
+
+    expect(state.task!.status).toBe('completed')
+    expect(visionMocks.record).not.toHaveBeenCalled()
   })
 })

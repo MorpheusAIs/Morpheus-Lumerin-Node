@@ -160,4 +160,21 @@ describe('session-first Cowork and Chat wiring', () => {
     expect(projection).toContain("| 'modelBindings'")
     expect(projection).toContain('modelBindings: _modelBindings')
   })
+
+  it('keeps opaque provider reasoning state out of the renderer', () => {
+    const ipc = source('src/main/src/client/cowork-ipc.ts')
+    const projection = ipc.slice(
+      ipc.indexOf('function publicTask('),
+      ipc.indexOf('function visionCapability')
+    )
+
+    expect(projection).toContain("| 'agentMessages'")
+    expect(projection).toContain('agentMessages: _agentMessages')
+    expect(ipc).not.toContain('reasoning_content')
+    expect(source('src/main/src/client/cowork-tool-protocol.ts')).not.toContain('reasoning_content')
+    expect(source('src/renderer/src/components/cowork/Cowork.tsx')).not.toContain(
+      'reasoning_content'
+    )
+    expect(source('src/preload/index.ts')).not.toContain('reasoning_content')
+  })
 })

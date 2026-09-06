@@ -1,4 +1,4 @@
-import type { CoworkAgentMessage } from './cowork.types'
+import type { CoworkAgentMessage, CoworkContentPart } from './cowork.types'
 
 export const COWORK_TEXT_TOOL_PROTOCOL = 'morpheus-cowork-v1' as const
 
@@ -15,7 +15,11 @@ export type TextToolEnvelope =
   | { type: 'tool_call'; name: string; arguments: Record<string, unknown> }
   | { type: 'final'; content: string }
 
-type CompletionMessage = { role: 'user' | 'assistant'; content: string }
+type CompletionMessage = {
+  role: 'user' | 'assistant'
+  /** A parts array carries the images on an instruction; everything else is text. */
+  content: string | CoworkContentPart[]
+}
 
 const TOOL_FIELDS = new Set(['tools', 'tool_choice', 'parallel_tool_calls'])
 const UNSUPPORTED = /(?:is|are) not supported(?: by this model)?/i
@@ -94,6 +98,39 @@ export function unsupportedNativeToolFields(status: number, body: string): Set<s
   return found
 }
 
+/**
+ * Wording a provider uses when it will not accept image parts at all. Matched
+ * only against client-fault statuses, so a generic 400 or a server fault can
+ * never be mistaken for one and silently strip a capable model's pixels.
+ */
+const IMAGE_REJECTION = [
+  /image[_ ]url/i,
+  /\bimage(s)?\b[^.]{0,40}\b(not supported|unsupported|not allowed|cannot be)/i,
+  /\b(not supported|unsupported|does not support|no support)\b[^.]{0,40}\bimage(s)?\b/i,
+  /\b(multimodal|vision)\b[^.]{0,40}\b(not supported|unsupported|not enabled)/i,
+  /invalid_image/i,
+  /image_parse_error/i,
+  /content\b[^.]{0,40}\bmust be a string/i,
+  /expected string[^.]{0,40}\b(got|received) (an )?array/i
+]
+
+/**
+ * Whether a rejection says the endpoint cannot take image content, as opposed
+ * to disliking something else about the request. True means the same turn is
+ * worth replaying with the pictures described in words instead of sent as
+ * pixels, which is the difference between a model that loses some detail and a
+ * task that dies outright.
+ */
+export function rejectsImageContent(status: number, body: string): boolean {
+  // A 500 carrying an upstream 400/422 is the gateway relaying a client fault,
+  // so it is read the same way. Everything else is ambiguous and left alone.
+  const clientFault =
+    status === 400 || status === 422 || (status === 500 && /upstream error (400|422)/i.test(body))
+  if (!clientFault || !body) return false
+  const text = body.replaceAll('\\_', '_')
+  return IMAGE_REJECTION.some((pattern) => pattern.test(text))
+}
+
 export function textToolProtocolInstructions(tools: readonly ToolDefinition[]): string {
   const manifest = tools.map((tool) => ({
     name: tool.function.name,
@@ -115,8 +152,10 @@ Available tools (names, descriptions, and argument schemas):
 ${JSON.stringify(manifest)}`
 }
 
-function parsedToolResult(content: string | null | undefined): unknown {
-  if (!content) return null
+function parsedToolResult(content: CoworkAgentMessage['content']): unknown {
+  // A tool result is always text. A parts array only ever appears on an
+  // instruction, which this branch never sees.
+  if (typeof content !== 'string' || !content) return null
   try {
     return JSON.parse(content)
   } catch {
@@ -130,8 +169,12 @@ export function textProtocolMessages(messages: readonly CoworkAgentMessage[]): C
   for (let index = 0; index < messages.length; index++) {
     const message = messages[index]
     if (message.role === 'user') {
-      if (typeof message.content === 'string')
-        converted.push({ role: 'user', content: message.content })
+      const content = message.content
+      // Images attached to an instruction pass through unchanged: dropping the
+      // parts array here would drop the instruction they belong to with it.
+      if (typeof content === 'string' || (Array.isArray(content) && content.length)) {
+        converted.push({ role: 'user', content })
+      }
       continue
     }
     if (message.role === 'tool') {

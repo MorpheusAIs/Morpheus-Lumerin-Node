@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { mutationArgumentsHash } from './cowork-mutation-journal'
+import { messageTextContent } from './cowork-model-history'
 import type { CoworkAgentMessage } from './cowork.types'
 
 const electron = vi.hoisted(() => ({ userData: '' }))
@@ -453,7 +454,7 @@ describe.sequential('Cowork store persistence', () => {
     )
 
     expect(results).toHaveLength(2)
-    expect(JSON.parse(results.at(-1)!.content!)).toEqual({
+    expect(JSON.parse(messageTextContent(results.at(-1)!.content))).toEqual({
       ok: false,
       error:
         'Workspace blocked a reused tool call ID whose action name or arguments had changed. No file action ran.'
@@ -561,6 +562,124 @@ describe.sequential('Cowork store persistence', () => {
 
     expect(policy).toMatchObject({ mode: 'manual', revision: 10 })
     expect(rows).toHaveLength(1)
+  })
+
+  it('preserves opaque provider reasoning state across save and reload', async () => {
+    const store = await import('./cowork-store')
+    const project = await store.createProject({
+      name: 'Reasoning continuity',
+      rootPath: projectRoot,
+      approvalMode: 'auto'
+    })
+    const task = await store.createTask({
+      projectId: project.id,
+      title: 'Thinking-mode continuation',
+      goal: 'Keep provider thinking state exact.',
+      model: { modelId: 'local-test', modelName: 'Local test model', isLocal: true }
+    })
+    const reasoning = 'step 1: read the file\nstep 2: write \u201cnotes.txt\u201d exactly once'
+    const message: CoworkAgentMessage = {
+      role: 'assistant',
+      content: null,
+      reasoning_content: reasoning,
+      tool_calls: [
+        {
+          id: 'reasoning-call-1',
+          type: 'function',
+          function: { name: 'read_file', arguments: JSON.stringify({ path: 'notes.txt' }) }
+        }
+      ]
+    }
+    store.appendAgentMessage(task, message)
+    await store.replaceTask(task)
+
+    const recovered = (await store.getTask(task.id))!
+    expect(recovered.agentMessages.at(-1)).toEqual(message)
+    expect(recovered.agentMessages.at(-1)!.reasoning_content).toBe(reasoning)
+  })
+
+  it('trims a long single-instruction history instead of failing the task', async () => {
+    // A multi-phase run produces one user message and then hundreds of
+    // assistant/tool pairs. Trimming used to insist on a second user message to
+    // cut at, so a long task threw here and lost everything it had built.
+    const store = await import('./cowork-store')
+    const task = await store.createTask({
+      projectId: (await store.createProject({ name: 'Trim', rootPath: projectRoot })).id,
+      title: 'Long build',
+      goal: 'Build a multi-phase project.',
+      model: { modelId: 'local-test', modelName: 'Local test model', isLocal: true }
+    })
+    // createTask already seeds the goal as message 0. That single user message is
+    // the whole point: a multi-phase run never produces a second one.
+    expect(task.agentMessages).toEqual([{ role: 'user', content: 'Build a multi-phase project.' }])
+    expect(() => {
+      for (let turn = 0; turn < 400; turn += 1) {
+        store.appendAgentMessage(task, {
+          role: 'assistant',
+          content: null,
+          tool_calls: [
+            {
+              id: `call-${turn}`,
+              type: 'function',
+              function: { name: 'read_file', arguments: JSON.stringify({ path: `f${turn}.txt` }) }
+            }
+          ]
+        })
+        store.appendAgentMessage(task, {
+          role: 'tool',
+          tool_call_id: `call-${turn}`,
+          content: JSON.stringify({ ok: true })
+        })
+      }
+    }).not.toThrow()
+
+    expect(task.agentMessages.length).toBeLessThanOrEqual(500)
+    // The statement of what the task is for outlives the middle of the run.
+    expect(task.agentMessages[0]).toMatchObject({
+      role: 'user',
+      content: 'Build a multi-phase project.'
+    })
+    // Every retained tool result still answers a call the model can see, which
+    // is what providers reject a history for.
+    const visible = new Set<string>()
+    for (const message of task.agentMessages) {
+      for (const call of message.tool_calls ?? []) visible.add(call.id)
+      if (message.role === 'tool') expect(visible.has(message.tool_call_id!)).toBe(true)
+    }
+  })
+
+  it('keeps modelContextStart pointing at a real turn boundary after a trim', async () => {
+    const store = await import('./cowork-store')
+    const task = await store.createTask({
+      projectId: (await store.createProject({ name: 'Trim rebind', rootPath: projectRoot })).id,
+      title: 'Rebound long build',
+      goal: 'Build a multi-phase project.',
+      model: { modelId: 'local-test', modelName: 'Local test model', isLocal: true }
+    })
+    task.modelContextStart = 1
+    for (let turn = 0; turn < 400; turn += 1) {
+      store.appendAgentMessage(task, {
+        role: 'assistant',
+        content: null,
+        tool_calls: [
+          {
+            id: `c${turn}`,
+            type: 'function',
+            function: { name: 'read_file', arguments: '{}' }
+          }
+        ]
+      })
+      store.appendAgentMessage(task, {
+        role: 'tool',
+        tool_call_id: `c${turn}`,
+        content: '{"ok":true}'
+      })
+    }
+
+    expect(task.modelContextStart).toBeGreaterThanOrEqual(1)
+    expect(task.modelContextStart).toBeLessThan(task.agentMessages.length)
+    const boundary = task.agentMessages[task.modelContextStart!]
+    expect(boundary.role === 'user' || boundary.role === 'assistant').toBe(true)
   })
 
   it('refuses to overwrite approval settings from a newer schema', async () => {

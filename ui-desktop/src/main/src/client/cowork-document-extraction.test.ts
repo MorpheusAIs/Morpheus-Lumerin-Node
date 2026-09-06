@@ -150,13 +150,22 @@ describe('Cowork document extraction', () => {
   }, 20_000)
 
   it('truncates large extracted text within both text and serialized-output limits', async () => {
+    // Sized off the limit rather than a literal, so raising the ceiling cannot
+    // quietly turn this into a test of a document that never needed truncating.
+    const paragraphCharacters = 20_000
     const artifact = await generateDocxArtifact({
       format: 'docx',
       title: 'Large Document',
-      blocks: Array.from({ length: 7 }, () => ({
-        type: 'paragraph' as const,
-        text: '四'.repeat(20_000)
-      }))
+      blocks: Array.from(
+        {
+          length:
+            Math.ceil(COWORK_DOCUMENT_EXTRACTION_LIMITS.textCharacters / paragraphCharacters) + 2
+        },
+        () => ({
+          type: 'paragraph' as const,
+          text: '四'.repeat(paragraphCharacters)
+        })
+      )
     })
 
     const result = await extractCoworkDocument(artifact.buffer, 'large.docx')

@@ -40,6 +40,11 @@ export type CoworkLoopGuardReason =
 export interface CoworkLoopGuardState {
   version: 1
   unverifiedMutations: number
+  /**
+   * Destinations already mutated since the last verification read. Written by an
+   * older build this is absent, so every read of it tolerates undefined.
+   */
+  unverifiedDestinations?: string[]
   lastMutationHash?: string
   equivalentMutationStreak: number
   lastDestinationHash?: string
@@ -64,6 +69,7 @@ export function createCoworkLoopGuardState(): CoworkLoopGuardState {
   return {
     version: 1,
     unverifiedMutations: 0,
+    unverifiedDestinations: [],
     equivalentMutationStreak: 0,
     destinationMutationStreak: 0,
     recentMutationHashes: [],
@@ -123,7 +129,8 @@ function generatedPayload(input: Record<string, unknown>): Record<string, unknow
 function clonedState(state: CoworkLoopGuardState): CoworkLoopGuardState {
   return {
     ...state,
-    recentMutationHashes: [...state.recentMutationHashes],
+    recentMutationHashes: [...(state.recentMutationHashes ?? [])],
+    unverifiedDestinations: [...(state.unverifiedDestinations ?? [])],
     contentDestinationsByHash: Object.fromEntries(
       Object.entries(state.contentDestinationsByHash).map(([key, values]) => [key, [...values]])
     )
@@ -131,12 +138,33 @@ function clonedState(state: CoworkLoopGuardState): CoworkLoopGuardState {
 }
 
 function resetMutationSequence(state: CoworkLoopGuardState, resetUnverified: boolean): void {
-  if (resetUnverified) state.unverifiedMutations = 0
+  if (resetUnverified) {
+    state.unverifiedMutations = 0
+    state.unverifiedDestinations = []
+  }
   delete state.lastMutationHash
   state.equivalentMutationStreak = 0
   delete state.lastDestinationHash
   state.destinationMutationStreak = 0
   state.recentMutationHashes = []
+}
+
+/**
+ * Rolls back the detectors that model disk state after a mutation that failed.
+ * Nothing was written, so retrying the same destination is correction, not
+ * repetition -- counting it paused runs at exactly the moment the model had
+ * just been told what to fix. The equivalent-action streak deliberately
+ * survives: resending the identical failing call is a loop either way.
+ */
+export function revertCoworkLoopGuardMutation(
+  attempted: Readonly<CoworkLoopGuardState>,
+  before: Readonly<CoworkLoopGuardState>
+): CoworkLoopGuardState {
+  const state = clonedState(before as CoworkLoopGuardState)
+  state.equivalentMutationStreak = attempted.equivalentMutationStreak
+  if (attempted.lastMutationHash === undefined) delete state.lastMutationHash
+  else state.lastMutationHash = attempted.lastMutationHash
+  return state
 }
 
 function blocked(
@@ -181,8 +209,17 @@ export function evaluateCoworkLoopGuard(
   state.destinationMutationStreak =
     state.lastDestinationHash === destinationHash ? state.destinationMutationStreak + 1 : 1
   state.lastDestinationHash = destinationHash
-  state.unverifiedMutations += 1
-  state.recentMutationHashes = [...state.recentMutationHashes, mutationHash].slice(-4)
+  // Only a destination this run has already written counts against the blind-work
+  // budget. Laying down a directory tree of new files is ordinary progress, and
+  // counting it as repetition paused legitimate multi-file tasks partway through.
+  // Rewriting somewhere already written without ever looking is the actual smell.
+  const seenDestinations = state.unverifiedDestinations ?? []
+  if (seenDestinations.includes(destinationHash)) {
+    state.unverifiedMutations += 1
+  } else {
+    state.unverifiedDestinations = [...seenDestinations, destinationHash].slice(-256)
+  }
+  state.recentMutationHashes = [...(state.recentMutationHashes ?? []), mutationHash].slice(-4)
 
   let repeatedContentAcrossDestinations = false
   if (GENERATED_PAYLOAD_TOOLS.has(action.toolName)) {
@@ -190,7 +227,8 @@ export function evaluateCoworkLoopGuard(
     const destinations = state.contentDestinationsByHash[contentHash] ?? []
     if (!destinations.includes(destinationHash)) {
       state.contentDestinationsByHash[contentHash] = [...destinations, destinationHash]
-      repeatedContentAcrossDestinations = destinations.length >= 2
+      // Reusing one template across a handful of files is ordinary scaffolding.
+      repeatedContentAcrossDestinations = destinations.length >= 4
     }
   }
 
@@ -208,18 +246,20 @@ export function evaluateCoworkLoopGuard(
       'Paused after the same file action was requested three times consecutively. Inspect the current files before continuing.'
     )
   }
-  if (state.destinationMutationStreak >= 3) {
+  // Refining one file a few times running is normal authoring; six untouched by
+  // any read is not. Failed attempts no longer count, so these are real writes.
+  if (state.destinationMutationStreak >= 6) {
     return blocked(
       state,
       'repeated-destination',
-      'Paused after three consecutive mutations targeted the same destination. Inspect the current file before continuing.'
+      'Paused after six consecutive writes to the same destination without a verification read. Inspect the current file before continuing.'
     )
   }
   if (repeatedContentAcrossDestinations) {
     return blocked(
       state,
       'repeated-content-across-destinations',
-      'Paused after equivalent generated content was sent to three different destinations. Inspect the current files before continuing.'
+      'Paused after equivalent generated content was sent to five different destinations. Inspect the current files before continuing.'
     )
   }
   if (alternatingCycle) {
@@ -229,11 +269,11 @@ export function evaluateCoworkLoopGuard(
       'Paused after detecting a repeating A-B file-action cycle. Inspect the current files before continuing.'
     )
   }
-  if (state.unverifiedMutations >= 4) {
+  if (state.unverifiedMutations >= 12) {
     return blocked(
       state,
       'unverified-mutation-limit',
-      'Paused before a fourth file mutation without a successful verification read. Inspect the current files before continuing.'
+      'Paused after rewriting the same files repeatedly without a verification read. Inspect the current files before continuing.'
     )
   }
 

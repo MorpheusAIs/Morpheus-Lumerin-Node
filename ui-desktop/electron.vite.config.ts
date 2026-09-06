@@ -118,11 +118,23 @@ export default defineConfig(({ command, mode }) => {
       build: {
         rollupOptions: {
           output: {
-            format: 'es'
+            format: 'es',
+            // Electron's asar layer cannot service a runtime ESM `import()`:
+            // the lazily split chunks fail with "Cannot use import statement
+            // outside a module" once packaged, which silently disabled every
+            // document and professional-artifact tool. Emitting a single main
+            // chunk removes the runtime import. CJS is not an option here
+            // because several dependencies (chalk, docx) are ESM-only.
+            inlineDynamicImports: true
           }
         }
       },
-      plugins: [externalizeDepsPlugin()],
+      // `pptxgenjs` declares no `"type": "module"` yet points ESM importers at
+      // `dist/pptxgen.es.js`, so Node classifies that ESM source as CommonJS
+      // and fails to parse it. Bundling the package instead of externalizing
+      // it lets Rollup read the ESM build directly and sidesteps the broken
+      // resolution entirely.
+      plugins: [externalizeDepsPlugin({ exclude: ['pptxgenjs'] })],
       define: processEnvDefineMap
     },
     preload: {

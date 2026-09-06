@@ -301,19 +301,24 @@ function appendHistoryItem<T>(items: T[], item: T): void {
   historyByteSizes.set(items, nextBytes)
 }
 
-function removeHistoryPrefix(items: unknown[], count: number): void {
-  if (count <= 0) return
-  if (count >= items.length) {
+function removeHistoryRange(items: unknown[], start: number, count: number): void {
+  if (count <= 0 || start < 0 || start >= items.length) return
+  const removable = Math.min(count, items.length - start)
+  if (removable >= items.length) {
     items.splice(0, items.length)
     historyByteSizes.set(items, 2)
     return
   }
   const removedBytes = items
-    .slice(0, count)
+    .slice(start, start + removable)
     .reduce<number>((total, item) => total + Buffer.byteLength(JSON.stringify(item), 'utf8'), 0)
-  const nextBytes = historyBytes(items) - removedBytes - count
-  items.splice(0, count)
+  const nextBytes = historyBytes(items) - removedBytes - removable
+  items.splice(start, removable)
   historyByteSizes.set(items, Math.max(2, nextBytes))
+}
+
+function removeHistoryPrefix(items: unknown[], count: number): void {
+  removeHistoryRange(items, 0, count)
 }
 
 export const createProject = async (input: {
@@ -669,30 +674,52 @@ export const appendDisplayMessage = (
   })
 }
 
+/**
+ * A turn starts at a user or assistant message; tool results belong to the
+ * assistant call above them. Cutting anywhere else orphans tool results, which
+ * every OpenAI-compatible provider rejects.
+ */
+function firstTrimmableTurnStart(items: CoworkAgentMessage[]): number {
+  for (let index = 2; index < items.length; index += 1) {
+    const role = items[index].role
+    if (role === 'user' || role === 'assistant') return index
+  }
+  return -1
+}
+
 export const appendAgentMessage = (task: CoworkTask, message: CoworkAgentMessage): void => {
   appendHistoryItem(task.agentMessages, clean(message))
   while (
     task.agentMessages.length > 1 &&
     (task.agentMessages.length > 500 || historyBytes(task.agentMessages) > MAX_AGENT_HISTORY_BYTES)
   ) {
-    // Trim only at a user-message boundary so an assistant tool call is never
+    // Trim at a user-message boundary so an assistant tool call is never
     // separated from its tool results.
     const boundary = task.agentMessages.findIndex(
       (item, index) => index > 0 && item.role === 'user'
     )
-    if (boundary <= 0) {
-      throw new Error(
-        'This task reached its 12 MB model-history limit. Start a new task to continue safely.'
-      )
+    if (boundary > 0) {
+      if (task.modelContextStart !== undefined) {
+        // modelContextStart is an index into this exact array. Keep the current
+        // binding boundary attached to the same message when an old prefix is
+        // discarded, especially when the handoff user message itself triggers
+        // the bounded-history trim.
+        task.modelContextStart = Math.max(0, task.modelContextStart - boundary)
+      }
+      removeHistoryPrefix(task.agentMessages, boundary)
+      continue
     }
-    if (task.modelContextStart !== undefined) {
-      // modelContextStart is an index into this exact array. Keep the current
-      // binding boundary attached to the same message when an old prefix is
-      // discarded, especially when the handoff user message itself triggers
-      // the bounded-history trim.
-      task.modelContextStart = Math.max(0, task.modelContextStart - boundary)
+    // One multi-phase instruction never produces a second user message, so a
+    // long run found no boundary here and used to throw, losing everything it
+    // had built. Shed the oldest complete turn instead and keep the opener,
+    // which is the only statement of what the task is for.
+    const turnStart = firstTrimmableTurnStart(task.agentMessages)
+    if (turnStart < 0) break
+    const removed = turnStart - 1
+    if (task.modelContextStart !== undefined && task.modelContextStart > 1) {
+      task.modelContextStart = Math.max(1, task.modelContextStart - removed)
     }
-    removeHistoryPrefix(task.agentMessages, boundary)
+    removeHistoryRange(task.agentMessages, 1, removed)
   }
 }
 

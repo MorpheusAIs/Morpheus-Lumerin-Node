@@ -51,7 +51,9 @@ export interface CoworkModelTarget {
 
 export interface CoworkModelOption extends CoworkModelTarget {
   source: 'local' | 'marketplace';
-  visionCapability: 'declared' | 'detected' | 'none';
+  /** 'verified' means a probe sent this model an image and it answered correctly. */
+  visionCapability: 'verified' | 'declared' | 'detected' | 'none';
+  visionProbedAt?: number;
 }
 
 export interface CoworkPlanStep {

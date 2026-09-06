@@ -40,6 +40,9 @@ export interface CoworkProject {
   archivedAt?: number
 }
 
+/** How sure Workspace is that a model can actually see an image. */
+export type CoworkVisionCapability = 'verified' | 'declared' | 'detected' | 'none'
+
 export interface CoworkModelTarget {
   modelId: string
   modelName: string
@@ -47,12 +50,21 @@ export interface CoworkModelTarget {
   sessionId?: string
   sessionEndsAt?: number
   dataBoundary?: 'on-device' | 'configured-endpoint' | 'independent-provider'
+  /**
+   * Carried on the binding so a running task keeps the judgement made when the
+   * model was chosen, rather than re-deriving it from a name mid-run. Absent on
+   * tasks created before image support existed, which are treated as unknown
+   * and so are offered the image tool.
+   */
+  visionCapability?: CoworkVisionCapability
 }
 
 export interface CoworkModelOption extends CoworkModelTarget {
   source: 'local' | 'marketplace'
   dataBoundary: 'on-device' | 'configured-endpoint' | 'independent-provider'
-  visionCapability: 'declared' | 'detected' | 'none'
+  visionCapability: CoworkVisionCapability
+  /** Present once a real probe has answered; the picker shows this over the guess. */
+  visionProbedAt?: number
 }
 
 export interface CoworkModelBinding extends CoworkModelTarget {
@@ -147,9 +159,35 @@ export interface CoworkPendingApproval {
   createdAt: number
 }
 
+/**
+ * Where the bytes of an image a task has looked at actually live. Only the
+ * reference is stored; the bytes are read and encoded when a request is built,
+ * so a transcript never grows by the size of the pictures in it.
+ */
+export interface CoworkImageReference {
+  /** 'project' is relative to the connected folder; 'attachment' is the Workspace store. */
+  source: 'project' | 'attachment'
+  path: string
+  mediaType: string
+  bytes: number
+  width?: number
+  height?: number
+}
+
+export type CoworkContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image'; image: CoworkImageReference }
+
 export interface CoworkAgentMessage {
   role: 'user' | 'assistant' | 'tool'
-  content?: string | null
+  content?: string | null | CoworkContentPart[]
+  /**
+   * Opaque provider reasoning state, such as DeepSeek thinking mode. Providers
+   * that emit it require the exact value back on every later request carrying
+   * native tools. Workspace stores and replays it unchanged and never renders,
+   * logs, summarizes, truncates, or exposes it to the renderer.
+   */
+  reasoning_content?: string | null
   tool_calls?: CoworkToolCall[]
   tool_call_id?: string
 }
@@ -161,6 +199,8 @@ export interface CoworkToolExecution {
   argumentsHash: string
   /** User-instruction safety epoch; absent only on records created before this field existed. */
   instructionId?: string
+  /** Destination this action was preparing, so a failure can name what is missing. */
+  targetPath?: string
   resultMessage?: string
   preparedAt: number
   completedAt?: number

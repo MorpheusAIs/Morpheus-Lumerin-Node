@@ -57,22 +57,26 @@ export class CoworkDocumentExtractionError extends Error {
  * caller-configurable: model-authored tool arguments must not be able to turn
  * a preview into an unbounded archive or document parser.
  */
+// Reading side. textCharacters stays the most conservative of these because it
+// governs how much lands in the model's context, where the cost is the model's
+// own window rather than this process's memory. The archive ceilings remain
+// zip-bomb protection and are raised only proportionally.
 export const COWORK_DOCUMENT_EXTRACTION_LIMITS = Object.freeze({
-  inputBytes: 20 * 1024 * 1024,
-  outputBytes: 1024 * 1024,
-  textCharacters: 120_000,
-  textBytes: 200_000,
-  pdfPages: 100,
-  workbookSheets: 20,
-  workbookRowsPerSheet: 5_000,
-  workbookRowsTotal: 20_000,
-  workbookColumnsPerSheet: 100,
-  workbookCellsTotal: 100_000,
-  presentationSlides: 100,
-  archiveEntries: 2_048,
-  archiveEntryBytes: 16 * 1024 * 1024,
-  archiveInflatedBytes: 64 * 1024 * 1024,
-  archiveRelationshipBytes: 1024 * 1024
+  inputBytes: 64 * 1024 * 1024,
+  outputBytes: 4 * 1024 * 1024,
+  textCharacters: 300_000,
+  textBytes: 500_000,
+  pdfPages: 400,
+  workbookSheets: 64,
+  workbookRowsPerSheet: 50_000,
+  workbookRowsTotal: 100_000,
+  workbookColumnsPerSheet: 256,
+  workbookCellsTotal: 300_000,
+  presentationSlides: 300,
+  archiveEntries: 8_192,
+  archiveEntryBytes: 48 * 1024 * 1024,
+  archiveInflatedBytes: 192 * 1024 * 1024,
+  archiveRelationshipBytes: 4 * 1024 * 1024
 })
 
 const SUPPORTED_FORMATS = new Set<CoworkDocumentFormat>(['pdf', 'docx', 'xlsx', 'pptx'])
@@ -816,7 +820,30 @@ function assertBoundedOutput(result: CoworkDocumentExtraction): void {
  * are rejected. Spreadsheet formulas are represented as plain text and are
  * never evaluated.
  */
+/**
+ * Inflating one archive at the ceiling can hold 192 MB live. Concurrent tasks
+ * would multiply that against a fixed process heap, so extraction takes the
+ * same one-at-a-time slot as artifact generation.
+ */
+let extractionChain: Promise<unknown> = Promise.resolve()
+
+function withExtractionSlot<T>(work: () => Promise<T>): Promise<T> {
+  const result = extractionChain.then(work, work)
+  extractionChain = result.then(
+    () => undefined,
+    () => undefined
+  )
+  return result
+}
+
 export async function extractCoworkDocument(
+  buffer: Buffer,
+  nameOrExtension: string
+): Promise<CoworkDocumentExtraction> {
+  return withExtractionSlot(() => extractCoworkDocumentUnqueued(buffer, nameOrExtension))
+}
+
+async function extractCoworkDocumentUnqueued(
   buffer: Buffer,
   nameOrExtension: string
 ): Promise<CoworkDocumentExtraction> {

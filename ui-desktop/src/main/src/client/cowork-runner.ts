@@ -25,19 +25,39 @@ import {
 } from './cowork-tools'
 import { discoverCoworkExtensionCatalog } from './cowork-extension-catalog'
 import { mutationArgumentsHash } from './cowork-mutation-journal'
-import { compactCoworkModelHistory, containsOmittedExecutionMarker } from './cowork-model-history'
-import { createCoworkLoopGuardState, evaluateCoworkLoopGuard } from './cowork-loop-guard'
+import {
+  compactCoworkModelHistory,
+  containsOmittedExecutionMarker,
+  materialiseCoworkImages
+} from './cowork-model-history'
+import { loadCoworkImageBytes } from './cowork-tools'
+import {
+  createCoworkLoopGuardState,
+  evaluateCoworkLoopGuard,
+  revertCoworkLoopGuardMutation
+} from './cowork-loop-guard'
+import type { CoworkLoopGuardState } from './cowork-loop-guard'
 import { retrieveCoworkWebPage } from './cowork-web'
 import {
+  coworkVisionVerdict,
+  loadCoworkVisionProbes,
+  recordCoworkVisionProbe
+} from './cowork-vision-cache'
+import { runCoworkVisionProbe } from './cowork-vision-probe'
+import {
   parseTextToolEnvelope,
+  rejectsImageContent,
   textProtocolMessages,
   textToolProtocolInstructions,
   unsupportedNativeToolFields
 } from './cowork-tool-protocol'
+import type { TextToolEnvelope } from './cowork-tool-protocol'
 import {
+  CoworkContentPart,
   CoworkModelTarget,
   CoworkPendingApproval,
   CoworkPlanStep,
+  CoworkPlanStepStatus,
   CoworkTask,
   CoworkTaskEvent,
   CoworkToolCall,
@@ -58,16 +78,89 @@ class CoworkRunInterrupted extends Error {
   }
 }
 
+/**
+ * A turn the model shaped wrongly: too many calls at once, a tool that does not
+ * exist, an oversized payload. None of it has executed, so the only thing lost
+ * is the turn itself. Carrying the correction back to the model lets it try
+ * again instead of ending the task on a mistake it could have fixed.
+ */
+/**
+ * A call the model got wrong: bad arguments, an unusable payload. The run is
+ * healthy and the fix is the model's to make, so these are reported back as a
+ * tool result rather than ending the task. Deliberately narrow — an infra
+ * failure such as a rejected save leaves a mutation ambiguous and must stay
+ * fatal, because continuing would build on a state we cannot vouch for.
+ */
+class CoworkToolRejection extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'CoworkToolRejection'
+  }
+}
+
+class CoworkToolProtocolViolation extends Error {
+  readonly guidance: string
+  constructor(message: string, guidance: string) {
+    super(message)
+    this.name = 'CoworkToolProtocolViolation'
+    this.guidance = guidance
+  }
+}
+
 const activeRuns = new Map<string, ActiveRun>()
 const taskLifecycleTails = new Map<string, Promise<void>>()
 const pendingTaskInterruptions = new Map<string, Set<symbol>>()
-const MAX_MODEL_STEPS_PER_INSTRUCTION = 30
-const MAX_COMPLETION_BYTES = 4 * 1024 * 1024
+// A multi-phase project legitimately spends dozens of turns reading, writing and
+// verifying. This is a runaway ceiling, not a work budget: it exists so a wedged
+// run eventually stops, not so a real task has to be resumed by hand.
+const MAX_MODEL_STEPS_PER_INSTRUCTION = 150
+const MAX_COMPLETION_BYTES = 16 * 1024 * 1024
 const MAX_SUMMARY_CHARACTERS = 20_000
 const MAX_ACTIVE_RUNS = 4
 const MAX_ACTIVE_RUNS_PER_PROJECT = 2
-const MAX_MUTATION_EXECUTIONS = 128
-const MAX_MUTATIONS_PER_INSTRUCTION = 40
+const MAX_MUTATION_EXECUTIONS = 600
+const MAX_MUTATIONS_PER_INSTRUCTION = 200
+const MAX_REPORTED_FILE_ACTION_FAILURES = 12
+// Gateway-level failures that carry no information about the model's own
+// output: the request never reached a decision, so replaying it is meaningful.
+const TRANSIENT_UPSTREAM_STATUSES = new Set([408, 425, 429, 502, 503, 504])
+// proxy-router answers a provider-side fault with a generic HTTP 500 whose body
+// names the real cause, so the status alone cannot tell a gateway hiccup from a
+// deterministic rejection. These are the markers proxy-router's own health
+// checker treats as connection or timeout faults; keep them in step with
+// proxy-router/internal/modelhealth/checker.go.
+const TRANSIENT_UPSTREAM_BODY_MARKERS = [
+  'context deadline exceeded',
+  'failed to send request',
+  'connection refused',
+  'no such host',
+  'connection reset',
+  'i/o timeout',
+  'client.timeout exceeded',
+  'socket hang up',
+  'server closed idle connection'
+]
+const MAX_COMPLETION_ATTEMPTS = 3
+const COMPLETION_RETRY_BACKOFF_MS = [1_000, 4_000]
+// Reads mutate nothing, and a reconnaissance turn over an unfamiliar folder
+// legitimately wants more than a handful. What actually needs bounding is
+// writes, and MAX_MUTATIONS_PER_INSTRUCTION already bounds those.
+export const MAX_TOOL_CALLS_PER_TURN = 64
+// Enough to correct an honest mistake, too few to let a model that ignores the
+// correction spend the whole step budget repeating it.
+export const MAX_TOOL_PROTOCOL_CORRECTIONS = 4
+// A model that narrates its next action instead of taking it has not finished,
+// but it has stopped. Enough nudges to get it moving again, few enough that a
+// model with genuinely nothing left to do still reaches an end.
+export const MAX_UNFINISHED_PLAN_NUDGES = 8
+/** Turns a model may spend finishing a reply the provider cut off mid-sentence. */
+export const MAX_TRUNCATED_TURN_CONTINUATIONS = 3
+/**
+ * Consecutive turns in which every action was rejected. Reporting a rejection
+ * back lets a model correct itself, but a model that cannot must still stop
+ * rather than spend the whole step budget repeating one invalid call.
+ */
+export const MAX_CONSECUTIVE_REJECTED_TURNS = 4
 const GENERATED_PAYLOAD_TOOL_NAMES = new Set([
   'write_file',
   'create_docx',
@@ -79,6 +172,7 @@ const VERIFICATION_TOOL_NAMES = new Set([
   'inspect_file',
   'read_file',
   'read_document',
+  'read_image',
   'search_files',
   'analyze_csv'
 ])
@@ -89,6 +183,7 @@ const ALLOWED_TOOL_NAMES = new Set([
   'inspect_file',
   'read_file',
   'read_document',
+  'read_image',
   'search_files',
   'analyze_csv',
   'fetch_web_page',
@@ -105,6 +200,124 @@ const ALLOWED_TOOL_NAMES = new Set([
   'finish_task'
 ])
 const PROFESSIONAL_TOOL_NAMES = new Set(['create_docx', 'create_xlsx', 'create_pptx', 'create_pdf'])
+/** A probe is one tiny request; a provider that has not answered by now will not. */
+const VISION_PROBE_TIMEOUT_MS = 30_000
+const visionProbesInFlight = new Set<string>()
+
+/**
+ * Images a batch of tool calls has produced but not yet handed to the model.
+ *
+ * Pixels cannot ride on a tool result: providers accept image parts only on a
+ * user message, and a user message may not appear between an assistant's
+ * tool_calls block and the results answering it. So an image waits here until
+ * the last call of its batch has been answered, then goes out as one message.
+ * A batch that never finishes simply drops its images; the model can look
+ * again, which is cheaper than an unsendable transcript.
+ */
+const pendingCoworkImages = new Map<string, CoworkContentPart[]>()
+
+/**
+ * Models whose endpoint has answered a request containing pictures with a
+ * client fault naming image content. Remembered for the life of the process so
+ * one refusal costs one replayed turn rather than one per turn.
+ */
+const imagePixelsRefused = new Set<string>()
+
+/** Test seam. A refusal is otherwise meant to outlive the task that found it. */
+export const resetCoworkImageRefusals = (): void => imagePixelsRefused.clear()
+
+const historyHasImages = (task: CoworkTask): boolean =>
+  task.agentMessages.some(
+    (message) =>
+      Array.isArray(message.content) && message.content.some((part) => part.type === 'image')
+  )
+
+function queueCoworkImage(taskId: string, part: CoworkContentPart): void {
+  const queued = pendingCoworkImages.get(taskId)
+  if (queued) queued.push(part)
+  else pendingCoworkImages.set(taskId, [part])
+}
+
+function flushCoworkImages(task: CoworkTask): boolean {
+  const queued = pendingCoworkImages.get(task.id)
+  pendingCoworkImages.delete(task.id)
+  if (!queued?.length) return false
+  // The facts ride alongside the pixels for every model, not just the ones
+  // suspected of being blind. A model that cannot see now has the file's real
+  // name, format and size to reason from instead of inventing them, and one
+  // that can see loses nothing by being told what it is looking at.
+  const manifest = queued
+    .map((part) =>
+      part.type === 'image'
+        ? `- ${part.image.path} (${part.image.mediaType}${
+            part.image.width && part.image.height
+              ? `, ${part.image.width}x${part.image.height}`
+              : ''
+          }, ${part.image.bytes} bytes)`
+        : ''
+    )
+    .filter(Boolean)
+    .join('\n')
+  appendAgentMessage(task, {
+    role: 'user',
+    content: [
+      {
+        type: 'text',
+        text:
+          (queued.length === 1
+            ? 'Here is the image you asked to look at.'
+            : `Here are the ${queued.length} images you asked to look at.`) +
+          `\n${manifest}\nDescribe only what you can actually see. If no picture reached you, say so instead of guessing.`
+      },
+      ...queued
+    ]
+  })
+  return true
+}
+
+/**
+ * Probes a model's vision once, in the background, using the credentials the
+ * run already holds. It never blocks or fails a task: the worst case is that
+ * this run keeps the guess and the next one has the verified answer.
+ */
+async function probeVisionInBackground(
+  model: CoworkModelTarget,
+  headers: Record<string, string>
+): Promise<void> {
+  // Without this a long task would probe again on every turn, because the
+  // verdict is only recorded once the first probe has come back.
+  if (visionProbesInFlight.has(model.modelId)) return
+  visionProbesInFlight.add(model.modelId)
+  try {
+    await loadCoworkVisionProbes()
+    if (coworkVisionVerdict(model.modelId)) return
+    const result = await runCoworkVisionProbe(model.modelId, async (body) => {
+      const response = await fetch(`${config.chain.localProxyRouterUrl}/v1/chat/completions`, {
+        method: 'POST',
+        headers,
+        signal: AbortSignal.timeout(VISION_PROBE_TIMEOUT_MS),
+        body: JSON.stringify(body)
+      })
+      if (!response.ok) throw new Error(`probe rejected with HTTP ${response.status}`)
+      return await response.text()
+    })
+    recordCoworkVisionProbe(result)
+  } catch {
+    // A probe that cannot run leaves the guess in place, which is what it replaced.
+  } finally {
+    visionProbesInFlight.delete(model.modelId)
+  }
+}
+
+/**
+ * Every model is offered every tool, image reading included. A name-based guess
+ * that a model is blind was wrong often enough to be worse than the failure it
+ * prevented, and the two real risks are both covered elsewhere: an endpoint
+ * that refuses pictures gets the turn replayed with them described in words,
+ * and a model that accepts them without seeing them still receives the file's
+ * true name, format and size in the same message.
+ */
+const toolsForModel = (_model: CoworkModelTarget): typeof tools => tools
 
 function assertRunCapacity(projectId?: string, taskId?: string): void {
   if (taskId && activeRuns.has(taskId)) return
@@ -141,6 +354,18 @@ function taskInterruptionPending(taskId: string): boolean {
   return Boolean(pendingTaskInterruptions.get(taskId)?.size)
 }
 
+/**
+ * Whether a failed completion is worth replaying. A 4xx is always the request's
+ * own fault and is never widened, however its body reads: a model that quoted
+ * one of these phrases back would otherwise buy itself free retries.
+ */
+function isTransientUpstreamFailure(status: number, body: string): boolean {
+  if (TRANSIENT_UPSTREAM_STATUSES.has(status)) return true
+  if (status < 500) return false
+  const haystack = body.slice(0, 4_096).toLowerCase()
+  return TRANSIENT_UPSTREAM_BODY_MARKERS.some((marker) => haystack.includes(marker))
+}
+
 function requestImmediateTaskInterruption(taskId: string): () => void {
   const token = Symbol(taskId)
   const pending = pendingTaskInterruptions.get(taskId) ?? new Set<symbol>()
@@ -152,6 +377,25 @@ function requestImmediateTaskInterruption(taskId: string): () => void {
     current?.delete(token)
     if (!current?.size) pendingTaskInterruptions.delete(taskId)
   }
+}
+
+/** Waits, but surrenders immediately when the task is stopped mid-backoff. */
+function delayUnlessInterrupted(milliseconds: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new CoworkRunInterrupted())
+      return
+    }
+    const onAbort = (): void => {
+      clearTimeout(timer)
+      reject(new CoworkRunInterrupted())
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }, milliseconds)
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
 }
 
 async function assertRunMayContinue(task: CoworkTask, signal: AbortSignal): Promise<void> {
@@ -184,6 +428,8 @@ async function runTrackedContinuation(
     .then(operation)
     .finally(() => {
       if (activeRuns.get(taskId)?.controller === controller) activeRuns.delete(taskId)
+      // An unfinished batch leaves images queued that no message will ever carry.
+      pendingCoworkImages.delete(taskId)
     })
   await active.promise
 }
@@ -301,6 +547,19 @@ const tools = [
           startLine: { type: 'integer', minimum: 1 },
           endLine: { type: 'integer', minimum: 1 }
         },
+        required: ['path']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'read_image',
+      description:
+        'Look at a PNG, JPEG, WEBP, GIF, or BMP image in the connected folder. The picture itself is added to the conversation, so describe what you actually see rather than guessing from the file name.',
+      parameters: {
+        type: 'object',
+        properties: { path: { type: 'string' } },
         required: ['path']
       }
     }
@@ -451,7 +710,7 @@ const tools = [
     function: {
       name: 'create_pptx',
       description:
-        'Create a native 16:9 PPTX deck from bounded slides containing text, bullets, or a table. The output path must end in .pptx.',
+        'Create a native 16:9 PPTX deck from bounded slides containing text, bullets, or a table. A slide may pair a table with a short caption in body, but not with bullets. The output path must end in .pptx.',
       parameters: {
         type: 'object',
         properties: {
@@ -465,8 +724,13 @@ const tools = [
               properties: {
                 title: { type: 'string' },
                 subtitle: { type: 'string' },
-                body: { type: 'string' },
+                body: {
+                  type: 'string',
+                  description:
+                    'A paragraph, or a single caption line of at most 240 characters when the slide also has a table.'
+                },
                 bullets: { type: 'array', items: { type: 'string' } },
+                notes: { type: 'string', description: 'Speaker notes; never shown on the slide.' },
                 table: {
                   type: 'object',
                   properties: professionalTableProperties,
@@ -715,17 +979,33 @@ async function readLimitedBody(response: Response): Promise<string> {
 function normaliseToolCalls(value: unknown): CoworkToolCall[] | undefined {
   if (value === undefined) return undefined
   if (!Array.isArray(value)) throw new Error('The selected model returned invalid tool calls.')
-  if (value.length > 8) throw new Error('The selected model requested too many actions at once.')
+  if (value.length > MAX_TOOL_CALLS_PER_TURN) {
+    throw new CoworkToolProtocolViolation(
+      'The selected model requested too many actions at once.',
+      `You requested ${value.length} actions in a single turn, but at most ` +
+        `${MAX_TOOL_CALLS_PER_TURN} are allowed. None of them ran. Request the ` +
+        'most important ones now and the rest on your next turn.'
+    )
+  }
   const calls: CoworkToolCall[] = value.map((raw: any, index: number) => {
     const name = String(raw?.function?.name ?? '')
-    if (!ALLOWED_TOOL_NAMES.has(name))
-      throw new Error(`The selected model requested an unsupported action: ${name || 'unnamed'}.`)
+    if (!ALLOWED_TOOL_NAMES.has(name)) {
+      throw new CoworkToolProtocolViolation(
+        `The selected model requested an unsupported action: ${name || 'unnamed'}.`,
+        `No tool named "${name || 'unnamed'}" exists. None of the actions in that ` +
+          'turn ran. Use only the tools supplied to you, and check the spelling.'
+      )
+    }
     const args =
       typeof raw?.function?.arguments === 'string'
         ? raw.function.arguments
         : JSON.stringify(raw?.function?.arguments ?? {})
-    if (Buffer.byteLength(args, 'utf8') > 2 * 1024 * 1024 + 64 * 1024) {
-      throw new Error(`The selected model supplied oversized arguments for ${name}.`)
+    if (Buffer.byteLength(args, 'utf8') > 8 * 1024 * 1024 + 64 * 1024) {
+      throw new CoworkToolProtocolViolation(
+        `The selected model supplied oversized arguments for ${name}.`,
+        `The arguments you supplied to ${name} are too large to accept. None of ` +
+          'the actions in that turn ran. Split the work into smaller pieces.'
+      )
     }
     return {
       id: String(raw?.id || `tool-${index + 1}-${randomUUID()}`).slice(0, 160),
@@ -736,6 +1016,10 @@ function normaliseToolCalls(value: unknown): CoworkToolCall[] | undefined {
   const ids = new Set<string>()
   for (const call of calls) {
     if (ids.has(call.id)) {
+      // Deliberately fatal, unlike the violations above: call IDs are what the
+      // durable-replay path uses to tell an already-executed action from a new
+      // one, so a collision is a correctness hazard rather than a mistake to
+      // coach the model out of.
       throw new Error('The selected model returned duplicate tool call IDs.')
     }
     ids.add(call.id)
@@ -752,7 +1036,11 @@ async function complete(
   signal: AbortSignal
 ): Promise<{
   content?: string | null
+  /** Opaque provider thinking state; present only when the provider supplied it. */
+  reasoning_content?: string | null
   tool_calls?: CoworkToolCall[]
+  /** Provider's own account of why it stopped; 'length' means it was cut off. */
+  finishReason?: string | null
   toolProtocol: 'native' | 'text-v1'
 }> {
   if (!project) throw new Error('Workspace project not found.')
@@ -767,6 +1055,13 @@ async function complete(
   else if (task.model.sessionId) headers.session_id = task.model.sessionId
   else throw new Error('This marketplace model no longer has an open session.')
 
+  // Deliberately not awaited: the verdict is for later turns and later tasks,
+  // and this one must not wait on it.
+  void probeVisionInBackground(task.model, headers)
+
+  // Cleared for the rest of the run once the endpoint has refused pictures.
+  let sendPixels = !imagePixelsRefused.has(task.model.modelId)
+
   const request = async (
     mode: 'native' | 'text-v1'
   ): Promise<{ response: Response; text: string }> => {
@@ -775,6 +1070,7 @@ async function complete(
       task.agentMessages.length
     )
     const modelHistory = compactCoworkModelHistory(task.agentMessages.slice(contextStart))
+    const activeTools = toolsForModel(task.model)
     const system =
       systemPrompt(
         project.name,
@@ -782,7 +1078,14 @@ async function complete(
         projectMemory,
         extensionGuidance,
         handoffPrompt(task)
-      ) + (mode === 'text-v1' ? textToolProtocolInstructions(tools) : '')
+      ) + (mode === 'text-v1' ? textToolProtocolInstructions(activeTools) : '')
+    // Image bytes are read here and nowhere earlier, so the transcript holds
+    // references and each request carries the file as it stands right now.
+    const outboundHistory = await materialiseCoworkImages(
+      mode === 'text-v1' ? textProtocolMessages(modelHistory) : modelHistory,
+      (reference) => loadCoworkImageBytes(project, reference),
+      { pixels: sendPixels }
+    )
     const body = {
       model: task.model.modelId,
       stream: false,
@@ -792,9 +1095,9 @@ async function complete(
           role: 'system',
           content: system
         },
-        ...(mode === 'text-v1' ? textProtocolMessages(modelHistory) : modelHistory)
+        ...outboundHistory
       ],
-      ...(mode === 'native' ? { tools } : {})
+      ...(mode === 'native' ? { tools: activeTools } : {})
     }
     const response = await fetch(`${config.chain.localProxyRouterUrl}/v1/chat/completions`, {
       method: 'POST',
@@ -805,8 +1108,40 @@ async function complete(
     return { response, text: await readLimitedBody(response) }
   }
 
+  /**
+   * A completion request performs no local action: nothing is written and no
+   * tool executes until a response returns and validates. A gateway timeout
+   * therefore costs only the turn, so replaying it is safe, while refusing to
+   * replay it discarded whole multi-phase tasks on a single upstream hiccup.
+   * Deterministic rejections are still surfaced on the first attempt, since
+   * repeating those would only reproduce the same failure. The retry may cost
+   * a second provider charge when the upstream in fact completed the work.
+   */
+  const requestAllowingTransientFailure = async (
+    attemptedMode: 'native' | 'text-v1'
+  ): Promise<{ response: Response; text: string }> => {
+    for (let attempt = 0; ; attempt += 1) {
+      const finalAttempt = attempt >= MAX_COMPLETION_ATTEMPTS - 1
+      try {
+        const result = await request(attemptedMode)
+        if (finalAttempt || !isTransientUpstreamFailure(result.response.status, result.text))
+          return result
+      } catch (error) {
+        // A stop request and a dead transport both surface here; only the
+        // latter is worth another attempt.
+        if (finalAttempt || signal.aborted || error instanceof CoworkRunInterrupted) throw error
+        if (error instanceof Error && error.name === 'AbortError') throw error
+      }
+      await delayUnlessInterrupted(
+        COMPLETION_RETRY_BACKOFF_MS[attempt] ?? COMPLETION_RETRY_BACKOFF_MS.at(-1) ?? 4_000,
+        signal
+      )
+      await assertRunMayContinue(task, signal)
+    }
+  }
+
   let mode: 'native' | 'text-v1' = task.toolProtocol ?? 'native'
-  let { response, text } = await request(mode)
+  let { response, text } = await requestAllowingTransientFailure(mode)
   if (!response.ok && mode === 'native') {
     const unsupported = unsupportedNativeToolFields(response.status, text)
     if (unsupported.has('tools')) {
@@ -814,22 +1149,66 @@ async function complete(
       // exactly one compatibility retry is safe. Never retry ambiguous
       // timeouts, transport failures, auth/rate limits, generic 400s, or generic 5xxs.
       mode = 'text-v1'
-      ;({ response, text } = await request(mode))
+      ;({ response, text } = await requestAllowingTransientFailure(mode))
     }
+  }
+  // An endpoint that cannot take pictures rejects the whole request, which used
+  // to end the task on the turn after the model looked at a file. Describing
+  // the images in words costs detail; failing here costs the entire run.
+  if (
+    !response.ok &&
+    sendPixels &&
+    historyHasImages(task) &&
+    rejectsImageContent(response.status, text)
+  ) {
+    sendPixels = false
+    imagePixelsRefused.add(task.model.modelId)
+    // Recorded as a verdict so the picker stops advertising vision this model
+    // demonstrably does not have, and later runs skip the wasted first attempt.
+    recordCoworkVisionProbe({
+      modelId: task.model.modelId,
+      sees: false,
+      probedAt: Date.now(),
+      answer: `endpoint rejected image content with HTTP ${response.status}`
+    })
+    ;({ response, text } = await requestAllowingTransientFailure(mode))
   }
   if (!response.ok) throw new Error(text || `Model request failed with HTTP ${response.status}.`)
   const data = parseCompletion(text)
   const message = data?.choices?.[0]?.message
   if (!message) throw new Error('The selected model returned no assistant message.')
+  const rawFinishReason = (data?.choices?.[0] as { finish_reason?: unknown } | undefined)
+    ?.finish_reason
+  const finishReason = typeof rawFinishReason === 'string' ? rawFinishReason : null
 
   if (mode === 'text-v1') {
     if (typeof message.content !== 'string') {
-      throw new Error('The selected model returned an invalid Workspace compatibility response.')
+      throw new CoworkToolProtocolViolation(
+        'The selected model returned an invalid Workspace compatibility response.',
+        textToolProtocolInstructions(tools)
+      )
     }
-    const envelope = parseTextToolEnvelope(message.content, ALLOWED_TOOL_NAMES)
+    // A compatibility-mode model that answers in prose instead of an envelope has
+    // made the same class of mistake as a native model naming a tool that does
+    // not exist, and used to be the one case that ended the task outright.
+    let envelope: TextToolEnvelope
+    try {
+      envelope = parseTextToolEnvelope(message.content, ALLOWED_TOOL_NAMES)
+    } catch (error) {
+      throw new CoworkToolProtocolViolation(
+        error instanceof Error
+          ? error.message
+          : 'The selected model returned an invalid Workspace tool envelope.',
+        `${
+          error instanceof Error ? error.message : 'That reply was not a valid tool envelope.'
+        } Nothing ran. Reply with exactly one JSON envelope and no other text.\n\n` +
+          textToolProtocolInstructions(tools)
+      )
+    }
     if (envelope.type === 'final') {
       return {
         content: envelope.content.slice(0, 200_000),
+        finishReason,
         toolProtocol: mode
       }
     }
@@ -859,6 +1238,7 @@ async function complete(
           function: { name: envelope.name, arguments: args }
         }
       ]),
+      finishReason,
       toolProtocol: mode
     }
   }
@@ -870,10 +1250,20 @@ async function complete(
   ) {
     throw new Error('The selected model returned invalid assistant content.')
   }
+  // Validated before tool calls are normalised or executed: a provider that
+  // cannot round-trip its own thinking state must fail the turn, not act.
+  const reasoning = (message as { reasoning_content?: unknown }).reasoning_content
+  if (reasoning !== undefined && reasoning !== null && typeof reasoning !== 'string') {
+    throw new Error('The selected model returned invalid assistant reasoning state.')
+  }
   return {
     content:
       typeof message.content === 'string' ? message.content.slice(0, 200_000) : message.content,
+    // Opaque and byte-exact. Providers such as DeepSeek reject a thinking-mode
+    // tool continuation whose prior reasoning was altered or dropped.
+    ...(reasoning === undefined ? {} : { reasoning_content: reasoning }),
     tool_calls: normaliseToolCalls(message.tool_calls),
+    finishReason,
     toolProtocol: mode
   }
 }
@@ -882,7 +1272,7 @@ type DelegateWork = { label: string; prompt: string }
 
 function delegateWorkItems(input: Record<string, any>): DelegateWork[] {
   if (!Array.isArray(input.tasks) || input.tasks.length < 1 || input.tasks.length > 3) {
-    throw new Error('delegate_analysis requires one to three tasks.')
+    throw new CoworkToolRejection('delegate_analysis requires one to three tasks.')
   }
   return input.tasks.map((raw: any, index: number) => {
     const label = String(raw?.label ?? '')
@@ -890,8 +1280,9 @@ function delegateWorkItems(input: Record<string, any>): DelegateWork[] {
       .slice(0, 160)
     const prompt = String(raw?.prompt ?? '').trim()
     if (!label || !prompt)
-      throw new Error(`Delegate task ${index + 1} requires a label and prompt.`)
-    if (prompt.length > 30_000) throw new Error(`Delegate task “${label}” is too large.`)
+      throw new CoworkToolRejection(`Delegate task ${index + 1} requires a label and prompt.`)
+    if (prompt.length > 30_000)
+      throw new CoworkToolRejection(`Delegate task “${label}” is too large.`)
     return { label, prompt }
   })
 }
@@ -1002,6 +1393,73 @@ function closePendingApproval(task: CoworkTask, reason: string): void {
   delete task.pendingApproval
 }
 
+function toolFailureReason(execution: CoworkToolExecution): string {
+  try {
+    const parsed = JSON.parse(execution.resultMessage ?? '{}')
+    const error = typeof parsed?.error === 'string' ? parsed.error.trim() : ''
+    if (error) return error
+  } catch {
+    // A result message that is not JSON says nothing more than the fallback.
+  }
+  return 'The action did not complete.'
+}
+
+/**
+ * A failed file action is reported to the model as a tool result and nowhere
+ * else. A model that narrates success regardless therefore leaves a task that
+ * reads as finished with nothing on disk, which is exactly the case a person
+ * cannot diagnose from the outside. Name the destinations that were never
+ * written, skipping any the model went on to write successfully.
+ */
+function noteUnwrittenFiles(task: CoworkTask): void {
+  const instructionId = task.runSafety?.id
+  if (!instructionId) return
+  const executions = (task.toolExecutions ?? []).filter(
+    (execution) => execution.instructionId === instructionId
+  )
+  const written = new Set(
+    executions
+      .filter((execution) => execution.status === 'succeeded' && execution.targetPath)
+      .map((execution) => execution.targetPath as string)
+  )
+  const failures = executions.filter(
+    (execution) =>
+      execution.status === 'failed' &&
+      !(execution.targetPath !== undefined && written.has(execution.targetPath))
+  )
+  if (failures.length === 0) return
+  const reported = failures.slice(0, MAX_REPORTED_FILE_ACTION_FAILURES)
+  const lines = reported.map((execution) => {
+    const target = execution.targetPath ? `“${execution.targetPath}”` : 'a file'
+    return `• ${execution.toolName.replaceAll('_', ' ')} → ${target}: ${toolFailureReason(execution)}`
+  })
+  const omitted = failures.length - reported.length
+  if (omitted > 0) lines.push(`• …and ${omitted} more.`)
+  const single = failures.length === 1
+  appendDisplayMessage(
+    task,
+    'assistant',
+    `${failures.length} file action${single ? '' : 's'} failed, so ${single ? 'this file was' : 'these files were'} not created. Anything the summary claims about ${single ? 'it' : 'them'} is unverified.\n${lines.join('\n')}`,
+    { kind: 'workspace' }
+  )
+  appendActivity(task, {
+    type: 'system',
+    label: single ? 'A file action did not complete' : 'Some file actions did not complete',
+    detail: lines.join(' '),
+    status: 'error'
+  })
+}
+
+/** Reports a rejected call back to the model so the turn can still close. */
+function failToolCall(task: CoworkTask, call: CoworkToolCall, error: string): void {
+  appendAgentMessage(task, {
+    role: 'tool',
+    tool_call_id: call.id,
+    content: JSON.stringify({ ok: false, error })
+  })
+  scrubCoworkToolArguments(task, call)
+}
+
 function closeInterruptedToolCalls(task: CoworkTask, calls: CoworkToolCall[]): void {
   for (const call of calls) {
     appendAgentMessage(task, {
@@ -1098,17 +1556,53 @@ async function pauseForRepetition(
   return 'paused'
 }
 
-function normalisePlan(input: Record<string, any>): CoworkPlanStep[] {
+const PLAN_STEP_STATUSES = ['pending', 'in_progress', 'completed'] as const
+const MAX_PLAN_STEPS = 60
+const MAX_PLAN_TITLE_CHARACTERS = 200
+const MAX_PLAN_NOTE_CHARACTERS = 500
+
+function planStepStatus(value: unknown): CoworkPlanStepStatus | undefined {
+  return (PLAN_STEP_STATUSES as readonly string[]).includes(value as string)
+    ? (value as CoworkPlanStepStatus)
+    : undefined
+}
+
+/**
+ * Merges a submitted plan over the current one instead of replacing it. Models
+ * re-plan mid-task and resubmit steps they have already finished, usually with
+ * no status at all; replacing wholesale reset those to pending, so the progress
+ * counter ran backwards and finished work looked undone. An explicit status is
+ * still honoured, since reopening a step is a legitimate thing to ask for.
+ */
+function normalisePlan(input: Record<string, any>, existing: CoworkPlanStep[]): CoworkPlanStep[] {
   if (!Array.isArray(input.steps)) throw new Error('set_plan requires a steps array.')
-  return input.steps.slice(0, 30).map((step: any, index: number) => ({
-    id: String(step.id || `step-${index + 1}`),
-    title: String(step.title || '').trim() || `Step ${index + 1}`,
-    status: ['pending', 'in_progress', 'completed'].includes(step.status)
-      ? step.status
-      : index === 0
-        ? 'in_progress'
-        : 'pending'
-  }))
+  const previousById = new Map(existing.map((step) => [step.id, step]))
+  const steps: CoworkPlanStep[] = []
+  const seen = new Set<string>()
+  for (const [index, raw] of input.steps.slice(0, MAX_PLAN_STEPS).entries()) {
+    const step = (raw ?? {}) as Record<string, unknown>
+    const id = String(step.id || `step-${index + 1}`).slice(0, 160)
+    // Duplicate ids would make update_plan_step ambiguous and collide as React
+    // keys, so the first occurrence wins.
+    if (seen.has(id)) continue
+    seen.add(id)
+    const previous = previousById.get(id)
+    const status =
+      planStepStatus(step.status) ?? previous?.status ?? (index === 0 ? 'in_progress' : 'pending')
+    const note = typeof step.note === 'string' ? step.note : previous?.note
+    steps.push({
+      id,
+      title:
+        String(step.title || '')
+          .trim()
+          .slice(0, MAX_PLAN_TITLE_CHARACTERS) ||
+        previous?.title ||
+        `Step ${index + 1}`,
+      status,
+      ...(note ? { note: note.slice(0, MAX_PLAN_NOTE_CHARACTERS) } : {})
+    })
+  }
+  return steps
 }
 
 function activityDetail(name: string, input: Record<string, any>): string {
@@ -1215,7 +1709,7 @@ function validatedToolInput(toolCall: CoworkToolCall): Record<string, any> {
   )
   const unexpected = Object.keys(input).find((key) => !allowed.has(key))
   if (unexpected) {
-    throw new Error(
+    throw new CoworkToolRejection(
       `${toolCall.function.name} received unsupported argument “${unexpected}”. No action ran.`
     )
   }
@@ -1378,6 +1872,7 @@ async function executeToolCall(
       'inspect_file',
       'read_file',
       'read_document',
+      'read_image',
       'search_files',
       'analyze_csv'
     ].includes(name)
@@ -1404,8 +1899,27 @@ async function executeToolCall(
   }
 
   if (name === 'set_plan') {
-    setPlan(task, normalisePlan(input))
-    appendActivity(task, { type: 'plan', label: 'Created task plan', status: 'success' })
+    // A malformed plan changes nothing on disk, so it is reported back as a
+    // tool result the model can act on rather than ending the task.
+    if (!Array.isArray(input.steps) || input.steps.length === 0) {
+      appendAgentMessage(task, {
+        role: 'tool',
+        tool_call_id: toolCall.id,
+        content: JSON.stringify({
+          ok: false,
+          error: 'set_plan requires a non-empty steps array of { id, title } objects.'
+        })
+      })
+      await save(task, emit)
+      return 'continue'
+    }
+    const hadPlan = task.plan.length > 0
+    setPlan(task, normalisePlan(input, task.plan))
+    appendActivity(task, {
+      type: 'plan',
+      label: hadPlan ? 'Updated task plan' : 'Created task plan',
+      status: 'success'
+    })
     appendAgentMessage(task, {
       role: 'tool',
       tool_call_id: toolCall.id,
@@ -1417,9 +1931,27 @@ async function executeToolCall(
 
   if (name === 'update_plan_step') {
     const step = task.plan.find((item) => item.id === String(input.id))
-    if (!step) throw new Error(`Plan step not found: ${input.id}`)
-    step.status = input.status
-    step.note = input.note ? String(input.note) : step.note
+    const status = planStepStatus(input.status)
+    // An id the plan does not contain is the commonest way a model loses a
+    // task: it invents one, or refers to a step a later set_plan removed.
+    // Naming the ids that do exist lets it correct itself on the next turn.
+    if (!step || !status) {
+      appendAgentMessage(task, {
+        role: 'tool',
+        tool_call_id: toolCall.id,
+        content: JSON.stringify({
+          ok: false,
+          error: step
+            ? `Invalid plan step status: ${String(input.status)}. Use pending, in_progress, or completed.`
+            : `No plan step has id ${JSON.stringify(String(input.id ?? ''))}.`,
+          ...(step ? {} : { availableStepIds: task.plan.map((item) => item.id) })
+        })
+      })
+      await save(task, emit)
+      return 'continue'
+    }
+    step.status = status
+    step.note = input.note ? String(input.note).slice(0, MAX_PLAN_NOTE_CHARACTERS) : step.note
     appendActivity(task, {
       type: 'plan',
       label: step.title,
@@ -1469,6 +2001,7 @@ async function executeToolCall(
       if (step.status === 'in_progress') step.status = 'completed'
     })
     appendDisplayMessage(task, 'assistant', summary, modelMessageAuthor(task))
+    noteUnwrittenFiles(task)
     appendAgentMessage(task, {
       role: 'tool',
       tool_call_id: toolCall.id,
@@ -1634,8 +2167,12 @@ async function executeToolCall(
       return 'waiting'
     }
 
+    let loopGuardBeforeMutation: CoworkLoopGuardState | undefined
     if (mutation) {
       const safety = instructionSafety!
+      // Held so a failed attempt can be rolled back: the guard runs before the
+      // tool does and cannot know yet whether anything reached disk.
+      loopGuardBeforeMutation = safety.loopGuard
       const decision = evaluateCoworkLoopGuard(safety.loopGuard, { toolName: name, input })
       safety.loopGuard = decision.state
       if (decision.blocked) {
@@ -1684,12 +2221,14 @@ async function executeToolCall(
         await save(task, emit)
         return 'continue'
       }
+      const target = String(input.path ?? input.destination ?? '').trim()
       execution = {
         toolCallId: toolCall.id,
         toolName: name,
         status: 'prepared',
         argumentsHash,
         instructionId: instructionSafety!.id,
+        ...(target ? { targetPath: target.slice(0, 1_024) } : {}),
         preparedAt: Date.now()
       }
       executions.push(execution)
@@ -1720,12 +2259,17 @@ async function executeToolCall(
         }).state
       }
       if (output.artifact) upsertArtifact(task, output.artifact)
-      const resultMessage = JSON.stringify({ ok: true, ...output })
+      // The reference is queued rather than serialised: what the model needs is
+      // the picture, and repeating its coordinates in the tool result would only
+      // invite it to cite them as though it had seen the contents.
+      const { image, ...reportable } = output
+      const resultMessage = JSON.stringify({ ok: true, ...reportable })
       appendAgentMessage(task, {
         role: 'tool',
         tool_call_id: toolCall.id,
         content: resultMessage
       })
+      if (image) queueCoworkImage(task.id, { type: 'image', image })
       if (execution) {
         execution.status = 'succeeded'
         execution.resultMessage = resultMessage
@@ -1749,6 +2293,10 @@ async function executeToolCall(
         }
         throw error
       }
+      if (loopGuardBeforeMutation) {
+        const safety = instructionSafety!
+        safety.loopGuard = revertCoworkLoopGuardMutation(safety.loopGuard, loopGuardBeforeMutation)
+      }
       const message = safeToolError(error, currentProject.rootPath)
       const resultMessage = JSON.stringify({ ok: false, error: message })
       appendAgentMessage(task, {
@@ -1771,6 +2319,9 @@ async function executeToolCall(
     // Large write payloads are needed until approval/execution, but retaining
     // them in subsequent requests makes task databases and prompts unbounded.
     scrubCoworkToolArguments(task, toolCall)
+    // Every call in this batch has now been answered, so a user message carrying
+    // the images no longer separates an assistant's tool_calls from its results.
+    if (!remaining.length) flushCoworkImages(task)
     await save(task, emit)
     return 'continue'
   }
@@ -1785,8 +2336,11 @@ async function processToolCalls(
   calls: CoworkToolCall[],
   emit: Emit,
   authHeaders: AuthHeaders,
-  signal: AbortSignal
+  signal: AbortSignal,
+  /** Filled in with what the model got wrong, so a stuck run can still stop. */
+  rejections?: { count: number; lastMessage?: string }
 ): Promise<'continue' | 'waiting' | 'finished' | 'paused' | 'interrupted'> {
+  let rejected = 0
   for (let index = 0; index < calls.length; index++) {
     try {
       await assertRunMayContinue(task, signal)
@@ -1800,10 +2354,32 @@ async function processToolCalls(
       )
       if (outcome !== 'continue') return outcome
     } catch (error) {
-      if (!(error instanceof CoworkRunInterrupted)) throw error
-      closeInterruptedToolCalls(task, calls.slice(index))
+      if (error instanceof CoworkRunInterrupted) {
+        closeInterruptedToolCalls(task, calls.slice(index))
+        await save(task, emit)
+        return 'interrupted'
+      }
+      // Anything that is not the model's own mistake still ends the run.
+      if (!(error instanceof CoworkToolRejection)) throw error
+      // One rejected call is the model's to correct, not grounds to discard the
+      // run. Rejections say what was wrong with the arguments, which is exactly
+      // what the model needs to try again, so hand it back as a tool result and
+      // keep going. Over a long task a single hallucinated argument used to end
+      // everything that came before it.
+      const message = error.message
+      rejected += 1
+      failToolCall(task, calls[index], message)
+      appendActivity(task, {
+        type: 'tool',
+        label: calls[index].function.name.replaceAll('_', ' '),
+        detail: message,
+        status: 'error'
+      })
       await save(task, emit)
-      return 'interrupted'
+      if (rejections) {
+        rejections.count = rejected
+        rejections.lastMessage = message
+      }
     }
   }
   return 'continue'
@@ -1853,6 +2429,11 @@ async function loop(
   }
   task = await save(task, emit)
 
+  let protocolCorrections = 0
+  let unfinishedPlanNudges = 0
+  let truncatedTurnContinuations = 0
+  let consecutiveRejectedTurns = 0
+
   while (true) {
     if (controller.signal.aborted) return
     task = (await getTask(taskId)) ?? task
@@ -1876,14 +2457,37 @@ async function loop(
     }
     safety.modelSteps += 1
     task = await save(task, emit)
-    const message = await complete(
-      task,
-      project,
-      projectMemory,
-      extensionGuidance,
-      authHeaders,
-      controller.signal
-    )
+    let message: Awaited<ReturnType<typeof complete>>
+    try {
+      message = await complete(
+        task,
+        project,
+        projectMemory,
+        extensionGuidance,
+        authHeaders,
+        controller.signal
+      )
+    } catch (error) {
+      // The malformed turn is discarded rather than recorded: an assistant
+      // message carrying tool calls that never ran would leave the history
+      // owing tool results that will never arrive.
+      if (
+        !(error instanceof CoworkToolProtocolViolation) ||
+        protocolCorrections >= MAX_TOOL_PROTOCOL_CORRECTIONS
+      ) {
+        throw error
+      }
+      protocolCorrections += 1
+      appendAgentMessage(task, { role: 'user', content: error.guidance })
+      appendActivity(task, {
+        type: 'system',
+        label: 'Asked the model to retry the turn',
+        detail: error.message,
+        status: 'success'
+      })
+      task = await save(task, emit)
+      continue
+    }
     if (message.toolProtocol === 'text-v1' && task.toolProtocol !== 'text-v1') {
       task.toolProtocol = 'text-v1'
       appendActivity(task, {
@@ -1898,26 +2502,113 @@ async function loop(
     appendAgentMessage(task, {
       role: 'assistant',
       content: message.content ?? null,
+      // Persisted for every native turn, including assistant turns that call no
+      // tool, so a later follow-up in the same task still replays it exactly.
+      ...(message.reasoning_content === undefined
+        ? {}
+        : { reasoning_content: message.reasoning_content }),
       ...(message.tool_calls?.length ? { tool_calls: message.tool_calls } : {})
     })
     if (content) appendDisplayMessage(task, 'assistant', content, modelMessageAuthor(task))
     task = await save(task, emit)
 
     if (message.tool_calls?.length) {
+      const rejections = { count: 0, lastMessage: undefined as string | undefined }
       const outcome = await processToolCalls(
         task,
         message.tool_calls,
         emit,
         authHeaders,
-        controller.signal
+        controller.signal,
+        rejections
       )
       if (outcome !== 'continue') return
+      // A turn where something ran is progress, whatever else it got wrong.
+      consecutiveRejectedTurns =
+        rejections.count >= message.tool_calls.length ? consecutiveRejectedTurns + 1 : 0
+      if (consecutiveRejectedTurns >= MAX_CONSECUTIVE_REJECTED_TURNS) {
+        task.status = 'failed'
+        task.error = rejections.lastMessage ?? 'The model repeated an action Workspace rejected.'
+        appendActivity(task, {
+          type: 'system',
+          label: 'Model could not correct a rejected action',
+          detail: task.error,
+          status: 'error'
+        })
+        await save(task, emit)
+        return
+      }
+      continue
+    }
+
+    // finish_reason 'length' means the provider truncated the reply at its token
+    // ceiling. Such a turn carries no tool calls because the model never got to
+    // emit them, so treating it as a finished answer used to file a sentence
+    // fragment as the task summary and stop. Ask for the rest instead.
+    if (message.finishReason === 'length') {
+      if (truncatedTurnContinuations < MAX_TRUNCATED_TURN_CONTINUATIONS) {
+        truncatedTurnContinuations += 1
+        appendAgentMessage(task, {
+          role: 'user',
+          content:
+            'Your previous reply was cut off at the length limit before it finished. ' +
+            'Continue from exactly where it stopped. Keep this turn short, and call the ' +
+            'tool you need rather than restating work you have already described.'
+        })
+        appendActivity(task, {
+          type: 'system',
+          label: 'Model reply was cut off',
+          detail: 'Asked the model to continue from where it stopped.',
+          status: 'running'
+        })
+        task = await save(task, emit)
+        continue
+      }
+      task.status = 'failed'
+      task.error =
+        'The model kept exceeding its reply length limit. Narrow the request or split it into smaller tasks.'
+      appendActivity(task, {
+        type: 'system',
+        label: 'Model reply was cut off',
+        detail: task.error,
+        status: 'error'
+      })
+      await save(task, emit)
+      return
+    }
+
+    // A turn with no tool calls used to end the task outright, which took a model
+    // at its word when it said "creating it now" and then called nothing. The plan
+    // it wrote is the available statement of whether it is actually done, so an
+    // unfinished plan buys it another turn rather than a premature completion.
+    // An empty plan deliberately does not nudge: a model answering a question,
+    // or asking one back, has legitimately finished its turn.
+    const unfinishedStep = task.plan.find((step) => step.status !== 'completed')
+    if (unfinishedStep && unfinishedPlanNudges < MAX_UNFINISHED_PLAN_NUDGES) {
+      unfinishedPlanNudges += 1
+      appendAgentMessage(task, {
+        role: 'user',
+        content:
+          `Your plan still has an incomplete step: ${JSON.stringify(unfinishedStep.title)} ` +
+          `(id ${JSON.stringify(unfinishedStep.id)}, status ${unfinishedStep.status}). ` +
+          'Carry on with it now by calling the tool it needs. If the work is genuinely ' +
+          'finished, call update_plan_step to close the step, or say plainly that you ' +
+          'cannot finish it and why.'
+      })
+      appendActivity(task, {
+        type: 'system',
+        label: 'Asked the model to finish the plan',
+        detail: unfinishedStep.title,
+        status: 'running'
+      })
+      task = await save(task, emit)
       continue
     }
 
     task.status = 'completed'
     task.completedAt = Date.now()
     task.summary = (content || 'Task completed.').slice(0, MAX_SUMMARY_CHARACTERS)
+    noteUnwrittenFiles(task)
     appendActivity(task, { type: 'system', label: 'Task completed', status: 'success' })
     await save(task, emit)
     return
@@ -1957,6 +2648,8 @@ export function startCoworkRun(
     })
     .finally(() => {
       if (activeRuns.get(taskId)?.controller === controller) activeRuns.delete(taskId)
+      // An unfinished batch leaves images queued that no message will ever carry.
+      pendingCoworkImages.delete(taskId)
     })
 }
 
@@ -2294,10 +2987,23 @@ async function resolveCoworkApprovalUnlocked(
         }
       })
     } catch (error) {
-      if (!(error instanceof CoworkRunInterrupted)) throw error
+      // The approval was already consumed above, so these calls have no second
+      // chance to run. Whatever went wrong, they must still be answered: leaving
+      // an assistant tool_calls block unmatched makes every later turn in the
+      // task unsendable, and the run had no way back from that.
       closeInterruptedToolCalls(task, [pending.toolCall, ...pending.remainingToolCalls])
-      await save(task, emit)
       shouldResume = false
+      if (!(error instanceof CoworkRunInterrupted)) {
+        task.status = 'failed'
+        task.error = error instanceof Error ? error.message : 'The approved action failed.'
+        appendActivity(task, {
+          type: 'system',
+          label: 'Approved action failed',
+          detail: task.error,
+          status: 'error'
+        })
+      }
+      await save(task, emit)
     }
   } else {
     appendActivity(task, {

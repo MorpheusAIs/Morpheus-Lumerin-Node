@@ -30,6 +30,7 @@ import {
   steerCoworkRun
 } from './cowork-runner'
 import { executeCoworkTool, openCoworkPath } from './cowork-tools'
+import { coworkVisionVerdict, loadCoworkVisionProbes } from './cowork-vision-cache'
 import {
   CoworkModelOption,
   CoworkModelTarget,
@@ -233,6 +234,23 @@ function visionCapability(model: any): CoworkModelOption['visionCapability'] {
   return hints.some((hint) => name.includes(hint)) ? 'detected' : 'none'
 }
 
+/**
+ * The verified answer replaces the guess in both directions: a model a probe
+ * has seen answer correctly is reported as vision whatever its name suggests,
+ * and one that failed the probe is reported as none however it is tagged.
+ */
+function resolvedVisionCapability(
+  modelId: string,
+  guess: CoworkModelOption['visionCapability']
+): { visionCapability: CoworkModelOption['visionCapability']; visionProbedAt?: number } {
+  const probed = coworkVisionVerdict(modelId)
+  if (!probed) return { visionCapability: guess }
+  return {
+    visionCapability: probed.sees ? 'verified' : 'none',
+    visionProbedAt: probed.probedAt
+  }
+}
+
 function boundaryFingerprint(kind: string, ...values: unknown[]): string {
   return createHash('sha256')
     .update([kind, ...values.map((value) => String(value ?? ''))].join('\0'), 'utf8')
@@ -268,7 +286,7 @@ async function remoteModelOptions(walletAddress: string): Promise<ResolvedModelO
       sessionEndsAt: endsAt,
       source: 'marketplace',
       dataBoundary: 'independent-provider',
-      visionCapability: visionCapability(model),
+      ...resolvedVisionCapability(String(model.Id), visionCapability(model)),
       boundaryFingerprint: boundaryFingerprint('marketplace-session', session.Id, model.Id)
     })
   )
@@ -283,6 +301,9 @@ async function loadModelOptions(walletAddress: string): Promise<ResolvedModelOpt
 }
 
 async function modelOptions(force = false): Promise<ResolvedModelOption[]> {
+  // Verdicts recorded by earlier runs are what turn a name-match guess into a
+  // reported certainty, so they must be in memory before options are built.
+  await loadCoworkVisionProbes()
   const wallet = await getActiveWallet()
   const walletAddress = normalizeCoworkWalletAddress(wallet?.address)
   if (!walletAddress) return []
@@ -333,6 +354,7 @@ function modelTarget(option: ResolvedModelOption): CoworkModelTarget {
     modelName: option.modelName,
     isLocal: option.isLocal,
     dataBoundary: option.dataBoundary,
+    visionCapability: option.visionCapability,
     ...(option.sessionId ? { sessionId: option.sessionId } : {}),
     ...(option.sessionEndsAt ? { sessionEndsAt: option.sessionEndsAt } : {})
   }

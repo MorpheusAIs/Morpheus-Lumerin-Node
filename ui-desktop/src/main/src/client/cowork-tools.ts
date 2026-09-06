@@ -2,8 +2,19 @@ import { app, shell } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { constants, promises as fs } from 'node:fs'
 import path from 'node:path'
-import { CoworkApprovalMode, CoworkArtifact, CoworkProject } from './cowork.types'
+import {
+  CoworkApprovalMode,
+  CoworkArtifact,
+  CoworkImageReference,
+  CoworkProject
+} from './cowork.types'
 import { analyzeCsvText } from './cowork-data-analysis'
+import {
+  MAX_IMAGE_BYTES,
+  imageMediaTypeForPath,
+  readCoworkImageDimensions,
+  supportedCoworkImageExtensions
+} from './cowork-images'
 import type { ProfessionalArtifactFormat } from './cowork-professional-artifacts'
 
 const MAX_READ_BYTES = 512 * 1024
@@ -383,6 +394,37 @@ async function readStableFile(
   }
 }
 
+/** Reads the leading bytes only, so inspecting a large image stays a cheap call. */
+async function readFileHeader(absolute: string, maxBytes: number): Promise<Buffer | null> {
+  const handle = await fs.open(absolute, 'r').catch(() => null)
+  if (!handle) return null
+  try {
+    const buffer = Buffer.allocUnsafe(maxBytes)
+    const { bytesRead } = await handle.read(buffer, 0, maxBytes, 0)
+    return buffer.subarray(0, bytesRead)
+  } catch {
+    return null
+  } finally {
+    await handle.close().catch(() => undefined)
+  }
+}
+
+/**
+ * Reads only the container header, so an ordinary inspect_file on a large image
+ * stays as cheap as a stat. A file that is not really the image its extension
+ * claims simply reports no dimensions rather than failing the inspection.
+ */
+async function describeImageFile(
+  absolute: string,
+  relative: string
+): Promise<Record<string, unknown>> {
+  const mediaType = imageMediaTypeForPath(relative)
+  if (!mediaType) return {}
+  const header = await readFileHeader(absolute, 64 * 1024)
+  const dimensions = header ? readCoworkImageDimensions(header, mediaType) : null
+  return { mediaType, ...(dimensions ?? {}) }
+}
+
 async function storeBackup(
   project: CoworkProject,
   absolute: string,
@@ -471,12 +513,51 @@ const artifact = (relative: string, kind: CoworkArtifact['kind']): CoworkArtifac
   updatedAt: Date.now()
 })
 
+/** Where an image attached to an instruction is kept, outside the project folder. */
+export const coworkAttachmentDirectory = (): string =>
+  path.join(app.getPath('userData'), 'CoworkAttachments')
+
+/**
+ * Reads the bytes for one stored image reference at request time.
+ *
+ * Resolution goes through the same guard as any other tool path, so a reference
+ * that has been tampered with cannot reach outside the connected folder, and a
+ * file that has since moved simply reports null rather than failing the turn.
+ */
+export async function loadCoworkImageBytes(
+  project: CoworkProject,
+  reference: CoworkImageReference
+): Promise<Buffer | null> {
+  try {
+    const mediaType = imageMediaTypeForPath(reference.path)
+    if (!mediaType || mediaType !== reference.mediaType) return null
+    const absolute =
+      reference.source === 'attachment'
+        ? attachmentAbsolutePath(reference.path)
+        : (await resolveProjectPath(project, reference.path)).absolute
+    if (!absolute) return null
+    const { buffer } = await readStableFile(absolute, MAX_IMAGE_BYTES)
+    const { assertCoworkImageBytes } = await import('./cowork-images')
+    assertCoworkImageBytes(buffer, mediaType, reference.path)
+    return buffer
+  } catch {
+    return null
+  }
+}
+
+/** Attachment names are opaque identifiers, so anything path-like is refused. */
+function attachmentAbsolutePath(name: string): string | null {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(name)) return null
+  if (name.includes('..')) return null
+  return path.join(coworkAttachmentDirectory(), name)
+}
+
 export async function executeCoworkTool(
   project: CoworkProject,
   toolName: string,
   input: Record<string, any>,
   options: { allowOverwrite?: boolean } = {}
-): Promise<{ result: unknown; artifact?: CoworkArtifact }> {
+): Promise<{ result: unknown; artifact?: CoworkArtifact; image?: CoworkImageReference }> {
   switch (toolName) {
     case 'list_files': {
       const target = await resolveProjectPath(project, String(input.path ?? '.'))
@@ -498,8 +579,50 @@ export async function executeCoworkTool(
           path: target.relative,
           type: stat.isDirectory() ? 'directory' : 'file',
           size: stat.size,
-          modifiedAt: stat.mtime.toISOString()
+          modifiedAt: stat.mtime.toISOString(),
+          // Named for every caller, so a model that cannot see pixels still
+          // learns the shape of an image instead of only its byte count.
+          ...(stat.isFile() ? await describeImageFile(target.absolute, target.relative) : {})
         }
+      }
+    }
+    case 'read_image': {
+      const target = await resolveProjectPath(project, String(input.path ?? ''))
+      const mediaType = imageMediaTypeForPath(target.relative)
+      if (!mediaType) {
+        throw new Error(
+          `read_image supports ${supportedCoworkImageExtensions().join(', ')}; ` +
+            `${JSON.stringify(target.relative)} is not one of them.`
+        )
+      }
+      const stat = await fs.stat(target.absolute)
+      if (!stat.isFile()) throw new Error('read_image requires a file path.')
+      if (stat.size > MAX_IMAGE_BYTES) {
+        throw new Error(
+          `Image is too large to send (${stat.size} bytes; limit ${MAX_IMAGE_BYTES}). ` +
+            'Save a smaller copy and read that instead.'
+        )
+      }
+      const { buffer } = await readStableFile(target.absolute, MAX_IMAGE_BYTES)
+      const { assertCoworkImageBytes } = await import('./cowork-images')
+      assertCoworkImageBytes(buffer, mediaType, target.relative)
+      const dimensions = readCoworkImageDimensions(buffer, mediaType)
+      const image: CoworkImageReference = {
+        source: 'project',
+        path: target.relative,
+        mediaType,
+        bytes: buffer.byteLength,
+        ...(dimensions ?? {})
+      }
+      return {
+        result: {
+          path: target.relative,
+          mediaType,
+          bytes: buffer.byteLength,
+          ...(dimensions ?? {}),
+          note: 'The image itself follows this result and is visible to you.'
+        },
+        image
       }
     }
     case 'read_file': {
