@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react';
+import { MotionConfig } from 'framer-motion';
 import styled, {
   ThemeProvider as StyledThemeProvider,
 } from 'styled-components';
@@ -37,7 +38,7 @@ const ShellLoading = styled.div`
   background: #04130d;
   color: rgba(255, 255, 255, 0.62);
   display: flex;
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--font-ui);
   font-size: 1.2rem;
   height: 100vh;
   justify-content: center;
@@ -50,7 +51,7 @@ subscribeToMainProcessMessages(client.store);
 
 function App(): JSX.Element {
   return (
-    <>
+    <MotionConfig reducedMotion="user">
       <ClientProvider value={client}>
         <Provider store={client.store}>
           <QueryClientProvider client={queryClient}>
@@ -79,7 +80,7 @@ function App(): JSX.Element {
           </QueryClientProvider>
         </Provider>
       </ClientProvider>
-    </>
+    </MotionConfig>
   );
 }
 

@@ -108,6 +108,322 @@ const emptyExtensions = {
 };
 
 describe('Cowork performance helpers', () => {
+  it('keeps drafts with their task, retains failures, and does not erase newer text after send', async () => {
+    const previousCowork = window.cowork;
+    const model: CoworkModelOption = {
+      modelId: 'model-1',
+      modelName: 'Active model',
+      source: 'marketplace',
+      isLocal: false,
+      dataBoundary: 'independent-provider',
+      visionCapability: 'none',
+      sessionId: 'session-1',
+      sessionEndsAt: Date.now() + 60_000,
+    };
+    const tasks = [
+      persistedTask({ model, status: 'paused', title: 'First project task' }),
+      persistedTask({
+        id: 'task-2',
+        model,
+        status: 'paused',
+        title: 'Second project task',
+      }),
+    ];
+    let accept: () => void = () => undefined;
+    const steerTask = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Connection unavailable'))
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            accept = resolve;
+          }),
+      );
+    window.cowork = {
+      getApprovalPolicy: async () => persistedApprovalPolicy,
+      listModelOptions: async () => [model],
+      listProjects: async () => [persistedProject],
+      listTasks: async () => tasks,
+      getTask: async (id: string) => tasks.find((task) => task.id === id),
+      steerTask,
+      listSchedules: async () => [],
+      listExtensions: async () => emptyExtensions,
+      onTaskEvent: () => () => undefined,
+    } as unknown as Window['cowork'];
+    const view = render(
+      createElement(MemoryRouter, null, createElement(Cowork)),
+    );
+    try {
+      let composer = await screen.findByRole('textbox', {
+        name: 'Message Workspace',
+      });
+      fireEvent.change(composer, { target: { value: 'First task draft' } });
+      fireEvent.click(
+        screen.getByRole('button', { name: /Second project task/ }),
+      );
+      await waitFor(() =>
+        expect(
+          screen.getByRole('textbox', { name: 'Message Workspace' }),
+        ).toHaveValue(''),
+      );
+      fireEvent.change(
+        screen.getByRole('textbox', { name: 'Message Workspace' }),
+        { target: { value: 'Second task draft' } },
+      );
+      fireEvent.click(
+        screen.getByRole('button', { name: /First project task/ }),
+      );
+      await waitFor(() =>
+        expect(
+          screen.getByRole('textbox', { name: 'Message Workspace' }),
+        ).toHaveValue('First task draft'),
+      );
+      composer = screen.getByRole('textbox', { name: 'Message Workspace' });
+      fireEvent.submit(composer.closest('form')!);
+      await screen.findByText('Connection unavailable');
+      expect(composer).toHaveValue('First task draft');
+      fireEvent.submit(composer.closest('form')!);
+      fireEvent.submit(composer.closest('form')!);
+      expect(steerTask).toHaveBeenCalledTimes(2);
+      fireEvent.change(composer, {
+        target: { value: 'Newer unsent instruction' },
+      });
+      accept();
+      await waitFor(() =>
+        expect(composer).toHaveValue('Newer unsent instruction'),
+      );
+      expect(steerTask).toHaveBeenLastCalledWith('task-1', 'First task draft');
+    } finally {
+      view.unmount();
+      window.cowork = previousCowork;
+    }
+  });
+
+  it('searches saved tasks locally and supports keyboard navigation between history tabs', async () => {
+    const previousCowork = window.cowork;
+    const listTasks = vi.fn(async () => [
+      taskSummary({ title: 'Quarterly report' }),
+      taskSummary({ id: 'task-2', title: 'Website audit' }),
+    ]);
+    Object.defineProperty(window, 'cowork', {
+      configurable: true,
+      writable: true,
+      value: {
+        getApprovalPolicy: vi.fn(async () => persistedApprovalPolicy),
+        listModelOptions: vi.fn(async () => []),
+        listProjects: vi.fn(async () => [persistedProject]),
+        listTasks,
+        getTask: vi.fn(async () => persistedTask()),
+        listSchedules: vi.fn(async () => []),
+        listExtensions: vi.fn(async () => emptyExtensions),
+        onTaskEvent: vi.fn(() => () => undefined),
+      } as unknown as Window['cowork'],
+    });
+    const view = render(
+      createElement(MemoryRouter, null, createElement(Cowork)),
+    );
+    try {
+      const search = await screen.findByRole('searchbox', {
+        name: 'Search tasks',
+      });
+      fireEvent.change(search, { target: { value: '  WEBSITE  ' } });
+      expect(
+        screen.getByRole('button', { name: /Website audit/ }),
+      ).toBeTruthy();
+      expect(
+        screen.queryByRole('button', { name: /Quarterly report/ }),
+      ).toBeNull();
+      expect(listTasks).toHaveBeenCalledTimes(1);
+      fireEvent.change(search, { target: { value: 'missing' } });
+      expect(screen.getByText('No tasks match “missing”.')).toBeTruthy();
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Clear history search' }),
+      );
+      expect(
+        screen.getByRole('button', { name: /Quarterly report/ }),
+      ).toBeTruthy();
+
+      const tasksTab = screen.getByRole('tab', { name: /Tasks/ });
+      const schedulesTab = screen.getByRole('tab', { name: /Schedules/ });
+      tasksTab.focus();
+      fireEvent.keyDown(tasksTab, { key: 'ArrowRight' });
+      expect(document.activeElement).toBe(schedulesTab);
+      expect(schedulesTab.getAttribute('aria-selected')).toBe('true');
+      expect(tasksTab.tabIndex).toBe(-1);
+      expect(
+        screen.getByRole('searchbox', { name: 'Search schedules' }),
+      ).toBeTruthy();
+      fireEvent.keyDown(schedulesTab, { key: 'Home' });
+      expect(document.activeElement).toBe(tasksTab);
+      expect(tasksTab.getAttribute('aria-selected')).toBe('true');
+    } finally {
+      view.unmount();
+      window.cowork = previousCowork;
+    }
+  });
+
+  it('opens the navigation drawer when connecting a folder from the welcome screen', async () => {
+    const previousCowork = window.cowork;
+    Object.defineProperty(window, 'cowork', {
+      configurable: true,
+      writable: true,
+      value: {
+        getApprovalPolicy: vi.fn(async () => persistedApprovalPolicy),
+        listModelOptions: vi.fn(async () => []),
+        listProjects: vi.fn(async () => []),
+        onTaskEvent: vi.fn(() => () => undefined),
+      } as unknown as Window['cowork'],
+    });
+    const view = render(
+      createElement(MemoryRouter, null, createElement(Cowork)),
+    );
+    try {
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'Connect a folder' }),
+      );
+      expect(screen.getByRole('main').getAttribute('data-rail-open')).toBe(
+        'true',
+      );
+      expect(screen.getByLabelText('Project name')).toBe(
+        document.activeElement,
+      );
+    } finally {
+      view.unmount();
+      window.cowork = previousCowork;
+    }
+  });
+
+  it('returns to the latest message without taking away manual transcript scrolling', async () => {
+    const previousCowork = window.cowork;
+    const scrollHeight = vi
+      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+      .mockReturnValue(1_200);
+    const clientHeight = vi
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockReturnValue(240);
+    Object.defineProperty(window, 'cowork', {
+      configurable: true,
+      writable: true,
+      value: {
+        getApprovalPolicy: vi.fn(async () => persistedApprovalPolicy),
+        listModelOptions: vi.fn(async () => []),
+        listProjects: vi.fn(async () => [persistedProject]),
+        listTasks: vi.fn(async () => [taskSummary()]),
+        getTask: vi.fn(async () => persistedTask()),
+        listSchedules: vi.fn(async () => []),
+        listExtensions: vi.fn(async () => emptyExtensions),
+        onTaskEvent: vi.fn(() => () => undefined),
+      } as unknown as Window['cowork'],
+    });
+    const view = render(
+      createElement(MemoryRouter, null, createElement(Cowork)),
+    );
+    try {
+      await screen.findByText('The latest saved result.');
+      const transcript = document.querySelector(
+        '.cowork-transcript',
+      ) as HTMLDivElement;
+      transcript.scrollTop = 100;
+      fireEvent.wheel(transcript, { deltaY: -10 });
+      expect(transcript.scrollTop).toBe(100);
+      fireEvent.click(screen.getByRole('button', { name: 'Latest message' }));
+      expect(transcript.scrollTop).toBe(1_200);
+      expect(
+        screen.queryByRole('button', { name: 'Latest message' }),
+      ).toBeNull();
+    } finally {
+      view.unmount();
+      scrollHeight.mockRestore();
+      clientHeight.mockRestore();
+      window.cowork = previousCowork;
+    }
+  });
+
+  it('does not submit unfinished IME composition and traps and restores file-preview focus', async () => {
+    const previousCowork = window.cowork;
+    const model = {
+      modelId: 'model-1',
+      modelName: 'Active model',
+      source: 'marketplace' as const,
+      isLocal: false,
+      dataBoundary: 'independent-provider' as const,
+      sessionId: 'session-1',
+      sessionEndsAt: Date.now() + 60_000,
+    };
+    const artifact = {
+      path: 'report.txt',
+      name: 'report.txt',
+      kind: 'file' as const,
+      createdAt: 10,
+      updatedAt: 20,
+    };
+    const task = persistedTask({
+      model,
+      status: 'paused',
+      artifacts: [artifact],
+    });
+    const steerTask = vi.fn(async () => task);
+    Object.defineProperty(window, 'cowork', {
+      configurable: true,
+      writable: true,
+      value: {
+        getApprovalPolicy: vi.fn(async () => persistedApprovalPolicy),
+        listModelOptions: vi.fn(async () => [model]),
+        listProjects: vi.fn(async () => [persistedProject]),
+        listTasks: vi.fn(async () => [taskSummary()]),
+        getTask: vi.fn(async () => task),
+        steerTask,
+        previewArtifact: vi.fn(async () => ({
+          ...artifact,
+          content: 'A saved report.',
+          truncated: false,
+        })),
+        listSchedules: vi.fn(async () => []),
+        listExtensions: vi.fn(async () => emptyExtensions),
+        onTaskEvent: vi.fn(() => () => undefined),
+      } as unknown as Window['cowork'],
+    });
+    const view = render(
+      createElement(MemoryRouter, null, createElement(Cowork)),
+    );
+    try {
+      const composer = await screen.findByRole('textbox', {
+        name: 'Message Workspace',
+      });
+      expect((composer as HTMLTextAreaElement).disabled).toBe(false);
+      fireEvent.change(composer, { target: { value: 'Draft context' } });
+      fireEvent.keyDown(composer, { key: 'Enter', isComposing: true });
+      fireEvent.keyDown(composer, { key: 'Enter', keyCode: 229 });
+      expect(steerTask).not.toHaveBeenCalled();
+      fireEvent.keyDown(composer, { key: 'Enter' });
+      await waitFor(() =>
+        expect(steerTask).toHaveBeenCalledWith('task-1', 'Draft context'),
+      );
+
+      const artifactButton = screen.getByRole('button', {
+        name: 'Preview report.txt',
+      });
+      artifactButton.focus();
+      fireEvent.click(artifactButton);
+      const closeButton = await screen.findByRole('button', {
+        name: 'Close preview',
+      });
+      expect(document.activeElement).toBe(closeButton);
+      fireEvent.keyDown(closeButton, { key: 'Tab', shiftKey: true });
+      expect(document.activeElement).toBe(
+        screen.getByLabelText('File preview contents'),
+      );
+      fireEvent.keyDown(document.activeElement!, { key: 'Tab' });
+      expect(document.activeElement).toBe(closeButton);
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(document.activeElement).toBe(artifactButton);
+    } finally {
+      view.unmount();
+      window.cowork = previousCowork;
+    }
+  });
+
   it('uses the configured near-bottom threshold for transcript following', () => {
     expect(
       isNearCoworkBottom({

@@ -4,8 +4,6 @@ import { LayoutHeader } from '../common/LayoutHeader';
 import { View } from '../common/View';
 import ProvidersList from './ProvidersList';
 
-import { BtnAccent } from '../dashboard/BalanceBlock.styles';
-
 import withProvidersState from '../../store/hocs/withProvidersState';
 import { queryKeys } from '../../store/queries';
 import QueryError from '../common/QueryError';
@@ -90,11 +88,18 @@ export const Providers = ({
         what="model names"
         onRetry={() => modelsQuery.refetch()}
       />
-      <LayoutHeader title="Providers">
-        <BtnAccent style={{ padding: '1.5rem' }} disabled>
-          Add provider
-        </BtnAccent>
-      </LayoutHeader>
+      <LayoutHeader title="Provider Hub" />
+      <p
+        style={{
+          color: 'var(--text-muted)',
+          fontSize: '1.4rem',
+          margin: '0 0 2.4rem',
+          maxWidth: '65ch',
+        }}
+      >
+        Sessions served by this wallet appear here. To use a model as a
+        consumer, start a session in Chat.
+      </p>
       <ProvidersList
         sessions={sessions}
         sessionsLoading={sessionsQuery.isPending && !!providerId}

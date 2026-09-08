@@ -4,6 +4,7 @@ import { useSelector } from 'react-redux';
 import { useQueryClient } from '@tanstack/react-query';
 import styled, { keyframes } from 'styled-components';
 import OfflineWarning from './OfflineWarning';
+import QuickStartGuide from './onboarding/QuickStartGuide';
 // import ChangePassword from './ChangePassword'
 import Sidebar from './sidebar/Sidebar';
 import 'bootstrap/dist/css/bootstrap.min.css';
@@ -29,20 +30,19 @@ const LegacyCoworkRedirect = () => {
 
 const fadeIn = keyframes`
   from {
-    transform: scale(1.025);
     opacity: 0;
   }
   to {
-    transform: scale(1);
     opacity: 1;
   }
 `;
 
 const Container = styled.div`
+  --sidebar-width: 220px;
   display: flex;
   height: 100vh;
   padding-left: 64px;
-  animation: ${fadeIn} 0.3s linear;
+  animation: ${fadeIn} 160ms ease-out;
 
   @media (min-width: 800px) {
     left: 200px;
@@ -65,7 +65,7 @@ const RouteLoading = styled.div`
   background: #04130d;
   color: rgba(255, 255, 255, 0.62);
   display: flex;
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--font-ui);
   font-size: 1.2rem;
   height: 100vh;
   justify-content: center;
@@ -168,6 +168,7 @@ export const Layout = () => {
       </Main>
       {/* <AutoPriceAdjuster /> */}
       <SessionPrefetcher />
+      <QuickStartGuide />
       <OfflineWarning />
     </Container>
   );

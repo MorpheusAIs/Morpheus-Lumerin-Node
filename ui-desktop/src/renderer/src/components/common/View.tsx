@@ -3,14 +3,11 @@ import styled from 'styled-components';
 export const View = styled.div`
   height: 100vh;
   max-width: 100%;
-  min-width: 600px;
+  min-width: 0;
   position: relative;
-  padding: 0 2.4rem;
-  padding-top: 2rem;
-
-  @media (min-width: 800px) {
-  }
-
-  @media (min-width: 1200px) {
+  padding: 2.8rem 3.2rem;
+  overflow-y: auto;
+  @media (max-width: 799px) {
+    padding: 2rem 1.6rem;
   }
 `;

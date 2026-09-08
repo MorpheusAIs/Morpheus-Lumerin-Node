@@ -25,6 +25,7 @@ import QueryError from '../common/QueryError';
 import WalletSwitcher from './WalletSwitcher';
 import { ToastsContext } from '../toasts';
 import { abbreviateAddress } from '../../utils';
+import { copyWalletAddress } from '../../utils/clipboard';
 import BaseLogo from '../icons/BaseLogo';
 import { MorpheusLogo } from '../icons/MorpheusLogo';
 import { EtherIcon } from '../icons/EtherIcon';
@@ -119,7 +120,9 @@ const IconBtn = styled.button`
   background: transparent;
   color: rgba(255, 255, 255, 0.6);
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 
   &:hover {
     background: rgba(32, 220, 142, 0.14);
@@ -144,10 +147,11 @@ const TokenCard = styled.div`
       ? 'linear-gradient(135deg, rgba(32,220,142,0.16) 0%, rgba(32,220,142,0.04) 55%, rgba(255,255,255,0.02) 100%)'
       : 'rgba(255,255,255,0.04)'};
   border: 1px solid
-    ${(p) =>
-      p.$accent ? 'rgba(32,220,142,0.30)' : 'rgba(255,255,255,0.07)'};
+    ${(p) => (p.$accent ? 'rgba(32,220,142,0.30)' : 'rgba(255,255,255,0.07)')};
   animation: ${fadeUp} 0.35s ease both;
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease;
 
   &:hover {
     transform: translateY(-2px);
@@ -296,7 +300,9 @@ const ActionTile = styled.button`
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.07);
   color: #fff;
-  transition: background 0.15s ease, border-color 0.15s ease,
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
     transform 0.15s ease;
 
   &:hover {
@@ -427,11 +433,8 @@ const Dashboard = ({
   const ethSymbol = eth.symbol || 'ETH';
   const explorerHost = explorerUrl ? new URL(explorerUrl).hostname : 'explorer';
 
-  const handleCopy = () => {
-    if (!address) return;
-    copyToClipboard(address);
-    context.toast('info', 'Address copied to clipboard', { autoClose: 1500 });
-  };
+  const handleCopy = () =>
+    copyWalletAddress(address, copyToClipboard, context.toast);
 
   return (
     <View data-testid="dashboard-container">
@@ -456,7 +459,11 @@ const Dashboard = ({
               <AddressPill>
                 <AddressDot />
                 {abbreviateAddress(address, 6)}
-                <IconBtn title="Copy address" onClick={handleCopy}>
+                <IconBtn
+                  title="Copy address"
+                  aria-label="Copy wallet address"
+                  onClick={handleCopy}
+                >
                   <IconCopy size={16} />
                 </IconBtn>
                 <IconBtn
@@ -533,7 +540,9 @@ const Dashboard = ({
             </StatIcon>
             <ActionText>
               <ActionTitle>Send</ActionTitle>
-              <ActionSub>Transfer {morSymbol} or {ethSymbol}</ActionSub>
+              <ActionSub>
+                Transfer {morSymbol} or {ethSymbol}
+              </ActionSub>
             </ActionText>
           </ActionTile>
 

@@ -1,176 +1,44 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
-import styled from 'styled-components';
-import { IconMessage, IconSparkles } from '@tabler/icons-react';
-import { IconBrandStackshare } from '@tabler/icons-react';
-import { IconWallet, IconPackages, IconUsers } from '@tabler/icons-react';
+import {
+  IconMessage,
+  IconSparkles,
+  IconBrandStackshare,
+  IconWallet,
+  IconPackages,
+  IconUsers,
+} from '@tabler/icons-react';
+import { NavGroup, NavItem } from './Nav.styles';
 
-const Container = styled.div`
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
+const pages = [
+  { path: '/wallet', label: 'Wallet', icon: IconWallet },
+  { path: '/chat', label: 'Chat', icon: IconMessage },
+  { path: '/workspace', label: 'Workspace', icon: IconSparkles },
+  { path: '/models', label: 'Models', icon: IconPackages },
+  { path: '/agents', label: 'Agents', icon: IconUsers },
+  { path: '/providers', label: 'Provider Hub', icon: IconBrandStackshare },
+];
 
-  max-height: 10%;
-
-  @media (min-width: 800px) {
-    padding-left: 2.2rem;
-  }
-`;
-
-const Button = styled(NavLink)`
-  display: flex;
-  min-height: 6rem;
-  align-items: center;
-  text-decoration: none;
-  color: white;
-  padding: 1.6rem;
-  border-top: 1px solid transparent;
-
-  &:focus {
-    outline: none;
-  }
-
-  &.active {
-    color: ${(p) => p.theme.colors.morMain};
-    pointer-events: none;
-  }
-`;
-
-const IconWrapper = styled.div`
-  margin-right: 0.75rem;
-  margin-left: 0.3rem;
-  width: 3rem;
-  opacity: 0.5;
-
-  ${Button}.active & {
-    opacity: 1;
-  }
-`;
-
-const Label = styled.span`
-  opacity: 0;
-  flex-grow: 1;
-  font-weight: 500;
-  text-align: left;
-  padding-bottom: 2px;
-
-  ${({ parent }) => parent}:hover ${Button}.active & {
-    opacity: 1;
-  }
-
-  ${({ parent }) => parent}:hover & {
-    opacity: 1;
-  }
-
-  @media (min-width: 800px) {
-    opacity: 0.9;
-
-    ${Button}.active & {
-      opacity: 1;
-      font-weight: 600;
-    }
-  }
-`;
-
-const iconSize = '2rem';
-
-export default function PrimaryNav({
-  parent,
-  activeIndex,
-  setActiveIndex,
-  onRouteIntent,
-}) {
+export default function PrimaryNav({ onRouteIntent }) {
   const warm = (path) => {
-    void onRouteIntent?.(path).catch(() => undefined);
+    void onRouteIntent?.(path)?.catch(() => undefined);
   };
-
   return (
-    <Container>
-      <Button
-        onClick={() => setActiveIndex(0)}
-        className={(navData) => (navData.isActive ? 'active-style' : 'none')}
-        data-testid="wallet-nav-btn"
-        onFocus={() => warm('/wallet')}
-        onPointerEnter={() => warm('/wallet')}
-        to="/wallet"
-      >
-        <IconWrapper>
-          <IconWallet width={iconSize} />
-        </IconWrapper>
-        <Label active={activeIndex === 0} parent={parent}>
-          Wallet
-        </Label>
-      </Button>
-
-      <Button
-        onClick={() => setActiveIndex(1)}
-        onFocus={() => warm('/chat')}
-        onPointerEnter={() => warm('/chat')}
-        to="/chat"
-      >
-        <IconWrapper>
-          <IconMessage width={iconSize} />
-        </IconWrapper>
-        <Label active={activeIndex === 1} parent={parent}>
-          Chat
-        </Label>
-      </Button>
-
-      <Button
-        onClick={() => setActiveIndex(2)}
-        onFocus={() => warm('/workspace')}
-        onPointerEnter={() => warm('/workspace')}
-        to="/workspace"
-      >
-        <IconWrapper>
-          <IconSparkles width={iconSize} />
-        </IconWrapper>
-        <Label active={activeIndex === 2} parent={parent}>
-          Workspace
-        </Label>
-      </Button>
-
-      <Button
-        onClick={() => setActiveIndex(3)}
-        onFocus={() => warm('/models')}
-        onPointerEnter={() => warm('/models')}
-        to="/models"
-      >
-        <IconWrapper>
-          <IconPackages width={iconSize} />
-        </IconWrapper>
-        <Label active={activeIndex === 3} parent={parent}>
-          Models
-        </Label>
-      </Button>
-
-      <Button
-        onClick={() => setActiveIndex(4)}
-        onFocus={() => warm('/agents')}
-        onPointerEnter={() => warm('/agents')}
-        to="/agents"
-      >
-        <IconWrapper>
-          <IconUsers width={iconSize} />
-        </IconWrapper>
-        <Label active={activeIndex === 4} parent={parent}>
-          Agents
-        </Label>
-      </Button>
-
-      <Button
-        onClick={() => setActiveIndex(5)}
-        onFocus={() => warm('/providers')}
-        onPointerEnter={() => warm('/providers')}
-        to="/providers"
-      >
-        <IconWrapper>
-          <IconBrandStackshare width={iconSize} />
-        </IconWrapper>
-        <Label active={activeIndex === 5} parent={parent}>
-          Provider Hub
-        </Label>
-      </Button>
-    </Container>
+    <NavGroup>
+      {pages.map(({ path, label, icon: Icon }) => (
+        <NavItem
+          key={path}
+          to={path}
+          aria-label={label}
+          title={label}
+          data-guide={path.slice(1)}
+          data-testid={`${path.slice(1)}-nav-btn`}
+          onFocus={() => warm(path)}
+          onPointerEnter={() => warm(path)}
+        >
+          <Icon aria-hidden="true" stroke={1.7} />
+          <span>{label}</span>
+        </NavItem>
+      ))}
+    </NavGroup>
   );
 }

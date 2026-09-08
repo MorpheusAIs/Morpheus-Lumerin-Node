@@ -292,7 +292,10 @@ export function SendForm(props) {
         <WalletInputLabel>To: </WalletInputLabel>
         <WalletInput
           id="toAddress"
+          aria-label="Recipient wallet address"
           placeholder="0x…"
+          autoComplete="off"
+          autoCapitalize="none"
           spellCheck={false}
           disabled={isPending}
           onChange={handleDestinationAddressInput}
@@ -306,7 +309,11 @@ export function SendForm(props) {
           <FooterLabel>{selectedCurrency?.label} Balance</FooterLabel>
           <FooterLabel>
             {Number(availableBalance || 0).toFixed(6)}
-            <MaxBtn type="button" disabled={isPending} onClick={props.onMaxClick}>
+            <MaxBtn
+              type="button"
+              disabled={isPending}
+              onClick={props.onMaxClick}
+            >
               MAX
             </MaxBtn>
           </FooterLabel>

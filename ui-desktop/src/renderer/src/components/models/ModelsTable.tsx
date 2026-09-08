@@ -13,6 +13,7 @@ import {
   IconX,
 } from '@tabler/icons-react';
 import ProgressBar from 'react-bootstrap/ProgressBar';
+import { ModelActionButton } from './ModelActionButton';
 
 // Event payload for download progress events from the SSE stream
 interface DownloadProgressEvent {
@@ -511,9 +512,14 @@ function ModelCard({
         <DownloadProgressContainer>
           <div className="progress-header">
             <h4>Downloading Model</h4>
-            <div className="cancel-button" onClick={cancelDownload}>
-              <IconX size={16} />
-            </div>
+            <ModelActionButton
+              type="button"
+              aria-label={`Cancel download of ${model.Name || 'model'}`}
+              title="Cancel download"
+              onClick={cancelDownload}
+            >
+              <IconX size={18} aria-hidden="true" />
+            </ModelActionButton>
           </div>
 
           <ProgressBar
@@ -554,11 +560,15 @@ function ModelCard({
           >
             {model.Name || 'Unnamed Model'}
           </span>
-          <IconDownload
-            className="icon-button"
-            style={{ width: '2.5rem', height: '2.5rem' }}
+          <ModelActionButton
+            type="button"
+            aria-label={`Download ${model.Name || 'model'}`}
+            title="Download model file"
+            disabled={isDownloading}
             onClick={handleFolderSelect}
-          />
+          >
+            <IconDownload size={18} aria-hidden="true" />
+          </ModelActionButton>
         </Card.Title>
 
         <div className="model-info-section">
@@ -570,19 +580,18 @@ function ModelCard({
             <div className="info-value">
               <span className="hash-container monospace">
                 {abbreviateAddress(model?.Id || '', 6)}
-                <IconCopy
-                  style={{
-                    width: '1rem',
-                    height: '1rem',
-                    marginLeft: '8px',
-                    cursor: 'pointer',
-                    opacity: 0.8,
-                  }}
+                <ModelActionButton
+                  type="button"
+                  aria-label={`Copy model ID for ${model.Name || 'model'}`}
+                  title="Copy model ID"
+                  disabled={!model.Id}
                   onClick={(e) => {
                     e.stopPropagation();
                     copyId();
                   }}
-                />
+                >
+                  <IconCopy size={16} aria-hidden="true" />
+                </ModelActionButton>
               </span>
             </div>
           </div>
@@ -595,19 +604,18 @@ function ModelCard({
             <div className="info-value">
               <span className="hash-container monospace">
                 {abbreviateAddress(model?.IpfsCID, 6)}
-                <IconCopy
-                  style={{
-                    width: '1rem',
-                    height: '1rem',
-                    marginLeft: '8px',
-                    cursor: 'pointer',
-                    opacity: 0.8,
-                  }}
+                <ModelActionButton
+                  type="button"
+                  aria-label={`Copy CID hash for ${model.Name || 'model'}`}
+                  title="Copy CID hash"
+                  disabled={!model.IpfsCID}
                   onClick={(e) => {
                     e.stopPropagation();
                     copyCIDHash();
                   }}
-                />
+                >
+                  <IconCopy size={16} aria-hidden="true" />
+                </ModelActionButton>
               </span>
             </div>
           </div>

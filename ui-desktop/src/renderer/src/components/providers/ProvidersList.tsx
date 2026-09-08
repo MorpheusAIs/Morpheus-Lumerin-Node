@@ -11,35 +11,48 @@ import { queryKeys } from '../../store/queries';
 import './Providers.css';
 
 const BidTable = styled(Table)`
-  text-align: center !important;
-  border: 0.5px solid#21dc8f !important;
+  text-align: left;
+  font-size: 1.3rem;
+  --bs-table-border-color: var(--border-subtle);
+  --bs-table-striped-bg: transparent;
+  font-variant-numeric: tabular-nums;
 
   th {
-    background: #244a47 !important;
-    color: #21dc8f !important;
+    background: var(--surface-raised) !important;
+    color: var(--text-muted) !important;
+    padding: 1.2rem !important;
+    font-weight: 550;
   }
 
   td {
-    background: #244a47 !important;
-    color: #21dc8f !important;
-    padding: 12px 0 !important;
+    background: var(--surface-base) !important;
+    color: var(--text-primary) !important;
+    padding: 1.2rem !important;
+    vertical-align: middle;
   }
 `;
 
 const StartBtn = styled(Button)`
-  background: rgba(0, 0, 0, 0.9) !important;
-  border-radius: 0 !important;
-  border: 1px solid #21dc8f !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3.6rem;
+  padding: 0.8rem 1.2rem;
+  font-size: 1.3rem;
+  background: var(--surface-hover) !important;
+  color: var(--accent) !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--border-strong) !important;
 `;
 
 const Container = styled.div`
-  height: 75vh;
-  overflow-y: auto;
+  overflow: auto;
 `;
 
 const EmptyState = styled.div`
-  color: rgba(255, 255, 255, 0.62);
-  padding: 2rem 0;
+  color: var(--text-muted);
+  font-size: 1.4rem;
+  padding: 3.2rem 0;
 `;
 
 const formatBalance = (session, balances, balancesLoading) => {
@@ -164,7 +177,12 @@ function ProvidersList({
   }
 
   if (!groups.length) {
-    return <EmptyState>No provider sessions found.</EmptyState>;
+    return (
+      <EmptyState>
+        No provider sessions yet. Sessions will appear here when your provider
+        serves a request.
+      </EmptyState>
+    );
   }
 
   return (

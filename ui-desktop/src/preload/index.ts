@@ -1,4 +1,4 @@
-import { ipcRenderer, clipboard, contextBridge } from 'electron'
+import { ipcRenderer, contextBridge } from 'electron'
 
 const coworkChannels = {
   getApprovalPolicy: 'cowork:get-approval-policy',
@@ -364,8 +364,8 @@ if (process.contextIsolated) {
   try {
     // @see http://electronjs.org/docs/tutorial/security#2-disable-nodejs-integration-for-remote-content
 
-    const copyToClipboard = function (text) {
-      return clipboard.writeText(text)
+    const copyToClipboard = function (text: string): Promise<void> {
+      return ipcRenderer.invoke('clipboard:write-text', text)
     }
 
     // Was `remote.app.getVersion()` via @electron/remote. That module is

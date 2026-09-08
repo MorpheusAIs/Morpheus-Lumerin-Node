@@ -23,7 +23,10 @@ const config: Configuration = {
     '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}',
     '!{.env,.env.*,.npmrc,pnpm-lock.yaml}',
     '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}',
-    '!services/*'
+    '!services/*',
+    '!scripts/ui-preview/**',
+    // Keep previous installers out when a test build uses a nested output folder.
+    '!dist/**'
   ],
   // `read_document` reaches these two through a runtime `import()`, which
   // Electron's asar layer cannot resolve. Unpacking them puts the files on

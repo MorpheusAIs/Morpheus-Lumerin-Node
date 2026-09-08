@@ -2,8 +2,14 @@ import styled from 'styled-components';
 
 import Card from 'react-bootstrap/Card';
 import { abbreviateAddress } from '../../utils';
-import { IconPinnedOff, IconCopy, IconFile, IconTag, IconHash } from '@tabler/icons-react';
-
+import {
+  IconPinnedOff,
+  IconCopy,
+  IconFile,
+  IconTag,
+  IconHash,
+} from '@tabler/icons-react';
+import { ModelActionButton } from './ModelActionButton';
 
 const CustomCard = styled(Card)`
   background: linear-gradient(145deg, #244a47 0%, #1d3c39 100%) !important;
@@ -13,7 +19,7 @@ const CustomCard = styled(Card)`
   transition: all 0.2s ease-in-out;
   border-radius: 12px !important;
   overflow: hidden;
-  
+
   &:hover {
     transform: translateY(-4px);
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.25);
@@ -82,14 +88,14 @@ const CustomCard = styled(Card)`
     transition: all 0.2s;
     background: rgba(255, 255, 255, 0.05);
     color: rgba(255, 255, 255, 0.8);
-    
+
     &:hover {
       background: rgba(255, 0, 0, 0.15);
       color: #ff6b6b;
       transform: rotate(8deg);
     }
   }
-  
+
   .copy-button {
     background: rgba(33, 220, 143, 0.15);
     color: white;
@@ -100,16 +106,16 @@ const CustomCard = styled(Card)`
     cursor: pointer;
     margin-left: 10px;
     transition: all 0.2s;
-    
+
     &:hover {
       background: rgba(33, 220, 143, 0.3);
     }
-    
+
     svg {
       margin-right: 4px;
     }
   }
-  
+
   .tag-container {
     display: flex;
     flex-wrap: wrap;
@@ -129,19 +135,19 @@ const CustomCard = styled(Card)`
     line-height: 1;
     transition: all 0.2s;
     border: 1px solid rgba(33, 220, 143, 0.1);
-    
+
     &:hover {
       background: rgba(33, 220, 143, 0.25);
       transform: translateY(-2px);
     }
   }
-  
+
   .monospace {
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.85rem;
     letter-spacing: -0.03em;
   }
-  
+
   .hash-container {
     background: rgba(0, 0, 0, 0.2);
     border-radius: 6px;
@@ -160,22 +166,22 @@ const Container = styled.div`
   max-height: 75vh;
   padding: 8px 4px;
   overflow-y: auto;
-  
+
   &::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
-  
+
   &::-webkit-scrollbar-track {
     background: rgba(0, 0, 0, 0.1);
     border-radius: 4px;
   }
-  
+
   &::-webkit-scrollbar-thumb {
     background: rgba(33, 220, 143, 0.3);
     border-radius: 4px;
   }
-  
+
   &::-webkit-scrollbar-thumb:hover {
     background: rgba(33, 220, 143, 0.5);
   }
@@ -193,12 +199,19 @@ interface PinnedFile {
   id: string;
 }
 
-function ModelCard({ model, toasts, unpinFile }: { model: PinnedFile, toasts: any, unpinFile: any }) {
+function ModelCard({
+  model,
+  toasts,
+  unpinFile,
+}: {
+  model: PinnedFile;
+  toasts: any;
+  unpinFile: any;
+}) {
   const onUnpinFile = (e) => {
     e.stopPropagation();
     unpinFile(model.fileCIDHash);
     unpinFile(model.metadataCIDHash);
-    toasts.toast("success", "File unpinned successfully", { autoClose: 2000 });
   };
 
   const copyToClipboard = async (text: string, label: string) => {
@@ -206,19 +219,19 @@ function ModelCard({ model, toasts, unpinFile }: { model: PinnedFile, toasts: an
       // Use the Electron clipboard bridge; navigator.clipboard silently
       // fails in the renderer (focus/permissions)
       await window.copyToClipboard(text);
-      toasts.toast("success", `${label} copied to clipboard`, {
-        autoClose: 700
+      toasts.toast('success', `${label} copied to clipboard`, {
+        autoClose: 700,
       });
     } catch (e) {
-      toasts.toast("error", `Failed to copy ${label} to clipboard`);
+      toasts.toast('error', `Failed to copy ${label} to clipboard`);
     }
   };
 
-  const copyHash = () => copyToClipboard(model.metadataCIDHash, "Hash");
+  const copyHash = () => copyToClipboard(model.metadataCIDHash, 'Hash');
 
-  const copyCID = () => copyToClipboard(model.metadataCID, "CID");
+  const copyCID = () => copyToClipboard(model.metadataCID, 'CID');
 
-  const copyId = () => copyToClipboard(model.id, "ID");
+  const copyId = () => copyToClipboard(model.id, 'ID');
 
   const formatFileSize = (bytes: number) => {
     if (!bytes) return '';
@@ -241,30 +254,49 @@ function ModelCard({ model, toasts, unpinFile }: { model: PinnedFile, toasts: an
       <Card.Body>
         <Card.Title
           as={'div'}
-          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
         >
-          <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: '90%' }}>
-            {model.fileName || "Unnamed File"}
+          <span
+            style={{
+              textOverflow: 'ellipsis',
+              overflow: 'hidden',
+              maxWidth: '90%',
+            }}
+          >
+            {model.fileName || 'Unnamed File'}
           </span>
-          <IconPinnedOff
-            className="icon-button"
-            style={{ width: '2.5rem', height: '2.5rem' }}
+          <ModelActionButton
+            type="button"
+            aria-label={`Unpin ${model.fileName || 'file'}`}
+            title="Unpin model file"
             onClick={onUnpinFile}
-          />
+          >
+            <IconPinnedOff size={18} aria-hidden="true" />
+          </ModelActionButton>
         </Card.Title>
 
         <div className="model-info-section">
-        <div className="model-info-item">
+          <div className="model-info-item">
             <span className="info-label">
               <IconHash size={16} strokeWidth={2} />
-              CID:</span>
-              <div className="info-value">
+              CID:
+            </span>
+            <div className="info-value">
               <span className="hash-container monospace">
                 {abbreviateAddress(model.metadataCID, 6)}
-                <IconCopy
-                  style={{ width: '1rem', height: '1rem', marginLeft: '8px', cursor: 'pointer', opacity: 0.8 }}
+                <ModelActionButton
+                  type="button"
+                  aria-label={`Copy CID for ${model.fileName || 'file'}`}
+                  title="Copy CID"
+                  disabled={!model.metadataCID}
                   onClick={() => copyCID()}
-                />
+                >
+                  <IconCopy size={16} aria-hidden="true" />
+                </ModelActionButton>
               </span>
             </div>
           </div>
@@ -272,25 +304,33 @@ function ModelCard({ model, toasts, unpinFile }: { model: PinnedFile, toasts: an
           <div className="model-info-item">
             <span className="info-label">
               <IconHash size={16} strokeWidth={2} />
-              CID Hash:</span>
+              CID Hash:
+            </span>
             <div className="info-value">
               <span className="hash-container monospace">
                 {abbreviateAddress(model.metadataCIDHash, 6)}
-                <IconCopy
-                  style={{ width: '1rem', height: '1rem', marginLeft: '8px', cursor: 'pointer', opacity: 0.8 }}
+                <ModelActionButton
+                  type="button"
+                  aria-label={`Copy CID hash for ${model.fileName || 'file'}`}
+                  title="Copy CID hash"
+                  disabled={!model.metadataCIDHash}
                   onClick={() => copyHash()}
-                />
+                >
+                  <IconCopy size={16} aria-hidden="true" />
+                </ModelActionButton>
               </span>
             </div>
           </div>
-          
+
           {model.fileSize ? (
             <div className="model-info-item">
               <span className="info-label">
                 <IconFile size={16} strokeWidth={2} />
                 Size:
               </span>
-              <span className="info-value">{formatFileSize(model.fileSize)}</span>
+              <span className="info-value">
+                {formatFileSize(model.fileSize)}
+              </span>
             </div>
           ) : null}
 
@@ -298,7 +338,8 @@ function ModelCard({ model, toasts, unpinFile }: { model: PinnedFile, toasts: an
             <div className="model-info-item">
               <span className="info-label">
                 <IconHash size={16} strokeWidth={2} />
-                Name:</span>
+                Name:
+              </span>
               <span className="info-value">{model.modelName}</span>
             </div>
           ) : null}
@@ -307,14 +348,19 @@ function ModelCard({ model, toasts, unpinFile }: { model: PinnedFile, toasts: an
             <div className="model-info-item">
               <span className="info-label">
                 <IconHash size={16} strokeWidth={2} />
-                ID:</span>
+                ID:
+              </span>
               <div className="info-value">
-              <span className="hash-container monospace">
-                {abbreviateAddress(model.id, 6)}
-                <IconCopy
-                  style={{ width: '1rem', height: '1rem', marginLeft: '8px', cursor: 'pointer', opacity: 0.8 }}
-                  onClick={() => copyId()}
-                  />
+                <span className="hash-container monospace">
+                  {abbreviateAddress(model.id, 6)}
+                  <ModelActionButton
+                    type="button"
+                    aria-label={`Copy model ID for ${model.fileName || 'file'}`}
+                    title="Copy model ID"
+                    onClick={() => copyId()}
+                  >
+                    <IconCopy size={16} aria-hidden="true" />
+                  </ModelActionButton>
                 </span>
               </div>
             </div>
@@ -343,33 +389,31 @@ function ModelCard({ model, toasts, unpinFile }: { model: PinnedFile, toasts: an
   );
 }
 
-
-function PinnedFilesTable({
-  pinnedFiles,
-  toasts,
-  unpinFile
-}: any) {
+function PinnedFilesTable({ pinnedFiles, toasts, unpinFile }: any) {
   return (
     <Container>
-      {pinnedFiles?.length ?
-        pinnedFiles.map(x => (
+      {pinnedFiles?.length ? (
+        pinnedFiles.map((x) => (
           <div key={x.fileCIDHash}>
             {ModelCard({ model: x, toasts, unpinFile })}
           </div>
-        )) :
-        <div style={{
-          width: '100%',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: '40px 0',
-          color: 'rgba(255, 255, 255, 0.6)',
-          fontSize: '1.1rem',
-          fontStyle: 'italic'
-        }}>
+        ))
+      ) : (
+        <div
+          style={{
+            width: '100%',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: '40px 0',
+            color: 'rgba(255, 255, 255, 0.6)',
+            fontSize: '1.1rem',
+            fontStyle: 'italic',
+          }}
+        >
           No pinned files found
         </div>
-      }
+      )}
     </Container>
   );
 }

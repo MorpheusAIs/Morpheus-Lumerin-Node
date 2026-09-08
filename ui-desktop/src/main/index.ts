@@ -16,6 +16,7 @@ import { registerCoworkIpc } from './src/client/cowork-ipc'
 import { isTrustedRendererEvent, isTrustedRendererUrl } from './rendererTrust'
 import { registerChatStreamIpc } from './src/client/chat-stream-ipc'
 import { registerIpfsDownloadIpc } from './src/client/ipfs-download-ipc'
+import { registerClipboardIpc } from './clipboardIpc'
 
 const installExtension = (install as any).default as typeof install
 const openExternalChannel = 'open-external-url'
@@ -251,6 +252,7 @@ appReady
     registerCoworkIpc()
     registerChatStreamIpc()
     registerIpfsDownloadIpc()
+    registerClipboardIpc()
     createWindow()
 
     app.on('activate', function () {

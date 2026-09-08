@@ -11,6 +11,7 @@ import {
 import {
   IconActivity,
   IconAlertTriangle,
+  IconArrowDown,
   IconCalendarTime,
   IconCheck,
   IconChevronRight,
@@ -36,6 +37,7 @@ import {
   IconPuzzle,
   IconRefresh,
   IconRobot,
+  IconSearch,
   IconSend,
   IconShieldCheck,
   IconSparkles,
@@ -493,6 +495,8 @@ function Cowork(): JSX.Element {
     null,
   );
   const [railMode, setRailMode] = useState<'tasks' | 'schedules'>('tasks');
+  const [historySearch, setHistorySearch] = useState('');
+  const historyTabFocusRef = useRef(false);
   const [activeTask, setActiveTask] = useState<CoworkTask | null>(null);
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [projectName, setProjectName] = useState('');
@@ -506,7 +510,13 @@ function Cowork(): JSX.Element {
   const [taskTitle, setTaskTitle] = useState('');
   const [taskGoal, setTaskGoal] = useState('');
   const [selectedModelKey, setSelectedModelKey] = useState('');
-  const [steeringMessage, setSteeringMessage] = useState('');
+  const [steeringDrafts, setSteeringDrafts] = useState<Record<string, string>>(
+    {},
+  );
+  const steeringMessage = activeTask
+    ? (steeringDrafts[activeTask.id] ?? '')
+    : '';
+  const steeringSubmissionRef = useRef(false);
   const [scheduleName, setScheduleName] = useState('');
   const [scheduleTitle, setScheduleTitle] = useState('');
   const [scheduleGoal, setScheduleGoal] = useState('');
@@ -525,6 +535,8 @@ function Cowork(): JSX.Element {
   const [preview, setPreview] = useState<CoworkArtifactPreview | null>(null);
   const [railOpen, setRailOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [showLatestShortcut, setShowLatestShortcut] = useState(false);
+  const previewElementRef = useRef<HTMLDivElement | null>(null);
   const [earlierMessages, setEarlierMessages] = useState<
     CoworkDisplayMessage[]
   >([]);
@@ -564,11 +576,13 @@ function Cowork(): JSX.Element {
       // A newly mounted transcript represents a newly opened task and should
       // start at its latest message. Subsequent user scrolling owns the policy.
       transcriptAutoScrollRef.current = true;
+      setShowLatestShortcut(false);
       scrollCoworkTranscriptToLatest(element);
       transcriptObserverCleanupRef.current = observeCoworkAutoScroll(
         element,
         (enabled) => {
           transcriptAutoScrollRef.current = enabled;
+          setShowLatestShortcut(!enabled);
         },
         false,
       );
@@ -586,6 +600,63 @@ function Cowork(): JSX.Element {
     () => planSteps.filter((step) => step?.status === 'completed').length,
     [planSteps],
   );
+
+  const filteredTasks = useMemo(() => {
+    const query = historySearch.trim().toLocaleLowerCase();
+    return query
+      ? tasks.filter((task) => task.title.toLocaleLowerCase().includes(query))
+      : tasks;
+  }, [historySearch, tasks]);
+  const filteredSchedules = useMemo(() => {
+    const query = historySearch.trim().toLocaleLowerCase();
+    return query
+      ? schedules.filter((schedule) =>
+          schedule.name.toLocaleLowerCase().includes(query),
+        )
+      : schedules;
+  }, [historySearch, schedules]);
+
+  useEffect(() => setHistorySearch(''), [selectedProjectId, railMode]);
+  useLayoutEffect(() => {
+    if (!historyTabFocusRef.current) return;
+    historyTabFocusRef.current = false;
+    document.getElementById(`workspace-${railMode}-tab`)?.focus();
+  }, [railMode]);
+
+  // The native-feeling preview keeps keyboard focus inside it, then returns
+  // focus to the artifact that opened it. It never changes the underlying task.
+  useEffect(() => {
+    if (!preview) return;
+    const dialog = previewElementRef.current;
+    if (!dialog) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const getControls = () =>
+      Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), [tabindex="0"]',
+        ),
+      );
+    getControls()[0]?.focus();
+    const containFocus = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      const controls = getControls();
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    dialog.addEventListener('keydown', containFocus);
+    return () => {
+      dialog.removeEventListener('keydown', containFocus);
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [preview]);
 
   const activeModels = useMemo(
     () =>
@@ -1182,15 +1253,29 @@ function Cowork(): JSX.Element {
     if (
       !api ||
       !activeTask ||
+      steeringSubmissionRef.current ||
       !exactTaskSessionActive ||
       !steeringMessage.trim()
     )
       return;
     const content = steeringMessage.trim();
-    setSteeringMessage('');
+    const taskId = activeTask.id;
+    const submittedDraft = steeringMessage;
+    steeringSubmissionRef.current = true;
     void runAction('steer-task', async () => {
-      await api.steerTask(activeTask.id, content);
-      await loadTask(activeTask.id);
+      try {
+        await api.steerTask(taskId, content);
+        setSteeringDrafts((drafts) => {
+          // Do not erase text typed while the previous instruction was sending.
+          if (drafts[taskId] !== submittedDraft) return drafts;
+          const next = { ...drafts };
+          delete next[taskId];
+          return next;
+        });
+        await loadTask(taskId);
+      } finally {
+        steeringSubmissionRef.current = false;
+      }
     });
   };
 
@@ -1644,7 +1729,31 @@ function Cowork(): JSX.Element {
 
         {selectedProject && (
           <section className="cowork-rail-section cowork-tasks-section">
-            <div className="cowork-rail-switch" role="tablist">
+            <div
+              aria-label="Project history"
+              className="cowork-rail-switch"
+              onKeyDown={(event) => {
+                if (
+                  !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(
+                    event.key,
+                  )
+                )
+                  return;
+                event.preventDefault();
+                const next =
+                  event.key === 'Home'
+                    ? 'tasks'
+                    : event.key === 'End'
+                      ? 'schedules'
+                      : railMode === 'tasks'
+                        ? 'schedules'
+                        : 'tasks';
+                historyTabFocusRef.current = next !== railMode;
+                setRailMode(next);
+                document.getElementById(`workspace-${next}-tab`)?.focus();
+              }}
+              role="tablist"
+            >
               <button
                 aria-controls="workspace-rail-panel"
                 aria-selected={railMode === 'tasks'}
@@ -1652,6 +1761,7 @@ function Cowork(): JSX.Element {
                 id="workspace-tasks-tab"
                 onClick={() => setRailMode('tasks')}
                 role="tab"
+                tabIndex={railMode === 'tasks' ? 0 : -1}
                 type="button"
               >
                 Tasks
@@ -1664,6 +1774,7 @@ function Cowork(): JSX.Element {
                 id="workspace-schedules-tab"
                 onClick={() => setRailMode('schedules')}
                 role="tab"
+                tabIndex={railMode === 'schedules' ? 0 : -1}
                 type="button"
               >
                 Schedules
@@ -1716,6 +1827,30 @@ function Cowork(): JSX.Element {
                 </button>
               </div>
             </div>
+            <div className="cowork-history-search">
+              <IconSearch aria-hidden="true" size={16} />
+              <input
+                aria-label={
+                  railMode === 'tasks' ? 'Search tasks' : 'Search schedules'
+                }
+                onChange={(event) => setHistorySearch(event.target.value)}
+                placeholder={
+                  railMode === 'tasks' ? 'Find a task…' : 'Find a schedule…'
+                }
+                type="search"
+                value={historySearch}
+              />
+              {historySearch && (
+                <button
+                  aria-label="Clear history search"
+                  className="cowork-icon-button"
+                  onClick={() => setHistorySearch('')}
+                  type="button"
+                >
+                  <IconX aria-hidden="true" size={14} />
+                </button>
+              )}
+            </div>
             <div
               aria-labelledby={
                 railMode === 'tasks'
@@ -1728,7 +1863,7 @@ function Cowork(): JSX.Element {
             >
               {railMode === 'tasks' ? (
                 <>
-                  {tasks.map((task) => (
+                  {filteredTasks.map((task) => (
                     <button
                       aria-current={
                         task.id === selectedTaskId ? 'true' : undefined
@@ -1742,6 +1877,7 @@ function Cowork(): JSX.Element {
                         setRailOpen(false);
                       }}
                       type="button"
+                      title={task.title}
                     >
                       <span
                         aria-hidden="true"
@@ -1765,10 +1901,15 @@ function Cowork(): JSX.Element {
                   {tasks.length === 0 && (
                     <p className="cowork-rail-empty">No tasks yet.</p>
                   )}
+                  {tasks.length > 0 && filteredTasks.length === 0 && (
+                    <p className="cowork-rail-empty" role="status">
+                      No tasks match “{historySearch.trim()}”.
+                    </p>
+                  )}
                 </>
               ) : (
                 <>
-                  {schedules.map((schedule) => (
+                  {filteredSchedules.map((schedule) => (
                     <button
                       aria-current={
                         schedule.id === selectedScheduleId ? 'true' : undefined
@@ -1783,6 +1924,7 @@ function Cowork(): JSX.Element {
                         setRailOpen(false);
                       }}
                       type="button"
+                      title={schedule.name}
                     >
                       <span
                         aria-hidden="true"
@@ -1807,6 +1949,11 @@ function Cowork(): JSX.Element {
                   ))}
                   {schedules.length === 0 && (
                     <p className="cowork-rail-empty">No schedules yet.</p>
+                  )}
+                  {schedules.length > 0 && filteredSchedules.length === 0 && (
+                    <p className="cowork-rail-empty" role="status">
+                      No schedules match “{historySearch.trim()}”.
+                    </p>
                   )}
                 </>
               )}
@@ -1947,9 +2094,6 @@ function Cowork(): JSX.Element {
               <IconMenu2 size={19} />
             </button>
             <div className="cowork-workspace-title">
-              <span className="cowork-eyebrow">
-                {selectedProject?.folderName || 'Local workspace'}
-              </span>
               <h1>
                 {railMode === 'schedules'
                   ? selectedSchedule?.name || 'New schedule'
@@ -2135,7 +2279,6 @@ function Cowork(): JSX.Element {
               <span className="cowork-hero-icon">
                 <IconSparkles size={30} />
               </span>
-              <span className="cowork-eyebrow">Morpheus Workspace</span>
               <h2>Give an AI agent a goal, not a checklist.</h2>
               <p>
                 Connect a project folder, choose one of your active Morpheus
@@ -2144,7 +2287,11 @@ function Cowork(): JSX.Element {
               </p>
               <button
                 className="cowork-primary-button"
-                onClick={() => setShowProjectForm(true)}
+                onClick={() => {
+                  setShowProjectForm(true);
+                  setRailOpen(true);
+                  setInspectorOpen(false);
+                }}
                 type="button"
               >
                 <IconFolderPlus size={17} />
@@ -2752,6 +2899,12 @@ function Cowork(): JSX.Element {
               aria-live="polite"
             >
               <div className="cowork-task-context">
+                {selectedProject?.folderName && (
+                  <span className="cowork-folder-context">
+                    <IconFolder aria-hidden="true" size={14} />
+                    {selectedProject.folderName}
+                  </span>
+                )}
                 <span className="cowork-model-chip">
                   {activeTask.model.dataBoundary === 'on-device' ? (
                     <IconDeviceLaptop size={14} />
@@ -2921,16 +3074,45 @@ function Cowork(): JSX.Element {
             </div>
 
             <form className="cowork-steer-bar" onSubmit={handleSteer}>
+              {showLatestShortcut && (
+                <button
+                  className="cowork-latest-button"
+                  onClick={() => {
+                    if (!transcriptElementRef.current) return;
+                    transcriptAutoScrollRef.current = true;
+                    scrollCoworkTranscriptToLatest(
+                      transcriptElementRef.current,
+                    );
+                    setShowLatestShortcut(false);
+                  }}
+                  type="button"
+                >
+                  <IconArrowDown aria-hidden="true" size={15} />
+                  Latest message
+                </button>
+              )}
               <textarea
                 aria-label="Message Workspace"
+                aria-describedby="workspace-compose-hint"
                 disabled={
                   busy === 'steer-task' ||
                   !exactTaskSessionActive ||
                   activeTask.status === 'waiting_approval'
                 }
-                onChange={(event) => setSteeringMessage(event.target.value)}
+                onChange={(event) => {
+                  const content = event.target.value;
+                  setSteeringDrafts((drafts) => ({
+                    ...drafts,
+                    [activeTask.id]: content,
+                  }));
+                }}
                 onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !event.shiftKey) {
+                  if (
+                    event.key === 'Enter' &&
+                    !event.shiftKey &&
+                    !event.nativeEvent.isComposing &&
+                    event.keyCode !== 229
+                  ) {
                     event.preventDefault();
                     event.currentTarget.form?.requestSubmit();
                   }
@@ -2962,7 +3144,7 @@ function Cowork(): JSX.Element {
                   <IconSend size={18} />
                 )}
               </button>
-              <span className="cowork-steer-hint">
+              <span className="cowork-steer-hint" id="workspace-compose-hint">
                 Enter to send · Shift+Enter for a new line
               </span>
             </form>
@@ -3144,6 +3326,7 @@ function Cowork(): JSX.Element {
                   {activeTask.artifacts.map((artifact) => (
                     <div className="cowork-artifact-row" key={artifact.path}>
                       <button
+                        aria-label={`Preview ${artifact.path}`}
                         disabled={
                           artifact.kind !== 'file' ||
                           busy === `preview:${artifact.path}`
@@ -3327,6 +3510,7 @@ function Cowork(): JSX.Element {
           aria-label={`Preview ${preview.path}`}
           aria-modal="true"
           className="cowork-preview-backdrop"
+          ref={previewElementRef}
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) setPreview(null);
           }}
@@ -3350,7 +3534,9 @@ function Cowork(): JSX.Element {
                 <IconX size={18} />
               </button>
             </header>
-            <pre>{preview.content}</pre>
+            <pre aria-label="File preview contents" tabIndex={0}>
+              {preview.content}
+            </pre>
             {preview.truncated && (
               <footer>Preview truncated for safety and performance.</footer>
             )}

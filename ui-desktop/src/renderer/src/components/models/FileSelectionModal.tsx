@@ -1,358 +1,343 @@
-import Modal from '../contracts/modals/Modal';
+import { useEffect, useRef, useState } from 'react';
 import styled from 'styled-components';
-import {
-    TitleWrapper,
-    Title,
-    RightBtn
-} from '../contracts/modals/CreateContractModal.styles';
-import { useState } from 'react';
 import Form from 'react-bootstrap/Form';
-import { Sp } from '../common'
 import { IconFile, IconUpload, IconHash, IconTag } from '@tabler/icons-react';
+import Modal from '../contracts/modals/Modal';
+import {
+  TitleWrapper,
+  Title,
+  RightBtn,
+} from '../contracts/modals/CreateContractModal.styles';
 
-const bodyProps = {
-    height: '750px',
-    width: '70%',
-    maxWidth: '100%',
-    overflow: 'hidden',
-    onClick: e => e.stopPropagation()
-}
+const bodyProps = { width: '640px', maxWidth: '100%' };
 
-const RowContainer = styled.div`
-  padding: 1rem;
-  border: 1px solid rgba(33, 220, 143, 0.2);
-  background: rgba(0, 0, 0, 0.2);
-  margin-bottom: 1rem;
-  border-radius: 8px;
+const StyledForm = styled(Form)`
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  transition: all 0.2s;
-  
-  &:hover {
-    border-color: rgba(33, 220, 143, 0.4);
-    background: rgba(0, 0, 0, 0.25);
-    transform: translateY(-2px);
+  gap: 1.6rem;
+
+  .form-control {
+    min-height: 4rem;
+    padding: 0.8rem 1.2rem;
+    background: var(--surface-base, #071711);
+    border: 1px solid var(--border-strong, rgba(170, 216, 193, 0.3));
+    border-radius: 8px;
+    color: var(--text-primary, #edf7f0);
+    font-size: 1.4rem;
+    line-height: 1.5;
   }
-  
+
+  .form-control:focus {
+    border-color: var(--accent, #19d695);
+    background: var(--surface-base, #071711);
+    color: var(--text-primary, #edf7f0);
+  }
+
+  .form-control::placeholder {
+    color: var(--text-muted, #9ab4a7);
+  }
+
+  .form-label {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    margin-bottom: 0.6rem;
+    color: var(--text-primary, #edf7f0);
+    font-size: 1.4rem;
+    font-weight: 600;
+  }
+
+  .invalid-feedback {
+    color: #ffb7a8;
+    font-size: 1.2rem;
+  }
+`;
+
+const HelperText = styled.p`
+  color: var(--text-muted, #9ab4a7);
+  font-size: 1.2rem;
+  line-height: 1.5;
+  margin: 0.6rem 0 0;
+`;
+
+const FileSummary = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1.2rem 0;
+  font-size: 1.4rem;
+  border-block: 1px solid var(--border-subtle, rgba(170, 216, 193, 0.13));
+
   .file-info {
     display: flex;
     align-items: center;
-    gap: 8px;
-    color: #fff;
-    font-size: 0.9rem;
-    
-    svg {
-      color: #21dc8f;
-    }
+    gap: 0.8rem;
+    flex-wrap: wrap;
   }
-  
+
+  strong {
+    overflow-wrap: anywhere;
+  }
+
+  svg {
+    color: var(--accent, #19d695);
+    flex: 0 0 auto;
+  }
+
+  .file-detail {
+    color: var(--text-muted, #9ab4a7);
+    font-size: 1.2rem;
+    overflow-wrap: anywhere;
+  }
+
   .file-path {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.8rem;
-    opacity: 0.7;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%;
+    font-family: var(--font-mono, monospace);
   }
-  
-  .file-size {
-    background: rgba(33, 220, 143, 0.15);
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 0.8rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-`
+`;
 
-const HelperText = styled.div`
-    color: #8a8a8a;
-    font-size: 0.875rem;
-    margin-top: 0.25rem;
-`
-
-const StyledForm = styled(Form)`
-  .form-control {
-    background-color: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(33, 220, 143, 0.2);
-    color: white;
-    transition: all 0.2s;
-    
-    &:focus {
-      background-color: rgba(0, 0, 0, 0.3);
-      border-color: rgba(33, 220, 143, 0.5);
-      box-shadow: 0 0 0 0.25rem rgba(33, 220, 143, 0.15);
-      color: white;
-    }
-    
-    &::placeholder {
-      color: rgba(255, 255, 255, 0.5);
-    }
-  }
-  
-  .form-label {
-    color: #21dc8f;
-    font-weight: 500;
-    margin-bottom: 0.5rem;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  
-  .form-control-feedback {
-    margin-top: 0.25rem;
-  }
-`
+const SubmitRow = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 0.4rem;
+`;
 
 const StyledButton = styled(RightBtn)`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 0.5rem 1.25rem;
-  background: linear-gradient(135deg, #21dc8f 0%, #1baf71 100%);
-  border-radius: 8px;
-  transition: all 0.2s;
+  width: auto;
+  min-height: 4.4rem;
+  height: auto;
+  padding: 1rem 1.6rem;
+  gap: 0.8rem;
+  background: var(--accent, #19d695);
+  border-radius: 10px;
   border: none;
-  
-  &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-  }
-  
-  &:active {
-    transform: translateY(0);
-  }
-`
+  font-size: 1.4rem;
+  line-height: 1.4;
 
-const EmptyFilesMessage = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem;
-  border: 2px dashed rgba(33, 220, 143, 0.3);
-  border-radius: 8px;
-  margin: 1rem 0;
-  color: rgba(255, 255, 255, 0.6);
-  
-  svg {
-    font-size: 2rem;
-    margin-bottom: 1rem;
-    color: #21dc8f;
-    opacity: 0.5;
+  &:hover:not(:disabled) {
+    background: #48e4ae;
   }
-`
+`;
+
+const ErrorMessage = styled.p`
+  color: #ffb7a8;
+  font-size: 1.4rem;
+  line-height: 1.5;
+  margin: 0;
+`;
+
+type ModelFile = File & { path?: string };
 
 const formatFileSize = (bytes: number) => {
-  if (!bytes) return '';
-  
-  const KB = bytes / 1024;
-  const MB = KB / 1024;
-  const GB = MB / 1024;
-  
-  if (GB >= 1) {
-    return `${GB.toFixed(2)} GB`;
-  } else if (MB >= 1) {
-    return `${MB.toFixed(2)} MB`;
-  } else {
-    return `${KB.toFixed(2)} KB`;
-  }
+  if (bytes < 1024) return `${bytes} bytes`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(2)} KB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(2)} MB`;
+  return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
 };
 
-const FileSelectionModal = ({ isActive, handleClose, addFileToIpfs, pinFile, toasts }) => {
-
-    if (!isActive) {
-        return <></>;
-    }
-
-    const [files, setFiles] = useState<any>([]);
-    const [modelName, setModelName] = useState<string>('');
-    const [modelID, setModelID] = useState<string>('');
-    const [modelIDError, setModelIDError] = useState<string>('');
-    const [tags, setTags] = useState<string>('');
-
-    // Validate modelID - should be a hash of 32 bytes starting with 0x
-    const validateModelID = (id: string): boolean => {
-        if (!id) return true; // Empty is valid (optional field)
-        
-        // Check if starts with 0x
-        if (!id.startsWith('0x')) {
-            setModelIDError('Model ID must start with "0x"');
-            return false;
-        }
-        
-        // Remove 0x prefix for length check (0x + 64 characters for 32 bytes)
-        const hexPart = id.substring(2);
-        if (hexPart.length !== 64) {
-            setModelIDError('Model ID must be 32 bytes (64 hex characters after 0x)');
-            return false;
-        }
-        
-        // Check if it's a valid hex string
-        if (!/^[0-9a-fA-F]+$/.test(hexPart)) {
-            setModelIDError('Model ID must contain only hex characters (0-9, a-f, A-F)');
-            return false;
-        }
-        
-        setModelIDError('');
-        return true;
-    };
-
-    const handleModelIDChange = (e) => {
-        const value = e.target.value;
-        setModelID(value);
-        validateModelID(value);
-    };
-
-    const onPinModel = async () => {
-        // Validate modelID before proceeding
-        if (!validateModelID(modelID)) {
-            return; // Stop if validation fails
-        }
-
-        try {
-            const response = await addFileToIpfs(files[0].path, modelID, modelName, tags ? tags.split(',').map(tag => tag.trim()) : undefined);
-            console.log("🚀 ~ onPinModel ~ response:", response)
-            if (response) {
-                await Promise.all([
-                    pinFile(response.metadataCIDHash),
-                    pinFile(response.fileCIDHash)
-                ]).then((res) => {
-                    console.log("🚀 ~ ]).then ~ res:", res)
-                    if (res.every(r => r.result)) {
-                        handleClose();
-                        toasts.toast("success", "Model pinned successfully");
-                    } else {
-                        handleClose();
-                        toasts.toast("error", "Failed to pin model");
-                    }
-                }).catch(() => {
-                    handleClose();
-                    toasts.toast("error", "Failed to pin model");
-                });
-            } else {
-                handleClose();
-                toasts.toast("error", "Failed to pin model");
-            }
-        } catch (error) {
-            handleClose();
-            toasts.toast("error", "Failed to pin model");
-            console.error("Error", error);
-        }
-    }
-
-    return (
-        <Modal
-            onClose={() => {
-                handleClose();
-            }}
-            bodyProps={bodyProps}
-        >
-            <TitleWrapper>
-                <Title>Select File for IPFS</Title>
-            </TitleWrapper>
-
-            <StyledForm>
-                <Sp mt={2}>
-                    <Form.Group controlId="modelName" className="mb-3">
-                        <Form.Label>
-                            <IconFile size={16} strokeWidth={2} />
-                            Model Name (optional)
-                        </Form.Label>
-                        <Form.Control 
-                            type="text" 
-                            value={modelName}
-                            onChange={(e) => setModelName(e.target.value)}
-                            placeholder="Enter model name"
-                        />
-                    </Form.Group>
-                </Sp>
-                
-                <Sp mt={2}>
-                    <Form.Group controlId="modelID" className="mb-3">
-                        <Form.Label>
-                            <IconHash size={16} strokeWidth={2} />
-                            Model ID (optional)
-                        </Form.Label>
-                        <Form.Control 
-                            type="text" 
-                            value={modelID}
-                            onChange={handleModelIDChange}
-                            placeholder="Enter model ID (0x followed by 64 hex characters)"
-                            isInvalid={!!modelIDError}
-                        />
-                        {modelIDError && (
-                            <Form.Control.Feedback type="invalid">
-                                {modelIDError}
-                            </Form.Control.Feedback>
-                        )}
-                        <HelperText>
-                            Must be a 32-byte hash starting with 0x (e.g., 0x1234...abcd)
-                        </HelperText>
-                    </Form.Group>
-                </Sp>
-                
-                <Sp mt={2}>
-                    <Form.Group controlId="tags" className="mb-3">
-                        <Form.Label>
-                            <IconTag size={16} strokeWidth={2} />
-                            Tags (optional, comma-separated)
-                        </Form.Label>
-                        <Form.Control 
-                            type="text" 
-                            value={tags}
-                            onChange={(e) => setTags(e.target.value)}
-                            placeholder="tag1, tag2, tag3"
-                        />
-                    </Form.Group>
-                </Sp>
-                
-                <Sp mt={2}>
-                    <Form.Group controlId="formFile" className="mb-3">
-                        <Form.Label>
-                            <IconUpload size={16} strokeWidth={2} />
-                            Select files required to run model (including .gguf)
-                        </Form.Label>
-                        <Form.Control type="file" multiple onChange={(e => {
-                            setFiles(Object.values((e.currentTarget as any).files))
-                        })} />
-                    </Form.Group>
-                </Sp>
-            </StyledForm>
-
-            {!files.length ? (
-                <EmptyFilesMessage>
-                    <IconUpload size={36} strokeWidth={1.5} />
-                    <div>No files selected yet</div>
-                    <div style={{ fontSize: '0.9rem', marginTop: '0.5rem' }}>
-                        Please select files to pin to IPFS
-                    </div>
-                </EmptyFilesMessage>
-            ) : (
-                files.map((f, index) => (
-                    <RowContainer key={index}>
-                        <div className="file-info">
-                            <IconFile size={18} strokeWidth={2} />
-                            <strong>{f.name}</strong>
-                            <div className="file-size">{formatFileSize(f.size)}</div>
-                        </div>
-                        <div className="file-path">{f.path}</div>
-                    </RowContainer>
-                ))
-            )}
-
-            <Sp mt={3} style={{ display: 'flex', justifyContent: 'center' }}>
-                <StyledButton onClick={onPinModel} disabled={!files.length}>
-                    <IconUpload size={16} strokeWidth={2} />
-                    Pin Model Files
-                </StyledButton>
-            </Sp>
-        </Modal>
-    );
+function modelIdError(id: string): string {
+  if (!id) return '';
+  if (!id.startsWith('0x')) return 'Model ID must start with "0x".';
+  if (id.length !== 66)
+    return 'Model ID must contain 64 hex characters after 0x.';
+  if (!/^0x[0-9a-fA-F]{64}$/.test(id)) {
+    return 'Model ID must contain only hex characters (0–9, a–f).';
+  }
+  return '';
 }
+
+const FileSelectionModal = ({
+  isActive,
+  handleClose,
+  addFileToIpfs,
+  pinFile,
+  toasts,
+}) => {
+  const [file, setFile] = useState<ModelFile | null>(null);
+  const [modelName, setModelName] = useState('');
+  const [modelID, setModelID] = useState('');
+  const [tags, setTags] = useState('');
+  const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState('');
+  const pendingRef = useRef(false);
+  const mountedRef = useRef(true);
+  const idError = modelIdError(modelID.trim());
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // Keep hooks stable when the caller toggles the dialog's visibility.
+  if (!isActive) return null;
+
+  const onPinModel = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (pendingRef.current) return;
+    if (!file?.path) {
+      setError('Choose one model file from your computer before pinning.');
+      return;
+    }
+    if (idError) return;
+
+    pendingRef.current = true;
+    setIsPending(true);
+    setError('');
+    try {
+      const response = await addFileToIpfs(
+        file.path,
+        modelID.trim(),
+        modelName.trim(),
+        tags.trim()
+          ? tags
+              .split(',')
+              .map((tag) => tag.trim())
+              .filter(Boolean)
+          : undefined,
+      );
+      if (!response?.metadataCIDHash || !response?.fileCIDHash) {
+        throw new Error('The node did not return the file identifiers.');
+      }
+      const results = await Promise.all([
+        pinFile(response.metadataCIDHash),
+        pinFile(response.fileCIDHash),
+      ]);
+      if (!results.every((result) => result?.result)) {
+        throw new Error('The node did not confirm both pins.');
+      }
+      toasts.toast('success', 'Model pinned successfully');
+      if (mountedRef.current) handleClose();
+    } catch {
+      const message =
+        'Could not pin this model. Check your IPFS connection and try again.';
+      if (mountedRef.current)
+        setError(`${message} Your selection has been kept.`);
+      else toasts.toast('error', message);
+    } finally {
+      pendingRef.current = false;
+      if (mountedRef.current) setIsPending(false);
+    }
+  };
+
+  return (
+    <Modal
+      ariaLabel="Pin a model file"
+      onClose={handleClose}
+      bodyProps={bodyProps}
+    >
+      <TitleWrapper>
+        <Title as="h2">Pin a model file</Title>
+      </TitleWrapper>
+      <StyledForm
+        onSubmit={onPinModel}
+        aria-label="Pin model file"
+        aria-busy={isPending}
+      >
+        <Form.Group controlId="modelName">
+          <Form.Label>
+            <IconFile size={18} aria-hidden="true" />
+            Model name (optional)
+          </Form.Label>
+          <Form.Control
+            type="text"
+            value={modelName}
+            disabled={isPending}
+            onChange={(event) => setModelName(event.target.value)}
+            placeholder="Enter model name"
+          />
+        </Form.Group>
+        <Form.Group controlId="modelID">
+          <Form.Label>
+            <IconHash size={18} aria-hidden="true" />
+            Model ID (optional)
+          </Form.Label>
+          <Form.Control
+            type="text"
+            value={modelID}
+            disabled={isPending}
+            onChange={(event) => setModelID(event.target.value)}
+            placeholder="0x followed by 64 hex characters"
+            isInvalid={!!idError}
+            aria-invalid={!!idError}
+            aria-describedby={idError ? 'model-id-error' : 'model-id-help'}
+          />
+          {idError && (
+            <Form.Control.Feedback
+              type="invalid"
+              id="model-id-error"
+              role="alert"
+            >
+              {idError}
+            </Form.Control.Feedback>
+          )}
+          <HelperText id="model-id-help">
+            Leave blank, or enter a 32-byte model hash starting with 0x.
+          </HelperText>
+        </Form.Group>
+        <Form.Group controlId="tags">
+          <Form.Label>
+            <IconTag size={18} aria-hidden="true" />
+            Tags (optional)
+          </Form.Label>
+          <Form.Control
+            type="text"
+            value={tags}
+            disabled={isPending}
+            onChange={(event) => setTags(event.target.value)}
+            placeholder="Separate tags with commas"
+          />
+        </Form.Group>
+        <Form.Group controlId="modelFile">
+          <Form.Label>
+            <IconUpload size={18} aria-hidden="true" />
+            Model file
+          </Form.Label>
+          <Form.Control
+            type="file"
+            disabled={isPending}
+            aria-describedby="model-file-help"
+            onChange={(event) => {
+              const selected = (event.currentTarget as HTMLInputElement).files;
+              if (selected && selected.length > 1) {
+                setError('Choose one model file at a time.');
+                setFile(null);
+                return;
+              }
+              setFile(selected?.[0] ?? null);
+              setError('');
+            }}
+          />
+          <HelperText id="model-file-help">
+            Choose one file per pin, such as a .gguf model file.
+          </HelperText>
+        </Form.Group>
+        {file && (
+          <FileSummary>
+            <div className="file-info">
+              <IconFile size={18} aria-hidden="true" />
+              <strong>{file.name}</strong>
+              <span className="file-detail">{formatFileSize(file.size)}</span>
+            </div>
+            {file.path && (
+              <div className="file-detail file-path">{file.path}</div>
+            )}
+          </FileSummary>
+        )}
+        {error && <ErrorMessage role="alert">{error}</ErrorMessage>}
+        <SubmitRow>
+          <StyledButton submit disabled={!file || !!idError || isPending}>
+            <IconUpload size={18} aria-hidden="true" />
+            {isPending
+              ? 'Pinning file…'
+              : error
+                ? 'Try pinning again'
+                : 'Pin model file'}
+          </StyledButton>
+        </SubmitRow>
+      </StyledForm>
+    </Modal>
+  );
+};
 
 export default FileSelectionModal;

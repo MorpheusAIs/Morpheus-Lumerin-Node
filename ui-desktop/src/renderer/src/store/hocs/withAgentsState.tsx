@@ -1,4 +1,4 @@
-import { ComponentType, useState, useEffect, useContext } from 'react';
+import { ComponentType, useState, useEffect, useContext, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { withClient } from './clientContext';
 import selectors from '../selectors';
@@ -29,7 +29,7 @@ export interface ContainerProps {
   retryAgents: () => void;
 }
 
-type TxModal =
+export type TxModal =
   | {
       state: 'pending';
     }
@@ -58,6 +58,58 @@ export interface MappedProps {
   morTokenAddress: string;
 }
 
+export function useAgentTransactions(
+  client: Pick<ApiGateway, 'getAgentTxs'>,
+  address?: string,
+) {
+  const [txModal, setTxModal] = useState<TxModal>({ state: 'pending' });
+  const ownerRef = useRef(address);
+
+  useEffect(() => {
+    // Transaction history is wallet-scoped; a wallet switch also closes it.
+    if (ownerRef.current !== address) {
+      ownerRef.current = address;
+      setTxModal({ state: 'pending' });
+      return;
+    }
+    if (txModal.state !== 'loading') return;
+    let cancelled = false;
+    const agentName = txModal.agentName;
+
+    void (async () => {
+      try {
+        const result = await client.getAgentTxs({
+          username: agentName,
+          cursor: '',
+          limit: 10,
+        });
+        if (cancelled) return;
+        if (!result || !Array.isArray(result.txHashes)) {
+          throw new Error('Missing transaction history');
+        }
+        setTxModal({ state: 'success', agentName, data: result.txHashes });
+      } catch {
+        if (!cancelled) {
+          setTxModal({
+            state: 'error',
+            agentName,
+            error:
+              'Could not load transaction history. Check your local node connection and try again.',
+          });
+        }
+      }
+    })();
+
+    // The API does not accept an AbortSignal. Ignore late responses on close,
+    // agent/wallet switch, retry, or unmount instead of reopening the dialog.
+    return () => {
+      cancelled = true;
+    };
+  }, [address, client, txModal]);
+
+  return { txModal, setTxModal };
+}
+
 // `MappedProps` get injected later by `connect()`; the Container itself only
 // receives `ContainerProps`. Type the wrapped component loosely so callers can
 // declare their own prop shapes without fighting HOC composition.
@@ -66,29 +118,10 @@ const withAgentsState = (WrappedComponent: ComponentType<any>) => {
     const context = useContext(ToastsContext);
     const queryClient = useQueryClient();
 
-    const [txModal, setTxModal] = useState<TxModal>({ state: 'pending' });
-
-    useEffect(() => {
-      if (txModal.state !== 'pending') {
-        props.client
-          .getAgentTxs({ username: txModal.agentName, cursor: '', limit: 10 })
-          .then((res) => {
-            if (!res) {
-              setTxModal({
-                state: 'error',
-                agentName: txModal.agentName,
-                error: 'Failed to fetch transactions',
-              });
-            } else {
-              setTxModal({
-                state: 'success',
-                agentName: txModal.agentName,
-                data: res.txHashes,
-              });
-            }
-          });
-      }
-    }, [txModal.state !== 'pending' && txModal.agentName]);
+    const { txModal, setTxModal } = useAgentTransactions(
+      props.client,
+      props.address,
+    );
 
     const agentsQuery = useQuery({
       queryKey: queryKeys.agents(props.address),

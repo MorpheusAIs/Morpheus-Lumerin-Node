@@ -135,13 +135,12 @@ export class ToastsProvider extends React.Component<
                 data-type={type}
                 onMouseEnter={this.handleMouseEnter}
                 onMouseLeave={this.handleMouseLeave}
-                initial={{ maxHeight: 0, opacity: 0, y: -45 }}
+                initial={{ maxHeight: 0, opacity: 0, y: -8 }}
                 animate={{ maxHeight: 450, opacity: 1, y: 0 }}
-                exit={{ maxHeight: 0, opacity: 0, y: -45 }}
+                exit={{ maxHeight: 0, opacity: 0, y: -4 }}
                 transition={{
-                  type: 'spring',
-                  stiffness: 170,
-                  damping: 15,
+                  duration: 0.18,
+                  ease: 'easeOut',
                 }}
                 style={{ overflow: 'hidden' }}
               >

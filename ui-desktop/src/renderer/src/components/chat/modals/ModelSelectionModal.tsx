@@ -487,7 +487,13 @@ const ModelSelectionModal = ({
   };
 
   return (
-    <Modal onClose={resetAndClose} bodyProps={bodyProps}>
+    <Modal
+      onClose={resetAndClose}
+      bodyProps={bodyProps}
+      ariaLabel={
+        coworkSetup ? 'Choose a model for Workspace' : 'Choose a model'
+      }
+    >
       <Layout>
         <Header>
           <TitleRow>
