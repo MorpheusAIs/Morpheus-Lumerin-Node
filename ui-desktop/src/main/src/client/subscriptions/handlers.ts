@@ -42,10 +42,25 @@ import {
 } from './agentMutationSecurity'
 import { InferenceTargetPayload, sessionInferenceHeaders } from './inference-session-target'
 import { parseExistingSessionConflict } from './proxy-router-conflict'
+import { showSessionConfirmation } from '../../../sessionConfirmation'
+import type { SessionConfirmationDetails } from '../../../sessionConfirmationView'
 
 let authentication: Record<string, string> | null = null
 let orchestrator: Orchestrator | null = null
 let sensitiveConfirmationOpen = false
+
+async function confirmSessionAction(details: SessionConfirmationDetails): Promise<boolean> {
+  if (sensitiveConfirmationOpen) throw new Error('Another security confirmation is already open.')
+  sensitiveConfirmationOpen = true
+  try {
+    const owner =
+      BrowserWindow.getFocusedWindow() ??
+      BrowserWindow.getAllWindows().find((window) => !window.isDestroyed())
+    return await showSessionConfirmation(owner, details)
+  } finally {
+    sensitiveConfirmationOpen = false
+  }
+}
 
 async function confirmNativeAction(options: {
   title: string
@@ -681,15 +696,11 @@ export const openSession = async (payload: {
   }
   const directPayment = payload?.directPayment === true
   const failover = payload?.failover === true
-  const approved = await confirmNativeAction({
-    title: 'Open session',
-    message: `Open a session for model “${modelId.slice(0, 120)}”?`,
-    detail:
-      `Contract duration input: ${duration.toLocaleString()} seconds\n` +
-      `Payment mode: ${directPayment ? 'direct MOR payment' : 'MOR stake/escrow'}\n` +
-      `Failover: ${failover ? 'enabled' : 'disabled'}\n\n` +
-      'This submits a blockchain transaction and may lock or spend tokens according to the selected payment mode.',
-    confirmLabel: 'Open session'
+  const approved = await confirmSessionAction({
+    modelId,
+    duration,
+    directPayment,
+    failover
   })
   if (!approved) throw new Error('Session opening cancelled.')
   try {

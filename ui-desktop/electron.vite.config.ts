@@ -140,6 +140,10 @@ export default defineConfig(({ command, mode }) => {
     preload: {
       build: {
         rollupOptions: {
+          input: {
+            index: resolve(__dirname, 'src/preload/index.ts'),
+            'session-confirmation': resolve(__dirname, 'src/preload/session-confirmation.ts')
+          },
           // CJS for the preload script. Electron 28's ESM preload support is
           // patchy (notably, the bundled sandbox bootstrap fails with
           // "object null is not iterable"). CJS sidesteps the whole CJS↔ESM

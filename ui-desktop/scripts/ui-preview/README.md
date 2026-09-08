@@ -22,3 +22,17 @@ the guide. Useful direct views:
 Browser window resizing additionally exercises the real sidebar media queries.
 The preview server uses its own Vite configuration and never loads the normal
 Electron build configuration. Stop it with Ctrl+C.
+
+## Session confirmation (Electron)
+
+After `npm run build`, keep the preview server above running and launch
+`node scripts/ui-preview/session-confirmation-smoke.mjs` in another terminal.
+This opens the real, main-owned confirmation with its dedicated isolated preload,
+not the normal wallet app. It uses a fresh temporary user-data directory.
+
+With the parent preview focused, press **R** for a stake confirmation, **D** for
+direct payment, **N** for a smaller window or **W** for a wider window. Confirm
+and cancel using the actual buttons or keyboard; results and listener cleanup
+are printed to the terminal. There is no transaction submission path in this
+harness. Escape cancels, Cancel receives initial focus, and Tab stays inside
+the confirmation. Stop both processes with Ctrl+C when finished.
