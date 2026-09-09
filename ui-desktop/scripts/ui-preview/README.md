@@ -18,6 +18,13 @@ the guide. Useful direct views:
 - `/?empty=1#/workspace` — first-project setup
 - `/?modal=receive#/wallet` — long address and receive dialog
 - `/?modal=models#/chat` — model filters and rows
+- `/onboarding.html` — actual fresh wallet setup with synthetic wallet operations
+- `/onboarding.html?existing=1` — existing-wallet unlock, without real credentials
+- `/onboarding.html?fail-setup=1` — setup fails once, then can be retried
+- `/onboarding.html?existing=1&recover=1` — authenticated incomplete-setup recovery
+
+The onboarding fixture denies application fetch/XHR. It uses a public test
+phrase, never touches OS key storage, and never submits a wallet transaction.
 
 Browser window resizing additionally exercises the real sidebar media queries.
 The preview server uses its own Vite configuration and never loads the normal

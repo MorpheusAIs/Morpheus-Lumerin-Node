@@ -9,6 +9,7 @@ const runtime = vi.hoisted(() => ({
   stopped: false,
   unsubscribed: false,
   startError: null as Error | null,
+  passwordHash: 'configured-wallet' as string | null | undefined,
   getState: vi.fn(async () => ({ chain: { persisted: true } }))
 }))
 
@@ -56,7 +57,7 @@ vi.mock('./subscriptions', () => ({
 
 vi.mock('./settings', () => ({
   presetDefaults: vi.fn(),
-  getPasswordHash: vi.fn(() => 'configured-wallet')
+  getPasswordHash: vi.fn(() => runtime.passwordHash)
 }))
 
 vi.mock('./storage', () => ({
@@ -112,6 +113,7 @@ describe('renderer client bootstrap', () => {
     runtime.stopped = false
     runtime.unsubscribed = false
     runtime.startError = null
+    runtime.passwordHash = 'configured-wallet'
     runtime.getState.mockReset()
     runtime.getState.mockResolvedValue({ chain: { persisted: true } })
   })
@@ -150,6 +152,40 @@ describe('renderer client bootstrap', () => {
     // miss the original race because subscribe() did run shortly afterward.
     expect(runtime.subscriptionStateAtReady).toEqual([true])
     expect(runtime.order).toEqual(['core-start', 'subscribe', 'ui-ready'])
+  })
+
+  it.each([undefined, null, ''])(
+    'routes settings without a password hash to setup (%j)',
+    async (passwordHash) => {
+      runtime.passwordHash = passwordHash
+      createClient({ chain: { chainId: 'base' } })
+      const send = vi.fn()
+      runtime.ipcHandlers.get('ui-ready')?.({ sender: { send } }, { id: 'fresh-ready' })
+      await vi.waitFor(() =>
+        expect(send).toHaveBeenCalledWith(
+          'ui-ready',
+          expect.objectContaining({
+            data: expect.objectContaining({ onboardingComplete: false })
+          })
+        )
+      )
+    }
+  )
+
+  it('preserves password protection for legacy settings even when cached wallet metadata is absent', async () => {
+    runtime.passwordHash = 'legacy-password-hash'
+    runtime.getState.mockResolvedValue({} as any)
+    createClient({ chain: { chainId: 'base' } })
+    const send = vi.fn()
+    runtime.ipcHandlers.get('ui-ready')?.({ sender: { send } }, { id: 'legacy-ready' })
+    await vi.waitFor(() =>
+      expect(send).toHaveBeenCalledWith(
+        'ui-ready',
+        expect.objectContaining({
+          data: expect.objectContaining({ onboardingComplete: true })
+        })
+      )
+    )
   })
 
   it('rolls back the core and listeners when the ready response cannot be delivered', async () => {

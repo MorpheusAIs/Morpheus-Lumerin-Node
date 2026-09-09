@@ -41,6 +41,10 @@ export class Root extends React.Component<RootProps> {
     // on a separate `open-wallet` event allowed late bootstrap hydration to
     // erase it, while a second proxy request would make offline login slow.
     const walletState = await this.props.client.onLoginSubmit({ password });
+    if (walletState?.requiresOnboarding === true) {
+      this.setState({ onboardingComplete: false });
+      return;
+    }
     const address = walletState?.address;
     if (!address) {
       throw new Error(
@@ -64,9 +68,10 @@ export class Root extends React.Component<RootProps> {
           payload: { ...persistedState, config },
         });
         this.setState({ onboardingComplete });
+        return onboardingComplete;
       })
-      .then(() => {
-        if (this.props.isAuthBypassed) {
+      .then((onboardingComplete) => {
+        if (onboardingComplete && this.props.isAuthBypassed) {
           // TODO: replace dummy password
           return this.startAuthenticatedSession('password').catch((_e) => {
             this.context.toast('error', 'Bypass auth failed');
@@ -113,28 +118,19 @@ export class Root extends React.Component<RootProps> {
   }
 
   onOnboardingCompleted = (data) => {
-    return (
-      this.props.client
-        .onOnboardingCompleted({
-          proxyUrl: this.props.config.chain.localProxyRouterUrl,
-          ...data,
-        })
-        .then((error) => {
-          if (error) {
-            this.context.toast('error', error);
-            return;
-          }
-          this.setState({ onboardingComplete: true });
-          this.props.dispatch({ type: 'session-started' });
-        })
-        // eslint-disable-next-line no-console
-        .catch((_e) => {
-          this.context.toast(
-            'error',
-            'Failed to finish onboarding. Please wait a few minutes and try again',
+    return this.props.client
+      .onOnboardingCompleted({
+        proxyUrl: this.props.config.chain.localProxyRouterUrl,
+        ...data,
+      })
+      .then((error) => {
+        if (error)
+          throw new Error(
+            error?.error?.message || error?.message || String(error),
           );
-        })
-    );
+        this.setState({ onboardingComplete: true });
+        this.props.dispatch({ type: 'session-started' });
+      });
   };
 
   onLoginSubmit = ({ password }) => this.startAuthenticatedSession(password);

@@ -6,10 +6,15 @@ import Sp from './Spacing';
 import { LumerinLogoFull } from '../icons/LumerinLogoFull';
 
 const Container = styled(Flex.Column)`
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
+  overflow-y: auto;
   padding: 4rem 2rem;
-  justify-content: center;
+  justify-content: flex-start;
   background: transparent;
+  > * {
+    flex-shrink: 0;
+  }
 `;
 
 const Body = styled.div`
@@ -20,6 +25,7 @@ const Body = styled.div`
   max-width: 53rem;
   width: 100%;
   margin-top: 2.4rem;
+  margin-bottom: auto;
   @media (max-width: 480px) {
     padding: 2.4rem;
   }
@@ -39,6 +45,7 @@ const Title = styled.h1`
 `;
 
 const LogoContainer = styled.div`
+  margin-top: auto;
   display: flex;
   justify-content: center;
   svg {

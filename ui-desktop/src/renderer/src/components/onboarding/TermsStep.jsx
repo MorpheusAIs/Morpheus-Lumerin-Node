@@ -1,104 +1,124 @@
-import TermsAndConditions from '../../components/common/TermsAndConditions';
-import PropTypes from 'prop-types';
 import styled from 'styled-components';
-import React from 'react';
-
+import { useState } from 'react';
+import licenseText from '../../../../../LICENSE?raw';
+import TermsAndConditions from '../common/TermsAndConditions';
 import { AltLayout, AltLayoutNarrow, Btn, Sp } from '../common';
-import Message from './Message';
+import SecondaryBtn from './SecondaryBtn';
 
-const DisclaimerWarning = styled.div`
-  text-align: left;
-  color: ${p => p.theme.colors.dark};
-  font-size: 16px;
-  margin-top: 16px;
-  text-align: justify;
+const Description = styled.p`
+  color: var(--text-muted);
+  font-size: 1.4rem;
+  line-height: 1.6;
 `;
-
-const DisclaimerMessage = styled.div`
-  width: 100%;
-  height: 130px;
-  border-radius: 2px;
-  background-color: rgba(0, 0, 0, 0.5);
-  color: ${p => p.theme.colors.dark};
+const LegalText = styled.section`
+  max-height: clamp(14rem, calc(100vh - 50rem), 32rem);
   overflow: auto;
-  font-size: 12px;
-  padding: 10px 16px 0 16px;
-  margin: 16px 0;
+  background: var(--surface-sunken, #071a12);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 1.6rem;
+  margin: 2rem 0;
+  color: var(--text-primary);
+  font-size: 1.4rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+`;
+const Consent = styled.label`
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  min-height: 44px;
+  padding-block: 0.8rem;
+  color: var(--text-primary);
+  font-size: 1.4rem;
+  line-height: 1.5;
+  cursor: pointer;
+  input {
+    flex-shrink: 0;
+    margin-top: 0.35rem;
+    accent-color: var(--accent);
+  }
+`;
+const LicenseButton = styled.button`
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 `;
 
-const P = styled.p`
-  color: ${p => p.theme.colors.dark};
-`;
-
-const Subtext = styled.span`
-  color: ${p => p.theme.colors.dark};
-  margin-left: 5px;
-`;
-
-const TermsStep = props => {
-  const onCheckboxToggle = e => {
-    props.onInputChange({ id: e.target.id, value: e.target.checked });
-  };
-
+export default function TermsStep(props) {
+  const [showLicense, setShowLicense] = useState(false);
+  const toggle = (event) =>
+    props.onInputChange({ id: event.target.id, value: event.target.checked });
   return (
-    <AltLayout title="Accept to Continue" data-testid="onboarding-container">
+    <AltLayout title="Terms and conditions" data-testid="onboarding-container">
       <AltLayoutNarrow>
-        <DisclaimerWarning>
-          Please read and accept these terms and conditions.
-        </DisclaimerWarning>
-
-        <DisclaimerMessage>
-          <TermsAndConditions ParagraphComponent={props => <P {...props} />} />
-        </DisclaimerMessage>
-
-        <Message>
-          <div style={{ display: 'flex' }}>
-            <input
-              data-testid="accept-terms-chb"
-              onChange={onCheckboxToggle}
-              checked={props.termsCheckbox}
-              type="checkbox"
-              id="termsCheckbox"
-            />
-            <Subtext>I have read and accept these terms</Subtext>
-          </div>
-          <div style={{ display: 'flex' }}>
-            <input
-              data-testid="accept-license-chb"
-              onChange={onCheckboxToggle}
-              checked={props.licenseCheckbox}
-              type="checkbox"
-              id="licenseCheckbox"
-            />
-            <Subtext>I have read and accept the</Subtext>
-            <a onClick={props.onTermsLinkClick} style={{ marginLeft: '5px' }}>
-              software license
-            </a>
-          </div>
-        </Message>
-
-        <Sp mt={6}>
+        <Description>
+          Review the terms before setting up your wallet.
+        </Description>
+        <LegalText tabIndex={0} aria-label="Morpheus terms of use">
+          <TermsAndConditions />
+        </LegalText>
+        <Consent htmlFor="termsCheckbox">
+          <input
+            id="termsCheckbox"
+            data-testid="accept-terms-chb"
+            type="checkbox"
+            checked={props.termsCheckbox}
+            onChange={toggle}
+          />
+          <span>I have read and accept these terms</span>
+        </Consent>
+        <Consent htmlFor="licenseCheckbox">
+          <input
+            id="licenseCheckbox"
+            data-testid="accept-license-chb"
+            type="checkbox"
+            checked={props.licenseCheckbox}
+            onChange={toggle}
+          />
+          <span>I have read and accept the software license</span>
+        </Consent>
+        <LicenseButton
+          type="button"
+          aria-expanded={showLicense}
+          aria-controls="software-license-text"
+          onClick={() => setShowLicense(!showLicense)}
+        >
+          {showLicense
+            ? 'Hide the software license'
+            : 'Read the software license'}
+        </LicenseButton>
+        {showLicense && (
+          <LegalText
+            id="software-license-text"
+            tabIndex={0}
+            aria-label="Morpheus software license"
+          >
+            <pre style={{ whiteSpace: 'pre-wrap', font: 'inherit', margin: 0 }}>
+              {licenseText}
+            </pre>
+          </LegalText>
+        )}
+        <Sp mt={3}>
           <Btn
             data-testid="accept-terms-btn"
-            autoFocus
             disabled={!props.licenseCheckbox || !props.termsCheckbox}
             onClick={props.onTermsAccepted}
             block
           >
-            Accept
+            Accept and continue
           </Btn>
+        </Sp>
+        <Sp mt={2}>
+          <SecondaryBtn block onClick={props.onChooseWallet}>
+            Back to wallet options
+          </SecondaryBtn>
         </Sp>
       </AltLayoutNarrow>
     </AltLayout>
   );
-};
-
-TermsStep.propTypes = {
-  onTermsLinkClick: PropTypes.func.isRequired,
-  onTermsAccepted: PropTypes.func.isRequired,
-  licenseCheckbox: PropTypes.bool.isRequired,
-  termsCheckbox: PropTypes.bool.isRequired,
-  onInputChange: PropTypes.func.isRequired
-};
-
-export default TermsStep;
+}

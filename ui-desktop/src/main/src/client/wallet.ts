@@ -28,6 +28,15 @@ const getWalletFromSeed = (seed, index = 0) =>
 
 const getAddress2 = (seed, index) => getWalletFromSeed(seed, index).getChecksumAddressString()
 
+/** Public identity only, using the same relative BIP-44 path convention as the router. */
+export const getAddressForDerivationPath = (seed: string, derivationPath: string): string => {
+  const path = derivationPath.startsWith('m/') ? derivationPath : `m/44'/60'/0'/0/${derivationPath}`
+  return hdkey.EthereumHDKey.fromMasterSeed(Buffer.from(seed, 'hex'))
+    .derivePath(path)
+    .getWallet()
+    .getChecksumAddressString()
+}
+
 const getPrivateKey = (seed, index) => getWalletFromSeed(seed, index).getPrivateKey()
 
 const getAddressAndPrivateKey = (seed, index) => ({
@@ -56,6 +65,7 @@ export default {
   getActiveWallet: getWallet,
   setActiveWallet: setAddress,
   createAddress: getAddress2,
+  getAddressForDerivationPath,
   getAddressAndPrivateKey,
   privateKeyToAddress,
   clearWallet,

@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import styled from 'styled-components';
 import Markdown from 'marked-react';
-import termsPath from '../../termsAndConditions.md';
+import terms from '../../termsAndConditions.md?raw';
 
 const StyledTC = styled.div`
-  text-align: justify;
+  text-align: left;
 
   h1 {
     font-size: 1.5em;
@@ -18,18 +18,9 @@ const StyledTC = styled.div`
 `;
 
 const TermsAndConditions = () => {
-  const [result, setResult] = useState('');
-
-  useEffect(() => {
-    // TODO: replace with an md loader
-    fetch(termsPath)
-      .then(res => res.text())
-      .then(setResult);
-  }, []);
-
   return (
     <StyledTC>
-      <Markdown>{result}</Markdown>
+      <Markdown>{terms}</Markdown>
     </StyledTC>
   );
 };

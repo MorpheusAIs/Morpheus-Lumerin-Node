@@ -13,7 +13,8 @@ import {
   setKey,
   getFailoverSetting,
   setFailoverSetting as setFailoverSettingMain,
-  setPasswordHash
+  setPasswordHash,
+  getPasswordHash
 } from '../settings'
 import config from '../../../config'
 import os from 'node:os'
@@ -48,6 +49,8 @@ import type { SessionConfirmationDetails } from '../../../sessionConfirmationVie
 let authentication: Record<string, string> | null = null
 let orchestrator: Orchestrator | null = null
 let sensitiveConfirmationOpen = false
+let onboardingInProgress = false
+let onboardingRecoveryHash: string | null = null
 
 async function confirmSessionAction(details: SessionConfirmationDetails): Promise<boolean> {
   if (sensitiveConfirmationOpen) throw new Error('Another security confirmation is already open.')
@@ -421,7 +424,7 @@ export const importWallet = async (params: { privateKey: string; label?: string 
   const normalised = privateKey.startsWith('0x') ? privateKey : `0x${privateKey}`
 
   // Derive the address locally — importing must not disturb the active wallet.
-  const address = keys.privateKeyToAddress(normalised)
+  const address = wallet.privateKeyToAddress(normalised)
 
   return wallets.addImportedWallet({
     address,
@@ -1426,73 +1429,133 @@ export const pingService = async (data: { service: keyof OrchestratorConfig }, c
 }
 
 export const onboardingCompleted = async (data, core: Core) => {
+  if (onboardingInProgress) {
+    return { error: new WalletError('Wallet setup is already in progress. Please wait.') }
+  }
+  onboardingInProgress = true
   try {
     // Never trust a renderer-provided destination for wallet setup. This flow
     // sends the seed or imported key, so even a well-formed remote URL would be
     // credential exfiltration. The admin API is deliberately loopback-only.
     const proxyUrl = configuredLoopbackProxyUrl()
+    const existingHash = getPasswordHash()
+    if (existingHash && onboardingRecoveryHash !== existingHash) {
+      throw new Error(
+        'A wallet is already protected by this app. Sign in before changing its setup.'
+      )
+    }
+    if (typeof data?.password !== 'string' || !data.password || data.password.length > 1024) {
+      throw new Error('Enter a valid wallet password.')
+    }
+
+    const mnemonic =
+      typeof data.mnemonic === 'string'
+        ? data.mnemonic.trim().toLowerCase().replace(/\s+/g, ' ')
+        : ''
+    const privateKey = typeof data.privateKey === 'string' ? data.privateKey.trim() : ''
+    const derivationPath = String(data.derivationPath ?? '0').trim()
+    if (!!mnemonic === !!privateKey)
+      throw new Error('Provide either a recovery phrase or a private key.')
+    if (!derivationPath || derivationPath.length > 256)
+      throw new Error('The derivation path is invalid.')
+    if (mnemonic && !keys.isValidMnemonic(mnemonic))
+      throw new Error('The recovery phrase is invalid.')
+    if (privateKey && !/^(0x)?[0-9a-fA-F]{64}$/.test(privateKey))
+      throw new Error('The private key is invalid.')
+    const expectedAddress = mnemonic
+      ? wallet.getAddressForDerivationPath(keys.mnemonicToSeedHex(mnemonic), derivationPath)
+      : wallet.privateKeyToAddress(privateKey)
+
+    // A settings reset or interrupted setup can leave a real key in the node.
+    // Reconnect a matching identity, but never replace that key implicitly.
+    let alreadyConfigured = false
+    try {
+      const current = await getActiveWallet({ signal: AbortSignal.timeout(5_000) })
+      const currentAddress = walletAddress(current?.address, 'Wallet address')
+      if (currentAddress.toLowerCase() !== expectedAddress.toLowerCase()) {
+        throw new Error(
+          'Your node already has a different wallet. Setup will not replace it. Sign in or restore access to that wallet first.'
+        )
+      }
+      alreadyConfigured = true
+    } catch (error) {
+      if (!isWalletNotSet(error)) throw error
+    }
 
     if (data.ethNode) {
+      const signal = AbortSignal.timeout(15_000)
       const ethNodeResult = await fetch(`${proxyUrl}/config/ethNode`, {
         method: 'POST',
         body: JSON.stringify({ urls: [data.ethNode] }),
-        headers: await getAuthHeaders()
+        headers: await getAuthHeaders(signal),
+        signal
       })
 
       const dataResponse = await ethNodeResult.json()
-      if (dataResponse.error) {
-        return dataResponse.error
+      if (!ethNodeResult.ok || dataResponse.error) {
+        throw new Error(dataResponse.error || 'The Ethereum node settings could not be saved.')
       }
     }
 
-    await auth.setPassword(data.password)
-
-    if (data.mnemonic) {
-      const mnemonicRes = await fetch(`${proxyUrl}/wallet/mnemonic`, {
-        method: 'POST',
-        body: JSON.stringify({
-          mnemonic: data.mnemonic,
-          derivationPath: String(data.derivationPath || 0)
-        }),
-        headers: await getAuthHeaders()
-      })
-      if (!mnemonicRes.ok) {
-        throw new Error(await mnemonicRes.text())
-      }
-
-      console.log('Set Mnemonic To Wallet', await mnemonicRes.json())
-    } else {
-      const pKeyResp = await fetch(`${proxyUrl}/wallet/privateKey`, {
-        method: 'POST',
-        body: JSON.stringify({ privateKey: String(data.privateKey) }),
-        headers: await getAuthHeaders()
-      })
-      if (!pKeyResp.ok) {
-        throw new Error(await pKeyResp.text())
-      }
-      console.log('Set Private Key To Wallet', await pKeyResp.json())
+    if (!alreadyConfigured) {
+      const signal = AbortSignal.timeout(15_000)
+      const walletResponse = await fetch(
+        `${proxyUrl}/wallet/${mnemonic ? 'mnemonic' : 'privateKey'}`,
+        {
+          method: 'POST',
+          body: JSON.stringify(mnemonic ? { mnemonic, derivationPath } : { privateKey }),
+          headers: await getAuthHeaders(signal),
+          signal
+        }
+      )
+      if (!walletResponse.ok)
+        throw new Error('The local node could not save your wallet. Please retry setup.')
     }
 
-    const activeAddress = await fetch(`${proxyUrl}/wallet`, {
-      method: 'GET',
-      headers: await getAuthHeaders()
-    })
-      .then((res) => res.json())
-      .then((res) => res.address)
-    const verifiedAddress = walletAddress(activeAddress, 'Wallet address')
-
-    console.log('Wallet Address Is', verifiedAddress)
+    const active = await getActiveWallet({ signal: AbortSignal.timeout(5_000) })
+    const verifiedAddress = walletAddress(active?.address, 'Wallet address')
+    if (verifiedAddress.toLowerCase() !== expectedAddress.toLowerCase()) {
+      throw new Error(
+        'The local node did not activate the expected wallet. Your app password has not been changed.'
+      )
+    }
 
     wallet.setSeed(verifiedAddress, data.password)
     wallet.setAddress(verifiedAddress)
+    // The password hash is the legacy bootstrap completion marker. Commit it
+    // only after node setup, identity verification and local metadata succeed.
+    await auth.setPassword(data.password)
+    onboardingRecoveryHash = null
     core.emitter.emit('create-wallet', { address: verifiedAddress })
     await openWallet(data.password, core, verifiedAddress)
+    return undefined
   } catch (err) {
-    return { error: new WalletError('Onboarding unable to be completed: ', err) }
+    return {
+      error: new WalletError(
+        err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')
+          ? 'Wallet setup timed out while waiting for the local node. Retry with the same recovery phrase or private key to reconnect safely.'
+          : err instanceof Error
+            ? err.message
+            : 'Wallet setup could not be completed.',
+        err
+      )
+    }
+  } finally {
+    onboardingInProgress = false
   }
 }
 
+function isWalletNotSet(error: unknown): boolean {
+  return (
+    error instanceof ProxyRouterError &&
+    error.status === 500 &&
+    (error.responseBody as { error?: unknown } | null)?.error === 'wallet not set'
+  )
+}
+
 export const onLoginSubmit = async ({ password }, core: Core) => {
+  onboardingRecoveryHash = null
+  const authenticatedHash = getPasswordHash()
   const isValid = config.chain.bypassAuth ? true : await auth.isValidPassword(password)
   if (!isValid) {
     return { error: new WalletError('Invalid password') }
@@ -1501,6 +1564,19 @@ export const onLoginSubmit = async ({ password }, core: Core) => {
   try {
     return await openWallet(password, core)
   } catch (err) {
+    // Only an authenticated, authoritative empty-wallet response can offer
+    // setup recovery. Offline, malformed and keychain-permission failures must
+    // never look like a fresh wallet or authorize replacement.
+    if (!config.chain.bypassAuth && isWalletNotSet(err)) {
+      if (
+        typeof authenticatedHash === 'string' &&
+        authenticatedHash &&
+        getPasswordHash() === authenticatedHash
+      ) {
+        onboardingRecoveryHash = authenticatedHash
+        return { requiresOnboarding: true }
+      }
+    }
     log.error('onLoginSubmit err', err)
     const message =
       err instanceof ProxyRouterError && err.unreachable

@@ -143,7 +143,12 @@ const createClient = function (createStore) {
   };
 
   const forwardedMethods = {
-    onOnboardingCompleted: utils.forwardToMainProcess('onboarding-completed'),
+    // Main allows two 5s wallet reads and two 15s setup writes. Leave room for
+    // their decided result and the local password commit instead of failing at 10s.
+    onOnboardingCompleted: utils.forwardToMainProcess(
+      'onboarding-completed',
+      60000,
+    ),
     suggestAddresses: utils.forwardToMainProcess('suggest-addresses'),
     validatePassword: utils.forwardToMainProcess('validate-password'),
     changePassword: utils.forwardToMainProcess('change-password'),
