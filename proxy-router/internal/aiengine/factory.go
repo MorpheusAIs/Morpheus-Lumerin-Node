@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 )
 
@@ -11,6 +12,13 @@ import (
 // httpClient is optional; when non-nil it overrides the default http.Client used by
 // adapters that support it (currently openai and claudeai). Pass nil for default behavior.
 func ApiAdapterFactory(apiType string, modelName string, url string, apikey string, parameters ModelParameters, llmTimeout time.Duration, log lib.ILogger, httpClient *http.Client) (AIEngineStream, bool) {
+	// Stack presets (vllm, ollama, venice, …) declare the backend's API for
+	// the spec reported to consumers; they all speak one of the existing
+	// transport adapters.
+	if adapter, ok := apispec.TransportFor(apiType); ok {
+		apiType = adapter
+	}
+
 	switch apiType {
 	case API_TYPE_OPENAI:
 		return NewOpenAIEngine(modelName, url, apikey, llmTimeout, log, httpClient), true
