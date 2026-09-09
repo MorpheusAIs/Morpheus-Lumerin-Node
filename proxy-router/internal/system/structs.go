@@ -78,6 +78,99 @@ type ModelHealthReport struct {
 	// when the probe failed with a non-200 response (e.g. 402, 429).
 	// Zero when the probe succeeded or never got an HTTP response.
 	HttpStatus int `json:"httpStatus,omitempty"`
+	// Api is the provider-declared API spec for this model (see internal/apispec): serving stack preset, model family and the request-param bindings a consumer needs to translate canonical fields. Derived from models-config presets only — never the backend URL, key or private model string.
+	Api *ModelApiSpec `json:"api,omitempty"`
+}
+
+const (
+	ThinkingModeAlwaysOn = "always_on"
+	// ThinkingModeControllable means thinking can be switched: a
+	// reasoning.disable or reasoning.enable binding exists.
+	ThinkingModeControllable = "controllable"
+	// ThinkingModeTunable means thinking intensity can be adjusted but never
+	// fully disabled (effort/budget bindings only, e.g. gpt-oss).
+	ThinkingModeTunable = "tunable"
+)
+
+// Binding kinds: the mechanism a ParamBinding uses.
+const (
+	// BindingKindBodyParam is a request body param addressed by dotted path
+	// on the OpenAI-compatible chat endpoint (e.g. "reasoning_effort",
+	// "venice_parameters.disable_thinking").
+	BindingKindBodyParam = "body_param"
+	// BindingKindTemplateKwarg is a chat-template variable passed via
+	// chat_template_kwargs (vLLM / SGLang / llama.cpp); Param starts with
+	// "chat_template_kwargs.".
+	BindingKindTemplateKwarg = "template_kwarg"
+	// BindingKindSystemPrompt means the intent is realized by magic text in
+	// the system prompt (Hint carries the text).
+	BindingKindSystemPrompt = "system_prompt"
+	// BindingKindNativeBodyParam exists only on the stack's native
+	// (non-OpenAI-compatible) endpoint; informational, Hint names the endpoint.
+	BindingKindNativeBodyParam = "native_body_param"
+)
+
+// Canonical request intents bindings are keyed by. Open-ended: new groups
+// join without schema changes.
+const (
+	IntentReasoningDisable = "reasoning.disable"
+	IntentReasoningEnable  = "reasoning.enable"
+	IntentReasoningEffort  = "reasoning.effort"
+	IntentReasoningBudget  = "reasoning.budget"
+	IntentReasoningFormat  = "reasoning.format"
+
+	IntentResponseFormatJSON    = "response_format.json"
+	IntentResponseFormatSchema  = "response_format.schema"
+	IntentResponseFormatGrammar = "response_format.grammar"
+	IntentResponseFormatChoice  = "response_format.choice"
+
+	IntentSamplingTopK              = "sampling.top_k"
+	IntentSamplingMinP              = "sampling.min_p"
+	IntentSamplingRepetitionPenalty = "sampling.repetition_penalty"
+	IntentSamplingTypicalP          = "sampling.typical_p"
+	IntentSamplingTopA              = "sampling.top_a"
+
+	IntentContextNumCtx      = "context.num_ctx"
+	IntentStreamIncludeUsage = "stream.include_usage"
+	IntentCachePrompt        = "cache.prompt"
+	IntentToolsParallel      = "tools.parallel"
+)
+
+// ModelApiSpec describes the API serving a model as declared by the
+// provider's models-config presets. Self-reported and unverified: consumers
+// treat it as a routing/translation hint, not truth.
+type ModelApiSpec struct {
+	// Stack is the serving stack / vendor preset: vllm | sglang | llamacpp |
+	// ollama | venice | openrouter | litellm | anthropic | openai.
+	Stack string `json:"stack,omitempty"`
+	// ModelFamily is the canonical model family (qwen3, deepseek-r1, claude…).
+	ModelFamily string `json:"modelFamily,omitempty"`
+	// Thinking summarizes reasoning controllability; knobs live in Bindings.
+	Thinking *ThinkingSpec `json:"thinking,omitempty"`
+	// Bindings maps canonical request intents to how this backend spells them.
+	// An absent intent means the backend has no way to express it.
+	Bindings map[string]*ParamBinding `json:"bindings,omitempty"`
+	// Parameters lists standard OpenAI chat-completions params the stack
+	// documents as accepted (an upper bound: server-side flags are invisible).
+	Parameters []string `json:"parameters,omitempty"`
+	DeclaredAt int64    `json:"declaredAt,omitempty"`
+}
+
+// ThinkingSpec summarizes whether reasoning output can be controlled.
+type ThinkingSpec struct {
+	Mode string `json:"mode"` // always_on | controllable | tunable
+}
+
+// ParamBinding says how one canonical intent maps onto this backend.
+type ParamBinding struct {
+	Kind      string `json:"kind"`
+	Param     string `json:"param,omitempty"`     // dotted path within the mechanism
+	ParamType string `json:"paramType,omitempty"` // boolean | number | enum | string | object | array
+	// Value is the fixed value realizing the intent (e.g. false for
+	// reasoning.disable via enable_thinking). Nil for caller-supplied values.
+	Value      any      `json:"value,omitempty"`
+	EnumValues []string `json:"enumValues,omitempty"`
+	Hint       string   `json:"hint,omitempty"`
 }
 
 type StatusRes struct {
