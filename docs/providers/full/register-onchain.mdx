@@ -3,7 +3,7 @@ title: "Register on chain (provider, model, bid)"
 description: "Look up existing models on active.mor.org, register as a provider, bid on a known modelId when possible, and only mint a new model when nothing suitable exists."
 audience: ["provider-full", "provider-resale"]
 product: ["proxy-router"]
-last_verified: "v7.5.0"
+last_verified: "v7.11.0"
 source: "docs/03-provider-offer.md"
 ---
 
@@ -33,14 +33,15 @@ After your proxy-router is running, register on the BASE Diamond contract. **Pre
 
 ## Step 0 — Look up models before you mint
 
-Browse [active.mor.org/status](https://active.mor.org/status) or pull the JSON snapshots:
+Browse [active.mor.org/status](https://active.mor.org/status) or pull the JSON snapshots. Pick the layer — do not treat every file as "the catalog." Semantics: [Marketplace catalog](/ecosystem/active-status). Diagrams: [tech.mor.org/active.html](https://tech.mor.org/active.html).
 
-| URL | Use |
-|-----|-----|
-| [active_models.json](https://active.mor.org/active_models.json) | Routable models (healthy/degraded bids) — start here |
-| [active_bids.json](https://active.mor.org/active_bids.json) | Competing `pricePerSecond` for a model name |
-| [all_models.json](https://active.mor.org/all_models.json) | All non-deleted on-chain models (including ones with no live healthy provider) |
-| [status](https://active.mor.org/status) | Human UI + uptime / min price views |
+| URL | Layer | Use |
+|-----|-------|-----|
+| [active_models.json](https://active.mor.org/active_models.json) | ACTIVE | Polled working set (healthy / degraded / **skipped**) — start here when joining a live listing |
+| [active_bids.json](https://active.mor.org/active_bids.json) | ACTIVE | Competing `pricePerSecond` for a model name |
+| [all_models.json](https://active.mor.org/all_models.json) / [all_bids.json](https://active.mor.org/all_bids.json) | ALL | Non-deleted on-chain records **including failed stamps** (no live healthy provider, unreachable, …) |
+| [gateway_models.json](https://active.mor.org/gateway_models.json) | GATEWAY | Hosted-API input (healthy + degraded + aliases). Not what a C-Node must consume. |
+| [status](https://active.mor.org/status) | Human UI | Uptime / min price views (ACTIVE slice today) |
 
 ```bash
 # Find a model by name (field names are PascalCase in the JSON)

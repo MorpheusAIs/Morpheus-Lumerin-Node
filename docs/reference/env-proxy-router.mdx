@@ -3,7 +3,7 @@ title: "Env: proxy-router"
 description: "Every environment variable consumed by the proxy-router, with mainnet/testnet defaults and explicit precedence rules where two variables overlap."
 audience: ["provider-full", "provider-resale", "prosumer", "developer"]
 product: ["proxy-router"]
-last_verified: "2026-08-24"
+last_verified: "2026-09-09"
 source: "docs/proxy-router.all.env"
 ---
 
@@ -177,7 +177,7 @@ For exact defaults check the source of truth ([`config.go`](https://github.com/M
 
 ## Model health self-checks (provider)
 
-On provider nodes the proxy-router periodically probes every model from `models-config.json` that has an **active bid from this provider**: LLM models get a small dynamically generated arithmetic prompt (correctness is graded), embedding models get an embeddings request, and other model types are skipped. The report covers the whole ecosystem of bids and configured models — active bids whose model is missing from `models-config.json` are flagged as `no_model_configured` (capacity being sold with no backend to serve it). The cached per-model results (on-chain `modelId` and registered model name, `bidId`, status, `errorKind` plus upstream `httpStatus` on failure, `lastHealthy` epoch, latency, prompt correctness — never the private `models-config.json` `modelName`, `apiUrl`, or `apiKey`) are exposed in the `models` field of `GET /healthcheck`, in the `network.ping` (pong) response on the `:3333` MOR RPC port, and in `POST /proxy/provider/ping`, so consumers can see a provider's model health before opening a session. Full operational guide: [Model health self-report](/providers/full/model-health).
+On provider nodes the proxy-router periodically probes every model from `models-config.json` that has an **active bid from this provider**: LLM models get a small dynamically generated arithmetic prompt (correctness is graded), embedding models get an embeddings request. Untagged / unknown-type models are probed as LLM unless their tags name image/video/audio/music; a failed guessed probe reports `skipped` (with `errorKind`), not `unhealthy`. STT/TTS and media-tagged models are skipped without a probe. The report covers the whole ecosystem of bids and configured models — active bids whose model is missing from `models-config.json` are flagged as `no_model_configured` (capacity being sold with no backend to serve it). The cached per-model results (on-chain `modelId` and registered model name, `bidId`, status, `errorKind` plus upstream `httpStatus` on failure, `lastHealthy` epoch, latency, prompt correctness — never the private `models-config.json` `modelName`, `apiUrl`, or `apiKey`) are exposed in the `models` field of `GET /healthcheck`, in the `network.ping` (pong) response on the `:3333` MOR RPC port, and in `POST /proxy/provider/ping`, so consumers can see a provider's model health before opening a session. The [active.mor.org](/ecosystem/active-status) sweep copies these stamps into ALL / ACTIVE / GATEWAY. Full operational guide: [Model health self-report](/providers/full/model-health).
 
 | Variable | Default | Notes |
 |----------|---------|-------|
@@ -216,6 +216,15 @@ These are only consulted when at least one model in the marketplace is `tee`-tag
 | `ARTIFACT_REGISTRY_REFRESH_INTERVAL` | `1h` | How often the proxy-router re-downloads the artifact registry |
 
 See [TEE overview](/concepts/tee-overview) and [TEE reference](/providers/full/tee-reference).
+
+## IPFS (optional)
+
+The proxy-router talks to a local Kubo API only when you set a real **multiaddr**. Unset `IPFS_MULTADDR` means IPFS is **disabled** — that is the headless default since v7.11. There is **no** `localhost:5001` default (that string is not a multiaddr and used to log ERROR on every boot). The bundled desktop already sets `/ip4/127.0.0.1/tcp/5001` when it runs Kubo.
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `IPFS_MULTADDR` | *(empty — disabled)* | Kubo API multiaddr, e.g. `/ip4/127.0.0.1/tcp/5001`. Invalid values log a warning and disable IPFS. |
+| `IPFS_DISABLED` | `false` | Set `true` to force-disable even when `IPFS_MULTADDR` is set. |
 
 ## System tuning (optional sysctl tweaks)
 

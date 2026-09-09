@@ -3,7 +3,7 @@ title: "Consumer troubleshooting"
 description: "The most common consumer-side problems and their fixes."
 audience: ["consumer"]
 product: ["proxy-router", "ui-desktop"]
-last_verified: "v7.9.0"
+last_verified: "v7.11.0"
 ---
 
 This page focuses on consumer-side symptoms. For provider-side or deeper proxy-router operational issues, see the full [Reference: troubleshooting](/reference/troubleshooting).
@@ -22,7 +22,7 @@ You probably recovered a **derived** address from your mnemonic. MorpheusUI only
 ## "Provider not responding" or stuck mid-prompt
 
 - Confirm the proxy-router is still running (`http://localhost:8082/healthcheck`, or check the Proxy Router entry on MorpheusUI's startup screen).
-- The provider may be down. Close the session; unused stake returns immediately, and the used stipend in `userStakesOnHold` becomes claimable via `withdrawUserStakes` after ~1 UTC day:
+- The provider may be down. Close the session; unused stake returns immediately, and the used stipend in `userStakesOnHold` becomes claimable after ~1 UTC day via `POST /blockchain/stakes/withdraw` (or `withdrawUserStakes` on the Diamond):
   ```bash
   curl -X POST 'http://localhost:8082/blockchain/sessions/<sessionId>/close' \
     -H 'Authorization: Basic <base64(user:pass)>' -d '{}'

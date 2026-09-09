@@ -3,7 +3,7 @@ title: "Verify your provider setup"
 description: "Self-check your provider end-to-end after setup: healthcheck, on-chain registration, network discovery, and a real prompt against your bid."
 audience: ["provider-full", "provider-resale"]
 product: ["proxy-router"]
-last_verified: "v7.0.0"
+last_verified: "v7.11.0"
 ---
 
 After [registering](/providers/full/register-onchain) your provider and bid (and a new model only if you had to mint one), you want to know **before any consumer hits you** that everything works. There is no built-in setup wizard yet. This page walks the same five checks the support team uses to verify a provider when someone posts in Discord asking "can you check if my setup is OK?".
@@ -64,7 +64,7 @@ On provider nodes the response also includes a `models` array — the periodic m
 | `unhealthy` | Probe failed — see `errorKind` and `httpStatus` below | Fix the backend; consumers opening a session hit the same failure |
 | `no_bid` | Configured model has no active bid; not probed | Post a bid if you want to sell it |
 | `no_model_configured` | **Active bid exists but the model is missing from `models-config.json`** | Add the model entry or delete the bid — consumers can open sessions against this bid and get errors |
-| `skipped` | Model type other than LLM/embedding; not probed | — |
+| `skipped` | STT/TTS, media tags (image/video/audio/music), or an untagged/unknown type whose guessed LLM probe failed. Not the same as "anything other than LLM." Still routable under default `permissive`. | — unless you need GATEWAY / hosted-API listing |
 
 The self-report has its own operational reference — schedule, tuning, backend impact, and diagnosis recipes — at [Model health self-report](/providers/full/model-health).
 
@@ -129,10 +129,10 @@ If any of these doesn't return your record, the on-chain transaction either fail
 
 ## Step 4 — Network discovery
 
-Two cron-driven dashboards aggregate the marketplace into JSON snapshots. Your provider only shows up here if the cron has reached you successfully **after your registration**:
+[active.mor.org](https://active.mor.org) photographs the marketplace every few minutes into **ALL / ACTIVE / GATEWAY**. Your provider only shows up after a sweep **after your registration**. Layer semantics: [Marketplace catalog](/ecosystem/active-status).
 
 ```bash
-# Active models — populated when the verifier can reach your provider's :3333 and ping the model
+# ACTIVE working set — skipped / degraded / healthy (what most C-Node apps consume)
 curl -sS https://active.mor.org/active_models.json \
   | jq --arg p "0xYOUR_PROVIDER" '
       .models[]
@@ -140,15 +140,23 @@ curl -sS https://active.mor.org/active_models.json \
       | {Name, Id, Tags, bidDetail}
     '
 
-# Active bids — same, but for bids
+# ACTIVE bids
 curl -sS https://active.mor.org/active_bids.json \
   | jq --arg p "0xYOUR_PROVIDER" '
       .bids[]
       | select(.Provider | ascii_downcase == ($p | ascii_downcase))
     '
+
+# ALL — same sweep including failed stamps (unreachable, unreported, unhealthy, …)
+curl -sS https://active.mor.org/all_bids.json \
+  | jq --arg p "0xYOUR_PROVIDER" '
+      .bids[]
+      | select(.Provider | ascii_downcase == ($p | ascii_downcase))
+      | {ModelName, Id, health}
+    '
 ```
 
-If your bid is on chain (Step 3) but **not** in `active_bids.json`, it means the verifier could reach the chain but **could not reach your `:3333`**. Re-check Step 2.
+If your bid is on chain (Step 3) but **not** in `active_bids.json`, look at `all_bids.json` for the stamp. `unreachable` / `unreported` usually means the sweep could not reach your `:3333` or got no `models[]` — re-check Step 2. `unhealthy` / `no_model_configured` is a self-report problem ([model health](/providers/full/model-health)). GATEWAY (`gateway_models.json`) additionally drops `skipped`; that is the hosted-API input, not a C-Node requirement.
 
 The dashboards refresh on a schedule (a few minutes); give it time before concluding it failed.
 
