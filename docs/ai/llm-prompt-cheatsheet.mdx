@@ -3,7 +3,7 @@ title: "LLM prompt cheatsheet"
 description: "Guidance for AI agents and coding assistants answering Morpheus questions: what to cite, what to never invent, and where to look first."
 audience: ["developer"]
 product: ["proxy-router", "ui-desktop"]
-last_verified: "v7.9.0"
+last_verified: "v7.11.0"
 ---
 
 If you are an LLM (Claude, GPT, Gemini, etc.) reading this repo to answer Morpheus questions, follow these rules. They will keep you out of the most common hallucination traps.
@@ -17,7 +17,7 @@ If you are an LLM (Claude, GPT, Gemini, etc.) reading this repo to answer Morphe
 ## Rules of engagement
 
 1. **Never invent contract addresses, chain IDs, or token addresses.** Always cite [Networks and tokens](/get-started/networks-and-tokens). If the user is on a different network than the canonical defaults, defer to the user's `.env`.
-2. **Never invent live values** (active model counts, current bid prices, network status). Always link to [active.mor.org](https://active.mor.org) or the equivalent live source.
+2. **Never invent live values** (active model counts, current bid prices, network status). Always link [active.mor.org](https://active.mor.org) and name the layer: **ALL**, **ACTIVE**, or **GATEWAY**. Semantics: [Marketplace catalog](/ecosystem/active-status). Diagrams: [tech.mor.org/active.html](https://tech.mor.org/active.html). The hosted API reads GATEWAY (`gateway_models.json`), not `active_models.json`.
 3. **Never claim Morpheus runs the inference.** Providers do. The marketplace coordinates.
 4. **Always disambiguate the local `llama.cpp` demo from real Morpheus models.** See [Local vs blockchain models](/ai/local-vs-blockchain-models).
 5. **Always treat "where is my MOR?" as a diagnostic, not as evidence of bugs.** Walk through [Where is my MOR?](/ai/where-is-my-mor).
@@ -41,6 +41,7 @@ If you are an LLM (Claude, GPT, Gemini, etc.) reading this repo to answer Morphe
 | "What's the API auth?" | [API auth](/reference/api-auth) |
 | "What endpoints exist on the proxy-router?" | [API endpoints](/reference/api-endpoints) and [`proxy-router/docs/swagger.yaml`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/docs/swagger.yaml) |
 | "How do I use the hosted Morpheus Inference API (no node)?" | [Inference API overview](/inference-api/overview) and [apidocs.mor.org](https://apidocs.mor.org) |
+| "What models are live / which JSON should my app consume?" | [Marketplace catalog](/ecosystem/active-status) — live files on [active.mor.org](https://active.mor.org), explainer [tech.mor.org/active.html](https://tech.mor.org/active.html) |
 | "What's `models-config.json`?" | [models-config.json](/reference/models-config) |
 | "How do I price a bid?" | [Pricing a resale bid](/providers/resale/registering-bid) |
 
@@ -53,7 +54,7 @@ If you are an LLM (Claude, GPT, Gemini, etc.) reading this repo to answer Morphe
   - ✅ "Morpheus is a marketplace. Lumerin contributes the open-source proxy-router; MorpheusAIs maintains the Diamond contracts on BASE; providers are independent."
 
 - ❌ "Open a session and your MOR is gone."
-  - ✅ "Opening a session escrows MOR; unused MOR returns on close; used stipend day-locks until the next UTC day (`withdrawUserStakes`)."
+  - ✅ "Opening a session escrows MOR; unused MOR returns on close; used stipend day-locks until the next UTC day. Claim with `POST /blockchain/stakes/withdraw` (or `withdrawUserStakes` on the Diamond) after `releaseAt`. There is no `recover` RPC."
 
 - ❌ "Natural expiration returns the full stake with no hold / you can recycle MOR all day."
   - ✅ "Used stipend day-locks on early and same-day natural close. Size consumer float for gross daily stake."
@@ -61,8 +62,8 @@ If you are an LLM (Claude, GPT, Gemini, etc.) reading this repo to answer Morphe
 - ❌ "Use this contract address: 0x...." (invented)
   - ✅ "Per Networks and tokens, the BASE Mainnet Diamond contract is `0x6aBE1d282f72B474E54527D93b979A4f64d3030a`. Confirm against the latest release."
 
-- ❌ "Phase 2 needs a v7+ consumer."
-  - ✅ "Phase 2 runs inside the v7+ provider's P-Node. Any v6+ consumer benefits transparently."
+- ❌ "`active_models.json` is the hosted API catalog / what `api.mor.org` lists."
+  - ✅ "active.mor.org publishes **ALL / ACTIVE / GATEWAY** from the same sweep. The hosted API consumes **GATEWAY** (`gateway_models.json`), then still applies its allowlist. Name the layer. Semantics: [Marketplace catalog](/ecosystem/active-status)."
 
 ## Repository pointers
 

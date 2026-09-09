@@ -19,11 +19,11 @@ This repository has nuance that generic web knowledge gets wrong. **Before answe
 
 0. **Never confuse the proxy-router HTTP API (this repo) with the hosted Morpheus Inference API.** The proxy-router API is documented at `proxy-router/docs/swagger.yaml`. The hosted Morpheus Inference API at [apidocs.mor.org](https://apidocs.mor.org) (`https://api.mor.org/api/v1`) is a **separate product** for users who don't run a node — see [`docs/inference-api/overview.mdx`](../../docs/inference-api/overview.mdx).
 1. **Never invent contract addresses, chain IDs, or token addresses.** Use [`docs/get-started/networks-and-tokens.mdx`](../../docs/get-started/networks-and-tokens.mdx) (BASE Mainnet `8453`, Sepolia `84532`).
-2. **Never invent live values** (active model count, bid prices, latency). Link to `https://active.mor.org`.
+2. **Never invent live values** (active model count, bid prices, latency). Link `https://active.mor.org` and name the layer (ALL / ACTIVE / GATEWAY). Semantics: [`docs/ecosystem/active-status.mdx`](../../docs/ecosystem/active-status.mdx). Diagrams: https://tech.mor.org/active.html. Hosted API consumes GATEWAY, not `active_models.json`.
 3. **Never claim "Morpheus runs the inference."** Independent providers run inference; Morpheus is a marketplace coordinated by the Diamond contract on BASE.
 4. **Disambiguate the local `tinyllama` demo from real Morpheus models.** Cite [`docs/ai/local-vs-blockchain-models.mdx`](../../docs/ai/local-vs-blockchain-models.mdx).
 5. **Opening a session escrows MOR; it does not spend MOR.** Unused MOR returns on close. Cite [`docs/ai/session-states-open-close-recover.mdx`](../../docs/ai/session-states-open-close-recover.mdx).
-6. **There is no `recover` RPC.** Closing the session is the recovery path.
+6. **There is no `recover` RPC.** Closing the session is the recovery path. Day-lock claim is `POST /blockchain/stakes/withdraw`.
 7. **For TEE questions, separate Phase 1 (consumer → P-Node) from Phase 2 (P-Node → backend).** A v6+ consumer transparently benefits from a v7+ provider's Phase 2 with no client-side upgrade.
 8. **The proxy-router `:8082` admin/API port must not be exposed publicly.** Only `:3333` is public, and only on providers.
 9. **MorpheusUI mnemonic recovery only works for tier-1 (index 0) addresses.** For derived addresses, recommend importing the private key directly.

@@ -3,7 +3,7 @@ title: "Open a session (buy a bid)"
 description: "How to open a Morpheus session via MorpheusUI or the API: pick a model, select a bid, stake MOR, and what happens next."
 audience: ["consumer"]
 product: ["proxy-router", "ui-desktop"]
-last_verified: "v7.9.0"
+last_verified: "v7.11.0"
 source: "docs/05-bid-purchase.md"
 ---
 
@@ -30,7 +30,7 @@ Opening a session = "buying a bid." You stake MOR for a fixed duration; the prox
     - **Natural expiration** — your consumer node submits `closeSession` ~1 minute after `endsAt` (if online).
     - **Early close** — click the time icon next to the model line; click **X** next to the session.
 
-    In both cases: **unused** stake returns in the close txn; the **used stipend** day-locks in `userStakesOnHold` until the next UTC day. After `releaseAt`, call `withdrawUserStakes` to claim the held slice.
+    In both cases: **unused** stake returns in the close txn; the **used stipend** day-locks in `userStakesOnHold` until the next UTC day. After `releaseAt`, claim with `POST /blockchain/stakes/withdraw` (or `withdrawUserStakes` on the Diamond). There is no `recover` RPC.
   </Step>
 </Steps>
 
@@ -71,6 +71,6 @@ There is no single right answer; consider:
 - **`pricePerSecond`** — lower is cheaper but providers compete on quality and uptime.
 - **Provider reputation / stake** — higher provider stake means more skin in the game.
 - **TEE vs non-TEE** — `tee`-tagged models give you cryptographic guarantees about the running software (see [TEE overview](/concepts/tee-overview)).
-- **Throughput / capacity** — see live data at [active.mor.org](https://active.mor.org).
+- **Throughput / capacity** — live files at [active.mor.org](https://active.mor.org). Name the layer ([Marketplace catalog](/ecosystem/active-status)); C-Node apps usually want **ACTIVE**. Explainer: [tech.mor.org/active.html](https://tech.mor.org/active.html).
 
 For a `rating-config.json` that prefers certain providers automatically, see [rating-config](/reference/rating-config).
