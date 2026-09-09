@@ -62,7 +62,12 @@ const withOnboardingState = (WrappedComponent) => {
     }
 
     onWalletModeSelected = (walletMode) => {
-      if (this.submitting || !['create', 'import'].includes(walletMode)) return;
+      if (
+        this.submitting ||
+        !this.state.areTermsAccepted ||
+        !['create', 'import'].includes(walletMode)
+      )
+        return;
       this.preparationId++;
       this.setState({
         walletMode,
@@ -350,8 +355,8 @@ const withOnboardingState = (WrappedComponent) => {
     };
 
     getCurrentStep() {
-      if (!this.state.walletMode) return 'choose-wallet';
       if (!this.state.areTermsAccepted) return 'ask-for-terms';
+      if (!this.state.walletMode) return 'choose-wallet';
       if (!this.state.isPasswordDefined) return 'define-password';
       if (this.state.useEthStep) return 'set-custom-eth';
       if (this.state.useUserMnemonic) return 'recover-from-mnemonic';

@@ -93,8 +93,8 @@ function enterPassword() {
 }
 
 async function reachPhraseVerification() {
-  selectWallet('create');
   acceptTerms();
+  selectWallet('create');
   enterPassword();
   expect(await screen.findByTestId('mnemonic-label')).toHaveTextContent(
     TEST_PHRASE,
@@ -111,18 +111,27 @@ describe('first-run onboarding integration', () => {
     vi.restoreAllMocks();
   });
 
-  it('starts with wallet options instead of asking for an existing password', () => {
+  it('starts with terms before any wallet choice or password and has no misleading back control', () => {
     const { client, onCompleted } = renderOnboarding();
 
     expect(
-      screen.getByRole('heading', { name: 'Welcome to Morpheus' }),
+      screen.getByRole('heading', { name: 'Terms and conditions' }),
     ).toBeVisible();
     expect(
-      screen.getByRole('button', { name: 'Create a new wallet' }),
-    ).toBeEnabled();
+      screen.getByRole('heading', { name: 'Morpheus Terms of Use' }),
+    ).toBeVisible();
     expect(
-      screen.getByRole('button', { name: 'Import an existing wallet' }),
-    ).toBeEnabled();
+      screen.queryByRole('button', { name: 'Create a new wallet' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Import an existing wallet' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Back to wallet options' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Accept and continue' }),
+    ).toBeDisabled();
     expect(screen.queryByTestId('pass-field')).not.toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: 'Login' }),
@@ -132,14 +141,13 @@ describe('first-run onboarding integration', () => {
   });
 
   it.each(['create', 'import'] as const)(
-    'requires both visible terms consents before a new password for %s',
+    'requires both terms consents before choosing %s and creating a new app password',
     (mode) => {
       const blockedFetch = vi.fn(() => {
         throw new Error('Offline');
       });
       vi.stubGlobal('fetch', blockedFetch);
       const { client, onCompleted } = renderOnboarding();
-      selectWallet(mode);
 
       expect(
         screen.getByRole('heading', { name: 'Morpheus Terms of Use' }),
@@ -158,13 +166,32 @@ describe('first-run onboarding integration', () => {
         }),
       );
       expect(accept).toBeDisabled();
+      expect(screen.queryByTestId('wallet-choice')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('pass-field')).not.toBeInTheDocument();
       fireEvent.click(
         screen.getByRole('checkbox', {
           name: 'I have read and accept the software license',
         }),
       );
       expect(accept).toBeEnabled();
+      expect(screen.queryByTestId('wallet-choice')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('pass-field')).not.toBeInTheDocument();
       fireEvent.click(accept);
+
+      expect(
+        screen.getByRole('heading', { name: 'Welcome to Morpheus' }),
+      ).toBeVisible();
+      expect(
+        screen.getByRole('button', { name: 'Create a new wallet' }),
+      ).toBeEnabled();
+      expect(
+        screen.getByRole('button', { name: 'Import an existing wallet' }),
+      ).toBeEnabled();
+      expect(screen.queryByTestId('pass-field')).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: 'Accept and continue' }),
+      ).not.toBeInTheDocument();
+      selectWallet(mode);
 
       expect(
         screen.getByRole('heading', { name: 'Create your app password' }),
@@ -190,7 +217,6 @@ describe('first-run onboarding integration', () => {
     vi.stubGlobal('fetch', blockedFetch);
     const openWindow = vi.spyOn(window, 'open').mockImplementation(() => null);
     const { client } = renderOnboarding();
-    selectWallet('create');
 
     const readLicense = screen.getByRole('button', {
       name: 'Read the software license',
@@ -282,8 +308,8 @@ describe('first-run onboarding integration', () => {
     const { client, onCompleted } = renderOnboarding({
       onCompleted: completed,
     });
-    selectWallet('import');
     acceptTerms();
+    selectWallet('import');
     enterPassword();
 
     expect(
@@ -348,8 +374,8 @@ describe('first-run onboarding integration', () => {
     const { client, onCompleted } = renderOnboarding({
       createMnemonic: generated,
     });
-    selectWallet('create');
     acceptTerms();
+    selectWallet('create');
     enterPassword();
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -377,8 +403,8 @@ describe('first-run onboarding integration', () => {
     client.suggestAddresses.mockImplementationOnce(
       () => pendingAddresses.promise,
     );
-    selectWallet('import');
     acceptTerms();
+    selectWallet('import');
     enterPassword();
     fireEvent.change(screen.getByTestId('mnemonic-field'), {
       target: { value: TEST_PHRASE },
@@ -417,8 +443,8 @@ describe('first-run onboarding integration', () => {
 
   it('uses the default connection even if a custom URL was typed previously', async () => {
     const { onCompleted } = renderOnboarding();
-    selectWallet('import');
     acceptTerms();
+    selectWallet('import');
     enterPassword();
     fireEvent.change(screen.getByTestId('mnemonic-field'), {
       target: { value: TEST_PHRASE },
@@ -442,4 +468,38 @@ describe('first-run onboarding integration', () => {
       ethNode: '',
     });
   });
+
+  it.each(['create', 'import'] as const)(
+    'returns from the %s password screen to wallet options without requesting consent again',
+    (mode) => {
+      const { client, onCompleted } = renderOnboarding();
+      acceptTerms();
+      selectWallet(mode);
+      expect(
+        screen.getByRole('heading', { name: 'Create your app password' }),
+      ).toBeVisible();
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Back to wallet options' }),
+      );
+
+      expect(
+        screen.getByRole('heading', { name: 'Welcome to Morpheus' }),
+      ).toBeVisible();
+      expect(
+        screen.queryByRole('heading', { name: 'Terms and conditions' }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: 'Accept and continue' }),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByTestId('pass-field')).not.toBeInTheDocument();
+      selectWallet(mode === 'create' ? 'import' : 'create');
+
+      expect(
+        screen.getByRole('heading', { name: 'Create your app password' }),
+      ).toBeVisible();
+      expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+      expect(client.createMnemonic).not.toHaveBeenCalled();
+      expect(onCompleted).not.toHaveBeenCalled();
+    },
+  );
 });

@@ -25,6 +25,9 @@ the guide. Useful direct views:
 
 The onboarding fixture denies application fetch/XHR. It uses a public test
 phrase, never touches OS key storage, and never submits a wallet transaction.
+Fresh setup must show terms and license acceptance first, followed by the
+Create/Import choice and then a new app password. Neither wallet options nor
+password fields should appear before both consent checkboxes are accepted.
 
 Browser window resizing additionally exercises the real sidebar media queries.
 The preview server uses its own Vite configuration and never loads the normal

@@ -14,8 +14,8 @@ export default function WalletChoiceStep({ onWalletModeSelected }) {
     <AltLayout title="Welcome to Morpheus" data-testid="wallet-choice">
       <AltLayoutNarrow>
         <Description>
-          Start with a new wallet or import one you already own. You’ll review
-          the terms and create a password to protect access on this device.
+          Create a new wallet or import one you already own. Next, set an app
+          password to protect access on this device.
         </Description>
         <Sp mt={4}>
           <Btn block onClick={() => onWalletModeSelected('create')}>

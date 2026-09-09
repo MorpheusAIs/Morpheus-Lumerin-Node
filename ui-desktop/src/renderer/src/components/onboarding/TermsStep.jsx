@@ -3,7 +3,6 @@ import { useState } from 'react';
 import licenseText from '../../../../../LICENSE?raw';
 import TermsAndConditions from '../common/TermsAndConditions';
 import { AltLayout, AltLayoutNarrow, Btn, Sp } from '../common';
-import SecondaryBtn from './SecondaryBtn';
 
 const Description = styled.p`
   color: var(--text-muted);
@@ -57,7 +56,8 @@ export default function TermsStep(props) {
     <AltLayout title="Terms and conditions" data-testid="onboarding-container">
       <AltLayoutNarrow>
         <Description>
-          Review the terms before setting up your wallet.
+          Review and accept the terms first. Then choose whether to create or
+          import a wallet.
         </Description>
         <LegalText tabIndex={0} aria-label="Morpheus terms of use">
           <TermsAndConditions />
@@ -112,11 +112,6 @@ export default function TermsStep(props) {
           >
             Accept and continue
           </Btn>
-        </Sp>
-        <Sp mt={2}>
-          <SecondaryBtn block onClick={props.onChooseWallet}>
-            Back to wallet options
-          </SecondaryBtn>
         </Sp>
       </AltLayoutNarrow>
     </AltLayout>
