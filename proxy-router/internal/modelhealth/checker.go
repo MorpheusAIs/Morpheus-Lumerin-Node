@@ -80,6 +80,42 @@ type modelMeta struct {
 	name      string
 	modelType structs.ModelType
 	isTee     bool
+	// mediaOnly marks a model whose tags name a media family this checker has
+	// no probe for. DetectModelType does not recognise these, so they arrive as
+	// Unknown and would otherwise inherit the LLM fallback below and be sent a
+	// text prompt.
+	mediaOnly bool
+}
+
+// unprobeableMediaTags are tag families that clearly are not text models but
+// that DetectModelType does not classify, so they resolve to Unknown. They are
+// deliberately NOT part of DetectModelType: this is checker policy about what
+// can be probed, not a claim about the model type the rest of the router uses.
+//
+// "chat" and "code" are absent on purpose. Both are Unknown today - the
+// create-model API even tells you to tag "chat" while DetectModelType looks
+// only for llm/textgeneration/t2t - and both should take the LLM probe.
+var unprobeableMediaTags = map[string]struct{}{
+	"image":         {},
+	"images":        {},
+	"text2image":    {},
+	"text-to-image": {},
+	"t2i":           {},
+	"video":         {},
+	"text2video":    {},
+	"text-to-video": {},
+	"t2v":           {},
+	"audio":         {},
+	"music":         {},
+}
+
+func hasUnprobeableMediaTag(tags []string) bool {
+	for _, raw := range tags {
+		if _, ok := unprobeableMediaTags[strings.ToLower(strings.TrimSpace(raw))]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 type Checker struct {
@@ -393,12 +429,39 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 		}
 	}
 
+	// typeGuessed records that the model carries no recognised type tag and the
+	// LLM probe below is an assumption rather than a known type. A failed
+	// assumption must not be reported as unhealthy: see the error branch after
+	// the probe.
+	typeGuessed := false
+
 	var probe func(ctx context.Context, adapter aiengine.AIEngineStream, report *system.ModelHealthReport) error
 	switch meta.modelType {
 	case structs.ModelTypeLLM:
 		probe = c.probeLLM
 	case structs.ModelTypeEMBEDDING:
 		probe = c.probeEmbeddings
+	case structs.ModelTypeUnknown:
+		// A model with no recognised tag still needs a health answer. Skipping
+		// publishes no health for it at all, and consumers that filter on the
+		// provider's self-report drop the bid entirely, so a working backend
+		// looks unavailable. Only the model owner can add tags, so the provider
+		// serving it cannot fix this at source. Probe as LLM, which is what an
+		// untyped model on this network almost always is; if the guess is
+		// wrong the probe fails and reports unhealthy, which is a more useful
+		// answer than silence. Known non-LLM types below still skip.
+		//
+		// Except where the tags name a media family DetectModelType does not
+		// classify. Those reach Unknown too, and firing a text prompt at an
+		// image or video backend buys an upstream call and a misleading
+		// unhealthy row rather than information.
+		if meta.mediaOnly {
+			report.Status = system.ModelHealthStatusSkipped
+			c.setReport(report)
+			return
+		}
+		typeGuessed = true
+		probe = c.probeLLM
 	default:
 		report.Status = system.ModelHealthStatusSkipped
 		c.setReport(report)
@@ -431,6 +494,18 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 		if report.HttpStatus == http.StatusTooManyRequests {
 			report.Status = system.ModelHealthStatusDegraded
 			report.ErrorKind = system.ModelHealthErrorRateLimited
+		} else if typeGuessed {
+			// The type was assumed, not known, so a failed probe is not
+			// evidence the backend is broken - it is just as likely that this
+			// is not a text model at all. That distinction matters because
+			// unhealthy is excluded by EVERY session health policy, including
+			// the default permissive one, while skipped is not. Reporting
+			// unhealthy here would take an untagged image or video bid that was
+			// merely unroutable and hard-block it from opening sessions, which
+			// is strictly worse than the silence this patch set out to fix.
+			// The error kind is still recorded so the failure is diagnosable.
+			report.Status = system.ModelHealthStatusSkipped
+			report.ErrorKind = classifyError(err)
 		} else {
 			report.Status = system.ModelHealthStatusUnhealthy
 			report.ErrorKind = classifyError(err)
@@ -530,7 +605,12 @@ func (c *Checker) modelMetaFor(ctx context.Context, modelID common.Hash) (modelM
 		return modelMeta{}, err
 	}
 
-	meta := modelMeta{name: name, modelType: blockchainapi.DetectModelType(tags), isTee: blockchainapi.IsTeeModel(tags)}
+	meta := modelMeta{
+		name:      name,
+		modelType: blockchainapi.DetectModelType(tags),
+		isTee:     blockchainapi.IsTeeModel(tags),
+		mediaOnly: hasUnprobeableMediaTag(tags),
+	}
 
 	c.mu.Lock()
 	c.modelMeta[modelID.Hex()] = meta

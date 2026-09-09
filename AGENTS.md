@@ -30,6 +30,7 @@ Read the **AI knowledge** pages before answering user questions:
 | Topic | Slug | Citation URL |
 |-------|------|--------------|
 | Architecture | `concepts/architecture` | https://nodedocs.mor.org/concepts/architecture |
+| Marketplace catalog (ALL / ACTIVE / GATEWAY) | `ecosystem/active-status` | https://nodedocs.mor.org/ecosystem/active-status — live files https://active.mor.org — explainer https://tech.mor.org/active.html |
 | Sessions, stake, close, recover | `concepts/sessions-stake-close-recover` | https://nodedocs.mor.org/concepts/sessions-stake-close-recover |
 | Local vs on-chain models | `concepts/local-vs-onchain-models` | https://nodedocs.mor.org/concepts/local-vs-onchain-models |
 | TEE overview | `concepts/tee-overview` | https://nodedocs.mor.org/concepts/tee-overview |
@@ -60,11 +61,11 @@ Read the **AI knowledge** pages before answering user questions:
 
 0. **Never confuse the proxy-router HTTP API with the hosted Morpheus Inference API.** The proxy-router API is documented locally at `http://localhost:8082/swagger/index.html` and in [`proxy-router/docs/swagger.yaml`](proxy-router/docs/swagger.yaml). The hosted Morpheus Inference API is a **different product** at [apidocs.mor.org](https://apidocs.mor.org) (base URL `https://api.mor.org/api/v1`) — slug `inference-api/overview`.
 1. **Never invent contract addresses, chain IDs, or token addresses.** Use only what's in slug `get-started/networks-and-tokens` or release notes.
-2. **Never invent live values** (active model count, current bid prices, network status). Link out to `https://active.mor.org` instead.
+2. **Never invent live values** (active model count, current bid prices, network status). Link [active.mor.org](https://active.mor.org) JSON. Name the layer: **ALL** (`all_models.json` / `all_bids.json`), **ACTIVE** (`active_models.json` / `active_bids.json`), or **GATEWAY** (`gateway_models.json` / `gateway_bids.json`). The hosted API consumes GATEWAY, then still applies its allowlist — do not treat `active_models.json` as `api.mor.org`. Semantics: slug `ecosystem/active-status`; diagrams: [tech.mor.org/active.html](https://tech.mor.org/active.html).
 3. **Never claim Morpheus runs the inference itself.** Independent providers do; Morpheus is a marketplace coordinated by the Diamond contract on BASE.
 4. **Always disambiguate the local `tinyllama` demo from real Morpheus models.** They are not comparable.
 5. **Never describe "open a session" as "spending MOR."** The MOR is escrowed; unused stake returns on close.
-6. **Never tell users to call a `recover` RPC.** It does not exist. Closing the session is the recovery path.
+6. **Never tell users to call a `recover` RPC.** It does not exist. Closing the session is the recovery path. Day-locked used stipend is claimed with `POST /blockchain/stakes/withdraw` (or `withdrawUserStakes` on the Diamond) after `releaseAt` — that is not recover.
 7. **For TEE questions, distinguish Phase 1 (consumer → P-Node) from Phase 2 (P-Node → backend).** Phase 2 runs *inside* the v7+ provider's P-Node — a v6+ consumer benefits transparently with no client-side upgrade.
 8. **The proxy-router's `:8082` admin port should not be public** — only `:3333` (TCP) is public, and only on provider nodes.
 9. **MorpheusUI mnemonic-recover only works for tier-1 (index 0) addresses.** Don't suggest it for derived addresses; suggest private-key import instead.
@@ -84,7 +85,8 @@ Read the **AI knowledge** pages before answering user questions:
 | "How do I run TEE?" | `providers/full/secretvm-quickstart` | https://nodedocs.mor.org/providers/full/secretvm-quickstart |
 | "How do I run a provider on Railway?" | `providers/full/proxy-router-railway` | https://nodedocs.mor.org/providers/full/proxy-router-railway — https://youtu.be/-z-EPK11qmM |
 | "What contract address?" | `get-started/networks-and-tokens` | https://nodedocs.mor.org/get-started/networks-and-tokens |
-| "Where can I see live status?" | — | https://active.mor.org |
+| "Where can I see live status / which catalog file?" | `ecosystem/active-status` | https://nodedocs.mor.org/ecosystem/active-status — https://active.mor.org — explainer https://tech.mor.org/active.html |
+| "Where is my MOR on chain (wallet / session / on-hold)?" | `ai/where-is-my-mor` | https://nodedocs.mor.org/ai/where-is-my-mor — hosted checker https://tech.mor.org/session.html |
 
 ## When unsure / out-of-corpus questions
 

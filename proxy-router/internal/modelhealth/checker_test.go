@@ -62,6 +62,9 @@ var (
 	modelNoBid        = common.HexToHash("0x03")
 	modelTTS          = common.HexToHash("0x04")
 	modelUnconfigured = common.HexToHash("0x05")
+	modelUntagged     = common.HexToHash("0x06")
+	modelChatTagged   = common.HexToHash("0x07")
+	modelImage        = common.HexToHash("0x08")
 )
 
 type mockDeps struct {
@@ -260,6 +263,94 @@ func TestCheckAllStatuses(t *testing.T) {
 	require.Equal(t, string(structs.ModelTypeLLM), unconfigured.ModelType)
 	require.Zero(t, unconfigured.LatencyMs)
 	require.Nil(t, unconfigured.PromptCorrect)
+}
+
+// An untagged model must still be probed. DetectModelType returns Unknown when
+// a model carries no recognised tag, and skipping publishes no health for it at
+// all, which drops the bid out of consumer-facing routable listings even though
+// the backend serves normally. Only the model owner can add tags, so a provider
+// cannot fix this at source.
+func TestCheckAllUntaggedModelProbesAsLLM(t *testing.T) {
+	deps := &mockDeps{
+		bids: []*structs.Bid{
+			bidFor(modelUntagged), bidFor(modelChatTagged),
+			bidFor(modelImage), bidFor(modelTTS),
+		},
+		tags: map[common.Hash][]string{
+			modelUntagged:   {},
+			modelChatTagged: {"chat"},
+			modelImage:      {"image"},
+			modelTTS:        {"tts"},
+		},
+		modelIDs: []common.Hash{modelUntagged, modelChatTagged, modelImage, modelTTS},
+		adapter:  &mathSolvingAdapter{},
+	}
+
+	checker := newTestChecker(deps)
+	checker.checkAll(context.Background(), common.Address{})
+
+	reports := checker.GetReports()
+
+	untagged := reportByID(t, reports, modelUntagged)
+	require.Equal(t, system.ModelHealthStatusHealthy, untagged.Status)
+	require.Equal(t, string(structs.ModelTypeUnknown), untagged.ModelType)
+	require.NotNil(t, untagged.PromptCorrect)
+	require.True(t, *untagged.PromptCorrect)
+
+	// "chat" is not in DetectModelType, so it resolves to Unknown and must take
+	// the same LLM probe. The create-model API tells contributors to tag "chat"
+	// while DetectModelType looks for llm/textgeneration/t2t, so this is a
+	// common way to end up untyped while plainly being a text model.
+	chat := reportByID(t, reports, modelChatTagged)
+	require.Equal(t, system.ModelHealthStatusHealthy, chat.Status)
+	require.Equal(t, string(structs.ModelTypeUnknown), chat.ModelType)
+	require.NotNil(t, chat.PromptCorrect)
+	require.True(t, *chat.PromptCorrect)
+
+	// "image" is also Unknown to DetectModelType, but it must NOT inherit the
+	// LLM fallback: a text prompt fired at an image backend costs an upstream
+	// call and reports a misleading unhealthy rather than information.
+	image := reportByID(t, reports, modelImage)
+	require.Equal(t, system.ModelHealthStatusSkipped, image.Status)
+	require.Nil(t, image.PromptCorrect)
+
+	// A known non-LLM type still skips: no text probe is sent to a speech model.
+	tts := reportByID(t, reports, modelTTS)
+	require.Equal(t, system.ModelHealthStatusSkipped, tts.Status)
+}
+
+// A guessed type that turns out wrong must NOT report unhealthy. Most of the
+// registry carries no tags at all, so mediaOnly cannot catch an untagged image
+// or video model and it reaches the LLM probe. unhealthy is excluded by every
+// session health policy, including the default permissive one, while skipped is
+// not — so reporting unhealthy on a failed guess would hard-block a bid that was
+// only unroutable before, which is worse than the silence this patch fixes.
+// A tagged model keeps reporting unhealthy: there the type is known, so a failed
+// probe really is evidence about the backend.
+func TestCheckAllGuessedTypeProbeFailureSkipsNotUnhealthy(t *testing.T) {
+	deps := &mockDeps{
+		bids: []*structs.Bid{bidFor(modelUntagged), bidFor(modelLLM)},
+		tags: map[common.Hash][]string{
+			modelUntagged: {},
+			modelLLM:      {"llm"},
+		},
+		modelIDs: []common.Hash{modelUntagged, modelLLM},
+		adapter:  &mathSolvingAdapter{promptErr: errors.New("not a text model")},
+	}
+
+	checker := newTestChecker(deps)
+	checker.checkAll(context.Background(), common.Address{})
+
+	reports := checker.GetReports()
+
+	// Guessed type, probe failed: stays out of the way rather than blocking.
+	untagged := reportByID(t, reports, modelUntagged)
+	require.Equal(t, system.ModelHealthStatusSkipped, untagged.Status)
+	require.Equal(t, string(structs.ModelTypeUnknown), untagged.ModelType)
+
+	// Known type, same failure: unhealthy, because the probe was appropriate.
+	llm := reportByID(t, reports, modelLLM)
+	require.Equal(t, system.ModelHealthStatusUnhealthy, llm.Status)
 }
 
 func TestCheckAllPrunesRemovedModels(t *testing.T) {

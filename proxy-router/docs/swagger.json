@@ -436,6 +436,85 @@
                 }
             }
         },
+        "/blockchain/stakes/onhold": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Get the releasable and still time-locked MOR stake for the proxy-router wallet",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transactions"
+                ],
+                "summary": "Get consumer stakes on hold",
+                "parameters": [
+                    {
+                        "maximum": 255,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 255,
+                        "description": "Maximum on-hold entries to inspect",
+                        "name": "iterations",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.UserStakesOnHoldRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/blockchain/stakes/withdraw": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Claim releasable MOR stake for the proxy-router wallet",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transactions"
+                ],
+                "summary": "Withdraw consumer stakes on hold",
+                "parameters": [
+                    {
+                        "description": "Withdrawal options; iterations defaults to 255 and accepts 1 through 255",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "iterations": {
+                                    "type": "integer"
+                                }
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/structs.TxRes"
+                        }
+                    }
+                }
+            }
+        },
         "/blockchain/bids": {
             "post": {
                 "security": [
@@ -4704,6 +4783,19 @@
                 "mor": {
                     "type": "integer",
                     "example": 100000000
+                }
+            }
+        },
+        "structs.UserStakesOnHoldRes": {
+            "type": "object",
+            "properties": {
+                "available": {
+                    "type": "string",
+                    "example": "100000000"
+                },
+                "hold": {
+                    "type": "string",
+                    "example": "200000000"
                 }
             }
         },

@@ -3,13 +3,13 @@ title: "Model health self-report"
 description: "How the provider's built-in model health checker works: what it probes, what it costs your backend, how to tune the schedule, and how to read the report to diagnose failing models."
 audience: ["provider-full", "provider-resale"]
 product: ["proxy-router"]
-last_verified: "v7.4.0"
+last_verified: "v7.11.0"
 ---
 
 Since v7.4.0 every provider proxy-router continuously verifies that the models it sells actually work, and publishes the result as a `models` array on its `/healthcheck` endpoint. This page is the operational reference for that capability: what runs, what it costs, how to tune it, and how to read the report when something is unhealthy. For the one-time post-setup walkthrough, see [Verify your provider setup](/providers/full/verify-setup).
 
 <Note>
-The `httpStatus` and `modelName` report fields, the `rate_limited` error kind, probe pacing (`MODEL_HEALTH_CHECK_PROBE_DELAY`), and the manual `POST /healthcheck/models/refresh` trigger were added in the release **after** v7.4.0. On v7.4.0 nodes you get the report without those features. The `degraded` status (rate-limited backends) and the consumer-side `SESSION_HEALTH_POLICY` were added later still; on earlier nodes a rate-limited backend reports `unhealthy` with `errorKind: rate_limited`.
+The `httpStatus` and `modelName` report fields, the `rate_limited` error kind, probe pacing (`MODEL_HEALTH_CHECK_PROBE_DELAY`), and the manual `POST /healthcheck/models/refresh` trigger were added in the release **after** v7.4.0. On v7.4.0 nodes you get the report without those features. The `degraded` status (rate-limited backends) and the consumer-side `SESSION_HEALTH_POLICY` were added later still; on earlier nodes a rate-limited backend reports `unhealthy` with `errorKind: rate_limited`. **v7.11:** untagged / unknown-type models are probed as LLM unless their tags name image/video/audio/music; a failed guessed probe reports `skipped`, not `unhealthy`. The [active.mor.org](/ecosystem/active-status) photograph copies these stamps into ALL / ACTIVE / GATEWAY.
 </Note>
 
 ## What actually runs
@@ -19,7 +19,15 @@ On a schedule (default hourly, plus one sweep immediately at startup), the proxy
 - every model in `models-config.json`, **probed only if it has an active on-chain bid from your wallet**, and
 - every active bid whose model is *missing* from `models-config.json` — capacity you are selling but cannot serve, reported as `no_model_configured`.
 
-An LLM probe is a real, tiny chat completion sent **directly to your backend `apiUrl`** — a randomized arithmetic question ("What is 17+34? Reply with only the number."), graded into `promptCorrect`. Embedding models get a one-input embeddings request. Other model types (TTS, image, video) are not probed and report `skipped`. Results are cached in memory between sweeps.
+An LLM probe is a real, tiny chat completion sent **directly to your backend `apiUrl`** — a randomized arithmetic question ("What is 17+34? Reply with only the number."), graded into `promptCorrect`. Embedding models get a one-input embeddings request. Detection still only knows LLM / embedding / STT / TTS; empty or unrecognised tags are `UNKNOWN`.
+
+Probe policy for `UNKNOWN` and media:
+
+- **Untagged or unknown type, and tags do not name image / video / audio / music** — probe **as LLM** (`typeGuessed`). The report's `modelType` stays `UNKNOWN`.
+- **Tags that name image, video, audio, or music** — `skipped` without a probe (same as STT/TTS).
+- **Guessed LLM probe fails** — status is **`skipped`**, not `unhealthy`. `errorKind` (and `httpStatus` when present) still explain the failure. Tagged LLM / embedding failures remain `unhealthy`. `429` is still `degraded`.
+
+`skipped` is still routable under the consumer default `SESSION_HEALTH_POLICY=permissive`. The hosted API's GATEWAY catalog drops `skipped`. See [Marketplace catalog](/ecosystem/active-status). Results are cached in memory between sweeps.
 
 Two consequences worth internalizing:
 
@@ -86,7 +94,7 @@ curl -s http://localhost:8082/healthcheck | jq '.models'
 | `unhealthy` | Probe failed — `errorKind` and `httpStatus` say why (see below) |
 | `no_bid` | Configured but no active bid; **not probed** |
 | `no_model_configured` | Active bid but no `models-config.json` entry — consumers can open sessions against this bid and get errors |
-| `skipped` | Model type not probeable (TTS, image, video) |
+| `skipped` | Not probed: STT/TTS, or tags that name image/video/audio/music. Also: untagged/unknown type whose **guessed** LLM probe failed (`errorKind` still set). `skipped` stays on the [ACTIVE](/ecosystem/active-status) catalog; GATEWAY drops it. Default consumer policy still routes it. |
 | `tee_unverified` | `tee`-tagged model whose backend TEE attestation failed or never succeeded; **not probed**, and session requests for it are rejected |
 
 For `unhealthy` (and `degraded`) models, the diagnosis is the combination of `errorKind` and `httpStatus`:

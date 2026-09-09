@@ -252,6 +252,32 @@ func (g *SessionRouter) ClaimProviderBalance(opts *bind.TransactOpts, sessionId 
 	return tx.Hash(), nil
 }
 
+func (g *SessionRouter) GetUserStakesOnHold(ctx context.Context, user common.Address, iterations uint8) (available, hold *big.Int, err error) {
+	stakes, err := g.sessionRouter.GetUserStakesOnHold(&bind.CallOpts{Context: ctx}, user, iterations)
+	if err != nil {
+		return nil, nil, lib.TryConvertGethError(err)
+	}
+
+	return stakes.Available, stakes.Hold, nil
+}
+
+func (g *SessionRouter) WithdrawUserStakes(opts *bind.TransactOpts, user common.Address, iterations uint8) (common.Hash, error) {
+	tx, err := g.sessionRouter.WithdrawUserStakes(opts, user, iterations)
+	if err != nil {
+		return common.Hash{}, lib.TryConvertGethError(err)
+	}
+
+	receipt, err := lib.WaitMinedWithTimeout(opts.Context, g.client, tx, lib.DefaultTxMineTimeout)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	if receipt.Status != 1 {
+		return receipt.TxHash, fmt.Errorf("Transaction failed with status %d", receipt.Status)
+	}
+
+	return tx.Hash(), nil
+}
+
 func (g *SessionRouter) GetTodaysBudget(ctx context.Context, timestamp *big.Int) (*big.Int, error) {
 	budget, err := g.sessionRouter.GetTodaysBudget(&bind.CallOpts{Context: ctx}, timestamp)
 	if err != nil {
