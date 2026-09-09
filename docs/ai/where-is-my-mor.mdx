@@ -47,7 +47,18 @@ After a successful `closeSession`, the contract may park the **used stipend** in
 
 **Resolution:**
 
-After `releaseAt`, call `withdrawUserStakes` on the Diamond contract. **There is no HTTP route on the proxy-router** for this — you submit the on-chain call yourself:
+Use the proxy-router wallet endpoints to inspect the queue and claim rows whose `releaseAt` has passed:
+
+```bash
+curl -u 'admin:admin' \
+  'http://localhost:8082/blockchain/stakes/onhold?iterations=20'
+curl -u 'admin:admin' \
+  -X POST 'http://localhost:8082/blockchain/stakes/withdraw' \
+  -H 'Content-Type: application/json' \
+  -d '{"iterations":20}'
+```
+
+To bypass the node, submit the on-chain call directly:
 
 ```bash
 cast send 0x6aBE1d282f72B474E54527D93b979A4f64d3030a \

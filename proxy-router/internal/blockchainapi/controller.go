@@ -1,7 +1,10 @@
 package blockchainapi
 
 import (
+	"context"
 	"crypto/rand"
+	"errors"
+	"io"
 	"math/big"
 	"net/http"
 
@@ -15,16 +18,23 @@ import (
 )
 
 type BlockchainController struct {
-	service  *BlockchainService
-	log      lib.ILogger
-	authConf system.HTTPAuthConfig
+	service    *BlockchainService
+	userStakes userStakesService
+	log        lib.ILogger
+	authConf   system.HTTPAuthConfig
+}
+
+type userStakesService interface {
+	GetUserStakesOnHold(ctx context.Context, iterations uint8) (available, hold *big.Int, err error)
+	WithdrawUserStakes(ctx context.Context, iterations uint8) (common.Hash, error)
 }
 
 func NewBlockchainController(service *BlockchainService, authConf system.HTTPAuthConfig, log lib.ILogger) *BlockchainController {
 	c := &BlockchainController{
-		service:  service,
-		log:      log,
-		authConf: authConf,
+		service:    service,
+		userStakes: service,
+		log:        log,
+		authConf:   authConf,
 	}
 
 	return c
@@ -39,6 +49,8 @@ func (c *BlockchainController) RegisterRoutes(r interfaces.Router) {
 	r.POST("/blockchain/approve", c.authConf.CheckAuth("approve"), c.approve)
 	r.POST("/blockchain/send/eth", c.authConf.CheckAuth("send_eth"), c.sendETH)
 	r.POST("/blockchain/send/mor", c.authConf.CheckAuth("send_mor"), c.sendMOR)
+	r.GET("/blockchain/stakes/onhold", c.authConf.CheckAuth("get_stakes_on_hold"), c.getUserStakesOnHold)
+	r.POST("/blockchain/stakes/withdraw", c.authConf.CheckAuth("withdraw_user_stakes"), c.withdrawUserStakes)
 
 	// providers
 	r.GET("/blockchain/providers", c.authConf.CheckAuth("get_providers"), c.getAllProviders)
@@ -73,6 +85,66 @@ func (c *BlockchainController) RegisterRoutes(r interfaces.Router) {
 	r.POST("/blockchain/sessions/:id/close", c.authConf.CheckAuth("close_session"), c.closeSession)
 	r.GET("/blockchain/sessions/budget", c.authConf.CheckAuth("get_budget"), c.getBudget)
 	r.GET("/blockchain/token/supply", c.authConf.CheckAuth("get_supply"), c.getSupply)
+}
+
+// GetUserStakesOnHold godoc
+//
+//	@Summary		Get consumer stakes on hold
+//	@Description	Get the releasable and still time-locked MOR stake for the proxy-router wallet
+//	@Tags			transactions
+//	@Produce		json
+//	@Param			iterations	query		int	false	"Maximum on-hold entries to inspect" default(255) minimum(1) maximum(255)
+//	@Success		200			{object}	structs.UserStakesOnHoldRes
+//	@Security		BasicAuth
+//	@Router			/blockchain/stakes/onhold [get]
+func (c *BlockchainController) getUserStakesOnHold(ctx *gin.Context) {
+	var query structs.QueryUserStakeIterations
+	if err := ctx.ShouldBindQuery(&query); err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	available, hold, err := c.userStakes.GetUserStakesOnHold(ctx, structs.UserStakeIterationsOrDefault(query.Iterations))
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, structs.UserStakesOnHoldRes{
+		Available: &lib.BigInt{Int: *available},
+		Hold:      &lib.BigInt{Int: *hold},
+	})
+}
+
+// WithdrawUserStakes godoc
+//
+//	@Summary		Withdraw consumer stakes on hold
+//	@Description	Claim releasable MOR stake for the proxy-router wallet
+//	@Tags			transactions
+//	@Accept			json
+//	@Produce		json
+//	@Param			request	body		object{iterations=integer}	false	"Withdrawal options; iterations defaults to 255 and accepts 1 through 255"
+//	@Success		200		{object}	structs.TxRes
+//	@Security		BasicAuth
+//	@Router			/blockchain/stakes/withdraw [post]
+func (c *BlockchainController) withdrawUserStakes(ctx *gin.Context) {
+	var request structs.UserStakeWithdrawalRequest
+	if err := ctx.ShouldBindJSON(&request); err != nil && !errors.Is(err, io.EOF) {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	txHash, err := c.userStakes.WithdrawUserStakes(ctx, structs.UserStakeIterationsOrDefault(request.Iterations))
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, structs.TxRes{Tx: txHash})
 }
 
 // GetProviderClaimableBalance godoc
