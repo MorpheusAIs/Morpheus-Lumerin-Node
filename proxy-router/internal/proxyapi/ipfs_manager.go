@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
@@ -36,9 +37,13 @@ type ProgressCallback func(downloaded, total int64) error
 
 // NewIpfsManager connects to the local Kubo (IPFS) node using the RPC client.
 func NewIpfsManager(ipfsAddress string, log lib.ILogger) *IpfsManager {
+	if strings.TrimSpace(ipfsAddress) == "" {
+		return NewIpfsManagerDisabled(log)
+	}
+
 	ma, err := multiaddr.NewMultiaddr(ipfsAddress)
 	if err != nil {
-		log.Error("invalid IPFSmultiaddr:", ipfsAddress, err)
+		log.Warn("invalid IPFSmultiaddr:", ipfsAddress, err)
 		return NewIpfsManagerDisabled(log)
 	}
 

@@ -59,7 +59,7 @@ curl -X POST 'http://localhost:8082/blockchain/sessions/<sessionId>/close' \
 ## What you should expect
 
 - **Wallet balance drops by the staked amount** the instant the open transaction is mined. The MOR is now in the Inference Contract on Base for the duration of the session.
-- **On close (early or natural):** unused stake returns in the same txn; the used stipend day-locks with `releaseAt = startOfTheDay(min(closedAt, endsAt)) + 1 day`. After `releaseAt`, call `withdrawUserStakes(yourAddress, iterations)` on the Diamond — there is no HTTP route on the proxy-router.
+- **On close (early or natural):** unused stake returns in the same txn; the used stipend day-locks with `releaseAt = startOfTheDay(min(closedAt, endsAt)) + 1 day`. After `releaseAt`, claim releasable rows with `POST /blockchain/stakes/withdraw`, or call `withdrawUserStakes(yourAddress, iterations)` directly on the Diamond when bypassing the node.
 - **Capital planning:** used stake is **not reusable the same UTC day**. Size your wallet for the gross stake you need that day, not for recycling one pile of MOR many times before midnight UTC. See [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover).
 - **The provider is paid from a separate protocol funding account**, not from your stake in real time. If that funding account is empty or under-approved, every `closeSession` fails — yours included. The session sits "active" past `endsAt` until operators top it up. See [Why is my MOR locked?](/ai/why-locked-in-contract).
 - For a hosted read-only wallet checker that splits your MOR across the three on-chain buckets (wallet / active session / on-hold), see [tech.mor.org/session.html](https://tech.mor.org/session.html).

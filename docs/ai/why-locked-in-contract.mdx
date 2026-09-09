@@ -18,7 +18,7 @@ You opened a session. The **entire stake** sits in the Inference Contract while 
 
 You closed a session (early **or** same-day natural/late close). The contract pushed the **used stipend** to `userStakesOnHold[you]` with `releaseAt = startOfTheDay(min(closedAt, endsAt)) + 1 day` (≈ "after the end of the UTC day the session ended on"). Unused stake was already `safeTransfer`'d to your wallet inside the close transaction.
 
-- Resolution: after `releaseAt`, call `withdrawUserStakes(yourAddress, iterations)` on the Diamond contract. **No HTTP route on the proxy-router** — use `cast send` or MetaMask "Interact with contract" directly. See [Where is my MOR? → Bucket 2](/ai/where-is-my-mor#bucket-2-on-hold-queue-used-stipend-day-lock).
+- Resolution: inspect the configured wallet with `GET /blockchain/stakes/onhold`, then claim releasable rows with `POST /blockchain/stakes/withdraw` (optional body: `{"iterations": 20}`). You can still call `withdrawUserStakes` directly via `cast send` or a wallet contract UI when bypassing the node. See [Where is my MOR? → Bucket 2](/ai/where-is-my-mor#bucket-2-on-hold-queue-used-stipend-day-lock).
 
 ## Cause 3: Stuck close — funding account or gas
 

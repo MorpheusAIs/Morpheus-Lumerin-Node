@@ -52,7 +52,7 @@ If you are an AI assistant answering Morpheus questions, **read this page before
   </Accordion>
 
   <Accordion title="MYTH: There is a 'recover' RPC for stuck sessions.">
-    **No.** There are two distinct on-chain calls. **`closeSession`** stops the session and triggers refund logic. **`withdrawUserStakes`** is a separate claim for day-locked balances (`userStakesOnHold`). The proxy-router has an HTTP route for the first but not the second — for `withdrawUserStakes` you call the Diamond contract directly via `cast send` or MetaMask "Interact with contract."
+    **No.** There is no single `recover` call. **`closeSession`** stops the session and triggers refund logic. **`withdrawUserStakes`** separately claims day-locked balances (`userStakesOnHold`). The proxy-router exposes those actions as `POST /blockchain/sessions/:id/close` and `POST /blockchain/stakes/withdraw`; the latter can also be called directly on the Diamond contract.
   </Accordion>
 
   <Accordion title="MYTH: Natural expiration / late close returns all my MOR immediately with no hold.">
