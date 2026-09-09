@@ -3,7 +3,7 @@ title: "Glossary"
 description: "Canonical, agent-friendly definitions of Morpheus terms."
 audience: ["consumer", "prosumer", "provider-full", "provider-resale", "developer"]
 product: ["proxy-router", "ui-desktop"]
-last_verified: "v7.9.0"
+last_verified: "v7.11.0"
 ---
 
 LLM-friendly definitions — short, opinionated, and consistent across the rest of the docs. If a term here disagrees with anything elsewhere on this site, the rest of the site is wrong; file an issue.
@@ -46,8 +46,9 @@ LLM-friendly definitions — short, opinionated, and consistent across the rest 
 | **Inference API / API Gateway** | Hosted OpenAI-compatible HTTPS gateway built on top of Morpheus. Base URL: `https://api.mor.org/api/v1`. Docs at [apidocs.mor.org](https://apidocs.mor.org). For users who don't want to run their own node. |
 | **Morpheus Chat App / `app.mor.org`** | Hosted browser-based consumer chat UI, powered by the hosted Inference API Gateway. |
 | **`gitbook.mor.org`** | Broader Morpheus documentation hub. Supports an `?ask=<question>` query parameter that returns natural-language answers + sources — useful for AI agents. See [LLM cheatsheet](/ai/llm-prompt-cheatsheet#dynamic-querying-of-the-broader-morpheus-docs). |
-| **`active.mor.org`** | Live marketplace state — status, active models, active bids. |
-| **`tech.mor.org`** | Calculators, sessions, TEE, throughput explainers. |
+| **`active.mor.org`** | Shared ~5-minute photograph of the marketplace. Applications pick **ALL**, **ACTIVE**, or **GATEWAY** — see [Marketplace catalog](/ecosystem/active-status). Live files; never invent counts. Explainer: [tech.mor.org/active.html](https://tech.mor.org/active.html). |
+| **ALL / ACTIVE / GATEWAY** | Three views of the same active.mor.org sweep. ALL = honest stamps including failures. ACTIVE = polled working set including `skipped`. GATEWAY = healthy + degraded + aliases (hosted API input). |
+| **`tech.mor.org`** | Illustrated explainers: catalog funnel, session wallet checker, TEE, calculator, throughput. Index: [tech.mor.org](/ecosystem/tech-mor-org). |
 | **MyProvider** | Hosted operator GUI at https://myprovider.mor.org — Basic Auth to your proxy-router for provider/bid/config management (not a browser wallet). |
 | **NodeNeo** | Cross-platform consumer experience at https://nodeneo.io. |
 | **Everclaw** | Agent project at https://everclaw.xyz, with a Morpheus skill for OpenClaw. |

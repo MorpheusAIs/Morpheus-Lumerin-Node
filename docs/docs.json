@@ -44,6 +44,7 @@
             "pages": [
               "concepts/what-is-morpheus",
               "concepts/architecture",
+              "ecosystem/active-status",
               "concepts/sessions-stake-close-recover",
               "concepts/local-vs-onchain-models",
               "concepts/tee-overview",
@@ -229,8 +230,16 @@
             "href": "https://active.mor.org/status"
           },
           {
+            "label": "Catalog explainer",
+            "href": "https://tech.mor.org/active.html"
+          },
+          {
             "label": "Active models",
             "href": "https://active.mor.org/active_models"
+          },
+          {
+            "label": "Gateway models",
+            "href": "https://active.mor.org/gateway_models.json"
           },
           {
             "label": "Active bids",

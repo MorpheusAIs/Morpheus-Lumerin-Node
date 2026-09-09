@@ -1,58 +1,110 @@
 ---
-title: "active.mor.org (live status)"
-description: "Mirror summary of active.mor.org — live status, active models, and active bids on the Morpheus marketplace."
-audience: ["consumer", "prosumer", "provider-full", "provider-resale", "developer"]
-product: ["proxy-router"]
-last_verified: "v7.5.0"
+title: "Marketplace catalog (active.mor.org)"
+description: "active.mor.org is the shared ~5-minute photograph of the Morpheus marketplace. Applications pick ALL, ACTIVE, or GATEWAY from the same sweep instead of rediscovering bids per request."
+audience: ["developer", "prosumer", "provider-full", "provider-resale", "consumer"]
+product: ["proxy-router", "inference-api"]
+last_verified: "v7.11.0"
 source_url: "https://active.mor.org"
 ---
 
 <Note>
-**Mirrored summary.** Live numbers (counts, prices, latencies) live at [active.mor.org](https://active.mor.org). This page describes the **semantics** of those numbers and how to interpret them. Providers: start here **before** minting a new model — see [Register on chain → Step 0](/providers/full/register-onchain#step-0--look-up-models-before-you-mint).
+**Live files** are on [active.mor.org](https://active.mor.org). **Semantics** (what ALL / ACTIVE / GATEWAY mean, which file to consume) live on this page. The illustrated explainer is [tech.mor.org/active.html](https://tech.mor.org/active.html). Never invent model counts, bid prices, or latencies — link the live JSON.
 </Note>
 
-## What's there
+[active.mor.org](https://active.mor.org) is the common catalog surface for **any application builder** on Morpheus: the hosted Inference API, NodeNeo, calculators, C-Node clients, and humans. A consumer node, before it opens a session, still has to ping providers, read `models[]`, apply `SESSION_HEALTH_POLICY`, then **escrow** MOR. The status site does that walk on a timer (~five minutes) and publishes **three views of the same sweep** so apps do not repeat it on every request.
 
-| Endpoint | What it shows | Useful for |
-|----------|---------------|-----------|
-| [active.mor.org/status](https://active.mor.org/status) | Human status UI (uptime, min prices, model detail) | Spotting outages; picking a model to join |
-| [active_models.json](https://active.mor.org/active_models.json) | Routable models (healthy/degraded bids) | Choosing what to consume; **finding an existing `Id` to bid on** |
-| [active_bids.json](https://active.mor.org/active_bids.json) | Currently posted bids across all models | Pricing decisions; competitive analysis |
-| [all_models.json](https://active.mor.org/all_models.json) | All non-deleted on-chain models | Lookup when a model has no live healthy provider yet |
-| [status/api.json](https://active.mor.org/status/api.json) | Machine-readable status summary | Monitoring / agents |
+It does **not** open sessions, hold MOR, or run inference. Independent providers still do that. Closing a session is still the recovery path — there is no `recover` RPC.
+
+## Pick a layer
+
+Each layer is a subset of the one above, from the **same** photograph.
+
+| Layer | Keep | Drop | Typical reader |
+|-------|------|------|----------------|
+| **RAW** | Everything ever registered on-chain | — | Chain explorers / full history. Not a working catalog. |
+| **ALL** | Non-deleted models and open bids (`DeletedAt = 0`), with an honest health stamp on every bid | Expired / deleted | Ops, status debugging, any app that needs **failures** too |
+| **ACTIVE** | Polled working set: `skipped`, `degraded`, `healthy` | `unreachable`, `unreported`, `no_model_configured`, `no_bid`, `tee_unverified`, `unhealthy` | NodeNeo, C-Nodes, other apps whose policy can still refuse `skipped` or `degraded` |
+| **GATEWAY** | Tested/openable: `healthy` + `degraded`, plus name aliases | `skipped` (and everything ACTIVE already dropped) | Hosted Inference API (`api.mor.org`) |
+
+**Do not mix the files.** `active_models.json` is **ACTIVE**, not GATEWAY. The hosted API consumes **GATEWAY**, then still applies its own allowlist / fuse / refuse-at-open. A model on GATEWAY is not a promise it is callable through `api.mor.org`.
+
+Visual funnel (RAW → ALL → ACTIVE → GATEWAY) and the native health pipeline: [tech.mor.org/active.html](https://tech.mor.org/active.html).
+
+## Files
+
+JSON snapshots refresh on a short cron (on the order of minutes). Field names are PascalCase (`Id`, `Name`, `ModelName`, `PricePerSecond`, `Provider`, …). `pricePerSecond` is MOR wei per second.
+
+| URL | Layer | Use |
+|-----|-------|-----|
+| [all_models.json](https://active.mor.org/all_models.json) / [all_bids.json](https://active.mor.org/all_bids.json) | ALL | Full current photograph, including failed stamps. Start here when you need to know **why** a bid is missing from ACTIVE. |
+| [active_models.json](https://active.mor.org/active_models.json) / [active_bids.json](https://active.mor.org/active_bids.json) | ACTIVE | Polled working set (includes `skipped`). Default for NodeNeo / C-Node-style apps. |
+| [gateway_models.json](https://active.mor.org/gateway_models.json) / [gateway_bids.json](https://active.mor.org/gateway_bids.json) | GATEWAY | Healthy + degraded + aliases. Default input for the hosted API. |
+| [status](https://active.mor.org/status) | Human UI | Uptime, min prices, model detail. Status HTML currently reads the **ACTIVE** slice (grey `skipped`). |
+| [status/api.json](https://active.mor.org/status/api.json) | Machine summary | Monitoring / agents |
 
 HTML list views also exist at `/active_models` and `/active_bids` on the same host.
 
-## Provider tip: join, don't duplicate
-
-The marketplace does not stop two people from registering the same display name as separate models. That creates clutter. If you intend to serve a model that already appears in `active_models.json`, **register as a provider and bid on that model's `Id`** (via [MyProvider](/providers/full/myprovider-gui) or the API). Mint a new model only for genuinely new weights or a required new `tee` listing.
-
 ```bash
+# ACTIVE working set (includes skipped)
 curl -sS https://active.mor.org/active_models.json \
-  | jq '.models[] | select(.Name | test("glm-5"; "i")) | {Name, Id, Tags, health}'
+  | jq '.models[] | select(.Name | test("llama-3.3"; "i")) | {Name, Id, Tags, health}'
+
+# GATEWAY (hosted-API input — healthy + degraded only)
+curl -sS https://active.mor.org/gateway_models.json \
+  | jq '.models[] | {Name, Id, aliases, health}'
+
+# Competing bids for a name (ACTIVE slice)
+curl -sS https://active.mor.org/active_bids.json \
+  | jq '[.bids[] | select(.ModelName | test("llama-3.3"; "i"))] | sort_by(.PricePerSecond | tonumber) | .[:5]'
 ```
 
-## How to read it
+## Stamps (ALL)
 
-- **A model "active" here means `(at least one bid posted) AND (provider healthcheck passes)`.** A model on chain that has no healthy provider won't show up in `active_models.json` even if its Diamond record exists — check `all_models.json` in that case.
-- Snapshot fields use PascalCase (`Id`, `Name`, `ModelName`, `PricePerSecond`, `Provider`, …).
-- **`pricePerSecond`** values are MOR wei per second. Many UIs also show `priceMorPerHour`.
-- Snapshots refresh on a short cron (on the order of minutes); a brand-new bid may take a few minutes to appear.
+Step 1 is on-chain: the bid/model is not deleted. Steps 2–10 are mutually exclusive health stamps on that sweep. The lambda invents only `unreachable` and `unreported`; stamps 4–10 come from the provider's `models[]` self-report (see [Model health](/providers/full/model-health)).
+
+| # | Stamp | Where it lives |
+|---|-------|----------------|
+| 2 | `unreachable` | ALL only |
+| 3 | `unreported` | ALL only |
+| 4 | `no_model_configured` | ALL only |
+| 5 | `no_bid` | ALL only |
+| 6 | `tee_unverified` | ALL only |
+| 7 | `unhealthy` | ALL only |
+| 8 | `skipped` | ALL and **ACTIVE** (GATEWAY drops it) |
+| 9 | `degraded` | ALL, ACTIVE, GATEWAY |
+| 10 | `healthy` | ALL, ACTIVE, GATEWAY |
+
+`skipped` is still **routable** under a C-Node's default `SESSION_HEALTH_POLICY=permissive`. GATEWAY drops it because the hosted API only wants tested chat/embedding-style completions. Untagged / unknown-type models are LLM-probed since v7.11; a failed **guess** reports `skipped` (with `errorKind` still set), not `unhealthy`. Media-tagged models (image / video / audio / music) stay `skipped` without a probe.
+
+## Provider tip: join, don't duplicate
+
+The marketplace does not stop two people from registering the same display name as separate models. If you intend to serve a model that already appears in `active_models.json` (or `all_models.json` if it has no live bid yet), **register as a provider and bid on that model's `Id`**. Mint a new model only for genuinely new weights or a required new `tee` listing. See [Register on chain → Step 0](/providers/full/register-onchain#step-0--look-up-models-before-you-mint).
+
+## C-Node vs the photograph
+
+| | Your C-Node (per session) | active.mor.org (~5 min) |
+|--|---------------------------|-------------------------|
+| Job | Ping, policy, **escrow MOR**, route prompts | Shared catalog so apps do not rediscover bids |
+| Policy | `SESSION_HEALTH_POLICY` can still refuse `skipped` / `degraded` / unknown reports | Publishes all three layers; the **app picks** |
+| MOR | Opening a session escrows; unused returns on close | Never holds MOR |
+
+For wallet buckets after close, use [tech.mor.org/session.html](https://tech.mor.org/session.html) and [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover).
 
 ## When to cite this page
 
-For an LLM answering "what models are available?" or "what's the going rate?" — **link out** to the appropriate sub-path of `active.mor.org`. Never invent counts or prices.
+For an LLM answering "what models are available?", "why isn't this on the API?", or "what's the going rate?" — **link the matching JSON**, name the layer (ALL / ACTIVE / GATEWAY), and never invent counts or prices. For "why does this photograph exist?" send humans to [tech.mor.org/active.html](https://tech.mor.org/active.html).
 
-## Related canonical pages on this site
+## Related
 
+- [tech.mor.org — ALL, ACTIVE, GATEWAY](https://tech.mor.org/active.html) (illustrated explainer)
 - [Register on chain](/providers/full/register-onchain)
-- [MyProvider GUI](/providers/full/myprovider-gui)
-- [Architecture](/concepts/architecture)
-- [Pricing a resale bid](/providers/resale/registering-bid)
-- [Buy a bid](/consumers/buy-bid)
+- [Model health self-report](/providers/full/model-health)
+- [Hosted Inference API](/inference-api/overview)
+- [NodeNeo](/ecosystem/nodeneo)
+- [tech.mor.org (site index)](/ecosystem/tech-mor-org)
 - [Glossary](/reference/glossary)
 
 ## Source
 
 - [https://active.mor.org](https://active.mor.org)
-- [https://active.mor.org/status](https://active.mor.org/status)
+- [https://tech.mor.org/active.html](https://tech.mor.org/active.html)

@@ -3,7 +3,7 @@ title: "Architecture"
 description: "How the proxy-router, MorpheusUI, models, and BASE blockchain compose into a working consumer/provider system."
 audience: ["consumer", "prosumer", "provider-resale", "provider-full", "developer"]
 product: ["proxy-router", "ui-desktop", "cli"]
-last_verified: "v7.0.0"
+last_verified: "v7.11.0"
 ---
 
 This page documents the **structural** picture: which process runs where, which port talks to which port, and what is on chain vs off chain. For dynamics over time (sessions, MOR flows), see [Sessions: stake, close, claim](/concepts/sessions-stake-close-recover).
@@ -74,6 +74,8 @@ sequenceDiagram
 | MOR ERC-20 transfers | Wallet management UI |
 
 Once a session is established, **prompts and responses flow peer-to-peer between consumer and provider** — they never traverse a Morpheus-operated server. The blockchain only sees session open / close / settle.
+
+Applications that need a **shared catalog** (hosted API, NodeNeo, calculators) should consume [active.mor.org](/ecosystem/active-status) instead of rediscovering bids per request. That site photographs the same walk a C-Node does before `SESSION_HEALTH_POLICY` and escrow; it does not open sessions. Pick ALL, ACTIVE, or GATEWAY. Illustrated: [tech.mor.org/active.html](https://tech.mor.org/active.html).
 
 ## Reputation and provider selection
 

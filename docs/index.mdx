@@ -3,7 +3,7 @@ title: "Morpheus Lumerin Node Docs"
 description: "The canonical knowledge base for Morpheus DeAI: consumers, providers, the proxy-router API, TEE attestation, and the broader Morpheus ecosystem. Curated for humans and AI agents."
 sidebarTitle: "Welcome"
 audience: ["consumer", "prosumer", "provider-resale", "provider-full", "developer"]
-last_verified: "v7.0.0"
+last_verified: "v7.11.0"
 ---
 
 The Morpheus Lumerin Node is the open-source software that lets a desktop chat experience talk to distributed, decentralized LLMs on the Morpheus network. This documentation is the **canonical, human-and-agent-friendly source of truth** for installing, running, and operating that software.
@@ -36,7 +36,7 @@ The Morpheus Lumerin Node is the open-source software that lets a desktop chat e
 
 <CardGroup cols={3}>
   <Card title="Concepts" icon="book" href="/concepts/architecture">
-    Architecture, sessions, TEE, tokens — what every user should understand once.
+    Architecture, catalog layers, sessions, TEE, tokens.
   </Card>
   <Card title="API endpoints" icon="code" href="/reference/api-endpoints">
     Curated subset of the proxy-router HTTP API; full schema in [`proxy-router/docs/swagger.yaml`](https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/blob/main/proxy-router/docs/swagger.yaml).
@@ -45,7 +45,7 @@ The Morpheus Lumerin Node is the open-source software that lets a desktop chat e
     Anti-hallucination pages: where is my MOR, session states, locked-in-contract.
   </Card>
   <Card title="Ecosystem" icon="globe" href="/ecosystem/overview">
-    Mirrors of mor.org, NodeNeo, Everclaw, MyProvider, with attribution.
+    active.mor.org catalog, tech.mor.org explainers, NodeNeo, Everclaw, MyProvider.
   </Card>
   <Card title="Reference" icon="gear" href="/reference/api-overview">
     Env vars, configs, troubleshooting, glossary.
@@ -57,10 +57,10 @@ The Morpheus Lumerin Node is the open-source software that lets a desktop chat e
 
 ## Live network resources
 
-These pages link out to **live data** that changes too often to mirror:
+These pages link out to **live data** that changes too often to mirror. Semantics for the catalog (ALL / ACTIVE / GATEWAY) are on this site so builders pick the right file:
 
-- **Status, active models, active bids** — [active.mor.org](https://active.mor.org)
-- **Calculators, sessions, TEE, throughput** — [tech.mor.org](https://tech.mor.org)
+- **Marketplace catalog** — [active.mor.org](https://active.mor.org) files; [what ALL / ACTIVE / GATEWAY mean](/ecosystem/active-status); illustrated explainer [tech.mor.org/active.html](https://tech.mor.org/active.html)
+- **Sessions, calculator, TEE, throughput** — [tech.mor.org](https://tech.mor.org)
 - **Provider portal** — [myprovider.mor.org](https://myprovider.mor.org)
 - **Hosted Inference API** (separate product, OpenAI-compatible) — [apidocs.mor.org](https://apidocs.mor.org)
 
