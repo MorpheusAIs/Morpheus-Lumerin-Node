@@ -1,15 +1,18 @@
 package apispec
 
 import (
+	"sort"
+
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 )
 
 // Per-serving-stack request-param remap tables: what each stack documents
 // beyond the standard OpenAI chat-completions surface, keyed by canonical
-// intent. Every entry cites the official documentation it was verified
-// against (two independent doc reviews per stack; see
-// docs/api-detect-stack-research.md for the research log). Keep entries literal to the docs — a wrong binding is worse than a
-// missing one, since consumers translate requests with it.
+// intent. These are static tables, not introspected from a live backend;
+// every entry cites the official documentation it was verified against in
+// the doc-URL comment above its table. Keep entries literal to the docs — a
+// wrong binding is worse than a missing one, since consumers translate
+// requests with it.
 //
 // Reasoning intents are deliberately sparse here: whether a model can think,
 // and via which template kwarg, is a model property handled by the family
@@ -99,8 +102,7 @@ var stackBindings = map[string]bindingSet{
 		system.IntentStreamIncludeUsage:        {Kind: bodyParam, Param: "stream_options.include_usage", ParamType: "boolean", Value: true},
 	},
 
-	// OpenRouter. The per-model supported_parameters listing is imported by
-	// probeRegistryShape; this table covers the request shapes.
+	// OpenRouter.
 	// https://openrouter.ai/docs/api-reference/parameters
 	// https://openrouter.ai/docs/use-cases/reasoning-tokens
 	// https://openrouter.ai/docs/features/structured-outputs
@@ -122,13 +124,19 @@ var stackBindings = map[string]bindingSet{
 		system.IntentToolsParallel:             {Kind: bodyParam, Param: "parallel_tool_calls", ParamType: "boolean"},
 	},
 
-	// Venice. Reasoning presence comes from the model listing's
-	// capabilities.supportsReasoning (probeRegistryShape).
-	// https://docs.venice.ai/api-reference/api-spec
+	// Venice.
+	// https://docs.venice.ai/api-reference/endpoint/chat/completions
 	"venice": {
-		system.IntentReasoningDisable: {Kind: bodyParam, Param: "venice_parameters.disable_thinking", ParamType: "boolean", Value: true, Hint: "adds /no_think and strips the thinking block"},
-		system.IntentReasoningEffort:  {Kind: bodyParam, Param: "reasoning_effort", ParamType: "enum", EnumValues: []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}, Hint: "top-level takes precedence over reasoning.effort"},
-		system.IntentReasoningFormat:  {Kind: bodyParam, Param: "venice_parameters.strip_thinking_response", ParamType: "boolean", Hint: "true suppresses <think> blocks server-side"},
+		system.IntentReasoningDisable:          {Kind: bodyParam, Param: "venice_parameters.disable_thinking", ParamType: "boolean", Value: true, Hint: "adds /no_think and strips the thinking block"},
+		system.IntentReasoningEffort:           {Kind: bodyParam, Param: "reasoning_effort", ParamType: "enum", EnumValues: []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}, Hint: "top-level takes precedence over reasoning.effort"},
+		system.IntentReasoningFormat:           {Kind: bodyParam, Param: "venice_parameters.strip_thinking_response", ParamType: "boolean", Hint: "true suppresses <think> blocks server-side"},
+		system.IntentSamplingTopK:              {Kind: bodyParam, Param: "top_k", ParamType: "number", Hint: "integer >= 0"},
+		system.IntentSamplingMinP:              {Kind: bodyParam, Param: "min_p", ParamType: "number", Hint: "[0,1]"},
+		system.IntentSamplingRepetitionPenalty: {Kind: bodyParam, Param: "repetition_penalty", ParamType: "number", Hint: ">= 0, 1.0 = off"},
+		system.IntentResponseFormatJSON:        {Kind: bodyParam, Param: "response_format", ParamType: "object", Value: jsonObjectFormat},
+		system.IntentResponseFormatSchema:      {Kind: bodyParam, Param: "response_format", ParamType: "object", Hint: `{"type":"json_schema","json_schema":{...}}`},
+		system.IntentStreamIncludeUsage:        {Kind: bodyParam, Param: "stream_options.include_usage", ParamType: "boolean", Value: true},
+		system.IntentToolsParallel:             {Kind: bodyParam, Param: "parallel_tool_calls", ParamType: "boolean"},
 	},
 
 	// LiteLLM Proxy: a gateway whose unified params are translated per
@@ -162,17 +170,73 @@ var stackBindings = map[string]bindingSet{
 	},
 }
 
+// ollamaThinkBindings maps the reasoning toggle onto what Ollama's
+// OpenAI-compatible /v1 endpoint documents: reasoning_effort, where "none"
+// turns thinking off. The native /api/chat boolean `think` is reported for
+// completeness but is unreachable through the openai adapter. Stack
+// knowledge for the "ollama" table above.
+// https://docs.ollama.com/api/openai-compatibility
+// https://docs.ollama.com/capabilities/thinking
+func ollamaThinkBindings() map[string]*system.ParamBinding {
+	return map[string]*system.ParamBinding{
+		system.IntentReasoningDisable: {Kind: system.BindingKindBodyParam, Param: "reasoning_effort", ParamType: "string", Value: "none", Hint: "native /api/chat: think: false"},
+		system.IntentReasoningEnable:  {Kind: system.BindingKindNativeBodyParam, Param: "think", ParamType: "boolean", Value: true, Hint: "native /api/chat only; thinking is on by default, and on /v1 any reasoning_effort level other than none enables it"},
+	}
+}
+
+// rewriteBindingsForOllama rewrites template-kwarg reasoning bindings onto
+// what Ollama's /v1 endpoint honors (chat_template_kwargs is not passed
+// through): boolean toggles become the reasoning_effort "none" / native
+// think pair, effort enums keep their levels on reasoning_effort. Intents
+// with no Ollama equivalent (e.g. a numeric budget kwarg) are dropped and
+// reported. Stack knowledge for the "ollama" table above.
+func rewriteBindingsForOllama(bindings map[string]*system.ParamBinding) (rewritten bool, dropped []string) {
+	if bindings == nil {
+		return false, nil
+	}
+	toggle := false
+	for intent, b := range bindings {
+		if b == nil || b.Kind != system.BindingKindTemplateKwarg {
+			continue
+		}
+		switch intent {
+		case system.IntentReasoningDisable, system.IntentReasoningEnable:
+			toggle = true
+			rewritten = true
+		case system.IntentReasoningEffort:
+			bindings[intent] = &system.ParamBinding{
+				Kind: system.BindingKindBodyParam, Param: "reasoning_effort", ParamType: "enum",
+				EnumValues: b.EnumValues, Hint: "native /api/chat equivalent: think: <level>",
+			}
+			rewritten = true
+		default:
+			delete(bindings, intent)
+			dropped = append(dropped, intent)
+		}
+	}
+	if toggle {
+		for intent, b := range ollamaThinkBindings() {
+			bindings[intent] = b
+		}
+	}
+	sort.Strings(dropped)
+	return rewritten, dropped
+}
+
 // stackParameters lists the standard OpenAI chat-completions params each
-// stack documents as supported on its OpenAI-compatible endpoint. Used only
-// when the backend publishes no per-model list of its own (OpenRouter and
-// LiteLLM introspection do).
+// stack documents as supported on its OpenAI-compatible endpoint (composition
+// rule 5: `parameters` is the preset's documented list). See the doc-URL
+// comments on each stack's stackBindings table above for the sources.
 var stackParameters = map[string][]string{
 	"vllm":       {"model", "messages", "temperature", "top_p", "n", "stream", "stream_options", "stop", "max_tokens", "max_completion_tokens", "presence_penalty", "frequency_penalty", "logit_bias", "logprobs", "top_logprobs", "seed", "response_format", "tools", "tool_choice", "parallel_tool_calls", "reasoning_effort"},
 	"sglang":     {"model", "messages", "temperature", "top_p", "n", "stream", "stream_options", "stop", "max_tokens", "max_completion_tokens", "presence_penalty", "frequency_penalty", "logit_bias", "logprobs", "top_logprobs", "user", "seed", "response_format", "tools", "tool_choice", "parallel_tool_calls", "reasoning_effort"},
 	"llamacpp":   {"model", "messages", "temperature", "top_p", "n", "stream", "stream_options", "stop", "max_tokens", "max_completion_tokens", "presence_penalty", "frequency_penalty", "logit_bias", "logprobs", "top_logprobs", "seed", "response_format", "tools", "tool_choice", "parallel_tool_calls", "reasoning_effort"},
 	"ollama":     {"model", "messages", "temperature", "top_p", "stream", "stream_options", "stop", "max_tokens", "presence_penalty", "frequency_penalty", "seed", "response_format", "tools", "reasoning_effort"},
 	"openrouter": {"model", "messages", "temperature", "top_p", "stream", "stream_options", "stop", "max_tokens", "max_completion_tokens", "presence_penalty", "frequency_penalty", "logit_bias", "logprobs", "top_logprobs", "user", "seed", "response_format", "tools", "tool_choice", "parallel_tool_calls", "reasoning_effort"},
-	"litellm":    {"model", "messages", "temperature", "top_p", "n", "stream", "stream_options", "stop", "max_tokens", "max_completion_tokens", "presence_penalty", "frequency_penalty", "logit_bias", "logprobs", "top_logprobs", "user", "seed", "response_format", "tools", "tool_choice", "parallel_tool_calls", "reasoning_effort"},
+	// Venice. https://docs.venice.ai/api-reference/endpoint/chat/completions
+	// (logit_bias is not documented by Venice — deliberately omitted)
+	"venice":  {"model", "messages", "temperature", "top_p", "n", "stream", "stream_options", "stop", "max_tokens", "max_completion_tokens", "presence_penalty", "frequency_penalty", "logprobs", "top_logprobs", "user", "seed", "response_format", "tools", "tool_choice", "parallel_tool_calls", "reasoning_effort"},
+	"litellm": {"model", "messages", "temperature", "top_p", "n", "stream", "stream_options", "stop", "max_tokens", "max_completion_tokens", "presence_penalty", "frequency_penalty", "logit_bias", "logprobs", "top_logprobs", "user", "seed", "response_format", "tools", "tool_choice", "parallel_tool_calls", "reasoning_effort"},
 	// Anthropic Messages API wire names (not OpenAI's): the claudeai adapter
 	// targets /v1/messages. https://platform.claude.com/docs/en/api/messages
 	"anthropic": {"model", "messages", "system", "max_tokens", "stream", "temperature", "top_p", "top_k", "stop_sequences", "tools", "tool_choice", "metadata"},
@@ -220,5 +284,8 @@ func StackFor(apiType string) string {
 var gatewayStacks = map[string]bool{"venice": true, "openrouter": true, "litellm": true, "anthropic": true, "openai": true}
 
 // familyNativeVendor maps a family to the stack whose own API its
-// body-param defaults describe.
-var familyNativeVendor = map[string]string{"claude": "anthropic"}
+// body-param defaults describe. o-series' default is the standard OpenAI
+// reasoning_effort body param, valid wherever the generic openai preset
+// forwards standard fields. gemini has no native vendor here (no gemini
+// preset exists yet) and stays unreachable on gateway stacks.
+var familyNativeVendor = map[string]string{"claude": "anthropic", "o-series": "openai"}

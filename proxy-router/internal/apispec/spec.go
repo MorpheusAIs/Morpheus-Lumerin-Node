@@ -39,10 +39,7 @@ func Build(cfg config.ModelConfig) *system.ModelApiSpec {
 		bindings = cloneSet(defaults)
 	}
 
-	if stack == "ollama" {
-		if bindings == nil && !alwaysOn && familyReasons {
-			bindings = cloneSet(defaults)
-		}
+	if stack == "ollama" && bindings != nil {
 		rewriteBindingsForOllama(bindings)
 	}
 

@@ -86,6 +86,12 @@ func TestBuildGatewayPresetsSkipFamilyTemplateKwargs(t *testing.T) {
 	for intent, b := range venice.Bindings {
 		require.NotEqual(t, system.BindingKindTemplateKwarg, b.Kind, intent)
 	}
+	// composition rule 5: parameters must be the preset's documented list,
+	// never nil, even when the preset's bindings table is sparse.
+	require.NotEmpty(t, venice.Parameters, "venice preset must advertise its documented parameter list")
+	require.Contains(t, venice.Parameters, "messages")
+	require.Contains(t, venice.Parameters, "reasoning_effort")
+	require.NotContains(t, venice.Parameters, "logit_bias", "logit_bias is not documented by Venice")
 
 	veniceLlama := build("venice", "llama-3.3-70b", "")
 	require.Nil(t, veniceLlama.Thinking)
@@ -140,4 +146,56 @@ func TestBuildResultIsNotAliasedToTables(t *testing.T) {
 	a.Bindings[system.IntentSamplingTopK].Param = "mutated"
 	b := build("vllm", "qwen3-32b", "")
 	require.Equal(t, "top_k", b.Bindings[system.IntentSamplingTopK].Param)
+}
+
+// TestBuildOSeriesOnOpenAIPreset covers controller ruling 2: the o-series
+// family's native vendor is the generic openai preset (standard
+// reasoning_effort body param), so o4-mini on the openai preset must still
+// get a tunable reasoning spec even though openai is a gateway stack.
+func TestBuildOSeriesOnOpenAIPreset(t *testing.T) {
+	api := build("openai", "o4-mini", "")
+	require.NotNil(t, api)
+	require.Equal(t, "o-series", api.ModelFamily)
+	require.NotNil(t, api.Thinking)
+	require.Equal(t, system.ThinkingModeTunable, api.Thinking.Mode)
+	effort := api.Bindings[system.IntentReasoningEffort]
+	require.NotNil(t, effort)
+	require.Equal(t, "reasoning_effort", effort.Param)
+	require.Nil(t, api.Bindings[system.IntentReasoningDisable])
+}
+
+// TestBuildFamilyWinsOverStackTableForSameIntent covers precedence: when
+// both the family layer and the stack table bind the same intent, the
+// family's binding (the model-specific one) must win, not the stack's more
+// generic one.
+func TestBuildFamilyWinsOverStackTableForSameIntent(t *testing.T) {
+	api := build("ollama", "gpt-oss:120b", "")
+	effort := api.Bindings[system.IntentReasoningEffort]
+	require.NotNil(t, effort)
+	require.Equal(t, []string{"low", "medium", "high"}, effort.EnumValues, "family's enum values must win over the ollama stack table's [low medium high max none]")
+}
+
+// TestBuildResultDeepCopiesNestedValues covers the deep-copy invariant:
+// mutating a returned spec's nested map/slice values must not corrupt the
+// shared static tables that a subsequent Build reads from.
+func TestBuildResultDeepCopiesNestedValues(t *testing.T) {
+	a := build("vllm", "gpt-oss-120b", "")
+	jsonFormat, ok := a.Bindings[system.IntentResponseFormatJSON].Value.(map[string]any)
+	require.True(t, ok)
+	jsonFormat["type"] = "mutated"
+	a.Bindings[system.IntentReasoningEffort].EnumValues[0] = "mutated"
+
+	b := build("vllm", "gpt-oss-120b", "")
+	require.Equal(t, map[string]any{"type": "json_object"}, b.Bindings[system.IntentResponseFormatJSON].Value)
+	require.Equal(t, []string{"low", "medium", "high"}, b.Bindings[system.IntentReasoningEffort].EnumValues)
+}
+
+// TestBuildThinkingNameOverridesFamilyDefault covers the "-thinking" model
+// name override: a model name containing "thinking" reasons unconditionally
+// regardless of what its family would otherwise default to.
+func TestBuildThinkingNameOverridesFamilyDefault(t *testing.T) {
+	api := build("vllm", "qwen3-235b-a22b-thinking-2507", "")
+	require.NotNil(t, api.Thinking)
+	require.Equal(t, system.ThinkingModeAlwaysOn, api.Thinking.Mode)
+	require.Nil(t, api.Bindings[system.IntentReasoningDisable])
 }

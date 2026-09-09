@@ -77,6 +77,12 @@ func TestAllTablesWellFormed(t *testing.T) {
 		require.NotEmpty(t, params, stack)
 		require.Contains(t, params, "messages", stack)
 	}
+	// Every stack with a bindings table must also have a documented parameter
+	// list (composition rule 5: `parameters` is the preset's documented
+	// list) — a stack that binds params it doesn't also advertise is a gap.
+	for stack := range stackBindings {
+		require.NotEmpty(t, stackParameters[stack], "stack %q has bindings but no stackParameters entry", stack)
+	}
 	for _, f := range []string{"qwen3", "glm", "hunyuan", "deepseek-v3.1", "granite", "gpt-oss", "seed-oss", "nemotron", "o-series", "gemini"} {
 		_, b := bindingsForFamily(f, "m")
 		assertWellFormed(t, "family:"+f, b)

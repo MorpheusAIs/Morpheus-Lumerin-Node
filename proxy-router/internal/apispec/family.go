@@ -2,7 +2,6 @@ package apispec
 
 import (
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -216,63 +215,4 @@ func claudeBindings(modelName string) (alwaysOn bool, b bindingSet) {
 			system.IntentReasoningBudget:  budget,
 		}
 	}
-}
-
-// ollamaThinkBindings maps the reasoning toggle onto what Ollama's
-// OpenAI-compatible /v1 endpoint documents: reasoning_effort, where "none"
-// turns thinking off. The native /api/chat boolean `think` is reported for
-// completeness but is unreachable through the openai adapter.
-// https://docs.ollama.com/api/openai-compatibility
-// https://docs.ollama.com/capabilities/thinking
-func ollamaThinkBindings() map[string]*system.ParamBinding {
-	return map[string]*system.ParamBinding{
-		system.IntentReasoningDisable: {Kind: system.BindingKindBodyParam, Param: "reasoning_effort", ParamType: "string", Value: "none", Hint: "native /api/chat: think: false"},
-		system.IntentReasoningEnable:  {Kind: system.BindingKindNativeBodyParam, Param: "think", ParamType: "boolean", Value: true, Hint: "native /api/chat only; thinking is on by default, and on /v1 any reasoning_effort level other than none enables it"},
-	}
-}
-
-// hasReasoningBindings reports whether any reasoning.* intent is bound.
-func hasReasoningBindings(b map[string]*system.ParamBinding) bool {
-	for intent := range b {
-		if strings.HasPrefix(intent, "reasoning.") {
-			return true
-		}
-	}
-	return false
-}
-
-// rewriteBindingsForOllama rewrites template-kwarg reasoning bindings onto
-// what Ollama's /v1 endpoint honors (chat_template_kwargs is not passed
-// through): boolean toggles become the reasoning_effort "none" / native
-// think pair, effort enums keep their levels on reasoning_effort. Intents
-// with no Ollama equivalent (e.g. a numeric budget kwarg) are dropped and
-// reported.
-func rewriteBindingsForOllama(bindings map[string]*system.ParamBinding) (rewritten bool, dropped []string) {
-	toggle := false
-	for intent, b := range bindings {
-		if b == nil || b.Kind != system.BindingKindTemplateKwarg {
-			continue
-		}
-		switch intent {
-		case system.IntentReasoningDisable, system.IntentReasoningEnable:
-			toggle = true
-			rewritten = true
-		case system.IntentReasoningEffort:
-			bindings[intent] = &system.ParamBinding{
-				Kind: system.BindingKindBodyParam, Param: "reasoning_effort", ParamType: "enum",
-				EnumValues: b.EnumValues, Hint: "native /api/chat equivalent: think: <level>",
-			}
-			rewritten = true
-		default:
-			delete(bindings, intent)
-			dropped = append(dropped, intent)
-		}
-	}
-	if toggle {
-		for intent, b := range ollamaThinkBindings() {
-			bindings[intent] = b
-		}
-	}
-	sort.Strings(dropped)
-	return rewritten, dropped
 }
