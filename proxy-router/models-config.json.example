@@ -45,6 +45,14 @@
       "apiType": "openai",
       "apiUrl": "https://api.openai.com/v1",
       "apiKey": "FILL_ME_IN"
+    },
+    {
+      "modelId": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "modelName": "qwen3-235b-a22b",
+      "apiType": "vllm",
+      "modelFamily": "qwen3",
+      "apiUrl": "http://localhost:8000/v1/chat/completions",
+      "apiKey": ""
     }
   ]
 }

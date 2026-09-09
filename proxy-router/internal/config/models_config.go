@@ -40,8 +40,12 @@ type ModelConfigLoader struct {
 }
 
 type ModelConfig struct {
-	ModelName       string            `json:"modelName" validate:"required"`
-	ApiType         string            `json:"apiType" validate:"required"`
+	ModelName string `json:"modelName" validate:"required"`
+	ApiType   string `json:"apiType" validate:"required"`
+	// ModelFamily optionally pins the canonical model family (qwen3,
+	// deepseek-v3.1, gpt-oss, claude…) used to pick reasoning-control
+	// bindings; inferred from ModelName when empty.
+	ModelFamily     string            `json:"modelFamily"`
 	ApiURL          string            `json:"apiUrl" validate:"required,url"`
 	ApiKey          string            `json:"apiKey"`
 	ConcurrentSlots int               `json:"concurrentSlots" validate:"number"`

@@ -24,7 +24,12 @@
             "title": "API Type",
             "description": "Defines the type of API to be used with this model",
             "type": "string",
-            "enum": ["openai", "prodia-v2", "hyperbolic-sd", "claudeai"]
+            "enum": ["openai", "vllm", "sglang", "llamacpp", "ollama", "venice", "openrouter", "litellm", "anthropic", "claudeai", "prodia-sd", "prodia-sdxl", "prodia-v2", "hyperbolic-sd"]
+          },
+          "modelFamily": {
+            "title": "Model Family",
+            "description": "Optional canonical model family (qwen3, deepseek-v3.1, deepseek-r1, gpt-oss, glm, granite, seed-oss, nemotron, claude, o-series, gemini) used to pick reasoning-control bindings; inferred from modelName when omitted",
+            "type": "string"
           },
           "apiUrl": {
             "title": "API URL",
