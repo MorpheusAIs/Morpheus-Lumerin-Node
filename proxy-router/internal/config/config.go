@@ -242,10 +242,9 @@ func (cfg *Config) SetDefaults() {
 		cfg.Proxy.SessionHealthPolicy = "permissive"
 	}
 
-	// IPFS
-	if cfg.IPFS.Address == "" {
-		cfg.IPFS.Address = "localhost:5001"
-	}
+	// IPFS: leave Address empty when unset. A host:port default is not a
+	// multiaddr and made NewIpfsManager log ERROR on every headless boot (#872).
+	// Operators who run Kubo should set IPFS_MULTADDR (e.g. /ip4/127.0.0.1/tcp/5001).
 
 	// TEE
 	if cfg.TEE.PortalURL == "" {
