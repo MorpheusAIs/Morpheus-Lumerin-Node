@@ -2321,29 +2321,16 @@ jobs:
 
           CUTOFF_UTC=""
           if [ -n "$UPDATED_AT" ] && [ "$UPDATED_AT" != "None" ]; then
-            CUTOFF_UTC=$(python3 -c '
-import sys
-from datetime import datetime, timezone
-raw = sys.argv[1].strip().replace("Z", "+00:00")
-dt = datetime.fromisoformat(raw)
-if dt.tzinfo is None:
-    dt = dt.replace(tzinfo=timezone.utc)
-print(dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"))
-' "$UPDATED_AT")
+            # One-liners: a column-0 python body inside `run: |` terminates the
+            # YAML block (GitHub: "Invalid workflow file") and the whole CI-CD
+            # graph matches zero jobs. Keep this indented.
+            CUTOFF_UTC=$(python3 -c 'import sys; from datetime import datetime, timezone; raw = sys.argv[1].strip().replace("Z", "+00:00"); dt = datetime.fromisoformat(raw); dt = dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt; print(dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"))' "$UPDATED_AT")
             echo "📌 PRIMARY updatedAt: ${UPDATED_AT} → cutoff_utc=${CUTOFF_UTC} UTC (invoke immediately)"
           else
             echo "⚠️ Could not resolve PRIMARY updatedAt; Lambda will derive from ECS."
           fi
 
-          PAYLOAD=$(python3 -c '
-import json, sys
-tag = sys.argv[1]
-cutoff = sys.argv[2] if len(sys.argv) > 2 else ""
-payload = {"release_tag": tag}
-if cutoff:
-    payload["cutoff_utc"] = cutoff
-print(json.dumps(payload))
-' "$BUILDTAG" "$CUTOFF_UTC")
+          PAYLOAD=$(python3 -c 'import json, sys; tag = sys.argv[1]; cutoff = sys.argv[2] if len(sys.argv) > 2 else ""; payload = {"release_tag": tag}; payload.update({"cutoff_utc": cutoff} if cutoff else {}); print(json.dumps(payload))' "$BUILDTAG" "$CUTOFF_UTC")
 
           STATUS=""
           BODY=""
