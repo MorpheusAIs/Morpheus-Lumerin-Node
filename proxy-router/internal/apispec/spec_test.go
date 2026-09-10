@@ -55,18 +55,38 @@ func TestBuildAlwaysOnKeepsOnlyReasoningFormat(t *testing.T) {
 	require.Equal(t, "separate_reasoning", api.Bindings[system.IntentReasoningFormat].Param)
 }
 
-func TestBuildGptOssIsTunable(t *testing.T) {
+// TestBuildGptOssOnLlamacppReasoningBindings covers a thinking-capable family
+// (gpt-oss contributes only reasoning.effort) combined with llama.cpp's
+// stack-level reasoning_budget param. Per the llama-server README,
+// reasoning_budget: 0 ends thinking immediately, so llama.cpp can disable
+// thinking even though gpt-oss's own kwarg has no explicit off switch — that
+// makes the mode controllable, not merely tunable.
+func TestBuildGptOssOnLlamacppReasoningBindings(t *testing.T) {
 	api := build("llamacpp", "gpt-oss-120b", "")
-	require.Equal(t, system.ThinkingModeTunable, api.Thinking.Mode)
-	require.Nil(t, api.Bindings[system.IntentReasoningDisable])
+	require.Equal(t, system.ThinkingModeControllable, api.Thinking.Mode)
 	require.Equal(t, "chat_template_kwargs.reasoning_effort", api.Bindings[system.IntentReasoningEffort].Param)
+
+	budget := api.Bindings[system.IntentReasoningBudget]
+	require.NotNil(t, budget)
+	require.Equal(t, "reasoning_budget", budget.Param)
+	require.NotEmpty(t, budget.Hint)
+
+	disable := api.Bindings[system.IntentReasoningDisable]
+	require.NotNil(t, disable)
+	require.Equal(t, "reasoning_budget", disable.Param)
+	require.Equal(t, 0, disable.Value)
 }
 
 func TestBuildOllamaRewritesToReasoningEffort(t *testing.T) {
 	api := build("ollama", "qwen3:32b", "")
 	require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningDisable].Param)
 	require.Equal(t, "none", api.Bindings[system.IntentReasoningDisable].Value)
-	require.Equal(t, system.BindingKindNativeBodyParam, api.Bindings[system.IntentReasoningEnable].Kind)
+	// mirrors litellm: reasoning_effort (any level but none) also works on
+	// ollama's OpenAI-compatible /v1 surface, so gateways can enable thinking
+	// without the native-only `think` boolean.
+	require.Equal(t, system.BindingKindBodyParam, api.Bindings[system.IntentReasoningEnable].Kind)
+	require.Equal(t, "reasoning_effort", api.Bindings[system.IntentReasoningEnable].Param)
+	require.Equal(t, "medium", api.Bindings[system.IntentReasoningEnable].Value)
 	require.Equal(t, "options.num_ctx", api.Bindings[system.IntentContextNumCtx].Param)
 
 	gptoss := build("ollama", "gpt-oss:120b", "")

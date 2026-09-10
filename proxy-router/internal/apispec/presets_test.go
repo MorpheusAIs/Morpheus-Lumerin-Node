@@ -99,6 +99,11 @@ func TestAllTablesWellFormed(t *testing.T) {
 	}
 }
 
+func TestIsKnownFamily(t *testing.T) {
+	require.True(t, IsKnownFamily("qwen3"))
+	require.False(t, IsKnownFamily("qwen-3"))
+}
+
 func TestFamilyFromName(t *testing.T) {
 	require.Equal(t, "qwen3", FamilyFromName("Qwen/Qwen3-235B-A22B"))
 	require.Equal(t, "deepseek-r1", FamilyFromName("deepseek-r1:70b"))

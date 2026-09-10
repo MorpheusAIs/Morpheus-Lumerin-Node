@@ -149,6 +149,30 @@ func bindingsForFamily(family, modelName string) (alwaysOn bool, b bindingSet) {
 	return false, nil
 }
 
+// IsKnownFamily reports whether name is one of the model families
+// bindingsForFamily has dedicated bindings for (the documented set: qwen3,
+// deepseek-v3.1, deepseek-r1, gpt-oss, glm, granite, seed-oss, nemotron,
+// claude, o-series, gemini — plus qwq and hunyuan, which share a case with a
+// documented family in the same switch and get real bindings too). Mirrors
+// bindingsForFamily's switch rather than a second hand-written list so the
+// two can't drift; comparison is case-insensitive to match Build's own
+// normalization of ModelFamily.
+func IsKnownFamily(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "qwen3", "glm", "hunyuan",
+		"deepseek-v3.1", "granite",
+		"qwq", "deepseek-r1",
+		"gpt-oss",
+		"seed-oss",
+		"nemotron",
+		"claude",
+		"o-series",
+		"gemini":
+		return true
+	}
+	return false
+}
+
 // claudeVersionRe extracts the first major[.minor] number pair from a Claude
 // model name (claude-opus-4-6, claude-sonnet-4-5-20250929, claude-3-7-sonnet,
 // claude-opus-5). A minor of three or more digits is a date, not a version.
@@ -188,7 +212,9 @@ func claudeBindings(modelName string) (alwaysOn bool, b bindingSet) {
 	budget := &system.ParamBinding{Kind: system.BindingKindBodyParam, Param: "thinking.budget_tokens", ParamType: "number", Hint: "minimum 1024; must be below max_tokens"}
 
 	if strings.Contains(name, "fable") || strings.Contains(name, "mythos") {
-		// Reasons unconditionally; thinking.type enabled/disabled are rejected.
+		// Always reasons (thinking.type enabled/disabled are rejected) but
+		// effort is tunable, so it is reported as tunable with only the
+		// effort binding.
 		return false, bindingSet{system.IntentReasoningEffort: effortAll}
 	}
 

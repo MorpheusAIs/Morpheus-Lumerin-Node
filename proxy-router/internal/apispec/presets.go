@@ -1,8 +1,6 @@
 package apispec
 
 import (
-	"sort"
-
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 )
 
@@ -42,8 +40,8 @@ var stackBindings = map[string]bindingSet{
 		system.IntentReasoningFormat:           {Kind: bodyParam, Param: "include_reasoning", ParamType: "boolean", Hint: "false omits parsed reasoning from the response (tokens are still generated)"},
 		system.IntentResponseFormatJSON:        {Kind: bodyParam, Param: "response_format", ParamType: "object", Value: jsonObjectFormat, Hint: "not combinable with tools"},
 		system.IntentResponseFormatSchema:      {Kind: bodyParam, Param: "response_format", ParamType: "object", Hint: `{"type":"json_schema","json_schema":{"name":...,"schema":{...},"strict":bool}}; not combinable with tools`},
-		system.IntentResponseFormatGrammar:     {Kind: bodyParam, Param: "structured_outputs.grammar", ParamType: "string", Hint: "EBNF/Lark grammar; structured_outputs.regex for a regex; one constraint kind per request"},
-		system.IntentResponseFormatChoice:      {Kind: bodyParam, Param: "structured_outputs.choice", ParamType: "array", Hint: "array of allowed strings"},
+		system.IntentResponseFormatGrammar:     {Kind: bodyParam, Param: "structured_outputs.grammar", ParamType: "string", Hint: "vLLM >= 0.12 (older builds: guided_grammar / guided_choice); EBNF/Lark grammar; structured_outputs.regex for a regex; one constraint kind per request"},
+		system.IntentResponseFormatChoice:      {Kind: bodyParam, Param: "structured_outputs.choice", ParamType: "array", Hint: "vLLM >= 0.12 (older builds: guided_grammar / guided_choice); array of allowed strings"},
 		system.IntentSamplingTopK:              {Kind: bodyParam, Param: "top_k", ParamType: "number", Hint: "0 or -1 = all tokens"},
 		system.IntentSamplingMinP:              {Kind: bodyParam, Param: "min_p", ParamType: "number", Hint: "[0,1]"},
 		system.IntentSamplingRepetitionPenalty: {Kind: bodyParam, Param: "repetition_penalty", ParamType: "number", Hint: ">0, 1.0 = off"},
@@ -71,7 +69,8 @@ var stackBindings = map[string]bindingSet{
 	// llama.cpp llama-server.
 	// https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md
 	"llamacpp": {
-		system.IntentReasoningBudget:           {Kind: bodyParam, Param: "reasoning_budget_tokens", ParamType: "number"},
+		system.IntentReasoningBudget:           {Kind: bodyParam, Param: "reasoning_budget", ParamType: "number", Hint: "-1 unrestricted, 0 ends thinking immediately"},
+		system.IntentReasoningDisable:          {Kind: bodyParam, Param: "reasoning_budget", ParamType: "number", Value: 0, Hint: "0 = immediate end of thinking"},
 		system.IntentReasoningFormat:           {Kind: bodyParam, Param: "reasoning_format", ParamType: "enum", EnumValues: []string{"none", "auto", "deepseek", "deepseek-legacy"}, Hint: "how reasoning is split out of content"},
 		system.IntentResponseFormatJSON:        {Kind: bodyParam, Param: "response_format", ParamType: "object", Value: jsonObjectFormat},
 		system.IntentResponseFormatSchema:      {Kind: bodyParam, Param: "response_format", ParamType: "object", Hint: `{"type":"json_schema","json_schema":{"schema":{...}}}`},
@@ -180,19 +179,19 @@ var stackBindings = map[string]bindingSet{
 func ollamaThinkBindings() map[string]*system.ParamBinding {
 	return map[string]*system.ParamBinding{
 		system.IntentReasoningDisable: {Kind: system.BindingKindBodyParam, Param: "reasoning_effort", ParamType: "string", Value: "none", Hint: "native /api/chat: think: false"},
-		system.IntentReasoningEnable:  {Kind: system.BindingKindNativeBodyParam, Param: "think", ParamType: "boolean", Value: true, Hint: "native /api/chat only; thinking is on by default, and on /v1 any reasoning_effort level other than none enables it"},
+		system.IntentReasoningEnable:  {Kind: system.BindingKindBodyParam, Param: "reasoning_effort", ParamType: "string", Value: "medium", Hint: "on /v1 any level other than none enables thinking (gpt-oss maps low/medium/high); native /api/chat: think: true"},
 	}
 }
 
 // rewriteBindingsForOllama rewrites template-kwarg reasoning bindings onto
 // what Ollama's /v1 endpoint honors (chat_template_kwargs is not passed
-// through): boolean toggles become the reasoning_effort "none" / native
-// think pair, effort enums keep their levels on reasoning_effort. Intents
-// with no Ollama equivalent (e.g. a numeric budget kwarg) are dropped and
-// reported. Stack knowledge for the "ollama" table above.
-func rewriteBindingsForOllama(bindings map[string]*system.ParamBinding) (rewritten bool, dropped []string) {
+// through): boolean toggles become the reasoning_effort "none" / medium
+// pair, effort enums keep their levels on reasoning_effort. Intents with no
+// Ollama equivalent (e.g. a numeric budget kwarg) are dropped. Stack
+// knowledge for the "ollama" table above.
+func rewriteBindingsForOllama(bindings map[string]*system.ParamBinding) {
 	if bindings == nil {
-		return false, nil
+		return
 	}
 	toggle := false
 	for intent, b := range bindings {
@@ -202,16 +201,13 @@ func rewriteBindingsForOllama(bindings map[string]*system.ParamBinding) (rewritt
 		switch intent {
 		case system.IntentReasoningDisable, system.IntentReasoningEnable:
 			toggle = true
-			rewritten = true
 		case system.IntentReasoningEffort:
 			bindings[intent] = &system.ParamBinding{
 				Kind: system.BindingKindBodyParam, Param: "reasoning_effort", ParamType: "enum",
 				EnumValues: b.EnumValues, Hint: "native /api/chat equivalent: think: <level>",
 			}
-			rewritten = true
 		default:
 			delete(bindings, intent)
-			dropped = append(dropped, intent)
 		}
 	}
 	if toggle {
@@ -219,8 +215,6 @@ func rewriteBindingsForOllama(bindings map[string]*system.ParamBinding) (rewritt
 			bindings[intent] = b
 		}
 	}
-	sort.Strings(dropped)
-	return rewritten, dropped
 }
 
 // stackParameters lists the standard OpenAI chat-completions params each
