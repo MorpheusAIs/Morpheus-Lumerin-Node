@@ -129,3 +129,39 @@ func TestPongResponceModelsExcludedFromSignature(t *testing.T) {
 	old.Signature = lib.HexString{}
 	assert.True(t, rpc.VerifySignatureAddr(old, oldSignature, addr, lib.NewTestLogger()))
 }
+
+func TestPongResponseModelsCarryApiSpecOutsideSignature(t *testing.T) {
+	prKey, err := crypto.GenerateKey()
+	assert.NoError(t, err)
+	prKeyBytes := crypto.FromECDSA(prKey)
+	addr := crypto.PubkeyToAddress(prKey.PublicKey)
+
+	models := []system.ModelHealthReport{{
+		ModelID: "0x01", Status: system.ModelHealthStatusHealthy, LastChecked: 1,
+		Api: &system.ModelApiSpec{
+			Stack: "venice", ModelFamily: "qwen3",
+			Thinking: &system.ThinkingSpec{Mode: system.ThinkingModeControllable},
+			Bindings: map[string]*system.ParamBinding{
+				system.IntentReasoningDisable: {Kind: system.BindingKindBodyParam, Param: "venice_parameters.disable_thinking", ParamType: "boolean", Value: true},
+			},
+		},
+	}}
+
+	rpc := NewMorRpc()
+	res, err := rpc.PongResponce("req-1", prKeyBytes, lib.HexString{0x01, 0x02}, "1.0.0", models)
+	assert.NoError(t, err)
+
+	// Check raw JSON contains the api spec
+	raw, err := json.Marshal(res)
+	assert.NoError(t, err)
+	assert.Contains(t, string(raw), `"api":{"stack":"venice"`)
+	assert.Contains(t, string(raw), `"venice_parameters.disable_thinking"`)
+
+	// Verify signature excludes models
+	var pong PongRes
+	assert.NoError(t, json.Unmarshal(*res.Result, &pong))
+	signature := pong.Signature
+	pong.Signature = lib.HexString{}
+	pong.Models = nil
+	assert.True(t, rpc.VerifySignatureAddr(pong, signature, addr, lib.NewTestLogger()))
+}
