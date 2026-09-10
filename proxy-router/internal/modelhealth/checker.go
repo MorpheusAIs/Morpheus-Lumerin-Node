@@ -15,6 +15,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -386,18 +387,26 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 		report.BidID = bidID.Hex()
 	}
 
-	if prev, ok := c.getReport(modelID.Hex()); ok {
+	prev, hasPrev := c.getReport(modelID.Hex())
+	if hasPrev {
 		report.LastHealthy = prev.LastHealthy
+	}
+
+	if cfg.ModelFamily != "" && !apispec.IsKnownFamily(cfg.ModelFamily) {
+		c.log.Warnf("model %s: unknown modelFamily %q — no family bindings will be advertised", lib.Short(modelID), cfg.ModelFamily)
 	}
 
 	// Provider-declared API spec (presets in models-config): advertised for
 	// every configured model so consumers can shape requests before a
-	// session.
-	if cfg.ApiType != "" {
-		if api := apispec.Build(cfg); api != nil {
-			api.DeclaredAt = time.Now().Unix()
-			report.Api = api
+	// session. DeclaredAt is only refreshed when the composed spec actually
+	// changed, so it reflects when the declaration last changed rather than
+	// every sweep.
+	if api := apispec.Build(cfg); api != nil {
+		api.DeclaredAt = time.Now().Unix()
+		if hasPrev && prev.Api != nil && sameApiSpecIgnoringDeclaredAt(prev.Api, api) {
+			api.DeclaredAt = prev.Api.DeclaredAt
 		}
+		report.Api = api
 	}
 
 	if !hasBid {
@@ -534,6 +543,14 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 	}
 
 	c.setReport(report)
+}
+
+// sameApiSpecIgnoringDeclaredAt reports whether a and b describe the same
+// declared API spec, disregarding their DeclaredAt timestamps.
+func sameApiSpecIgnoringDeclaredAt(a, b *system.ModelApiSpec) bool {
+	ac, bc := *a, *b
+	ac.DeclaredAt, bc.DeclaredAt = 0, 0
+	return reflect.DeepEqual(ac, bc)
 }
 
 func (c *Checker) probeLLM(ctx context.Context, adapter aiengine.AIEngineStream, report *system.ModelHealthReport) error {

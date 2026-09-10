@@ -849,3 +849,51 @@ func TestCheckModelAttachesDeclaredApiSpec(t *testing.T) {
 	require.NotNil(t, noBid.Api)
 	require.Equal(t, "ollama", noBid.Api.Stack)
 }
+
+// The declared API spec's DeclaredAt must only move when the spec itself
+// changes, not on every sweep — otherwise consumers can't tell "still the
+// same declaration" from "the provider just redeclared it". A DeclaredAt
+// value is seeded directly through setReport rather than relying on
+// wall-clock granularity between sweeps.
+func TestCheckModelDeclaredAtStableAcrossSweeps(t *testing.T) {
+	deps := &mockDeps{
+		bids:     []*structs.Bid{bidFor(modelLLM)},
+		tags:     map[common.Hash][]string{modelLLM: {"llm"}},
+		modelIDs: []common.Hash{modelLLM},
+		adapter:  &mathSolvingAdapter{},
+		configs: map[common.Hash]config.ModelConfig{
+			modelLLM: {ModelName: "qwen3-32b", ApiType: "vllm", ApiURL: "http://llm:8000/v1/chat/completions", ModelFamily: "qwen3"},
+		},
+	}
+
+	checker := newTestChecker(deps)
+	checker.checkAll(context.Background(), common.Address{})
+
+	first := reportByID(t, checker.GetReports(), modelLLM)
+	require.NotNil(t, first.Api)
+	require.NotZero(t, first.Api.DeclaredAt)
+
+	// Seed a distinguishable DeclaredAt on the stored report so the next
+	// assertions don't depend on wall-clock granularity between sweeps.
+	seeded := first
+	seededAPI := *first.Api
+	seededAPI.DeclaredAt = 12345
+	seeded.Api = &seededAPI
+	checker.setReport(seeded)
+
+	// Unchanged config: a second sweep must keep the seeded DeclaredAt.
+	checker.checkAll(context.Background(), common.Address{})
+	second := reportByID(t, checker.GetReports(), modelLLM)
+	require.NotNil(t, second.Api)
+	require.Equal(t, int64(12345), second.Api.DeclaredAt, "unchanged spec must keep the previous DeclaredAt")
+
+	// Changing modelFamily changes the composed spec: DeclaredAt must refresh.
+	cfg := deps.configs[modelLLM]
+	cfg.ModelFamily = "deepseek-r1"
+	deps.configs[modelLLM] = cfg
+	checker.checkAll(context.Background(), common.Address{})
+	third := reportByID(t, checker.GetReports(), modelLLM)
+	require.NotNil(t, third.Api)
+	require.NotZero(t, third.Api.DeclaredAt)
+	require.NotEqual(t, int64(12345), third.Api.DeclaredAt, "changed spec must refresh DeclaredAt")
+}
