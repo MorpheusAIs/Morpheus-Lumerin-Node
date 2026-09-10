@@ -4931,7 +4931,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "parameters": {
-                    "description": "Parameters lists standard OpenAI chat-completions params the stack\ndocuments as accepted (an upper bound: server-side flags are invisible).",
+                    "description": "Parameters lists the request parameters the stack documents as\naccepted, in the stack's own request vocabulary — OpenAI\nchat-completions names for every stack except anthropic, which uses\nAnthropic Messages names (an upper bound: server-side flags are\ninvisible).",
                     "type": "array",
                     "items": {
                         "type": "string"

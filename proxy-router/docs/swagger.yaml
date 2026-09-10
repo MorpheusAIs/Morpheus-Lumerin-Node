@@ -1139,8 +1139,11 @@ definitions:
         type: string
       parameters:
         description: |-
-          Parameters lists standard OpenAI chat-completions params the stack
-          documents as accepted (an upper bound: server-side flags are invisible).
+          Parameters lists the request parameters the stack documents as
+          accepted, in the stack's own request vocabulary — OpenAI
+          chat-completions names for every stack except anthropic, which uses
+          Anthropic Messages names (an upper bound: server-side flags are
+          invisible).
         items:
           type: string
         type: array

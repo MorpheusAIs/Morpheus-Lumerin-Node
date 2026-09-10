@@ -150,8 +150,11 @@ type ModelApiSpec struct {
 	// Bindings maps canonical request intents to how this backend spells them.
 	// An absent intent means the backend has no way to express it.
 	Bindings map[string]*ParamBinding `json:"bindings,omitempty"`
-	// Parameters lists standard OpenAI chat-completions params the stack
-	// documents as accepted (an upper bound: server-side flags are invisible).
+	// Parameters lists the request parameters the stack documents as
+	// accepted, in the stack's own request vocabulary — OpenAI
+	// chat-completions names for every stack except anthropic, which uses
+	// Anthropic Messages names (an upper bound: server-side flags are
+	// invisible).
 	Parameters []string `json:"parameters,omitempty"`
 	DeclaredAt int64    `json:"declaredAt,omitempty"`
 }
