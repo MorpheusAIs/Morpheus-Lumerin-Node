@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/apispec"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/attestation"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi/structs"
@@ -265,7 +266,11 @@ func (c *Checker) checkAll(ctx context.Context, walletAddr common.Address) {
 		if hasBid && probed && !c.sleep(ctx, c.probeDelay) {
 			return
 		}
-		c.checkModel(ctx, modelID, bidID, hasBid, modelCfgs[i].ApiURL, reattestTee)
+		var cfg config.ModelConfig
+		if i < len(modelCfgs) {
+			cfg = modelCfgs[i]
+		}
+		c.checkModel(ctx, modelID, bidID, hasBid, cfg, reattestTee)
 		if hasBid {
 			probed = true
 		}
@@ -370,7 +375,7 @@ func (c *Checker) activeBidModels(ctx context.Context, walletAddr common.Address
 	return byModel, nil
 }
 
-func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID common.Hash, hasBid bool, apiURL string, reattestTee bool) {
+func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID common.Hash, hasBid bool, cfg config.ModelConfig, reattestTee bool) {
 	report := system.ModelHealthReport{
 		ModelID:      modelID.Hex(),
 		HasActiveBid: hasBid,
@@ -383,6 +388,16 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 
 	if prev, ok := c.getReport(modelID.Hex()); ok {
 		report.LastHealthy = prev.LastHealthy
+	}
+
+	// Provider-declared API spec (presets in models-config): advertised for
+	// every configured model so consumers can shape requests before a
+	// session.
+	if cfg.ApiType != "" {
+		if api := apispec.Build(cfg); api != nil {
+			api.DeclaredAt = time.Now().Unix()
+			report.Api = api
+		}
 	}
 
 	if !hasBid {
@@ -413,7 +428,7 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 	if meta.isTee && c.deps.TeeStatus != nil {
 		if reattestTee {
 			attestCtx, cancel := context.WithTimeout(ctx, c.timeout)
-			if err := c.deps.TeeStatus.ReattestBackend(attestCtx, modelID.Hex(), apiURL); err != nil {
+			if err := c.deps.TeeStatus.ReattestBackend(attestCtx, modelID.Hex(), cfg.ApiURL); err != nil {
 				c.log.Warnf("model %s: backend TEE re-attestation failed: %s", lib.Short(modelID), err)
 			}
 			cancel()

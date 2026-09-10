@@ -76,6 +76,7 @@ type mockDeps struct {
 	adapter    aiengine.AIEngineStream
 	adapterErr error
 	teeStatus  TeeStatusProvider
+	configs    map[common.Hash]config.ModelConfig
 }
 
 // mockTeeStatus returns canned backend attestation snapshots per model and
@@ -127,6 +128,9 @@ func (m *mockDeps) GetModelNameAndTags(ctx context.Context, modelID common.Hash)
 
 func (m *mockDeps) GetAll() ([]common.Hash, []config.ModelConfig) {
 	configs := make([]config.ModelConfig, len(m.modelIDs))
+	for i, id := range m.modelIDs {
+		configs[i] = m.configs[id]
+	}
 	return m.modelIDs, configs
 }
 
@@ -810,4 +814,38 @@ func TestCheckAllBidsError(t *testing.T) {
 	// no reports should be written when the bid lookup fails, so stale
 	// results from a previous successful run are preserved
 	require.Empty(t, checker.GetReports())
+}
+
+// The provider-declared API spec (models-config apiType presets, see
+// internal/apispec) must ride the report for every configured model,
+// including one with no active bid: consumers can shape requests before a
+// session even opens.
+func TestCheckModelAttachesDeclaredApiSpec(t *testing.T) {
+	deps := &mockDeps{
+		bids:     []*structs.Bid{bidFor(modelLLM)},
+		tags:     map[common.Hash][]string{modelLLM: {"llm"}},
+		modelIDs: []common.Hash{modelLLM, modelNoBid},
+		adapter:  &mathSolvingAdapter{},
+		configs: map[common.Hash]config.ModelConfig{
+			modelLLM:   {ModelName: "qwen3-32b", ApiType: "vllm", ApiURL: "http://llm:8000/v1/chat/completions"},
+			modelNoBid: {ModelName: "llama-3.1-8b", ApiType: "ollama", ApiURL: "http://ollama:11434/v1/chat/completions"},
+		},
+	}
+
+	checker := newTestChecker(deps)
+	checker.checkAll(context.Background(), common.Address{})
+	reports := checker.GetReports()
+
+	llm := reportByID(t, reports, modelLLM)
+	require.NotNil(t, llm.Api)
+	require.Equal(t, "vllm", llm.Api.Stack)
+	require.Equal(t, "qwen3", llm.Api.ModelFamily)
+	require.Equal(t, "chat_template_kwargs.enable_thinking", llm.Api.Bindings[system.IntentReasoningDisable].Param)
+	require.NotZero(t, llm.Api.DeclaredAt)
+
+	// declared for configured models without an active bid too
+	noBid := reportByID(t, reports, modelNoBid)
+	require.Equal(t, system.ModelHealthStatusNoBid, noBid.Status)
+	require.NotNil(t, noBid.Api)
+	require.Equal(t, "ollama", noBid.Api.Stack)
 }
