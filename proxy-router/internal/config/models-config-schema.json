@@ -22,7 +22,7 @@
           },
           "apiType": {
             "title": "API Type",
-            "description": "Defines the type of API to be used with this model",
+            "description": "Defines the type of API to be used with this model. openai, vllm, sglang, llamacpp, ollama, venice, openrouter, litellm and anthropic are stack presets that select both the transport adapter and the advertised API spec; the remaining values are legacy aliases kept for backward compatibility",
             "type": "string",
             "enum": ["openai", "vllm", "sglang", "llamacpp", "ollama", "venice", "openrouter", "litellm", "anthropic", "claudeai", "prodia-sd", "prodia-sdxl", "prodia-v2", "hyperbolic-sd"]
           },

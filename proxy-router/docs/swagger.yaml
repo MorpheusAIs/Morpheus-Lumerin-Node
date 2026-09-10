@@ -71,6 +71,8 @@ definitions:
         $ref: '#/definitions/attestation.BackendAttestationStatus'
       teeType:
         $ref: '#/definitions/attestation.TEEType'
+      tlsBindingKind:
+        $ref: '#/definitions/attestation.TLSBindingKind'
       verifiedAt:
         type: string
       vmTemplateName:
@@ -96,6 +98,14 @@ definitions:
     x-enum-varnames:
     - TEETypeTDX
     - TEETypeSEV
+  attestation.TLSBindingKind:
+    enum:
+    - spki
+    - certificate
+    type: string
+    x-enum-varnames:
+    - TLSBindingSPKI
+    - TLSBindingCertificate
   authapi.AddUserReq:
     properties:
       password:
@@ -126,7 +136,7 @@ definitions:
     properties:
       allowances:
         additionalProperties:
-          $ref: '#/definitions/lib.BigInt'
+          type: string
         type: object
       isConfirmed:
         type: boolean
@@ -278,11 +288,6 @@ definitions:
         type: string
       responseAt:
         type: integer
-    type: object
-  lib.BigInt:
-    properties:
-      big.Int:
-        type: string
     type: object
   morrpcmesssage.SessionRes:
     properties:
@@ -1042,15 +1047,6 @@ definitions:
         example: 100000000
         type: integer
     type: object
-  structs.UserStakesOnHoldRes:
-    properties:
-      available:
-        example: "100000000"
-        type: string
-      hold:
-        example: "200000000"
-        type: string
-    type: object
   structs.TokenTransfer:
     properties:
       from:
@@ -1082,6 +1078,15 @@ definitions:
     properties:
       tx:
         example: "0x1234"
+        type: string
+    type: object
+  structs.UserStakesOnHoldRes:
+    properties:
+      available:
+        example: "100000000"
+        type: string
+      hold:
+        example: "200000000"
         type: string
     type: object
   system.ConfigResponse:
@@ -1117,8 +1122,48 @@ definitions:
       version:
         type: string
     type: object
+  system.ModelApiSpec:
+    properties:
+      bindings:
+        additionalProperties:
+          $ref: '#/definitions/system.ParamBinding'
+        description: |-
+          Bindings maps canonical request intents to how this backend spells them.
+          An absent intent means the backend has no way to express it.
+        type: object
+      declaredAt:
+        type: integer
+      modelFamily:
+        description: ModelFamily is the canonical model family (qwen3, deepseek-r1,
+          claude…).
+        type: string
+      parameters:
+        description: |-
+          Parameters lists standard OpenAI chat-completions params the stack
+          documents as accepted (an upper bound: server-side flags are invisible).
+        items:
+          type: string
+        type: array
+      stack:
+        description: |-
+          Stack is the serving stack / vendor preset: vllm | sglang | llamacpp |
+          ollama | venice | openrouter | litellm | anthropic | openai.
+        type: string
+      thinking:
+        allOf:
+        - $ref: '#/definitions/system.ThinkingSpec'
+        description: Thinking summarizes reasoning controllability; knobs live in
+          Bindings.
+    type: object
   system.ModelHealthReport:
     properties:
+      api:
+        allOf:
+        - $ref: '#/definitions/system.ModelApiSpec'
+        description: 'Api is the provider-declared API spec for this model (see internal/apispec):
+          serving stack preset, model family and the request-param bindings a consumer
+          needs to translate canonical fields. Derived from models-config presets
+          only — never the backend URL, key or private model string.'
       bidId:
         type: string
       errorKind:
@@ -1148,6 +1193,27 @@ definitions:
       status:
         type: string
     type: object
+  system.ParamBinding:
+    properties:
+      enumValues:
+        items:
+          type: string
+        type: array
+      hint:
+        type: string
+      kind:
+        type: string
+      param:
+        description: dotted path within the mechanism
+        type: string
+      paramType:
+        description: boolean | number | enum | string | object | array
+        type: string
+      value:
+        description: |-
+          Value is the fixed value realizing the intent (e.g. false for
+          reasoning.disable via enable_thinking). Nil for caller-supplied values.
+    type: object
   system.SetEthNodeURLReq:
     properties:
       urls:
@@ -1160,6 +1226,12 @@ definitions:
   system.StatusRes:
     properties:
       status:
+        type: string
+    type: object
+  system.ThinkingSpec:
+    properties:
+      mode:
+        description: always_on | controllable | tunable
         type: string
     type: object
   walletapi.SetupWalletMnemonicReqBody:
@@ -1462,57 +1534,6 @@ paths:
       security:
       - BasicAuth: []
       summary: Get ETH and MOR balance
-      tags:
-      - transactions
-  /blockchain/stakes/onhold:
-    get:
-      description: Get the releasable and still time-locked MOR stake for the proxy-router
-        wallet
-      parameters:
-      - default: 255
-        description: Maximum on-hold entries to inspect
-        in: query
-        maximum: 255
-        minimum: 1
-        name: iterations
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/structs.UserStakesOnHoldRes'
-      security:
-      - BasicAuth: []
-      summary: Get consumer stakes on hold
-      tags:
-      - transactions
-  /blockchain/stakes/withdraw:
-    post:
-      consumes:
-      - application/json
-      description: Claim releasable MOR stake for the proxy-router wallet
-      parameters:
-      - description: Withdrawal options; iterations defaults to 255 and accepts 1 through
-          255
-        in: body
-        name: request
-        schema:
-          properties:
-            iterations:
-              type: integer
-          type: object
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/structs.TxRes'
-      security:
-      - BasicAuth: []
-      summary: Withdraw consumer stakes on hold
       tags:
       - transactions
   /blockchain/bids:
@@ -2178,6 +2199,57 @@ paths:
       summary: Get Sessions for User
       tags:
       - sessions
+  /blockchain/stakes/onhold:
+    get:
+      description: Get the releasable and still time-locked MOR stake for the proxy-router
+        wallet
+      parameters:
+      - default: 255
+        description: Maximum on-hold entries to inspect
+        in: query
+        maximum: 255
+        minimum: 1
+        name: iterations
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.UserStakesOnHoldRes'
+      security:
+      - BasicAuth: []
+      summary: Get consumer stakes on hold
+      tags:
+      - transactions
+  /blockchain/stakes/withdraw:
+    post:
+      consumes:
+      - application/json
+      description: Claim releasable MOR stake for the proxy-router wallet
+      parameters:
+      - description: Withdrawal options; iterations defaults to 255 and accepts 1
+          through 255
+        in: body
+        name: request
+        schema:
+          properties:
+            iterations:
+              type: integer
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/structs.TxRes'
+      security:
+      - BasicAuth: []
+      summary: Withdraw consumer stakes on hold
+      tags:
+      - transactions
   /blockchain/token/supply:
     get:
       description: Get MOR token supply from blockchain

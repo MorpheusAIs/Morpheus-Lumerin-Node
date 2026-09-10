@@ -15,7 +15,8 @@ source: "docs/models-config.json.md"
 |-------|----------|-------|
 | `modelId` | yes | The on-chain model id (32-byte hex) |
 | `modelName` | yes | Human-readable name |
-| `apiType` | yes | One of `openai`, `claudeai`, `prodia-sd`, `prodia-sdxl`, `prodia-v2`, `hyperbolic-sd`, etc. |
+| `apiType` | yes | Stack preset: `openai`, `vllm`, `sglang`, `llamacpp`, `ollama`, `venice`, `openrouter`, `litellm`, `anthropic`. Legacy values (still supported): `claudeai`, `prodia-sd`, `prodia-sdxl`, `prodia-v2`, `hyperbolic-sd` |
+| `modelFamily` | optional | Canonical model family used to pick reasoning-control bindings: `qwen3`, `deepseek-v3.1`, `deepseek-r1`, `gpt-oss`, `glm`, `granite`, `seed-oss`, `nemotron`, `claude`, `o-series`, `gemini`. Inferred from `modelName` when omitted |
 | `apiUrl` | yes | Full backend URL including the endpoint path |
 | `apiKey` | optional | Backend API key (resale providers usually need this) |
 | `concurrentSlots` | optional | Distinct concurrent chats your backend can handle for **this** model |
@@ -27,6 +28,24 @@ source: "docs/models-config.json.md"
 | `parameters` | optional | Per-`apiType` extra parameters (e.g. SD `cfg_scale`, `steps`) |
 
 For the canonical per-`apiType` schema, see the JSON schema file linked above.
+
+## API presets
+
+Presets declare the backend API; the reported `api` block in `/healthcheck` is derived from them and is self-reported.
+
+**`apiType` stack presets:** `openai`, `vllm`, `sglang`, `llamacpp`, `ollama`, `venice`, `openrouter`, `litellm`, `anthropic`. Legacy values that keep working: `claudeai`, `prodia-sd`, `prodia-sdxl`, `prodia-v2`, `hyperbolic-sd`.
+
+**`modelFamily` (optional):** one of `qwen3`, `deepseek-v3.1`, `deepseek-r1`, `gpt-oss`, `glm`, `granite`, `seed-oss`, `nemotron`, `claude`, `o-series`, `gemini`. When omitted, the family is inferred from `modelName`.
+
+```json
+{
+  "modelId": "0x0000000000000000000000000000000000000000000000000000000000000008",
+  "modelName": "Qwen3-235B-A22B-Instruct",
+  "apiType": "vllm",
+  "apiUrl": "http://localhost:8000/v1/chat/completions",
+  "modelFamily": "qwen3"
+}
+```
 
 ## Examples
 
