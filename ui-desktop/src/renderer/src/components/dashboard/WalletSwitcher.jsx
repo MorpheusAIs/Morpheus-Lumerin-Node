@@ -176,6 +176,11 @@ function WalletSwitcher({ client, activeAddress, openSessionCount = 0 }) {
   const [importing, setImporting] = useState(false);
   const [importKey, setImportKey] = useState('');
   const [pendingSwitch, setPendingSwitch] = useState(null);
+  // `{ id, draft }` while a wallet is being renamed in place. Electron's
+  // Chromium does not implement `window.prompt()` — it throws — so the rename
+  // has to happen inside the menu.
+  const [renaming, setRenaming] = useState(null);
+  const renameInFlight = useRef(false);
   const ref = useRef(null);
   const context = useContext(ToastsContext);
   const queryClient = useQueryClient();
@@ -194,16 +199,26 @@ function WalletSwitcher({ client, activeAddress, openSessionCount = 0 }) {
         setOpen(false);
         setImporting(false);
         setPendingSwitch(null);
+        setRenaming(null);
       }
     };
-    const onKey = (e) => e.key === 'Escape' && setOpen(false);
+    // Escape backs out of a rename first, so a mistyped name does not also
+    // close the whole menu.
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      if (renaming) {
+        setRenaming(null);
+        return;
+      }
+      setOpen(false);
+    };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey);
     };
-  }, [open]);
+  }, [open, renaming]);
 
   const data = walletsQuery.data;
   const wallets = data?.wallets ?? [];
@@ -290,12 +305,29 @@ function WalletSwitcher({ client, activeAddress, openSessionCount = 0 }) {
     }
   };
 
-  const onRename = async (e, w) => {
+  const startRename = (e, w) => {
     e.stopPropagation();
-    const label = window.prompt('Wallet name', w.label);
-    if (!label) return;
+    setPendingSwitch(null);
+    renameInFlight.current = false;
+    setRenaming({ id: w.id, draft: w.label });
+  };
+
+  const commitRename = async () => {
+    // Enter and blur can both land on the same edit. The ref makes the commit
+    // idempotent without waiting for a re-render to clear `renaming`.
+    if (!renaming || renameInFlight.current) return;
+    renameInFlight.current = true;
+    const label = renaming.draft.trim();
+    const original = wallets.find((w) => w.id === renaming.id);
+    // Nothing to save, and an empty name would be rejected by the main process
+    // anyway — just back out rather than showing an error for a no-op.
+    if (!label || label === original?.label) {
+      setRenaming(null);
+      return;
+    }
+    setRenaming(null);
     try {
-      await client.renameWallet({ walletId: w.id, label });
+      await client.renameWallet({ walletId: renaming.id, label });
       await walletsQuery.refetch();
     } catch (err) {
       context.toast('error', err?.message || 'Failed to rename wallet');
@@ -362,7 +394,27 @@ function WalletSwitcher({ client, activeAddress, openSessionCount = 0 }) {
                 <span style={{ width: 16 }} />
               )}
               <RowText>
-                <Label>{w.label}</Label>
+                {renaming?.id === w.id ? (
+                  <Input
+                    autoFocus
+                    aria-label={`Rename ${w.label}`}
+                    maxLength={64}
+                    value={renaming.draft}
+                    style={{ margin: 0 }}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) =>
+                      setRenaming((r) => r && { ...r, draft: e.target.value })
+                    }
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === 'Enter') commitRename();
+                      if (e.key === 'Escape') setRenaming(null);
+                    }}
+                    onBlur={commitRename}
+                  />
+                ) : (
+                  <Label>{w.label}</Label>
+                )}
                 <Sub>
                   {abbreviateAddress(w.address, 6)}
                   {w.kind === 'hd' ? ` · account ${w.derivationPath}` : ' · imported'}
@@ -370,9 +422,11 @@ function WalletSwitcher({ client, activeAddress, openSessionCount = 0 }) {
               </RowText>
               {busy === w.id ? (
                 <Sub>switching…</Sub>
+              ) : renaming?.id === w.id ? (
+                <Sub>enter to save</Sub>
               ) : (
                 <>
-                  <IconBtn title="Rename" onClick={(e) => onRename(e, w)}>
+                  <IconBtn title="Rename" onClick={(e) => startRename(e, w)}>
                     <IconPencil size={14} />
                   </IconBtn>
                   {w.id !== activeId && wallets.length > 1 && (

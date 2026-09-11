@@ -30,22 +30,43 @@ const Container = styled.div`
 
 const DismissBtn = styled.button`
   position: absolute;
-  top: 0;
-  right: 0;
-  background: transparent;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  /* This was a bare 0.6-opacity glyph flush against the corner of a dark
+     panel, which read as decoration rather than a control — so error toasts
+     felt unclosable. Give it a visible chip and a real hit target. */
+  background: rgba(255, 255, 255, 0.1);
   outline: none;
   cursor: pointer;
   color: white;
   border: none;
-  padding: 16px;
+  padding: 0;
   line-height: 1;
   font-size: 16px;
   margin: 0;
-  opacity: 0.6;
+  opacity: 0.85;
   z-index: 1;
+  transition: opacity 120ms ease, background 120ms ease;
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
 
   &:hover {
     opacity: 1;
+    background: rgba(255, 255, 255, 0.22);
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.7);
+    outline-offset: 2px;
   }
 `;
 
@@ -119,6 +140,7 @@ export default class Toast extends React.Component {
         <Container type={type}>
           <DismissBtn
             type="button"
+            title="Dismiss"
             aria-label="Dismiss notification"
             onClick={this.handleDismiss}
           >

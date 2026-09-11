@@ -52,6 +52,10 @@ vi.mock('electron', async () => {
         setBounds: vi.fn(),
         setMenu: vi.fn(),
         show: vi.fn(),
+        // A modal child disables its parent on Windows. Teardown has to break
+        // the link before destroying the window, so the fixture has to model
+        // the call or the production cleanup throws.
+        setParentWindow: vi.fn(),
         isDestroyed: vi.fn(() => destroyed),
         destroy: vi.fn(() => {
           destroyed = true
@@ -91,6 +95,8 @@ function makeOwner() {
   const owner = Object.assign(new EventEmitter(), {
     webContents,
     isDestroyed: vi.fn(() => false),
+    isEnabled: vi.fn(() => true),
+    setEnabled: vi.fn(),
     isMinimized: vi.fn(() => false),
     getContentSize: vi.fn(() => [1200, 800]),
     getContentBounds: vi.fn(() => ({ x: 0, y: 0, width: 1200, height: 800 })),
@@ -456,6 +462,31 @@ describe('main-owned in-app session confirmation', () => {
     respond(pending)
     await expect(pending.promise).resolves.toBe(false)
     expectCleaned(pending)
+  })
+
+  it('releases the owner before destroying the modal child', async () => {
+    // A modal child disables its parent through EnableWindow on Windows, and
+    // `destroy()` deliberately skips the close path that would undo it. Tearing
+    // the child down first left the main window painting but deaf to every
+    // click and keystroke until the app was restarted — the "app breaks after
+    // starting a second session" report.
+    const pending = request()
+    respond(pending, true)
+    await expect(pending.promise).resolves.toBe(true)
+    const released = pending.view.setParentWindow.mock.invocationCallOrder[0]
+    const destroyed = pending.view.destroy.mock.invocationCallOrder[0]
+    expect(pending.view.setParentWindow).toHaveBeenCalledWith(null)
+    expect(released).toBeLessThan(destroyed)
+    expect(pending.owner.setEnabled).not.toHaveBeenCalled()
+  })
+
+  it('re-enables an owner the platform left disabled anyway', async () => {
+    const pending = request()
+    pending.owner.isEnabled.mockReturnValue(false)
+    respond(pending, true)
+    await expect(pending.promise).resolves.toBe(true)
+    expect(pending.owner.setEnabled).toHaveBeenCalledWith(true)
+    expect(pending.owner.webContents.focus).toHaveBeenCalled()
   })
 
   it('destroys its child without restoring focus to an owner that was destroyed', async () => {

@@ -74,8 +74,22 @@ export async function showSessionConfirmation(
         // Native objects may disappear between events. Teardown must never
         // leave the caller waiting or turn a failed cleanup into permission.
         for (const cleanup of [
+          // Sever the modal parent link BEFORE tearing the window down. On
+          // Windows a modal child disables its parent through EnableWindow,
+          // and `destroy()` deliberately skips the close path that would undo
+          // that. The result is a main window that still paints but ignores
+          // every click and keystroke until the app is restarted — which is
+          // exactly how this looked in the field after opening a session.
+          () => {
+            if (!view.isDestroyed()) view.setParentWindow(null)
+          },
           () => {
             if (!view.isDestroyed()) view.destroy()
+          },
+          // Belt and braces: if the parent was left disabled regardless, undo
+          // it directly rather than trusting the platform to have done so.
+          () => {
+            if (!owner.isDestroyed() && !owner.isEnabled()) owner.setEnabled(true)
           },
           () => {
             if (!owner.isDestroyed() && !ownerContents.isDestroyed()) ownerContents.focus()

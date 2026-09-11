@@ -46,6 +46,14 @@ export class ToastsProvider extends React.Component<
 
   timers = {};
 
+  // Toasts are grouped by type, so these are keyed by type too. `hovered`
+  // means "the cursor is on it right now"; `pinned` means "the user expanded
+  // it and asked to keep reading", which is the only reason a group should
+  // ever stop counting down on its own.
+  hovered = {};
+
+  pinned = {};
+
   addToast = (
     type: string,
     message: string,
@@ -62,12 +70,21 @@ export class ToastsProvider extends React.Component<
 
     const typeGroup = this.state.stack.find(([typeName]) => typeName === type);
 
-    if (
-      autoClose > 0 &&
-      (!typeGroup || (this.timers[type] && this.timers[type].timerId))
-    ) {
+    // A group that left the screen takes its pin with it.
+    if (!typeGroup) this.pinned[type] = false;
+
+    // Re-arm on every message unless the user pinned this group. The previous
+    // guard also required a live `timerId`, which is exactly what `pause()`
+    // clears — so once the cursor had touched an error toast, no later error
+    // could ever re-arm the timer, and `handleMouseLeave` checked the same
+    // null `timerId` and never resumed either. The error group then sat there
+    // permanently, which is the "errors just don't disappear" report.
+    if (autoClose > 0 && !this.pinned[type]) {
       this.clearTimeout(type);
-      this.timers[type] = new Timer(() => this.removeToast(type), autoClose);
+      const timer = new Timer(() => this.removeToast(type), autoClose);
+      // Don't start counting down underneath the cursor.
+      if (this.hovered[type]) timer.pause();
+      this.timers[type] = timer;
     }
 
     this.setState((state) => ({
@@ -93,6 +110,9 @@ export class ToastsProvider extends React.Component<
   }
 
   removeToast = (type) => {
+    this.clearTimeout(type);
+    this.hovered[type] = false;
+    this.pinned[type] = false;
     this.setState((state) => ({
       ...state,
       stack: state.stack.filter(([typeName]) => typeName !== type),
@@ -105,20 +125,21 @@ export class ToastsProvider extends React.Component<
 
   handleDismiss = (type) => this.removeToast(type);
 
-  handleShowMore = (type) => this.clearTimeout(type);
+  handleShowMore = (type) => {
+    this.pinned[type] = true;
+    this.clearTimeout(type);
+  };
 
   handleMouseEnter = (e) => {
     const type = e.currentTarget.dataset.type;
-    if (this.timers[type] && this.timers[type].timerId) {
-      this.timers[type].pause();
-    }
+    this.hovered[type] = true;
+    if (this.timers[type]) this.timers[type].pause();
   };
 
   handleMouseLeave = (e) => {
     const type = e.currentTarget.dataset.type;
-    if (this.timers[type] && this.timers[type].timerId) {
-      this.timers[type].resume();
-    }
+    this.hovered[type] = false;
+    if (this.timers[type] && !this.pinned[type]) this.timers[type].resume();
   };
 
   contextValue = { toast: this.addToast };
