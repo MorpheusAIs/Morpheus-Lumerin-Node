@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"time"
 
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/aiengine"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/blockchainapi"
@@ -37,6 +38,15 @@ const (
 const (
 	MORDecimals = 18
 	ETHDecimals = 18
+)
+
+const (
+	// balanceRetryAttempts is how many times the startup balance read is tried
+	// before the proxy gives up and stops.
+	balanceRetryAttempts = 5
+	// balanceRetryDelay is the delay before the second attempt. It doubles
+	// after every further failure.
+	balanceRetryDelay = 2 * time.Second
 )
 
 var (
@@ -163,7 +173,16 @@ func (p *Proxy) run(ctx context.Context, prKey lib.HexString) error {
 	}
 	p.log.Infof("Wallet address: %s", walletAddr.String())
 
-	ethBalance, morBalance, err := p.blockchainService.GetBalance(ctx)
+	// The eth node may rate-limit this read, most often because the model
+	// pre-flight in cmd/main.go has just issued one call per configured model
+	// against the same endpoint. That is transient, so retry rather than
+	// stopping the proxy.
+	var ethBalance, morBalance *big.Int
+	err = retryWithBackoff(ctx, balanceRetryAttempts, balanceRetryDelay, p.log, "balance read", func() error {
+		var err error
+		ethBalance, morBalance, err = p.blockchainService.GetBalance(ctx)
+		return err
+	})
 	if err != nil {
 		return err
 	}
@@ -322,4 +341,35 @@ func formatMOR(n *big.Int) string {
 
 func formatETH(n *big.Int) string {
 	return formatDecimal(n, ETHDecimals) + " ETH"
+}
+
+// retryWithBackoff calls fn until it returns nil, ctx is done, or attempts are
+// exhausted, doubling delay after each failure. It returns the last error from
+// fn, or ctx.Err() if the context ended first.
+func retryWithBackoff(ctx context.Context, attempts int, delay time.Duration, log lib.ILogger, what string, fn func() error) error {
+	var lastErr error
+
+	for attempt := 1; attempt <= attempts; attempt++ {
+		lastErr = fn()
+		if lastErr == nil {
+			return nil
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if attempt == attempts {
+			break
+		}
+
+		log.Warnf("%s failed, retrying (%d/%d) in %s: %s", what, attempt, attempts, delay, lastErr)
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(delay):
+		}
+		delay *= 2
+	}
+
+	return fmt.Errorf("%s failed after %d attempts: %w", what, attempts, lastErr)
 }
