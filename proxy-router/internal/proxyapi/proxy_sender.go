@@ -2,7 +2,6 @@ package proxyapi
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/json"
@@ -13,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -563,11 +561,26 @@ func (p *ProxyServiceSender) GetAgentTools(ctx context.Context, sessionID common
 	return string(decryptedResponse), nil
 }
 
+const (
+	// Time allowed to establish the TCP connection to a provider.
+	TIMEOUT_TO_ESTABLISH_CONNECTION = time.Second * 3
+	// Time allowed to write the request once connected.
+	TIMEOUT_TO_WRITE_REQUEST = time.Second * 5
+	// Time allowed for the provider to return a complete response.
+	//
+	// Previously there was NO read deadline at all: only the dial was bounded.
+	// A provider that accepted the TCP connection and then went silent (half
+	// open connection, wedged process, blackholing firewall) left Decode()
+	// blocked forever. The consumer-side spinner span indefinitely with no
+	// error and no way to recover short of restarting the router — a very
+	// common "the app just hangs" report.
+	TIMEOUT_TO_READ_RESPONSE = time.Second * 30
+)
+
 func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage) (*msgs.RpcResponse, int, error) {
 	// TODO: enable request-response matching by using requestID
 	// TODO: add context cancellation
 
-	TIMEOUT_TO_ESTABLISH_CONNECTION := time.Second * 3
 	dialer := net.Dialer{Timeout: TIMEOUT_TO_ESTABLISH_CONNECTION}
 
 	conn, err := dialer.Dial("tcp", url)
@@ -584,6 +597,10 @@ func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage)
 		p.log.Errorf("%s", err)
 		return nil, http.StatusInternalServerError, err
 	}
+
+	if err := conn.SetWriteDeadline(time.Now().Add(TIMEOUT_TO_WRITE_REQUEST)); err != nil {
+		p.log.Warnf("failed to set write deadline: %s", err)
+	}
 	_, err = conn.Write(msgJSON)
 	if err != nil {
 		err = lib.WrapError(ErrWriteProvider, err)
@@ -592,12 +609,22 @@ func (p *ProxyServiceSender) rpcRequest(url string, rpcMessage *msgs.RPCMessage)
 	}
 
 	// read response
+	if err := conn.SetReadDeadline(time.Now().Add(TIMEOUT_TO_READ_RESPONSE)); err != nil {
+		p.log.Warnf("failed to set read deadline: %s", err)
+	}
+
 	reader := bufio.NewReader(conn)
 	d := json.NewDecoder(reader)
 
 	var msg *msgs.RpcResponse
 	err = d.Decode(&msg)
 	if err != nil {
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+			err = lib.WrapError(ErrConnectProvider,
+				fmt.Errorf("provider did not respond within %s", TIMEOUT_TO_READ_RESPONSE))
+			p.log.Warnf("%s", err)
+			return nil, http.StatusGatewayTimeout, err
+		}
 		err = lib.WrapError(ErrDecode, err)
 		p.log.Errorf("%s", err)
 		return nil, http.StatusBadRequest, err
@@ -811,7 +838,9 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 ) (interface{}, int, int, int, error) {
 	log := p.log.With("request_id", lib.RequestIDFromContext(ctx))
 
-	const TIMEOUT_TO_ESTABLISH_CONNECTION = time.Second * 3
+	// Uses the package-level TIMEOUT_TO_ESTABLISH_CONNECTION; the local const
+	// that used to shadow it here has been removed so both call sites stay in
+	// step if the dial budget is ever retuned.
 
 	timeoutPerAttempt := p.cnodePnodeTimeout
 	maxRetries := p.cnodePnodeMaxRetries
@@ -1221,63 +1250,10 @@ func (p *ProxyServiceSender) handleEmbeddings(aiResponse []byte, responses []int
 	return nil, 0, false, lib.WrapError(ErrInvalidResponse, fmt.Errorf("unknown embeddings response format"))
 }
 
-// checkProviderAvailability checks if the provider is alive using portchecker.io API
+// checkProviderAvailability preserves the current behavior while the external
+// availability probe is disabled: a connected provider is treated as alive.
 func checkProviderAvailability(url string) (bool, error) {
 	return true, nil
-	host, port, err := net.SplitHostPort(url)
-	if err != nil {
-		return false, err
-	}
-
-	portInt, err := strconv.Atoi(port)
-	if err != nil {
-		return false, err
-	}
-
-	requestBody, err := json.Marshal(map[string]interface{}{
-		"host":  host,
-		"ports": []int{portInt},
-	})
-	if err != nil {
-		return false, err
-	}
-
-	req, err := http.NewRequest("POST", "https://portchecker.io/api/v1/query", bytes.NewBuffer(requestBody))
-	if err != nil {
-		return false, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return false, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return false, err
-	}
-
-	var response struct {
-		Check []struct {
-			Status bool `json:"status"`
-			Port   int  `json:"port"`
-		} `json:"check"`
-	}
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		return false, err
-	}
-
-	for _, check := range response.Check {
-		if check.Port == portInt {
-			return check.Status, nil
-		}
-	}
-
-	return false, fmt.Errorf("port status not found in response")
 }
 
 // SendAudioTranscriptionStreamV2 sends audio transcription using streaming chunks to avoid memory issues with large files

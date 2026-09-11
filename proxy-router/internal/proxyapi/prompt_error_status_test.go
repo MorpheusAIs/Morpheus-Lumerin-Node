@@ -20,6 +20,9 @@ type stubAdapter struct {
 }
 
 func (s *stubAdapter) Prompt(ctx context.Context, prompt *gsc.OpenAICompletionRequestExtra, cb gsc.CompletionCallback) error {
+	if s.errResp == nil {
+		return nil
+	}
 	return cb(ctx, nil, s.errResp)
 }
 
@@ -38,7 +41,10 @@ func (s *stubAdapter) Embeddings(ctx context.Context, prompt *gsc.EmbeddingsRequ
 func (s *stubAdapter) ApiType() string { return "openai" }
 
 type stubAIEngine struct {
-	adapter aiengine.AIEngineStream
+	adapter         aiengine.AIEngineStream
+	getAdapterCalls int
+	storeContext    bool
+	forwardContext  bool
 }
 
 func (s *stubAIEngine) GetLocalModels() ([]aiengine.LocalModel, error) { return nil, nil }
@@ -50,6 +56,9 @@ func (s *stubAIEngine) GetAgentTools(ctx context.Context, sessionID, agentID com
 	return nil, nil
 }
 func (s *stubAIEngine) GetAdapter(ctx context.Context, chatID, modelID, sessionID common.Hash, storeContext, forwardContext bool) (aiengine.AIEngineStream, error) {
+	s.getAdapterCalls++
+	s.storeContext = storeContext
+	s.forwardContext = forwardContext
 	return s.adapter, nil
 }
 
@@ -103,5 +112,65 @@ func TestPromptDefaultsTo400WhenStatusUnknown(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestPromptHistoryHeaderControlsRequestContext(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name            string
+		header          string
+		storeDefault    bool
+		forwardDefault  bool
+		wantStore       bool
+		wantForward     bool
+		wantStatus      int
+		wantAdapterCall bool
+	}{
+		{name: "missing preserves defaults", storeDefault: true, forwardDefault: true, wantStore: true, wantForward: true, wantStatus: http.StatusOK, wantAdapterCall: true},
+		{name: "default preserves defaults", header: "default", storeDefault: true, forwardDefault: false, wantStore: true, wantForward: false, wantStatus: http.StatusOK, wantAdapterCall: true},
+		{name: "on cannot override disabled server policy", header: "on", storeDefault: false, forwardDefault: false, wantStore: false, wantForward: false, wantStatus: http.StatusOK, wantAdapterCall: true},
+		{name: "off disables storage and forwarding", header: "off", storeDefault: true, forwardDefault: true, wantStore: false, wantForward: false, wantStatus: http.StatusOK, wantAdapterCall: true},
+		{name: "off is case insensitive", header: " OFF ", storeDefault: true, forwardDefault: true, wantStore: false, wantForward: false, wantStatus: http.StatusOK, wantAdapterCall: true},
+		{name: "invalid value is rejected", header: "false", storeDefault: true, forwardDefault: true, wantStatus: http.StatusBadRequest, wantAdapterCall: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			engine := &stubAIEngine{adapter: &stubAdapter{}}
+			controller := &ProxyController{
+				aiEngine:           engine,
+				log:                &lib.LoggerMock{},
+				storeChatContext:   tt.storeDefault,
+				forwardChatContext: tt.forwardDefault,
+			}
+
+			w := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(w)
+			ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions",
+				strings.NewReader(`{"messages":[{"role":"user","content":"hello"}]}`))
+			ctx.Request.Header.Set("Content-Type", "application/json")
+			if tt.header != "" {
+				ctx.Request.Header.Set("x-morpheus-history", tt.header)
+			}
+
+			controller.Prompt(ctx)
+
+			if w.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d; body = %s", w.Code, tt.wantStatus, w.Body.String())
+			}
+			if got := engine.getAdapterCalls > 0; got != tt.wantAdapterCall {
+				t.Errorf("adapter called = %t, want %t", got, tt.wantAdapterCall)
+			}
+			if tt.wantAdapterCall {
+				if engine.storeContext != tt.wantStore {
+					t.Errorf("storeContext = %t, want %t", engine.storeContext, tt.wantStore)
+				}
+				if engine.forwardContext != tt.wantForward {
+					t.Errorf("forwardContext = %t, want %t", engine.forwardContext, tt.wantForward)
+				}
+			}
+		})
 	}
 }

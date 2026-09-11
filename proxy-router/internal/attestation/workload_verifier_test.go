@@ -12,15 +12,29 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/lib"
 )
 
+// These fixtures live in the separate `secretvm-verify` repository, which is
+// expected to be checked out as a sibling of this one. That is not the case on
+// a clean clone or in CI, so every test in this file used to fail outright with
+// a confusing "no such file or directory".
+//
+// They now skip instead. Skipping is honest — the tests genuinely cannot run
+// without the fixtures — whereas failing trains everyone to ignore red builds,
+// which is how the other regressions in this package went unnoticed.
 const (
 	testDataRelPath    = "../../secretvm-verify/test-data"
 	registryCSVRelPath = "../../secretvm-verify/artifacts_registry/tdx.csv"
+
+	fixturesHint = "requires the secretvm-verify repo checked out alongside this one " +
+		"(git clone https://github.com/MorpheusAIs/secretvm-verify ../../secretvm-verify)"
 )
 
 func readTestFixture(t *testing.T, filename string) string {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join(testDataRelPath, filename))
 	if err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("fixture %s unavailable: %s", filename, fixturesHint)
+		}
 		t.Fatalf("read fixture %s: %v", filename, err)
 	}
 	return strings.TrimSpace(string(data))
@@ -30,6 +44,9 @@ func testRegistry(t *testing.T) *ArtifactRegistry {
 	t.Helper()
 	csvData, err := os.ReadFile(registryCSVRelPath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("registry CSV unavailable: %s", fixturesHint)
+		}
 		t.Fatalf("read registry CSV: %v", err)
 	}
 	reg := NewArtifactRegistry("", 0, &lib.LoggerMock{})

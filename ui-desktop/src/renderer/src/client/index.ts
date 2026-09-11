@@ -15,7 +15,7 @@ const createClient = function (createStore) {
 
   const store = createStore(reduxDevtoolsOptions);
 
-  const onUIReady = (_ev, payload) => {
+  const onUIReady = (payload) => {
     const debounceTime = get(
       payload,
       'data.config.statePersistanceDebounce',
@@ -64,6 +64,51 @@ const createClient = function (createStore) {
   const copyToClipboard = (text) =>
     Promise.resolve(window.copyToClipboard(text));
 
+  const chatCompletion = async (payload) => {
+    const requestId = window.crypto.randomUUID();
+    let streamController;
+    let settled = false;
+    let unsubscribe = () => {};
+    const body = new ReadableStream({
+      start(controller) {
+        streamController = controller;
+        unsubscribe = window.chatStream.onEvent(requestId, (event) => {
+          if (settled) return;
+          if (event.kind === 'chunk') {
+            const binary = window.atob(event.dataBase64);
+            const chunk = new Uint8Array(binary.length);
+            for (let index = 0; index < binary.length; index += 1) {
+              chunk[index] = binary.charCodeAt(index);
+            }
+            controller.enqueue(chunk);
+            return;
+          }
+          settled = true;
+          unsubscribe();
+          if (event.kind === 'error')
+            controller.error(new Error(event.message));
+          else controller.close();
+        });
+      },
+      cancel() {
+        if (settled) return;
+        settled = true;
+        unsubscribe();
+        window.chatStream.cancel(requestId);
+      },
+    });
+
+    try {
+      const metadata = await window.chatStream.start(requestId, payload);
+      return { ...metadata, body };
+    } catch (error) {
+      settled = true;
+      unsubscribe();
+      streamController?.error(error);
+      throw error;
+    }
+  };
+
   const lockSendTransaction = () => {
     store.dispatch({
       type: 'allow-send-transaction',
@@ -98,46 +143,42 @@ const createClient = function (createStore) {
   };
 
   const forwardedMethods = {
-    refreshAllTransactions: utils.forwardToMainProcess(
-      'refresh-all-transactions',
-      120000,
+    // Main allows two 5s wallet reads and two 15s setup writes. Leave room for
+    // their decided result and the local password commit instead of failing at 10s.
+    onOnboardingCompleted: utils.forwardToMainProcess(
+      'onboarding-completed',
+      60000,
     ),
-    refreshAllContracts: utils.forwardToMainProcess(
-      'refresh-all-contracts',
-      120000,
-    ),
-    onOnboardingCompleted: utils.forwardToMainProcess('onboarding-completed'),
     suggestAddresses: utils.forwardToMainProcess('suggest-addresses'),
-    getTokenGasLimit: utils.forwardToMainProcess('get-token-gas-limit'),
     validatePassword: utils.forwardToMainProcess('validate-password'),
     changePassword: utils.forwardToMainProcess('change-password'),
     onLoginSubmit: utils.forwardToMainProcess('login-submit'),
-    createContract: utils.forwardToMainProcess('create-contract', 750000),
-    purchaseContract: utils.forwardToMainProcess('purchase-contract', 750000),
-    editContract: utils.forwardToMainProcess('edit-contract', 750000),
-    cancelContract: utils.forwardToMainProcess('cancel-contract', 750000),
-    setDeleteContractStatus: utils.forwardToMainProcess(
-      'set-delete-contract-status',
-      750000,
-    ),
-    getPastTransactions: utils.forwardToMainProcess(
-      'get-past-transactions',
-      750000,
-    ),
-    sendLmr: utils.forwardToMainProcess('send-lmr', 750000),
-    sendEth: utils.forwardToMainProcess('send-eth', 750000),
+    // Transfers.
+    //
+    // These must comfortably EXCEED the proxy-router's own mining timeout
+    // (lib.DefaultTxMineTimeout, currently 1 minute) — SendMOR/SendETH block on
+    // WaitMinedWithTimeout, so the backend can legitimately take that long
+    // before answering. An equal timeout on this side is a race: we would
+    // report "Operation timed out" for a transaction that was broadcast and is
+    // still mining, and the obvious user reaction is to send again. 90s leaves
+    // the backend room to return its own success or timeout first, so the UI
+    // always reflects a decided outcome.
+    sendMor: utils.forwardToMainProcess('send-mor', 90000),
+    sendEth: utils.forwardToMainProcess('send-eth', 90000),
+    // Chat attachments. A large document can take a while to validate and
+    // extract even though it crosses IPC as bounded binary, not base64.
+    parseAttachment: utils.forwardToMainProcess('parse-attachment', 120000),
+    // Multi-wallet. Switching restarts the proxy-router's session machinery,
+    // so it gets a longer budget than a plain read.
+    getWallets: utils.forwardToMainProcess('get-wallets', 20000),
+    addHdWallet: utils.forwardToMainProcess('add-hd-wallet', 30000),
+    importWallet: utils.forwardToMainProcess('import-wallet', 20000),
+    switchWallet: utils.forwardToMainProcess('switch-wallet', 45000),
+    removeWallet: utils.forwardToMainProcess('remove-wallet', 20000),
+    renameWallet: utils.forwardToMainProcess('rename-wallet', 20000),
     clearCache: utils.forwardToMainProcess('clear-cache'),
     handleClientSideError: utils.forwardToMainProcess('handle-client-error'),
-    startDiscovery: utils.forwardToMainProcess('start-discovery'),
-    stopDiscovery: utils.forwardToMainProcess('stop-discovery'),
-    setMinerPool: utils.forwardToMainProcess('set-miner-pool'),
-    getLmrTransferGasLimit: utils.forwardToMainProcess(
-      'get-lmr-transfer-gas-limit',
-    ),
     logout: utils.forwardToMainProcess('logout'),
-    getLocalIp: utils.forwardToMainProcess('get-local-ip'),
-    getPoolAddress: utils.forwardToMainProcess('get-pool-address'),
-    getPrivateKey: utils.forwardToMainProcess('get-private-key'),
     getProxyRouterSettings: utils.forwardToMainProcess(
       'get-proxy-router-settings',
     ),
@@ -150,8 +191,11 @@ const createClient = function (createStore) {
     saveProxyRouterSettings: utils.forwardToMainProcess(
       'save-proxy-router-settings',
     ),
-    getMarketplaceFee: utils.forwardToMainProcess('get-marketplace-fee'),
-    claimFaucet: utils.forwardToMainProcess('claim-faucet', 750000),
+    // NOTE: `get-marketplace-fee` and `claim-faucet` were removed here — neither
+    // had a handler registered in the main process, so calling them hung until
+    // the timeout and then failed with a generic "Operation timed out". Nothing
+    // in the UI referenced them. If a faucet is reintroduced, register the IPC
+    // channel in src/main/src/client/subscriptions/index.ts at the same time.
     getCustomEnvValues: utils.forwardToMainProcess('get-custom-env-values'),
     setCustomEnvValues: utils.forwardToMainProcess('set-custom-env-values'),
     getProfitSettings: utils.forwardToMainProcess('get-profit-settings'),
@@ -160,8 +204,44 @@ const createClient = function (createStore) {
     setAutoAdjustPriceData: utils.forwardToMainProcess('set-auto-adjust-price'),
     getContractHashrate: utils.forwardToMainProcess('get-contract-hashrate'),
     // API Gateway
-    getAuthHeaders: utils.forwardToMainProcess('get-auth-headers'),
-    getAllModels: utils.forwardToMainProcess('get-all-models'),
+    // A cold full-registry read can legitimately exceed the generic 10s IPC
+    // budget. Chat still needs the full list, so let the backend finish once
+    // instead of timing out and immediately duplicating the same chain scan.
+    getAllModels: utils.forwardToMainProcess('get-all-models', 120000),
+    getModelsPage: utils.forwardToMainProcess('get-models-page', 30000),
+    getProviders: utils.forwardToMainProcess('get-providers'),
+    getLocalModels: utils.forwardToMainProcess('get-local-models'),
+    getNodeConfig: utils.forwardToMainProcess('get-node-config'),
+    updateEthNode: utils.forwardToMainProcess('update-eth-node'),
+    getSessionsByUser: utils.forwardToMainProcess(
+      'get-sessions-by-user',
+      120000,
+    ),
+    getBidsByModel: utils.forwardToMainProcess('get-bids-by-model', 120000),
+    getBidInfo: utils.forwardToMainProcess('get-bid-info'),
+    closeSession: utils.forwardToMainProcess('close-session', 120000),
+    openSession: utils.forwardToMainProcess('open-session', 120000),
+    getSessionsByProvider: utils.forwardToMainProcess(
+      'get-sessions-by-provider',
+      120000,
+    ),
+    getProviderClaimableBalance: utils.forwardToMainProcess(
+      'get-provider-claimable-balance',
+    ),
+    claimProviderFunds: utils.forwardToMainProcess(
+      'claim-provider-funds',
+      120000,
+    ),
+    chatCompletion,
+    selectIpfsDownloadFolder: () => window.ipfsDownload.selectFolder(),
+    startIpfsDownload: ({ requestId, folderToken, cidHash }) =>
+      window.ipfsDownload.start(requestId, folderToken, cidHash),
+    cancelIpfsDownload: ({ requestId }) =>
+      window.ipfsDownload.cancel(requestId),
+    onIpfsDownloadEvent: ({ requestId, listener }) =>
+      window.ipfsDownload.onEvent(requestId, listener),
+    synthesizeSpeech: utils.forwardToMainProcess('synthesize-speech', 330000),
+    transcribeAudio: utils.forwardToMainProcess('transcribe-audio', 330000),
 
     getTransactions: utils.forwardToMainProcess('get-transactions'),
     getBalances: utils.forwardToMainProcess('get-balances'),
@@ -195,17 +275,11 @@ const createClient = function (createStore) {
 
     // IPFS
     getIpfsVersion: utils.forwardToMainProcess('get-ipfs-version', 750000),
-    getIpfsFile: utils.forwardToMainProcess('get-ipfs-file', null),
     pinIpfsFile: utils.forwardToMainProcess('pin-ipfs-file', 750000),
     unpinIpfsFile: utils.forwardToMainProcess('unpin-ipfs-file', 750000),
     addFileToIpfs: utils.forwardToMainProcess('add-file-to-ipfs', 750000),
     getIpfsPinnedFiles: utils.forwardToMainProcess(
       'get-ipfs-pinned-files',
-      750000,
-    ),
-
-    openSelectFolderDialog: utils.forwardToMainProcess(
-      'open-select-folder-dialog',
       750000,
     ),
 

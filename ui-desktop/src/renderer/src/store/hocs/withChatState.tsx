@@ -3,18 +3,8 @@ import { connect } from 'react-redux';
 import { withClient } from './clientContext';
 import { ToastsContext } from '../../components/toasts';
 import selectors from '../selectors';
-import {
-  getSessionsByUser,
-  getBidsByModelId,
-  getBidInfoById,
-} from '../utils/apiCallsHelper';
+import { explainChainError } from '../utils/chainErrors';
 import { ApiGateway } from 'src/main/src/client/apiGateway';
-
-const AvailabilityStatus = {
-  available: 'available',
-  unknown: 'unknown',
-  disconnected: 'disconnected',
-};
 
 export interface ContainerProps {
   client: ApiGateway;
@@ -29,7 +19,7 @@ export interface ContainerProps {
 }
 
 // WrappedComponent receives `ContainerProps` plus all the helper props the HOC
-// injects (getProviders, onOpenSession, etc.) — typed loosely as `any` because
+// injects (onOpenSession, getBidsByModelId, etc.) — typed loosely as `any` because
 // the container builds them dynamically and individual consumers refine them
 // in their own prop types.
 const withChatState = (WrappedComponent: ComponentType<any>) => {
@@ -41,35 +31,10 @@ const withChatState = (WrappedComponent: ComponentType<any>) => {
       WrappedComponent.displayName || WrappedComponent.name
     })`;
 
-    getProviders = async () => {
-      try {
-        const authHeaders = await this.props.client.getAuthHeaders();
-        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/providers`;
-        const response = await fetch(path, {
-          headers: authHeaders,
-        });
-        const data = await response.json();
-        if (data.error) {
-          console.error(data.error);
-          return [];
-        }
-        return data.providers;
-      } catch (e) {
-        console.log('Error', e);
-        return [];
-      }
-    };
-
     closeSession = async (sessionId: string) => {
       this.context.toast('info', 'Closing...');
       try {
-        const authHeaders = await this.props.client.getAuthHeaders();
-        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions/${sessionId}/close`;
-        const response = await fetch(path, {
-          method: 'POST',
-          headers: authHeaders,
-        });
-        const data = await response.json();
+        const data = await this.props.client.closeSession({ sessionId });
         if (data.error) {
           this.context.toast('error', 'Session not closed');
           throw new Error(data.error);
@@ -84,125 +49,11 @@ const withChatState = (WrappedComponent: ComponentType<any>) => {
     };
 
     getAllModels = async () => {
-      try {
-        const authHeaders = await this.props.client.getAuthHeaders();
-        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/models`;
-        const response = await fetch(path, {
-          headers: authHeaders,
-          method: 'GET',
-        });
-        const data = await response.json();
-        if (data.error) {
-          console.error(data.error);
-          return [];
-        }
-        return data.models;
-      } catch (e) {
-        console.log('Error', e);
-        return [];
-      }
+      return (await this.props.client.getAllModels()) || [];
     };
 
     getLocalModels = async () => {
-      try {
-        const authHeaders = await this.props.client.getAuthHeaders();
-        const path = `${this.props.config.chain.localProxyRouterUrl}/v1/models`;
-        const response = await fetch(path, {
-          headers: authHeaders,
-        });
-        if (!response.ok) {
-          return [];
-        }
-        return await response.json();
-      } catch (e) {
-        console.log('Error', e);
-        return [];
-      }
-    };
-
-    getModelsData = async () => {
-      const [localModels, modelsResp, providersResp, meta, userBalances] =
-        await Promise.all([
-          this.getLocalModels(),
-          this.getAllModels(),
-          this.getProviders(),
-          this.getMetaInfo(),
-          this.getBalances(),
-        ]);
-
-      const models = modelsResp.filter((m) => !m.IsDeleted);
-      const providers = providersResp.filter((m) => !m.IsDeleted);
-
-      const result = [
-        ...localModels.map((m) => ({ ...m, isLocal: true })),
-        ...models,
-      ];
-
-      return { models: result, providers, meta, userBalances };
-    };
-
-    getProvidersAvailability = async (providers) => {
-      const isValidUrl = (url) => {
-        const urlRegex =
-          /^(https?:\/\/)?(([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|localhost)|(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}))(:\d{1,5})?(\/\S*)?$/;
-        return urlRegex.test(url);
-      };
-
-      const availabilityResults = await Promise.all(
-        providers.map(async (p) => {
-          try {
-            const recordString = localStorage.getItem(p.Address);
-            const storedRecord = recordString && JSON.parse(recordString);
-            if (
-              storedRecord &&
-              storedRecord.status == AvailabilityStatus.available
-            ) {
-              const lastUpdatedAt = new Date(storedRecord.time);
-              const cacheMinutes = 15;
-              const timestampBefore = new Date(
-                new Date().getTime() - cacheMinutes * 60 * 1000,
-              );
-
-              if (lastUpdatedAt > timestampBefore) {
-                return { ...storedRecord, id: p.Address };
-              }
-            }
-
-            if (!isValidUrl(p.Endpoint)) {
-              return {
-                id: p.Address,
-                status: AvailabilityStatus.disconnected,
-                time: new Date(),
-              };
-            }
-
-            const isValid = await this.props.client.checkProviderConnectivity({
-              endpoint: p.Endpoint,
-              address: p.Address,
-            });
-
-            const record = {
-              id: p.Address,
-              status: isValid
-                ? AvailabilityStatus.available
-                : AvailabilityStatus.disconnected,
-              time: new Date(),
-            };
-            localStorage.setItem(
-              record.id,
-              JSON.stringify({ status: record.status, time: record.time }),
-            );
-            return record;
-          } catch (e) {
-            return {
-              id: p.Address,
-              status: AvailabilityStatus.unknown,
-              time: new Date(),
-            };
-          }
-        }),
-      );
-      return availabilityResults;
+      return (await this.props.client.getLocalModels()) || [];
     };
 
     getMetaInfo = async () => {
@@ -218,12 +69,7 @@ const withChatState = (WrappedComponent: ComponentType<any>) => {
         return;
       }
 
-      const authHeaders = await this.props.client.getAuthHeaders();
-      return await getSessionsByUser(
-        this.props.config.chain.localProxyRouterUrl,
-        user,
-        authHeaders,
-      );
+      return await this.props.client.getSessionsByUser({ user });
     };
 
     getBidInfo = async (id) => {
@@ -231,12 +77,7 @@ const withChatState = (WrappedComponent: ComponentType<any>) => {
         return;
       }
 
-      const authHeaders = await this.props.client.getAuthHeaders();
-      return await getBidInfoById(
-        this.props.config.chain.localProxyRouterUrl,
-        id,
-        authHeaders,
-      );
+      return await this.props.client.getBidInfo({ id });
     };
 
     getBidsByModelId = async (modelId) => {
@@ -244,48 +85,52 @@ const withChatState = (WrappedComponent: ComponentType<any>) => {
         return;
       }
 
-      const authHeaders = await this.props.client.getAuthHeaders();
-      const bids = await getBidsByModelId(
-        this.props.config.chain.localProxyRouterUrl,
-        modelId,
-        authHeaders,
-      );
+      const bids = await this.props.client.getBidsByModel({ modelId });
       return (bids ?? [])
         .filter((b) => +b.DeletedAt === 0)
         .filter((b) => b.Provider != this.props.address);
     };
 
     onOpenSession = async ({ modelId, duration, isDirectPay = false }) => {
-      this.context.toast('info', 'Processing...');
+      this.context.toast('info', 'Checking and opening session…');
       try {
         const failoverSettings = await this.props.client.getFailoverSetting();
 
-        const authHeaders = await this.props.client.getAuthHeaders();
-        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/models/${modelId}/session`;
-        const body = {
+        const dataResponse = await this.props.client.openSession({
+          modelId,
           failover: failoverSettings?.isEnabled || false,
-          sessionDuration: +duration, // convert to seconds
+          duration: +duration,
           directPayment: isDirectPay,
-        };
-        const response = await fetch(path, {
-          method: 'POST',
-          body: JSON.stringify(body),
-          headers: authHeaders,
         });
-        const dataResponse = await response.json();
-        if (!response.ok) {
+        if (dataResponse?.existingSessionID) {
           this.context.toast(
-            'error',
-            `Failed to open session: "${dataResponse.error}"`,
+            'info',
+            'An open session already exists. Resuming it instead.',
           );
-          console.log('Failed initiate session', dataResponse);
+          return { existingSessionID: dataResponse.existingSessionID };
+        }
+        if (dataResponse?.error) {
+          // The proxy-router nests its failures several layers deep
+          // ("failed to send transaction: open session failed: failed to send
+          // transaction: <real cause>"). Surfacing that verbatim told the user
+          // nothing, and hid the fact that the two most common causes — no ETH
+          // for gas, and a read-only RPC endpoint — need completely different
+          // fixes.
+          const { message, hint } = explainChainError(dataResponse.error);
+          this.context.toast('error', hint ? `${message} ${hint}` : message, {
+            autoClose: 15000,
+          });
+          console.error('Failed to initiate session:', dataResponse.error);
           return;
         }
         this.context.toast('success', 'Session successfully created');
         return dataResponse.sessionID;
       } catch (e) {
         console.error(e);
-        this.context.toast('error', 'Failed to open session');
+        const { message, hint } = explainChainError(e);
+        this.context.toast('error', hint ? `${message} ${hint}` : message, {
+          autoClose: 15000,
+        });
         return;
       }
     };
@@ -297,12 +142,11 @@ const withChatState = (WrappedComponent: ComponentType<any>) => {
     render() {
       return (
         <WrappedComponent
-          getProviders={this.getProviders}
-          getProvidersAvailability={this.getProvidersAvailability}
+          getAllModels={this.getAllModels}
+          getLocalModels={this.getLocalModels}
           getBidInfo={this.getBidInfo}
           getMetaInfo={this.getMetaInfo}
           getBidsByModelId={this.getBidsByModelId}
-          getModelsData={this.getModelsData}
           getSessionsByUser={this.getSessionsByUser}
           closeSession={this.closeSession}
           onOpenSession={this.onOpenSession}

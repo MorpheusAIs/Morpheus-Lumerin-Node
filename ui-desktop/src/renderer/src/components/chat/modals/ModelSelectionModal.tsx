@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import styled, { keyframes } from 'styled-components';
 
 const spin = keyframes`
@@ -16,10 +16,24 @@ import {
   IconWorld,
   IconShieldLock,
   IconInfoCircle,
+  IconEye,
+  IconSparkles,
+  IconLoader2,
+  IconArrowLeft,
 } from '@tabler/icons-react';
 import Modal from '../../contracts/modals/Modal';
 import ModelRow from './ModelRow';
-import { isSecureModel, SECURE_MODE_INFO } from '../utils';
+import {
+  getModelModality,
+  isCoworkCandidate,
+  isSecureModel,
+  SECURE_MODE_INFO,
+} from '../utils';
+import { getVisionCapability } from '../../../store/utils/attachments';
+import {
+  normalizeModelList,
+  normalizeModelTags,
+} from '../../../store/utils/modelMetadata';
 
 /* The shared outer modal `Body` (in CreateContractModal.styles) bakes in
    `padding: 5rem` and never sets `overflow: hidden`, so an `auto`-height box
@@ -55,6 +69,40 @@ const Header = styled.div`
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 `;
 
+/* The close X is a small unlabelled glyph in the far corner. Backing out of
+   the picker is the most common non-pick action, so it gets a real, labelled
+   control of its own. */
+const BackBtn = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 1.1rem;
+  padding: 4px 11px 4px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 1.15rem;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(255, 255, 255, 0.16);
+    color: rgba(255, 255, 255, 0.95);
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba(32, 220, 142, 0.5);
+    outline-offset: 2px;
+  }
+`;
+
 const TitleRow = styled.div`
   display: flex;
   align-items: baseline;
@@ -83,7 +131,9 @@ const SearchWrapper = styled.div`
     border-radius: 8px;
     overflow: hidden;
     border: 1px solid rgba(255, 255, 255, 0.06);
-    transition: border-color 0.15s ease, background 0.15s ease;
+    transition:
+      border-color 0.15s ease,
+      background 0.15s ease;
   }
 
   .input-group:focus-within {
@@ -113,6 +163,22 @@ const FilterRow = styled.div`
   margin-top: 1.2rem;
 `;
 
+const CoworkCandidateHint = styled.div`
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 0.9rem;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 1.05rem;
+  line-height: 1.45;
+
+  svg {
+    flex: 0 0 auto;
+    margin-top: 1px;
+    color: ${(p) => p.theme.colors.morMain};
+  }
+`;
+
 const FilterPill = styled.button<{ $active: boolean }>`
   display: inline-flex;
   align-items: center;
@@ -121,9 +187,7 @@ const FilterPill = styled.button<{ $active: boolean }>`
   border-radius: 999px;
   border: 1px solid
     ${(p) =>
-      p.$active
-        ? 'rgba(32, 220, 142, 0.5)'
-        : 'rgba(255, 255, 255, 0.08)'};
+      p.$active ? 'rgba(32, 220, 142, 0.5)' : 'rgba(255, 255, 255, 0.08)'};
   background: ${(p) =>
     p.$active ? 'rgba(32, 220, 142, 0.14)' : 'rgba(255, 255, 255, 0.03)'};
   color: ${(p) =>
@@ -132,7 +196,10 @@ const FilterPill = styled.button<{ $active: boolean }>`
   font-weight: 500;
   letter-spacing: 0.2px;
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
 
   &:hover {
     background: ${(p) =>
@@ -165,7 +232,9 @@ const Body = styled.div`
 
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
-  &::-webkit-scrollbar { width: 6px; }
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
   &::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.12);
     border-radius: 3px;
@@ -173,7 +242,9 @@ const Body = styled.div`
 `;
 
 const Section = styled.section`
-  & + & { margin-top: 1.8rem; }
+  & + & {
+    margin-top: 1.8rem;
+  }
 `;
 
 const SectionLabel = styled.div`
@@ -246,33 +317,38 @@ const EmptyState = styled.div`
   font-size: 1.35rem;
   line-height: 1.5;
 
-  svg { opacity: 0.4; margin-bottom: 1rem; }
-`;
-
-const BidsLoadingHint = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 1rem;
-  font-size: 1.1rem;
-  color: rgba(255, 255, 255, 0.5);
-
-  &::before {
-    content: '';
-    width: 12px;
-    height: 12px;
-    border: 2px solid rgba(255, 255, 255, 0.25);
-    border-top-color: ${(p) => p.theme.colors.morMain};
-    border-radius: 50%;
-    animation: ${spin} 0.7s linear infinite;
+  svg {
+    opacity: 0.4;
+    margin-bottom: 1rem;
   }
 `;
 
-type FilterId = 'all' | 'llm' | 'embeddings' | 'tts' | 'stt' | 'local' | 'tee';
+const LoadingState = styled(EmptyState)`
+  color: rgba(255, 255, 255, 0.72);
+
+  svg {
+    animation: ${spin} 0.7s linear infinite;
+    color: ${(p) => p.theme.colors.morMain};
+    opacity: 0.9;
+  }
+`;
+
+type FilterId =
+  | 'all'
+  | 'llm'
+  | 'cowork'
+  | 'vision'
+  | 'embeddings'
+  | 'tts'
+  | 'stt'
+  | 'local'
+  | 'tee';
 
 const FILTERS: { id: FilterId; label: string; modality?: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'llm', label: 'LLM', modality: 'llm' },
+  { id: 'cowork', label: 'Workspace candidates' },
+  { id: 'vision', label: 'Vision' },
   { id: 'embeddings', label: 'Embeddings', modality: 'embeddings' },
   { id: 'tts', label: 'Text-to-Speech', modality: 'tts' },
   { id: 'stt', label: 'Speech-to-Text', modality: 'stt' },
@@ -281,17 +357,20 @@ const FILTERS: { id: FilterId; label: string; modality?: string }[] = [
 ];
 
 const isTee = (m: any) => isSecureModel(m);
-
-function hasModality(tags: any[] = [], modality: string) {
-  return tags.some((t: any) => String(t).toLowerCase() === modality);
-}
+const isVision = (m: any) => getVisionCapability(m) !== 'none';
+const isCoworkCandidateModel = (m: any) => isCoworkCandidate(m);
 
 function matchesQuery(model: any, q: string) {
   const needle = q.trim().toLowerCase();
   if (!needle) return true;
-  if ((model.Name || '').toLowerCase().includes(needle)) return true;
-  return (model.Tags || []).some((t: any) =>
-    String(t).toLowerCase().includes(needle),
+  if (
+    String(model.Name ?? '')
+      .toLowerCase()
+      .includes(needle)
+  )
+    return true;
+  return normalizeModelTags(model.Tags).some((tag) =>
+    tag.toLowerCase().includes(needle),
   );
 }
 
@@ -301,57 +380,94 @@ const ModelSelectionModal = ({
   models,
   onChangeModel,
   symbol,
-  providersAvailability,
-  bidsLoading,
+  modelsLoading = false,
+  marketplaceOnly = false,
+  coworkSetup = false,
 }: any) => {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<FilterId>('all');
   const [showTeeInfo, setShowTeeInfo] = useState(false);
 
-  // Annotate each model with `isOnline` (true for local, otherwise derived
-  // from provider availability checks). Sort online first within each section.
-  //
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  // Where the list was left off. A ref rather than state, so scrolling a list
+  // of this size never triggers a re-render.
+  const scrollTopRef = useRef(0);
+  const pendingRestoreRef = useRef(false);
+  const modeKey = `${marketplaceOnly}:${coworkSetup}`;
+  const modeKeyRef = useRef(modeKey);
+
+  // Reopening the picker should land the user where they left off. The list is
+  // long, and after trying one model the reason for coming back is almost
+  // always "the one just under that one" — which used to mean scrolling all
+  // the way down again, because closing wiped search, filter and position.
+  useEffect(() => {
+    if (isActive) pendingRestoreRef.current = true;
+  }, [isActive]);
+
+  useLayoutEffect(() => {
+    if (!isActive || !pendingRestoreRef.current) return;
+    const el = bodyRef.current;
+    if (!el) return;
+    // Nothing to scroll yet — still loading, or filtered down to nothing. Keep
+    // the request pending until there is actually a list to restore into.
+    if (el.scrollHeight <= el.clientHeight) return;
+    el.scrollTop = Math.min(
+      scrollTopRef.current,
+      el.scrollHeight - el.clientHeight,
+    );
+    pendingRestoreRef.current = false;
+  });
+
+  // Workspace setup and plain new-chat show different pills and different
+  // models. Carrying a now-hidden filter across the two would leave the user
+  // staring at a short list with no visible control explaining why.
+  useEffect(() => {
+    if (modeKeyRef.current === modeKey) return;
+    modeKeyRef.current = modeKey;
+    scrollTopRef.current = 0;
+    setSearch('');
+    setFilter('all');
+    setShowTeeInfo(false);
+  }, [modeKey]);
+
   // NB: hooks must run on every render — keep `useMemo` BEFORE the
   // `isActive` early-return, otherwise the hook count changes between
   // renders and React throws "Rendered more hooks than during the previous
   // render".
   const enriched = useMemo(
     () =>
-      (models || []).map((m: any) => {
-        if (m.isLocal || !providersAvailability) {
-          return { ...m, isOnline: true };
-        }
-        const info = (m.bids || []).reduce((acc: any, next: any) => {
-          const entry = providersAvailability.find(
-            (pa: any) => pa.id == next.Provider,
-          );
-          if (!entry) return acc;
-          if (entry.isOnline) return acc;
-          const online = entry.status != 'disconnected';
-          return { isOnline: online, lastCheck: !online ? entry.time : undefined };
-        }, {});
-        return { ...m, ...info };
-      }),
-    [models, providersAvailability],
+      normalizeModelList(models)
+        .filter((m: any) => !marketplaceOnly || !m.isLocal)
+        .filter((m: any) => !coworkSetup || isCoworkCandidate(m)),
+    [coworkSetup, marketplaceOnly, models],
   );
 
   // Count results per filter (using the current search query) so the pills
   // can show live counts and disabled-look for empty filters.
   const counts: Record<FilterId, number> = useMemo(() => {
     const c: Record<FilterId, number> = {
-      all: 0, llm: 0, embeddings: 0, tts: 0, stt: 0, tee: 0, local: 0,
+      all: 0,
+      llm: 0,
+      cowork: 0,
+      vision: 0,
+      embeddings: 0,
+      tts: 0,
+      stt: 0,
+      tee: 0,
+      local: 0,
     };
     for (const m of enriched) {
       if (!matchesQuery(m, search)) continue;
       c.all++;
       if (m.isLocal) c.local++;
       if (isTee(m)) c.tee++;
-      const tags = m.Tags || [];
-      if (hasModality(tags, 'llm') || hasModality(tags, 'chat')) c.llm++;
-      if (hasModality(tags, 'embeddings') || hasModality(tags, 'embedding'))
-        c.embeddings++;
-      if (hasModality(tags, 'tts')) c.tts++;
-      if (hasModality(tags, 'stt')) c.stt++;
+      if (isVision(m)) c.vision++;
+      if (isCoworkCandidateModel(m)) c.cowork++;
+      const modality = getModelModality(m);
+      if (modality === 'llm') c.llm++;
+      if (modality === 'embedding') c.embeddings++;
+      if (modality === 'tts') c.tts++;
+      if (modality === 'stt') c.stt++;
     }
     return c;
   }, [enriched, search]);
@@ -359,7 +475,6 @@ const ModelSelectionModal = ({
   const visible = useMemo(() => {
     const filtered = enriched.filter((m: any) => {
       if (!matchesQuery(m, search)) return false;
-      const tags = m.Tags || [];
       switch (filter) {
         case 'all':
           return true;
@@ -367,16 +482,18 @@ const ModelSelectionModal = ({
           return !!m.isLocal;
         case 'tee':
           return isTee(m);
+        case 'vision':
+          return isVision(m);
+        case 'cowork':
+          return isCoworkCandidateModel(m);
         case 'llm':
-          return hasModality(tags, 'llm') || hasModality(tags, 'chat');
+          return getModelModality(m) === 'llm';
         case 'embeddings':
-          return (
-            hasModality(tags, 'embeddings') || hasModality(tags, 'embedding')
-          );
+          return getModelModality(m) === 'embedding';
         case 'tts':
-          return hasModality(tags, 'tts');
+          return getModelModality(m) === 'tts';
         case 'stt':
-          return hasModality(tags, 'stt');
+          return getModelModality(m) === 'stt';
       }
     });
 
@@ -392,48 +509,79 @@ const ModelSelectionModal = ({
   // Bail out *after* all hooks have run.
   if (!isActive) return null;
 
+  // Closing deliberately preserves search, filter and scroll position so the
+  // back button has somewhere to go back *to*.
+  const close = () => handleClose();
+
   const handlePick = (data: any) => {
     onChangeModel(data);
-    handleClose();
+    close();
   };
 
-  // Section buckets: Local → TEE → Marketplace.
-  // TEE models surface in their own section (not duplicated under Marketplace)
-  // so privacy-sensitive options are visually unambiguous.
-  const localModels = visible.filter((m: any) => m.isLocal);
-  const teeModels = visible.filter((m: any) => !m.isLocal && isTee(m));
-  const remoteModels = visible.filter((m: any) => !m.isLocal && !isTee(m));
+  // A provider-declared capability and a name-family heuristic are materially
+  // different confidence levels. Keep them in separate buckets so users never
+  // have to infer which models actually advertise image input.
+  const declaredVisionModels = visible.filter(
+    (m: any) => getVisionCapability(m) === 'declared',
+  );
+  const possibleVisionModels = visible.filter(
+    (m: any) => getVisionCapability(m) === 'detected',
+  );
+  const localModels = visible.filter(
+    (m: any) => m.isLocal && getVisionCapability(m) === 'none',
+  );
+  const teeModels = visible.filter(
+    (m: any) => !m.isLocal && getVisionCapability(m) === 'none' && isTee(m),
+  );
+  const remoteModels = visible.filter(
+    (m: any) => !m.isLocal && getVisionCapability(m) === 'none' && !isTee(m),
+  );
 
   const filterIconFor = (id: FilterId) => {
     switch (id) {
-      case 'llm': return <IconMessage size={13} stroke={2} />;
-      case 'embeddings': return <IconVector size={13} stroke={2} />;
-      case 'tts': return <IconHeadphones size={13} stroke={2} />;
-      case 'stt': return <IconMicrophone size={13} stroke={2} />;
-      case 'tee': return <IconShieldLock size={13} stroke={2} />;
-      case 'local': return <IconHome size={13} stroke={2} />;
-      default: return null;
+      case 'llm':
+        return <IconMessage size={13} stroke={2} />;
+      case 'vision':
+        return <IconEye size={13} stroke={2} />;
+      case 'cowork':
+        return <IconSparkles size={13} stroke={2} />;
+      case 'embeddings':
+        return <IconVector size={13} stroke={2} />;
+      case 'tts':
+        return <IconHeadphones size={13} stroke={2} />;
+      case 'stt':
+        return <IconMicrophone size={13} stroke={2} />;
+      case 'tee':
+        return <IconShieldLock size={13} stroke={2} />;
+      case 'local':
+        return <IconHome size={13} stroke={2} />;
+      default:
+        return null;
     }
   };
 
   return (
     <Modal
-      onClose={() => {
-        setSearch('');
-        setFilter('all');
-        setShowTeeInfo(false);
-        handleClose();
-      }}
+      onClose={close}
       bodyProps={bodyProps}
+      ariaLabel={
+        coworkSetup ? 'Choose a model for Workspace' : 'Choose a model'
+      }
     >
       <Layout>
         <Header>
+          <BackBtn type="button" onClick={close}>
+            <IconArrowLeft size={15} stroke={2} aria-hidden="true" />
+            Back
+          </BackBtn>
           <TitleRow>
-            <Title>New chat</Title>
+            <Title>
+              {coworkSetup ? 'Choose a text model for Workspace' : 'New chat'}
+            </Title>
             {/* Only surface the counter when filtering/search actually hides
                 models — otherwise "N of N" is noise. */}
             {visible.length !== enriched.length && (
-              <ResultCount>
+              <ResultCount role="status" aria-live="polite">
                 {visible.length} of {enriched.length}{' '}
                 {enriched.length === 1 ? 'model' : 'models'}
               </ResultCount>
@@ -446,6 +594,7 @@ const ModelSelectionModal = ({
               </InputGroup.Text>
               <Form.Control
                 type="text"
+                aria-label="Search models"
                 placeholder="Search models or tags…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -461,8 +610,12 @@ const ModelSelectionModal = ({
               />
             </InputGroup>
           </SearchWrapper>
-          <FilterRow>
-            {FILTERS.map((f) => {
+          <FilterRow role="group" aria-label="Filter models by capability">
+            {FILTERS.filter(
+              (item) =>
+                (!marketplaceOnly || item.id !== 'local') &&
+                (!coworkSetup || item.id !== 'cowork'),
+            ).map((f) => {
               const active = filter === f.id;
               const count = counts[f.id];
               return (
@@ -471,32 +624,67 @@ const ModelSelectionModal = ({
                   $active={active}
                   type="button"
                   onClick={() => setFilter(f.id)}
+                  aria-pressed={active}
+                  aria-label={
+                    f.id === 'cowork'
+                      ? `Show Workspace candidate models (${count})`
+                      : `Show ${f.label} models (${count})`
+                  }
+                  title={
+                    f.id === 'cowork'
+                      ? 'Marketplace text/chat models that can be tried with Workspace. Provider tool support is not published and is checked only after a session opens.'
+                      : undefined
+                  }
                 >
                   {filterIconFor(f.id)}
                   {f.label}
-                  <FilterCount $active={active}>{count}</FilterCount>
+                  <FilterCount $active={active} aria-hidden="true">
+                    {count}
+                  </FilterCount>
                 </FilterPill>
               );
             })}
           </FilterRow>
-          {bidsLoading && (
-            <BidsLoadingHint>
-              Loading marketplace options… local models are ready to use.
-            </BidsLoadingHint>
+          {filter === 'cowork' && (
+            <CoworkCandidateHint role="note">
+              <IconInfoCircle size={15} stroke={2} aria-hidden="true" />
+              <span>
+                Candidates are not verified. Providers do not publish tool
+                support; Workspace checks it after a session opens and uses
+                compatibility mode when possible.
+              </span>
+            </CoworkCandidateHint>
           )}
         </Header>
 
-        <Body>
-          {visible.length === 0 && (
+        <Body
+          ref={bodyRef}
+          onScroll={(e) => {
+            // Don't record the pre-restore position as the new one.
+            if (pendingRestoreRef.current) return;
+            scrollTopRef.current = (e.target as HTMLDivElement).scrollTop;
+          }}
+          aria-busy={modelsLoading}
+        >
+          {modelsLoading ? (
+            <LoadingState role="status" aria-live="polite">
+              <IconLoader2 size={32} stroke={1.8} aria-hidden="true" />
+              <div>Loading models from your node…</div>
+            </LoadingState>
+          ) : visible.length === 0 ? (
             <EmptyState>
               <IconWorld size={36} stroke={1.5} />
               <div>
                 {search.trim()
                   ? 'No models match your search.'
-                  : 'No models available for this filter.'}
+                  : filter === 'cowork'
+                    ? 'No marketplace text/chat models are available to try with Workspace.'
+                    : filter === 'all'
+                      ? 'No models are currently available from this node.'
+                      : 'No models available for this filter.'}
               </div>
             </EmptyState>
-          )}
+          ) : null}
 
           {localModels.length > 0 && (
             <Section>
@@ -535,6 +723,50 @@ const ModelSelectionModal = ({
               {showTeeInfo && <InfoPanel>{SECURE_MODE_INFO}</InfoPanel>}
               <SectionList>
                 {teeModels.map((m: any) => (
+                  <ModelRow
+                    key={m.Id}
+                    model={m}
+                    symbol={symbol}
+                    onChangeModel={handlePick}
+                  />
+                ))}
+              </SectionList>
+            </Section>
+          )}
+
+          {declaredVisionModels.length > 0 && (
+            <Section>
+              <SectionLabel>
+                <IconEye size={13} stroke={2} />
+                Vision (declared)
+                <SectionHint>
+                  (image input advertised by model metadata)
+                </SectionHint>
+              </SectionLabel>
+              <SectionList>
+                {declaredVisionModels.map((m: any) => (
+                  <ModelRow
+                    key={m.Id}
+                    model={m}
+                    symbol={symbol}
+                    onChangeModel={handlePick}
+                  />
+                ))}
+              </SectionList>
+            </Section>
+          )}
+
+          {possibleVisionModels.length > 0 && (
+            <Section>
+              <SectionLabel>
+                <IconEye size={13} stroke={2} />
+                Possible vision (name match)
+                <SectionHint>
+                  (recognised family; provider did not declare it)
+                </SectionHint>
+              </SectionLabel>
+              <SectionList>
+                {possibleVisionModels.map((m: any) => (
                   <ModelRow
                     key={m.Id}
                     model={m}

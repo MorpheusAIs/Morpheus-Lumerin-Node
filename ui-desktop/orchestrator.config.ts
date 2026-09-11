@@ -5,9 +5,26 @@ import {
   buildLocalRatingConfig
 } from './src/main/orchestrator/proxy-config'
 
+// CI injects a release-specific URL for production builds. This verified
+// stable fallback keeps local packages functional when those CI-only
+// variables are absent, and includes numeric SecretAI quote-field support.
+const DefaultProxyRouterVersion = '7.9.0'
+const DefaultProxyRouterReleaseBase = `https://github.com/MorpheusAIs/Morpheus-Lumerin-Node/releases/download/v${DefaultProxyRouterVersion}`
+
+const proxyRouterDownloadUrl = (
+  configuredUrl: string | undefined,
+  assetName: string,
+  extension = ''
+) =>
+  configuredUrl ||
+  `${DefaultProxyRouterReleaseBase}/${assetName}-${DefaultProxyRouterVersion}${extension}`
+
 const configMacArm = {
   proxyRouter: {
-    downloadUrl: process.env.SERVICE_PROXY_DOWNLOAD_URL_MAC_ARM64,
+    downloadUrl: proxyRouterDownloadUrl(
+      process.env.SERVICE_PROXY_DOWNLOAD_URL_MAC_ARM64,
+      'mac-arm64-morpheus-router'
+    ),
     fileName: './services/proxy-router/proxy-router' as string,
     runPath: './services/proxy-router/proxy-router' as string,
     ports: [process.env.SERVICE_PROXY_PORT, process.env.SERVICE_PROXY_API_PORT],
@@ -20,8 +37,10 @@ const configMacArm = {
       AUTH_CONFIG_FILE_PATH: './proxy.conf',
       COOKIE_FILE_PATH: './.cookie',
       PROXY_ADDRESS: `0.0.0.0:${process.env.SERVICE_PROXY_PORT}`,
-      WEB_ADDRESS: `0.0.0.0:${process.env.SERVICE_PROXY_API_PORT}`,
-      WEB_PUBLIC_URL: `http://localhost:${process.env.SERVICE_PROXY_API_PORT}`,
+      // The admin API carries wallet/configuration operations and is consumed
+      // only by this desktop app. Never expose it on the LAN.
+      WEB_ADDRESS: `127.0.0.1:${process.env.SERVICE_PROXY_API_PORT}`,
+      WEB_PUBLIC_URL: `http://127.0.0.1:${process.env.SERVICE_PROXY_API_PORT}`,
       MODELS_CONFIG_PATH: './models-config.json',
       RATING_CONFIG_PATH: './rating-config.json',
       ETH_NODE_USE_SUBSCRIPTIONS: 'false',
@@ -47,7 +66,7 @@ const configMacArm = {
     ),
     ratingConfig: JSON.stringify(buildLocalRatingConfig()),
     probe: {
-      url: `http://localhost:${process.env.SERVICE_PROXY_API_PORT}/healthcheck`
+      url: `http://127.0.0.1:${process.env.SERVICE_PROXY_API_PORT}/healthcheck`
     }
   },
   aiRuntime: {
@@ -106,7 +125,10 @@ const configMacArm = {
 const configMacX64 = {
   proxyRouter: {
     ...configMacArm.proxyRouter,
-    downloadUrl: process.env.SERVICE_PROXY_DOWNLOAD_URL_MAC_X64
+    downloadUrl: proxyRouterDownloadUrl(
+      process.env.SERVICE_PROXY_DOWNLOAD_URL_MAC_X64,
+      'mac-x64-morpheus-router'
+    )
   },
   aiRuntime: {
     ...configMacArm.aiRuntime,
@@ -130,7 +152,10 @@ const configMacX64 = {
 const configLinux: typeof configMacArm = {
   proxyRouter: {
     ...configMacArm.proxyRouter,
-    downloadUrl: process.env.SERVICE_PROXY_DOWNLOAD_URL_LINUX_X64
+    downloadUrl: proxyRouterDownloadUrl(
+      process.env.SERVICE_PROXY_DOWNLOAD_URL_LINUX_X64,
+      'linux-x86_64-morpheus-router'
+    )
   },
   // original b4406
   aiRuntime: {
@@ -155,7 +180,10 @@ const configLinux: typeof configMacArm = {
 const configLinuxArm: typeof configMacArm = {
   proxyRouter: {
     ...configMacArm.proxyRouter,
-    downloadUrl: process.env.SERVICE_PROXY_DOWNLOAD_URL_LINUX_ARM64
+    downloadUrl: proxyRouterDownloadUrl(
+      process.env.SERVICE_PROXY_DOWNLOAD_URL_LINUX_ARM64,
+      'linux-arm64-morpheus-router'
+    )
   },
   aiRuntime: {
     ...configMacArm.aiRuntime,
@@ -179,7 +207,11 @@ const configLinuxArm: typeof configMacArm = {
 const configWin: typeof configMacArm = {
   proxyRouter: {
     ...configMacArm.proxyRouter,
-    downloadUrl: process.env.SERVICE_PROXY_DOWNLOAD_URL_WINDOWS_X64,
+    downloadUrl: proxyRouterDownloadUrl(
+      process.env.SERVICE_PROXY_DOWNLOAD_URL_WINDOWS_X64,
+      'win-x64-morpheus-router',
+      '.exe'
+    ),
     fileName: './services/proxy-router.exe' as string,
     runPath: './services/proxy-router.exe' as string,
     env: {
@@ -224,6 +256,8 @@ const configWin: typeof configMacArm = {
 const configWinArm: typeof configMacArm = {
   proxyRouter: {
     ...configWin.proxyRouter,
+    // Upstream v7.9.0 does not publish a native Windows ARM64 router. Keep the
+    // CI-provided value authoritative instead of manufacturing a broken URL.
     downloadUrl: process.env.SERVICE_PROXY_DOWNLOAD_URL_WINDOWS_ARM64,
     fileName: './services/proxy-router.exe' as string,
     runPath: './services/proxy-router.exe' as string

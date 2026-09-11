@@ -261,6 +261,18 @@ func (cfg *HTTPAuthConfig) EnsureConfigFilesExist() error {
 	return nil
 }
 
+// AddUser stores a credential for the RPC auth file.
+//
+// SECURITY NOTE — the stored verifier is HMAC-SHA256(salt, password), which is
+// a fast MAC rather than a password-hashing function. For the auto-generated
+// admin cookie this is fine: it is 32 random characters, so brute force is not
+// a threat. It is weak for agent users who choose their own passwords, because
+// an attacker who reads proxy.conf can guess offline at enormous rates.
+//
+// Migrating to argon2id/scrypt is the right fix, but it invalidates every
+// stored credential, so it needs a versioned-hash format and a rehash-on-next-
+// successful-login path — a standalone change, not a drive-by one. Deliberately
+// left as-is here rather than silently locking existing users out.
 func (cfg *HTTPAuthConfig) AddUser(username string, plaintextPassword string, perms []string) error {
 	saltBytes := make([]byte, 16)
 	if _, err := io.ReadFull(rand.Reader, saltBytes); err != nil {
@@ -457,7 +469,7 @@ func (cfg *HTTPAuthConfig) RequestAgentUser(username, password string, perms []s
 		if !ok {
 			return fmt.Errorf("invalid allowance value for token %s", token)
 		}
-		mappedAllowances[token] = lib.BigInt{*allowance}
+		mappedAllowances[token] = lib.BigInt{Int: *allowance}
 	}
 
 	err = cfg.AuthStorage.AddAuthRequest(&storages.AgentUser{

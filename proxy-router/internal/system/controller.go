@@ -82,6 +82,10 @@ func (s *SystemController) RegisterRoutes(r i.Router) {
 //	@Success		200	{object}	HealthCheckResponse
 //	@Router			/healthcheck [get]
 func (s *SystemController) HealthCheck(ctx *gin.Context) {
+	if processIdentity := os.Getenv("MORPHEUS_DESKTOP_INSTANCE_TOKEN"); processIdentity != "" {
+		ctx.Header("X-Morpheus-Instance-Token", processIdentity)
+	}
+
 	status := "healthy"
 	components := make(map[string]string)
 

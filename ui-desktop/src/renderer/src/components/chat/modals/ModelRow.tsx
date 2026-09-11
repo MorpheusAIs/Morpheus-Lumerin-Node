@@ -7,12 +7,16 @@ import {
   IconVector,
   IconPhoto,
   IconEye,
-  IconPlugConnectedX,
   IconChevronRight,
   IconHome,
   IconShieldLock,
 } from '@tabler/icons-react';
 import { formatSmallNumber, SECURE_TAG, SECURE_BADGE_TOOLTIP } from '../utils';
+import { getVisionCapability } from '../../../store/utils/attachments';
+import {
+  normalizeModelName,
+  normalizeModelTags,
+} from '../../../store/utils/modelMetadata';
 
 type IconCmp = React.ComponentType<any>;
 
@@ -42,15 +46,22 @@ const RowContainer = styled.button<{ $online: boolean }>`
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 10px;
   color: rgba(255, 255, 255, 0.92);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 68px;
   cursor: ${(p) => (p.$online ? 'pointer' : 'not-allowed')};
   text-align: left;
   font: inherit;
-  transition: background 0.12s ease, border-color 0.12s ease, transform 0.06s ease;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    transform 0.06s ease;
   opacity: ${(p) => (p.$online ? 1 : 0.55)};
 
   &:hover {
-    background: ${(p) => (p.$online ? 'rgba(32, 220, 142, 0.08)' : 'rgba(255, 255, 255, 0.04)')};
-    border-color: ${(p) => (p.$online ? 'rgba(32, 220, 142, 0.4)' : 'rgba(255, 255, 255, 0.08)')};
+    background: ${(p) =>
+      p.$online ? 'rgba(32, 220, 142, 0.08)' : 'rgba(255, 255, 255, 0.04)'};
+    border-color: ${(p) =>
+      p.$online ? 'rgba(32, 220, 142, 0.4)' : 'rgba(255, 255, 255, 0.08)'};
   }
 
   &:active:not(:disabled) {
@@ -152,6 +163,21 @@ const TeePill = styled.span`
   color: rgba(173, 211, 255, 0.95);
 `;
 
+const VisionPill = styled.span<{ $declared: boolean }>`
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px 1px 5px;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  background: ${(p) =>
+    p.$declared ? 'rgba(190, 125, 255, 0.18)' : 'rgba(190, 125, 255, 0.1)'};
+  color: ${(p) =>
+    p.$declared ? 'rgba(224, 190, 255, 1)' : 'rgba(210, 180, 240, 0.85)'};
+`;
+
 const Dot = styled.span`
   color: rgba(255, 255, 255, 0.25);
   padding: 0 2px;
@@ -201,6 +227,10 @@ const OfflineBadge = styled.div`
   letter-spacing: 0.3px;
 `;
 
+const CheckPriceBadge = styled(OfflineBadge)`
+  color: ${(p) => p.theme.colors.morMain};
+`;
+
 const Caret = styled.div`
   color: rgba(255, 255, 255, 0.25);
   display: flex;
@@ -211,14 +241,14 @@ const Caret = styled.div`
   }
 `;
 
-function classifyTags(rawTags: string[] = [], modelName: string = '') {
+function classifyTags(rawTags: unknown, modelName: string = '') {
   const modalityKeys: string[] = [];
   const familyTags: string[] = [];
   const seenModality = new Set<string>();
   const normalisedName = modelName.toLowerCase();
   let hasTee = false;
 
-  for (const tag of rawTags) {
+  for (const tag of normalizeModelTags(rawTags)) {
     const lower = tag.toLowerCase().trim();
     if (!lower) continue;
     // TEE is a security attribute, not a family tag — surface separately.
@@ -252,7 +282,9 @@ type PriceInfo =
 
 function computePrice(model: any): PriceInfo {
   if (model?.isLocal) return { kind: 'local' };
-  const bids = (model?.bids || []).filter((b: any) => b?.Id);
+  const bids = Array.isArray(model?.bids)
+    ? model.bids.filter((b: any) => b?.Id)
+    : [];
   if (bids.length === 0) return { kind: 'offline' };
   const prices = bids
     .map((b: any) => Number(b.PricePerSecond))
@@ -267,28 +299,41 @@ function computePrice(model: any): PriceInfo {
 function ModelRow(props: {
   model: any;
   symbol: string;
-  onChangeModel: (data: { modelId: string; bidId?: string; isLocal?: boolean }) => void;
+  onChangeModel: (data: {
+    modelId: string;
+    bidId?: string;
+    isLocal?: boolean;
+  }) => void;
 }) {
   const model = props.model || {};
   const modelId = model.Id || '';
+  const modelName = normalizeModelName(model.Name);
+  const modelTags = useMemo(() => normalizeModelTags(model.Tags), [model.Tags]);
   const isLocal = !!model.isLocal;
-  const isOnline = isLocal || model.isOnline !== false;
+  const hasBidData = Array.isArray(model?.bids);
+  const providerCount = hasBidData
+    ? model.bids.filter((bid: any) => bid?.Id).length
+    : 0;
+  const availabilityUnknown = !isLocal && !hasBidData;
+  const isOnline =
+    isLocal ||
+    availabilityUnknown ||
+    (providerCount > 0 && model.isOnline !== false);
   const symbol = props.symbol || 'MOR';
   const lastCheck: Date | undefined = model.lastCheck
     ? new Date(model.lastCheck)
     : undefined;
 
   const { modalityKeys, familyTags, hasTee } = useMemo(
-    () => classifyTags(model.Tags, model.Name),
-    [model.Tags, model.Name],
+    () => classifyTags(modelTags, modelName),
+    [modelName, modelTags],
   );
 
   const primaryModalityKey = modalityKeys[0] || 'llm';
-  const ModalityIcon =
-    MODALITY[primaryModalityKey]?.Icon || IconMessage;
+  const ModalityIcon = MODALITY[primaryModalityKey]?.Icon || IconMessage;
 
   const price = useMemo(() => computePrice(model), [model]);
-  const providerCount = (model?.bids || []).filter((b: any) => b?.Id).length;
+  const visionCapability = getVisionCapability(model);
 
   const handleSelect = () => {
     if (!isOnline) return;
@@ -301,9 +346,7 @@ function ModelRow(props: {
 
   // Title tooltip surfaces the full model name + all original tags for
   // discoverability when the row is truncated.
-  const tooltip = `${model.Name}${
-    model.Tags?.length ? ' — ' + model.Tags.join(', ') : ''
-  }`;
+  const tooltip = `${modelName}${modelTags.length ? ` — ${modelTags.join(', ')}` : ''}`;
 
   return (
     <RowContainer
@@ -319,8 +362,8 @@ function ModelRow(props: {
 
       <NameStack>
         <NameLine>
-          <StatusDot $online={isOnline} />
-          <NameText>{model.Name}</NameText>
+          <StatusDot $online={isLocal || providerCount > 0} />
+          <NameText>{modelName}</NameText>
         </NameLine>
         <MetaLine>
           {modalityKeys.slice(0, 1).map((key) => (
@@ -334,6 +377,19 @@ function ModelRow(props: {
               Secure
             </TeePill>
           )}
+          {visionCapability !== 'none' && (
+            <VisionPill
+              $declared={visionCapability === 'declared'}
+              title={
+                visionCapability === 'declared'
+                  ? 'Image input support is declared by this model’s tags.'
+                  : 'Likely supports image input based on its recognised model family; the provider has not declared a vision tag.'
+              }
+            >
+              <IconEye size={11} stroke={2.2} />
+              {visionCapability === 'declared' ? 'Vision' : 'Likely vision'}
+            </VisionPill>
+          )}
           {!isLocal && providerCount > 1 && (
             <>
               <Dot>·</Dot>
@@ -343,16 +399,10 @@ function ModelRow(props: {
           {familyTags.slice(0, 2).map((t) => (
             <Pill key={t}>{t}</Pill>
           ))}
-          {!isOnline && lastCheck && (
+          {!availabilityUnknown && !isOnline && lastCheck && (
             <>
               <Dot>·</Dot>
-              <span>
-                <IconPlugConnectedX
-                  size={12}
-                  style={{ verticalAlign: '-2px', marginRight: 3 }}
-                />
-                Offline since {lastCheck.toLocaleTimeString()}
-              </span>
+              <span>Offline since {lastCheck.toLocaleTimeString()}</span>
             </>
           )}
         </MetaLine>
@@ -365,7 +415,10 @@ function ModelRow(props: {
             Local
           </LocalBadge>
         )}
-        {price.kind === 'offline' && <OfflineBadge>Unavailable</OfflineBadge>}
+        {availabilityUnknown && <CheckPriceBadge>Check price</CheckPriceBadge>}
+        {!availabilityUnknown && price.kind === 'offline' && (
+          <OfflineBadge>Unavailable</OfflineBadge>
+        )}
         {price.kind === 'single' && (
           <>
             <PriceValue>{formatSmallNumber(price.perSec)}</PriceValue>
@@ -375,7 +428,8 @@ function ModelRow(props: {
         {price.kind === 'range' && (
           <>
             <PriceValue>
-              {formatSmallNumber(price.minPerSec)} – {formatSmallNumber(price.maxPerSec)}
+              {formatSmallNumber(price.minPerSec)} –{' '}
+              {formatSmallNumber(price.maxPerSec)}
             </PriceValue>
             <PriceUnit>{symbol}/s</PriceUnit>
           </>

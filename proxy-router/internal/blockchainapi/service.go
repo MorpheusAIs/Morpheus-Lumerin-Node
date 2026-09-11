@@ -94,11 +94,13 @@ type BlockchainService struct {
 	// OpenSessionByModelId; empty means HealthPolicyPermissive.
 	sessionHealthPolicy string
 
-	supplyBudgetMu sync.Mutex
-	cachedSupply   *big.Int
-	cachedSupplyAt time.Time
-	cachedBudget   *big.Int
-	cachedBudgetAt time.Time
+	supplyBudgetMu   sync.Mutex
+	cachedSupply     *big.Int
+	cachedSupplyAt   time.Time
+	cachedBudget     *big.Int
+	cachedBudgetAt   time.Time
+	allModelsCache   modelListCache
+	sessionOpenLocks keyedLockSet
 
 	legacyTx    bool
 	privateKey  i.PrKeyProvider
@@ -241,12 +243,14 @@ func (s *BlockchainService) GetProvider(ctx context.Context, providerAddr common
 }
 
 func (s *BlockchainService) GetAllModels(ctx context.Context) ([]*structs.Model, error) {
-	ids, models, err := s.modelRegistry.GetAllModels(ctx)
-	if err != nil {
-		return nil, err
-	}
+	return s.allModelsCache.get(ctx, func(fetchCtx context.Context) ([]*structs.Model, error) {
+		ids, models, err := s.modelRegistry.GetAllModels(fetchCtx)
+		if err != nil {
+			return nil, err
+		}
 
-	return mapModels(ids, models), nil
+		return mapModels(ids, models), nil
+	})
 }
 
 func (s *BlockchainService) GetModels(ctx context.Context, offset *big.Int, limit uint8, order r.Order) ([]*structs.Model, error) {
@@ -328,10 +332,27 @@ func (s *BlockchainService) GetRatedBids(ctx context.Context, modelID common.Has
 }
 
 func (s *BlockchainService) rateBids(bidIds [][32]byte, bids []m.IBidStorageBid, pmStats []s.IStatsStorageProviderModelStats, provider []pr.IProviderStorageProvider, mStats *s.IStatsStorageModelStats, minStake *big.Int, log lib.ILogger) []structs.ScoredBid {
-	ratingInputs := make([]rating.RatingInput, len(bids))
+	// These five slices are assembled from separate on-chain reads and are only
+	// index-aligned if every read returned the same number of rows. A short
+	// provider or stats slice used to panic the whole daemon with an
+	// index-out-of-range inside this loop — an unrecoverable crash triggered by
+	// remote data we do not control. Rate only the prefix we can safely align,
+	// and say loudly when we had to truncate.
+	n := len(bids)
+	for _, l := range []int{len(bidIds), len(pmStats), len(provider)} {
+		if l < n {
+			n = l
+		}
+	}
+	if n < len(bids) {
+		log.Warnf("rateBids: inconsistent input lengths (bids=%d bidIds=%d pmStats=%d providers=%d); rating first %d",
+			len(bids), len(bidIds), len(pmStats), len(provider), n)
+	}
+
+	ratingInputs := make([]rating.RatingInput, n)
 	bidIDIndexMap := make(map[common.Hash]int)
 
-	for i := range bids {
+	for i := 0; i < n; i++ {
 		ratingInputs[i] = rating.RatingInput{
 			ScoreInput: rating.ScoreInput{
 				ProviderModel:  &pmStats[i],
@@ -589,6 +610,7 @@ func (s *BlockchainService) CreateNewModel(ctx context.Context, modelID common.H
 	if err != nil {
 		return nil, lib.WrapError(ErrSendTx, err)
 	}
+	s.allModelsCache.invalidate()
 
 	ID, err := s.modelRegistry.GetModelId(ctx, transactOpt.From, modelID)
 	if err != nil {
@@ -631,6 +653,7 @@ func (s *BlockchainService) DeregisterModel(ctx context.Context, modelId common.
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrSendTx, err)
 	}
+	s.allModelsCache.invalidate()
 
 	return tx, nil
 }
@@ -1308,6 +1331,23 @@ func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.H
 }
 
 func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID common.Hash, duration *big.Int, directPayment bool, isFailoverEnabled bool, omitProvider common.Address, agentUsername string) (common.Hash, error) {
+	return s.openSessionByModelID(ctx, modelID, duration, directPayment, isFailoverEnabled, omitProvider, agentUsername, nil)
+}
+
+func (s *BlockchainService) openSessionByModelID(ctx context.Context, modelID common.Hash, duration *big.Int, directPayment bool, isFailoverEnabled bool, omitProvider common.Address, agentUsername string, beforeOpen func(context.Context, common.Address) error) (common.Hash, error) {
+	userAddr, err := s.GetMyAddress(ctx)
+	if err != nil {
+		return common.Hash{}, lib.WrapError(ErrMyAddress, err)
+	}
+	if beforeOpen != nil {
+		// Guarded desktop opens check for a resumable session before provider
+		// discovery and health probes. The caller holds the wallet/model lock,
+		// so other guarded opens for this pair cannot race this decision.
+		if err := beforeOpen(ctx, userAddr); err != nil {
+			return common.Hash{}, err
+		}
+	}
+
 	supply, err := s.GetTokenSupply(ctx)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrTokenSupply, err)
@@ -1338,11 +1378,6 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 
 	if len(bids) == 0 {
 		return common.Hash{}, ErrNoBid
-	}
-
-	userAddr, err := s.GetMyAddress(ctx)
-	if err != nil {
-		return common.Hash{}, lib.WrapError(ErrMyAddress, err)
 	}
 
 	minStake, err := s.getMinStakeCached(ctx)
@@ -1412,7 +1447,14 @@ func (s *BlockchainService) OpenSessionByModelId(ctx context.Context, modelID co
 		}
 		candidates = kept
 	}
-
+	if beforeOpen != nil {
+		// Recheck at the transaction boundary as well. Legacy/API callers do not
+		// opt into the keyed guarded path and may have opened this model while
+		// provider discovery was running after the fast check above.
+		if err := beforeOpen(ctx, userAddr); err != nil {
+			return common.Hash{}, err
+		}
+	}
 	for i, bid := range candidates {
 		log.Infof("trying to open session with provider #%d %s", i, bid.Bid.Provider.String())
 		durationCopy := new(big.Int).Set(duration)

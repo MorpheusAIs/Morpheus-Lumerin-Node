@@ -4,11 +4,14 @@ import { BtnAccent } from '../dashboard/BalanceBlock.styles';
 import { BaseBtn } from '../common';
 
 export const SubHeader = styled.h2`
-  font-size: 2rem;
-  white-space: nowrap;
+  font-size: 1.5rem;
+  line-height: 1.4;
   font-weight: 600;
-  color: ${(p) => p.theme.colors.morMain};
-  margin: 2em 0 1em;
+  color: var(--text-muted);
+  margin: 2.4rem 0 1.2rem;
+  &:first-child {
+    margin-top: 0;
+  }
 `;
 
 export const AgentList = styled.div`

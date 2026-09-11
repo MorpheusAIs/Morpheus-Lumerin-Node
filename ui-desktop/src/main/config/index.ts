@@ -8,7 +8,7 @@ const config = {
     diamondAddress: process.env.DIAMOND_ADDRESS,
     displayName: process.env.CHAIN_NAME,
     explorerUrl: process.env.EXPLORER_URL,
-    localProxyRouterUrl: `http://localhost:${process.env.SERVICE_PROXY_API_PORT}`,
+    localProxyRouterUrl: `http://127.0.0.1:${process.env.SERVICE_PROXY_API_PORT}`,
     mainTokenAddress: process.env.TOKEN_ADDRESS,
     symbol: 'MOR',
     symbolEth: 'ETH'

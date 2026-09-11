@@ -7,33 +7,66 @@
 // components/HOCs that own the proxy-router fetch logic and are passed inline to
 // `useQuery`, since they close over the IPC client + chain config.
 export const queryKeys = {
-  // { models, providers, meta, userBalances } from withChatState.getModelsData
-  modelsData: ['modelsData'] as const,
-  // models merged with their bids (withChatState.getBidsByModelId fan-out)
-  modelsWithBids: ['modelsWithBids'] as const,
+  // Chat's supplemental startup reads stay separate from the shared model
+  // registry, so the picker is not held behind provider/funding responses.
+  localModels: ['localModels'] as const,
+  chatFunding: (address?: string) => ['chatFunding', address ?? ''] as const,
+  // Active bids are loaded only for the marketplace model the user selects.
+  // The wallet belongs in the key because consumers must not select their own
+  // provider bid, so the filtered result can differ after switching wallets.
+  modelBids: (address?: string, modelId?: string) =>
+    ['modelBids', address ?? '', modelId ?? ''] as const,
   // raw on-chain user sessions (paginated) — shared by Chat + Wallet
   sessions: (address?: string) => ['sessions', address ?? ''] as const,
   // saved chat-history titles (local proxy-router index)
   chatTitles: ['chatTitles'] as const,
-  // provider connectivity ping results
-  providersAvailability: ['providersAvailability'] as const,
   // wallet ETH/MOR balances (+ MOR rate)
   balances: (address?: string) => ['balances', address ?? ''] as const,
   // Blockscout transaction history
   transactions: (address?: string) => ['transactions', address ?? ''] as const,
-  // raw on-chain model list (Models tab registry)
+  // Raw on-chain model registry shared by Models and Chat/New Chat.
   allModels: ['allModels'] as const,
+  // The Models screen loads the registry incrementally for a fast first paint.
+  modelPages: ['modelPages'] as const,
   // local IPFS node version / connectivity
   ipfsVersion: ['ipfsVersion'] as const,
   // IPFS-pinned model files
   pinnedFiles: ['pinnedFiles'] as const,
-  // provider sessions + claimable balances (Providers tab)
-  providerData: (providerId?: string) =>
-    ['providerData', providerId ?? ''] as const,
+  // Provider Hub renders the session rows first; slower claimable balances are
+  // a separate cache so they cannot hold the entire page hostage.
+  providerSessions: (providerId?: string) =>
+    ['providerSessions', providerId ?? ''] as const,
+  providerBalances: (providerId?: string, sessionIds?: readonly string[]) =>
+    sessionIds
+      ? ([
+          'providerBalances',
+          providerId ?? '',
+          [...sessionIds].sort().join(','),
+        ] as const)
+      : (['providerBalances', providerId ?? ''] as const),
+  // Agent access and allowance requests are fetched together and cached when
+  // navigating away from the Agents tab.
+  agents: (address?: string) => ['agents', address ?? ''] as const,
+  // registry of known wallets + which one the proxy-router currently holds.
+  // Intentionally NOT parameterised by address: this is the list that tells you
+  // what the address could be.
+  wallets: ['wallets'] as const,
 };
 
 const isClosedSession = (item: any) =>
   item.ClosedAt || new Date().getTime() > item.EndsAt * 1000;
+
+/** Number of sessions still open. Used to warn before switching wallets. */
+export const countOpenSessions = (sessions: any[] | undefined): number => {
+  if (!Array.isArray(sessions)) {
+    return 0;
+  }
+  try {
+    return sessions.filter((s) => s && !isClosedSession(s)).length;
+  } catch (e) {
+    return 0;
+  }
+};
 
 // Sum of stake locked in currently-open sessions, in whole MOR (2 decimals).
 // Mirrors the previous withDashboardState.getStakedFunds computation but works

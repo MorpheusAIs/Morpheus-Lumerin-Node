@@ -3,20 +3,25 @@ import TextareaAutosize from 'react-textarea-autosize';
 import { BtnAccent } from '../dashboard/BalanceBlock.styles';
 
 export const View = styled.div`
+  display: flex;
+  flex-direction: column;
   height: 100vh;
   max-width: 100%;
-  min-width: 600px;
+  min-width: 0;
   position: relative;
+  width: 100%;
 `;
 
 export const Container = styled.div`
   max-width: 1120px;
-  height: calc(100% - 200px);
+  flex: 1 1 auto;
+  min-height: 0;
   justify-content: space-between;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   padding: 20px 2.4rem 0;
+  width: 100%;
 `;
 
 export const ChatBlock = styled.div`
@@ -50,19 +55,58 @@ export const ChatHistoryContainer = styled.div`
   height: 100%;
 `;
 
+export const ChatStartupState = styled.div`
+  align-items: center;
+  color: rgba(255, 255, 255, 0.72);
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1rem;
+  height: 100%;
+  justify-content: center;
+  padding: 3rem;
+  text-align: center;
+
+  svg {
+    color: ${(p) => p.theme.colors.morMain};
+  }
+
+  strong {
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 1.8rem;
+    font-weight: 600;
+  }
+
+  span {
+    font-size: 1.3rem;
+    line-height: 1.55;
+    max-width: 52ch;
+  }
+
+  button {
+    margin-top: 0.8rem;
+  }
+`;
+
 export const ChatIntroContainer = styled.div`
   width: 100%;
   height: 100%;
+  min-height: 0;
   overflow-y: auto;
   margin-bottom: 20px;
+  padding: clamp(1.6rem, 5vh, 4rem) 0;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
 `;
 
 export const ChatIntroInner = styled.div`
-  width: 486px;
-  padding: 54px;
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  margin: auto;
+  max-width: 100%;
+  padding: clamp(2.4rem, 6vw, 5.4rem);
+  width: 48.6rem;
   background-color: ${(p) => p.theme.colors.primaryDark};
   border-radius: 15px;
 `;
@@ -87,6 +131,112 @@ export const ChatIntroInnerText = styled.p`
   color: #ffffff;
   margin-top: 40px;
   margin-bottom: 25px;
+`;
+
+export const SessionDurationField = styled.label`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 24px 0 8px;
+  color: #ffffff;
+  font-size: 14px;
+
+  select {
+    width: 100%;
+    padding: 10px 12px;
+    color: #ffffff;
+    background: ${(p) => p.theme.colors.primary};
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 8px;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  select:focus-visible {
+    outline: 2px solid ${(p) => p.theme.colors.active};
+    outline-offset: 2px;
+  }
+`;
+
+export const SessionCostSummary = styled.div`
+  margin: 10px 0 24px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+  line-height: 1.45;
+`;
+
+export const SessionSetupState = styled.div`
+  min-height: 250px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px 0 12px;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: center;
+
+  strong {
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  span {
+    max-width: 38ch;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .spinner-border {
+    width: 32px;
+    height: 32px;
+  }
+`;
+
+export const SessionSetupActions = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
+
+  ${ChatIntroButton} {
+    width: auto;
+    min-width: 148px;
+    min-height: 40px;
+  }
+`;
+
+export const SessionHistoryNotice = styled.div`
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 18px 0 0;
+  color: #e8a33d;
+  font-size: 12px;
+  line-height: 1.45;
+
+  span {
+    flex: 1;
+  }
+
+  button {
+    min-height: 40px;
+    padding: 0 10px;
+    flex: 0 0 auto;
+    border: 1px solid rgba(232, 163, 61, 0.45);
+    border-radius: 7px;
+    background: transparent;
+    color: #f2bd6d;
+    cursor: pointer;
+    font: inherit;
+  }
+
+  button:focus-visible {
+    outline: 2px solid ${(p) => p.theme.colors.active};
+    outline-offset: 2px;
+  }
 `;
 
 export const Control = styled.div`
@@ -213,6 +363,7 @@ export const CustomTextArrea = styled(TextareaAutosize)`
 
 export const ContainerTitle = styled.div`
   display: flex;
+  flex: 0 0 auto;
   flex-direction: row;
   justify-content: space-between;
   align-items: center;
@@ -232,6 +383,48 @@ export const TitleRow = styled.div`
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
+`;
+
+export const ChatHeaderControls = styled.div`
+  align-items: center;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 35rem) max-content;
+  justify-content: start;
+  min-width: 0;
+  width: 100%;
+`;
+
+export const ChatHeaderActions = styled.div`
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  min-width: 0;
+`;
+
+export const ChatHeaderActionButton = styled(BtnAccent)`
+  align-items: center;
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 0 14rem;
+  gap: 0.8rem;
+  height: auto;
+  justify-content: center;
+  line-height: 1.2;
+  margin: 0;
+  min-height: 6rem;
+  padding: 1.2rem;
+  white-space: nowrap;
+  width: 14rem;
+
+  svg {
+    flex: 0 0 auto;
+  }
+
+  &:focus-visible {
+    outline: 2px solid ${(p) => p.theme.colors.active};
+    outline-offset: 2px;
+  }
 `;
 
 export const Title = styled.label`
@@ -264,6 +457,26 @@ export const LoadingCover = styled.div`
   background: rgba(0, 0, 0, 0.4);
 
   z-index: 5;
+`;
+
+export const LoadingStatus = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 36rem;
+  padding: 24px;
+  text-align: center;
+
+  strong {
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 16px;
+  }
+
+  span {
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 13px;
+  }
 `;
 
 export const ImageContainer = styled.img`
@@ -322,7 +535,9 @@ export const AudioActionBtn = styled.button`
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 
   &:hover {
     background: rgba(32, 220, 142, 0.12);

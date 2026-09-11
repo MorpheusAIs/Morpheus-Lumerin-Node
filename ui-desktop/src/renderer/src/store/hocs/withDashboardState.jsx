@@ -4,7 +4,6 @@ import selectors from '../selectors';
 import { connect } from 'react-redux';
 import PropTypes from 'prop-types';
 import { ToastsContext } from '../../components/toasts';
-import { getSessionsByUser } from '../utils/apiCallsHelper';
 
 const withDashboardState = (WrappedComponent) => {
   class Container extends React.Component {
@@ -15,7 +14,6 @@ const withDashboardState = (WrappedComponent) => {
         .isRequired,
       address: PropTypes.string.isRequired,
       client: PropTypes.shape({
-        refreshAllTransactions: PropTypes.func.isRequired,
         copyToClipboard: PropTypes.func.isRequired,
       }).isRequired,
     };
@@ -60,14 +58,7 @@ const withDashboardState = (WrappedComponent) => {
       if (!user) {
         return [];
       }
-      const authHeaders = await this.props.client.getAuthHeaders();
-      return (
-        (await getSessionsByUser(
-          this.props.config.chain.localProxyRouterUrl,
-          user,
-          authHeaders,
-        )) || []
-      );
+      return (await this.props.client.getSessionsByUser({ user })) || [];
     };
 
     getBalances = async () => {

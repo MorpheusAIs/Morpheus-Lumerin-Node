@@ -31,4 +31,19 @@ func TestOpenSessionWithFailoverOmitProviderDefaultsToZero(t *testing.T) {
 	if req.OmitProvider.Address != (common.Address{}) {
 		t.Errorf("OmitProvider = %s, want zero address", req.OmitProvider.Address.Hex())
 	}
+	if req.RejectExisting {
+		t.Error("RejectExisting must default to false for backward compatibility")
+	}
+}
+
+func TestOpenSessionWithFailoverRejectExisting(t *testing.T) {
+	var req OpenSessionWithFailover
+	body := `{"sessionDuration":3600,"rejectExisting":true}`
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+
+	if !req.RejectExisting {
+		t.Error("RejectExisting = false, want true")
+	}
 }

@@ -1,4 +1,14 @@
-import { Configuration } from 'electron-builder'
+import { Configuration, type AfterPackContext } from 'electron-builder'
+import {
+  restoreNativeModuleBinaries,
+  stageNativeModuleBinaries,
+  verifyPackagedNativeBinaries
+} from './src/main/orchestrator/native-prebuilds'
+import {
+  prepareProxyRouterBundle,
+  ProxyRouterBundleDirectoryName,
+  verifyPackagedProxyRouterBundle
+} from './src/main/orchestrator/proxy-router-bundle'
 
 const config: Configuration = {
   appId: 'com.electron.morpheus-ui',
@@ -13,9 +23,41 @@ const config: Configuration = {
     '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}',
     '!{.env,.env.*,.npmrc,pnpm-lock.yaml}',
     '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}',
-    '!services/*'
+    '!services/*',
+    '!scripts/ui-preview/**',
+    // Keep previous installers out when a test build uses a nested output folder.
+    '!dist/**'
   ],
-  asarUnpack: ['resources/**', 'pkg-scripts/**'],
+  // `read_document` reaches these two through a runtime `import()`, which
+  // Electron's asar layer cannot resolve. Unpacking them puts the files on
+  // disk where the ordinary Node resolver can load them.
+  asarUnpack: [
+    'resources/**',
+    'pkg-scripts/**',
+    'node_modules/pdfjs-dist/**',
+    'node_modules/mammoth/**',
+    // Named explicitly so the packaged native binary sits at a known path and
+    // can be checked against the target platform before the build succeeds.
+    'node_modules/keytar/**'
+  ],
+  extraResources: [
+    {
+      from: 'buildResources/.generated/proxy-router/${os}-${arch}',
+      to: ProxyRouterBundleDirectoryName,
+      filter: ['bundled-proxy-router', 'manifest.json']
+    }
+  ],
+  beforePack: async (context: AfterPackContext) => {
+    await prepareProxyRouterBundle(context)
+    await stageNativeModuleBinaries(context)
+  },
+  afterPack: async (context: AfterPackContext) => {
+    // Restore first, unconditionally: a failed verification must still leave the
+    // checkout with binaries this machine can run.
+    await restoreNativeModuleBinaries(context)
+    await verifyPackagedProxyRouterBundle(context)
+    await verifyPackagedNativeBinaries(context)
+  },
   win: {
     executableName: 'morpheus-ui',
     target: ['portable']

@@ -1,5 +1,5 @@
 import settings from 'electron-settings'
-import { hdkey } from '@ethereumjs/wallet'
+import { hdkey, Wallet as EthWallet } from '@ethereumjs/wallet'
 
 import { aes256cbcIv } from './crypto'
 
@@ -28,6 +28,15 @@ const getWalletFromSeed = (seed, index = 0) =>
 
 const getAddress2 = (seed, index) => getWalletFromSeed(seed, index).getChecksumAddressString()
 
+/** Public identity only, using the same relative BIP-44 path convention as the router. */
+export const getAddressForDerivationPath = (seed: string, derivationPath: string): string => {
+  const path = derivationPath.startsWith('m/') ? derivationPath : `m/44'/60'/0'/0/${derivationPath}`
+  return hdkey.EthereumHDKey.fromMasterSeed(Buffer.from(seed, 'hex'))
+    .derivePath(path)
+    .getWallet()
+    .getChecksumAddressString()
+}
+
 const getPrivateKey = (seed, index) => getWalletFromSeed(seed, index).getPrivateKey()
 
 const getAddressAndPrivateKey = (seed, index) => ({
@@ -35,13 +44,30 @@ const getAddressAndPrivateKey = (seed, index) => ({
   privateKey: Buffer.from(getPrivateKey(seed, index)).toString('hex')
 })
 
+/**
+ * Derives the checksummed address for a raw private key.
+ *
+ * Used when importing a wallet, so the address can be shown and de-duplicated
+ * without pushing the key into the proxy-router first — importing must never
+ * disturb whichever wallet is currently active.
+ */
+export const privateKeyToAddress = (privateKeyHex: string): string => {
+  const hex = privateKeyHex.startsWith('0x') ? privateKeyHex.slice(2) : privateKeyHex
+  if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
+    throw new Error('Invalid private key (expected 64 hex characters).')
+  }
+  return EthWallet.fromPrivateKey(Buffer.from(hex, 'hex')).getChecksumAddressString()
+}
+
 export default {
   getAddress,
   setAddress,
   getActiveWallet: getWallet,
   setActiveWallet: setAddress,
   createAddress: getAddress2,
+  getAddressForDerivationPath,
   getAddressAndPrivateKey,
+  privateKeyToAddress,
   clearWallet,
   getWallet,
   getToken,

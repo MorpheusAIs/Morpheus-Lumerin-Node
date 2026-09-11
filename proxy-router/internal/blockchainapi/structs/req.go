@@ -71,6 +71,11 @@ type OpenSessionWithFailover struct {
 	SessionDuration *lib.BigInt `json:"sessionDuration" swaggertype:"integer"`
 	DirectPayment   bool        `json:"directPayment" binding:"omitempty"`
 	Failover        bool        `json:"failover" binding:"omitempty"`
+	// RejectExisting asks the router to refuse this open when the wallet already
+	// has a live session for the same model. It is opt-in so existing API and
+	// mobile callers that intentionally manage multiple sessions keep their
+	// current behaviour.
+	RejectExisting bool `json:"rejectExisting" binding:"omitempty"`
 	// OmitProvider excludes a provider from bid selection, e.g. one whose
 	// backend just failed a prompt (impaired provider failover).
 	OmitProvider lib.Address `json:"omitProvider" binding:"omitempty" swaggertype:"string" example:"0x1234567890abcdef1234567890abcdef12345678"`

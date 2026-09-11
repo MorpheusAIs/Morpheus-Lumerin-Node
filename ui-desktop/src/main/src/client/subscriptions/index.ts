@@ -25,12 +25,39 @@ const listeners = {
   'login-submit': handlers.onLoginSubmit,
   // Api Gateway
   'get-all-models': handlers.getAllModels,
+  'get-models-page': handlers.getModelsPage,
+  'get-providers': handlers.getProviders,
+  'get-local-models': handlers.getLocalModels,
+  'get-node-config': handlers.getNodeConfig,
+  'update-eth-node': handlers.updateEthNode,
+  'get-sessions-by-user': handlers.getSessionsByUser,
+  'get-bids-by-model': handlers.getBidsByModel,
+  'get-bid-info': handlers.getBidInfo,
+  'close-session': handlers.closeSession,
+  'open-session': handlers.openSession,
+  'get-sessions-by-provider': handlers.getSessionsByProvider,
+  'get-provider-claimable-balance': handlers.getProviderClaimableBalance,
+  'claim-provider-funds': handlers.claimProviderFunds,
+  'synthesize-speech': handlers.synthesizeSpeech,
+  'transcribe-audio': handlers.transcribeAudio,
   'get-transactions': handlers.getTransactions,
   'get-balances': handlers.getBalances,
+  // Transfers. `send-mor` was implemented in handlers.ts but never registered
+  // here, so the channel didn't exist and the renderer had no way to reach it.
+  'send-mor': handlers.sendMor,
+  'send-eth': handlers.sendEth,
+  // Chat attachments
+  'parse-attachment': handlers.parseAttachment,
+  // Multi-wallet
+  'get-wallets': handlers.getWallets,
+  'add-hd-wallet': handlers.addHdWallet,
+  'import-wallet': handlers.importWallet,
+  'switch-wallet': handlers.switchWallet,
+  'remove-wallet': handlers.removeWallet,
+  'rename-wallet': handlers.renameWallet,
   'get-rates': handlers.getMorRate,
   'get-todays-budget': handlers.getTodaysBudget,
   'get-supply': handlers.getTokenSupply,
-  'get-auth-headers': handlers.getAuthHeaders,
   // Chat history
   'get-chat-history-titles': handlers.getChatHistoryTitles,
   'get-chat-history': handlers.getChatHistory,
@@ -43,12 +70,10 @@ const listeners = {
 
   // IPFS
   'get-ipfs-version': handlers.getIpfsVersion,
-  'get-ipfs-file': handlers.getIpfsFile,
   'pin-ipfs-file': handlers.pinIpfsFile,
   'unpin-ipfs-file': handlers.unpinIpfsFile,
   'add-file-to-ipfs': handlers.addFileToIpfs,
   'get-ipfs-pinned-files': handlers.getIpfsPinnedFiles,
-  'open-select-folder-dialog': handlers.openSelectFolderDialog,
 
   // Agent
   'get-agent-users': handlers.getAgentUsers,

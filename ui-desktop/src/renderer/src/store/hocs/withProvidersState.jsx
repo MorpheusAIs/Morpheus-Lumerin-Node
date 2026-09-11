@@ -1,140 +1,56 @@
-import * as validators from '../validators';
 import { withClient } from './clientContext';
-import * as utils from '../utils';
 import { connect } from 'react-redux';
-import PropTypes from 'prop-types';
 import React from 'react';
-import { ToastsContext } from '../../components/toasts';
 import selectors from '../selectors';
 
-const withProvidersState = WrappedComponent => {
+const withProvidersState = (WrappedComponent) => {
   class Container extends React.Component {
-   
-    static contextType = ToastsContext;
-
-    static displayName = `withProvidersState(${WrappedComponent.displayName ||
-      WrappedComponent.name})`;
+    static displayName = `withProvidersState(${
+      WrappedComponent.displayName || WrappedComponent.name
+    })`;
 
     getAllModels = async () => {
-        const result = await this.props.client.getAllModels();
-        return result;
-    }
-
-    getAllProviders = async () => {
-      try {
-        const authHeaders = await this.props.client.getAuthHeaders();
-        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/providers`
-        const response = await fetch(path, {
-          headers: authHeaders
-        });
-        const data = await response.json();
-        return data.providers;
-      }
-      catch(e) {
-        console.log("Error", e)
-        return [];
-      }
-    }
+      const result = await this.props.client.getAllModels();
+      return result;
+    };
 
     getSessionsByProvider = async (provider) => {
-      try {
-        const authHeaders = await this.props.client.getAuthHeaders();
-        const path = `${this.props.config.chain.localProxyRouterUrl}/blockchain/sessions/provider?provider=${provider}`;
-        const response = await fetch(path, {
-          headers: authHeaders
-        });
-        const data = await response.json();
-        return data.sessions;
-      }
-      catch(e) {
-        console.log("Error", e)
-        return [];
-      }
-    }
+      return (
+        (await this.props.client.getSessionsByProvider({ provider })) || []
+      );
+    };
 
     getBalanceBySession = async (sessionId) => {
-      try {
-        const authHeaders = await this.props.client.getAuthHeaders();
-        const path = `${this.props.config.chain.localProxyRouterUrl}/proxy/sessions/${sessionId}/providerClaimableBalance`
-        const response = await fetch(path, {
-          headers: authHeaders
-        });
-        const data = await response.json();
-        return data.balance;
-      }
-      catch(e) {
-        console.log("Error", e)
-        return [];
-      }
-    }
+      return this.props.client.getProviderClaimableBalance({ sessionId });
+    };
 
     claimFunds = async (sessionId) => {
-      try {
-        const authHeaders = await this.props.client.getAuthHeaders();
-        const path = `${props.config.chain.localProxyRouterUrl}/proxy/sessions/${sessionId}/providerClaim`;
-        const response = await fetch(path, {
-            method: "POST",
-            headers: authHeaders
-        });
-        const dataResponse = await response.json();
-      }
-      catch(e) {
-        console.log("Error", e)
-      }
-    }
+      // NOTE: this used to reference a bare `props` (instead of `this.props`),
+      // so every claim threw a ReferenceError that the catch below swallowed —
+      // the button silently did nothing. Errors now propagate to the caller so
+      // the UI can actually report a failed claim.
+      return this.props.client.claimProviderFunds({ sessionId });
+    };
 
-    fetchData = async (providerId) => {
-      const models = await this.getAllModels();
-      // const providers = await getAllProviders();
-      const providerSession = await this.getSessionsByProvider(providerId);
-      const modelsNames = models.reduce((a,b) => ({ ...a, [b.Id]: b.Name}), {});
-      
-      let results = [];
-      for (const session of providerSession) {
-        const id = session.Id;
-        let balance = 0;
-        try {
-          if(!session.ClosedAt) {
-            balance = (await this.getBalanceBySession(id));
-          }
-        }
-        catch(e) {
-          console.log(e);
-        }
-        results.push({ ...session, Balance: balance })
-      }
-
-      return { results, modelsNames };
-    }
- 
     render() {
-
       return (
         <WrappedComponent
-            getAllModels={this.getAllModels}
-            getAllProviders={this.getAllProviders}
-            getBalanceBySession={this.getBalanceBySession}
-            claimFunds={this.claimFunds}
-            getSessionsByProvider={this.getSessionsByProvider}
-            fetchData={this.fetchData}
-            {...this.state}
-            {...this.props}
+          getAllModels={this.getAllModels}
+          getBalanceBySession={this.getBalanceBySession}
+          claimFunds={this.claimFunds}
+          getSessionsByProvider={this.getSessionsByProvider}
+          {...this.state}
+          {...this.props}
         />
       );
     }
   }
 
   const mapStateToProps = (state, props) => ({
-    // selectedCurrency: selectors.getSellerSelectedCurrency(state),
     providerId: selectors.getWalletAddress(state),
-    config: state.config
   });
 
-  const mapDispatchToProps = dispatch => ({
-    setSelectedModel: model => dispatch({ type: 'set-model', payload: model })
-  });
-
-  return withClient(connect(mapStateToProps, mapDispatchToProps)(Container));
+  return withClient(connect(mapStateToProps)(Container));
 };
 
 export default withProvidersState;

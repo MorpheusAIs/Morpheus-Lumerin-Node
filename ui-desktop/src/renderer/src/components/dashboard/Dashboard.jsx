@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useContext } from 'react';
 import styled, { keyframes } from 'styled-components';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   IconCopy,
-  IconExternalLink,
   IconArrowDownLeft,
+  IconArrowUpRight,
   IconChartBar,
   IconLock,
 } from '@tabler/icons-react';
@@ -15,9 +15,17 @@ import TransactionModal from './tx-modal';
 import TxList from './tx-list/TxList';
 import { View } from '../common/View';
 import { toUSD } from '../../store/utils/syncAmounts';
-import { queryKeys, computeStakedFunds } from '../../store/queries';
+import {
+  queryKeys,
+  computeStakedFunds,
+  countOpenSessions,
+} from '../../store/queries';
+import QueryError from '../common/QueryError';
+import ExplorerLink from '../common/ExplorerLink';
+import WalletSwitcher from './WalletSwitcher';
 import { ToastsContext } from '../toasts';
 import { abbreviateAddress } from '../../utils';
+import { copyWalletAddress } from '../../utils/clipboard';
 import BaseLogo from '../icons/BaseLogo';
 import { MorpheusLogo } from '../icons/MorpheusLogo';
 import { EtherIcon } from '../icons/EtherIcon';
@@ -112,7 +120,9 @@ const IconBtn = styled.button`
   background: transparent;
   color: rgba(255, 255, 255, 0.6);
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 
   &:hover {
     background: rgba(32, 220, 142, 0.14);
@@ -137,10 +147,11 @@ const TokenCard = styled.div`
       ? 'linear-gradient(135deg, rgba(32,220,142,0.16) 0%, rgba(32,220,142,0.04) 55%, rgba(255,255,255,0.02) 100%)'
       : 'rgba(255,255,255,0.04)'};
   border: 1px solid
-    ${(p) =>
-      p.$accent ? 'rgba(32,220,142,0.30)' : 'rgba(255,255,255,0.07)'};
+    ${(p) => (p.$accent ? 'rgba(32,220,142,0.30)' : 'rgba(255,255,255,0.07)')};
   animation: ${fadeUp} 0.35s ease both;
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease;
 
   &:hover {
     transform: translateY(-2px);
@@ -289,7 +300,9 @@ const ActionTile = styled.button`
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.07);
   color: #fff;
-  transition: background 0.15s ease, border-color 0.15s ease,
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
     transform 0.15s ease;
 
   &:hover {
@@ -339,8 +352,20 @@ const Dashboard = ({
 }) => {
   const [activeModal, setActiveModal] = useState(null);
   const context = useContext(ToastsContext);
+  const queryClient = useQueryClient();
 
-  const onCloseModal = () => setActiveModal(null);
+  const onCloseModal = () => {
+    // A send may have just gone through, so drop the cached balances and
+    // transaction list rather than showing pre-transfer numbers for up to the
+    // 30s staleTime window.
+    if (activeModal === 'success') {
+      queryClient.invalidateQueries({ queryKey: queryKeys.balances(address) });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.transactions(address),
+      });
+    }
+    setActiveModal(null);
+  };
   const onTabSwitch = (modal) => setActiveModal(modal);
 
   // Cached, stale-while-revalidate data. Revisiting the wallet tab renders the
@@ -395,17 +420,20 @@ const Dashboard = ({
     [sessionsQuery.data],
   );
 
+  // Drives the switch confirmation: switching wallets stops any in-flight chat,
+  // so the user should know a session is live before doing it.
+  const openSessionCount = useMemo(
+    () => countOpenSessions(sessionsQuery.data),
+    [sessionsQuery.data],
+  );
+
   const { eth, mor } = balanceData;
   const balancesLive = balancesQuery.isFetching;
   const morSymbol = mor.symbol || 'MOR';
   const ethSymbol = eth.symbol || 'ETH';
-  const explorerHost = explorerUrl ? new URL(explorerUrl).hostname : 'explorer';
 
-  const handleCopy = () => {
-    if (!address) return;
-    copyToClipboard(address);
-    context.toast('info', 'Address copied to clipboard', { autoClose: 1500 });
-  };
+  const handleCopy = () =>
+    copyWalletAddress(address, copyToClipboard, context.toast);
 
   return (
     <View data-testid="dashboard-container">
@@ -420,21 +448,38 @@ const Dashboard = ({
           </TitleGroup>
 
           {address && (
-            <AddressPill>
-              <AddressDot />
-              {abbreviateAddress(address, 6)}
-              <IconBtn title="Copy address" onClick={handleCopy}>
-                <IconCopy size={16} />
-              </IconBtn>
-              <IconBtn
-                title={`View on ${explorerHost}`}
-                onClick={() => explorerUrl && window.openLink(explorerUrl)}
-              >
-                <IconExternalLink size={16} />
-              </IconBtn>
-            </AddressPill>
+            <div
+              style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}
+            >
+              <WalletSwitcher
+                activeAddress={address}
+                openSessionCount={openSessionCount}
+              />
+              <AddressPill>
+                <AddressDot />
+                {abbreviateAddress(address, 6)}
+                <IconBtn
+                  title="Copy address"
+                  aria-label="Copy wallet address"
+                  onClick={handleCopy}
+                >
+                  <IconCopy size={16} />
+                </IconBtn>
+                <ExplorerLink
+                  variant="icon"
+                  kind="account"
+                  url={explorerUrl}
+                />
+              </AddressPill>
+            </div>
           )}
         </TopBar>
+
+        <QueryError
+          error={balancesQuery.error}
+          what="balances"
+          onRetry={() => balancesQuery.refetch()}
+        />
 
         <HeroGrid>
           <TokenCard $accent>
@@ -486,6 +531,18 @@ const Dashboard = ({
               </StatValue>
             </StatText>
           </StatCard>
+
+          <ActionTile onClick={() => onTabSwitch('send')}>
+            <StatIcon>
+              <IconArrowUpRight size={22} />
+            </StatIcon>
+            <ActionText>
+              <ActionTitle>Send</ActionTitle>
+              <ActionSub>
+                Transfer {morSymbol} or {ethSymbol}
+              </ActionSub>
+            </ActionText>
+          </ActionTile>
 
           <ActionTile onClick={() => onTabSwitch('receive')}>
             <StatIcon>

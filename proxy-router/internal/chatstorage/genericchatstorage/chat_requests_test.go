@@ -2,6 +2,7 @@ package genericchatstorage
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -60,7 +61,10 @@ func TestChatCompletionMessage_UnmarshalContentShapes(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unmarshal: %v", err)
 			}
-			if got != tc.want {
+			// DeepEqual, not ==: ChatCompletionMessage now carries
+			// MultiContent []ChatMessagePart, and a struct with a slice
+			// field is not comparable — `!=` is a compile error.
+			if !reflect.DeepEqual(got, tc.want) {
 				t.Errorf("got %+v, want %+v", got, tc.want)
 			}
 		})

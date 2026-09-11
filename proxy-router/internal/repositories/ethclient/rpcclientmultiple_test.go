@@ -4,8 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"sync/atomic"
 	"testing"
+
+	"github.com/ethereum/go-ethereum/rpc"
 )
 
 func TestShouldRetryRPCError(t *testing.T) {
@@ -104,6 +109,39 @@ func TestShouldRetryRPCError(t *testing.T) {
 			err:      &url.Error{Op: "Get", URL: "http://example.com", Err: fmt.Errorf("dial failed")},
 			expected: true,
 		},
+		{
+			name: "retired endpoint",
+			err: rpc.HTTPError{
+				StatusCode: 410,
+				Status:     "410 Gone",
+				Body:       []byte(`{"error":"This endpoint has been discontinued."}`),
+			},
+			expected: true,
+		},
+		{
+			name: "missing endpoint path",
+			err: rpc.HTTPError{
+				StatusCode: 404,
+				Status:     "404 Not Found",
+			},
+			expected: true,
+		},
+		{
+			name: "http method rejected",
+			err: rpc.HTTPError{
+				StatusCode: 405,
+				Status:     "405 Method Not Allowed",
+			},
+			expected: true,
+		},
+		{
+			name: "invalid rpc request",
+			err: rpc.HTTPError{
+				StatusCode: 400,
+				Status:     "400 Bad Request",
+			},
+			expected: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -111,6 +149,96 @@ func TestShouldRetryRPCError(t *testing.T) {
 			got := shouldRetryRPCError(tt.err)
 			if got != tt.expected {
 				t.Errorf("shouldRetryRPCError(%v) = %v, want %v", tt.err, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestRPCClientMultiple_RotatesAfterRetiredEndpoint(t *testing.T) {
+	var retiredCalls atomic.Int32
+	retiredEndpoint := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		retiredCalls.Add(1)
+		w.WriteHeader(http.StatusGone)
+		_, _ = w.Write([]byte(`{"error":"This endpoint has been discontinued."}`))
+	}))
+	defer retiredEndpoint.Close()
+
+	var healthyCalls atomic.Int32
+	healthyEndpoint := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		healthyCalls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":"0x2105"}`))
+	}))
+	defer healthyEndpoint.Close()
+
+	client, err := NewRPCClientMultiple([]string{retiredEndpoint.URL, healthyEndpoint.URL}, nil)
+	if err != nil {
+		t.Fatalf("NewRPCClientMultiple() error = %v", err)
+	}
+	defer client.Close()
+
+	// retriableCall starts at Add(rr, 1) % n. Point the first attempt at the
+	// retired endpoint so the test exercises rotation rather than merely
+	// classifying an isolated error.
+	client.rr = uint32(len(client.clients) - 1)
+
+	var chainID string
+	if err := client.CallContext(context.Background(), &chainID, "eth_chainId"); err != nil {
+		t.Fatalf("CallContext() error = %v", err)
+	}
+	if chainID != "0x2105" {
+		t.Fatalf("CallContext() result = %q, want %q", chainID, "0x2105")
+	}
+	if got := retiredCalls.Load(); got != 1 {
+		t.Fatalf("retired endpoint calls = %d, want 1", got)
+	}
+	if got := healthyCalls.Load(); got != 1 {
+		t.Fatalf("healthy endpoint calls = %d, want 1", got)
+	}
+}
+
+// Read-only public RPCs answer reads happily but reject eth_sendRawTransaction.
+// https://mainnet.base.org is first in the public endpoint list for chain 8453
+// and returns exactly "method is not allowed on this endpoint". That phrasing
+// was not matched, so the client never rotated to an endpoint that would accept
+// the broadcast — making it impossible to open a session out of the box without
+// setting ETH_NODE_ADDRESS.
+func TestShouldRetryRPCError_ReadOnlyEndpoint(t *testing.T) {
+	retryable := []struct {
+		name string
+		msg  string
+	}{
+		{"base mainnet public rpc", "method is not allowed on this endpoint"},
+		{"capitalised", "Method Is Not Allowed On This Endpoint"},
+		{"wrapped by proxy-router", "failed to send transaction: open session failed: failed to send transaction: method is not allowed on this endpoint"},
+		{"method not allowed", "method not allowed"},
+		{"method not found", "the method eth_sendRawTransaction does not exist/is not available: method not found"},
+		{"unsupported method", "unsupported method: eth_sendRawTransaction"},
+		{"method is not available", "method is not available"},
+	}
+
+	for _, tt := range retryable {
+		t.Run(tt.name, func(t *testing.T) {
+			if !shouldRetryRPCError(fmt.Errorf("%s", tt.msg)) {
+				t.Errorf("shouldRetryRPCError(%q) = false, want true (should rotate to the next endpoint)", tt.msg)
+			}
+		})
+	}
+
+	// A revert is a decision by the contract, not an endpoint problem. Rotating
+	// would just replay a doomed transaction against every RPC in the list.
+	notRetryable := []struct {
+		name string
+		msg  string
+	}{
+		{"execution reverted", "execution reverted: insufficient allowance"},
+		{"insufficient funds", "insufficient funds for gas * price + value: have 100 want 200"},
+	}
+
+	for _, tt := range notRetryable {
+		t.Run(tt.name, func(t *testing.T) {
+			if shouldRetryRPCError(fmt.Errorf("%s", tt.msg)) {
+				t.Errorf("shouldRetryRPCError(%q) = true, want false (rotating cannot help)", tt.msg)
 			}
 		})
 	}
