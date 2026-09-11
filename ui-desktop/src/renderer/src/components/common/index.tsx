@@ -13,6 +13,7 @@ import GasEditor from './GasEditor';
 import Selector from './Selector';
 import { GlobalTooltips, Tooltip } from './Tooltips';
 import Modal from './Modal';
+import ExplorerLink, { explorerHost } from './ExplorerLink';
 import Tabs from './Tabs';
 import Text from './Text';
 import Flex from './Flex';
@@ -34,6 +35,8 @@ export {
   Tooltip,
   FieldBtn,
   BaseBtn,
+  ExplorerLink,
+  explorerHost,
   Label,
   Modal,
   Tabs,

@@ -215,6 +215,114 @@ describe('ModelSelectionModal Workspace filter', () => {
     expect(screen.queryByText('Deleted Chat Model')).toBeNull();
   });
 
+  it('gives the user a labelled way back out of the picker', () => {
+    const handleClose = vi.fn();
+    render(
+      <ThemeProvider theme={theme}>
+        <ModelSelectionModal
+          isActive
+          handleClose={handleClose}
+          onChangeModel={vi.fn()}
+          symbol="MOR"
+          models={[marketplaceModel({ Id: 'chat', Name: 'Chat Model' })]}
+        />
+      </ThemeProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(handleClose).toHaveBeenCalledOnce();
+  });
+
+  it('remembers where the user was instead of resetting on every close', () => {
+    const props = {
+      handleClose: vi.fn(),
+      onChangeModel: vi.fn(),
+      symbol: 'MOR',
+      models: [
+        marketplaceModel({ Id: 'chat', Name: 'Chat Model' }),
+        marketplaceModel({
+          Id: 'speech',
+          Name: 'Speech Model',
+          ModelType: 'tts',
+          Tags: ['tts'],
+        }),
+      ],
+    };
+    const { rerender } = render(
+      <ThemeProvider theme={theme}>
+        <ModelSelectionModal {...props} isActive />
+      </ThemeProvider>,
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Show Text-to-Speech models (1)' }),
+    );
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search models' }), {
+      target: { value: 'Speech' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Speech Model' }));
+
+    rerender(
+      <ThemeProvider theme={theme}>
+        <ModelSelectionModal {...props} isActive={false} />
+      </ThemeProvider>,
+    );
+    rerender(
+      <ThemeProvider theme={theme}>
+        <ModelSelectionModal {...props} isActive />
+      </ThemeProvider>,
+    );
+
+    expect(
+      screen.getByRole('textbox', { name: 'Search models' }),
+    ).toHaveValue('Speech');
+    expect(
+      screen
+        .getByRole('button', { name: 'Show Text-to-Speech models (1)' })
+        .getAttribute('aria-pressed'),
+    ).toBe('true');
+  });
+
+  it('drops a filter that the other mode does not even show', () => {
+    const props = {
+      handleClose: vi.fn(),
+      onChangeModel: vi.fn(),
+      symbol: 'MOR',
+      models: [
+        marketplaceModel({ Id: 'chat', Name: 'Chat Model' }),
+        marketplaceModel({
+          Id: 'speech',
+          Name: 'Speech Model',
+          ModelType: 'tts',
+          Tags: ['tts'],
+        }),
+      ],
+    };
+    const { rerender } = render(
+      <ThemeProvider theme={theme}>
+        <ModelSelectionModal {...props} isActive />
+      </ThemeProvider>,
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /Workspace candidate/ }),
+    );
+
+    // Workspace setup hides the candidate pill entirely. Carrying the filter
+    // over would leave no visible control explaining the shortened list.
+    rerender(
+      <ThemeProvider theme={theme}>
+        <ModelSelectionModal {...props} isActive coworkSetup />
+      </ThemeProvider>,
+    );
+
+    expect(
+      screen.getByRole('button', { name: /Show All models/ }).getAttribute(
+        'aria-pressed',
+      ),
+    ).toBe('true');
+  });
+
   it('keeps the catalog usable when model tags have inconsistent shapes', () => {
     render(
       <ThemeProvider theme={theme}>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import styled, { keyframes } from 'styled-components';
 
 const spin = keyframes`
@@ -19,6 +19,7 @@ import {
   IconEye,
   IconSparkles,
   IconLoader2,
+  IconArrowLeft,
 } from '@tabler/icons-react';
 import Modal from '../../contracts/modals/Modal';
 import ModelRow from './ModelRow';
@@ -66,6 +67,40 @@ const Layout = styled.div`
 const Header = styled.div`
   padding: 1.8rem 5.5rem 1.4rem 2.4rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+`;
+
+/* The close X is a small unlabelled glyph in the far corner. Backing out of
+   the picker is the most common non-pick action, so it gets a real, labelled
+   control of its own. */
+const BackBtn = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 1.1rem;
+  padding: 4px 11px 4px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 1.15rem;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(255, 255, 255, 0.16);
+    color: rgba(255, 255, 255, 0.95);
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba(32, 220, 142, 0.5);
+    outline-offset: 2px;
+  }
 `;
 
 const TitleRow = styled.div`
@@ -353,6 +388,48 @@ const ModelSelectionModal = ({
   const [filter, setFilter] = useState<FilterId>('all');
   const [showTeeInfo, setShowTeeInfo] = useState(false);
 
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  // Where the list was left off. A ref rather than state, so scrolling a list
+  // of this size never triggers a re-render.
+  const scrollTopRef = useRef(0);
+  const pendingRestoreRef = useRef(false);
+  const modeKey = `${marketplaceOnly}:${coworkSetup}`;
+  const modeKeyRef = useRef(modeKey);
+
+  // Reopening the picker should land the user where they left off. The list is
+  // long, and after trying one model the reason for coming back is almost
+  // always "the one just under that one" — which used to mean scrolling all
+  // the way down again, because closing wiped search, filter and position.
+  useEffect(() => {
+    if (isActive) pendingRestoreRef.current = true;
+  }, [isActive]);
+
+  useLayoutEffect(() => {
+    if (!isActive || !pendingRestoreRef.current) return;
+    const el = bodyRef.current;
+    if (!el) return;
+    // Nothing to scroll yet — still loading, or filtered down to nothing. Keep
+    // the request pending until there is actually a list to restore into.
+    if (el.scrollHeight <= el.clientHeight) return;
+    el.scrollTop = Math.min(
+      scrollTopRef.current,
+      el.scrollHeight - el.clientHeight,
+    );
+    pendingRestoreRef.current = false;
+  });
+
+  // Workspace setup and plain new-chat show different pills and different
+  // models. Carrying a now-hidden filter across the two would leave the user
+  // staring at a short list with no visible control explaining why.
+  useEffect(() => {
+    if (modeKeyRef.current === modeKey) return;
+    modeKeyRef.current = modeKey;
+    scrollTopRef.current = 0;
+    setSearch('');
+    setFilter('all');
+    setShowTeeInfo(false);
+  }, [modeKey]);
+
   // NB: hooks must run on every render — keep `useMemo` BEFORE the
   // `isActive` early-return, otherwise the hook count changes between
   // renders and React throws "Rendered more hooks than during the previous
@@ -432,16 +509,13 @@ const ModelSelectionModal = ({
   // Bail out *after* all hooks have run.
   if (!isActive) return null;
 
-  const resetAndClose = () => {
-    setSearch('');
-    setFilter('all');
-    setShowTeeInfo(false);
-    handleClose();
-  };
+  // Closing deliberately preserves search, filter and scroll position so the
+  // back button has somewhere to go back *to*.
+  const close = () => handleClose();
 
   const handlePick = (data: any) => {
     onChangeModel(data);
-    resetAndClose();
+    close();
   };
 
   // A provider-declared capability and a name-family heuristic are materially
@@ -488,7 +562,7 @@ const ModelSelectionModal = ({
 
   return (
     <Modal
-      onClose={resetAndClose}
+      onClose={close}
       bodyProps={bodyProps}
       ariaLabel={
         coworkSetup ? 'Choose a model for Workspace' : 'Choose a model'
@@ -496,6 +570,10 @@ const ModelSelectionModal = ({
     >
       <Layout>
         <Header>
+          <BackBtn type="button" onClick={close}>
+            <IconArrowLeft size={15} stroke={2} aria-hidden="true" />
+            Back
+          </BackBtn>
           <TitleRow>
             <Title>
               {coworkSetup ? 'Choose a text model for Workspace' : 'New chat'}
@@ -579,7 +657,15 @@ const ModelSelectionModal = ({
           )}
         </Header>
 
-        <Body aria-busy={modelsLoading}>
+        <Body
+          ref={bodyRef}
+          onScroll={(e) => {
+            // Don't record the pre-restore position as the new one.
+            if (pendingRestoreRef.current) return;
+            scrollTopRef.current = (e.target as HTMLDivElement).scrollTop;
+          }}
+          aria-busy={modelsLoading}
+        >
           {modelsLoading ? (
             <LoadingState role="status" aria-live="polite">
               <IconLoader2 size={32} stroke={1.8} aria-hidden="true" />

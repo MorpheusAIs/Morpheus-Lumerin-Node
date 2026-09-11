@@ -95,7 +95,11 @@ describe('Agents transaction dialog', () => {
     expect(screen.queryByText('Loading transactions…')).not.toBeInTheDocument();
   });
 
-  it('shows transaction links safely in a successful history', () => {
+  it('shows transaction links safely in a successful history', async () => {
+    // Explorer links go out through the main process rather than a renderer
+    // anchor, so there is no window for the target page to reach back into.
+    const openLink = window.openLink as unknown as ReturnType<typeof vi.fn>;
+    openLink.mockClear();
     render(
       <ThemeProvider theme={theme}>
         <Agents
@@ -103,12 +107,11 @@ describe('Agents transaction dialog', () => {
         />
       </ThemeProvider>,
     );
-    const link = screen.getByRole('link', { name: '0xabc' });
-    expect(link).toHaveAttribute(
-      'href',
+    const link = screen.getByRole('button', { name: '0xabc' });
+    expect(link).toHaveAttribute('title', 'View transaction on example.com');
+    await userEvent.click(link);
+    expect(openLink).toHaveBeenCalledWith(
       'https://example.com/transaction/0xabc',
     );
-    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
-    expect(link).toHaveStyle({ overflowWrap: 'anywhere' });
   });
 });

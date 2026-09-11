@@ -2,6 +2,7 @@ import { LayoutHeader } from '../common/LayoutHeader';
 import { View } from '../common/View';
 import { TrashIcon } from '@renderer/components/icons/TrashIcon';
 import Modal from '../common/Modal';
+import ExplorerLink from '../common/ExplorerLink';
 import withAgentsState, {
   MappedProps,
   ContainerProps,
@@ -200,14 +201,13 @@ export const Agents = (props: ContainerProps & MappedProps) => {
               {txModal.data.map((tx) => {
                 return (
                   <TransactionRow key={tx}>
-                    <a
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      href={props.txUrlResolver(tx)}
-                      style={{ overflowWrap: 'anywhere', minWidth: 0 }}
+                    <ExplorerLink
+                      kind="transaction"
+                      url={props.txUrlResolver(tx)}
+                      style={{ minWidth: 0 }}
                     >
                       {tx}
-                    </a>
+                    </ExplorerLink>
                   </TransactionRow>
                 );
               })}

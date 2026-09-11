@@ -17,7 +17,7 @@ import {
   FooterSublabel,
 } from './common.styles';
 import { copyWalletAddress } from '../../../utils/clipboard';
-import { BtnAccent } from '../BalanceBlock.styles';
+import ExplorerLink from '../../common/ExplorerLink';
 const QRContainer = styled.div`
   display: flex;
   align-self: center;
@@ -126,14 +126,12 @@ export function ReceiveForm({
           {eth.value.toFixed(6)} {eth.symbol} ≈ {eth.usd || 0}
         </FooterSublabel>
         <Divider style={{ margin: '2rem 0' }} />
-        <BtnAccent
+        <ExplorerLink
+          variant="button"
+          kind="account"
+          url={explorerUrl}
           style={{ marginBottom: '5px' }}
-          onClick={() => {
-            window.openLink(explorerUrl);
-          }}
-        >
-          View account at {explorerUrl ? new URL(explorerUrl).hostname : ''}
-        </BtnAccent>
+        />
       </Footer>
     </>
   );

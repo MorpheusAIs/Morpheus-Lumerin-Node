@@ -3,7 +3,6 @@ import styled, { keyframes } from 'styled-components';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   IconCopy,
-  IconExternalLink,
   IconArrowDownLeft,
   IconArrowUpRight,
   IconChartBar,
@@ -22,6 +21,7 @@ import {
   countOpenSessions,
 } from '../../store/queries';
 import QueryError from '../common/QueryError';
+import ExplorerLink from '../common/ExplorerLink';
 import WalletSwitcher from './WalletSwitcher';
 import { ToastsContext } from '../toasts';
 import { abbreviateAddress } from '../../utils';
@@ -431,7 +431,6 @@ const Dashboard = ({
   const balancesLive = balancesQuery.isFetching;
   const morSymbol = mor.symbol || 'MOR';
   const ethSymbol = eth.symbol || 'ETH';
-  const explorerHost = explorerUrl ? new URL(explorerUrl).hostname : 'explorer';
 
   const handleCopy = () =>
     copyWalletAddress(address, copyToClipboard, context.toast);
@@ -466,12 +465,11 @@ const Dashboard = ({
                 >
                   <IconCopy size={16} />
                 </IconBtn>
-                <IconBtn
-                  title={`View on ${explorerHost}`}
-                  onClick={() => explorerUrl && window.openLink(explorerUrl)}
-                >
-                  <IconExternalLink size={16} />
-                </IconBtn>
+                <ExplorerLink
+                  variant="icon"
+                  kind="account"
+                  url={explorerUrl}
+                />
               </AddressPill>
             </div>
           )}

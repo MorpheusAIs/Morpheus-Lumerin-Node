@@ -2,6 +2,7 @@ import React from 'react';
 import styled from 'styled-components';
 
 import { BaseBtn } from '../../common';
+import ExplorerLink from '../../common/ExplorerLink';
 import { abbreviateAddress } from '../../../utils';
 import { SuccessLayer } from './SuccessLayer';
 
@@ -119,19 +120,15 @@ export function SuccessForm(props) {
           {abbreviateAddress(props.toAddress)}
         </FooterLabel>
         {props.txHash && (
-          <FooterLabel
-            style={{
-              cursor: 'pointer',
-              textDecoration: 'underline',
-              wordBreak: 'break-all',
-            }}
-            onClick={() =>
-              props.txUrlResolver
-                ? window.openLink(props.txUrlResolver(props.txHash))
-                : undefined
-            }
-          >
-            {abbreviateAddress(props.txHash)} — view on explorer
+          <FooterLabel>
+            <ExplorerLink
+              kind="transaction"
+              url={
+                props.txUrlResolver ? props.txUrlResolver(props.txHash) : null
+              }
+            >
+              {abbreviateAddress(props.txHash)}
+            </ExplorerLink>
           </FooterLabel>
         )}
         <DoneBtn data-modal={null} onClick={onDone}>
