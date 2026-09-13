@@ -15,9 +15,10 @@ import (
 )
 
 const (
-	authRequestPrefix      = "auth_request"
-	allowanceRequestPrefix = "allowance_request"
-	agentTxPrefix          = "agent_tx"
+	authRequestPrefix        = "auth_request"
+	allowanceRequestPrefix   = "allowance_request"
+	agentTxPrefix            = "agent_tx"
+	allowanceConflictRetries = 32
 )
 
 type AuthStorage struct {
@@ -156,6 +157,82 @@ func (s *AuthStorage) ConfirmOrDeclineAllowanceRequest(username string, token st
 
 	key := formatKey(allowanceRequestPrefix, username, token)
 	return s.db.Delete(key)
+}
+
+// DecreaseAllowance subtracts amount from the token allowance inside one Badger
+// transaction. It fails closed if the user, token, or remaining balance is missing.
+func (s *AuthStorage) DecreaseAllowance(username string, token string, amount lib.BigInt) error {
+	return s.adjustAllowance(username, token, amount, false)
+}
+
+// IncreaseAllowance adds amount to the token allowance inside one Badger transaction.
+func (s *AuthStorage) IncreaseAllowance(username string, token string, amount lib.BigInt) error {
+	return s.adjustAllowance(username, token, amount, true)
+}
+
+func (s *AuthStorage) adjustAllowance(username string, token string, amount lib.BigInt, increase bool) error {
+	token = strings.ToLower(token)
+	if amount.Sign() < 0 {
+		return fmt.Errorf("allowance adjustment must be non-negative")
+	}
+
+	key := formatKey(authRequestPrefix, username)
+	var last error
+	for attempt := 0; attempt < allowanceConflictRetries; attempt++ {
+		last = s.adjustAllowanceOnce(key, username, token, amount, increase)
+		if last == nil || !errors.Is(last, badger.ErrConflict) {
+			return last
+		}
+	}
+	return last
+}
+
+func (s *AuthStorage) adjustAllowanceOnce(key []byte, username string, token string, amount lib.BigInt, increase bool) error {
+	return s.db.RunInTransaction(func(txn *badger.Txn) error {
+		item, err := txn.Get(key)
+		if err != nil {
+			if errors.Is(err, badger.ErrKeyNotFound) {
+				return fmt.Errorf("allowance not found")
+			}
+			return fmt.Errorf("error reading agent user %s for allowance update: %w", username, err)
+		}
+
+		requestJson, err := item.ValueCopy(nil)
+		if err != nil {
+			return fmt.Errorf("error copying agent user value for %s: %w", username, err)
+		}
+
+		request := &AgentUser{}
+		if err := json.Unmarshal(requestJson, request); err != nil {
+			return fmt.Errorf("error unmarshaling agent user %s: %w", username, err)
+		}
+
+		if request.Allowances == nil {
+			request.Allowances = make(map[string]lib.BigInt)
+		}
+
+		current, exists := request.Allowances[token]
+		if !exists && !increase {
+			return fmt.Errorf("allowance not found")
+		}
+
+		next := new(big.Int).Set(&current.Int)
+		if increase {
+			next.Add(next, &amount.Int)
+		} else {
+			if next.Cmp(&amount.Int) < 0 {
+				return fmt.Errorf("not enough allowance")
+			}
+			next.Sub(next, &amount.Int)
+		}
+		request.Allowances[token] = lib.BigInt{Int: *next}
+
+		updatedJson, err := json.Marshal(request)
+		if err != nil {
+			return err
+		}
+		return txn.Set(key, updatedJson)
+	})
 }
 
 // SetAllowance atomically reads the agent user, updates the allowance, and writes back

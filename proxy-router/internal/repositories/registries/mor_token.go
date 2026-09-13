@@ -125,7 +125,7 @@ func (g *MorToken) Transfer(ctx *bind.TransactOpts, to common.Address, value *bi
 	// Wait for the transaction receipt with timeout
 	receipt, err := lib.WaitMinedWithTimeout(ctx.Context, g.client, tx, lib.DefaultTxMineTimeout)
 	if err != nil {
-		return nil, nil, err
+		return tx, nil, err
 	}
 	return tx, receipt, nil
 }
