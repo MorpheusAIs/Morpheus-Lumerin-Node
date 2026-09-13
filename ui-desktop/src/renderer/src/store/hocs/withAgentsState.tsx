@@ -14,6 +14,8 @@ export interface ContainerProps {
   pendingAgents: AgentUser[];
   activeAgents: AgentUser[];
   allowanceRequests: AgentAllowanceRequest[];
+  isLoading: boolean;
+  loadError: string | null;
   txModal: TxModal;
   setTxModal: (txModal: TxModal) => void;
   handleApproveAccess: (agent: AgentUser, approve: boolean) => Promise<void>;
@@ -63,6 +65,8 @@ const withAgentsState = (WrappedComponent: ComponentType<any>) => {
     const [allowanceRequests, setAllowanceRequests] = useState<
       AgentAllowanceRequest[]
     >([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [refresh, setRefresh] = useState(0);
     const context = useContext(ToastsContext);
 
@@ -95,34 +99,46 @@ const withAgentsState = (WrappedComponent: ComponentType<any>) => {
     }
 
     useEffect(() => {
-      fetchPageData();
+      void fetchPageData();
     }, [refresh]);
 
     async function fetchPageData() {
-      const pendingAgentRequests = await props.client.getAgentUsers();
-      if (!pendingAgentRequests) {
-        console.error('Failed to fetch pending agent requests');
-        return;
-      }
-      let pendingAgents: AgentUser[] = [];
-      let activeAgents: AgentUser[] = [];
+      setIsLoading(true);
+      setLoadError(null);
 
-      for (const agent of pendingAgentRequests.agents) {
-        if (agent.isConfirmed) {
-          activeAgents.push(agent);
-        } else {
-          pendingAgents.push(agent);
+      try {
+        const [agentUsersResponse, allowanceRequestsResponse] =
+          await Promise.all([
+            props.client.getAgentUsers(),
+            props.client.getAgentAllowanceRequests(),
+          ]);
+
+        if (!agentUsersResponse || !allowanceRequestsResponse) {
+          throw new Error('One or more agent API requests failed');
         }
-      }
-      setPendingAgents(pendingAgents);
-      setActiveAgents(activeAgents);
 
-      const allowanceRequests = await props.client.getAgentAllowanceRequests();
-      if (!allowanceRequests) {
-        console.error('Failed to fetch allowance requests');
-        return;
+        const nextPendingAgents: AgentUser[] = [];
+        const nextActiveAgents: AgentUser[] = [];
+
+        for (const agent of agentUsersResponse.agents) {
+          if (agent.isConfirmed) {
+            nextActiveAgents.push(agent);
+          } else {
+            nextPendingAgents.push(agent);
+          }
+        }
+
+        setPendingAgents(nextPendingAgents);
+        setActiveAgents(nextActiveAgents);
+        setAllowanceRequests(allowanceRequestsResponse.requests);
+      } catch (error) {
+        console.error('Failed to fetch agent data', error);
+        setLoadError(
+          'Unable to load agent data. Check that the proxy router is running and try again.',
+        );
+      } finally {
+        setIsLoading(false);
       }
-      setAllowanceRequests(allowanceRequests.requests);
     }
 
     async function handleApproveAccess(agent: AgentUser, approve: boolean) {
@@ -173,6 +189,8 @@ const withAgentsState = (WrappedComponent: ComponentType<any>) => {
         pendingAgents={pendingAgents}
         activeAgents={activeAgents}
         allowanceRequests={allowanceRequests}
+        isLoading={isLoading}
+        loadError={loadError}
         txModal={txModal}
         setTxModal={setTxModal}
         handleApproveAccess={handleApproveAccess}

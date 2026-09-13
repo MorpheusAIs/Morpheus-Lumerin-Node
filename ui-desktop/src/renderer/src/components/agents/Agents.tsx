@@ -14,6 +14,7 @@ import {
   TransactionList,
   TransactionRow,
   ScrollContainer,
+  ListStatus,
 } from '@renderer/components/agents/Agents.styles';
 import { AgentRowComp } from '@renderer/components/agents/AgentRow';
 import { AllowanceRowComp } from '@renderer/components/agents/AllowanceRow';
@@ -28,6 +29,8 @@ const Agents = (props: ContainerProps & MappedProps) => {
     handleApproveAccess,
     handleApproveAllowance,
     handleDeleteAgent,
+    isLoading,
+    loadError,
   } = props;
 
   return (
@@ -39,8 +42,15 @@ const Agents = (props: ContainerProps & MappedProps) => {
     >
       <LayoutHeader title="Agents" />
       <ScrollContainer>
+        {!isLoading && loadError && (
+          <ListStatus role="alert">{loadError}</ListStatus>
+        )}
         <SubHeader>Access requests</SubHeader>
         <AgentList>
+          {isLoading && <ListStatus>Loading access requests…</ListStatus>}
+          {!isLoading && !loadError && pendingAgents.length === 0 && (
+            <ListStatus>No pending access requests.</ListStatus>
+          )}
           {pendingAgents.map((agent) => (
             <AgentRowComp
               key={agent.username}
@@ -67,6 +77,10 @@ const Agents = (props: ContainerProps & MappedProps) => {
         </AgentList>
         <SubHeader>Allowance requests</SubHeader>
         <AgentList>
+          {isLoading && <ListStatus>Loading allowance requests…</ListStatus>}
+          {!isLoading && !loadError && allowanceRequests.length === 0 && (
+            <ListStatus>No pending allowance requests.</ListStatus>
+          )}
           {allowanceRequests.map((agent) => (
             <AllowanceRowComp
               key={`${agent.username}-${agent.token}`}
@@ -97,6 +111,10 @@ const Agents = (props: ContainerProps & MappedProps) => {
         </AgentList>
         <SubHeader>All Agents</SubHeader>
         <AgentList>
+          {isLoading && <ListStatus>Loading agents…</ListStatus>}
+          {!isLoading && !loadError && activeAgents.length === 0 && (
+            <ListStatus>No agents have been approved yet.</ListStatus>
+          )}
           {activeAgents.map((agent) => (
             <AgentRowComp
               key={agent.username}
