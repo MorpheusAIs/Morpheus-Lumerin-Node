@@ -16,6 +16,15 @@ export const queryKeys = {
   // provider bid, so the filtered result can differ after switching wallets.
   modelBids: (address?: string, modelId?: string) =>
     ['modelBids', address ?? '', modelId ?? ''] as const,
+  // Bids ordered by the router's own score. Kept separate from modelBids: the
+  // active list is unordered and includes providers the router would skip, so
+  // it cannot answer "which provider will this open against, and at what
+  // price". Same wallet reasoning applies.
+  ratedModelBids: (address?: string, modelId?: string) =>
+    ['ratedModelBids', address ?? '', modelId ?? ''] as const,
+  // The contract's session length range. Owner settable, so it is read rather
+  // than hardcoded, but it changes rarely enough to cache broadly.
+  sessionDurationBounds: ['sessionDurationBounds'] as const,
   // raw on-chain user sessions (paginated) — shared by Chat + Wallet
   sessions: (address?: string) => ['sessions', address ?? ''] as const,
   // saved chat-history titles (local proxy-router index)

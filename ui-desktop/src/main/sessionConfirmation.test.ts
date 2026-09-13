@@ -554,7 +554,11 @@ describe('isolated session-confirmation document', () => {
     expect(document.body.textContent).toContain(details.modelId)
     expect(document.body.textContent).toContain('3,600 seconds')
     expect(document.body.textContent).toContain('Stake MOR · escrow')
-    expect(document.body.textContent).toContain('Unused stake returns when the session closes.')
+    expect(document.body.textContent).toContain('Unused stake returns when the session closes')
+    // Staking refunds in full: _rewardUserAfterClose pays the provider from
+    // emissions unless the session is direct pay. The old copy left the user to
+    // assume the compute came out of their stake.
+    expect(document.body.textContent).toContain('the provider is paid from emissions')
     expect(document.body.textContent).toContain('Enabled')
   })
 
@@ -567,6 +571,22 @@ describe('isolated session-confirmation document', () => {
     expect(document.body.textContent).toContain('Direct MOR payment')
     expect(document.body.textContent).toContain('Disabled')
     expect(document.body.textContent).not.toContain('Unused stake returns')
+  })
+
+  it('names the provider when one was chosen, and stays silent when none was', () => {
+    const provider = '0x1234567890abcdef1234567890abcdef12345678'
+    const chosen = new DOMParser().parseFromString(
+      renderSessionConfirmationHtml({ ...details, provider }, 'safe-test-nonce'),
+      'text/html'
+    )
+    expect([...chosen.querySelectorAll('dt')].map((term) => term.textContent)).toContain('Provider')
+    expect(chosen.body.textContent).toContain(provider)
+
+    const unchosen = new DOMParser().parseFromString(
+      renderSessionConfirmationHtml(details, 'safe-test-nonce'),
+      'text/html'
+    )
+    expect(unchosen.body.textContent).not.toContain(provider)
   })
 })
 

@@ -6,22 +6,11 @@ import {
   SESSION_DURATION_OPTIONS,
   clampSessionDuration,
   estimateSessionTokenAmount,
-  toSessionRequestDuration,
+  sessionComputeCost,
+  sessionDurationOptions,
 } from './sessionDuration';
 
 describe('session duration', () => {
-  it('passes a staked session duration through unchanged', () => {
-    expect(
-      toSessionRequestDuration(3600, false, { supply: 100, budget: 10 }),
-    ).toBe(3600);
-  });
-
-  it('compensates direct pay for the current contract conversion', () => {
-    expect(
-      toSessionRequestDuration(900, true, { supply: 100, budget: 10 }),
-    ).toBe(9001);
-  });
-
   it('offers nothing shorter than a session a provider will accept', () => {
     // Five minutes fell under the provider minimum spend, so picking it only
     // ever produced a refused session request.
@@ -44,15 +33,49 @@ describe('session duration', () => {
     expect(clampSessionDuration(999_999)).toBe(MAX_SESSION_DURATION_SECONDS);
   });
 
-  it('estimates the amount for the selected duration and payment method', () => {
-    const meta = { supply: 100, budget: 10 };
-    expect(estimateSessionTokenAmount(2, 900, false, meta)).toBe(18000);
-    expect(estimateSessionTokenAmount(2, 900, true, meta)).toBe(18002);
+  it('honours a ceiling lower than the hardcoded one', () => {
+    // getSessionEnd clamps to the contract's own maximum, so a length above it
+    // is paid for and not received.
+    expect(clampSessionDuration(24 * 60 * 60, 3600)).toBe(3600);
+    expect(sessionDurationOptions(3600).map((option) => option.seconds)).toEqual(
+      [900, 1800, 3600],
+    );
+    expect(sessionDurationOptions()).toEqual(SESSION_DURATION_OPTIONS);
   });
 
-  it('rejects direct-pay conversion until pricing is available', () => {
+  it('never leaves the picker empty when the ceiling is misreported', () => {
+    expect(sessionDurationOptions(1)).toEqual([SESSION_DURATION_OPTIONS[0]]);
+    expect(sessionDurationOptions(Number.NaN)).toEqual(
+      SESSION_DURATION_OPTIONS,
+    );
+  });
+
+  it('charges the same amount whichever way the provider is paid', () => {
+    // The payment method decides who pays the provider at close, not what the
+    // session costs to open. Direct pay used to be quoted at price x duration,
+    // which buys a few hundredth of the length asked for.
+    const meta = { supply: 100, budget: 10 };
+    // 2 wei/s x (900 + 1 headroom) x 100 / 10.
+    expect(estimateSessionTokenAmount(2, 900, meta)).toBe(18020);
+  });
+
+  it('rounds the amount up so the session is never short', () => {
+    expect(estimateSessionTokenAmount(1, 900, { supply: 10, budget: 3 })).toBe(
+      Math.ceil((901 * 10) / 3),
+    );
+  });
+
+  it('reports the compute cost separately from the amount locked up', () => {
+    const meta = { supply: 100, budget: 10 };
+    expect(sessionComputeCost(2, 900)).toBe(1800);
+    expect(estimateSessionTokenAmount(2, 900, meta)).toBeGreaterThan(
+      sessionComputeCost(2, 900),
+    );
+  });
+
+  it('refuses to quote until pricing data has loaded', () => {
     expect(() =>
-      toSessionRequestDuration(900, true, { supply: 0, budget: 0 }),
+      estimateSessionTokenAmount(2, 900, { supply: 0, budget: 0 }),
     ).toThrow('Pricing data is not ready');
   });
 });

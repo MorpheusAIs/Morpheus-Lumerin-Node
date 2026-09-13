@@ -65,6 +65,19 @@ type QueryProvider struct {
 
 type OpenSessionWithDurationRequest struct {
 	SessionDuration *lib.BigInt `json:"sessionDuration" swaggertype:"integer"`
+	// DirectPayment pays the provider out of the amount escrowed for this
+	// session instead of out of the emissions pool. Opening against a chosen
+	// bid used to force staking, so a consumer picking their own provider had
+	// no way to pay directly.
+	DirectPayment bool `json:"directPayment" binding:"omitempty"`
+}
+
+// QueryOpenSessionEstimate selects what to quote: a session length, a payment
+// method, and optionally one specific bid rather than the top-scored one.
+type QueryOpenSessionEstimate struct {
+	SessionDuration *lib.BigInt `form:"sessionDuration" binding:"required" validate:"number,gt=0" swaggertype:"integer"`
+	DirectPayment   bool        `form:"directPayment" binding:"omitempty"`
+	BidID           string      `form:"bidId" binding:"omitempty" validate:"omitempty,hex32"`
 }
 
 type OpenSessionWithFailover struct {

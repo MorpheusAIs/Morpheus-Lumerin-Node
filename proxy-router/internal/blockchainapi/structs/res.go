@@ -86,8 +86,15 @@ type BlockRes struct {
 	Block uint64 `json:"block" example:"1234"`
 }
 
-// OpenSessionStakeEstimate is the MOR amount and inputs used when opening a session
-// with the top-scored bid (same ordering as GetRatedBids / first OpenSession attempt).
+// OpenSessionStakeEstimate is the MOR amount and the inputs it was derived
+// from, for the bid that was quoted. Unless a bid is named explicitly that is
+// the top-scored bid, the one an unattended open tries first (same ordering as
+// GetRatedBids).
+//
+// StakeWei is what the diamond pulls from the wallet. SessionCostWei is the
+// compute that amount buys, price_per_second × duration. The two differ by
+// roughly the supply-to-budget ratio and confusing them is what made the
+// desktop app look like it was charging hundreds of times the real price.
 type OpenSessionStakeEstimate struct {
 	StakeWei           string  `json:"stake_wei"`
 	SessionCostWei     string  `json:"session_cost_wei"`
@@ -96,7 +103,15 @@ type OpenSessionStakeEstimate struct {
 	PricePerSecondWei  string  `json:"price_per_second_wei"`
 	DurationSeconds    string  `json:"duration_seconds"`
 	DirectPayment      bool    `json:"direct_payment"`
+	BidID              string  `json:"bid_id"`
 	TopBidProvider     string  `json:"top_bid_provider"`
 	TopBidScore        float64 `json:"top_bid_score"`
 	Explanation        string  `json:"explanation"`
+}
+
+// SessionDurationBounds is the session length range the deployed contract
+// accepts, so consumers stop hardcoding it.
+type SessionDurationBounds struct {
+	MinSeconds string `json:"min_seconds" example:"300"`
+	MaxSeconds string `json:"max_seconds" example:"86400"`
 }

@@ -82,7 +82,9 @@ func (c *BlockchainController) RegisterRoutes(r interfaces.Router) {
 	r.POST("/blockchain/sessions", c.authConf.CheckAuth("open_session"), c.openSession)
 	r.POST("/blockchain/bids/:id/session", c.authConf.CheckAuth("open_session"), c.openSessionByBid)
 	r.POST("/blockchain/models/:id/session", c.authConf.CheckAuth("open_session"), c.openSessionByModelId)
+	r.GET("/blockchain/models/:id/session/estimate", c.authConf.CheckAuth("get_bids"), c.estimateOpenSession)
 	r.POST("/blockchain/sessions/:id/close", c.authConf.CheckAuth("close_session"), c.closeSession)
+	r.GET("/blockchain/sessions/duration", c.authConf.CheckAuth("get_sessions"), c.getSessionDurationBounds)
 	r.GET("/blockchain/sessions/budget", c.authConf.CheckAuth("get_budget"), c.getBudget)
 	r.GET("/blockchain/token/supply", c.authConf.CheckAuth("get_supply"), c.getSupply)
 }
@@ -694,7 +696,7 @@ func (s *BlockchainController) openSessionByBid(ctx *gin.Context) {
 	}
 	usernameStr := username.(string)
 
-	sessionId, err := s.service.openSessionByBid(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), usernameStr)
+	sessionId, err := s.service.openSessionByBid(ctx, params.ID.Hash, reqPayload.SessionDuration.Unpack(), reqPayload.DirectPayment, usernameStr)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
 		return
@@ -702,6 +704,75 @@ func (s *BlockchainController) openSessionByBid(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, structs.OpenSessionRes{SessionID: sessionId})
 	return
+}
+
+// EstimateOpenSession godoc
+//
+//	@Summary		Estimate what opening a session costs
+//	@Description	Returns the MOR amount an open would move and every input it was derived from, for the top-scored bid or for one named bid
+//	@Tags			sessions
+//	@Produce		json
+//	@Param			id				path		string	true	"Model ID"
+//	@Param			sessionDuration	query		int		true	"Session length in seconds"
+//	@Param			directPayment	query		bool	false	"Pay the provider from the escrowed amount instead of staking"
+//	@Param			bidId			query		string	false	"Quote this bid instead of the top-scored one"
+//	@Success		200				{object}	structs.OpenSessionStakeEstimate
+//	@Router			/blockchain/models/{id}/session/estimate [get]
+//	@Security		BasicAuth
+func (c *BlockchainController) estimateOpenSession(ctx *gin.Context) {
+	var params structs.PathHex32ID
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	var query structs.QueryOpenSessionEstimate
+	if err := ctx.ShouldBindQuery(&query); err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	// HexToHash silently left-pads anything shorter, which would quote the
+	// wrong bid rather than fail, so the length is checked first.
+	var bidID common.Hash
+	if query.BidID != "" {
+		if len(common.FromHex(query.BidID)) != common.HashLength {
+			ctx.JSON(http.StatusBadRequest, structs.ErrRes{Error: "bidId must be a 32 byte hex value"})
+			return
+		}
+		bidID = common.HexToHash(query.BidID)
+	}
+
+	estimate, err := c.service.EstimateOpenSessionStake(ctx, params.ID.Hash, bidID, query.SessionDuration.Unpack(), query.DirectPayment)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, estimate)
+}
+
+// GetSessionDurationBounds godoc
+//
+//	@Summary		Get the session length range the contract accepts
+//	@Description	Returns MIN_SESSION_DURATION and getMaxSessionDuration so consumers stop hardcoding them
+//	@Tags			sessions
+//	@Produce		json
+//	@Success		200	{object}	structs.SessionDurationBounds
+//	@Router			/blockchain/sessions/duration [get]
+//	@Security		BasicAuth
+func (c *BlockchainController) getSessionDurationBounds(ctx *gin.Context) {
+	bounds, err := c.service.GetSessionDurationBounds(ctx)
+	if err != nil {
+		c.log.Error(err)
+		ctx.JSON(http.StatusInternalServerError, structs.ErrRes{Error: err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, bounds)
 }
 
 // OpenSessionByModelId godoc

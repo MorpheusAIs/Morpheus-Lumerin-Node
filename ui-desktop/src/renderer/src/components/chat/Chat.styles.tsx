@@ -133,7 +133,11 @@ export const ChatIntroInnerText = styled.p`
   margin-bottom: 25px;
 `;
 
-export const SessionDurationField = styled.label`
+/**
+ * A labelled dropdown in the session setup panel. Session length and provider
+ * share it so the two controls read as one form rather than two designs.
+ */
+export const SessionSelectField = styled.label`
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -156,6 +160,16 @@ export const SessionDurationField = styled.label`
     outline: 2px solid ${(p) => p.theme.colors.active};
     outline-offset: 2px;
   }
+`;
+
+export const SessionDurationField = SessionSelectField;
+
+/** The one-line explanation sitting directly under a session setup dropdown. */
+export const SessionFieldHint = styled.p`
+  margin: 0 0 8px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  line-height: 1.45;
 `;
 
 export const SessionCostSummary = styled.div`

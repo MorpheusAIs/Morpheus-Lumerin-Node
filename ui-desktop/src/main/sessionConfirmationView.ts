@@ -6,6 +6,12 @@ export interface SessionConfirmationDetails {
   readonly duration: number
   readonly directPayment: boolean
   readonly failover: boolean
+  /**
+   * The provider the session will open against, when one was chosen rather than
+   * left to the router's scoring. Shown so the choice made in the app is
+   * visible in the window that actually authorises the transaction.
+   */
+  readonly provider?: string
 }
 
 const escapeHtml = (value: string): string =>
@@ -44,12 +50,16 @@ export function renderSessionConfirmationHtml(
         <div class="session-confirmation__model"><dt>Model ID</dt><dd><code>${escapeHtml(details.modelId)}</code></dd></div>
         <div><dt>Contract duration input</dt><dd>${escapeHtml(details.duration.toLocaleString('en-US'))} seconds</dd></div>
         <div><dt>Payment method</dt><dd>${details.directPayment ? 'Direct MOR payment' : 'Stake MOR · escrow'}</dd></div>
-        <div><dt>Provider failover</dt><dd>${details.failover ? 'Enabled' : 'Disabled'}</dd></div>
+        <div><dt>Provider failover</dt><dd>${details.failover ? 'Enabled' : 'Disabled'}</dd></div>${
+          details.provider
+            ? `\n        <div class="session-confirmation__model"><dt>Provider</dt><dd><code>${escapeHtml(details.provider)}</code></dd></div>`
+            : ''
+        }
       </dl>
       <p class="session-confirmation__payment">${
         details.directPayment
-          ? 'This session uses direct MOR payment. Confirm only if you want to proceed with this payment mode.'
-          : 'Your MOR is escrowed for the session. Unused stake returns when the session closes.'
+          ? 'This session uses direct MOR payment. The provider is paid out of this amount when the session closes and the remainder is returned. Confirm only if you want to proceed with this payment mode.'
+          : 'Your MOR is escrowed for the session. Unused stake returns when the session closes, and the provider is paid from emissions rather than from your stake.'
       }</p>
       <p class="session-confirmation__note">Nothing is submitted until you choose Open session. This confirmation expires after 60 seconds.</p>
     </div>

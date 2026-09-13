@@ -91,7 +91,42 @@ const withChatState = (WrappedComponent: ComponentType<any>) => {
         .filter((b) => b.Provider != this.props.address);
     };
 
-    onOpenSession = async ({ modelId, duration, isDirectPay = false }) => {
+    /**
+     * Bids ordered by the router's own score, highest first, which is the order
+     * an unattended open walks. The quote and the picker both read from this so
+     * that what the user is charged matches the provider they are given.
+     */
+    getRatedBidsByModelId = async (modelId) => {
+      if (!modelId) {
+        return [];
+      }
+
+      const rated = await this.props.client.getRatedBidsByModel({ modelId });
+      return (rated ?? [])
+        .filter((entry) => entry?.Bid)
+        .filter((entry) => +entry.Bid.DeletedAt === 0)
+        .filter((entry) => entry.Bid.Provider !== this.props.address);
+    };
+
+    /**
+     * The contract's own session length range. Owner settable, so offering a
+     * hardcoded ceiling means selling lengths getSessionEnd would shorten.
+     */
+    getSessionDurationBounds = async () => {
+      const bounds = await this.props.client.getSessionDurationBounds();
+      return {
+        minSeconds: Number(bounds?.min_seconds),
+        maxSeconds: Number(bounds?.max_seconds),
+      };
+    };
+
+    onOpenSession = async ({
+      modelId,
+      duration,
+      isDirectPay = false,
+      bidId,
+      provider,
+    }) => {
       this.context.toast('info', 'Checking and opening session…');
       try {
         const failoverSettings = await this.props.client.getFailoverSetting();
@@ -101,6 +136,8 @@ const withChatState = (WrappedComponent: ComponentType<any>) => {
           failover: failoverSettings?.isEnabled || false,
           duration: +duration,
           directPayment: isDirectPay,
+          bidId,
+          provider,
         });
         if (dataResponse?.existingSessionID) {
           this.context.toast(
@@ -147,6 +184,8 @@ const withChatState = (WrappedComponent: ComponentType<any>) => {
           getBidInfo={this.getBidInfo}
           getMetaInfo={this.getMetaInfo}
           getBidsByModelId={this.getBidsByModelId}
+          getRatedBidsByModelId={this.getRatedBidsByModelId}
+          getSessionDurationBounds={this.getSessionDurationBounds}
           getSessionsByUser={this.getSessionsByUser}
           closeSession={this.closeSession}
           onOpenSession={this.onOpenSession}

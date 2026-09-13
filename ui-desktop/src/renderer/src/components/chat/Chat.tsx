@@ -48,7 +48,8 @@ import {
   ChatIntroInnerTitle,
   ChatIntroInnerText,
   ChatIntroButton,
-  SessionDurationField,
+  SessionSelectField,
+  SessionFieldHint,
   SessionCostSummary,
   SessionSetupState,
   SessionSetupActions,
@@ -108,10 +109,62 @@ import {
 } from '../../store/utils/visionMemory';
 import {
   DEFAULT_SESSION_DURATION_SECONDS,
-  SESSION_DURATION_OPTIONS,
+  clampSessionDuration,
   estimateSessionTokenAmount,
-  toSessionRequestDuration,
+  sessionComputeCost,
+  sessionDurationOptions,
 } from '../../store/utils/sessionDuration';
+
+/**
+ * A bid with the router's own score attached, as returned by
+ * /blockchain/models/{id}/bids/rated. Field names are the Go struct's, which
+ * carries no json tags.
+ */
+type RatedBid = {
+  Bid: {
+    Id: string;
+    Provider: string;
+    PricePerSecond: string | number;
+    DeletedAt: string | number;
+  };
+  Score: number;
+};
+
+/**
+ * The bid a quote should be built from: the user's pick if they made one, and
+ * otherwise the highest-scored bid, which is the one an unattended open tries
+ * first. Quoting anything else — the old code took the most expensive of the
+ * *active* bids, including providers the router would skip — overstates the
+ * price and can disable the open button on a wallet that has the funds.
+ */
+export const resolveQuotedBid = (
+  rated: readonly RatedBid[],
+  chosenBidId?: string,
+): RatedBid | null => {
+  if (rated.length === 0) {
+    return null;
+  }
+  if (chosenBidId) {
+    const chosen = rated.find((entry) => entry.Bid.Id === chosenBidId);
+    if (chosen) {
+      return chosen;
+    }
+  }
+  return rated.reduce((best, entry) => (entry.Score > best.Score ? entry : best));
+};
+
+/** A bid price, which is per second of compute, in whole MOR. */
+const formatSecondPrice = (pricePerSecondWei: string | number): string =>
+  `${formatValue(Number(pricePerSecondWei), 18)} MOR/s`;
+
+/**
+ * The router's composite rating of a provider — throughput, latency, session
+ * success, stake and price rolled into one relative number. It is not a
+ * percentage and carries no unit, so it is shown as what it is rather than
+ * dressed up as a health grade.
+ */
+const formatBidScore = (score: number): string =>
+  Number.isFinite(score) ? `score ${score.toFixed(2)}` : 'unrated';
 
 const CHAT_BOTTOM_THRESHOLD_PX = 96;
 const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
@@ -297,10 +350,17 @@ type ChatProps = {
   getSessionsByUser: (address: string) => Promise<any>;
   getBidInfo: (id: string) => Promise<any>;
   getBidsByModelId: (id: string) => Promise<any>;
+  getRatedBidsByModelId: (id: string) => Promise<RatedBid[]>;
+  getSessionDurationBounds: () => Promise<{
+    minSeconds: number;
+    maxSeconds: number;
+  }>;
   onOpenSession: (props: {
     modelId: string;
     duration: number;
     isDirectPay: boolean;
+    bidId?: string;
+    provider?: string;
   }) => Promise<any>;
   closeSession: (sessionId: string) => Promise<any>;
 };
@@ -349,6 +409,9 @@ const Chat = (props: ChatProps) => {
   const [sessionDuration, setSessionDuration] = useState(
     DEFAULT_SESSION_DURATION_SECONDS,
   );
+  // Empty means "let the router score them". A chosen bid pins the provider,
+  // so the price quoted is the price charged.
+  const [chosenBidId, setChosenBidId] = useState('');
 
   const [chat, setChat] = useState<ChatData | undefined>(undefined);
 
@@ -410,6 +473,34 @@ const Chat = (props: ChatProps) => {
       (await props.getBidsByModelId(selectedModel?.Id)) ?? [],
   });
 
+  // The same bids, ordered by the router's score. This is what the quote and
+  // the provider picker read; the active-bid list above still drives the
+  // "is there any provider at all" states.
+  const ratedBidsQuery = useQuery({
+    queryKey: queryKeys.ratedModelBids(props.address, selectedModel?.Id),
+    enabled: !!props.address && !!selectedModel?.Id && !selectedModel?.isLocal,
+    staleTime: 60_000,
+    queryFn: async () =>
+      (await props.getRatedBidsByModelId(selectedModel?.Id)) ?? [],
+  });
+
+  // The contract's ceiling is owner-settable, so offering a hardcoded one sells
+  // lengths getSessionEnd would silently shorten. A failure here is not fatal:
+  // the picker falls back to its own constant.
+  const sessionBoundsQuery = useQuery({
+    queryKey: queryKeys.sessionDurationBounds,
+    enabled: !!props.address,
+    staleTime: 10 * 60_000,
+    retry: 1,
+    queryFn: () => props.getSessionDurationBounds(),
+  });
+
+  // A provider chosen for one model means nothing for the next one, and a
+  // select holding a value that is no longer among its options renders blank.
+  useEffect(() => {
+    setChosenBidId('');
+  }, [selectedModel?.Id]);
+
   const chatTitlesQuery = useQuery({
     queryKey: queryKeys.chatTitles,
     queryFn: () => props.client.getChatHistoryTitles(),
@@ -457,6 +548,17 @@ const Chat = (props: ChatProps) => {
 
   const meta = fundingQuery.data?.meta ?? { budget: 0, supply: 0 };
   const balances = fundingQuery.data?.userBalances ?? { eth: 0, mor: 0 };
+
+  const ratedBids: RatedBid[] = ratedBidsQuery.data ?? [];
+  // Highest score first, so the picker lists providers in the order the router
+  // would pick them and the default sits at the top.
+  const ratedBidsByScore = useMemo(
+    () => [...ratedBids].sort((a, b) => b.Score - a.Score),
+    [ratedBids],
+  );
+  const quotedBid = resolveQuotedBid(ratedBidsByScore, chosenBidId);
+  const contractMaxSessionSeconds = sessionBoundsQuery.data?.maxSeconds;
+  const durationOptions = sessionDurationOptions(contractMaxSessionSeconds);
   const modelsLoading =
     marketplaceModelsQuery.isPending &&
     marketplaceModelsQuery.data === undefined;
@@ -805,7 +907,9 @@ const Chat = (props: ChatProps) => {
   };
 
   const onOpenSession = async (isReopen: boolean, isDirectPay: boolean) => {
-    if (!selectedModel?.Id || !selectedModelBidsQuery.data?.length) {
+    // Guard on the bid the open would actually use, which is the same one the
+    // price was quoted from.
+    if (!selectedModel?.Id || !quotedBid) {
       props.toasts.toast(
         'error',
         'This model has no active provider price. Retry the price check or choose another model.',
@@ -832,16 +936,21 @@ const Chat = (props: ChatProps) => {
         });
       }
 
-      const duration = toSessionRequestDuration(
+      // The length asked for is the length sent. The app used to inflate it for
+      // direct pay to compensate for a router that applied no emissions
+      // conversion on that path; both sides now compute the same amount, so
+      // inflating here would buy hundreds of times the session requested.
+      const duration = clampSessionDuration(
         sessionDuration,
-        isDirectPay,
-        meta,
+        contractMaxSessionSeconds,
       );
 
       const rawResult = await props.onOpenSession({
         modelId: selectedModel.Id,
         duration,
         isDirectPay,
+        bidId: chosenBidId || undefined,
+        provider: chosenBidId ? quotedBid?.Bid.Provider : undefined,
       });
       resolvedResult = resolveSessionOpenResult(rawResult);
       if (!resolvedResult) {
@@ -1808,60 +1917,73 @@ const Chat = (props: ChatProps) => {
     // `x > NaN` comparison is false — which silently disabled *both* payment
     // buttons with no explanation. Treat unknown pricing as "not ready yet" and
     // say so, rather than rendering a dead screen.
-    const selectedModelBids = selectedModelBidsQuery.data ?? [];
-    const prices = selectedModelBids.map((x: any) => Number(x.PricePerSecond));
-    const maxPrice = prices.length ? Math.max(...prices) : Number.NaN;
+    // Quote the bid that will actually be used. The old code took
+    // Math.max over every *active* bid's price, including providers the router
+    // scores as unreachable and would never open against — on a model whose
+    // healthy provider was 14% cheaper than a skipped one, that overstated a
+    // 24 hour session by over 200 MOR and disabled the button on a funded
+    // wallet.
+    const quotedPrice = quotedBid
+      ? Number(quotedBid.Bid.PricePerSecond)
+      : Number.NaN;
     const isPricingReady =
       fundingQuery.data !== undefined &&
       Number(meta.budget) > 0 &&
       Number(meta.supply) > 0 &&
-      Number.isFinite(maxPrice);
+      Number.isFinite(quotedPrice);
 
     const requiredStake = isPricingReady
       ? {
           min: estimateSessionTokenAmount(
-            maxPrice,
-            SESSION_DURATION_OPTIONS[0].seconds,
-            false,
+            quotedPrice,
+            durationOptions[0].seconds,
             meta,
           ),
           max: estimateSessionTokenAmount(
-            maxPrice,
-            SESSION_DURATION_OPTIONS[SESSION_DURATION_OPTIONS.length - 1]
-              .seconds,
-            false,
+            quotedPrice,
+            durationOptions[durationOptions.length - 1].seconds,
             meta,
           ),
         }
       : null;
 
-    // for stake mode
-    const selectedStake = isPricingReady
-      ? estimateSessionTokenAmount(maxPrice, sessionDuration, false, meta)
+    // The amount the diamond pulls does not depend on the payment method:
+    // getSessionEnd prices every session as stakeToStipend(amount) / price,
+    // direct pay or not. Only the settlement at close differs.
+    const sessionAmount = isPricingReady
+      ? estimateSessionTokenAmount(quotedPrice, sessionDuration, meta)
       : Number.POSITIVE_INFINITY;
-    const requiredStakeForDirectPay = isPricingReady
-      ? estimateSessionTokenAmount(maxPrice, sessionDuration, true, meta)
-      : Number.POSITIVE_INFINITY;
-    const hasSelectedStakeFunds =
-      isPricingReady && Number(balances.mor) >= selectedStake;
-    const isEnoughFundsForDirectPay =
-      isPricingReady && Number(balances.mor) >= requiredStakeForDirectPay;
+    // What the session is worth as compute, which is what the provider is
+    // actually owed. Shown next to the amount so the gap reads as the emissions
+    // conversion it is rather than as a fee.
+    const computeCost = isPricingReady
+      ? sessionComputeCost(quotedPrice, sessionDuration)
+      : Number.NaN;
+    const hasFundsForSession =
+      isPricingReady && Number(balances.mor) >= sessionAmount;
 
+    // These states gate on the *rated* query, because that is the one the quote
+    // and the provider list are built from. Gating on the active-bid query
+    // instead would clear the way to a panel whose price says "calculating…"
+    // forever and whose buttons are dead with no reason given.
     const bidsAreLoading = isInitialQueryFetchActive(
-      selectedModelBidsQuery.data,
-      selectedModelBidsQuery.fetchStatus,
+      ratedBidsQuery.data,
+      ratedBidsQuery.fetchStatus,
     );
-    const bidsFailed =
-      selectedModelBidsQuery.isError && selectedModelBids.length === 0;
+    const bidsFailed = ratedBidsQuery.isError && ratedBids.length === 0;
     const bidsCouldNotStart =
       Boolean(props.address) &&
-      selectedModelBidsQuery.data === undefined &&
+      ratedBidsQuery.data === undefined &&
       !bidsAreLoading &&
       !bidsFailed;
     const noActiveProviders =
-      selectedModelBidsQuery.data !== undefined &&
-      !selectedModelBidsQuery.isError &&
-      selectedModelBids.length === 0;
+      ratedBidsQuery.data !== undefined &&
+      !ratedBidsQuery.isError &&
+      ratedBids.length === 0;
+    const retryPricing = () => {
+      void ratedBidsQuery.refetch();
+      void selectedModelBidsQuery.refetch();
+    };
     const fundingIsLoading = isInitialQueryFetchActive(
       fundingQuery.data,
       fundingQuery.fetchStatus,
@@ -1874,7 +1996,7 @@ const Chat = (props: ChatProps) => {
       !fundingIsLoading &&
       !fundingFailed;
     const pricingUsesCachedData =
-      (selectedModelBidsQuery.isError && selectedModelBids.length > 0) ||
+      (ratedBidsQuery.isError && ratedBids.length > 0) ||
       (fundingQuery.isError && fundingQuery.data !== undefined);
     const showModelPicker = () => {
       setCoworkModelSelection(false);
@@ -1939,10 +2061,7 @@ const Chat = (props: ChatProps) => {
                       : 'The provider check failed. Your balance has not been charged.'}
                   </span>
                   <SessionSetupActions>
-                    <ChatIntroButton
-                      type="button"
-                      onClick={() => selectedModelBidsQuery.refetch()}
-                    >
+                    <ChatIntroButton type="button" onClick={retryPricing}>
                       Retry
                     </ChatIntroButton>
                     <ChatIntroButton type="button" onClick={showModelPicker}>
@@ -1958,10 +2077,7 @@ const Chat = (props: ChatProps) => {
                     one.
                   </span>
                   <SessionSetupActions>
-                    <ChatIntroButton
-                      type="button"
-                      onClick={() => selectedModelBidsQuery.refetch()}
-                    >
+                    <ChatIntroButton type="button" onClick={retryPricing}>
                       Retry
                     </ChatIntroButton>
                     <ChatIntroButton type="button" onClick={showModelPicker}>
@@ -2008,22 +2124,53 @@ const Chat = (props: ChatProps) => {
                 </SessionSetupState>
               ) : (
                 <>
-                  <SessionDurationField>
+                  <SessionSelectField>
                     Session length
                     <select
                       aria-label="Session length"
-                      value={sessionDuration}
+                      value={clampSessionDuration(
+                        sessionDuration,
+                        contractMaxSessionSeconds,
+                      )}
                       onChange={(event) =>
                         setSessionDuration(Number(event.target.value))
                       }
                     >
-                      {SESSION_DURATION_OPTIONS.map((option) => (
+                      {durationOptions.map((option) => (
                         <option key={option.seconds} value={option.seconds}>
                           {option.label}
                         </option>
                       ))}
                     </select>
-                  </SessionDurationField>
+                  </SessionSelectField>
+
+                  <SessionSelectField>
+                    Provider
+                    <select
+                      aria-label="Provider"
+                      value={chosenBidId}
+                      onChange={(event) => setChosenBidId(event.target.value)}
+                    >
+                      <option value="">
+                        Best available
+                        {ratedBidsByScore[0]
+                          ? ` (${formatSecondPrice(ratedBidsByScore[0].Bid.PricePerSecond)})`
+                          : ''}
+                      </option>
+                      {ratedBidsByScore.map((entry) => (
+                        <option key={entry.Bid.Id} value={entry.Bid.Id}>
+                          {abbreviateAddress(entry.Bid.Provider, 6)} ·{' '}
+                          {formatSecondPrice(entry.Bid.PricePerSecond)} ·{' '}
+                          {formatBidScore(entry.Score)}
+                        </option>
+                      ))}
+                    </select>
+                  </SessionSelectField>
+                  <SessionFieldHint>
+                    {chosenBidId
+                      ? 'This session opens against the provider you picked, with no failover to another one.'
+                      : 'Your node picks the highest-scored provider and can fail over to another if that one is unreachable.'}
+                  </SessionFieldHint>
 
                   {openSessionsForModel.length > 0 && (
                     <ChatIntroInnerText style={{ color: '#20dc8e' }}>
@@ -2060,7 +2207,7 @@ const Chat = (props: ChatProps) => {
                       <button
                         type="button"
                         onClick={() => {
-                          void selectedModelBidsQuery.refetch();
+                          retryPricing();
                           void fundingQuery.refetch();
                         }}
                       >
@@ -2068,57 +2215,58 @@ const Chat = (props: ChatProps) => {
                       </button>
                     </SessionHistoryNotice>
                   )}
+                  {/*
+                    One amount, two settlements. The contract prices every
+                    session the same way whether or not it is direct pay, so
+                    showing two different figures was reporting a difference
+                    that does not exist.
+                  */}
+                  <SessionCostSummary>
+                    <strong>
+                      {Number.isFinite(sessionAmount)
+                        ? `${formatValue(sessionAmount, 18)} MOR`
+                        : 'calculating…'}
+                    </strong>{' '}
+                    is locked up for this session
+                    {!hasFundsForSession && isPricingReady
+                      ? ' — more than your balance'
+                      : ''}
+                    .{' '}
+                    {Number.isFinite(computeCost)
+                      ? `The compute itself costs ${formatValue(computeCost, 18)} MOR; the rest is the emissions conversion the contract applies and is not a fee.`
+                      : ''}{' '}
+                    {requiredStake
+                      ? `Across the lengths offered here that runs from ${formatValue(requiredStake.min, 18)} to ${formatValue(requiredStake.max, 18)} MOR.`
+                      : ''}
+                  </SessionCostSummary>
+
                   <ChatIntroInnerText>
-                    Stake MOR to reserve compute for the session length selected
-                    above (min:{' '}
-                    {requiredStake
-                      ? `${formatValue(requiredStake.min, 18)} MOR`
-                      : 'calculating…'}
-                    , max:{' '}
-                    {requiredStake
-                      ? `${formatValue(requiredStake.max, 18)} MOR`
-                      : 'calculating…'}
-                    ). The MOR is escrowed, and unused stake returns when the
-                    session closes.
+                    Stake and the whole amount comes back when the session
+                    closes. The provider is paid from emissions, not from your
+                    MOR.
                   </ChatIntroInnerText>
                   <SessionSetupActions>
                     <ChatIntroButton
                       onClick={() => onOpenSession(false, false)}
-                      disabled={!hasSelectedStakeFunds}
+                      disabled={!hasFundsForSession}
                     >
                       Stake MOR
                     </ChatIntroButton>
                   </SessionSetupActions>
-                  <SessionCostSummary>
-                    Estimated stake for this length:{' '}
-                    {Number.isFinite(selectedStake)
-                      ? `${formatValue(selectedStake, 18)} MOR`
-                      : 'calculating…'}
-                    {!hasSelectedStakeFunds && isPricingReady
-                      ? ' — insufficient balance'
-                      : ''}
-                  </SessionCostSummary>
+
                   <ChatIntroInnerText>
-                    Pay with your MOR tokens directly for the session length
-                    selected above.
+                    Pay directly and the provider is paid out of this amount
+                    when the session closes, with the remainder returned. The
+                    amount locked up is the same either way.
                   </ChatIntroInnerText>
                   <SessionSetupActions>
                     <ChatIntroButton
                       onClick={() => onOpenSession(false, true)}
-                      disabled={!isEnoughFundsForDirectPay}
+                      disabled={!hasFundsForSession}
                     >
                       Direct Pay
                     </ChatIntroButton>
                   </SessionSetupActions>
-                  <SessionCostSummary>
-                    Estimated direct payment:{' '}
-                    {Number.isFinite(requiredStakeForDirectPay)
-                      ? `${formatValue(requiredStakeForDirectPay, 18)} MOR`
-                      : 'calculating…'}
-                    {!isEnoughFundsForDirectPay && isPricingReady
-                      ? ' — insufficient balance'
-                      : ''}
-                  </SessionCostSummary>
                 </>
               )}
             </ChatIntroInner>

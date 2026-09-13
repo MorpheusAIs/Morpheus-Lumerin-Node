@@ -218,6 +218,14 @@ const createClient = function (createStore) {
       120000,
     ),
     getBidsByModel: utils.forwardToMainProcess('get-bids-by-model', 120000),
+    getRatedBidsByModel: utils.forwardToMainProcess(
+      'get-rated-bids-by-model',
+      120000,
+    ),
+    getSessionDurationBounds: utils.forwardToMainProcess(
+      'get-session-duration-bounds',
+    ),
+    estimateOpenSession: utils.forwardToMainProcess('estimate-open-session'),
     getBidInfo: utils.forwardToMainProcess('get-bid-info'),
     closeSession: utils.forwardToMainProcess('close-session', 120000),
     openSession: utils.forwardToMainProcess('open-session', 120000),

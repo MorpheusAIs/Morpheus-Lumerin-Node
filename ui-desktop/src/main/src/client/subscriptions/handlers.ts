@@ -658,6 +658,67 @@ export const getBidsByModel = async (payload: { modelId: string }): Promise<unkn
   return bids
 }
 
+/**
+ * Bids for a model ordered by the router's own score, highest first.
+ *
+ * This is the ordering an unattended open follows, so it is also the ordering a
+ * quote has to follow. The active-bid list is unordered and includes providers
+ * the router would skip, and quoting the most expensive entry in it overstated
+ * the cost by double digits and disabled the open button on a funded wallet.
+ */
+export const getRatedBidsByModel = async (payload: { modelId: string }): Promise<unknown[]> => {
+  const modelId = boundedProxyId(payload?.modelId, 'Model ID')
+  const data = await proxyFetch<{ bids: unknown[] }>(
+    `/blockchain/models/${encodeURIComponent(modelId)}/bids/rated`,
+    {},
+    'rated model bids'
+  )
+  return data.bids ?? []
+}
+
+/**
+ * The session length range the deployed contract accepts. Owner settable, so it
+ * is read rather than hardcoded: a ceiling guessed too high offers lengths that
+ * getSessionEnd would silently shorten after the user has paid for them.
+ */
+export const getSessionDurationBounds = async (): Promise<unknown> => {
+  return proxyFetch<{ min_seconds: string; max_seconds: string }>(
+    '/blockchain/sessions/duration',
+    {},
+    'session duration bounds'
+  )
+}
+
+/**
+ * What opening a session would move, priced by the router rather than
+ * re-derived in the renderer. bidId quotes one specific bid; omitting it quotes
+ * the top-scored one.
+ */
+export const estimateOpenSession = async (payload: {
+  modelId: string
+  duration: number
+  directPayment?: boolean
+  bidId?: string
+}): Promise<unknown> => {
+  const modelId = boundedProxyId(payload?.modelId, 'Model ID')
+  const duration = Number(payload?.duration)
+  if (!Number.isSafeInteger(duration) || duration <= 0 || duration > 315_360_000) {
+    throw new Error('Session duration is invalid.')
+  }
+  const query = new URLSearchParams({
+    sessionDuration: String(duration),
+    directPayment: String(payload?.directPayment === true)
+  })
+  if (payload?.bidId) {
+    query.set('bidId', boundedProxyId(payload.bidId, 'Bid ID'))
+  }
+  return proxyFetch(
+    `/blockchain/models/${encodeURIComponent(modelId)}/session/estimate?${query.toString()}`,
+    {},
+    'session estimate'
+  )
+}
+
 export const getBidInfo = async (payload: { id: string }): Promise<unknown> => {
   const id = boundedProxyId(payload?.id, 'Bid ID')
   const data = await proxyFetch<{ bid: unknown }>(
@@ -691,6 +752,8 @@ export const openSession = async (payload: {
   duration: number
   directPayment?: boolean
   failover?: boolean
+  bidId?: string
+  provider?: string
 }): Promise<unknown> => {
   const modelId = boundedProxyId(payload?.modelId, 'Model ID')
   const duration = Number(payload?.duration)
@@ -698,15 +761,32 @@ export const openSession = async (payload: {
     throw new Error('Session duration is invalid.')
   }
   const directPayment = payload?.directPayment === true
-  const failover = payload?.failover === true
+  // Naming a bid names a provider, so there is nothing left to fail over to.
+  const bidId = payload?.bidId ? boundedProxyId(payload.bidId, 'Bid ID') : ''
+  const failover = bidId ? false : payload?.failover === true
+  const provider = payload?.provider ? walletAddress(payload.provider, 'Provider address') : ''
   const approved = await confirmSessionAction({
     modelId,
     duration,
     directPayment,
-    failover
+    failover,
+    provider: bidId ? provider || undefined : undefined
   })
   if (!approved) throw new Error('Session opening cancelled.')
   try {
+    // A chosen bid goes to the by-bid route, which opens against that provider
+    // and no other. The by-model route re-scores and may land somewhere else,
+    // which would quietly ignore the choice the user just confirmed.
+    if (bidId) {
+      return await proxyFetch(
+        `/blockchain/bids/${encodeURIComponent(bidId)}/session`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ sessionDuration: duration, directPayment })
+        },
+        'session opening'
+      )
+    }
     return await proxyFetch(
       `/blockchain/models/${encodeURIComponent(modelId)}/session`,
       {

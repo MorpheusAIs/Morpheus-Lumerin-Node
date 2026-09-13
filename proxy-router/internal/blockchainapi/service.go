@@ -1289,11 +1289,11 @@ func (s *BlockchainService) GetTransactions(ctx context.Context, page uint64, li
 }
 
 // OpenSessionByBidId opens a session against a specific bid (no provider failover).
-func (s *BlockchainService) OpenSessionByBidId(ctx context.Context, bidID common.Hash, duration *big.Int, agentUsername string) (common.Hash, error) {
-	return s.openSessionByBid(ctx, bidID, duration, agentUsername)
+func (s *BlockchainService) OpenSessionByBidId(ctx context.Context, bidID common.Hash, duration *big.Int, directPayment bool, agentUsername string) (common.Hash, error) {
+	return s.openSessionByBid(ctx, bidID, duration, directPayment, agentUsername)
 }
 
-func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.Hash, duration *big.Int, agentUsername string) (common.Hash, error) {
+func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.Hash, duration *big.Int, directPayment bool, agentUsername string) (common.Hash, error) {
 	supply, err := s.GetTokenSupply(ctx)
 	if err != nil {
 		return common.Hash{}, lib.WrapError(ErrTokenSupply, err)
@@ -1326,7 +1326,7 @@ func (s *BlockchainService) openSessionByBid(ctx context.Context, bidID common.H
 		}
 	}
 
-	hash, _, err := s.tryOpenSession(ctx, bid, duration, supply, budget, userAddr, false, false, agentUsername, isTee)
+	hash, _, err := s.tryOpenSession(ctx, bid, duration, supply, budget, userAddr, directPayment, false, agentUsername, isTee)
 	return hash, err
 }
 
@@ -1522,28 +1522,55 @@ func (s *BlockchainService) GetAllBidsWithRating(ctx context.Context, modelAgent
 	return ids, bids, providerModelStats, providers, nil
 }
 
-// computeSessionTokenAmount returns the MOR amount transferred when opening a session
-// (mirrors tryOpenSession / OpenSession on-chain pull).
-func computeSessionTokenAmount(bid *structs.Bid, duration, supply, budget *big.Int, directPayment bool) (*big.Int, error) {
+// sessionDurationHeadroomSeconds pads the amount by one second of compute.
+//
+// stakeToStipend floors when it converts the amount to a stipend, and
+// getSessionEnd floors again when it divides that stipend by the price, so an
+// amount computed to land exactly on the requested duration can come out one
+// second short. A second of headroom removes both truncations for a cost of
+// well under a tenth of a percent on any session length the UI offers.
+var sessionDurationHeadroomSeconds = big.NewInt(1)
+
+// computeSessionTokenAmount returns the MOR amount openSession pulls for a
+// session of the requested length.
+//
+// The amount does not depend on the payment method. SessionRouter.getSessionEnd
+// prices every session as stakeToStipend(amount) / pricePerSecond, whether or
+// not it is direct pay; direct pay changes only who the provider is paid by at
+// close (the user's escrowed amount rather than the emissions pool). Returning
+// price × duration for direct pay, as this did, bought roughly
+// duration × budget ÷ supply seconds — currently about a three-hundredth of
+// what was asked for — and reverted as SessionTooShort. The desktop app hid
+// that by pre-inflating the duration it sent; the inflation has been removed
+// along with this branch, so router and app now agree on one number.
+func computeSessionTokenAmount(bid *structs.Bid, duration, supply, budget *big.Int) (*big.Int, error) {
 	if bid == nil || bid.PricePerSecond == nil {
 		return nil, fmt.Errorf("invalid bid")
 	}
-	sessionCost := new(big.Int).Mul(&bid.PricePerSecond.Int, duration)
-	if directPayment {
-		return new(big.Int).Set(sessionCost), nil
+	if duration == nil || duration.Sign() <= 0 {
+		return nil, fmt.Errorf("invalid session duration")
 	}
-	if supply == nil {
+	if supply == nil || supply.Sign() <= 0 {
 		return nil, fmt.Errorf("invalid token supply")
 	}
-	if budget == nil || budget.Sign() == 0 {
+	if budget == nil || budget.Sign() <= 0 {
 		return nil, fmt.Errorf("invalid emissions budget")
 	}
-	stake := new(big.Int).Div(new(big.Int).Mul(supply, sessionCost), budget)
-	return stake, nil
+	paidDuration := new(big.Int).Add(duration, sessionDurationHeadroomSeconds)
+	cost := new(big.Int).Mul(&bid.PricePerSecond.Int, paidDuration)
+	amount := new(big.Int).Mul(supply, cost)
+	// Round up: rounding down is the other way a session lands short.
+	amount.Add(amount, new(big.Int).Sub(budget, big.NewInt(1)))
+	return amount.Div(amount, budget), nil
 }
 
-// EstimateOpenSessionStake estimates MOR moved for the highest-scored bid (first open attempt).
-func (s *BlockchainService) EstimateOpenSessionStake(ctx context.Context, modelID common.Hash, duration *big.Int, directPayment bool) (*structs.OpenSessionStakeEstimate, error) {
+// EstimateOpenSessionStake reports the MOR amount an open would move, along
+// with every input it was derived from, so a caller can show the user the real
+// cost next to the amount being locked up.
+//
+// bidID selects the bid to quote. The zero hash quotes the highest-scored bid,
+// which is the one an unattended open tries first.
+func (s *BlockchainService) EstimateOpenSessionStake(ctx context.Context, modelID common.Hash, bidID common.Hash, duration *big.Int, directPayment bool) (*structs.OpenSessionStakeEstimate, error) {
 	rated, err := s.GetRatedBids(ctx, modelID)
 	if err != nil {
 		return nil, err
@@ -1551,7 +1578,22 @@ func (s *BlockchainService) EstimateOpenSessionStake(ctx context.Context, modelI
 	if len(rated) == 0 {
 		return nil, ErrNoBid
 	}
-	top := &rated[0].Bid
+
+	quoted := &rated[0]
+	if bidID != (common.Hash{}) {
+		quoted = nil
+		for i := range rated {
+			if rated[i].Bid.Id == bidID {
+				quoted = &rated[i]
+				break
+			}
+		}
+		if quoted == nil {
+			return nil, lib.WrapError(ErrBid, fmt.Errorf("bid %s is not among the rated bids for model %s", bidID.Hex(), modelID.Hex()))
+		}
+	}
+
+	bid := &quoted.Bid
 	supply, err := s.GetTokenSupply(ctx)
 	if err != nil {
 		return nil, err
@@ -1560,23 +1602,47 @@ func (s *BlockchainService) EstimateOpenSessionStake(ctx context.Context, modelI
 	if err != nil {
 		return nil, err
 	}
-	stake, err := computeSessionTokenAmount(top, duration, supply, budget, directPayment)
+	stake, err := computeSessionTokenAmount(bid, duration, supply, budget)
 	if err != nil {
 		return nil, err
 	}
-	sessionCost := new(big.Int).Mul(&top.PricePerSecond.Int, duration)
+	sessionCost := new(big.Int).Mul(&bid.PricePerSecond.Int, duration)
+	settlement := "Staking returns the whole amount when the session closes; the provider is paid from emissions."
+	if directPayment {
+		settlement = "Direct payment pays the provider out of this amount at close and refunds the remainder."
+	}
 	return &structs.OpenSessionStakeEstimate{
 		StakeWei:           stake.String(),
 		SessionCostWei:     sessionCost.String(),
 		MorSupplyWei:       supply.String(),
 		EmissionsBudgetWei: budget.String(),
-		PricePerSecondWei:  top.PricePerSecond.String(),
+		PricePerSecondWei:  bid.PricePerSecond.String(),
 		DurationSeconds:    duration.String(),
 		DirectPayment:      directPayment,
-		TopBidProvider:     top.Provider.Hex(),
-		TopBidScore:        rated[0].Score,
-		Explanation: "MOR moved ≈ (total MOR supply × provider price_per_second × duration) ÷ today's emissions budget. " +
-			"It is not the same as price_per_second × duration in MOR. The app uses increaseAllowance on the MOR token for the diamond when your allowance is below ~3× this amount, then the diamond pulls this stake in openSession.",
+		BidID:              bid.Id.Hex(),
+		TopBidProvider:     bid.Provider.Hex(),
+		TopBidScore:        quoted.Score,
+		Explanation: "stake_wei ≈ (total MOR supply × price_per_second × duration) ÷ today's emissions budget, rounded up. " +
+			"It is not price_per_second × duration; that is session_cost_wei, the compute this session actually buys. " +
+			settlement +
+			" The app raises its MOR allowance for the diamond when the allowance is below ~3× stake_wei, then the diamond pulls it in openSession.",
+	}, nil
+}
+
+// GetSessionDurationBounds reports the shortest and longest session the
+// deployed contract accepts.
+func (s *BlockchainService) GetSessionDurationBounds(ctx context.Context) (*structs.SessionDurationBounds, error) {
+	minSeconds, err := s.sessionRouter.GetMinSessionDuration(ctx)
+	if err != nil {
+		return nil, err
+	}
+	maxSeconds, err := s.sessionRouter.GetMaxSessionDuration(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &structs.SessionDurationBounds{
+		MinSeconds: minSeconds.String(),
+		MaxSeconds: maxSeconds.String(),
 	}, nil
 }
 
@@ -1612,7 +1678,7 @@ func (s *BlockchainService) tryOpenSession(ctx context.Context, bid *structs.Bid
 		log.Infof("TEE attestation passed for provider %s", bid.Provider)
 	}
 
-	amountTransferred, err := computeSessionTokenAmount(bid, duration, supply, budget, directPayment)
+	amountTransferred, err := computeSessionTokenAmount(bid, duration, supply, budget)
 	if err != nil {
 		return common.Hash{}, false, err
 	}
