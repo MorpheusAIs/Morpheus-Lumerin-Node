@@ -816,10 +816,10 @@ func TestCheckAllBidsError(t *testing.T) {
 	require.Empty(t, checker.GetReports())
 }
 
-// The provider-declared API spec (models-config apiType presets, see
-// internal/apispec) must ride the report for every configured model,
-// including one with no active bid: consumers can shape requests before a
-// session even opens.
+// The provider-declared API spec (models-config apiStack presets, see
+// internal/apispec) must ride the report for every model that declares an
+// apiStack, including one with no active bid: consumers can shape requests
+// before a session even opens.
 func TestCheckModelAttachesDeclaredApiSpec(t *testing.T) {
 	deps := &mockDeps{
 		bids:     []*structs.Bid{bidFor(modelLLM)},
@@ -827,8 +827,8 @@ func TestCheckModelAttachesDeclaredApiSpec(t *testing.T) {
 		modelIDs: []common.Hash{modelLLM, modelNoBid},
 		adapter:  &mathSolvingAdapter{},
 		configs: map[common.Hash]config.ModelConfig{
-			modelLLM:   {ModelName: "qwen3-32b", ApiType: "vllm", ApiURL: "http://llm:8000/v1/chat/completions"},
-			modelNoBid: {ModelName: "llama-3.1-8b", ApiType: "ollama", ApiURL: "http://ollama:11434/v1/chat/completions"},
+			modelLLM:   {ModelName: "qwen3-32b", ApiType: "openai", ApiStack: "vllm", ApiURL: "http://llm:8000/v1/chat/completions"},
+			modelNoBid: {ModelName: "llama-3.1-8b", ApiType: "openai", ApiStack: "ollama", ApiURL: "http://ollama:11434/v1/chat/completions"},
 		},
 	}
 
@@ -850,6 +850,28 @@ func TestCheckModelAttachesDeclaredApiSpec(t *testing.T) {
 	require.Equal(t, "ollama", noBid.Api.Stack)
 }
 
+// The api block is opt-in per model: a model configured with only a legacy
+// apiType (no apiStack) is still health-checked but its report carries no
+// api spec.
+func TestCheckModelWithoutApiStackHasNoApiSpec(t *testing.T) {
+	deps := &mockDeps{
+		bids:     []*structs.Bid{bidFor(modelLLM)},
+		tags:     map[common.Hash][]string{modelLLM: {"llm"}},
+		modelIDs: []common.Hash{modelLLM},
+		adapter:  &mathSolvingAdapter{},
+		configs: map[common.Hash]config.ModelConfig{
+			modelLLM: {ModelName: "qwen3-32b", ApiType: "openai", ApiURL: "http://llm:8000/v1/chat/completions"},
+		},
+	}
+
+	checker := newTestChecker(deps)
+	checker.checkAll(context.Background(), common.Address{})
+
+	llm := reportByID(t, checker.GetReports(), modelLLM)
+	require.NotEqual(t, system.ModelHealthStatusNoBid, llm.Status, "the model is still checked")
+	require.Nil(t, llm.Api, "report carries api only for models with apiStack")
+}
+
 // The declared API spec's DeclaredAt must only move when the spec itself
 // changes, not on every sweep — otherwise consumers can't tell "still the
 // same declaration" from "the provider just redeclared it". A DeclaredAt
@@ -862,7 +884,7 @@ func TestCheckModelDeclaredAtStableAcrossSweeps(t *testing.T) {
 		modelIDs: []common.Hash{modelLLM},
 		adapter:  &mathSolvingAdapter{},
 		configs: map[common.Hash]config.ModelConfig{
-			modelLLM: {ModelName: "qwen3-32b", ApiType: "vllm", ApiURL: "http://llm:8000/v1/chat/completions", ModelFamily: "qwen3"},
+			modelLLM: {ModelName: "qwen3-32b", ApiType: "openai", ApiStack: "vllm", ApiURL: "http://llm:8000/v1/chat/completions", ModelFamily: "qwen3"},
 		},
 	}
 

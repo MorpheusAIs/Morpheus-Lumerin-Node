@@ -8,17 +8,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestApiAdapterFactoryAcceptsStackPresets(t *testing.T) {
+// apiType is the transport adapter and nothing else: each legacy value maps
+// to its engine as it did before the presets work, and an apiStack preset
+// name (vllm, anthropic, …) is not an adapter — the loader keeps those in
+// ModelConfig.ApiStack, which never reaches the factory.
+func TestApiAdapterFactoryLegacyApiTypesOnly(t *testing.T) {
 	log := lib.NewTestLogger()
-	for _, preset := range []string{"vllm", "sglang", "llamacpp", "ollama", "venice", "openrouter", "litellm", "openai"} {
-		engine, ok := ApiAdapterFactory(preset, "m", "http://h/v1/chat/completions", "", nil, time.Second, log, nil)
-		require.True(t, ok, preset)
-		require.Equal(t, API_TYPE_OPENAI, engine.ApiType(), preset)
+	for _, apiType := range []string{API_TYPE_OPENAI, API_TYPE_CLAUDEAI, API_TYPE_PRODIA_SD, API_TYPE_PRODIA_SDXL, API_TYPE_PRODIA_V2, API_TYPE_HYPERBOLIC_SD} {
+		engine, ok := ApiAdapterFactory(apiType, "m", "http://h/v1", "", nil, time.Second, log, nil)
+		require.True(t, ok, apiType)
+		require.Equal(t, apiType, engine.ApiType(), apiType)
 	}
-	engine, ok := ApiAdapterFactory("anthropic", "m", "http://h/v1/messages", "", nil, time.Second, log, nil)
-	require.True(t, ok)
-	require.Equal(t, API_TYPE_CLAUDEAI, engine.ApiType())
-
-	_, ok = ApiAdapterFactory("bogus", "m", "http://h", "", nil, time.Second, log, nil)
-	require.False(t, ok)
+	for _, notAnAdapter := range []string{"vllm", "sglang", "llamacpp", "ollama", "venice", "openrouter", "litellm", "anthropic", "bogus", ""} {
+		engine, ok := ApiAdapterFactory(notAnAdapter, "m", "http://h/v1", "", nil, time.Second, log, nil)
+		require.False(t, ok, notAnAdapter)
+		require.Nil(t, engine, notAnAdapter)
+	}
 }

@@ -41,7 +41,14 @@ type ModelConfigLoader struct {
 
 type ModelConfig struct {
 	ModelName string `json:"modelName" validate:"required"`
-	ApiType   string `json:"apiType" validate:"required"`
+	// ApiType is the transport adapter (openai, claudeai, prodia-sd,
+	// prodia-sdxl, prodia-v2, hyperbolic-sd) — see aiengine.ApiAdapterFactory.
+	ApiType string `json:"apiType" validate:"required"`
+	// ApiStack optionally names the backend API preset (vllm, ollama,
+	// anthropic…) that feeds the advertised `api` block of the model's health
+	// report. It never selects the adapter: its transport must match ApiType
+	// (ValidateApiStack). Empty means no api block is advertised.
+	ApiStack string `json:"apiStack"`
 	// ModelFamily optionally pins the canonical model family (qwen3,
 	// deepseek-v3.1, gpt-oss, claude…) used to pick reasoning-control
 	// bindings; inferred from ModelName when empty.
@@ -113,6 +120,13 @@ func (e *ModelConfigLoader) Init() error {
 		if err != nil {
 			return fmt.Errorf("invalid models config V2 format: %s", err)
 		}
+		// Validate every model before storing any so a rejected config never
+		// leaves a partially populated map behind (main.go only warns on error).
+		for _, v := range modelConfigsV2.Models {
+			if err := ValidateApiStack(v.ID, v.ModelConfig); err != nil {
+				return fmt.Errorf("invalid models config: %w", err)
+			}
+		}
 		for _, v := range modelConfigsV2.Models {
 			e.modelConfigs[v.ID] = v.ModelConfig
 			_ = e.Validate(context.Background(), common.HexToHash(v.ID), v.ModelConfig)
@@ -132,6 +146,11 @@ func (e *ModelConfigLoader) Init() error {
 	err = e.validator.Struct(modelConfigs)
 	if err != nil {
 		return fmt.Errorf("invalid models config: %w", err)
+	}
+	for id, cfg := range modelConfigs {
+		if err := ValidateApiStack(id, cfg); err != nil {
+			return fmt.Errorf("invalid models config: %w", err)
+		}
 	}
 
 	e.modelConfigs = modelConfigs

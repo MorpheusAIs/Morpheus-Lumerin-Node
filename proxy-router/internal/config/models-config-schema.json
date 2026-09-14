@@ -22,9 +22,15 @@
           },
           "apiType": {
             "title": "API Type",
-            "description": "Defines the type of API to be used with this model. openai, vllm, sglang, llamacpp, ollama, venice, openrouter, litellm and anthropic are stack presets that select both the transport adapter and the advertised API spec; the remaining values are legacy aliases kept for backward compatibility",
+            "description": "Defines the type of API to be used with this model",
             "type": "string",
-            "enum": ["openai", "vllm", "sglang", "llamacpp", "ollama", "venice", "openrouter", "litellm", "anthropic", "claudeai", "prodia-sd", "prodia-sdxl", "prodia-v2", "hyperbolic-sd"]
+            "enum": ["openai", "claudeai", "prodia-sd", "prodia-sdxl", "prodia-v2", "hyperbolic-sd"]
+          },
+          "apiStack": {
+            "title": "API Stack",
+            "description": "Optional backend API preset advertised in the model's api block (/healthcheck and pong models); it never selects the adapter. Its transport must match apiType: openai for every preset except anthropic, which requires claudeai",
+            "type": "string",
+            "enum": ["openai", "vllm", "sglang", "llamacpp", "ollama", "venice", "openrouter", "litellm", "anthropic"]
           },
           "modelFamily": {
             "title": "Model Family",

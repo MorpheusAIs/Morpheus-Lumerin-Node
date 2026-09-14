@@ -396,11 +396,11 @@ func (c *Checker) checkModel(ctx context.Context, modelID common.Hash, bidID com
 		c.log.Warnf("model %s: unknown modelFamily %q — no family bindings will be advertised", lib.Short(modelID), cfg.ModelFamily)
 	}
 
-	// Provider-declared API spec (presets in models-config): advertised for
-	// every configured model so consumers can shape requests before a
-	// session. DeclaredAt is only refreshed when the composed spec actually
-	// changed, so it reflects when the declaration last changed rather than
-	// every sweep.
+	// Provider-declared API spec: advertised only for models that declare
+	// apiStack in models-config (Build returns nil otherwise) so consumers
+	// can shape requests before a session. DeclaredAt is only refreshed when
+	// the composed spec actually changed, so it reflects when the declaration
+	// last changed rather than every sweep.
 	if api := apispec.Build(cfg); api != nil {
 		api.DeclaredAt = time.Now().Unix()
 		if hasPrev && prev.Api != nil && sameApiSpecIgnoringDeclaredAt(prev.Api, api) {

@@ -1,6 +1,7 @@
 package apispec
 
 import (
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 )
 
@@ -243,33 +244,22 @@ var stackParameters = map[string][]string{
 // surface, by definition supported on api.openai.com.
 var openaiChatParameters = []string{"model", "messages", "temperature", "top_p", "n", "stream", "stream_options", "stop", "max_tokens", "max_completion_tokens", "presence_penalty", "frequency_penalty", "logit_bias", "logprobs", "top_logprobs", "user", "seed", "response_format", "tools", "tool_choice", "parallel_tool_calls", "reasoning_effort"}
 
-// Transport maps each accepted apiType (preset or legacy value) to the
-// adapter that speaks its protocol.
-var transport = map[string]string{
-	"openai": "openai", "vllm": "openai", "sglang": "openai", "llamacpp": "openai",
-	"ollama": "openai", "venice": "openai", "openrouter": "openai", "litellm": "openai",
-	"anthropic": "claudeai", "claudeai": "claudeai",
-	"prodia-sd": "prodia-sd", "prodia-sdxl": "prodia-sdxl", "prodia-v2": "prodia-v2", "hyperbolic-sd": "hyperbolic-sd",
-}
-
-// stackOf maps an accepted apiType to the stack name reported in the spec.
-// Image adapters have no chat API spec.
-var stackOf = map[string]string{
-	"openai": "openai", "vllm": "vllm", "sglang": "sglang", "llamacpp": "llamacpp",
-	"ollama": "ollama", "venice": "venice", "openrouter": "openrouter", "litellm": "litellm",
-	"anthropic": "anthropic", "claudeai": "anthropic",
-}
-
-// TransportFor returns the adapter apiType for a configured apiType.
-func TransportFor(apiType string) (string, bool) {
-	adapter, ok := transport[apiType]
+// TransportFor returns the adapter apiType required by an apiStack preset.
+// The table is config.StackTransport (config cannot import this package),
+// so the loader's validation and this package agree on the nine presets;
+// legacy adapter names are apiType values and are not accepted here.
+func TransportFor(stack string) (string, bool) {
+	adapter, ok := config.StackTransport[stack]
 	return adapter, ok
 }
 
-// StackFor returns the spec stack name for a configured apiType, or "" when
-// the apiType has no chat API spec (image adapters, unknown values).
-func StackFor(apiType string) string {
-	return stackOf[apiType]
+// StackFor returns the spec stack name for a configured apiStack, or ""
+// when it is empty or not one of the nine presets (no chat API spec).
+func StackFor(stack string) string {
+	if _, ok := config.StackTransport[stack]; ok {
+		return stack
+	}
+	return ""
 }
 
 // gatewayStacks are OpenAI-compatible gateways / hosted vendors that

@@ -1,6 +1,6 @@
 // Package apispec composes a provider-declared API spec (system.ModelApiSpec)
 // for a configured model from static, documentation-verified knowledge: the
-// apiType stack preset and the model family. No network access.
+// apiStack preset and the model family. No network access.
 package apispec
 
 import (
@@ -10,11 +10,11 @@ import (
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 )
 
-// Build composes the spec for cfg. It returns nil when the apiType has no
-// chat API spec (image adapters, unknown values). DeclaredAt is left for the
-// caller to stamp.
+// Build composes the spec for cfg. It returns nil when cfg.ApiStack is empty
+// or unknown: the api block is opt-in per model and apiType (the transport
+// adapter) plays no part in it. DeclaredAt is left for the caller to stamp.
 func Build(cfg config.ModelConfig) *system.ModelApiSpec {
-	stack := StackFor(cfg.ApiType)
+	stack := StackFor(cfg.ApiStack)
 	if stack == "" {
 		return nil
 	}

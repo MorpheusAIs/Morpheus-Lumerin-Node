@@ -137,8 +137,8 @@ const (
 )
 
 // ModelApiSpec describes the API serving a model as declared by the
-// provider's models-config presets. Self-reported and unverified: consumers
-// treat it as a routing/translation hint, not truth.
+// provider's models-config apiStack preset. Self-reported and unverified:
+// consumers treat it as a routing/translation hint, not truth.
 type ModelApiSpec struct {
 	// Stack is the serving stack / vendor preset: vllm | sglang | llamacpp |
 	// ollama | venice | openrouter | litellm | anthropic | openai.

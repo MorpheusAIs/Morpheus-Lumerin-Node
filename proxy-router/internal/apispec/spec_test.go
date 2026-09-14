@@ -9,8 +9,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func build(apiType, name, family string) *system.ModelApiSpec {
-	return Build(config.ModelConfig{ModelName: name, ApiType: apiType, ModelFamily: family, ApiURL: "http://h/v1/chat/completions"})
+// build composes the spec for an apiStack preset. apiType is the preset's
+// transport adapter (openai when the preset is unknown) so every case is a
+// config the loader would accept.
+func build(stack, name, family string) *system.ModelApiSpec {
+	apiType, ok := TransportFor(stack)
+	if !ok {
+		apiType = "openai"
+	}
+	return Build(config.ModelConfig{ModelName: name, ApiType: apiType, ApiStack: stack, ModelFamily: family, ApiURL: "http://h/v1/chat/completions"})
 }
 
 func TestBuildVLLMQwen3(t *testing.T) {
@@ -135,9 +142,12 @@ func TestBuildAnthropicIsGenerationAware(t *testing.T) {
 	require.Equal(t, "output_config.format", api.Bindings[system.IntentResponseFormatSchema].Param)
 	require.Contains(t, api.Parameters, "stop_sequences")
 
-	legacy := build("claudeai", "claude-sonnet-4-5-20250929", "")
-	require.Equal(t, "anthropic", legacy.Stack)
-	require.Equal(t, "thinking.budget_tokens", legacy.Bindings[system.IntentReasoningBudget].Param)
+	// apiStack: anthropic declared on the claudeai transport adapter — the
+	// only apiType it is valid with.
+	onClaudeai := Build(config.ModelConfig{ModelName: "claude-sonnet-4-5-20250929", ApiType: "claudeai", ApiStack: "anthropic", ApiURL: "https://api.anthropic.com/v1/messages"})
+	require.NotNil(t, onClaudeai)
+	require.Equal(t, "anthropic", onClaudeai.Stack)
+	require.Equal(t, "thinking.budget_tokens", onClaudeai.Bindings[system.IntentReasoningBudget].Param)
 
 	fable := build("anthropic", "claude-fable-5-1", "")
 	require.Equal(t, system.ThinkingModeTunable, fable.Thinking.Mode)
@@ -156,9 +166,24 @@ func TestBuildGenericOpenAIIsConservative(t *testing.T) {
 	require.Equal(t, system.ThinkingModeAlwaysOn, r1.Thinking.Mode)
 }
 
-func TestBuildImageAdaptersHaveNoSpec(t *testing.T) {
-	require.Nil(t, build("prodia-v2", "sd-xl", ""))
-	require.Nil(t, build("bogus", "", ""))
+// The api block is opt-in per model: without apiStack Build returns nil
+// whatever the transport adapter, and an unknown apiStack is nil too.
+func TestBuildNilWithoutApiStack(t *testing.T) {
+	for _, apiType := range []string{"openai", "claudeai", "prodia-v2", "hyperbolic-sd"} {
+		require.Nil(t, Build(config.ModelConfig{ModelName: "qwen3-32b", ApiType: apiType, ApiURL: "http://h/v1"}), apiType)
+	}
+	require.Nil(t, Build(config.ModelConfig{ModelName: "qwen3-32b", ApiType: "openai", ApiStack: "bogus", ApiURL: "http://h/v1"}))
+	require.Nil(t, build("bogus", "sd-xl", ""))
+}
+
+// Every apiStack preset builds a spec that reports itself as the stack.
+func TestBuildEveryPresetBuilds(t *testing.T) {
+	for stack := range config.StackTransport {
+		api := build(stack, "qwen3-32b", "")
+		require.NotNil(t, api, stack)
+		require.Equal(t, stack, api.Stack, stack)
+		require.NotEmpty(t, api.Parameters, stack)
+	}
 }
 
 func TestBuildResultIsNotAliasedToTables(t *testing.T) {

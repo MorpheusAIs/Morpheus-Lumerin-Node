@@ -3,10 +3,14 @@ package apispec
 import (
 	"testing"
 
+	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/config"
 	"github.com/MorpheusAIs/Morpheus-Lumerin-Node/proxy-router/internal/system"
 	"github.com/stretchr/testify/require"
 )
 
+// TransportFor answers only for apiStack presets: legacy adapter names are
+// apiType values, so they are not accepted here (the validation path relies
+// on that to reject `apiStack: claudeai`).
 func TestTransportFor(t *testing.T) {
 	for _, preset := range []string{"vllm", "sglang", "llamacpp", "ollama", "venice", "openrouter", "litellm", "openai"} {
 		adapter, ok := TransportFor(preset)
@@ -16,25 +20,39 @@ func TestTransportFor(t *testing.T) {
 	adapter, ok := TransportFor("anthropic")
 	require.True(t, ok)
 	require.Equal(t, "claudeai", adapter)
-	adapter, ok = TransportFor("claudeai")
-	require.True(t, ok)
-	require.Equal(t, "claudeai", adapter)
-	for _, legacy := range []string{"prodia-sd", "prodia-sdxl", "prodia-v2", "hyperbolic-sd"} {
-		adapter, ok = TransportFor(legacy)
-		require.True(t, ok, legacy)
-		require.Equal(t, legacy, adapter)
+	for _, legacy := range []string{"claudeai", "prodia-sd", "prodia-sdxl", "prodia-v2", "hyperbolic-sd"} {
+		_, ok = TransportFor(legacy)
+		require.False(t, ok, "legacy adapter %q is an apiType, not an apiStack", legacy)
 	}
 	_, ok = TransportFor("bogus")
+	require.False(t, ok)
+	_, ok = TransportFor("")
 	require.False(t, ok)
 }
 
 func TestStackFor(t *testing.T) {
 	require.Equal(t, "vllm", StackFor("vllm"))
-	require.Equal(t, "anthropic", StackFor("claudeai"))
 	require.Equal(t, "anthropic", StackFor("anthropic"))
 	require.Equal(t, "openai", StackFor("openai"))
+	require.Equal(t, "", StackFor("claudeai"), "no legacy alias: claudeai is a transport, not a stack")
 	require.Equal(t, "", StackFor("prodia-v2"))
 	require.Equal(t, "", StackFor("bogus"))
+	require.Equal(t, "", StackFor(""))
+}
+
+// The stack tables here and config.StackTransport must describe the same
+// nine presets, or a preset could validate at load but build no spec (or
+// the reverse).
+func TestStackTablesMatchConfigPresets(t *testing.T) {
+	for stack := range stackBindings {
+		require.Contains(t, config.StackTransport, stack, "stackBindings key %q is not a config.StackTransport preset", stack)
+	}
+	for stack := range stackParameters {
+		require.Contains(t, config.StackTransport, stack, "stackParameters key %q is not a config.StackTransport preset", stack)
+	}
+	for stack := range config.StackTransport {
+		require.Contains(t, stackParameters, stack, "preset %q has no stackParameters entry", stack)
+	}
 }
 
 // assertWellFormed checks a binding set: known kind, a param (except
