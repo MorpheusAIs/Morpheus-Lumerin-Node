@@ -102,6 +102,7 @@
     "react-virtualized": "9.22.6",
     "redux": "^5.0.1",
     "redux-actions": "2.3.0",
+    "remark-gfm": "^4.0.1",
     "reselect": "^5.1.0",
     "styled-components": "4.1.2",
     "tar-stream": "^3.1.7",

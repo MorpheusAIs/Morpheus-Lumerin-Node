@@ -11,6 +11,10 @@ import { NavAction } from './Nav.styles';
 import { LumerinLogoFull } from '../icons/LumerinLogoFull';
 import { AddressHeader } from '../common/AddressHeader';
 import withSidebarState from '../../store/hocs/withSidebarState';
+import {
+  usePersistedFlag,
+  SIDEBAR_COLLAPSED_KEY,
+} from '../../hooks/usePersistedFlag';
 
 const Container = styled.aside`
   background: #0a1e15;
@@ -25,8 +29,13 @@ const Container = styled.aside`
   overflow-y: auto;
   overflow-x: hidden;
 
+  transition: width 0.18s ease, flex-basis 0.18s ease;
+
   .sidebar-toggle {
     display: none;
+  }
+  .sidebar-collapse {
+    margin: 0.4rem 0 1.6rem;
   }
   .sidebar-address {
     margin: 1.6rem 0 0;
@@ -35,11 +44,28 @@ const Container = styled.aside`
     font-family: var(--font-mono);
   }
 
+  /* Collapsing used to be a small-window affordance only, which left no way to
+     reclaim the 220px on a laptop where the chat is the whole point. */
+  &[data-sidebar-collapsed='true'] {
+    width: 64px;
+    flex: 0 0 64px;
+    padding: 2.4rem 0.6rem 1.6rem;
+
+    .sidebar-address {
+      display: none;
+    }
+  }
+
   @media (max-width: 799px) {
     position: fixed;
     inset: 0 auto 0 0;
     width: 64px;
     padding: 1.6rem 0.8rem;
+    /* Below this width the overlay toggle already owns the rail, so the
+       persistent collapse control would be a second button doing one job. */
+    .sidebar-collapse {
+      display: none;
+    }
     .sidebar-toggle {
       display: flex;
       margin: 0.4rem 0 1.6rem;
@@ -74,6 +100,14 @@ const Brand = styled.div`
     font-weight: 650;
     letter-spacing: -0.025em;
   }
+  [data-sidebar-collapsed='true'] & {
+    padding: 0 0.4rem;
+    margin-bottom: 0.8rem;
+    strong {
+      display: none;
+    }
+  }
+
   @media (max-width: 799px) {
     padding: 0 0.4rem;
     margin-bottom: 0.8rem;
@@ -105,6 +139,9 @@ const Backdrop = styled.button`
 
 export function Sidebar({ address, copyToClipboard, onRouteIntent }) {
   const [expanded, setExpanded] = useState(false);
+  // `expanded` is the transient mobile overlay; `collapsed` is the remembered
+  // width preference that applies at every window size.
+  const [collapsed, setCollapsed] = usePersistedFlag(SIDEBAR_COLLAPSED_KEY);
   const { pathname } = useLocation();
   useEffect(() => {
     setExpanded(false);
@@ -120,6 +157,7 @@ export function Sidebar({ address, copyToClipboard, onRouteIntent }) {
       )}
       <Container
         data-sidebar-expanded={String(expanded)}
+        data-sidebar-collapsed={String(collapsed)}
         aria-label="Morpheus navigation"
         onKeyDown={(event) => {
           if (event.key === 'Escape') setExpanded(false);
@@ -129,6 +167,20 @@ export function Sidebar({ address, copyToClipboard, onRouteIntent }) {
           <LumerinLogoFull />
           <strong>Morpheus</strong>
         </Brand>
+        <NavAction
+          className="sidebar-collapse"
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-expanded={!collapsed}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          onClick={() => setCollapsed((v) => !v)}
+        >
+          {collapsed ? (
+            <IconLayoutSidebarLeftExpand />
+          ) : (
+            <IconLayoutSidebarLeftCollapse />
+          )}
+          <span>Collapse sidebar</span>
+        </NavAction>
         <NavAction
           className="sidebar-toggle"
           aria-label={expanded ? 'Collapse navigation' : 'Expand navigation'}

@@ -2226,6 +2226,112 @@ describe.sequential('Cowork runner plan bookkeeping', () => {
     expect(state.task!.plan.map((step) => step.id)).toEqual(['a', 'b'])
     expect(state.task!.plan[0]?.title).toBe('First')
   }, 20_000)
+
+  it('closes the step it left behind when the model opens the next one', async () => {
+    // What the user sees when this is not enforced: the status line under a
+    // project names step one for the rest of the run, because the reader takes
+    // the first open step and the model never closed it.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          tool_calls: [
+            planCall('c1', 'set_plan', {
+              steps: [
+                { id: 'a', title: 'Read the folder' },
+                { id: 'b', title: 'Write the report' }
+              ]
+            })
+          ]
+        })
+      )
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          tool_calls: [planCall('c2', 'update_plan_step', { id: 'b', status: 'in_progress' })]
+        })
+      )
+      .mockImplementation(async () => completionResponse({ content: 'Done.' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToCompletion()
+
+    expect(state.task!.plan.map((step) => [step.id, step.status])).toEqual([
+      ['a', 'completed'],
+      ['b', 'in_progress']
+    ])
+  }, 20_000)
+
+  it('sends a later open step back to pending when an earlier one is reopened', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          tool_calls: [
+            planCall('c1', 'set_plan', {
+              steps: [
+                { id: 'a', title: 'Read the folder', status: 'completed' },
+                { id: 'b', title: 'Write the report', status: 'in_progress' }
+              ]
+            })
+          ]
+        })
+      )
+      // Going back to step a means the work after it is no longer underway, so
+      // b cannot stay open alongside it.
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          tool_calls: [planCall('c2', 'update_plan_step', { id: 'a', status: 'in_progress' })]
+        })
+      )
+      .mockImplementation(async () => completionResponse({ content: 'Done.' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToCompletion()
+
+    expect(state.task!.plan.map((step) => [step.id, step.status])).toEqual([
+      ['a', 'in_progress'],
+      ['b', 'pending']
+    ])
+  }, 20_000)
+
+  it('leaves one step open when a submitted plan marks several', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        completionResponse({
+          content: null,
+          tool_calls: [
+            planCall('c1', 'set_plan', {
+              steps: [
+                { id: 'a', title: 'First', status: 'in_progress' },
+                { id: 'b', title: 'Second', status: 'in_progress' },
+                { id: 'c', title: 'Third', status: 'pending' }
+              ]
+            })
+          ]
+        })
+      )
+      // Answering before the plan is closed earns a nudge rather than an
+      // ending, so read the plan from the request that carries it.
+      .mockImplementation(async () => completionResponse({ content: 'Done.' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runToCompletion()
+
+    // The latest marked step is the one the model means; the earlier one is
+    // work it has already moved past.
+    expect(toolResults(fetchMock, 1).at(-1).plan.map((step: any) => [step.id, step.status])).toEqual(
+      [
+        ['a', 'completed'],
+        ['b', 'in_progress'],
+        ['c', 'pending']
+      ]
+    )
+  }, 20_000)
 })
 
 describe.sequential('Cowork runner unfinished plan continuation', () => {

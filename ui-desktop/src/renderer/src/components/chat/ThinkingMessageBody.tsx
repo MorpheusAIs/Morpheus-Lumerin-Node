@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import styled from 'styled-components';
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { coldarkDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import bash from 'react-syntax-highlighter/dist/esm/languages/prism/bash';
@@ -20,7 +21,13 @@ import sql from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
 import tsx from 'react-syntax-highlighter/dist/esm/languages/prism/tsx';
 import typescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript';
 import yaml from 'react-syntax-highlighter/dist/esm/languages/prism/yaml';
-import { IconChevronRight, IconChevronDown } from '@tabler/icons-react';
+import {
+  IconChevronRight,
+  IconChevronDown,
+  IconCheck,
+  IconCopy,
+} from '@tabler/icons-react';
+import { formatElapsed } from './ChatActivity';
 
 // The full Prism export eagerly bundles hundreds of language grammars into the
 // startup-critical Chat route. Workspace/chat output overwhelmingly uses this
@@ -208,6 +215,15 @@ const EmptyTag = styled.span`
   border-radius: 3px;
 `;
 
+// Tabular numerals keep the header from jittering as the count ticks.
+const ThinkingElapsed = styled.span`
+  margin-left: 6px;
+  font-size: 0.82em;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.35);
+  font-variant-numeric: tabular-nums;
+`;
+
 const ThinkingDots = styled.span`
   display: inline-block;
   margin-left: 4px;
@@ -251,29 +267,199 @@ const ThinkingBody = styled.div<{ $hidden: boolean }>`
   }
 `;
 
+const CodeBlockWrapper = styled.div`
+  position: relative;
+  margin: 8px 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  overflow: hidden;
+
+  pre {
+    margin: 0 !important;
+    border-radius: 0 !important;
+  }
+`;
+
+const CodeBlockHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px 4px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+`;
+
+const CodeBlockLanguage = styled.span`
+  font-size: 0.75em;
+  font-weight: 500;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+  font-family: inherit;
+`;
+
+const CopyButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  padding: 3px 7px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.78em;
+  font-weight: 500;
+  font-family: inherit;
+  transition: background 0.15s ease, color 0.15s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  &:focus {
+    outline: none;
+  }
+`;
+
+// Electron's renderer exposes the async clipboard API, but it is unavailable in
+// non-secure contexts and in the test environment, so fall back rather than
+// letting a missing API throw inside a click handler.
+async function writeClipboardText(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const scratch = document.createElement('textarea');
+  scratch.value = text;
+  scratch.setAttribute('readonly', '');
+  scratch.style.position = 'fixed';
+  scratch.style.opacity = '0';
+  document.body.appendChild(scratch);
+  scratch.select();
+  try {
+    document.execCommand('copy');
+  } finally {
+    document.body.removeChild(scratch);
+  }
+}
+
+function CodeBlock({ language, code }: { language: string; code: string }) {
+  const [copied, setCopied] = useState(false);
+  const resetTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(
+    () => () => {
+      if (resetTimer.current) clearTimeout(resetTimer.current);
+    },
+    [],
+  );
+
+  const onCopy = useCallback(async () => {
+    try {
+      await writeClipboardText(code);
+      setCopied(true);
+      if (resetTimer.current) clearTimeout(resetTimer.current);
+      resetTimer.current = setTimeout(() => setCopied(false), 1600);
+    } catch {
+      // A failed copy should not take the message down with it.
+    }
+  }, [code]);
+
+  return (
+    <CodeBlockWrapper>
+      <CodeBlockHeader>
+        <CodeBlockLanguage>{language}</CodeBlockLanguage>
+        <CopyButton
+          type="button"
+          onClick={onCopy}
+          aria-label={copied ? 'Copied' : 'Copy code'}
+        >
+          {copied ? (
+            <IconCheck size={13} stroke={2} />
+          ) : (
+            <IconCopy size={13} stroke={1.8} />
+          )}
+          {copied ? 'Copied' : 'Copy'}
+        </CopyButton>
+      </CodeBlockHeader>
+      <SyntaxHighlighter PreTag="div" language={language} style={coldarkDark}>
+        {code}
+      </SyntaxHighlighter>
+    </CodeBlockWrapper>
+  );
+}
+
+// GFM tables arrive as bare <table>/<th>/<td>, which inherit nothing from the
+// bubble and render as unreadable runs of text. These give them the same
+// borders and spacing the rest of the message already uses.
+const MarkdownTableWrapper = styled.div`
+  overflow-x: auto;
+  margin: 8px 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.94em;
+  }
+
+  th,
+  td {
+    padding: 7px 12px;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  th {
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.05);
+    white-space: nowrap;
+  }
+
+  tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  tbody tr:hover td {
+    background: rgba(255, 255, 255, 0.03);
+  }
+`;
+
 const markdownComponents = {
   code(props: any) {
     const { children, className, node, ...rest } = props;
     const match = /language-(\w+)/.exec(className || '');
-    return match ? (
-      <SyntaxHighlighter
-        {...rest}
-        PreTag="div"
-        language={
-          CODE_LANGUAGE_ALIASES[match[1].toLowerCase()] ??
-          match[1].toLowerCase()
-        }
-        style={coldarkDark}
-      >
-        {String(children).replace(/\n$/, '')}
-      </SyntaxHighlighter>
-    ) : (
-      <code {...rest} className={className}>
-        {children}
-      </code>
+    if (!match) {
+      return (
+        <code {...rest} className={className}>
+          {children}
+        </code>
+      );
+    }
+    const raw = match[1].toLowerCase();
+    return (
+      <CodeBlock
+        language={CODE_LANGUAGE_ALIASES[raw] ?? raw}
+        code={String(children).replace(/\n$/, '')}
+      />
+    );
+  },
+  table(props: any) {
+    const { node, ...rest } = props;
+    return (
+      <MarkdownTableWrapper>
+        <table {...rest} />
+      </MarkdownTableWrapper>
     );
   },
 };
+
+const remarkPlugins = [remarkGfm];
 
 function ReasoningBlock({
   tag,
@@ -289,9 +475,32 @@ function ReasoningBlock({
   // that the user can toggle freely without us flipping it back.
   const [open, setOpen] = useState(true);
   const prevComplete = useRef(complete);
+
+  // How long the model spent thinking. Only measured when we actually watched
+  // the block stream — a message reloaded from history arrives already closed,
+  // and inventing a duration for it would be a lie.
+  const startedAt = useRef<number | undefined>(
+    complete ? undefined : Date.now(),
+  );
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [finalMs, setFinalMs] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (complete || startedAt.current === undefined) return undefined;
+    const id = setInterval(() => {
+      if (startedAt.current !== undefined) {
+        setElapsedMs(Date.now() - startedAt.current);
+      }
+    }, 250);
+    return () => clearInterval(id);
+  }, [complete]);
+
   useEffect(() => {
     if (!prevComplete.current && complete) {
       setOpen(false);
+      if (startedAt.current !== undefined) {
+        setFinalMs(Date.now() - startedAt.current);
+      }
     }
     prevComplete.current = complete;
   }, [complete]);
@@ -301,6 +510,9 @@ function ReasoningBlock({
 
   const Caret = open ? IconChevronDown : IconChevronRight;
   const label = complete ? LABELS_COMPLETE[tag] : LABELS_STREAMING[tag];
+  // The count keeps running in the collapsed header, so the user can still see
+  // what the wait cost them after the block folds itself away.
+  const shownMs = complete ? finalMs : elapsedMs;
 
   return (
     <ThinkingContainer>
@@ -318,6 +530,9 @@ function ReasoningBlock({
             <ThinkingDots />
           </>
         )}
+        {shownMs !== undefined && shownMs >= 1000 && (
+          <ThinkingElapsed>{formatElapsed(shownMs)}</ThinkingElapsed>
+        )}
         {isEmpty && <EmptyTag>empty</EmptyTag>}
       </ThinkingHeader>
       <ThinkingBody $hidden={!open}>
@@ -326,7 +541,9 @@ function ReasoningBlock({
             No reasoning content emitted by the provider.
           </em>
         ) : (
-          <Markdown components={markdownComponents}>{trimmed}</Markdown>
+          <Markdown components={markdownComponents} remarkPlugins={remarkPlugins}>
+            {trimmed}
+          </Markdown>
         )}
       </ThinkingBody>
     </ThinkingContainer>
@@ -338,7 +555,11 @@ export function ThinkingMessageBody({ text }: { text: string }) {
 
   // Fast path: no reasoning tag anywhere → plain markdown.
   if (segments.every((s) => s.kind === 'text')) {
-    return <Markdown components={markdownComponents}>{text}</Markdown>;
+    return (
+      <Markdown components={markdownComponents} remarkPlugins={remarkPlugins}>
+        {text}
+      </Markdown>
+    );
   }
 
   return (
@@ -357,7 +578,11 @@ export function ThinkingMessageBody({ text }: { text: string }) {
         const trimmed = seg.content.replace(/^\s+/, '');
         if (trimmed.length === 0) return null;
         return (
-          <Markdown key={`text-${i}`} components={markdownComponents}>
+          <Markdown
+            key={`text-${i}`}
+            components={markdownComponents}
+            remarkPlugins={remarkPlugins}
+          >
             {trimmed}
           </Markdown>
         );

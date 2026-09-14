@@ -1,5 +1,3 @@
-import styled from 'styled-components';
-
 import Card from 'react-bootstrap/Card';
 import { abbreviateAddress } from '../../utils';
 import {
@@ -10,182 +8,11 @@ import {
   IconHash,
 } from '@tabler/icons-react';
 import { ModelActionButton } from './ModelActionButton';
-
-const CustomCard = styled(Card)`
-  background: linear-gradient(145deg, #244a47 0%, #1d3c39 100%) !important;
-  color: #21dc8f !important;
-  border: 1px solid rgba(33, 220, 143, 0.2) !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  transition: all 0.2s ease-in-out;
-  border-radius: 12px !important;
-  overflow: hidden;
-
-  &:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.25);
-    border-color: rgba(33, 220, 143, 0.4) !important;
-  }
-
-  p {
-    color: white !important;
-  }
-
-  .card-title {
-    font-weight: 600;
-    font-size: 1.3rem;
-    letter-spacing: 0.02em;
-    text-overflow: ellipsis;
-    color: #21dc8f;
-  }
-
-  .card-subtitle {
-    font-size: 0.85rem;
-    color: rgba(255, 255, 255, 0.7) !important;
-  }
-
-  .card-body {
-    padding: 1.5rem;
-  }
-
-  .model-info-section {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    padding-top: 8px;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
-  }
-
-  .model-info-item {
-    display: flex;
-    align-items: center;
-    font-size: 1.1rem;
-    padding: 4px 0;
-  }
-
-  .info-label {
-    font-weight: 600;
-    min-width: 90px;
-    color: rgba(255, 255, 255, 0.9);
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .info-value {
-    color: white;
-    display: flex;
-    align-items: center;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    display: inline-block;
-  }
-
-  .icon-button {
-    cursor: pointer;
-    padding: 8px;
-    border-radius: 50%;
-    transition: all 0.2s;
-    background: rgba(255, 255, 255, 0.05);
-    color: rgba(255, 255, 255, 0.8);
-
-    &:hover {
-      background: rgba(255, 0, 0, 0.15);
-      color: #ff6b6b;
-      transform: rotate(8deg);
-    }
-  }
-
-  .copy-button {
-    background: rgba(33, 220, 143, 0.15);
-    color: white;
-    padding: 4px 8px;
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    cursor: pointer;
-    margin-left: 10px;
-    transition: all 0.2s;
-
-    &:hover {
-      background: rgba(33, 220, 143, 0.3);
-    }
-
-    svg {
-      margin-right: 4px;
-    }
-  }
-
-  .tag-container {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    align-items: center;
-  }
-
-  .tag-item {
-    background: rgba(33, 220, 143, 0.15);
-    padding: 4px 8px;
-    border-radius: 6px;
-    font-size: 1rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    height: 22px;
-    line-height: 1;
-    transition: all 0.2s;
-    border: 1px solid rgba(33, 220, 143, 0.1);
-
-    &:hover {
-      background: rgba(33, 220, 143, 0.25);
-      transform: translateY(-2px);
-    }
-  }
-
-  .monospace {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.85rem;
-    letter-spacing: -0.03em;
-  }
-
-  .hash-container {
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: 6px;
-    padding: 6px 10px;
-    display: flex;
-    align-items: center;
-    font-size: 1.1rem;
-  }
-`;
-
-const Container = styled.div`
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 28px;
-  max-height: 75vh;
-  padding: 8px 4px;
-  overflow-y: auto;
-
-  &::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-
-  &::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.1);
-    border-radius: 4px;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background: rgba(33, 220, 143, 0.3);
-    border-radius: 4px;
-  }
-
-  &::-webkit-scrollbar-thumb:hover {
-    background: rgba(33, 220, 143, 0.5);
-  }
-`;
+import {
+  ModelCardEmptyState,
+  ModelCardGrid,
+  ModelCardSurface,
+} from './ModelCardSurface';
 
 interface PinnedFile {
   fileCID: string;
@@ -250,23 +77,10 @@ function ModelCard({
   };
 
   return (
-    <CustomCard style={{ width: '36rem' }}>
+    <ModelCardSurface>
       <Card.Body>
-        <Card.Title
-          as={'div'}
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <span
-            style={{
-              textOverflow: 'ellipsis',
-              overflow: 'hidden',
-              maxWidth: '90%',
-            }}
-          >
+        <Card.Title as={'div'} className="model-card-title">
+          <span className="model-card-name">
             {model.fileName || 'Unnamed File'}
           </span>
           <ModelActionButton
@@ -385,13 +199,13 @@ function ModelCard({
           ) : null}
         </div>
       </Card.Body>
-    </CustomCard>
+    </ModelCardSurface>
   );
 }
 
 function PinnedFilesTable({ pinnedFiles, toasts, unpinFile }: any) {
   return (
-    <Container>
+    <ModelCardGrid>
       {pinnedFiles?.length ? (
         pinnedFiles.map((x) => (
           <div key={x.fileCIDHash}>
@@ -399,22 +213,9 @@ function PinnedFilesTable({ pinnedFiles, toasts, unpinFile }: any) {
           </div>
         ))
       ) : (
-        <div
-          style={{
-            width: '100%',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            padding: '40px 0',
-            color: 'rgba(255, 255, 255, 0.6)',
-            fontSize: '1.1rem',
-            fontStyle: 'italic',
-          }}
-        >
-          No pinned files found
-        </div>
+        <ModelCardEmptyState>No pinned files found</ModelCardEmptyState>
       )}
-    </Container>
+    </ModelCardGrid>
   );
 }
 

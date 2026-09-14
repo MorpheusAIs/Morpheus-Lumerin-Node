@@ -27,6 +27,7 @@ import {
   ContainerTitle,
   ChatTitleContainer,
   ChatAvatar,
+  HeaderIconButton,
   Avatar,
   TitleRow,
   ChatHeaderControls,
@@ -66,6 +67,19 @@ import {
 import withChatState from '../../store/hocs/withChatState';
 import { abbreviateAddress } from '../../utils';
 import { ThinkingMessageBody } from './ThinkingMessageBody';
+import {
+  ActivityStatus,
+  derivePhase,
+  lastAssistantText,
+  useElapsed,
+} from './ChatActivity';
+import { withCustomInstructions } from '../../lib/customInstructions';
+import {
+  messageCostMor,
+  readChunkUsage,
+  type MessageUsage as MessageUsageCounts,
+} from '../../lib/messageUsage';
+import { MessageActions, precedingUserText } from './MessageActions';
 
 import 'react-modern-drawer/dist/index.css';
 import './Chat.css';
@@ -155,7 +169,9 @@ export const resolveQuotedBid = (
       return chosen;
     }
   }
-  return rated.reduce((best, entry) => (entry.Score > best.Score ? entry : best));
+  return rated.reduce((best, entry) =>
+    entry.Score > best.Score ? entry : best,
+  );
 };
 
 /**
@@ -194,7 +210,6 @@ const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
 const selectAvailableMarketplaceModels = (models: unknown) =>
   normalizeModelList(models).filter((model) => !model.IsDeleted);
 
-let abort = false;
 const userMessage = { user: 'Me', role: 'user', icon: 'M', color: '#20dc8e' };
 
 type ScrollMetrics = Pick<
@@ -253,6 +268,32 @@ export const disposeActiveChatStream = async (
     await reader.cancel().catch(() => undefined);
   }
 };
+
+/**
+ * True when work started for one chat has been overtaken, either by the screen
+ * unmounting or by the user switching to another chat. Every async result that
+ * ends in a setState has to pass this first, or a slow response for the chat the
+ * user has left lands in the chat they are now looking at. That is the only way
+ * two chats on this side can see each other's context, so it is checked after
+ * every await rather than only at the top.
+ */
+export const isStaleChatWork = (
+  mountedRef: MutableRef<boolean>,
+  generationRef: MutableRef<number>,
+  generation: number,
+): boolean => !mountedRef.current || generationRef.current !== generation;
+
+/**
+ * The chat id to send with a request. Omitting it does not mean "no history",
+ * it means the router invents a fresh random id for that one turn, so the turn
+ * is filed somewhere nothing can find again and the next turn is filed
+ * somewhere else. Minting one id here and keeping it is what gives a chat a
+ * transcript, and what keeps two open chats in separate buckets.
+ */
+export const resolveChatId = (
+  existingId: string | undefined,
+  mint: () => string,
+): string => (existingId ? existingId : mint());
 
 /** Keeps the latest stream state and commits it at most once per paint. */
 export const createAnimationFrameBatch = <T,>(
@@ -398,6 +439,11 @@ const Chat = (props: ChatProps) => {
   const ownedAudioUrlsRef = useRef(new Set<string>());
   const mountedRef = useRef(true);
   const chatGenerationRef = useRef(0);
+  // Per instance, not per module. This was a module-level `let`, so two mounted
+  // chats shared one flag: switching or stopping in either one cancelled the
+  // other's in-flight stream, and the second reader to observe the flag saw it
+  // already cleared. A ref keeps the stop signal inside the chat that raised it.
+  const abortRef = useRef(false);
   const activeReaderRef =
     useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const queryClient = useQueryClient();
@@ -417,6 +463,9 @@ const Chat = (props: ChatProps) => {
   const [isOpen, setIsOpen] = useState(false);
 
   const [isSpinning, setIsSpinning] = useState(false);
+  // Seconds since the request went out. A reasoning model can stay silent for
+  // minutes, and without this the app is indistinguishable from one that hung.
+  const activityElapsedMs = useElapsed(isSpinning);
 
   const [imagePreview, setImagePreview] = useState<string>();
   const [activeSession, setActiveSession] = useState<any>(undefined);
@@ -1081,10 +1130,18 @@ const Chat = (props: ChatProps) => {
   };
 
   const loadChatHistory = async (chatId: string) => {
+    // Every caller bumps the generation before switching, so a fetch that was
+    // started for the chat the user has since left is identifiable here. Without
+    // this, a slow load for chat A resolving after a switch painted A's
+    // transcript into chat B, which is the one way two chats could see each
+    // other's context.
+    const chatGeneration = chatGenerationRef.current;
+    const isStale = () =>
+      isStaleChatWork(mountedRef, chatGenerationRef, chatGeneration);
     try {
       const history = await props.client.getChatHistory(chatId);
       const messages: HistoryMessage[] = [];
-      if (!history) {
+      if (!history || isStale()) {
         return;
       }
 
@@ -1145,8 +1202,14 @@ const Chat = (props: ChatProps) => {
         }
         messages.push(assistant);
       });
+      if (isStale()) {
+        return;
+      }
       setMessages(messages);
     } catch (e) {
+      if (isStale()) {
+        return;
+      }
       console.error('Failed to load chat history', e);
       props.toasts.toast('error', 'Failed to load chat history');
     }
@@ -1196,7 +1259,7 @@ const Chat = (props: ChatProps) => {
   };
 
   const selectChat = async (chatData: ChatData) => {
-    abort = true;
+    abortRef.current = true;
     chatGenerationRef.current += 1;
     const modelId = chatData.modelId;
     if (!modelId) {
@@ -1247,6 +1310,28 @@ const Chat = (props: ChatProps) => {
     setIsReadonly(false);
   };
 
+  // A request that carries no chat id makes the router mint a random one, so the
+  // turn is stored under an id nothing on this side knows, the next turn gets a
+  // different random id, and the conversation has neither history nor a
+  // transcript that can be reopened. Minting here instead keeps one stable id
+  // per chat, which is also what keeps two open chats from sharing a bucket.
+  const ensureChatId = (): string =>
+    resolveChatId(chat?.id, () => {
+      const minted = generateHashId();
+      if (selectedModel?.Id) {
+        const mintedChat: ChatData = {
+          id: minted,
+          createdAt: new Date(),
+          modelId: selectedModel.Id,
+          isLocal,
+        };
+        // Functional form: a concurrent selectChat may already have set a chat,
+        // and the one the user picked wins over the one this send invented.
+        setChat((current) => current ?? mintedChat);
+      }
+      return minted;
+    });
+
   const call = async (message, callAttachments: Attachment[] = []) => {
     const chatGeneration = chatGenerationRef.current;
     let memoState = [
@@ -1267,15 +1352,24 @@ const Chat = (props: ChatProps) => {
     setMessages(memoState);
     scheduleScrollToBottom();
 
+    // A request that carries no chat id makes the router mint a random one, so
+    // the turn is stored under an id nothing on this side knows. The next turn
+    // gets a different random id, so the conversation has no history and the
+    // transcript cannot be reopened. Mint the id here instead, once, and keep it.
+    const chatId = ensureChatId();
+
     // Plain string content when there are no images, so the text-only path
     // keeps exactly the shape it had before attachments existed.
     const incommingMessage = buildUserMessage(message, callAttachments);
     const proxyResponse = await props.client
       .chatCompletion({
         target: isLocal
-          ? { modelId: selectedModel.Id, chatId: chat?.id }
-          : { sessionId: activeSession.Id, chatId: chat?.id },
-        messages: [incommingMessage],
+          ? { modelId: selectedModel.Id, chatId }
+          : { sessionId: activeSession.Id, chatId },
+        // Sent on every turn rather than only the first: the router replays
+        // just the last message of each stored turn, so a one-off system
+        // message would vanish from turn two on. See lib/customInstructions.ts.
+        messages: withCustomInstructions([incommingMessage]),
       })
       .catch((e) => {
         console.log('Failed to send request', e);
@@ -1343,12 +1437,19 @@ const Chat = (props: ChatProps) => {
       setMessages(nextMessages);
       scheduleScrollToBottom();
     });
+    // Token counts arrive on the final chunk only, so the last non-null reading
+    // is kept and re-attached to the message on every subsequent write.
+    let streamUsage: MessageUsageCounts | undefined;
+    // Billed from the moment the request went out, not from the first token: a
+    // reasoning model's silence is session time and is charged like any other.
+    const startedAt = Date.now();
+    const pricePerSecond = isLocal ? undefined : selectedBid?.PricePerSecond;
     try {
       let chunksBuffer = '';
       while (true) {
-        if (abort) {
+        if (abortRef.current) {
           await reader.cancel();
-          abort = false;
+          abortRef.current = false;
         }
 
         const { value, done } = await reader.read();
@@ -1397,6 +1498,11 @@ const Chat = (props: ChatProps) => {
           if (typeof part === 'string') {
             handleSystemMessage(part);
             return;
+          }
+
+          const chunkUsage = readChunkUsage(part);
+          if (chunkUsage) {
+            streamUsage = chunkUsage;
           }
 
           const imageContent = part.imageUrl;
@@ -1453,7 +1559,13 @@ const Chat = (props: ChatProps) => {
                 .replace('<|im_end|>', '');
             result = [
               ...otherMessages,
-              { id: part.id, text: text, ...iconProps },
+              {
+                id: part.id,
+                text: text,
+                ...iconProps,
+                usage: streamUsage,
+                costMor: messageCostMor(Date.now() - startedAt, pricePerSecond),
+              },
             ];
           }
           memoState = result;
@@ -1478,10 +1590,12 @@ const Chat = (props: ChatProps) => {
     return memoState;
   };
 
-  const buildInferenceTarget = () =>
-    isLocal
-      ? { modelId: selectedModel.Id, chatId: chat?.id }
-      : { sessionId: activeSession.Id, chatId: chat?.id };
+  const buildInferenceTarget = () => {
+    const chatId = ensureChatId();
+    return isLocal
+      ? { modelId: selectedModel.Id, chatId }
+      : { sessionId: activeSession.Id, chatId };
+  };
 
   const audioIconProps = () => {
     const icon = modelName.toUpperCase()[0];
@@ -1827,12 +1941,12 @@ const Chat = (props: ChatProps) => {
   };
 
   const handleSubmit = () => {
-    if (abort) {
-      abort = false;
+    if (abortRef.current) {
+      abortRef.current = false;
     }
 
     if (isSpinning) {
-      abort = true;
+      abortRef.current = true;
       setIsSpinning(false);
       return;
     }
@@ -1890,6 +2004,41 @@ const Chat = (props: ChatProps) => {
     setAttachments([]);
   };
 
+  // Edit loads the message back into the composer rather than mutating the
+  // transcript. The router stores every turn it was sent and exposes no way to
+  // revise one, so rewriting history here would be a lie that a reload undoes.
+  const editMessage = (message: { text?: string }) => {
+    if (typeof message?.text !== 'string') return;
+    setPromptInput(message.text);
+    const box =
+      document.querySelector<HTMLTextAreaElement>('[data-chat-input]');
+    box?.focus();
+    // Caret to the end: the user is almost always appending or amending, not
+    // retyping from the start.
+    box?.setSelectionRange(message.text.length, message.text.length);
+  };
+
+  // Retry re-asks the original question. It appends a fresh turn rather than
+  // replacing the old answer, for the same reason edit does not rewrite history.
+  const regenerateFrom = (index: number) => {
+    if (isSpinning || isDisabled) return;
+    const prompt = precedingUserText(messages, index);
+    if (!prompt) {
+      props.toasts.toast('info', 'There is no earlier question to retry.');
+      return;
+    }
+    setIsSpinning(true);
+    const requestGeneration = chatGenerationRef.current;
+    call(prompt).finally(() => {
+      if (
+        mountedRef.current &&
+        chatGenerationRef.current === requestGeneration
+      ) {
+        setIsSpinning(false);
+      }
+    });
+  };
+
   const deleteChatEntry = (id: string) => {
     props.client
       .deleteChatHistory(id)
@@ -1924,7 +2073,7 @@ const Chat = (props: ChatProps) => {
     // completes afterwards, the one-time bootstrap must not replace it with a
     // different historical session.
     initializedRef.current = true;
-    abort = true;
+    abortRef.current = true;
     chatGenerationRef.current += 1;
     autoScrollRef.current = true;
     setMessages([]);
@@ -2351,7 +2500,9 @@ const Chat = (props: ChatProps) => {
                   <SessionCostSummary>
                     <strong>{formatValue(quote.amount, 18)} MOR</strong> is
                     locked up for this session
-                    {!hasFundsForSession ? ' — more than your balance' : ''}.{' '}
+                    {!hasFundsForSession
+                      ? ' — more than your balance'
+                      : ''}.{' '}
                     {`The compute itself costs ${formatValue(quote.computeCost, 18)} MOR; the rest is the emissions conversion the contract applies and is not a fee.`}{' '}
                     {`Across the lengths offered here that runs from ${formatValue(quote.min, 18)} to ${formatValue(quote.max, 18)} MOR.`}
                   </SessionCostSummary>
@@ -2394,8 +2545,25 @@ const Chat = (props: ChatProps) => {
                 key={x.id ?? index}
                 message={x}
                 onOpenImage={setImagePreview}
+                busy={isSpinning}
+                onEdit={
+                  x.role === 'user' && !isDisabled
+                    ? () => editMessage(x)
+                    : undefined
+                }
+                onRegenerate={
+                  x.role === 'assistant' && !isDisabled
+                    ? () => regenerateFrom(index)
+                    : undefined
+                }
               />
             ))}
+            {isSpinning && (
+              <ActivityStatus
+                phase={derivePhase(lastAssistantText(messages))}
+                elapsedMs={activityElapsedMs}
+              />
+            )}
           </ChatHistoryContainer>
         )}
       </>
@@ -2562,11 +2730,14 @@ const Chat = (props: ChatProps) => {
                             <span style={{ color: 'white' }}>Provider:</span> {isLocal ? "(local)" : providerAddress}
                         </div>
                     } */}
-          <div>
-            <div onClick={toggleDrawer}>
-              <IconHistory size={'2.4rem'}></IconHistory>
-            </div>
-          </div>
+          <HeaderIconButton
+            onClick={toggleDrawer}
+            aria-label={isOpen ? 'Hide chat history' : 'Show chat history'}
+            aria-expanded={isOpen}
+            title={isOpen ? 'Hide chat history' : 'Show chat history'}
+          >
+            <IconHistory size={'2.4rem'} />
+          </HeaderIconButton>
         </ChatTitleContainer>
 
         {imagePreview && (
@@ -2685,6 +2856,7 @@ const Chat = (props: ChatProps) => {
                   </>
                 )}
                 <CustomTextArrea
+                  data-chat-input
                   disabled={isDisabled}
                   onKeyPress={(e) => {
                     if (e.key === 'Enter') {
@@ -2762,7 +2934,9 @@ const Chat = (props: ChatProps) => {
         models={(chainData as any)?.models}
         modelsLoading={modelsLoading}
         priceIndex={modelPriceIndex}
-        pricesLoading={modelPricesQuery.isPending && modelPricesQuery.isFetching}
+        pricesLoading={
+          modelPricesQuery.isPending && modelPricesQuery.isFetching
+        }
         pricesFailed={modelPricesQuery.isError}
         isActive={openChangeModal}
         marketplaceOnly
@@ -2877,16 +3051,45 @@ const Message = memo(
   ({
     message,
     onOpenImage,
+    onEdit,
+    onRegenerate,
+    busy,
   }: {
     message: any;
     onOpenImage: (url: string) => void;
+    onEdit?: () => void;
+    onRegenerate?: () => void;
+    busy?: boolean;
   }) => {
+    // Media turns have no text to copy and nothing meaningful to resend, so the
+    // row would be three disabled buttons; it is omitted for them entirely.
+    const isMedia =
+      message.isAudioContent ||
+      message.isImageContent ||
+      message.isVideoRawContent;
+
     return (
-      <div style={{ display: 'flex', margin: '12px 0 28px 0' }}>
+      <div
+        data-message-row
+        data-testid="chat-message"
+        style={{ display: 'flex', margin: '12px 0 28px 0' }}
+      >
         <Avatar color={message.color}>{message.icon}</Avatar>
-        <div>
+        {/* min-width keeps a long unbroken reply from pushing the row wider
+            than the column instead of wrapping. */}
+        <div style={{ minWidth: 0, flex: 1 }}>
           <AvatarHeader>{message.user}</AvatarHeader>
           {renderMessage(message, onOpenImage)}
+          {!isMedia && (
+            <MessageActions
+              text={message.text}
+              onEdit={onEdit}
+              onRegenerate={onRegenerate}
+              busy={busy}
+              usage={message.usage}
+              costMor={message.costMor}
+            />
+          )}
         </div>
       </div>
     );

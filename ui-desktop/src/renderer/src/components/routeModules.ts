@@ -9,6 +9,7 @@ export type AppRoutePath =
   | '/agents'
   | '/models'
   | '/providers'
+  | '/instructions'
   | '/settings';
 
 export const routeModules: Record<AppRoutePath, () => Promise<RouteModule>> = {
@@ -18,6 +19,7 @@ export const routeModules: Record<AppRoutePath, () => Promise<RouteModule>> = {
   '/agents': () => import('./agents/Agents'),
   '/models': () => import('./models/Models'),
   '/providers': () => import('./providers/Providers'),
+  '/instructions': () => import('./instructions/CustomInstructions'),
   '/settings': () => import('./settings/Settings'),
 };
 

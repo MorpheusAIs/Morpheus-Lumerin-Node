@@ -271,6 +271,105 @@ describe('executeCoworkTool', () => {
     )
   })
 
+  it('edits part of a file and leaves the rest byte for byte', async () => {
+    const target = path.join(projectRoot, 'config.json')
+    const original = '{\n  "port": 8080,\n  "host": "localhost"\n}\n'
+    await fs.writeFile(target, original)
+
+    const output = await executeCoworkTool(project(), 'edit_file', {
+      path: 'config.json',
+      oldText: '"port": 8080',
+      newText: '"port": 9090'
+    })
+
+    await expect(fs.readFile(target, 'utf8')).resolves.toBe(
+      '{\n  "port": 9090,\n  "host": "localhost"\n}\n'
+    )
+    expect(output.result).toMatchObject({
+      path: 'config.json',
+      startLine: 2,
+      removedLines: 1,
+      addedLines: 1
+    })
+    expect(output.artifact).toMatchObject({ path: 'config.json', kind: 'file' })
+  })
+
+  it('backs up the file before editing it', async () => {
+    const target = path.join(projectRoot, 'notes.md')
+    await fs.writeFile(target, 'before\n')
+
+    await executeCoworkTool(project(), 'edit_file', {
+      path: 'notes.md',
+      oldText: 'before',
+      newText: 'after'
+    })
+
+    // The backup directory is keyed by project rather than by test, so it also
+    // holds what earlier cases in this file put there. Backups are named for the
+    // file they came from, which is what makes this one identifiable.
+    const backupDirectory = path.join(electron.userData, 'CoworkBackups', project().id)
+    const backups = (await fs.readdir(backupDirectory)).filter((name) => name.endsWith('notes.md'))
+    expect(backups).toHaveLength(1)
+    await expect(fs.readFile(path.join(backupDirectory, backups[0]), 'utf8')).resolves.toBe(
+      'before\n'
+    )
+  })
+
+  it('refuses to edit a file that is not there rather than creating one', async () => {
+    // A mistyped path is a model working from a bad read. Creating the file
+    // would turn that into a silent success and a file nobody asked for.
+    await expect(
+      executeCoworkTool(project(), 'edit_file', {
+        path: 'missing.txt',
+        oldText: 'a',
+        newText: 'b'
+      })
+    ).rejects.toThrow()
+    await expect(fs.readFile(path.join(projectRoot, 'missing.txt'), 'utf8')).rejects.toThrow()
+  })
+
+  it('leaves the file untouched when the snippet is ambiguous', async () => {
+    const target = path.join(projectRoot, 'repeated.txt')
+    await fs.writeFile(target, 'x = 1\ny = 2\nx = 1\n')
+
+    await expect(
+      executeCoworkTool(project(), 'edit_file', {
+        path: 'repeated.txt',
+        oldText: 'x = 1',
+        newText: 'x = 3'
+      })
+    ).rejects.toThrow(/2 matches/)
+    await expect(fs.readFile(target, 'utf8')).resolves.toBe('x = 1\ny = 2\nx = 1\n')
+  })
+
+  it('will not edit a binary file as text', async () => {
+    const target = path.join(projectRoot, 'blob.bin')
+    await fs.writeFile(target, Buffer.from([0x41, 0x00, 0x42]))
+
+    await expect(
+      executeCoworkTool(project(), 'edit_file', { path: 'blob.bin', oldText: 'A', newText: 'C' })
+    ).rejects.toThrow(/binary/i)
+  })
+
+  it('will not edit the project root', async () => {
+    await expect(
+      executeCoworkTool(project(), 'edit_file', { path: '.', oldText: 'a', newText: 'b' })
+    ).rejects.toThrow(/not the project root/i)
+  })
+
+  it('asks before editing an existing file, and calls it an edit rather than a replacement', async () => {
+    await fs.writeFile(path.join(projectRoot, 'existing.txt'), 'content')
+
+    expect(isCoworkMutationTool('edit_file')).toBe(true)
+    await expect(
+      approvalRequirement(project('auto'), 'edit_file', { path: 'existing.txt' })
+    ).resolves.toMatchObject({ risk: 'overwrite' })
+    const requirement = await approvalRequirement(project('auto'), 'edit_file', {
+      path: 'existing.txt'
+    })
+    expect(requirement?.reason).toContain('editing part of')
+  })
+
   it('creates a bounded professional binary artifact inside the project', async () => {
     const output = await executeCoworkTool(project(), 'create_pdf', {
       path: 'reports/operating-review.pdf',

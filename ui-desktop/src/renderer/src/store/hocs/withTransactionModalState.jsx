@@ -13,6 +13,9 @@ import { toBaseUnits, isValidAddress } from '../utils/amount';
 // whole time, but nothing in the UI ever called it. This is now a straight
 // MOR/ETH send against that endpoint.
 
+/** ETH held back by the MAX button so the transfer can pay its own gas. */
+const ETH_GAS_RESERVE = 0.0005;
+
 const withTransactionModalState = (WrappedComponent) => {
   class Container extends React.Component {
     static displayName = `withTransactionModalState(${
@@ -47,11 +50,14 @@ const withTransactionModalState = (WrappedComponent) => {
         errors: { ...state.errors, [id]: null },
       }));
 
-    /** Balance of the currently selected asset, as a decimal number. */
-    getAvailableBalance = () =>
-      this.state.selectedCurrency.value === 'ETH'
+    /** Balance of a given asset, as a decimal number. */
+    balanceFor = (currency) =>
+      currency === 'ETH'
         ? Number(this.props.eth?.value ?? 0)
         : Number(this.props.mor?.value ?? 0);
+
+    /** Balance of the currently selected asset, as a decimal number. */
+    getAvailableBalance = () => this.balanceFor(this.state.selectedCurrency.value);
 
     validate = () => {
       const { coinAmount, toAddress } = this.state;
@@ -104,9 +110,13 @@ const withTransactionModalState = (WrappedComponent) => {
     onMaxClick = () => {
       const balance = this.getAvailableBalance();
       // Never offer a true "max" on ETH — see the gas note in validate().
+      // Neither the router nor the client exposes an eth_estimateGas call, so
+      // this is a flat reserve rather than a quote. It is deliberately generous
+      // for a Base transfer; the leftover stays in the wallet, whereas guessing
+      // low means the transaction reverts and the user pays for nothing.
       const value =
         this.state.selectedCurrency.value === 'ETH'
-          ? String(Math.max(balance - 0.0005, 0))
+          ? String(Math.max(balance - ETH_GAS_RESERVE, 0))
           : String(balance);
       this.onInputChange({ id: 'coinAmount', value });
     };
@@ -124,6 +134,7 @@ const withTransactionModalState = (WrappedComponent) => {
           copyToClipboard={this.copyToClipboard}
           onInputChange={this.onInputChange}
           onMaxClick={this.onMaxClick}
+          balanceFor={this.balanceFor}
           resetForm={this.resetForm}
           onSubmit={this.onSubmit}
           setSelectedCurrency={this.setSelectedCurrency}

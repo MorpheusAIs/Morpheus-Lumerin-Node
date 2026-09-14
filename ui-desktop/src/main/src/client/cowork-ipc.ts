@@ -143,19 +143,29 @@ function publicProject(
   return { ...visible, folderName: path.basename(rootPath) }
 }
 
+const hidden = (value: unknown): string =>
+  `[${typeof value === 'string' ? value.length : 0} characters hidden from renderer]`
+
 function publicToolCall(call: CoworkToolCall): CoworkToolCall {
-  if (call.function.name !== 'write_file') return call
+  const name = call.function.name
+  if (name !== 'write_file' && name !== 'edit_file') return call
   try {
     const parsed = JSON.parse(call.function.arguments || '{}')
-    const length = typeof parsed.content === 'string' ? parsed.content.length : 0
     return {
       ...call,
       function: {
         ...call.function,
-        arguments: JSON.stringify({
-          ...parsed,
-          content: `[${length} characters hidden from renderer]`
-        })
+        arguments: JSON.stringify(
+          name === 'write_file'
+            ? { ...parsed, content: hidden(parsed.content) }
+            : // An edit carries two blocks of file content rather than one, and
+              // the renderer has no more use for either than it had for content.
+              {
+                ...parsed,
+                oldText: hidden(parsed.oldText),
+                newText: hidden(parsed.newText)
+              }
+        )
       }
     }
   } catch {

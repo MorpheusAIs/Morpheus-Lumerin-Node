@@ -8,13 +8,34 @@ export const chatStreamChannels = {
   event: 'chat-stream:event'
 } as const
 
-export const chatStreamLimits = {
+export type ChatStreamLimits = {
+  activePerRenderer: number
+  chunkBytes: number
+  ipcEvents: number
+  responseBytes: number
+  timeoutMs: number
+}
+
+// Zero means no ceiling.
+//
+// `ipcEvents`, `responseBytes` and `timeoutMs` used to be 16,384 events, 8 MB
+// and five minutes. All three are generous for a chat reply and all three are
+// wrong for a model that reasons. One SSE frame is one IPC event, so a long
+// answer crosses 16,384 while it is still mid-sentence, and the five minute
+// timer aborted the stream itself rather than the request feeding it, so the
+// user lost everything already on screen. None of these should be the thing
+// that decides a model has said enough, so none of them decide anything now.
+//
+// `chunkBytes` stays, because it splits rather than refuses, and
+// `activePerRenderer` stays, because it bounds concurrent streams rather than
+// the length of any one of them.
+export const chatStreamLimits: ChatStreamLimits = {
   activePerRenderer: 4,
   chunkBytes: 64 * 1024,
-  ipcEvents: 16_384,
-  responseBytes: 8 * 1024 * 1024,
-  timeoutMs: 5 * 60_000
-} as const
+  ipcEvents: 0,
+  responseBytes: 0,
+  timeoutMs: 0
+}
 
 type StreamEvent =
   | { requestId: string; kind: 'chunk'; dataBase64: string }
@@ -24,7 +45,8 @@ type StreamEvent =
 type ActiveStream = {
   controller: AbortController
   sender: WebContents
-  timeout: ReturnType<typeof setTimeout>
+  // Absent when no timeout is configured, which is the default.
+  timeout: ReturnType<typeof setTimeout> | undefined
 }
 
 const activeStreams = new Map<string, ActiveStream>()
@@ -49,14 +71,18 @@ function sendStreamEvent(sender: WebContents, payload: StreamEvent): void {
 function cleanupStream(key: string): void {
   const active = activeStreams.get(key)
   if (!active) return
-  clearTimeout(active.timeout)
+  if (active.timeout !== undefined) clearTimeout(active.timeout)
   activeStreams.delete(key)
 }
 
 export async function pumpChatResponse(
   body: ReadableStream<Uint8Array> | null,
   signal: AbortSignal,
-  onChunk: (chunk: Uint8Array) => void
+  onChunk: (chunk: Uint8Array) => void,
+  // Injectable so the guards below stay under test even though production runs
+  // with them switched off. A test that has to disable the thing it is testing
+  // is not a test.
+  limits: ChatStreamLimits = chatStreamLimits
 ): Promise<void> {
   if (!body) return
   const reader = body.getReader()
@@ -69,17 +95,21 @@ export async function pumpChatResponse(
       if (done) return
       if (!value?.byteLength) continue
       total += value.byteLength
-      if (total > chatStreamLimits.responseBytes) {
+      if (limits.responseBytes > 0 && total > limits.responseBytes) {
         await reader.cancel('Chat stream response exceeded the size limit.').catch(() => undefined)
-        throw new Error('Chat stream response exceeded the 8 MB limit.')
+        throw new Error(
+          `Chat stream response exceeded the ${Math.round(
+            limits.responseBytes / (1024 * 1024)
+          )} MB limit.`
+        )
       }
-      for (let offset = 0; offset < value.byteLength; offset += chatStreamLimits.chunkBytes) {
+      for (let offset = 0; offset < value.byteLength; offset += limits.chunkBytes) {
         events += 1
-        if (events > chatStreamLimits.ipcEvents) {
+        if (limits.ipcEvents > 0 && events > limits.ipcEvents) {
           await reader.cancel('Chat stream emitted too many chunks.').catch(() => undefined)
           throw new Error('Chat stream emitted too many chunks.')
         }
-        onChunk(value.subarray(offset, offset + chatStreamLimits.chunkBytes))
+        onChunk(value.subarray(offset, offset + limits.chunkBytes))
       }
     }
   } finally {
@@ -106,16 +136,22 @@ export function registerChatStreamIpc(): void {
 
     const controller = new AbortController()
     let responseStarted = false
-    const timeout = setTimeout(() => {
-      if (responseStarted) {
-        sendStreamEvent(event.sender, {
-          requestId,
-          kind: 'error',
-          message: 'The chat stream timed out.'
-        })
-      }
-      controller.abort('Chat stream timed out.')
-    }, chatStreamLimits.timeoutMs)
+    // No wall clock unless one is configured. The stream is still torn down by
+    // an explicit cancel, a destroyed renderer, a navigation, or the response
+    // ending, which are all events that mean something. Elapsed time is not.
+    const timeout =
+      chatStreamLimits.timeoutMs > 0
+        ? setTimeout(() => {
+            if (responseStarted) {
+              sendStreamEvent(event.sender, {
+                requestId,
+                kind: 'error',
+                message: 'The chat stream timed out.'
+              })
+            }
+            controller.abort('Chat stream timed out.')
+          }, chatStreamLimits.timeoutMs)
+        : undefined
     activeStreams.set(key, { controller, sender: event.sender, timeout })
     const abortIfDestroyed = (): void => controller.abort('Renderer closed.')
     const abortIfNavigating = (

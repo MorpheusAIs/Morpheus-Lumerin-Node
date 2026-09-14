@@ -21,6 +21,7 @@ const Cowork = lazy(routeModules['/workspace']);
 const Agents = lazy(routeModules['/agents']);
 const Models = lazy(routeModules['/models']);
 const Providers = lazy(routeModules['/providers']);
+const Instructions = lazy(routeModules['/instructions']);
 const Settings = lazy(routeModules['/settings']);
 
 const LegacyCoworkRedirect = () => {
@@ -160,6 +161,7 @@ export const Layout = () => {
               <Route path="/agents" element={<Agents />} />
               <Route path="/models" element={<Models />} />
               <Route path="/providers" element={<Providers />} />
+              <Route path="/instructions" element={<Instructions />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="*" element={<Navigate replace to="/wallet" />} />
             </Routes>

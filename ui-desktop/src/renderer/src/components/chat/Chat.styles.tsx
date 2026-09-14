@@ -356,6 +356,32 @@ export const ChatAvatar = styled.div`
   align-items: center;
 `;
 
+// The history toggle used to be a bare <div onClick>: no accessible name, no
+// keyboard focus, no hover feedback. It is the only control on this side of the
+// header, so it may as well look and behave like one.
+export const HeaderIconButton = styled.button.attrs({ type: 'button' })`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: ${(p) => p.theme.colors.morMain};
+  }
+
+  &:focus-visible {
+    outline: none;
+    border-color: ${(p) => p.theme.colors.morMain};
+  }
+`;
+
 export const CustomTextArrea = styled(TextareaAutosize)`
   background: transparent;
   box-sizing: border-box;

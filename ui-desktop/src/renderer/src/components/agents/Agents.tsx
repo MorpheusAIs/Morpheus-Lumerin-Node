@@ -1,8 +1,6 @@
 import { LayoutHeader } from '../common/LayoutHeader';
-import { View } from '../common/View';
 import { TrashIcon } from '@renderer/components/icons/TrashIcon';
 import Modal from '../common/Modal';
-import ExplorerLink from '../common/ExplorerLink';
 import withAgentsState, {
   MappedProps,
   ContainerProps,
@@ -15,6 +13,11 @@ import {
   TransactionList,
   TransactionRow,
   ScrollContainer,
+  AgentsView,
+  EmptyNote,
+  ModalNote,
+  ModalErrorBlock,
+  TransactionExplorerLink,
 } from '@renderer/components/agents/Agents.styles';
 import { AgentRowComp } from '@renderer/components/agents/AgentRow';
 import { AllowanceRowComp } from '@renderer/components/agents/AllowanceRow';
@@ -36,12 +39,7 @@ export const Agents = (props: ContainerProps & MappedProps) => {
   } = props;
 
   return (
-    <View
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
+    <AgentsView>
       <LayoutHeader title="Agents" />
       <QueryError error={agentsError} what="agents" onRetry={retryAgents} />
       <ScrollContainer>
@@ -120,17 +118,10 @@ export const Agents = (props: ContainerProps & MappedProps) => {
           activeAgents.length === 0 &&
           pendingAgents.length === 0 &&
           allowanceRequests.length === 0 && (
-            <p
-              style={{
-                color: 'var(--text-muted)',
-                fontSize: '1.4rem',
-                lineHeight: 1.6,
-                maxWidth: '60ch',
-              }}
-            >
+            <EmptyNote>
               No agents connected yet. Agent access requests will appear here
               for you to review before approving.
-            </p>
+            </EmptyNote>
           )}
         <AgentList>
           {activeAgents.map((agent) => (
@@ -173,12 +164,10 @@ export const Agents = (props: ContainerProps & MappedProps) => {
         title="View transactions"
       >
         {txModal.state === 'loading' && (
-          <p role="status" style={{ padding: '1.6rem', margin: 0 }}>
-            Loading transactions…
-          </p>
+          <ModalNote role="status">Loading transactions…</ModalNote>
         )}
         {txModal.state === 'error' && (
-          <div style={{ padding: '1.6rem' }}>
+          <ModalErrorBlock>
             <p role="alert">{txModal.error}</p>
             <Button
               onClick={() =>
@@ -188,12 +177,12 @@ export const Agents = (props: ContainerProps & MappedProps) => {
             >
               Retry transactions
             </Button>
-          </div>
+          </ModalErrorBlock>
         )}
         {txModal.state === 'success' && txModal.data.length === 0 && (
-          <p role="status" style={{ padding: '1.6rem', margin: 0 }}>
+          <ModalNote role="status">
             No transactions recorded for this agent yet.
-          </p>
+          </ModalNote>
         )}
         <TransactionList>
           {txModal.state === 'success' && (
@@ -201,13 +190,12 @@ export const Agents = (props: ContainerProps & MappedProps) => {
               {txModal.data.map((tx) => {
                 return (
                   <TransactionRow key={tx}>
-                    <ExplorerLink
+                    <TransactionExplorerLink
                       kind="transaction"
                       url={props.txUrlResolver(tx)}
-                      style={{ minWidth: 0 }}
                     >
                       {tx}
-                    </ExplorerLink>
+                    </TransactionExplorerLink>
                   </TransactionRow>
                 );
               })}
@@ -215,7 +203,7 @@ export const Agents = (props: ContainerProps & MappedProps) => {
           )}
         </TransactionList>
       </Modal>
-    </View>
+    </AgentsView>
   );
 };
 

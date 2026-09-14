@@ -11,10 +11,50 @@ vi.mock('./subscriptions/handlers', () => ({
   openChatCompletionStream: vi.fn()
 }))
 
-import { chatStreamLimits, pumpChatResponse, validateChatStreamRequestId } from './chat-stream-ipc'
+import {
+  chatStreamLimits,
+  pumpChatResponse,
+  validateChatStreamRequestId,
+  type ChatStreamLimits
+} from './chat-stream-ipc'
+
+// Production runs with the size, event and time ceilings switched off, because
+// a reasoning model crosses all three while it is still answering. The guards
+// themselves still work when a ceiling is configured, so they are exercised
+// here with explicit limits rather than deleted along with the defaults.
+const withLimits = (overrides: Partial<ChatStreamLimits>): ChatStreamLimits => ({
+  ...chatStreamLimits,
+  ...overrides
+})
 
 describe('chat stream IPC bounds', () => {
   beforeEach(() => vi.clearAllMocks())
+
+  it('applies no size, event or time ceiling by default', () => {
+    expect(chatStreamLimits.responseBytes).toBe(0)
+    expect(chatStreamLimits.ipcEvents).toBe(0)
+    expect(chatStreamLimits.timeoutMs).toBe(0)
+    // Splitting is not refusing, and concurrency is not length. Both stay.
+    expect(chatStreamLimits.chunkBytes).toBeGreaterThan(0)
+    expect(chatStreamLimits.activePerRenderer).toBeGreaterThan(0)
+  })
+
+  it('carries a response past the byte count that used to end it', async () => {
+    let delivered = 0
+    const oldCeiling = 8 * 1024 * 1024
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(oldCeiling + 1))
+        controller.close()
+      }
+    })
+
+    await pumpChatResponse(body, new AbortController().signal, (chunk) => {
+      delivered += chunk.byteLength
+    })
+
+    expect(delivered).toBe(oldCeiling + 1)
+  })
 
   it('accepts only UUID v4 request identifiers', () => {
     const id = '123e4567-e89b-42d3-a456-426614174000'
@@ -49,11 +89,12 @@ describe('chat stream IPC bounds', () => {
     ])
   })
 
-  it('cancels and rejects responses over the total byte limit', async () => {
+  it('cancels and rejects responses over a configured byte limit', async () => {
+    const limits = withLimits({ responseBytes: 8 * 1024 * 1024 })
     let cancelled = false
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
-        controller.enqueue(new Uint8Array(chatStreamLimits.responseBytes + 1))
+        controller.enqueue(new Uint8Array(limits.responseBytes + 1))
       },
       cancel() {
         cancelled = true
@@ -61,7 +102,7 @@ describe('chat stream IPC bounds', () => {
     })
 
     await expect(
-      pumpChatResponse(body, new AbortController().signal, () => undefined)
+      pumpChatResponse(body, new AbortController().signal, () => undefined, limits)
     ).rejects.toThrow('Chat stream response exceeded the 8 MB limit.')
     expect(cancelled).toBe(true)
   })
@@ -80,7 +121,8 @@ describe('chat stream IPC bounds', () => {
     )
   })
 
-  it('bounds the number of IPC events from pathological tiny chunks', async () => {
+  it('bounds IPC events from pathological tiny chunks when a limit is configured', async () => {
+    const limits = withLimits({ ipcEvents: 32 })
     let emitted = 0
     let cancelled = false
     const body = new ReadableStream<Uint8Array>({
@@ -93,11 +135,36 @@ describe('chat stream IPC bounds', () => {
     })
 
     await expect(
-      pumpChatResponse(body, new AbortController().signal, () => {
-        emitted += 1
-      })
+      pumpChatResponse(
+        body,
+        new AbortController().signal,
+        () => {
+          emitted += 1
+        },
+        limits
+      )
     ).rejects.toThrow('Chat stream emitted too many chunks.')
-    expect(emitted).toBe(chatStreamLimits.ipcEvents)
+    expect(emitted).toBe(limits.ipcEvents)
     expect(cancelled).toBe(true)
+  })
+
+  it('emits far past the old event ceiling when none is configured', async () => {
+    const oldCeiling = 16_384
+    let emitted = 0
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (emitted > oldCeiling) {
+          controller.close()
+          return
+        }
+        controller.enqueue(new Uint8Array([1]))
+      }
+    })
+
+    await pumpChatResponse(body, new AbortController().signal, () => {
+      emitted += 1
+    })
+
+    expect(emitted).toBeGreaterThan(oldCeiling)
   })
 })

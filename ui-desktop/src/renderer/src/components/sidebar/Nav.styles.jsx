@@ -37,6 +37,14 @@ const itemStyle = css`
     background: #133b2a;
     border-color: rgba(25, 214, 149, 0.14);
   }
+  [data-sidebar-collapsed='true'] & {
+    justify-content: center;
+    padding: 1.1rem 0;
+    span {
+      display: none;
+    }
+  }
+
   @media (max-width: 799px) {
     [data-sidebar-expanded='false'] & span {
       display: none;

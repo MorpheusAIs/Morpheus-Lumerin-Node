@@ -32,7 +32,7 @@ export const Divider = styled.div`
   margin-top: 5px;
   width: 100%;
   height: 1px;
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--border-subtle);
 `;
 
 const AddressBlock = styled(FooterBlock)`
@@ -55,18 +55,31 @@ const CopyBtn = styled(BaseBtn)`
   width: 4rem;
   height: 4rem;
   background-color: transparent;
-  color: ${(p) => p.theme.colors.morMain};
+  color: var(--accent);
   border-radius: 0.6rem;
   margin-inline-start: 1rem;
 
   &:hover:not(:disabled) {
-    background: rgba(32, 220, 142, 0.1);
+    background: var(--surface-hover);
   }
 
   &:focus-visible {
-    outline: 2px solid ${(p) => p.theme.colors.morMain};
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
+`;
+
+/** The modal footer, tightened up for this form. */
+const ReceiveFooter = styled(Footer)`
+  padding: 0 2rem 2rem;
+`;
+
+const FooterDivider = styled(Divider)`
+  margin: 2rem 0;
+`;
+
+const ExplorerRow = styled(ExplorerLink)`
+  margin-bottom: 5px;
 `;
 
 export function ReceiveForm({
@@ -95,14 +108,14 @@ export function ReceiveForm({
           aria-label="Close receive window"
           onClick={onRequestClose}
         >
-          <BackIcon size="2.4rem" fill="white" />
+          <BackIcon size="2.4rem" fill="var(--text-primary)" />
         </BackBtn>
         <Header>You are receiving</Header>
       </HeaderWrapper>
       <QRContainer>
-        <QRCode value={address} bgColor="transparent" fgColor="#20dc8e" />
+        <QRCode value={address} bgColor="transparent" fgColor="#19d695" />
       </QRContainer>
-      <Footer style={{ padding: '0 2rem 2rem' }}>
+      <ReceiveFooter>
         <FooterRow>
           <AddressBlock>
             <FooterLabel>{mor.symbol} Address</FooterLabel>
@@ -125,14 +138,9 @@ export function ReceiveForm({
         <FooterSublabel>
           {eth.value.toFixed(6)} {eth.symbol} ≈ {eth.usd || 0}
         </FooterSublabel>
-        <Divider style={{ margin: '2rem 0' }} />
-        <ExplorerLink
-          variant="button"
-          kind="account"
-          url={explorerUrl}
-          style={{ marginBottom: '5px' }}
-        />
-      </Footer>
+        <FooterDivider />
+        <ExplorerRow variant="button" kind="account" url={explorerUrl} />
+      </ReceiveFooter>
     </>
   );
 }

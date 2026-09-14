@@ -1,5 +1,10 @@
 import React from 'react';
-import { IconSettings, IconHelp, IconRoute } from '@tabler/icons-react';
+import {
+  IconSettings,
+  IconHelp,
+  IconRoute,
+  IconSparkles,
+} from '@tabler/icons-react';
 import { withClient } from '../../store/hocs/clientContext';
 import { NavAction, NavGroup, NavItem } from './Nav.styles';
 import { openQuickStartGuide } from '../onboarding/QuickStartGuide';
@@ -8,8 +13,24 @@ function SecondaryNav({ client: { onHelpLinkClick }, onRouteIntent }) {
   const warm = () => {
     void onRouteIntent?.('/settings')?.catch(() => undefined);
   };
+  const warmInstructions = () => {
+    void onRouteIntent?.('/instructions')?.catch(() => undefined);
+  };
   return (
     <NavGroup>
+      {/* Sits with the app-wide options rather than inside Settings: it changes
+          how every model answers, which is not a configuration detail. */}
+      <NavItem
+        to="/instructions"
+        data-testid="instructions-nav-btn"
+        aria-label="Custom instructions"
+        title="Custom instructions"
+        onFocus={warmInstructions}
+        onPointerEnter={warmInstructions}
+      >
+        <IconSparkles aria-hidden="true" stroke={1.7} />
+        <span>Instructions</span>
+      </NavItem>
       <NavItem
         to="/settings"
         data-guide="settings"

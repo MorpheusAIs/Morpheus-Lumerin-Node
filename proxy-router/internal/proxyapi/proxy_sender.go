@@ -875,8 +875,16 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 		}
 	}
 
-	// Set initial read deadline
-	_ = conn.SetReadDeadline(time.Now().Add(timeoutPerAttempt))
+	// Set the initial read deadline, unless there is no per-attempt budget.
+	// `time.Now().Add(0)` is a deadline that has already passed, so a zero
+	// timeout has to be spelled as the zero `time.Time`, which is Go's way of
+	// saying no deadline at all. Getting this wrong would turn "no limit" into
+	// "fail immediately".
+	if timeoutPerAttempt > 0 {
+		_ = conn.SetReadDeadline(time.Now().Add(timeoutPerAttempt))
+	} else {
+		_ = conn.SetReadDeadline(time.Time{})
+	}
 
 	msgJSON, err := json.Marshal(rpcMessage)
 	if err != nil {
@@ -933,8 +941,14 @@ func (p *ProxyServiceSender) rpcRequestStreamV2(
 					if alive {
 						retryCount++
 						log.Infof("Provider is alive, retrying (%d/%d)...", retryCount, maxRetries)
-						// Reset the read deadline
-						conn.SetReadDeadline(time.Now().Add(timeoutPerAttempt))
+						// Reset the read deadline, on the same terms as the
+						// initial one: zero means no deadline, not a deadline
+						// in the past.
+						if timeoutPerAttempt > 0 {
+							_ = conn.SetReadDeadline(time.Now().Add(timeoutPerAttempt))
+						} else {
+							_ = conn.SetReadDeadline(time.Time{})
+						}
 						// Clear the error state by reading any remaining data
 						reader.Discard(reader.Buffered())
 						// Reset the decoder

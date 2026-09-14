@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 
 const MUTATION_TOOLS = new Set([
   'write_file',
+  'edit_file',
   'make_directory',
   'copy_file',
   'move_file',
@@ -14,6 +15,7 @@ const MUTATION_TOOLS = new Set([
 
 const GENERATED_PAYLOAD_TOOLS = new Set([
   'write_file',
+  'edit_file',
   'create_docx',
   'create_xlsx',
   'create_pptx',

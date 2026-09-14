@@ -64,6 +64,7 @@ import type {
   CoworkTaskStatus,
 } from './types';
 import ErrorBoundary from '../common/ErrorBoundary';
+import { ActivityStatus, useElapsed } from '../chat/ChatActivity';
 
 import './Cowork.css';
 
@@ -599,6 +600,27 @@ function Cowork(): JSX.Element {
   const planCompletedCount = useMemo(
     () => planSteps.filter((step) => step?.status === 'completed').length,
     [planSteps],
+  );
+  // Naming the step in flight turns "it is doing something" into "it is doing
+  // this", which is the difference between a spinner and a status.
+  // The last open step rather than the first. The runner now closes the
+  // previous step when a new one opens, but plans stored before that rule
+  // existed can still hold two, and taking the first one is what left this
+  // label stuck on work the model had already moved past.
+  const runningStepTitle = useMemo(() => {
+    for (let index = planSteps.length - 1; index >= 0; index -= 1) {
+      if (planSteps[index]?.status === 'in_progress') {
+        return planSteps[index]?.title ?? undefined;
+      }
+    }
+    return undefined;
+  }, [planSteps]);
+  // Anchored to the run's own start, so leaving the project and coming back
+  // shows how long the run has been going rather than how long this visit has.
+  const taskElapsedMs = useElapsed(
+    activeTask?.status === 'running',
+    250,
+    activeTask?.startedAt,
   );
 
   const filteredTasks = useMemo(() => {
@@ -2945,8 +2967,11 @@ function Cowork(): JSX.Element {
 
               {activeTask.status === 'running' && (
                 <div className="cowork-thinking-row">
-                  <IconLoader2 className="cowork-spin" size={17} />
-                  Workspace is working through the plan…
+                  <ActivityStatus
+                    phase={runningStepTitle ? 'tool' : 'connecting'}
+                    elapsedMs={taskElapsedMs}
+                    detail={runningStepTitle}
+                  />
                 </div>
               )}
 

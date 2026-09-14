@@ -68,9 +68,18 @@ describe('legacy renderer bridge security boundaries', () => {
     expect(rendererClient).toContain('window.chatStream.start(requestId, payload)')
     expect(rendererClient).toContain('window.chatStream.cancel(requestId)')
     expect(streamMain).toContain('isTrustedRendererEvent(event)')
+    // The bounds that remain are the ones that bound something other than
+    // length. chunkBytes splits a large frame rather than refusing it, and
+    // activePerRenderer caps concurrent streams. The length and time ceilings
+    // are off, because a reasoning model legitimately exceeds all of them, and
+    // the guard code stays exercised through an injectable limits argument.
     expect(streamMain).toContain('activePerRenderer: 4')
-    expect(streamMain).toContain('responseBytes: 8 * 1024 * 1024')
-    expect(streamMain).toContain('ipcEvents: 16_384')
+    expect(streamMain).toContain('chunkBytes: 64 * 1024')
+    expect(streamMain).toContain('responseBytes: 0')
+    expect(streamMain).toContain('ipcEvents: 0')
+    expect(streamMain).toContain('timeoutMs: 0')
+    expect(streamMain).toContain('limits.responseBytes > 0')
+    expect(streamMain).toContain('limits.ipcEvents > 0')
     expect(streamMain).toContain("controller.abort('Chat stream cancelled.')")
     expect(streamMain).toContain("event.sender.once('destroyed', abortIfDestroyed)")
     expect(streamMain).toContain("event.sender.on('did-start-navigation', abortIfNavigating)")

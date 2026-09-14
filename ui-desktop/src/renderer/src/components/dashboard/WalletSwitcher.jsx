@@ -27,15 +27,15 @@ const Trigger = styled.button`
   gap: 8px;
   padding: 0.6rem 1rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.92);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
   font-size: 1.3rem;
   cursor: pointer;
   font-variant-numeric: tabular-nums;
 
   &:hover {
-    border-color: rgba(32, 220, 142, 0.35);
+    border-color: var(--border-strong);
   }
 `;
 
@@ -43,7 +43,7 @@ const Dot = styled.div`
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: ${(p) => p.theme.colors.morMain};
+  background: var(--accent);
   box-shadow: 0 0 0 3px rgba(32, 220, 142, 0.18);
   flex-shrink: 0;
 `;
@@ -58,8 +58,8 @@ const Menu = styled.div`
   overflow-y: auto;
   padding: 0.6rem;
   border-radius: 14px;
-  background: #0d1f18;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
 `;
 
@@ -72,12 +72,11 @@ const Row = styled.div`
   border-radius: 10px;
   cursor: ${(p) => (p.$disabled ? 'not-allowed' : 'pointer')};
   opacity: ${(p) => (p.$disabled ? 0.5 : 1)};
-  color: #fff;
-  background: ${(p) => (p.$active ? 'rgba(32,220,142,0.10)' : 'transparent')};
+  color: var(--text-primary);
+  background: ${(p) => (p.$active ? 'var(--surface-hover)' : 'transparent')};
 
   &:hover {
-    background: ${(p) =>
-      p.$disabled ? 'transparent' : 'rgba(255,255,255,0.06)'};
+    background: ${(p) => (p.$disabled ? 'transparent' : 'var(--surface-hover)')};
   }
 `;
 
@@ -98,29 +97,29 @@ const Label = styled.span`
 
 const Sub = styled.span`
   font-size: 1.1rem;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 `;
 
 const IconBtn = styled.button`
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--text-muted);
   cursor: pointer;
   padding: 4px;
   border-radius: 6px;
   display: inline-flex;
 
   &:hover {
-    color: #fff;
-    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+    background: var(--surface-hover);
   }
 `;
 
 const Divider = styled.div`
   height: 1px;
   margin: 0.5rem 0.4rem;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--border-subtle);
 `;
 
 const Action = styled.button`
@@ -132,17 +131,35 @@ const Action = styled.button`
   border: none;
   border-radius: 10px;
   background: transparent;
-  color: ${(p) => p.theme.colors.morMain};
+  color: var(--accent);
   font-size: 1.25rem;
   cursor: pointer;
   text-align: left;
 
   &:hover:not(:disabled) {
-    background: rgba(32, 220, 142, 0.1);
+    background: var(--surface-hover);
   }
+
   &:disabled {
-    color: rgba(255, 255, 255, 0.25);
+    color: var(--text-muted);
     cursor: not-allowed;
+  }
+`;
+
+/** The same row, for the choice that backs out rather than the one that acts. */
+const SecondaryAction = styled(Action)`
+  color: var(--text-primary);
+`;
+
+/** Sits inside a Warn, where the two choices need to read as one control pair. */
+const InlineActions = styled.div`
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+
+  ${Action} {
+    padding: 0.5rem 0.9rem;
+    width: auto;
   }
 `;
 
@@ -152,9 +169,9 @@ const Warn = styled.div`
   padding: 0.9rem 1rem;
   margin: 0.4rem;
   border-radius: 10px;
-  background: rgba(232, 163, 61, 0.1);
-  border: 1px solid rgba(232, 163, 61, 0.3);
-  color: rgba(255, 255, 255, 0.85);
+  background: rgba(246, 191, 98, 0.1);
+  border: 1px solid rgba(246, 191, 98, 0.3);
+  color: var(--text-primary);
   font-size: 1.15rem;
   line-height: 1.5;
 `;
@@ -164,10 +181,32 @@ const Input = styled.input`
   padding: 0.8rem 1rem;
   margin: 0.4rem 0;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: #03160e;
-  color: #fff;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-base);
+  color: var(--text-primary);
   font-size: 1.2rem;
+`;
+
+/** The rename field replaces a label in place, so it carries no outer margin. */
+const InlineInput = styled(Input)`
+  margin: 0;
+`;
+
+/** The private key form and the row of buttons under it. */
+const ImportPanel = styled.div`
+  padding: 0.4rem;
+`;
+
+const ImportActions = styled.div`
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+`;
+
+/** Keeps a row without a check mark aligned with the rows that have one. */
+const CheckSpacer = styled.span`
+  width: 16px;
+  flex-shrink: 0;
 `;
 
 function WalletSwitcher({ client, activeAddress, openSessionCount = 0 }) {
@@ -363,20 +402,14 @@ function WalletSwitcher({ client, activeAddress, openSessionCount = 0 }) {
                 {openSessionCount > 1 ? 's' : ''} on this wallet. Switching
                 keeps {openSessionCount > 1 ? 'them' : 'it'} open on-chain and
                 your stake is unaffected, but any chat in progress will stop.
-                <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-                  <Action
-                    style={{ padding: '0.5rem 0.9rem' }}
-                    onClick={() => doSwitch(pendingSwitch.id)}
-                  >
+                <InlineActions>
+                  <Action onClick={() => doSwitch(pendingSwitch.id)}>
                     Switch anyway
                   </Action>
-                  <Action
-                    style={{ padding: '0.5rem 0.9rem', color: '#fff' }}
-                    onClick={() => setPendingSwitch(null)}
-                  >
+                  <SecondaryAction onClick={() => setPendingSwitch(null)}>
                     Cancel
-                  </Action>
-                </div>
+                  </SecondaryAction>
+                </InlineActions>
               </div>
             </Warn>
           )}
@@ -389,18 +422,17 @@ function WalletSwitcher({ client, activeAddress, openSessionCount = 0 }) {
               onClick={() => onPick(w)}
             >
               {w.id === activeId ? (
-                <IconCheck size={16} color="#20dc8e" />
+                <IconCheck size={16} color="var(--accent)" />
               ) : (
-                <span style={{ width: 16 }} />
+                <CheckSpacer />
               )}
               <RowText>
                 {renaming?.id === w.id ? (
-                  <Input
+                  <InlineInput
                     autoFocus
                     aria-label={`Rename ${w.label}`}
                     maxLength={64}
                     value={renaming.draft}
-                    style={{ margin: 0 }}
                     onClick={(e) => e.stopPropagation()}
                     onChange={(e) =>
                       setRenaming((r) => r && { ...r, draft: e.target.value })
@@ -442,7 +474,7 @@ function WalletSwitcher({ client, activeAddress, openSessionCount = 0 }) {
           <Divider />
 
           {importing ? (
-            <div style={{ padding: '0.4rem' }}>
+            <ImportPanel>
               <Input
                 autoFocus
                 type="password"
@@ -455,21 +487,20 @@ function WalletSwitcher({ client, activeAddress, openSessionCount = 0 }) {
               <Sub>
                 Stored in your operating system's keychain, not in app settings.
               </Sub>
-              <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+              <ImportActions>
                 <Action onClick={onImport} disabled={busy === 'import'}>
                   {busy === 'import' ? 'Importing…' : 'Import'}
                 </Action>
-                <Action
-                  style={{ color: '#fff' }}
+                <SecondaryAction
                   onClick={() => {
                     setImporting(false);
                     setImportKey('');
                   }}
                 >
                   Cancel
-                </Action>
-              </div>
-            </div>
+                </SecondaryAction>
+              </ImportActions>
+            </ImportPanel>
           ) : (
             <>
               <Action

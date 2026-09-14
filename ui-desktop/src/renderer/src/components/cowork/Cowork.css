@@ -1774,12 +1774,9 @@
   text-align: left;
 }
 
+/* Alignment only. The pill inside is <ActivityStatus>, shared with the chat
+   transcript, so its appearance lives with the component rather than here. */
 .cowork-thinking-row {
-  align-items: center;
-  color: var(--cowork-green);
-  display: flex;
-  font-size: 1.1rem;
-  gap: 0.8rem;
   margin: 0.5rem 0 2.2rem 4.55rem;
 }
 

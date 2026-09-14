@@ -41,6 +41,7 @@ const MAX_RECENT_DISPLAY_MESSAGES = 100
 const MAX_AGENT_HISTORY_BYTES = 12 * 1024 * 1024
 const LARGE_ARGUMENT_TOOLS = new Set([
   'write_file',
+  'edit_file',
   'create_docx',
   'create_xlsx',
   'create_pptx',
@@ -738,6 +739,16 @@ export function scrubCoworkToolArguments(task: CoworkTask, toolCall: CoworkToolC
         stored.function.arguments = JSON.stringify({
           ...parsed,
           content: `[omitted after execution: ${length} characters]`
+        })
+      } else if (toolCall.function.name === 'edit_file') {
+        // Both snippets go, not just one: an edit that has run is described by
+        // its path, and keeping either half invites the model to reuse it.
+        const oldLength = typeof parsed.oldText === 'string' ? parsed.oldText.length : 0
+        const newLength = typeof parsed.newText === 'string' ? parsed.newText.length : 0
+        stored.function.arguments = JSON.stringify({
+          ...parsed,
+          oldText: `[omitted after execution: ${oldLength} characters]`,
+          newText: `[omitted after execution: ${newLength} characters]`
         })
       } else {
         stored.function.arguments = JSON.stringify({

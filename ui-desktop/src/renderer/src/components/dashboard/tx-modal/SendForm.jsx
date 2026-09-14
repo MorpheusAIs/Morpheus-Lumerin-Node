@@ -1,7 +1,6 @@
 import React, { useState, useContext } from 'react';
 import styled from 'styled-components';
 import { ToastsContext } from '../../toasts';
-import Select from 'react-select';
 import { explainChainError } from '../../../store/utils/chainErrors';
 
 import BackIcon from '../../icons/BackIcon';
@@ -16,6 +15,61 @@ import {
   FooterLabel,
 } from './common.styles';
 
+// The token choice used to be a react-select dropdown carrying its own
+// hardcoded palette, which is the one control in this modal that looked like it
+// came from a different app. There are exactly two assets, so a segmented
+// control shows both at once and needs no styling escape hatch.
+const CurrencyToggle = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 4px 0 8px;
+`;
+
+const CurrencyOption = styled.button`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 8px;
+  cursor: pointer;
+  border-radius: 5px;
+  font-family: inherit;
+  background: ${(p) =>
+    p.$selected ? 'rgba(32, 220, 142, 0.14)' : 'rgba(255, 255, 255, 0.04)'};
+  border: 1px solid
+    ${(p) => (p.$selected ? p.theme.colors.morMain : 'rgba(255, 255, 255, 0.1)')};
+  color: ${(p) =>
+    p.$selected ? p.theme.colors.morMain : 'rgba(255, 255, 255, 0.6)'};
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+
+  &:hover:not(:disabled) {
+    border-color: ${(p) => p.theme.colors.morMain};
+    color: ${(p) => p.theme.colors.morMain};
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  &:focus {
+    outline: none;
+  }
+`;
+
+const CurrencyName = styled.span`
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+`;
+
+const CurrencyBalance = styled.span`
+  font-size: 1.1rem;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.45);
+`;
+
 const AmountContainer = styled.label`
   display: block;
   position: relative;
@@ -28,14 +82,14 @@ const AmountInput = styled.input`
   font-size: 4rem;
   width: 100%;
   text-align: center;
-  background: #03160e !important;
+  background: transparent;
   outline: none;
   border: none;
-  color: ${({ isActive, theme }) =>
-    isActive ? theme.colors.morMain : theme.colors.morMain};
+  color: ${(p) => p.theme.colors.morMain};
 
   ::placeholder {
     color: ${(p) => p.theme.colors.morMain};
+    opacity: 0.4;
   }
 
   &[type='number']::-webkit-inner-spin-button,
@@ -102,22 +156,30 @@ const WalletInput = styled.input`
   color: ${(p) => p.theme.colors.dark};
   font-weight: 300;
   font-size: 16px;
-  background: #03160e !important;
+  background: rgba(255, 255, 255, 0.04);
   outline: none;
   border-radius: 5px;
-  border-style: solid;
   padding: 8px 20px 6px 60px;
-  border: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: border-color 0.15s ease;
+
+  &:focus {
+    border-color: ${(p) => p.theme.colors.morMain};
+  }
 `;
 
 const SendBtn = styled(BaseBtn)`
   width: 100%;
   height: 50px;
   border-radius: 5px;
-  color: black;
+  color: ${(p) => p.theme.colors.primaryDark};
   font-weight: 600;
-  background-color: ${({ isActive, theme }) =>
-    isActive ? theme.colors.helpertextGray : theme.colors.morMain};
+  background-color: ${(p) => p.theme.colors.morMain};
+
+  &:disabled {
+    background-color: ${(p) => p.theme.colors.helpertextGray};
+    cursor: not-allowed;
+  }
 `;
 
 const IconContainer = styled.div`
@@ -135,32 +197,8 @@ const SendContainer = styled.div`
   margin: 16px 0 0;
 `;
 
-const selectorStyles = {
-  singleValue: (provided) => ({
-    ...provided,
-    color: 'white',
-  }),
-  control: (base) => ({
-    ...base,
-    borderColor: '#20dc8e',
-    color: '#FFFFFF',
-    backgroundColor: '#03160e',
-    width: '100%',
-  }),
-  option: (base, state) => ({
-    ...base,
-    backgroundColor: state.isSelected ? '#03160e' : undefined,
-    color: state.isSelected ? '#FFFFFF' : undefined,
-    ':active': {
-      ...base[':active'],
-      backgroundColor: '#0e435380',
-      color: '#FFFFFF',
-    },
-  }),
-};
-
 const ErrorLabel = styled.div`
-  color: #ff6b6b;
+  color: ${(p) => p.theme.colors.danger};
   font-size: 1.2rem;
   text-align: center;
   min-height: 1.6rem;
@@ -184,6 +222,7 @@ export function SendForm(props) {
     selectedCurrency,
     currencyOptions,
     availableBalance,
+    balanceFor,
     errors = {},
   } = props;
 
@@ -250,18 +289,28 @@ export function SendForm(props) {
         <Header>You are sending</Header>
       </HeaderWrapper>
 
-      <div style={{ color: 'black' }}>
-        <Select
-          className="basic-single"
-          classNamePrefix="select"
-          name="currency"
-          styles={selectorStyles}
-          onChange={props.setSelectedCurrency}
-          value={selectedCurrency}
-          options={currencyOptions}
-          isDisabled={isPending}
-        />
-      </div>
+      <CurrencyToggle role="group" aria-label="Asset to send">
+        {(currencyOptions || []).map((option) => {
+          const selected = selectedCurrency?.value === option.value;
+          return (
+            <CurrencyOption
+              key={option.value}
+              type="button"
+              $selected={selected}
+              aria-pressed={selected}
+              disabled={isPending}
+              onClick={() => props.setSelectedCurrency(option)}
+            >
+              <CurrencyName>{option.label}</CurrencyName>
+              <CurrencyBalance>
+                {Number(
+                  balanceFor ? balanceFor(option.value) : 0,
+                ).toLocaleString(undefined, { maximumFractionDigits: 6 })}
+              </CurrencyBalance>
+            </CurrencyOption>
+          );
+        })}
+      </CurrencyToggle>
 
       <Column>
         <AmountContainer>
@@ -270,7 +319,6 @@ export function SendForm(props) {
             min="0"
             step="any"
             placeholder="0"
-            isActive={true}
             disabled={isPending}
             onChange={handleAmountInput}
             value={props.coinAmount}

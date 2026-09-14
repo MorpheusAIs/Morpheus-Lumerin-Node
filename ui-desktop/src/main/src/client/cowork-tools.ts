@@ -9,6 +9,7 @@ import {
   CoworkProject
 } from './cowork.types'
 import { analyzeCsvText } from './cowork-data-analysis'
+import { applyCoworkFileEdit } from './cowork-file-edit'
 import {
   MAX_IMAGE_BYTES,
   imageMediaTypeForPath,
@@ -246,6 +247,7 @@ export const toolArguments = parseArguments
 export const isCoworkMutationTool = (toolName: string): boolean =>
   [
     'write_file',
+    'edit_file',
     'make_directory',
     'copy_file',
     'move_file',
@@ -290,6 +292,7 @@ export async function approvalRequirement(
   }
   const mutation = [
     'write_file',
+    'edit_file',
     'make_directory',
     'copy_file',
     'move_file',
@@ -327,6 +330,7 @@ export async function approvalRequirement(
     destinationStat &&
     [
       'write_file',
+      'edit_file',
       'move_file',
       'copy_file',
       'create_docx',
@@ -336,7 +340,13 @@ export async function approvalRequirement(
     ].includes(toolName)
   ) {
     return {
-      reason: `Allow replacing the existing path “${destination}”. A backup will be kept.`,
+      reason:
+        toolName === 'edit_file'
+          ? // An edit changes part of a file rather than standing a new one in
+            // its place, and a prompt that says "replace" for it would overstate
+            // what the user is agreeing to.
+            `Allow editing part of the existing file “${destination}”. A backup will be kept.`
+          : `Allow replacing the existing path “${destination}”. A backup will be kept.`,
       risk: 'overwrite'
     }
   }
@@ -747,6 +757,48 @@ export async function executeCoworkTool(
       await writeDestination(project, target.absolute, content, options.allowOverwrite === true)
       return {
         result: { path: target.relative, bytes: Buffer.byteLength(content, 'utf8') },
+        artifact: artifact(target.relative, 'file')
+      }
+    }
+    case 'edit_file': {
+      const requested = String(input.path ?? '').trim()
+      if (!requested || requested === '.')
+        throw new Error('edit_file requires a file path, not the project root.')
+      // Resolved without allowMissing: an edit is defined against a file that is
+      // already there, and creating one here would make a mistyped path silently
+      // succeed as a new file instead of telling the model it read the wrong one.
+      const target = await resolveProjectPath(project, requested)
+      const stat = await fs.stat(target.absolute)
+      if (!stat.isFile()) throw new Error('edit_file requires a file path.')
+      if (stat.size > MAX_READ_BYTES) {
+        throw new Error(
+          `File is too large to edit safely (${stat.size} bytes; limit ${MAX_READ_BYTES}).`
+        )
+      }
+      const { buffer } = await readStableFile(target.absolute, MAX_READ_BYTES)
+      if (buffer.includes(0)) throw new Error('Binary files cannot be edited as text.')
+      const edit = applyCoworkFileEdit(
+        buffer.toString('utf8'),
+        String(input.oldText ?? ''),
+        String(input.newText ?? '')
+      )
+      if (Buffer.byteLength(edit.content, 'utf8') > MAX_WRITE_BYTES)
+        throw new Error('The edited file would exceed the 2 MB write limit.')
+      // allowOverwrite is forced: the file demonstrably exists, so the approval
+      // this edit was granted is the overwrite approval, and refusing here would
+      // make every edit unapprovable.
+      await writeDestination(project, target.absolute, edit.content, true)
+      return {
+        result: {
+          path: target.relative,
+          startLine: edit.startLine,
+          removedLines: edit.removedLines,
+          addedLines: edit.addedLines,
+          bytes: Buffer.byteLength(edit.content, 'utf8'),
+          ...(edit.normalizedLineEndings
+            ? { note: 'The file uses CRLF endings and the edit was written in them.' }
+            : {})
+        },
         artifact: artifact(target.relative, 'file')
       }
     }

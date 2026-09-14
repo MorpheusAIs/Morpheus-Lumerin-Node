@@ -13,6 +13,7 @@ import type {
 
 const GENERATED_PAYLOAD_TOOLS = new Set([
   'write_file',
+  'edit_file',
   'create_docx',
   'create_xlsx',
   'create_pptx',
