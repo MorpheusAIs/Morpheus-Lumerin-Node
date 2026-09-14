@@ -381,3 +381,42 @@ func claudeBindings(modelName string) (alwaysOn bool, b bindingSet) {
 		}
 	}
 }
+
+// refinesFamily reports whether candidate is a more specific variant of
+// base (e.g. "deepseek-r1" refines "deepseek"), or base is unknown.
+func refinesFamily(base, candidate string) bool {
+	if candidate == "" {
+		return false
+	}
+	return base == "" || strings.HasPrefix(candidate, base+"-")
+}
+
+// jinjaStmtRe extracts {% ... %} statement blocks from a chat template.
+var jinjaStmtRe = regexp.MustCompile(`(?s)\{%.*?%\}`)
+
+// bareThinkingRe matches the word `thinking` used as a template variable.
+var bareThinkingRe = regexp.MustCompile(`(^|[^a-zA-Z0-9_])thinking($|[^a-zA-Z0-9_])`)
+
+// bindingsFromTemplate derives the reasoning bindings from chat template
+// source — the template is the authoritative definition of which kwargs it
+// honors.
+func bindingsFromTemplate(tpl string) bindingSet {
+	if tpl == "" {
+		return nil
+	}
+	if strings.Contains(tpl, "enable_thinking") {
+		return kwargBoolBindings("enable_thinking")
+	}
+	if strings.Contains(tpl, "reasoning_effort") {
+		return effortKwargBindings()
+	}
+	if strings.Contains(tpl, "thinking_budget") {
+		return budgetKwargBindings()
+	}
+	for _, stmt := range jinjaStmtRe.FindAllString(tpl, -1) {
+		if bareThinkingRe.MatchString(stmt) {
+			return kwargBoolBindings("thinking")
+		}
+	}
+	return nil
+}

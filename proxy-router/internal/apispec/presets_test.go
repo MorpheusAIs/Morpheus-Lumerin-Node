@@ -251,3 +251,104 @@ func TestBindingsForFamilyExaone(t *testing.T) {
 	requireNoReasoning(t, "exaone", "LGAI-EXAONE/EXAONE-3.5-32B-Instruct")
 	requireNoReasoning(t, "exaone", "exaone")
 }
+
+// withStackTable temporarily registers a stack's tables for a test.
+func withStackTable(t *testing.T, stack string, b bindingSet, params []string) {
+	t.Helper()
+	prevB, hadB := stackBindings[stack]
+	prevP, hadP := stackParameters[stack]
+	stackBindings[stack] = b
+	stackParameters[stack] = params
+	t.Cleanup(func() {
+		if hadB {
+			stackBindings[stack] = prevB
+		} else {
+			delete(stackBindings, stack)
+		}
+		if hadP {
+			stackParameters[stack] = prevP
+		} else {
+			delete(stackParameters, stack)
+		}
+	})
+}
+
+func TestMergeStackBindingsFillsMissingIntentsOnly(t *testing.T) {
+	withStackTable(t, "teststack", bindingSet{
+		system.IntentSamplingTopK:       {Kind: system.BindingKindBodyParam, Param: "top_k", ParamType: "number"},
+		system.IntentReasoningDisable:   {Kind: system.BindingKindBodyParam, Param: "stack_level_disable", ParamType: "boolean", Value: false},
+		system.IntentResponseFormatJSON: {Kind: system.BindingKindBodyParam, Param: "response_format", ParamType: "object", Value: map[string]any{"type": "json_object"}},
+	}, []string{"temperature", "top_p"})
+
+	api := &system.ModelApiSpec{Stack: "teststack"}
+	established := bindingSet{
+		// evidence-derived reasoning binding must win over the stack default
+		system.IntentReasoningDisable: {Kind: system.BindingKindTemplateKwarg, Param: "chat_template_kwargs.enable_thinking", ParamType: "boolean", Value: false},
+	}
+	mergeStackTables(api, "teststack", established, true, false)
+
+	require.Equal(t, "chat_template_kwargs.enable_thinking", api.Bindings[system.IntentReasoningDisable].Param)
+	require.Equal(t, "top_k", api.Bindings[system.IntentSamplingTopK].Param)
+	require.Equal(t, "response_format", api.Bindings[system.IntentResponseFormatJSON].Param)
+	require.Equal(t, []string{"temperature", "top_p"}, api.Parameters)
+
+	// the shared table must not be aliased: mutating the result leaves the table intact
+	api.Bindings[system.IntentSamplingTopK].Param = "mutated"
+	require.Equal(t, "top_k", stackBindings["teststack"][system.IntentSamplingTopK].Param)
+}
+
+func TestMergeStackTablesKeepsRegistryParameters(t *testing.T) {
+	withStackTable(t, "teststack", nil, []string{"temperature"})
+
+	api := &system.ModelApiSpec{Stack: "teststack", Parameters: []string{"tools", "reasoning"}}
+	mergeStackTables(api, "teststack", nil, false, false)
+	// a registry-imported list (per-model, authoritative) is never replaced by the stack default
+	require.Equal(t, []string{"tools", "reasoning"}, api.Parameters)
+}
+
+func TestMergeStackTablesNoopForUnknownStack(t *testing.T) {
+	api := &system.ModelApiSpec{Stack: "", ModelFamily: "llama"}
+	mergeStackTables(api, "", nil, false, false)
+	require.Empty(t, api.Bindings)
+	require.Empty(t, api.Parameters)
+}
+
+func TestMergeStackTablesGatesReasoningOnEvidence(t *testing.T) {
+	withStackTable(t, "teststack", bindingSet{
+		system.IntentReasoningBudget: {Kind: system.BindingKindBodyParam, Param: "budget", ParamType: "number"},
+		system.IntentSamplingTopK:    {Kind: system.BindingKindBodyParam, Param: "top_k", ParamType: "number"},
+	}, nil)
+
+	// no reasoning evidence: the stack's reasoning knob must not imply the model thinks
+	api := &system.ModelApiSpec{Stack: "teststack"}
+	mergeStackTables(api, "teststack", nil, false, false)
+	require.Nil(t, api.Bindings[system.IntentReasoningBudget])
+	require.NotNil(t, api.Bindings[system.IntentSamplingTopK])
+
+	api = &system.ModelApiSpec{Stack: "teststack"}
+	mergeStackTables(api, "teststack", nil, true, false)
+	require.NotNil(t, api.Bindings[system.IntentReasoningBudget])
+}
+
+func TestMergeStackTablesAlwaysOnKeepsOnlyFormat(t *testing.T) {
+	withStackTable(t, "teststack", bindingSet{
+		system.IntentReasoningDisable: {Kind: system.BindingKindBodyParam, Param: "off", ParamType: "boolean", Value: true},
+		system.IntentReasoningEffort:  {Kind: system.BindingKindBodyParam, Param: "effort", ParamType: "enum", EnumValues: []string{"low"}},
+		system.IntentReasoningFormat:  {Kind: system.BindingKindBodyParam, Param: "separate", ParamType: "boolean"},
+	}, nil)
+
+	api := &system.ModelApiSpec{Stack: "teststack"}
+	mergeStackTables(api, "teststack", nil, true, true)
+	require.Nil(t, api.Bindings[system.IntentReasoningDisable])
+	require.Nil(t, api.Bindings[system.IntentReasoningEffort])
+	require.NotNil(t, api.Bindings[system.IntentReasoningFormat])
+}
+
+func TestRewriteBindingsForOllamaEffortKeepsLevels(t *testing.T) {
+	b := effortKwargBindings()
+	rewriteBindingsForOllama(b)
+	effort := b[system.IntentReasoningEffort]
+	require.Equal(t, system.BindingKindBodyParam, effort.Kind)
+	require.Equal(t, "reasoning_effort", effort.Param)
+	require.ElementsMatch(t, []string{"low", "medium", "high"}, effort.EnumValues)
+}
